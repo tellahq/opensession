@@ -69,6 +69,20 @@ export type ProbeWindow = {
   frames: ProbeFrame[];
 };
 
+type TranscriptScrollProbeControl = {
+  phase: string;
+  markScripted: (ms: number) => void;
+  pick: () => { id: string | null; top: number } | null;
+  locate: (id: string) => number | null;
+  take: () => ProbeWindow;
+};
+
+declare global {
+  interface Window {
+    __transcriptScrollProbe: TranscriptScrollProbeControl;
+  }
+}
+
 export type ReaderDisplacement = {
   t: number;
   phase: string;
@@ -105,17 +119,17 @@ export function installTranscriptScrollProbe(): void {
   const state = {
     phase: "open",
     scriptedUntil: 0,
-    writes: [] as ProbeWrite[],
-    scrolls: [] as ProbeScroll[],
-    gestures: [] as ProbeGesture[],
-    motion: [] as ProbeMotion[],
-    frames: [] as ProbeFrame[],
+    writes: new Array<ProbeWrite>(),
+    scrolls: new Array<ProbeScroll>(),
+    gestures: new Array<ProbeGesture>(),
+    motion: new Array<ProbeMotion>(),
+    frames: new Array<ProbeFrame>(),
   };
   let seq = 0;
-  const isScroller = (node: unknown): node is Element =>
+  const isScroller = (node: EventTarget | null): node is Element =>
     node instanceof Element && node.matches(SCROLLER);
   const record = <T>(
-    node: unknown,
+    node: Element | null,
     kind: ProbeWrite["kind"],
     target: number | null,
     run: () => T,
@@ -157,39 +171,61 @@ export function installTranscriptScrollProbe(): void {
       },
     });
   }
-  const topOf = (args: unknown[]): number | undefined => {
-    const first = args[0];
-    if (first && typeof first === "object")
-      return (first as { top?: number }).top;
-    return typeof args[1] === "number" ? args[1] : undefined;
-  };
-  type Method = (this: Element, ...args: unknown[]) => unknown;
-  const scrollTo = Element.prototype.scrollTo as Method;
-  Element.prototype.scrollTo = function (this: Element, ...args: unknown[]) {
-    const top = topOf(args);
-    return record(
-      this,
-      "scrollTo",
-      typeof top === "number" ? top : this.scrollTop,
-      () => scrollTo.apply(this, args),
-    );
-  } as typeof Element.prototype.scrollTo;
-  const scrollBy = Element.prototype.scrollBy as Method;
-  Element.prototype.scrollBy = function (this: Element, ...args: unknown[]) {
-    const top = topOf(args);
-    return record(this, "scrollBy", this.scrollTop + (top ?? 0), () =>
-      scrollBy.apply(this, args),
-    );
-  } as typeof Element.prototype.scrollBy;
-  const scrollIntoView = Element.prototype.scrollIntoView as Method;
-  Element.prototype.scrollIntoView = function (
+  const topOf = (
+    first: ScrollToOptions | number | undefined,
+    second: number | undefined,
+  ): number | undefined => (first instanceof Object ? first.top : second);
+
+  const scrollToOptions: (this: Element, options?: ScrollToOptions) => void =
+    Element.prototype.scrollTo;
+  const scrollToPosition: (this: Element, x: number, y: number) => void =
+    Element.prototype.scrollTo;
+  function probedScrollTo(this: Element, options?: ScrollToOptions): void;
+  function probedScrollTo(this: Element, x: number, y: number): void;
+  function probedScrollTo(
     this: Element,
-    ...args: unknown[]
-  ) {
-    return record(this.closest(SCROLLER), "scrollIntoView", null, () =>
-      scrollIntoView.apply(this, args),
+    first?: ScrollToOptions | number,
+    second?: number,
+  ): void {
+    const top = topOf(first, second);
+    record(this, "scrollTo", top ?? this.scrollTop, () => {
+      if (first === undefined) scrollToOptions.call(this);
+      else if (first instanceof Object) scrollToOptions.call(this, first);
+      else scrollToPosition.call(this, first, second ?? 0);
+    });
+  }
+  Element.prototype.scrollTo = probedScrollTo;
+
+  const scrollByOptions: (this: Element, options?: ScrollToOptions) => void =
+    Element.prototype.scrollBy;
+  const scrollByPosition: (this: Element, x: number, y: number) => void =
+    Element.prototype.scrollBy;
+  function probedScrollBy(this: Element, options?: ScrollToOptions): void;
+  function probedScrollBy(this: Element, x: number, y: number): void;
+  function probedScrollBy(
+    this: Element,
+    first?: ScrollToOptions | number,
+    second?: number,
+  ): void {
+    const top = topOf(first, second);
+    record(this, "scrollBy", this.scrollTop + (top ?? 0), () => {
+      if (first === undefined) scrollByOptions.call(this);
+      else if (first instanceof Object) scrollByOptions.call(this, first);
+      else scrollByPosition.call(this, first, second ?? 0);
+    });
+  }
+  Element.prototype.scrollBy = probedScrollBy;
+
+  const scrollIntoView = Element.prototype.scrollIntoView;
+  function probedScrollIntoView(
+    this: Element,
+    options?: boolean | ScrollIntoViewOptions,
+  ): void {
+    record(this.closest(SCROLLER), "scrollIntoView", null, () =>
+      scrollIntoView.call(this, options),
     );
-  } as typeof Element.prototype.scrollIntoView;
+  }
+  Element.prototype.scrollIntoView = probedScrollIntoView;
 
   document.addEventListener(
     "scroll",
@@ -315,9 +351,7 @@ export function installTranscriptScrollProbe(): void {
   };
   requestAnimationFrame(sample);
 
-  (
-    window as unknown as { __transcriptScrollProbe: unknown }
-  ).__transcriptScrollProbe = {
+  window.__transcriptScrollProbe = {
     set phase(value: string) {
       state.phase = value;
     },

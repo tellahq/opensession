@@ -15,14 +15,24 @@ function deferredResponse() {
   return { promise, resolve };
 }
 
+function installFetch(
+  implementation: (
+    ...args: Parameters<typeof fetch>
+  ) => ReturnType<typeof fetch>,
+): void {
+  globalThis.fetch = Object.assign(implementation, {
+    preconnect: originalFetch.preconnect,
+  });
+}
+
 describe("request", () => {
   test("shares concurrent GETs and releases them after they settle", async () => {
     const first = deferredResponse();
     let calls = 0;
-    globalThis.fetch = (() => {
+    installFetch(() => {
       calls++;
       return first.promise;
-    }) as unknown as typeof fetch;
+    });
 
     const one = request<{ value: number }>("/same");
     const two = request<{ value: number }>("/same");
@@ -32,20 +42,20 @@ describe("request", () => {
     expect(await one).toEqual({ value: 1 });
     expect(await two).toEqual({ value: 1 });
 
-    globalThis.fetch = (() => {
+    installFetch(() => {
       calls++;
       return Promise.resolve(Response.json({ value: 2 }));
-    }) as unknown as typeof fetch;
+    });
     expect(await request<{ value: number }>("/same")).toEqual({ value: 2 });
     expect(calls).toBe(2);
   });
 
   test("keeps abortable GETs and writes independent", async () => {
     let calls = 0;
-    globalThis.fetch = (() => {
+    installFetch(() => {
       calls++;
       return Promise.resolve(Response.json({ ok: true }));
-    }) as unknown as typeof fetch;
+    });
 
     await Promise.all([
       request("/abortable", { signal: new AbortController().signal }),
@@ -57,7 +67,7 @@ describe("request", () => {
   });
 
   test("preserves API error messages and status codes", async () => {
-    globalThis.fetch = (() =>
+    installFetch(() =>
       Promise.resolve(
         Response.json(
           {
@@ -65,15 +75,17 @@ describe("request", () => {
           },
           { status: 409 },
         ),
-      )) as unknown as typeof fetch;
+      ),
+    );
 
     try {
       await request("/rejected");
       throw new Error("Expected request to fail");
     } catch (error) {
       expect(error).toBeInstanceOf(ApiError);
-      expect((error as ApiError).message).toBe("Request rejected");
-      expect((error as ApiError).status).toBe(409);
+      if (!(error instanceof ApiError)) throw error;
+      expect(error.message).toBe("Request rejected");
+      expect(error.status).toBe(409);
     }
   });
 });

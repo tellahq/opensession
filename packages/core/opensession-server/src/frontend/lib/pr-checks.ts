@@ -7,10 +7,12 @@ export type CheckVisual =
   | "skipped"
   | "neutral";
 
-export function checkStatusMeta(check: PrCheck): {
+export type CheckStatusMeta = {
   kind: CheckVisual;
   label: string;
-} {
+};
+
+export function checkStatusMeta(check: PrCheck): CheckStatusMeta {
   const running = check.status !== "COMPLETED" && check.status !== "";
   if (
     running ||
