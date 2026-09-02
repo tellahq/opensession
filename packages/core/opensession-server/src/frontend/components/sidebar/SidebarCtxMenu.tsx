@@ -28,16 +28,18 @@ function CtxItem({
   onClick?: () => void;
   onMouseEnter?: (e: React.MouseEvent) => void;
 }) {
+  const style: React.CSSProperties = {
+    ...CTX_ITEM_STYLE,
+    display: "flex",
+    alignItems: "center",
+    gap: 11,
+  };
+  if (danger) style.color = "var(--red, #e5534b)";
+
   return (
     <button
       type="button"
-      style={{
-        ...CTX_ITEM_STYLE,
-        display: "flex",
-        alignItems: "center",
-        gap: 11,
-        ...(danger ? { color: "var(--red, #e5534b)" } : {}),
-      }}
+      style={style}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
     >

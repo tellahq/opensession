@@ -68,15 +68,14 @@ export async function uploadProfileImage(
     body: file,
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as {
-      error?: string;
-    } | null;
+    const body: { error?: string } | null = await res.json().catch(() => null);
     throw new ApiError(
       body?.error || `Failed to upload the picture: ${res.status}`,
       res.status,
     );
   }
-  return (await res.json()) as { image: string };
+  const body: { image: string } = await res.json();
+  return body;
 }
 
 export function removeProfileImage(user?: string): Promise<{ image: string }> {

@@ -63,7 +63,7 @@ export function CodeStorageConfiguration({
       const result = await connectCodeStorage(org.trim(), pem);
       setPem("");
       setNote(
-        typeof result.repoCount === "number"
+        result.repoCount !== undefined
           ? `Connected. ${result.repoCount} repo${result.repoCount === 1 ? "" : "s"} visible. Register them under Settings → Repositories.`
           : "Connected. Register repositories under Settings → Repositories.",
       );
@@ -139,7 +139,7 @@ export function CodeStorageConfiguration({
               : status.error
                 ? `Configured for organization “${status.org}”, but the last check failed.`
                 : `Connected to organization “${status.org}”${
-                    typeof status.repoCount === "number"
+                    status.repoCount !== undefined
                       ? ` · ${status.repoCount} repo${status.repoCount === 1 ? "" : "s"} visible`
                       : ""
                   }.`}

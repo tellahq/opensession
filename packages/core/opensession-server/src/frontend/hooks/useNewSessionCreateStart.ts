@@ -11,6 +11,13 @@ import type { useAppRoute } from "./useAppRoute";
 import type { useNewSessionPalette } from "./useNewSessionPalette";
 import type { useSessions } from "./useSessions";
 
+interface PendingInitialPrompt {
+  content: string;
+  user: string;
+  sentAt: number;
+  images?: string[];
+}
+
 interface UseNewSessionCreateStartOptions {
   getCurrentRoute: ReturnType<typeof useAppRoute>["getCurrentRoute"];
   navigate: ReturnType<typeof useAppRoute>["navigate"];
@@ -23,12 +30,7 @@ interface UseNewSessionCreateStartOptions {
   setActiveViewTabState: Dispatch<SetStateAction<ActiveViewTab>>;
   setOptimisticSession: Dispatch<SetStateAction<UnifiedSession | null>>;
   setPendingInitialPrompts: Dispatch<
-    SetStateAction<
-      Record<
-        string,
-        { content: string; user: string; sentAt: number; images?: string[] }
-      >
-    >
+    SetStateAction<Record<string, PendingInitialPrompt>>
   >;
   setPendingNewWorkspace: Dispatch<SetStateAction<boolean>>;
   setPendingSessionId: Dispatch<SetStateAction<string | null>>;
@@ -107,14 +109,15 @@ export function useNewSessionCreateStart({
     setActiveViewTabState(null);
     if (started.workspaceId) saveActiveViewTab(started.workspaceId, null);
     if (started.prompt || started.images?.length) {
+      const prompt: PendingInitialPrompt = {
+        content: started.prompt,
+        user,
+        sentAt: new Date(startedAt).getTime(),
+      };
+      if (started.images?.length) prompt.images = started.images;
       setPendingInitialPrompts((current) => ({
         ...current,
-        [started.id]: {
-          content: started.prompt,
-          user,
-          sentAt: new Date(startedAt).getTime(),
-          ...(started.images?.length ? { images: started.images } : {}),
-        },
+        [started.id]: prompt,
       }));
     }
     setPendingSessionId(started.id);

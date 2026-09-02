@@ -38,11 +38,9 @@ export function rememberRepoCount(count: number): void {
     // A browser with storage blocked still gets the in-memory count.
   }
   // Server rendering and tests have no browser event target.
-  if (
-    typeof window !== "undefined" &&
-    typeof window.dispatchEvent === "function"
-  )
+  if (globalThis.window?.dispatchEvent instanceof Function) {
     window.dispatchEvent(new Event(CHANGE_EVENT));
+  }
 }
 
 export function onRepoCountChanged(handler: () => void): () => void {

@@ -61,7 +61,6 @@ import {
   SUPPORT_SURFACE_OPTIONS,
   setSupportSurface,
   supportSurfaceOf,
-  type SupportSurface,
 } from "../../lib/support-surface";
 import {
   SettingCard,
@@ -98,25 +97,42 @@ const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
+const SORT_OPTIONS: { value: SortBy; label: string }[] = [
+  { value: "updated", label: "Updated" },
+  { value: "created", label: "Created" },
+];
+
+type ThemeMockStyle = React.CSSProperties & {
+  "--mk-bg": string;
+  "--mk-panel": string;
+  "--mk-line": string;
+  "--mk-pill": string;
+};
+
+type AccentSwatchStyle = React.CSSProperties & {
+  "--swatch": string;
+  "--swatch-ink": string;
+};
+
 /**
  * Fixed palettes for the miniature mockup below, deliberately raw values
  * rather than theme tokens, because each swatch has to keep showing its own
  * tone no matter which theme is active. Applied as custom properties so the
  * mock's parts can stay plain utilities.
  */
-const MOCK_PALETTE: Record<"light" | "dark", React.CSSProperties> = {
+const MOCK_PALETTE: Record<"light" | "dark", ThemeMockStyle> = {
   light: {
     "--mk-bg": "#e9e9e9",
     "--mk-panel": "#ffffff",
     "--mk-line": "#d5d5d5",
     "--mk-pill": "#cbcbcb",
-  } as React.CSSProperties,
+  },
   dark: {
     "--mk-bg": "#565656",
     "--mk-panel": "#3e3e3e",
     "--mk-line": "#c4c4c4",
     "--mk-pill": "#8a8a8a",
-  } as React.CSSProperties,
+  },
 };
 
 // A miniature app mockup used inside the theme swatches. Its proportions are
@@ -194,10 +210,10 @@ function AccentSwatch({
   const option = getAccentThemeOption(theme);
   const swatch = option[tone];
   const ink = getOnAccentInk(theme, tone);
-  const style = {
+  const style: AccentSwatchStyle = {
     "--swatch": swatch,
     "--swatch-ink": ink,
-  } as React.CSSProperties;
+  };
 
   return (
     <Tooltip label={option.label}>
@@ -398,11 +414,8 @@ export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
               <Select
                 label="Sort by"
                 value={filter.sort}
-                options={[
-                  { value: "updated", label: "Updated" },
-                  { value: "created", label: "Created" },
-                ]}
-                onChange={(sort) => setFilter({ sort: sort as SortBy })}
+                options={SORT_OPTIONS}
+                onChange={(sort) => setFilter({ sort })}
               />
             }
           />
@@ -461,9 +474,12 @@ export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
             <Segmented
               label="Sidebar row density"
               value={density}
-              onValueChange={(value) =>
-                setSidebarDensity(value as SidebarDensity)
-              }
+              onValueChange={(value) => {
+                const option = DENSITY_OPTIONS.find(
+                  (candidate) => candidate.value === value,
+                );
+                if (option) setSidebarDensity(option.value);
+              }}
             >
               {DENSITY_OPTIONS.map(({ value, label, Icon }) => (
                 <SegmentedOption key={value} value={value}>
@@ -509,7 +525,7 @@ export function SidebarItemsSection() {
       .then((feeds) => {
         if (alive) setSidebarFeeds(feeds);
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         if (alive)
           setSidebarFeedsError(
             errorMessage(error, "Failed to load sidebar sources"),
@@ -556,7 +572,7 @@ export function SidebarItemsSection() {
                   !hiddenSidebarFeeds.has(PLAIN_ID),
                 )}
                 options={SUPPORT_SURFACE_OPTIONS}
-                onChange={(value) => setSupportSurface(value as SupportSurface)}
+                onChange={setSupportSurface}
               />
             }
           />

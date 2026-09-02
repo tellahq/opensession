@@ -96,10 +96,7 @@ export function initAlerts(): void {
 function armAudio(): void {
   try {
     if (!audioCtx) {
-      const Ctx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext })
-          .webkitAudioContext;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
       if (Ctx) audioCtx = new Ctx();
     }
     if (audioCtx?.state === "suspended") void audioCtx.resume();
@@ -181,9 +178,8 @@ function shouldAlert(event: NotifEvent, s: NotifSettings): boolean {
 // that bridge, hence the feature check.
 function focusApp(): void {
   try {
-    (
-      window as unknown as { os1?: { focusWindow?: () => void } }
-    ).os1?.focusWindow?.();
+    const shell = window.os1;
+    if (shell?.focusWindow instanceof Function) shell.focusWindow();
   } catch {
     // The bridge is missing or threw. The plain focus below still runs.
   }

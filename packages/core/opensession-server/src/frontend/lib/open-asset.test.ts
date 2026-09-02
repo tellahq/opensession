@@ -2,9 +2,15 @@ import { expect, test } from "bun:test";
 import { collectWrittenAssets } from "./open-asset";
 import type { TranscriptEntry } from "./types";
 
+interface ToolInput {
+  content?: string;
+  file_path?: string;
+  path?: string;
+}
+
 function toolUse(
   toolName: string,
-  toolInput: unknown,
+  toolInput: ToolInput,
   id = "1",
 ): TranscriptEntry {
   return {
@@ -14,7 +20,7 @@ function toolUse(
     timestamp: "2026-08-10T00:00:00.000Z",
     toolName,
     toolInput,
-  } as TranscriptEntry;
+  };
 }
 
 test("collects the scratch files a turn wrote, in first-write order", () => {
@@ -40,14 +46,14 @@ test("one chip per path, however often the turn rewrote it", () => {
 });
 
 test("a delete leaves nothing to open, and non-tool entries are ignored", () => {
-  const entries = [
+  const entries: TranscriptEntry[] = [
     toolUse("opensession-assets_delete_asset", { path: "old.html" }),
     {
       id: "z",
       type: "assistant",
       content: "wrote report.html",
       timestamp: "2026-08-10T00:00:00.000Z",
-    } as TranscriptEntry,
+    },
   ];
   expect(collectWrittenAssets(entries)).toEqual([]);
 });
