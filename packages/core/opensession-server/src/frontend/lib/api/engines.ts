@@ -1,5 +1,6 @@
+import { z } from "zod";
 import { request } from "./request";
-import type { EngineId, EngineOption } from "../model-engine";
+import { ENGINE_IDS, type EngineId, type EngineOption } from "../model-engine";
 
 // ── Engines ──
 //
@@ -17,38 +18,43 @@ export interface EngineCatalog {
 }
 
 const EMPTY: EngineCatalog = { engines: [], modelEngines: {} };
+const engineIdSchema = z.enum(ENGINE_IDS);
+const engineEntrySchema = z.object({
+  id: engineIdSchema,
+  label: z.string(),
+  available: z.literal(false).optional().catch(undefined),
+});
+const engineCatalogPayloadSchema = z
+  .object({
+    engines: z.array(z.unknown()).catch([]),
+    modelEngines: z.record(z.string(), z.unknown()).catch({}),
+  })
+  .catch({ engines: [], modelEngines: {} });
 const CACHE_MS = 60_000;
 let cache: { value: EngineCatalog; fetchedAt: number } | null = null;
 let pending: Promise<EngineCatalog> | null = null;
 
-function normalize(body: unknown): EngineCatalog {
-  const raw = (body || {}) as Record<string, unknown>;
-  const engines = Array.isArray(raw.engines)
-    ? (raw.engines as unknown[]).flatMap((entry) => {
-        const e = (entry || {}) as Record<string, unknown>;
-        return typeof e.id === "string" && typeof e.label === "string"
-          ? [
-              {
-                id: e.id as EngineId,
-                label: e.label,
-                available: e.available !== false,
-              },
-            ]
-          : [];
-      })
-    : [];
-  const modelEngines: Record<string, EngineId> = {};
-  if (
-    raw.modelEngines &&
-    typeof raw.modelEngines === "object" &&
-    !Array.isArray(raw.modelEngines)
-  ) {
-    for (const [model, engine] of Object.entries(
-      raw.modelEngines as Record<string, unknown>,
-    )) {
-      if (typeof engine === "string") modelEngines[model] = engine as EngineId;
-    }
-  }
+function normalize(
+  body: z.output<typeof engineCatalogPayloadSchema>,
+): EngineCatalog {
+  const engines = body.engines.flatMap((entry) => {
+    const result = engineEntrySchema.safeParse(entry);
+    return result.success
+      ? [
+          {
+            id: result.data.id,
+            label: result.data.label,
+            available: result.data.available !== false,
+          },
+        ]
+      : [];
+  });
+  const modelEngines = Object.fromEntries(
+    Object.entries(body.modelEngines).flatMap(([model, engine]) => {
+      const result = engineIdSchema.safeParse(engine);
+      return result.success ? [[model, result.data]] : [];
+    }),
+  );
   return { engines, modelEngines };
 }
 
@@ -56,7 +62,7 @@ async function refreshEngines(): Promise<EngineCatalog> {
   if (pending) return pending;
   pending = request<unknown>("/models", { label: "Failed to fetch engines" })
     .then((body) => {
-      const value = normalize(body);
+      const value = normalize(engineCatalogPayloadSchema.parse(body));
       cache = { value, fetchedAt: Date.now() };
       return value;
     })
