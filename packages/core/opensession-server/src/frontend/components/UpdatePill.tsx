@@ -1,3 +1,4 @@
+import { os1Shell } from "../lib/os1-shell";
 import React, { useEffect, useState } from "react";
 import { z } from "zod";
 import type { WSServerMessage } from "../lib/types";
@@ -33,7 +34,7 @@ type ShellUpdates = {
 /** The mac shell's updater bridge — absent in a browser. `onState` replays the
  *  current state on subscribe, so a reload re-surfaces a staged update. */
 function os1Updates(): ShellUpdates | undefined {
-  const updates = window.os1?.updates;
+  const updates = os1Shell()?.updates;
   if (
     !(updates instanceof Object) ||
     !("onState" in updates) ||

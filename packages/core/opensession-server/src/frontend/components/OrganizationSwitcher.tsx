@@ -1,3 +1,4 @@
+import { os1Shell } from "../lib/os1-shell";
 import React, { useState } from "react";
 import { z } from "zod";
 import { useOrganizationName } from "../hooks/useOrganizationIcon";
@@ -77,7 +78,7 @@ const organizationBridgeSchema = z.object({
 });
 
 function organizationBridge(): OrganizationBridge | undefined {
-  return organizationBridgeSchema.safeParse(window.os1?.organizations).data;
+  return organizationBridgeSchema.safeParse(os1Shell()?.organizations).data;
 }
 
 /** Active organization identity and account switcher. */

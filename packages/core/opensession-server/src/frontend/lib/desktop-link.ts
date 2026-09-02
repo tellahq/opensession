@@ -1,3 +1,5 @@
+import { os1Shell } from "./os1-shell";
+
 declare global {
   interface Navigator {
     readonly userAgentData?: {
@@ -55,7 +57,7 @@ export function desktopProtocolUrlFromBrowser(): string | null {
     hash: location.hash,
     platform: navigator.userAgentData?.platform || navigator.platform || "",
     maxTouchPoints: navigator.maxTouchPoints || 0,
-    desktop: window.os1?.desktop === true,
+    desktop: os1Shell()?.desktop === true,
     standalone: matchMedia("(display-mode: standalone)").matches,
   });
 }

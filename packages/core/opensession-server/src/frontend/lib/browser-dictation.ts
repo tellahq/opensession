@@ -1,3 +1,5 @@
+import { os1Shell } from "./os1-shell";
+
 /**
  * Live browser speech recognition for web dictation.
  *
@@ -172,7 +174,7 @@ export function startBrowserDictation(
   stream?: MediaStream,
 ): BrowserDictation | null {
   if (typeof window === "undefined") return null;
-  const desktop = window.os1?.dictation;
+  const desktop = os1Shell()?.dictation;
   if (desktop && stream) {
     const native = startDesktopDictation(desktop, stream, onTranscript);
     if (native) return native;

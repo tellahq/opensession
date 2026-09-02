@@ -1,4 +1,4 @@
-interface OS1ShellBridge {
+export interface OS1ShellBridge {
   desktop?: boolean;
   materialBackdrop?: boolean;
   focusWindow?: () => void;
@@ -19,6 +19,12 @@ interface OS1ShellBridge {
   };
 }
 
-interface Window {
-  os1?: OS1ShellBridge;
+declare global {
+  interface Window {
+    os1?: OS1ShellBridge;
+  }
+}
+
+export function os1Shell(): OS1ShellBridge | undefined {
+  return globalThis.window?.os1;
 }
