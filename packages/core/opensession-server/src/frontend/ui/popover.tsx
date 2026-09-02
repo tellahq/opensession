@@ -47,19 +47,14 @@ function Root<Payload = unknown>({
   const internalActionsRef = React.useRef<BasePopover.Root.Actions | null>(
     null,
   );
-  const entry = { close: () => internalActionsRef.current?.close() };
+  const resolvedActionsRef = actionsRef ?? internalActionsRef;
+  const entry = { close: () => resolvedActionsRef.current?.close() };
   const group = useExclusivePopup(entry);
-
-  React.useImperativeHandle(
-    actionsRef,
-    () => internalActionsRef.current as BasePopover.Root.Actions,
-    [],
-  );
 
   return (
     <BasePopover.Root
       {...props}
-      actionsRef={internalActionsRef}
+      actionsRef={resolvedActionsRef}
       onOpenChange={(open, eventDetails) => {
         if (exclusive) {
           if (open) group?.activate(entry);

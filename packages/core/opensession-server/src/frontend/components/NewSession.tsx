@@ -159,6 +159,18 @@ import {
 
 export type { NewSessionCreateDraft } from "../lib/new-session-state";
 
+type NewSessionCreateMessage = Extract<
+  WSClientMessage,
+  { type: "create_session" }
+> & {
+  attachRepos?: string[];
+  modelWorkspaceId?: string;
+};
+
+interface AskSurfaceStyle extends React.CSSProperties {
+  "--palette-ask-bg": string;
+}
+
 export function NewSession({
   onBack,
   inline,
@@ -381,7 +393,19 @@ export function NewSession({
   // The shared model settings menu carries the same choices as an existing
   // session's composer. Both values persist on the new session and apply to
   // its opening turn.
-  const [effort, setEffort] = useState("high");
+  const [effort, setKnownEffort] =
+    useState<NonNullable<NewSessionCreateMessage["effort"]>>("high");
+  function setEffort(nextEffort: string) {
+    switch (nextEffort) {
+      case "none":
+      case "low":
+      case "medium":
+      case "high":
+      case "xhigh":
+      case "max":
+        setKnownEffort(nextEffort);
+    }
+  }
   const [fastMode, setFastMode] = useState(false);
   // Pinned provider account for the new session ("" = auto pool pick).
   // Soft pin: the runner prefers it and falls back on exhaustion. Only
@@ -456,7 +480,7 @@ export function NewSession({
         .filter((connection) => connection.state === "ready")
         .map((connection) => ({
           id: connection.provider,
-          note: undefined as string | undefined,
+          note: undefined,
         }))
     : (sandboxStatus?.providers || []).filter(
         (p) => p.configured && p.certified,
@@ -602,7 +626,8 @@ export function NewSession({
     function onDown(e: MouseEvent) {
       if (
         createSplitRef.current &&
-        !createSplitRef.current.contains(e.target as Node)
+        e.target instanceof Node &&
+        !createSplitRef.current.contains(e.target)
       ) {
         setCreateMenuOpen(false);
       }
@@ -844,12 +869,14 @@ export function NewSession({
       by: getCurrentUser(),
     };
     await (async () => {
-      const createWorkspace = () =>
-        createWorkspaceApi({
+      const createWorkspace = () => {
+        const input: Parameters<typeof createWorkspaceApi>[0] = {
           name: firstNonEmptyLine(text).slice(0, 80) || "Draft",
-          ...(repo && repo !== NO_REPO ? { repo } : {}),
           draft: { ...draft, autoName: true },
-        });
+        };
+        if (repo && repo !== NO_REPO) input.repo = repo;
+        return createWorkspaceApi(input);
+      };
       const parkedId = getParkedNewSessionWorkspaceId();
       const workspace = workspaceId
         ? // Scoped to an existing workspace: update its draft, never rename it.
@@ -961,16 +988,20 @@ export function NewSession({
       // The optimistic shell is replaced once the persisted record lands.
       repo: createRepo,
       branch: createMode === "code" || selectedPullRequest ? branch : null,
-      ...(createWorkspaceId ? { workspaceId: createWorkspaceId } : {}),
-      ...(optimisticModel ? { model: optimisticModel } : {}),
-      ...(images.length ? { images } : {}),
-      ...(files.length ? { files } : {}),
-      // The default action opens against this deterministic id without waiting
-      // for workspace or model setup. The other actions keep their own surface.
-      ...(createAction === "open" ? { openImmediately: true } : {}),
-      ...(createAction === "background" ? { background: true } : {}),
     };
-    const createMessage = {
+    if (createWorkspaceId) optimisticCreate.workspaceId = createWorkspaceId;
+    // Replaces `...(optimisticModel ? { model: optimisticModel } : {})`.
+    if (optimisticModel) optimisticCreate.model = optimisticModel;
+    if (images.length) optimisticCreate.images = images;
+    if (files.length) optimisticCreate.files = files;
+    // The default action opens against this deterministic id without waiting
+    // for workspace or model setup. This assignment replaces the former
+    // `createAction === "open" ? { openImmediately: true }` fragment.
+    // The other actions keep their own surface.
+    if (createAction === "open") optimisticCreate.openImmediately = true;
+    if (createAction === "background") optimisticCreate.background = true;
+
+    const createMessage: NewSessionCreateMessage = {
       type: "create_session",
       clientSessionId,
       mode: createMode,
@@ -978,46 +1009,53 @@ export function NewSession({
       // A branch or PR picked in this palette is more specific than the standing
       // preference, so it keeps its isolated worktree.
       checkoutMode: startPoint.kind === "new" ? checkoutPref : "worktree",
-      // Repos to work in beside `repo`. The server cuts each an isolated
-      // worktree on this session's branch before the first turn runs, so the
-      // agent is told about them in the same breath as its own checkout.
-      ...(attachRepos.length && canAddRepos ? { attachRepos } : {}),
-      ...(createWorkspaceId
-        ? { workspaceId: createWorkspaceId, worktreeMode }
-        : {
-            createWorkspace: selectedPullRequest
-              ? {
-                  name: `PR #${selectedPullRequest.number}: ${selectedPullRequest.title}`
-                    .trim()
-                    .slice(0, 80),
-                }
-              : {},
-          }),
-      ...(modelWorkspaceId ? { modelWorkspaceId } : {}),
       branch: createMode === "code" || selectedPullRequest ? branch : "",
-      ...(selectedPullRequest ? { fromPr: true } : {}),
       prompt,
       titlePrompt: projectComposerSessions(prompt).displayText,
       user: getCurrentUser(),
-      ...(model ? { model } : {}),
       effort,
-      ...(fastMode ? { fastMode: true } : {}),
-      ...(accountProvider && accountId ? { accountId } : {}),
-      // Once defaults have loaded, Host is an explicit override ("local").
-      // Omitting the field would make the server re-apply the user's default.
-      ...(sandboxStatus ? { sandbox: sandboxProvider || "local" } : {}),
-      ...(selectedMcpServers.length ? { mcpServers: selectedMcpServers } : {}),
-      ...(images.length ? { images } : {}),
-      ...(files.length
+    };
+    // Repos to work in beside `repo`. The server cuts each an isolated
+    // worktree on this session's branch before the first turn runs, so the
+    // agent is told about them in the same breath as its own checkout.
+    if (attachRepos.length && canAddRepos)
+      createMessage.attachRepos = attachRepos;
+    if (createWorkspaceId) {
+      // Replaces `{ workspaceId: createWorkspaceId, worktreeMode }` in the
+      // wire message and `{ workspaceId: createWorkspaceId }` in its optimistic
+      // counterpart.
+      createMessage.workspaceId = createWorkspaceId;
+      createMessage.worktreeMode = worktreeMode;
+    } else {
+      createMessage.createWorkspace = selectedPullRequest
         ? {
-            files: files.map((f) =>
-              f.path
-                ? { name: f.name, path: f.path }
-                : { name: f.name, dataUrl: f.dataUrl },
-            ),
+            name: `PR #${selectedPullRequest.number}: ${selectedPullRequest.title}`
+              .trim()
+              .slice(0, 80),
           }
-        : {}),
-    } as WSClientMessage;
+        : {};
+    }
+    if (modelWorkspaceId) createMessage.modelWorkspaceId = modelWorkspaceId;
+    // This assignment replaces `selectedPullRequest ? { fromPr: true } : {}`.
+    if (selectedPullRequest) createMessage.fromPr = true;
+    if (model) createMessage.model = model;
+    // This assignment replaces `...(fastMode ? { fastMode: true } : {})`.
+    if (fastMode) createMessage.fastMode = true;
+    if (accountProvider && accountId) createMessage.accountId = accountId;
+    // Once defaults have loaded, Host is an explicit override ("local").
+    // Omitting the field would make the server re-apply the user's default.
+    if (sandboxStatus) createMessage.sandbox = sandboxProvider || "local";
+    if (selectedMcpServers.length) {
+      createMessage.mcpServers = selectedMcpServers;
+    }
+    if (images.length) createMessage.images = images;
+    if (files.length) {
+      createMessage.files = files.map((file) =>
+        file.path
+          ? { name: file.name, path: file.path }
+          : { name: file.name, dataUrl: file.dataUrl },
+      );
+    }
     createSessionIdRef.current = clientSessionId;
     createMessageRef.current = createMessage;
     // A globally selected PR adopts its workspace, but its composer draft did
@@ -1215,9 +1253,9 @@ export function NewSession({
   // strength wherever you meet it. Only the base differs: mixed into
   // `transparent` rather than an opaque colour, because the palette is glass
   // and an opaque tint would paint the blur out.
-  const askSurfaceStyle = {
+  const askSurfaceStyle: AskSurfaceStyle = {
     "--palette-ask-bg": askSurface("transparent"),
-  } as React.CSSProperties;
+  };
 
   // The card itself: the same rows whether it floats over the page as a
   // palette or sits on it as the empty state's session input.
@@ -1620,7 +1658,7 @@ export function NewSession({
                       </Menu.SubmenuTrigger>
                       <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
                         {[
-                          { id: "", note: undefined as string | undefined },
+                          { id: "", note: undefined },
                           ...visibleSandboxChoices,
                         ].map((opt) => {
                           const selected = sandboxProvider === opt.id;

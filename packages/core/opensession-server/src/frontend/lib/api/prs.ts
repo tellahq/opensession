@@ -8,6 +8,38 @@ import type {
   ReviewGuideData,
 } from "../types";
 
+interface DiscardDiffFileRequest {
+  path: string;
+  repo?: string;
+  oldPath?: string;
+}
+
+interface SaveWorktreeFileRequest {
+  path: string;
+  content: string;
+  repo?: string;
+}
+
+interface GitPullRequest {
+  repo?: string;
+  base?: true;
+}
+
+interface PrTargetRequest {
+  repo?: string;
+  branch?: string;
+}
+
+interface MergePrRequest extends PrTargetRequest {
+  method: "squash" | "merge" | "rebase";
+}
+
+interface PrActionRequest {
+  kind: PrAgentAction | "cancel-review";
+  user: string;
+  repo?: string;
+}
+
 /** One open PR from the batched repo-wide list (session or not). */
 export interface OpenPr {
   repo: string;
@@ -220,9 +252,12 @@ export async function discardDiffFile(
   repo?: string,
   oldPath?: string,
 ): Promise<void> {
+  const body: DiscardDiffFileRequest = { path };
+  if (repo) body.repo = repo;
+  if (oldPath) body.oldPath = oldPath;
   await request(`/sessions/${encodeURIComponent(sessionId)}/discard-file`, {
     method: "POST",
-    body: { path, ...(repo ? { repo } : {}), ...(oldPath ? { oldPath } : {}) },
+    body,
     label: "Failed to discard file",
   });
 }
@@ -325,9 +360,11 @@ export async function saveWorktreeFile(
   content: string,
   repo?: string,
 ): Promise<void> {
+  const body: SaveWorktreeFileRequest = { path, content };
+  if (repo) body.repo = repo;
   await request(`/sessions/${encodeURIComponent(sessionId)}/worktree-file`, {
     method: "POST",
-    body: { path, content, ...(repo ? { repo } : {}) },
+    body,
     label: "Failed to save file",
   });
 }
@@ -377,11 +414,14 @@ export async function gitPullApi(
   repo?: string,
   fromBase?: boolean,
 ) {
+  const body: GitPullRequest = {};
+  if (repo) body.repo = repo;
+  if (fromBase) body.base = true;
   return request<{ ok: true }>(
     `/sessions/${encodeURIComponent(sessionId)}/git-pull`,
     {
       method: "POST",
-      body: { ...(repo ? { repo } : {}), ...(fromBase ? { base: true } : {}) },
+      body,
     },
   );
 }
@@ -542,15 +582,14 @@ export async function mergePrApi(
   repo?: string,
   branch?: string,
 ) {
+  const body: MergePrRequest = { method };
+  if (repo) body.repo = repo;
+  if (branch) body.branch = branch;
   return request<{ ok: true; url?: string }>(
     `/sessions/${encodeURIComponent(sessionId)}/pr-merge`,
     {
       method: "POST",
-      body: {
-        method,
-        ...(repo ? { repo } : {}),
-        ...(branch ? { branch } : {}),
-      },
+      body,
     },
   );
 }
@@ -577,15 +616,14 @@ export async function mergePrStackApi(
   repo?: string,
   branch?: string,
 ) {
+  const body: MergePrRequest = { method };
+  if (repo) body.repo = repo;
+  if (branch) body.branch = branch;
   return request<{ ok: true; merged: number[] }>(
     `/sessions/${encodeURIComponent(sessionId)}/pr-stack-merge`,
     {
       method: "POST",
-      body: {
-        method,
-        ...(repo ? { repo } : {}),
-        ...(branch ? { branch } : {}),
-      },
+      body,
     },
   );
 }
@@ -606,14 +644,14 @@ export async function closePrApi(
   repo?: string,
   branch?: string,
 ) {
+  const body: PrTargetRequest = {};
+  if (repo) body.repo = repo;
+  if (branch) body.branch = branch;
   const result = await request<{ ok: true; url?: string }>(
     `/sessions/${encodeURIComponent(sessionId)}/pr-close`,
     {
       method: "POST",
-      body: {
-        ...(repo ? { repo } : {}),
-        ...(branch ? { branch } : {}),
-      },
+      body,
     },
   );
   notifyPrClosed({ repo, branch, url: result.url });
@@ -654,6 +692,8 @@ export async function triggerPrActionApi(
   user: string,
   repo?: string,
 ) {
+  const body: PrActionRequest = { kind, user };
+  if (repo) body.repo = repo;
   return request<{
     ok: boolean;
     message?: string;
@@ -668,7 +708,7 @@ export async function triggerPrActionApi(
     session?: UnifiedSession | null;
   }>(`/sessions/${encodeURIComponent(sessionId)}/pr-action`, {
     method: "POST",
-    body: { kind, user, ...(repo ? { repo } : {}) },
+    body,
   });
 }
 
@@ -677,11 +717,13 @@ export async function cancelPrReviewApi(
   user: string,
   repo?: string,
 ): Promise<{ ok: boolean; cancelled: boolean }> {
+  const body: PrActionRequest = { kind: "cancel-review", user };
+  if (repo) body.repo = repo;
   return request<{ ok: boolean; cancelled: boolean }>(
     `/sessions/${encodeURIComponent(sessionId)}/pr-action`,
     {
       method: "POST",
-      body: { kind: "cancel-review", user, ...(repo ? { repo } : {}) },
+      body,
       label: "Couldn't cancel the review",
     },
   );
