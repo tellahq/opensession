@@ -699,3 +699,8 @@ export type ProtocolServerMessage =
   | { type: "notice"; sessionId?: string; message: string }
   | { type: "pong" }
   | { type: "error"; sessionId?: string; message: string };
+
+/** Images one message may carry. The server refuses a longer list at intake
+ * and every composer stops at the same count, so a sender learns while
+ * attaching rather than from a rejected send. */
+export const MAX_PROMPT_IMAGES = 6;

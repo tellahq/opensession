@@ -72,7 +72,7 @@ describe("session notes", () => {
         "os-too-many-images",
         Array(7).fill("data:image/png;base64,iVBORw0KGgo="),
       ),
-    ).toThrow("too many images");
+    ).toThrow("Attach up to 6 images per message.");
   });
 
   test("activity reports the latest note per session", () => {

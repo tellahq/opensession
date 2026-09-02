@@ -222,3 +222,22 @@ test("what is staging is counted by kind", () => {
     ]),
   ).toEqual({ images: 1, files: 1 });
 });
+
+// The server refuses a message with more than the cap, and a refused message
+// used to sit in the outbox retrying with nothing to press. Stop at the cap
+// while attaching and say what was left out.
+test("a seventh image is left out of the draft and named", async () => {
+  const server = stagingServer();
+  server.release();
+  saveDraft(KEY, {
+    images: Array.from({ length: 5 }, (_, i) => `/media?path=${i}`),
+  });
+
+  const result = await attachToDraft(KEY, [png("six.png"), png("seven.png")]);
+
+  expect(loadDraft(KEY).images).toHaveLength(6);
+  expect(loadDraft(KEY).images[5]).toBe(
+    `/media?path=${encodeURIComponent("/uploads/staged/six.png")}`,
+  );
+  expect(result.rejected).toEqual(["1 image (a message holds up to 6)"]);
+});

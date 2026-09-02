@@ -77,7 +77,14 @@ import {
   sessionRuntimeSnapshot,
   type SessionRuntimeSnapshot,
 } from "../session-cache";
-import { asDataUrlList, countImageRefs, parseImageDataUrls } from "../uploads";
+import {
+  asDataUrlList,
+  countImageRefs,
+  InvalidUploadError,
+  parseImageDataUrls,
+} from "../uploads";
+import { MAX_PROMPT_IMAGES } from "@tellahq/opensession-protocol/session";
+import { SessionKernelActorError } from "../session-kernel/actor-client";
 import { notifyMentions } from "../mentions";
 import { reviewTeamFor } from "../people";
 import { sendPushToUser } from "../push";
@@ -1260,6 +1267,15 @@ export async function handleSessionsRoutes(
           { status: 400 },
         );
       }
+      // Same terminal answer for a list the queue would refuse to stage. Ask
+      // before delivery so the kernel never records a receipt for a message
+      // that can only ever fail the same way.
+      if ((images?.length ?? 0) > MAX_PROMPT_IMAGES) {
+        return Response.json(
+          { error: `Attach up to ${MAX_PROMPT_IMAGES} images per message.` },
+          { status: 400 },
+        );
+      }
       const clientId =
         typeof body?.clientId === "string" && body.clientId.trim()
           ? body.clientId.trim().slice(0, 200)
@@ -1289,20 +1305,38 @@ export async function handleSessionsRoutes(
           typeof body?.fastMode === "boolean" ? body.fastMode : undefined,
         );
       }
-      const result = await getSessionControl().deliverToSession(
-        sessionId,
-        content,
-        user,
-        {
-          busy: busyMode,
-          hold: busyMode === "queue",
-          images,
-          imageUrls,
-          files,
-          contextSessions,
-          ...(clientId ? { deliveryId: clientId } : {}),
-        },
-      );
+      let result: Awaited<
+        ReturnType<ReturnType<typeof getSessionControl>["deliverToSession"]>
+      >;
+      try {
+        result = await getSessionControl().deliverToSession(
+          sessionId,
+          content,
+          user,
+          {
+            busy: busyMode,
+            hold: busyMode === "queue",
+            images,
+            imageUrls,
+            files,
+            contextSessions,
+            ...(clientId ? { deliveryId: clientId } : {}),
+          },
+        );
+      } catch (error) {
+        // A rejected attachment list, or the kernel replaying the failure it
+        // recorded for this client id, will not change on retry. Say so with
+        // a 4xx: a 500 reads as transient and keeps the outbox looping on a
+        // message nobody can edit or discard.
+        if (error instanceof InvalidUploadError)
+          return Response.json(
+            { error: error.message },
+            { status: error.status },
+          );
+        if (error instanceof SessionKernelActorError && !error.retryable)
+          return Response.json({ error: error.message }, { status: 409 });
+        throw error;
+      }
       if (result.status === "error") {
         return Response.json(
           { ...result, error: result.message },

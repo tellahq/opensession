@@ -20,8 +20,14 @@
  * workspace — a completion that lands afterwards must not write the image
  * back and resurrect a draft that is finished.
  */
+import { MAX_PROMPT_IMAGES } from "@tellahq/opensession-protocol/session";
 import { loadDraft, saveDraft } from "./drafts";
 import { splitAttachments, type FileAttachment } from "./images";
+
+/** Why an image past the per-message cap was left out of the draft. */
+export function imageCapReason(dropped: number): string {
+  return `${dropped} image${dropped === 1 ? "" : "s"} (a message holds up to ${MAX_PROMPT_IMAGES})`;
+}
 
 /** Bumped whenever a key's draft is consumed, so in-flight staging for it can
  *  tell that the composer it belongs to has moved on. */
@@ -115,8 +121,14 @@ export async function attachToDraft(
   }
   if (images.length || files.length) {
     const stored = loadDraft(key);
+    // The server refuses a longer list outright, so stop at the cap here and
+    // name what was left out: the store, not the caller's stale array, is
+    // what decides how much room a paste still has.
+    const room = Math.max(0, MAX_PROMPT_IMAGES - stored.images.length);
+    if (images.length > room)
+      rejected.push(imageCapReason(images.length - room));
     saveDraft(key, {
-      images: [...stored.images, ...images],
+      images: [...stored.images, ...images.slice(0, room)],
       files: [...stored.files, ...files],
     });
   }

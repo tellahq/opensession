@@ -20,8 +20,20 @@ import {
   unlinkSync,
   writeFileSync,
 } from "fs";
+import { MAX_PROMPT_IMAGES } from "@tellahq/opensession-protocol/session";
 import type { ImageInput } from "./run-events";
 import { SESSIONS_DIR } from "./session-cache";
+
+/** The sender's attachment list cannot be staged as sent. Carries the HTTP
+ * status so a route answers 400: the browser outbox parks a 4xx as failed with
+ * Edit and Discard, while a 5xx retries forever behind a fixed message. */
+export class InvalidUploadError extends Error {
+  readonly status = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidUploadError";
+  }
+}
 
 /** Keep only the string image references from a composer `images` payload: the
  *  display/queue form (parsed to ImageInput at delivery via parseImageDataUrls).
@@ -124,7 +136,6 @@ const STAGED_UPLOADS_DIR = `${UPLOADS_DIR}/staged`;
 // inline base64/WS path buffers, so keep it modest.
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MAX_CREATION_ATTACHMENTS = 32;
-const MAX_INLINE_IMAGES = 6;
 const INLINE_IMAGE_EXTENSIONS: Record<string, string> = {
   "image/png": ".png",
   "image/jpeg": ".jpg",
@@ -201,22 +212,28 @@ export function stageInlineImages(
   subdir = "images",
 ): string[] {
   if (urls === undefined) return [];
-  if (!Array.isArray(urls)) throw new Error("images must be an array");
-  if (urls.length > MAX_INLINE_IMAGES)
-    throw new Error(`too many images (max ${MAX_INLINE_IMAGES})`);
+  if (!Array.isArray(urls))
+    throw new InvalidUploadError("images must be an array");
+  if (urls.length > MAX_PROMPT_IMAGES)
+    throw new InvalidUploadError(
+      `Attach up to ${MAX_PROMPT_IMAGES} images per message.`,
+    );
   const images = urls.map(
     (url): { data: string; extension: string } | { url: string } => {
-      if (typeof url !== "string") throw new Error("invalid image");
+      if (typeof url !== "string")
+        throw new InvalidUploadError("invalid image");
       // The web composer stages an image at attach time and sends the ref. It
       // already lives under the uploads dir and /media already serves it, so a
       // note keeps the ref instead of rewriting the same bytes to a second file.
       if (url.startsWith("/media?")) {
-        if (!stagedImageRef(url)) throw new Error("unsupported image type");
+        if (!stagedImageRef(url))
+          throw new InvalidUploadError("unsupported image type");
         return { url };
       }
       const match = url.match(/^data:([^;]+);base64,(.+)$/s);
       const extension = match && INLINE_IMAGE_EXTENSIONS[match[1]];
-      if (!match || !extension) throw new Error("unsupported image type");
+      if (!match || !extension)
+        throw new InvalidUploadError("unsupported image type");
       return { data: match[2], extension };
     },
   );
@@ -228,7 +245,9 @@ export function stageInlineImages(
         ? (stagedImageRef(image.url)?.size ?? 0)
         : Buffer.byteLength(image.data, "base64");
     if (totalBytes > MAX_UPLOAD_BYTES)
-      throw new Error(`images too large (max ${MAX_UPLOAD_BYTES} bytes total)`);
+      throw new InvalidUploadError(
+        `images too large (max ${MAX_UPLOAD_BYTES} bytes total)`,
+      );
   }
   const dir = `${UPLOADS_DIR}/${sanitizeFilename(subdir)}/${sanitizeFilename(sessionId)}`;
   mkdirSync(dir, { recursive: true });
@@ -242,7 +261,7 @@ export function stageInlineImages(
         continue;
       }
       const data = Buffer.from(image.data, "base64");
-      if (!data.length) throw new Error("empty image");
+      if (!data.length) throw new InvalidUploadError("empty image");
       const path = uniqueUploadPath(
         dir,
         `${Date.now()}-${index + 1}${image.extension}`,
