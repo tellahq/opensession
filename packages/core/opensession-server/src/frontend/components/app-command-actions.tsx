@@ -83,6 +83,12 @@ export function buildAppCommandActions({
   toggleSidebarCollapsed,
   showToast,
 }: BuildAppCommandActionsOptions): CommandPaletteAction[] {
+  // Same target as the ⌘G/⌘⇧G chords: the primary branch's PR, else the
+  // first linked repo PR on a multi-repo session.
+  const prUrl =
+    currentSession?.prUrl ??
+    currentSession?.prs?.find((ref) => ref.url)?.url ??
+    null;
   return [
     {
       id: "new-session",
@@ -193,6 +199,23 @@ export function buildAppCommandActions({
             run: () =>
               copyToClipboard(absoluteLink(copyLinkPath), () =>
                 showToast("Link copied"),
+              ),
+          },
+        ]
+      : []),
+    ...(prUrl
+      ? [
+          {
+            id: "copy-pr-link",
+            label: "Copy pull request link",
+            description: "Copy the GitHub link to this session's pull request",
+            category: "Actions" as const,
+            keywords: ["url", "share", "clipboard", "github", "pr"],
+            shortcut: shortcutPrimaryKeys("pr-copy-link") ?? undefined,
+            icon: <IconPullRequest size={18} />,
+            run: () =>
+              copyToClipboard(prUrl, () =>
+                showToast("Pull request link copied"),
               ),
           },
         ]

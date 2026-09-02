@@ -67,6 +67,7 @@ export type ShortcutId =
   | "effort-up"
   | "effort-down"
   | "open-pr"
+  | "pr-copy-link"
   | "open-preview";
 
 export interface ShortcutCommand {
@@ -237,7 +238,8 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
   {
     id: "session-copy-link",
     title: "Copy link",
-    description: "Copy a link to the open session or pull request",
+    description:
+      "Copy the Open Session link to the open session, workspace, or review",
     group: "Sessions",
     defaults: ["mod+shift+c"],
   },
@@ -303,6 +305,16 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
     description: "Open the session's pull request on GitHub",
     group: "Links",
     defaults: ["mod+g"],
+  },
+  // ⌘⇧G is to ⌘G what ⌘⇧C is to the session: the same target, copied
+  // rather than opened. It hands out the GitHub URL, where ⌘⇧C on a review
+  // hands out the Open Session one.
+  {
+    id: "pr-copy-link",
+    title: "Copy pull request link",
+    description: "Copy the GitHub link to the session's pull request",
+    group: "Links",
+    defaults: ["mod+shift+g"],
   },
   {
     id: "open-preview",

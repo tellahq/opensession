@@ -271,6 +271,8 @@ function PrBarButton({
 function PrCopyItems({ pr }: { pr: PrDetails }) {
   const [copied, setCopied] = useState<"link" | "number" | null>(null);
   const provider = providerFromUrl(pr.url);
+  const openChord = useShortcutLabel("open-pr");
+  const copyChord = useShortcutLabel("pr-copy-link");
 
   const copy = (kind: "link" | "number", text: string) => {
     navigator.clipboard?.writeText(text).then(() => {
@@ -293,6 +295,7 @@ function PrCopyItems({ pr }: { pr: PrDetails }) {
       >
         <IconArrowUpRight size={20} className={MENU_ICON} />
         <span className="grow">Open on {provider.name}</span>
+        {openChord && <ContextMenu.Shortcut>{openChord}</ContextMenu.Shortcut>}
       </ContextMenu.Item>
       <ContextMenu.Item
         closeOnClick={false}
@@ -306,6 +309,7 @@ function PrCopyItems({ pr }: { pr: PrDetails }) {
         <span className="grow">
           {copied === "link" ? "Copied" : "Copy link"}
         </span>
+        {copyChord && <ContextMenu.Shortcut>{copyChord}</ContextMenu.Shortcut>}
       </ContextMenu.Item>
       <ContextMenu.Item
         closeOnClick={false}

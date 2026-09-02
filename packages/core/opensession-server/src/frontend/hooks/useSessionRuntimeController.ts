@@ -32,6 +32,7 @@ import { withPreviewPath } from "../lib/preview-url";
 import type { SessionViewerProps } from "../lib/session-viewer-bindings";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import { ownedBy } from "../lib/sidebar-lanes";
+import { copyToClipboard } from "../lib/share-link";
 import { matchesShortcut } from "../lib/shortcuts";
 import type {
   SessionPrRef,
@@ -422,16 +423,18 @@ export function useSessionRuntimeController({
   }, [showStaging, stagingSettled, stagingUrl, onCloseStaging]);
 
   // ⌘O opens the PR's preview environment (the Vercel preview StagingLink's globe
-  // points at); ⌘G opens its GitHub PR. Chords without a target (no staging
-  // deploy / no PR) fall through to the browser.
+  // points at); ⌘G opens its GitHub PR and ⌘⇧G copies that URL instead.
+  // Chords without a target (no staging deploy / no PR) fall through to the
+  // browser.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (!focused) return;
       const openPr = matchesShortcut(e, "open-pr");
+      const copyPr = matchesShortcut(e, "pr-copy-link");
       const openPreview = matchesShortcut(e, "open-preview");
       if (
         e.defaultPrevented ||
-        (!openPr && !openPreview) ||
+        (!openPr && !copyPr && !openPreview) ||
         blockingOverlayOpen()
       )
         return;
@@ -446,12 +449,16 @@ export function useSessionRuntimeController({
             )
           : null;
       if (editable && !editable.classList.contains("composer-textarea")) return;
-      if (openPr) {
+      if (openPr || copyPr) {
         // Primary branch's PR, falling back to the first attached/linked
         // repo PR on multi-repo sessions.
         const prUrl = session.prUrl ?? session.prs?.find((ref) => ref.url)?.url;
         if (!prUrl) return;
         e.preventDefault();
+        if (copyPr) {
+          copyToClipboard(prUrl, () => toast("Pull request link copied"));
+          return;
+        }
         window.open(prUrl, "_blank", "noopener");
       } else if (openPreview && staging) {
         e.preventDefault();
