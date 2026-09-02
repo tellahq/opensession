@@ -766,7 +766,25 @@ struct AuditLogSettingsView: View {
     }
 }
 
-enum AccountKind: String, Identifiable { case claude = "Claude", codex = "Codex"; var id: String { rawValue } }
+enum AccountKind: String, Identifiable, CaseIterable {
+    case claude = "Claude", codex = "Codex", xai = "xAI"
+    var id: String { rawValue }
+    /// The BrandTile mark and the SettingsCache key prefix.
+    var brand: String {
+        switch self {
+        case .claude: "claude"
+        case .codex: "codex"
+        case .xai: "xai"
+        }
+    }
+    var providerName: String {
+        switch self {
+        case .claude: "Anthropic"
+        case .codex: "OpenAI"
+        case .xai: "xAI"
+        }
+    }
+}
 struct AccountRemoval: Identifiable { let id: String; let name: String; let kind: AccountKind }
 private struct MemoryEditTarget: Identifiable { let scope: MemoryScopeInfo; let entry: MemoryEntry?; var id: String { "\(scope.key ?? "")-\(entry?.id ?? "new")" } }
 
@@ -889,6 +907,118 @@ struct CodexDeviceLoginView: View {
         else { return }
         login?.state = "cancelled"
         _ = try? await SettingsAPI.cancelCodexDeviceLogin(id: id)
+    }
+}
+
+/// SuperGrok sibling of CodexDeviceLoginView. There is no name field: the
+/// server names the account after the signed-in email.
+struct XaiDeviceLoginView: View {
+    let onAdded: () async -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @State private var shared = true
+    @State private var login: XaiDeviceLogin?
+    @State private var error: String?
+    @State private var starting = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let login {
+                    Section("SuperGrok sign-in") {
+                        if login.state == "starting" {
+                            ProgressView("Starting sign-in…")
+                        } else if login.state == "awaiting_code" {
+                            Text("Open xAI and enter this one-time code:")
+                            Button { copyToPasteboard(login.code ?? "") } label: {
+                                Text(login.code ?? "—").font(.title.monospaced().bold())
+                            }
+                            if let raw = login.url, let url = URL(string: raw) {
+                                Button("Copy code and open xAI") {
+                                    copyToPasteboard(login.code ?? "")
+                                    openURL(url)
+                                }
+                            }
+                            ProgressView("Waiting for approval…")
+                        } else if login.state == "error" {
+                            Text(login.error ?? "SuperGrok sign-in failed.").foregroundStyle(.red)
+                        }
+                    }
+                } else {
+                    Section {
+                        Toggle("Shared pool account", isOn: $shared)
+                    } header: {
+                        Text("Account")
+                    } footer: {
+                        Text("Sign in with a SuperGrok or X Premium account. Runs on Grok models then draw on that subscription's quota, not API credits.")
+                    }
+                    Button(starting ? "Starting…" : "Start SuperGrok sign-in") {
+                        Task { await start() }
+                    }
+                    .disabled(starting)
+                }
+                if let error { Text(error).foregroundStyle(.red) }
+            }
+            .navigationTitle("Add xAI Account")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { Task { await cancel() } }
+                }
+            }
+            .task(id: login?.id) { await poll() }
+        }
+        .onDisappear { Task { await cancelPendingLogin() } }
+        #if os(macOS)
+        .frame(minWidth: 440, minHeight: 360)
+        #endif
+    }
+
+    private func start() async {
+        starting = true
+        error = nil
+        do {
+            login = try await SettingsAPI.startXaiDeviceLogin(
+                owner: shared ? nil : ServerConfig.shared.userName
+            )
+        } catch {
+            self.error = error.localizedDescription
+        }
+        starting = false
+    }
+
+    private func poll() async {
+        guard let id = login?.id else { return }
+        while !Task.isCancelled {
+            guard login?.state == "starting" || login?.state == "awaiting_code" else { return }
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            do {
+                let next = try await SettingsAPI.xaiDeviceLogin(id: id)
+                login = next
+                if next.state == "done" {
+                    await onAdded()
+                    dismiss()
+                    return
+                }
+            } catch {
+                self.error = error.localizedDescription
+                return
+            }
+        }
+    }
+
+    private func cancel() async {
+        await cancelPendingLogin()
+        dismiss()
+    }
+
+    private func cancelPendingLogin() async {
+        guard let id = login?.id,
+              let state = login?.state,
+              state == "starting" || state == "awaiting_code"
+        else { return }
+        login?.state = "cancelled"
+        _ = try? await SettingsAPI.cancelXaiDeviceLogin(id: id)
     }
 }
 

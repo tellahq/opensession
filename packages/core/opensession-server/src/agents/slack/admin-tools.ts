@@ -220,7 +220,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .string()
             .optional()
             .describe(
-              "Optional claude-accounts id to pin runs to one subscription. By default a hard pin (cost cap: exhaustion falls to the fallback model, never the shared pool).",
+              "Optional model account id (Claude, ChatGPT or SuperGrok pool) to pin runs to one subscription. By default a hard pin (cost cap: exhaustion falls to the fallback model, never the shared pool).",
             ),
           accountStrict: z
             .boolean()
@@ -350,7 +350,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .string()
             .optional()
             .describe(
-              "Pin runs to this claude-accounts id; '' clears the pin.",
+              "Pin runs to this model account id (Claude, ChatGPT or SuperGrok pool); '' clears the pin.",
             ),
           accountStrict: z
             .boolean()

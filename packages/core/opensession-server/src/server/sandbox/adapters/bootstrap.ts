@@ -92,6 +92,8 @@ import {
   maskOpenaiAccount,
   openaiSeedAuthPath,
 } from "../../openai-auth";
+import { buildXaiRemoteUpload, maskXaiAccount } from "../../xai-accounts";
+import { XAI_OAUTH_PROVIDER } from "../../xai-provider-id";
 import {
   fallbackPlan,
   modelSupportsSteer,
@@ -309,6 +311,16 @@ export function remoteRunNeedsAnthropic(
   );
 }
 
+export function remoteRunNeedsXai(
+  model: string | undefined,
+  fallbackModel?: string,
+): boolean {
+  const prefix = `pi/${XAI_OAUTH_PROVIDER}/`;
+  return remoteReachableModels(model, fallbackModel).some((candidate) =>
+    candidate.startsWith(prefix),
+  );
+}
+
 function remoteSettingsProviderIds(
   model: string | undefined,
   fallbackModel?: string,
@@ -377,6 +389,7 @@ export function projectRemoteModelProviderConfig(
     if (trustProfile === "automation" && pinnedAccountId) {
       projectedBridge.accounts = [pinnedAccountId];
       projectedBridge.openaiAccounts = [pinnedAccountId];
+      projectedBridge.xaiAccounts = [pinnedAccountId];
     } else {
       if (Array.isArray(bridge.accounts))
         projectedBridge.accounts = bridge.accounts.filter(
@@ -384,6 +397,10 @@ export function projectRemoteModelProviderConfig(
         );
       if (Array.isArray(bridge.openaiAccounts))
         projectedBridge.openaiAccounts = bridge.openaiAccounts.filter(
+          (value): value is string => typeof value === "string",
+        );
+      if (Array.isArray(bridge.xaiAccounts))
+        projectedBridge.xaiAccounts = bridge.xaiAccounts.filter(
           (value): value is string => typeof value === "string",
         );
     }
@@ -2258,6 +2275,54 @@ function makeRemoteLauncher(
         await driver.exec(
           `rm -f ${codexStorePath} && rm -rf ${shellQuoteWord(REMOTE_OPENAI_SEED_DIR)}`,
         );
+      }
+      // SuperGrok material for pi/xai-oauth/* dispatched IN-SANDBOX: a scoped
+      // store whose records carry a freshly refreshed access token and the
+      // placeholder refresh (buildXaiRemoteUpload). The guest picks with the
+      // same pool rules and refuses to refresh, so the host's grant is never
+      // rotated from inside a sandbox. Uploaded only when the reachable walk
+      // can enter the pool; rewritten or removed every launch.
+      const usesXai = remoteRunNeedsXai(spec.model, spec.fallbackModel);
+      const xaiUpload = usesXai
+        ? await buildXaiRemoteUpload({
+            user: spec.user,
+            accountId: spec.accountId,
+            restrictIds: readModelProviderConfig()?.xaiAccounts,
+          })
+        : { accounts: [], skipped: [] };
+      if (
+        automationProfile &&
+        usesXai &&
+        !xaiUpload.accounts.some((account) => account.id === spec.accountId)
+      ) {
+        throw new Error(
+          "the pinned automation account is not an eligible SuperGrok account",
+        );
+      }
+      for (const { account, reason } of xaiUpload.skipped) {
+        console.warn(
+          `[sandbox-remote] xai upload for ${maskXaiAccount(account)} skipped: ${reason}`,
+        );
+      }
+      const xaiStorePath = `${REMOTE_HOME}/.opensession-xai-accounts.json`;
+      if (xaiUpload.accounts.length) {
+        await driver.writeFile(
+          xaiStorePath,
+          JSON.stringify({ accounts: xaiUpload.accounts }, null, 2) + "\n",
+        );
+        secureFiles.push(xaiStorePath);
+        audit({
+          msg: "sandbox_xai_seed_upload",
+          host_id: spec.hostId,
+          session_id: spec.osSessionId,
+          mechanism: "scoped-xai-account-remote",
+          accounts: xaiUpload.accounts.map((a) => maskXaiAccount(a)),
+          skipped: xaiUpload.skipped.map(
+            (s) => `${maskXaiAccount(s.account)}: ${s.reason}`,
+          ),
+        });
+      } else {
+        await driver.exec(`rm -f ${shellQuoteWord(xaiStorePath)}`);
       }
       const secured = await driver.exec(
         [

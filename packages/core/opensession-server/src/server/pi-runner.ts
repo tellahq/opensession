@@ -1910,6 +1910,7 @@ async function* runPiAttempt(
       user: accountUser,
       pinnedId: opts.accountId,
       strict: opts.accountStrict,
+      restrictIds: readModelProviderConfig()?.xaiAccounts,
       exclude: excluded,
     });
     return "error" in next ? undefined : xaiPoolRef(next);
@@ -2061,6 +2062,7 @@ async function* runPiAttempt(
       },
       dependencies: {
         readOpenaiAccounts: () => readModelProviderConfig()?.openaiAccounts,
+        readXaiAccounts: () => readModelProviderConfig()?.xaiAccounts,
         pickOpenaiAccount,
         buildSeededOpenaiAuth,
         anthropicTransport: piAnthropicTransport,

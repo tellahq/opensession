@@ -14,9 +14,15 @@
  * straight back. Two processes (gateway and executor) read the same file, so
  * the token is re-read immediately before a refresh and a failed refresh
  * re-reads once more before giving up, in case the other side rotated first.
+ *
+ * Sandboxes only ever hold a copy that cannot rotate the grant: Docker mounts
+ * this store read-only and remote hosts receive buildXaiRemoteUpload's
+ * access-token-only projection. Either copy refuses to refresh and fails
+ * loudly at expiry, while the host keeps its tokens ahead of expiry with a
+ * periodic upkeep tick so those copies always find a live one.
  */
 
-import { chmodSync, existsSync, readFileSync } from "fs";
+import { accessSync, chmodSync, constants, existsSync, readFileSync } from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { stateDir } from "./paths";
 import { userMatchesAny } from "./shared/user-mappings";
@@ -43,6 +49,17 @@ const DEFAULT_EXHAUST_MS = 60 * 60 * 1000;
 const REFRESH_WINDOW_MS = 60 * 1000;
 const FAILED_REFRESH_WAIT_MS = 10 * 60 * 1000;
 const POLL_INTERVAL_MS = 60 * 60 * 1000;
+/** Host-side token upkeep: every tick, any access token this close to expiry
+ * is refreshed, so a read-only sandbox mount never picks a dead token. xAI
+ * tokens last an hour, hence the short cadence. */
+const UPKEEP_INTERVAL_MS = 10 * 60 * 1000;
+const UPKEEP_AHEAD_MS = 20 * 60 * 1000;
+/** A remote guest cannot refresh at all, so an upload carries a token with
+ * as much of its hour left as a refresh can give it. */
+const REMOTE_UPLOAD_AHEAD_MS = 45 * 60 * 1000;
+/** The refresh slot of a guest copy: the real grant never leaves the host,
+ * so a sandbox refresh can neither rotate nor kill it. */
+export const XAI_REMOTE_SEED_REFRESH = "opensession-remote-seed";
 /** Cached usage older than this no longer gates picking. */
 const USAGE_GATE_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
@@ -183,6 +200,7 @@ const usageCache: Map<string, XaiUsageSnapshot> = ((
   globalThis as any
 ).__xaiAccountUsage ??= new Map());
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+let upkeepTimer: ReturnType<typeof setInterval> | null = null;
 
 export function xaiUsageFor(accountId: string): XaiUsageSnapshot | null {
   return usageCache.get(accountId) || null;
@@ -317,6 +335,9 @@ export interface PickXaiAccountOptions {
   user?: string;
   pinnedId?: string;
   strict?: boolean;
+  /** Designated account ids in preference order (bridge.xaiAccounts), the
+   *  sibling of the Codex pool's openaiAccounts. Empty = the whole pool. */
+  restrictIds?: string[];
   exclude?: ReadonlySet<string>;
   out?: { reason?: string };
 }
@@ -324,22 +345,27 @@ export interface PickXaiAccountOptions {
 /**
  * Pick an account for a run, mirroring pickOpenaiAccount + pickCodexAccount:
  * an eligible pin first (a strict pin never widens into the pool), then the
- * run user's own personal accounts, then the shared pool. Other people's
- * personal accounts are never eligible, and a run with no user (automations,
- * one-shots) sees shared accounts only. Session affinity is the pinned
- * rendezvous hash shared with the Codex pool; account-less callers get the
- * least recently picked account.
+ * designated list in order when one is configured, then the run user's own
+ * personal accounts, then the shared pool. Other people's personal accounts
+ * are never eligible, and a run with no user (automations, one-shots) sees
+ * shared accounts only. Session affinity is the pinned rendezvous hash
+ * shared with the Codex pool; account-less callers get the least recently
+ * picked account.
  */
 export function pickXaiAccount(
   options: PickXaiAccountOptions = {},
 ): XaiAccount | { error: string } {
   const { model, sessionKey, user, pinnedId, strict, exclude, out } = options;
+  const restrictIds = options.restrictIds?.length
+    ? options.restrictIds
+    : undefined;
   const all = readStore();
   if (!all.length) {
     return { error: "no SuperGrok accounts are configured" };
   }
   const allowedOwner = (account: XaiAccount) =>
     !account.owner || (!!user && userMatchesAny(user, [account.owner]));
+  const designated = (id: string) => !restrictIds || restrictIds.includes(id);
   const usable = (account: XaiAccount) =>
     !exclude?.has(account.id) &&
     !isExhausted(account.id, model) &&
@@ -347,7 +373,12 @@ export function pickXaiAccount(
     !refreshErrors.get(account.id)?.reloginRequired;
   if (pinnedId) {
     const pinned = all.find((a) => a.id === pinnedId);
-    if (pinned && usable(pinned) && allowedOwner(pinned)) {
+    if (
+      pinned &&
+      usable(pinned) &&
+      allowedOwner(pinned) &&
+      designated(pinned.id)
+    ) {
       if (out) out.reason = "pinned";
       lastPickedAt.set(pinned.id, Date.now());
       return pinned;
@@ -357,6 +388,19 @@ export function pickXaiAccount(
         error: `pinned account ${pinned?.name || pinnedId} is not currently usable (hard pin — not falling back to the pool)`,
       };
     }
+  }
+  if (restrictIds) {
+    for (const id of restrictIds) {
+      const account = all.find((a) => a.id === id);
+      if (account && usable(account) && allowedOwner(account)) {
+        if (out) out.reason = "designated";
+        lastPickedAt.set(account.id, Date.now());
+        return account;
+      }
+    }
+    return {
+      error: `no designated SuperGrok account is usable (${restrictIds.join(", ")})`,
+    };
   }
   const candidatesAll = all.filter(usable);
   const personal = user
@@ -392,8 +436,27 @@ export function maskXaiAccount(
 
 // ── Token upkeep ────────────────────────────────────────────────────────────
 
-function needsRefresh(account: XaiAccount, now = Date.now()): boolean {
-  return account.expires <= now + REFRESH_WINDOW_MS;
+function needsRefresh(
+  account: XaiAccount,
+  aheadMs = REFRESH_WINDOW_MS,
+  now = Date.now(),
+): boolean {
+  return account.expires <= now + aheadMs;
+}
+
+/** Why this copy of the store must not refresh: a guest projection holds no
+ * grant, and a read-only mount (Docker) could not keep a rotated pair, which
+ * would strand the host's copy. Null on the host. */
+function refreshRefusal(account: XaiAccount): string | null {
+  if (account.refresh === XAI_REMOTE_SEED_REFRESH) {
+    return "this sandbox copy holds an access token only; the host refreshes it before each launch";
+  }
+  try {
+    accessSync(STORE_PATH, constants.W_OK);
+  } catch {
+    return "the account store is read-only here; the host refreshes it on its own";
+  }
+  return null;
 }
 
 function persistTokens(id: string, tokens: XaiOAuthTokens): XaiAccount | null {
@@ -421,12 +484,18 @@ function persistTokens(id: string, tokens: XaiOAuthTokens): XaiAccount | null {
   return next;
 }
 
-async function refreshOnce(id: string): Promise<XaiAccount> {
+async function refreshOnce(id: string, aheadMs: number): Promise<XaiAccount> {
   // Re-read right before the network call: the other host process may have
   // rotated the pair since the caller looked.
   const current = readStore().find((a) => a.id === id);
   if (!current) throw new XaiOAuthError("account was removed", true);
-  if (!needsRefresh(current)) return current;
+  if (!needsRefresh(current, aheadMs)) return current;
+  const refusal = refreshRefusal(current);
+  if (refusal) {
+    throw new XaiOAuthError(
+      `access token has expired and cannot be refreshed: ${refusal}`,
+    );
+  }
   try {
     const tokens = await refreshXaiTokens(current.refresh);
     refreshErrors.delete(id);
@@ -454,13 +523,15 @@ async function refreshOnce(id: string): Promise<XaiAccount> {
  * The account with a usable access token: the stored one when it has time
  * left, otherwise a refreshed pair. Concurrent callers for one account share
  * a single refresh. A failed refresh backs off ten minutes and, when the
- * grant is dead, marks the account as needing a fresh sign-in.
+ * grant is dead, marks the account as needing a fresh sign-in. `aheadMs`
+ * widens "time left" for callers that need the token to outlive a run.
  */
 export async function ensureFreshXaiAccount(
   account: XaiAccount,
+  aheadMs = REFRESH_WINDOW_MS,
 ): Promise<XaiAccount> {
   const stored = readStore().find((a) => a.id === account.id) ?? account;
-  if (!needsRefresh(stored)) return stored;
+  if (!needsRefresh(stored, aheadMs)) return stored;
   const blocked = refreshBlockedUntil.get(account.id) ?? 0;
   if (Date.now() < blocked) {
     const last = refreshErrors.get(account.id);
@@ -471,11 +542,92 @@ export async function ensureFreshXaiAccount(
   }
   const existing = refreshInFlight.get(account.id);
   if (existing) return existing;
-  const run = refreshOnce(account.id).finally(() =>
+  const run = refreshOnce(account.id, aheadMs).finally(() =>
     refreshInFlight.delete(account.id),
   );
   refreshInFlight.set(account.id, run);
   return run;
+}
+
+/** Host upkeep tick: refresh every token that would otherwise expire before
+ * the next tick, so a read-only guest copy always finds a live one. */
+export async function refreshXaiTokensAhead(): Promise<void> {
+  for (const account of readStore()) {
+    if (!needsRefresh(account, UPKEEP_AHEAD_MS)) continue;
+    if (refreshErrors.get(account.id)?.reloginRequired) continue;
+    await ensureFreshXaiAccount(account, UPKEEP_AHEAD_MS).catch(
+      () => undefined,
+    );
+  }
+}
+
+export interface XaiRemoteUpload {
+  accounts: XaiAccount[];
+  skipped: Array<{ account: XaiAccount; reason: string }>;
+}
+
+/**
+ * The scoped, rotation-proof store a remote sandbox receives, the sibling of
+ * Claude's accountsForRemoteUpload and Codex's buildOpenaiRemoteSeedUpload.
+ * An explicit pin narrows the set to that one account when this run may use
+ * it (a missing or foreign pin falls back to the scoped set, never wider);
+ * otherwise the run user's own and the shared accounts, limited to the
+ * designated ids. Every record is rebuilt field by field with a freshly
+ * refreshed access token and the placeholder refresh, so neither the grant
+ * nor an unknown future host field crosses the trust boundary.
+ */
+export async function buildXaiRemoteUpload(input: {
+  user?: string;
+  accountId?: string;
+  restrictIds?: string[];
+}): Promise<XaiRemoteUpload> {
+  const allowedOwner = (account: XaiAccount) =>
+    !account.owner ||
+    (!!input.user && userMatchesAny(input.user, [account.owner]));
+  const all = readStore();
+  const designated = input.restrictIds?.length
+    ? input.restrictIds
+        .map((id) => all.find((account) => account.id === id))
+        .filter((account): account is XaiAccount => !!account)
+    : all;
+  const pinned = input.accountId
+    ? designated.find((account) => account.id === input.accountId)
+    : undefined;
+  const eligible =
+    pinned && allowedOwner(pinned) ? [pinned] : designated.filter(allowedOwner);
+  const accounts: XaiAccount[] = [];
+  const skipped: XaiRemoteUpload["skipped"] = [];
+  for (const account of eligible) {
+    if (refreshErrors.get(account.id)?.reloginRequired) {
+      skipped.push({ account, reason: "needs a fresh sign-in" });
+      continue;
+    }
+    let fresh: XaiAccount;
+    try {
+      fresh = await ensureFreshXaiAccount(account, REMOTE_UPLOAD_AHEAD_MS);
+    } catch (error) {
+      skipped.push({
+        account,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+    if (fresh.expires <= Date.now()) {
+      skipped.push({ account, reason: "access token has expired" });
+      continue;
+    }
+    accounts.push({
+      id: fresh.id,
+      name: fresh.name,
+      ...(fresh.email ? { email: fresh.email } : {}),
+      ...(fresh.owner ? { owner: fresh.owner } : {}),
+      createdAt: fresh.createdAt,
+      access: fresh.access,
+      refresh: XAI_REMOTE_SEED_REFRESH,
+      expires: fresh.expires,
+    });
+  }
+  return { accounts, skipped };
 }
 
 /** Accounts whose last refresh failed, for the health sweep. */
@@ -521,16 +673,23 @@ export async function refreshXaiUsage(
   }
 }
 
-/** Start the hourly usage and catalog poller (boot-wired beside the others). */
+/** Start the hourly usage and catalog poller plus the token upkeep tick
+ * (boot-wired beside the other pools' pollers). */
 export function startXaiUsagePoller(): void {
-  if (pollTimer) return;
+  if (pollTimer || upkeepTimer) return;
   const refresh = () =>
     refreshXaiUsage().catch((error) =>
       console.error("[xai-accounts] usage poll failed:", error),
     );
   void refresh();
   pollTimer = setInterval(refresh, POLL_INTERVAL_MS);
-  console.log("[xai-accounts] usage poller started (hourly)");
+  upkeepTimer = setInterval(
+    () => void refreshXaiTokensAhead(),
+    UPKEEP_INTERVAL_MS,
+  );
+  console.log(
+    "[xai-accounts] usage poller started (hourly, token upkeep every 10 minutes)",
+  );
 }
 
 // ── Model catalog ───────────────────────────────────────────────────────────
@@ -771,6 +930,7 @@ export async function bindXaiAccount(input: {
   user?: string;
   accountId?: string;
   accountStrict?: boolean;
+  restrictIds?: string[];
   excluded: ReadonlySet<string>;
   out?: { reason?: string };
 }): Promise<
@@ -787,6 +947,7 @@ export async function bindXaiAccount(input: {
     user: input.user,
     pinnedId: input.accountId,
     strict: input.accountStrict,
+    restrictIds: input.restrictIds,
     exclude: input.excluded,
     out: input.out,
   });

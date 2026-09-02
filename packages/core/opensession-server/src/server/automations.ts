@@ -29,6 +29,7 @@ import {
 } from "./runner-shared";
 import { getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
+import { getXaiAccountById } from "./xai-accounts";
 import { isAgentLiveEngineBusy, runAgent } from "./agent-runner";
 import { activeRunRecords, hasActiveRunFor } from "./run-journal";
 import {
@@ -459,7 +460,7 @@ function sanitizeAccountId(
   if (typeof v !== "string") return { error: "accountId must be a string" };
   const id = v.trim();
   if (!id) return undefined;
-  if (!getAccountById(id) && !getCodexAccountById(id))
+  if (!getAccountById(id) && !getCodexAccountById(id) && !getXaiAccountById(id))
     return { error: `Unknown model account id "${id}"` };
   return id;
 }
@@ -509,10 +510,16 @@ export function validateSandboxAutomation(
           "the pinned account does not belong to the selected OpenAI model",
       };
     }
+  } else if (/^pi\/xai-oauth\//.test(runModel)) {
+    if (!getXaiAccountById(automation.accountId)) {
+      return {
+        error: "the pinned account does not belong to the selected Grok model",
+      };
+    }
   } else {
     return {
       error:
-        "sandbox automations require an Anthropic or OpenAI subscription model with a pinned account",
+        "sandbox automations require an Anthropic, OpenAI or xAI subscription model with a pinned account",
     };
   }
   if (automation.accountStrict === false) {

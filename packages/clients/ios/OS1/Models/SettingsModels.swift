@@ -194,6 +194,10 @@ struct ProviderAccount: Codable, Sendable, Identifiable {
     /// The token has no usage scope, so there is nothing to meter rather than
     /// nothing spent. The two look identical without this.
     var noUsageScope: Bool?
+    /// A SuperGrok account whose refresh grant died: only a fresh device-code
+    /// sign-in brings it back.
+    var reloginRequired: Bool?
+    var refreshError: String?
 }
 
 struct ProviderAccountsResponse: Codable, Sendable {
@@ -203,6 +207,16 @@ struct ProviderAccountsResponse: Codable, Sendable {
 struct CodexDeviceLogin: Codable, Sendable, Identifiable {
     var id: String?
     var name: String?
+    var state: String?
+    var url: String?
+    var code: String?
+    var error: String?
+}
+
+/// A SuperGrok device-code sign-in in flight. The account name comes from
+/// the signed-in email, so there is no name to send.
+struct XaiDeviceLogin: Codable, Sendable, Identifiable {
+    var id: String?
     var state: String?
     var url: String?
     var code: String?

@@ -1015,7 +1015,11 @@ const responseFor = (url: URL, method: string): Response => {
   if (path === "/api/lanes") return json({ lanes: {} });
   if (path === "/api/reads") return json({ reads: {} });
   if (path === "/api/automations") return json(automations);
-  if (path === "/api/claude-accounts" || path === "/api/codex-accounts")
+  if (
+    path === "/api/claude-accounts" ||
+    path === "/api/codex-accounts" ||
+    path === "/api/xai-accounts"
+  )
     return json({ accounts: [] });
   if (/^\/api\/sessions\/[^/]+\/assets$/.test(path))
     return json({ dir: "/demo/assets", files: [] });

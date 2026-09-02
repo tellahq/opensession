@@ -64,6 +64,8 @@ type SeededAuthResult = { seeded: SeededOpenaiAuth } | { error: string };
 export interface PiRuntimeBindingDependencies {
   loadSdk?: () => Promise<PiSdk>;
   readOpenaiAccounts: () => unknown;
+  /** Designated SuperGrok ids (bridge.xaiAccounts), when configured. */
+  readXaiAccounts?: () => string[] | undefined;
   pickOpenaiAccount: (
     modelID: string,
     accounts: any,
@@ -173,6 +175,7 @@ export async function createPiRuntimeBinding(
       user: input.accountUser,
       accountId: input.accountId,
       accountStrict: input.accountStrict,
+      restrictIds: deps.readXaiAccounts?.(),
       excluded: input.excludedOpenaiAccountIds,
       out: pickOut,
     });

@@ -321,6 +321,10 @@ export interface ModelProviderSettings {
    *  only gates the Anthropic bridge); model provider/openai auth keys off the codex
    *  accounts pool, not this file — see model provider-openai-auth.ts. */
   openaiAccounts?: string[];
+  /** The SuperGrok sibling: which xai-accounts.ts ids serve
+   *  pi/xai-oauth/* runs, in preference order (read from bridge.xaiAccounts).
+   *  Absent = the normal SuperGrok pool pick. */
+  xaiAccounts?: string[];
   /** Third-party providers (id → apiKey/baseURL), injected into model provider
    *  config as provider.<id>.options. Independent of `enabled` (that flag only
    *  gates the Anthropic bridge). anthropic/openai never live here. */
@@ -570,6 +574,7 @@ export function normalizeModelProviderConfig(
         ? r.bridgeMaxRequestsPerHour
         : undefined,
     openaiAccounts: stringArray(bridge?.openaiAccounts),
+    xaiAccounts: stringArray(bridge?.xaiAccounts),
     providers: providerMap(r.providers, loadCatalogFile),
     orchestrator: r.orchestrator === true,
   };

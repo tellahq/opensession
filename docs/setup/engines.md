@@ -72,7 +72,14 @@ SuperGrok accounts sign in by device code from Settings → Providers. Their
 models appear in the picker as `pi/xai-oauth/<model>` and every request goes
 through xAI's `cli-chat-proxy.grok.com`, so it draws on the subscription's
 quota rather than API credits. Pay-per-token xAI keys stay a separate `xai`
-provider under Your own providers.
+provider under Your own providers. `bridge.xaiAccounts` in
+`model-providers.json` restricts which accounts serve Grok runs, like
+`bridge.openaiAccounts` does for the ChatGPT pool.
+
+Sandboxes never hold the xAI refresh grant. Docker mounts the store read-only
+and remote sandboxes receive a scoped copy with fresh access tokens and no
+refresh token, so a sandbox can neither rotate nor kill the host's sign-in;
+the host keeps every stored token ahead of expiry on its own.
 
 Legacy top-level counterparts such as `~/.opensession-claude-accounts.json`
 remain supported when the grouped path is absent. Run `opensession doctor`
