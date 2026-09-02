@@ -54,6 +54,8 @@ import type { NativeSessionFile, TranscriptEntry } from "../../server/types";
 export interface SessionsToolContext {
   /** Display name credited when this session messages/creates others. */
   createdBy: string;
+  /** Verified login inherited by child sessions; never supplied by tool args. */
+  createdByLogin?: string;
   /** Trusted user — gates the control tools (answer/send/cancel/create). */
   isAdmin: boolean;
   /** The session using these tools, so worker sessions can report back to it. */
@@ -529,6 +531,7 @@ export async function spawnTaskImpl(
   const { id, createdBy, createdAt } = await deps.control.createSession({
     requestId,
     requestScope: caller || ctx.createdBy,
+    createdByLogin: ctx.createdByLogin,
     prompt,
     repo: args.repo,
     mode,
@@ -1248,6 +1251,7 @@ export function createSessionsMcpServer(
                 args,
               ),
               requestScope: ctx.currentSessionId || ctx.createdBy,
+              createdByLogin: ctx.createdByLogin,
               prompt,
               repo: args.repo,
               mode: args.mode,

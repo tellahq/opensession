@@ -93,6 +93,8 @@ export interface CreateSessionOpts {
   requestId?: string;
   /** Verified actor scope used by the create command owner. */
   requestScope?: string;
+  /** Server-authenticated creator login. Never accept this from agent input. */
+  createdByLogin?: string;
   /** Branch for a code-mode worktree session. Ignored for ask mode. */
   branch?: string;
   /** Committed ref the new isolated branch starts from. Internal callers must

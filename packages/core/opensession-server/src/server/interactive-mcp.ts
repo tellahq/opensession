@@ -164,6 +164,9 @@ export function interactiveMcpServers(
   return {
     "opensession-sessions": createSessionsMcpServer({
       createdBy,
+      createdByLogin: sessionId
+        ? findSession(sessionId)?.createdByLogin
+        : undefined,
       isAdmin: true,
       currentSessionId: sessionId,
     }),

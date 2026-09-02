@@ -169,6 +169,7 @@ function makeHarness(childId?: string): Harness {
 
 const ctx = (currentSessionId?: string): SessionsToolContext => ({
   createdBy: "Alex",
+  createdByLogin: "alex-two",
   isAdmin: true,
   currentSessionId,
 });
@@ -206,6 +207,7 @@ describe("spawnTaskImpl", () => {
     );
     expect(h.created[0].parentSessionId).toBe(parent);
     expect(h.created[0].user).toBe("Alex");
+    expect(h.created[0].createdByLogin).toBe("alex-two");
     expect(h.created[0].mode).toBe("ask");
     expect(res.createdBy).toBe("Alex");
     expect(res.createdAt).toBe("2026-08-06T10:00:00.000Z");
