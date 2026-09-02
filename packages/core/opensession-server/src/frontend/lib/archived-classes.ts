@@ -20,7 +20,7 @@ export const ARCHIVED_PHONE_SEARCH_DOCK =
 /** Section labels and row contents share the page's content edge. The list
  * itself extends 12px beyond it so the hover wash has room to breathe. */
 export const ARCHIVED_SECTION_LABEL =
-  "m-0 px-3 pb-1.5 text-meta font-semibold text-faint";
+  "m-0 px-3 pb-1.5 text-body font-semibold text-faint";
 
 export const ARCHIVED_SECTION_ROWS = "m-0 list-none p-0";
 
