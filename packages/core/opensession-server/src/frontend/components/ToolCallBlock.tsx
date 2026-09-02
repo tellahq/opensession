@@ -50,6 +50,7 @@ import { openGalleryFrom } from "../lib/media-lightbox-gallery";
 import { useOpenAsset, useOpenAssetPaths } from "../lib/open-asset";
 import { assetPathForMediaSrc } from "../lib/asset-preview";
 import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
+import { z } from "zod";
 // Re-exported so the session view keeps one import for the transcript's
 // context providers; the context itself lives with the rest of the
 // open-an-asset behaviour, which the turn footer shares.
@@ -83,10 +84,38 @@ interface Props {
   sessionId?: string;
 }
 
-type FullEntryDetail = Pick<
-  TranscriptEntry,
-  "content" | "toolInput" | "images"
->;
+const fullEntryDetailSchema = z.object({
+  content: z.string(),
+  toolInput: z.json().optional(),
+  images: z.array(z.string()).optional(),
+  featuredMedia: z.array(z.string()).optional(),
+});
+
+const toolInputValueSchema = z.json().optional();
+const toolArgumentsSchema = z.record(z.string(), z.json());
+const boundedToolInputSchema = z.object({
+  toolName: z.string(),
+  byteSize: z.number(),
+  keys: z.array(z.json()),
+});
+
+type ToolInputValue = z.infer<typeof toolInputValueSchema>;
+type ToolArguments = z.infer<typeof toolArgumentsSchema>;
+
+interface ToolInput {
+  value: ToolInputValue;
+  arguments: ToolArguments;
+}
+
+function parseToolInput(input: TranscriptEntry["toolInput"]): ToolInput {
+  const parsedValue = toolInputValueSchema.safeParse(input);
+  const value = parsedValue.success ? parsedValue.data : undefined;
+  const parsedArguments = toolArgumentsSchema.safeParse(value);
+  return {
+    value,
+    arguments: parsedArguments.success ? parsedArguments.data : {},
+  };
+}
 
 function useHydratedTranscriptEntry(
   target: TranscriptEntry | undefined,
@@ -113,23 +142,21 @@ function useHydratedTranscriptEntry(
     )
       .then(async (res) => {
         if (!res.ok) return;
-        const detail = (await res.json()) as FullEntryDetail;
+        const detail = fullEntryDetailSchema.parse(await res.json());
         let toolInput = detail.toolInput;
         if (legacyVoiceInput && toolInput === undefined && detail.content) {
           await (async () => {
-            toolInput = JSON.parse(detail.content);
+            toolInput = toolInputValueSchema.parse(JSON.parse(detail.content));
           })().catch(async () => {
             toolInput = detail.content;
           });
         }
+        const hydratedEntry: TranscriptEntry = { ...target, ...detail };
+        if (toolInput !== undefined) hydratedEntry.toolInput = toolInput;
         setHydrated({
           sessionId,
           source: target,
-          entry: {
-            ...target,
-            ...detail,
-            ...(toolInput !== undefined ? { toolInput } : {}),
-          },
+          entry: hydratedEntry,
         });
       })
       .catch((error) => {
@@ -192,18 +219,24 @@ export const LiveSubagentsProvider = LiveSubagentsContext.Provider;
  */
 export function toolSummary(
   rawName: string,
-  rawInput: unknown,
+  rawInput: TranscriptEntry["toolInput"],
   fallback: string,
   roots: readonly PathRoot[] = [],
 ): string {
   // Pi routes every bridged MCP call through its `mcp_call` dispatcher, so the
   // envelope is what a transcript stores. Summarize the call inside it.
-  const { toolName, input } = unwrapMcpDispatcher(rawName, rawInput);
-  const detail = formatToolDetail(toolDetail(toolName, input), (p) =>
-    tidyPath(p, roots),
+  const outerInput = parseToolInput(rawInput);
+  const unwrapped = unwrapMcpDispatcher(rawName, outerInput.value);
+  const input = parseToolInput(unwrapped.input);
+  const detail = formatToolDetail(
+    toolDetail(unwrapped.toolName, input.value),
+    (p) => tidyPath(p, roots),
   );
   if (detail) return detail;
-  if (parseMcpTool(toolName) && fallback.trim() === `Using ${toolName}`)
+  if (
+    parseMcpTool(unwrapped.toolName) &&
+    fallback.trim() === `Using ${unwrapped.toolName}`
+  )
     return "";
   return fallback;
 }
@@ -332,8 +365,9 @@ export const ToolCallBlock = function ToolCallBlock({
   onOpenSubagent,
   sessionId,
 }: Props) {
+  const entryInput = parseToolInput(entry.toolInput);
   const entryNeedsHydration =
-    entry.contentClamped || isBoundedToolInput(entry.toolInput);
+    entry.contentClamped || isBoundedToolInput(entryInput.value);
   const resultNeedsHydration = Boolean(result?.contentClamped);
   // Default closed, and open only for media the agent asked to SHOW. Keep an
   // explicit choice on the transcript entry rather than this component: the
@@ -364,7 +398,7 @@ export const ToolCallBlock = function ToolCallBlock({
     expanded && resultNeedsHydration,
     sessionId,
   );
-  const shownInput = fullEntry?.toolInput ?? entry.toolInput;
+  const shownInput = parseToolInput(fullEntry?.toolInput ?? entry.toolInput);
   const shownResult = fullResult ?? result;
   const imageCount = shownResult?.images?.length ?? 0;
   const videoCount = shownResult?.videos?.length ?? 0;
@@ -385,20 +419,22 @@ export const ToolCallBlock = function ToolCallBlock({
   // The transcript stores pi's dispatcher envelope for every bridged MCP call,
   // so the row resolves the call inside it once and derives everything from
   // that: the label, the glyph, the summary, the expanded input.
-  const { toolName, input: callInput } = unwrapMcpDispatcher(
+  const unwrappedCall = unwrapMcpDispatcher(
     entry.toolName || "Tool",
-    shownInput,
+    shownInput.value,
   );
+  const { toolName } = unwrappedCall;
+  const callInput = parseToolInput(unwrappedCall.input);
   const canonical = canonicalToolName(toolName);
   const roots = useToolPathRoots();
   const mcp = parseMcpTool(toolName);
   const mcpParts = mcp ? mcpLabelParts(mcp.server, mcp.tool) : [];
   const scopedOpenSession =
     mcpParts[0] === "Open Session" && mcpParts.length > 2;
-  const summary = toolSummary(toolName, callInput, entry.content, roots);
+  const summary = toolSummary(toolName, callInput.value, entry.content, roots);
   const isFileTool =
     canonical === "Read" || canonical === "Edit" || canonical === "Write";
-  const lineStats = toolLineStats(toolName, callInput);
+  const lineStats = toolLineStats(toolName, callInput.value);
   const duration = stepDuration(entry, result);
   const failed = Boolean(shownResult?.isError);
   // The language mark a file row wears in front of its path, the same one the
@@ -407,9 +443,7 @@ export const ToolCallBlock = function ToolCallBlock({
   // scanned by language rather than by reading every path to its last word.
   // A name with no extension has no mark, and keeps the path it always had.
   const baseName = isFileTool
-    ? (filePathOf((callInput || {}) as Record<string, unknown>)
-        .split("/")
-        .pop() ?? "")
+    ? (filePathOf(callInput.arguments).split("/").pop() ?? "")
     : "";
   const fileMark = fileExt(baseName) ? baseName : "";
   const resultContent = visibleResultContent(
@@ -421,7 +455,7 @@ export const ToolCallBlock = function ToolCallBlock({
   // A scratch file this call named: openable straight from the row, because
   // assets live outside every worktree and nothing else in the transcript can
   // say what the path means. A delete names one too, with nothing left to open.
-  const assetPath = assetToolPath(toolName, callInput);
+  const assetPath = assetToolPath(toolName, callInput.value);
   const asset = useOpenAsset();
   const assetPaths = useOpenAssetPaths();
   const canOpenAsset =
@@ -757,7 +791,7 @@ function ToolInputDetail({
   input,
 }: {
   toolName: string;
-  input: unknown;
+  input: ToolInput;
 }) {
   const inputNode = toolInputNode(toolName, input);
   if (!inputNode) return null;
@@ -780,17 +814,15 @@ function ToolInputDetail({
  */
 function toolInputNode(
   toolName: string,
-  input: unknown,
+  input: ToolInput,
 ): React.ReactNode | null {
-  const inp = (input && typeof input === "object" ? input : {}) as Record<
-    string,
-    unknown
-  >;
+  const inp = input.arguments;
+  const command = bashCommand(input);
 
-  if (toolName === "Bash" && bashCommand(input)) {
+  if (toolName === "Bash" && command) {
     return (
       <div className={TOOL_CODE_WELL}>
-        <CodeHighlight code={bashCommand(input)!} lang="bash" />
+        <CodeHighlight code={command} lang="bash" />
       </div>
     );
   }
@@ -800,7 +832,7 @@ function toolInputNode(
     // syntax highlighting and changed-line treatment as Files changed. This
     // also covers multi-edit schemas (`edits: [{ oldText, newText }]`) that
     // used to fall through to a raw JSON payload.
-    const inputDiff = toolInputDiff(toolName, input);
+    const inputDiff = toolInputDiff(toolName, input.value);
     if (inputDiff) return <ToolInputDiff patch={inputDiff.patch} />;
 
     // Codex apply_patch bodies are already diff-shaped, but not unified
@@ -818,7 +850,7 @@ function toolInputNode(
   // The plan is a checklist, not a payload — render it as one (same component
   // the status flap above the composer uses).
   if (toolName === "TodoWrite") {
-    const items = parsePlanItems(input);
+    const items = parsePlanItems(input.value);
     if (items.length > 0)
       return <PlanChecklist items={items} className="px-1 py-1.5" />;
   }
@@ -851,15 +883,15 @@ function toolInputNode(
  */
 function renderResultContent(
   toolName: string,
-  input: unknown,
+  input: ToolInput,
   content: string,
 ) {
   const text = content;
   const lang =
     toolName === "Read"
-      ? langForFile(filePathOf((input || {}) as Record<string, unknown>))
+      ? langForFile(filePathOf(input.arguments))
       : toolName === "Grep"
-        ? langForGrep(input)
+        ? langForGrep(input.value)
         : null;
   if (lang) {
     return (
@@ -961,29 +993,23 @@ function ExpandablePre({
   );
 }
 
-function isBoundedToolInput(input: unknown): boolean {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
-  const value = input as Record<string, unknown>;
-  return (
-    typeof value.toolName === "string" &&
-    typeof value.byteSize === "number" &&
-    Array.isArray(value.keys)
-  );
+function isBoundedToolInput(input: ToolInputValue): boolean {
+  return boundedToolInputSchema.safeParse(input).success;
 }
 
 /**
  * Bash input rendered as a script: description and flags become `#` comments
  * above the command, so the whole block highlights as bash without losing info.
  */
-function bashCommand(input: unknown): string | null {
-  if (!input || typeof input !== "object") return null;
-  const inp = input as Record<string, unknown>;
+function bashCommand(input: ToolInput): string | null {
+  const inp = input.arguments;
   const command = commandOf(inp);
   if (!command) return null;
 
   const comments: string[] = [];
-  if (typeof inp.description === "string" && inp.description) {
-    comments.push(`# ${inp.description}`);
+  const description = z.string().safeParse(inp.description);
+  if (description.success && description.data) {
+    comments.push(`# ${description.data}`);
   }
   for (const [key, value] of Object.entries(inp)) {
     if (key === "command" || key === "cmd" || key === "description") continue;
@@ -993,18 +1019,20 @@ function bashCommand(input: unknown): string | null {
   return [...comments, command].join("\n");
 }
 
-function formatInput(input: unknown): string {
-  if (!input) return "";
-  if (typeof input === "string") return input;
-  if (typeof input === "object" && !Array.isArray(input)) {
+function formatInput(input: ToolInput): string {
+  if (!input.value) return "";
+  const text = z.string().safeParse(input.value);
+  if (text.success) return text.data;
+  const parsedArguments = toolArgumentsSchema.safeParse(input.value);
+  if (parsedArguments.success) {
     const visible = Object.fromEntries(
-      Object.entries(input as Record<string, unknown>).filter(
-        ([k]) => !isHiddenToolInputKey(k),
+      Object.entries(parsedArguments.data).filter(
+        ([key]) => !isHiddenToolInputKey(key),
       ),
     );
     return JSON.stringify(visible, null, 2);
   }
-  return JSON.stringify(input, null, 2);
+  return JSON.stringify(input.value, null, 2);
 }
 
 function truncate(str: string, max: number): string {

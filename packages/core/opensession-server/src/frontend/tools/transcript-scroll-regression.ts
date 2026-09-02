@@ -102,7 +102,7 @@ const APP = app;
 const lease = await acquireCdpBrowser();
 const results: ViewportResult[] = [];
 
-function assert(condition: unknown, message: string): asserts condition {
+function assert<T>(condition: T, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
@@ -113,7 +113,8 @@ function turnOf(anchorId: string): {
 } | null {
   const match = anchorId.match(/^hydration-(user|assistant)-(\d+)/);
   if (!match) return null;
-  return { role: match[1] as "user" | "assistant", turn: Number(match[2]) };
+  const role = match[1] === "user" ? "user" : "assistant";
+  return { role, turn: Number(match[2]) };
 }
 
 function drift(before: Snapshot, after: Snapshot): number {
@@ -183,7 +184,7 @@ try {
             response.exceptionDetails.text ||
             "browser evaluation failed",
         );
-      return response.result.value as T;
+      return response.result.value;
     };
     const settle = () =>
       evaluate<void>(
