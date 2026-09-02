@@ -518,10 +518,10 @@ export function Archived({
 
   const actions = (
     <>
-      <span className="whitespace-nowrap text-supporting text-dim tabular-nums">
+      {searchAction}
+      <span className="ml-auto whitespace-nowrap text-supporting text-dim tabular-nums">
         {count}
       </span>
-      {searchAction}
       {filterAction}
     </>
   );

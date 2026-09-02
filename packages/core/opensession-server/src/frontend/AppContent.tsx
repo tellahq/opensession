@@ -1404,7 +1404,9 @@ export function AppContent({
                           <TopBarActions
                             className={cn(
                               DETAIL_TOPBAR_ACTIONS,
-                              route.view === "prs" && "ml-4 flex-1 pl-0",
+                              (route.view === "prs" ||
+                                route.view === "archived") &&
+                                "ml-4 flex-1 pl-0",
                             )}
                             ref={setTopbarActionsEl}
                           />
