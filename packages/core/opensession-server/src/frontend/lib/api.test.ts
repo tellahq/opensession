@@ -10,6 +10,16 @@ import {
 } from "./api";
 
 const originalFetch = globalThis.fetch;
+type FetchImplementation = (
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1],
+) => Promise<Response>;
+
+function stubFetch(implementation: FetchImplementation): typeof fetch {
+  return Object.assign(implementation, {
+    preconnect: originalFetch.preconnect,
+  });
+}
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -17,10 +27,10 @@ afterEach(() => {
 
 test("read marks load from the current user's API namespace", async () => {
   let url = "";
-  globalThis.fetch = (async (input: string | URL | Request) => {
+  globalThis.fetch = stubFetch(async (input) => {
     url = String(input);
     return Response.json({ reads: { "bks-1": "2026-08-11T10:00:00.000Z" } });
-  }) as unknown as typeof fetch;
+  });
 
   await expect(fetchReads("Ada Lovelace")).resolves.toEqual({
     "bks-1": "2026-08-11T10:00:00.000Z",
@@ -30,7 +40,7 @@ test("read marks load from the current user's API namespace", async () => {
 
 test("provider account loading reports a failed pool and keeps the other pool", async () => {
   const failures: unknown[] = [];
-  globalThis.fetch = (async (input: string | URL | Request) => {
+  globalThis.fetch = stubFetch(async (input) => {
     if (String(input).endsWith("/claude-accounts")) {
       return Response.json(
         { error: "Claude accounts unavailable" },
@@ -47,7 +57,7 @@ test("provider account loading reports a failed pool and keeps the other pool", 
         },
       ],
     });
-  }) as unknown as typeof fetch;
+  });
 
   await expect(
     fetchProviderAccounts({
@@ -68,11 +78,9 @@ test("provider account loading reports a failed pool and keeps the other pool", 
 
 test("workspace loading reports a failure while preserving its empty fallback", async () => {
   const failures: unknown[] = [];
-  globalThis.fetch = (async () =>
-    Response.json(
-      { error: "Workspaces unavailable" },
-      { status: 502 },
-    )) as unknown as typeof fetch;
+  globalThis.fetch = stubFetch(async () =>
+    Response.json({ error: "Workspaces unavailable" }, { status: 502 }),
+  );
 
   await expect(
     fetchWorkspaces({ onError: (cause) => failures.push(cause) }),
@@ -83,13 +91,13 @@ test("workspace loading reports a failure while preserving its empty fallback", 
 
 test("repository loading rejects after transient retries are exhausted", async () => {
   let calls = 0;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = stubFetch(async () => {
     calls++;
     return Response.json(
       { error: "Repositories unavailable" },
       { status: 502 },
     );
-  }) as unknown as typeof fetch;
+  });
 
   await expect(fetchRepos()).rejects.toThrow("Repositories unavailable");
   expect(calls).toBe(4);
@@ -97,7 +105,7 @@ test("repository loading rejects after transient retries are exhausted", async (
 
 test("repository loading recovers from transient server failures", async () => {
   let calls = 0;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = stubFetch(async () => {
     calls++;
     if (calls < 3) {
       return Response.json(
@@ -115,7 +123,7 @@ test("repository loading recovers from transient server failures", async () => {
         },
       ],
     });
-  }) as unknown as typeof fetch;
+  });
 
   await expect(fetchRepos()).resolves.toEqual([
     {
@@ -130,10 +138,7 @@ test("repository loading recovers from transient server failures", async () => {
 
 test("session snapshots send validators and accept bodyless 304 responses", async () => {
   let requestHeaders: Headers | undefined;
-  globalThis.fetch = (async (
-    _input: string | URL | Request,
-    init?: RequestInit,
-  ) => {
+  globalThis.fetch = stubFetch(async (_input, init) => {
     requestHeaders = new Headers(init?.headers);
     return new Response(null, {
       status: 304,
@@ -141,7 +146,7 @@ test("session snapshots send validators and accept bodyless 304 responses", asyn
         ETag: '"sessions-v1"',
       },
     });
-  }) as unknown as typeof fetch;
+  });
 
   await expect(
     fetchSessionsSnapshot({ etag: '"sessions-v1"' }),
@@ -154,10 +159,12 @@ test("session snapshots send validators and accept bodyless 304 responses", asyn
 });
 
 test("session snapshots retain response validators on changed data", async () => {
-  globalThis.fetch = (async () =>
-    new Response('[{"id":"session-1"}]', {
-      headers: { ETag: '"sessions-v2"' },
-    })) as unknown as typeof fetch;
+  globalThis.fetch = stubFetch(
+    async () =>
+      new Response('[{"id":"session-1"}]', {
+        headers: { ETag: '"sessions-v2"' },
+      }),
+  );
 
   await expect(fetchSessionsSnapshot()).resolves.toEqual({
     text: '[{"id":"session-1"}]',
@@ -180,10 +187,10 @@ test("workspace archive fetches stay scoped and slim", async () => {
     isRunning: false,
     archived: true,
   };
-  globalThis.fetch = (async (input: string | URL | Request) => {
+  globalThis.fetch = stubFetch(async (input) => {
     url = String(input);
     return Response.json([archived]);
-  }) as unknown as typeof fetch;
+  });
 
   await expect(fetchWorkspaceArchivedSessions("ws / one")).resolves.toEqual([
     archived,
@@ -196,14 +203,11 @@ test("workspace archive fetches stay scoped and slim", async () => {
 test("new workspace tabs create an idle sibling session", async () => {
   let url = "";
   let init: RequestInit | undefined;
-  globalThis.fetch = (async (
-    input: string | URL | Request,
-    requestInit?: RequestInit,
-  ) => {
+  globalThis.fetch = stubFetch(async (input, requestInit) => {
     url = String(input);
     init = requestInit;
     return Response.json({ id: "bks-new", session: { id: "bks-new" } });
-  }) as unknown as typeof fetch;
+  });
 
   const clientSessionId = "os-019f0000-0000-7000-8000-000000000001";
   const created = await newSessionApi(
