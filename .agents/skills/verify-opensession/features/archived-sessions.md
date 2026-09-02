@@ -22,14 +22,14 @@ Archived sessions are removed from active workspace lanes but remain searchable,
 Preconditions:
 
 - Doctor passes for the isolated demo run.
-- The demo seed has finished and cancelled sessions available to the archive UI.
+- Create one archived result through the UI because the demo seed starts with no archived sessions. Open `/session/bks-demo-live`, choose `More actions`, choose menu item `Archive session Ctrl+Shift+A`, then confirm with `Close anyway ⌘↵`. This cancels only the synthetic running state in the disposable demo.
 
-- **Open the index.** Run `verify-opensession browser "$RUN_ID" open --route /archived --width 1440 --height 900`. Wait for textbox `Search archived sessions` and capture the unfiltered state.
-- **Search.** Run `verify-opensession browser "$RUN_ID" fill --role textbox --name "Search archived sessions" --value "retry"`. The visible results narrow to archived work matching `retry`, or an explicit no-results state appears if the seed's archive rules changed.
-- **Clear and filter.** Refill the search textbox with an empty value, choose the `Filters` button using the exact accessible name from the current snapshot, and select one visible repository or person. Capture the filter state and narrowed result list.
-- **Open a result.** Choose a visible archived session title. Its transcript opens and keeps the archived state visible.
-- **Restore.** From `/archived`, choose `Restore session` on one disposable demo result. Confirm it disappears from the matching archived results and reappears in its active workspace or `/api/sessions` response.
-- **Check phone layout.** Repeat search and result opening at 390x844. Search and filters must remain reachable without desktop hover.
+- **Open the index.** Run `verify-opensession browser "$RUN_ID" open --route /archived --width 1440 --height 900`. Wait for `searchbox` named `Search archived sessions`. The page defaults to `My archived`, while the seeded session belongs to Alex, so open `Filters, 1 active` and choose `Everyone` before capturing the unfiltered result.
+- **Search.** Run `verify-opensession browser "$RUN_ID" fill --role searchbox --name "Search archived sessions" --value "tracing"`. The visible results narrow to `Instrument request tracing in api-gateway`. Use an unmatched value to capture the explicit no-results state.
+- **Clear and filter.** Refill the searchbox with an empty value, choose the `Filters` button using the exact accessible name from the current snapshot, and select one visible repository or person. Capture the filter state and narrowed result list.
+- **Open a result.** Choose the button whose name starts with `Instrument request tracing in api-gateway`. Its transcript opens and keeps the archived state visible.
+- **Restore.** From `/archived`, choose `Restore session` on desktop or `Restore` on phone. Confirm it disappears from `/api/sessions?archived=only&slim=1` and reappears in its active workspace.
+- **Check phone layout.** Repeat search and result opening at 390x844. Select `Everyone` again because reopening the route resets the owner filter. Search and filters must remain reachable without desktop hover.
 - **Proof.** Capture unfiltered, filtered, and resulting states. For restore behavior, save a read-only session API response after the UI action.
 
 ## Gotchas
@@ -37,5 +37,5 @@ Preconditions:
 - Searching is read-only. It does not prove restore behavior.
 - A session may be hidden by archive reason or current-person defaults. Record active filters in proof.
 - The filter button's accessible name includes the active-filter count. Take a fresh snapshot after each change.
-- Restoring mutates disposable demo state. Run it last if later checks depend on the seeded archive list.
+- Archiving and restoring mutate disposable demo state. Restore the session last so the drive leaves no archived residue.
 - Opening a direct session URL does not prove the archived index entry point.
