@@ -3,6 +3,7 @@ import {
   ARCHIVED_PHONE_SEARCH_DOCK,
   ARCHIVED_ROW,
   ARCHIVED_ROW_ACTION,
+  ARCHIVED_SECTION_LABEL,
   ARCHIVED_SWIPE_ACTION,
   ARCHIVED_SWIPE_ROW,
 } from "./archived-classes";
@@ -12,6 +13,10 @@ test("archived phone search stays at the thumb edge", () => {
   expect(ARCHIVED_PHONE_SEARCH_DOCK).toContain("bottom-0");
   expect(ARCHIVED_PHONE_SEARCH_DOCK).toContain("safe-area-inset-bottom");
   expect(ARCHIVED_PHONE_SEARCH_DOCK).toContain("phone:block");
+});
+
+test("archived day headings sit above the row title scale", () => {
+  expect(ARCHIVED_SECTION_LABEL).toContain("text-body");
 });
 
 test("archived phone rows reveal Restore instead of reserving a button", () => {

@@ -510,18 +510,21 @@ export function Archived({
       </Menu.Root>
     </>
   );
-  const actions = (
-    <>
-      {searchAction}
-      {filterAction}
-    </>
-  );
-
   const count = loaded
     ? archived.length === allArchived.length
       ? `${archived.length} archived session${archived.length === 1 ? "" : "s"}`
       : `${archived.length} of ${allArchived.length} archived sessions`
     : "Loading archived sessions";
+
+  const actions = (
+    <>
+      <span className="whitespace-nowrap text-supporting text-dim tabular-nums">
+        {count}
+      </span>
+      {searchAction}
+      {filterAction}
+    </>
+  );
 
   const desktopPortaled = !!topbarActionsEl && !isPhone;
   const mobileFilterPortaled = !!mobileActionsEl && isPhone;
@@ -536,7 +539,7 @@ export function Archived({
         {!isPhone && !desktopPortaled ? (
           <div className="mb-3 flex items-center gap-2">{actions}</div>
         ) : null}
-        <p className="m-0 mb-[18px] text-supporting text-dim phone:mb-3.5">
+        <p className="m-0 mb-3.5 hidden text-supporting text-dim tabular-nums phone:block">
           {count}
         </p>
         {archived.length === 0 && !loaded ? (
@@ -566,7 +569,7 @@ export function Archived({
             {sections.map((section, sectionIndex) => (
               <section
                 key={section.key}
-                className={sectionIndex > 0 ? "mt-4" : undefined}
+                className={sectionIndex > 0 ? "mt-6" : undefined}
               >
                 <h2 className={ARCHIVED_SECTION_LABEL}>{section.label}</h2>
                 <ul className={ARCHIVED_SECTION_ROWS}>
