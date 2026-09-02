@@ -1,6 +1,11 @@
 # Stable public listener for Open Session. systemd retains this socket while
 # opensession-ingress.service is upgraded. Gateway and peer rollouts never
 # restart the ingress process.
+#
+# Source installs only. A compiled release has no ingress process and its
+# server binds 127.0.0.1:PORT itself, so `opensession service install` neither
+# ships nor renders this unit there. Copying it in by hand takes the port away
+# from the server (tellahq/opensession#297).
 [Unit]
 Description=Open Session stable gateway listener
 

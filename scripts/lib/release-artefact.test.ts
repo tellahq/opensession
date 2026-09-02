@@ -50,8 +50,13 @@ describe("compiled release artefact", () => {
     expect(missing).toEqual([]);
   });
 
-  test("the socket unit is staged next to the service it activates", () => {
-    expect(RELEASE_SERVICE_TEMPLATES).toContain("opensession.socket");
+  test("the socket unit stays out of the compiled release", () => {
+    // A compiled `opensession server` binds its port through Bun.serve and
+    // never adopts a systemd fd, so a shipped socket unit only takes the port
+    // away from it (tellahq/opensession#297). The installer skips it; the
+    // artefact must not tempt anyone into copying it in by hand.
+    expect(RELEASE_SERVICE_TEMPLATES).not.toContain("opensession.socket");
+    expect(RELEASE_TEMPLATE_EXEMPTIONS.has("opensession.socket")).toBe(true);
   });
 
   test("every staged file exists in the checkout", () => {

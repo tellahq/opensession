@@ -23,10 +23,11 @@ import {
   renderIngressUnit,
   renderLauncher,
   renderPlist,
+  renderSocketUnit,
   renderUnit,
   serviceWorkdir,
 } from "./service";
-import { ENV_PATH, HOME } from "./paths";
+import { ENV_PATH, HOME, SHIM_PATH } from "./paths";
 
 // Both renderers interpolate host paths and the local bun, so on Windows they
 // produce a unit and a plist that could never be installed. Neither service
@@ -183,6 +184,42 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
       "";
     expect(path).toContain("/usr/bin");
     expect(path.split(":").every((p) => p.startsWith("/"))).toBe(true);
+  });
+});
+
+// A compiled `opensession server` is opensession.ts binding PORT through
+// Bun.serve; it never adopts a systemd fd and no ingress process ships with the
+// release. 0.4.52 to 0.4.55 rendered `Requires=opensession.socket` for it
+// anyway, so the install either died on the missing template or, with one
+// supplied, systemd held 3850 and the server crash-looped on EADDRINUSE
+// (tellahq/opensession#297).
+describe.skipIf(!onServiceHost)("compiled systemd unit", () => {
+  test("binds the port itself instead of expecting socket activation", async () => {
+    const unit = await renderUnit("user", true);
+    expect(unit).toContain(`ExecStart=${SHIM_PATH} server`);
+    expect(unit).not.toContain("opensession.socket");
+    expect(unit).not.toContain("opensession-ingress.service");
+    expect(unit).not.toMatch(/^(Sockets|Requires|Wants)=/m);
+    expect(unit).not.toContain("OPENSESSION_EXTERNAL_INGRESS");
+    expect(unit).toContain(
+      "After=network.target opensession-session-kernel.service\n",
+    );
+  });
+
+  test("system scope still orders the executor ahead of the gateway", async () => {
+    const unit = await renderUnit("system", true);
+    expect(unit).not.toContain("opensession.socket");
+    expect(unit).toContain(
+      "After=network.target opensession-session-kernel.service opensession-executor.service\n",
+    );
+  });
+
+  test("the socket unit only ever activates the source ingress", async () => {
+    for (const scope of ["user", "system"] as const) {
+      const unit = await renderSocketUnit(scope);
+      expect(unit).toContain("Service=opensession-ingress.service");
+      expect(unit).not.toContain("Service=opensession.service");
+    }
   });
 });
 
