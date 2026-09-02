@@ -960,7 +960,9 @@ struct StreamingBubble: View {
                     .accessibilityLabel("Active reasoning")
                     .accessibilityValue(heading)
             } else {
-                StreamingMarkdownBody(text)
+                // Same repair the durable reasoning row applies, so a
+                // token-fragmented summary never flips shape when it lands.
+                StreamingMarkdownBody(ReasoningSummaryDisplay.normalizeFragmented(text))
             }
         }
         .padding(.vertical, 2)

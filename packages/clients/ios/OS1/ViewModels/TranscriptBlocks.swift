@@ -341,7 +341,7 @@ struct ReasoningSummaryDisplay: Equatable {
     let body: String
 
     init(_ content: String) {
-        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = Self.normalizeFragmented(content)
         guard trimmed.hasPrefix("**"),
               let close = trimmed.dropFirst(2).range(of: "**"),
               !trimmed[trimmed.index(trimmed.startIndex, offsetBy: 2)..<close.lowerBound]
@@ -369,6 +369,58 @@ struct ReasoningSummaryDisplay: Equatable {
     func activityTitle(isActive: Bool) -> String? {
         if !title.isEmpty { return title }
         return isActive ? "Thinking" : nil
+    }
+
+    /// Some reasoning-summary providers terminate tiny token fragments as
+    /// separate summary parts. The server preserves those boundaries as blank
+    /// lines, and the markdown renderer would otherwise show a sentence one or
+    /// two words per row. Repair only that pathological shape: ordinary
+    /// paragraphs, wrapped prose, lists, headings and fenced code keep their
+    /// authored whitespace. Mirrors the web's `normalizeFragmentedReasoning`,
+    /// and is the one transform both the durable row and the live stream use.
+    static func normalizeFragmented(_ content: String) -> String {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // `\r\n` is one Character, so counting newline characters matches the
+        // web's `\r?\n` count.
+        let lines = trimmed.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        let lineBreaks = lines.count - 1
+        guard lineBreaks >= 8 else { return trimmed }
+
+        let nonEmpty = lines.filter { !$0.allSatisfy(\.isWhitespace) }
+        guard !nonEmpty.isEmpty else { return trimmed }
+        if nonEmpty.contains(where: { isFence($0) }) { return trimmed }
+
+        var words = 0
+        var shortLines = 0
+        var structuredLines = 0
+        for line in nonEmpty {
+            let count = line.split(whereSeparator: \.isWhitespace).count
+            words += count
+            if count <= 4 { shortLines += 1 }
+            if line.contains(structuredLine) { structuredLines += 1 }
+        }
+        guard words > 0 else { return trimmed }
+        let total = Double(nonEmpty.count)
+        let fragmented = Double(lineBreaks) / Double(words) >= 0.2
+            && Double(shortLines) / total >= 0.7
+            && Double(structuredLines) / total < 0.2
+        guard fragmented else { return trimmed }
+
+        var joined = trimmed.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        joined = joined.replacing(#/\s+([,.;:!?%)\]}])/#) { String($0.output.1) }
+        joined = joined.replacing(#/([(\[{])\s+/#) { String($0.output.1) }
+        joined = joined.replacing(#/([\p{L}\p{N}])\s+(-[\p{L}\p{N}])/#) {
+            String($0.output.1) + String($0.output.2)
+        }
+        joined = joined.replacing(#/\s+(['’][\p{L}])/#) { String($0.output.1) }
+        return joined
+    }
+
+    private static let structuredLine = #/^\s*(?:[-+*] |\d+[.)] |#{1,6} |>|```|~~~)/#
+
+    private static func isFence(_ line: Substring) -> Bool {
+        let lead = line.drop(while: \.isWhitespace)
+        return lead.hasPrefix("```") || lead.hasPrefix("~~~")
     }
 
     /// A tolerant compatibility check for the old bold-heading-only shape.
