@@ -23,7 +23,7 @@
 
 import { audit } from "../audit";
 import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permissions";
-import { envRequired, type IntegrationSpec } from "../integrations/registry";
+import type { IntegrationSpec } from "../integrations/registry";
 import { setupAccessSnapshot } from "../setup-access";
 import { requireWorkspaceAdmin } from "../workspace-auth";
 import type { RouteContext } from "./context";
@@ -47,7 +47,7 @@ async function integrationSnapshot(
       : !!process.env[name];
   const env = spec.env.map((e) => ({
     name: e.name,
-    required: envRequired(e, present),
+    required: !!e.required,
     description: e.description,
     present: present(e.name),
   }));

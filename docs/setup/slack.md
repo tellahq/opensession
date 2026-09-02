@@ -5,25 +5,21 @@ The Slack agent lives in
 @-mentions into agent runs, keeps worktree-channel sessions, handles Block Kit
 actions and link unfurls, and supplies watched-channel events to automations.
 
-## Current transport support
+## Transport
 
-The running server currently supports **HTTP Events API intake only**.
-`SlackAgent.getRoutes()` always registers `/slack/events` and `/slack/actions`,
-and its health response always reports `transport: "http"`. There is no Socket
-Mode client in the server.
-
-The setup UI and manifest generator currently expose a Socket Mode choice and
-accept `SLACK_APP_TOKEN`, but the runtime never reads that token. Do not select
-Socket Mode or rely on an `xapp-…` token. Configure public ingress, select
-**HTTP**, and set `SLACK_SIGNING_SECRET`. An app token does not make the signing
-secret optional and does not remove the HTTP routes.
+The server supports **HTTP Events API intake only**. `SlackAgent.getRoutes()`
+always registers `/slack/events` and `/slack/actions`, and its health response
+always reports `transport: "http"`. There is no Socket Mode client, so the
+setup dialog and generated manifest only describe an HTTP app: public ingress
+is required and `SLACK_SIGNING_SECRET` is always required. A leftover
+`SLACK_APP_TOKEN` in `~/.opensession.env` is ignored.
 
 ## Set up the app
 
 1. Configure an HTTPS origin under **Settings → Domains and ingress → Public callbacks**. It must route
    to the fail-closed gateway on `127.0.0.1:3860`; see
    [Public ingress](install.md#public-ingress).
-2. Open **Settings → Integrations → Slack → Set up**, select **HTTP**, and click
+2. Open **Settings → Integrations → Slack → Set up** and click
    **Create Slack app**. The generated manifest comes from
    `src/frontend/lib/slack-manifest.ts` and includes the bot scopes, bot event
    subscriptions, interactivity, the two request URLs, the assistant surface,
@@ -58,7 +54,6 @@ literal value `true` enables it; see
 | `WORKTREE_HOOK_SECRET`       | only for worktree hooks  | Value callers send as `x-worktree-secret` to the two `/worktree/*` routes. Missing means every hook request is rejected with 403                                           |
 | `SLACK_MENTION_INTENT_MODEL` | no                       | Mention intent classifier; default `claude-haiku-4-5`                                                                                                                      |
 | `SCHEDULE_WHEN_MODEL`        | no                       | Natural-language parser used by one-off scheduling tools; default `claude-haiku-4-5`                                                                                       |
-| `SLACK_APP_TOKEN`            | do not use               | Declared by the setup registry but not consumed by the runtime; it does not enable Socket Mode                                                                             |
 
 The setup dialog manages the bot token, signing secret, allowed user and
 worktree-hook secret. It does not expose the two model overrides. Set those

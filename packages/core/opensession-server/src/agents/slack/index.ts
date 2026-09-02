@@ -137,9 +137,8 @@ function verifyWorktreeSecret(req: Request): boolean {
 
 /**
  * Dispatch a parsed Slack Events API callback. The HTTP `/slack/events`
- * route and Socket Mode (`events_api` envelopes) both feed the same
- * `event_callback` JSON here, so the routing lives in one place and only the
- * transport differs.
+ * route feeds `event_callback` JSON here so the routing lives in one place,
+ * separate from signature verification and the HTTP response.
  */
 export async function dispatchSlackEvent(payload: any): Promise<void> {
   if (payload.type !== "event_callback") return;
@@ -253,8 +252,7 @@ export async function dispatchSlackEvent(payload: any): Promise<void> {
 
 /**
  * Dispatch a parsed Slack interactive payload (Block Kit buttons, modal
- * submits). Shared by the HTTP `/slack/actions` route and Socket Mode
- * (`interactive` envelopes).
+ * submits) from the HTTP `/slack/actions` route.
  */
 export async function dispatchSlackInteractive(payload: any): Promise<void> {
   // Handle block_actions (button clicks)

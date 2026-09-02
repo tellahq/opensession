@@ -3,23 +3,16 @@ import { CopyCheck, useCopy } from "../ui/copy";
 import { Disclosure } from "../ui/disclosure";
 import { PRODUCT_NAME, PUBLIC_BASE_URL, WEBHOOK_BASE_URL } from "../lib/brand";
 import { slackCreateAppUrl, slackManifestJson } from "../lib/slack-manifest";
-import type { SlackTransport } from "../lib/slack-setup";
 import { IconCopy } from "./icons";
 
 /**
  * Creates the Slack app from generated configuration instead of asking the
- * person to transcribe scopes, subscriptions, and request URLs. The transport
- * comes from the dialog's credential choice so the manifest and form agree.
+ * person to transcribe scopes, subscriptions, and request URLs.
  */
-export function SlackManifestGuide({
-  transport,
-}: {
-  transport: SlackTransport;
-}) {
+export function SlackManifestGuide() {
   const options = {
     publicBaseUrl: PUBLIC_BASE_URL,
     webhookBaseUrl: WEBHOOK_BASE_URL,
-    transport,
     appName: PRODUCT_NAME,
   };
   const json = slackManifestJson(options);
@@ -51,8 +44,7 @@ export function SlackManifestGuide({
       </div>
 
       <p className="m-0 text-supporting leading-relaxed text-dim">
-        The manifest fills in the scopes, event subscriptions
-        {transport === "http" ? ", request URLs" : " and Socket Mode"}, and
+        The manifest fills in the scopes, event subscriptions, request URLs, and
         interactivity. Credentials are still yours to paste above.
       </p>
 

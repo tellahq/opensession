@@ -4,17 +4,11 @@ import { Disclosure } from "../ui/disclosure";
 import { Modal } from "../ui/modal";
 import { SettingsSection } from "../ui/settings";
 import { InlineAlert } from "../ui/state";
-import { Segmented, SegmentedOption } from "../ui/segmented";
 import { Switch } from "../ui/switch";
 import { toast } from "../ui/toast";
 import { WEBHOOK_BASE_URL } from "../lib/brand";
 import { SLACK_SCOPE_GROUPS } from "../lib/slack-manifest";
-import {
-  publicWebhookAvailable,
-  savedSlackTransport,
-  slackCredentialRequired,
-  type SlackTransport,
-} from "../lib/slack-setup";
+import { publicWebhookAvailable } from "../lib/slack-setup";
 import { IconTile } from "./BrandTile";
 import { CodeStorageConfiguration } from "./CodeStorageConfiguration";
 import { GithubAppFields } from "./GithubAppFields";
@@ -108,11 +102,7 @@ function endpoint(publicBaseUrl: string, path: string): string {
   return `${publicBaseUrl.replace(/\/$/, "")}${path}`;
 }
 
-function guideFor(
-  integration: SetupIntegration,
-  publicBaseUrl: string,
-  transport: SlackTransport,
-): Guide {
+function guideFor(integration: SetupIntegration, publicBaseUrl: string): Guide {
   const url = (path: string) => endpoint(publicBaseUrl, path);
 
   switch (integration.id) {
@@ -187,30 +177,20 @@ function guideFor(
       };
 
     case "slack": {
-      const socket = transport === "socket";
       return {
         description:
           "Create a Slack bot for DMs, mentions, session channels, and interactive controls.",
-        intro: <SlackManifestGuide transport={transport} />,
+        intro: <SlackManifestGuide />,
         steps: [
           <>
             Create the app from the manifest above, then install it to your
             workspace.
           </>,
-          socket ? (
-            <>
-              Open <strong>Basic Information → App-Level Tokens</strong>,
-              generate a token with the <strong>connections:write</strong>{" "}
-              scope, and paste the <Code>xapp-</Code> value into{" "}
-              <Code>SLACK_APP_TOKEN</Code> above.
-            </>
-          ) : (
-            <>
-              Copy the signing secret from <strong>Basic Information</strong>{" "}
-              into <Code>SLACK_SIGNING_SECRET</Code> above. The manifest already
-              includes the event and interactivity request URLs.
-            </>
-          ),
+          <>
+            Copy the signing secret from <strong>Basic Information</strong> into{" "}
+            <Code>SLACK_SIGNING_SECRET</Code> above. The manifest already
+            includes the event and interactivity request URLs.
+          </>,
           <>
             Copy the bot token from <strong>OAuth &amp; Permissions</strong>{" "}
             after installing, and set an allowed Slack user id so admin tools
@@ -225,12 +205,7 @@ function guideFor(
         // can never drift apart. Keep it visible for someone reviewing an
         // existing app rather than creating a new one.
         scopes: SLACK_SCOPE_GROUPS,
-        scopesNote: socket ? (
-          <>
-            The manifest grants all of these. The app-level token only needs{" "}
-            <strong>connections:write</strong>.
-          </>
-        ) : (
+        scopesNote: (
           <>The manifest grants all of these and enables interactivity.</>
         ),
       };
@@ -415,9 +390,6 @@ export function IntegrationSetupDialog({
   const [cleared, setCleared] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [transport, setTransport] = useState<SlackTransport>(() =>
-    savedSlackTransport(integration.env),
-  );
   const [clientId, setClientId] = useState("");
   const [appSlug, setAppSlug] = useState(github?.appSlug ?? "");
   const [installationOwner, setInstallationOwner] = useState(
@@ -427,17 +399,18 @@ export function IntegrationSetupDialog({
   const [privateKey, setPrivateKey] = useState("");
   const [clearClientId, setClearClientId] = useState(false);
   const [clearClientSecret, setClearClientSecret] = useState(false);
-  const guide = guideFor(integration, WEBHOOK_BASE_URL, transport);
-  const httpAvailable = publicWebhookAvailable(WEBHOOK_BASE_URL);
+  const guide = guideFor(integration, WEBHOOK_BASE_URL);
+  // Slack only reaches this instance over HTTP, so a loopback webhook base
+  // means events can never arrive no matter what gets saved.
+  const webhookReachable =
+    integration.id !== "slack" || publicWebhookAvailable(WEBHOOK_BASE_URL);
 
-  // Cancel discards a transport change just like it discards typed credentials.
   useEffect(() => {
     if (!open) return;
     setEnabled(integration.enabled);
     setTyped({});
     setCleared({});
     setError(null);
-    setTransport(savedSlackTransport(integration.env));
     setClientId("");
     setAppSlug(github?.appSlug ?? "");
     setInstallationOwner(github?.installationOwner ?? github?.appOrg ?? "");
@@ -446,22 +419,6 @@ export function IntegrationSetupDialog({
     setClearClientId(false);
     setClearClientSecret(false);
   }, [open, integration, github]);
-
-  function pickTransport(next: SlackTransport) {
-    setTransport(next);
-    setTyped((current) => ({ ...current, SLACK_APP_TOKEN: "" }));
-    setCleared((current) => ({ ...current, SLACK_APP_TOKEN: next === "http" }));
-  }
-
-  const hiddenEnvKey =
-    integration.id === "slack"
-      ? transport === "socket"
-        ? "SLACK_SIGNING_SECRET"
-        : "SLACK_APP_TOKEN"
-      : null;
-  const visibleEnv = hiddenEnvKey
-    ? integration.env.filter((envVar) => envVar.name !== hiddenEnvKey)
-    : integration.env;
 
   const typedKeys = integration.env
     .map((envVar) => envVar.name)
@@ -704,48 +661,13 @@ export function IntegrationSetupDialog({
                 />
               </ConfigurationSection>
             )}
-            {integration.id === "slack" && (
-              <ConfigurationSection title="Event delivery">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="min-w-[12rem] flex-1 text-supporting text-dim">
-                    {transport === "socket"
-                      ? "Uses an outbound connection and needs no public webhook URL."
-                      : "Slack posts events to this instance's public webhook URL."}
-                  </div>
-                  <Segmented
-                    label="Slack event delivery"
-                    value={transport}
-                    onValueChange={(next) => {
-                      if (next === "socket" || next === "http")
-                        pickTransport(next);
-                    }}
-                    className="ml-auto phone:ml-0 phone:w-full"
-                  >
-                    <SegmentedOption
-                      value="socket"
-                      disabled={saving}
-                      className="phone:min-h-11 phone:flex-1"
-                    >
-                      Socket Mode
-                    </SegmentedOption>
-                    <SegmentedOption
-                      value="http"
-                      disabled={saving || !httpAvailable}
-                      className="phone:min-h-11 phone:flex-1"
-                    >
-                      HTTP
-                    </SegmentedOption>
-                  </Segmented>
-                </div>
-                {transport === "http" && !httpAvailable && (
-                  <InlineAlert variant="warn" className="mt-3">
-                    This instance has no public webhook URL. Choose Socket Mode
-                    or configure a public URL first.
-                  </InlineAlert>
-                )}
-              </ConfigurationSection>
+            {!webhookReachable && (
+              <InlineAlert variant="warn">
+                This instance has no public webhook URL. Slack posts events over
+                HTTP, so configure a public URL under Domains and ingress first.
+              </InlineAlert>
             )}
-            {visibleEnv.length > 0 && (
+            {integration.env.length > 0 && (
               <ConfigurationSection
                 title={
                   integration.id === "github"
@@ -759,22 +681,14 @@ export function IntegrationSetupDialog({
                 }
               >
                 <div className="flex flex-col gap-4">
-                  {visibleEnv.map((envVar) => (
+                  {integration.env.map((envVar) => (
                     <SecretField
                       key={envVar.name}
                       name={envVar.name}
                       label={<Code>{envVar.name}</Code>}
                       description={envVar.description}
                       present={envVar.present}
-                      required={
-                        integration.id === "slack"
-                          ? slackCredentialRequired(
-                              envVar.name,
-                              envVar.required,
-                              transport,
-                            )
-                          : envVar.required
-                      }
+                      required={envVar.required}
                       disabled={saving}
                       cleared={Boolean(
                         envVar.present &&

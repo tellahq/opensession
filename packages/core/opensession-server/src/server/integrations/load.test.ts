@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { activeIntegrations, isEnabled } from "./load";
-import { envRequired, findIntegration, INTEGRATIONS } from "./registry";
+import { findIntegration, INTEGRATIONS } from "./registry";
 
 const FLAGS = INTEGRATIONS.map((i) => i.enableFlag);
 const saved = new Map(FLAGS.map((f) => [f, process.env[f]]));
@@ -92,25 +92,19 @@ describe("activeIntegrations", () => {
   });
 });
 
-describe("envRequired", () => {
+describe("slack credentials", () => {
   const slack = findIntegration("slack")!;
-  const signingSecret = slack.env.find(
-    (e) => e.name === "SLACK_SIGNING_SECRET",
-  )!;
-  const botToken = slack.env.find((e) => e.name === "SLACK_BOT_TOKEN")!;
 
-  test("Socket Mode does not require the HTTP signing secret", () => {
-    expect(
-      envRequired(signingSecret, (name) => name === "SLACK_APP_TOKEN"),
-    ).toBe(false);
+  test("the signing secret is unconditionally required", () => {
+    // The runtime only implements HTTP intake and verifySlackSignature fails
+    // closed on an empty secret, so nothing may make this optional.
+    const signingSecret = slack.env.find(
+      (e) => e.name === "SLACK_SIGNING_SECRET",
+    );
+    expect(signingSecret?.required).toBe(true);
   });
 
-  test("the HTTP transport requires its signing secret", () => {
-    expect(envRequired(signingSecret, () => false)).toBe(true);
-  });
-
-  test("unconditional credentials stay required", () => {
-    expect(envRequired(botToken, () => true)).toBe(true);
-    expect(envRequired(botToken, () => false)).toBe(true);
+  test("no Socket Mode app token is offered", () => {
+    expect(slack.env.map((e) => e.name)).not.toContain("SLACK_APP_TOKEN");
   });
 });
