@@ -1159,6 +1159,7 @@ export async function handlePrRoutes(
         mode: "code",
         branch: target.branch,
         parentSessionId: session.id,
+        createdByLogin: ctx.authUser?.login,
         agentStarted: true,
         reportBack: false,
         user: requestUser(ctx, body?.user) || "Someone",

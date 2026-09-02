@@ -1030,6 +1030,7 @@ export async function handleSessionsRoutes(
         id: targetId,
         requestId,
         requestScope: actorScope,
+        createdByLogin: ctx.authUser?.login,
         prompt,
         mode,
         ...(mode === "code" && branch ? { branch } : {}),

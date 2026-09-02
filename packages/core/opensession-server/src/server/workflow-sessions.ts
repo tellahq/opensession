@@ -381,6 +381,7 @@ export function createWorkflowSessionController(
       const created = await control.createSession({
         requestId,
         requestScope: opts.parentSessionId,
+        createdByLogin: parent.createdByLogin,
         prompt,
         repo: input.repo,
         mode,
