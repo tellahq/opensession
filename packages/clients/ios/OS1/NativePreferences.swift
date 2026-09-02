@@ -87,6 +87,9 @@ enum NativePreferences {
                 ?? SidebarTools.defaultHiddenJSON
             prefs[SidebarFeeds.prefKey] = defaults.string(forKey: SidebarFeeds.storageKey)
                 ?? "[]"
+            prefs[SidebarSubagents.prefKey] = SidebarSubagents.encode(
+                defaults.object(forKey: SidebarSubagents.storageKey) as? Bool ?? true
+            )
         }
         let previousIdentity = defaults.string(forKey: identityKey)
         let previousBucket = defaults.string(forKey: bucketKey)
@@ -216,6 +219,16 @@ enum NativePreferences {
             validatedIdList(prefs[SidebarTools.prefKey]),
             default: SidebarTools.defaultHiddenJSON,
             key: SidebarTools.storageKey,
+            resetMissing: true,
+            in: defaults
+        )
+        // Whether a session offers its delegated workers. The web nests them
+        // under the workspace row; here it is the parent's worker menu. Absent
+        // means shown, on both.
+        setBool(
+            SidebarSubagents.shown(prefs[SidebarSubagents.prefKey]),
+            default: true,
+            key: SidebarSubagents.storageKey,
             resetMissing: true,
             in: defaults
         )

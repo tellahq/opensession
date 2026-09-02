@@ -103,6 +103,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   Transcript videos stream inline on both platforms. Tool-result screenshots
   and recordings marked as featured stay visible when their work fold closes,
   while incidental media remains inside the producing tool row.
+  The account's Show sub-agents preference (`sidebar-subagents`, the web's
+  nested workspace rows) governs the parent session's Delegated workers menu
+  here, since this app has no nested rows; hiding empties that menu without
+  promoting workers to the list, and direct worker links still open.
   A `Task` row opens the sub-agent's own transcript in a sheet (polled while
   the worker runs, via `GET /api/sessions/:id/subagent/:agentId`), and a
   footer's file chip opens that file's diff for the turn. A published

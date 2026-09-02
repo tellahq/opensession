@@ -266,6 +266,32 @@ final class SessionTests: XCTestCase {
         )
     }
 
+    /// The web's Show sub-agents pref hides the nested rows under a workspace.
+    /// Natively that surface is the parent's worker menu, so hiding empties
+    /// the menu and nothing else: the workers keep their parent link, so a
+    /// direct open still lands on a one-session view, and none is promoted
+    /// into the list.
+    func testHidingSubagentsEmptiesTheWorkerMenuWithoutPromotingWorkers() throws {
+        let sessions = try JSONDecoder().decode(
+            [Session].self,
+            from: Data(
+                #"[{"id":"parent","workspaceId":"ws-1"},{"id":"worker","workspaceId":"ws-1","parentSessionId":"parent","spawnedBy":"parent","createdAt":"2026-07-03T00:00:00Z"}]"#.utf8
+            )
+        )
+        let workers = SessionsListViewModel.workerSessions(in: sessions, parentId: "parent")
+
+        XCTAssertEqual(SidebarSubagents.menuWorkers(workers, shown: true).map(\.id), ["worker"])
+        XCTAssertEqual(SidebarSubagents.menuWorkers(workers, shown: false), [])
+        XCTAssertEqual(
+            SessionsListViewModel.listedSessions(in: sessions, claimed: []).map(\.id),
+            ["parent"]
+        )
+        XCTAssertEqual(
+            SessionsListViewModel.tabSessions(in: sessions, containing: sessions[1]).map(\.id),
+            ["worker"]
+        )
+    }
+
     func testClosingATabLandsOnItsNeighbour() throws {
         let sessions = try JSONDecoder().decode(
             [Session].self,

@@ -101,6 +101,33 @@ final class PreferenceHydrationTests: XCTestCase {
         XCTAssertNil(NativePreferences.liveTypingEnabled("future-value"))
     }
 
+    /// The same "show"/"hide" pair the web writes for `sidebar-subagents`.
+    func testSidebarSubagentsPreferenceUsesWebValues() {
+        XCTAssertEqual(SidebarSubagents.shown("show"), true)
+        XCTAssertEqual(SidebarSubagents.shown("hide"), false)
+        XCTAssertNil(SidebarSubagents.shown(nil))
+        XCTAssertNil(SidebarSubagents.shown("future-value"))
+        XCTAssertEqual(SidebarSubagents.encode(true), "show")
+        XCTAssertEqual(SidebarSubagents.encode(false), "hide")
+    }
+
+    /// Default shown, like the web.
+    @MainActor
+    func testSidebarSubagentsDefaultsShown() {
+        let defaults = UserDefaults.standard
+        let key = SidebarSubagents.storageKey
+        let previous = defaults.object(forKey: key) as? Bool
+        defer {
+            if let previous { defaults.set(previous, forKey: key) }
+            else { defaults.removeObject(forKey: key) }
+        }
+
+        defaults.removeObject(forKey: key)
+        XCTAssertTrue(SidebarSubagents.isShown)
+        defaults.set(false, forKey: key)
+        XCTAssertFalse(SidebarSubagents.isShown)
+    }
+
     /// Default off: an account that has never touched the switch reads the
     /// same on the phone as in the browser.
     func testLiveTypingDefaultsOff() {

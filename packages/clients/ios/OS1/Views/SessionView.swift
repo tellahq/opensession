@@ -168,6 +168,9 @@ struct SessionView: View {
     @AppStorage("os1.appearance.turnActivity") private var turnWork = "running"
     @AppStorage("os1.appearance.toolCalls") private var toolCalls = "folded"
     @AppStorage(ThinkingMessages.storageKey) private var thinkingMessages = "latest"
+    /// The account's sub-agent visibility, mapped onto the worker menu here
+    /// because this app has no nested sidebar rows (`SidebarSubagents`).
+    @AppStorage(SidebarSubagents.storageKey) private var showSubagents = true
     private var turnActivity: TurnActivity {
         TurnActivity(work: turnWork, tools: toolCalls)
     }
@@ -1063,7 +1066,7 @@ struct SessionView: View {
             SessionActionsMenu(
                 viewModel: viewModel,
                 tabs: tabs,
-                workerSessions: workerSessions,
+                workerSessions: SidebarSubagents.menuWorkers(workerSessions, shown: showSubagents),
                 workspaceNames: workspaceNames,
                 catalog: catalog,
                 onNewSession: onNewSession,

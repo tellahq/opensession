@@ -696,6 +696,7 @@ struct AppearanceSettingsView: View {
     @AppStorage("os1.sidebar.repoOrder") private var repoOrderJSON = "[]"
     @AppStorage(SidebarFeeds.storageKey) private var hiddenFeeds = "[]"
     @AppStorage(SidebarTools.storageKey) private var hiddenTools = SidebarTools.defaultHiddenJSON
+    @AppStorage(SidebarSubagents.storageKey) private var showSubagents = true
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var repos: [OS1API.RepoInfo] = SettingsCache.value("repos") ?? []
@@ -792,11 +793,20 @@ struct AppearanceSettingsView: View {
                     Text("Off").tag("off")
                     Text("Always").tag("always")
                 }
+                // The web nests workers under the workspace row; this app
+                // has no nested rows, so the same account pref governs the
+                // parent session's Delegated workers menu (`SidebarSubagents`).
+                Toggle(isOn: Binding(
+                    get: { showSubagents },
+                    set: { SidebarSubagents.setShown($0) }
+                )) {
+                    Text("Show sub-agents")
+                }
             } header: {
                 Text("Session list")
             } footer: {
                 Text(
-                    "Repo order is your account's — the web sidebar follows it too. The last-used time is this device's, and a running session always shows its own clock."
+                    "Repo order and sub-agents sync with the web sidebar. Sub-agents are delegated workers available from their parent session's menu. Last-used time stays on this device. Running sessions always show their own clock."
                 )
             }
 
