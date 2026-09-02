@@ -13,19 +13,6 @@ export function transcriptRangesContainPayload(
   return ranges.some((range) => range.entryIds.some(hasPayload));
 }
 
-/** The bounded opening payload may cut into a range and leave a loaded suffix.
- * Only that shape inserts later hydration at the start of an existing row.
- * Normal range pagination starts at firstSeq and appends at the row's end. */
-export function transcriptRangeHasLoadedSuffix(
-  entryIds: readonly string[],
-  hasPayload: (entryId: string) => boolean,
-): boolean {
-  const firstLoaded = entryIds.findIndex(hasPayload);
-  return (
-    firstLoaded > 0 && entryIds.slice(firstLoaded).every((id) => hasPayload(id))
-  );
-}
-
 /**
  * Missing payload can move the opening viewport only when it belongs to a row
  * the virtualizer actually reports as visible. Unloaded ranges occupy no

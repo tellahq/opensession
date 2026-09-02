@@ -83,6 +83,7 @@ import { latestFeaturedScreenshot } from "../../shared/shipped-change-media";
 import { useBackSwipe } from "../hooks/useBackSwipe";
 import { useNavigation } from "../hooks/useNavigation";
 import { useSessionSocket } from "../hooks/useSessionSocket";
+import { useConnectionPresentation } from "../hooks/useConnectionPresentation";
 import { useSessionRuntime } from "../hooks/useSessionRuntime";
 import {
   useComposerQueueState,
@@ -490,6 +491,7 @@ export function SessionViewer({
 }: SessionViewerProps) {
   const navigation = useNavigation();
   const { send, addHandler } = useSessionSocket();
+  const presentedConnected = useConnectionPresentation(connected);
   const reviewController = useSessionReviewController({
     session,
     navigation,
@@ -1617,7 +1619,7 @@ export function SessionViewer({
             workspaceSessions,
             openSession,
             reviewSessionActionTarget,
-            connected,
+            connected: presentedConnected,
             isBusy,
             noEngine,
             openCurrentWorkspace,

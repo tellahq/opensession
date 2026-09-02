@@ -53,7 +53,9 @@ test("shows the pull request API failure reason beside both retry states", () =>
     'errorMessage(prResource.error, "Couldn’t load pull request.")',
   );
   expect(statusBarSource).toContain("{prLoadError}");
-  expect(panelSource).toContain("{loadError}\n        </EmptyState>");
+  expect(panelSource).toContain(
+    '<span className="text-pretty">{loadError}</span>',
+  );
 });
 
 test("a successful read with no PR still says No PR open", () => {

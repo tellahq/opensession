@@ -1178,6 +1178,12 @@ struct SessionsListView: View {
                     if let lens = env["OS1_PERSON_LENS"], !lens.isEmpty {
                         peopleFilterRaw = lens
                     }
+                    // Open a commit directly for UI verification.
+                    if let raw = env["OS1_OPEN_COMMIT"],
+                       let url = URL(string: "\(CommitLinks.scheme)://\(raw)"),
+                       let reference = CommitLinks.reference(from: url) {
+                        commitReference = reference
+                    }
                     #endif
                 }
                 .sheet(item: $newSessionRequest) { request in

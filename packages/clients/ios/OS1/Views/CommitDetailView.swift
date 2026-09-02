@@ -5,6 +5,7 @@ struct CommitDetailView: View {
     let reference: CommitLinks.Reference
 
     @State private var commit: CommitDetails?
+    @State private var changedFiles: [FilePatch] = []
     @State private var loading = true
     @State private var error: String?
     @Environment(\.dismiss) private var dismiss
@@ -44,7 +45,7 @@ struct CommitDetailView: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 440, idealWidth: 520, minHeight: 380, idealHeight: 520)
+        .frame(minWidth: 440, idealWidth: 680, minHeight: 380, idealHeight: 640)
         #endif
         .task(id: reference.id) { await load() }
         #if os(iOS)
@@ -111,9 +112,32 @@ struct CommitDetailView: View {
                     }
                     .buttonStyle(.borderedProminent)
                 }
+
+                changes(commit)
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func changes(_ commit: CommitDetails) -> some View {
+        if !changedFiles.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Changes")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    ForEach(changedFiles) { file in
+                        CommitFileDiff(file: file)
+                    }
+                }
+            }
+        }
+        if commit.patchTruncated == true {
+            Text("Some large changes aren’t shown.")
+                .font(.footnote)
+                .foregroundStyle(OS1VisualStyle.textFaint)
         }
     }
 
@@ -148,8 +172,15 @@ struct CommitDetailView: View {
     private func load() async {
         loading = true
         error = nil
+        changedFiles = []
         do {
-            commit = try await OS1API.commit(sha: reference.sha, repo: reference.repo)
+            let loaded = try await OS1API.commit(sha: reference.sha, repo: reference.repo)
+            let files = await Task.detached(priority: .userInitiated) {
+                loaded?.changedFiles ?? []
+            }.value
+            guard !Task.isCancelled else { return }
+            commit = loaded
+            changedFiles = files
         } catch {
             commit = nil
             self.error = error.localizedDescription
@@ -163,5 +194,23 @@ struct CommitDetailView: View {
         #else
         openURL(url)
         #endif
+    }
+}
+
+private struct CommitFileDiff: View {
+    let file: FilePatch
+
+    var body: some View {
+        ToolCodeBox(label: file.path, lines: ToolCodeMetrics.lines(hunks)) {
+            DiffText(patch: hunks, maxLines: 2_000)
+        }
+    }
+
+    private var hunks: String {
+        let lines = file.patch.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let first = lines.firstIndex(where: { $0.hasPrefix("@@ ") }) else {
+            return file.patch
+        }
+        return lines[first...].joined(separator: "\n")
     }
 }

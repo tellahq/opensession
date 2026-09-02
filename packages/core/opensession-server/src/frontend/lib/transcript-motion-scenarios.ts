@@ -264,6 +264,26 @@ export function makeTranscriptMotionScenario(
   };
 }
 
+export const HYDRATION_TALL_TURN = 9;
+
+/** Grow a loaded entry by a few measured lines, bumping its change sequence
+ * the way a late revision would. Unloaded or unknown entries are unchanged. */
+export function growTranscriptMotionEntry(
+  state: TranscriptMotionScenarioState,
+  entryId: string,
+): TranscriptMotionScenarioState {
+  const entry = state.entries.find((candidate) => candidate.id === entryId);
+  if (!entry) return state;
+  const changeSeq = (entry.changeSeq ?? entry.seq ?? 0) + 1;
+  return applyTranscriptMotionEvent(state, {
+    atMs: 0,
+    kind: "update-entry",
+    id: entryId,
+    content: `${entry.content}\n${growingResult(`growth-${changeSeq}`, 8)}`,
+    changeSeq,
+  });
+}
+
 export function makeTranscriptHydrationScenario(): TranscriptMotionScenario {
   const allEntries: TranscriptEntry[] = [];
   for (let turn = 0; turn < 18; turn++) {
@@ -281,7 +301,13 @@ export function makeTranscriptHydrationScenario(): TranscriptMotionScenario {
       {
         id: `hydration-assistant-${turn}`,
         type: "assistant",
-        content: growingResult(`incremental-${turn + 1}`, 3 + (turn % 5) * 3),
+        // One reply taller than a phone viewport: its first measurement
+        // misses the estimate by a screen, the shape behind residual jumps
+        // after a keyed prepend.
+        content: growingResult(
+          `incremental-${turn + 1}`,
+          turn === HYDRATION_TALL_TURN ? 60 : 3 + (turn % 5) * 3,
+        ),
         timestamp: timestamp(assistantSeq),
         seq: assistantSeq,
         changeSeq: assistantSeq,

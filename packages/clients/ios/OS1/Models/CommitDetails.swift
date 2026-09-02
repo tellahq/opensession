@@ -16,13 +16,23 @@ struct CommitDetails: Decodable, Equatable, Sendable {
     let url: String?
     let onDefaultBranch: Bool
     let defaultBranch: String
+    let rawPatch: String?
+    let patchTruncated: Bool?
 
     var committedDate: Date? { Session.parseISO(committedAt) }
+
+    var changedFiles: [FilePatch] {
+        guard let rawPatch, !rawPatch.isEmpty else { return [] }
+        return PatchSplitter.split(rawPatch)
+    }
 
     static func lookupPath(sha: String, repo: String?) -> String {
         var components = URLComponents()
         components.path = "/api/commit"
-        components.queryItems = [URLQueryItem(name: "sha", value: sha)]
+        components.queryItems = [
+            URLQueryItem(name: "sha", value: sha),
+            URLQueryItem(name: "changes", value: "1"),
+        ]
         if let repo, !repo.isEmpty {
             components.queryItems?.append(URLQueryItem(name: "repo", value: repo))
         }

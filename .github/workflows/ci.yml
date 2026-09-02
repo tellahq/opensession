@@ -65,8 +65,11 @@ jobs:
       # A deterministic local fixture drives the production transcript stack
       # without credentials, sessions, or API traffic. Chrome is preinstalled
       # on the hosted runner; the explicit profile makes remote debugging work
-      # on current headless Chrome.
-      - name: Transcript motion performance budgets
+      # on current headless Chrome. The scroll regression is the behavioral
+      # contract for transcript reading: the entry a reader looks at moves
+      # only by what they scrolled, on desktop and phone, through hydration,
+      # growth above them, tail growth, and a touch fling.
+      - name: Transcript motion budgets and scroll regression
         run: |
           google-chrome --headless=new --no-sandbox \
             --remote-debugging-port=9222 --remote-allow-origins='*' \
@@ -92,6 +95,8 @@ jobs:
             bun packages/core/opensession-server/src/frontend/tools/transcript-motion-fuzz.ts \
               --profile stream --seeds 1 --speed 1 \
               --out "$RUNNER_TEMP/transcript-stream-report.json"
+          CDP_PORT=9222 OPENSESSION_URL=http://127.0.0.1:4899 \
+            bun run test:transcript-scroll
 
       # The snapshot scenarios are exactly the part of that sweep the ordering
       # problem eats: they redirect the sessions dir, transcript store, MCP

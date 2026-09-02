@@ -9,6 +9,7 @@ import { AnimatePresence } from "motion/react";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import {
   applyTranscriptMotionEvent,
+  growTranscriptMotionEntry,
   makeTranscriptHydrationScenario,
   makeTranscriptMotionScenario,
   makeTranscriptStreamPerformanceScenario,
@@ -25,6 +26,10 @@ type TranscriptMotionControl = {
   paused: boolean;
   followLatest: () => void;
   step?: () => boolean;
+  /** Grow a loaded entry in place, wherever the reader is. Lets a driver
+   * exercise growth above the reader inside their own row, in the row above,
+   * or during a fling, none of which a keyed prepend covers. */
+  grow?: (entryId: string) => boolean;
 };
 
 declare global {
@@ -184,6 +189,18 @@ function TranscriptMotionPlayer({
             const next = eventIndex + 1;
             setEventIndex(next);
             if (next === scenario.events.length) onStatusChange("done");
+            return true;
+          }
+        : undefined,
+      grow: manual
+        ? (entryId) => {
+            if (
+              !scenario.initial.transcriptIndex?.some(
+                (entry) => entry.id === entryId,
+              )
+            )
+              return false;
+            setState((current) => growTranscriptMotionEntry(current, entryId));
             return true;
           }
         : undefined,

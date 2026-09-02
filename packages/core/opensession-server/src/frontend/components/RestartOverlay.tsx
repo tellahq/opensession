@@ -3,15 +3,13 @@ import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { dismissToast, toast } from "../ui/toast";
 import { fetchHealthStatus } from "../lib/health";
+import { CONNECTION_PRESENTATION_GRACE_MS } from "../lib/connection-presentation";
 import {
   bootTransition,
   resolvedRestartPhase,
   type RestartPhase,
 } from "../lib/restart-boot";
 
-// Give foreground recovery enough time to probe and replace the stale PWA
-// socket before showing anything. Background time never counts toward this.
-const PILL_DELAY_MS = 8_000;
 // A disconnect older than this whose health probe ALSO fails escalates from
 // the calm pill to the full restart overlay (covers hard crashes).
 const ESCALATE_AFTER_MS = 22_000;
@@ -161,7 +159,10 @@ export function RestartOverlay({ connected, addHandler }: Props) {
       }
       if (phaseRef.current !== "ok" && phaseRef.current !== "restarting")
         return;
-      const delay = phaseRef.current === "restarting" ? 0 : PILL_DELAY_MS;
+      const delay =
+        phaseRef.current === "restarting"
+          ? 0
+          : CONNECTION_PRESENTATION_GRACE_MS;
       timer = setTimeout(() => {
         if (document.visibilityState !== "hidden") setPhase("reconnecting");
       }, delay);

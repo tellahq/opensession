@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TranscriptIndexedRange } from "../../lib/transcript-index";
 import {
-  transcriptRangeHasLoadedSuffix,
   transcriptRangesContainPayload,
   visibleTranscriptHydrationDemand,
   type TranscriptHydrationOutlineItem,
@@ -95,22 +94,6 @@ describe("visible transcript hydration", () => {
         (id) => id.startsWith("loaded"),
       ),
     ).toEqual([]);
-  });
-
-  test("distinguishes start-growing opening suffixes from appended pages", () => {
-    const ids = ["one", "two", "three", "four"];
-    expect(
-      transcriptRangeHasLoadedSuffix(ids, (id) =>
-        ["three", "four"].includes(id),
-      ),
-    ).toBe(true);
-    expect(
-      transcriptRangeHasLoadedSuffix(ids, (id) => ["one", "two"].includes(id)),
-    ).toBe(false);
-    expect(
-      transcriptRangeHasLoadedSuffix(ids, (id) => ["two", "four"].includes(id)),
-    ).toBe(false);
-    expect(transcriptRangeHasLoadedSuffix(ids, () => true)).toBe(false);
   });
 
   test("does not claim readiness before the virtualizer reports a window", () => {

@@ -10,7 +10,6 @@ import {
   type TranscriptIndexedRange,
 } from "../lib/transcript-index";
 import {
-  shouldAnimateTranscriptEntryPosition,
   transcriptArrivalAliases,
   transcriptEntryMountKey,
   turnMountKey,
@@ -47,7 +46,6 @@ import {
 } from "./ShippedChangeComposer";
 import { SessionContextMessage } from "./SessionContextMessage";
 import {
-  transcriptRangeHasLoadedSuffix,
   transcriptRangesContainPayload,
   visibleTranscriptHydrationDemand,
 } from "./session-viewer/transcript-hydration";
@@ -864,16 +862,6 @@ function IndexedTranscriptBlocks(props: Props) {
   const firstRenderedRangeKey = firstRenderedRange
     ? indexedItemKey(firstRenderedRange.item, firstRenderedRange.index)
     : null;
-  const firstRenderedRangeIds = firstRenderedRange
-    ? indexedItemEntryIds(firstRenderedRange.item)
-    : [];
-  const firstRenderedRangeLoaded = firstRenderedRangeIds.filter((id) =>
-    payloadById.has(id),
-  ).length;
-  const firstRenderedRangeIsPartialSuffix = transcriptRangeHasLoadedSuffix(
-    firstRenderedRangeIds,
-    (id) => payloadById.has(id),
-  );
   // Fired when the reader nears the top of the mounted window: collect the
   // next batch of missing ranges walking backwards from the window's head.
   // Start AT the head because the bounded opening payload can begin partway
@@ -957,9 +945,6 @@ function IndexedTranscriptBlocks(props: Props) {
         // it must not slide settled work or runner notices below it. Loose
         // entries are the live/optimistic atoms outside those durable ranges.
         animateArrival: item.kind === "entry",
-        animatePositionChanges:
-          item.kind === "entry" &&
-          shouldAnimateTranscriptEntryPosition(item.entry),
         estimateSize,
         measure: true,
         content:
@@ -1019,10 +1004,6 @@ function IndexedTranscriptBlocks(props: Props) {
       onLayout={props.onLayout}
       onTopApproach={handleTopApproach}
       topApproachGeneration={props.transcriptRangeRetryGeneration}
-      topGrowthKey={firstRenderedRangeKey}
-      topGrowthVersion={
-        firstRenderedRangeIsPartialSuffix ? firstRenderedRangeLoaded : undefined
-      }
       onVisibleItems={(visible) => {
         const wanted = visibleTranscriptHydrationDemand(
           hydrationOutline,
