@@ -209,11 +209,68 @@ struct CodexDeviceLogin: Codable, Sendable, Identifiable {
     var error: String?
 }
 
+/// One third-party provider (Settings → Providers). Mirrors `publicProvider`
+/// in routes/connections.ts: the key masked, the fields the form edits, and a
+/// summary of the catalog it cannot edit. Every field beyond `id` is optional
+/// so a server that predates custom gateways still decodes.
 struct ModelProvider: Codable, Sendable, Identifiable {
     var id: String?
     var apiKeyMasked: String?
     var baseURL: String?
+    /// `openai-completions` when the id is a custom gateway rather than a
+    /// slug pi already knows. Absent for known providers.
+    var api: String?
+    /// Display name; the id when absent.
+    var name: String?
+    /// Opted in to `GET {baseURL}/models` discovery.
+    var discoverModels: Bool?
+    /// ISO timestamp of the last discovery that recorded anything.
+    var discoveredAt: String?
+    /// Operator catalog file next to model-providers.json.
+    var catalogFile: String?
+    /// Rows in the operator catalog (inline, file, or discovered).
+    var catalogModels: Int?
+    /// Full picker ids (pi/<provider>/<model>) registered for it.
     var models: [String]?
+
+    var isCustomGateway: Bool { api?.isEmpty == false }
+    var displayName: String {
+        if let name, !name.isEmpty { return name }
+        return id ?? "Provider"
+    }
+    var apiDisplayName: String {
+        api == "openai-completions" ? "OpenAI-compatible" : (api ?? "pi built-in")
+    }
+
+    /// The row's second line: key, endpoint and catalog state, mirroring the
+    /// web's SettingRowDescription.
+    var summary: String {
+        var parts = [apiKeyMasked.flatMap { $0.isEmpty ? nil : $0 } ?? "no API key stored"]
+        if let baseURL, !baseURL.isEmpty { parts.append(baseURL) }
+        if isCustomGateway { parts.append(apiDisplayName) }
+        if let rows = catalogModels, rows > 0 { parts.append("\(rows) catalog \(rows == 1 ? "row" : "rows")") }
+        if discoverModels == true { parts.append("discovery on") }
+        if let count = models?.count, count > 0 { parts.append("\(count) in picker") }
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// Answer to `POST /api/settings/model-providers/:id/discover`, and the
+/// `discovery` block a PUT carries when discovery ran on save.
+struct ModelProviderDiscovery: Codable, Sendable {
+    /// Model ids the gateway listed.
+    var models: [String]?
+    /// How many of them were new to the picker.
+    var added: Int?
+    var provider: ModelProvider?
+}
+
+/// Answer to `PUT /api/settings/model-providers/:id`.
+struct ModelProviderSaveResponse: Codable, Sendable {
+    var provider: ModelProvider?
+    var discovery: ModelProviderDiscovery?
+    /// Set when the save succeeded but the requested discovery did not.
+    var discoveryError: String?
 }
 
 struct ModelProvidersResponse: Codable, Sendable {

@@ -107,8 +107,14 @@ struct ModelProvidersSections: View {
     @State private var providers: [ModelProvider]?
     @State private var loading = true
     @State private var error: String?
+    /// Outcome of the last save or discovery, shown above the rows because the
+    /// sheet that triggered it is gone by the time the answer lands.
+    @State private var notice: String?
+    /// Id of the provider a discovery poll is running for.
+    @State private var discovering: String?
     @State private var editor: ModelProvider?
     @State private var deleting: ModelProvider?
+    @State private var openedFromEnvironment = false
 
     init(reload: Int) {
         self.reload = reload
@@ -116,9 +122,12 @@ struct ModelProvidersSections: View {
     }
 
     var body: some View {
-        Section("Your own providers") {
+        Section {
             if loading, providers == nil { settingsLoadingRow }
             if let error { settingsErrorRow(error) { Task { await load() } } }
+            if let notice {
+                Text(notice).font(.caption).foregroundStyle(.secondary)
+            }
             if let providers {
                 if providers.isEmpty {
                     Text("No providers yet. Add one to use models beyond the Anthropic and OpenAI subscriptions.")
@@ -127,28 +136,174 @@ struct ModelProvidersSections: View {
                 }
                 ForEach(providers.filter { $0.id?.isEmpty == false }, id: \.id) { provider in
                     Button { editor = provider } label: {
-                        VStack(alignment: .leading) {
-                            Text(provider.id ?? "Provider")
-                            Text(provider.baseURL ?? provider.apiKeyMasked ?? "No endpoint configured").font(.caption).foregroundStyle(.secondary)
+                        ModelProviderRow(provider: provider, discovering: discovering == provider.id)
+                    }
+                    .foregroundStyle(.primary)
+                    .swipeActions(edge: .leading) {
+                        if provider.baseURL?.isEmpty == false {
+                            Button { Task { notice = await discover(provider) } } label: {
+                                Label("Discover models", systemImage: "magnifyingglass")
+                            }
+                            .tint(.accentColor)
                         }
-                    }.foregroundStyle(.primary)
+                    }
+                    .contextMenu {
+                        if provider.baseURL?.isEmpty == false {
+                            Button { Task { notice = await discover(provider) } } label: {
+                                Label("Discover models", systemImage: "magnifyingglass")
+                            }
+                        }
+                        Button(role: .destructive) { deleting = provider } label: {
+                            Label("Delete provider", systemImage: "trash")
+                        }
+                    }
                 }
-                Button { editor = ModelProvider(id: "", apiKeyMasked: nil, baseURL: nil, models: nil) } label: { Label("Add provider", systemImage: "plus") }
+                Button { editor = ModelProvider(id: "") } label: { Label("Add provider", systemImage: "plus") }
             }
+        } header: {
+            Text("Your own providers")
+        } footer: {
+            Text("Any provider pi supports with your API key, or any OpenAI-compatible gateway with its base URL. Keys are stored on the server and only shown masked. Discover models reads the gateway's model list into the picker.")
         }
-        .task(id: reload) { await load() }
+        .task(id: reload) { await load(); openFromEnvironment() }
         .sheet(item: $editor) { provider in
-            ModelProviderEditor(provider: provider, onSave: save, onDelete: { deleting = provider })
+            ModelProviderEditor(
+                provider: provider,
+                onSave: save,
+                onDiscover: { await discover(provider) },
+                onDelete: { deleting = provider }
+            )
         }
         .alert("Delete provider?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { provider in
             Button("Delete", role: .destructive) { Task { await delete(provider) } }; Button("Cancel", role: .cancel) {}
-        } message: { provider in Text("Remove \(provider.id ?? "this provider")?") }
+        } message: { provider in Text("Remove \(provider.displayName)?") }
     }
+
     private func load() async { loading = true; error = nil; do { let fetched = try await SettingsAPI.modelProviders().providers ?? []; providers = fetched; SettingsCache.save("model-providers", fetched) } catch { self.error = error.localizedDescription }; loading = false }
-    private func save(id: String, key: String, url: String, models: [String]) async {
-        do { _ = try await SettingsAPI.upsertModelProvider(id: id, apiKey: key.isEmpty ? nil : key, baseURL: url.isEmpty ? nil : url, models: models); editor = nil; await load() } catch { self.error = error.localizedDescription }
+
+    /// Returns the failure to show inside the sheet, or nil once saved. The
+    /// discovery outcome of a save lands in `notice` because the sheet closes.
+    private func save(_ draft: ModelProviderDraft) async -> String? {
+        do {
+            let response = try await SettingsAPI.upsertModelProvider(
+                id: draft.cleanId,
+                apiKey: draft.apiKeyValue,
+                baseURL: draft.trimmedBaseURL,
+                models: draft.modelIds,
+                api: draft.apiValue,
+                name: draft.trimmedName,
+                discoverModels: draft.discoverModels
+            )
+            if let failure = response.discoveryError {
+                notice = "Provider \(draft.cleanId) saved. \(failure)"
+            } else if let discovery = response.discovery {
+                notice = "Provider \(draft.cleanId) saved, \(discovery.models?.count ?? 0) models discovered"
+            } else {
+                notice = nil
+            }
+            editor = nil
+            await load()
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
+
+    /// Poll the gateway's model list. Returns a one-line outcome either way,
+    /// so the caller can show it wherever it started from.
+    private func discover(_ provider: ModelProvider) async -> String {
+        guard let id = provider.id, !id.isEmpty else { return "Save the provider before discovering models." }
+        discovering = id
+        defer { discovering = nil }
+        do {
+            let result = try await SettingsAPI.discoverModelProviderModels(id: id)
+            await load()
+            return "\(result.models?.count ?? 0) models listed, \(result.added ?? 0) added to the picker"
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     private func delete(_ provider: ModelProvider) async { guard let id = provider.id, !id.isEmpty else { return }; do { _ = try await SettingsAPI.deleteModelProvider(id: id); providers?.removeAll { $0.id == id }; if let providers { SettingsCache.save("model-providers", providers) } } catch { self.error = error.localizedDescription }; deleting = nil }
+
+    /// Node-only hook: a scripted run cannot tap its way into a sheet, so
+    /// `OS1_OPEN_PROVIDER=<id>` (or `new`) opens the editor once the list is in.
+    private func openFromEnvironment() {
+        #if DEBUG
+        guard !openedFromEnvironment, editor == nil,
+              let target = ProcessInfo.processInfo.environment["OS1_OPEN_PROVIDER"], !target.isEmpty
+        else { return }
+        openedFromEnvironment = true
+        editor = target == "new" ? ModelProvider(id: "") : providers?.first { $0.id == target }
+        #endif
+    }
+}
+
+/// One provider in the list: display name (id beside it when they differ),
+/// then the key, endpoint and catalog state on a second line.
+private struct ModelProviderRow: View {
+    let provider: ModelProvider
+    let discovering: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(provider.displayName)
+                if provider.name?.isEmpty == false, let id = provider.id {
+                    Text(id).font(.caption).foregroundStyle(.secondary)
+                }
+                if discovering { ProgressView().controlSize(.small) }
+            }
+            Text(provider.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+    }
+}
+
+/// What the provider editor collects, and the rules the Save button follows.
+/// Kept as a plain value so the rules are testable without a view.
+struct ModelProviderDraft: Equatable {
+    var id = ""
+    var apiKey = ""
+    var baseURL = ""
+    var name = ""
+    var modelText = ""
+    /// Declare `api: openai-completions` so an id pi does not know can run.
+    var customGateway = false
+    /// Poll `GET {baseURL}/models` on save.
+    var discoverModels = false
+    /// Editing an existing provider: a blank key keeps the stored one.
+    var isEditing = false
+
+    init(provider: ModelProvider) {
+        id = provider.id ?? ""
+        baseURL = provider.baseURL ?? ""
+        name = provider.name ?? ""
+        modelText = (provider.models ?? []).joined(separator: ", ")
+        customGateway = provider.isCustomGateway
+        discoverModels = provider.discoverModels == true
+        isEditing = !(provider.id ?? "").isEmpty
+    }
+
+    var cleanId: String { id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+    /// The server's PROVIDER_ID_RE: lowercase letters, digits and dashes.
+    var idValid: Bool { cleanId.range(of: "^[a-z0-9-]+$", options: .regularExpression) != nil }
+    var cleanKey: String { apiKey.filter { !$0.isWhitespace } }
+    /// `nil` keeps the stored key; the form never clears one.
+    var apiKeyValue: String? { cleanKey.isEmpty ? nil : cleanKey }
+    var trimmedBaseURL: String { baseURL.trimmingCharacters(in: .whitespacesAndNewlines) }
+    var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// `""` clears the protocol, making the id a plain pi slug again.
+    var apiValue: String { customGateway ? "openai-completions" : "" }
+    var modelIds: [String] {
+        modelText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+    /// A custom protocol or discovery without an endpoint can never run, and
+    /// the server refuses to store it.
+    var needsBaseURL: Bool { (customGateway || discoverModels) && trimmedBaseURL.isEmpty }
+    var canSave: Bool { idValid && !needsBaseURL && (isEditing || !cleanKey.isEmpty) }
 }
 
 struct ConnectionsSettingsView: View {
@@ -892,11 +1047,131 @@ struct CodexDeviceLoginView: View {
     }
 }
 
+/// Add or edit a provider: a pi slug with a key, or any OpenAI-compatible
+/// gateway with a base URL. Catalog rows and the catalog file are read-only
+/// here (they live in model-providers.json); discovery can be run in place.
 private struct ModelProviderEditor: View {
-    let provider: ModelProvider; let onSave: (String, String, String, [String]) async -> Void; let onDelete: () -> Void
+    let provider: ModelProvider
+    /// Returns the failure to show, or nil once saved (the sheet then closes).
+    let onSave: (ModelProviderDraft) async -> String?
+    /// Returns a one-line outcome, success or failure.
+    let onDiscover: () async -> String
+    let onDelete: () -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var id = ""; @State private var key = ""; @State private var url = ""; @State private var modelText = ""
-    var body: some View { NavigationStack { Form { TextField("Provider ID", text: $id); SecureField("API key (leave blank to keep)", text: $key); TextField("Base URL", text: $url); TextField("Model IDs, comma separated", text: $modelText); if !provider.id.orEmpty.isEmpty { Button("Delete provider", role: .destructive) { onDelete(); dismiss() } } } .navigationTitle(provider.id.orEmpty.isEmpty ? "Add Provider" : "Edit Provider").onAppear { id = provider.id ?? ""; url = provider.baseURL ?? ""; modelText = (provider.models ?? []).joined(separator: ", ") }.toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { Task { await onSave(id, key, url, modelText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }) } }.disabled(id.isEmpty) } } } }
+    @State private var draft: ModelProviderDraft
+    @State private var saving = false
+    @State private var discovering = false
+    @State private var discoveryStatus: String?
+    @State private var error: String?
+
+    init(
+        provider: ModelProvider,
+        onSave: @escaping (ModelProviderDraft) async -> String?,
+        onDiscover: @escaping () async -> String,
+        onDelete: @escaping () -> Void
+    ) {
+        self.provider = provider
+        self.onSave = onSave
+        self.onDiscover = onDiscover
+        self.onDelete = onDelete
+        _draft = State(initialValue: ModelProviderDraft(provider: provider))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Provider ID", text: $draft.id)
+                        .noAutocapitalizationCompat().autocorrectionDisabled()
+                    SecureField(draft.isEditing ? "API key (leave blank to keep)" : "API key", text: $draft.apiKey)
+                    TextField("Base URL", text: $draft.baseURL)
+                        .urlFieldCompat()
+                    TextField("Display name (optional)", text: $draft.name)
+                } footer: {
+                    Text("Use pi's slug for a known provider (xai, openrouter, groq), or any id with a base URL for an OpenAI-compatible gateway.")
+                }
+
+                Section {
+                    Toggle("OpenAI-compatible gateway", isOn: $draft.customGateway)
+                    Toggle("Discover models on save", isOn: $draft.discoverModels)
+                } header: {
+                    Text("Gateway")
+                } footer: {
+                    if draft.needsBaseURL {
+                        Text("A base URL is required for these options.").foregroundStyle(.red)
+                    } else {
+                        Text("Turn on the gateway option for an id pi does not know. Discovery reads the gateway's /v1/models list into the picker without removing pinned ids.")
+                    }
+                }
+
+                Section {
+                    TextField("Model IDs, comma separated", text: $draft.modelText)
+                        .noAutocapitalizationCompat().autocorrectionDisabled()
+                } header: {
+                    Text("Models")
+                } footer: {
+                    Text("Registered in the picker as pi/<provider>/<model>. List the provider's own model ids, e.g. grok-4 for xai.")
+                }
+
+                if draft.isEditing {
+                    Section("Catalog") {
+                        LabeledContent("API", value: provider.apiDisplayName)
+                        LabeledContent("Catalog rows", value: "\(provider.catalogModels ?? 0)")
+                        if let file = provider.catalogFile, !file.isEmpty {
+                            LabeledContent("Catalog file", value: file)
+                        }
+                        LabeledContent("Last discovery", value: lastDiscovery)
+                        Button {
+                            discovering = true
+                            Task {
+                                discoveryStatus = await onDiscover()
+                                discovering = false
+                            }
+                        } label: {
+                            HStack {
+                                Label("Discover models now", systemImage: "magnifyingglass")
+                                if discovering { Spacer(); ProgressView().controlSize(.small) }
+                            }
+                        }
+                        .disabled(discovering || (provider.baseURL ?? "").isEmpty)
+                        if let discoveryStatus {
+                            Text(discoveryStatus).font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Section {
+                        Button("Delete provider", role: .destructive) { onDelete(); dismiss() }
+                    }
+                }
+
+                if let error {
+                    Section { Text(error).foregroundStyle(.red) }
+                }
+            }
+            .navigationTitle(draft.isEditing ? "Edit Provider" : "Add Provider")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(saving ? "Saving…" : "Save") {
+                        saving = true
+                        Task {
+                            error = await onSave(draft)
+                            saving = false
+                        }
+                    }
+                    .disabled(!draft.canSave || saving)
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 480, minHeight: 560)
+        #endif
+    }
+
+    private var lastDiscovery: String {
+        guard let date = Session.parseISO(provider.discoveredAt) else { return "Never" }
+        return date.formatted(.relative(presentation: .named))
+    }
 }
 
 private struct MCPConnectionEditor: View {
@@ -976,5 +1251,3 @@ private struct MemoryEditor: View {
 /// spinner and the same retryable error row, so they live once here.
 var settingsLoadingRow: some View { HStack { Spacer(); ProgressView("Loading…"); Spacer() } }
 func settingsErrorRow(_ message: String, retry: @escaping () -> Void) -> some View { VStack(alignment: .leading, spacing: 8) { Text(message).foregroundStyle(.red); Button("Retry", action: retry) } }
-
-private extension Optional where Wrapped == String { var orEmpty: String { self ?? "" } }

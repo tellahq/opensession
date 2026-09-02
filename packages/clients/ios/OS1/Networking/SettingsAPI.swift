@@ -403,14 +403,34 @@ enum SettingsAPI {
         try await request("/api/settings/model-providers")
     }
 
-    static func upsertModelProvider(id: String, apiKey: String? = nil, baseURL: String? = nil, models: [String]? = nil) async throws -> ModelProvider {
-        struct Response: Decodable, Sendable { var provider: ModelProvider? }
+    /// Upsert a provider. Field semantics follow the server: `nil` keeps the
+    /// stored value, `""` clears it, anything else replaces it. `api` is
+    /// `"openai-completions"` for a custom gateway or `""` to make the id a
+    /// plain pi slug again. Catalog rows, the catalog file and discovery
+    /// results are never sent, so the server preserves them as stored.
+    static func upsertModelProvider(
+        id: String,
+        apiKey: String? = nil,
+        baseURL: String? = nil,
+        models: [String]? = nil,
+        api: String? = nil,
+        name: String? = nil,
+        discoverModels: Bool? = nil
+    ) async throws -> ModelProviderSaveResponse {
         var body: [String: Any] = [:]
         if let apiKey { body["apiKey"] = apiKey }
         if let baseURL { body["baseURL"] = baseURL }
         if let models { body["models"] = models }
-        let response: Response = try await request("/api/settings/model-providers/\(segment(id))", method: "PUT", body: body)
-        return response.provider ?? ModelProvider(id: id, apiKeyMasked: nil, baseURL: nil, models: nil)
+        if let api { body["api"] = api }
+        if let name { body["name"] = name }
+        if let discoverModels { body["discoverModels"] = discoverModels }
+        return try await request("/api/settings/model-providers/\(segment(id))", method: "PUT", body: body)
+    }
+
+    /// `GET {baseURL}/models` with the stored key, recorded server-side and
+    /// added to the picker without removing pinned ids. Admin-only.
+    static func discoverModelProviderModels(id: String) async throws -> ModelProviderDiscovery {
+        try await request("/api/settings/model-providers/\(segment(id))/discover", method: "POST")
     }
 
     static func deleteModelProvider(id: String) async throws -> SettingsOK {

@@ -14,6 +14,9 @@ struct SettingsView: View {
     @State private var copiedCode = false
     @State private var confirmingSignOut = false
     @State private var isAdmin = true
+    /// Node-only hook: `OS1_OPEN_SETTINGS=providers` pushes the Providers
+    /// page, which a scripted run cannot otherwise reach inside the sheet.
+    @State private var openProviders = false
 
     private var signIn: GitHubSignIn { .shared }
 
@@ -44,7 +47,13 @@ struct SettingsView: View {
             #endif
             .toolbar { toolbar }
             .onAppear { signIn.nudge() }
+            .navigationDestination(isPresented: $openProviders) { ProvidersSettingsView() }
             .task {
+                #if DEBUG
+                if ProcessInfo.processInfo.environment["OS1_OPEN_SETTINGS"] == "providers" {
+                    openProviders = true
+                }
+                #endif
                 if let status = try? await OS1API.authStatus() {
                     isAdmin = status.admin != false
                 }
