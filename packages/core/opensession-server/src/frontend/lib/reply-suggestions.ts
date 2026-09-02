@@ -8,7 +8,7 @@
 // appears when a turn actually ended on a choice, so an instance that never
 // hits one never sees it.
 
-import { makeUserPref } from "./user-pref";
+import * as userPref from "./user-pref";
 
 export interface ReplySuggestion {
   /** 1-2 words, sentence case. What the chip reads as. */
@@ -17,7 +17,7 @@ export interface ReplySuggestion {
   text: string;
 }
 
-const pref = makeUserPref<boolean>({
+const pref = userPref.makeUserPref<boolean>({
   localKey: "opensession-reply-suggestions",
   prefKey: "reply-suggestions",
   changeEvent: "opensession-reply-suggestions-changed",

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 // The session last open in each workspace, so re-entering a workspace (sidebar
 // click, bare /workspace/<id> URL) lands on the session tab it was left on
 // rather than the oldest session. A per-device working preference, like the
@@ -11,13 +13,16 @@ const MAX_ENTRIES = 200;
 
 function read(): Record<string, string> {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(KEY) || "{}");
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-    return Object.fromEntries(
-      Object.entries(value).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string",
-      ),
-    );
+    const parsed = z
+      .record(z.string(), z.unknown())
+      .safeParse(JSON.parse(localStorage.getItem(KEY) || "{}"));
+    if (!parsed.success) return {};
+    const entries: Array<[string, string]> = [];
+    for (const [key, value] of Object.entries(parsed.data)) {
+      const sessionId = z.string().safeParse(value);
+      if (sessionId.success) entries.push([key, sessionId.data]);
+    }
+    return Object.fromEntries(entries);
   } catch {
     return {};
   }

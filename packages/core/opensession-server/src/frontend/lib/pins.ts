@@ -3,6 +3,7 @@
 // API stays synchronous (an in-memory cache) so callers don't change: the cache
 // is hydrated from the server on load and on user switch, and writes are
 // optimistic — update the cache + fire the change event immediately, then PUT.
+import { z } from "zod";
 import { fetchPins, fetchUiPrefs, savePinsApi, saveUiPrefsApi } from "./api";
 import { getCurrentUser } from "../components/UserPicker";
 import { whenCurrentUserReady } from "./auth-ready";
@@ -21,8 +22,16 @@ function emit() {
 
 function readLegacy(): string[] {
   try {
-    const v = JSON.parse(localStorage.getItem(LEGACY_KEY) || "[]");
-    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+    const parsed = z
+      .array(z.unknown())
+      .safeParse(JSON.parse(localStorage.getItem(LEGACY_KEY) || "[]"));
+    if (!parsed.success) return [];
+    const pins: string[] = [];
+    for (const value of parsed.data) {
+      const pin = z.string().safeParse(value);
+      if (pin.success) pins.push(pin.data);
+    }
+    return pins;
   } catch {
     return [];
   }
@@ -181,7 +190,7 @@ window.addEventListener(
 /** Apply an authoritative server push without writing the same list back. */
 export function receivePins(user: string, pins: string[]): void {
   if (user !== getCurrentUser()) return;
-  cache = Array.from(new Set(pins.filter((id) => typeof id === "string")));
+  cache = Array.from(new Set(pins));
   emit();
 }
 

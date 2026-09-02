@@ -7,16 +7,47 @@ import {
   normalizeChord,
 } from "./shortcut-chord";
 
+class TestKeyboardEvent extends Event implements KeyboardEvent {
+  readonly altKey: boolean;
+  readonly charCode = 0;
+  readonly code: string;
+  readonly ctrlKey: boolean;
+  readonly detail = 0;
+  readonly isComposing: boolean;
+  readonly key: string;
+  readonly keyCode = 0;
+  readonly location = 0;
+  readonly metaKey: boolean;
+  readonly repeat = false;
+  readonly shiftKey: boolean;
+  readonly view = null;
+  readonly which = 0;
+  readonly DOM_KEY_LOCATION_STANDARD = 0;
+  readonly DOM_KEY_LOCATION_LEFT = 1;
+  readonly DOM_KEY_LOCATION_RIGHT = 2;
+  readonly DOM_KEY_LOCATION_NUMPAD = 3;
+
+  constructor(init: Partial<KeyboardEvent> & { key: string }) {
+    super("keydown");
+    this.altKey = init.altKey ?? false;
+    this.code = init.code ?? "";
+    this.ctrlKey = init.ctrlKey ?? false;
+    this.isComposing = init.isComposing ?? false;
+    this.key = init.key;
+    this.metaKey = init.metaKey ?? false;
+    this.shiftKey = init.shiftKey ?? false;
+  }
+
+  getModifierState(): boolean {
+    return false;
+  }
+
+  initKeyboardEvent(): void {}
+  initUIEvent(): void {}
+}
+
 function key(init: Partial<KeyboardEvent> & { key: string }): KeyboardEvent {
-  return {
-    isComposing: false,
-    code: "",
-    metaKey: false,
-    ctrlKey: false,
-    altKey: false,
-    shiftKey: false,
-    ...init,
-  } as KeyboardEvent;
+  return new TestKeyboardEvent(init);
 }
 
 describe("eventChord", () => {

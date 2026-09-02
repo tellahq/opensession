@@ -103,11 +103,12 @@ describe("cheat sheet, tab and stop commands", () => {
     for (const id of ADDED) {
       const command = mod.shortcutCommand(id);
       expect(command?.id).toBe(id);
-      expect(mod.SHORTCUT_GROUPS).toContain(
-        command!.group as (typeof mod.SHORTCUT_GROUPS)[number],
+      if (!command) throw new Error(`Missing shortcut command: ${id}`);
+      expect(mod.SHORTCUT_GROUPS.some((group) => group === command.group)).toBe(
+        true,
       );
-      expect(command!.defaults.length).toBeGreaterThan(0);
-      for (const chord of command!.defaults) {
+      expect(command.defaults.length).toBeGreaterThan(0);
+      for (const chord of command.defaults) {
         // A non-canonical default is un-matchable: the event side only
         // ever produces canonical form.
         expect(chordMod.normalizeChord(chord, true)).toBe(chord);

@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import type { TranscriptEntry } from "../lib/types";
+import type { ProtocolClientMessage, TranscriptEntry } from "../lib/types";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { getCurrentUser } from "./UserPicker";
 import {
@@ -244,7 +244,7 @@ export function DeskConversation({
         setModels(m.models);
         setDefaultModel(m.default);
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         // The catalog only populates the picker. The Desk keeps its stored
         // model id and remains usable when this optional lookup fails.
         console.warn(errorMessage(error, "Could not load models"));
@@ -434,20 +434,19 @@ export function DeskConversation({
         ? { name: f.name, path: f.path }
         : { name: f.name, dataUrl: f.dataUrl },
     );
-    send({
+    const message: Extract<ProtocolClientMessage, { type: "prompt" }> = {
       type: "prompt",
       sessionId,
       content,
       user: getCurrentUser(),
       effort: effort || "low",
-      // Busy sends follow the same two behaviours as a session: plain send
-      // queues until the run finishes, ⌘/Ctrl+Enter steers into it.
-      ...(isRunning
-        ? { busyMode: opts?.steer ? ("steer" as const) : ("queue" as const) }
-        : {}),
-      ...(images.length ? { images } : {}),
-      ...(files.length ? { files: filePayload } : {}),
-    });
+    };
+    // Busy sends follow the same two behaviours as a session: plain send
+    // queues until the run finishes, ⌘/Ctrl+Enter steers into it.
+    if (isRunning) message.busyMode = opts?.steer ? "steer" : "queue";
+    if (images.length) message.images = images;
+    if (files.length) message.files = filePayload;
+    send(message);
     setPending(content);
     setImages([]);
     setFiles([]);

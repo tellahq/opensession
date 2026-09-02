@@ -582,6 +582,10 @@ const REPO_METRICS = [
 type RepoMetric = (typeof REPO_METRICS)[number]["key"];
 type RepoMetricMeta = (typeof REPO_METRICS)[number];
 
+function isRepoMetric(value: string): value is RepoMetric {
+  return REPO_METRICS.some((metric) => metric.key === value);
+}
+
 interface PersonRepoRow {
   name: string;
   total: number;
@@ -693,7 +697,8 @@ function PersonRepoBars({
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
-      if (!wrapRef.current?.contains(e.target as Node)) clear();
+      if (!(e.target instanceof Node) || !wrapRef.current?.contains(e.target))
+        clear();
     };
     document.addEventListener("pointerdown", onDown);
     return () => document.removeEventListener("pointerdown", onDown);
@@ -857,11 +862,12 @@ const PRESETS = [
   { label: "90d", days: 90 },
 ];
 
-const PR_STATE: Record<string, { label: string; color: string }> = {
-  OPEN: { label: "Open", color: "var(--viz-2)" },
-  MERGED: { label: "Merged", color: "var(--viz-7)" },
-  CLOSED: { label: "Closed", color: "var(--viz-8)" },
-};
+const OPEN_PR_STATE = { label: "Open", color: "var(--viz-2)" };
+const PR_STATE = new Map([
+  ["OPEN", OPEN_PR_STATE],
+  ["MERGED", { label: "Merged", color: "var(--viz-7)" }],
+  ["CLOSED", { label: "Closed", color: "var(--viz-8)" }],
+]);
 
 export function Analytics() {
   const [from, setFrom] = useState(() => daysAgo(29));
@@ -1825,7 +1831,9 @@ export function Analytics() {
                         label="Measure"
                         size="sm"
                         value={repoMetric}
-                        onValueChange={(v) => setRepoMetric(v as RepoMetric)}
+                        onValueChange={(value) => {
+                          if (isRepoMetric(value)) setRepoMetric(value);
+                        }}
                       >
                         {REPO_METRICS.map((m) => (
                           <SegmentedOption key={m.key} value={m.key}>
@@ -1861,7 +1869,7 @@ export function Analytics() {
                     <div className="flex flex-col">
                       {(showAllPrs ? data.prs : data.prs.slice(0, 12)).map(
                         (pr) => {
-                          const state = PR_STATE[pr.state] || PR_STATE.OPEN;
+                          const state = PR_STATE.get(pr.state) ?? OPEN_PR_STATE;
                           return (
                             <a
                               key={`${pr.repo}#${pr.number}`}

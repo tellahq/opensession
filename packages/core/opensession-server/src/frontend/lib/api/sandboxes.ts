@@ -33,14 +33,11 @@ export function sandboxAction(
   sessionId: string,
   action: "pause" | "resume" | "recreate",
 ): Promise<SessionSandboxStatus> {
-  return request(
-    `/sessions/${encodeURIComponent(sessionId)}/sandbox/${action}`,
-    {
-      method: "POST",
-      ...(action === "recreate" ? { body: { confirm: true } } : {}),
-      label: `Failed to ${action} sandbox`,
-    },
-  );
+  const path = `/sessions/${encodeURIComponent(sessionId)}/sandbox/${action}`;
+  const label = `Failed to ${action} sandbox`;
+  return action === "recreate"
+    ? request(path, { method: "POST", body: { confirm: true }, label })
+    : request(path, { method: "POST", label });
 }
 
 export interface SandboxConnectionsResponse {

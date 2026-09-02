@@ -30,6 +30,10 @@ const WIDTH_KEY = "opensession-panel-w";
 const MIN_W = 320;
 const MAX_W = 2400;
 
+interface SidePanelStyle extends React.CSSProperties {
+  "--panel-w": string;
+}
+
 export interface SidePanel {
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -45,9 +49,9 @@ export function useSidePanel(): SidePanel {
   const [open, setOpenState] = useState(sidePanelOpen);
   useEffect(() => {
     const syncOpen = (event: Event) => {
-      if (!(event instanceof CustomEvent) || typeof event.detail !== "boolean")
-        return;
-      setOpenState(event.detail);
+      if (!(event instanceof CustomEvent)) return;
+      if (event.detail === true) setOpenState(true);
+      else if (event.detail === false) setOpenState(false);
     };
     const syncStorage = (event: StorageEvent) => {
       if (event.key === SIDE_PANEL_OPEN_KEY) setOpenState(sidePanelOpen());
@@ -69,15 +73,13 @@ export function useSidePanel(): SidePanel {
   useEffect(() => {
     const syncPage = (event: Event) => {
       if (!(event instanceof CustomEvent)) return;
-      const next = event.detail as SidePanelPage;
-      if (
-        next !== "changes" &&
-        next !== "portals" &&
-        next !== "agents" &&
-        next !== "terminal"
-      )
-        return;
-      setPageState(next);
+      switch (event.detail) {
+        case "changes":
+        case "portals":
+        case "agents":
+        case "terminal":
+          setPageState(event.detail);
+      }
     };
     const syncStorage = (event: StorageEvent) => {
       if (event.key === SIDE_PANEL_PAGE_KEY) setPageState(sidePanelPage());
@@ -106,9 +108,8 @@ export function useSidePanel(): SidePanel {
   function startResize(e: React.MouseEvent) {
     e.preventDefault();
     const right =
-      (
-        e.currentTarget.parentElement as HTMLElement | null
-      )?.getBoundingClientRect().right ?? window.innerWidth;
+      e.currentTarget.parentElement?.getBoundingClientRect().right ??
+      window.innerWidth;
     document.body.classList.add("resizing-panel");
     // Snap Motion layout morphs while dragging — the composer re-measures on
     // every step, so springing it reads as funky text (mirrors the sidebar).
@@ -135,14 +136,16 @@ export function useSidePanel(): SidePanel {
     window.addEventListener("mouseup", onUp);
   }
 
+  const style: SidePanelStyle | undefined = width
+    ? { "--panel-w": `${width}px` }
+    : undefined;
+
   return {
     open,
     setOpen,
     page,
     setPage,
-    style: width
-      ? ({ "--panel-w": `${width}px` } as React.CSSProperties)
-      : undefined,
+    style,
     resizeHandle: (
       <div
         className={PANEL_RESIZE}

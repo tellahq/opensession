@@ -701,9 +701,10 @@ export function AssetPreview({
             const document = event.currentTarget.contentDocument;
             if (!document) return;
             document.addEventListener("click", (clickEvent) => {
-              const link = (clickEvent.target as Element | null)?.closest?.(
-                "a",
-              );
+              const link =
+                clickEvent.target instanceof Element
+                  ? clickEvent.target.closest("a")
+                  : null;
               const prefill = link ? parseNewSessionLink(link.href) : null;
               if (!prefill) return;
               clickEvent.preventDefault();
@@ -769,7 +770,7 @@ export function AssetPreview({
         ) : (
           <MarkdownBody
             className="markdown px-4 py-3 text-label"
-            html={marked.parse(text, { async: false }) as string}
+            html={marked.parse(text, { async: false })}
           />
         )
       ) : kind === "text" ? (

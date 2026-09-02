@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { z } from "zod";
 import type { CommandMenuHandle } from "../components/CommandMenuHost";
 import { getCurrentUser } from "../components/UserPicker";
 import {
@@ -20,6 +21,8 @@ import {
 } from "../lib/workspace-pane-state";
 import { useSubagentTabs } from "./useSubagentTabs";
 import type { useWebSocket } from "./useWebSocket";
+
+const todosResponseSchema = z.object({ todos: z.array(z.unknown()) });
 
 interface UseAppViewStateOptions {
   route: Route;
@@ -239,12 +242,8 @@ export function useAppViewState({
           `${BASE_PATH}/api/todos?user=${encodeURIComponent(getCurrentUser())}`,
         );
         const res = await fetch(path);
-        const data: unknown = await res.json();
-        const todos =
-          typeof data === "object" && data !== null && "todos" in data
-            ? data.todos
-            : undefined;
-        if (!stale) setTaskCount(Array.isArray(todos) ? todos.length : 0);
+        const parsed = todosResponseSchema.safeParse(await res.json());
+        if (!stale) setTaskCount(parsed.success ? parsed.data.todos.length : 0);
       })().catch(async () => {});
     };
     void load();
