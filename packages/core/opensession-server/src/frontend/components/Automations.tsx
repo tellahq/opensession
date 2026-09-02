@@ -1438,6 +1438,7 @@ function McpPicker({
 function accountPoolSuffix(m: ModelOption): string {
   if (m.accountProvider === "codex") return " (OpenAI Codex)";
   if (m.accountProvider === "claude") return " (Claude)";
+  if (m.accountProvider === "xai") return " (SuperGrok)";
   return "";
 }
 

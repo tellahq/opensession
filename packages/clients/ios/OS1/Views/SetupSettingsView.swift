@@ -179,6 +179,7 @@ struct SetupSettingsView: View {
         var parts: [String] = []
         if let n = engine.claudeAccounts, n > 0 { parts.append("\(n) Claude") }
         if let n = engine.codexAccounts, n > 0 { parts.append("\(n) OpenAI") }
+        if let n = engine.xaiAccounts, n > 0 { parts.append("\(n) xAI") }
         guard !parts.isEmpty else { return nil }
         return parts.joined(separator: ", ") + " accounts"
     }

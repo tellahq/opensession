@@ -18,6 +18,13 @@ import {
 } from "./model-providers";
 import { stateDir } from "./paths";
 import { piEngineEnabled, piPickerModels } from "./pi-config";
+import {
+  hasXaiAccounts,
+  xaiSubscriptionModelEfforts,
+  xaiSubscriptionModelName,
+  xaiSubscriptionPickerModels,
+} from "./xai-accounts";
+import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
 // Workspace ("Custom") presets live in the workspace store, so the one thing
 // this module needs from them — a preset's lead model — has to be read there.
 // The import cycle back into this module is inert: workspace-model-presets
@@ -119,6 +126,8 @@ export function modelEfforts(
     if (efforts.length) return [...efforts];
   }
   if (provider === "meta" && slug === "muse-spark-1.1") return OPENAI_EFFORTS;
+  // SuperGrok: the subscription catalog says which models take an effort.
+  if (provider === XAI_OAUTH_PROVIDER) return xaiSubscriptionModelEfforts(slug);
   // An operator's catalog row names the levels its gateway accepts.
   const configured = provider
     ? configuredCatalogModel(provider, slug, providers)
@@ -677,6 +686,10 @@ export function piModelLabel(
       ? configuredCatalogModel(provider, rest.join("/"), providers)
       : undefined;
   if (configured?.name) return configured.name;
+  if (provider === XAI_OAUTH_PROVIDER) {
+    const name = xaiSubscriptionModelName(rest.join("/"));
+    if (name) return name;
+  }
   const native = KNOWN_MODELS.find((m) => m.provider !== "pi" && m.id === tail);
   return (native?.label || prettifyModelSlug(tail))
     .replace(/^Claude\s+/i, "")
@@ -711,9 +724,14 @@ export function refreshPickerModels(): void {
         .filter(([, provider]) => !!provider.apiKey)
         .map(([id]) => id),
     );
+    const subscriptionXai = hasXaiAccounts();
     const usable = (id: string) => {
       const provider = id.split("/")[1] || "";
-      return BRIDGE_PROVIDER_IDS.has(provider) || keyed.has(provider);
+      return (
+        BRIDGE_PROVIDER_IDS.has(provider) ||
+        keyed.has(provider) ||
+        (provider === XAI_OAUTH_PROVIDER && subscriptionXai)
+      );
     };
     // Subscription-backed models are the normal catalog, not legacy direct-SDK
     // entries. Surface their Pi ids whenever Pi is enabled; the models route
@@ -721,6 +739,7 @@ export function refreshPickerModels(): void {
     const bridgeModels = piEngineEnabled() ? DEFAULT_BRIDGE_PICKER_MODELS : [];
     const configuredModels = [
       ...bridgeModels,
+      ...(piEngineEnabled() ? xaiSubscriptionPickerModels() : []),
       ...piPickerModels(),
       ...configuredPickerModels(),
     ];
@@ -1137,7 +1156,7 @@ export function routeModel(
   };
 }
 
-export type AccountProvider = "claude" | "codex";
+export type AccountProvider = "claude" | "codex" | "xai";
 
 /** Account pool used by a model after resolving presets and legacy ids. */
 export function accountProviderForModel(
@@ -1158,6 +1177,7 @@ export function accountProviderForModel(
   ) {
     return "codex";
   }
+  if (upstream === XAI_OAUTH_PROVIDER) return "xai";
   return undefined;
 }
 

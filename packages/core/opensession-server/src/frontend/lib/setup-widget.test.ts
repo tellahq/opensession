@@ -19,6 +19,7 @@ const status: SetupStatus = {
     claudeBin: null,
     claudeAccounts: 0,
     codexAccounts: 0,
+    xaiAccounts: 0,
     defaultModel: "",
     ready: false,
     blocker: null,

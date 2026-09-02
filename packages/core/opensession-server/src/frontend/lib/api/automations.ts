@@ -12,7 +12,7 @@ export interface ModelOption {
   /** Presets fix the lead model's effort instead of offering a ladder. */
   fixedEffort?: string;
   /** Provider account pool available to this model, if any. */
-  accountProvider?: "claude" | "codex";
+  accountProvider?: "claude" | "codex" | "xai";
   /** Picker section override ("dial" = The Dial presets). */
   group?: string;
   /** One-line subtitle shown under the label (dial presets). */
@@ -83,7 +83,7 @@ export interface ProviderAccountOption {
   id: string;
   name: string;
   email?: string;
-  provider: "claude" | "codex";
+  provider: "claude" | "codex" | "xai";
   /** Personal-sub owner, if any (else it's a shared-pool account). */
   owner?: string;
   /** False when the account is currently exhausted / over its cap. */
@@ -108,7 +108,10 @@ const providerAccountsResponseSchema = z.object({
 export async function fetchProviderAccounts(options?: {
   onPoolError?: (cause: unknown) => void;
 }): Promise<ProviderAccountOption[]> {
-  const fetchPool = async (provider: "claude" | "codex", path: string) => {
+  const fetchPool = async (
+    provider: "claude" | "codex" | "xai",
+    path: string,
+  ) => {
     try {
       const data = providerAccountsResponseSchema.parse(
         await request<object>(path),
@@ -130,11 +133,12 @@ export async function fetchProviderAccounts(options?: {
       return [];
     }
   };
-  const [claude, codex] = await Promise.all([
+  const [claude, codex, xai] = await Promise.all([
     fetchPool("claude", "/claude-accounts"),
     fetchPool("codex", "/codex-accounts"),
+    fetchPool("xai", "/xai-accounts"),
   ]);
-  return [...claude, ...codex];
+  return [...claude, ...codex, ...xai];
 }
 
 export interface AutomationRun {

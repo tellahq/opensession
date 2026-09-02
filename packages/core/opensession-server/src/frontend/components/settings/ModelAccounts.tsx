@@ -119,6 +119,34 @@ interface CodexUsageBucket {
   rateLimitReachedType?: string;
 }
 
+interface XaiAccountInfo {
+  id: string;
+  name: string;
+  email?: string;
+  kind: "oauth";
+  owner?: string;
+  mode: "shared" | "personal";
+  createdAt: string;
+  exhaustedUntil: string | null;
+  usable: boolean;
+  refreshError?: string;
+  reloginRequired: boolean;
+  usage: {
+    fetchedAt: string;
+    subscriptionTier?: string;
+    creditUsagePercent?: number;
+    usedCents?: number;
+    monthlyLimitCents?: number;
+    onDemandEnabled?: boolean;
+    onDemandUsedCents?: number;
+    onDemandCapCents?: number;
+    periodType?: string;
+    periodEnd?: string;
+    productUsage?: { product: string; usagePercent: number }[];
+    error?: string;
+  } | null;
+}
+
 // ── Shared bits ────────────────────────────────────────────────────────────
 
 function abortPendingOAuth(pending: {
@@ -203,7 +231,7 @@ function OwnerSelect({
 
 /** A provider mark keeps mixed account rows scannable without repeating a
  * column of colored tiles beside provider names that are already written out. */
-function AccountProviderMark({ name }: { name: "claude" | "codex" }) {
+function AccountProviderMark({ name }: { name: "claude" | "codex" | "xai" }) {
   return (
     <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center text-faint">
       <BrandMark name={name} size={18} />
@@ -1050,6 +1078,233 @@ export function CodexAccountsSection({
   );
 }
 
+// ── xAI (SuperGrok) accounts ──────────────────────────────────────────────────
+
+function XaiAccountStatus({ account }: { account: XaiAccountInfo }) {
+  if (account.reloginRequired)
+    return (
+      <AccountStatus tone="red" title={account.refreshError}>
+        Sign in again
+      </AccountStatus>
+    );
+  if (account.exhaustedUntil)
+    return (
+      <AccountStatus
+        tone="red"
+        title={`Sidelined until ${account.exhaustedUntil}`}
+      >
+        Limit hit
+      </AccountStatus>
+    );
+  if ((account.usage?.creditUsagePercent ?? 0) >= 100)
+    return <AccountStatus tone="red">Credits spent</AccountStatus>;
+  if (account.usage?.error)
+    return (
+      <AccountStatus tone="yellow" title={account.usage.error}>
+        Usage unknown
+      </AccountStatus>
+    );
+  return null;
+}
+
+function formatCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+/** SuperGrok reports one credit budget per billing period, plus per-product
+ * shares and an optional on-demand pool once the included credits are gone. */
+function XaiUsageMeters({ account }: { account: XaiAccountInfo }) {
+  const usage = account.usage;
+  if (!usage)
+    return <div className="mt-1.5 text-meta text-faint">Checking usage…</div>;
+  if (usage.error)
+    return <div className="mt-1.5 text-meta text-red">{usage.error}</div>;
+  const period = usage.periodType
+    ? usage.periodType.replace(/^USAGE_PERIOD_TYPE_/, "").toLowerCase()
+    : "";
+  const included =
+    usage.creditUsagePercent !== undefined ? usage.creditUsagePercent : null;
+  const onDemandPct =
+    usage.onDemandCapCents && usage.onDemandUsedCents !== undefined
+      ? Math.min(100, (usage.onDemandUsedCents / usage.onDemandCapCents) * 100)
+      : null;
+  return (
+    <MeterGroup>
+      <Meter
+        label={
+          period
+            ? `${period[0].toUpperCase()}${period.slice(1)} credits`
+            : "Included credits"
+        }
+        labelTitle={
+          usage.usedCents !== undefined && usage.monthlyLimitCents !== undefined
+            ? `${formatCents(usage.usedCents)} of ${formatCents(usage.monthlyLimitCents)}`
+            : undefined
+        }
+        pct={included}
+        value={included === null ? "–" : `${Math.round(included)}%`}
+        note={formatReset(usage.periodEnd ?? null)}
+        noteTitle={absoluteReset(usage.periodEnd ?? null)}
+      />
+      {(usage.productUsage || []).map((entry) => (
+        <Meter
+          key={entry.product}
+          label={entry.product}
+          pct={entry.usagePercent}
+          value={`${Math.round(entry.usagePercent)}%`}
+        />
+      ))}
+      {onDemandPct !== null && (
+        <Meter
+          label="On-demand"
+          labelTitle={`${formatCents(usage.onDemandUsedCents ?? 0)} of ${formatCents(usage.onDemandCapCents ?? 0)}`}
+          pct={onDemandPct}
+          value={`${Math.round(onDemandPct)}%`}
+          note={usage.onDemandEnabled === false ? "off" : undefined}
+        />
+      )}
+    </MeterGroup>
+  );
+}
+
+function useXaiAccounts() {
+  const [accounts, setAccounts] = useState<XaiAccountInfo[] | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async (forceUsage = false) => {
+    if (forceUsage) setRefreshing(true);
+    try {
+      const { accounts } = await request<{ accounts: XaiAccountInfo[] }>(
+        forceUsage ? "/xai-accounts/refresh" : "/xai-accounts",
+        {
+          method: forceUsage ? "POST" : "GET",
+          label: "Could not load xAI accounts",
+        },
+      );
+      setAccounts(accounts);
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not load xAI accounts"));
+      setAccounts((current) => current ?? []);
+    }
+    setRefreshing(false);
+  }, []);
+
+  useEffect(() => {
+    void load();
+    const timer = setInterval(() => void load(), 60_000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  async function setOwner(account: XaiAccountInfo, owner: string) {
+    if (owner === (account.owner || "")) return;
+    try {
+      await request(`/xai-accounts/${encodeURIComponent(account.id)}`, {
+        method: "PUT",
+        body: { owner },
+        label: "Could not update xAI account",
+      });
+      void load();
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not update xAI account"));
+    }
+  }
+
+  async function remove(account: XaiAccountInfo) {
+    if (
+      !confirm(
+        `Remove SuperGrok account "${providerAccountLabel(account)}"? Runs will stop using it.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await request(`/xai-accounts/${encodeURIComponent(account.id)}`, {
+        method: "DELETE",
+        label: "Could not remove xAI account",
+      });
+      void load();
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not remove xAI account"));
+    }
+  }
+
+  return { accounts, error, load, refreshing, remove, setError, setOwner };
+}
+
+type XaiAccountsState = ReturnType<typeof useXaiAccounts>;
+
+function XaiAccountRows({ state }: { state: XaiAccountsState }) {
+  return (
+    <>
+      {[...(state.accounts || [])]
+        .sort(
+          (left, right) =>
+            providerAccountLabel(left).localeCompare(
+              providerAccountLabel(right),
+            ) || left.id.localeCompare(right.id),
+        )
+        .map((account) => (
+          <SettingRow
+            key={account.id}
+            className="items-start gap-x-3 phone:px-4"
+          >
+            <AccountProviderMark name="xai" />
+            <SettingRowText>
+              <div className="flex min-w-0 items-center gap-2">
+                <SettingRowTitle className="truncate">
+                  {providerAccountLabel(account)}
+                </SettingRowTitle>
+                <XaiAccountStatus account={account} />
+              </div>
+              <SettingRowDescription className="truncate text-meta">
+                xAI · SuperGrok login
+                {account.usage?.subscriptionTier
+                  ? ` · ${account.usage.subscriptionTier}`
+                  : ""}
+              </SettingRowDescription>
+              <XaiUsageMeters account={account} />
+            </SettingRowText>
+            <SettingRowControl className="flex items-center gap-1.5 phone:mt-1 phone:ml-0 phone:w-full phone:basis-full phone:gap-2.5 phone:pl-10">
+              <span className="hidden shrink-0 text-meta text-faint phone:inline">
+                Used by
+              </span>
+              <OwnerSelect
+                value={account.owner || ""}
+                onChange={(owner) => state.setOwner(account, owner)}
+                label={`Owner of ${providerAccountLabel(account)}`}
+                quiet
+                className="phone:ml-auto"
+                title={
+                  account.owner
+                    ? `${account.owner}'s personal subscription. Their runs use it first, everyone else never does.`
+                    : "Shared pool account, used by everyone and by automations."
+                }
+              />
+              <Menu.Root>
+                <Menu.Trigger
+                  className={rowMenuTriggerClasses}
+                  aria-label={`Manage ${providerAccountLabel(account)}`}
+                >
+                  <IconDotsHorizontal size={18} />
+                </Menu.Trigger>
+                <Menu.Popup align="end" sideOffset={4}>
+                  <Menu.Item
+                    onClick={() => state.remove(account)}
+                    className="text-red data-[highlighted]:bg-red-soft"
+                  >
+                    <IconTrash size={16} />
+                    Remove account
+                  </Menu.Item>
+                </Menu.Popup>
+              </Menu.Root>
+            </SettingRowControl>
+          </SettingRow>
+        ))}
+    </>
+  );
+}
+
 /** One provider, collapsed: how many accounts it has and how many can take a
  * run right now. The accounts themselves stay one click away, so a pool of a
  * dozen reads as two rows instead of a page of meters. */
@@ -1062,7 +1317,7 @@ function ProviderSummaryRow({
   onAdd,
   children,
 }: {
-  mark: "claude" | "codex";
+  mark: "claude" | "codex" | "xai";
   title: string;
   accounts: { usable: boolean; exhaustedUntil: string | null }[];
   expanded: boolean;
@@ -1131,16 +1386,29 @@ export function ProviderAccountsSection({
 } = {}) {
   const claude = useClaudeAccounts();
   const codex = useCodexAccounts();
-  const [adding, setAdding] = useState<"claude" | "codex" | null>(null);
+  const xai = useXaiAccounts();
+  const [adding, setAdding] = useState<"claude" | "codex" | "xai" | null>(null);
   const [view, setView] = useState<"providers" | "accounts">("providers");
-  const [expanded, setExpanded] = useState<"claude" | "codex" | null>(null);
-  const loading = claude.accounts === null || codex.accounts === null;
+  const [expanded, setExpanded] = useState<"claude" | "codex" | "xai" | null>(
+    null,
+  );
+  const loading =
+    claude.accounts === null ||
+    codex.accounts === null ||
+    xai.accounts === null;
   const empty =
-    !loading && claude.accounts?.length === 0 && codex.accounts?.length === 0;
-  const refreshing = claude.refreshing || codex.refreshing;
+    !loading &&
+    claude.accounts?.length === 0 &&
+    codex.accounts?.length === 0 &&
+    xai.accounts?.length === 0;
+  const refreshing = claude.refreshing || codex.refreshing || xai.refreshing;
 
   function refreshUsage() {
-    void Promise.allSettled([claude.load(true), codex.load(true)]);
+    void Promise.allSettled([
+      claude.load(true),
+      codex.load(true),
+      xai.load(true),
+    ]);
   }
 
   return (
@@ -1195,6 +1463,10 @@ export function ProviderAccountsSection({
                   <IconTile name="codex" size={18} />
                   OpenAI account
                 </Menu.Item>
+                <Menu.Item onClick={() => setAdding("xai")}>
+                  <IconTile name="xai" size={18} />
+                  xAI account
+                </Menu.Item>
               </Menu.Popup>
             </Menu.Root>
           </>
@@ -1228,6 +1500,11 @@ export function ProviderAccountsSection({
           {codex.error}
         </InlineAlert>
       )}
+      {xai.error && (
+        <InlineAlert className="mb-2" onDismiss={() => xai.setError(null)}>
+          {xai.error}
+        </InlineAlert>
+      )}
 
       <Modal.Root
         open={adding === "claude"}
@@ -1257,6 +1534,20 @@ export function ProviderAccountsSection({
           />
         </Modal.Content>
       </Modal.Root>
+      <Modal.Root
+        open={adding === "xai"}
+        onOpenChange={(open) => !open && setAdding(null)}
+      >
+        <Modal.Content>
+          <AddXaiAccountForm
+            onAdded={() => {
+              setAdding(null);
+              void xai.load();
+              void onChanged?.();
+            }}
+          />
+        </Modal.Content>
+      </Modal.Root>
 
       <SettingCard className={onboarding ? "p-1" : undefined}>
         {loading ? (
@@ -1264,8 +1555,8 @@ export function ProviderAccountsSection({
         ) : empty ? (
           <EmptyState placement="row">
             {onboarding
-              ? "Connect a Claude or OpenAI account to use its subscription."
-              : "No accounts yet. Runs use this server's Claude and Codex sign-ins until you add an Anthropic or OpenAI account."}
+              ? "Connect a Claude, OpenAI or xAI account to use its subscription."
+              : "No accounts yet. Runs use this server's Claude and Codex sign-ins until you add an Anthropic, OpenAI or xAI account."}
           </EmptyState>
         ) : view === "providers" ? (
           <>
@@ -1293,11 +1584,22 @@ export function ProviderAccountsSection({
             >
               <CodexAccountRows state={codex} />
             </ProviderSummaryRow>
+            <ProviderSummaryRow
+              mark="xai"
+              title="xAI"
+              accounts={xai.accounts || []}
+              expanded={expanded === "xai"}
+              onToggle={() => setExpanded(expanded === "xai" ? null : "xai")}
+              onAdd={() => setAdding("xai")}
+            >
+              <XaiAccountRows state={xai} />
+            </ProviderSummaryRow>
           </>
         ) : (
           <>
             <ClaudeAccountRows state={claude} />
             <CodexAccountRows state={codex} />
+            <XaiAccountRows state={xai} />
           </>
         )}
       </SettingCard>
@@ -1974,6 +2276,198 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
               {saving ? "Adding…" : "Add account"}
             </Button>
           )}
+        </Modal.Footer>
+      </form>
+    </>
+  );
+}
+
+interface XaiDeviceLogin {
+  id: string;
+  state: "starting" | "awaiting_code" | "done" | "error" | "cancelled";
+  url?: string;
+  code?: string;
+  error?: string;
+  account?: XaiAccountInfo;
+}
+
+/** SuperGrok sign-in: device code only, the same shape as the ChatGPT device
+ * flow. The server runs the OAuth exchange itself, so nothing needs a VPS
+ * shell or a Pi extension. */
+function AddXaiAccountForm({ onAdded }: { onAdded: () => void }) {
+  const [owner, setOwner] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [login, setLogin] = useState<XaiDeviceLogin | null>(null);
+  const [pendingDone, setPendingDone] = useState(false);
+
+  const cleanupPendingLogin = useEffectEvent(() => {
+    if (pendingDone) return;
+    if (
+      login &&
+      (login.state === "starting" || login.state === "awaiting_code")
+    ) {
+      void request(
+        `/xai-accounts/device-login/${encodeURIComponent(login.id)}`,
+        { method: "DELETE", label: "Could not cancel xAI sign-in" },
+      ).catch(() => undefined);
+    }
+  });
+  useEffect(() => () => cleanupPendingLogin(), []);
+
+  const pollDeviceLoginTick = useEffectEvent(async () => {
+    if (!login?.id) return;
+    try {
+      const next = await request<XaiDeviceLogin>(
+        `/xai-accounts/device-login/${encodeURIComponent(login.id)}`,
+        { label: "Could not refresh xAI sign-in" },
+      );
+      setLogin(next);
+      if (next.state === "done") {
+        setPendingDone(true);
+        onAdded();
+      }
+    } catch {
+      // Keep polling. A transient refresh failure does not end the device flow.
+    }
+  });
+  const loginId = login?.id;
+  const loginState = login?.state;
+  useEffect(() => {
+    if (!loginId || loginState === "done" || loginState === "error") return;
+    const timer = setInterval(() => void pollDeviceLoginTick(), 2000);
+    return () => clearInterval(timer);
+  }, [loginId, loginState]);
+
+  async function handleStartDeviceLogin() {
+    setSaving(true);
+    setError(null);
+    try {
+      const next = await request<XaiDeviceLogin>("/xai-accounts/device-login", {
+        method: "POST",
+        body: owner.trim() ? { owner: owner.trim() } : {},
+        label: "Could not start xAI sign-in",
+      });
+      setLogin(next);
+    } catch (cause) {
+      setError(errorMessage(cause, "Could not start xAI sign-in"));
+    }
+    setSaving(false);
+  }
+
+  const loginPending =
+    login && (login.state === "starting" || login.state === "awaiting_code");
+
+  return (
+    <>
+      <Modal.Header
+        title="Add xAI account"
+        description="Sign in with a SuperGrok or X Premium account from here. You'll get a link and a one-time code to enter on any device. Runs on Grok models then draw on that subscription's quota, not API credits."
+      />
+
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (saving) return;
+          if (!loginPending && login?.state !== "done")
+            void handleStartDeviceLogin();
+        }}
+      >
+        <Field
+          label="Owner"
+          title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations."
+        >
+          <OwnerSelect
+            value={owner}
+            onChange={setOwner}
+            label="Owner"
+            disabled={!!login}
+          />
+        </Field>
+
+        {login && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-md bg-surface px-4 py-3 text-supporting"
+          >
+            {login.state === "starting" && (
+              <div className="text-dim">Starting sign-in…</div>
+            )}
+            {login.state === "awaiting_code" && (
+              <>
+                <div>
+                  1. Open{" "}
+                  <a
+                    href={login.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-link underline"
+                  >
+                    {login.url}
+                  </a>{" "}
+                  and sign in to the xAI account.
+                </div>
+                <div className="mt-1.5">
+                  2. Confirm this one-time code if the page asks for it:
+                </div>
+                {login.code && (
+                  <div className="my-2">
+                    <DeviceCode
+                      code={login.code}
+                      className="text-section-title"
+                    />
+                  </div>
+                )}
+                <div className="text-dim">
+                  Waiting for the sign-in to complete… this panel updates by
+                  itself.
+                </div>
+              </>
+            )}
+            {login.state === "done" && (
+              <div>
+                Signed in.{" "}
+                {login.account
+                  ? providerAccountLabel(login.account)
+                  : "Account"}{" "}
+                added to the pool.
+              </div>
+            )}
+            {login.state === "error" && (
+              <InlineAlert
+                className="whitespace-pre-wrap"
+                onRetry={() => setLogin(null)}
+                retryLabel="Try again"
+              >
+                {login.error || "Sign-in failed."}
+              </InlineAlert>
+            )}
+          </div>
+        )}
+
+        {error && <InlineAlert>{error}</InlineAlert>}
+
+        <Modal.Footer>
+          <Modal.Close
+            render={
+              <Button variant="ghost" disabled={saving}>
+                {loginPending ? "Cancel sign-in" : "Cancel"}
+              </Button>
+            }
+          />
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={saving || !!loginPending || login?.state === "done"}
+          >
+            {saving
+              ? "Starting…"
+              : loginPending
+                ? "Waiting for sign-in…"
+                : "Start sign-in"}
+          </Button>
         </Modal.Footer>
       </form>
     </>

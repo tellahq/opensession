@@ -2,6 +2,8 @@ import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { CodexAccount } from "./codex-accounts";
 import type { SeededOpenaiAuth } from "./openai-auth";
 import type { ModelProviderConfig } from "./model-providers";
+import type { XaiAccount, bindXaiAccount } from "./xai-accounts";
+import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
 
 export type PiSdk = typeof import("@earendil-works/pi-coding-agent");
 type PiModel = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
@@ -36,6 +38,9 @@ export interface PiRuntimeAccountEvidence {
   pickedOpenai?: CodexAccount;
   sidelineableOpenai?: CodexAccount;
   openaiPickReason?: string;
+  pickedXai?: XaiAccount;
+  sidelineableXai?: XaiAccount;
+  xaiPickReason?: string;
 }
 
 export interface PiRuntimeBinding extends PiRuntimeAccountEvidence {
@@ -43,6 +48,8 @@ export interface PiRuntimeBinding extends PiRuntimeAccountEvidence {
   runtime: ModelRuntime;
   model: PiModel;
   usesOpenaiOAuth: boolean;
+  /** A SuperGrok turn: requests need the cli-chat-proxy payload shaping. */
+  usesXaiProxy: boolean;
 }
 
 type ConfiguredProvider = ModelProviderConfig;
@@ -87,6 +94,7 @@ export interface PiRuntimeBindingDependencies {
     configured?: ModelProviderConfig;
     builtinModelIds: readonly string[];
   }) => { config: PiProviderConfigInput } | { error: string };
+  bindXaiAccount: typeof bindXaiAccount;
   now?: () => number;
 }
 
@@ -100,6 +108,7 @@ export interface CreatePiRuntimeBindingInput {
   accountId?: string;
   accountStrict?: boolean;
   usageCredits?: boolean;
+  /** Accounts already burned by this turn's walk (Codex and SuperGrok pools). */
   excludedOpenaiAccountIds: ReadonlySet<string>;
   /** Publishes evidence immediately so a later throw can still rotate safely. */
   onAccountEvidence?: (evidence: PiRuntimeAccountEvidence) => void;
@@ -151,6 +160,42 @@ export async function createPiRuntimeBinding(
   const evidence: PiRuntimeAccountEvidence = {};
   let seededOpenaiCredential: SeededOpenaiAuth["openai"] | undefined;
   let openaiApiKeyCredential: string | undefined;
+  let xaiBinding:
+    | Extract<Awaited<ReturnType<typeof bindXaiAccount>>, { access: string }>
+    | undefined;
+
+  if (input.providerID === XAI_OAUTH_PROVIDER) {
+    const pickOut: OpenaiPickOut = {};
+    const bound = await deps.bindXaiAccount({
+      modelID: input.modelID,
+      affinityKey: input.affinityKey,
+      unifiedSessionId: input.unifiedSessionId,
+      user: input.accountUser,
+      accountId: input.accountId,
+      accountStrict: input.accountStrict,
+      excluded: input.excludedOpenaiAccountIds,
+      out: pickOut,
+    });
+    if ("error" in bound) {
+      // A picked account whose token could not be refreshed is worth
+      // rotating off, so publish it before throwing.
+      if (bound.account) {
+        evidence.pickedXai = bound.account;
+        evidence.xaiPickReason = pickOut.reason;
+        input.onAccountEvidence?.({ ...evidence });
+      }
+      const error = new Error(
+        `pi/${XAI_OAUTH_PROVIDER}: ${bound.error}`,
+      ) as Error & { usageLimitExhausted?: boolean };
+      error.usageLimitExhausted = true;
+      throw error;
+    }
+    xaiBinding = bound;
+    evidence.pickedXai = bound.account;
+    evidence.sidelineableXai = bound.account;
+    evidence.xaiPickReason = pickOut.reason;
+    input.onAccountEvidence?.({ ...evidence });
+  }
 
   if (input.providerID === "openai") {
     const pickOut: OpenaiPickOut = {};
@@ -217,7 +262,16 @@ export async function createPiRuntimeBinding(
   });
   let model: ReturnType<typeof runtime.getModel>;
 
-  if (input.providerID === "openai" && openaiApiKeyCredential) {
+  if (xaiBinding) {
+    runtime.registerProvider(XAI_OAUTH_PROVIDER, xaiBinding.provider);
+    await runtime.setRuntimeApiKey(XAI_OAUTH_PROVIDER, xaiBinding.access);
+    model = runtime.getModel(XAI_OAUTH_PROVIDER, input.modelID);
+    if (!model) {
+      throw new Error(
+        `Unknown SuperGrok model "${input.modelID}" (could not register it with pi)`,
+      );
+    }
+  } else if (input.providerID === "openai" && openaiApiKeyCredential) {
     await runtime.setRuntimeApiKey("openai", openaiApiKeyCredential);
     model = runtime.getModel("openai", input.modelID);
     if (!model) {
@@ -323,5 +377,6 @@ export async function createPiRuntimeBinding(
     model,
     ...evidence,
     usesOpenaiOAuth: seededOpenaiCredential !== undefined,
+    usesXaiProxy: xaiBinding !== undefined,
   };
 }

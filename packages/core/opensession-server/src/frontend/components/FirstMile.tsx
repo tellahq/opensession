@@ -188,7 +188,9 @@ function FirstMileSummary({
     } catch {}
   }
   const accountCount =
-    status.engine.claudeAccounts + status.engine.codexAccounts;
+    status.engine.claudeAccounts +
+    status.engine.codexAccounts +
+    status.engine.xaiAccounts;
   const accounts = [
     ...Array.from({ length: status.engine.claudeAccounts }, () => ({
       label: "Claude subscription",
@@ -197,6 +199,10 @@ function FirstMileSummary({
     ...Array.from({ length: status.engine.codexAccounts }, () => ({
       label: "OpenAI subscription",
       provider: "codex" as const,
+    })),
+    ...Array.from({ length: status.engine.xaiAccounts }, () => ({
+      label: "SuperGrok subscription",
+      provider: "xai" as const,
     })),
   ];
   const tiles = [

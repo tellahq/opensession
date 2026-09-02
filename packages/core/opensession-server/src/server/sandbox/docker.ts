@@ -771,6 +771,10 @@ async function createContainer(
   // (an in-container refresh attempt against a ro auth.json fails loudly
   // instead of corrupting the host family).
   roIfExists(stateDir("codex-accounts.json"), "codex account pool");
+  // SuperGrok pool for pi/xai-oauth/* dispatch in-container. Read-only: an
+  // in-container refresh keeps its fresh token for the run but never rewrites
+  // the host's pair; the host refreshes on its own next pick.
+  roIfExists(stateDir("xai-accounts.json"), "xai account pool");
   for (const acct of listCodexAccounts()) {
     if (acct.kind === "home")
       roIfExists(`${acct.value}/auth.json`, `codex auth (${acct.name})`);

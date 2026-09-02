@@ -455,10 +455,11 @@ claude setup-token   # prints sk-ant-…
 ```
 
 With the server running, open **Workspace → Providers** and paste the token.
-The same page can sign in a ChatGPT-plan account by device code, or add a
-third-party provider API key and select one of its models. Subscription account
-stores live at `~/.opensession/claude-accounts.json` and
-`~/.opensession/codex-accounts.json`; provider keys live at
+The same page can sign in a ChatGPT-plan or SuperGrok account by device code,
+or add a third-party provider API key and select one of its models.
+Subscription account stores live at `~/.opensession/claude-accounts.json`,
+`~/.opensession/codex-accounts.json` and `~/.opensession/xai-accounts.json`;
+provider keys live at
 `~/.opensession/model-providers.json`. All are server-managed mode-`0600`
 files, so use the UI rather than hand-editing them. The exception is a custom
 OpenAI-compatible gateway's per-model catalog, which is hand-written and

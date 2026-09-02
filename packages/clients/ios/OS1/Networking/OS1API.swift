@@ -1480,6 +1480,7 @@ enum OS1API {
             let bridgeEnabled: Bool?
             let claudeAccounts: Int?
             let codexAccounts: Int?
+            let xaiAccounts: Int?
         }
 
         /// Whether a repo commits the scripts that let a session provision and

@@ -658,6 +658,35 @@ describe("isPiUsageLimitShape (provider-aware)", () => {
     expect(isPiUsageLimitShape("upstream returned 529", "openai")).toBe(false);
     expect(isPiUsageLimitShape("ordinary tool failure", "openai")).toBe(false);
   });
+
+  test("xai-oauth runs match the proxy's quota shapes and a dead token, not infra quota errors", () => {
+    expect(
+      isPiUsageLimitShape("OpenAI API error: 429 rate limited", "xai-oauth"),
+    ).toBe(true);
+    expect(isPiUsageLimitShape("insufficient_quota", "xai-oauth")).toBe(true);
+    expect(
+      isPiUsageLimitShape("credits exhausted for this period", "xai-oauth"),
+    ).toBe(true);
+    expect(
+      isPiUsageLimitShape(
+        "xAI token refresh failed: invalid_grant",
+        "xai-oauth",
+      ),
+    ).toBe(true);
+    expect(
+      isPiUsageLimitShape(
+        "pi/xai-oauth: no usable SuperGrok account is available",
+        "xai-oauth",
+      ),
+    ).toBe(true);
+    expect(
+      isPiUsageLimitShape("EDQUOT: disk quota exceeded", "xai-oauth"),
+    ).toBe(false);
+    expect(isPiUsageLimitShape("overloaded_error", "xai-oauth")).toBe(false);
+    expect(isPiUsageLimitShape("ordinary tool failure", "xai-oauth")).toBe(
+      false,
+    );
+  });
 });
 
 describe("pi/openai in-band account rotation gate", () => {

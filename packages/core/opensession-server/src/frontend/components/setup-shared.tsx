@@ -75,8 +75,9 @@ export interface SetupEngine {
   claudeBin: string | null;
   claudeAccounts: number;
   codexAccounts: number;
+  xaiAccounts: number;
   defaultModel: string;
-  provider?: "claude" | "codex";
+  provider?: "claude" | "codex" | "xai";
   ready: boolean;
   blocker: string | null;
   fix: string | null;

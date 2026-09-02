@@ -1,6 +1,8 @@
 import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { modelProviders } from "./model-providers";
+import { hasXaiAccounts } from "./xai-accounts";
+import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
 import {
   KNOWN_MODELS,
   interactiveDefaultModel,
@@ -21,6 +23,7 @@ export function configuredModelProviders(): Set<string> {
   return new Set([
     ...(listAccountsPublic().length ? ["anthropic"] : []),
     ...(listCodexAccountsPublic().length ? ["openai"] : []),
+    ...(hasXaiAccounts() ? [XAI_OAUTH_PROVIDER] : []),
     ...Object.entries(modelProviders())
       .filter(([, provider]) => !!provider.apiKey)
       .map(([provider]) => provider),

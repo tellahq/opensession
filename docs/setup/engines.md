@@ -65,7 +65,14 @@ The UI writes these files with mode `0600`:
 | ------------------------------------- | ----------------------------------------------------------------------------------- |
 | `~/.opensession/claude-accounts.json` | Claude setup tokens and optional usage credentials                                  |
 | `~/.opensession/codex-accounts.json`  | ChatGPT sign-ins and OpenAI API keys                                                |
+| `~/.opensession/xai-accounts.json`    | SuperGrok / X Premium sign-ins (xAI OAuth tokens)                                   |
 | `~/.opensession/model-providers.json` | Third-party provider keys, base URLs, picker models, and optional pool restrictions |
+
+SuperGrok accounts sign in by device code from Settings → Providers. Their
+models appear in the picker as `pi/xai-oauth/<model>` and every request goes
+through xAI's `cli-chat-proxy.grok.com`, so it draws on the subscription's
+quota rather than API credits. Pay-per-token xAI keys stay a separate `xai`
+provider under Your own providers.
 
 Legacy top-level counterparts such as `~/.opensession-claude-accounts.json`
 remain supported when the grouped path is absent. Run `opensession doctor`

@@ -5,6 +5,7 @@ import { modelVendor } from "./model-engine";
 const VENDOR_BRANDS = new Map<string, string>([
   ["anthropic", "claude"],
   ["openai", "codex"],
+  ["xai-oauth", "xai"],
 ]);
 
 /** Resolve one concrete model id to its product-facing brand mark. */

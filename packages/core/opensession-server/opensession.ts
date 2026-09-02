@@ -35,6 +35,7 @@ import {
 } from "./src/server/automations";
 import { startUsagePoller } from "./src/server/claude-accounts";
 import { startCodexUsagePoller } from "./src/server/codex-accounts";
+import { startXaiUsagePoller } from "./src/server/xai-accounts";
 import {
   FRONTEND_SRC,
   IS_DEV,
@@ -803,6 +804,8 @@ if (!g.__opensessionBooted) {
     startUsagePoller();
     // Poll supported ChatGPT/Codex rate-limit windows per registered CODEX_HOME.
     startCodexUsagePoller();
+    // Poll SuperGrok credit usage and the live Grok catalog per xAI account.
+    startXaiUsagePoller();
 
     // DM account owners when pool credentials expire or break (account-health.ts)
     startAccountHealthMonitor();

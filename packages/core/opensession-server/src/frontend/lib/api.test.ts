@@ -47,6 +47,19 @@ test("provider account loading reports a failed pool and keeps the other pool", 
         { status: 502 },
       );
     }
+    if (String(input).endsWith("/xai-accounts")) {
+      return Response.json({
+        accounts: [
+          {
+            id: "xai-1",
+            name: "grok@example.com",
+            email: "grok@example.com",
+            kind: "oauth",
+            usable: false,
+          },
+        ],
+      });
+    }
     return Response.json({
       accounts: [
         {
@@ -70,6 +83,14 @@ test("provider account loading reports a failed pool and keeps the other pool", 
       provider: "codex",
       owner: "Ada",
       usable: true,
+    },
+    {
+      id: "xai-1",
+      name: "grok@example.com",
+      email: "grok@example.com",
+      provider: "xai",
+      usable: false,
+      kind: "oauth",
     },
   ]);
   expect(failures).toHaveLength(1);
