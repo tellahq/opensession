@@ -506,9 +506,16 @@ async function main(): Promise<number> {
     // First-party read-only Fathom MCP entrypoint. The installed command works
     // in source checkouts and compiled releases without a TypeScript sidecar.
     case "fathom-mcp": {
-      const { startFathomServer } = await import("./mcp-fathom");
-      await startFathomServer();
-      await new Promise<never>(() => {});
+      const { sanitizeError, startFathomServer } = await import("./mcp-fathom");
+      try {
+        await startFathomServer();
+        await new Promise<never>(() => {});
+      } catch (error) {
+        console.error(
+          `Fathom MCP configuration error: ${sanitizeError(error)}`,
+        );
+        return 1;
+      }
     }
 
     // Internal git credential-helper entrypoint. It stays out of --help, but is
