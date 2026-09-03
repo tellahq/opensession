@@ -28,8 +28,8 @@ Preconditions:
 - **Search.** Run `verify-opensession browser "$RUN_ID" fill --role searchbox --name "Search archived sessions" --value "tracing"`. The visible results narrow to `Instrument request tracing in api-gateway`. Use an unmatched value to capture the explicit no-results state.
 - **Clear and filter.** Refill the searchbox with an empty value, choose the `Filters` button using the exact accessible name from the current snapshot, and select one visible repository or person. Capture the filter state and narrowed result list.
 - **Open a result.** Choose the button whose name starts with `Instrument request tracing in api-gateway`. Its transcript opens and keeps the archived state visible.
-- **Restore.** From `/archived`, choose `Restore session` on desktop or `Restore` on phone. Confirm it disappears from `/api/sessions?archived=only&slim=1` and reappears in its active workspace.
-- **Check phone layout.** Repeat search and result opening at 390x844. Select `Everyone` again because reopening the route resets the owner filter. Search and filters must remain reachable without desktop hover.
+- **Check phone layout.** Before restoring the only archived result, repeat search and result opening at 390x844. Select `Everyone` again because reopening the route resets the owner filter. Search and filters must remain reachable without desktop hover.
+- **Restore last.** From `/archived`, choose `Restore session` on desktop or `Restore` on phone. Confirm it disappears from `/api/sessions?archived=only&slim=1` and reappears in its active workspace.
 - **Proof.** Capture unfiltered, filtered, and resulting states. For restore behavior, save a read-only session API response after the UI action.
 
 ## Gotchas
