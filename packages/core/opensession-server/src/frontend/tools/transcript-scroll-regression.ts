@@ -111,7 +111,10 @@ function turnOf(anchorId: string): {
   role: "user" | "assistant";
   turn: number;
 } | null {
-  const match = anchorId.match(/^hydration-(user|assistant)-(\d+)/);
+  // Mid-scroll the probe can land on a virtualised range row rather than a
+  // mounted entry; its key is `range:` plus the id of the entry that opens
+  // the range, which is the turn a reader at that spot is looking at.
+  const match = anchorId.match(/^(?:range:)?hydration-(user|assistant)-(\d+)/);
   if (!match) return null;
   const role = match[1] === "user" ? "user" : "assistant";
   return { role, turn: Number(match[2]) };
