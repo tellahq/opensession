@@ -678,12 +678,18 @@ export function PrStatusBar({
       return;
     }
     if (mergePhase !== "idle") return;
+    // Two branches rather than one conditional expression: the two calls
+    // resolve to differently shaped results, and inferring `run`'s type
+    // parameter from that union depends on check order (the Vercel build
+    // rejected it while a fresh `tsc` accepted it).
     scheduleDeferredMerge(mergeKey, async () => {
-      await run("merge", () =>
-        stackMerge
-          ? mergePrStackApi(sessionId, "squash", targetRepo, targetBranch)
-          : mergePrApi(sessionId, "squash", targetRepo, targetBranch),
-      );
+      await run("merge", async () => {
+        if (stackMerge) {
+          await mergePrStackApi(sessionId, "squash", targetRepo, targetBranch);
+        } else {
+          await mergePrApi(sessionId, "squash", targetRepo, targetBranch);
+        }
+      });
     });
   }
 
