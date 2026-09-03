@@ -80,10 +80,23 @@ jobs:
             > "$RUNNER_TEMP/transcript-motion-fixture.log" 2>&1 &
           fixture_pid=$!
           trap 'kill "$fixture_pid" "$chrome_pid" 2>/dev/null || true' EXIT
+          # The fuzz tool dials CDP_PORT at once and does not retry, so both
+          # the fixture and Chrome's debugging port have to answer first;
+          # a cold Chrome on a shared runner can take longer than the
+          # fixture does.
           for attempt in {1..120}; do
             curl -fsS http://127.0.0.1:4899/__fixtures/transcript-motion >/dev/null && break
             if [ "$attempt" -eq 120 ]; then
               cat "$RUNNER_TEMP/transcript-motion-fixture.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          for attempt in {1..120}; do
+            curl -fsS http://127.0.0.1:9222/json/version >/dev/null && break
+            if [ "$attempt" -eq 120 ] || ! kill -0 "$chrome_pid" 2>/dev/null; then
+              echo "Chrome never answered on 9222"
+              cat "$RUNNER_TEMP/transcript-motion-chrome.log"
               exit 1
             fi
             sleep 1
@@ -97,6 +110,15 @@ jobs:
               --out "$RUNNER_TEMP/transcript-stream-report.json"
           CDP_PORT=9222 OPENSESSION_URL=http://127.0.0.1:4899 \
             bun run test:transcript-scroll
+
+      - name: Chrome and fixture logs from the motion check
+        if: failure()
+        run: |
+          for log in transcript-motion-chrome transcript-motion-fixture; do
+            echo "::group::$log.log"
+            cat "$RUNNER_TEMP/$log.log" 2>/dev/null || echo "(no $log.log)"
+            echo "::endgroup::"
+          done
 
       # The snapshot scenarios are exactly the part of that sweep the ordering
       # problem eats: they redirect the sessions dir, transcript store, MCP
@@ -233,7 +255,13 @@ jobs:
             const text = kind === "launchd"
               ? `${renderPlist()}\n${renderLauncher()}`
               : await renderUnit();
-            if (!text.includes("opensession.ts") && !text.includes("opensession server")) {
+            // A source install runs the gateway supervisor; a compiled one
+            // runs `opensession server`.
+            if (
+              !text.includes("gateway-supervisor.ts") &&
+              !text.includes("opensession.ts") &&
+              !text.includes("opensession server")
+            ) {
               throw new Error("no service command");
             }
             const user = text.match(/^User=(.*)$/m)?.[1];
