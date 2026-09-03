@@ -64,6 +64,7 @@ export type ShortcutId =
   | "composer-focus"
   | "transcript-up"
   | "transcript-down"
+  | "ask-focus"
   | "effort-up"
   | "effort-down"
   | "open-pr"
@@ -285,6 +286,16 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
     group: "Transcript",
     defaults: ["ctrl+shift+arrowdown"],
   },
+  // The letters answer from anywhere but a text field. This is the way in
+  // from the one place they cannot reach: the composer, which is where the
+  // keyboard usually is when a question lands.
+  {
+    id: "ask-focus",
+    title: "Answer the question",
+    description: "Jump to the question the assistant is waiting on",
+    group: "Transcript",
+    defaults: ["mod+i"],
+  },
   {
     id: "effort-up",
     title: "More reasoning",
@@ -360,7 +371,7 @@ export const SHORTCUT_REFERENCE: ShortcutReference[] = [
   },
   {
     title: "Answer a question",
-    description: "Pick a lettered option on a question card",
+    description: "Pick a lettered option from anywhere but a text field",
     keys: ["A", "B", "C"],
   },
   {

@@ -246,7 +246,18 @@ try {
       break;
     }
     case "press": {
-      const key = requiredFlag("key");
+      // "Control+i", "Meta+Shift+g": modifiers are named before the key, and
+      // travel as CDP's modifier bitmask so the page sees a real chord.
+      const spelled = requiredFlag("key");
+      const parts = spelled.split("+");
+      const key = parts.pop();
+      const modifierBits = { Alt: 1, Control: 2, Meta: 4, Shift: 8 };
+      let modifiers = 0;
+      for (const part of parts) {
+        const bit = modifierBits[part];
+        if (!bit) throw new Error(`unknown modifier ${JSON.stringify(part)}`);
+        modifiers |= bit;
+      }
       const codes = {
         Enter: ["Enter", "Enter", 13],
         Escape: ["Escape", "Escape", 27],
@@ -260,12 +271,14 @@ try {
         key,
         0,
       ];
-      const text = key.length === 1 ? key : undefined;
+      // A chord never inserts text; a bare character does.
+      const text = key.length === 1 && modifiers === 0 ? key : undefined;
       await send("Input.dispatchKeyEvent", {
         type: "keyDown",
         key: keyName,
         code,
         windowsVirtualKeyCode,
+        modifiers,
         ...(text ? { text } : {}),
       });
       await send("Input.dispatchKeyEvent", {
@@ -273,8 +286,9 @@ try {
         key: keyName,
         code,
         windowsVirtualKeyCode,
+        modifiers,
       });
-      console.log(`pressed ${key}`);
+      console.log(`pressed ${spelled}`);
       break;
     }
     case "wait": {

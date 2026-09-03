@@ -8,10 +8,23 @@ import { cn } from "../ui/cn";
 import { IconCheck, IconReturn } from "./icons";
 import { useMarkdownRepo } from "./MarkdownBody";
 import { ASK_CARD_SHELL, ASK_CHOICE_ROW } from "../lib/ask-card-classes";
+import {
+  askLetterFromKey,
+  askOptionForLetter,
+  isTextEntryTarget,
+} from "../lib/ask-shortcuts";
+import { blockingOverlayOpen } from "../lib/blocking-overlay";
+import { matchesShortcut } from "../lib/shortcuts";
 
 interface Props {
   questions: AskQuestion[];
   onAnswer: (answers: Record<string, string>) => void;
+  /**
+   * Whether this card's session is the one the keyboard belongs to. Split
+   * tabs can show two live questions at once, and one keystroke must answer
+   * only the focused session's. Defaults on for a card standing alone.
+   */
+  active?: boolean;
 }
 
 /**
@@ -64,18 +77,33 @@ const HIDE_WHEN_INERT = "[&[hidden]]:hidden";
  * A lone single-select question still answers on the first click — that is the
  * hot path (96% of recorded asks are one question) and it stays one
  * interaction, not select-then-send.
+ *
+ * The letters are the keyboard's click. The primitive answers to A, B, C…
+ * only while the form holds focus, but a question lands while you are reading
+ * the transcript or sitting in the composer, so the card also listens on the
+ * window: a bare letter from anywhere that is not a text field picks that
+ * option, and on a lone single-select it sends, exactly as a click would. The
+ * composer is the one place the letters cannot reach (they are typing there),
+ * so the `ask-focus` chord brings the keyboard to the card instead.
  */
-export function AskCard({ questions, onAnswer }: Props) {
+export function AskCard({ questions, onAnswer, active = true }: Props) {
   const repo = useMarkdownRepo();
   const titleBase = React.useId();
   const [picks, setPicks] = React.useState<Record<string, string[]>>({});
   const [custom, setCustom] = React.useState<Record<string, string>>({});
   const [submitted, setSubmitted] = React.useState(false);
-  // Only a pointer answers on the spot. Arrow keys and letter shortcuts pick
-  // by calling click() on the radio, which is indistinguishable from a real
-  // click by the time the change lands — so a keyboard user browsing the
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const itemRefs = React.useRef<Array<HTMLFieldSetElement | null>>([]);
+  // Which question the primitive is showing. It steps through them itself;
+  // this only mirrors that so a letter from outside the form resolves against
+  // the question on screen rather than the first one.
+  const [activeName, setActiveName] = React.useState(itemName(0));
+  // Only a pointer answers on the spot through the change handler. Arrow keys
+  // pick by calling click() on the radio, which is indistinguishable from a
+  // real click by the time the change lands — so a keyboard user browsing the
   // options with ArrowDown would send the first one they touched. A pointer
-  // press always precedes its change; a synthesised click never does.
+  // press always precedes its change; a synthesised click never does. (The
+  // letters are the other deliberate pick, and take their own path below.)
   const pointerPick = React.useRef(false);
 
   // Mirrors what we render below. Handing the collection to the root is what
@@ -125,9 +153,7 @@ export function AskCard({ questions, onAnswer }: Props) {
 
     // One single-select question is the common ask: clicking IS answering.
     if (lone && byPointer) {
-      setPicks({ [name]: [label] });
-      setSubmitted(true);
-      onAnswer({ [q.question]: label });
+      answerLone(q, label);
       return;
     }
 
@@ -163,6 +189,78 @@ export function AskCard({ questions, onAnswer }: Props) {
   // validation, so a keyboard user gets the spoken error rather than silence.
   const allAnswered = questions.every((_, i) => answerFor(i) !== "");
 
+  function answerLone(q: AskQuestion, label: string) {
+    setPicks({ [itemName(0)]: [label] });
+    setSubmitted(true);
+    onAnswer({ [q.question]: label });
+  }
+
+  /**
+   * Answer a letter the way a click on that row would: a lone single-select
+   * sends, anything else picks (or toggles) and moves focus to the row so
+   * Enter and the arrows carry on from there. False when the letter names
+   * nothing on the current question, so the keystroke stays the browser's.
+   */
+  function pressLetter(letter: string): boolean {
+    if (submitted) return false;
+    const index = questions.findIndex((_, i) => itemName(i) === activeName);
+    const q = questions[index];
+    if (!q) return false;
+    const option = askOptionForLetter(q, letter);
+    if (!option) return false;
+    if (lone && !q.multiSelect) {
+      answerLone(q, option.label);
+      return true;
+    }
+    const input = Array.from(
+      itemRefs.current[index]?.querySelectorAll<HTMLInputElement>(
+        "input[type=radio], input[type=checkbox]",
+      ) ?? [],
+    ).find((el) => el.value === option.label);
+    if (!input) return false;
+    input.focus();
+    input.click();
+    return true;
+  }
+
+  // Letters typed into the card's own free-text field are text, and inside
+  // the form the primitive would otherwise pick without sending; taking the
+  // keystroke here first keeps a letter meaning the same thing wherever it
+  // is pressed.
+  function handleKeyDownCapture(e: React.KeyboardEvent<HTMLFormElement>) {
+    if (e.defaultPrevented || isTextEntryTarget(e.target)) return;
+    const letter = askLetterFromKey(e.nativeEvent);
+    if (letter && pressLetter(letter)) e.preventDefault();
+  }
+
+  // Hearing the rest of the page. Keystrokes inside the form already went
+  // through the capture handler above; the composer and every other field
+  // keep their letters; an open palette or dialog keeps the keyboard.
+  const onWindowKeyDown = React.useEffectEvent((e: KeyboardEvent) => {
+    if (e.defaultPrevented || blockingOverlayOpen()) return;
+    const form = formRef.current;
+    if (!form) return;
+    if (matchesShortcut(e, "ask-focus")) {
+      e.preventDefault();
+      const item = form.querySelector<HTMLElement>("fieldset:not([hidden])");
+      const target =
+        item?.querySelector<HTMLElement>("input:checked") ??
+        item?.querySelector<HTMLElement>("input:not([type=hidden])") ??
+        item;
+      target?.focus();
+      return;
+    }
+    if (e.target instanceof Node && form.contains(e.target)) return;
+    if (isTextEntryTarget(e.target)) return;
+    const letter = askLetterFromKey(e);
+    if (letter && pressLetter(letter)) e.preventDefault();
+  });
+  React.useEffect(() => {
+    if (!active || submitted) return;
+    window.addEventListener("keydown", onWindowKeyDown);
+    return () => window.removeEventListener("keydown", onWindowKeyDown);
+  }, [active, submitted]);
+
   // Only reached once every item validates — the root holds the submit back
   // and focuses the first unanswered question otherwise.
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -178,8 +276,11 @@ export function AskCard({ questions, onAnswer }: Props) {
 
   return (
     <Questionnaire.Root
+      ref={formRef}
       items={items}
       shortcuts="letters"
+      onItemChange={setActiveName}
+      onKeyDownCapture={handleKeyDownCapture}
       onSubmit={handleSubmit}
       className={ASK_CARD_SHELL}
     >
@@ -212,6 +313,9 @@ export function AskCard({ questions, onAnswer }: Props) {
       {questions.map((q, i) => (
         <Questionnaire.Item
           key={itemName(i)}
+          ref={(el) => {
+            itemRefs.current[i] = el;
+          }}
           name={itemName(i)}
           required
           multiple={q.multiSelect}

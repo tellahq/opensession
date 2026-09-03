@@ -1,6 +1,38 @@
-import { expect, test } from "bun:test";
+// AskCard reads the shortcut registry for its focus chord, and lib/shortcuts
+// reaches the ui-prefs factory, which touches localStorage, fetch and window
+// at module load. There is no DOM preload in this repo, so the shims go here,
+// file-locally, and the import is dynamic to land after them (a static import
+// would hoist above the shims and hang on load).
+
+import { beforeAll, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { AskCard } from "./AskCard";
+
+const store = new Map<string, string>();
+Object.assign(globalThis, {
+  localStorage: {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => void store.set(k, v),
+    removeItem: (k: string) => void store.delete(k),
+  },
+  window: {
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() {},
+  },
+  Event: class {
+    type: string;
+    constructor(type: string) {
+      this.type = type;
+    }
+  },
+  fetch: () => Promise.reject(new Error("offline in tests")),
+});
+
+let AskCard: typeof import("./AskCard").AskCard;
+
+beforeAll(async () => {
+  AskCard = (await import("./AskCard")).AskCard;
+});
 
 test("renders a free-text question without options", () => {
   const html = renderToStaticMarkup(

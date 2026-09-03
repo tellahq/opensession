@@ -1003,6 +1003,7 @@ export function SessionViewerMainRegion({
                 <AskCard
                   key={ask.questionId}
                   questions={ask.questions}
+                  active={focused}
                   onAnswer={(answers) => {
                     tailActionNeedsLayoutScrollRef.current = true;
                     send({
