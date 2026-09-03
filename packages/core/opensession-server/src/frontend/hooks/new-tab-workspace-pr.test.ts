@@ -3,9 +3,6 @@ import { expect, test } from "bun:test";
 const tabsSource = await Bun.file(
   new URL("./useSessionTabs.tsx", import.meta.url),
 ).text();
-const viewerSource = await Bun.file(
-  new URL("../components/SessionViewer.tsx", import.meta.url),
-).text();
 
 test("a new tab's local shell inherits the workspace's PRs, not the source's flat PR fields", () => {
   const draft = tabsSource.slice(
@@ -18,11 +15,16 @@ test("a new tab's local shell inherits the workspace's PRs, not the source's fla
   expect(draft).toContain("prState: undefined");
 });
 
-test("PR surfaces revalidate once a pending create lands", () => {
-  expect(viewerSource).toContain(
-    "const settled = wasPendingCreation.current && !pendingCreation;",
+test("the tab's resources are asked again once the create has landed", () => {
+  const landed = tabsSource.indexOf(
+    "void revalidateApiResources(sessionApiKeyFilter(createdId));",
   );
-  expect(viewerSource).toContain(
-    "if (settled) setGitRefreshTick((tick) => tick + 1);",
+  expect(landed).toBeGreaterThan(0);
+  // After the server copy is in the list, before the pending shell is released.
+  const before = tabsSource.slice(
+    tabsSource.indexOf("const created = await newSessionApi("),
+    landed,
   );
+  expect(before).toContain("inject(");
+  expect(before).not.toContain("clearTimeout(pendingTimer.current)");
 });

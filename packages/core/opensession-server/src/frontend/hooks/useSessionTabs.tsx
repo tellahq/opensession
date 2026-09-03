@@ -1,6 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { mutate as revalidateApiResources } from "swr";
 import type { SplitSide } from "../components/SessionSplit";
 import { SessionTabs } from "../components/SessionTabs";
 import { getCurrentUser } from "../components/UserPicker";
@@ -24,6 +25,7 @@ import {
 } from "../lib/landing-session";
 import { setLane, type Lane } from "../lib/lanes";
 import { dedupeViewers, otherViewers } from "../lib/presence";
+import { sessionApiKeyFilter } from "../lib/api-swr";
 import { newClientSessionId } from "../lib/session-id";
 import { siblingTabPrRefs } from "../lib/session-prs";
 import type { NewTabMorphOrigin, ViewTab } from "../lib/session-tabs-types";
@@ -860,6 +862,11 @@ export function useSessionTabs({
         },
         { sticky: true },
       );
+      // The tab's PR and git surfaces already asked the server about this id
+      // while it was only a local shell, and SWR kept the 404. The server
+      // knows the id now: ask again, so the workspace's PR fills in without
+      // waiting for a poll.
+      void revalidateApiResources(sessionApiKeyFilter(createdId));
       clearTimeout(pendingTimer.current);
       setPendingSessionId((pending) => (pending === id ? null : pending));
       setOptimisticSession((pending) => (pending?.id === id ? null : pending));

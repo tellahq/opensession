@@ -699,15 +699,6 @@ export function SessionViewer({
   const { canKeepInSidebar, keepInSidebar, promoting } = agentsController;
   const { isAsk, hasWorkspace, hasRepoWork, handlePromote } = agentsController;
   const { gitRefreshTick, setGitRefreshTick } = presenceController;
-  // PR and git reads issued while this tab was still a client-side shell were
-  // answered 404, and SWR keeps that answer. Once the create lands, ask every
-  // mounted PR surface again so the workspace's PR shows without a poll.
-  const wasPendingCreation = useRef(pendingCreation);
-  useEffect(() => {
-    const settled = wasPendingCreation.current && !pendingCreation;
-    wasPendingCreation.current = pendingCreation;
-    if (settled) setGitRefreshTick((tick) => tick + 1);
-  }, [pendingCreation, setGitRefreshTick]);
   const { sessionPrTargetsRef, viewers, setViewers } = presenceController;
   const { typingUsers, setTypingUsers } = presenceController;
   const { workspacePreparing, setWorkspacePreparing } = presenceController;

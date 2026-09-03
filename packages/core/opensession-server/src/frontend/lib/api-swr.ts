@@ -1,4 +1,4 @@
-import type { SWRConfiguration } from "swr";
+import type { Arguments, SWRConfiguration } from "swr";
 
 /**
  * Shared defaults for read-only API resources. SWR keeps the last successful
@@ -49,3 +49,17 @@ export const apiSWRKey = {
   previewPrDiff: (repo: string, branch: string) =>
     ["api", "preview-pr-diff", repo, branch] as const,
 };
+
+/**
+ * Every resource keyed by one session, for `mutate(filter)` once the server
+ * has learned a client-minted id. Reads issued before the create landed were
+ * answered 404, and SWR keeps that answer until something asks again.
+ */
+export function sessionApiKeyFilter(
+  sessionId: string,
+): (key: Arguments) => boolean {
+  return (key) =>
+    Array.isArray(key) &&
+    key[0] === "api" &&
+    (key[2] === sessionId || key[2] === `sessions:${sessionId}`);
+}
