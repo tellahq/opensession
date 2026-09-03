@@ -25,6 +25,7 @@ import {
 import { setLane, type Lane } from "../lib/lanes";
 import { dedupeViewers, otherViewers } from "../lib/presence";
 import { newClientSessionId } from "../lib/session-id";
+import { siblingTabPrRefs } from "../lib/session-prs";
 import type { NewTabMorphOrigin, ViewTab } from "../lib/session-tabs-types";
 import { sessionPath, workspacePanePath } from "../lib/share-link";
 import { matchesShortcut } from "../lib/shortcuts";
@@ -773,8 +774,26 @@ export function useSessionTabs({
       archived: false,
       waitingForInput: false,
       queuedCount: 0,
+      // The source tab's PR is the workspace's PR. Keep it, as a shared ref
+      // rather than this shell's own: the flat fields describe the source's
+      // branch, which a stack or ask sibling does not have.
+      prs: siblingTabPrRefs(src),
+      linkedPrs: undefined,
       prUrl: undefined,
       prState: undefined,
+      prNumber: undefined,
+      prTitle: undefined,
+      prIsDraft: undefined,
+      prMergeable: undefined,
+      prReviewDecision: undefined,
+      prReviewRequested: undefined,
+      prReviewedBy: undefined,
+      prAdditions: undefined,
+      prDeletions: undefined,
+      prChangedFiles: undefined,
+      prChecks: undefined,
+      prAuthor: undefined,
+      prUpdatedAt: undefined,
       automation: undefined,
       plainThreadId: undefined,
       goal: undefined,
