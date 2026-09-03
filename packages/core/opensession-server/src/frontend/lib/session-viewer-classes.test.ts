@@ -23,10 +23,10 @@ test("the focused phone transcript clears the keyboard and complete composer", a
   expect(VIEWER_MESSAGES).toContain("var(--kb-inset,0px)");
   expect(VIEWER_MESSAGES).toContain("var(--viewer-input-height,64px)");
 
-  const viewer = await Bun.file(
-    new URL("../components/SessionViewer.tsx", import.meta.url),
+  const reader = await Bun.file(
+    new URL("../hooks/useTranscriptReaderController.ts", import.meta.url),
   ).text();
-  expect(viewer).toContain('"--viewer-input-height"');
-  expect(viewer).toContain("new ResizeObserver(measure)");
-  expect(viewer).toContain('observe(viewerInput, { box: "border-box" })');
+  expect(reader).toContain('"--viewer-input-height"');
+  expect(reader).toContain("new ResizeObserver(measure)");
+  expect(reader).toContain('observe(viewerInput, { box: "border-box" })');
 });

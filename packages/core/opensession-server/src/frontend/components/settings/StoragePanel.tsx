@@ -43,20 +43,17 @@ function draftFrom(settings: AssetStorageSettingsDto): StorageDraft {
 }
 
 function payload(draft: StorageDraft): AssetStorageSettingsInput {
-  return {
-    provider: draft.provider,
-    ...(draft.provider === "s3"
-      ? {
-          bucket: draft.bucket,
-          region: draft.region,
-          endpoint: draft.endpoint,
-          prefix: draft.prefix,
-          accessKeyId: draft.accessKeyId,
-          secretAccessKey: draft.secretAccessKey,
-          forcePathStyle: draft.forcePathStyle,
-        }
-      : {}),
-  };
+  const input: AssetStorageSettingsInput = { provider: draft.provider };
+  if (draft.provider === "s3") {
+    input.bucket = draft.bucket;
+    input.region = draft.region;
+    input.endpoint = draft.endpoint;
+    input.prefix = draft.prefix;
+    input.accessKeyId = draft.accessKeyId;
+    input.secretAccessKey = draft.secretAccessKey;
+    input.forcePathStyle = draft.forcePathStyle;
+  }
+  return input;
 }
 
 export function StoragePanel() {

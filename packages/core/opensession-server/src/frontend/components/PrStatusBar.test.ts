@@ -2,6 +2,13 @@ import { expect, test } from "bun:test";
 import type { GitStatusInfo, PrDetails } from "../lib/types";
 import { deriveHeadline } from "../lib/pr-headline";
 
+const statusBarSource = await Bun.file(
+  new URL("./PrStatusBar.tsx", import.meta.url),
+).text();
+const panelSource = await Bun.file(
+  new URL("./PrPanel.tsx", import.meta.url),
+).text();
+
 function gitStatus(overrides: Partial<GitStatusInfo> = {}): GitStatusInfo {
   return {
     branch: "main",
@@ -39,6 +46,16 @@ test("says the PR status is unavailable rather than claiming there is no PR", ()
     label: "PR status unavailable",
     tone: "yellow",
   });
+});
+
+test("shows the pull request API failure reason beside both retry states", () => {
+  expect(statusBarSource).toContain(
+    'errorMessage(prResource.error, "Couldn’t load pull request.")',
+  );
+  expect(statusBarSource).toContain("{prLoadError}");
+  expect(panelSource).toContain(
+    '<span className="text-pretty">{loadError}</span>',
+  );
 });
 
 test("a successful read with no PR still says No PR open", () => {

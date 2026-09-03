@@ -32,7 +32,17 @@ function oldSort(rows: UnifiedSession[]): UnifiedSession[] {
 }
 
 function session(s: Partial<UnifiedSession> & { id: string }): UnifiedSession {
-  return s as UnifiedSession;
+  const base = {
+    source: "opensession",
+    branch: null,
+    worktreeDir: null,
+    startedBy: null,
+    title: "",
+    lastActivity: "",
+    createdAt: "",
+    isRunning: false,
+  } satisfies Omit<UnifiedSession, "id">;
+  return Object.assign(base, s);
 }
 
 // Deliberately awkward: two sessions share a timestamp (the tie a stable sort

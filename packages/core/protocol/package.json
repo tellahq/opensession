@@ -18,6 +18,7 @@
     "./runner": "./src/runner.ts",
     "./session": "./src/session.ts",
     "./notices": "./src/notices.ts",
+    "./pasted-text": "./src/pasted-text.ts",
     "./todo-plan": "./src/todo-plan.ts",
     "./tool-presentation": "./src/tool-presentation.ts",
     "./identity": "./src/identity.ts",

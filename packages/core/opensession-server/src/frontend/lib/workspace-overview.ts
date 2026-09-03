@@ -46,9 +46,7 @@ export async function buildClientOverview(
   sessions: OverviewSessionRef[],
 ): Promise<WorkspaceOverview> {
   const transcripts = await Promise.all(
-    sessions.map((c) =>
-      fetchTranscript(c.id).catch(() => null as TranscriptEntry[] | null),
-    ),
+    sessions.map((c) => fetchTranscript(c.id).catch(() => null)),
   );
   let prompt: WorkspaceOverview["prompt"] = null;
   let lastMessage: WorkspaceOverview["lastMessage"] = null;

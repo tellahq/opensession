@@ -1,3 +1,9 @@
+declare global {
+  interface Window {
+    __sessionPerf?: typeof sessionPerfSnapshot;
+  }
+}
+
 export interface SessionPerfSample {
   name: string;
   value: number;
@@ -74,8 +80,8 @@ export function scheduleTranscriptDomNodeSample() {
       document.querySelectorAll(".viewer-messages [data-eid]").length,
     );
   };
-  if (typeof requestIdleCallback === "function")
-    requestIdleCallback(sample, { timeout: 1_000 });
+  if ("requestIdleCallback" in globalThis)
+    globalThis.requestIdleCallback(sample, { timeout: 1_000 });
   else setTimeout(sample, 0);
 }
 
@@ -102,15 +108,14 @@ export function startSessionPerfObservers() {
       for (const entry of list.getEntries())
         recordSessionPerf("input_event_ms", entry.duration);
     });
-    events.observe({
+    const eventOptions = {
       type: "event",
       buffered: true,
       durationThreshold: 16,
-    } as PerformanceObserverInit & { durationThreshold: number });
+    } satisfies PerformanceObserverInit & { durationThreshold: number };
+    events.observe(eventOptions);
   } catch {
     // Event Timing is progressive telemetry.
   }
-  (
-    window as typeof window & { __sessionPerf?: typeof sessionPerfSnapshot }
-  ).__sessionPerf = sessionPerfSnapshot;
+  window.__sessionPerf = sessionPerfSnapshot;
 }

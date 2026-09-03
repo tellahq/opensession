@@ -26,7 +26,14 @@
  * server in the foreground.
  */
 
-import { chmodSync, existsSync, mkdirSync, readFileSync } from "fs";
+import {
+  accessSync,
+  chmodSync,
+  constants as fsConstants,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+} from "fs";
 import { userInfo } from "os";
 import { dirname, join } from "path";
 import {
@@ -108,6 +115,35 @@ function envFileValue(name: string): string | undefined {
     return raw.slice(1, -1);
   }
   return raw;
+}
+
+/**
+ * Why the service user cannot edit `path` from Settings, or undefined when it
+ * can. The server writes the env file through a `.bak-<n>` copy and an atomic
+ * `.tmp.*` rename, both created beside the file, so the directory must be
+ * writable and traversable; write access on the file alone is not enough. A
+ * system-scope install pointed at root-only `/etc/opensession` (the credential
+ * and run-host directory, reset to 0700 on every install) fails this check.
+ */
+export function envFileWriteProblem(
+  path: string,
+  access: (target: string, mode: number) => void = accessSync,
+): string | undefined {
+  const dir = dirname(path);
+  const { W_OK, X_OK } = fsConstants;
+  try {
+    access(dir, W_OK | X_OK);
+  } catch {
+    return `${dir} is not writable by this user; Settings edits ${path} through backups and atomic writes created beside it`;
+  }
+  if (existsSync(path)) {
+    try {
+      access(path, W_OK);
+    } catch {
+      return `${path} is not writable by this user`;
+    }
+  }
+  return undefined;
 }
 
 function defaultStatePath(base: string): string {
@@ -306,6 +342,49 @@ function servicePath(bunDir: string): string {
 }
 
 /**
+ * Does this install use systemd socket activation?
+ *
+ * Only a source install does. There `opensession.socket` holds 127.0.0.1:PORT
+ * and hands the fd to `opensession-ingress.service`, which relays to whichever
+ * gateway child the supervisor currently runs. The compiled binary's `server`
+ * subcommand is `opensession.ts` itself: it binds PORT directly through
+ * `Bun.serve` and never reads LISTEN_FDS, and no ingress process exists in a
+ * release artefact. Rendering `Requires=opensession.socket` for it therefore
+ * fails twice over: the tarball has no socket template, and a hand-supplied
+ * one takes the port before the server can (tellahq/opensession#297).
+ */
+function socketActivated(compiled = isCompiledBinary()): boolean {
+  return !compiled;
+}
+
+function socketUnitPath(scope: SystemdScope): string {
+  return scope === "system" ? SOCKET_PATH : USER_SOCKET_PATH;
+}
+
+/**
+ * Drop a socket unit that an earlier compiled install (0.4.52 to 0.4.55) or
+ * the hand-written workaround for it left behind. While it exists the old
+ * `Requires=` still resolves and a 3850 listener may still be held by systemd,
+ * so the freshly rendered socket-free service could not bind.
+ */
+async function removeStaleSocketUnit(
+  scope: SystemdScope,
+  env?: Record<string, string>,
+): Promise<void> {
+  const path = socketUnitPath(scope);
+  if (!existsSync(path)) return;
+  info(dim(`removing ${path}: the compiled server binds its port directly`));
+  await runInherit(
+    systemctl(scope, ["disable", "--now", SOCKET_NAME]),
+    undefined,
+    env,
+  );
+  await runInherit(
+    scope === "system" ? ["sudo", "rm", "-f", path] : ["rm", "-f", path],
+  );
+}
+
+/**
  * How the service starts the server, and the dir to head the PATH with.
  *
  * Compiled-binary install: the binary is the server behind `server`, and the
@@ -316,9 +395,11 @@ function servicePath(bunDir: string): string {
  * Source install: `bun run packages/core/opensession-server/opensession.ts`
  * from the checkout.
  */
-function serverExec(): { cmd: string; binDir: string } {
-  if (isCompiledBinary())
-    return { cmd: `${SHIM_PATH} server`, binDir: BIN_DIR };
+function serverExec(compiled = isCompiledBinary()): {
+  cmd: string;
+  binDir: string;
+} {
+  if (compiled) return { cmd: `${SHIM_PATH} server`, binDir: BIN_DIR };
   const bun = bunPath();
   return {
     cmd: `${bun} run packages/core/opensession-server/opensession.ts`,
@@ -404,12 +485,6 @@ export async function renderSocketUnit(
   let unit = (await Bun.file(template).text())
     .replace(/^ListenStream=.*$/m, `ListenStream=127.0.0.1:${port}`)
     .replace(
-      /^Service=.*$/m,
-      isCompiledBinary()
-        ? "Service=opensession.service"
-        : "Service=opensession-ingress.service",
-    )
-    .replace(
       /^WantedBy=.*$/m,
       scope === "system"
         ? "WantedBy=sockets.target"
@@ -446,13 +521,13 @@ export async function renderIngressUnit(
 
 export async function renderUnit(
   scope: SystemdScope = "user",
+  compiled = isCompiledBinary(),
 ): Promise<string> {
   const template = join(REPO_ROOT, "opensession.service");
   if (!existsSync(template)) {
     throw new Error(`missing unit template at ${template}`);
   }
-  const exec = serverExec();
-  const compiled = isCompiledBinary();
+  const exec = serverExec(compiled);
   let unit = (await Bun.file(template).text())
     .replace(/^WorkingDirectory=.*$/m, `WorkingDirectory=${serviceWorkdir()}`)
     .replace(
@@ -465,17 +540,14 @@ export async function renderUnit(
       /^Environment="PATH=.*"$/m,
       `Environment="PATH=${servicePath(exec.binDir)}"`,
     );
-  if (compiled) {
+  if (!socketActivated(compiled)) {
+    // The compiled server owns its listener: no socket, no ingress peer.
     unit = unit
+      .replace(/^Wants=opensession\.socket opensession-ingress\.service\n/m, "")
       .replace(
-        /^Wants=opensession\.socket opensession-ingress\.service$/m,
-        "Requires=opensession.socket",
+        /^After=network\.target opensession-ingress\.service /m,
+        "After=network.target ",
       )
-      .replace(
-        /^After=network\.target opensession-ingress\.service/m,
-        "After=network.target opensession.socket",
-      )
-      .replace(/^Type=simple$/m, "Type=simple\nSockets=opensession.socket")
       .replace(/^Environment="OPENSESSION_EXTERNAL_INGRESS=1"\n/m, "");
   }
   const credentialMarker =
@@ -505,10 +577,7 @@ export async function renderUnit(
       /^# SESSION_KERNEL_CREDENTIAL$/m,
       `LoadCredential=session-kernel-token:${USER_SESSION_KERNEL_TOKEN_PATH}`,
     )
-    .replace(
-      /^After=network\.target opensession-ingress\.service opensession-session-kernel\.service opensession-executor\.service$/m,
-      "After=network.target opensession-ingress.service opensession-session-kernel.service",
-    )
+    .replace(/^(After=.*) opensession-executor\.service$/m, "$1")
     .replace(
       credentialMarker,
       'Environment="OPENSESSION_EXECUTOR=0"\n' +
@@ -808,9 +877,9 @@ export async function install(
       const scope = opts.scope ?? "user";
       const wasActive = installedScope() === scope && (await isActive());
       const unit = await renderUnit(scope);
-      const sourceIngress = !isCompiledBinary();
+      const sourceIngress = socketActivated();
       const ingressUnit = sourceIngress ? await renderIngressUnit(scope) : "";
-      const socketUnit = await renderSocketUnit(scope);
+      const socketUnit = sourceIngress ? await renderSocketUnit(scope) : "";
       const kernelUnit = await renderSessionKernelUnit(scope);
       const env = userEnv();
       let migratedUserUnit: string | null = null;
@@ -836,6 +905,7 @@ export async function install(
           return false;
         }
         mkdirSync(dirname(USER_UNIT_PATH), { recursive: true });
+        if (!sourceIngress) await removeStaleSocketUnit("user", env);
         if (!existsSync(USER_SESSION_KERNEL_TOKEN_PATH)) {
           await Bun.write(
             USER_SESSION_KERNEL_TOKEN_PATH,
@@ -844,12 +914,16 @@ export async function install(
           chmodSync(USER_SESSION_KERNEL_TOKEN_PATH, 0o600);
         }
         await Bun.write(USER_UNIT_PATH, unit);
-        if (sourceIngress) await Bun.write(USER_INGRESS_UNIT_PATH, ingressUnit);
-        await Bun.write(USER_SOCKET_PATH, socketUnit);
+        if (sourceIngress) {
+          await Bun.write(USER_INGRESS_UNIT_PATH, ingressUnit);
+          await Bun.write(USER_SOCKET_PATH, socketUnit);
+        }
         await Bun.write(USER_SESSION_KERNEL_UNIT_PATH, kernelUnit);
         info(dim(`installed ${USER_UNIT_PATH}`));
-        if (sourceIngress) info(dim(`installed ${USER_INGRESS_UNIT_PATH}`));
-        info(dim(`installed ${USER_SOCKET_PATH}`));
+        if (sourceIngress) {
+          info(dim(`installed ${USER_INGRESS_UNIT_PATH}`));
+          info(dim(`installed ${USER_SOCKET_PATH}`));
+        }
         info(dim(`installed ${USER_SESSION_KERNEL_UNIT_PATH}`));
         await enableLinger();
         const runtimeDir =
@@ -862,11 +936,26 @@ export async function install(
           await Bun.sleep(500);
         }
       } else {
+        const envProblem = envFileWriteProblem(ENV_PATH);
+        if (envProblem) {
+          fail(
+            "service installation blocked: the gateway cannot edit its env file",
+            envProblem,
+          );
+          info(
+            "move the file to a directory the service user owns (for example ~/.opensession.env),",
+          );
+          info(
+            "set OPENSESSION_ENV_FILE to that path, and rerun the same installation command",
+          );
+          return false;
+        }
         const executorUnit = await renderExecutorUnit();
         await Bun.write(STAGED_UNIT_PATH, unit);
-        if (sourceIngress)
+        if (sourceIngress) {
           await Bun.write(STAGED_INGRESS_UNIT_PATH, ingressUnit);
-        await Bun.write(STAGED_SOCKET_PATH, socketUnit);
+          await Bun.write(STAGED_SOCKET_PATH, socketUnit);
+        }
         await Bun.write(STAGED_EXECUTOR_UNIT_PATH, executorUnit);
         await Bun.write(STAGED_SESSION_KERNEL_UNIT_PATH, kernelUnit);
         const serviceUser = await resolveUsername();
@@ -922,9 +1011,11 @@ export async function install(
           ["sudo", "-n", RUN_HOST_HELPER, "check"],
           ["sudo", "cp", STAGED_UNIT_PATH, SERVICE_PATH],
           ...(sourceIngress
-            ? [["sudo", "cp", STAGED_INGRESS_UNIT_PATH, INGRESS_SERVICE_PATH]]
+            ? [
+                ["sudo", "cp", STAGED_INGRESS_UNIT_PATH, INGRESS_SERVICE_PATH],
+                ["sudo", "cp", STAGED_SOCKET_PATH, SOCKET_PATH],
+              ]
             : []),
-          ["sudo", "cp", STAGED_SOCKET_PATH, SOCKET_PATH],
           ["sudo", "cp", STAGED_EXECUTOR_UNIT_PATH, EXECUTOR_SERVICE_PATH],
           [
             "sudo",
@@ -1006,12 +1097,13 @@ export async function install(
             env,
           );
         }
+        if (!sourceIngress) await removeStaleSocketUnit("system");
         const start = [
           ...(wasActive ? [["sudo", "systemctl", "stop", SERVICE_NAME]] : []),
           ["sudo", "systemctl", "daemon-reload"],
-          ["sudo", "systemctl", "enable", "--now", SOCKET_NAME],
           ...(sourceIngress
             ? [
+                ["sudo", "systemctl", "enable", "--now", SOCKET_NAME],
                 [
                   "sudo",
                   "systemctl",
@@ -1076,11 +1168,12 @@ export async function install(
                   undefined,
                   env,
                 );
-              await runInherit(
-                systemctl("user", ["enable", "--now", SOCKET_NAME]),
-                undefined,
-                env,
-              );
+              if (migratedUserSocketUnit)
+                await runInherit(
+                  systemctl("user", ["enable", "--now", SOCKET_NAME]),
+                  undefined,
+                  env,
+                );
               await runInherit(
                 systemctl("user", ["enable", "--now", SERVICE_NAME]),
                 undefined,
@@ -1101,9 +1194,9 @@ export async function install(
       for (const cmd of [
         ...(wasActive ? [systemctl(scope, ["stop", SERVICE_NAME])] : []),
         systemctl(scope, ["daemon-reload"]),
-        systemctl(scope, ["enable", "--now", SOCKET_NAME]),
         ...(sourceIngress
           ? [
+              systemctl(scope, ["enable", "--now", SOCKET_NAME]),
               systemctl(scope, [
                 "enable",
                 "--now",
@@ -1257,12 +1350,16 @@ export async function control(
 
   const scope = installedScope() ?? "user";
   const env = userEnv();
+  // Source installs own a socket unit; compiled ones bind the port directly.
+  const socketInstalled = existsSync(socketUnitPath(scope));
   if (action === "start") {
-    const socket = await runInherit(
-      systemctl(scope, ["start", SOCKET_NAME]),
-      undefined,
-      env,
-    );
+    const socket = socketInstalled
+      ? await runInherit(
+          systemctl(scope, ["start", SOCKET_NAME]),
+          undefined,
+          env,
+        )
+      : 0;
     if (socket !== 0) return socket;
     const actor = await runInherit(
       systemctl(scope, ["start", SESSION_KERNEL_SERVICE_NAME]),
@@ -1291,11 +1388,13 @@ export async function control(
     env,
   );
   if (action === "stop") {
-    const socket = await runInherit(
-      systemctl(scope, ["stop", SOCKET_NAME]),
-      undefined,
-      env,
-    );
+    const socket = socketInstalled
+      ? await runInherit(
+          systemctl(scope, ["stop", SOCKET_NAME]),
+          undefined,
+          env,
+        )
+      : 0;
     return gateway || actor || socket;
   }
   return actor === 0
@@ -1356,11 +1455,12 @@ export async function uninstall(): Promise<boolean> {
         undefined,
         env,
       );
-      await runInherit(
-        systemctl(scope, ["disable", "--now", SOCKET_NAME]),
-        undefined,
-        env,
-      );
+      if (existsSync(socketUnitPath(scope)))
+        await runInherit(
+          systemctl(scope, ["disable", "--now", SOCKET_NAME]),
+          undefined,
+          env,
+        );
       if (scope === "user") {
         await runInherit(
           systemctl(scope, ["disable", "--now", SESSION_KERNEL_SERVICE_NAME]),

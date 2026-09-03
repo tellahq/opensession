@@ -10,10 +10,16 @@
 import { requestUser, type RouteContext } from "./context";
 import { defaultRepo, personaName } from "../config";
 import { hostRepoId, prHostFor } from "../pr-host";
+import { footerPrsFor, getPrsByRepo, prsBySessionRef } from "../pr-cache";
 import { cachedPrDetailsForSession, reconcilePrDetails } from "../pr-info";
 import { getPrStack, linkPrStack, mergePrStack } from "../pr-stack";
 import { findSessionAsync, invalidateSessionsCache } from "../session-cache";
 import { getSessionControl } from "../session-control";
+import { indexedWorkspaceMemberSessions } from "../session-list-store";
+import {
+  enrichSessionPrRefs,
+  projectWorkspacePrRefs,
+} from "../session-pr-target";
 import { resolvePrTarget } from "../session-repos";
 import {
   getOpenPrs,
@@ -86,6 +92,25 @@ async function loadPrCodeFlow(
   if (!details || !diff || (!diff.patch && !diff.skippedFiles)) return null;
   const { prCodeFlow } = await import("../code-flow");
   return prCodeFlow(repo, details, diff);
+}
+
+async function findPrSessionAsync(sessionId: string) {
+  const stored = await findSessionAsync(sessionId);
+  if (!stored) return stored;
+  const prsByRepo = getPrsByRepo();
+  const prsBySession = prsBySessionRef(prsByRepo);
+  const enrich = (session: NonNullable<typeof stored>) =>
+    enrichSessionPrRefs(session, {
+      defaultRepoId: defaultRepo().id,
+      prsByRepo,
+      footerMatches: footerPrsFor(prsBySession, session),
+    });
+  const session = enrich(stored);
+  if (!session.workspaceId) return session;
+  return projectWorkspacePrRefs(
+    session,
+    indexedWorkspaceMemberSessions(session.workspaceId).map(enrich),
+  );
 }
 
 async function codeFlowApiResponse(
@@ -163,6 +188,7 @@ export async function handlePrRoutes(
   }
   if (path === "/api/pr-viewed-files" && req.method === "POST") {
     const body = (await req.json().catch(() => ({}))) as {
+      repo?: string;
       prId?: string;
       path?: string;
       viewed?: boolean;
@@ -178,6 +204,7 @@ export async function handlePrRoutes(
       await setPrFileViewed(
         ctx,
         requestUser(ctx, body.user),
+        (body.repo ? getRepo(body.repo) : defaultRepo()).ghRepo,
         body.prId,
         body.path,
         body.viewed,
@@ -232,12 +259,17 @@ export async function handlePrRoutes(
 
   // One commit by sha, for the transcript's commit references (the hover card
   // behind `4ed1ef09`). `?repo=` is where the sha was written and is searched
-  // first; the answer names the repo it was actually found in. Null when no
-  // checkout has it, which is what an unresolvable reference gets.
+  // first; the answer names the repo it was actually found in. Detail views ask
+  // for `?changes=1`; ordinary hover cards stay metadata-only.
   if (path === "/api/commit" && req.method === "GET") {
-    const { lookupCommit } = await import("../commit-lookup");
+    const { lookupCommit, lookupCommitWithChanges } =
+      await import("../commit-lookup");
+    const read =
+      url.searchParams.get("changes") === "1"
+        ? lookupCommitWithChanges
+        : lookupCommit;
     return Response.json(
-      await lookupCommit(
+      await read(
         url.searchParams.get("sha") || "",
         url.searchParams.get("repo") || undefined,
       ),
@@ -251,7 +283,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const target = resolvePrTarget(
@@ -310,7 +342,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-diff$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const target = resolvePrTarget(
@@ -333,7 +365,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-code-flow$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const target = resolvePrTarget(
@@ -357,7 +389,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-diff-groups$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const target = resolvePrTarget(
@@ -434,7 +466,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/review-guide$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const target = resolvePrTarget(
@@ -668,7 +700,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-comment$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -710,7 +742,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-review$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -775,7 +807,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-merge$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -822,7 +854,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-stack$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const stackedOn = session.stackedOn;
@@ -895,7 +927,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-stack-merge$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -981,7 +1013,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-close$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -1014,7 +1046,7 @@ export async function handlePrRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/pr-action$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -1127,6 +1159,7 @@ export async function handlePrRoutes(
         mode: "code",
         branch: target.branch,
         parentSessionId: session.id,
+        createdByLogin: ctx.authUser?.login,
         agentStarted: true,
         reportBack: false,
         user: requestUser(ctx, body?.user) || "Someone",

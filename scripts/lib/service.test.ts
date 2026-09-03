@@ -16,6 +16,7 @@ import { describe, expect, test } from "bun:test";
 import { platform } from "os";
 import {
   bootstrapLaunchAgent,
+  envFileWriteProblem,
   LAUNCHD_LABEL,
   LAUNCHD_LAUNCHER,
   metadataInstallBlockGuidance,
@@ -23,10 +24,11 @@ import {
   renderIngressUnit,
   renderLauncher,
   renderPlist,
+  renderSocketUnit,
   renderUnit,
   serviceWorkdir,
 } from "./service";
-import { ENV_PATH, HOME } from "./paths";
+import { ENV_PATH, HOME, SHIM_PATH } from "./paths";
 
 // Both renderers interpolate host paths and the local bun, so on Windows they
 // produce a unit and a plist that could never be installed. Neither service
@@ -109,6 +111,41 @@ describe("cloud metadata install refusal", () => {
   });
 });
 
+describe("env file write check", () => {
+  // Issue #282: pointing OPENSESSION_ENV_FILE into root-only /etc/opensession
+  // installs fine and then 500s on every Settings save. The check runs before
+  // any sudo step so the operator sees the problem at install time.
+  const denied = (paths: Set<string>) => (target: string, _mode: number) => {
+    if (paths.has(target)) {
+      throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+    }
+  };
+
+  test("refuses a directory the service user cannot write", () => {
+    const problem = envFileWriteProblem(
+      "/etc/opensession/opensession.env",
+      denied(new Set(["/etc/opensession"])),
+    );
+    expect(problem).toContain("/etc/opensession is not writable");
+    expect(problem).toContain("/etc/opensession/opensession.env");
+    expect(problem).toContain("backups and atomic writes");
+  });
+
+  test("refuses an existing env file the service user cannot write", () => {
+    const problem = envFileWriteProblem(ENV_PATH, denied(new Set([ENV_PATH])));
+    // ENV_PATH may not exist on the test host; then only the directory counts.
+    if (problem !== undefined) {
+      expect(problem).toBe(`${ENV_PATH} is not writable by this user`);
+    }
+  });
+
+  test("accepts a writable directory", () => {
+    expect(
+      envFileWriteProblem("/tmp/does-not-matter/opensession.env", () => {}),
+    ).toBeUndefined();
+  });
+});
+
 describe.skipIf(!onServiceHost)("systemd unit", () => {
   test("user scope: no User=, no IPAddressDeny=, wants default.target", async () => {
     const unit = await renderUnit("user");
@@ -183,6 +220,42 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
       "";
     expect(path).toContain("/usr/bin");
     expect(path.split(":").every((p) => p.startsWith("/"))).toBe(true);
+  });
+});
+
+// A compiled `opensession server` is opensession.ts binding PORT through
+// Bun.serve; it never adopts a systemd fd and no ingress process ships with the
+// release. 0.4.52 to 0.4.55 rendered `Requires=opensession.socket` for it
+// anyway, so the install either died on the missing template or, with one
+// supplied, systemd held 3850 and the server crash-looped on EADDRINUSE
+// (tellahq/opensession#297).
+describe.skipIf(!onServiceHost)("compiled systemd unit", () => {
+  test("binds the port itself instead of expecting socket activation", async () => {
+    const unit = await renderUnit("user", true);
+    expect(unit).toContain(`ExecStart=${SHIM_PATH} server`);
+    expect(unit).not.toContain("opensession.socket");
+    expect(unit).not.toContain("opensession-ingress.service");
+    expect(unit).not.toMatch(/^(Sockets|Requires|Wants)=/m);
+    expect(unit).not.toContain("OPENSESSION_EXTERNAL_INGRESS");
+    expect(unit).toContain(
+      "After=network.target opensession-session-kernel.service\n",
+    );
+  });
+
+  test("system scope still orders the executor ahead of the gateway", async () => {
+    const unit = await renderUnit("system", true);
+    expect(unit).not.toContain("opensession.socket");
+    expect(unit).toContain(
+      "After=network.target opensession-session-kernel.service opensession-executor.service\n",
+    );
+  });
+
+  test("the socket unit only ever activates the source ingress", async () => {
+    for (const scope of ["user", "system"] as const) {
+      const unit = await renderSocketUnit(scope);
+      expect(unit).toContain("Service=opensession-ingress.service");
+      expect(unit).not.toContain("Service=opensession.service");
+    }
   });
 });
 

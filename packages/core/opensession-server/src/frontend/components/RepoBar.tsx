@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   cachedRepos,
   fetchRepos,
@@ -73,11 +73,12 @@ export function RepoBar({
   // switch landed and the parent re-fetched). Compared by content: the parent
   // rebuilds the array each fetch.
   const initialAttachedKey = JSON.stringify(initialAttached);
-  const initialAttachedValue = useMemo(
-    () => JSON.parse(initialAttachedKey) as AttachedRepo[],
-    [initialAttachedKey],
-  );
-  useEffect(() => setAttached(initialAttachedValue), [initialAttachedValue]);
+  const previousInitialAttachedKey = useRef(initialAttachedKey);
+  useEffect(() => {
+    if (previousInitialAttachedKey.current === initialAttachedKey) return;
+    previousInitialAttachedKey.current = initialAttachedKey;
+    setAttached(initialAttached);
+  }, [initialAttached, initialAttachedKey]);
   useEffect(() => setPrimary(primaryRepo), [primaryRepo]);
 
   // Can this session's primary repo be switched, and does it already have work?
@@ -88,7 +89,7 @@ export function RepoBar({
         setHasWork(hasWork);
         setControlsLoadError(null);
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         // Without fresh server state, hide switching rather than offer it from
         // stale flags. Attaching cached repositories remains independent.
         setSwitchable(false);
@@ -108,7 +109,7 @@ export function RepoBar({
           setRepos(nextRepos);
           setReposLoadError(null);
         })
-        .catch((error: unknown) => {
+        .catch((error) => {
           // Keep the cached rows visible while naming the failed revalidation.
           setReposLoadError(
             errorMessage(error, "Failed to refresh repositories"),
@@ -129,7 +130,7 @@ export function RepoBar({
     await (async () => {
       setAttached(await attachRepoApi(sessionId, repo, branch || undefined));
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         setError(errorMessage(error, "Failed to attach repository"));
       })
       .finally(async () => {
@@ -143,7 +144,7 @@ export function RepoBar({
     await (async () => {
       setAttached(await detachRepoApi(sessionId, repo));
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         setError(errorMessage(error, "Failed to detach repository"));
       })
       .finally(async () => {
@@ -175,7 +176,7 @@ export function RepoBar({
       setHasWork(false); // the new worktree starts fresh
       setAttached((prev) => prev.filter((r) => r.repo !== res.repo));
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         setError(errorMessage(error, "Failed to switch repository"));
         // Resync in case a concurrent turn changed the session's state.
         fetchRepoSwitchable(sessionId)
@@ -184,7 +185,7 @@ export function RepoBar({
             setHasWork(hasWork);
             setControlsLoadError(null);
           })
-          .catch((refreshError: unknown) => {
+          .catch((refreshError) => {
             // The switch failure keeps the action error. This secondary loader
             // fails closed and reports inside the menu with the stale controls.
             setSwitchable(false);

@@ -12,8 +12,8 @@
  */
 export {
   allForwardedCallsResolved,
+  coalesceCompleteToolResultContinuation,
   createEarlyStopTracker,
-  isCompleteToolResultContinuation,
   noteAssistantMessage,
   noteUserContent,
   settledToolCallAssistantUuid,

@@ -146,9 +146,11 @@ export function OrganizationProfileSection({
           const icon = await pngFromImageUrl(profile.avatarUrl);
           if (icon) await uploadOrganizationIcon(icon);
         }
-        return saveOrganizationSettings({
-          ...(needsName ? { organizationName: profile?.name || login } : {}),
-        });
+        return needsName
+          ? saveOrganizationSettings({
+              organizationName: profile?.name || login,
+            })
+          : saveOrganizationSettings({});
       }, `Filled in from ${login} on GitHub.`);
     })();
   });

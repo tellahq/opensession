@@ -47,17 +47,14 @@ function IdentityInput({
       return;
     }
     setSaving(true);
-    await (async () => {
+    try {
       await onSave(next);
-    })()
-      .catch(async (_error: unknown) => {
-        // The owning save handler shows the error; this boundary only restores
-        // the last persisted value.
-        setDraft(value);
-      })
-      .finally(async () => {
-        setSaving(false);
-      });
+    } catch {
+      // The owning save handler shows the error; this boundary only restores
+      // the last persisted value.
+      setDraft(value);
+    }
+    setSaving(false);
   };
   return (
     <input
@@ -93,17 +90,18 @@ export function IdentityRows({
   const [identity, setIdentity] = useState<InstanceIdentityDto | null>(null);
   useEffect(() => {
     let cancelled = false;
-    fetchInstanceIdentity()
-      .then((dto) => {
+    void (async () => {
+      try {
+        const dto = await fetchInstanceIdentity();
         if (!cancelled) setIdentity(dto);
-      })
-      .catch((error: unknown) => {
+      } catch (error) {
         if (!cancelled) {
           toast(errorMessage(error, "Failed to load identity"), {
             variant: "error",
           });
         }
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -112,15 +110,15 @@ export function IdentityRows({
     personaName?: string;
     productName?: string;
   }) => {
-    await (async () => {
+    try {
       setIdentity(await saveInstanceIdentity(patch));
       toast("Saved. Open tabs update after the next rebuild.", {
         variant: "success",
       });
-    })().catch(async (error: unknown) => {
+    } catch (error) {
       toast(errorMessage(error, "Failed to save"), { variant: "error" });
       throw error;
-    });
+    }
   };
 
   if (compact) {

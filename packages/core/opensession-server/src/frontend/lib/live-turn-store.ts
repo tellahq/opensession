@@ -41,21 +41,35 @@ const prefersReducedMotion = () =>
   typeof window !== "undefined" &&
   !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-const scheduleFrame = (callback: FrameRequestCallback): number =>
-  typeof requestAnimationFrame === "function"
-    ? requestAnimationFrame(callback)
-    : (setTimeout(() => callback(performance.now()), 16) as unknown as number);
-const cancelFrame = (id: number) => {
-  if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(id);
-  else clearTimeout(id);
+type ScheduledFrame =
+  | { kind: "animation"; id: number }
+  | { kind: "timeout"; id: ReturnType<typeof setTimeout> };
+
+const scheduleFrame = (callback: FrameRequestCallback): ScheduledFrame => {
+  const requestFrame = globalThis.requestAnimationFrame;
+  return requestFrame
+    ? { kind: "animation", id: requestFrame(callback) }
+    : {
+        kind: "timeout",
+        id: setTimeout(() => callback(performance.now()), 16),
+      };
 };
 
-// Placeholder frame id held while scheduleFrame is being called: if the
-// callback fires synchronously (a test-installed requestAnimationFrame may),
-// flush() nulls `frame` before scheduleFrame returns — and storing the
-// returned id over that null would leave a stale id blocking every future
-// schedule, silencing the store for good.
-const SCHEDULING = -1;
+const cancelFrame = (frame: ScheduledFrame) => {
+  if (frame.kind === "timeout") {
+    clearTimeout(frame.id);
+    return;
+  }
+  const cancelAnimation = globalThis.cancelAnimationFrame;
+  if (cancelAnimation) cancelAnimation(frame.id);
+  else clearTimeout(frame.id);
+};
+
+// Placeholder held while scheduleFrame is being called: if the callback fires
+// synchronously (a test-installed requestAnimationFrame may), flush() nulls
+// `frame` before scheduleFrame returns, and storing the returned handle over
+// that null would block every future schedule, silencing the store for good.
+const SCHEDULING = Symbol("scheduling-frame");
 
 /**
  * The bubble a running turn writes into.
@@ -72,7 +86,7 @@ export class LiveTurnStore {
   private snapshot: LiveTurnSnapshot = EMPTY;
   private listeners = new Set<() => void>();
   private buffer = new LiveTextBuffer();
-  private frame: number | null = null;
+  private frame: ScheduledFrame | typeof SCHEDULING | null = null;
   private clearTimer: ReturnType<typeof setTimeout> | null = null;
   private firstDeltaAt: number | null = null;
   /** How much of the buffer the bubble shows; the reveal walks it forward. */

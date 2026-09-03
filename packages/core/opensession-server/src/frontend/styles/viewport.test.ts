@@ -1,11 +1,10 @@
 import { describe, expect, test } from "bun:test";
-
-const CSS = new URL("./base.css", import.meta.url);
+import { readBaseCss } from "./base-css-test-support";
 const HTML = new URL("../index.html", import.meta.url);
 
 describe("app viewport", () => {
   test("the app fills its viewport-locked body without remeasuring viewport units", async () => {
-    const css = await Bun.file(CSS).text();
+    const css = await readBaseCss();
     const root = css.match(/#root\s*\{([^}]*)\}/)?.[1] ?? "";
 
     expect(css).toMatch(/body\s*\{\s*position:\s*fixed;\s*inset:\s*0;/);
@@ -14,7 +13,7 @@ describe("app viewport", () => {
   });
 
   test("focused text fields release the physical-screen override for keyboard panning", async () => {
-    const css = await Bun.file(CSS).text();
+    const css = await readBaseCss();
 
     expect(css).toMatch(
       /html:has\(body\.kb-open\),\s*body\.kb-open\s*\{[^}]*height:\s*100%\s*!important/,

@@ -99,6 +99,10 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     /// Images an agent marked as the visual result of its work. A merged-change
     /// share uses the newest local screenshot when no walkthrough still exists.
     var featuredMedia: [String]?
+    /// Large pastes sent beside the message. The server lifted them out of
+    /// `content` (protocol pasted-text.ts); each renders as a card under the
+    /// bubble rather than as pages of log inside it.
+    var pastedTexts: [String]?
     /// Set when this entry is an operational notice rather than a message —
     /// a runner line, a recap, a worker's report, a heads-up from another
     /// session. The server classifies it (protocol notices.ts) and strips the

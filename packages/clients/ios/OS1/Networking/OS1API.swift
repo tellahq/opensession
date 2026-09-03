@@ -1480,6 +1480,7 @@ enum OS1API {
             let bridgeEnabled: Bool?
             let claudeAccounts: Int?
             let codexAccounts: Int?
+            let xaiAccounts: Int?
         }
 
         /// Whether a repo commits the scripts that let a session provision and
@@ -1635,6 +1636,22 @@ enum OS1API {
         return components.string ?? "/api/models"
     }
 
+    struct ForkFrom: Equatable, Sendable {
+        let sourceId: String
+        let messageId: String?
+
+        init(sourceId: String, messageId: String? = nil) {
+            self.sourceId = sourceId
+            self.messageId = messageId
+        }
+
+        var wireValue: [String: String] {
+            var value = ["sourceId": sourceId]
+            if let messageId { value["messageId"] = messageId }
+            return value
+        }
+    }
+
     /// Create a session; returns the new session id. Code mode gets a
     /// server-suggested branch; the opening run starts immediately.
     static func createSession(
@@ -1649,6 +1666,7 @@ enum OS1API {
         files: [AttachedFile] = [],
         workspaceId: String? = nil,
         sandbox: String? = nil,
+        forkFrom: ForkFrom? = nil,
         requestId: String? = nil
     ) async throws -> String {
         struct CreateResponse: Decodable { let id: String }
@@ -1664,6 +1682,7 @@ enum OS1API {
             files: files,
             workspaceId: workspaceId,
             sandbox: sandbox,
+            forkFrom: forkFrom,
             user: ServerConfig.shared.userName,
             requestId: requestId
         )
@@ -1694,6 +1713,7 @@ enum OS1API {
         files: [AttachedFile] = [],
         workspaceId: String? = nil,
         sandbox: String? = nil,
+        forkFrom: ForkFrom? = nil,
         user: String,
         requestId: String? = nil
     ) -> [String: Any] {
@@ -1715,6 +1735,7 @@ enum OS1API {
         // than starting a standalone session: the server takes the workspace's
         // worktree/branch for code sessions, so the tabs share one checkout.
         if let workspaceId, !workspaceId.isEmpty { body["workspaceId"] = workspaceId }
+        if let forkFrom { body["forkFrom"] = forkFrom.wireValue }
         if let model, !model.isEmpty { body["model"] = model }
         if let effort, !effort.isEmpty { body["effort"] = effort }
         if fastMode { body["fastMode"] = true }

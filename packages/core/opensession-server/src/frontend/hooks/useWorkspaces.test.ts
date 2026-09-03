@@ -8,7 +8,10 @@ import {
   useWorkspaces,
 } from "./useWorkspaces";
 
-const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+const appSource = await Promise.all([
+  Bun.file(new URL("../AppContent.tsx", import.meta.url)).text(),
+  Bun.file(new URL("useSessionTabs.tsx", import.meta.url)).text(),
+]).then((sources) => sources.join("\n"));
 const hookSource = await Bun.file(
   new URL("useWorkspaces.ts", import.meta.url),
 ).text();
@@ -26,7 +29,12 @@ function expectInOrder(source: string, needles: string[]) {
 }
 
 function workspace(id: string): Workspace {
-  return { id, name: `Workspace ${id}` } as Workspace;
+  return {
+    id,
+    name: `Workspace ${id}`,
+    createdBy: "Kent",
+    createdAt: "2026-07-16T13:00:00Z",
+  };
 }
 
 describe("workspace loading", () => {

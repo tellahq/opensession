@@ -3,46 +3,40 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TranscriptEntry } from "../lib/types";
 
-// A sibling test may already have installed a partial `window`. Fill in this
-// file's browser surface without replacing it or depending on test order.
-Object.assign(
-  ((globalThis as unknown as { window?: Record<string, unknown> }).window ??=
-    {}),
-  {
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    matchMedia: () => ({ matches: false }),
-  },
-);
-Object.assign(
-  ((
-    globalThis as unknown as { document?: Record<string, unknown> }
-  ).document ??= {}),
-  {
-    documentElement: { dataset: {}, style: {} },
-    querySelector: () => null,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-  },
-);
-Object.assign(
-  ((
-    globalThis as unknown as { localStorage?: Record<string, unknown> }
-  ).localStorage ??= {}),
-  {
-    getItem: () => null,
-    setItem: () => {},
-    removeItem: () => {},
-  },
-);
+// A sibling test may already have installed partial browser globals. Fill in
+// this file's browser APIs without depending on test order.
+const windowShim = globalThis.window ?? {};
+Object.assign(windowShim, {
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  matchMedia: () => ({ matches: false }),
+});
+const documentShim = globalThis.document ?? {};
+Object.assign(documentShim, {
+  documentElement: { dataset: {}, style: {} },
+  querySelector: () => null,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+});
+const localStorageShim = globalThis.localStorage ?? {};
+Object.assign(localStorageShim, {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+});
+Object.assign(globalThis, {
+  window: windowShim,
+  document: documentShim,
+  localStorage: localStorageShim,
+});
 
 const { ToolSection } = await import("./TurnBlock");
 const { ToolCallBlock } = await import("./ToolCallBlock");
 
-function toolUse(
+function toolUse<T>(
   id: string,
   toolName: string,
-  toolInput: unknown,
+  toolInput: T,
 ): TranscriptEntry {
   return {
     id,
@@ -52,7 +46,7 @@ function toolUse(
     toolName,
     toolUseId: `use-${id}`,
     toolInput,
-  } as TranscriptEntry;
+  };
 }
 
 function result(
@@ -66,7 +60,7 @@ function result(
     timestamp: "2026-08-17T09:00:01.000Z",
     toolUseId: `use-${forId}`,
     ...extra,
-  } as TranscriptEntry;
+  };
 }
 
 function edit(id: string, oldString: string, newString: string) {

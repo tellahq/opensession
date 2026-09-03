@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { z } from "zod";
 import type { TranscriptEntry } from "../lib/types";
 import { renderMarkdown } from "../lib/markdown";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
@@ -15,7 +16,9 @@ import { assetPathForMediaSrc } from "../lib/asset-preview";
 import { fullTime, shortTime } from "../lib/time";
 import { UserAvatar } from "./UserAvatar";
 import { openGalleryFrom } from "../lib/media-lightbox-gallery";
-import { IconExpand, IconPencil } from "./icons";
+import { IconExpand, IconFileText2, IconPencil } from "./icons";
+import { Collapsible, collapsiblePanelClasses } from "../ui/collapsible";
+import { pastedTextLineLabel } from "@tellahq/opensession-protocol/pasted-text";
 import { personKey } from "../lib/review-queue";
 import { AnsweredAskCard } from "./AnsweredAskCard";
 
@@ -46,7 +49,7 @@ import {
   msgTime,
 } from "../lib/msg-classes";
 import { cn } from "../ui/cn";
-import { reasoningDisplay } from "../lib/reasoning-display";
+import { reasoningBody, reasoningDisplay } from "../lib/reasoning-display";
 import { transcriptEnterClass } from "../lib/transcript-motion";
 
 // Only this much of a message is markdown-parsed eagerly. marked is
@@ -59,6 +62,7 @@ const EAGER_MD_CHARS = 6000;
 // Expanded content still renders as markdown up to this size; past it the
 // content is machine payload, not prose — a plain <pre> shows it instantly.
 const FULL_MD_CHARS = 32 * 1024;
+const sessionEntryResponseSchema = z.object({ content: z.string() });
 
 function sizeLabel(chars: number): string {
   return chars >= 1024 ? `${Math.round(chars / 1024)} KB` : `${chars} chars`;
@@ -74,11 +78,14 @@ export function ClampedBody({
   className,
   entry,
   sessionId,
+  transformContent,
 }: {
   content: string;
   className: string;
   entry?: TranscriptEntry;
   sessionId?: string;
+  /** Display-only repair applied again after a clamped entry hydrates. */
+  transformContent?: (content: string) => string;
 }) {
   const wireClamped = !!entry?.contentClamped;
   const fullLength = entry?.contentLength ?? content.length;
@@ -96,7 +103,8 @@ export function ClampedBody({
     return nl > EAGER_MD_CHARS / 2 ? slice.slice(0, nl) : slice;
   })();
 
-  const shown = showAll ? (fetched ?? content) : head;
+  const rawShown = showAll ? (fetched ?? content) : head;
+  const shown = transformContent ? transformContent(rawShown) : rawShown;
   // Giant expanded payloads skip markdown entirely — see FULL_MD_CHARS.
   const asMarkdown = shown.length <= FULL_MD_CHARS;
   const repo = useMarkdownRepo();
@@ -113,8 +121,9 @@ export function ClampedBody({
           `${BASE_PATH}/api/sessions/${encodeURIComponent(sessionId)}/entry/${encodeURIComponent(entry.id)}`,
         );
         if (res.ok) {
-          const data = await res.json();
-          if (typeof data?.content === "string") setFetched(data.content);
+          const payload: unknown = await res.json();
+          const result = sessionEntryResponseSchema.safeParse(payload);
+          if (result.success) setFetched(result.data.content);
         }
       })()
         .catch(async () => {
@@ -286,7 +295,7 @@ function NoticeRow({
  * than a flex child, so a one-line notice stays centered.
  */
 function NoticeIcon({ icon }: { icon?: NoticeIconName }) {
-  const path = NOTICE_ICON_PATHS[icon ?? ""];
+  const path = icon ? NOTICE_ICON_PATHS.get(icon) : undefined;
   if (!path) return null;
   return (
     <svg
@@ -306,23 +315,25 @@ function NoticeIcon({ icon }: { icon?: NoticeIconName }) {
   );
 }
 
-const NOTICE_ICON_PATHS: Record<string, React.ReactNode> = {
-  merge: (
+const NOTICE_ICON_PATHS = new Map<NoticeIconName, React.ReactNode>([
+  [
+    "merge",
     <>
       <circle cx="18" cy="18" r="3" />
       <circle cx="6" cy="6" r="3" />
       <path d="M6 21V9a9 9 0 0 0 9 9" />
-    </>
-  ),
-  deploy: (
+    </>,
+  ],
+  [
+    "deploy",
     <>
       <circle cx="12" cy="12" r="9.5" />
       <path d="M12 16.5V8" />
       <path d="m8.2 11.8 3.8-3.8 3.8 3.8" />
-    </>
-  ),
-  done: <path d="M20 6 9 17l-5-5" />,
-};
+    </>,
+  ],
+  ["done", <path d="M20 6 9 17l-5-5" />],
+]);
 
 /** Triangle-alert glyph for a toned notice; inherits the pill's colour. */
 function NoticeGlyph() {
@@ -574,6 +585,119 @@ function EntryFiles({
   );
 }
 
+/**
+ * Large pastes sent beside a message. The model saw each block after the
+ * message; a reader gets a card per block that opens in place, so a 6 KB log
+ * does not become the bubble. The wire and the store both clamp long content
+ * from the tail, which means only the LAST block can be cut short: that card
+ * fetches the whole entry when opened.
+ */
+function EntryPastedTexts({
+  entry,
+  sessionId,
+  right,
+}: {
+  entry: TranscriptEntry;
+  sessionId?: string;
+  right?: boolean;
+}) {
+  const texts = entry.pastedTexts;
+  if (!texts?.length) return null;
+  return (
+    <div className={cn(msgMedia, "flex-col", right && "items-end")}>
+      {texts.map((text, i) => (
+        <PastedTextCard
+          key={i}
+          text={text}
+          index={i}
+          entry={entry}
+          sessionId={sessionId}
+          truncated={!!entry.contentClamped && i === texts.length - 1}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PastedTextCard({
+  text,
+  index,
+  entry,
+  sessionId,
+  truncated,
+}: {
+  text: string;
+  index: number;
+  entry: TranscriptEntry;
+  sessionId?: string;
+  truncated: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [full, setFull] = useState<string | null>(null);
+  const [fetching, setFetching] = useState(false);
+  const shown = full ?? text;
+  const partial = truncated && full === null;
+
+  const hydrate = async () => {
+    if (!partial || !sessionId || fetching) return;
+    setFetching(true);
+    // No `finally`: the React Compiler does not lower it yet.
+    try {
+      const res = await fetch(
+        `${BASE_PATH}/api/sessions/${encodeURIComponent(sessionId)}/entry/${encodeURIComponent(entry.id)}`,
+      );
+      if (res.ok) {
+        const data: { pastedTexts?: string[] } = await res.json();
+        const whole = data.pastedTexts?.[index];
+        if (whole !== undefined) setFull(whole);
+      }
+    } catch {
+      // The clamped head stays; the card just says it is partial.
+    }
+    setFetching(false);
+  };
+
+  return (
+    <Collapsible.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) void hydrate();
+      }}
+      className="flex min-w-0 max-w-full flex-col items-end"
+    >
+      <Collapsible.Trigger
+        className={cn(
+          fileChipCard,
+          fileChipCardPadding,
+          "focus-ring cursor-pointer text-left hover:border-accent",
+        )}
+      >
+        <span className={fileChipThumb}>
+          <IconFileText2 size={15} />
+        </span>
+        <span className={fileChipMeta}>
+          <span className={fileChipName}>Pasted text</span>
+          <span className={fileChipSub}>
+            {pastedTextLineLabel(shown)}
+            {partial ? " · partial" : ""}
+            {" · "}
+            {fetching ? "Loading…" : open ? "Hide" : "Show"}
+          </span>
+        </span>
+      </Collapsible.Trigger>
+      <Collapsible.Panel className={cn(collapsiblePanelClasses, "w-full")}>
+        {/* A <pre> for the preserved whitespace: a paste is usually a log or
+            a diff, so it keeps its columns. `font-sans` because the app ships
+            no Preflight and the UA would set monospace. */}
+        <pre className="mt-1.5 max-h-[50vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface p-3 font-sans text-label leading-relaxed text-fg">
+          {shown}
+        </pre>
+      </Collapsible.Panel>
+    </Collapsible.Root>
+  );
+}
+
 // Memoized: entries keep stable references across stream events (mergeEntries
 // reuses objects) and owner is stable upstream, so a tool event appended to
 // the transcript re-renders only the affected blocks — not every bubble's
@@ -648,6 +772,7 @@ export const MessageBubble = function MessageBubble({
         <EntryImages images={e.images} sessionId={sessionId} right />
         <EntryVideos videos={e.videos} right />
         <EntryFiles files={e.files} right />
+        <EntryPastedTexts entry={e} sessionId={sessionId} right />
       </div>
     );
   }
@@ -670,10 +795,17 @@ export const MessageBubble = function MessageBubble({
       !displayContent &&
       !e.images?.length &&
       !e.videos?.length &&
-      !e.files?.length
+      !e.files?.length &&
+      !e.pastedTexts?.length
     ) {
       return null;
     }
+    // The clamp cuts content from the tail, and pasted blocks sit at the
+    // tail, so once blocks were lifted the message before them is whole: the
+    // card takes the "show more", not the bubble.
+    const bodyEntry = e.pastedTexts?.length
+      ? { ...e, contentClamped: undefined, contentLength: undefined }
+      : e;
     // Your own settled messages skip the label entirely — the right-aligned
     // bubble already says "you". Turns sent by someone else keep the
     // attribution label.
@@ -712,13 +844,14 @@ export const MessageBubble = function MessageBubble({
             <ClampedBody
               className={cn(msgBubbleUser, "markdown")}
               content={displayContent}
-              entry={e}
+              entry={bodyEntry}
               sessionId={sessionId}
             />
           )}
           <EntryImages images={e.images} sessionId={sessionId} right />
           <EntryVideos videos={e.videos} right />
           <EntryFiles files={e.files} right />
+          <EntryPastedTexts entry={e} sessionId={sessionId} right />
         </div>
       </div>
     );
@@ -739,6 +872,7 @@ export const MessageBubble = function MessageBubble({
             content={body}
             entry={e}
             sessionId={sessionId}
+            transformContent={reasoningBody}
           />
         )}
       </div>

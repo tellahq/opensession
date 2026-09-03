@@ -17,8 +17,8 @@
         "@modelcontextprotocol/sdk": "^1.30.0",
         "@pierre/diffs": "1.3.2",
         "@pierre/trees": "^1.0.0-beta.4",
-        "@rynfar/meridian": "1.62.5",
-        "@rynfar/meridian-source": "github:rynfar/meridian#948a10a96014ada0649fb771ee799f1196194a48",
+        "@rynfar/meridian": "1.66.0",
+        "@rynfar/meridian-source": "github:rynfar/meridian#00a2f82d50df0921aa3410f216d7e0a8908b8fc1",
         "@shadcn/react": "^0.3.0",
         "@shikijs/langs": "3.23.0",
         "@shikijs/themes": "3.23.0",
@@ -46,6 +46,7 @@
         "zod": "^4.3.6",
       },
       "devDependencies": {
+        "@oxlint/plugins": "1.80.0",
         "@tailwindcss/cli": "^4.3.2",
         "@types/bun": "latest",
         "@types/react": "^19.0.0",
@@ -95,8 +96,8 @@
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@pierre/diffs": "1.3.2",
         "@pierre/trees": "^1.0.0-beta.4",
-        "@rynfar/meridian": "1.62.5",
-        "@rynfar/meridian-source": "github:rynfar/meridian#948a10a96014ada0649fb771ee799f1196194a48",
+        "@rynfar/meridian": "1.66.0",
+        "@rynfar/meridian-source": "github:rynfar/meridian#00a2f82d50df0921aa3410f216d7e0a8908b8fc1",
         "@shadcn/react": "^0.3.0",
         "@shikijs/langs": "3.23.0",
         "@shikijs/themes": "3.23.0",
@@ -138,6 +139,10 @@
     "packages/core/protocol": {
       "name": "@tellahq/opensession-protocol",
       "version": "0.1.0",
+    },
+    "packages/core/subscription-gateway": {
+      "name": "@tellahq/subscription-gateway",
+      "version": "0.0.0",
     },
     "packages/integrations/apple-mobile": {
       "name": "@tellahq/opensession-apple-mobile",
@@ -669,6 +674,8 @@
 
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.80.0", "", { "os": "win32", "cpu": "x64" }, "sha512-yAnO7lwBYQnz2pcfBPIGQQZWIX5zd5R/1aAKIF3oE+TVj7IhoHcROjOkz3sRDngzqhfPKfFaXqug5j5rE5dn6Q=="],
 
+    "@oxlint/plugins": ["@oxlint/plugins@1.80.0", "", {}, "sha512-QRgH1XqQEYNHa4f1vvPQ5fAdNdncHGIUG1ZWLlGIZHky3qwCEeAKYitZNbZMtaXtAQAAFFTOwqUfzESvimqZNA=="],
+
     "@parcel/watcher": ["@parcel/watcher@2.5.1", "", { "dependencies": { "detect-libc": "^1.0.3", "is-glob": "^4.0.3", "micromatch": "^4.0.5", "node-addon-api": "^7.0.0" }, "optionalDependencies": { "@parcel/watcher-android-arm64": "2.5.1", "@parcel/watcher-darwin-arm64": "2.5.1", "@parcel/watcher-darwin-x64": "2.5.1", "@parcel/watcher-freebsd-x64": "2.5.1", "@parcel/watcher-linux-arm-glibc": "2.5.1", "@parcel/watcher-linux-arm-musl": "2.5.1", "@parcel/watcher-linux-arm64-glibc": "2.5.1", "@parcel/watcher-linux-arm64-musl": "2.5.1", "@parcel/watcher-linux-x64-glibc": "2.5.1", "@parcel/watcher-linux-x64-musl": "2.5.1", "@parcel/watcher-win32-arm64": "2.5.1", "@parcel/watcher-win32-ia32": "2.5.1", "@parcel/watcher-win32-x64": "2.5.1" } }, "sha512-dfUnCxiN9H4ap84DvD2ubjw+3vUNpstxa0TneY/Paat8a3R4uQZDLSvWjmznAY/DoahqTHl9V46HF/Zs3F29pg=="],
 
     "@parcel/watcher-android-arm64": ["@parcel/watcher-android-arm64@2.5.1", "", { "os": "android", "cpu": "arm64" }, "sha512-KF8+j9nNbUN8vzOFDpRMsaKBHZ/mcjEjMToVMJOhTozkDonQFFrRcfdLWn6yWKCmJKmdVxSgHiYvTCef4/qcBA=="],
@@ -723,9 +730,9 @@
 
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.2", "", {}, "sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug=="],
 
-    "@rynfar/meridian": ["@rynfar/meridian@1.62.5", "", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.2.117", "@anthropic-ai/claude-code": "^2.1.198", "jsonc-parser": "^3.3.1", "libsql": "^0.5.29" }, "bin": { "meridian": "dist/cli.js", "claude-max-proxy": "dist/cli.js" } }, "sha512-QIwnAe9hECey72tk12OhE3RxHdk6vY5JyisXzLFQntavCm+RXFogpSmYI0vqak0YLEqHJz14tSA4ayRuNubSxA=="],
+    "@rynfar/meridian": ["@rynfar/meridian@1.66.0", "", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.2.117", "@anthropic-ai/claude-code": "^2.1.198", "cross-spawn": "7.0.6", "jsonc-parser": "^3.3.1", "libsql": "^0.5.29", "zod": "4.4.3" }, "bin": { "meridian": "dist/cli.js", "claude-max-proxy": "dist/cli.js" } }, "sha512-KdRsWIfhCtaL2vBgYfw2muEyI4fdkKrvY6NKHj+CBb7qGSbYD24jeE3jcuqDon2N+s5yI/ipiVnCmBPPYtCUUA=="],
 
-    "@rynfar/meridian-source": ["@rynfar/meridian@github:rynfar/meridian#948a10a", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.2.117", "@anthropic-ai/claude-code": "^2.1.198", "jsonc-parser": "^3.3.1", "libsql": "^0.5.29" }, "bin": { "meridian": "./dist/cli.js", "claude-max-proxy": "./dist/cli.js" } }, "rynfar-meridian-948a10a", "sha512-IpBD8zdYyY4cTkLKlgkdtPpV4uRDGcEkUo+Y7ihvw3qj7HmZfkkLotJDtGDpmBN2bdpgRun9/T5IAETy8JQhmg=="],
+    "@rynfar/meridian-source": ["@rynfar/meridian@github:rynfar/meridian#00a2f82", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.2.117", "@anthropic-ai/claude-code": "^2.1.198", "cross-spawn": "7.0.6", "jsonc-parser": "^3.3.1", "libsql": "^0.5.29", "zod": "4.4.3" }, "bin": { "meridian": "./dist/cli.js", "claude-max-proxy": "./dist/cli.js" } }, "rynfar-meridian-00a2f82", "sha512-jrXVUXZlpIp6Vlw9hyclbkRx6YkFfWznYWeZyPsWT8eBRJzrGIz2unCFsfeAdLT29QNCAOGVBTXnStUvm7ZIPA=="],
 
     "@shadcn/react": ["@shadcn/react@0.3.0", "", { "peerDependencies": { "@types/react": ">=19", "react": ">=19" }, "optionalPeers": ["@types/react", "react"] }, "sha512-iKN0NuYe850VDHlxEfvppFrpa7CMV3zArTHusXlaSmeFeQhohGbIqclv6WwPTs/44I8EkXQpcuRt6sXEVKkWqQ=="],
 
@@ -812,6 +819,8 @@
     "@tellahq/opensession-server": ["@tellahq/opensession-server@workspace:packages/core/opensession-server"],
 
     "@tellahq/opensession-website": ["@tellahq/opensession-website@workspace:packages/clients/website"],
+
+    "@tellahq/subscription-gateway": ["@tellahq/subscription-gateway@workspace:packages/core/subscription-gateway"],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 
@@ -1782,6 +1791,10 @@
     "@parcel/watcher/detect-libc": ["detect-libc@1.0.3", "", { "bin": { "detect-libc": "./bin/detect-libc.js" } }, "sha512-pGjwhsmsp4kL2RTz08wcOlGN83otlqHeD/Z5T8GXZB+/YcpQ/dgo+lbU8ZsGxV0HIvqqxo9l7mqYwyYMD9bKDg=="],
 
     "@pierre/diffs/diff": ["diff@9.0.0", "", {}, "sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw=="],
+
+    "@rynfar/meridian/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
+
+    "@rynfar/meridian-source/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
     "@tailwindcss/oxide-wasm32-wasi/@emnapi/core": ["@emnapi/core@1.11.1", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" }, "bundled": true }, "sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ=="],
 

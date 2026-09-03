@@ -30,7 +30,6 @@ import { syncAgentSessionEngine } from "./agent-session-sync";
 import { cancelAgentWait } from "./agent-waits";
 import { runAgentHosted } from "./host-client";
 import { getRunState, transitionRunState } from "./run-state";
-import { getAutomation } from "./automations";
 import { resolveSessionRunInputs } from "./session-run-inputs";
 import { defaultRepo } from "./config";
 import { isDevInstance } from "./dev-mode";
@@ -39,6 +38,7 @@ import {
   buildEngineSwitchHandoffNote,
 } from "./fork-handoff";
 import { getGitStatus, gitPush } from "./git-status";
+import { duplicateContextSessionIds } from "./session-duplicate";
 import { onSessionIdle as onHumanAsksSessionIdle } from "./human-asks";
 import { parseTranscriptAsync } from "./jsonl-parser";
 import {
@@ -56,8 +56,14 @@ import {
   transcriptLineUser,
 } from "./transcript-persistence";
 import { cacheMissNotice } from "@tellahq/opensession-protocol/notices";
+import { RESTART_QUEUE_NOTICE_MESSAGE } from "@tellahq/opensession-protocol/session";
 import { dropSandboxPreviewRoutes } from "./preview";
-import { wrapContext, stripContext, isContextOnly } from "./prompt-context";
+import {
+  wrapContext,
+  stripContext,
+  isContextOnly,
+  withPromptAttribution,
+} from "./prompt-context";
 import { takeVoiceHandoff } from "./desk-voice";
 import {
   activeRunRecords,
@@ -70,6 +76,7 @@ import { registerRunToken, unregisterRunToken } from "./run-rpc";
 import { createSlackPostScanner, linkThreadInIndex } from "./slack-links";
 import {
   STRIPE_CONFIRM_TOOLS,
+  filterMcpServers,
   looksLikeFabricatedToolTranscript,
 } from "./runner-shared";
 import {
@@ -91,10 +98,21 @@ import {
 import {
   isRemoteSandboxProvider,
   isRunnableSandboxProvider,
+  sandboxAutomationConfig,
   sandboxesEnabled,
   sandboxProviderConfigured,
 } from "./sandbox/config";
+import { disposeAutomationSandbox } from "./sandbox/automation-disposal";
+import {
+  automationModelEgressDestinations,
+  mcpEgressDestinations,
+} from "./sandbox/automation-egress";
 import { ensureSandboxWithTransientRetry } from "./sandbox/reliability";
+import {
+  automationModel,
+  getAutomation,
+  validateSandboxAutomation,
+} from "./automations";
 import {
   portableWorkspacePresetRun,
   resolveWorkspaceModelPreset,
@@ -1373,8 +1391,7 @@ function notifyShutdownPark(sessionId: string): void {
   broadcastToSession(sessionId, {
     type: "notice",
     sessionId,
-    message:
-      "The server is restarting. Your message is queued and will be delivered when it's back.",
+    message: RESTART_QUEUE_NOTICE_MESSAGE,
   });
 }
 
@@ -1796,9 +1813,9 @@ export async function autoPushSessionBranches(
  * session records a provider, every unavailable/config/launch failure is
  * surfaced by the caller and the prompt is not run on the host. Changing the
  * execution, trust or billing boundary always requires a person's choice.
- * Automation-owned sessions are refused outright — sandboxes carry
- * interactive-parity credentials (~/.ssh, gh, account pool / scoped OAuth
- * upload) that untrusted prompt text must not reach.
+ * Automation-owned root sessions use a separate disposable path: every turn
+ * revalidates the owning automation, reapplies its minimal credentials and
+ * egress policy, and destroys the Executor when the stream closes.
  */
 export function sandboxRunSecuritySpec(
   session: UnifiedSession,
@@ -1843,7 +1860,7 @@ export function sandboxRunSecuritySpec(
     user: opts.isAutomationSession ? undefined : opts.user,
     mcpGrantUser: opts.isAutomationSession
       ? undefined
-      : session.startedBy || undefined,
+      : session.createdByLogin || undefined,
     journalKind: opts.isAutomationSession ? "automation" : "prompt",
     trustProfile: opts.isAutomationSession ? "automation" : "interactive",
   };
@@ -1893,14 +1910,47 @@ export async function maybeLaunchSandboxedRun(
       `Sandbox provider "${sbProvider}" is not configured and Ready`,
     );
   }
-  if (opts.isAutomationSession && !session.automationDescendantPolicy) {
-    throw new Error(
-      "Interactive sandbox connections are unavailable to automation sessions",
-    );
+  const disposableAutomationResume =
+    opts.isAutomationSession && !session.automationDescendantPolicy;
+  const owningAutomation = disposableAutomationResume
+    ? session.automationId
+      ? getAutomation(session.automationId)
+      : null
+    : null;
+  if (disposableAutomationResume) {
+    if (
+      !owningAutomation ||
+      !owningAutomation.sandbox ||
+      owningAutomation.name !== session.automation ||
+      owningAutomation.accountId !== session.accountId ||
+      !!session.sandbox?.sandboxId
+    ) {
+      throw new Error(
+        "Sandbox automation resume policy is unavailable or has changed",
+      );
+    }
+    const validation = validateSandboxAutomation({
+      ...owningAutomation,
+      model: session.model || owningAutomation.model,
+    });
+    if (validation) throw new Error(validation.error);
   }
-  // Hoisted so the catch below can unregister it — a failed launch must not
-  // leak the run token (spawnHostRun's error path does the same cleanup).
+  // Hoisted so the catch below can unregister credentials and dispose a
+  // sandbox when launch fails after ensure but before the event stream exists.
   let rpcToken: string | undefined;
+  let disposableResumeSandbox:
+    | { provider: ReturnType<typeof getSandboxProvider>; id: string }
+    | undefined;
+  const disposeResumeSandbox = async () => {
+    const owned = disposableResumeSandbox;
+    if (!owned) return;
+    disposableResumeSandbox = undefined;
+    await disposeAutomationSandbox({
+      provider: owned.provider,
+      sandboxId: owned.id,
+      sessionId: session.id,
+    });
+  };
   const sandboxStartedAt = Date.now();
   try {
     if (isAgentSessionCancelled(session.id, opts.startToken))
@@ -1915,19 +1965,44 @@ export async function maybeLaunchSandboxedRun(
       });
     }
     const provider = getSandboxProvider(sbProvider);
+    const automationSandbox = disposableAutomationResume
+      ? sandboxAutomationConfig()
+      : undefined;
+    const resumeModel = disposableAutomationResume
+      ? automationModel(session.model || owningAutomation?.model)
+      : undefined;
     const sandbox = await ensureSandboxWithTransientRetry(
       provider,
       {
         sessionId: session.id,
-        repo: session.repo,
+        repo: owningAutomation
+          ? getRepo(owningAutomation.repo).id
+          : session.repo,
         branch: session.branch || undefined,
         mode: session.mode,
-        cwd: opts.cwd,
-        // Bind-mode containers mount attached repos too (a changed set
-        // recreates the container); volume mode rejects them in ensure().
-        attachedDirs: (session.attachedRepos || [])
-          .map((r) => r.dir)
-          .filter(Boolean),
+        ...(disposableAutomationResume
+          ? {
+              trustProfile: "automation" as const,
+              egressAllowlist: [
+                ...(automationSandbox?.egressAllowlist || []),
+                ...automationModelEgressDestinations(resumeModel || ""),
+                ...mcpEgressDestinations(
+                  filterMcpServers(
+                    owningAutomation?.mcpServers || [],
+                    undefined,
+                    [],
+                  ),
+                ),
+              ],
+            }
+          : {
+              cwd: opts.cwd,
+              // Bind-mode containers mount attached repos too (a changed set
+              // recreates the container); volume mode rejects them in ensure().
+              attachedDirs: (session.attachedRepos || [])
+                .map((r) => r.dir)
+                .filter(Boolean),
+            }),
       },
       {
         onRetry(error) {
@@ -1943,8 +2018,13 @@ export async function maybeLaunchSandboxedRun(
         },
       },
     );
-    if (isAgentSessionCancelled(session.id, opts.startToken))
+    if (disposableAutomationResume) {
+      disposableResumeSandbox = { provider, id: sandbox.id };
+    }
+    if (isAgentSessionCancelled(session.id, opts.startToken)) {
+      await disposeResumeSandbox();
       return cancelledRun(sandbox);
+    }
     // Remote engine databases live inside the sandbox. A replacement VM cannot
     // resume the old engine id, even when its git workspace was safely pushed.
     const previousSandboxId = session.sandbox?.sandboxId;
@@ -2052,13 +2132,23 @@ export async function maybeLaunchSandboxedRun(
         opts.isAutomationSession ? undefined : opts.user,
         opts.isAutomationSession ? undefined : session.startedBy,
       ),
-      fallbackModel: interactiveFallbackModel(session.model),
+      fallbackModel: opts.isAutomationSession
+        ? undefined
+        : interactiveFallbackModel(session.model),
       effort: portablePreset?.effort ?? session.effort,
       fastMode: session.fastMode,
-      accountId: session.accountId,
+      accountId: disposableAutomationResume
+        ? owningAutomation?.accountId
+        : session.accountId,
+      accountStrict: disposableAutomationResume ? true : undefined,
+      usageCredits: disposableAutomationResume
+        ? owningAutomation?.usageCredits
+        : undefined,
     };
     if (isAgentSessionCancelled(session.id, opts.startToken)) {
       unregisterRunToken(rpcToken);
+      rpcToken = undefined;
+      await disposeResumeSandbox();
       return cancelledRun(sandbox);
     }
     const runCallbacks = {
@@ -2076,12 +2166,32 @@ export async function maybeLaunchSandboxedRun(
     if (isAgentSessionCancelled(session.id, opts.startToken)) {
       handle.cancel();
       unregisterRunToken(rpcToken);
+      rpcToken = undefined;
+      await disposeResumeSandbox();
       return cancelledRun(sandbox);
     }
     console.log(
       `[sandbox] ${session.id}: running in ${sandbox.id} (${sandbox.cwd})`,
     );
-    return Object.assign(handle.events(), {
+    const events = disposableAutomationResume
+      ? (async function* (): AsyncGenerator<StreamEvent> {
+          try {
+            yield* handle.events();
+          } finally {
+            unregisterRunToken(rpcToken);
+            rpcToken = undefined;
+            try {
+              await disposeResumeSandbox();
+            } catch (error) {
+              console.error(
+                `[sandbox] could not dispose automation Executor ${sandbox.id} after follow-up:`,
+                error,
+              );
+            }
+          }
+        })()
+      : handle.events();
+    return Object.assign(events, {
       freshEngine: remoteSandboxReplaced || undefined,
       sandboxProvider: sbProvider,
       sandboxId: sandbox.id,
@@ -2090,7 +2200,22 @@ export async function maybeLaunchSandboxedRun(
   } catch (e: any) {
     unregisterRunToken(rpcToken);
     const reason = String(e?.message || e).slice(0, 200);
-    if (session.source === "opensession" && session.sandbox) {
+    const hadDisposableResumeSandbox = !!disposableResumeSandbox;
+    if (hadDisposableResumeSandbox) {
+      try {
+        await disposeResumeSandbox();
+      } catch (error) {
+        console.error(
+          `[sandbox] could not dispose automation Executor after launch failure:`,
+          error,
+        );
+      }
+    }
+    if (
+      (!disposableAutomationResume || !hadDisposableResumeSandbox) &&
+      session.source === "opensession" &&
+      session.sandbox
+    ) {
       touchNativeSession(session.id, {
         sandbox: {
           ...session.sandbox,
@@ -2491,6 +2616,13 @@ async function runSessionPromptInner(
   // rule in engineSessionPatch, so both live together in sessions.ts.
   const engineSessionId = engineSessionIdFor(session, provider);
 
+  // A teammate sending into someone else's session needs explicit attribution:
+  // bare transcript turns belong to the session owner. Apply it before durable
+  // intake so the sender stays correct even when setup or engine launch fails.
+  // Multi-message queue drains arrive pre-attributed, and context-only turns
+  // are nobody's message; withPromptAttribution leaves both unchanged.
+  let prompt = withPromptAttribution(content, user, session.startedBy);
+
   // Durable intake (2026-07-24, bks-019f93ea): persist the user's message to
   // the transcript store NOW, before the worktree/title/engine-spawn awaits,
   // so a process death anywhere in the run path can no longer lose it. The
@@ -2504,7 +2636,7 @@ async function runSessionPromptInner(
     await storeAppendUserLineEarly(
       sessionId,
       transcriptLineUser(
-        content,
+        prompt,
         durablePromptEntryId,
         undefined,
         images,
@@ -2623,14 +2755,30 @@ async function runSessionPromptInner(
         type: "notice",
         message: `This session's worktree was cleaned up — recreating it from branch ${session.branch}…`,
       });
+      let revived = false;
       try {
         cwd = await reviveWorktree(session.branch, repo.id);
+        revived = true;
       } catch (e) {
         broadcastToSession(sessionId, {
           type: "notice",
           message: `Couldn't recreate the worktree (${e}); running in the main checkout instead.`,
         });
         cwd = repo.repo;
+      }
+      // A branch rename changes reviveWorktree's path. Keep the owning row on
+      // the checkout we just created so activity protection and every later
+      // turn stop targeting the missing pre-rename path.
+      if (
+        revived &&
+        session.source === "opensession" &&
+        cwd !== session.worktreeDir
+      ) {
+        await updateSessionFile(session.id, (data) => ({
+          ...data,
+          worktreeDir: cwd,
+        }));
+        session.worktreeDir = cwd;
       }
     } else {
       broadcastToSession(sessionId, {
@@ -2640,23 +2788,6 @@ async function runSessionPromptInner(
       });
       cwd = repo.repo;
     }
-  }
-  let prompt = content;
-  // A teammate sending into someone else's idle session gets the same
-  // "[Name] " attribution the steer path already applies — without it the
-  // message lands bare in the transcript and the viewer credits it to the
-  // session owner (startedBy). The owner's own turns stay bare (the common
-  // case), automation runs pass no user, and multi-message queue drains
-  // arrive pre-attributed — don't double-prefix those. A prompt that is ONLY
-  // injected context (the auto-continue nudge) is nobody's message: attributing
-  // it left a bare "[auto-continue] " stub as the whole transcript entry.
-  if (
-    user &&
-    user !== session.startedBy &&
-    !isContextOnly(content) &&
-    !content.startsWith(`[${user}] `)
-  ) {
-    prompt = `[${user}] ${prompt}`;
   }
   // Bridge a cross-provider engine switch (computed above) so the incoming
   // engine continues the conversation instead of starting blank. Fenced so the
@@ -2680,7 +2811,10 @@ async function runSessionPromptInner(
   // their prompts are untrusted text.
   const inlinedSessionIds = new Set<string>();
   if (!session.automation) {
-    const attachedIds = [...new Set(contextSessions ?? [])];
+    const attachedIds = duplicateContextSessionIds(
+      session,
+      contextSessions ?? [],
+    );
     const attachedSessions = attachedIds
       .filter((id) => id !== sessionId)
       .map((id) => findSession(id))
@@ -2696,11 +2830,9 @@ async function runSessionPromptInner(
         id: s.id,
         title: s.title,
         model: s.model,
-        // Async: an attached session's transcript can be multi-MB — the
-        // sync parse held the event loop for the whole read.
-        entries: s.transcriptPath
-          ? await parseTranscriptAsync(s.transcriptPath)
-          : [],
+        // Async: an attached session's transcript can be multi-MB. Read the
+        // actor-owned transcript first, with the legacy file fallback.
+        entries: await mergedSessionTranscriptAsync(s),
       });
     }
     for (const c of attachedDigests) inlinedSessionIds.add(c.id);
@@ -2919,8 +3051,8 @@ async function runSessionPromptInner(
   // unavailable; it never absorbs an engine into the gateway's control-plane
   // cgroup. Automation-owned sessions ride it too, with the automation's
   // scoping intact: proxy names come from the same fail-closed automation
-  // set the run-rpc fallback builder serves, the repos note and MCP grant
-  // identity are withheld, and the automation's prReviewer rides the spec.
+  // set the run-rpc fallback builder serves, while the repos note and MCP
+  // grant identity are withheld.
   const hostedRun =
     !runnerRun && !sandboxRun && routedEngine === "pi"
       ? runAgentHosted({
@@ -2937,7 +3069,7 @@ async function runSessionPromptInner(
           // grants must not ride an automation-owned session's turns.
           mcpGrantUser: isAutomationSession
             ? undefined
-            : session.startedBy || undefined,
+            : session.createdByLogin || undefined,
           model: session.model,
           images,
           mcpServers: mcpServers ?? "all",
@@ -2968,13 +3100,6 @@ async function runSessionPromptInner(
           effort: session.effort,
           fastMode: session.fastMode,
           accountId: session.accountId,
-          // A human steering an automation-owned session still opens PRs
-          // under that automation's policy (parity with the in-process
-          // call below).
-          prReviewer:
-            isAutomationSession && session.automationId
-              ? getAutomation(session.automationId)?.prReviewer
-              : undefined,
           trustProfile: isAutomationSession ? "automation" : "interactive",
           journalKind: "prompt",
           onAskUser: makeAskHandler(sessionId),
@@ -3070,13 +3195,6 @@ async function runSessionPromptInner(
       reposNote: isAutomationSession
         ? undefined
         : await buildSessionNote(session, user),
-      // A human steering an automation-owned session still opens PRs under
-      // that automation's policy — keep its reviewer so a resumed turn's PR
-      // surfaces the same way the unattended run's would have.
-      prReviewer:
-        isAutomationSession && session.automationId
-          ? getAutomation(session.automationId)?.prReviewer
-          : undefined,
       deniedTools,
       publicationPolicy: session.automationDescendantPolicy
         ? {

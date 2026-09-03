@@ -15,7 +15,7 @@ import {
   type LocalArchiveOverride,
 } from "../lib/session-slices";
 import { errorMessage } from "../lib/error-message";
-import { makeSessionListRuntime } from "../lib/session-list-runtime";
+import * as SessionListRuntime from "../lib/session-list-runtime";
 import {
   ARCHIVED_QUERY,
   LIVE_POLL_FALLBACK_MS,
@@ -54,7 +54,7 @@ export function useSessions({
   liveQuery?: string;
   socket?: Pick<SessionSocket, "addHandler"> & { connected: boolean };
 } = {}) {
-  const [runtime] = useState(() => makeSessionListRuntime());
+  const [runtime] = useState(() => SessionListRuntime.makeSessionListRuntime());
   const [live, setLive] = useState<UnifiedSession[]>([]);
   // When the live list last came back. Settles a local unarchive: a poll that
   // STARTED after the change and still doesn't list the session means the
@@ -396,18 +396,15 @@ export function useSessions({
     });
   }, [addHandler]);
 
-  // A disconnected socket may miss list invalidations. The first connection
-  // races the initial list load and needs no extra fetch; later reconnects do.
-  const webSocketConnectedOnceRef = useRef(false);
-  const onReconnected = useEffectEvent(() => {
-    refresh();
-  });
+  // A disconnected socket may miss list invalidations. Refresh on every
+  // connection, including the first: the initial list request may have read an
+  // older snapshot before the socket handler was ready. The invalidation
+  // revision fences an initial request that is still in flight.
+  const onConnected = useEffectEvent(() => refreshInvalidated());
   const socketConnected = socket?.connected ?? false;
   useEffect(() => {
-    if (!socketConnected) return;
-    if (webSocketConnectedOnceRef.current) onReconnected();
-    else webSocketConnectedOnceRef.current = true;
-    // Refresh only when connectivity changes. Changes to refresh's captured
+    if (socketConnected) onConnected();
+    // Refresh only when connectivity changes. Changes to the current list or
     // archived state are not reconnects and must not re-arm this effect.
   }, [socketConnected]);
 

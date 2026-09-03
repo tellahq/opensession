@@ -1,0 +1,277 @@
+* {
+  box-sizing: border-box;
+}
+
+html {
+  /* Drives light-dark() in embedded components (@pierre/trees) + native UI.
+	   theme.ts also sets this inline per resolved theme; this is the fallback. */
+  color-scheme: dark;
+}
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* ── Scrollbars ──────────────────────────────────────────────
+   A Mac on a trackpad draws an OVERLAY scrollbar: it fades in while you
+   scroll, sits over the content, and reserves no width at all. Connect a
+   mouse, or set Show scroll bars to Always, and the same window gets a
+   permanent 15px bar with a filled track down the side of every panel.
+   Measured against the transcript: a #272727 band on a #1a1a1a page carrying
+   a #606060 thumb, full height, right against the info panel's edge, where it
+   reads as a third column. Windows and Linux draw the same bar.
+
+   Thin with the track dropped keeps what the bar is for, which is where you
+   are in a long session and something to drag when a wheel is too slow, at a
+   fraction of the ink. 15px becomes 11px, and the band becomes the page.
+
+   Deliberately the standard properties, and NOT ::-webkit-scrollbar. That
+   pseudo-element replaces the platform scrollbar with a custom one, and a
+   custom scrollbar is never an overlay: giving it a width carves a permanent
+   gutter out of every Mac that draws overlays (measured in Chrome on macOS:
+   0px becomes 8px). The standard pair is inert wherever the platform draws
+   overlays, so it only reaches the bar that is really there. The app's own
+   `[&::-webkit-scrollbar]:hidden` utilities are safe for the same reason
+   nothing here sets a width — they hide, and a hidden bar reserves nothing.
+
+   scrollbar-width does not inherit, so it takes the universal selector. Zero
+   specificity, so the scrollers that hide their bar outright still win. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--type-root);
+  /* Medium is the app's regular. Metadata and supporting copy are the
+	   exceptions: they render at 400 so their secondary text stays quiet and
+	   their smaller strokes do not close up. Bold accents stay 600/700. */
+  font-weight: 500;
+  /* No -webkit-font-smoothing here on purpose: macOS rasterizes text for us.
+	   `antialiased` opts out of that and thins every stem, so the same string
+	   reads lighter in the web UI than in the native app beside it. The default
+	   keeps the contrast boost AppKit applies, which is what the rest of the
+	   desktop looks like. */
+  /* Every size in this sheet is a hand-picked px value, but WebKit's default
+	   text autosizing (-webkit-text-size-adjust: auto) re-scales them per block
+	   from that block's width — so on iPhone the sidebar's rows came out at
+	   inconsistent, larger-than-authored sizes (and grew again in landscape).
+	   Preflight normally pins this to 100%; we deliberately don't ship it (see
+	   styles/tailwind.css), so it has to be set here. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Form controls don't inherit font-weight — the UA stylesheet pins them to
+   regular, and we deliberately don't ship Tailwind preflight to undo that. A
+   huge share of the UI is <button>-based (sidebar rows, step rows, tabs), so
+   without this the body's medium never reaches it. */
+button,
+input,
+textarea,
+select {
+  font-weight: inherit;
+}
+
+/* Lock the outer document to the viewport so only inner containers scroll.
+   position: fixed stops iOS rubber-band/elastic overscroll of the whole page
+   (header included); overscroll-behavior stops scroll-chaining to the body. */
+/* Must live on html, not body: overscroll-behavior only disables the
+   browser's swipe-back/forward navigation gesture (Chrome/Android) when set
+   on the root element — it does not propagate up from body. */
+html {
+  overscroll-behavior-x: none;
+}
+
+body {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: pan-x pan-y;
+}
+
+#root {
+  /* Fill the viewport-locked body instead of measuring another viewport unit.
+	   In standalone iPhone mode index.html corrects WebKit's short viewport by
+	   setting the document-flow roots to screen.height before the app mounts. */
+  height: 100%;
+  overflow: hidden;
+}
+
+/* The standalone correction is for the resting window only. When a text field
+   focuses, release its inline screen.height so WebKit can pan the original
+   viewport above the keyboard. The keyboard covers the letterboxed strip while
+   this class is present, and removing the class restores full device height. */
+html:has(body.kb-open),
+body.kb-open {
+  height: 100% !important;
+}
+
+/* A palette is a surface you type into, so the page behind it must hold still.
+   Base UI's `trap-focus` mode deliberately neither inerts nor scroll-locks the
+   page (the "@"-mention popup portals to <body> and inerting would kill it), so
+   on a phone the transcript or list underneath still panned under the sheet and
+   took the composer with it. `touch-action` is the smallest lever that stops
+   it: it blocks the pan without touching overflow, so no scroller loses its
+   position and nothing reflows. Effective touch-action is the intersection down
+   the ancestor chain, so one declaration on the app root covers every scroller
+   inside it, and the palette itself is portaled outside .app and keeps
+   scrolling its own prompt. `:not([hidden])` is load-bearing: a keepMounted
+   palette (the Desk) is in the DOM from boot and would otherwise lock the page
+   forever. */
+body:has(.palette-backdrop:not([hidden])) .app {
+  touch-action: none;
+}
+
+/* ── Native feel: UI chrome isn't text-selectable ────────────────
+   Disable text selection everywhere by default so labels, buttons,
+   nav, headers, tabs and status text behave like a native app — no
+   accidental blue highlight when you drag across the UI. Genuine
+   content (session messages + the names in them, code, diffs, inputs,
+   and anything tagged .selectable) opts back in just below. */
+body {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Match copied-text highlights to the selected accent without replacing the
+   content's own foreground colour (important for code and diff syntax). */
+::selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+/* The transcript passage staged as composer context ("Selected text"). Adding
+   a passage takes the native selection away and hands the mark to this
+   highlight, so exactly one band paints under the words and it survives the
+   click that moves the caret into the composer. Registered by QuoteSelection,
+   which has no element of its own to carry a utility. */
+::highlight(quote) {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+/* Text the user may legitimately want to select and copy: supporting copy,
+   message rows and their prose, names, system text, code, diffs, inputs. The
+   row wrapper is included on purpose — a drag has to be able to start in a
+   bubble's padding or the gutter beside it (see the transcript rule below) —
+   and the highlight still hugs the words because .msg and .msg-body are flex
+   columns, which is what stopped WebKit painting full-width bands across the
+   gaps. */
+.text-supporting,
+input,
+textarea,
+select,
+[contenteditable],
+[contenteditable] *,
+.msg,
+.msg *,
+.msg-label,
+.msg-body,
+.msg-body *,
+.msg-system-text,
+.markdown,
+.markdown *,
+code,
+pre,
+.selectable,
+.selectable * {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* The transcript is a document, not chrome: the whole reading area selects —
+   row gutters, bubble padding and the space between messages included.
+   Opting in only the text leaves (above) wasn't enough, because a browser
+   refuses to START a selection inside a `user-select: none` region and won't
+   extend out of one: a drag that began a few pixels off a glyph — in the
+   gutter beside a right-aligned user bubble, in the bubble's own 10/14px
+   padding, or between two messages — selected nothing at all, which reads as
+   "messages can't be selected" (reported on the desktop shell). The
+   full-width "gap band" painting that made us narrow this in the first place
+   is handled structurally now: .viewer-messages, .msg and .msg-body are flex
+   columns, which WebKit doesn't band-paint. */
+.viewer-messages,
+.viewer-messages * {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* Interactive controls stay unselectable even inside selectable content
+   (e.g. the hover fork button on a message). :is() lifts these to the same
+   specificity as the .viewer-messages opt-in above, so — coming later — they
+   still win inside the transcript. */
+:is(button, [role="button"]),
+:is(button, [role="button"]) * {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+/* No preflight ships, so neutralize the UA button chrome here. The moment an
+   author background/border lands on a <button> (e.g. Tailwind's
+   bg-transparent), browsers drop native appearance and paint the "devolved"
+   2px-outset bevel + buttonface padding instead — iOS renders that as a
+   raised 3D card. Every button in the app styles itself via classes; none
+   want the native chrome. Scoped to button only — appearance:none would
+   break native selects/checkboxes. */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+@supports (corner-shape: squircle) {
+  /* Turn the squircle treatment on everywhere: every corner radius in this
+	   file is authored as `calc(<value> * var(--rf))` + `corner-shape: var(--cs)`,
+	   so flipping these two tokens rounds up ALL radii at once. 1.35 matches the
+	   bump the Tailwind utilities already ship in tailwind.css, so legacy CSS
+	   and the new UI system land on the same corner. --rp follows on its own:
+	   it is derived from --rf, so a percentage radius lands back at the value
+	   it is authored with here and takes the circular shrink everywhere else. */
+  :root {
+    --rf: 1.35;
+    --cs: squircle;
+  }
+
+  :where([class*="rounded-"]:not([class*="rounded-full"]), [class~="rounded"]) {
+    corner-shape: squircle;
+  }
+
+  /* Legacy classes that set a radius without any `rounded-*` utility on the
+	   markup, so the rule above cannot reach them. An entry dies with its
+	   class: once a component migrates, its radius comes from a utility and
+	   the name here matches nothing. Read this list as the set of elements
+	   legacy deliberately squircles — `rounded-full` is the one utility
+	   spelling that opts OUT, so migrating one of these to it flattens the
+	   corner at the same radius. Use `rounded-[999px]` for a squircled pill. */
+  .session-link,
+  .sidebar-reopen {
+    corner-shape: squircle;
+  }
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+a {
+  color: var(--link);
+}

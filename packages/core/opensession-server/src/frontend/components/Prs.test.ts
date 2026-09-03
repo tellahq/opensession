@@ -14,21 +14,29 @@ test("keeps GitHub merged state authoritative over stale archived session data",
     title: "Review view-tab",
     additions: 10,
     deletions: 2,
+    isDraft: false,
+    reviewDecision: "",
+    createdAt: "2026-07-16T13:00:00Z",
     updatedAt: "2026-07-16T14:00:00Z",
     person: "kent",
     author: "tella-butler",
-  } as RecentPr;
+    checks: { total: 0, passed: 0, failed: 0, pending: 0 },
+  } satisfies RecentPr;
   const session = {
     id: "bks-review",
+    source: "opensession",
     title: "Review view-tab",
     repo: "opensession",
     branch: "os1-review-sidebar-open",
+    worktreeDir: null,
     prUrl: url,
     prState: "OPEN",
     lastActivity: "2026-07-16T13:00:00Z",
+    createdAt: "2026-07-16T13:00:00Z",
+    isRunning: false,
     archived: true,
     startedBy: "Kent",
-  } as UnifiedSession;
+  } satisfies UnifiedSession;
 
   const rows = buildWorktreeRows([recentPr], [session]);
 
@@ -41,8 +49,13 @@ test("keeps GitHub merged state authoritative over stale archived session data",
 test("keeps line stats for every projected session PR", () => {
   const session = {
     id: "bks-cross-repo",
+    source: "opensession",
     title: "Cross-repo change",
+    branch: null,
+    worktreeDir: null,
     lastActivity: "2026-07-16T13:00:00Z",
+    createdAt: "2026-07-16T13:00:00Z",
+    isRunning: false,
     startedBy: "Kent",
     prs: [
       {
@@ -62,7 +75,7 @@ test("keeps line stats for every projected session PR", () => {
         deletions: 4,
       },
     ],
-  } as UnifiedSession;
+  } satisfies UnifiedSession;
 
   const rows = buildWorktreeRows([], [session]);
   const stats = rows.map(({ repo, additions, deletions }) => ({

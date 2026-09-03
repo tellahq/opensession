@@ -110,23 +110,29 @@ function actingGithubCredential(ctx: RouteContext): GithubCredential | null {
     : null;
 }
 
-/** Prefer the configured App installation, whose selected repositories are the
- * source of truth for workspace setup. A configured but unavailable App fails
- * closed instead of being masked by a user's narrower token. Without a service
- * configuration, a signed-in teammate remains the compatibility path.
- * Repository setup never inherits the server user's ambient gh login. */
+/** Prefer the configured App, whose installations' selected repositories are
+ * the source of truth for workspace setup. `repo` (`owner/name`) selects the
+ * installation for that owner, so a second organization clones through its
+ * own installation. A configured but unavailable App fails closed instead of
+ * being masked by a user's narrower token. Without a service configuration, a
+ * signed-in teammate remains the compatibility path. Repository setup never
+ * inherits the server user's ambient gh login. */
 async function setupGithubCredential(
   ctx: RouteContext,
+  repo?: string,
 ): Promise<GithubCredential | null> {
   const { githubConfiguredCredential } = await import("../github-app");
   if (githubConfiguredCredential()) {
+    const opts = repo ? { repo } : {};
     try {
-      return await resolveGithubCredential(serviceGithubCredential);
+      return await resolveGithubCredential(serviceGithubCredential, opts);
     } catch {
       // A just-installed App can take a moment to appear in GitHub's installation
       // list. Retry once so the next onboarding step does not race that edge.
       await Bun.sleep(750);
-      return resolveGithubCredential(serviceGithubCredential).catch(() => null);
+      return resolveGithubCredential(serviceGithubCredential, opts).catch(
+        () => null,
+      );
     }
   }
   return actingGithubCredential(ctx);
@@ -140,6 +146,9 @@ interface PickerRepo {
   description?: string;
   defaultBranch: string;
   registered: boolean;
+  /** The App installation (account login) this repository is reachable
+   * through, on the App path. */
+  installation?: string;
   /** For pushed_at-desc sorting; stripped before responding. */
   pushedAt?: string;
 }
@@ -151,7 +160,14 @@ const REPO_CACHE_TTL_MS = 60_000;
  *  snappy across the setup page's refetches. */
 const repoListCache = new Map<
   string,
-  { at: number; payload: { source: "user" | "app"; repos: PickerRepo[] } }
+  {
+    at: number;
+    payload: {
+      source: "user" | "app";
+      repos: PickerRepo[];
+      unavailableInstallations?: string[];
+    };
+  }
 >();
 
 async function githubJson(
@@ -220,7 +236,7 @@ async function listReposViaUserRepos(token: string): Promise<PickerRepo[]> {
  * user endpoints used by PATs and App user tokens. */
 export async function listReposViaAppInstallation(
   token: string,
-): Promise<PickerRepo[]> {
+): Promise<PickerRepo[] | null> {
   const registered = registeredGhRepos();
   const repos: PickerRepo[] = [];
   for (let page = 1; repos.length < REPO_LIST_CAP && page <= 5; page++) {
@@ -228,7 +244,7 @@ export async function listReposViaAppInstallation(
       token,
       `https://api.github.com/installation/repositories?per_page=100&page=${page}`,
     );
-    if (!ok || !Array.isArray(body?.repositories)) break;
+    if (!ok || !Array.isArray(body?.repositories)) return null;
     for (const raw of body.repositories) {
       const repo = toPickerRepo(raw, registered);
       if (repo) repos.push(repo);
@@ -236,6 +252,35 @@ export async function listReposViaAppInstallation(
     if (body.repositories.length < 100) break;
   }
   return repos.slice(0, REPO_LIST_CAP);
+}
+
+/** Service path: the union of every installation of the workspace App, each
+ * listed with its own installation token. An installation whose token cannot
+ * mint is skipped (and named in `unavailable`), so one broken account never
+ * hides the others. */
+export async function listReposAcrossAppInstallations(
+  installations: Array<{ login: string }>,
+): Promise<{ repos: PickerRepo[]; unavailable: string[] }> {
+  const { githubToken } = await import("../github-app");
+  const results = await Promise.all(
+    installations.map(async (installation) => {
+      const token = await githubToken({ owner: installation.login });
+      if (!token) return { login: installation.login, repos: null };
+      const repos = await listReposViaAppInstallation(token);
+      return { login: installation.login, repos };
+    }),
+  );
+  const repos: PickerRepo[] = [];
+  const unavailable: string[] = [];
+  for (const result of results) {
+    if (!result.repos) {
+      unavailable.push(result.login);
+      continue;
+    }
+    for (const repo of result.repos)
+      repos.push({ ...repo, installation: result.login });
+  }
+  return { repos, unavailable };
 }
 
 /** GitHub App user-token path: union of the token's accessible installations.
@@ -279,6 +324,12 @@ let csRepoListCache: {
   at: number;
   payload: { source: "org"; repos: PickerRepo[] };
 } | null = null;
+
+/** Drop the cached GitHub picker list, so a changed App installation set or
+ *  key is reflected immediately instead of after the TTL. */
+export function invalidateGithubRepoListCache(): void {
+  repoListCache.clear();
+}
 
 /** Drop the cached org repo list — the connect/disconnect flow
  *  (setup-codestorage.ts) calls this so the setup wizard's code.storage
@@ -888,46 +939,110 @@ export async function handleSetupRepoRoutes(
   const { req, path } = ctx;
 
   if (path === "/api/setup/github/repos" && req.method === "GET") {
-    // Browse the repositories selected for the workspace App installation.
+    // Browse the repositories selected for the workspace App's installations.
     // A connected teammate is only a compatibility path when no App service
     // credential is configured; ambient credentials are never consulted.
-    const credential = await setupGithubCredential(ctx);
-    const token = credential?.env.GH_TOKEN;
-    const source: "user" | "app" | null = credential
-      ? credential.kind === "user"
-        ? "user"
-        : "app"
+    const {
+      configuredGithubInstallationOwner,
+      githubConfiguredCredential,
+      listGithubAppInstallations,
+    } = await import("../github-app");
+    const appConfigured = githubConfiguredCredential();
+    const configuredOwner = configuredGithubInstallationOwner();
+    // The App's installation directory rides along whenever the App identity
+    // can produce one, so the picker can name every account the App reaches
+    // and mark the configured default. A just-installed App can take a moment
+    // to appear in GitHub's list; retry once so onboarding does not race it.
+    let appInstallations = appConfigured
+      ? await listGithubAppInstallations()
       : null;
-    if (!token || !source) {
-      const { githubConfiguredCredential } = await import("../github-app");
-      return Response.json({
+    if (appConfigured && !appInstallations?.length) {
+      await Bun.sleep(750);
+      appInstallations = await listGithubAppInstallations({ fresh: true });
+    }
+    const installationContext = appInstallations
+      ? {
+          installationOwner: configuredOwner || null,
+          installations: appInstallations.map(({ login, type }) => ({
+            login,
+            type,
+            selected: login.toLowerCase() === configuredOwner.toLowerCase(),
+          })),
+        }
+      : {};
+    const unavailableResponse = (unavailableInstallations?: string[]) =>
+      Response.json({
         source: null,
         repos: [],
-        appConfigured: githubConfiguredCredential(),
+        appConfigured,
         appInstallUrl: githubAppInstallUrl(),
+        ...(unavailableInstallations?.length
+          ? { unavailableInstallations }
+          : {}),
+        ...installationContext,
       });
-    }
-    const cacheKey = credential.principal;
+    const credential = appConfigured ? null : actingGithubCredential(ctx);
+    const token = credential?.env.GH_TOKEN;
+    const installations = appInstallations ?? [];
+    if (appConfigured && installations.length === 0)
+      return unavailableResponse();
+    if (!appConfigured && !token) return unavailableResponse();
+    // The service list spans every installation, so its identity is the set
+    // of installations rather than one pinned owner: a newly installed
+    // account must not wait out the TTL behind the previous set.
+    const cacheKey = appConfigured
+      ? `service:${installations.map((i) => i.id).join(",")}`
+      : credential?.principal || "user";
     const cached = repoListCache.get(cacheKey);
     if (cached && Date.now() - cached.at < REPO_CACHE_TTL_MS) {
-      return Response.json(cached.payload);
+      return Response.json({ ...cached.payload, ...installationContext });
     }
     try {
-      // Installation tokens have a direct repository list. App user tokens list
-      // through their installations, with /user/repos as a compatibility path
-      // for older non-expiring OAuth grants already stored before migration.
-      const repos =
-        source === "app"
-          ? await listReposViaAppInstallation(token)
-          : ((await listReposViaInstallations(token)) ??
-            (await listReposViaUserRepos(token)));
+      // Installation tokens have a direct repository list, one per
+      // installation. App user tokens list through their installations, with
+      // /user/repos as a compatibility path for older non-expiring OAuth
+      // grants already stored before migration.
+      let repos: PickerRepo[];
+      let source: "user" | "app";
+      if (appConfigured) {
+        const listed = await listReposAcrossAppInstallations(installations);
+        // Every installation refusing to mint is the closed credential
+        // boundary, not an empty App.
+        if (listed.unavailable.length === installations.length)
+          return unavailableResponse(listed.unavailable);
+        repos = listed.repos;
+        source = "app";
+        const unavailableInstallations = listed.unavailable;
+        repos.sort((a, b) =>
+          (b.pushedAt || "").localeCompare(a.pushedAt || ""),
+        );
+        const payload = {
+          source,
+          repos: repos
+            .slice(0, REPO_LIST_CAP)
+            .map(({ pushedAt: _pushedAt, ...repo }) => repo),
+          ...(unavailableInstallations.length
+            ? { unavailableInstallations }
+            : {}),
+        };
+        repoListCache.set(cacheKey, { at: Date.now(), payload });
+        return Response.json({ ...payload, ...installationContext });
+      } else {
+        if (!token) return unavailableResponse();
+        repos =
+          (await listReposViaInstallations(token)) ??
+          (await listReposViaUserRepos(token));
+        source = "user";
+      }
       repos.sort((a, b) => (b.pushedAt || "").localeCompare(a.pushedAt || ""));
       const payload = {
         source,
-        repos: repos.map(({ pushedAt: _pushedAt, ...repo }) => repo),
+        repos: repos
+          .slice(0, REPO_LIST_CAP)
+          .map(({ pushedAt: _pushedAt, ...repo }) => repo),
       };
       repoListCache.set(cacheKey, { at: Date.now(), payload });
-      return Response.json(payload);
+      return Response.json({ ...payload, ...installationContext });
     } catch (e) {
       return Response.json(
         { error: e instanceof Error ? e.message : String(e) },
@@ -1052,14 +1167,15 @@ export async function handleSetupRepoRoutes(
     }
     // The acting token lets a private clone succeed without ambient gh /
     // credential-helper auth; absent, the clone stays anonymous (public repos).
-    const credential = await setupGithubCredential(ctx);
+    // On the App path the token comes from this repository owner's
+    // installation; an owner the App is not installed on fails closed here.
+    const credential = await setupGithubCredential(ctx, body.fullName);
     if (!credential) {
       const { githubConfiguredCredential } = await import("../github-app");
       if (githubConfiguredCredential()) {
         return Response.json(
           {
-            error:
-              "The configured GitHub App installation is unavailable. Check the installation owner and make sure the App is installed for this repository.",
+            error: `The GitHub App is not installed for ${body.fullName.split("/")[0]}, or its installation is unavailable. Install the App on that account and grant it this repository, then retry.`,
           },
           { status: 409 },
         );

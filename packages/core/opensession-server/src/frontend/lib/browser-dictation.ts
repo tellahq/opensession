@@ -1,3 +1,5 @@
+import { os1Shell } from "./os1-shell";
+
 /**
  * Live browser speech recognition for web dictation.
  *
@@ -57,10 +59,6 @@ declare global {
     SpeechRecognition?: SpeechRecognizerConstructor;
     webkitSpeechRecognition?: SpeechRecognizerConstructor;
     webkitAudioContext?: typeof AudioContext;
-    os1?: {
-      dictation?: DesktopDictationAPI;
-      [key: string]: unknown;
-    };
   }
 }
 
@@ -117,9 +115,7 @@ function startDesktopDictation(
   const id = randomUUID();
   let stopped = false;
   const unsubscribe = api.onText((payload) => {
-    if (payload.id === id && typeof payload.text === "string" && payload.text) {
-      onTranscript(payload.text);
-    }
+    if (payload.id === id && payload.text) onTranscript(payload.text);
   });
   const started = api
     .start(
@@ -178,7 +174,7 @@ export function startBrowserDictation(
   stream?: MediaStream,
 ): BrowserDictation | null {
   if (typeof window === "undefined") return null;
-  const desktop = window.os1?.dictation;
+  const desktop = os1Shell()?.dictation;
   if (desktop && stream) {
     const native = startDesktopDictation(desktop, stream, onTranscript);
     if (native) return native;

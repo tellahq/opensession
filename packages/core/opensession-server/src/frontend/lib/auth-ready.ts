@@ -16,7 +16,7 @@ export function authGatesOut(
 }
 
 function storedCurrentUser(): string {
-  if (typeof localStorage === "undefined") return "Anonymous";
+  if (!globalThis.localStorage) return "Anonymous";
   return (
     localStorage.getItem(USER_KEY) ||
     localStorage.getItem(LEGACY_USER_KEY) ||
@@ -30,10 +30,7 @@ function storedCurrentUser(): string {
  * not load every per-user store once as Anonymous and again after sign-in.
  */
 export function whenCurrentUserReady(run: (user: string) => void): () => void {
-  if (
-    typeof window === "undefined" ||
-    typeof window.addEventListener !== "function"
-  ) {
+  if (!(globalThis.window?.addEventListener instanceof Function)) {
     run("Anonymous");
     return () => {};
   }

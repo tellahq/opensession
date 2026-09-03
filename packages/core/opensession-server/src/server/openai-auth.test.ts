@@ -15,7 +15,7 @@ describe("OpenAI auth", () => {
     expect(supportsOpenaiFastMode("pi/openai/gpt-5.6-sol")).toBe(true);
     expect(supportsOpenaiFastMode("openai/gpt-5.6-terra")).toBe(true);
     expect(supportsOpenaiFastMode("gpt-5.6-luna")).toBe(true);
-    expect(supportsOpenaiFastMode("pi/anthropic/claude-fable-5")).toBe(false);
+    expect(supportsOpenaiFastMode("pi/anthropic/claude-fable-5-1")).toBe(false);
   });
 
   test("adds the priority service tier after Pi's existing payload hook", async () => {

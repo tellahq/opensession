@@ -5,8 +5,13 @@ import {
   runStateRequiresLiveOwner,
 } from "./session-cache";
 import { __sessionKernelStoreForTest } from "./session-kernel";
+import {
+  holdPendingOpening,
+  releasePendingOpening,
+} from "./session-state-events";
 import type { UnifiedSession } from "./types";
 import { allClients } from "./ws-hub";
+import { sessionListResponseRevision } from "./session-list-response-revision";
 
 const sockets = new Set<any>();
 
@@ -25,9 +30,11 @@ test("session cache invalidation notifies connected list clients", () => {
   };
   sockets.add(socket);
   allClients.add(socket);
+  const responseRevision = sessionListResponseRevision();
 
   invalidateSessionsCache();
 
+  expect(sessionListResponseRevision()).toBe(responseRevision + 1);
   expect(sent.map((payload) => JSON.parse(payload))).toEqual([
     { type: "sessions_invalidated" },
   ]);
@@ -53,6 +60,20 @@ describe("session runtime enrichment", () => {
 
     expect(session.isRunning).toBe(false);
     expect(session.runStartedAt).toBeUndefined();
+  });
+
+  test("a persisted create that still owes its opening turn lists as running", () => {
+    const session = { id: "pending-opening-runtime-test" } as UnifiedSession;
+    holdPendingOpening(session.id);
+    try {
+      enrichSessionRuntime([session]);
+      expect(session.isRunning).toBe(true);
+    } finally {
+      releasePendingOpening(session.id);
+    }
+
+    enrichSessionRuntime([session]);
+    expect(session.isRunning).toBe(false);
   });
 
   test("uses one run-state projection for a full session list", () => {

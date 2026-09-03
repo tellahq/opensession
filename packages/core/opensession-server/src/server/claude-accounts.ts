@@ -919,7 +919,7 @@ function isAccountUsableFor(
     models.length > 1 &&
     models.some((required) => required?.includes("fable"))
   ) {
-    const fable = scopedLimitForModel(usage, "claude-fable-5");
+    const fable = scopedLimitForModel(usage, "claude-fable-5-1");
     if (fable === null || fable >= SCOPED_EXHAUSTED_UTILIZATION) {
       return !!allowExtraUsage && hasCreditHeadroom(a);
     }

@@ -61,7 +61,7 @@ const session = {
 };
 
 describe("buildBranchNote", () => {
-  test("allows an ordinary PR to merge only after the current review and checks pass", () => {
+  test("requires explicit user authorization before merging a PR", () => {
     const note = buildBranchNote({
       mode: "code",
       branch: "ready-after-review",
@@ -69,13 +69,13 @@ describe("buildBranchNote", () => {
     });
 
     expect(note).toContain("git push -u origin ready-after-review");
-    expect(note).toContain("you may merge it yourself");
     expect(note).toContain(
-      "latest Open Session review covers the current head",
+      "Never merge a pull request unless the user explicitly asks",
     );
-    expect(note).toContain("reports no blocking findings");
-    expect(note).toContain("all required checks have passed");
-    expect(note).toContain("Do not merge while the review is stale");
+    expect(note).toContain("in the current conversation");
+    expect(note).toContain("that specific pull request");
+    expect(note).toContain("A positive review (including 5/5");
+    expect(note).not.toContain("you may merge it yourself");
   });
 });
 

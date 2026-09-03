@@ -67,6 +67,16 @@ configuration for the run.
   open a GitHub PR; trusted `github-*` code workflows have a separate,
   repository-scoped credential path. Every other scope still applies: MCP
   allowlist, denied writes, IMDS blocking, and the explicit environment.
+- A sandboxed automation runs in a fresh disposable Daytona Executor. Open
+  Session admits it only after Daytona has passed qualification, including a
+  live domain-allowlist check. The provider applies that allowlist before
+  runner bootstrap, repository setup hooks, private workspace seeds, or model
+  credentials enter the guest. Each run requires one hard-pinned Anthropic or
+  OpenAI subscription account, no fallback model, no nested CLI credentials,
+  and an explicit MCP allowlist. The launcher adds only the callback, clone,
+  runner bootstrap, model API, configured MCP, and operator-approved domains.
+  It probes one allowed and one blocked destination before continuing, and
+  strictly deletes the Executor after the run. There is no host fallback.
 - When adding an automation, scope it: pick ask mode unless it must write, and
   name only the MCP servers it uses.
 - A code automation's `prReviewer` is preserved and added to its instructions,
@@ -199,12 +209,14 @@ authority.
 ## GitHub credential scoping (out-of-org writes fail server-side)
 
 The "repositories outside your org require confirmation" rule in AGENTS.md is
-enforced with credential scope, not just prompts. The selected GitHub App
-installation belongs to `integrations.github.installationOwner`; server reads
-and writes use short-lived installation tokens, while trusted repository code
-runs receive a token narrowed to the owner-verified `owner/repo`. Teammate
-device-flow tokens are limited by both that App installation and the person's
-own GitHub access. Out-of-installation writes therefore fail at GitHub's side.
+enforced with credential scope, not just prompts. One GitHub App may have
+installations on several accounts. Server reads and writes resolve the
+installation from the repository owner and use a short-lived token for that
+installation. Trusted repository code runs receive a token narrowed further to
+the owner-verified `owner/repo`. `integrations.github.installationOwner` is only
+the default for calls that do not name a repository. Teammate device-flow
+tokens are limited by both the App's installations and the person's own GitHub
+access. Out-of-installation writes therefore fail at GitHub's side.
 
 The App is a fail-closed boundary: token-mint failure never consults ambient
 `gh` hosts.yml accounts, SSH credentials, or a connected human. Process-local

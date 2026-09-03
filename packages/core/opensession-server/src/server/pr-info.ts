@@ -74,7 +74,7 @@ export async function getPrAutomationDetails(
   repo: string = DEFAULT_REPO(),
 ): Promise<PrAutomationDetails | null> {
   if (ghRateLimited("rest")) throw new Error(GH_REST_RATE_LIMIT_MESSAGE);
-  const token = await githubToken();
+  const token = await githubToken({ repo });
   if (!token)
     throw new Error("The selected GitHub bot credential is unavailable");
   const numeric = /^\d+$/.test(selector);
@@ -423,9 +423,104 @@ export function loadPrDetailsSnapshot(): void {
   try {
     const raw: Record<string, { data: PrDetails | null; ts: number }> =
       JSON.parse(readFileSync(DETAILS_CACHE_FILE, "utf8"));
-    for (const [k, v] of Object.entries(raw)) cache.set(k, v);
+    for (const [k, v] of Object.entries(raw)) {
+      cache.set(k, v);
+      if (v.data?.state === "OPEN" && Number.isInteger(v.data.number))
+        numberByBranch.set(k, v.data.number);
+    }
   } catch {}
 }
+
+// Branch → number of its open PR. gh resolves a branch by wrapping the whole
+// field set in `pullRequests(headRefName:, first: 30)`, and with `commits`
+// (100 commits × 100 authors) GitHub prices that shape at 32 points; the same
+// fields by number cost 1 (measured 2026-09-03, when CI webhook bursts spent
+// the installation's hourly GraphQL budget on branch lookups alone). A PR's
+// number never changes, so the memo only has to forget a PR once it is no
+// longer open: a reused branch name then resolves afresh.
+const numberByBranch = new Map<string, number>();
+
+/** Remember the open PR on a branch so later detail fetches skip the branch
+ *  lookup. Any other state forgets the branch. */
+export function notePrNumberForBranch(
+  repo: string,
+  branch: string,
+  number: unknown,
+  state: unknown,
+): void {
+  const key = cacheKey(repo, branch);
+  if (state === "OPEN" && Number.isInteger(number))
+    numberByBranch.set(key, number as number);
+  else numberByBranch.delete(key);
+}
+
+/** The memoized open PR number for a branch, if any. */
+export function knownPrNumberForBranch(
+  repo: string,
+  branch: string,
+): number | undefined {
+  return numberByBranch.get(cacheKey(repo, branch));
+}
+
+// The same shape gh's branch finder uses, minus the fields: 30 candidates,
+// newest first, own-repository heads only, the open one preferred. One point.
+const PR_NUMBER_QUERY = `query($owner: String!, $name: String!, $branch: String!) {
+  rateLimit { limit used remaining resetAt }
+  repository(owner: $owner, name: $name) {
+    pullRequests(headRefName: $branch, first: 30, orderBy: { field: CREATED_AT, direction: DESC }) {
+      nodes { number state headRepositoryOwner { login } }
+    }
+  }
+}`;
+
+/**
+ * The PR number a branch's details are fetched by: the bulk cache's open PR,
+ * then the memo, then a one-point branch lookup that also samples the GraphQL
+ * bucket for the budget log. Null when the branch has no PR.
+ */
+async function resolvePrNumber(
+  branch: string,
+  repo: string,
+  env: Record<string, string | undefined>,
+  opts: { trustCached: boolean },
+): Promise<number | null> {
+  if (opts.trustCached) {
+    const { cachedPrNumberByBranch } = await import("./pr-cache");
+    const known =
+      cachedPrNumberByBranch(repo, branch) ??
+      knownPrNumberForBranch(repo, branch);
+    if (known !== undefined) return known;
+  }
+  const [owner, name] = repo.split("/");
+  const started = Date.now();
+  let ok = false;
+  let bucket: unknown;
+  try {
+    const raw =
+      await $`gh api graphql -f query=${PR_NUMBER_QUERY} -F owner=${owner} -F name=${name} -F branch=${branch}`
+        .env(env)
+        .quiet()
+        .text();
+    const parsed = JSON.parse(raw);
+    bucket = parsed?.data?.rateLimit;
+    ok = true;
+    const nodes: any[] = parsed?.data?.repository?.pullRequests?.nodes || [];
+    const own = nodes.filter(
+      (node) =>
+        String(node?.headRepositoryOwner?.login || "").toLowerCase() ===
+        (owner || "").toLowerCase(),
+    );
+    const pr = own.find((node) => node.state === "OPEN") ?? own[0];
+    if (!pr || !Number.isInteger(pr.number)) return null;
+    notePrNumberForBranch(repo, branch, pr.number, pr.state);
+    return pr.number;
+  } finally {
+    noteGithubGraphqlCall("pr-info:resolve", Date.now() - started, ok, {
+      bucket,
+    });
+  }
+}
+
 loadPrDetailsSnapshot();
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -478,10 +573,13 @@ const diffInflight: Map<string, Promise<PrDiffData | null>> = ((
   globalThis as any
 ).__prDiffInflight ??= new Map());
 
+/** Service env for one repository: the token comes from that repository
+ * owner's installation, so a second organization works alongside the first. */
 async function selectedGhEnv(
+  repo: string,
   opts: { write?: boolean } = {},
 ): Promise<Record<string, string>> {
-  const token = await githubToken(opts);
+  const token = await githubToken({ ...opts, repo });
   if (!token)
     throw new Error("The selected GitHub bot credential is unavailable");
   return { GH_TOKEN: token, GITHUB_TOKEN: token };
@@ -581,7 +679,9 @@ async function getMutationPrMeta(
   repo: string,
   credential: GithubCredential,
 ): Promise<MutationPrMeta | null> {
-  const resolvedCredential = await resolveGithubCredential(credential);
+  const resolvedCredential = await resolveGithubCredential(credential, {
+    repo,
+  });
   const proc = spawnGh(
     [
       "pr",
@@ -603,7 +703,9 @@ async function getMutationPrMeta(
     if (isNoPrError(err)) return null;
     throw new Error(prApiErrorMessage(err));
   }
-  return JSON.parse(out) as MutationPrMeta;
+  const meta = JSON.parse(out) as MutationPrMeta;
+  notePrNumberForBranch(repo, branch, meta.number, meta.state);
+  return meta;
 }
 
 export async function getPrDiff(
@@ -626,7 +728,7 @@ export async function getPrDiff(
 
   const refresh = (async () => {
     try {
-      const token = await githubToken();
+      const token = await githubToken({ repo });
       if (!token)
         throw new Error("The selected GitHub bot credential is unavailable");
       const headers = {
@@ -796,7 +898,10 @@ export async function postPrComment(
   credential: GithubCredential = serviceGithubCredential,
 ): Promise<{ ok: true; url?: string } | { error: string }> {
   try {
-    credential = await resolveGithubCredential(credential, { write: true });
+    credential = await resolveGithubCredential(credential, {
+      write: true,
+      repo,
+    });
     if (input.path && input.line) {
       const meta = await getMutationPrMeta(branch, repo, credential);
       if (!meta) return { error: "No PR found for this branch" };
@@ -873,7 +978,7 @@ export async function submitPrReview(
   repo: string = DEFAULT_REPO(),
   credential: GithubCredential = serviceGithubCredential,
 ): Promise<{ ok: true; url?: string } | { error: string }> {
-  credential = await resolveGithubCredential(credential, { write: true });
+  credential = await resolveGithubCredential(credential, { write: true, repo });
   if (!input.comments.length && !input.body?.trim()) {
     return { error: "Nothing to submit" };
   }
@@ -957,7 +1062,7 @@ export async function closePr(
   repo: string = DEFAULT_REPO(),
   credential: GithubCredential = serviceGithubCredential,
 ): Promise<{ ok: true; url?: string; number: number } | { error: string }> {
-  credential = await resolveGithubCredential(credential, { write: true });
+  credential = await resolveGithubCredential(credential, { write: true, repo });
   const pr = await getMutationPrMeta(branch, repo, credential);
   if (!pr) return { error: "No PR found for this branch" };
   if (pr.state !== "OPEN")
@@ -1003,7 +1108,7 @@ export async function mergePr(
   repo: string = DEFAULT_REPO(),
   credential: GithubCredential = serviceGithubCredential,
 ): Promise<{ ok: true; url?: string } | { error: string }> {
-  credential = await resolveGithubCredential(credential, { write: true });
+  credential = await resolveGithubCredential(credential, { write: true, repo });
   const pr = await getMutationPrMeta(branch, repo, credential);
   if (!pr) return { error: "No PR found for this branch" };
   if (pr.state !== "OPEN")
@@ -1087,7 +1192,7 @@ export async function editPrReviewers(
   repo: string = DEFAULT_REPO(),
   credential: GithubCredential = serviceGithubCredential,
 ): Promise<{ ok: true } | { error: string }> {
-  credential = await resolveGithubCredential(credential, { write: true });
+  credential = await resolveGithubCredential(credential, { write: true, repo });
   const args = ["pr", "edit", branch, "--repo", repo];
   if (opts.add) args.push("--add-reviewer", opts.add);
   // A list, because withdrawing a request made on GitHub rather than here can
@@ -1126,7 +1231,7 @@ export async function prReviewerSpecs(
   repo: string = DEFAULT_REPO(),
   credential: GithubCredential = serviceGithubCredential,
 ): Promise<string[] | null> {
-  credential = await resolveGithubCredential(credential);
+  credential = await resolveGithubCredential(credential, { repo });
   const proc = spawnGh(
     ["pr", "view", branch, "--repo", repo, "--json", "reviewRequests"],
     credential,
@@ -1163,7 +1268,7 @@ export async function updatePrBody(
   repo: string = DEFAULT_REPO(),
 ): Promise<{ ok: true; number: number; url: string } | { error: string }> {
   try {
-    const ghEnv = await selectedGhEnv({ write: true });
+    const ghEnv = await selectedGhEnv(repo, { write: true });
     const view = Bun.spawn(
       ["gh", "pr", "view", branch, "--repo", repo, "--json", "body,number,url"],
       { stdout: "pipe", stderr: "pipe", env: { ...process.env, ...ghEnv } },
@@ -1366,23 +1471,38 @@ async function fetchPrDetails(
     // ("stream error: … CANCEL; received from peer") — that's transient, and
     // treating it as "no PR" broke PR actions (PR #4910). Retry transient
     // failures; a genuine "no pull requests found" stays a fast null.
-    let raw = "";
-    const selectedEnv = await selectedGhEnv();
+    let pr: any;
+    const env = { ...process.env, ...(await selectedGhEnv(repo)) };
+    // A memoized number is trusted once: should the PR it names head another
+    // branch, the memo is dropped and the branch resolved afresh.
+    let trustCached = true;
     for (let attempt = 1; ; attempt++) {
       const baseFields =
         "number,title,url,state,isDraft,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,reviewDecision,author,body,mergeable,mergeStateStatus,comments,commits,files,latestReviews,reviewRequests";
       const fields = `${baseFields},statusCheckRollup`;
       const queryStarted = Date.now();
       try {
-        raw = await $`gh pr view ${branch} --repo ${repo} --json ${fields}`
-          .env({ ...process.env, ...selectedEnv })
-          .quiet()
-          .text();
+        const number = await resolvePrNumber(branch, repo, env, {
+          trustCached,
+        });
+        if (number === null) return null;
+        const raw =
+          await $`gh pr view ${number} --repo ${repo} --json ${fields}`
+            .env(env)
+            .quiet()
+            .text();
         noteGithubGraphqlCall(
           "pr-info:details",
           Date.now() - queryStarted,
           true,
         );
+        pr = JSON.parse(raw);
+        if (pr.headRefName !== branch && trustCached) {
+          notePrNumberForBranch(repo, branch, number, "stale");
+          trustCached = false;
+          continue;
+        }
+        notePrNumberForBranch(repo, branch, pr.number, pr.state);
         break;
       } catch (e: any) {
         noteGithubGraphqlCall(
@@ -1399,7 +1519,6 @@ async function fetchPrDetails(
         await new Promise((r) => setTimeout(r, attempt * 2000));
       }
     }
-    const pr = JSON.parse(raw);
     data = {
       number: pr.number,
       title: pr.title,

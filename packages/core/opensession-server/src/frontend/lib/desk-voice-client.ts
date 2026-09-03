@@ -4,6 +4,7 @@
 // directly to OpenAI, mirrors the call's transcript back to the server, and
 // routes function calls through the server's tool endpoint.
 
+import { z } from "zod";
 import { BASE_PATH } from "./base";
 import { randomUUID } from "./random-uuid";
 
@@ -19,12 +20,14 @@ export type DeskVoiceState =
 const API = `${BASE_PATH}/api/desk/voice`;
 const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
 
-interface SecretResponse {
-  clientSecret: string;
-  expiresAt: number;
-  model: string;
-  sessionId: string;
-}
+const secretResponseSchema = z.object({
+  clientSecret: z.string(),
+  expiresAt: z.number(),
+  model: z.string(),
+  sessionId: z.string(),
+});
+
+type SecretResponse = z.infer<typeof secretResponseSchema>;
 
 interface TranscriptEntry {
   id: string;
@@ -32,19 +35,72 @@ interface TranscriptEntry {
   text: string;
 }
 
-type RealtimeEvent = { type: string; [key: string]: unknown };
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+
+const realtimeEventSchema = z.object({
+  type: z.string(),
+  call_id: z.coerce.string().optional(),
+  name: z.coerce.string().optional(),
+  arguments: z.coerce.string().optional(),
+  transcript: z.coerce.string().optional(),
+  item_id: z.coerce.string().optional(),
+  error: z
+    .object({ message: z.string().optional() })
+    .optional()
+    .catch(undefined),
+});
+
+type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
+
+type VoiceRequest =
+  | { user: string }
+  | { user: string; entries: TranscriptEntry[] }
+  | {
+      user: string;
+      callId: string;
+      name: string;
+      args: JsonValue;
+    };
+
+const errorResponseSchema = z.object({ error: z.string().optional() });
+const transcriptResponseSchema = z.object({ ok: z.boolean() });
+const toolResponseSchema = z.object({ result: jsonValueSchema });
+
+async function postJson<T>(
+  path: string,
+  body: VoiceRequest,
+  responseSchema: z.ZodType<T>,
+): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = (await res.json().catch(() => null)) as
-    | (T & { error?: string })
-    | null;
-  if (!res.ok) throw new Error(data?.error || `${path}: HTTP ${res.status}`);
-  return data as T;
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    const error = errorResponseSchema.safeParse(data);
+    throw new Error(
+      (error.success && error.data.error) || `${path}: HTTP ${res.status}`,
+    );
+  }
+  return responseSchema.parse(data);
 }
 
 export class DeskVoiceClient {
@@ -100,7 +156,11 @@ export class DeskVoiceClient {
 
     let secret: SecretResponse;
     try {
-      secret = await postJson<SecretResponse>("/secret", { user: this.user });
+      secret = await postJson(
+        "/secret",
+        { user: this.user },
+        secretResponseSchema,
+      );
     } catch (e) {
       this.teardownMedia();
       const message = e instanceof Error ? e.message : "Failed to start call";
@@ -260,7 +320,11 @@ export class DeskVoiceClient {
     if (!entry.text.trim()) return;
     this.transcriptQueue = this.transcriptQueue.then(async () => {
       try {
-        await postJson("/transcript", { user: this.user, entries: [entry] });
+        await postJson(
+          "/transcript",
+          { user: this.user, entries: [entry] },
+          transcriptResponseSchema,
+        );
       } catch (e) {
         console.warn("desk voice transcript mirror failed:", e);
       }
@@ -272,21 +336,25 @@ export class DeskVoiceClient {
     const name = String(event.name ?? "");
     this.onState("action", name);
 
-    let args: unknown = {};
+    let args: JsonValue = {};
     try {
-      args = JSON.parse(String(event.arguments ?? "{}"));
+      args = jsonValueSchema.parse(JSON.parse(event.arguments ?? "{}"));
     } catch {
       args = {};
     }
 
-    let output: unknown;
+    let output: JsonValue;
     try {
-      const res = await postJson<{ result: unknown }>("/tool", {
-        user: this.user,
-        callId,
-        name,
-        args,
-      });
+      const res = await postJson(
+        "/tool",
+        {
+          user: this.user,
+          callId,
+          name,
+          args,
+        },
+        toolResponseSchema,
+      );
       output = res.result;
     } catch (e) {
       output = { error: e instanceof Error ? e.message : "Tool call failed" };
@@ -310,7 +378,7 @@ export class DeskVoiceClient {
     this.resetIdleTimer();
     let event: RealtimeEvent;
     try {
-      event = JSON.parse(raw);
+      event = realtimeEventSchema.parse(JSON.parse(raw));
     } catch {
       return;
     }
@@ -350,8 +418,7 @@ export class DeskVoiceClient {
         void this.handleFunctionCall(event);
         break;
       case "error": {
-        const err = event.error as { message?: string } | undefined;
-        this.onState("error", err?.message);
+        this.onState("error", event.error?.message);
         break;
       }
       default:

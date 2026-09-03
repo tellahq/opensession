@@ -90,11 +90,15 @@ describe("gateway activation preload barrier", () => {
     const barrier = entry.indexOf("await waitForGatewayActivationIfStandby()");
     const peers = entry.indexOf("await waitForRuntimePeerGeneration()");
     const lease = entry.indexOf("await acquireGatewayActivationLease");
+    const promotedRole = entry.indexOf(
+      'process.env.OPENSESSION_GATEWAY_ROLE = "active"',
+    );
     expect(prewarm).toBeGreaterThan(0);
     expect(precheck).toBeGreaterThan(prewarm);
     expect(barrier).toBeGreaterThan(precheck);
     expect(peers).toBeGreaterThan(barrier);
     expect(lease).toBeGreaterThan(peers);
+    expect(promotedRole).toBeGreaterThan(lease);
     expect(entry).not.toContain("}, 1500);");
     for (const effect of [
       "devInstanceBootError()",
@@ -105,7 +109,7 @@ describe("gateway activation preload barrier", () => {
       "await startSessionKernelActor()",
       "await ensureFrontendBuilt()",
     ]) {
-      expect(entry.indexOf(effect)).toBeGreaterThan(lease);
+      expect(entry.indexOf(effect)).toBeGreaterThan(promotedRole);
     }
   });
 

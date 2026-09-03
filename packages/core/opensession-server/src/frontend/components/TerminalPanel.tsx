@@ -1,3 +1,4 @@
+import type { Ghostty } from "ghostty-web";
 import React, { useEffect, useRef, useState } from "react";
 import { useSessionSocket } from "../hooks/useSessionSocket";
 import { Button } from "../ui/button";
@@ -77,13 +78,13 @@ interface TerminalOptions {
     cursor: string;
     selectionBackground: string;
   };
-  [key: string]: unknown;
+  ghostty?: Ghostty;
 }
 
 interface TermEngine {
   Terminal: new (options: TerminalOptions) => TerminalInstance;
   FitAddon: new () => TerminalAddon;
-  extraOptions: Record<string, unknown>;
+  extraOptions: Pick<TerminalOptions, "ghostty">;
 }
 
 /**
@@ -304,8 +305,8 @@ function ShellView({
         // Frames are tagged with the termId of the PTY they belong to — route
         // only ours. (Untagged frames from a pre-multi-tab server — the cloud
         // upstream mid-deploy — fall through to every tab: single-tab compat.)
-        const tagged = msg as { termId?: string };
-        if (tagged.termId != null && tagged.termId !== termId) return;
+        const taggedTermId = "termId" in msg ? msg.termId : undefined;
+        if (taggedTermId != null && taggedTermId !== termId) return;
         if (msg.type === "term_data") term.write(b64decode(msg.data));
         else if (msg.type === "term_ready" && msg.target !== "host")
           // Remote sessions run their shell in the selected workspace.

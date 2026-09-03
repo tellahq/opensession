@@ -145,7 +145,10 @@ export function ResponsiveDialog({
     if (!open || !mounted) return;
     // A local in effect scope (not a ref) so teardown hands focus back to
     // exactly the element this open parked.
-    let restoreTo = document.activeElement as HTMLElement | null;
+    let restoreTo =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     const raf = requestAnimationFrame(() => {
       const panel = panelRef.current;
       if (!panel || panel.contains(document.activeElement)) return;
@@ -176,7 +179,10 @@ export function ResponsiveDialog({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Tab" || e.defaultPrevented) return;
       const panel = panelRef.current;
-      const activeEl = document.activeElement as HTMLElement | null;
+      const activeEl =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
       // Focus that has legitimately left the panel (a portalled menu
       // popup) manages its own tabbing.
       if (!panel || !activeEl || !panel.contains(activeEl)) return;
@@ -286,7 +292,7 @@ export function ResponsiveDialog({
             <div className="h-[5px] w-9 rounded-full bg-active" />
           </div>
         )}
-        {typeof children === "function" ? children(onClose) : children}
+        {children instanceof Function ? children(onClose) : children}
       </div>
     </div>,
     document.body,

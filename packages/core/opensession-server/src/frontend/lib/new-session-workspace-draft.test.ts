@@ -5,7 +5,9 @@ import {
   rememberParkedNewSessionWorkspace,
 } from "./new-session-workspace-draft";
 
-const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+const appSource = await Bun.file(
+  new URL("../AppContent.tsx", import.meta.url),
+).text();
 const helperSource = await Bun.file(
   new URL("./new-session-workspace-draft.ts", import.meta.url),
 ).text();

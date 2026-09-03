@@ -267,6 +267,19 @@ extension ToolPresentation {
         }
     }
 
+    /// A leading `cd <dir> &&` only sets up the working directory. The summary
+    /// shows the command that follows; the expanded view keeps the full text.
+    private static let leadingCdPattern =
+        #"^cd[ \t]+(?:"[^"]*"|'[^']*'|\S+)[ \t]*(?:&&|;|\n)\s*"#
+
+    private static func stripLeadingCd(_ command: String) -> String {
+        guard let range = command.range(of: leadingCdPattern, options: .regularExpression) else {
+            return command
+        }
+        let rest = String(command[range.upperBound...])
+        return rest.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? command : rest
+    }
+
     private static func identifierWords(_ value: String) -> [String] {
         value
             .replacingOccurrences(
@@ -411,7 +424,7 @@ extension ToolPresentation {
             return (fileChangeSummary(input, worktreeDir: worktreeDir), true)
         case "Bash":
             let command = string(input, "command") ?? string(input, "cmd") ?? ""
-            let flat = command
+            let flat = stripLeadingCd(command)
                 .components(separatedBy: .newlines)
                 .map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty }

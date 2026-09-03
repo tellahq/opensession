@@ -61,7 +61,7 @@ export interface ComposerConfig {
    * from being folded into the queued message being edited. Works in both
    * controlled and uncontrolled modes.
    */
-  prefill?: { seq: number; text: string; replace?: boolean } | null;
+  prefill?: ComposerPrefill | null;
   hint?: string;
   /** Lets the focused session pane claim the attachment shortcut even when
    * focus is in the transcript rather than the textarea. */
@@ -103,16 +103,34 @@ export interface ComposerConfig {
   askExitPending?: boolean;
 }
 
-export interface ComposerActions {
+/** A one-shot draft handed to the composer (see `ComposerConfig.prefill`). */
+export interface ComposerPrefill {
+  seq: number;
+  text: string;
+  replace?: boolean;
+  /** Large pastes restored as chips beside the text: a message taken back
+   *  from the queue or the outbox, or one being edited to send again. */
+  pastedTexts?: string[];
+}
+
+/** What a send carries beside its text. */
+export interface ComposerSendOptions {
   /**
-   * `steer` folds the send into the running turn right away, and the turn keeps
+   * Fold the send into the running turn right away, and the turn keeps
    * running. Busy sends otherwise follow the user's follow-up preference
    * (queue by default, delivered after the run fully finishes). Command or
    * Control plus Enter, or Command or Control-click, flips the default action.
    */
+  steer?: boolean;
+  /** The pasted-text chips, in order. Never folded into `text`: a prompt
+   *  sends them beside it and the server places them after the message. */
+  pastedTexts?: string[];
+}
+
+export interface ComposerActions {
   onSend: (
     text: string,
-    options?: { steer?: boolean },
+    options?: ComposerSendOptions,
   ) => boolean | void | Promise<boolean | void>;
   onStop?: () => void;
   onModelChange: (model: string) => void;

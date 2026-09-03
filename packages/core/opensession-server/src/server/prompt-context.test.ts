@@ -6,6 +6,7 @@ import {
   stripContext,
   isContextOnly,
   parseContextBlocks,
+  withPromptAttribution,
 } from "./prompt-context";
 import { AUTO_CONTINUE_PROMPT, AUTO_CONTINUE_USER } from "./auto-continue";
 
@@ -94,6 +95,33 @@ describe("prompt-context", () => {
     expect(isContextOnly("just a normal message")).toBe(false);
     expect(isContextOnly("")).toBe(false);
     expect(isContextOnly(wrapContext("only plumbing"))).toBe(true);
+  });
+
+  describe("prompt attribution", () => {
+    it("attributes a teammate before the prompt reaches the transcript", () => {
+      expect(withPromptAttribution("Fix this", "Kent", "Michiel")).toBe(
+        "[Kent] Fix this",
+      );
+    });
+
+    it("leaves the owner's prompt bare", () => {
+      expect(withPromptAttribution("Fix this", "Michiel", "Michiel")).toBe(
+        "Fix this",
+      );
+    });
+
+    it("does not double-prefix queued prompts", () => {
+      expect(withPromptAttribution("[Kent] Fix this", "Kent", "Michiel")).toBe(
+        "[Kent] Fix this",
+      );
+    });
+
+    it("does not attribute context-only turns", () => {
+      const context = wrapContext("Continue", "auto-continue");
+      expect(withPromptAttribution(context, "auto-continue", "Michiel")).toBe(
+        context,
+      );
+    });
   });
 });
 

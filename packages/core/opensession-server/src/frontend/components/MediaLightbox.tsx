@@ -13,8 +13,6 @@ import {
   supportsHeroTransition,
   type LightboxRequest,
   type LightboxState,
-  type ViewTransitionDocument,
-  type ViewTransitionHandle,
 } from "../lib/media-lightbox";
 import {
   lightboxDiagramFor,
@@ -39,7 +37,7 @@ import { MediaLightboxGallery } from "./MediaLightboxGallery";
  */
 export function MediaLightboxHost() {
   const [state, setState] = useState<LightboxState | null>(null);
-  const activeTransition = useRef<ViewTransitionHandle | null>(null);
+  const activeTransition = useRef<ViewTransition | null>(null);
   const activeSourceCleanup = useRef<(() => void) | null>(null);
   useEffect(() => {
     const open = (request: LightboxRequest) => {
@@ -53,10 +51,12 @@ export function MediaLightboxHost() {
         useHeroTransition: false,
       };
       const item = request.items[request.index];
+      const startViewTransition = document.startViewTransition;
       if (
         item?.kind !== "image" ||
         !canMorphFrom(origin) ||
-        !supportsHeroTransition()
+        !supportsHeroTransition() ||
+        !startViewTransition
       ) {
         setState(next);
         return;
@@ -68,8 +68,7 @@ export function MediaLightboxHost() {
       activeSourceCleanup.current = restoreOrigin;
       const clearTransitionMark = markTransition("opening", id);
       try {
-        const transition = (document as ViewTransitionDocument)
-          .startViewTransition!(() => {
+        const transition = startViewTransition(() => {
           // The source belongs only to the old snapshot. Removing its name before
           // React mounts the destination avoids duplicate named elements.
           restoreOrigin();
@@ -116,7 +115,8 @@ export function MediaLightboxHost() {
         e.altKey
       )
         return;
-      const target = e.target as HTMLElement;
+      if (!(e.target instanceof Element)) return;
+      const target = e.target;
       // Enter on the focused link dispatches a click whose target is the
       // wrapping <a>, not the <img> inside it — match both, or keyboard
       // activation falls through to the raw file in a new tab.
@@ -136,15 +136,16 @@ export function MediaLightboxHost() {
   function close(current: LightboxState, allowHeroTransition = true) {
     const item = current.items[current.index];
     const origin = current.origin;
-    const canReturn =
-      allowHeroTransition &&
-      current.useHeroTransition &&
-      current.index === current.originIndex &&
-      item?.kind === "image" &&
-      canMorphFrom(origin) &&
-      supportsHeroTransition();
-
-    if (!canReturn) {
+    const startViewTransition = document.startViewTransition;
+    if (
+      !allowHeroTransition ||
+      !current.useHeroTransition ||
+      current.index !== current.originIndex ||
+      item?.kind !== "image" ||
+      !canMorphFrom(origin) ||
+      !supportsHeroTransition() ||
+      !startViewTransition
+    ) {
       // Native transitions don't need Motion's lifecycle. If the source has
       // disappeared (for example, a hover card closed), opt back into the
       // fallback for one frame so the viewer still leaves gracefully.
@@ -172,8 +173,7 @@ export function MediaLightboxHost() {
     const clearTransitionMark = markTransition("closing", current.id);
     let restoreOrigin: (() => void) | undefined;
     try {
-      const transition = (document as ViewTransitionDocument)
-        .startViewTransition!(() => {
+      const transition = startViewTransition(() => {
         // The target belongs only to the old snapshot; name the source after
         // that capture so it becomes the destination in the new snapshot.
         restoreOrigin = setTransitionName(origin, HERO_TRANSITION_NAME);

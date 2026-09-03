@@ -16,16 +16,19 @@ export function modelIsCodex(id: string, models: ModelOption[]): boolean {
 // switch reads unmistakably as e.g. "Sonnet · Claude → GPT-5.5 · Codex". Pure
 // (no models list needed) so it works in the transcript_init weave before the
 // models endpoint has loaded.
-const MODEL_NAMES: Record<string, string> = {
-  "claude-fable-5": "Fable",
-  "claude-opus-5": "Opus 5",
-  "claude-opus-4-8": "Opus 4.8",
-  "claude-sonnet-5": "Sonnet",
-  "claude-haiku-4-5-20251001": "Haiku",
-  "gpt-5.5": "GPT-5.5",
-  "gpt-5": "GPT-5",
-  codex: "Codex",
-};
+const MODEL_NAMES = Object.fromEntries(
+  Object.entries({
+    "claude-fable-5-1": "Fable 5.1",
+    "claude-fable-5": "Fable 5",
+    "claude-opus-5": "Opus 5",
+    "claude-opus-4-8": "Opus 4.8",
+    "claude-sonnet-5": "Sonnet",
+    "claude-haiku-4-5-20251001": "Haiku",
+    "gpt-5.5": "GPT-5.5",
+    "gpt-5": "GPT-5",
+    codex: "Codex",
+  } satisfies Record<string, string>),
+);
 export function prettyModel(id: string): string {
   // A workspace preset names itself; with no models list to read its label
   // from, its slug is still a name and its storage path is not.

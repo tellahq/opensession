@@ -4,6 +4,7 @@ import {
   fetchAppleMobileSetup,
   fetchAppleReleaseApprovals,
   saveAppleMobileSetup,
+  type AppleMobileSetupInput,
   type AppleMobileSetupStatus,
   type AppleReleaseApprovals,
 } from "../lib/api/apple-mobile";
@@ -117,20 +118,19 @@ function AppleMobileSetupDialog({
     setSaving(true);
     setError(null);
     try {
-      const updated = await saveAppleMobileSetup({
+      const input: AppleMobileSetupInput = {
         buildEnabled,
         releaseEnabled,
         teamId: teamId.trim(),
-        ...(keyId.trim() ? { keyId: keyId.trim() } : {}),
-        ...(issuerId.trim() ? { issuerId: issuerId.trim() } : {}),
-        ...(privateKeyPath.trim()
-          ? { privateKeyPath: privateKeyPath.trim() }
-          : {}),
         allowedUsers: allowedUsers
           .split(",")
           .map((user) => user.trim())
           .filter(Boolean),
-      });
+      };
+      if (keyId.trim()) input.keyId = keyId.trim();
+      if (issuerId.trim()) input.issuerId = issuerId.trim();
+      if (privateKeyPath.trim()) input.privateKeyPath = privateKeyPath.trim();
+      const updated = await saveAppleMobileSetup(input);
       onSaved(updated);
       onOpenChange(false);
       toast("Apple mobile saved");

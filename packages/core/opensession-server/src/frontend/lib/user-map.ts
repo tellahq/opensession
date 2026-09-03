@@ -37,32 +37,37 @@ import { whenCurrentUserReady } from "./auth-ready";
 const USER_CHANGE_EVENT = "opensession-user-changed";
 
 /** What a write asks the server to change. Absent keys are left alone. */
+type UserMapEntries<V> = Record<string, V>;
+
+function emptyUserMapEntries<V>(): UserMapEntries<V> {
+  return {};
+}
+
 export interface MapDelta<V> {
-  set: Record<string, V>;
+  set: UserMapEntries<V>;
   remove: string[];
 }
 
 /**
- * One outstanding write. `value` absent means the key was removed. `seq`
- * identifies this exact write so a confirmation only clears the intent it
- * actually carried, never a newer one made while the PUT was in flight.
+ * One outstanding write. `seq` identifies this exact write so a confirmation
+ * only clears the intent it actually carried, never a newer one made while the
+ * PUT was in flight.
  */
-interface Intent<V> {
-  value?: V;
-  seq: number;
-}
+type Intent<V> =
+  | { kind: "set"; value: V; seq: number }
+  | { kind: "remove"; seq: number };
 
 export interface UserMap<V> {
   /** Synchronous read of the cached map. */
-  get: () => Record<string, V>;
+  get: () => UserMapEntries<V>;
   /**
    * Apply a change: the mutator gets the current map and returns the next one,
    * or null to mean "nothing changed" (no event, no write). Returns the map in
    * effect afterwards.
    */
   update: (
-    mutate: (current: Record<string, V>) => Record<string, V> | null,
-  ) => Record<string, V>;
+    mutate: (current: UserMapEntries<V>) => UserMapEntries<V> | null,
+  ) => UserMapEntries<V>;
   /** Subscribe to changes (local writes and hydrations). */
   onChanged: (handler: () => void) => () => void;
   /** Whether the cache reflects the server map for the current user. */
@@ -74,9 +79,9 @@ export interface UserMap<V> {
 export function makeUserMap<V>(opts: {
   /** Window event dispatched whenever the map changes. */
   changeEvent: string;
-  fetchMap: (user: string) => Promise<Record<string, V>>;
+  fetchMap: (user: string) => Promise<UserMapEntries<V>>;
   /** Persist only what changed. Must reject on failure so the intent is kept. */
-  saveDelta: (user: string, delta: MapDelta<V>) => Promise<unknown>;
+  saveDelta: (user: string, delta: MapDelta<V>) => Promise<object | void>;
   /** Defaults to the UserPicker name; injectable for tests. */
   currentUser?: () => string;
   /** Delay before retrying a hydration that failed. */
@@ -85,7 +90,7 @@ export function makeUserMap<V>(opts: {
   const currentUser = opts.currentUser ?? getCurrentUser;
   const retryMs = opts.retryMs ?? 5_000;
 
-  let cache: Record<string, V> = {};
+  let cache = emptyUserMapEntries<V>();
   let hydratedFor: string | null = null;
   let hydrationVersion = 0;
   let hydrating = false;
@@ -93,7 +98,7 @@ export function makeUserMap<V>(opts: {
   let seq = 0;
   // Writes not yet confirmed by the server, keyed by user so a switch
   // mid-flight can't carry one person's intent onto another's map.
-  const pendingIntents = new Map<string, Record<string, Intent<V>>>();
+  const pendingIntents = new Map<string, UserMapEntries<Intent<V>>>();
   // One request at a time per user preserves this client's mutation order.
   // Without it, two fetches can reach the server in reverse order and leave
   // the older value behind.
@@ -106,22 +111,15 @@ export function makeUserMap<V>(opts: {
   // `window` global without DOM methods, and these modules must stay
   // importable outside a browser (their domain helpers are unit-tested).
   function hasDom(): boolean {
-    return (
-      typeof window !== "undefined" &&
-      typeof window.addEventListener === "function"
-    );
+    return globalThis.window?.addEventListener instanceof Function;
   }
 
   function emit(): void {
-    if (
-      typeof window === "undefined" ||
-      typeof window.dispatchEvent !== "function"
-    )
-      return;
+    if (!(globalThis.window?.dispatchEvent instanceof Function)) return;
     window.dispatchEvent(new Event(opts.changeEvent));
   }
 
-  function get(): Record<string, V> {
+  function get(): UserMapEntries<V> {
     return cache;
   }
 
@@ -132,21 +130,22 @@ export function makeUserMap<V>(opts: {
   /** Record what this write changed, so it survives until the server has it. */
   function recordIntents(
     user: string,
-    prev: Record<string, V>,
-    next: Record<string, V>,
+    prev: UserMapEntries<V>,
+    next: UserMapEntries<V>,
   ): void {
     const intents = pendingIntents.get(user) ?? {};
-    const written: Record<string, Intent<V>> = {};
+    const written: UserMapEntries<Intent<V>> = {};
     for (const [key, value] of Object.entries(next))
-      if (prev[key] !== value) written[key] = { value, seq: ++seq };
+      if (prev[key] !== value)
+        written[key] = { kind: "set", value, seq: ++seq };
     for (const key of Object.keys(prev))
-      if (!(key in next)) written[key] = { seq: ++seq };
+      if (!(key in next)) written[key] = { kind: "remove", seq: ++seq };
     for (const [key, intent] of Object.entries(written)) intents[key] = intent;
     pendingIntents.set(user, intents);
   }
 
   /** Drop the intents a confirmed write carried, keeping any newer ones. */
-  function confirm(user: string, written: Record<string, Intent<V>>): void {
+  function confirm(user: string, written: UserMapEntries<Intent<V>>): void {
     const intents = pendingIntents.get(user);
     if (intents) {
       for (const [key, intent] of Object.entries(written))
@@ -156,11 +155,11 @@ export function makeUserMap<V>(opts: {
     confirmedVersions.set(user, (confirmedVersions.get(user) ?? 0) + 1);
   }
 
-  function deltaOf(written: Record<string, Intent<V>>): MapDelta<V> {
-    const set: Record<string, V> = {};
+  function deltaOf(written: UserMapEntries<Intent<V>>): MapDelta<V> {
+    const set: UserMapEntries<V> = {};
     const remove: string[] = [];
     for (const [key, intent] of Object.entries(written)) {
-      if ("value" in intent) set[key] = intent.value as V;
+      if (intent.kind === "set") set[key] = intent.value;
       else remove.push(key);
     }
     return { set, remove };
@@ -188,8 +187,8 @@ export function makeUserMap<V>(opts: {
   }
 
   function update(
-    mutate: (current: Record<string, V>) => Record<string, V> | null,
-  ): Record<string, V> {
+    mutate: (current: UserMapEntries<V>) => UserMapEntries<V> | null,
+  ): UserMapEntries<V> {
     const next = mutate(cache);
     if (!next || next === cache) return cache;
     const user = currentUser();
@@ -212,14 +211,19 @@ export function makeUserMap<V>(opts: {
     }, retryMs);
     retry = handle;
     // Never hold a test runner or a script open on the retry.
-    (handle as unknown as { unref?: () => void }).unref?.();
+    if (
+      handle instanceof Object &&
+      "unref" in handle &&
+      handle.unref instanceof Function
+    )
+      handle.unref();
   }
 
   async function hydrate(user: string = currentUser()): Promise<void> {
     const version = ++hydrationVersion;
     const confirmedAtStart = confirmedVersions.get(user) ?? 0;
     hydrating = true;
-    let server: Record<string, V>;
+    let server: UserMapEntries<V>;
     try {
       server = await opts.fetchMap(user);
     } catch {
@@ -242,9 +246,9 @@ export function makeUserMap<V>(opts: {
     // been read before our write landed, and it is never authoritative about
     // a change it hasn't confirmed yet.
     const outstanding = pendingIntents.get(user) ?? {};
-    const next: Record<string, V> = { ...server };
+    const next = { ...server };
     for (const [key, intent] of Object.entries(outstanding)) {
-      if ("value" in intent) next[key] = intent.value as V;
+      if (intent.kind === "set") next[key] = intent.value;
       else delete next[key];
     }
     clearTimeout(retry);
@@ -268,7 +272,7 @@ export function makeUserMap<V>(opts: {
     window.addEventListener(USER_CHANGE_EVENT, () => void hydrate());
     // A tab left open all day is the one most likely to be showing a map
     // another device has moved on from.
-    if (typeof document !== "undefined" && document.addEventListener)
+    if (globalThis.document?.addEventListener instanceof Function)
       document.addEventListener("visibilitychange", () => {
         if (!document.hidden) void hydrate();
       });

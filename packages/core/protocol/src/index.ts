@@ -12,6 +12,8 @@
  *                 asks, usage, core WebSocket frames): "bring your own UI"
  * - `./notices` — how a transcript entry reads: the classifier that turns
  *                 operational deliveries into one uniform `notice`
+ * - `./pasted-text` — a large paste as an attachment: how it folds into the
+ *                 prompt and lifts back onto the entry as `pastedTexts`
  * - `./tool-presentation` — what a tool call is and what it did, derived once
  *                 for every client (`./todo-plan` parses the model's plan)
  * - `./identity` — cross-cutting identity records (`GitIdentity`)
@@ -24,6 +26,7 @@ export * from "./live-text";
 export * from "./runner";
 export * from "./session";
 export * from "./notices";
+export * from "./pasted-text";
 export * from "./todo-plan";
 export * from "./tool-presentation";
 export * from "./identity";

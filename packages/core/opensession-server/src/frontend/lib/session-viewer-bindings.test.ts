@@ -25,7 +25,9 @@ test("session-viewer-bindings owns the bounded SessionViewer prop API", async ()
       new URL("../components/SessionViewer.tsx", import.meta.url),
     ).text(),
     Bun.file(new URL("./session-viewer-bindings.ts", import.meta.url)).text(),
-    Bun.file(new URL("../App.tsx", import.meta.url)).text(),
+    Bun.file(
+      new URL("../components/AppSessionPane.tsx", import.meta.url),
+    ).text(),
   ]);
   const props = interfaceBody(bindings, "SessionViewerProps");
   const topLevelMembers = props
@@ -45,7 +47,7 @@ test("session-viewer-bindings owns the bounded SessionViewer prop API", async ()
   expect(viewer).not.toContain("interface Props {");
 
   const invocationStart = app.indexOf("<SessionViewer\n");
-  const invocationEnd = app.indexOf("\n        />", invocationStart);
+  const invocationEnd = app.indexOf("\n      />", invocationStart);
   expect(invocationStart).toBeGreaterThanOrEqual(0);
   expect(invocationEnd).toBeGreaterThan(invocationStart);
   const invocation = app.slice(invocationStart, invocationEnd);

@@ -17,7 +17,7 @@ import {
   getModelFallbackAuto,
   interactiveDefaultModel,
   modelEfforts,
-  orchestratorWorkerForBridge,
+  orchestratorWorkerModels,
   piModelLabel,
   refreshPickerModels,
   setDefaultModel,
@@ -25,7 +25,7 @@ import {
   setModelFallbackAuto,
   toPiModel,
 } from "../models";
-import { orchestratorEnabled } from "../model-providers";
+import { modelProviders, orchestratorEnabled } from "../model-providers";
 import {
   configuredInteractiveDefaultModel,
   configuredModelProviders,
@@ -145,33 +145,30 @@ export async function handleModelsRoutes(
               ),
             ),
             ...(orchestratorEnabled()
-              ? ORCHESTRATOR_PRESETS.filter((p) =>
-                  presetFitsConfiguredProviders(
-                    {
-                      group: "orchestrator",
-                      lead: { model: p.model },
-                    },
+              ? ORCHESTRATOR_PRESETS.map((preset) => ({
+                  preset,
+                  workers: orchestratorWorkerModels(
+                    preset,
                     configuredProviders,
                   ),
-                ).map((p) => {
-                  const lead = toPiModel(p.model) || p.model;
-                  const leadProvider = lead.split("/")[1] || "anthropic";
-                  return globalPresetEntry(
-                    p,
-                    "orchestrator",
-                    presetComposition([
-                      lead,
-                      ...p.workerAgents.map(
-                        (name) =>
-                          orchestratorWorkerForBridge(
-                            name,
-                            leadProvider,
-                            configuredProviders,
-                          )?.model,
-                      ),
-                    ]),
-                  );
-                })
+                }))
+                  .filter(({ preset, workers }) =>
+                    presetFitsConfiguredProviders(
+                      {
+                        group: "orchestrator",
+                        lead: { model: preset.model },
+                        supporting: workers.map((model) => ({ model })),
+                      },
+                      configuredProviders,
+                    ),
+                  )
+                  .map(({ preset, workers }) =>
+                    globalPresetEntry(
+                      preset,
+                      "orchestrator",
+                      presetComposition([preset.model, ...workers]),
+                    ),
+                  )
               : []),
           ]
         : [];
@@ -198,9 +195,11 @@ export async function handleModelsRoutes(
         ? `${pi ? "pi/" : ""}workspace-preset/${workspace.id}/${preset.id}`
         : interactiveDefault;
     })();
+    // One provider config read for the whole catalog, not one per model.
+    const providers = modelProviders();
     const catalogModels = [...presetModels, ...visibleModels].map((model) => ({
       ...model,
-      efforts: modelEfforts(model.id),
+      efforts: modelEfforts(model.id, providers),
       accountProvider: accountProviderForModel(model.id),
       fastModeSupported: supportsOpenaiFastMode(toPiModel(model.id)),
     }));

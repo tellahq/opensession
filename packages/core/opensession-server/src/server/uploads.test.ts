@@ -21,6 +21,7 @@ const {
   parseImageDataUrls,
   prepareCreationAttachmentSources,
   stageCreationAttachment,
+  InvalidUploadError,
   stageInlineImages,
 } = await import("./uploads");
 if (saved === undefined) delete process.env.OPENSESSION_STATE_DIR;
@@ -162,5 +163,24 @@ describe("staging images for a note", () => {
     expect(() =>
       stageInlineImages("os-note", ["/media?path=%2Fetc%2Fpasswd"]),
     ).toThrow("unsupported image type");
+  });
+
+  // A seventh screenshot used to surface as a 500, which the browser outbox
+  // reads as transient: the message retried every 30 seconds with no way to
+  // edit or discard it. The error names its status so the route answers 400.
+  test("refuses a seventh image as a client error", () => {
+    const refs = Array.from({ length: 7 }, (_, i) => stage(`shot-${i}.png`));
+    let thrown: unknown;
+    try {
+      stageInlineImages("os-note", refs);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(InvalidUploadError);
+    expect(thrown).toMatchObject({
+      status: 400,
+      message: "Attach up to 6 images per message.",
+    });
+    expect(stageInlineImages("os-note", refs.slice(0, 6))).toHaveLength(6);
   });
 });

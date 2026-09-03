@@ -56,7 +56,13 @@ test("persists before returning and delivers each session in order", async () =>
 
 test("persists optimistic anchors without sending them to the server", async () => {
   const storage = memoryStorage();
-  let delivered: Record<string, unknown> | undefined;
+  let delivered:
+    | Parameters<
+        NonNullable<
+          NonNullable<ConstructorParameters<typeof PromptOutbox>[0]>["deliver"]
+        >
+      >[1]
+    | undefined;
   const outbox = new PromptOutbox({
     storage,
     scope: "transcript-anchor",

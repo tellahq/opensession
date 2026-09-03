@@ -273,26 +273,27 @@ function ConnectDialog({
   async function connect() {
     setSaving(true);
     await (async () => {
-      const response = await connectSandbox(connection.provider, {
-        ...(apiKey ? { apiKey } : {}),
-        ...(tokenId ? { tokenId } : {}),
-        ...(tokenSecret ? { tokenSecret } : {}),
-        settings: {
-          ...(region ? { region } : {}),
-          ...(snapshot ? { snapshot } : {}),
-          ...(app ? { app } : {}),
-          ...(environment ? { environment } : {}),
-          ...(cpu ? { cpu: Number(cpu) } : {}),
-          ...(memoryMb ? { memoryMb: Number(memoryMb) } : {}),
-        },
-      });
+      const settings: NonNullable<
+        Parameters<typeof connectSandbox>[1]["settings"]
+      > = {};
+      const body: Parameters<typeof connectSandbox>[1] = { settings };
+      if (apiKey) body.apiKey = apiKey;
+      if (tokenId) body.tokenId = tokenId;
+      if (tokenSecret) body.tokenSecret = tokenSecret;
+      if (region) settings.region = region;
+      if (snapshot) settings.snapshot = snapshot;
+      if (app) settings.app = app;
+      if (environment) settings.environment = environment;
+      if (cpu) settings.cpu = Number(cpu);
+      if (memoryMb) settings.memoryMb = Number(memoryMb);
+      const response = await connectSandbox(connection.provider, body);
       onChanged(response);
       onOpenChange(false);
       toast(`${provider.label} connection check started`, {
         variant: "success",
       });
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         toast(errorMessage(error, `Failed to connect ${provider.label}`), {
           variant: "error",
         });
@@ -310,7 +311,7 @@ function ConnectDialog({
       onOpenChange(false);
       toast(`${provider.label} disconnected`, { variant: "success" });
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         toast(errorMessage(error, `Failed to disconnect ${provider.label}`), {
           variant: "error",
         });
@@ -554,7 +555,7 @@ function ConnectionCard({
     await (async () => {
       onChanged(await testSandboxConnection(connection.provider));
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         toast(errorMessage(error, `Failed to test ${provider.label}`), {
           variant: "error",
         });
@@ -571,7 +572,7 @@ function ConnectionCard({
         await updateSandboxConnection(connection.provider, { enabled }),
       );
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         toast(errorMessage(error, `Failed to update ${provider.label}`), {
           variant: "error",
         });
@@ -786,7 +787,7 @@ function ProjectEnvironmentDialog({
         },
       );
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         toast(errorMessage(error, "Failed to build project snapshot"), {
           variant: "error",
         });
@@ -812,11 +813,12 @@ function ProjectEnvironmentDialog({
             <Field label="Provider">
               <Select
                 value={provider}
-                onChange={(event) =>
-                  chooseProvider(
-                    event.target.value as SandboxConnectionInfo["provider"],
-                  )
-                }
+                onChange={(event) => {
+                  const nextProvider = providerOptions.find(
+                    (candidate) => candidate === event.target.value,
+                  );
+                  if (nextProvider) chooseProvider(nextProvider);
+                }}
               >
                 {providerOptions.map((candidate) => (
                   <option key={candidate} value={candidate}>
@@ -932,7 +934,7 @@ export function SandboxesPanel() {
           setEnvironments(response.environments);
           setEnvironmentsError(null);
         })
-        .catch((error: unknown) => {
+        .catch((error) => {
           if (active) {
             setEnvironmentsError(
               errorMessage(error, "Failed to load sandbox environments"),
@@ -946,7 +948,7 @@ export function SandboxesPanel() {
           setConnectionsError(null);
           setLoading(false);
         },
-        (error: unknown) => {
+        (error) => {
           if (!active) return;
           setConnectionsError(
             errorMessage(error, "Failed to load sandbox connections"),

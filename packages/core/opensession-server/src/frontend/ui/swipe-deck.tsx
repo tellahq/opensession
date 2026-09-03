@@ -18,6 +18,18 @@ import { SWIPE_DISTANCE, SWIPE_VELOCITY } from "../lib/swipe-deck";
 
 type SwipeExitDir = "left" | "right" | "up" | null;
 
+type SwipeExitStyle = {
+  position?: "absolute";
+  top?: number;
+  left?: number;
+  right?: number;
+  x: number;
+  y: number;
+  rotate: number;
+  opacity: number;
+  transition: { duration: number };
+};
+
 export function SwipeCard<A extends string>({
   className,
   custom,
@@ -57,7 +69,10 @@ export function SwipeCard<A extends string>({
   const leftTint = useTransform(x, [-SWIPE_DISTANCE, -20], [1, 0]);
   const rightTint = useTransform(x, [20, SWIPE_DISTANCE], [0, 1]);
 
-  function onDragEnd(_: unknown, info: PanInfo) {
+  function onDragEnd(
+    _event: MouseEvent | TouchEvent | PointerEvent,
+    info: PanInfo,
+  ) {
     if (info.offset.x < -SWIPE_DISTANCE || info.velocity.x < -SWIPE_VELOCITY)
       onSwipeLeft();
     else if (info.offset.x > SWIPE_DISTANCE || info.velocity.x > SWIPE_VELOCITY)
@@ -69,16 +84,20 @@ export function SwipeCard<A extends string>({
   const variants = {
     exit: (a: A | null) => {
       const dir = exitFor(a);
-      return {
-        ...(popOnExit
-          ? { position: "absolute" as const, top: 0, left: 0, right: 0 }
-          : {}),
+      const style: SwipeExitStyle = {
         x: dir === "left" ? -exitDistance : dir === "right" ? exitDistance : 0,
         y: dir === "up" ? -exitDistance : 0,
         rotate: dir === "left" ? -12 : dir === "right" ? 12 : 0,
         opacity: 0,
         transition: { duration: 0.26 },
       };
+      if (popOnExit) {
+        style.position = "absolute";
+        style.top = 0;
+        style.left = 0;
+        style.right = 0;
+      }
+      return style;
     },
   };
 

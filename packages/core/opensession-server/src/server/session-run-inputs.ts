@@ -76,6 +76,7 @@ export type RunInputsSession = Pick<
   | "externalRefs"
   | "goalId"
   | "startedBy"
+  | "createdByLogin"
 >;
 
 /** Which in-process server set the next turn carries. Pure — mirrors the
@@ -138,7 +139,7 @@ export async function resolveSessionRunInputs(
     mcpServersSource: mcpServers === undefined ? "all" : source,
     deniedTools: isAutomationSession ? automationDeniedTools() : undefined,
     user: isAutomationSession ? undefined : opts.user,
-    mcpGrantUser: session.startedBy || undefined,
+    mcpGrantUser: session.createdByLogin || undefined,
     inProcessMcpBranch: sessionInProcessMcpBranch(session),
     sessionNote: !isAutomationSession,
   };

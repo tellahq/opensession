@@ -54,7 +54,11 @@ import {
 } from "./session-kernel";
 import { withSessionMutationLock } from "./session-mutation-lock";
 import { broadcastToAll } from "./ws-hub";
-import { hasSessionRunningHold } from "./session-state-events";
+import {
+  hasPendingOpening,
+  hasSessionRunningHold,
+} from "./session-state-events";
+import { advanceSessionListResponseRevision } from "./session-list-response-revision";
 
 export const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
@@ -101,6 +105,9 @@ export function invalidateSessionsCache(): void {
     sessionsCacheGenerations[slice]++;
     if (sessionsCaches[slice]) sessionsCaches[slice]!.invalidated = true;
   }
+  // Fence a response build already reading the previous projection. The
+  // response layer retries it before releasing every request coalesced there.
+  advanceSessionListResponseRevision();
   // The list route caches its serialized response on top of this cache. Mark
   // those snapshots stale so ordinary slices rebuild on their next request;
   // the bounded live slice deliberately serves the stale body while it does
@@ -181,11 +188,14 @@ export function enrichSessionRuntime(
     // an earlier write. Runtime state is authoritative in both directions:
     // promote a newly active run and demote a finished one so the sidebar can
     // leave In progress on its next poll.
+    // A create persisted before its opening turn took admission is busy
+    // preparing its workspace, not idle with an unanswered prompt.
     s.isRunning =
       engineBusy ||
       recoveryBusy ||
       isRunStateUnsettled(rs) ||
-      hasSessionRunningHold(s.id);
+      hasSessionRunningHold(s.id) ||
+      hasPendingOpening(s.id);
     if (s.isRunning) {
       s.runStartedAt =
         runStarts.get(s.id) ||

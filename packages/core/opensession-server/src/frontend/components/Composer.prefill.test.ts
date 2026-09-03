@@ -8,7 +8,7 @@ test("a restored message reaches the draft store before React state", async () =
   const effectEnd = source.indexOf("// Fire a send handler", effectStart);
   const effect = source.slice(effectStart, effectEnd);
   const persist = effect.indexOf(
-    "saveDraft(draftKey, { text: next, pastedTexts })",
+    "saveDraft(draftKey, { text: next, pastedTexts: nextPasted })",
   );
   const update = effect.indexOf("setText(next)");
 

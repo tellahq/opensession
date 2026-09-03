@@ -358,16 +358,23 @@ export async function compileAssets(): Promise<BundleMeta> {
   // unmodified with a content-hashed name and serve it ourselves.
   // base.css is the permanent foundation (tokens, reset, platform chrome);
   // legacy.css is the component styling being migrated to Tailwind and is
-  // meant to reach zero. Concatenated in this order so the split is purely
-  // organisational — every rule keeps the cascade position it had when the
-  // two were one file. Each has its own doc header explaining the contract.
-  let cssSrc = (
-    await Promise.all(
-      ["base", "legacy"].map((n) =>
-        Bun.file(`${FRONTEND_SRC}/styles/${n}.css`).text(),
-      ),
-    )
-  ).join("\n");
+  // meant to reach zero. Bun's CSS build resolves base.css's local imports,
+  // but the unminified source path below bypasses that output. Inline those
+  // modules here in the same order before appending legacy.css, so every rule
+  // keeps its cascade position.
+  const baseCss = await Bun.file(`${FRONTEND_SRC}/styles/base.css`).text();
+  const localImportPattern = /^@import "\.\/([^"]+)";$/gm;
+  const importedCss = await Promise.all(
+    [...baseCss.matchAll(localImportPattern)].map((match) =>
+      Bun.file(`${FRONTEND_SRC}/styles/${match[1]}`).text(),
+    ),
+  );
+  let nextImport = 0;
+  let cssSrc = baseCss.replace(
+    /^@import "\.\/([^"]+)";$/gm,
+    () => importedCss[nextImport++] ?? "",
+  );
+  cssSrc += `\n${await Bun.file(`${FRONTEND_SRC}/styles/legacy.css`).text()}`;
   // xterm stylesheet (the Shell tab) rides along in the same file, vendored
   // straight from the installed package so it can't drift from the JS.
   try {

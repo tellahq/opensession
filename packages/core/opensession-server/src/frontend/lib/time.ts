@@ -33,11 +33,12 @@ export function fullTime(ts: string, now: Date = new Date()): string {
   const days = Math.round((midnight(now) - midnight(d)) / 86_400_000);
   if (days === 0) return `Today at ${time}`;
   if (days === 1) return `Yesterday at ${time}`;
-  const date = d.toLocaleDateString(undefined, {
+  const dateOptions: Intl.DateTimeFormatOptions = {
     month: "short",
     day: "numeric",
-    ...(d.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
-  });
+  };
+  if (d.getFullYear() !== now.getFullYear()) dateOptions.year = "numeric";
+  const date = d.toLocaleDateString(undefined, dateOptions);
   return `${date} at ${time}`;
 }
 

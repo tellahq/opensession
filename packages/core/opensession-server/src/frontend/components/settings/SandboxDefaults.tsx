@@ -41,7 +41,7 @@ function SandboxDefaultRow({
   useEffect(() => {
     fetchSandboxStatus(user)
       .then(setStatus)
-      .catch((error: unknown) =>
+      .catch((error) =>
         setLoadError(
           errorMessage(error, "Failed to load available sandbox providers"),
         ),
@@ -108,13 +108,13 @@ function SandboxDefaultRow({
         current ? { ...current, defaults: response.defaults } : current,
       );
     })()
-      .catch(async (error: unknown) => {
+      .catch(async (error) => {
         toast(errorMessage(error, "Failed to save sandbox default"), {
           variant: "error",
         });
         fetchSandboxStatus(user)
           .then(setStatus)
-          .catch((_refreshError: unknown) => {
+          .catch(() => {
             // The save error is already visible and the pre-save status remains valid.
           });
       })
@@ -128,8 +128,8 @@ function SandboxDefaultRow({
       title="Default sandbox"
       desc={
         scope === "personal"
-          ? "Your environment for new sessions. A per-session choice still overrides it."
-          : "The environment new sessions use unless a person or session chooses another."
+          ? "Your environment for new sessions."
+          : "The environment for new sessions."
       }
       control={
         <div className={saving ? "pointer-events-none opacity-60" : undefined}>
@@ -164,8 +164,7 @@ export function WorkspaceSandboxDefaults({
         <SandboxDefaultRow scope="workspace" canManage={canManage} />
       </SettingCard>
       <SettingsHint>
-        None keeps sessions on this host. Only configured providers that passed
-        the live behavior and warm-restore matrices are offered.
+        None uses this host. Only tested providers appear here.
       </SettingsHint>
     </>
   );

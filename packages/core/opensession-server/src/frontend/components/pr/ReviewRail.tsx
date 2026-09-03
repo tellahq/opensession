@@ -15,7 +15,7 @@ import {
   IconCheck,
   IconChevronRight,
   IconFile,
-  IconMessages,
+  IconPlus,
   IconX,
 } from "../icons";
 import { CheckRow } from "./CheckRow";
@@ -53,8 +53,7 @@ export function ReviewRail({
   mergeError,
   onOpenFile,
   onOpenFiles,
-  onOpenSessions,
-  sessionCount = 0,
+  onStartSession,
   focusChecksSeq,
   compact,
   className,
@@ -83,9 +82,8 @@ export function ReviewRail({
   onOpenFile: (path: string) => void;
   /** Go to the Files changed page. */
   onOpenFiles: () => void;
-  /** Open the list of sessions working on this pull request. */
-  onOpenSessions?: () => void;
-  sessionCount?: number;
+  /** Open a new session tab in the PR's workspace. */
+  onStartSession?: () => void;
   /**
    * A check chip elsewhere in the app asked for the checks. Bumped per click,
    * so asking twice re-reveals the section after the reader scrolled away.
@@ -291,20 +289,18 @@ export function ReviewRail({
         </RailSection>
       )}
 
-      {onOpenSessions && (
+      {onStartSession && (
         <RailSection title="Sessions">
           <button
             className={RAIL_ROW}
-            onClick={onOpenSessions}
-            title="Sessions working on this pull request"
+            onClick={onStartSession}
+            title="Open a new session tab on this pull request"
           >
             <span className="inline-flex w-4 shrink-0 items-center justify-center [&>svg]:block">
-              <IconMessages size={15} className="text-faint" />
+              <IconPlus size={15} className="text-faint" />
             </span>
             <span className="min-w-0 flex-1 truncate font-medium">
-              {sessionCount > 0
-                ? `${sessionCount} session${sessionCount === 1 ? "" : "s"}`
-                : "No sessions"}
+              New session
             </span>
             <IconChevronRight size={14} className="shrink-0 text-faint" />
           </button>

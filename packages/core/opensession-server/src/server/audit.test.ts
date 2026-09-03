@@ -26,7 +26,7 @@ describe("buildAuditDigest", () => {
         session_id: "legacy",
         run_kind: "automation",
         mode: "ask",
-        model: "opencode/anthropic/claude-fable-5",
+        model: "opencode/anthropic/claude-fable-5-1",
         text_snippet: "check the queue",
       },
       {
@@ -67,7 +67,7 @@ describe("buildAuditDigest", () => {
         run_key: "native-session",
         run_kind: "prompt",
         mode: "code",
-        model: "pi/anthropic/claude-fable-5",
+        model: "pi/anthropic/claude-fable-5-1",
         ok: false,
         error: "primary exhausted",
         total_cost_usd: 0.25,

@@ -1,4 +1,5 @@
 import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
+import { pastedTextLineLabel } from "@tellahq/opensession-protocol/pasted-text";
 import { Reorder } from "motion/react";
 import type { TranscriptEntry } from "../lib/types";
 import {
@@ -19,6 +20,7 @@ import {
   composerQueueBodyTone,
   composerQueueContent,
   composerQueueFrom,
+  composerQueuePasted,
   composerQueueImage,
   composerQueueImageCount,
   composerQueueImageThumb,
@@ -56,7 +58,7 @@ interface Props {
 }
 
 interface QueueContentProps {
-  item: Pick<QueueReceipt, "content" | "user" | "images">;
+  item: Pick<QueueReceipt, "content" | "user" | "images" | "pastedTexts">;
   classified: TranscriptEntry;
   currentUser: string;
   github?: boolean;
@@ -72,6 +74,14 @@ function QueueContent({
 }: QueueContentProps) {
   const firstImage = item.images?.[0];
   const extraImages = Math.max(0, (item.images?.length ?? 0) - 1);
+  // A paste rides beside the text, so a queued row names it rather than
+  // reading as if the message lost it.
+  const pasted = item.pastedTexts?.length ? item.pastedTexts : undefined;
+  const pastedLabel = pasted
+    ? pasted.length === 1
+      ? `Pasted text ${pastedTextLineLabel(pasted[0]!)}`
+      : `${pasted.length} pasted texts`
+    : null;
   const isReview = classified.notice?.kind === "review-handoff";
   const from = isReview ? null : queueAttribution(classified, currentUser);
   const body = isReview
@@ -97,6 +107,12 @@ function QueueContent({
           <span className={composerQueueFrom}>GitHub</span>
         )}
         {body}
+        {pastedLabel && (
+          <span className={composerQueuePasted}>
+            {" · "}
+            {pastedLabel}
+          </span>
+        )}
       </div>
     </div>
   );

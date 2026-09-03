@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { z } from "zod";
 import type { TranscriptEntry } from "../lib/types";
 import { Menu } from "../ui/menu";
 import { Popover } from "../ui/popover";
@@ -616,38 +617,48 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
   return files;
 }
 
+const toolInputRecordSchema = z.record(z.string(), z.unknown());
+const inputTextSchema = z.string().catch("");
+const inputListSchema = z.array(z.unknown());
+const fileChangeSchema = z.object({ path: z.string().catch("") });
+
 function readTouchedFiles(entry: TranscriptEntry): TouchedFile[] {
-  const input = entry.toolInput;
-  if (!input || typeof input !== "object") return [];
-  const inp = input as Record<string, unknown>;
+  const parsedInput = toolInputRecordSchema.safeParse(entry.toolInput);
+  if (!parsedInput.success) return [];
+  const inp = parsedInput.data;
   // Counting separators rather than splitting: same number, no array per call.
-  const lines = (v: unknown) => {
-    if (typeof v !== "string" || v.length === 0) return 0;
+  const lines = (value: string) => {
+    if (value.length === 0) return 0;
     let count = 1;
-    for (let at = v.indexOf("\n"); at >= 0; at = v.indexOf("\n", at + 1))
+    for (
+      let at = value.indexOf("\n");
+      at >= 0;
+      at = value.indexOf("\n", at + 1)
+    )
       count++;
     return count;
   };
   // Engines disagree on casing: pi writes `filePath`/`oldString`, the
   // Claude SDK `file_path`/`old_string`.
-  const key = (...names: string[]) => {
-    for (const n of names)
-      if (typeof inp[n] === "string" && inp[n]) return inp[n] as string;
-    return "";
-  };
-  const filePath = key("file_path", "filePath");
+  const filePath =
+    inputTextSchema.parse(inp.file_path) || inputTextSchema.parse(inp.filePath);
   switch (canonicalToolName(entry.toolName)) {
     case "Edit": {
       // MultiEdit: several hunks against one file.
-      if (filePath && Array.isArray(inp.edits)) {
+      const edits = inputListSchema.safeParse(inp.edits);
+      if (filePath && edits.success) {
         let additions = 0;
         let deletions = 0;
         const hunks: string[] = [];
-        for (const e of inp.edits) {
-          if (!e || typeof e !== "object") continue;
-          const ee = e as Record<string, unknown>;
-          const oldStr = str(ee.old_string ?? ee.oldString);
-          const newStr = str(ee.new_string ?? ee.newString);
+        for (const editInput of edits.data) {
+          const edit = toolInputRecordSchema.safeParse(editInput);
+          if (!edit.success) continue;
+          const oldStr = inputTextSchema.parse(
+            edit.data.old_string ?? edit.data.oldString,
+          );
+          const newStr = inputTextSchema.parse(
+            edit.data.new_string ?? edit.data.newString,
+          );
           additions += lines(newStr);
           deletions += lines(oldStr);
           hunks.push(replaceHunk(oldStr, newStr));
@@ -655,8 +666,12 @@ function readTouchedFiles(entry: TranscriptEntry): TouchedFile[] {
         return [{ path: filePath, additions, deletions, hunks }];
       }
       if (filePath) {
-        const oldStr = key("old_string", "oldString");
-        const newStr = key("new_string", "newString");
+        const oldStr =
+          inputTextSchema.parse(inp.old_string) ||
+          inputTextSchema.parse(inp.oldString);
+        const newStr =
+          inputTextSchema.parse(inp.new_string) ||
+          inputTextSchema.parse(inp.newString);
         return [
           {
             path: filePath,
@@ -667,35 +682,53 @@ function readTouchedFiles(entry: TranscriptEntry): TouchedFile[] {
         ];
       }
       // codex's apply_patch names its files inside the patch body.
-      return mergeTouchedFiles(patchTouchedFiles(key("patchText", "patch")));
+      return mergeTouchedFiles(
+        patchTouchedFiles(
+          inputTextSchema.parse(inp.patchText) ||
+            inputTextSchema.parse(inp.patch),
+        ),
+      );
     }
-    case "Write":
+    case "Write": {
       if (!filePath) return [];
+      const content = inputTextSchema.parse(inp.content);
       return [
         {
           path: filePath,
-          additions: lines(inp.content),
+          additions: lines(content),
           deletions: 0,
-          hunks: [addedHunk(str(inp.content))],
+          hunks: [addedHunk(content)],
         },
       ];
-    case "NotebookEdit":
-      if (typeof inp.notebook_path !== "string") return [];
+    }
+    case "NotebookEdit": {
+      const path = z.string().safeParse(inp.notebook_path);
+      if (!path.success) return [];
+      const source = inputTextSchema.parse(inp.new_source);
       return [
         {
-          path: inp.notebook_path,
-          additions: lines(inp.new_source),
+          path: path.data,
+          additions: lines(source),
           deletions: 0,
-          hunks: [addedHunk(str(inp.new_source))],
+          hunks: [addedHunk(source)],
         },
       ];
+    }
     case "FileChange": {
-      if (!Array.isArray(inp.changes)) return [];
+      const changes = inputListSchema.safeParse(inp.changes);
+      if (!changes.success) return [];
       const files: TouchedFile[] = [];
-      for (const change of inp.changes) {
-        const path = fileChangePath(change);
-        if (!path) continue;
-        files.push({ path, additions: 0, deletions: 0, hunks: [] });
+      for (const changeInput of changes.data) {
+        const raw = z.string().safeParse(changeInput);
+        let path = "";
+        if (raw.success) {
+          const match = raw.data.match(/^(?:add|delete|update)\s+(.+)$/);
+          path = (match?.[1] || raw.data).trim();
+        } else {
+          const change = fileChangeSchema.safeParse(changeInput);
+          if (change.success) path = change.data.path.trim();
+        }
+        if (path) files.push({ path, additions: 0, deletions: 0, hunks: [] });
       }
       return mergeTouchedFiles(files);
     }
@@ -820,21 +853,6 @@ function addedHunk(text: string): string {
     .split("\n")
     .map((l) => `+${l}`)
     .join("\n");
-}
-
-/** Reads a possibly-absent tool input value as a string. */
-function str(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
-function fileChangePath(change: unknown): string | null {
-  if (typeof change === "string") {
-    const m = change.match(/^(?:add|delete|update)\s+(.+)$/);
-    return (m?.[1] || change).trim() || null;
-  }
-  if (!change || typeof change !== "object") return null;
-  const path = (change as Record<string, unknown>).path;
-  return typeof path === "string" && path.trim() ? path : null;
 }
 
 // navigator.clipboard needs a secure context — opensession is served over plain

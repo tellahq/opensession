@@ -25,6 +25,7 @@ import {
 } from "./run-state";
 import type { StreamEvent, ImageInput } from "./run-events";
 import { isShuttingDown } from "./shutdown-state";
+import { hasPendingOpening } from "./session-state-events";
 import {
   sessionQuarantineSnapshot,
   sessionTurn,
@@ -1074,7 +1075,12 @@ export function isAgentSessionBusy(
   ...ids: Array<string | null | undefined>
 ): boolean {
   if (hasActiveRunFor(...ids) || isAgentEngineBusy(...ids)) return true;
-  return ids.some((id) => !!id && isRunStateUnsettled(getRunState(id)));
+  // A persisted create still owes its opening turn: a prompt admitted now
+  // would run before the workspace exists, so it queues behind the opening.
+  return ids.some(
+    (id) =>
+      !!id && (isRunStateUnsettled(getRunState(id)) || hasPendingOpening(id)),
+  );
 }
 
 /**

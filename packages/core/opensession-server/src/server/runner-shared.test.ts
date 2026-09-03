@@ -18,7 +18,7 @@ describe("isClaudeUsageLimitError", () => {
   test("recognizes provider notices before they leak into streamed output", () => {
     expect(
       isClaudeUsageLimitError(
-        "You've reached your Fable 5 limit. Switch to another model to continue.",
+        "You've reached your Fable 5.1 limit. Switch to another model to continue.",
         false,
       ),
     ).toBe(true);

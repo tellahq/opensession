@@ -3,7 +3,11 @@ import { $ } from "bun";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isCommitSha, readCommitAt } from "./commit-lookup";
+import {
+  isCommitSha,
+  readCommitAt,
+  readCommitChangesAt,
+} from "./commit-lookup";
 
 // Driven against a real repo rather than fixture strings: the format string
 // and the shortstat line are git's to define, and a fixture would only assert
@@ -102,6 +106,14 @@ describe("readCommitAt", () => {
     expect(commit!.filesChanged).toBe(1);
     expect(commit!.additions).toBe(2);
     expect(commit!.deletions).toBe(1);
+  });
+
+  test("reads the unified code changes separately from commit metadata", async () => {
+    const changes = await readCommitChangesAt(repo, sha);
+    expect(changes.rawPatch).toContain("diff --git a/one.txt b/one.txt");
+    expect(changes.rawPatch).toContain("-b");
+    expect(changes.rawPatch).toContain("+B");
+    expect(changes.patchTruncated).toBeUndefined();
   });
 
   test("takes an abbreviation and answers with the full sha", async () => {

@@ -275,19 +275,24 @@ describe("session chip labels", () => {
       title: `Open session ${id}`,
       querySelector: () => label,
     };
-    const globals = globalThis as unknown as Record<string, unknown>;
-    const previousDocument = globals.document;
-    globals.document = {
-      querySelectorAll: () => [anchor],
-    };
+    const previousDocument = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "document",
+    );
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      writable: true,
+      value: { querySelectorAll: () => [anchor] },
+    });
     try {
       setSessionTitles([[id, "Fix the sidebar hover states"]]);
       expect(label.textContent).toBe("Fix the sidebar hover states");
       expect(anchor.dataset.sessionLabel).toBeUndefined();
       expect(anchor.title).toBe(`Open Fix the sidebar hover states (${id})`);
     } finally {
-      if (previousDocument === undefined) delete globals.document;
-      else globals.document = previousDocument;
+      if (previousDocument)
+        Object.defineProperty(globalThis, "document", previousDocument);
+      else Reflect.deleteProperty(globalThis, "document");
     }
   });
 
@@ -1181,6 +1186,16 @@ describe("renderPrCommentMarkdown bot markup", () => {
     expect(html).toContain('<a href="https://vercel.com/tella/internal"');
     expect(html).not.toContain("&lt;a href");
     expect(html).not.toContain("&lt;sup&gt;");
+  });
+
+  it("renders Vercel's relative timestamp instead of showing its tags", () => {
+    const html = renderPrCommentMarkdown(
+      '| Updated |\n| :--- |\n| <relative-time datetime="2026-09-01T09:52:50.595Z">Sep 1, 2026 9:52am UTC</relative-time> |',
+    );
+    expect(html).toContain(
+      '<relative-time datetime="2026-09-01T09:52:50.595Z">Sep 1, 2026 9:52am UTC</relative-time>',
+    );
+    expect(html).not.toContain("&lt;relative-time");
   });
 
   it("opens a hand-written link in a new tab", () => {

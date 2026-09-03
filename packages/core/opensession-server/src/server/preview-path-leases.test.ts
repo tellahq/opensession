@@ -28,6 +28,7 @@ describe("preview path leases", () => {
         key: "video:vid_fixture",
         sessionId: "session-a",
         path: "/video/vid_fixture/edit",
+        sourceLeaseId: "epfl_fixture",
       },
       { file, now: 1_000 },
     );
@@ -40,7 +41,7 @@ describe("preview path leases", () => {
       { file, now: 2_000 },
     );
 
-    expect(first.ok).toBe(true);
+    expect(first.ok && first.lease.sourceLeaseId).toBe("epfl_fixture");
     expect(conflict).toEqual({ ok: false, reason: "in_use" });
   });
 

@@ -1,9 +1,8 @@
 import { describe, expect, test } from "bun:test";
-
+import { readBaseCss } from "../styles/base-css-test-support";
 import { PHONE_QUERY } from "./breakpoints";
 
 const TAILWIND = new URL("../styles/tailwind.css", import.meta.url);
-const BASE = new URL("../styles/base.css", import.meta.url);
 
 /** The number inside `(max-width: 720px)`, whatever it has been moved to. */
 const boundary = Number(PHONE_QUERY.match(/(\d+)px/)?.[1]);
@@ -29,7 +28,7 @@ describe("the phone breakpoint is one boundary", () => {
   });
 
   test("base.css's own phone blocks agree with the constant", async () => {
-    const css = await Bun.file(BASE).text();
+    const css = await readBaseCss();
     const widths = [
       ...css.matchAll(/@media[^{]*\(max-width:\s*(\d+)px\)/g),
     ].map((m) => Number(m[1]));

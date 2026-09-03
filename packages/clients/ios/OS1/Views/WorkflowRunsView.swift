@@ -414,6 +414,7 @@ private struct WorkflowAgentTranscriptView: View {
 
     @AppStorage("os1.appearance.turnActivity") private var turnWork = "running"
     @AppStorage("os1.appearance.toolCalls") private var toolCalls = "folded"
+    @AppStorage(ThinkingMessages.storageKey) private var thinkingMessages = "latest"
     private var turnActivity: TurnActivity {
         TurnActivity(work: turnWork, tools: toolCalls)
     }
@@ -455,7 +456,7 @@ private struct WorkflowAgentTranscriptView: View {
         .background(OS1VisualStyle.background)
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: seq) {
+        .task(id: "\(seq):\(thinkingMessages)") {
             await load()
             while !Task.isCancelled, keepsPolling {
                 try? await Task.sleep(for: .seconds(2))
@@ -496,7 +497,8 @@ private struct WorkflowAgentTranscriptView: View {
             let next = TranscriptGrouping.blocks(
                 from: TranscriptGrouping.displayItems(from: transcript.entries),
                 live: keepsPolling,
-                worktreeDir: nil
+                worktreeDir: nil,
+                thinkingMessages: ThinkingMessages(thinkingMessages)
             )
             if next != blocks { blocks = next }
             loaded = true

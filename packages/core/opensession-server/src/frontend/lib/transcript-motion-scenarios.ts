@@ -2,10 +2,7 @@ import { stripBasePath } from "./base";
 import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
 import type { TranscriptEntry } from "./types";
 import type { OptimisticTranscriptEntry } from "./transcript-state";
-import {
-  makeSessionFixture,
-  makeStreamDeltas,
-} from "./session-performance-fixtures";
+import * as sessionPerformanceFixtures from "./session-performance-fixtures";
 
 export type TranscriptMotionScenarioState = {
   entries: TranscriptEntry[];
@@ -14,25 +11,26 @@ export type TranscriptMotionScenarioState = {
   busy: boolean;
 };
 
-export type TranscriptMotionScenarioEvent =
-  | { atMs: number; kind: "begin-turn"; entry: OptimisticTranscriptEntry }
-  | { atMs: number; kind: "reconcile-turn"; entry: TranscriptEntry }
-  | { atMs: number; kind: "append-entry"; entry: TranscriptEntry }
-  | { atMs: number; kind: "hydrate-entries"; entries: TranscriptEntry[] }
+type TranscriptMotionScenarioAction =
+  | { kind: "begin-turn"; entry: OptimisticTranscriptEntry }
+  | { kind: "reconcile-turn"; entry: TranscriptEntry }
+  | { kind: "append-entry"; entry: TranscriptEntry }
+  | { kind: "hydrate-entries"; entries: TranscriptEntry[] }
   | {
-      atMs: number;
       kind: "update-entry";
       id: string;
       content: string;
       changeSeq: number;
     }
-  | { atMs: number; kind: "set-busy"; busy: boolean }
-  | { atMs: number; kind: "stream-start" }
-  | { atMs: number; kind: "stream-append"; text: string; blockId: string }
-  | { atMs: number; kind: "stream-land"; id: string; content: string }
-  | { atMs: number; kind: "stream-finish" };
+  | { kind: "set-busy"; busy: boolean }
+  | { kind: "stream-start" }
+  | { kind: "stream-append"; text: string; blockId: string }
+  | { kind: "stream-land"; id: string; content: string }
+  | { kind: "stream-finish" };
 
-type WithoutAt<T> = T extends unknown ? Omit<T, "atMs"> : never;
+export type TranscriptMotionScenarioEvent = TranscriptMotionScenarioAction & {
+  atMs: number;
+};
 
 export type TranscriptMotionScenario = {
   seed: number;
@@ -103,11 +101,11 @@ export function makeTranscriptMotionScenario(
   const nextDelay = (minimum: number, spread: number) =>
     minimum + Math.floor(random() * spread);
   const push = (
-    event: WithoutAt<TranscriptMotionScenarioEvent>,
+    event: TranscriptMotionScenarioAction,
     delay = nextDelay(35, 100),
   ) => {
     atMs += delay;
-    events.push({ ...event, atMs } as TranscriptMotionScenarioEvent);
+    events.push({ ...event, atMs });
   };
 
   const optimisticId = `seed-${seed}-optimistic`;
@@ -264,6 +262,26 @@ export function makeTranscriptMotionScenario(
   };
 }
 
+export const HYDRATION_TALL_TURN = 9;
+
+/** Grow a loaded entry by a few measured lines, bumping its change sequence
+ * the way a late revision would. Unloaded or unknown entries are unchanged. */
+export function growTranscriptMotionEntry(
+  state: TranscriptMotionScenarioState,
+  entryId: string,
+): TranscriptMotionScenarioState {
+  const entry = state.entries.find((candidate) => candidate.id === entryId);
+  if (!entry) return state;
+  const changeSeq = (entry.changeSeq ?? entry.seq ?? 0) + 1;
+  return applyTranscriptMotionEvent(state, {
+    atMs: 0,
+    kind: "update-entry",
+    id: entryId,
+    content: `${entry.content}\n${growingResult(`growth-${changeSeq}`, 8)}`,
+    changeSeq,
+  });
+}
+
 export function makeTranscriptHydrationScenario(): TranscriptMotionScenario {
   const allEntries: TranscriptEntry[] = [];
   for (let turn = 0; turn < 18; turn++) {
@@ -281,7 +299,13 @@ export function makeTranscriptHydrationScenario(): TranscriptMotionScenario {
       {
         id: `hydration-assistant-${turn}`,
         type: "assistant",
-        content: growingResult(`incremental-${turn + 1}`, 3 + (turn % 5) * 3),
+        // One reply taller than a phone viewport: its first measurement
+        // misses the estimate by a screen, the shape behind residual jumps
+        // after a keyed prepend.
+        content: growingResult(
+          `incremental-${turn + 1}`,
+          turn === HYDRATION_TALL_TURN ? 60 : 3 + (turn % 5) * 3,
+        ),
         timestamp: timestamp(assistantSeq),
         seq: assistantSeq,
         changeSeq: assistantSeq,
@@ -338,8 +362,8 @@ export function makeTranscriptHydrationScenario(): TranscriptMotionScenario {
 }
 
 export function makeTranscriptStreamPerformanceScenario(): TranscriptMotionScenario {
-  const entries = makeSessionFixture(10_000);
-  const deltas = makeStreamDeltas(100, 1);
+  const entries = sessionPerformanceFixtures.makeSessionFixture(10_000);
+  const deltas = sessionPerformanceFixtures.makeStreamDeltas(100, 1);
   return {
     seed: 0,
     initial: { entries, optimisticEntries: [], busy: true },

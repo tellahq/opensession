@@ -154,9 +154,14 @@ from the verified actor and request id. Every opening prompt enters a durable di
 announced. Create retries and boot recovery share one request-derived
 prompt-entry id: whichever path runs first adopts that dispatch, so they cannot
 launch two opening turns. Creation is owned by the deterministic target session,
-not a person-wide mailbox. Command admission completes once the session and
-opening dispatch are durable, while the opening run continues under generation
-fencing. A retried create rebuilds
+not a person-wide mailbox. Once the create dispatch and setup plan are durable,
+the session file is written and announced before credential, branch and
+attachment effects run, so an accepted create is visible in every client while
+its workspace is prepared. The session is held busy until the opening turn takes
+run admission, so a prompt sent meanwhile queues behind the opening instead of
+starting a turn in a worktree that does not exist yet. Command admission
+completes at that announce, while environment preparation and the opening run
+continue under the actor and generation fencing. A retried create rebuilds
 its full environment plan from the deterministic id and original request. The actor's write-once setup plan persists nondeterministic branch and workspace
 choices before those resources are created, plus the serializable
 `ResolvedCreate` decisions (model, sandbox, MCP scope and assembled opening

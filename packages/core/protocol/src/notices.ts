@@ -31,6 +31,7 @@
  * about to become).
  */
 
+import { liftPastedTexts } from "./pasted-text";
 import type { TranscriptEntry } from "./session";
 
 /**
@@ -648,8 +649,18 @@ function statusNotice(kind: NoticeKind, body: string): EntryNotice {
  * Idempotent: an already-classified entry passes straight through, so running
  * it twice on the same payload (a re-send, a client re-classifying an outbox
  * item the server has since tagged) can't double-strip.
+ *
+ * Pasted blocks lift last, after the delivery prefix and any notice header
+ * have come off, because they ride the END of the body: "[Kent] <pasted-text>"
+ * is an attributed lone paste, not a name followed by nothing. An entry an
+ * older server already attributed still lifts here, which is what keeps a
+ * newer web bundle correct during a rolling deploy.
  */
 export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
+  return liftPastedTexts(classifyDelivery(entry));
+}
+
+function classifyDelivery(entry: TranscriptEntry): TranscriptEntry {
   // During a rolling deploy, an older server may already have classified an
   // ask into its generic title + markdown notice before the newer web bundle
   // receives it. Upgrade that one legacy shape client-side; every complete

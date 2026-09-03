@@ -24,6 +24,23 @@ import {
 } from "../lib/media-lightbox-viewer";
 import { useIsPhone } from "./useIsPhone";
 
+function parseRegionHandle(value: string | null): RegionHandle | null {
+  switch (value) {
+    case "move":
+    case "n":
+    case "e":
+    case "s":
+    case "w":
+    case "nw":
+    case "ne":
+    case "se":
+    case "sw":
+      return value;
+    default:
+      return null;
+  }
+}
+
 /**
  * The lightbox's zoom and gesture controller: pinch on touch (iOS PWA
  * included — pointer events + touch-action:none, no native gesture
@@ -401,9 +418,13 @@ export function useMediaZoomGesture({
       // resizes it. Read from the target rather than from coordinates: the
       // handles deliberately overhang the region so a thin selection still
       // has something to take hold of.
-      const handle = (e.target as HTMLElement | null)
-        ?.closest?.("[data-region-handle]")
-        ?.getAttribute("data-region-handle") as RegionHandle | null;
+      const handle = parseRegionHandle(
+        e.target instanceof Element
+          ? (e.target
+              .closest("[data-region-handle]")
+              ?.getAttribute("data-region-handle") ?? null)
+          : null,
+      );
       // A corner handle sits half outside the picture, so only a fresh
       // selection has to start inside it.
       if (

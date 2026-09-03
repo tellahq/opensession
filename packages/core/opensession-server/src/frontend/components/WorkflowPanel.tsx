@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { z } from "zod";
 import { BASE_PATH } from "../lib/base";
 import type {
   WorkflowAgentSnapshot,
-  WorkflowJournalEntry,
   WorkflowRunSnapshot,
   WorkflowSessionSnapshot,
 } from "../../server/workflow-types";
@@ -22,6 +22,19 @@ import { friendlyModelSlug, routedModelParts } from "./ModelEffortSelect";
 import { WorkflowAgentTranscript } from "./WorkflowAgentTranscript";
 import { Badge } from "../ui/badge";
 import { workflowPhaseStats } from "../../shared/workflow-observability";
+
+const workflowAgentDetailSchema = z.object({
+  prompt: z.string(),
+  outcome: z.object({
+    error: z.string().optional(),
+    structured: z.unknown().optional(),
+    text: z.string().optional(),
+  }),
+});
+const workflowAgentDetailEnvelopeSchema = z.object({
+  entry: workflowAgentDetailSchema.optional(),
+});
+type WorkflowAgentDetail = z.infer<typeof workflowAgentDetailSchema>;
 
 /**
  * Agents tab: live view of a session's dynamic workflow runs (the
@@ -598,7 +611,7 @@ function RunCard({
     () => new Set(),
   );
   const [details, setDetails] = useState<
-    Record<number, WorkflowJournalEntry | "loading" | "missing">
+    Record<number, WorkflowAgentDetail | "loading" | "missing">
   >({});
   const [allLogs, setAllLogs] = useState(false);
   const [showResult, setShowResult] = useState(false);
@@ -650,17 +663,13 @@ function RunCard({
         `${BASE_PATH}/api/workflows/${encodeURIComponent(run.runId)}/agents/${seq}`,
       );
       if (!res.ok) throw new Error(String(res.status));
-      const data = (await res.json()) as
-        | WorkflowJournalEntry
-        | { entry?: WorkflowJournalEntry }
-        | null;
+      const data = await res.json();
+      const bareEntry = workflowAgentDetailSchema.safeParse(data);
       // Tolerate both a bare journal entry and an { entry } envelope.
-      const entry =
-        data && typeof data === "object" && "entry" in data
-          ? (data as { entry?: WorkflowJournalEntry }).entry
-          : (data as WorkflowJournalEntry | null);
-      if (!entry || typeof entry.prompt !== "string")
-        throw new Error("bad shape");
+      const entry = bareEntry.success
+        ? bareEntry.data
+        : workflowAgentDetailEnvelopeSchema.parse(data).entry;
+      if (!entry) throw new Error("bad shape");
       setDetails((prev) => ({ ...prev, [seq]: entry }));
     })().catch(async () => {
       setDetails((prev) => ({ ...prev, [seq]: "missing" }));
@@ -734,6 +743,7 @@ function RunCard({
   }
 
   const tone = RUN_TONE[run.status];
+  const stringResult = z.string().safeParse(run.result);
   return (
     <div className={CARD_CLASS}>
       <div className="flex items-center justify-between gap-2 px-2 pb-2.5 pt-1">
@@ -950,8 +960,8 @@ function RunCard({
             <div className="px-2 pb-1.5 pt-0.5">
               <DetailPre
                 text={
-                  typeof run.result === "string"
-                    ? run.result
+                  stringResult.success
+                    ? stringResult.data
                     : JSON.stringify(run.result, null, 2)
                 }
               />
@@ -981,14 +991,15 @@ const AgentRow = function AgentRow({
 }: {
   a: WorkflowAgentSnapshot;
   open: boolean;
-  detail: WorkflowJournalEntry | "loading" | "missing" | undefined;
+  detail: WorkflowAgentDetail | "loading" | "missing" | undefined;
   duration: string;
   onToggle: (seq: number) => void;
   onLoadDetail: (seq: number) => void;
   onOpenConversation: (seq: number) => void;
   onAction: (seq: number, action: "skip" | "retry") => void;
 }) {
-  const full = typeof detail === "object" ? detail : undefined;
+  const full =
+    detail === "loading" || detail === "missing" ? undefined : detail;
   const promptText = full?.prompt ?? a.promptPreview;
   const resultText = full
     ? (full.outcome.error ??

@@ -121,10 +121,10 @@ export function isClaudeUsageLimitError(
   // Observed CLI phrasings: "You've hit your session limit · resets 12:50pm (UTC)",
   // "Claude AI usage limit reached|<ts>", "5-hour limit reached ∙ resets 3am"
   if (/you've (?:hit|reached) your .{0,30}limit/.test(s)) return true;
-  // Credit-metered premium models (e.g. Fable 5) exhaust a separate per-account
+  // Credit-metered premium models (e.g. Fable 5.1) exhaust a separate per-account
   // credit pool, not the 5-hour session limit, and say so with none of the
   // "limit/reached/resets" tokens: "You're out of usage credits. Run
-  // /usage-credits to keep using Fable 5 or /model to switch models." Treat it
+  // /usage-credits to keep using Fable 5.1 or /model to switch models." Treat it
   // as a usage limit so the run rotates to another account (each has its own
   // credit balance) and, once the pool is drained, falls back off the model.
   if (/out of (usage )?credits/.test(s) || s.includes("/usage-credits"))

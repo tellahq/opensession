@@ -103,9 +103,10 @@ export function SupportPreview({
   }, [addHandler, draftKey]);
   useEffect(() => () => clearTimeout(startTimer.current), []);
 
-  function handleStart() {
+  function handleStart(_text: string, opts?: { pastedTexts?: string[] }) {
     const q = prompt.trim();
-    if (!q || starting || !connected) return;
+    const pastedTexts = opts?.pastedTexts ?? [];
+    if ((!q && pastedTexts.length === 0) || starting || !connected) return;
     setStarting(true);
     startingRef.current = true;
     setStartError(null);
@@ -118,7 +119,7 @@ export function SupportPreview({
         `${AGENT_NAME} didn't respond. Check your connection and try again.`,
       );
     }, 15_000);
-    send({
+    const message: Extract<WSClientMessage, { type: "create_session" }> = {
       type: "create_session",
       mode: "ask",
       branch: "",
@@ -133,8 +134,10 @@ export function SupportPreview({
           80,
         ),
       },
-      ...(model ? { model } : {}),
-    });
+    };
+    if (model) message.model = model;
+    if (pastedTexts.length) message.pastedTexts = pastedTexts;
+    send(message);
     // App navigates into the session on session_created
   }
 

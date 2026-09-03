@@ -28,6 +28,18 @@ export interface ComposerDisplayEdit {
   end: number;
 }
 
+export interface ComposerCanonicalSelection {
+  start: number;
+  end: number;
+}
+
+export interface ComposerSessionEditResult {
+  canonicalText: string;
+  canonicalSelectionStart: number;
+  canonicalSelectionEnd: number;
+  touchedSession: boolean;
+}
+
 function codeRanges(text: string): Array<{ start: number; end: number }> {
   const ranges: Array<{ start: number; end: number }> = [];
   const fences = /```[\s\S]*?```|```[\s\S]*$/g;
@@ -81,16 +93,17 @@ export function projectComposerSessions(
       range.end < canonicalText.length ? SESSION_PILL_MARGIN : "";
     const start = displayText.length;
     displayText += leadingMargin + token + trailingMargin;
-    sessions.push({
+    const session: DisplaySessionRange = {
       start,
       end: displayText.length,
       id: range.id,
-      ...(range.kind ? { kind: range.kind } : {}),
-      ...(archived ? { archived: true } : {}),
       canonicalStart: range.start,
       canonicalEnd: range.end,
       label,
-    });
+    };
+    if (range.kind) session.kind = range.kind;
+    if (archived) session.archived = true;
+    sessions.push(session);
     canonicalCursor = range.end;
   }
   displayText += canonicalText.slice(canonicalCursor);
@@ -118,7 +131,7 @@ export function composerCanonicalSelection(
   projection: ComposerSessionProjection,
   start: number,
   end = start,
-): { start: number; end: number } {
+): ComposerCanonicalSelection {
   const canonicalStart = composerCanonicalOffset(projection, start);
   if (start === end) return { start: canonicalStart, end: canonicalStart };
   const touchedEnd = projection.sessions.find(
@@ -142,12 +155,7 @@ export function applyComposerSessionEdit(
   selectionStart = nextDisplayText.length,
   selectionEnd = selectionStart,
   editHint?: ComposerDisplayEdit,
-): {
-  canonicalText: string;
-  canonicalSelectionStart: number;
-  canonicalSelectionEnd: number;
-  touchedSession: boolean;
-} {
+): ComposerSessionEditResult {
   const previous = projection.displayText;
   let start = editHint?.start ?? 0;
   let previousEnd = editHint?.end ?? previous.length;

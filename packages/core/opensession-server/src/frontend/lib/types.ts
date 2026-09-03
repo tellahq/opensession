@@ -206,6 +206,15 @@ export interface FeedDescriptor {
   fromConfig?: boolean;
 }
 
+/** JSON metadata attached to an external feed item. */
+export type FeedMetaValue =
+  | string
+  | number
+  | boolean
+  | null
+  | FeedMetaValue[]
+  | { [key: string]: FeedMetaValue };
+
 /** One external object in a feed band (mirror of src/server/feeds.ts). */
 export interface FeedItem {
   id: string;
@@ -215,7 +224,7 @@ export interface FeedItem {
   ts?: number;
   url?: string;
   thumbnail?: string;
-  meta?: Record<string, unknown>;
+  meta?: Record<string, FeedMetaValue>;
 }
 
 /** One item on a user's Desk todo list (mirror of src/server/todos.ts). */
@@ -345,6 +354,8 @@ export interface SessionSafetyState {
 
 export interface UnifiedSession {
   id: string;
+  /** Source chat copied into this session before its first turn. */
+  duplicatedFromSessionId?: string;
   /** Historical marker retained while old session files age out. */
   local?: boolean;
   /**

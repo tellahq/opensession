@@ -1,0 +1,300 @@
+/* ── App chrome ──────────────────────────────────────────── */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* The installed phone composer is a native-feeling capsule rather than the
+   desktop squircle. Safari already falls back to circular corners because it
+   does not support corner-shape; this keeps Chromium PWAs consistent. Its edge,
+   attached flaps, and Slack share card use the desktop ring's 35% strength. */
+@media (display-mode: standalone) and (max-width: 720px) {
+  .app .composer {
+    corner-shape: round;
+  }
+  .app .composer,
+  .app .pwa-composer-edge {
+    border-color: color-mix(in srgb, var(--composer-border) 35%, transparent);
+  }
+
+  /* Keep dictation in the browser view, where its recording APIs are reliable.
+	   The installed phone composer still shows model selection after it expands. */
+  .app .pwa-composer-dictation {
+    display: none;
+  }
+
+  /* Installed navigation uses the foreground colour instead of the custom
+	   accent. Slightly larger glyphs make the two edge controls easier to read
+	   without changing their 44px touch targets. */
+  .app .pwa-header-back,
+  .app .pwa-header-actions button {
+    color: var(--text);
+  }
+  .app .pwa-header-back svg {
+    width: 34px;
+    height: 34px;
+  }
+  .app .pwa-header-actions button svg {
+    width: 25px;
+    height: 25px;
+  }
+}
+
+/* A drag in progress owns the cursor for the whole document, not just the
+   handle under the pointer — the pointer routinely leaves the 4px handle
+   mid-drag, and without this the cursor flickers back to a caret over the
+   text it passes. Set on <body> by the resize handlers, which is why it can't
+   be a utility: React never renders that element. */
+body:is(.resizing-sidebar, .resizing-panel, .resizing-tab-split) {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* The reclaimed PWA back/forward cluster (see TitleBar.tsx) only exists in
+   Window Controls Overlay mode — hidden everywhere else. */
+.wco-nav {
+  display: none;
+}
+
+/* Window Controls Overlay (desktop PWA + the Open Session desktop app): the OS titlebar
+   is replaced by just the window-control buttons overlaid on our own chrome —
+   no OS bar, no centered title text, and NO dedicated titlebar band of our
+   own. The window's whole first content row IS the titlebar: on the sidebar
+   it's a pure chrome row — traffic lights (centered on the row by the shell's
+   trafficLightPosition), then collapse + the avatar account trigger, with
+   back/forward/search at the right edge — and it continues through the detail pane's
+   header and the right panel's PR strip. Every segment is a drag region
+   so grabbing anywhere along the top moves the window.
+
+   Keyed off `html.wco` (set by the detection script in index.html), NOT the
+   `(display-mode: window-controls-overlay)` media query: Electron (the Open Session
+   desktop shell, packages/clients/mac) exposes the WCO geometry and env() vars but
+   keeps display-mode at "browser", so the media query never matches there. */
+/* Updated macOS shell builds supply one native visual-effect surface beneath
+   Chromium. Reveal it only through the structural chrome: the sidebar, the one
+   region left beside the opaque workspace. The shell capability flag keeps
+   PWAs and older opaque shell builds on the normal solid surfaces. Native
+   vibrancy provides the blur, so this deliberately adds no backdrop-filter. */
+@media (min-width: 721px) {
+  html.material-backdrop,
+  html.material-backdrop body,
+  html.material-backdrop #root,
+  html.material-backdrop .app {
+    background: transparent;
+  }
+
+  html.material-backdrop .app-body {
+    background:
+      linear-gradient(180deg, var(--sidebar-material-sheen), transparent 180px),
+      var(--sidebar-material);
+  }
+
+  /* The app-body owns the material behind both regions. Painting it again on
+	   the child sidebar would double the wash and make it darker than the gutter. */
+  html.material-backdrop .sidebar-container {
+    background: transparent;
+  }
+
+  /* Until the app has something to draw, keep the window opaque. An app with
+	   no data yet paints almost nothing (measured: three elements on the whole
+	   page), and through a transparent window that does not read as an app
+	   waiting for its data, it reads as no app at all: the desktop shows
+	   through where the window should be. `app-ready` is set alongside the
+	   launch splash coming down (App.tsx), so this covers the load and any
+	   later state where the app has nothing to show. Same declaration as the
+	   reduced-transparency block below, for the same reason. */
+  html.material-backdrop:not(.app-ready),
+  html.material-backdrop:not(.app-ready) body,
+  html.material-backdrop:not(.app-ready) #root,
+  html.material-backdrop:not(.app-ready) .app,
+  html.material-backdrop:not(.app-ready) .app-body,
+  html.material-backdrop:not(.app-ready) .sidebar-container {
+    background: var(--sidebar-bg);
+  }
+
+  /* --row-chip is deliberately NOT re-derived here, and the vibrancy sidebar
+	   is the surface where the chip cannot have everything. Measured, in light,
+	   against a mid-green wallpaper: sidebar L222, hovered row L209. A chip
+	   that keeps the material's alpha and steps its colour lands at L214 — it
+	   re-paints a slab of the light material over the row's ink and comes out
+	   LIGHTER than the row it is pressed into. An opaque chip cannot track an
+	   unknown wallpaper either: the same #dedede reads as a lid on a light
+	   backdrop and as a bright tile on a dark one. Only a translucent ink wash
+	   steps reliably, and a wash is what a chip must not be — it shows the
+	   row's own wash and its title through the glyph. So the chip stays the
+	   opaque lid, and on this one surface it reads as a neutral tile rather
+	   than picking the wallpaper up. */
+}
+
+@media (min-width: 721px) and (prefers-reduced-transparency: reduce) {
+  html.material-backdrop,
+  html.material-backdrop body,
+  html.material-backdrop #root,
+  html.material-backdrop .app,
+  html.material-backdrop .app-body,
+  html.material-backdrop .sidebar-container {
+    background: var(--sidebar-bg);
+  }
+}
+
+/* Pinned headings need an opaque backing so rows cannot show through them.
+   Keep this material opaque rather than animating row opacity: `view()`
+   timelines can resolve against nested overflow containers and hide rows. */
+@media (min-width: 721px) {
+  html.material-backdrop {
+    --sidebar-material: var(--sidebar-bg);
+    --sidebar-material-sheen: transparent;
+  }
+}
+/* Sidebar top row clears the traffic lights. env(titlebar-area-x) is the
+   controls' right edge on macOS; it drops to 0 in fullscreen (lights hidden)
+   and on Windows (controls on the right), where the default padding wins. */
+html.wco .sidebar-brand {
+  padding-left: max(
+    env(titlebar-area-x, 78px),
+    calc(var(--sidebar-icon-left) - 8px)
+  );
+}
+/* The shell centers its traffic lights on this row, and everything in it wants
+   to sit 2px below where a 48px row would put it so its visual mass lands on
+   the lights' line. Give the row those 2px at both ends — one taller row —
+   rather than 4px of top padding: padding moved the content without balancing
+   it, so every row in the first band read top-heavy, and on `.pr-bar` (sized
+   by min-height, not fixed) it grew the row past the header beside it and
+   carried its hairline down with it. Nothing inside moves; the row is 4px
+   deeper and its divider sits 4px lower. */
+html.wco {
+  --desktop-header-h: 52px;
+}
+/* The whole first row doubles as the titlebar — everything interactive in it
+   opts back out so it stays clickable.
+
+   `wco-chrome` is the opt-in: any row that spans the top of a pane at
+   `--desktop-header-h` carries it, and gets the drag region plus every
+   carve-out below. It is one name rather than a list of them because a row
+   left out of the list is a dead stretch of the window's top edge: the report
+   pages had two such rows, and the window could only be dragged by the
+   sidebar. Rows: the sidebar brand row, the session header, the plain pane
+   title, the PR bar, the analytics bar, and both report headers. */
+/* `desktop-shell` is the durable Electron capability. `wco` still drives the
+   geometry and spacing, but Chromium can transiently report its overlay as
+   hidden while the BrowserWindow still has no native titlebar. Dragging must
+   survive that report or the window has no way to move. */
+html:is(.wco, .desktop-shell) .wco-chrome {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+html:is(.wco, .desktop-shell)
+  .wco-chrome
+  :is(button, a, input, select, textarea, [role="button"], [tabindex]) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+/* Settings has no visible titlebar row, so its empty strip is shell-only and
+   the nav starts below it. Keeping both rules here lets the durable Electron
+   capability work even while Chromium reports WCO as hidden. */
+.settings-drag-handle {
+  display: none;
+}
+html:is(.wco, .desktop-shell) .settings-drag-handle {
+  display: block;
+}
+html:is(.wco, .desktop-shell) .settings-nav,
+html:is(.wco, .desktop-shell) .settings-content:not(.settings-content-tool) {
+  padding-top: var(--desktop-header-h);
+}
+/* Chromium withholds pointer events from native drag regions. While a visible
+   menu is mounted, temporarily return the chrome to the page so its outside
+   press can dismiss the menu. A hidden keep-mounted popup must not disable
+   window dragging indefinitely. */
+html:is(.wco, .desktop-shell):has(.app-menu-popup:not([hidden])) .wco-chrome {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+/* The media lightbox floats over the draggable first row. Electron does not
+   reliably let an overlapping sibling carve clickable links out of that row,
+   so suspend the underlying drag region while the lightbox is mounted. */
+html:is(.wco, .desktop-shell):has([data-media-lightbox]) .wco-chrome {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+/* The chrome row itself (collapse + avatar left, back/forward + search at the
+   right edge) is shared by web and the desktop shell — only the traffic-light
+   inset and drag regions above are shell-specific. */
+.sidebar-brand .wco-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+/* Collapsed sidebar takes the chrome row (and its nav) with it — show the
+   floating fallback cluster in the detail pane instead, next to the sidebar
+   re-open control, and inset the header text past both. In the shell the
+   detail pane starts at x=0 with the traffic lights overlaying its left edge,
+   so everything additionally shifts right of env(titlebar-area-x) (0 in
+   fullscreen, where the lights hide and the row packs left again). */
+.wco-nav-pane {
+  position: absolute;
+  top: calc((var(--desktop-header-h) - 30px) / 2);
+  left: 50px;
+  z-index: 20;
+}
+/* These controls are siblings of the draggable header rather than descendants
+   of it, so the generic header no-drag rule above does not reach them. Mark the
+   floating cluster itself as interactive or the desktop shell consumes clicks
+   as window drags while the sidebar is collapsed. */
+html:is(.wco, .desktop-shell) .sidebar-reopen,
+html:is(.wco, .desktop-shell) .wco-nav-pane {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+html:is(.wco, .desktop-shell)
+  .app-body.sidebar-collapsed
+  .detail-pane
+  .wco-nav-pane {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+html.wco .sidebar-reopen {
+  /* Match .sidebar-brand's left padding exactly so collapsing does not move
+	   the panel icon horizontally. */
+  left: max(env(titlebar-area-x, 78px), 8px);
+}
+html.wco .wco-nav-pane {
+  left: calc(env(titlebar-area-x, 78px) + 42px);
+}
+html.wco .app-body.sidebar-collapsed .viewer-header,
+html.wco .app-body.sidebar-collapsed .detail-topbar-title {
+  padding-left: calc(env(titlebar-area-x, 78px) + 148px);
+}
+/* Electron does not reliably subtract a no-drag region when it belongs to an
+   overlapping sibling of the draggable header. The collapsed controls float
+   above that header, so make the underlying row non-draggable in this state;
+   otherwise it intercepts sidebar/back/forward clicks before they reach DOM. */
+html:is(.wco, .desktop-shell) .app-body.sidebar-collapsed .wco-chrome {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+/* The collapsed pane's floating controls occupy the traffic-light inset and
+   the next 104px. Its header stays no-drag because Electron does not reliably
+   subtract those overlapping siblings. This empty slot directly after the
+   controls restores a safe native grip without covering titlebar actions. */
+.wco-collapsed-drag-handle {
+  display: none;
+}
+html:is(.wco, .desktop-shell)
+  .app-body.sidebar-collapsed
+  .wco-collapsed-drag-handle {
+  position: absolute;
+  top: calc((var(--desktop-header-h) - 34px) / 2);
+  left: calc(env(titlebar-area-x, 78px) + 112px);
+  z-index: 20;
+  display: block;
+  width: 36px;
+  height: 34px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}

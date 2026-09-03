@@ -94,20 +94,22 @@ export function buildFeedRows(
   isTeammate?: (key: string) => boolean,
 ): FeedRow[] {
   const rows: FeedRow[] = [
-    ...prRows.map((row) => ({
-      key: row.key,
-      kind: "pr" as const,
-      title: row.title,
-      repo: row.repo,
-      person: row.person,
-      owner: feedOwner(row.person, row.author, isTeammate),
-      url: row.url,
-      ...(row.number ? { ref: `#${row.number}` } : {}),
-      additions: row.additions,
-      deletions: row.deletions,
-      shippedAt: row.updatedAt,
-      sessionId: row.sessionId,
-    })),
+    ...prRows.map((row): FeedRow => {
+      const feedRow = {
+        key: row.key,
+        kind: "pr",
+        title: row.title,
+        repo: row.repo,
+        person: row.person,
+        owner: feedOwner(row.person, row.author, isTeammate),
+        url: row.url,
+        additions: row.additions,
+        deletions: row.deletions,
+        shippedAt: row.updatedAt,
+        sessionId: row.sessionId,
+      } satisfies FeedRow;
+      return row.number ? { ...feedRow, ref: `#${row.number}` } : feedRow;
+    }),
     ...commits.map((commit) => ({
       key: `${commit.repo}:${commit.sha}`,
       kind: "commit" as const,

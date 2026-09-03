@@ -10,6 +10,7 @@ const g = globalThis as {
   __osSessionStateListeners?: Set<SessionStateListener>;
   __osPrimarySessionRunning?: Map<string, boolean>;
   __osSessionRunningHolds?: Map<string, Set<string>>;
+  __osPendingOpenings?: Set<string>;
 };
 
 function listeners(): Set<SessionStateListener> {
@@ -22,6 +23,28 @@ function primaryRunning(): Map<string, boolean> {
 
 function runningHolds(): Map<string, Set<string>> {
   return (g.__osSessionRunningHolds ??= new Map());
+}
+
+function pendingOpenings(): Set<string> {
+  return (g.__osPendingOpenings ??= new Set());
+}
+
+/** Sessions persisted for an accepted create whose opening turn has not taken
+ * run admission yet. The row exists so the person can see their session while
+ * its workspace is prepared, but a prompt admitted in this window would start a
+ * turn before the worktree exists and race the opening. Prompt admission and
+ * list state treat the session as busy until the opening turn owns it or the
+ * create fails. Process-local: boot recovery re-marks a resumed create. */
+export function holdPendingOpening(sessionId: string): void {
+  pendingOpenings().add(sessionId);
+}
+
+export function releasePendingOpening(sessionId: string): void {
+  pendingOpenings().delete(sessionId);
+}
+
+export function hasPendingOpening(sessionId: string): boolean {
+  return pendingOpenings().has(sessionId);
 }
 
 /** Whether a session has background work that must keep it busy after its

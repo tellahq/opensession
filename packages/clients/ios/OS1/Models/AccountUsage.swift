@@ -57,6 +57,17 @@ struct AccountUsage: Codable, Sendable, Equatable {
     var buckets: [CodexUsageBucket]?
     var resetCreditsAvailable: Double?
 
+    // SuperGrok: one credit budget per billing period, cents as the proxy
+    // reports them, plus an optional on-demand pool past the included credits.
+    var creditUsagePercent: Double?
+    var usedCents: Double?
+    var monthlyLimitCents: Double?
+    var onDemandEnabled: Bool?
+    var onDemandUsedCents: Double?
+    var onDemandCapCents: Double?
+    var periodType: String?
+    var periodEnd: String?
+
     var error: String?
     var errorStatus: Int?
 }
@@ -146,6 +157,35 @@ enum AccountUsageReading {
                     )
                 )
             }
+        }
+        return windows
+    }
+
+    /// A SuperGrok account reports one credit budget for its billing period
+    /// and, once that is spent, an optional on-demand pool with its own cap.
+    /// The period label names the budget ("Monthly credits"); the period end
+    /// is when it refills.
+    static func xaiLimits(_ usage: AccountUsage?) -> [LimitWindow] {
+        guard let usage else { return [] }
+        let period = (usage.periodType ?? "")
+            .replacingOccurrences(of: "USAGE_PERIOD_TYPE_", with: "")
+            .lowercased()
+        let label = period.isEmpty
+            ? "Included credits"
+            : "\(period.prefix(1).uppercased())\(period.dropFirst()) credits"
+        var windows = [
+            LimitWindow(label: label, utilization: usage.creditUsagePercent, resetsAt: usage.periodEnd)
+        ]
+        if usage.onDemandEnabled == true, let cap = usage.onDemandCapCents, cap > 0 {
+            let used = usage.onDemandUsedCents ?? 0
+            windows.append(
+                LimitWindow(
+                    label: "On-demand",
+                    utilization: min(100, used / cap * 100),
+                    resetsAt: nil,
+                    scoped: true
+                )
+            )
         }
         return windows
     }

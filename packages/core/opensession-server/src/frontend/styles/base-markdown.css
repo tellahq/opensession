@@ -1,0 +1,1363 @@
+/* ─────────────────────────────────────────────────────────────
+   Markdown — the typography of agent output.
+
+   This is content styling, not component styling, which is why it
+   lives here rather than in legacy.css: the HTML is produced by the
+   markdown renderer from model output, so there is no JSX to hang
+   utility classes on. Element selectors under `.markdown` are the only
+   way to reach it, and that stays true however far the migration goes.
+   ───────────────────────────────────────────────────────────── */
+/* Full automated-review preview: a readable long-form scale, bounded by the
+   popover rather than the viewport, with the same theme tokens as markdown. */
+.review-preview-markdown.markdown {
+  font-size: var(--type-body);
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.review-preview-markdown.markdown > h3:first-child {
+  margin: 0 0 12px;
+  font-size: var(--type-section-title);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  text-wrap: balance;
+}
+.review-preview-markdown.markdown pre {
+  max-width: 100%;
+}
+
+/* markdown content */
+/* Model and GitHub output carries tokens no line break can fall inside — a
+   module path, a query string, a bare URL. Left to default `normal` wrapping
+   those set the block's min-content width, so on a phone they don't just
+   overflow their own line: any flex/grid ancestor sized off min-content grows
+   with them and the whole surface scrolls sideways. `anywhere` both wraps them
+   and takes them out of the intrinsic width. `pre` is unaffected — it never
+   wraps, and keeps its own horizontal scroll. */
+.markdown {
+  overflow-wrap: anywhere;
+}
+
+/* Prose reads one step below the app's medium, in both themes. Dropping the
+   -webkit-font-smoothing override handed macOS back the rasterization every
+   other app gets, and that puts roughly 10% more ink in each stem: solid on a
+   label you scan, thick across a paragraph you read. A running text block is
+   the one place where that reads as weight rather than as presence, so it is
+   the one place that steps down. In light 450 lands the stroke back where the
+   500 sat before (measured stem fill 55.1% before, 56.2% here, 58.0% at 500);
+   in dark it takes about 8% of the ink back out, which is as far as weight
+   goes there. The rest of dark's heft is the rasterizer, so 400 buys little
+   more and would reach the clients that never got the darkening at all
+   (Windows, Linux, the iOS PWA). Bold and headings set their own 600, so only
+   running text moves. */
+.markdown {
+  font-weight: 450;
+}
+
+.markdown p {
+  /* 8px on a 15px/24px body ≈ the 0.47em block rhythm the native app uses
+	   (blockSpacing 8 against 17pt). 6px left paragraphs reading as one slab.
+	   Both this and the 24px leading are absolute, so the gap between two
+	   paragraphs stayed 32px when the body moved 14 -> 15; the words just fill
+	   more of the line box (1.6 leading now, was 1.71). */
+  margin: 0 0 8px;
+}
+
+.markdown a {
+  color: var(--link);
+  text-decoration: none;
+}
+.markdown a:hover {
+  text-decoration: underline;
+}
+
+.markdown strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.markdown pre {
+  background: #0c0c10;
+  border: 1px solid var(--border);
+  border-radius: calc(18px * var(--rf));
+  corner-shape: var(--cs);
+  padding: 10px 12px;
+  margin: 2px 0 8px;
+  /* Preserve authored indentation and line breaks, but soft-wrap long lines so
+	   a fence reads at the conversation width instead of becoming a scroller.
+	   `anywhere` also catches URLs, hashes, and generated identifiers that have
+	   no natural wrap point. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+  font-family: var(--mono);
+  /* The same ratio the inline chip below uses, so a block and an inline run
+	   of code are one size, and both scale with the prose they sit in rather
+	   than pinning a second absolute size into the scale. */
+  font-size: 0.9em;
+  line-height: 1.55;
+}
+
+/* An inline code chip is small enough that a 4px corner reads as a square
+   slab, and a paragraph of them reads as a row of boxes rather than words
+   with a highlight. At 7px (9.45 once --rf scales it) the corner takes the
+   full height of the chip, so it reads as a capsule around the word. The
+   wash is tinted with the chip's own ink rather than neutral black/white:
+   a grey fill under coloured text is a second, unrelated colour in the
+   sentence, and it is what made these read as slabs. */
+.markdown code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  background: rgba(221, 225, 240, 0.07);
+  border-radius: calc(7px * var(--rf));
+  corner-shape: var(--cs);
+  padding: 1.5px 6px;
+  color: #dde1f0;
+}
+.markdown pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+/* Live code tints in the composer draft — the same case as `.markdown` above,
+   and here for the same reason: a mirror div paints the styled draft behind a
+   transparent-text textarea (so caret, selection, undo and IME stay native),
+   and its spans are written as an innerHTML string by lib/composer-highlight.ts.
+   There is no JSX to hang utilities on, so this cannot become a utility; it is
+   renderer-emitted markup, which is what base.css keeps.
+
+   The tints paint only: colour, background, and the one outline below, all of
+   which leave the line box alone. Any font, padding or size change here would
+   desync the painted glyphs from the caret in the textarea behind them — the
+   mirror and the field have to agree on every metric. */
+.composer-hl .cmp-code {
+  background: rgba(255, 255, 255, 0.09);
+  /* Same capsule corner the chip gets once the draft is sent. */
+  border-radius: calc(7px * var(--rf));
+  corner-shape: var(--cs);
+  color: #e8b3b9;
+}
+.composer-hl .cmp-fence {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: calc(4px * var(--rf));
+  corner-shape: var(--cs);
+  color: #dde1f0;
+}
+/* A finished @-mention of a teammate, the draft's counterpart to the
+   `person-chip` a sent message renders. It reads as a pill without being one:
+   the span may not take a pixel of padding, because the mirror has to stay
+   glyph-identical to the textarea behind it. So the wash is painted by a
+   pseudo-element instead, inset negatively past the box — which an `outline`
+   also does, but only by the same amount on every side, and the room this
+   needs is horizontal. One element painting one translucent colour also stays
+   flat where two overlapping shadows would have doubled, and `z-index: -1`
+   puts it behind the name, in front of the mirror.
+
+   How far it reaches is arithmetic rather than taste. The only room beside a
+   mention is the space character next to it, and that one space has to cover
+   both the pill's own padding and the gap to the neighbouring word. A 14px
+   draft sets words 3.7px apart, which is not enough for either: a wash of any
+   real width sits ON the next word, which is what reads as the pill being cut
+   off. So the composer widens the space itself (`word-spacing`, on the field
+   as well as the mirror so the two still agree glyph for glyph; a margin on
+   this span alone would slide the painted text off the caret behind it), and
+   wears it only while a mention is in the draft, so an ordinary sentence keeps
+   the type's own spacing. See `composerMentionSpacing` in
+   lib/composer-classes.ts.
+
+   That sets a space at 7.2px, and the wash takes 5px of it on each side. What
+   is left, 2.2px, is the gap a neighbouring word sees. The two ends look even
+   at the same number even though they are not the same shape, because the
+   face at one end and the name's flat stem at the other are each 1px inside
+   their own edge of the box.
+
+   The mirror carries 6px of padding against a matching negative margin
+   (Composer.tsx): its content origin is unchanged, so nothing moves, but
+   `overflow: hidden` then clips past the reach — otherwise a mention at the
+   start of a line has its left edge cut off by the mirror's own bounds.
+
+   Hover is set by the composer, which hit-tests these spans through the
+   textarea covering them. */
+.composer-hl .cmp-mention {
+  position: relative;
+  color: var(--accent-ink);
+}
+.composer-hl .cmp-mention::before {
+  content: "";
+  position: absolute;
+  inset: -2px -5px;
+  z-index: -1;
+  /* Squircle capsule, the shape the sent `person-chip` takes. */
+  border-radius: 999px;
+  corner-shape: var(--cs);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.composer-hl .cmp-mention[data-hover]::before {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+/* A selected image area stays plain text in the message sent to the model,
+   while the composer groups its coordinates into one quiet inline reference. */
+.composer-hl .cmp-image-attachment {
+  padding: 2px 0;
+  border-radius: 999px;
+  corner-shape: var(--cs);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow:
+    4px 0 0 color-mix(in srgb, var(--accent) 12%, transparent),
+    -4px 0 0 color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-ink);
+  box-decoration-break: clone;
+}
+/* The face. It is painted rather than laid out, for the same reason: there is
+   nowhere to put a picture, so the `@` goes transparent and lends the face
+   its slot. The face hangs off THAT span rather than off the pill, so it
+   stays fixed to the slot whatever the wash around it does, and the gap either
+   side of it is the slot's own arithmetic: 13.8px at the composer's 14px type,
+   plus the 5px the wash reaches to its left, less a 0.8em face set 1px past
+   the box, leaves 4px of wash before the face and 3.6px between it and the
+   first letter. The size is in `em` because the slot is: the phone composer
+   sets 16px, where a fixed size would sit small in a wider gap. Absolute, so
+   it takes no part in layout. */
+.composer-hl .cmp-at {
+  position: relative;
+  color: transparent;
+}
+.composer-hl .cmp-faced .cmp-at::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  width: 0.8em;
+  height: 0.8em;
+  transform: translateY(-50%);
+  /* UserAvatar's squircle, the same shape the picture takes in the mention
+	   picker and in the sent chip. */
+  border-radius: calc(32% * var(--rp));
+  corner-shape: var(--cs);
+  background:
+    var(--cmp-face) center / cover no-repeat,
+    var(--bg-active);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent);
+}
+/* A session id in the draft, the counterpart to the `session-link` chip a sent
+   message renders — and where a pasted session link lands, since the composer
+   shortens one to the id it carries (`pastedSessionId` in lib/session-url.ts).
+   The pill is the receipt for that: someone just watched a URL they pasted
+   turn into an id, and the wash is what says the composer understood it rather
+   than mangled it.
+
+   Built like the mention pill above, and tinted deliberately unlike it. That
+   chip is accent because a mention is addressed AT somebody; this one takes
+   the same neutral wash the sent chip does, because a session reference is a
+   destination rather than an alert (see `.session-link[data-session-id]`).
+   Accent on both would spend the one distinction the two pills exist to draw.
+
+   It reaches 4px rather than the mention's 5px, and that one pixel keeps it out
+   of the word-spacing trade. The projection reserves one thin display-only
+   space outside each end of the painted token, in both the field and mirror.
+   That gives this link real margin without widening every ordinary space in the
+   draft or moving the painted text away from the native caret.
+
+   Where the mention paints its wash on a pseudo-element, this one paints on
+   the span, and that is the difference between the two that is NOT taste. A
+   pseudo-element is one rectangle over the whole inline box, which is fine for
+   a name and wrong for a forty-character id: on a phone it wraps, and one
+   rectangle over two lines is a slab lying across the sentence rather than a
+   pill around the id. `box-decoration-break: clone` gives each line fragment
+   its own capsule.
+
+   The painted 4px still has to come from somewhere that is not padding, because
+   horizontal padding on an inline box moves every glyph after it and the
+   mirror may not move a glyph. Two offset copies of the box do it instead: an
+   outer box-shadow is clipped to OUTSIDE the border box, so each copy shows
+   only as a 5px sliver at one end, the two never overlap, and the wash stays
+   one flat translucent value rather than doubling where they meet. Vertical
+   padding is safe (it does not affect line layout) and is what gives the
+   capsule its height. */
+.composer-hl .cmp-session {
+  --cmp-session-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.75 5.25H17.25C18.3546 5.25 19.25 6.14543 19.25 7.25V14.25C19.25 15.3546 18.3546 16.25 17.25 16.25H11.25L7.25 19.25V16.25H6.75C5.64543 16.25 4.75 15.3546 4.75 14.25V7.25C4.75 6.14543 5.64543 5.25 6.75 5.25Z'/%3E%3C/svg%3E");
+  padding: 2px 0;
+  /* Squircle capsule, like the mention pill above and the sent chip. The
+	   `corner-shape` is not optional decoration here: this rule is
+	   hand-written, so it gets none of the grant base.css gives a `rounded-*`
+	   utility, and without it the pill is the one round-ended object in a
+	   surface of squircles. */
+  border-radius: 999px;
+  corner-shape: var(--cs);
+  background: var(--hover);
+  box-shadow:
+    4px 0 0 var(--hover),
+    -4px 0 0 var(--hover);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+/* Once an omitted archived reference resolves, the archive crate replaces the
+   conversation glyph without changing the mirror's metrics. */
+.composer-hl .cmp-session.cmp-archived {
+  --cmp-session-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4.75' width='16' height='4' rx='1'/%3E%3Cpath d='M5.5 8.75V17.25C5.5 18.3546 6.39543 19.25 7.5 19.25H16.5C17.6046 19.25 18.5 18.3546 18.5 17.25V8.75'/%3E%3Cpath d='M10 12.25H14'/%3E%3C/svg%3E");
+}
+.composer-hl .cmp-session[data-hover] {
+  background: var(--hover-strong);
+  box-shadow:
+    4px 0 0 var(--hover-strong),
+    -4px 0 0 var(--hover-strong);
+}
+/* The glyph, painted into the slot the `os-` / `bks-` prefix lends it — the
+   same trade the face makes with the `@`, and for the same reason: the mirror
+   may not take a pixel of width, so a picture can only go where the text
+   already is. The prefix is what the draft can most afford to lose, because
+   the glyph beside it names a session far better than three characters of it
+   did, and the text underneath is untouched, so the caret, the selection and a
+   copy still see the whole id.
+
+   Sized in `em` because the slot is (the phone composer sets 16px), and
+   centred rather than pinned left: `bks-` is a character wider than `os-`, and
+   centring is what keeps the glyph off both edges of either one. Masked rather
+   than drawn as a background image so it takes `--text-dim` from the same
+   token the sent chip's glyph uses, in both themes. */
+.composer-hl .cmp-sid {
+  position: relative;
+  color: transparent;
+}
+.composer-hl .cmp-sid::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1.25em;
+  height: 1.25em;
+  transform: translate(-50%, -50%);
+  background: var(--text-dim);
+  -webkit-mask: var(--cmp-session-glyph) center / contain no-repeat;
+  mask: var(--cmp-session-glyph) center / contain no-repeat;
+}
+/* The same glyph for a named reference, which has no prefix to lend it a slot:
+   the projection reserves one in front of the title instead
+   (SESSION_GLYPH_SLOT in lib/composer-highlight.ts). Narrower than the id's,
+   because that one is centred over three or four characters of room while this
+   sits in a slot cut to its own size. */
+.composer-hl .cmp-sglyph {
+  position: relative;
+  color: transparent;
+}
+.composer-hl .cmp-sglyph::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1.1em;
+  height: 1.1em;
+  transform: translate(-50%, -50%);
+  background: var(--text-dim);
+  -webkit-mask: var(--cmp-session-glyph) center / contain no-repeat;
+  mask: var(--cmp-session-glyph) center / contain no-repeat;
+}
+html[data-theme="light"] .composer-hl .cmp-code {
+  background: rgba(149, 59, 57, 0.1);
+  color: #953b39;
+}
+html[data-theme="light"] .composer-hl .cmp-fence {
+  background: rgba(0, 0, 0, 0.05);
+  color: #1f2328;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.markdown li {
+  margin: 3px 0;
+}
+.markdown li > ul,
+.markdown li > ol {
+  margin: 3px 0 0;
+}
+
+/* Agent answers carry their structure in h2/h3, so those have to read as
+   section breaks at a glance. Two things were missing: size (h3/h4 were
+   SMALLER than the 14px body, so a heading was distinguishable only by
+   weight) and space above (6px, which collapsed with the previous
+   paragraph's own margin — a heading sat as close to the block it ended as
+   to the one it introduces). The ramp mirrors the native app's, scaled from
+   its 17pt body to ours: +29% / +14% / +7% / body, semibold throughout, with
+   optical tracking tightening as the size grows. Space is asymmetric on
+   purpose — a heading belongs to what follows it. */
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 16px 0 4px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--text);
+}
+.markdown h1 {
+  font-size: var(--type-section-title);
+  letter-spacing: -0.018em;
+}
+.markdown h2 {
+  font-size: var(--type-dialog-title);
+  letter-spacing: -0.016em;
+}
+/* The deepest two levels share the body size and are told apart by weight and
+   the space above them, which is what the scale has: section / dialog / body.
+   A step of its own for h4 only bought a size nobody could see. */
+.markdown h3,
+.markdown h4 {
+  font-size: var(--type-body);
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+/* A subhead directly under its parent heading is one unit, not a new section:
+   drop the full section gap so h2 + h3 don't drift apart. */
+.markdown :is(h1, h2, h3, h4) + :is(h1, h2, h3, h4) {
+  margin-top: 8px;
+}
+
+.markdown blockquote {
+  margin: 2px 0 8px;
+  padding: 3px 12px;
+  /* Not the accent: a red rule down the side of a quotation reads as a
+	   warning callout. Same call as the session chip and the PR token. */
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-dim);
+}
+
+.markdown table {
+  border-collapse: collapse;
+  margin: 2px 0 10px;
+  font-size: var(--type-label);
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.markdown th {
+  text-align: left;
+  font-size: var(--type-meta);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-faint);
+  border-bottom: 1px solid var(--border-strong);
+  padding: 4px 16px 5px 0;
+}
+.markdown td {
+  border-bottom: 1px solid var(--border);
+  padding: 6px 16px 6px 0;
+  vertical-align: top;
+}
+.markdown tr:last-child td {
+  border-bottom: none;
+}
+
+.markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
+.markdown .md-details {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: calc(7px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+.markdown .md-details > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 11px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+  list-style: none;
+}
+.markdown .md-details > summary::-webkit-details-marker {
+  display: none;
+}
+.markdown .md-details > summary::before {
+  content: "›";
+  color: var(--text-faint);
+  font-size: 17px;
+  line-height: 1;
+  transition: transform var(--dur-micro) var(--ease);
+}
+.markdown .md-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+.markdown .md-details-body {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+.markdown sub {
+  font-size: 0.78em;
+  color: var(--text-faint);
+}
+.md-image-link {
+  display: inline-block;
+  line-height: 0;
+}
+.md-image,
+.markdown img {
+  max-width: 100%;
+  max-height: 360px;
+  height: auto;
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  margin: 6px 0;
+  display: block;
+}
+/* Chat images open the media lightbox (delegated handler in MediaLightbox.tsx) */
+.md-image {
+  cursor: zoom-in;
+}
+/* An <img> written as raw HTML in PR prose (html-sanitize.ts tags them). The
+   block treatment above is right for a pasted screenshot and wrong here: bots
+   use raw images for 16px avatars and status badges inside a table cell, where
+   a block with a border and a 6px margin breaks the row. Keep the author's own
+   sizing, only capped to the container. */
+.markdown img.md-inline-image {
+  display: inline-block;
+  vertical-align: middle;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+/* An image in a table cell is a badge, not a figure: bots put a status dot
+   beside the word it labels, and a block image breaks the row onto two lines. */
+.markdown td img,
+.markdown th img {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+/* Rendered ```mermaid diagram (MarkdownBody swaps the fence for the SVG).
+   The diagram scrolls sideways inside its well, so the expand control is a
+   sibling of that scroller rather than a child: inside it, a wide diagram
+   would carry the button off the edge as you scrolled. */
+.md-mermaid-wrap {
+  position: relative;
+  margin: 2px 0 8px;
+}
+.md-mermaid {
+  padding: 12px;
+  background: var(--diagram-canvas);
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+  overflow-x: auto;
+  /* The whole chart opens the viewer, the way a picture in the transcript
+	   does; the button beside it is the discoverable and keyboard-reachable
+	   route to the same place (MediaLightbox.tsx). */
+  cursor: zoom-in;
+}
+.md-mermaid svg {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+}
+.md-video {
+  max-width: 100%;
+  max-height: 480px;
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  margin: 6px 0;
+  display: block;
+  background: #000;
+}
+.md-video-wrap {
+  position: relative;
+  line-height: 0;
+}
+/* Always visible (not hover-gated) so it works on touch/iOS. top offsets the
+   video's own 6px top margin inside the wrapper; a diagram's margin is on the
+   wrapper instead, so it sits at the plain inset. */
+.md-video-expand,
+.md-diagram-expand {
+  position: absolute;
+  top: 12px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.md-diagram-expand {
+  top: 6px;
+}
+.md-video-expand:hover,
+.md-diagram-expand:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.75);
+}
+
+/* ── Controls on a rendered code fence ─────────────────────────
+   Copy and per-block wrapping are built by lib/code-copy.ts as siblings of
+   the <pre>. They therefore stay fixed while an unwrapped block scrolls, and
+   never become part of selected or copied code. Renderer-emitted markup is
+   also why these styles live here rather than in a component utility. */
+.md-code-wrap {
+  position: relative;
+}
+.md-code-wrap[data-wrapped="false"] > pre {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+/* Keep the first line clear of both visible icon controls. */
+.md-code-wrap > pre {
+  padding-right: 80px;
+}
+.md-code-controls {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.md-code-copy,
+.md-code-settings-trigger {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: calc(12px * var(--rf));
+  corner-shape: var(--cs);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.md-code-settings-trigger {
+  position: relative;
+}
+.md-code-settings-trigger::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: calc(7px * var(--rf));
+  corner-shape: var(--cs);
+  background: transparent;
+  pointer-events: none;
+}
+.md-code-settings-trigger > svg {
+  position: relative;
+}
+.md-code-copy:hover {
+  background: var(--hover);
+  color: var(--text-dim);
+}
+.md-code-settings-trigger:hover,
+.md-code-settings-trigger[data-open] {
+  color: var(--text-dim);
+}
+.md-code-settings-trigger:hover::before,
+.md-code-settings-trigger[data-open]::before {
+  background: var(--hover);
+}
+.md-code-copy:focus-visible,
+.md-code-settings-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Both glyphs share one cell, so the swap to the check carries no layout and
+   the button cannot shift under the pointer mid-click. */
+.md-code-copy-glyph {
+  grid-area: 1 / 1;
+  display: grid;
+  place-items: center;
+}
+.md-code-copy-glyph[data-state="done"] {
+  opacity: 0;
+  color: var(--green);
+}
+.md-code-copy[data-copied] .md-code-copy-glyph[data-state="idle"] {
+  opacity: 0;
+}
+.md-code-copy[data-copied] .md-code-copy-glyph[data-state="done"] {
+  opacity: 1;
+}
+
+/* This popup cannot use the Base UI primitive because MarkdownBody owns the
+   fence as injected HTML rather than JSX. Its material, edge, radius and type
+   are the same tokens as ui/popover. */
+.md-code-settings {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: min(280px, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 12px;
+  border-radius: calc(16px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--popup-surface);
+  box-shadow:
+    0 2px 6px -2px color-mix(in srgb, black 5%, transparent),
+    0 10px 28px -8px color-mix(in srgb, black 10%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--popup-ring) 65%, transparent);
+  color: var(--text);
+}
+.md-code-settings[hidden] {
+  display: none;
+}
+.md-code-settings-copy {
+  min-width: 0;
+  flex: 1;
+}
+.md-code-settings-title {
+  font-size: var(--type-label);
+  font-weight: 600;
+  line-height: 1.35;
+}
+.md-code-settings-description {
+  margin-top: 2px;
+  font-size: var(--type-meta);
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
+/* A compact version of the shared switch shape. role=switch and aria-checked
+   are set in lib/code-copy.ts. The 44px button is its hit target; the 44×20
+   track remains the same compact macOS shape as ui/switch. */
+.md-code-wrap-toggle {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.md-code-wrap-toggle::before,
+.md-code-wrap-toggle::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  height: 20px;
+  border-radius: 999px;
+}
+.md-code-wrap-toggle::before {
+  width: 44px;
+  background: var(--bg-active);
+}
+.md-code-wrap-toggle::after {
+  left: 2px;
+  top: 14px;
+  width: 26px;
+  height: 16px;
+  background: var(--on-accent-control, var(--on-accent));
+  box-shadow:
+    0 1px 3px color-mix(in srgb, var(--text) 22%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--text) 7%, transparent);
+  transition: translate var(--dur-micro) var(--ease);
+}
+.md-code-wrap[data-wrapped="true"] .md-code-wrap-toggle::before {
+  background: var(--accent-control, var(--accent));
+}
+.md-code-wrap[data-wrapped="true"] .md-code-wrap-toggle::after {
+  translate: 14px 0;
+}
+.md-code-wrap-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+/* Both icon controls remain visible: code wrapping moved behind settings, so
+   copy immediately to its left also needs to read as a stable paired action.
+   Touch keeps a 44px target for both. */
+@media (hover: none) and (pointer: coarse) {
+  .md-code-controls {
+    top: 4px;
+    right: 4px;
+  }
+  .md-code-copy,
+  .md-code-settings-trigger {
+    width: 44px;
+    height: 44px;
+  }
+  .md-code-settings {
+    top: 52px;
+  }
+  .md-code-wrap > pre {
+    padding-right: 104px;
+  }
+}
+
+/* ── Chips inside rendered markdown ──────────────────────────
+   Both of these style markup that lib/markdown.ts writes as an innerHTML
+   string, so there is no JSX to hang utilities on — the same case as
+   `.markdown` above, and the reason they live here rather than migrating.
+
+   Position in this file is load-bearing: `a.pr-ref` ties `.markdown a` on
+   specificity (0,1,1) and wins only by sitting later, so keep this block
+   below the `.markdown` rules. */
+
+/* The baseline the whole family sits on. An inline-flex takes its baseline
+   from its first flex item, and for every chip below that item is a glyph box
+   with no text in it, so the chip's own words rode above the sentence's and
+   each one carried a hand-tuned `vertical-align` in em to put them back. Those
+   were measured in one font, and the app renders in SF, Inter or Segoe
+   depending on the machine, so they were only ever right on the machine they
+   were tuned on — the person chip's face fallback was 5px out.
+
+   A zero-width text run as the first item hands the container its LABEL's
+   baseline instead, which is correct in any font and needs no number. The
+   negative margin cancels the `gap` it would otherwise open before the glyph.
+   Measured at exactly 0 against the surrounding sentence for all four. */
+a.asset-ref::before,
+.session-link[data-session-id]::before,
+.automation-link[data-automation-id]::before,
+a.person-chip::before,
+a.pr-ref::before {
+  content: "\200b";
+  flex: none;
+  width: 0;
+  margin-inline-end: -4px;
+}
+
+/* One set of numbers for the four of them, in one place, because four copies
+   of "about 6 and about 8" drifted into 5/6 on one side and 8/9 on the other
+   and a sentence holding two chips showed it. What the eye compares is the air
+   at the two ENDS of the pill, so the label side is the larger number: the
+   glyph carries ~3px of its own inside its box, and a letter ends on a stem
+   with almost none. That lands every chip within a pixel of even.
+
+   The one shape this cannot make even is a chip whose leading item is a
+   PHOTO, which is dense to the edge of its box with no air of its own, so the
+   face sits closer to the pill than a glyph does. Growing the number to match
+   would leave the face floating in a hole rather than reading as the head of
+   the chip. */
+a.asset-ref,
+.session-link[data-session-id],
+.automation-link[data-automation-id],
+a.person-chip,
+a.pr-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  /* Never wider than the bubble it sits in; the label ellipsizes instead of
+	   pushing the chip past the edge. */
+  max-width: 100%;
+  /* Its own line box. Without this the paragraph's 24px lands inside the pill
+	   and pads it out, half of that under the baseline. */
+  line-height: 1.15;
+  /* Top and bottom are unequal on purpose, and that is what makes them LOOK
+	   equal: descenders fill the room under the baseline while nothing fills
+	   the room over the caps, so a balanced pill reads tight up there. */
+  padding: 2.5px 7px 1px 4.5px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Every chip below is as tall as the words inside it and no taller: the label's
+   own line box at 1.15, a glyph no bigger than that box, and 2.5px of room over
+   it against 1px under. At the old 1.3 leading with an 18px glyph they stood
+   23-25px tall inside a 24px line, so a paragraph carrying one had its leading
+   pushed apart and read as a slab dropped into the sentence. They now land at
+   19-21px, next to the 19px of an inline `code` capsule, which is the other
+   object a sentence can contain. */
+
+/* A scratch asset named in an answer. The file glyph and contained surface
+   distinguish it from an ordinary web link without turning a sentence into a
+   row of large cards; the full path remains in the link's title. */
+a.asset-ref {
+  border: 0;
+  border-radius: calc(9px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--accent-soft);
+  color: var(--text);
+  transition: background var(--dur-micro) var(--ease);
+}
+a.asset-ref:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  text-decoration: none;
+}
+a.asset-ref:active {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+a.asset-ref:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+.asset-ref-icon {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  place-items: center;
+  color: var(--accent-ink);
+  /* Onto the cap band, same 1px as the three chips below. */
+  transform: translateY(-1px);
+}
+.asset-ref-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.asset-ref-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.markdown a.asset-ref code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* A session reference rendered by markdown.ts as a clickable link into that
+   session (e.g. an orchestrator jumping into the worker it spawned). Labelled
+   with the session's title where we know it, and built from the same parts as
+   the PR chip below: a quiet wash, a glyph naming what opens, and room around
+   the label. Deliberately not accent-coloured: a cross-reference is a
+   destination, not an alert, and the accent chip read as an error inside a
+   sentence. The outlined, near-padless earlier form read as a stray border
+   rather than an object you can click. Scoped on
+   the chip's data-session-id attribute: bare .session-link is ALSO the viewer
+   header's Linear/Plain pills (which carry their own literal ↗), and an
+   unscoped rule here clobbered them into mono accent chips with a second
+   arrow. */
+.session-link[data-session-id],
+.automation-link[data-automation-id] {
+  font-size: 0.95em;
+  background: var(--hover);
+  border: 0;
+  color: var(--text);
+  /* Same corner as the asset chip above: at this height 9px (12.15 once
+	   --rf scales it) takes the full box, so the chip reads as a capsule
+	   around its label rather than a rounded rectangle sitting in prose. */
+  border-radius: calc(9px * var(--rf));
+  corner-shape: var(--cs);
+  transition:
+    background var(--dur-micro) var(--ease),
+    scale var(--dur-micro) var(--ease);
+}
+.session-link[data-session-id]:hover,
+.automation-link[data-automation-id]:hover {
+  background: var(--hover-strong);
+  /* the chip lights up instead: .markdown a:hover would underline it, which
+	   reads as a text link striking through the chip's own fill */
+  text-decoration: none;
+}
+.session-link[data-session-id]:active,
+.automation-link[data-automation-id]:active {
+  background: var(--hover-strong);
+  scale: 0.96;
+}
+.session-link[data-session-id]:focus-visible,
+.automation-link[data-automation-id]:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+.session-link-icon,
+.automation-link-icon {
+  display: inline-grid;
+  /* Never taller than the label's own line box, or the glyph rather than the
+	   words decides how tall the chip is — which is what made it a slab. */
+  width: 16px;
+  height: 16px;
+  flex: none;
+  place-items: center;
+  color: var(--text-dim);
+  /* Flex centres the box on the LINE box, which sits 1px lower than the cap
+	   band the eye reads the label by (half the 2px ascent/descent gap above).
+	   Undo that, or the glyph looks like it is sinking past the words. */
+  transform: translateY(-1px);
+}
+.session-link-icon svg,
+.automation-link-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.session-link-label,
+.automation-link-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* No title yet (archived, not polled): the label is a raw id, and mono is what
+   makes it read as one rather than as a mangled sentence. */
+.session-link[data-session-label="id"] .session-link-label {
+  font-family: var(--mono);
+  font-size: 0.95em;
+}
+.automation-link[data-automation-label="id"] .automation-link-label {
+  font-family: var(--mono);
+  font-size: 0.95em;
+}
+/* That session's agent is mid-run. The glyph becomes the same yellow dot the
+   sidebar uses for a live run, so the chip answers "is it still going?"
+   before you click. Static here: a dot breathing inside a paragraph pulls the
+   eye off the sentence. */
+.session-link[data-session-running] .session-link-icon svg {
+  display: none;
+}
+/* Painted into the glyph's own box instead of being a 7px box of its own, so
+   the running chip is the same size as the idle one and the dot lands where
+   the glyph did. */
+.session-link[data-session-running] .session-link-icon::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  background: radial-gradient(
+    circle at 50% 50%,
+    var(--yellow) 3.5px,
+    transparent 3.6px
+  );
+}
+
+/* An @-mention of a teammate, minted by markdown.ts. Third member of the chip
+   family above, and it follows their rules: the face is the first flex item,
+   so the sentence takes its baseline from that box rather than from the label,
+   and the padding is unequal on purpose so the name reads centred. The accent
+   fill is deliberate — a mention is addressed at somebody, so it should carry
+   more weight in a paragraph than a session or a PR does. */
+a.person-chip {
+  /* The two numbers the family cannot share. Every other chip leads with a
+	   glyph, which carries about 3px of its own air inside its box; a face is a
+	   picture, dense to the edge of its box, so it needs that room from the
+	   padding instead and gives it back on the label side. Sharing the family's
+	   pair left the pill lopsided: 4.5px of air before the face against 7.4px
+	   after the last letter. At 5.5 and 6 it measures even. */
+  padding-right: 6px;
+  padding-left: 5.5px;
+  font-size: 0.95em;
+  font-weight: 560;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent-ink);
+  border: 0;
+  /* The same corner as the three chips around it. It was a true capsule,
+	   which at this height reads as a different object in the same sentence:
+	   a squircle capsule is what every other pill in the app is. */
+  border-radius: calc(9px * var(--rf));
+  corner-shape: var(--cs);
+  transition: background var(--dur-micro) var(--ease);
+}
+a.person-chip:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  text-decoration: none;
+}
+a.person-chip:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+.person-chip-face {
+  /* Two smaller than the session chip's glyph box: a picture is dense to the
+	   edge of its box, so at the glyph's 16px it filled the pill and the two
+	   sets of corners collided. */
+  width: 14px;
+  height: 14px;
+  flex: none;
+  /* The same picture the app draws everywhere else: UserAvatar's squircle
+	   tile at 32%, not a circle. A round face here was the one person-shaped
+	   thing in the product that was not the product's own avatar. */
+  border-radius: calc(32% * var(--rp));
+  corner-shape: var(--cs);
+  object-fit: cover;
+  /* Same 1px lift as the session chip's glyph: flex centres on the line box,
+	   which sits below the cap band the eye reads the name by. */
+  transform: translateY(-1px);
+}
+/* `.markdown img` ties this on class count and wins by being later, so inside
+   a transcript it dragged the styling of a POSTED PICTURE onto the face: 6px
+   of vertical margin, which stood a chip carrying a photo at 31px against the
+   initial fallback's 19px, plus a hairline and the 8px image corner. Reset
+   what that rule sets; same case as `.markdown img.md-inline-image`. */
+.markdown img.person-chip-face {
+  height: 14px;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: calc(32% * var(--rp));
+  corner-shape: var(--cs);
+}
+.person-chip-initial {
+  display: inline-grid;
+  place-items: center;
+  background: var(--bg-active);
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1;
+}
+
+/* A pull-request reference (`#5528` or an explicit GitHub PR link) linked into
+   our own review surface by markdown.ts. The branch glyph and quiet wash make
+   it read as a PR object rather than another highlighted word; its live state
+   colours the surface while the full state stays in the tooltip. Not
+   scoped under .markdown: the chip turns up in every surface that renders
+   session markdown, and a few of those containers don't carry that class. */
+a.pr-ref {
+  background: var(--hover);
+  color: var(--text);
+  border: 0;
+  /* Capsule corner, same as the session chip above. */
+  border-radius: calc(9px * var(--rf));
+  corner-shape: var(--cs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background var(--dur-micro) var(--ease),
+    scale var(--dur-micro) var(--ease);
+}
+a.pr-ref:hover {
+  background: var(--hover-strong);
+  /* the token lights up instead — an underline reads as a strike through
+	   its own fill (same call as the session chip) */
+  text-decoration: none;
+}
+a.pr-ref:active {
+  background: var(--hover-strong);
+  scale: 0.96;
+}
+a.pr-ref:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+.pr-ref-icon {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  place-items: center;
+  color: var(--text-dim);
+  /* Flex centres the glyph on the line box, which hangs lower than the cap
+	   band the eye reads the label by. Onto that band, same 1px as the
+	   session chip above. */
+  transform: translateY(-1px);
+}
+.pr-ref-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+a.pr-ref[data-pr-tone="green"] {
+  background: var(--green-soft);
+  color: var(--green);
+}
+a.pr-ref[data-pr-tone="green"]:hover {
+  background: color-mix(in srgb, var(--green) 20%, transparent);
+}
+a.pr-ref[data-pr-tone="purple"] {
+  background: color-mix(in srgb, var(--purple) 12%, transparent);
+  color: var(--purple);
+}
+a.pr-ref[data-pr-tone="purple"]:hover {
+  background: color-mix(in srgb, var(--purple) 20%, transparent);
+}
+a.pr-ref[data-pr-tone="red"] {
+  background: var(--red-soft);
+  color: var(--red);
+}
+a.pr-ref[data-pr-tone="red"]:hover {
+  background: color-mix(in srgb, var(--red) 18%, transparent);
+}
+a.pr-ref[data-pr-tone="yellow"] {
+  background: var(--yellow-soft);
+  color: var(--yellow);
+}
+a.pr-ref[data-pr-tone="yellow"]:hover {
+  background: color-mix(in srgb, var(--yellow) 20%, transparent);
+}
+a.pr-ref[data-pr-tone="green"] .pr-ref-icon {
+  color: var(--green);
+}
+a.pr-ref[data-pr-tone="purple"] .pr-ref-icon {
+  color: var(--purple);
+}
+a.pr-ref[data-pr-tone="red"] .pr-ref-icon {
+  color: var(--red);
+}
+a.pr-ref[data-pr-tone="yellow"] .pr-ref-icon {
+  color: var(--yellow);
+}
+
+/* A commit sha, which markdown.ts leaves in the monospace capsule it was
+   written in rather than making a pill of it. A sha IS a code identifier, and
+   the sentences these turn up in name two or three at a time ("reverting
+   `4ed1ef09` + `437cba77`"), which as pills reads as a row of boxes.
+
+   So the capsule below repeats `.markdown code` on purpose (it is an <a>, not
+   a <code>, and it also has to hold up on the surfaces that render session
+   markdown without the `.markdown` class), and the only thing added is the
+   affordance: the dotted underline a term with a definition has always had,
+   solid on hover. `data-commit-unknown` is set by the hover card when no
+   checkout has the sha, which takes the promise back off a reference we
+   cannot answer.
+
+   Both element names are spelled out for the same reason `a.pr-ref` is: at
+   (0,1,0) a bare `.commit-ref` loses the underline to `.markdown a`'s
+   `text-decoration: none`, and only ties it at (0,1,1). */
+a.commit-ref,
+span.commit-ref {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  padding: 1.5px 6px;
+  border-radius: calc(7px * var(--rf));
+  corner-shape: var(--cs);
+  background: rgba(221, 225, 240, 0.07);
+  color: #dde1f0;
+  cursor: pointer;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  /* Its own ink, held back so the line reads as a hint under the word
+	   rather than a second stroke through it. */
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-underline-offset: 2px;
+  transition: background var(--dur-micro) var(--ease);
+}
+a.commit-ref:hover,
+span.commit-ref:hover {
+  background: rgba(221, 225, 240, 0.13);
+  text-decoration-style: solid;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+}
+a.commit-ref:focus-visible,
+span.commit-ref:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+a.commit-ref[data-commit-unknown],
+span.commit-ref[data-commit-unknown] {
+  cursor: text;
+  text-decoration-line: none;
+}
+html[data-theme="light"] a.commit-ref,
+html[data-theme="light"] span.commit-ref {
+  background: rgba(149, 59, 57, 0.09);
+  color: #953b39;
+}
+html[data-theme="light"] a.commit-ref:hover,
+html[data-theme="light"] span.commit-ref:hover {
+  background: rgba(149, 59, 57, 0.16);
+}
+
+/* The line-number gutter shiki writes into highlighted output
+   (lib/shiki-engine.ts). Renderer-emitted, same as the chips above. The code
+   well overrides the colour for its own darker surface, from the markup. */
+.shiki-gutter {
+  color: var(--text-faint);
+  user-select: none;
+}
+
+/* ── Docs (`.markdown wiki-doc`) ─────────────────────────────
+   A wider, roomier variant of `.markdown` for a whole document rather than a
+   message: a longer measure and looser leading, with the heading scale reset
+   to suit a page that opens on an h1. `.wiki-doc` is a class on JSX, but
+   everything it styles is rendered markdown, so it belongs here beside
+   `.markdown` rather than becoming utilities.
+
+   These tie `.markdown`'s own heading rules on specificity (0,1,1) and win by
+   sitting later — keep them below that block. */
+.wiki-doc {
+  max-width: 780px;
+  font-size: var(--type-body);
+  line-height: 1.65;
+}
+.wiki-doc h1 {
+  font-size: var(--type-section-title);
+  margin: 0 0 14px;
+}
+.wiki-doc h2 {
+  font-size: var(--type-dialog-title);
+  margin: 22px 0 10px;
+}
+.wiki-doc h3 {
+  /* Body size, the same as `.markdown h3`: weight and the space above carry
+	   it. Restated here only because this block re-declares its own margins. */
+  font-size: var(--type-body);
+  margin: 18px 0 8px;
+}
+.wiki-doc img {
+  max-width: 100%;
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+}
+.wiki-doc a {
+  color: var(--link);
+}
+
+/* ── Transcript liveness ─────────────────────────────────────
+   This rule is the only implementation of the streaming caret. It hangs off
+   the `.msg-streaming` ancestor, so it cannot be expressed as a utility on the
+   element that paints. The class name survives on the markup purely as its
+   hook (see lib/msg-classes.ts).
+
+   It lives here rather than in legacy.css, which is empty, and being
+   here puts its duration in the same file as the exception that restates it:
+   the two 1s values have to agree or the indicator changes rate for anyone
+   with the preference set.
+
+   The caret animates `msg-caret-pulse`, not the bare `pulse` the legacy rule
+   used. `pulse` was never ours: tailwind.css emits its own
+   `@keyframes pulse { 50% { opacity: .5 } }` unlayered and last, which had been
+   quietly beating legacy.css's `0%,100% { 1 } 50% { 0.35 }` — so 0.5 is what
+   shipped, and it is what this restates, the same call ui/status.tsx and
+   lib/session-tab-classes made when they hit this. Those two keep spelling it
+   `animate-[pulse_…]`, which is the only reason the utility sheet emits those
+   keyframes at all; a rule here should not be resting on that. */
+.msg-streaming .msg-body-assistant::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-left: 3px;
+  vertical-align: -2px;
+  border-radius: calc(2px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--accent);
+  animation: msg-caret-pulse 1s ease-in-out infinite;
+}
+@keyframes msg-caret-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}

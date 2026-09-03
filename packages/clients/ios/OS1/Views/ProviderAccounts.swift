@@ -12,23 +12,31 @@ struct ProviderAccountSections: View {
     var reload: Int
     @State private var claude: [ProviderAccount]
     @State private var codex: [ProviderAccount]
+    @State private var xai: [ProviderAccount]
     @State private var loaded: Bool
     @State private var loading = true
     @State private var error: String?
     @State private var showingAdd: AccountKind?
     @State private var removal: AccountRemoval?
     @State private var codexLoginSheet = false
+    @State private var xaiLoginSheet = false
 
     /// Seeded from the last answer this device saw, so re-entering Providers
     /// shows the pools straight away and the fetch behind it only corrects them.
     init(reload: Int) {
         self.reload = reload
-        let cachedClaude: [ProviderAccount] = SettingsCache.value("claude-accounts") ?? []
-        let cachedCodex: [ProviderAccount] = SettingsCache.value("codex-accounts") ?? []
+        let cachedClaude: [ProviderAccount] = SettingsCache.value(Self.cacheKey(.claude)) ?? []
+        let cachedCodex: [ProviderAccount] = SettingsCache.value(Self.cacheKey(.codex)) ?? []
+        let cachedXai: [ProviderAccount] = SettingsCache.value(Self.cacheKey(.xai)) ?? []
         _claude = State(initialValue: cachedClaude)
         _codex = State(initialValue: cachedCodex)
-        _loaded = State(initialValue: cachedClaude.isEmpty == false || cachedCodex.isEmpty == false)
+        _xai = State(initialValue: cachedXai)
+        _loaded = State(
+            initialValue: cachedClaude.isEmpty == false || cachedCodex.isEmpty == false || cachedXai.isEmpty == false
+        )
     }
+
+    private static func cacheKey(_ kind: AccountKind) -> String { "\(kind.brand)-accounts" }
 
     var body: some View {
         Section("Accounts") {
@@ -39,7 +47,7 @@ struct ProviderAccountSections: View {
             } else {
                 if let error { settingsErrorRow(error) { Task { await load() } } }
                 if accountItems.isEmpty {
-                    Text("No accounts yet. Runs use this server's Claude and Codex sign-ins until you add an Anthropic or OpenAI account.")
+                    Text("No accounts yet. Runs use this server's Claude and Codex sign-ins until you add an Anthropic, OpenAI or xAI account.")
                         .foregroundStyle(.secondary)
                 }
                 ForEach(accountItems) { item in
@@ -66,6 +74,9 @@ struct ProviderAccountSections: View {
                 Button { codexLoginSheet = true } label: {
                     Label("Sign in with ChatGPT", systemImage: "person.badge.key")
                 }
+                Button { xaiLoginSheet = true } label: {
+                    Label("Sign in with SuperGrok", systemImage: "person.badge.key")
+                }
             }
         }
         .task(id: reload) { await load() }
@@ -77,6 +88,12 @@ struct ProviderAccountSections: View {
         .sheet(isPresented: $codexLoginSheet) {
             CodexDeviceLoginView {
                 codexLoginSheet = false
+                await load()
+            }
+        }
+        .sheet(isPresented: $xaiLoginSheet) {
+            XaiDeviceLoginView {
+                xaiLoginSheet = false
                 await load()
             }
         }
@@ -92,89 +109,87 @@ struct ProviderAccountSections: View {
         }
     }
 
-    private var validClaude: [ProviderAccount] { claude.filter { $0.id?.isEmpty == false } }
-    private var validCodex: [ProviderAccount] { codex.filter { $0.id?.isEmpty == false } }
+    private func accounts(of kind: AccountKind) -> [ProviderAccount] {
+        switch kind {
+        case .claude: claude
+        case .codex: codex
+        case .xai: xai
+        }
+    }
+
+    private func setAccounts(_ accounts: [ProviderAccount], for kind: AccountKind) {
+        switch kind {
+        case .claude: claude = accounts
+        case .codex: codex = accounts
+        case .xai: xai = accounts
+        }
+    }
+
     private var accountItems: [ProviderAccountItem] {
-        let claudeItems = validClaude
-            .sorted { ($0.name ?? "").localizedCaseInsensitiveCompare($1.name ?? "") == .orderedAscending }
-            .map { ProviderAccountItem(account: $0, kind: .claude) }
-        let codexItems = validCodex
-            .sorted { ($0.name ?? "").localizedCaseInsensitiveCompare($1.name ?? "") == .orderedAscending }
-            .map { ProviderAccountItem(account: $0, kind: .codex) }
-        return claudeItems + codexItems
+        AccountKind.allCases.flatMap { kind in
+            accounts(of: kind)
+                .filter { $0.id?.isEmpty == false }
+                .sorted { ($0.name ?? "").localizedCaseInsensitiveCompare($1.name ?? "") == .orderedAscending }
+                .map { ProviderAccountItem(account: $0, kind: kind) }
+        }
     }
 
     private func load() async {
         loading = true
         error = nil
-        async let fetchedClaude = fetchClaude()
-        async let fetchedCodex = fetchCodex()
-        let result = await (fetchedClaude, fetchedCodex)
-        var problems: [String] = []
-        switch result.0 {
-        case .success(let accounts):
-            claude = accounts
-            loaded = true
-            SettingsCache.save("claude-accounts", accounts)
-        case .failure(let cause):
-            problems.append("Anthropic: \(cause.localizedDescription)")
-        }
-        switch result.1 {
-        case .success(let accounts):
-            codex = accounts
-            loaded = true
-            SettingsCache.save("codex-accounts", accounts)
-        case .failure(let cause):
-            problems.append("OpenAI: \(cause.localizedDescription)")
-        }
-        error = problems.isEmpty ? nil : problems.joined(separator: "\n")
+        await fetchAll(refresh: false)
         loading = false
     }
 
     private func refreshAccounts() async {
-        async let refreshedClaude = fetchClaude(refresh: true)
-        async let refreshedCodex = fetchCodex(refresh: true)
-        let result = await (refreshedClaude, refreshedCodex)
+        await fetchAll(refresh: true)
+    }
+
+    /// All three pools at once; one pool failing leaves the others current.
+    private func fetchAll(refresh: Bool) async {
+        async let fetchedClaude = fetch(.claude, refresh: refresh)
+        async let fetchedCodex = fetch(.codex, refresh: refresh)
+        async let fetchedXai = fetch(.xai, refresh: refresh)
+        let results = await [(AccountKind.claude, fetchedClaude), (.codex, fetchedCodex), (.xai, fetchedXai)]
         var problems: [String] = []
-        switch result.0 {
-        case .success(let accounts):
-            claude = accounts
-            SettingsCache.save("claude-accounts", accounts)
-        case .failure(let cause):
-            problems.append("Anthropic: \(cause.localizedDescription)")
-        }
-        switch result.1 {
-        case .success(let accounts):
-            codex = accounts
-            SettingsCache.save("codex-accounts", accounts)
-        case .failure(let cause):
-            problems.append("OpenAI: \(cause.localizedDescription)")
+        for (kind, result) in results {
+            switch result {
+            case .success(let accounts):
+                setAccounts(accounts, for: kind)
+                loaded = true
+                SettingsCache.save(Self.cacheKey(kind), accounts)
+            case .failure(let cause):
+                problems.append("\(kind.providerName): \(cause.localizedDescription)")
+            }
         }
         error = problems.isEmpty ? nil : problems.joined(separator: "\n")
     }
 
-    private func fetchClaude(refresh: Bool = false) async -> Result<[ProviderAccount], Error> {
+    private func fetch(_ kind: AccountKind, refresh: Bool) async -> Result<[ProviderAccount], Error> {
         do {
-            if refresh { return .success(try await SettingsAPI.refreshClaudeAccounts()) }
-            return .success(try await SettingsAPI.claudeAccounts())
-        } catch { return .failure(error) }
-    }
-
-    private func fetchCodex(refresh: Bool = false) async -> Result<[ProviderAccount], Error> {
-        do {
-            if refresh { return .success(try await SettingsAPI.refreshCodexAccounts()) }
-            return .success(try await SettingsAPI.codexAccounts())
+            switch (kind, refresh) {
+            case (.claude, true): return .success(try await SettingsAPI.refreshClaudeAccounts())
+            case (.claude, false): return .success(try await SettingsAPI.claudeAccounts())
+            case (.codex, true): return .success(try await SettingsAPI.refreshCodexAccounts())
+            case (.codex, false): return .success(try await SettingsAPI.codexAccounts())
+            case (.xai, true): return .success(try await SettingsAPI.refreshXaiAccounts())
+            case (.xai, false): return .success(try await SettingsAPI.xaiAccounts())
+            }
         } catch { return .failure(error) }
     }
 
     private func addAccount(kind: AccountKind, name: String, value: String, owner: String?) async {
         do {
-            if kind == .claude {
+            switch kind {
+            case .claude:
                 let body: [String: Any] = ["name": name, "token": value, "owner": owner ?? NSNull()]
                 claude.append(try await SettingsAPI.createClaudeAccount(body))
-            } else {
+            case .codex:
                 let body: [String: Any] = ["name": name, "kind": "api_key", "value": value, "owner": owner ?? NSNull()]
                 codex.append(try await SettingsAPI.createCodexAccount(body))
+            case .xai:
+                // SuperGrok accounts only arrive through the device-code sheet.
+                return
             }
             showingAdd = nil
         } catch { self.error = error.localizedDescription }
@@ -186,22 +201,27 @@ struct ProviderAccountSections: View {
             let owner: String? = account.owner?.isEmpty == false ? nil : ServerConfig.shared.userName
             let patch: [String: Any] = ["owner": owner ?? NSNull()]
             let result: ProviderAccount
-            if kind == .claude { result = try await SettingsAPI.updateClaudeAccount(id: id, patch: patch) }
-            else { result = try await SettingsAPI.updateCodexAccount(id: id, patch: patch) }
-            if kind == .claude, let index = claude.firstIndex(where: { $0.id == id }) { claude[index] = result }
-            if kind == .codex, let index = codex.firstIndex(where: { $0.id == id }) { codex[index] = result }
+            switch kind {
+            case .claude: result = try await SettingsAPI.updateClaudeAccount(id: id, patch: patch)
+            case .codex: result = try await SettingsAPI.updateCodexAccount(id: id, patch: patch)
+            case .xai: result = try await SettingsAPI.updateXaiAccount(id: id, patch: patch)
+            }
+            var pool = accounts(of: kind)
+            if let index = pool.firstIndex(where: { $0.id == id }) {
+                pool[index] = result
+                setAccounts(pool, for: kind)
+            }
         } catch { self.error = error.localizedDescription }
     }
 
     private func remove(_ target: AccountRemoval) async {
         do {
-            if target.kind == .claude {
-                _ = try await SettingsAPI.deleteClaudeAccount(id: target.id)
-                claude.removeAll { $0.id == target.id }
-            } else {
-                _ = try await SettingsAPI.deleteCodexAccount(id: target.id)
-                codex.removeAll { $0.id == target.id }
+            switch target.kind {
+            case .claude: _ = try await SettingsAPI.deleteClaudeAccount(id: target.id)
+            case .codex: _ = try await SettingsAPI.deleteCodexAccount(id: target.id)
+            case .xai: _ = try await SettingsAPI.deleteXaiAccount(id: target.id)
             }
+            setAccounts(accounts(of: target.kind).filter { $0.id != target.id }, for: target.kind)
         } catch { self.error = error.localizedDescription }
         removal = nil
     }
@@ -225,15 +245,17 @@ private struct AccountUsageRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 10) {
-                BrandTile(name: kind == .claude ? "claude" : "codex", size: 28)
+                BrandTile(name: kind.brand, size: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account.name ?? account.email ?? "Account")
-                    Text("\(providerName) · \(ownership)")
+                    Text("\(kind.providerName) · \(ownership)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 12)
-                if account.usable == false {
+                if account.reloginRequired == true {
+                    Text("Sign in again").foregroundStyle(.orange).font(.caption)
+                } else if account.usable == false {
                     Text("Unavailable").foregroundStyle(.orange).font(.caption)
                 }
                 // Borderless, because a plain button inside a List row takes
@@ -258,8 +280,6 @@ private struct AccountUsageRow: View {
         .padding(.vertical, 2)
     }
 
-    private var providerName: String { kind == .claude ? "Anthropic" : "OpenAI" }
-
     /// Whose subscription this is. A shared pool account is the default, so it
     /// is the phrase that needs no name beside it.
     private var ownership: String {
@@ -271,9 +291,11 @@ private struct AccountUsageRow: View {
     /// per-model cap. Which one is full changes what you do about it, and they
     /// free up at different times, so all of them are on the screen.
     private var limits: [LimitWindow] {
-        kind == .claude
-            ? AccountUsageReading.claudeLimits(account.usage)
-            : AccountUsageReading.codexLimits(account.usage)
+        switch kind {
+        case .claude: AccountUsageReading.claudeLimits(account.usage)
+        case .codex: AccountUsageReading.codexLimits(account.usage)
+        case .xai: AccountUsageReading.xaiLimits(account.usage)
+        }
     }
 
     @ViewBuilder
@@ -324,6 +346,9 @@ private struct AccountUsageRow: View {
     /// Why there is no meter. "Cannot see the usage" and "nothing spent" look
     /// identical without saying so.
     private var usageProblem: String? {
+        if account.reloginRequired == true {
+            return account.refreshError ?? "Sign in again to use this account."
+        }
         if let error = account.usage?.error, error.isEmpty == false {
             return account.usage?.errorStatus == 401 ? "Sign in again to read usage." : error
         }

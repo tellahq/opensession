@@ -19,6 +19,8 @@ export interface QueueReceipt {
   user?: string;
   images?: string[];
   files?: unknown;
+  /** Pasted blocks the server lifted out of `content` for display. */
+  pastedTexts?: string[];
   contextSessions?: string[];
   editable?: boolean;
   editing?: boolean;
@@ -110,16 +112,20 @@ export function deriveSessionQueue({
     ...(settingUpWorkspace ? [] : fallbackPending),
   ];
   const optimisticTranscriptEntries = pendingBubbles.length
-    ? pendingBubbles.map<OptimisticTranscriptEntry>((item) => ({
-        id: item.id,
-        type: "user",
-        content: item.content,
-        timestamp: new Date(item.sentAt).toISOString(),
-        optimisticAfterEntryId: item.transcriptAfterEntryId,
-        optimisticAfterSeq: item.transcriptAfterSeq,
-        sender: item.user,
-        ...(item.images?.length ? { images: item.images } : {}),
-      }))
+    ? pendingBubbles.map<OptimisticTranscriptEntry>((item) => {
+        const entry: OptimisticTranscriptEntry = {
+          id: item.id,
+          type: "user",
+          content: item.content,
+          timestamp: new Date(item.sentAt).toISOString(),
+          optimisticAfterEntryId: item.transcriptAfterEntryId,
+          optimisticAfterSeq: item.transcriptAfterSeq,
+          sender: item.user,
+        };
+        if (item.images?.length) entry.images = item.images;
+        if (item.pastedTexts?.length) entry.pastedTexts = item.pastedTexts;
+        return entry;
+      })
     : NO_OPTIMISTIC_ENTRIES;
   const transcriptDeliveryIds = [
     ...pendingDeliveryIds,

@@ -37,6 +37,7 @@ import { createAssetsMcpServer } from "../agents/slack/assets-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createSelfDeployMcpServer } from "./self-deploy";
 import { createWebMcpServer } from "./web-mcp";
+import { callMcpTool } from "./mcp-client";
 import { papercutsEnabledForRepo } from "./papercuts";
 import { defaultRepo, productName } from "./config";
 import { githubCredentialForRun } from "./github-auth";
@@ -63,6 +64,7 @@ import {
   switchPrimaryRepo,
 } from "./session-repos";
 import { makeAskHandler } from "./asks";
+import { createScheduleMcpServer } from "./schedule-mcp";
 import { activeSandboxFor } from "./session-sandbox";
 
 type PreviewAction = "start" | "status" | "stop";
@@ -148,6 +150,12 @@ function papercutsServerFor(
   };
 }
 
+export function editorFixtureGrantUser(
+  session: { createdByLogin?: string | null } | undefined,
+): string | undefined {
+  return session?.createdByLogin || undefined;
+}
+
 export function interactiveMcpServers(
   user?: string,
   sessionId?: string,
@@ -156,6 +164,9 @@ export function interactiveMcpServers(
   return {
     "opensession-sessions": createSessionsMcpServer({
       createdBy,
+      createdByLogin: sessionId
+        ? findSession(sessionId)?.createdByLogin
+        : undefined,
       isAdmin: true,
       currentSessionId: sessionId,
     }),
@@ -287,6 +298,21 @@ export function interactiveMcpServers(
             hasSandbox: () =>
               Boolean(findSession(sessionId)?.sandbox?.sandboxId),
             runner: () => findSession(sessionId),
+            verifyEditorFixture: (leaseId) => {
+              const session = findSession(sessionId);
+              const grantUser = editorFixtureGrantUser(session);
+              if (!grantUser)
+                throw new Error(
+                  "This session has no creator identity for Tella verification.",
+                );
+              return callMcpTool(
+                "tella-stage",
+                "verify_editor_fixture",
+                { leaseKey: sessionId, leaseId },
+                grantUser,
+                { requireUserGrant: true },
+              );
+            },
             setDefaultPath: async (path, options) => {
               const session = findSession(sessionId);
               if (!session) throw new Error("Session not found.");
@@ -308,6 +334,7 @@ export function interactiveMcpServers(
                 key: options.exclusiveKey,
                 sessionId,
                 path: path || "/",
+                sourceLeaseId: options.sourceLeaseId,
                 ttlMinutes: options.leaseMinutes,
               });
               if (!claim.ok)
@@ -388,6 +415,13 @@ export function interactiveMcpServers(
           // fails closed): untrusted ticket text must not write to a
           // human's list.
           "opensession-todos": createTodosMcpServer({
+            sessionId,
+            user: createdBy,
+          }),
+          // "Check back on this later": a durable kernel-timer prompt delivered
+          // to THIS session (scheduled-prompts.ts). Interactive-only: it
+          // authors a future turn in a human's session.
+          "opensession-schedule": createScheduleMcpServer({
             sessionId,
             user: createdBy,
           }),

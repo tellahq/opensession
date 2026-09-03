@@ -45,17 +45,17 @@ const PREF_KEY = "accent";
  * the palette, so someone who chose a removed accent lands somewhere close
  * rather than back on the default.
  */
-const RETIRED_THEMES: Record<string, AccentTheme> = {
-  gold: "lime",
-  purple: "coral",
-  pink: "coral",
-  brown: "orange",
-  teal: "sky",
-};
+const RETIRED_THEMES = new Map<string, AccentTheme>([
+  ["gold", "lime"],
+  ["purple", "coral"],
+  ["pink", "coral"],
+  ["brown", "orange"],
+  ["teal", "sky"],
+]);
 
 export function getAccentTheme(): AccentTheme {
   const stored = localStorage.getItem(KEY);
-  const retired = stored === null ? undefined : RETIRED_THEMES[stored];
+  const retired = stored === null ? undefined : RETIRED_THEMES.get(stored);
   if (retired) {
     localStorage.setItem(KEY, retired);
     return retired;
@@ -100,7 +100,7 @@ async function hydrateAccentTheme(user: string) {
   const localRaw = localStorage.getItem(KEY);
   const localWasExplicit =
     isAccentTheme(localRaw) ||
-    (localRaw !== null && RETIRED_THEMES[localRaw] !== undefined);
+    (localRaw !== null && RETIRED_THEMES.has(localRaw));
   const localTheme = getAccentTheme();
   let prefs: Record<string, string>;
   try {
@@ -111,7 +111,7 @@ async function hydrateAccentTheme(user: string) {
   if (writeStamp !== stampAtStart || getCurrentUser() !== user) return;
 
   const raw = prefs[PREF_KEY];
-  const serverTheme = isAccentTheme(raw) ? raw : RETIRED_THEMES[raw];
+  const serverTheme = isAccentTheme(raw) ? raw : RETIRED_THEMES.get(raw);
   if (serverTheme) {
     if (serverTheme !== localTheme) {
       localStorage.setItem(KEY, serverTheme);
@@ -139,11 +139,7 @@ export function handleAccentStorageChange(event: Pick<StorageEvent, "key">) {
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
-if (
-  typeof window !== "undefined" &&
-  typeof document !== "undefined" &&
-  typeof window.addEventListener === "function"
-) {
+if (globalThis.window && globalThis.document) {
   window.addEventListener("storage", handleAccentStorageChange);
 
   // The inline bootstrap applies this before paint; repeat it on import so the

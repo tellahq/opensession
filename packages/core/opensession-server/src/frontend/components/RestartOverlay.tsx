@@ -1,13 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { z } from "zod";
 import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { dismissToast, toast } from "../ui/toast";
-import { fetchHealthStatus } from "../lib/health";
-import { bootTransition } from "../lib/restart-boot";
+import { fetchHealthStatus, type HealthStatus } from "../lib/health";
+import { CONNECTION_PRESENTATION_GRACE_MS } from "../lib/connection-presentation";
+import {
+  bootTransition,
+  resolvedRestartPhase,
+  type RestartPhase,
+} from "../lib/restart-boot";
 
-// Give foreground recovery enough time to probe and replace the stale PWA
-// socket before showing anything. Background time never counts toward this.
-const PILL_DELAY_MS = 8_000;
 // A disconnect older than this whose health probe ALSO fails escalates from
 // the calm pill to the full restart overlay (covers hard crashes).
 const ESCALATE_AFTER_MS = 22_000;
@@ -44,9 +47,7 @@ interface Props {
  *    answers again — that page state is suspect anyway.
  */
 export function RestartOverlay({ connected, addHandler }: Props) {
-  const [phase, setPhase] = useState<
-    "ok" | "reconnecting" | "restarting" | "crashed"
-  >("ok");
+  const [phase, setPhase] = useState<RestartPhase>("ok");
   const [backOnline, setBackOnline] = useState(false);
   // Who likely caused the restart: `by` on server_restarting, or `restartBy`
   // on the new server's hello.
@@ -71,15 +72,14 @@ export function RestartOverlay({ connected, addHandler }: Props) {
       dismissToast(statusToast.current);
       statusToast.current = null;
     }
-    if (phaseRef.current === "restarting") setPhase("ok");
+    setPhase(resolvedRestartPhase);
   };
 
   // Adopt/compare a server-reported bootId. The first sighting is only a
   // baseline: a health request made after the announcement can still be
   // answered by the draining process, so it must not clear the notice. If the
   // announcement itself was lost, a changed bootId provides a fallback receipt.
-  const handleBootId = (id: unknown) => {
-    if (typeof id !== "string" || !id) return;
+  const handleBootId = (id: string) => {
     const transition = bootTransition(bootId.current, id);
     bootId.current = id;
     if (explicit.current) {
@@ -91,8 +91,10 @@ export function RestartOverlay({ connected, addHandler }: Props) {
     }
   };
 
-  const handleHealth = (data: { bootId?: unknown }) =>
-    handleBootId(data.bootId);
+  const handleHealth = (data: HealthStatus) => {
+    const result = z.string().min(1).safeParse(data.bootId);
+    if (result.success) handleBootId(result.data);
+  };
 
   // Learn the current instance's bootId up front (also the fallback for
   // servers that don't send the hello frame yet).
@@ -159,7 +161,10 @@ export function RestartOverlay({ connected, addHandler }: Props) {
       }
       if (phaseRef.current !== "ok" && phaseRef.current !== "restarting")
         return;
-      const delay = phaseRef.current === "restarting" ? 0 : PILL_DELAY_MS;
+      const delay =
+        phaseRef.current === "restarting"
+          ? 0
+          : CONNECTION_PRESENTATION_GRACE_MS;
       timer = setTimeout(() => {
         if (document.visibilityState !== "hidden") setPhase("reconnecting");
       }, delay);

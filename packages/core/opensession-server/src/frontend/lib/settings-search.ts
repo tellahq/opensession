@@ -14,7 +14,7 @@
  * someone would type, not a summary of the page.
  */
 
-export const SETTINGS_KEYWORDS: Record<string, string[]> = {
+export const SETTINGS_KEYWORDS = {
   myAccounts: [
     // Your profile lives at the top of this page, so its words have to find
     // it here.
@@ -58,6 +58,9 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
     "concise",
     "response length",
     "send messages with",
+    "pending sends",
+    "outbox",
+    "local storage",
     "enter key",
     "steer",
     "queue",
@@ -124,6 +127,9 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
     "pi",
     "claude accounts",
     "codex",
+    "xai",
+    "grok",
+    "supergrok",
     "api key",
     "fallback",
     "usage",
@@ -192,6 +198,10 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
   ],
 };
 
+const SETTINGS_KEYWORD_LOOKUP = new Map<string, string[]>(
+  Object.entries(SETTINGS_KEYWORDS),
+);
+
 export type SectionLike = { key: string; label: string; group: string };
 
 export type SectionHit<T extends SectionLike> = {
@@ -220,7 +230,9 @@ export function matchSections<T extends SectionLike>(
       hits.push({ item });
       continue;
     }
-    const hint = SETTINGS_KEYWORDS[item.key]?.find((k) => k.includes(q));
+    const hint = SETTINGS_KEYWORD_LOOKUP.get(item.key)?.find((keyword) =>
+      keyword.includes(q),
+    );
     if (hint) hits.push({ item, hint });
   }
   return hits;

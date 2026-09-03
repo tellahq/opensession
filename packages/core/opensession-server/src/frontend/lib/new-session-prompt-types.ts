@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
 import type { StagingCount } from "./attachments";
 import type { FileAttachment } from "./images";
+import type { PastedTextAttachment } from "./pasted-text";
 import type { SendKeyPref } from "./send-key";
 
 export interface NewSessionPromptHandle {
@@ -25,6 +26,8 @@ export interface NewSessionPromptConfig {
   disabled: boolean;
   images: string[];
   files: FileAttachment[];
+  /** Large pastes held as chips, sent beside the prompt as `pastedTexts`. */
+  pastedTexts: PastedTextAttachment[];
   /** What is still being written to disk. A pasted screenshot is not attached
    * until its upload lands, and during a slow load that is seconds of a card
    * that looks like it ignored the paste, so each one holds its place in the
@@ -54,6 +57,9 @@ export interface NewSessionPromptActions {
   removePendingImage?: (index: number) => void;
   removePendingFile?: (index: number) => void;
   addAttachments: (picked: FileList | File[]) => void;
+  /** A paste past the collapse threshold becomes a chip instead of text. */
+  addPastedText: (text: string) => void;
+  removePastedText: (id: string) => void;
   create: () => void;
   /** The draft went from empty to holding something, or back. The one thing
    * about the text the palette needs on every edit. */

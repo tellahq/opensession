@@ -4,10 +4,12 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   HostHandle,
+  hostedEventsWithJournal,
   localRunHostsSupported,
   reconcileUncertainHostEvents,
   retryHostedKernelCall,
   resolveInactiveHostRecovery,
+  type HostConnectionHandlers,
   type HostLauncher,
 } from "./host-client";
 import { SessionKernelActorError } from "./session-kernel/actor-client";
@@ -28,6 +30,7 @@ import {
 import { hostRunBusy } from "./host-registry";
 import {
   __setActiveRunsPathForTest,
+  activeRunRecords,
   takeInterruptedRuns,
   type ActiveRunRecord,
 } from "./run-journal";
@@ -110,6 +113,71 @@ describe("hosted kernel retry", () => {
     ).rejects.toBe(error);
     expect(calls).toBe(1);
     expect(waits).toBe(0);
+  });
+});
+
+describe("hosted run journal", () => {
+  test("retires a cancelled host that ends without a terminal event", async () => {
+    const root = mkdtempSync(join(tmpdir(), "host-quiet-cancel-test-"));
+    roots.push(root);
+    const journalPath = join(root, "active-runs.json");
+    const previousJournal = __setActiveRunsPathForTest(journalPath);
+    const kernelStore = new SessionKernelStore(join(root, "kernel.db"));
+    const previousKernel = __setSessionKernelStoreForTest(kernelStore);
+    const spec: RunHostSpec = {
+      hostId: "rh-quiet-cancel",
+      osSessionId: "os-quiet-cancel",
+      prompt: "test",
+      cwd: "/tmp",
+    };
+    registerTestRun(spec.osSessionId, spec.hostId);
+    let receive: HostConnectionHandlers["onMsg"] | undefined;
+    const launcher: HostLauncher = {
+      alive: () => true,
+      newRunDir: (hostId) => join(root, hostId),
+      launch: async () => {},
+      stop: async () => {},
+      connector: () => ({
+        connect: async (handlers) => {
+          receive = handlers.onMsg;
+          return { send: () => true, close: () => {} };
+        },
+      }),
+    };
+    const handle = new HostHandle(
+      join(root, spec.hostId),
+      spec,
+      {},
+      launcher,
+      spec.hostId,
+      1,
+    );
+
+    try {
+      await handle.connectWithWait(100);
+      const events = hostedEventsWithJournal(handle, spec);
+      const completion = events.next();
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (activeRunRecords().some((run) => run.runKey === spec.hostId)) break;
+        await Bun.sleep(1);
+      }
+      expect(activeRunRecords().some((run) => run.runKey === spec.hostId)).toBe(
+        true,
+      );
+      expect(handle.requestCancel()).toBe(true);
+      if (!receive) throw new Error("Host connector did not attach");
+      receive({ t: "end" });
+
+      expect(await completion).toEqual({ done: true, value: undefined });
+      expect(activeRunRecords().some((run) => run.runKey === spec.hostId)).toBe(
+        false,
+      );
+    } finally {
+      handle.abandon();
+      __setActiveRunsPathForTest(previousJournal);
+      __setSessionKernelStoreForTest(previousKernel);
+      kernelStore.close();
+    }
   });
 });
 

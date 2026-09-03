@@ -8,10 +8,16 @@
  *
  * Key file: ~/.opensession/github-app.pem (0600), override with
  * OPENSESSION_GITHUB_APP_KEY (a file path). The JWT issuer is the App client
- * id from github-auth.ts. Token + installation id are cached on globalThis;
- * tokens live 1h and refresh 5 min early. GitHub App authority fails closed when
- * identity, key, installation selection, or permissions are invalid. It never
- * falls back to ambient gh, SSH credentials, or a connected human.
+ * id from github-auth.ts.
+ *
+ * One App may be installed on several accounts. The installation that serves
+ * a call is selected from the repository owner (`acme/app` mints against the
+ * acme installation); `integrations.github.installationOwner` is only the
+ * default for calls that name no repository. Tokens are cached on globalThis
+ * per installation and permission scope; they live 1h and refresh 5 min
+ * early. GitHub App authority fails closed when identity, key, installation
+ * selection, or permissions are invalid. It never falls back to ambient gh,
+ * SSH credentials, or a connected human.
  */
 import { createSign } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
@@ -44,20 +50,42 @@ export function __setGithubAppKeyPathForTest(path: string | undefined): void {
 type AppTokenCache = {
   token: string;
   expiresAt: number; // ms epoch
-  installationId: number;
-  installationOwner: string;
-  credentialIdentity: string;
 };
 
 const g = globalThis as {
-  // Cached per scope: a read-only token and a write token carry different
-  // permission sets, so they cannot share a slot.
-  __ghAppTokenCacheRead?: AppTokenCache | null;
-  __ghAppTokenCacheWrite?: AppTokenCache | null;
-  __ghAppTokenWarned?: boolean;
+  /** Installation tokens keyed by client id, installation id, and permission
+   * scope. A read-only token and a write token carry different permission
+   * sets, and each installation mints its own, so none share a slot. */
+  __ghAppTokenCache?: Map<string, AppTokenCache>;
+  /** Selectors already warned about, so a broken installation logs once. */
+  __ghAppTokenWarned?: Set<string>;
   __ghAppLastMintOk?: boolean;
   __ghAppLastMintIdentity?: string;
+  __ghAppInstallationsCache?: {
+    clientId: string;
+    at: number;
+    installations: GithubAppInstallationAccount[];
+  } | null;
 };
+
+function tokenCache(): Map<string, AppTokenCache> {
+  return (g.__ghAppTokenCache ??= new Map());
+}
+
+/** Drop every cached token and the installation directory: they belonged to
+ * a previous key or App identity. */
+function clearAppCaches(): void {
+  g.__ghAppTokenCache = new Map();
+  g.__ghAppInstallationsCache = null;
+}
+
+/** The owner half of `owner/name`, or null when the value is not exactly one
+ * owner and one repository. */
+export function githubRepoOwner(ghRepo: string | undefined): string | null {
+  if (!ghRepo) return null;
+  const [owner, repo, extra] = ghRepo.split("/");
+  return owner && repo && extra === undefined ? owner : null;
+}
 
 // READ_PERMISSIONS / WRITE_PERMISSIONS are the canonical sets imported at the
 // top of the file (shared/github-app-permissions) — the same definition the
@@ -78,122 +106,196 @@ function appJwt(clientId: string, key: string): string {
   return `${unsigned}.${sig}`;
 }
 
+export interface GithubAppInstallationAccount {
+  /** GitHub's numeric installation id, the token-mint selector. */
+  id: number;
+  /** Account login, e.g. "my-organization". */
+  login: string;
+  /** GitHub account type: "User" or "Organization". */
+  type: string;
+}
+
+/** App-JWT headers, or null when the App identity or key is missing. */
+async function appAuthHeaders(): Promise<Record<string, string> | null> {
+  const { clientId } = githubUserAuthSettings();
+  if (!clientId || !existsSync(keyPath())) return null;
+  const key = await Bun.file(keyPath()).text();
+  return {
+    Authorization: `Bearer ${appJwt(clientId, key)}`,
+    Accept: "application/vnd.github+json",
+  };
+}
+
+/** Every account the App is installed on, listed with the App JWT alone (no
+ * installation token involved, so this answers even when the default owner
+ * matches no installation). Null when the App identity or key is missing or
+ * GitHub cannot answer: "unknown", never "none". Briefly cached because the
+ * setup picker refetches each time it opens; `fresh` bypasses the cache when a
+ * just-installed account is expected. */
+export async function listGithubAppInstallations(
+  opts: { fresh?: boolean } = {},
+): Promise<GithubAppInstallationAccount[] | null> {
+  const { clientId } = githubUserAuthSettings();
+  if (!clientId || !existsSync(keyPath())) return null;
+  const cached = g.__ghAppInstallationsCache;
+  if (
+    !opts.fresh &&
+    cached &&
+    cached.clientId === clientId &&
+    Date.now() - cached.at < 60_000
+  ) {
+    return cached.installations;
+  }
+  try {
+    const headers = await appAuthHeaders();
+    if (!headers) return null;
+    const installations: GithubAppInstallationAccount[] = [];
+    for (let page = 1; ; page++) {
+      const res = await fetch(
+        `https://api.github.com/app/installations?per_page=100&page=${page}`,
+        { headers, signal: AbortSignal.timeout(15_000) },
+      );
+      const body: unknown = await res.json().catch(() => null);
+      if (!res.ok || !Array.isArray(body)) return null;
+      for (const installation of body) {
+        if (!installation || typeof installation !== "object") continue;
+        const id = "id" in installation ? installation.id : undefined;
+        const account =
+          "account" in installation &&
+          installation.account &&
+          typeof installation.account === "object"
+            ? installation.account
+            : null;
+        const login = account && "login" in account ? account.login : undefined;
+        const type = account && "type" in account ? account.type : undefined;
+        if (typeof id !== "number" || typeof login !== "string" || !login)
+          continue;
+        installations.push({
+          id,
+          login,
+          type: typeof type === "string" ? type : "",
+        });
+      }
+      if (body.length < 100) break;
+    }
+    // An empty directory is not cached: a just-installed App can take a moment
+    // to appear, and callers retry that edge.
+    if (installations.length)
+      g.__ghAppInstallationsCache = { clientId, at: Date.now(), installations };
+    return installations;
+  } catch {
+    return null;
+  }
+}
+
+/** The account pinned as the App's default installation, from config
+ * (installationOwner, with the setup-era appOrg as fallback). Empty when
+ * nothing is pinned yet. Only calls that name no repository use it. */
+export function configuredGithubInstallationOwner(): string {
+  const github = configuredIntegration("github");
+  return String(github.installationOwner || github.appOrg || "").trim();
+}
+
+/** Which installation a call is for: an explicit repository owner, or the
+ * configured default (numeric installationId, then installationOwner). Part
+ * of every cache key so a changed default never reuses another
+ * installation's token. */
+function installationSelector(owner?: string): string {
+  if (owner) return `owner:${owner.toLowerCase()}`;
+  const github = configuredIntegration("github");
+  const configuredId =
+    typeof github.installationId === "number" ? github.installationId : "";
+  return `default:${configuredId}:${configuredGithubInstallationOwner().toLowerCase()}`;
+}
+
+type SelectedInstallation = { id: number; owner: string };
+
+/** Resolve the installation for an owner (or the default). An owner the App is
+ * not installed on fails closed; so does a missing default when the App is
+ * installed on several accounts. */
+async function selectInstallation(
+  owner: string | undefined,
+  headers: Record<string, string>,
+): Promise<SelectedInstallation> {
+  const github = configuredIntegration("github");
+  const configuredId =
+    typeof github.installationId === "number"
+      ? github.installationId
+      : undefined;
+  if (!owner && configuredId) {
+    const res = await fetch(
+      `https://api.github.com/app/installations/${configuredId}`,
+      { headers },
+    );
+    const installation = (await res.json().catch(() => null)) as {
+      account?: { login?: string };
+    } | null;
+    const login = installation?.account?.login;
+    if (!res.ok || !login)
+      throw new Error(`cannot resolve installation owner (${res.status})`);
+    return { id: configuredId, owner: login };
+  }
+  const wanted = (owner || configuredGithubInstallationOwner()).toLowerCase();
+  const pick = (installs: GithubAppInstallationAccount[]) =>
+    wanted
+      ? installs.find((i) => i.login.toLowerCase() === wanted)
+      : installs.length === 1
+        ? installs[0]
+        : undefined;
+  let installs = await listGithubAppInstallations();
+  let selected = installs ? pick(installs) : undefined;
+  // A miss may be a stale directory (the App was just installed on this
+  // account). Look once more before refusing.
+  if (!selected && g.__ghAppInstallationsCache) {
+    installs = await listGithubAppInstallations({ fresh: true });
+    selected = installs ? pick(installs) : undefined;
+  }
+  if (!installs) throw new Error("cannot list GitHub App installations");
+  if (!installs.length) throw new Error("no installations");
+  if (!selected) {
+    throw new Error(
+      wanted
+        ? `no GitHub App installation for ${wanted}`
+        : "multiple GitHub App installations; configure integrations.github.installationOwner",
+    );
+  }
+  return { id: selected.id, owner: selected.login };
+}
+
 /**
- * Installation access token for the app's (sole) installation, or null when
- * the App identity, key, installation selection, or permissions are invalid.
- * Callers treat null as a closed credential boundary.
+ * Installation access token, or null when the App identity, key, installation
+ * selection, or permissions are invalid. `owner` selects the installation for
+ * that repository owner; without it the configured default installation
+ * serves. Callers treat null as a closed credential boundary.
  */
 export async function githubAppInstallationToken(
-  opts: { write?: boolean } = {},
+  opts: { write?: boolean; owner?: string } = {},
 ): Promise<string | null> {
-  const slot = opts.write ? "__ghAppTokenCacheWrite" : "__ghAppTokenCacheRead";
   const { clientId } = githubUserAuthSettings();
-  const githubConfig = configuredIntegration("github");
-  const configuredInstallationId =
-    typeof githubConfig.installationId === "number"
-      ? githubConfig.installationId
-      : undefined;
-  const configuredOwner = (
-    [githubConfig.installationOwner, githubConfig.appOrg].find(
-      (value): value is string => typeof value === "string" && !!value.trim(),
-    ) ?? ""
-  ).toLowerCase();
-  const credentialIdentity = `${clientId || ""}:${configuredInstallationId || ""}:${configuredOwner}`;
-  const cached = g[slot];
-  if (
-    cached &&
-    cached.credentialIdentity === credentialIdentity &&
-    cached.expiresAt - Date.now() > 5 * 60_000
-  ) {
-    g.__ghAppLastMintOk = true;
-    g.__ghAppLastMintIdentity = credentialIdentity;
-    return cached.token;
-  }
-
-  if (!clientId || !existsSync(keyPath())) {
-    g.__ghAppLastMintOk = false;
-    g.__ghAppLastMintIdentity = credentialIdentity;
+  const selector = installationSelector(opts.owner);
+  const identity = `${clientId || ""}:${selector}`;
+  // Health snapshots follow the default installation only: one organization
+  // the App is not installed on must not report the whole credential dead.
+  const noteHealth = (ok: boolean) => {
+    if (opts.owner) return;
+    g.__ghAppLastMintOk = ok;
+    g.__ghAppLastMintIdentity = identity;
+  };
+  const headers = await appAuthHeaders().catch(() => null);
+  if (!headers) {
+    noteHealth(false);
     return null;
   }
   try {
-    const key = await Bun.file(keyPath()).text();
-    const jwt = appJwt(clientId, key);
-    const headers = {
-      Authorization: `Bearer ${jwt}`,
-      Accept: "application/vnd.github+json",
-    };
-    // Either cache slot can supply the installation id — it does not vary by scope.
-    let installationId =
-      configuredInstallationId ||
-      (g.__ghAppTokenCacheRead?.credentialIdentity === credentialIdentity
-        ? g.__ghAppTokenCacheRead.installationId
-        : undefined) ||
-      (g.__ghAppTokenCacheWrite?.credentialIdentity === credentialIdentity
-        ? g.__ghAppTokenCacheWrite.installationId
-        : undefined);
-    const matchingRead =
-      g.__ghAppTokenCacheRead?.credentialIdentity === credentialIdentity
-        ? g.__ghAppTokenCacheRead
-        : undefined;
-    const matchingWrite =
-      g.__ghAppTokenCacheWrite?.credentialIdentity === credentialIdentity
-        ? g.__ghAppTokenCacheWrite
-        : undefined;
-    let installationOwner =
-      matchingRead && matchingRead.installationId === installationId
-        ? matchingRead.installationOwner
-        : matchingWrite && matchingWrite.installationId === installationId
-          ? matchingWrite.installationOwner
-          : undefined;
-    if (!installationId) {
-      const res = await fetch("https://api.github.com/app/installations", {
-        headers,
-      });
-      const installs = (await res.json()) as Array<{
-        id: number;
-        account?: { login?: string };
-      }>;
-      if (!Array.isArray(installs) || !installs.length)
-        throw new Error("no installations");
-      // Prefer an explicit installation owner, then the org captured at setup
-      // (appOrg) — the same precedence setup-team.ts uses. An org App installed
-      // on more than one account must be selected explicitly.
-      const selected = configuredOwner
-        ? installs.find(
-            (installation) =>
-              installation.account?.login?.toLowerCase() === configuredOwner,
-          )
-        : installs.length === 1
-          ? installs[0]
-          : undefined;
-      if (!selected) {
-        throw new Error(
-          configuredOwner
-            ? `no GitHub App installation for ${configuredOwner}`
-            : "multiple GitHub App installations; configure integrations.github.installationOwner",
-        );
-      }
-      installationId = selected.id;
-      installationOwner = selected.account?.login;
+    const installation = await selectInstallation(opts.owner, headers);
+    const cacheKey = `${clientId}:${installation.id}:${opts.write ? "write" : "read"}`;
+    const cached = tokenCache().get(cacheKey);
+    if (cached && cached.expiresAt - Date.now() > 5 * 60_000) {
+      noteHealth(true);
+      return cached.token;
     }
-    if (!installationOwner) {
-      const installationRes = await fetch(
-        `https://api.github.com/app/installations/${installationId}`,
-        { headers },
-      );
-      const installation = (await installationRes.json()) as {
-        account?: { login?: string };
-      };
-      installationOwner = installation.account?.login;
-      if (!installationRes.ok || !installationOwner) {
-        throw new Error(
-          `cannot resolve installation owner (${installationRes.status})`,
-        );
-      }
-    }
-
     const res = await fetch(
-      `https://api.github.com/app/installations/${installationId}/access_tokens`,
+      `https://api.github.com/app/installations/${installation.id}/access_tokens`,
       {
         method: "POST",
         headers,
@@ -205,26 +307,22 @@ export async function githubAppInstallationToken(
     const tok = (await res.json()) as { token?: string; expires_at?: string };
     if (!tok.token)
       throw new Error(`mint failed: ${JSON.stringify(tok).slice(0, 120)}`);
-    g[slot] = {
+    tokenCache().set(cacheKey, {
       token: tok.token,
       expiresAt: tok.expires_at
         ? Date.parse(tok.expires_at)
         : Date.now() + 55 * 60_000,
-      installationId,
-      installationOwner,
-      credentialIdentity,
-    };
-    g.__ghAppTokenWarned = false;
-    g.__ghAppLastMintOk = true;
-    g.__ghAppLastMintIdentity = credentialIdentity;
+    });
+    g.__ghAppTokenWarned?.delete(selector);
+    noteHealth(true);
     return tok.token;
   } catch (e) {
-    g.__ghAppLastMintOk = false;
-    g.__ghAppLastMintIdentity = credentialIdentity;
-    if (!g.__ghAppTokenWarned) {
-      g.__ghAppTokenWarned = true;
+    noteHealth(false);
+    const warned = (g.__ghAppTokenWarned ??= new Set());
+    if (!warned.has(selector)) {
+      warned.add(selector);
       console.warn(
-        `[github-app] installation token unavailable: ${String(e).slice(0, 200)}`,
+        `[github-app] installation token unavailable (${selector}): ${String(e).slice(0, 200)}`,
       );
     }
     return null;
@@ -232,35 +330,45 @@ export async function githubAppInstallationToken(
 }
 
 /** The selected GitHub credential for REST/GraphQL calls. GitHub App
- * installation tokens are the only service credential. */
+ * installation tokens are the only service credential. `repo` (`owner/name`)
+ * or `owner` selects the installation for that owner; a malformed repo fails
+ * closed. Without either, the configured default installation serves. */
 export async function githubToken(
-  opts: { write?: boolean } = {},
+  opts: { write?: boolean; repo?: string; owner?: string } = {},
 ): Promise<string | null> {
   if (!githubConfiguredCredential()) return null;
-  return githubAppInstallationToken(opts);
+  const owner = opts.repo ? githubRepoOwner(opts.repo) : opts.owner || null;
+  if (opts.repo && !owner) return null;
+  return githubAppInstallationToken({
+    ...(opts.write ? { write: true } : {}),
+    ...(owner ? { owner } : {}),
+  });
 }
 
-/** Whether the App has the complete identity needed for service work. */
+/** The `owner/name` a GitHub REST path addresses (`/repos/{owner}/{name}/…`),
+ * so a call built from a path still mints against that owner's installation.
+ * Null for paths outside `/repos/`. */
+export function githubRepoFromApiPath(path: string): string | null {
+  const match = path.match(/^\/repos\/([^/?#]+)\/([^/?#]+)(?:[/?#]|$)/);
+  return match ? `${match[1]}/${match[2]}` : null;
+}
+
+/** Whether the App has the complete identity needed for service work.
+ * Installation owner is optional: repository calls select by repository owner,
+ * while repo-less calls use the default owner when one is configured. */
 export function githubConfiguredCredential(): boolean {
-  const github = configuredIntegration("github");
-  const owner = github.installationOwner || github.appOrg;
-  return githubAppConfigured() && !!githubAppIdentity().slug && !!owner;
+  return githubAppConfigured() && !!githubAppIdentity().slug;
 }
 
 /** Last observed App availability for synchronous health snapshots. Startup and
- * every GitHub request update this state through installation-token minting. */
+ * every default-installation GitHub request update this state through
+ * installation-token minting. */
 export function githubAppCredentialHealth():
   | "operational"
   | "unavailable"
   | "unchecked" {
   if (!githubConfiguredCredential()) return "unavailable";
-  const github = configuredIntegration("github");
-  const owner = String(
-    github.installationOwner || github.appOrg || "",
-  ).toLowerCase();
-  const installationId =
-    typeof github.installationId === "number" ? github.installationId : "";
-  const identity = `${githubUserAuthSettings().clientId || ""}:${installationId}:${owner}`;
+  const identity = `${githubUserAuthSettings().clientId || ""}:${installationSelector()}`;
   if (
     g.__ghAppLastMintIdentity !== identity ||
     g.__ghAppLastMintOk === undefined
@@ -332,8 +440,7 @@ export function writeGithubAppKey(pem: string): void {
       "OPENSESSION_GITHUB_APP_KEY is set; not overwriting an ops-managed key",
     );
   writeFileAtomic(keyPath(), pem.endsWith("\n") ? pem : `${pem}\n`, 0o600);
-  g.__ghAppTokenCacheRead = null;
-  g.__ghAppTokenCacheWrite = null;
+  clearAppCaches();
 }
 
 /** Remove only a UI-managed key. An ops-managed path is external authority and
@@ -343,8 +450,7 @@ export function removeGithubAppKey(): void {
   // that mixed mode, preserve the external file but still invalidate tokens.
   if (!process.env.OPENSESSION_GITHUB_APP_KEY)
     rmSync(keyPath(), { force: true });
-  g.__ghAppTokenCacheRead = null;
-  g.__ghAppTokenCacheWrite = null;
+  clearAppCaches();
 }
 
 /** Keep the key and matching config mutation in one recoverable transaction.
@@ -358,10 +464,7 @@ export async function commitGithubAppKeyMutation<T>(
     key === undefined ||
     (key === null && process.env.OPENSESSION_GITHUB_APP_KEY)
   ) {
-    if (key === null) {
-      g.__ghAppTokenCacheRead = null;
-      g.__ghAppTokenCacheWrite = null;
-    }
+    if (key === null) clearAppCaches();
     return commitConfig();
   }
   if (key !== null && process.env.OPENSESSION_GITHUB_APP_KEY)
@@ -378,8 +481,7 @@ export async function commitGithubAppKeyMutation<T>(
   } catch (error) {
     if (previous === null) rmSync(path, { force: true });
     else writeFileAtomic(path, previous, 0o600);
-    g.__ghAppTokenCacheRead = null;
-    g.__ghAppTokenCacheWrite = null;
+    clearAppCaches();
     throw error;
   }
 }
@@ -395,11 +497,9 @@ export function githubRepositoryMatchesInstallation(
   ghRepo: string,
   installationOwner: string | undefined,
 ): boolean {
-  const [owner, repo, extra] = ghRepo.split("/");
+  const owner = githubRepoOwner(ghRepo);
   return (
     !!owner &&
-    !!repo &&
-    !extra &&
     !!installationOwner &&
     owner.toLowerCase() === installationOwner.toLowerCase()
   );
@@ -409,36 +509,24 @@ export async function githubAppRepositoryToken(
   ghRepo: string,
 ): Promise<string | null> {
   if (!githubConfiguredCredential()) return null;
-  const [owner, repo] = ghRepo.split("/");
-  if (!owner || !repo || ghRepo.split("/").length !== 2) return null;
-  // Resolve the installation id through the existing credential path. It keeps
-  // installation selection in one place and may populate the shared cache.
-  await githubAppInstallationToken();
-  const installation = g.__ghAppTokenCacheRead || g.__ghAppTokenCacheWrite;
-  const installationId = installation?.installationId;
-  if (
-    !githubRepositoryMatchesInstallation(
-      ghRepo,
-      installation?.installationOwner,
-    )
-  ) {
-    console.warn(
-      `[github-app] refusing repository token for ${ghRepo}: selected installation belongs to ${installation?.installationOwner || "unknown"}`,
-    );
-    return null;
-  }
-  const { clientId } = githubUserAuthSettings();
-  if (!installationId || !clientId || !existsSync(keyPath())) return null;
+  const owner = githubRepoOwner(ghRepo);
+  const repo = ghRepo.split("/")[1];
+  if (!owner || !repo) return null;
+  const headers = await appAuthHeaders().catch(() => null);
+  if (!headers) return null;
   try {
-    const key = await Bun.file(keyPath()).text();
+    // The installation is the one for this repository's owner. An owner the
+    // App is not installed on fails closed here, and GitHub refuses the mint
+    // anyway when the installation cannot see the repository.
+    const installation = await selectInstallation(owner, headers);
+    if (!githubRepositoryMatchesInstallation(ghRepo, installation.owner)) {
+      throw new Error(`installation belongs to ${installation.owner}`);
+    }
     const res = await fetch(
-      `https://api.github.com/app/installations/${installationId}/access_tokens`,
+      `https://api.github.com/app/installations/${installation.id}/access_tokens`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${appJwt(clientId, key)}`,
-          Accept: "application/vnd.github+json",
-        },
+        headers,
         body: JSON.stringify({
           repositories: [repo],
           // Trusted repository code runs can push/reply and inspect the
@@ -462,8 +550,10 @@ export async function githubAppRepositoryToken(
  * Env overlay that makes `gh` authenticate with the installation token
  * (GH_TOKEN beats hosts.yml), or null when unavailable.
  */
-export async function githubAppEnv(): Promise<Record<string, string> | null> {
-  const token = await githubToken();
+export async function githubAppEnv(
+  repo?: string,
+): Promise<Record<string, string> | null> {
+  const token = await githubToken(repo ? { repo } : {});
   return token ? { GH_TOKEN: token } : null;
 }
 

@@ -1,6 +1,7 @@
 /** Shared readiness check for Setup and `opensession doctor`. */
 import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
+import { listXaiAccountsPublic } from "./xai-accounts";
 import { accountProviderForModel } from "./models";
 import { configuredInteractiveDefaultModel } from "./model-catalog";
 import { modelProviders } from "./model-providers";
@@ -17,8 +18,9 @@ export interface EngineStatus {
   piEnabled: boolean;
   claudeAccounts: number;
   codexAccounts: number;
+  xaiAccounts: number;
   defaultModel: string;
-  provider: "claude" | "codex" | undefined;
+  provider: "claude" | "codex" | "xai" | undefined;
   ready: boolean;
   blocker: string | null;
   fix: string | null;
@@ -29,8 +31,13 @@ export function engineStatus(): EngineStatus {
   const enabled = piEngineEnabled();
   const claudePool = listAccountsPublic();
   const codexPool = listCodexAccountsPublic();
+  const xaiPool = listXaiAccountsPublic();
   const claudeAccounts = claudePool.length;
   const codexAccounts = codexPool.length;
+  const xaiAccounts = xaiPool.length;
+  const xaiAvailable = xaiPool.filter(
+    (account) => account.usable && !account.exhaustedUntil,
+  ).length;
   const claudeAvailable = claudePool.filter(
     (account) => account.usable && !account.exhaustedUntil,
   ).length;
@@ -43,6 +50,7 @@ export function engineStatus(): EngineStatus {
     piEnabled: enabled,
     claudeAccounts,
     codexAccounts,
+    xaiAccounts,
     defaultModel,
     provider,
   };
@@ -73,10 +81,17 @@ export function engineStatus(): EngineStatus {
       "Add a ChatGPT account under Workspace → Setup, or wait for an exhausted account to reset.",
     );
   }
+  if (provider === "xai" && !xaiAvailable) {
+    return blocked(
+      "No usable SuperGrok accounts are available for the default model.",
+      "Add an xAI account under Workspace → Setup, or wait for an exhausted account to reset.",
+    );
+  }
   if (
     !provider &&
     !claudeAvailable &&
     !codexAvailable &&
+    !xaiAvailable &&
     !Object.keys(modelProviders()).length
   ) {
     return blocked(

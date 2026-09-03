@@ -45,22 +45,13 @@
  *  - Request hygiene: bodies over 10MB are refused (413), and a per-boot
  *    rolling per-account counter caps requests/hour (`bridgeMaxRequestsPerHour`
  *    in ~/.opensession-model-providers.json, default 300 → 429 past it; estimated
- *    tokens are tracked alongside for the audit trail). The ultimate backstop
- *    is Anthropic's own per-account extra-usage credit ceiling: bridge traffic
- *    bills to the designated account's extra-usage credits (see below), so
- *    even a runaway client can never spend past the credits that account has
- *    enabled at claude.ai/settings/usage.
+ *    tokens are tracked alongside for the audit trail). Account selection stops
+ *    at plan limits by default. A run may continue on paid credits only when it
+ *    explicitly enables `usageCredits` and the account has credit headroom.
  *
- * Billing reality (verified live, 2026-07-08): Anthropic's server classifies
- * these requests as third-party-app traffic (it fingerprints the Pi
- * system prompt content — a claude_code preset wrapper does NOT change the
- * verdict) and answers `400 "Third-party apps now draw from your extra
- * usage, not your plan limits"` unless the account has extra-usage credits
- * enabled at claude.ai/settings/usage. So the designated bridge account MUST
- * have extra usage enabled, and bridge traffic bills to those credits, never
- * plan limits. We deliberately do NOT scrub the fingerprints (the reference
- * ecosystem's scrub plugin does) — that's classifier evasion, the same bucket
- * as the OAuth spoofing the plan rules out.
+ * Billing behavior (verified live, 2026-08-06): this SDK mapping is accepted as
+ * Claude Code plan traffic on an account with extra usage disabled. It uses the
+ * same no-op tool registration and PreToolUse capture pattern as Meridian.
  *
  * Known approximations (documented, acceptable for a bridge):
  *  - No token-level streaming: streamed responses open the SSE immediately,
@@ -209,6 +200,11 @@ export interface BridgeAccountPin {
   /** Accounts this turn already burned, skipped on every path. Drives the pi
    *  provider's in-turn account walk (see resolveAccount's excludeIds). */
   excludeIds?: readonly string[];
+  /** The account whose isolated config dir already holds this session's SDK
+   *  conversation. Preferred over the least-used pick while it is usable, so
+   *  a session keeps its SDK resume and prompt cache instead of replaying the
+   *  whole context onto a different subscription every request. */
+  stickyId?: string;
 }
 
 /** Pick the account to serve a bridge/pi request (utilization-gated).
@@ -241,6 +237,7 @@ export function pickBridgeAccount(
     model,
     pinnedId: pin?.accountId,
     strictPin: pin?.accountStrict,
+    stickyId: pin?.stickyId,
     designatedIds: ids,
     allowExtraUsage: pin?.usageCredits,
     excludeIds: pin?.excludeIds,
@@ -382,8 +379,16 @@ function jsonSchemaToZod(schema: any): z.ZodTypeAny {
 export const PASSTHROUGH_MCP = "oc";
 export const PASSTHROUGH_PREFIX = `mcp__${PASSTHROUGH_MCP}__`;
 
+/** Primary switch: an empty `tools` list removes every SDK built-in from the
+ *  model's context, including ones added by SDK bumps after the denylist
+ *  below was written (CronCreate, ScheduleWakeup, Monitor, ...). Without it a
+ *  new built-in leaks into context, the model calls it, and the client
+ *  answers "Tool X not found". */
+export const SDK_BUILTIN_TOOLS: string[] = [];
+
 /** Built-in SDK tools the bridge must never let run — the client owns all
- *  execution. (The PreToolUse hook blocks everything as backstop.) */
+ *  execution. Belt-and-braces under `SDK_BUILTIN_TOOLS`; the PreToolUse hook
+ *  blocks everything as a final backstop. */
 export const DISALLOWED_BUILTINS = [
   "Bash",
   "Edit",
@@ -679,6 +684,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
         settingSources: [],
         mcpServers: mcpServers as any,
         strictMcpConfig: true,
+        tools: SDK_BUILTIN_TOOLS,
         disallowedTools: DISALLOWED_BUILTINS,
         allowedTools: requestTools.map((t) => `${PASSTHROUGH_PREFIX}${t.name}`),
         pathToClaudeCodeExecutable: CLAUDE_CODE_BIN,

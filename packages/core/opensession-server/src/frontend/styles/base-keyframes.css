@@ -1,0 +1,233 @@
+/* ── Keyframes the markup reaches directly ───────────────────
+   These are referenced only from Tailwind utilities in the components —
+   `animate-[preview-spin_0.7s_linear_infinite]`, or the longhand
+   `[animation:session-info-in_var(--dur)_var(--ease)]` — so there is no CSS
+   rule left in legacy.css to carry them, and that file is being emptied.
+   Grep for BOTH spellings before assuming one of these is unused: the
+   underscores in an arbitrary value hide the name from a naive search. */
+
+@keyframes composer-agents-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* A ghost holds its place before it shows itself. Referenced from the
+   longhand in ui/state's `Skeleton`, the frame every skeleton in the app
+   wears.
+
+   Most of the lists these stand in for arrive fast enough that a placeholder
+   would flash and go, which is more distracting than the gap it filled — so
+   the ghost is laid out at once but stays invisible for a beat, and only a
+   wait long enough to notice ever gets stood in for. `both` is what does the
+   holding: it keeps the 0% opacity through the delay, so the shape reserves
+   its height from the first paint and the real rows replace it in place
+   instead of dropping the page down when they land.
+
+   Under prefers-reduced-motion the block above zeroes the delay along with
+   the duration and the ghost simply appears. That is the right answer here:
+   the beat is a comfort, not information, and there is nothing to lose by
+   skipping it. */
+@keyframes ghost-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The pixel spinner's wave. Referenced from the longhand
+   `[animation-name:pixel-snake-trail]` in lib/pixel-spinner-classes. */
+@keyframes pixel-snake-trail {
+  0% {
+    background: var(--glow-color);
+    box-shadow: none;
+    opacity: 0.78;
+  }
+  15% {
+    background: var(--glow-color);
+    box-shadow: none;
+    opacity: 0.7;
+  }
+  30% {
+    background: color-mix(in srgb, var(--glow-color) 70%, transparent);
+    box-shadow: none;
+    opacity: 0.6;
+  }
+  45% {
+    background: color-mix(in srgb, var(--glow-color) 50%, transparent);
+    box-shadow: none;
+    opacity: 0.5;
+  }
+  60%,
+  100% {
+    background: color-mix(in srgb, var(--glow-color) 35%, transparent);
+    box-shadow: none;
+    opacity: 1;
+  }
+}
+
+@keyframes preview-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* TextShimmer moves a masked window and its duplicate text in opposite
+   directions. The transforms cancel for the glyphs, keeping them registered
+   with the base label while the mask crosses it on compositor layers. Unlike
+   animating a clipped gradient's background-position, this needs no repaint on
+   each frame. Timing and highlight color remain caller-controlled. */
+@keyframes text-shimmer-window {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes text-shimmer-copy {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+/* Deploy is on its way but butler hasn't posted the preview URL yet — there's
+   nothing to link to, so the globe just breathes (a skeleton-style shimmer) in
+   a muted tone to read as "loading" until the amber Building link takes over. */
+@keyframes staging-shimmer {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* Was nested inside `@media (max-width: 720px)` in legacy.css. Top level here,
+   which is equivalent: the only thing that uses it is INFO_PAGE, and that page
+   renders solely when `useIsPhone()` is true, so the element cannot exist at a
+   width where this would have been undefined. Un-nesting also removes a trap —
+   a media-scoped keyframe whose consumer is not scoped the same way animates
+   nothing, silently. */
+@keyframes session-info-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* A transcript block arriving at the live edge fades up into place instead of
+   popping. Applied one-shot via VirtualTranscriptList's `enter` flag (see
+   newTailBlockKeys): only blocks whose key was not mounted by the previous
+   build play it, so opening a session, hydrating history, and virtualizer
+   remounts never re-run it. Travel matches session-info-in; duration --dur
+   because a whole block arriving is anchored movement, not an in-place
+   change. prefers-reduced-motion freezes it in the global block above. */
+@keyframes transcript-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Edge fades so a tab clipped by the scroll boundary reads as "there's more this
+   way" rather than as a broken, half-drawn tab — the strip hides its scrollbar,
+   so without this an overflowing strip gives no hint that it scrolls at all.
+   Same technique as the transcript's fades: a CSS scroll timeline drives the two
+   widths, so there are no JS scroll listeners and no React re-renders, and each
+   fade appears only when content really is past that edge. The mask sits on the
+   scroller's own box, which is what puts the fade at the tabs' edge instead of
+   under the pinned "+". The mask hangs off [data-overflow] (set by SessionTabs)
+   rather than on the timeline alone, because a scroll timeline that goes
+   inactive HOLDS its last value instead of reverting: without that gate, a strip
+   that stopped overflowing would keep a stale fade dimming its first tab.
+   Browsers without scroll-driven animations never get a mask at all. The fades
+   track scroll position rather than elapsed time, so they're left active under
+   prefers-reduced-motion.
+
+   The two widths must be REGISTERED to animate: an unregistered custom property
+   has no type, so a keyframe can only flip it at 50% instead of interpolating
+   it, and the mask would jump rather than fade. Registration is also what gives
+   an element that never sets one the 0px resting value. They live here beside
+   the keyframes that drive them — @property is a global declaration, not
+   component styling, and it has no class to hang on. */
+@property --tabs-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --tabs-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes session-tabs-fade-start {
+  from {
+    --tabs-fade-start: 0px;
+  }
+  to {
+    --tabs-fade-start: 24px;
+  }
+}
+
+@keyframes session-tabs-fade-end {
+  from {
+    --tabs-fade-end: 24px;
+  }
+  to {
+    --tabs-fade-end: 0px;
+  }
+}
+
+/* Entrance for the sidebar's filter popover and the mini-menus it opens (see
+   components/sidebar/Filters.tsx, which spells it as `animate-[hovercard-in_…]`).
+   A keyframe set has no class to hang on, so it can't be a utility; it sits here
+   with the rest of them rather than in the component. Only the `from` step is
+   written — the resting state is the element's own, so the animation can't
+   overwrite whatever the popover settles at. */
+@keyframes hovercard-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+
+@keyframes tab-drop-slot-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes update-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

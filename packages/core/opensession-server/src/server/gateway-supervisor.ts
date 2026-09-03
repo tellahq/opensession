@@ -19,9 +19,25 @@ import {
 import { createStableFrontendResponder } from "./stable-frontend";
 import { publishGatewayBackendPort } from "./gateway-routing";
 
-export const GATEWAY_CONTROL_SOCKET =
-  process.env.OPENSESSION_GATEWAY_CONTROL_SOCKET ||
-  "/run/opensession-gateway/control.sock";
+/**
+ * Where the supervisor listens for handoff commands. systemd hands a unit
+ * with `RuntimeDirectory=` its directory through RUNTIME_DIRECTORY:
+ * /run/opensession-gateway for the system service, and
+ * $XDG_RUNTIME_DIR/opensession-gateway for a rootless user install. The fixed
+ * /run path exists only on the former, so a user service that assumed it died
+ * at boot with ENOENT and the installer reported a server that never came up.
+ */
+export function gatewayControlSocketPath(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  if (env.OPENSESSION_GATEWAY_CONTROL_SOCKET)
+    return env.OPENSESSION_GATEWAY_CONTROL_SOCKET;
+  // Several RuntimeDirectory= entries arrive colon-separated; ours is one.
+  const runtimeDir = env.RUNTIME_DIRECTORY?.split(":")[0];
+  return `${runtimeDir || "/run/opensession-gateway"}/control.sock`;
+}
+
+export const GATEWAY_CONTROL_SOCKET = gatewayControlSocketPath();
 
 const PUBLIC_HOST = process.env.HOST || "127.0.0.1";
 const PUBLIC_PORT = Number(process.env.PORT || 3850);

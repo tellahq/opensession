@@ -178,6 +178,26 @@ describe("SessionListStore", () => {
     });
   });
 
+  test("queries every member of one workspace without scanning other rows", () => {
+    const store = memoryStore();
+    store.upsertMany([
+      session("live", "2026-08-22T12:00:00.000Z", {
+        workspaceId: "workspace-one",
+      }),
+      session("archived", "2026-08-22T11:00:00.000Z", {
+        archived: true,
+        workspaceId: "workspace-one",
+      }),
+      session("other", "2026-08-22T10:00:00.000Z", {
+        workspaceId: "workspace-two",
+      }),
+    ]);
+
+    expect(
+      store.listWorkspaceMembers("workspace-one").map((row) => row.id),
+    ).toEqual(["live", "archived"]);
+  });
+
   test("queries one archived workspace through indexed identity fields", () => {
     const store = memoryStore();
     store.upsertMany([

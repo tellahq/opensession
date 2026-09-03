@@ -26,8 +26,17 @@ interface Props {
 }
 
 type FilterKey = "review" | "open" | "merged" | "closed" | "all";
+type StateKind = "open" | "draft" | "merged" | "closed";
 
-const STATE_RANK: Record<string, number> = { OPEN: 0, CLOSED: 1, MERGED: 2 };
+const STATE_RANK = {
+  OPEN: 0,
+  CLOSED: 1,
+  MERGED: 2,
+} satisfies Record<NonNullable<UnifiedSession["prState"]>, number>;
+
+function stateRank(state: UnifiedSession["prState"]): number {
+  return state ? STATE_RANK[state] : 1;
+}
 
 /* ── Table geometry ──────────────────────────────────────────────────────────
    The row grid and its cells are shared by the header row and every PR row, so
@@ -59,12 +68,19 @@ const C_UPDATED =
 const DIM = "text-meta text-faint";
 
 /** Ink per PR state — replaces the render-time `rv-state-${key}`. */
-const STATE_TONE: Record<string, string> = {
+const STATE_TONE = {
   open: "text-green",
   draft: "text-dim",
   merged: "text-purple",
   closed: "text-red",
-};
+} satisfies Record<StateKind, string>;
+
+const STATE_META = {
+  open: { key: "open", label: "Open" },
+  draft: { key: "draft", label: "Draft" },
+  merged: { key: "merged", label: "Merged" },
+  closed: { key: "closed", label: "Closed" },
+} satisfies Record<StateKind, { key: StateKind; label: string }>;
 
 type ChecksTone = "pass" | "fail" | "pending";
 
@@ -97,12 +113,12 @@ function cleanTitle(s: UnifiedSession): string {
   return cleanSessionTitle(s.title || "") || s.title;
 }
 
-function stateMeta(s: UnifiedSession): { key: string; label: string } {
+function stateMeta(s: UnifiedSession) {
   const state = s.prState || "OPEN";
-  if (state === "MERGED") return { key: "merged", label: "Merged" };
-  if (state === "CLOSED") return { key: "closed", label: "Closed" };
-  if (s.prIsDraft) return { key: "draft", label: "Draft" };
-  return { key: "open", label: "Open" };
+  if (state === "MERGED") return STATE_META.merged;
+  if (state === "CLOSED") return STATE_META.closed;
+  if (s.prIsDraft) return STATE_META.draft;
+  return STATE_META.open;
 }
 
 function needsReview(s: UnifiedSession): boolean {
@@ -114,7 +130,7 @@ function needsReview(s: UnifiedSession): boolean {
 }
 
 /** A GitHub-style icon for a PR's open/merged/closed/draft state. */
-function StateIcon({ kind }: { kind: string }) {
+function StateIcon({ kind }: { kind: StateKind }) {
   const common = {
     width: 15,
     height: 15,
@@ -251,8 +267,7 @@ export function Reviews({
       }
     }
     return [...byPr.values()].sort((a, b) => {
-      const r =
-        (STATE_RANK[a.prState || ""] ?? 1) - (STATE_RANK[b.prState || ""] ?? 1);
+      const r = stateRank(a.prState) - stateRank(b.prState);
       if (r !== 0) return r;
       return (
         new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
@@ -314,7 +329,7 @@ export function Reviews({
     if (!hasSelection) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      const t = e.target as HTMLElement | null;
+      const t = e.target instanceof HTMLElement ? e.target : null;
       if (
         t &&
         (t.tagName === "INPUT" ||
@@ -375,7 +390,6 @@ export function Reviews({
             send={send}
             addHandler={addHandler}
             sessions={sessions}
-            onOpenSessionById={onOpenSession}
             walkthrough={selected.walkthrough}
           />
         </div>

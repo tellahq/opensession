@@ -137,9 +137,12 @@ export function SidebarToolRows({
 									    own tick. */}
                 <Menu.RadioGroup
                   value={tool.surface}
-                  onValueChange={(value) =>
-                    onSetSupport(value as SupportSurface)
-                  }
+                  onValueChange={(value) => {
+                    const placement = SUPPORT_PLACEMENT_OPTIONS.find(
+                      (option) => option.value === value,
+                    );
+                    if (placement) onSetSupport(placement.value);
+                  }}
                 >
                   {SUPPORT_PLACEMENT_OPTIONS.map((option) => (
                     <Menu.RadioItem key={option.value} value={option.value}>

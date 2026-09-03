@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  MAX_COMMAND_BYTES,
+  PENDING_TTL_MS,
   shouldRetireCommandResult,
+  TOMBSTONE_TTL_MS,
   WsCommandOutbox,
 } from "./ws-command-outbox";
 
@@ -203,18 +206,66 @@ describe("WebSocket command outbox", () => {
     ).toThrow("was reused");
   });
 
-  test("does not evict unresolved commands by age or count", () => {
+  test("does not evict unresolved commands by count within retention", () => {
     const storage = new MemoryStorage();
     const first = new WsCommandOutbox(storage, () => 0, KEY);
     for (let i = 0; i < 101; i++)
       first.put({ type: "cancel", requestId: `request-${i}` });
-    const muchLater = new WsCommandOutbox(
-      storage,
-      () => 30 * 24 * 60 * 60_000,
-      KEY,
+    const later = new WsCommandOutbox(storage, () => PENDING_TTL_MS - 1, KEY);
+    expect(later.pending()).toHaveLength(101);
+    expect(later.pending()[0]).toMatchObject({ requestId: "request-0" });
+  });
+
+  test("expires pending commands and tombstones after their retention", () => {
+    const storage = new MemoryStorage();
+    const first = new WsCommandOutbox(storage, () => 0, KEY);
+    first.put({ type: "cancel", requestId: "old" });
+    first.forget({ type: "cancel", requestId: "gone" }.requestId);
+    // Shipped tombstones carry no timestamp; the first sighting stamps them.
+    storage.setItem(
+      `${KEY}:retired:untimed`,
+      JSON.stringify({ requestId: "untimed" }),
     );
-    expect(muchLater.pending()).toHaveLength(101);
-    expect(muchLater.pending()[0]).toMatchObject({ requestId: "request-0" });
+    const stamped = new WsCommandOutbox(storage, () => 10, KEY);
+    expect(JSON.parse(storage.getItem(`${KEY}:retired:untimed`)!)).toEqual({
+      requestId: "untimed",
+      at: 10,
+    });
+    expect(stamped.pending()).toHaveLength(1);
+    const expired = new WsCommandOutbox(storage, () => PENDING_TTL_MS + 1, KEY);
+    expect(expired.pending()).toEqual([]);
+    expect(storage.getItem(`${KEY}:item:old`)).toBeNull();
+    expect(storage.getItem(`${KEY}:retired:gone`)).toBeNull();
+    expect(storage.getItem(`${KEY}:retired:untimed`)).not.toBeNull();
+    new WsCommandOutbox(storage, () => 10 + TOMBSTONE_TTL_MS + 1, KEY);
+    expect(storage.getItem(`${KEY}:retired:untimed`)).toBeNull();
+  });
+
+  test("names why a command could not be saved", () => {
+    expect(
+      new WsCommandOutbox(undefined, () => 0, KEY).tryPut({
+        type: "cancel",
+        requestId: "x",
+      }),
+    ).toEqual({ ok: false, reason: "unavailable" });
+    const storage = new MemoryStorage();
+    const outbox = new WsCommandOutbox(storage, () => 0, KEY);
+    storage.failWrites = true;
+    expect(outbox.tryPut({ type: "cancel", requestId: "x" })).toEqual({
+      ok: false,
+      reason: "blocked",
+    });
+    storage.failWrites = false;
+    expect(outbox.tryPut({ type: "cancel", requestId: "x" })).toEqual({
+      ok: true,
+    });
+    expect(
+      outbox.tryPut({
+        type: "cancel",
+        requestId: "big",
+        sessionId: "s".repeat(MAX_COMMAND_BYTES),
+      }),
+    ).toEqual({ ok: false, reason: "full" });
   });
 
   test("keeps transient failures until a completed or terminal receipt", () => {

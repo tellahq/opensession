@@ -1,109 +1,31 @@
 /**
- * In-process Anthropic provider for the pi engine — the meridian trick
- * (blocked passthrough tools over the first-party @anthropic-ai/claude-agent-sdk)
- * implemented as a pi-ai NATIVE provider instead of the loopback HTTP bridge.
- * pi-runner registers it via `runtime.registerNativeProvider` when
- * `~/.opensession-pi.json` has `anthropicTransport: "inprocess"` (the
- * default; "bridge" keeps the pre-2026-08 loopback path as rollback), so
- * `pi/anthropic/*` turns reach pi/meridian's level: native token-level
- * streaming (SDK partial message events → pi text/thinking deltas), no
- * end-of-request replay assembly, and Meridian's durable passthrough
- * checkpoint protocol without a loopback HTTP hop.
+ * In-process Anthropic provider for the pi engine.
  *
- * How a stream call maps onto the SDK (the anthropic-bridge.ts recipe, HTTP
- * hop removed — the shared helpers are imported from there so the two stay
- * one implementation):
- *  - pi hands `streamSimple(model, context, options)` the FULL pi-side
- *    conversation each turn. Messages convert to the bridge's Anthropic wire
- *    shape (piMessagesToAnthropic) and the bridge's session store logic
- *    decides continuation vs replay (planSdkTurn): history strictly grew past
- *    what the SDK session has seen → resume with only the new tail flattened;
- *    a durable passthrough checkpoint instead resumes at its tool-bearing
- *    assistant UUID with the exact real tool results as structured content.
- *    Anything else (first turn,
- *    edited/compacted history, or the designated walk moving to a DIFFERENT
- *    account — SDK sessions live in per-account isolated config dirs, so a
- *    cross-account resume cannot work) → fresh SDK session with a full flat
- *    replay.
- *    The pi→SDK session map is keyed by the stream option `sessionId` (the
- *    pi session id on agent turns — pi's compaction/branch-summary one-shots
- *    deliberately carry a fresh uuid per request and so take the stateless
- *    full-replay path instead of contaminating the conversation's SDK
- *    session), unified id as fallback, parked on globalThis: hot reloads
- *    keep it, a real restart just replays — correct, only slower.
- *  - The request's tools become no-op SDK-MCP passthrough tools; a PreToolUse
- *    hook captures {id, name, input} and blocks with Meridian's explicit stop
- *    instruction. Once every denial reaches the iterator, Pi receives its
- *    terminal toolUse event immediately while the provider suppresses and
- *    drains the hidden SDK digest to a canonical result. Only then is the
- *    tool-bearing assistant UUID published as resumable. The next Pi step
- *    waits for that per-session drain and resumes there with real results.
- *  - Text/thinking stream token-level via `includePartialMessages` stream
- *    events; if the CLI ever yields no stream events, whole assistant
- *    messages fall back to one delta per text block on arrival — still
- *    strictly better than end-of-request replay.
- *  - Abort: the pi stream's AbortSignal drives the SDK's abortController
- *    (claude-direct's pattern); an abort ends the stream with reason
- *    "aborted", which runPi's user-cancel path swallows quietly.
+ * Each pi session keeps one Claude Agent SDK streaming-input query alive across
+ * model steps. Client tools are real in-process SDK MCP tools whose handlers
+ * park until pi returns the matching result. The provider exposes the complete
+ * assistant tool batch to pi, returns that batch as the pi step boundary, then
+ * resolves the parked handlers on the next step. Claude Code therefore keeps
+ * one native conversation and one prompt-cache chain instead of resuming from
+ * disk and rewriting the post-prefix context after every tool call.
  *
- * Containment (all enforced here, not in prompts):
- *  - Account pick mirrors pi/meridian: pickBridgeAccount (exported by
- *    the bridge) draws from the general claude-accounts pool with the run
- *    user's personal-first routing, honoring run-level pins (accountId/
- *    accountStrict/usageCredits). An pi bridgeAccountIds designation,
- *    when set, still contains serving to exactly those ids (legacy override).
- *    Building the provider throws bridgeDesignationError()'s exact message
- *    when the engine is disabled or no account exists, so the run fails as
- *    early and as clearly as the bridge path did.
- *  - Usage-limit-shaped SDK failures markExhausted the picked account and
- *    then ROTATE: the turn is replayed across every usable account, and only
- *    a dry pool surfaces the error (whose
- *    original message isPiUsageLimitShape's anthropic arm classifies:
- *    isClaudeUsageLimitError shapes, 429, "no designated bridge account").
- *    This is the account-walk discipline pi lacked: it sidelined the account
- *    and surfaced the failure, so one capped
- *    account ended the run while the rest of the pool sat idle and the
- *    sideline only helped the next prompt. agent-runner cannot rescue that
- *    either, because an explicit engine choice pins preferredFallback to
- *    "none" rather than crossing into an pi fallback. The per-account
- *    rolling hourly cap (admitBridgeRequest, shared counter with the bridge)
- *    refuses 429-worded for the same classifier, and rotates too, but is
- *    exempt from the sideline: it is local admission control that frees
- *    within the hour, and the sideline map is shared with pi.
- *    Rotation is bounded to a turn that has streamed NOTHING yet, so a
- *    failure mid-answer still surfaces plainly instead of replaying text the
- *    reader already saw. Known gap: the provider has no channel back to
- *    pi-runner's transcript, so a switch is visible in the audit log and the
- *    server log, not as a runner_notice the way pi's is.
- *  - Audit parity with the bridge (this replaces its per-request audit for pi
- *    traffic): `pi_anthropic_request` in/out with summarizeText, unified
- *    session attribution, account, tokens, duration — never raw text dumps,
- *    never tokens/secrets.
- *  - Env hygiene: the SDK subprocess env is PATH/HOME/LANG +
- *    CLAUDE_CODE_OAUTH_TOKEN + an ISOLATED per-account CLAUDE_CONFIG_DIR
- *    under stateDir("pi")/claude-cfg (claude-direct's stricter pattern — the
- *    subprocess can never fall back to host ~/.claude credentials), cwd is
- *    the bridge's empty BRIDGE_CWD (every tool is a blocked passthrough, no
- *    worktree must ever be visible), and the SDK's own built-ins are
- *    disallowed (DISALLOWED_BUILTINS + the block-everything hook backstop).
+ * The live query is keyed by pi session plus the exact model, system prompt,
+ * and tool configuration. A changed history or account closes it and falls
+ * back to the durable SDK resume/replay plan. Completed conversations remain
+ * warm for 15 minutes, bounded to 24 idle processes. In-use turns are never
+ * evicted; abandoned pending tools close after two hours. Per-account config
+ * directories keep credentials isolated. Account selection remains sticky
+ * while usable and still walks the pool on a limit
+ * before any visible output.
  *
- * Known approximations (bridge parity, documented): `temperature`/`maxTokens`
- * /`timeoutMs` and pi's `reasoning` thinking level are ignored (the SDK does
- * not expose them); thinking blocks stream out but are dropped from replay
- * (signatures cannot round-trip through flat text). Images are NOT dropped:
- * the flat replay cannot carry them, so planSdkTurn lifts the delivered
- * slice's image blocks out and the turn goes to the SDK as a structured user
- * message (see sdkPromptContent). They used to be filtered away here, which
- * meant a person's screenshot reached the transcript and then vanished before
- * the model, with no error on either side.
+ * Token-level text and thinking events pass through unchanged. SDK usage is
+ * cumulative inside a tool loop, so each pi step reports only the unreported
+ * delta. Images ride as structured content. Unknown SDK tool names are handed
+ * to pi, then the live query is discarded so Claude Code cannot continue on
+ * its own synthetic error branch.
  *
- * pi-ai is not a direct dependency (only @earendil-works/pi-coding-agent is),
- * so the Provider surface is structurally typed: types derive from
- * ModelRuntime's own signatures and the one cast lives in
- * buildPiAnthropicProvider. Returning a plain async generator from stream()
- * is contract-safe — ModelRuntime wraps every provider stream in pi-ai's
- * lazyStream, which forwards any AsyncIterable<AssistantMessageEvent> into a
- * real event stream and converts generator throws into terminal error events.
+ * The bridge transport remains the rollback path. This module has no import-
+ * time sockets, timers, or subprocesses; queries start only from stream().
  */
 
 import { mkdirSync } from "fs";
@@ -111,12 +33,15 @@ import {
   query,
   createSdkMcpServer,
   tool,
+  type Query,
+  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { stateDir } from "./paths";
 import { audit, summarizeText } from "./audit";
 import {
   DISALLOWED_BUILTINS,
+  SDK_BUILTIN_TOOLS,
   PASSTHROUGH_MCP,
   PASSTHROUGH_PREFIX,
   admitBridgeRequest,
@@ -131,8 +56,8 @@ import {
 } from "./anthropic-bridge";
 import { markExhausted, type ClaudeAccount } from "./claude-accounts";
 import {
+  coalesceCompleteToolResultContinuation,
   createEarlyStopTracker,
-  isCompleteToolResultContinuation,
   noteAssistantMessage,
   noteUserContent,
   settledToolCallAssistantUuid,
@@ -268,18 +193,141 @@ type PiStreamEvent =
       error: PiAssistantMessageShape;
     };
 
-// ── Passthrough capture and durable checkpoint drain ─────────────────────────
+// ── Passthrough capture and durable fallback checkpoints ────────────────────
 
-/** Meridian's model-facing denial. It is never part of Pi's transcript: once
- *  the visible tool batch settles, the provider closes Pi's stream and drains
- *  the SDK's digest branch invisibly to its canonical result. */
+/** Internal text used only by the facade's synthetic pi-side tool boundary.
+ * It never enters either the pi transcript or the live SDK conversation. */
 export const PI_PASSTHROUGH_BLOCK_REASON =
-  "This tool call has been forwarded to the client for execution. " +
-  "The result will be delivered in a future turn. " +
-  "Do not retry, do not call additional tools, and do not generate further text. End your turn now.";
+  "This tool call has been forwarded to the client for execution.";
 
-/** The SDK still needs room for its hidden digest after the visible tool turn. */
-export const PI_SDK_MAX_TURNS = 8;
+type EarlyStopTracker = ReturnType<typeof createEarlyStopTracker>;
+
+/** SDK-internal tools that really execute inside the SDK. Never forward these to pi. */
+const SDK_INTERNAL_TOOLS = new Set(["ToolSearch"]);
+
+/** Forward tool names the SDK cannot dispatch, including observed manglings
+ * such as `mcp__ocuser__bash`. Pi returns its normal unknown-tool result, and
+ * the provider then discards the live query before Claude Code can continue on
+ * a different synthetic-error history. Call after noteAssistantMessage. */
+export function captureUnforwardedToolUses(
+  tracker: EarlyStopTracker,
+  message: unknown,
+  captured: CapturedToolUse[],
+): number {
+  const m = message as {
+    type?: unknown;
+    uuid?: unknown;
+    message?: { content?: unknown };
+  } | null;
+  const content = m?.message?.content;
+  if (m?.type !== "assistant" || !Array.isArray(content)) return 0;
+  let added = 0;
+  for (const block of content) {
+    const b = block as {
+      type?: unknown;
+      id?: unknown;
+      name?: unknown;
+      input?: unknown;
+    } | null;
+    if (b?.type !== "tool_use") continue;
+    if (typeof b.id !== "string" || !b.id) continue;
+    if (typeof b.name !== "string" || SDK_INTERNAL_TOOLS.has(b.name)) continue;
+    if (tracker.expected.has(b.id)) continue;
+    if (captured.some((c) => c.id === b.id)) continue;
+    tracker.expected.add(b.id);
+    if (typeof m.uuid === "string" && m.uuid) {
+      tracker.toolCallAssistantUuid = m.uuid;
+    }
+    captured.push({
+      id: b.id,
+      name: b.name.startsWith(PASSTHROUGH_PREFIX)
+        ? b.name.slice(PASSTHROUGH_PREFIX.length)
+        : b.name,
+      input: (b.input as Record<string, unknown> | undefined) ?? {},
+    });
+    added++;
+  }
+  return added;
+}
+
+/** Capture every client-owned SDK tool call from the complete assistant
+ * envelope. Live MCP handlers park on these calls, so the envelope, rather
+ * than hook timing, is the authoritative parallel batch. */
+function captureSdkToolUses(
+  tracker: EarlyStopTracker,
+  message: unknown,
+  captured: CapturedToolUse[],
+): number {
+  const before = captured.length;
+  captureUnforwardedToolUses(tracker, message, captured);
+  const envelope = message as {
+    uuid?: unknown;
+    message?: { content?: unknown };
+  } | null;
+  if (!Array.isArray(envelope?.message?.content))
+    return captured.length - before;
+  for (const block of envelope.message.content) {
+    const toolUse = block as {
+      type?: unknown;
+      id?: unknown;
+      name?: unknown;
+      input?: unknown;
+    } | null;
+    if (
+      toolUse?.type !== "tool_use" ||
+      typeof toolUse.id !== "string" ||
+      !toolUse.id ||
+      typeof toolUse.name !== "string" ||
+      SDK_INTERNAL_TOOLS.has(toolUse.name) ||
+      captured.some((call) => call.id === toolUse.id)
+    ) {
+      continue;
+    }
+    tracker.expected.add(toolUse.id);
+    if (typeof envelope.uuid === "string" && envelope.uuid) {
+      tracker.toolCallAssistantUuid = envelope.uuid;
+    }
+    captured.push({
+      id: toolUse.id,
+      name: toolUse.name.startsWith(PASSTHROUGH_PREFIX)
+        ? toolUse.name.slice(PASSTHROUGH_PREFIX.length)
+        : toolUse.name,
+      input: (toolUse.input as Record<string, unknown> | undefined) ?? {},
+    });
+  }
+  return captured.length - before;
+}
+
+/** Capture the next visible assistant tool batch. A live SDK continuation
+ * echoes the previous batch's tool results before emitting this assistant
+ * message, so `tracker.resolved` can legitimately be non-empty here. Those
+ * unrelated ids are harmless: early-stop settlement only checks ids present
+ * in `tracker.expected`. The durable checkpoint, not resolved history, is the
+ * boundary that stops us from observing a later hidden assistant message. */
+export function captureVisibleSdkAssistantToolUses(
+  tracker: EarlyStopTracker,
+  message: unknown,
+  captured: CapturedToolUse[],
+  checkpointed: boolean,
+): boolean {
+  if (checkpointed) return false;
+  const expectedBefore = tracker.expected.size;
+  noteAssistantMessage(tracker, message);
+  captureSdkToolUses(tracker, message, captured);
+  return tracker.expected.size > expectedBefore;
+}
+
+/** Map the live facade's synthetic boundary marker onto pi stop reasons. */
+export function recoverSyntheticSdkStopReason(
+  subtype: unknown,
+  capturedToolCalls: number,
+  contentBlocks: number,
+): "toolUse" | "length" | undefined {
+  if (subtype !== "error_max_turns") return undefined;
+  if (capturedToolCalls > 0) return "toolUse";
+  if (contentBlocks > 0) return "length";
+  return undefined;
+}
 
 // ── pi messages → the bridge's Anthropic wire shape ──────────────────────────
 
@@ -405,9 +453,8 @@ export interface PiSdkSessionState {
    *  never-touching-host-creds) — the caller treats an account mismatch as
    *  divergence and replays fresh. */
   accountId: string;
-  /** Durable assistant boundary for a visible passthrough tool turn. When set,
-   *  the next exact tool-result continuation resumes here rather than after
-   *  the hidden SDK digest branch. */
+  /** Durable assistant boundary for a visible passthrough tool turn. A cold
+   * fallback resumes here with exact tool results when no live query remains. */
   passthroughToolCallAssistantUuid?: string;
   passthroughToolCallIds?: string[];
   lastUsedAt: number;
@@ -417,25 +464,6 @@ export interface PiSdkSessionState {
 // (a real restart replays — correct, only slower). Exported for tests.
 export function piSdkSessionStore(): Map<string, PiSdkSessionState> {
   return (g.__piAnthropicSdkSessions ??= new Map<string, PiSdkSessionState>());
-}
-
-/** Canonical SDK drains still running after Pi received a terminal toolUse
- *  event. The next step for that session waits here before reading its mapping. */
-function piSdkCanonicalDrains(): Map<string, Promise<void>> {
-  return (g.__piAnthropicCanonicalDrains ??= new Map<string, Promise<void>>());
-}
-
-function beginPiSdkCanonicalDrain(key: string): () => void {
-  const drains = piSdkCanonicalDrains();
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  drains.set(key, promise);
-  return () => {
-    if (drains.get(key) === promise) drains.delete(key);
-    resolve();
-  };
 }
 
 export interface PiSdkTurnPlan {
@@ -451,6 +479,9 @@ export interface PiSdkTurnPlan {
   /** Image blocks from the delivered slice, oldest first. Empty = a plain-text
    *  turn, which rides the SDK's string prompt exactly as it always has. */
   images: ContentBlock[];
+  /** Steering that arrived after a complete live tool-result batch. It is
+   * queued before parked handlers resume, matching Claude Code's live input. */
+  liveFollowUp?: { prompt: string; images: ContentBlock[] };
   continuation: boolean;
 }
 
@@ -486,13 +517,65 @@ export function resumedToolResults(
     blocks.push(...message.content);
   }
   const merged = [{ role: "user", content: blocks }];
-  return isCompleteToolResultContinuation(merged, expectedIds) ? blocks : null;
+  return coalesceCompleteToolResultContinuation(merged, expectedIds)
+    ? blocks
+    : null;
 }
 
-/** Meridian's continuation decision, factored pure for tests. A checkpointed
- *  tool turn resumes only when the new tail contains exactly its real tool
- *  results. Partial results, extra user content, edits, compaction, and stale
- *  counts full-replay into a fresh SDK session. */
+/** Keep a live tool turn alive when steering follows its complete results.
+ * A cold resume cannot safely inject both pieces, so this path is used only
+ * while the original streaming-input query still exists. */
+export function planLiveSdkTurn(
+  stored: PiSdkSessionState | undefined,
+  messages: AnthropicMessage[],
+): PiSdkTurnPlan | null {
+  if (
+    !stored?.passthroughToolCallAssistantUuid ||
+    messages.length <= stored.messageCount
+  ) {
+    return null;
+  }
+  const delivered = messages.slice(stored.messageCount);
+  const resultMessages: AnthropicMessage[] = [];
+  let consumed = 0;
+  for (const message of delivered) {
+    if (
+      message.role !== "user" ||
+      !Array.isArray(message.content) ||
+      !message.content.every((block) => block?.type === "tool_result")
+    ) {
+      break;
+    }
+    resultMessages.push(message);
+    consumed += 1;
+  }
+  const toolResults = resumedToolResults(
+    resultMessages,
+    stored.passthroughToolCallIds || [],
+  );
+  if (!toolResults) return null;
+  const followUp = delivered.slice(consumed);
+  if (followUp.some((message) => message.role !== "user")) return null;
+  return {
+    resume: stored.sdkSessionId,
+    resumeSessionAt: stored.passthroughToolCallAssistantUuid,
+    prompt: "",
+    toolResults,
+    images: [],
+    ...(followUp.length
+      ? {
+          liveFollowUp: {
+            prompt: replayConversation(followUp),
+            images: turnImages(followUp),
+          },
+        }
+      : {}),
+    continuation: true,
+  };
+}
+
+/** Durable continuation decision. A checkpointed cold resume accepts only the
+ * exact tool results. Edits, compaction, steering, and stale counts replay. */
 export function planSdkTurn(
   stored: PiSdkSessionState | undefined,
   messages: AnthropicMessage[],
@@ -742,6 +825,475 @@ export function buildPiAnthropicProvider(
   return provider as unknown as PiNativeProvider;
 }
 
+const MAX_LIVE_SDK_CONVERSATIONS = 24;
+const LIVE_SDK_IDLE_MS = 15 * 60_000;
+const LIVE_SDK_PENDING_MAX_MS = 2 * 60 * 60_000;
+const LIVE_MCP_TOOL_TIMEOUT_MS = 24 * 60 * 60_000;
+
+type SdkToolReply = {
+  content: Array<
+    | { type: "text"; text: string }
+    | { type: "image"; data: string; mimeType: string }
+  >;
+  isError?: boolean;
+};
+
+class SdkInputQueue implements AsyncIterable<SDKUserMessage> {
+  readonly #items: SDKUserMessage[] = [];
+  readonly #waiters: Array<(result: IteratorResult<SDKUserMessage>) => void> =
+    [];
+  #closed = false;
+
+  push(message: SDKUserMessage): void {
+    if (this.#closed) throw new Error("Claude SDK input is closed");
+    const waiter = this.#waiters.shift();
+    if (waiter) waiter({ value: message, done: false });
+    else this.#items.push(message);
+  }
+
+  close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    for (const waiter of this.#waiters.splice(0)) {
+      waiter({ value: undefined, done: true });
+    }
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
+    return {
+      next: () => {
+        const message = this.#items.shift();
+        if (message) return Promise.resolve({ value: message, done: false });
+        if (this.#closed) {
+          return Promise.resolve({ value: undefined, done: true });
+        }
+        return new Promise((resolve) => this.#waiters.push(resolve));
+      },
+    };
+  }
+}
+
+interface LiveSdkConversation {
+  key: string;
+  accountId: string;
+  query: Query;
+  input: SdkInputQueue;
+  controller: AbortController;
+  pendingToolIds: string[];
+  suppliedToolResults: Map<string, SdkToolReply>;
+  toolWaiters: Map<string, (reply: SdkToolReply) => void>;
+  lastUsedAt: number;
+  inUse: boolean;
+  disposed: boolean;
+}
+
+function liveSdkConversations(): Map<string, LiveSdkConversation> {
+  return (g.__piAnthropicLiveSdkConversations ??= new Map<
+    string,
+    LiveSdkConversation
+  >());
+}
+
+function disposeLiveSdkConversation(
+  live: LiveSdkConversation,
+  reason: string,
+): void {
+  if (live.disposed) return;
+  live.disposed = true;
+  if (liveSdkConversations().get(live.key) === live) {
+    liveSdkConversations().delete(live.key);
+  }
+  const reply: SdkToolReply = {
+    content: [
+      { type: "text", text: `Open Session ended this tool turn: ${reason}` },
+    ],
+    isError: true,
+  };
+  for (const resolve of live.toolWaiters.values()) resolve(reply);
+  live.toolWaiters.clear();
+  live.suppliedToolResults.clear();
+  live.input.close();
+  live.controller.abort();
+  live.query.close();
+}
+
+function pruneLiveSdkConversations(now = Date.now()): void {
+  const conversations = liveSdkConversations();
+  for (const live of conversations.values()) {
+    if (
+      !live.inUse &&
+      live.pendingToolIds.length > 0 &&
+      now - live.lastUsedAt > LIVE_SDK_PENDING_MAX_MS
+    ) {
+      disposeLiveSdkConversation(live, "stale tool turn evicted");
+    }
+  }
+  const idle = [...conversations.values()]
+    .filter((live) => !live.inUse && live.pendingToolIds.length === 0)
+    .sort((a, b) => a.lastUsedAt - b.lastUsedAt);
+  for (const live of idle) {
+    if (
+      now - live.lastUsedAt > LIVE_SDK_IDLE_MS ||
+      conversations.size > MAX_LIVE_SDK_CONVERSATIONS
+    ) {
+      disposeLiveSdkConversation(live, "idle conversation evicted");
+    }
+  }
+}
+
+function shortStableHash(value: string): string {
+  let first = 0x811c9dc5;
+  let second = 0x9e3779b9;
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    first = Math.imul(first ^ code, 0x01000193);
+    second = Math.imul(second ^ code, 0x85ebca6b);
+  }
+  return `${(first >>> 0).toString(36)}${(second >>> 0).toString(36)}`;
+}
+
+function liveConfigHash(
+  modelId: string,
+  system: string,
+  tools: readonly PiToolShape[],
+): string {
+  return shortStableHash(JSON.stringify([modelId, system, tools]));
+}
+
+function sdkUserMessage(content: string | ContentBlock[]): SDKUserMessage {
+  return {
+    type: "user",
+    message: { role: "user", content } as SDKUserMessage["message"],
+    parent_tool_use_id: null,
+  };
+}
+
+const SDK_USAGE_FIELDS = [
+  "input_tokens",
+  "output_tokens",
+  "cache_read_input_tokens",
+  "cache_creation_input_tokens",
+] as const;
+
+/** Usage for one pi step, keyed by Anthropic message id. Each SDK `assistant`
+ * message and stream event carries the usage of the API request that produced
+ * it, and the SDK repeats one `assistant` message per content block, so
+ * entries merge per id and sum across ids (an internal ToolSearch round trip
+ * adds a second request to the same step). The SDK `result` usage is not a
+ * per-step figure: its output count spans every step of the turn. */
+export type SdkStepUsage = Map<string, Record<string, number>>;
+
+export function recordSdkStepUsage(
+  step: SdkStepUsage,
+  id: string,
+  usage: Readonly<Record<string, unknown>>,
+): void {
+  const entry = step.get(id) ?? {};
+  for (const field of SDK_USAGE_FIELDS) {
+    const value = usage[field];
+    if (typeof value === "number") entry[field] = value;
+  }
+  step.set(id, entry);
+}
+
+export function sumSdkStepUsage(
+  step: SdkStepUsage,
+): Record<string, number> | undefined {
+  if (step.size === 0) return undefined;
+  const total: Record<string, number> = {};
+  for (const field of SDK_USAGE_FIELDS) total[field] = 0;
+  for (const entry of step.values()) {
+    for (const field of SDK_USAGE_FIELDS) total[field] += entry[field] ?? 0;
+  }
+  return total;
+}
+
+function sdkToolReply(block: ContentBlock): SdkToolReply {
+  const raw = Array.isArray(block.content)
+    ? block.content
+    : [{ type: "text", text: String(block.content ?? "") }];
+  const content: SdkToolReply["content"] = [];
+  for (const item of raw) {
+    if (item?.type === "text" && typeof item.text === "string") {
+      content.push({ type: "text", text: item.text });
+    } else if (
+      item?.type === "image" &&
+      item.source?.type === "base64" &&
+      typeof item.source.data === "string" &&
+      typeof item.source.media_type === "string"
+    ) {
+      content.push({
+        type: "image",
+        data: item.source.data,
+        mimeType: item.source.media_type,
+      });
+    }
+  }
+  if (!content.length) content.push({ type: "text", text: "" });
+  return { content, ...(block.is_error === true ? { isError: true } : {}) };
+}
+
+function supplyLiveToolResults(
+  live: LiveSdkConversation,
+  blocks: readonly ContentBlock[],
+): void {
+  for (const block of blocks) {
+    if (
+      block?.type !== "tool_result" ||
+      typeof block.tool_use_id !== "string"
+    ) {
+      continue;
+    }
+    const reply = sdkToolReply(block);
+    const waiter = live.toolWaiters.get(block.tool_use_id);
+    if (waiter) {
+      live.toolWaiters.delete(block.tool_use_id);
+      waiter(reply);
+    } else {
+      live.suppliedToolResults.set(block.tool_use_id, reply);
+    }
+  }
+  live.pendingToolIds = [];
+}
+
+function awaitLiveToolResult(
+  live: LiveSdkConversation,
+  toolUseId: string,
+): Promise<SdkToolReply> {
+  const supplied = live.suppliedToolResults.get(toolUseId);
+  if (supplied) {
+    live.suppliedToolResults.delete(toolUseId);
+    return Promise.resolve(supplied);
+  }
+  if (live.disposed) {
+    return Promise.resolve({
+      content: [{ type: "text", text: "Open Session closed this tool turn" }],
+      isError: true,
+    });
+  }
+  return new Promise((resolve) => live.toolWaiters.set(toolUseId, resolve));
+}
+
+function sdkToolUseId(extra: unknown): string | undefined {
+  if (!extra || typeof extra !== "object") return undefined;
+  const metadata = (extra as { _meta?: unknown })._meta;
+  if (!metadata || typeof metadata !== "object") return undefined;
+  const value = (metadata as Record<string, unknown>)["claudecode/toolUseId"];
+  return typeof value === "string" && value ? value : undefined;
+}
+
+function inputForPlan(plan: PiSdkTurnPlan): SDKUserMessage {
+  return sdkUserMessage(sdkPromptContent(plan) ?? plan.prompt);
+}
+
+interface LiveQueryFacade extends AsyncIterable<Record<string, any>> {
+  readonly live: LiveSdkConversation;
+}
+
+function queryFacade(live: LiveSdkConversation): LiveQueryFacade {
+  const synthetic: Array<Record<string, any>> = [];
+  return {
+    live,
+    [Symbol.asyncIterator]() {
+      return {
+        next: async (): Promise<IteratorResult<Record<string, any>>> => {
+          const queued = synthetic.shift();
+          if (queued) {
+            if (queued.__disposeLive === true) {
+              disposeLiveSdkConversation(live, "unsupported SDK tool call");
+              piSdkSessionStore().delete(live.key);
+              delete queued.__disposeLive;
+            }
+            return { value: queued, done: false };
+          }
+          const next = await live.query.next();
+          if (next.done) return { value: undefined, done: true };
+          const message = next.value as Record<string, any>;
+          if (
+            message.type === "assistant" &&
+            Array.isArray(message.message?.content)
+          ) {
+            const calls = message.message.content.filter(
+              (block: Record<string, any>) =>
+                block?.type === "tool_use" &&
+                typeof block.id === "string" &&
+                !SDK_INTERNAL_TOOLS.has(String(block.name || "")),
+            );
+            if (calls.length) {
+              live.pendingToolIds = calls.map(
+                (block: Record<string, any>) => block.id,
+              );
+              synthetic.push({
+                type: "user",
+                message: {
+                  role: "user",
+                  content: calls.map((block: Record<string, any>) => ({
+                    type: "tool_result",
+                    tool_use_id: block.id,
+                    content: PI_PASSTHROUGH_BLOCK_REASON,
+                    is_error: true,
+                  })),
+                },
+                session_id: message.session_id,
+              });
+              synthetic.push({
+                type: "result",
+                subtype: "error_max_turns",
+                is_error: true,
+                result: "Reached client tool boundary",
+                usage: message.message.usage,
+                session_id: message.session_id,
+                __disposeLive: calls.some(
+                  (block: Record<string, any>) =>
+                    !String(block.name || "").startsWith(PASSTHROUGH_PREFIX),
+                ),
+              });
+            }
+          }
+          return { value: message, done: false };
+        },
+        return: async () => ({ value: undefined, done: true }),
+      };
+    },
+  };
+}
+
+function createLiveSdkConversation(input: {
+  key: string;
+  account: ClaudeAccount;
+  model: PiCatalogModel;
+  system: string;
+  tools: readonly PiToolShape[];
+  plan: PiSdkTurnPlan;
+}): LiveSdkConversation {
+  const prompt = new SdkInputQueue();
+  const controller = new AbortController();
+  let live: LiveSdkConversation;
+  const passthroughTools = input.tools.map((definition) =>
+    tool(
+      definition.name,
+      definition.description || definition.name,
+      jsonSchemaToZodShape(definition.parameters),
+      async (_arguments, extra) => {
+        const toolUseId = sdkToolUseId(extra);
+        if (!toolUseId) {
+          return {
+            content: [
+              { type: "text" as const, text: "Missing Claude tool call id" },
+            ],
+            isError: true,
+          };
+        }
+        return awaitLiveToolResult(live, toolUseId);
+      },
+    ),
+  );
+  const mcpServers = passthroughTools.length
+    ? {
+        [PASSTHROUGH_MCP]: createSdkMcpServer({
+          name: PASSTHROUGH_MCP,
+          tools: passthroughTools,
+        }),
+      }
+    : {};
+  const sdkQuery = query({
+    prompt,
+    options: {
+      cwd: ensureAnthropicBridgeCwd(),
+      model: input.model.id,
+      resume: input.plan.resume,
+      ...(input.plan.resumeSessionAt
+        ? { resumeSessionAt: input.plan.resumeSessionAt }
+        : {}),
+      abortController: controller,
+      includePartialMessages: true,
+      systemPrompt: input.system || " ",
+      settingSources: [],
+      mcpServers: mcpServers as any,
+      strictMcpConfig: true,
+      tools: SDK_BUILTIN_TOOLS,
+      disallowedTools: DISALLOWED_BUILTINS,
+      allowedTools: input.tools.map(
+        (definition) => `${PASSTHROUGH_PREFIX}${definition.name}`,
+      ),
+      pathToClaudeCodeExecutable: CLAUDE_CODE_BIN,
+      executable: "bun" as const,
+      env: {
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+        LANG: process.env.LANG,
+        CLAUDE_CODE_OAUTH_TOKEN: input.account.token,
+        CLAUDE_CONFIG_DIR: claudeConfigDirFor(input.account.id),
+        MCP_TOOL_TIMEOUT: String(LIVE_MCP_TOOL_TIMEOUT_MS),
+      },
+    },
+  });
+  live = {
+    key: input.key,
+    accountId: input.account.id,
+    query: sdkQuery,
+    input: prompt,
+    controller,
+    pendingToolIds: [],
+    suppliedToolResults: new Map(),
+    toolWaiters: new Map(),
+    lastUsedAt: Date.now(),
+    inUse: false,
+    disposed: false,
+  };
+  liveSdkConversations().set(input.key, live);
+  prompt.push(inputForPlan(input.plan));
+  return live;
+}
+
+function acquireLiveSdkQuery(input: {
+  key: string;
+  account: ClaudeAccount;
+  model: PiCatalogModel;
+  system: string;
+  tools: readonly PiToolShape[];
+  plan: PiSdkTurnPlan;
+}): LiveQueryFacade {
+  pruneLiveSdkConversations();
+  let live = liveSdkConversations().get(input.key);
+  if (live && (live.accountId !== input.account.id || live.inUse)) {
+    disposeLiveSdkConversation(
+      live,
+      live.inUse ? "concurrent turn" : "account changed",
+    );
+    live = undefined;
+  }
+  if (live && !input.plan.continuation) {
+    disposeLiveSdkConversation(live, "conversation diverged");
+    live = undefined;
+  }
+  if (!live) return queryFacade(createLiveSdkConversation(input));
+
+  if (input.plan.toolResults) {
+    if (input.plan.liveFollowUp) {
+      const followUp = input.plan.liveFollowUp;
+      live.input.push(
+        sdkUserMessage(
+          followUp.images.length
+            ? [
+                ...followUp.images,
+                {
+                  type: "text",
+                  text: followUp.prompt.trim() || IMAGE_ONLY_PROMPT,
+                },
+              ]
+            : followUp.prompt,
+        ),
+      );
+    }
+    supplyLiveToolResults(live, input.plan.toolResults);
+  } else {
+    live.input.push(inputForPlan(input.plan));
+  }
+  live.lastUsedAt = Date.now();
+  return queryFacade(live);
+}
+
 // ── The SDK turn ─────────────────────────────────────────────────────────────
 
 interface CapturedToolUse {
@@ -831,15 +1383,18 @@ async function* runSdkAttempt(
     typeof options?.sessionId === "string" && options.sessionId
       ? options.sessionId
       : opts.unifiedSessionId;
-  const storeKey = `pi:${sessionKey}`;
+  // Include the exact model/system/tool configuration so compaction and other
+  // one-shot requests never evict an interactive conversation that happens to
+  // carry the same routing session id.
+  const wireMessages = piMessagesToAnthropic(context.messages || []);
+  const requestTools = context.tools || [];
+  const system = context.systemPrompt || "";
+  const storeKey = `pi:${sessionKey}:${liveConfigHash(model.id, system, requestTools)}`;
   // Set once the turn plan exists; the catch evicts the stored mapping on a
   // failed continuation so the NEXT turn replays fresh instead of resuming a
   // dead SDK session forever (count-based divergence never triggers while
   // history keeps growing — meridian evicts on resume failure the same way).
   let plannedContinuation = false;
-  const wireMessages = piMessagesToAnthropic(context.messages || []);
-  const requestTools = context.tools || [];
-  const system = context.systemPrompt || "";
 
   const auditBase = {
     msg: "pi_anthropic_request",
@@ -853,37 +1408,44 @@ async function* runSdkAttempt(
   let account: ClaudeAccount | undefined;
   const captured: CapturedToolUse[] = [];
   let clientDone = false;
-  let finishCanonicalDrain: (() => void) | undefined;
   try {
     if (signal?.aborted) {
       yield fail("aborted", "Request aborted");
       return;
     }
 
+    // Stay on the account that already holds this session's SDK conversation
+    // while it is usable. Every request re-picks, and the least-used tiebreak
+    // round-robins equal accounts, so without this a session hopped
+    // subscriptions on nearly every step and replayed its full context (a
+    // cache write, not a read) each time. The sticky step sits below the pin
+    // and above the least-used pool pick; exhaustion, sidelining, and the
+    // in-turn walk (excludeIds) still move the session off it.
+    const stickyId =
+      liveSdkConversations().get(storeKey)?.accountId ??
+      piSdkSessionStore().get(storeKey)?.accountId;
     const picked = pickBridgeAccount(model.id, {
       accountId: opts.accountId,
       accountStrict: opts.accountStrict,
       usageCredits: opts.usageCredits,
       user: opts.user,
       excludeIds: excluded.size ? [...excluded] : undefined,
+      stickyId,
     });
     if ("error" in picked) throw new Error(picked.error);
     account = picked;
-
-    // Pi can begin executing a visible tool call while the preceding SDK query
-    // invisibly drains its digest. Serialize only this session boundary so the
-    // follow-up cannot read the mapping before its checkpoint is durable.
-    await piSdkCanonicalDrains().get(storeKey);
 
     // Continuation planning happens with the account known: a stored SDK
     // session lives in ITS account's isolated CLAUDE_CONFIG_DIR, so a turn
     // the designated walk moved to a different account treats the mapping as
     // divergence and replays fresh instead of failing a cross-dir resume.
     const stored = piSdkSessionStore().get(storeKey);
-    const plan = planSdkTurn(
-      stored && stored.accountId === account.id ? stored : undefined,
-      wireMessages,
-    );
+    const usableStored =
+      stored && stored.accountId === account.id ? stored : undefined;
+    const plan =
+      (liveSdkConversations().has(storeKey)
+        ? planLiveSdkTurn(usableStored, wireMessages)
+        : null) ?? planSdkTurn(usableStored, wireMessages);
     plannedContinuation = plan.continuation;
 
     // Rolling per-account hourly cap — the SAME per-boot counter the bridge
@@ -917,60 +1479,48 @@ async function* runSdkAttempt(
       ...summarizeText(plan.prompt),
     });
 
-    const passthroughTools = requestTools.map((t) =>
-      tool(
-        t.name,
-        t.description || t.name,
-        jsonSchemaToZodShape(t.parameters),
-        async () => ({
-          content: [{ type: "text" as const, text: "forwarded to client" }],
-        }),
-      ),
-    );
-    const mcpServers =
-      passthroughTools.length > 0
-        ? {
-            [PASSTHROUGH_MCP]: createSdkMcpServer({
-              name: PASSTHROUGH_MCP,
-              tools: passthroughTools,
-            }),
-          }
-        : {};
-
-    const controller = new AbortController();
-    const onAbort = () => controller.abort();
+    const q = acquireLiveSdkQuery({
+      key: storeKey,
+      account,
+      model,
+      system,
+      tools: requestTools,
+      plan,
+    });
+    const controller = q.live.controller;
+    q.live.inUse = true;
+    const onAbort = () => disposeLiveSdkConversation(q.live, "request aborted");
     signal?.addEventListener("abort", onAbort, { once: true });
 
     let sdkSessionId: string | undefined;
-    let sdkUsage: Record<string, number> | undefined;
+    const stepUsage: SdkStepUsage = new Map();
+    let streamMessageId: string | undefined;
+    const noteStreamUsage = (ev: Record<string, any>) => {
+      if (ev.type === "message_start") {
+        streamMessageId = String(ev.message?.id || "") || undefined;
+        if (ev.message?.usage)
+          recordSdkStepUsage(
+            stepUsage,
+            streamMessageId ?? "stream",
+            ev.message.usage,
+          );
+      } else if (ev.type === "message_delta" && ev.usage) {
+        recordSdkStepUsage(stepUsage, streamMessageId ?? "stream", ev.usage);
+      }
+    };
     let reachedResult = false;
+    let cappedStopReason: "toolUse" | "length" | undefined;
     let checkpoint:
       | { assistantUuid: string; toolCallIds: string[] }
       | undefined;
     const earlyStop = createEarlyStopTracker();
-
-    // PreToolUse hooks can resolve before the stream iterator has delivered
-    // every tool_use block in a parallel batch. Hold each block result until
-    // the assistant message ends, then let the SDK persist all denials before
-    // the tracker aborts the otherwise automatic digest turn.
-    const pendingDenyReleases: Array<() => void> = [];
+    // The live-query facade supplies the synthetic blocked-result boundary.
+    // These names remain in the stream parser so its message ordering stays
+    // identical to the durable-resume fallback.
     let turnGenerating = false;
     const releaseHeldDenies = () => {
       turnGenerating = false;
-      for (const release of pendingDenyReleases.splice(0)) release();
     };
-    const holdDenyUntilTurnEnd = () =>
-      new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, 8_000);
-        pendingDenyReleases.push(() => {
-          clearTimeout(timer);
-          resolve();
-        });
-      });
-    // Stream-event bookkeeping: SDK content-block index (per SDK message) →
-    // index into `partial.content`; -1 marks a block we deliberately skip
-    // (tool_use streams are ignored — the post-hook captures are authoritative
-    // and a blocked-then-retried call must not double).
     let idxMap = new Map<number, number>();
     let pendingText = new Map<
       number,
@@ -979,85 +1529,6 @@ async function* runSdkAttempt(
     let deferredAccountUnavailable: string | undefined;
     let sawStreamContent = false;
     let emittedCaptures = 0;
-
-    // A turn carrying images goes in as one streaming-input user message whose
-    // content holds the real image blocks; a plain-text turn keeps the string
-    // prompt unchanged. Everything else about the turn (resume, hooks, partial
-    // streaming, the passthrough tools) is indifferent to which shape it gets.
-    const promptContent = sdkPromptContent(plan);
-    const sdkPrompt = promptContent
-      ? (async function* () {
-          yield {
-            type: "user" as const,
-            message: { role: "user" as const, content: promptContent },
-            parent_tool_use_id: null,
-          };
-        })()
-      : plan.prompt;
-
-    const q = query({
-      prompt: sdkPrompt as any,
-      options: {
-        cwd: ensureAnthropicBridgeCwd(),
-        model: model.id,
-        resume: plan.resume,
-        ...(plan.resumeSessionAt
-          ? { resumeSessionAt: plan.resumeSessionAt }
-          : {}),
-        abortController: controller,
-        includePartialMessages: true,
-        maxTurns: PI_SDK_MAX_TURNS,
-        systemPrompt: system || " ",
-        settingSources: [],
-        mcpServers: mcpServers as any,
-        strictMcpConfig: true,
-        disallowedTools: DISALLOWED_BUILTINS,
-        allowedTools: requestTools.map((t) => `${PASSTHROUGH_PREFIX}${t.name}`),
-        pathToClaudeCodeExecutable: CLAUDE_CODE_BIN,
-        executable: "bun" as const,
-        env: {
-          PATH: process.env.PATH,
-          HOME: process.env.HOME,
-          LANG: process.env.LANG,
-          CLAUDE_CODE_OAUTH_TOKEN: account.token,
-          CLAUDE_CONFIG_DIR: claudeConfigDirFor(account.id),
-        },
-        hooks: {
-          PreToolUse: [
-            {
-              matcher: "",
-              hooks: [
-                async (input: any) => {
-                  const name = String(input.tool_name || "");
-                  const bare = name.startsWith(PASSTHROUGH_PREFIX)
-                    ? name.slice(PASSTHROUGH_PREFIX.length)
-                    : name;
-                  // Calls after the visible checkpoint belong to the hidden
-                  // digest branch. Block them, but never expose them to Pi.
-                  if (!checkpoint) {
-                    captured.push({
-                      id: input.tool_use_id,
-                      name: bare,
-                      input: input.tool_input ?? {},
-                    });
-                  }
-                  if (turnGenerating && !controller.signal.aborted) {
-                    await holdDenyUntilTurnEnd();
-                  }
-                  return {
-                    decision: "block" as const,
-                    reason: checkpoint
-                      ? "This tool call has already been handled by the client-facing turn. " +
-                        "Do not repeat it, do not call additional tools, and do not generate further text. End your turn now."
-                      : PI_PASSTHROUGH_BLOCK_REASON,
-                  };
-                },
-              ],
-            },
-          ],
-        },
-      },
-    });
 
     /** Emit toolcall events for captures the hook recorded since last drain.
      *  Captures happen after the model finished emitting that tool_use block,
@@ -1097,9 +1568,8 @@ async function* runSdkAttempt(
         if (!earlyStop.expected.has(captured[i].id)) captured.splice(i, 1);
       }
       emittedCaptures = Math.min(emittedCaptures, captured.length);
-      finishCanonicalDrain = beginPiSdkCanonicalDrain(storeKey);
       clientDone = true;
-      const usage = usageFromSdkResult(model, sdkUsage);
+      const usage = usageFromSdkResult(model, sumSdkStepUsage(stepUsage));
       partial.usage = usage;
       const message: PiAssistantMessageShape = {
         ...partial,
@@ -1132,27 +1602,17 @@ async function* runSdkAttempt(
           ) {
             releaseHeldDenies();
           }
-          // Pi has already received its terminal toolUse event. Continue only
-          // the bookkeeping needed to reach the SDK's canonical result; every
-          // digest token and block remains invisible.
+          noteStreamUsage(ev);
+          // Pi has already received its terminal toolUse event. Consume only
+          // the facade's synthetic boundary result; the real SDK handler stays parked.
           if (clientDone) {
-            if (ev.type === "message_start") {
-              turnGenerating = true;
-              if (ev.message?.usage)
-                sdkUsage = { ...sdkUsage, ...ev.message.usage };
-            } else if (ev.type === "message_delta" && ev.usage) {
-              sdkUsage = { ...sdkUsage, ...ev.usage };
-            }
+            if (ev.type === "message_start") turnGenerating = true;
             continue;
           }
           if (ev.type === "message_start") {
             turnGenerating = true;
             idxMap = new Map();
             pendingText = new Map();
-            if (ev.message?.usage)
-              sdkUsage = { ...sdkUsage, ...ev.message.usage };
-          } else if (ev.type === "message_delta") {
-            if (ev.usage) sdkUsage = { ...sdkUsage, ...ev.usage };
           } else if (ev.type === "content_block_start") {
             const block = ev.content_block as Record<string, any> | undefined;
             const sdkIdx = Number(ev.index);
@@ -1287,14 +1747,19 @@ async function* runSdkAttempt(
           continue;
         }
         if (m.type === "assistant") {
-          let assistantAddedForwardedCall = false;
-          if (!checkpoint && earlyStop.resolved.size === 0) {
-            const expectedBefore = earlyStop.expected.size;
-            noteAssistantMessage(earlyStop, m);
-            assistantAddedForwardedCall =
-              earlyStop.expected.size > expectedBefore;
-          }
-          if (m.message?.usage) sdkUsage = { ...sdkUsage, ...m.message.usage };
+          const assistantAddedForwardedCall =
+            captureVisibleSdkAssistantToolUses(
+              earlyStop,
+              m,
+              captured,
+              !!checkpoint,
+            );
+          if (m.message?.usage)
+            recordSdkStepUsage(
+              stepUsage,
+              String(m.message.id || m.uuid || "") || "assistant",
+              m.message.usage,
+            );
           if (!clientDone && !sawStreamContent) {
             // Fallback (no partial stream events from the CLI): emit each text
             // block as one delta on arrival, per-message, not end-of-request.
@@ -1343,17 +1808,14 @@ async function* runSdkAttempt(
           sdkSessionId = String(m.session_id || "") || sdkSessionId;
           if (deferredAccountUnavailable)
             throw new Error(deferredAccountUnavailable);
-          // error_max_turns WITH captures is a SUCCESS (the bridge's fix):
-          // models that answer a blocked call by trying the next tool burn a
-          // turn per call and can blow the cap before ending cleanly — the
-          // captures are the whole point. Only a capture-less max-turns (the
-          // model never called a tool) stays an error.
-          const maxTurnsWithCaptures =
-            m.subtype === "error_max_turns" && captured.length > 0;
-          if (
-            (m.is_error || m.subtype !== "success") &&
-            !maxTurnsWithCaptures
-          ) {
+          // The facade uses error_max_turns as an internal compatibility marker
+          // so the existing pi event parser closes this step at the tool boundary.
+          cappedStopReason = recoverSyntheticSdkStopReason(
+            m.subtype,
+            captured.length,
+            partial.content.length,
+          );
+          if ((m.is_error || m.subtype !== "success") && !cappedStopReason) {
             const detail =
               (typeof m.result === "string" && m.result) ||
               partial.content
@@ -1365,7 +1827,10 @@ async function* runSdkAttempt(
               "SDK run failed";
             throw new Error(String(detail));
           }
-          sdkUsage = m.usage || undefined;
+          // Only fall back to the turn-wide result usage when this step saw
+          // no per-request usage at all (see SdkStepUsage).
+          if (stepUsage.size === 0 && m.usage)
+            recordSdkStepUsage(stepUsage, "result", m.usage);
           reachedResult = true;
           break;
         }
@@ -1376,11 +1841,15 @@ async function* runSdkAttempt(
     } finally {
       releaseHeldDenies();
       signal?.removeEventListener("abort", onAbort);
+      q.live.inUse = false;
+      q.live.lastUsedAt = Date.now();
       // Abandonment backstop: a consumer that stops iterating this generator
       // (early .return()/throw upstream) must not leave the SDK subprocess
       // running unattended — abort it whenever the run never reached its
       // result message (a completed run's subprocess is already exiting).
-      if (!reachedResult) controller.abort();
+      if (!reachedResult) {
+        disposeLiveSdkConversation(q.live, "stream abandoned");
+      }
     }
 
     if (signal?.aborted) {
@@ -1402,7 +1871,7 @@ async function* runSdkAttempt(
       throw new Error("SDK stream ended without a result message");
     }
 
-    if (sdkSessionId) {
+    if (sdkSessionId && !q.live.disposed) {
       rememberSdkTurn(
         storeKey,
         sdkSessionId,
@@ -1412,9 +1881,10 @@ async function* runSdkAttempt(
       );
     }
 
-    const usage = usageFromSdkResult(model, sdkUsage);
+    const usage = usageFromSdkResult(model, sumSdkStepUsage(stepUsage));
     partial.usage = usage;
-    const stopReason: "toolUse" | "stop" = captured.length ? "toolUse" : "stop";
+    const stopReason: "toolUse" | "stop" | "length" =
+      cappedStopReason ?? (captured.length ? "toolUse" : "stop");
     const message: PiAssistantMessageShape = {
       ...partial,
       stopReason,
@@ -1430,7 +1900,7 @@ async function* runSdkAttempt(
       duration_ms: Date.now() - started,
       stop_reason: stopReason,
       tool_uses: captured.length,
-      checkpoint_drain: !!checkpoint,
+      live_tool_boundary: !!checkpoint,
       sdk_session_id: sdkSessionId,
       input_tokens: usage.input,
       output_tokens: usage.output,
@@ -1444,6 +1914,8 @@ async function* runSdkAttempt(
     });
     if (!clientDone) yield { type: "done", reason: stopReason, message };
   } catch (e: any) {
+    const failedLive = liveSdkConversations().get(storeKey);
+    if (failedLive) disposeLiveSdkConversation(failedLive, "SDK turn failed");
     if (signal?.aborted) {
       piSdkSessionStore().delete(storeKey);
       audit({
@@ -1458,9 +1930,8 @@ async function* runSdkAttempt(
       return;
     }
     const message: string = e?.message || String(e);
-    // A failed hidden drain occurs after Pi already received a successful tool
-    // turn. Evict its unpublished checkpoint and let the next step replay; a
-    // second terminal event would corrupt the already-finished Pi turn.
+    // A facade failure after pi received the tool turn must not emit a second
+    // terminal event. Evict the live query and let the next step replay.
     if (clientDone) {
       piSdkSessionStore().delete(storeKey);
       audit({
@@ -1469,7 +1940,7 @@ async function* runSdkAttempt(
         ok: false,
         ...(account ? { account: account.name } : {}),
         duration_ms: Date.now() - started,
-        error: `checkpoint drain failed: ${message}`,
+        error: `live tool boundary failed: ${message}`,
       });
       return;
     }
@@ -1557,7 +2028,5 @@ async function* runSdkAttempt(
       return;
     }
     yield fail("error", message);
-  } finally {
-    finishCanonicalDrain?.();
   }
 }

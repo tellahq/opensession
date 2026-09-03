@@ -37,13 +37,17 @@ import {
   buildPiAnthropicProvider,
   IMAGE_ONLY_PROMPT,
   MAX_TURN_IMAGES,
+  recordSdkStepUsage,
+  sumSdkStepUsage,
   piImageBlockToAnthropic,
   piMessagesToAnthropic,
   piSdkSessionStore,
+  planLiveSdkTurn,
   planSdkTurn,
   sdkPromptContent,
   turnImages,
   rememberSdkTurn,
+  recoverSyntheticSdkStopReason,
   shouldDeferClaudeText,
   usageFromSdkResult,
   type PiCatalogModel,
@@ -55,6 +59,11 @@ import {
   noteUserContent,
   shouldEarlyStop,
 } from "./meridian-passthrough";
+import * as passthrough from "./meridian-passthrough";
+import {
+  captureUnforwardedToolUses,
+  captureVisibleSdkAssistantToolUses,
+} from "./pi-model-runtime";
 import {
   admitBridgeRequest,
   ensureAnthropicBridgeCwd,
@@ -308,6 +317,33 @@ describe("planSdkTurn (continuation vs replay)", () => {
       { type: "tool_result", tool_use_id: "tool-1", content: "A" },
       { type: "tool_result", tool_use_id: "tool-2", content: "B" },
     ]);
+  });
+
+  test("a live checkpoint keeps steering behind complete tool results", () => {
+    const stored = {
+      sdkSessionId: "sdk-1",
+      messageCount: 2,
+      accountId: "acc-1",
+      passthroughToolCallAssistantUuid: "assistant-uuid",
+      passthroughToolCallIds: ["tool-1"],
+      lastUsedAt: Date.now(),
+    };
+    const plan = planLiveSdkTurn(stored, [
+      messages[0],
+      messages[1],
+      wire({
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "tool-1", content: "A" }],
+      }),
+      wire({ role: "user", content: "Also mention banana" }),
+    ]);
+    expect(plan).toMatchObject({
+      continuation: true,
+      toolResults: [
+        { type: "tool_result", tool_use_id: "tool-1", content: "A" },
+      ],
+      liveFollowUp: { prompt: "Also mention banana", images: [] },
+    });
   });
 
   test("checkpoint mismatch full-replays instead of resuming the hidden digest tail", () => {
@@ -627,11 +663,23 @@ describe("images survive the turn", () => {
 });
 
 describe("Pi passthrough durable checkpoint", () => {
-  test("uses Meridian's explicit model-facing stop instruction", () => {
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toContain(
+  test("maps the synthetic facade boundary onto pi stop reasons", () => {
+    expect(recoverSyntheticSdkStopReason("error_max_turns", 1, 0)).toBe(
+      "toolUse",
+    );
+    expect(recoverSyntheticSdkStopReason("error_max_turns", 0, 1)).toBe(
+      "length",
+    );
+    expect(
+      recoverSyntheticSdkStopReason("error_max_turns", 0, 0),
+    ).toBeUndefined();
+    expect(recoverSyntheticSdkStopReason("success", 1, 1)).toBeUndefined();
+  });
+
+  test("keeps the synthetic boundary text short", () => {
+    expect(PI_PASSTHROUGH_BLOCK_REASON).toBe(
       "This tool call has been forwarded to the client for execution.",
     );
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toContain("End your turn now.");
   });
 
   test("settles only after every parallel call and retains its assistant UUID", () => {
@@ -674,6 +722,53 @@ describe("Pi passthrough durable checkpoint", () => {
     });
     expect(shouldEarlyStop(tracker)).toBe(true);
   });
+
+  test("captures a new live tool batch after the previous result echo", () => {
+    const tracker = createEarlyStopTracker();
+    noteUserContent(tracker, [
+      {
+        type: "tool_result",
+        tool_use_id: "previous-tool",
+        content: "previous result",
+      },
+    ]);
+    const captured: Array<{ id: string; name: string; input: unknown }> = [];
+
+    expect(
+      captureVisibleSdkAssistantToolUses(
+        tracker,
+        {
+          type: "assistant",
+          uuid: "next-assistant",
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "next-tool",
+                name: "mcp__oc__read",
+                input: { path: "README.md" },
+              },
+            ],
+          },
+        },
+        captured,
+        false,
+      ),
+    ).toBe(true);
+    expect(captured).toEqual([
+      { id: "next-tool", name: "read", input: { path: "README.md" } },
+    ]);
+    expect(shouldEarlyStop(tracker)).toBe(false);
+
+    noteUserContent(tracker, [
+      {
+        type: "tool_result",
+        tool_use_id: "next-tool",
+        content: PI_PASSTHROUGH_BLOCK_REASON,
+      },
+    ]);
+    expect(shouldEarlyStop(tracker)).toBe(true);
+  });
 });
 
 describe("buildPiAnthropicModels", () => {
@@ -697,6 +792,57 @@ describe("buildPiAnthropicModels", () => {
 
   test("does not duplicate a model the catalog already has", () => {
     expect(buildPiAnthropicModels([model], "claude-sonnet-5")).toHaveLength(1);
+  });
+});
+
+describe("SdkStepUsage", () => {
+  const request = {
+    input_tokens: 56,
+    output_tokens: 569,
+    cache_read_input_tokens: 217_978,
+    cache_creation_input_tokens: 6_139,
+  };
+
+  test("counts one API request once even when the SDK repeats its usage per content block", () => {
+    const step = new Map();
+    recordSdkStepUsage(step, "msg_1", request);
+    recordSdkStepUsage(step, "msg_1", request);
+    recordSdkStepUsage(step, "msg_1", request);
+    expect(sumSdkStepUsage(step)).toEqual(request);
+  });
+
+  test("sums the requests of one step and lets a message_delta finish its request", () => {
+    const step = new Map();
+    recordSdkStepUsage(step, "msg_1", {
+      input_tokens: 2,
+      output_tokens: 1,
+      cache_read_input_tokens: 2_200,
+      cache_creation_input_tokens: 44_982,
+    });
+    recordSdkStepUsage(step, "msg_1", { output_tokens: 519 });
+    recordSdkStepUsage(step, "msg_2", request);
+    expect(sumSdkStepUsage(step)).toEqual({
+      input_tokens: 58,
+      output_tokens: 1_088,
+      cache_read_input_tokens: 220_178,
+      cache_creation_input_tokens: 51_121,
+    });
+  });
+
+  test("ignores non-numeric fields and reports nothing for an empty step", () => {
+    const step = new Map();
+    expect(sumSdkStepUsage(step)).toBeUndefined();
+    recordSdkStepUsage(step, "msg_1", {
+      input_tokens: "56",
+      output_tokens: 3,
+      server_tool_use: { web_search_requests: 0 },
+    });
+    expect(sumSdkStepUsage(step)).toEqual({
+      input_tokens: 0,
+      output_tokens: 3,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+    });
   });
 });
 
@@ -777,7 +923,7 @@ describe("Claude account notice probe", () => {
     ).toBe(true);
     expect(
       shouldDeferClaudeText(
-        "You're out of usage credits. Run /usage-credits to keep using Fable 5 or /model to switch models.",
+        "You're out of usage credits. Run /usage-credits to keep using Fable 5.1 or /model to switch models.",
       ),
     ).toBe(true);
     expect(
@@ -1133,5 +1279,99 @@ describe("pickBridgeAccount pool mode (no designation — picks like pi)", () =>
     expect((bob as any).id).toBe("pool-shared");
     const anonymous = pickBridgeAccount("claude-sonnet-5");
     expect((anonymous as any).id).toBe("pool-shared");
+  });
+
+  test("a sticky account beats the least-used round-robin while usable", () => {
+    designate([]);
+    seedAccounts(["pool-sticky-a", "pool-sticky-b", "pool-sticky-c"]);
+    for (const id of ["pool-sticky-a", "pool-sticky-b", "pool-sticky-c"])
+      accounts.__setUsageCacheForTest(id, freshUsage);
+    // Consume the round-robin turn on the sticky account so the plain pick
+    // would move elsewhere; the sticky preference must hold it in place.
+    expect((pickBridgeAccount("claude-sonnet-5") as any).id).toBe(
+      "pool-sticky-a",
+    );
+    expect(
+      (
+        pickBridgeAccount("claude-sonnet-5", {
+          stickyId: "pool-sticky-a",
+        }) as any
+      ).id,
+    ).toBe("pool-sticky-a");
+    // Burned this turn: the walk moves on instead of retrying the sticky one.
+    const walked = pickBridgeAccount("claude-sonnet-5", {
+      stickyId: "pool-sticky-a",
+      excludeIds: ["pool-sticky-a"],
+    });
+    expect((walked as any).id).not.toBe("pool-sticky-a");
+    // Exhausted: falls through to the least-used pick.
+    accounts.__setUsageCacheForTest("pool-sticky-a", maxedUsage);
+    const moved = pickBridgeAccount("claude-sonnet-5", {
+      stickyId: "pool-sticky-a",
+    });
+    expect((moved as any).id).not.toBe("pool-sticky-a");
+    expect("error" in moved).toBe(false);
+  });
+});
+
+describe("captureUnforwardedToolUses", () => {
+  test("a mangled tool name is forwarded to pi instead of ending the query empty", () => {
+    const tracker = passthrough.createEarlyStopTracker();
+    const captured: Parameters<typeof captureUnforwardedToolUses>[2] = [];
+    const message = {
+      type: "assistant",
+      uuid: "asst-1",
+      message: {
+        content: [
+          {
+            type: "tool_use",
+            id: "t-mangled",
+            name: "mcp__ocuser__bash",
+            input: { command: "ls" },
+          },
+          { type: "tool_use", id: "t-internal", name: "ToolSearch", input: {} },
+        ],
+      },
+    };
+    passthrough.noteAssistantMessage(tracker, message);
+    // Meridian refuses the foreign mcp__ name outright.
+    expect(tracker.expected.size).toBe(0);
+    expect(captureUnforwardedToolUses(tracker, message, captured)).toBe(1);
+    expect(captured).toEqual([
+      { id: "t-mangled", name: "mcp__ocuser__bash", input: { command: "ls" } },
+    ]);
+    expect(tracker.toolCallAssistantUuid).toBe("asst-1");
+    // The SDK's "No such tool available" result now settles the turn, so the
+    // provider hands the call to pi (which answers "Tool X not found").
+    passthrough.noteUserContent(tracker, [
+      {
+        type: "tool_result",
+        tool_use_id: "t-mangled",
+        is_error: true,
+        content: "No such tool available: mcp__ocuser__bash",
+      },
+    ]);
+    expect(passthrough.shouldEarlyStop(tracker)).toBe(true);
+    expect(passthrough.settledToolCallAssistantUuid(tracker)).toBe("asst-1");
+  });
+
+  test("passthrough names stay with the PreToolUse hook", () => {
+    const tracker = passthrough.createEarlyStopTracker();
+    const captured: Parameters<typeof captureUnforwardedToolUses>[2] = [];
+    const message = {
+      type: "assistant",
+      uuid: "asst-2",
+      message: {
+        content: [
+          { type: "tool_use", id: "t-ok", name: "mcp__oc__bash", input: {} },
+        ],
+      },
+    };
+    passthrough.noteAssistantMessage(tracker, message);
+    expect(tracker.expected.has("t-ok")).toBe(true);
+    expect(captureUnforwardedToolUses(tracker, message, captured)).toBe(0);
+    expect(captured).toEqual([]);
+    // Idempotent on a replayed envelope.
+    expect(captureUnforwardedToolUses(tracker, message, captured)).toBe(0);
   });
 });

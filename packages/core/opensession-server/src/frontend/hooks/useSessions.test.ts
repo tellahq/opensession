@@ -9,7 +9,10 @@ import {
   sidebarSessionsQuery,
 } from "./useSessions";
 
-const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+const appSource = await Promise.all([
+  Bun.file(new URL("../AppContent.tsx", import.meta.url)).text(),
+  Bun.file(new URL("../components/AppSidebar.tsx", import.meta.url)).text(),
+]).then((sources) => sources.join("\n"));
 const hookSource = await Bun.file(
   new URL("useSessions.ts", import.meta.url),
 ).text();
@@ -29,6 +32,11 @@ describe("session feed socket ownership", () => {
     expect(hookSource).toContain(
       "const onInvalidated = useEffectEvent(() => refreshInvalidated())",
     );
+    expect(hookSource).toContain(
+      "const onConnected = useEffectEvent(() => refreshInvalidated())",
+    );
+    expect(hookSource).toContain("if (socketConnected) onConnected()");
+    expect(hookSource).not.toContain("webSocketConnectedOnceRef");
     expect(hookSource).toContain("}, [addHandler]);");
     expect(hookSource).toContain("}, [socketConnected]);");
     expect(hookSource).not.toContain("    refreshInvalidated,\n    inject,");
@@ -56,7 +64,18 @@ describe("session feed socket ownership", () => {
 });
 
 function session(archived: boolean): UnifiedSession {
-  return { id: "session-1", archived } as UnifiedSession;
+  return {
+    id: "session-1",
+    source: "opensession",
+    branch: null,
+    worktreeDir: null,
+    startedBy: null,
+    title: "Session 1",
+    lastActivity: "2026-08-22T12:00:00Z",
+    createdAt: "2026-08-22T12:00:00Z",
+    isRunning: false,
+    archived,
+  };
 }
 
 describe("sidebarSessionsQuery", () => {
@@ -204,10 +223,84 @@ describe("reconcilePendingSessionPatches", () => {
     expect(pending.has("session-1")).toBe(false);
   });
 
-  test("holds runtime and archive patches until the server acknowledges them", () => {
+  test("holds runtime, archive, and review patches until the server acknowledges them", () => {
     expect(sessionPatchNeedsAcknowledgement({ isRunning: true })).toBe(true);
     expect(sessionPatchNeedsAcknowledgement({ archived: true })).toBe(true);
+    expect(
+      sessionPatchNeedsAcknowledgement({
+        reviewRequest: {
+          to: "Michiel",
+          by: "Kent",
+          at: "2026-09-01T13:03:20Z",
+        },
+      }),
+    ).toBe(true);
     expect(sessionPatchNeedsAcknowledgement({ title: "Renamed" })).toBe(false);
+  });
+
+  test("keeps an optimistic review request applied across a stale poll", () => {
+    const request = {
+      to: "Michiel",
+      by: "Kent",
+      at: "2026-09-01T13:03:20Z",
+    } satisfies NonNullable<UnifiedSession["reviewRequest"]>;
+    const pending = new Map([
+      ["session-1", { values: { reviewRequest: request } }],
+    ]);
+
+    const [reconciled] = reconcilePendingSessionPatches(
+      [session(false)],
+      pending,
+    );
+
+    expect(reconciled.reviewRequest).toEqual(request);
+    expect(pending.has("session-1")).toBe(true);
+  });
+
+  test("accepts the persisted review request despite its server timestamp", () => {
+    const optimistic = {
+      to: "Michiel",
+      by: "Kent",
+      at: "2026-09-01T13:03:20Z",
+    } satisfies NonNullable<UnifiedSession["reviewRequest"]>;
+    const pending = new Map([
+      ["session-1", { values: { reviewRequest: optimistic } }],
+    ]);
+    const acknowledged = {
+      ...session(false),
+      reviewRequest: {
+        ...optimistic,
+        at: "2026-09-01T13:03:40Z",
+      },
+    };
+
+    expect(reconcilePendingSessionPatches([acknowledged], pending)).toEqual([
+      acknowledged,
+    ]);
+    expect(pending.has("session-1")).toBe(false);
+  });
+
+  test("does not mistake an older request for the new handoff", () => {
+    const optimistic = {
+      to: "Michiel",
+      by: "Kent",
+      at: "2026-09-01T13:03:20Z",
+    } satisfies NonNullable<UnifiedSession["reviewRequest"]>;
+    const pending = new Map([
+      ["session-1", { values: { reviewRequest: optimistic } }],
+    ]);
+    const stale = {
+      ...session(false),
+      reviewRequest: {
+        ...optimistic,
+        at: "2026-08-30T09:00:00Z",
+      },
+    };
+
+    const [reconciled] = reconcilePendingSessionPatches([stale], pending);
+
+    expect(reconciled.reviewRequest).toEqual(optimistic);
+    expect(pending.has("session-1")).toBe(true);
   });
 
   test("keeps an optimistic archive applied across a stale poll", () => {

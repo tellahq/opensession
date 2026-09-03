@@ -5,6 +5,7 @@
  * using fetch() + SLACK_BOT_TOKEN from process.env.
  */
 
+import { MAX_PROMPT_IMAGES } from "@tellahq/opensession-protocol/session";
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
 import { personaName } from "../../server/config";
 import type { ImageInput } from "../../server/run-events";
@@ -48,7 +49,6 @@ export function slackFileRefs(files: any[] | undefined): SlackFileRef[] {
 
 // Anthropic caps images at 5MB; stay under it, and bound the total payload.
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-const MAX_IMAGES_PER_PROMPT = 6;
 
 /**
  * Download the image attachments among `files` (bot-token auth) and return
@@ -67,7 +67,7 @@ export async function downloadSlackImages(
       lines.push(`- ${f.name} (${f.mimetype || "unknown type"}) — not inlined`);
       continue;
     }
-    if (images.length >= MAX_IMAGES_PER_PROMPT) {
+    if (images.length >= MAX_PROMPT_IMAGES) {
       lines.push(`- ${f.name} (${f.mimetype}) — skipped, image limit reached`);
       continue;
     }

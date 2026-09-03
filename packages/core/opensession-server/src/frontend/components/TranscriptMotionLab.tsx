@@ -7,13 +7,10 @@ import React, {
 } from "react";
 import { AnimatePresence } from "motion/react";
 import { LiveTurnStore } from "../lib/live-turn-store";
-import {
-  applyTranscriptMotionEvent,
-  makeTranscriptHydrationScenario,
-  makeTranscriptMotionScenario,
-  makeTranscriptStreamPerformanceScenario,
-  type TranscriptMotionScenario,
-  type TranscriptMotionScenarioEvent,
+import * as transcriptMotionScenarios from "../lib/transcript-motion-scenarios";
+import type {
+  TranscriptMotionScenario,
+  TranscriptMotionScenarioEvent,
 } from "../lib/transcript-motion-scenarios";
 import { VIEWER_MESSAGES } from "../lib/session-viewer-classes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
@@ -21,10 +18,20 @@ import { Button } from "../ui/button";
 import { SessionTranscript } from "./SessionTranscript";
 import { BusyInline } from "./session-viewer/busy-indicators";
 
+interface TranscriptMotionStyle extends React.CSSProperties {
+  "--session-under": string;
+  "--pane-header-h": string;
+  "--strip-clearance": string;
+}
+
 type TranscriptMotionControl = {
   paused: boolean;
   followLatest: () => void;
   step?: () => boolean;
+  /** Grow a loaded entry in place, wherever the reader is. Lets a driver
+   * exercise growth above the reader inside their own row, in the row above,
+   * or during a fling, none of which a keyed prepend covers. */
+  grow?: (entryId: string) => boolean;
 };
 
 declare global {
@@ -49,10 +56,10 @@ export function TranscriptMotionLab({
   );
   const scenario =
     profile === "stream"
-      ? makeTranscriptStreamPerformanceScenario()
+      ? transcriptMotionScenarios.makeTranscriptStreamPerformanceScenario()
       : profile === "hydration"
-        ? makeTranscriptHydrationScenario()
-        : makeTranscriptMotionScenario(seed);
+        ? transcriptMotionScenarios.makeTranscriptHydrationScenario()
+        : transcriptMotionScenarios.makeTranscriptMotionScenario(seed);
 
   useEffect(() => {
     const splash = document.getElementById("splash");
@@ -169,7 +176,9 @@ function TranscriptMotionPlayer({
         liveTurnStore.finish();
         break;
     }
-    setState((current) => applyTranscriptMotionEvent(current, event));
+    setState((current) =>
+      transcriptMotionScenarios.applyTranscriptMotionEvent(current, event),
+    );
   });
 
   useEffect(() => {
@@ -184,6 +193,23 @@ function TranscriptMotionPlayer({
             const next = eventIndex + 1;
             setEventIndex(next);
             if (next === scenario.events.length) onStatusChange("done");
+            return true;
+          }
+        : undefined,
+      grow: manual
+        ? (entryId) => {
+            if (
+              !scenario.initial.transcriptIndex?.some(
+                (entry) => entry.id === entryId,
+              )
+            )
+              return false;
+            setState((current) =>
+              transcriptMotionScenarios.growTranscriptMotionEntry(
+                current,
+                entryId,
+              ),
+            );
             return true;
           }
         : undefined,
@@ -239,17 +265,17 @@ function TranscriptMotionPlayer({
     relayout();
   }, [state, endTurn, relayout]);
 
+  const style: TranscriptMotionStyle = {
+    "--session-under": "0px",
+    "--pane-header-h": "0px",
+    "--strip-clearance": "0px",
+  };
+
   return (
     <section
       className="flex min-h-0 flex-1 flex-col"
       data-transcript-motion-event={eventIndex}
-      style={
-        {
-          "--session-under": "0px",
-          "--pane-header-h": "0px",
-          "--strip-clearance": "0px",
-        } as React.CSSProperties
-      }
+      style={style}
     >
       <div
         ref={setContainerRef}

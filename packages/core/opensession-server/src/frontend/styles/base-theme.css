@@ -1,0 +1,968 @@
+/* ─────────────────────────────────────────────────────────────
+   Open Session
+   Devin-inspired dark theme
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  /* Conductor-style dark: lifted neutral charcoal rather than near-black — the
+	   deepest surface sits ~#1b, so code blocks/terminals (which stay near-black)
+	   read as inset wells instead of blending in. */
+  /* Elevation ramp. Four tiers, each one step further from the page than the
+	   last, and — this is the part that has to hold — stepping the SAME
+	   direction in both themes: lighter than --bg in dark, darker than --bg in
+	   light. A surface's tier is what makes it read as lifted, so a token may
+	   not swap tiers between themes or the same stack reads raised in one and
+	   inset in the other.
+
+	     L0  --bg                                   the page
+	     L1  --bg-raised / --sidebar-bg / --topbar-bg   chrome behind the content
+	     L2  --bg-panel                             cards, bubbles, tool rows
+	     L3  --control-surface                      controls/popups on top
+
+	   --bg-hover/--bg-active continue past L3 (see below), so the whole chain
+	   is monotonic: bg < raised < panel < control < hover < active in dark, and
+	   the same order descending in light. */
+  --bg: #1c1c1c;
+  --bg-raised: #222222;
+  /* The sidebar and the chrome band around it. It has its own token because
+	   light puts it a hair off the page rather than a full L1 step down, which
+	   is what the Codex sidebar does and what the app copies. In dark it is
+	   L1 like every other piece of chrome, so the two stay the same surface. */
+  --sidebar-bg: var(--bg-raised);
+  /* Desktop sidebar material: a translucent charcoal wash over the native
+	   window/backdrop — the sidebar surface at partial opacity. */
+  --sidebar-material: rgba(34, 34, 34, 0.66);
+  --sidebar-material-sheen: rgba(255, 255, 255, 0.035);
+  /* The cast on the content column's left edge, which gives the chrome beside
+	   it a little depth. Dark has none, for the reason --auth-card-edge drops
+	   its cast below: black ink on a near-black column lands as a smudge rather
+	   than a lift. It measured one grey step over 7px, which is not depth, and
+	   the seam is already saying where the sidebar ends. Light keeps it: see
+	   the light block. */
+  --content-edge-shadow: none;
+  /* Level with the sidebar in both themes: a top bar that sits between the
+	   page and the sidebar reads as a third surface across one row of chrome. */
+  --topbar-bg: var(--sidebar-bg);
+  /* Clean control chips (header Share, PR chip), the composer, popups: the top
+	   of the ramp, so they read as lifted off whatever they sit on, with a
+	   whisper of shadow. Codex-style. */
+  --control-surface: #292929;
+  /* The plate under a control you *press*. In dark it is the control surface
+	   above — lighter than the page, so the fill is what lifts it. Light is the
+	   composer's case at chip scale, so it takes the composer's answer; see the
+	   light block. */
+  --button-surface: var(--control-surface);
+  /* Phone navigation controls float over live content, the way an iOS toolbar
+	   item does: a translucent plate that takes its colour from whatever passes
+	   underneath it, rather than a paper sticker laid on top. The fill used to be
+	   `--bg`, the same colour as the page it floats over, so nothing but the cast
+	   shadow said the control was there at all, and the bar read as stickers on a
+	   page instead of glass over one.
+
+	   Dark mode keeps a defined edge, because even thinned the fill lands close
+	   to the page; light mode takes the native toolbar treatment below, where an
+	   even cast around the control replaces that edge. The inset line leading
+	   each shadow is the specular top edge every glass control on iOS carries. It
+	   is what gives the plate a thickness, and it is the one part of the look a
+	   blur alone cannot produce. */
+  --mobile-header-control-border: var(--border);
+  --mobile-header-control-surface: color-mix(
+    in srgb,
+    var(--bg) 68%,
+    transparent
+  );
+  --mobile-header-control-blur: blur(20px) saturate(1.7);
+  /* The docked tab strip follows iOS: the selected tab is the bright plate and
+	   the rest sit a step under it. Both are OPAQUE on purpose. iOS paints its
+	   pills over a thick material, so the transcript passing behind them is a
+	   change in tone, never legible text; a thinned fill here put running code
+	   through the tab labels. The blur stays for the pill's edge, not to see
+	   through it. */
+  --mobile-tab-surface-selected: var(--bg-hover);
+  --mobile-tab-surface: var(--bg-raised);
+  --mobile-header-control-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 1px 3px -1px rgba(0, 0, 0, 0.06),
+    0 4px 10px -4px rgba(0, 0, 0, 0.09);
+  /* The segmented control's knob: the one plate that sits in a WELL rather
+	   than on the page, so it gets its own pair of tokens.
+
+	   It is deliberately ABOVE the ramp's last step (--bg-active #353535). A
+	   cast shadow on a near-black track does nothing, so in dark the fill is
+	   the only thing that can say "raised" — and the knob's own track is
+	   already --bg-hover, so anything at or below that tier reads as a hole
+	   cut in the group rather than a plate lifted out of it. That is what
+	   --control-surface (#292929, BELOW the track) looked like. The value is
+	   iOS's own: its selected segment sits around #636366 on a #2C2C2E track,
+	   which is a bigger step than an app this flat would arrive at on its own,
+	   and it is the step that actually reads as pressed.
+
+	   The edge is a hair LIGHTER than the fill, not darker — a dark line
+	   around a light plate is a drawn outline, while a light one reads as the
+	   top of the plate catching the light. Light mode wants neither; see the
+	   light block. */
+  --segmented-knob-surface: #5a5a5c;
+  --segmented-knob-edge: #6a6a6c;
+  /* Floating popups — hover cards, menus, context menus. Same L3 tier as the
+	   controls above, and in dark that is all it needs: lighter than the page,
+	   so the fill alone reads as lifted and the hairline is just an edge. Light
+	   is the case that needs its own pair, for the reason the composer states
+	   below — see the light block. */
+  --popup-surface: var(--control-surface);
+  --popup-ring: var(--smooth-ring-color);
+  /* A modal's edge, which is not a menu's. A menu floats over the page it
+	   came from, so the fill's step above --bg is what says it is in front. A
+	   dialog floats over a scrim that has already darkened everything around
+	   it: the fill's step shrinks to nothing, the cast shadow falls on ink it
+	   cannot darken further, and the shared hairline — 14% ink, painted at
+	   half strength by the ring utility — landed FAINTER than the dividers
+	   inside the dialog's own rows. A box whose interior lines are more
+	   definite than its outline reads as unfinished. 26% is the value that
+	   puts the outline level with those dividers (--border) once the utility
+	   has halved it. Light needs the firmer line for the opposite reason, the
+	   one --popup-surface gives below: a white box on white. */
+  --dialog-ring: color-mix(in srgb, var(--text) 26%, var(--bg));
+  /* Glass. The same fill, thinned so the page shows through, over a blur
+	   heavy enough that what shows through is colour and shape rather than
+	   somebody else's sentence — a popup you can read a row title through is
+	   not translucent, it is broken. Written once here rather than per theme:
+	   --popup-surface re-resolves under html[data-theme], so the mix follows.
+	   Both are overridden back to opaque at the bottom of this block's file
+	   for browsers without backdrop-filter and for reduced transparency. */
+  --popup-glass: color-mix(in srgb, var(--popup-surface) 72%, transparent);
+  --popup-blur: blur(20px) saturate(1.8);
+  /* The command palette's own glass. Denser than a menu's for two reasons: it
+	   is a big empty box rather than a strip of rows — the same reason
+	   --composer-surface and --popup-surface go white in light instead of
+	   following the ramp down — and it is the one popup with a dimming backdrop
+	   underneath, which composites THROUGH the fill and drags a 72% mix down to
+	   a grey slab. At 88% the page's colour and shape still read through it and
+	   the surface stays paper. */
+  --palette-glass: color-mix(in srgb, var(--popup-surface) 88%, transparent);
+  /* The composer's own fill + edge. In dark it IS --control-surface: lighter
+	   than the page, so the box already reads as lifted. Light needs its own
+	   pair — see the light block. */
+  --composer-surface: var(--control-surface);
+  --composer-border: var(--border);
+  --composer-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.16), 0 14px 36px rgba(0, 0, 0, 0.2);
+  /* The composer box's corner. It lives here, not on .composer, because the
+	   expand/collapse morph is driven from Composer.tsx — Motion writes the
+	   radius inline, so it has to be able to READ the resting value rather than
+	   carry a second copy of it. Same corner as the surfaces physically
+	   attached to the composer (the queue flap, the agents flap), which read
+	   this token rather than a `rounded-*` step of their own so the seam stays
+	   flush. The composer is deliberately the roundest surface on a session
+	   page — it is the one thing you touch — so it sits a step above the
+	   panels around it instead of matching them. */
+  --composer-radius: calc(28px * var(--rf));
+  /* The sign-in card's edge. On the dark marketing artwork, a cast has
+	   nothing to fall on: black ink on a near-black picture becomes a grey
+	   smudge rather than a lift. A hairline holds the glass shape instead, and
+	   nothing darkens the backdrop. Light keeps the cast: see the light block. */
+  --auth-card-edge: 0 0 0 1px var(--smooth-ring-color);
+  --bg-panel: #262626;
+  --bg-hover: #2e2e2e;
+  --bg-active: #353535;
+  /* What a mermaid diagram is drawn on. A token rather than a value in the
+	   `.md-mermaid` rule because the media lightbox paints the same surface
+	   under a diagram it has opened: the chart's ink is themed to the page, so
+	   on the viewer's near-black scrim a light-theme one would be unreadable. */
+  --diagram-canvas: #0c0c10;
+  /* The session's right-hand panel: the fill of the column itself, and the
+	   plate its sections sit on. The column takes a hair off the page rather
+	   than a whole tier, the argument --sidebar-bg already makes at column
+	   scale: what separates it is the seam, so the fill only has to be a shade
+	   off the page. The plate takes a smaller step than --bg-panel because five
+	   or six of them stack down one narrow column, and at the page's full plate
+	   strength the panel reads as a pile of blocks rather than a list of
+	   sections. PANEL_SHELL paints the first and re-points --bg-panel at the
+	   second, so every plate, chip and pill inside the column steps together. */
+  --panel-surface: #1f1f1f;
+  --panel-plate: #242424;
+  /* The plate a settings group sits on. In dark it is L1, like any other card:
+	   six units up from the page is already a whisper, and taking any less off
+	   would leave a group with no edge at all. Light is the case this token
+	   exists for. See the light block. */
+  --settings-plate: var(--bg-raised);
+  /* Interaction washes. --bg-hover/--bg-active above are absolute *surfaces*:
+	   used as a hover they land as a ~9% step on --bg but barely 2% on
+	   --bg-panel, so the same token gives a heavy wash on the composer and an
+	   invisible one inside panels and popups. These are the *effect* — a
+	   translucent ink that composites to the same strength on whatever surface
+	   it sits on. Use --hover for hover/focus, --hover-strong for pressed and
+	   selected. The surface tokens stay for real surfaces (segmented-control
+	   tracks, chips) and for the scroll-fade box-shadow masks, which need an
+	   opaque colour to hide what slides under them. */
+  --hover: rgba(255, 255, 255, 0.07);
+  --hover-strong: rgba(255, 255, 255, 0.11);
+  /* A SELECTED row: the session being viewed, the active tool, the open PR.
+	   Quieter than the pressed wash on purpose. A press is momentary and has to
+	   be felt under the pointer, while a selection persists and only has to be
+	   findable, and it never carries the row alone: a selected row also takes
+	   full-strength ink in a title its neighbours write dim. At pressed
+	   strength a column of open rows read as grey plates dropped on the list.
+	   The sidebar's hover is a layer over this, so pointing at the selected row
+	   still lifts it. */
+  --selected: rgba(255, 255, 255, 0.08);
+  /* Opaque equivalents of the sidebar row's translucent washes. Avatar rings
+	   cannot inherit the pixels behind them, so these reproduce the exact sRGB
+	   composites for resting selection, hover, and both layers together. */
+  --sidebar-row-hover: color-mix(in srgb, #ffffff 7%, var(--sidebar-bg));
+  --sidebar-row-selected: color-mix(in srgb, #ffffff 8%, var(--sidebar-bg));
+  --sidebar-row-selected-hover: color-mix(
+    in srgb,
+    #ffffff 14.44%,
+    var(--sidebar-bg)
+  );
+  /* The one interaction fill that is NOT a wash: an action chip floating over
+	   a row (the pin/archive cluster). A chip is a LID, not a tint — what is
+	   behind it is the row it covers, so a translucent one shows that row's own
+	   wash, and whatever the row still has under that spot, through the glyph.
+	   So it is opaque, and the background bleeds into its COLOUR instead of
+	   through its alpha: the hover wash pre-composited onto the sidebar's own
+	   surface, which is the same value the wash resolves to there. One surface
+	   it cannot follow is the vibrancy sidebar — see the material block for
+	   what was measured there and why it still takes this. */
+  --row-chip: color-mix(in srgb, #ffffff 11%, var(--sidebar-bg));
+  --row-chip-hover: color-mix(in srgb, #ffffff 7%, var(--row-chip));
+  --border: #333333;
+  --border-strong: #464646;
+  /* The seams of the app chrome: the hairline under a top bar, the sidebar
+	   edge, the right panel edge, a pane header's underline. These divide two
+	   surfaces that are already different, so the line only has to mark where
+	   one ends. At full --border it draws a frame around the whole top of the
+	   window instead, and three of them meeting in one corner is the loudest
+	   thing on a quiet screen. A wash of the same ink says the same thing more
+	   quietly. Keep --border itself for the edge of a control, where the line
+	   IS the shape. */
+  --divider: color-mix(in srgb, var(--border) 55%, transparent);
+  /* A block's own outline, where the fill under it already says where the
+	   block is and the line only has to close its shape: the settings plate.
+	   Lighter than --divider, which still has to read as a separation between
+	   two surfaces. Anything that has to be seen as a rule takes --divider or
+	   --border; this one is meant to be felt and not looked at. */
+  --divider-soft: color-mix(in srgb, var(--border) 34%, transparent);
+  /* The scrollbar thumb, on the platforms that draw a permanent one (see the
+	   scrollbar block further down). Translucent rather than a picked grey: the
+	   scrollers sit on four different fills, and an alpha keeps the thumb in the
+	   same relationship to each of them. */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.13);
+  --text: #e9e9e9;
+  --text-dim: #a2a2a2;
+  --text-faint: #767676;
+  /* ChatGPT-style reasoning shimmer: a dark translucent wash crosses the
+	   secondary text in dark mode; light mode reverses it below. */
+  --reasoning-shimmer-contrast: oklch(0 0 0 / 0.6);
+  /* The no-JS fallback brand mark: ink on the page — near-white on dark,
+	   near-black on light. The selected accent overrides it below. It is a FILL
+	   colour (the
+	   send disc, an active tab underline, a checked switch) and a full-strength
+	   EMPHASIS colour (an active icon against a dim one). It is deliberately NOT
+	   a link colour: at body contrast, words wearing it are indistinguishable
+	   from the prose around them, so inline affordances take --link. Red goes
+	   back to meaning only "this failed".
+
+	   var(--text) rather than a literal, so it tracks the ink ramp. This is not
+	   a new idea in this file — the `ink` Button variant, the light-theme Create
+	   button and .pr-bar-btn-solid already paint ink-on-paper, each with its own
+	   comment explaining that the red accent shouted. */
+  --accent: var(--text);
+  /* What sits ON an --accent fill: its inverse. Was a hardcoded #fff at every
+	   call site, which is white-on-white the moment the accent becomes ink. */
+  --on-accent: var(--bg);
+  /* Hover for a filled --accent control. While the accent is ink, the only
+	   direction with anywhere to go is toward the page: brightness-110 on a
+	   near-white or near-black plate is invisible. */
+  --accent-hover: color-mix(in srgb, var(--accent) 86%, var(--bg));
+  /* Achromatic wash for a surface that is TINTED by the accent: a badge, an
+	   "on" toggle, a focus ring. Pitched above --hover-strong (0.11) so it reads
+	   as a tint of its own and not as a heavier hover. Once the accent went ink
+	   this and the interaction washes became the same ink, so they were told
+	   apart only by opacity; the split is by meaning instead. The three
+	   achromatic ones each say a different thing: --hover is the pointer,
+	   --hover-strong the press, --selected what is open. "Needs you" is
+	   deliberately in none of them — it takes no fill at all, so it can sit on a
+	   selected row without either state losing. Don't spell a hover with this
+	   token — that is what the collision was. */
+  --accent-soft: rgba(255, 255, 255, 0.16);
+  /* Inline affordances: a link in an agent answer, a PR title that opens. The
+	   accent cannot do this job once it is ink, and red never should have. */
+  --link: var(--blue);
+  --tooltip-bg: #303030;
+  --tooltip-fg: #eeeeee;
+  --tooltip-ring: rgba(255, 255, 255, 0.1);
+  /* Status green and red. Both are held at the lightness they had and taken
+	   out to the chroma their hue can carry, which is what separates them from
+	   the greyed GitHub-era pair they started as. Lightness is the channel that
+	   is spoken for: green is the fill under CheckStatusIcon's white knockout
+	   and red is the fill under the sidebar's white attention count, so moving
+	   it moves a contrast ratio. Chroma costs nothing there. */
+  --green: #00bc52;
+  --green-soft: rgba(0, 188, 82, 0.14);
+  --yellow: #d29922;
+  /* The wash behind a --yellow label: the "Running" pill. In-progress work is
+	   yellow throughout — the pulsing run indicators and the "In progress"
+	   lane — because green here means a finished, reviewable result. */
+  --yellow-soft: rgba(210, 153, 34, 0.14);
+  /* Yellow as a SURFACE rather than as ink. `--yellow` is picked to read as
+	   text, so in light mode it is a dark ochre (#9a6700) — mixed down to the
+	   5-15% of a tint it loses its hue and lands as warm grey, which is what
+	   made the note surfaces look washed out. This one is picked to survive
+	   that dilution. Use it for note fills and hatches; keep `--yellow` for
+	   the label sitting on them. On dark the ink is already chromatic enough
+	   to do both jobs. */
+  --yellow-tint: #d29922;
+  --blue: #58a6ff;
+  --blue-soft: rgba(88, 166, 255, 0.13);
+  --red: #fc4a47;
+  --red-soft: rgba(252, 74, 71, 0.12);
+  --purple: #a371f7;
+  /* Tool-family hues (transcript timeline icons + detail accents) */
+  --tool-run: #3fb950;
+  --tool-file: #58a6ff;
+  --tool-edit: #e3b341;
+  --tool-find: #f0883e;
+  --tool-web: #39c5cf;
+  --tool-agent: #f778ba;
+  --tool-mcp: #a371f7;
+  --tool-skill: #2dd4bf;
+  /* The well a tool call's input and output sit in. It is a code colour
+	   scheme (GitHub's), not a step of the chrome ramp, which is why it is its
+	   own group rather than another --bg-*: the surface has to read as sunk
+	   under whatever card the tool block lands on, in both themes.
+	   NB the light value is the one `.markdown pre` moved away from — see the
+	   note above that rule — so a snippet here reads a touch raised in light
+	   where a pasted one reads sunk. Kept as-is by the migration; changing it
+	   is a visual call, not a mechanical one. */
+  /* Keep both surfaces available because the code theme can differ from the
+     app theme. --code-well remains the surface for the current app theme. */
+  --code-well-light: #f6f8fa;
+  --code-well-dark: #0d0f13;
+  --code-well: var(--code-well-dark);
+  /* Review code can pin the opposite scheme from the app. Keep both app-base
+     surfaces available so either pinned scheme matches its surrounding chrome. */
+  --review-code-light: #ffffff;
+  --review-code-dark: #1c1c1c;
+  --code-well-line: rgba(255, 255, 255, 0.06);
+  --code-well-ink: #b6bcc8;
+  --code-well-gutter: #565d6b;
+  /* Source chips — one tinted pill per session origin (slack / linear). Ask
+	   takes the app's own green (--green) instead of a token here: green is what
+	   ask means everywhere else in the product.
+	   Tokens rather than a rule per source because the theme is the only thing
+	   about them that moves: these are light-on-dark, and light needs the same
+	   hue re-toned dark-on-light to stay legible. A token re-resolves under
+	   html[data-theme] on its own, where the pair of rules it replaced had to
+	   state every chip twice. The neutral origins (cli, automation) use
+	   --bg-active/--text-dim and need no token of their own. */
+  --chip-slack-bg: rgba(74, 21, 75, 0.55);
+  --chip-slack-fg: #d9a8db;
+  --chip-linear-bg: rgba(94, 106, 210, 0.25);
+  --chip-linear-fg: #9da6ee;
+  --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  /* The web keeps desktop's compact metrics, while a phone promotes every role
+	   one rung. These are real custom properties, rather than values written
+	   directly into Tailwind's @theme block, so the same utility can follow the
+	   viewport without a `phone:` override at every call site. Raw markdown and
+	   inherited UI text read these too, which keeps the whole scale together. */
+  --type-root: 14px;
+  --type-meta: 11px;
+  --type-label: 13px;
+  --type-item-title: 14px;
+  --type-body: 15px;
+  --type-dialog-title: 17px;
+  --type-section-title: 19px;
+  --type-page-title: 24px;
+  --type-stat: 28px;
+  --type-stat-line: 32px;
+  --type-input-phone: 16px;
+  /* The weight a title takes: a page's own name, and the headings under it.
+	   It is a token rather than a fixed utility because the right weight is not
+	   the same in both themes. Light text on a dark page blooms, putting more
+	   ink on screen than the same stem does as dark text on white, which is the
+	   argument the light ramp below already makes about its greys, pointed the
+	   other way. So dark carries the lighter cut and light steps back up to
+	   semibold, and a heading is written `font-title` once instead of pairing a
+	   weight with a theme override at every call site. */
+  --title-weight: 500;
+  --radius: 14px;
+  /* Squircle corner treatment (Chrome 139+ `corner-shape`). A superellipse
+	   hugs the corner tighter than a circular arc at the same radius, so a
+	   browser that can draw one carries a larger radius multiplier than the
+	   circular fallback. --rf scales every px radius in the app and --cs picks
+	   the corner shape, so the pair flipped in the `@supports` block below is
+	   the whole switch.
+
+	   `corner-shape` is Chromium-only (WebKit has not shipped it), so Safari,
+	   and the installed iOS PWA with it, draws circular corners and has to
+	   reach the same shape with radius alone. It cannot land on it exactly,
+	   but the closest radius is the one that cuts the same amount off the
+	   corner: a circular arc removes 0.215r² of its corner square against a
+	   squircle's 0.073r², about three times as much, so it has to be 1.75x
+	   smaller to read at the same weight. 1.35 / 1.75 is the 0.771 here, and
+	   1.75 is the ratio commonly used for squircle classes
+	   (8px round against 14px squircle).
+
+	   This was 1, the radius each corner is authored with, and that is what
+	   made Safari read visibly rounder than Chrome. It was 0.85 before that,
+	   and why THAT was wrong is worth keeping: it reached only controls while
+	   large overlays kept the full 1.35, so a Safari palette was a very round
+	   shell full of squarer buttons, the hierarchy inverted rather than
+	   degraded. Every radius in the app now derives from this one token, so a
+	   shell and the controls inside it move together whatever it is set to. */
+  --rf: 0.771;
+  --cs: round;
+  /* The same correction for a radius written as a PERCENTAGE of its box,
+	   which --rf cannot scale because the percentage is already relative: the
+	   32% avatar tile, and nothing else. Percentages are authored at the value
+	   Chrome squircles, so this is 1 there and carries the whole 1/1.75 shrink
+	   in Safari. Derived from --rf rather than declared twice, so the
+	   `@supports` flip below stays the only place either one moves. */
+  --rp: calc(var(--rf) / 1.35);
+  /* Session column width — messages, work blocks, composer, ask cards all share
+	   it so the conversation reads as one column. */
+  --session-col: 780px;
+  /* Shared height for the desktop sidebar, session header and PR strip. */
+  --desktop-header-h: 48px;
+  /* Header height grows by the iOS status-bar inset when installed as a PWA
+     (black-translucent draws the webview under the clock/notch). The bar spends
+     8px on its own top pad, leaving 40px for MOBILE_BAR_SEGMENT and the settings
+     mark in lib/app-header-classes.ts. Move the two together. */
+  --header-h: calc(48px + env(safe-area-inset-top, 0px));
+}
+
+/* Above the phone breakpoint the top bar isn't rendered at all, so nothing is
+   offset by it and the token collapses to zero. It stays a token rather than a
+   rule on an element because everything that clears the bar reads it from
+   somewhere else in the tree: the workspace panel anchors its ≤920px
+   overlay to it, the sidebar masks its scroll by it, and the
+   detail pane spends it as --pane-header-h. */
+@media (min-width: 721px) {
+  :root {
+    --header-h: 0px;
+  }
+}
+
+/* ── Light theme ─────────────────────────────────────────────
+   Conductor-inspired neutral gray ramp. Applied when the user picks Light, or picks
+   System and the OS is light — see src/frontend/lib/theme.ts + the pre-paint
+   script in index.html, which set html[data-theme]. The whole UI is
+   variable-driven, so redefining these ~15 core tokens re-themes it; the handful
+   of hardcoded light-on-translucent spots get explicit overrides just below. */
+html[data-theme="light"] {
+  /* Same four tiers as :root, stepping down from white instead of up from
+	   charcoal (L0 #ffffff → L1 -9 → L2 -15 → L3 -20). The steps are wider than
+	   dark's 6/10/13 because ink on white reads lighter than the same step of
+	   white on charcoal. */
+  --bg: #ffffff;
+  --bg-raised: #f6f6f6;
+  /* The one L1 surface that does not take the full step: half of it, five
+	   units off white. The sidebar is a whole column of chrome, not a card, and
+	   at column scale the L1 grey reads as a panel bolted to the side of the
+	   page. What separates it is the seam and the shadow on the workspace's left
+	   edge, so the fill only has to be a shade cooler than the page, not a tier
+	   below it. Codex sets its sidebar two units off white, which was the first
+	   answer here and came out too faint to hold the column at all; this is the
+	   step in between. --topbar-bg follows it, and --bg-raised keeps the full
+	   step for the cards and panels that need a fill of their own. */
+  --sidebar-bg: #fafafa;
+  --sidebar-material: rgba(250, 250, 250, 0.72);
+  --sidebar-material-sheen: rgba(255, 255, 255, 0.42);
+  /* See :root. On paper the cast reads, and it is half of what holds the
+	   chrome column apart from the content beside it. */
+  --content-edge-shadow: -1px 0 8px rgba(0, 0, 0, 0.05);
+  /* Ink on white holds less of the page than white on charcoal does, so a
+	   title needs the heavier cut here to read as firmly as the lighter one
+	   does in dark. Same reasoning as the grey steps above, applied to stems
+	   instead of surfaces. */
+  --title-weight: 600;
+  /* L3 + a barely-there shadow — the clean lifted chip from the Codex
+	   reference. It used to be #ffffff, byte-identical to --bg, so a chip, the
+	   composer and the mention popup had no surface of their own in light; and
+	   it sat at the BOTTOM of the ramp here while it sits at the top in dark.
+	   #ebebeb lands between --bg-panel (#f0f0f0) and --bg-hover (#e9e9e9), which
+	   is where dark's #292929 sits between #262626 and #2e2e2e. */
+  --control-surface: #ebebeb;
+  /* A button is the composer's exception at chip scale. The ramp above is
+	   right for a *filled* chip — a status pill, an option row, an input well —
+	   which has nothing but its fill to read against the page. A button also
+	   carries a hairline and a cast shadow, and those already say "raised"; add
+	   the grey fill on top and the control reads as tinted rather than lifted,
+	   which is the disabled signal again. So it goes paper and lets the shadow
+	   do the lifting, exactly as the composer and the popups below do. */
+  --button-surface: #ffffff;
+  /* Native light toolbar controls do not draw a dark outline around their
+	   glass. A zero-offset cast with a little spread lifts the whole silhouette
+	   evenly, including its top edge, without turning that edge into a border. */
+  --mobile-header-control-border: transparent;
+  /* Thinner than dark's, because what shows through here is a bright page and
+	   the plate has to stay lighter than it to keep reading as glass rather than
+	   as a grey wash over the words underneath. */
+  --mobile-header-control-surface: color-mix(
+    in srgb,
+    var(--bg) 62%,
+    transparent
+  );
+  /* Light mode reaches the same two weights from the other side: the selected
+	   tab is pure white, the rest the grey a step under it. */
+  --mobile-tab-surface-selected: var(--bg);
+  --mobile-tab-surface: var(--bg-hover);
+  --mobile-header-control-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 0 14px 1px rgba(0, 0, 0, 0.1);
+  /* The segmented knob goes paper here, like every other raised control, and
+	   wears no edge at all. A --border hairline is darker than the --bg-hover
+	   track it lies on, so it reads as an outline drawn around the option
+	   rather than a plate raised out of the group, and the top of that outline
+	   has no shadow to justify it. White on a light grey track plus the cast
+	   shadow is enough; dark cannot do that and takes a fill and an edge of
+	   its own in the block above. */
+  --segmented-knob-surface: var(--button-surface);
+  --segmented-knob-edge: transparent;
+  /* The composer is the exception to the ramp above, and it has to be. The
+	   ramp steps AWAY from the page — darker in light — which is right for a
+	   small chip read against its neighbours, but the composer is a big empty
+	   box, and a big empty box that is darker than the page reads as a well
+	   you cannot type in: greyed out, the same signal a disabled field gives.
+	   So it goes white and does its lifting with an edge and a shadow instead
+	   of a fill, which is how a raised surface behaves in light anyway.
+	   #dcdcdc rather than --border (#e2e2e2): white-on-white needs a firmer
+	   line to hold its shape, while --border-strong (#d0d0d0) draws a box
+	   around the composer instead of an edge under it.
+	   This also fixes the stack behind it — the queue/agents flaps tuck under
+	   the composer at ~#f3f3f3, which is lighter than the old #ebebeb box in
+	   front of them, so the thing on top looked like the thing behind. */
+  --composer-surface: #ffffff;
+  --composer-border: #dcdcdc;
+  /* A hover card is the composer's case again: a big floating box, and the
+	   ramp's "step away from the page" (darker in light) turns it into a grey
+	   slab dropped on white — the same greyed-out signal, and it drags every
+	   thumbnail and chip inside it down with it. Paper instead: white, lifted
+	   by its shadow and an edge rather than a fill. That needs the composer's
+	   firmer line — the smooth-shadow ring resolves to ~#f3f3f3 here, which
+	   holds an edge under a grey fill but disappears under a white one. */
+  --popup-surface: #ffffff;
+  --popup-ring: var(--composer-border);
+  /* See :root. Here a dialog is the white-box-on-white case in that same
+	   paragraph, so it takes the composer's line rather than a mix of its
+	   own — the palette already did, and the two shells are one surface. */
+  --dialog-ring: var(--popup-ring);
+  --composer-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.04), 0 14px 36px rgba(0, 0, 0, 0.08);
+  /* See :root. The light artwork has enough value range for a quiet cast to
+	   lift the glass card from it. This is the scale's `lg` step
+	   (smooth-shadow.css), written out because only one theme takes it. */
+  --auth-card-edge:
+    0 4px 12px -4px color-mix(in srgb, black 5%, transparent),
+    0 18px 48px -14px color-mix(in srgb, black 11%, transparent);
+  --bg-panel: #f0f0f0;
+  --bg-hover: #e9e9e9;
+  --bg-active: #e0e0e0;
+  /* See :root. */
+  --diagram-canvas: #fbfbfc;
+  /* See :root. Four units off white for the column, eleven for its plates:
+	   the page's own #f0f0f0 plate is right for one card on white and too heavy
+	   repeated six times down a 480px column. */
+  --panel-surface: #fbfbfb;
+  --panel-plate: #f4f4f4;
+  /* See :root. Between the L1 plate and the sidebar's half-step, and it has to
+	   be: a settings page is a COLUMN of these blocks, not one card on the page,
+	   and at the full L1 grey (#f6f6f6) five of them stacked down 720px read as
+	   a page made of grey slabs rather than paper with a few quiet groups on it.
+	   The sidebar's own #fafafa is a step too far the other way: that value is
+	   sized for a full-height column, and a block that only has to hold a group
+	   of rows loses its edge at it. Seven units, so a group still reads as a
+	   surface while the page around it stays white. */
+  --settings-plate: #f8f8f8;
+  /* Neutral black ink; a touch lighter than dark's wash because ink on white
+	   reads heavier than the same alpha of white on charcoal. */
+  --hover: rgba(0, 0, 0, 0.055);
+  --hover-strong: rgba(0, 0, 0, 0.095);
+  --selected: rgba(0, 0, 0, 0.065);
+  --sidebar-row-hover: color-mix(in srgb, #000000 5.5%, var(--sidebar-bg));
+  --sidebar-row-selected: color-mix(in srgb, #000000 6.5%, var(--sidebar-bg));
+  --sidebar-row-selected-hover: color-mix(
+    in srgb,
+    #000000 11.6425%,
+    var(--sidebar-bg)
+  );
+  --row-chip: color-mix(in srgb, #000000 9.5%, var(--sidebar-bg));
+  --row-chip-hover: color-mix(in srgb, #000000 5.5%, var(--row-chip));
+  --border: #e2e2e2;
+  --border-strong: #d0d0d0;
+  /* See the note on the dark token. A touch more ink for the same reason the
+	   greys above carry it: black on white reads lighter than the same alpha of
+	   white on charcoal. */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+  --text: #1a1a1a;
+  --text-dim: #646464;
+  --text-faint: #949494;
+  --reasoning-shimmer-contrast: oklch(1 0 0 / 0.75);
+  --accent: var(--text);
+  --on-accent: var(--bg);
+  --accent-soft: rgba(0, 0, 0, 0.12);
+  --link: var(--blue);
+  --tooltip-bg: #222222;
+  --tooltip-fg: #ffffff;
+  --tooltip-ring: rgba(255, 255, 255, 0.12);
+  /* See the note on the dark pair. Light mode is where the old values read as
+	   dated, because sRGB holds almost no chroma at the lightness they sat at:
+	   the green was 92% of the little a forest green can carry. These lift the
+	   lightness instead, which is the only way to a vivid green here, and they
+	   spend the contrast headroom the two fills were carrying rather than the
+	   floor. White on green goes 5.08:1 to 3.82:1, above the 3:1 a knocked-out
+	   glyph needs, and white on red 5.36:1 to 4.54:1, still past 4.5:1 for the
+	   10px count that sits on it. */
+  --green: #009740;
+  --green-soft: rgba(0, 151, 64, 0.12);
+  --yellow: #9a6700;
+  --yellow-soft: rgba(154, 103, 0, 0.12);
+  /* See the note on --yellow-tint above: light mode's ink is too dark and too
+	   desaturated to tint with, so the surface yellow is its own colour. */
+  --yellow-tint: #f0b400;
+  --blue: #0969da;
+  --blue-soft: rgba(9, 105, 218, 0.1);
+  --red: #de3334;
+  --red-soft: rgba(222, 51, 52, 0.1);
+  --purple: #8250df;
+  --tool-run: #1a7f37;
+  --tool-file: #0969da;
+  --tool-edit: #9a6700;
+  --tool-find: #bc4c00;
+  --tool-web: #1b7c83;
+  --tool-agent: #bf3989;
+  --tool-mcp: #8250df;
+  --tool-skill: #0f766e;
+  --code-well: var(--code-well-light);
+  --code-well-line: #d8dee4;
+  --code-well-ink: #57606a;
+  --code-well-gutter: #8c959f;
+  /* Same hues as :root, re-toned dark-on-light — see the note there. */
+  --chip-slack-bg: rgba(122, 43, 124, 0.12);
+  --chip-slack-fg: #8a2b8c;
+  --chip-linear-bg: rgba(94, 106, 210, 0.14);
+  --chip-linear-fg: #4650c0;
+}
+
+/* Glass is an enhancement, never the thing holding the text up: without a
+   working backdrop-filter a thinned fill is just a see-through card, and
+   somebody who has asked the OS for less transparency has asked for exactly
+   this. Both fall back to the opaque surface, which is the same colour the
+   glass is mixed from, so nothing else about the popup changes. Declared
+   after both theme blocks so they win over the :root definition. */
+@supports not (backdrop-filter: blur(1px)) {
+  :root {
+    --popup-glass: var(--popup-surface);
+    --palette-glass: var(--popup-surface);
+    /* The page colour, which is what these controls were painted in before
+		   they became glass: without a blur behind it a thinned fill is just a
+		   window onto whatever is scrolling past. */
+    --mobile-header-control-surface: var(--bg);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --popup-glass: var(--popup-surface);
+    --palette-glass: var(--popup-surface);
+    --mobile-header-control-surface: var(--bg);
+  }
+}
+
+/* ── Accent themes ────────────────────────────────────────────
+   The same ten sRGB pairs as native AccentTheme.swift. data-accent is written
+   before paint by index.html and maintained by lib/accent-theme.ts. Keeping the
+   values as theme-level tokens means every existing accent consumer switches
+   together. --accent is the saturated fill/ring, --accent-ink is its readable
+   foreground form on a page, --on-accent sits on a filled control, and
+   --accent-soft becomes a hue-tinted wash/ring/shadow. */
+html[data-accent] {
+  --accent: var(--accent-dark);
+  --accent-ink: var(--accent-ink-dark, var(--accent));
+  --on-accent: var(--on-accent-dark, #ffffff);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  /* A hue has somewhere to go that ink does not, so it deepens instead of
+	   fading toward the page: the :root formula mixes the fill 14% into --bg,
+	   which on a teal plate lands on near-black rather than on a darker teal.
+	   Mixing into --text keeps the hue and reads as pressure in both themes —
+	   darker under light, lighter under dark, because that is where the ink
+	   ramp points. */
+  --accent-hover: color-mix(in srgb, var(--accent) 82%, var(--text));
+}
+
+html[data-theme="light"][data-accent] {
+  --accent: var(--accent-light);
+  --accent-ink: var(--accent-ink-light, var(--accent));
+  --on-accent: var(--on-accent-light, #ffffff);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+html[data-accent="sky"] {
+  --accent-light: #1d82bc;
+  --accent-dark: #2495d6;
+}
+
+html[data-accent="indigo"] {
+  --accent-light: #366ef5;
+  --accent-dark: #5386f6;
+}
+
+html[data-accent="coral"] {
+  --accent-light: #dd233a;
+  --accent-dark: #f73648;
+}
+
+html[data-accent="orange"] {
+  --accent-light: #d3571c;
+  --accent-dark: #eb6221;
+}
+
+/* Honey keeps one fill in both appearances: yellow only exists at high
+   lightness, so a value deep enough to separate from a white page still reads
+   as gold on a dark one, and one colour spares the picker a swatch that
+   changes identity with the theme.
+
+   Its white glyph is a deliberate exception to the contrast rule the other
+   accents keep, at 1.62:1. It is the pairing this palette was drawn from and
+   it is only ever a glyph on a plate, never body text. The ink form is what
+   carries a label, and that deepens until it clears text contrast instead.
+
+   A switch or a checkbox has to read as on/off rather than as a colour, and
+   yellow does neither: it is 1.3:1 against a white page, and its white glyph is
+   the 1.62:1 that only works at the size of an arrow in a disc. Controls borrow
+   Sky in both appearances. */
+html[data-accent="lime"] {
+  --accent-light: #eec75c;
+  --accent-dark: #eec75c;
+  --accent-ink-light: #8d7110;
+  --accent-ink-dark: #eec75c;
+  --accent-control: #2495d6;
+  --on-accent-control: #ffffff;
+}
+
+/* Black is the accent with no hue: it inverts with the page, so its fill is
+   white in dark mode. That is unreadable as a control's "on" state, and the ink
+   ramp has nowhere left to deepen into, so it borrows Sky there. In light mode
+   its own black plate reads perfectly well and is left alone. */
+html[data-accent="mono"] {
+  --accent-light: #000000;
+  --accent-dark: #ffffff;
+  --on-accent-light: #ffffff;
+  --on-accent-dark: #000000;
+  /* The one accent with no hue to deepen: it already sits past the end of the
+	   ink ramp, so mixing it into --text moves nothing. Back to the page. */
+  --accent-hover: color-mix(in srgb, var(--accent) 86%, var(--bg));
+}
+
+html[data-theme="dark"][data-accent="mono"] {
+  --accent-control: #2495d6;
+  --on-accent-control: #ffffff;
+}
+
+html[data-accent="green"] {
+  --accent-light: #1e8e45;
+  --accent-dark: #24a351;
+}
+
+/* ── Motion ──────────────────────────────────────────────────
+   One curve, three durations. The native OS1 app runs effectively a single
+   spring everywhere — `.snappy(duration: 0.18–0.28, extraBounce: 0)` — and the
+   web UI now matches it: one strong ease-out, no bounce, and the duration
+   picked by how far the thing travels rather than by which component it is.
+
+   --ease is the Ionic/iOS drawer curve. It decelerates hard into the end
+   position, so movement is visible the instant it starts (the moment the user
+   is watching most closely) and settles without overshoot. It is the primary
+   token: use it for enters, exits, movement, hovers and colour swaps alike.
+   The only deliberate exceptions are `linear` for constant motion (spinners,
+   progress fills, marquees), where any easing would read as stuttering, and
+   `ease-in-out` on the infinite breathing pulses, where the loop has no start
+   or end to accelerate away from. Never `ease-in` on UI.
+
+   Durations are chosen by travel distance, not by component:
+     --dur-micro  in-place state changes — hover washes, colour, opacity,
+                  a caret flip. Nothing moves more than a couple of px.
+     --dur        the default. Small anchored movement: popups, chips,
+                  carets, a control sliding a short distance.
+     --dur-lg     spatial changes that cross the screen — sheets, drawers,
+                  the settings pager.
+
+   Two things deliberately sit outside the scale. `linear` stays on the voice
+   waveform, which is driven by live audio amplitude rather than by a UI state
+   change — easing a signal would misreport it. And the 1ms `animation`
+   declarations on scroll-timeline elements are inert sentinels, not durations:
+   the scroll position drives their progress, so they never elapse.
+
+   Nothing below --dur-micro: under ~120ms a transition stops reading as
+   motion and reads as a jump with a smear on it, which is worse than no
+   transition at all. If something wants to be faster than --dur-micro, it
+   wants no transition — delete it instead. */
+:root {
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-micro: 0.15s;
+  --dur: 0.2s;
+  --dur-lg: 0.28s;
+}
+
+/* Reduced motion. One blanket rule rather than a guard per animation, so the
+   default is fail-safe: anything added later is covered without anyone having
+   to remember. It also reaches the Tailwind `transition-*` utilities in the
+   components, which no per-animation guard ever could.
+
+   The exceptions below are the motion that IS the information. A spinner or a
+   pulsing status dot is the only thing on screen saying "this is happening
+   right now"; freezing it doesn't calm the interface, it makes a live session
+   look hung. Both are also safe under this preference for the reason the
+   preference exists — they're small, fixed in place, and loop, so there is no
+   travel across the viewport to trigger vestibular discomfort. What the
+   preference removes is things flying, sliding, popping and washing about,
+   which is exactly what the blanket above takes out.
+
+   Deliberately NOT excepted, though they loop. Named by what the markup
+   actually spells today — most of these are now Tailwind arbitrary
+   animations, and an entry that names a class nobody emits any more is a
+   decision nobody can find:
+     animate-[staging-shimmer_…]  (StagingLink) the skeleton block already
+                        says "loading"; the travelling highlight on top of it
+                        is decoration, and it is the one looping thing here
+                        that actually translates.
+     animate-[composer-agents-pulse_…]  (ComposerAgents) keeping the existing
+                        explicit choice to stop it.
+     text-shimmer-window / text-shimmer-copy  (TextShimmer) the crest that
+                        crosses queue and reasoning activity labels. The words
+                        themselves say what is happening, so a still label
+                        loses nothing.
+     [animation-name:pixel-snake-trail]  (PixelSpinner) the decorative pixel
+                        loader — a wave that travels across the block. However
+                        fun, it is the single most motion-heavy thing in the
+                        app and the clearest thing this preference is asking
+                        us to drop; the grid still reads as a graphic at rest.
+
+   PREFER PUTTING A NEW EXCEPTION ON THE ELEMENT, not in this list:
+   `motion-reduce:[animation-duration:0.8s]! motion-reduce:[animation-iteration-count:infinite]!`
+   wins here (equal specificity, and the utility sheet is linked last) and
+   travels with the component. Five indicators silently froze during the
+   Tailwind migration because their class name was removed from the markup
+   while its exception stayed behind here — invisible on screen, since the
+   freeze only happens under the preference. It IS checkable, though: grep
+   each name below against the shipped bundle (every .js file of the current
+   build, not just the entry — the build code-splits), and a name with no hit
+   is an indicator that no longer turns. All eleven were live on 2026-08-08.
+
+   The exceptions restate their durations literally rather than trying to undo
+   the blanket with `revert` — `revert` rolls back to the *origin* below the
+   author one, i.e. the UA's `0s`, which would freeze exactly the indicators we
+   are trying to keep alive. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Progress spinners — constant rotation, the sole "working" signal, so
+	   they keep turning. Matched on the animation utility itself rather than
+	   on a hook class per spinner: the old name list silently stopped
+	   matching whenever a migration renamed an element, and a frozen spinner
+	   next to live output reads as a hung app. Anything spelt `animate-spin`
+	   or `animate-[spin_…]` is a progress indicator by construction. */
+  [class*="animate-spin"],
+  [class*="animate-[spin"] {
+    animation-duration: 0.8s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  /* A spinner that turns at a rate other than the 0.8s above keeps its own
+	   exception, placed after that rule so its duration wins the tie. The
+	   0.8s spinners need no entry at all — the rule above already names them
+	   by their animation utility. */
+
+  /* Status pulses — opacity breathing that encodes live session state
+	   (running vs waiting vs idle). The rule for this preference is "gentler,
+	   not zero: keep opacity, drop movement", and these are pure opacity. */
+  .pr-check-mark-pending,
+  .prc-mark-pending,
+  .rv-check-dot-pending {
+    animation-duration: 1.4s !important;
+    animation-iteration-count: infinite !important;
+  }
+  /* The caret below also has its animation in this file (see "Transcript
+	   liveness" further down), so this duration restates the rule's value. */
+  .pr-bar-checking {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
+  .msg-streaming .msg-body-assistant::after {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* Phones: the composer is the bottom-most thing on screen, so its shadow has
+   only the gap under it to fall into — and in mobile Safari (browser toolbar
+   below, so no safe-area inset) that gap is a few px, far less than the ~32px
+   a 14px-offset/36px-blur shadow needs. The tail was clipped into a hard line
+   along the bottom edge. Pull the offset up and shorten the blur so the whole
+   falloff lands inside the gap; the ambient spread still reads as lift. */
+@media (max-width: 720px) {
+  :root {
+    --composer-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.16), 0 4px 20px rgba(0, 0, 0, 0.2);
+  }
+  html[data-theme="light"] {
+    --composer-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.04), 0 4px 20px rgba(0, 0, 0, 0.08);
+  }
+}
+
+/* The native iPhone UI reads transcript prose at 17pt. At phone width the PWA
+   promotes every semantic role to the next rung of its existing scale, so its
+   15px body does not look like a shrunken desktop UI beside the native app.
+   Inputs join the body at 17px, still above Safari's 16px zoom threshold. */
+@media (max-width: 720px) {
+  :root {
+    --type-root: 15px;
+    --type-meta: 13px;
+    --type-label: 14px;
+    --type-item-title: 15px;
+    --type-body: 17px;
+    --type-dialog-title: 19px;
+    --type-section-title: 24px;
+    --type-page-title: 28px;
+    --type-stat: 34px;
+    --type-stat-line: 38px;
+    --type-input-phone: 17px;
+  }
+}
+
+html[data-theme="light"] .markdown code {
+  background: rgba(149, 59, 57, 0.09);
+  color: #953b39;
+}
+/* A code block is a well: it has to read as sunk BELOW whatever it sits on.
+   In dark that's free — #0c0c10 is below every surface in the ramp. Light has
+   no absolute that works on both containers a `.markdown` block gets: an
+   assistant turn paints on --bg (#fff), but a user or teammate turn paints on
+   the bubble (--bg-panel #f0f0f0 / the teal wash), and the old #f6f8fa was
+   LIGHTER than the bubble — so a pasted snippet read as raised in light and
+   sunk in dark. Translucent ink instead, the same trick as --hover: one value
+   that lands a fixed step below any surface it's dropped on. */
+html[data-theme="light"] .markdown pre {
+  background: rgba(0, 0, 0, 0.055);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #1f2328;
+}
+/* `.markdown pre code { background: none }` is out-specified in light by the
+   inline-code rule above (html[data-theme] + .markdown + code beats
+   .markdown + pre + code), so a block's own lines picked up the inline chip
+   wash as a band behind each line. Dark never had it — there the two rules
+   are the same weight and pre code wins on order. */
+html[data-theme="light"] .markdown pre code {
+  background: none;
+  color: inherit;
+}

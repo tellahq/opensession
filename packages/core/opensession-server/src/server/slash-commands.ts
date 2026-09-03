@@ -9,6 +9,7 @@ import { productName } from "./config";
 import { isPstackCommand, pstackCommandInput } from "./pstack-mode";
 import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
+import { listXaiAccountsPublic } from "./xai-accounts";
 import {
   accountProviderForModel,
   formatModelList,
@@ -211,13 +212,20 @@ export function handleSlashCommand(
     resolveWorkspaceModelPreset(session.model)?.model || session.model,
   );
   if (accountCommand && !accountProvider) {
-    return `${modelLabel(session.model)} does not use a managed Claude or Codex account pool.`;
+    return `${modelLabel(session.model)} does not use a managed Claude, Codex or SuperGrok account pool.`;
   }
-  const providerLabel = accountProvider === "codex" ? "Codex" : "Claude";
+  const providerLabel =
+    accountProvider === "codex"
+      ? "Codex"
+      : accountProvider === "xai"
+        ? "SuperGrok"
+        : "Claude";
   const accounts = (
     accountProvider === "codex"
       ? listCodexAccountsPublic()
-      : listAccountsPublic()
+      : accountProvider === "xai"
+        ? listXaiAccountsPublic()
+        : listAccountsPublic()
   ).filter(
     (account) =>
       !account.owner || (!!user && userMatchesAny(user, [account.owner])),

@@ -635,17 +635,31 @@ function renderEntry(e) {
   }
   if (type !== "user" && type !== "assistant") return null;
   const content = typeof e.content === "string" ? e.content : "";
-  if (!content.trim()) return null;
+  // Large pastes ride beside the message as `pastedTexts`; name them rather
+  // than print them, the web UI is the place for full reading.
+  const pasted = Array.isArray(e.pastedTexts) ? e.pastedTexts : [];
+  if (!content.trim() && !pasted.length) return null;
   const wrap = el("div", `msg ${type}`);
   wrap.append(el("div", "who", type === "user" ? e.user || "you" : "agent"));
-  // Clamp giant messages; the web UI is the place for full reading.
-  wrap.append(
-    el(
-      "div",
-      "body",
-      content.length > 4000 ? content.slice(0, 4000) + "\n…" : content,
-    ),
-  );
+  // Clamp giant messages.
+  if (content.trim())
+    wrap.append(
+      el(
+        "div",
+        "body",
+        content.length > 4000 ? content.slice(0, 4000) + "\n…" : content,
+      ),
+    );
+  for (const text of pasted) {
+    const lines = String(text).split(/\r\n|\r|\n/).length;
+    wrap.append(
+      el(
+        "div",
+        "body",
+        `[Pasted text · ${lines} line${lines === 1 ? "" : "s"}]`,
+      ),
+    );
+  }
   return wrap;
 }
 

@@ -26,7 +26,7 @@ export interface TranscriptWatchStore {
 }
 
 export interface TranscriptWatchSocket {
-  send(payload: string): void;
+  send(payload: string, compress?: boolean): void;
 }
 
 export interface StartTranscriptWatchOptions {
@@ -80,8 +80,14 @@ const RESUME_LIMIT = 199;
 // can still stop inside the same giant turn. Past either ceiling the snapshot
 // stays truncated and the reader pages with "Load all", exactly as before.
 const SNAPSHOT_TAIL_ENTRIES = 132;
-const SNAPSHOT_MIN_MESSAGES = 4;
-const SNAPSHOT_MIN_USER_MESSAGES_WITH_TOOL_WORK = 1;
+// Message-heavy transcripts already clear this through the 132-entry floor.
+// This larger target mainly extends tool-heavy tails, where folded work would
+// otherwise leave later hydration to grow the visible transcript after open.
+const SNAPSHOT_MIN_MESSAGES = 100;
+// Intermediate assistant notes count as transcript messages but collapse into
+// the work fold. Fifty user turns keeps the 100-message target meaningful in
+// tool-heavy sessions instead of letting one verbose turn satisfy it alone.
+const SNAPSHOT_MIN_USER_MESSAGES_WITH_TOOL_WORK = 50;
 const SNAPSHOT_MAX_ENTRIES = 1400;
 const SNAPSHOT_MAX_ESTIMATED_BYTES = 850_000;
 
@@ -110,8 +116,8 @@ export async function startTranscriptWatch(
   let resetPending = false;
   let closed = false;
 
-  const send = (frame: Record<string, unknown>) => {
-    if (!closed && isCurrent()) socket.send(JSON.stringify(frame));
+  const send = (frame: Record<string, unknown>, compress = false) => {
+    if (!closed && isCurrent()) socket.send(JSON.stringify(frame), compress);
   };
 
   async function sendSnapshot(): Promise<void> {
@@ -129,18 +135,21 @@ export async function startTranscriptWatch(
           weigh: v2SnapshotEntryWeight,
         })
       : store.readTail(sessionId, SNAPSHOT_TAIL_ENTRIES));
-    send({
-      type: "transcript_init",
-      sessionId,
-      // Classify first, clamp second: the classifier strips plumbing out of
-      // `content`, so the clamp then measures the text a reader will see.
-      entries: clampSnapshot(prepareEntries(tail.entries)),
-      truncated: tail.firstSeq > 1,
-      firstSeq: tail.firstSeq,
-      lastSeq: tail.lastSeq,
-      lastChangeSeq: cursor,
-      v2: true,
-    });
+    send(
+      {
+        type: "transcript_init",
+        sessionId,
+        // Classify first, clamp second: the classifier strips plumbing out of
+        // `content`, so the clamp then measures the text a reader will see.
+        entries: clampSnapshot(prepareEntries(tail.entries)),
+        truncated: tail.firstSeq > 1,
+        firstSeq: tail.firstSeq,
+        lastSeq: tail.lastSeq,
+        lastChangeSeq: cursor,
+        v2: true,
+      },
+      true,
+    );
     if (initialized) options.afterResetSnapshot?.();
   }
 

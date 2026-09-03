@@ -97,7 +97,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   for an edit, the command for a shell call, file content for a write.
   Routine calls fold into one `N steps` run, and consecutive edits to the same
   file into one row — the path once, the summed ±lines, and a `×3` count —
-  both opening to the individual calls.
+  both opening to the individual calls. The shared Thinking messages preference
+  shows none, all, or only the newest provider reasoning row, with Latest as the
+  default.
   Transcript videos stream inline on both platforms. Tool-result screenshots
   and recordings marked as featured stay visible when their work fold closes,
   while incidental media remains inside the producing tool row.
@@ -134,7 +136,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   directly above the composer when the keyboard opens. The actions menu carries
   worktree details, the pull request panel, Add to sidebar when needed, rename,
   share, hide or restore, and archive, matching the sidebar row's long-press
-  menu. A bounded cache keeps
+  menu. Completed native sessions can also fork from the current transcript tip
+  or a message menu; the composer names the source and opens the new session
+  after creation. A bounded cache keeps
   recently visited conversations loaded while their
   off-screen sockets remain disconnected, so returning to a page does not show
   a loading screen. Fenced Markdown, expanded tool inputs and code assets use

@@ -238,7 +238,11 @@ async function syncGithubOrganizationMembers(
     : null;
   const { githubToken } = await import("../github-app");
   const userToken = userCredential?.env.GH_TOKEN;
-  const serviceToken = userToken ? null : await githubToken();
+  // The organization's own installation lists its members; the default
+  // installation may belong to another account.
+  const serviceToken = userToken
+    ? null
+    : await githubToken({ owner: organization });
   const credentials = [userToken, serviceToken].filter(
     (token, index, all): token is string =>
       !!token && all.indexOf(token) === index,

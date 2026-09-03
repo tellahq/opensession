@@ -19,12 +19,16 @@ import {
   useSessionAssetsResource,
   useSessionDiffResource,
   useSessionGitResource,
+  useSessionPrDiffResource,
   useSessionPrResource,
   useWorkspaceOverviewResource,
 } from "../hooks/useApiResources";
+import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
+import { FileDiff } from "@pierre/diffs/react";
 import { assetPreviewKind, isVisualAsset } from "../lib/asset-preview";
 import { useAssetViewMode } from "../lib/asset-view-mode";
 import { AssetViewToggle } from "./AssetViewToggle";
+import { useResolvedTheme } from "./CodeHighlight";
 import { openLightbox } from "../lib/media-lightbox";
 import { fullTime } from "../lib/time";
 import { commitPrompt } from "../lib/commit-prompt";
@@ -82,6 +86,7 @@ import {
 } from "../lib/workspace-summary-open";
 import {
   IconChevronDown,
+  IconChevronRight,
   IconClock,
   IconFile,
   IconGitCommit,
@@ -240,6 +245,14 @@ type OpenCommitDetails =
 type CommitRowTarget =
   | { kind: "workspace"; commit: WorkspaceCommit }
   | { kind: "pr"; commit: PrCommit };
+
+type SummaryChangeFile = {
+  key: string;
+  path: string;
+  additions: number;
+  deletions: number;
+  meta?: FileDiffMetadata;
+};
 
 type ReviewLine = {
   key: string;
@@ -547,6 +560,9 @@ export function WorkspaceSummaryBody({
   // Pictures or rows. One preference, shared with the Workspace panel's own
   // Assets section, so the same folder is not drawn two ways in one window.
   const [assetView, setAssetView] = useAssetViewMode();
+  const [changesOpen, setChangesOpen] = useState(false);
+  const [openCommit, setOpenCommit] = useState<OpenCommitDetails | null>(null);
+  const diffTheme = useResolvedTheme();
   // `session` follows the session-list poll; the viewer's explicit value follows
   // the workspace_status socket event and wins when it is available.
   const workspaceIsPreparing =
@@ -596,12 +612,24 @@ export function WorkspaceSummaryBody({
     revision: refreshTick,
   });
   const pr = prResource.data ?? null;
+  // File names come with the PR summary. Its much larger patch waits until the
+  // person opens Changes, when it can power the per-file hover previews.
+  const prDiffResource = useSessionPrDiffResource(
+    session.id,
+    session.repo || undefined,
+    undefined,
+    {
+      enabled: (changesOpen || Boolean(openCommit)) && Boolean(pr),
+      revision: `${pr?.headRefOid || ""}\0${refreshTick || 0}`,
+    },
+  );
   const hasConnectedPr = sessionHasConnectedPr(session);
   const git = gitResource.data ?? null;
   const assets = assetsResource.data ?? [];
   const commits = overviewResource.data?.commits ?? [];
   const prCommits = pr?.commits ?? [];
-  const hasCommitDetails = prCommits.length > 0 || commits.length > 0;
+  const commitCount = prCommits.length || commits.length;
+  const hasCommitDetails = commitCount > 0;
   const media = (() => {
     const seen = new Set<string>();
     return [...liveMedia, ...(overviewResource.data?.media ?? [])].filter(
@@ -623,12 +651,11 @@ export function WorkspaceSummaryBody({
       { additions: 0, deletions: 0, files: 0 },
     ) ?? null;
   const [prompted, setPrompted] = useState(false);
-  const [changesOpen, setChangesOpen] = useState(false);
   const [commitsOpen, setCommitsOpen] = useState(false);
-  const [openCommit, setOpenCommit] = useState<OpenCommitDetails | null>(null);
   const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewStarting, setReviewStarting] = useState(false);
   const [reviewCancelling, setReviewCancelling] = useState(false);
   const [fixBusy, setFixBusy] = useState(false);
   const [fixError, setFixError] = useState<string | null>(null);
@@ -650,11 +677,54 @@ export function WorkspaceSummaryBody({
   // state to show. Keep a real PR or feature-branch diff unchanged.
   const showDiffChanges =
     changedFiles > 0 && !(git?.sharedCheckout && commits.length > 0);
-  // A PR diff is committed by definition. Without a PR, an ahead branch with
-  // no dirty files is also wholly committed. Mixed work stays labelled
-  // "Changes" rather than pretending its line totals belong to one state.
-  const diffIsCommitted =
-    showDiffChanges && Boolean(pr || ((git?.ahead ?? 0) > 0 && dirty === 0));
+  const changeFiles = (() => {
+    if (pr) {
+      const byPath = new Map<string, FileDiffMetadata>();
+      const patchIsCurrent =
+        !pr.headRefOid || prDiffResource.data?.headRefOid === pr.headRefOid;
+      const patch = patchIsCurrent ? prDiffResource.data?.patch || "" : "";
+      if (patch.trim()) {
+        try {
+          for (const parsedPatch of parsePatchFiles(patch)) {
+            for (const file of parsedPatch.files) byPath.set(file.name, file);
+          }
+        } catch {
+          // A truncated or malformed patch still leaves the file list useful.
+        }
+      }
+      return (pr.files ?? []).map((file) => ({
+        key: file.path,
+        path: file.path,
+        additions: file.additions,
+        deletions: file.deletions,
+        meta: byPath.get(file.path),
+      }));
+    }
+
+    const files: SummaryChangeFile[] = [];
+    for (const repo of diffResource.data?.repos ?? []) {
+      const byPath = new Map<string, FileDiffMetadata>();
+      if (repo.diff.rawPatch.trim()) {
+        try {
+          for (const parsedPatch of parsePatchFiles(repo.diff.rawPatch)) {
+            for (const file of parsedPatch.files) byPath.set(file.name, file);
+          }
+        } catch {
+          // Keep names and line totals when this repo's patch cannot be parsed.
+        }
+      }
+      for (const file of repo.diff.files) {
+        files.push({
+          key: `${repo.repo}\0${file.path}`,
+          path: file.path,
+          additions: file.additions,
+          deletions: file.deletions,
+          meta: byPath.get(file.path),
+        });
+      }
+    }
+    return files;
+  })();
 
   /** Route somewhere else and get out of the way. A card that stayed open
    *  over the thing it just opened would have to be dismissed by hand. */
@@ -696,8 +766,9 @@ export function WorkspaceSummaryBody({
   const reviewTeams = useReviewTeams();
   const reviewers = reviewLines(pr, selectedReview, prReviewRequested);
   const osReview = pr?.osReview;
-  const osReviewActive = Boolean(pr?.reviewActive);
+  const osReviewActive = Boolean(pr?.reviewActive || reviewStarting);
   const showOsReview = osReviewActive || Boolean(osReview);
+  const canRerunOsReview = pr?.state === "OPEN" && Boolean(osReview?.stale);
   const canFixOsReview =
     pr?.state === "OPEN" &&
     Boolean(osReview) &&
@@ -760,6 +831,30 @@ export function WorkspaceSummaryBody({
   );
   const assetsHidden = assets.length - shown.length;
 
+  async function rerunOsReview() {
+    if (!pr || !canRerunOsReview || reviewStarting) return;
+    setReviewStarting(true);
+    setReviewError(null);
+    await (async () => {
+      const result = await triggerPrActionApi(
+        session.id,
+        "review",
+        getCurrentUser(),
+        session.repo || undefined,
+      );
+      if (!result.ok)
+        throw new Error(result.error || result.message || "Couldn't start");
+      void prResource.mutate(
+        { ...pr, reviewActive: true },
+        { revalidate: false },
+      );
+    })()
+      .catch((error) => {
+        setReviewError(errorMessage(error, "Couldn't start the re-review"));
+      })
+      .finally(() => setReviewStarting(false));
+  }
+
   async function cancelOsReview() {
     if (!pr?.reviewActive || reviewCancelling) return;
     setReviewCancelling(true);
@@ -777,7 +872,7 @@ export function WorkspaceSummaryBody({
         { revalidate: false },
       );
     })()
-      .catch((error: unknown) => {
+      .catch((error) => {
         setReviewError(errorMessage(error, "Couldn't cancel the review"));
       })
       .finally(async () => {
@@ -802,7 +897,7 @@ export function WorkspaceSummaryBody({
         go(() => onOpenSession(result.bksId!, result.session ?? null));
       }
     })()
-      .catch((error: unknown) => {
+      .catch((error) => {
         setFixError(errorMessage(error, "Couldn't start Auto-fix"));
       })
       .finally(async () => {
@@ -814,12 +909,18 @@ export function WorkspaceSummaryBody({
     if (reviewBusy) return;
     const previous = selectedReview;
     const next = name
-      ? {
-          to: name,
-          ...(recipients ? { recipients } : {}),
-          by: getCurrentUser(),
-          at: new Date().toISOString(),
-        }
+      ? recipients
+        ? {
+            to: name,
+            recipients,
+            by: getCurrentUser(),
+            at: new Date().toISOString(),
+          }
+        : {
+            to: name,
+            by: getCurrentUser(),
+            at: new Date().toISOString(),
+          }
       : null;
     setSelectedReview(next);
     setReviewError(null);
@@ -829,7 +930,7 @@ export function WorkspaceSummaryBody({
     const owner = (previous && reviewRequestSessionId) || session.id;
     onReviewChange?.(owner, next);
     setSessionReviewerApi(owner, name, getCurrentUser())
-      .catch((error: unknown) => {
+      .catch((error) => {
         setSelectedReview(previous);
         onReviewChange?.(owner, previous);
         setReviewError(errorMessage(error, "Failed to set reviewer"));
@@ -837,19 +938,87 @@ export function WorkspaceSummaryBody({
       .finally(() => setReviewBusy(false));
   }
 
+  function fileChangeRow(file: SummaryChangeFile) {
+    const slash = file.path.lastIndexOf("/");
+    const directory = slash >= 0 ? file.path.slice(0, slash + 1) : "";
+    const filename = slash >= 0 ? file.path.slice(slash + 1) : file.path;
+    const path = (
+      <span className="flex min-w-0 flex-1 items-baseline text-left text-label">
+        {directory && <span className="truncate text-dim">{directory}</span>}
+        <span className="max-w-full shrink-0 truncate text-fg">{filename}</span>
+      </span>
+    );
+    const stats = (
+      <span className="inline-flex shrink-0 items-center gap-1 text-meta font-semibold tabular-nums">
+        {file.additions > 0 && (
+          <span className="text-green">+{file.additions}</span>
+        )}
+        {file.deletions > 0 && (
+          <span className="text-red">−{file.deletions}</span>
+        )}
+      </span>
+    );
+    const options = {
+      diffStyle: "unified" as const,
+      disableFileHeader: true,
+      overflow: "scroll" as const,
+      enableLineSelection: false,
+      theme: diffTheme === "light" ? "pierre-light" : "pierre-dark",
+      themeType: diffTheme,
+    };
+
+    return (
+      <Popover.Root key={file.key} exclusive={false}>
+        <Popover.Trigger
+          openOnHover={Boolean(file.meta)}
+          delay={200}
+          closeDelay={90}
+          type="button"
+          className="mx-2 flex min-h-7 w-[calc(100%_-_16px)] min-w-0 items-center gap-1.5 rounded-row px-2 text-left transition-colors hover:bg-hover focus-ring"
+          onClick={() => go(() => onOpenPanelTab("changes"))}
+          aria-label={`${file.path} · open in Changes`}
+        >
+          <span className={WS_SUMMARY_RAIL} aria-hidden />
+          {path}
+          {stats}
+        </Popover.Trigger>
+        {file.meta && (
+          <Popover.Popup
+            portalContainer={
+              typeof document !== "undefined" ? document.body : undefined
+            }
+            side={embedded ? "top" : "left"}
+            align="start"
+            sideOffset={10}
+            elevation="lg"
+            className="flex max-h-[min(720px,82vh,var(--available-height))] w-[min(720px,calc(100vw-24px))] flex-col overflow-hidden bg-panel px-3 py-2.5"
+          >
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="mb-2 flex min-w-0 items-baseline justify-between gap-2">
+                {path}
+                {stats}
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto text-label">
+                <FileDiff
+                  fileDiff={file.meta}
+                  options={options}
+                  disableWorkerPool
+                />
+              </div>
+            </div>
+          </Popover.Popup>
+        )}
+      </Popover.Root>
+    );
+  }
+
   function diffChangeRow(label: string) {
     return (
       <>
         <button
           className={WS_SUMMARY_ROW}
-          // Review already owns the full Files canvas. Keep the summary in
-          // place and reveal its filenames here; elsewhere open Changes.
-          onClick={() =>
-            reviewMode
-              ? setChangesOpen((open) => !open)
-              : onOpenPanelTab("changes")
-          }
-          aria-expanded={reviewMode ? changesOpen : undefined}
+          onClick={() => setChangesOpen((open) => !open)}
+          aria-expanded={changesOpen}
         >
           <span className={WS_SUMMARY_RAIL}>
             <IconFile size={20} className={WS_SUMMARY_ICON} />
@@ -859,38 +1028,16 @@ export function WorkspaceSummaryBody({
             <span className="text-green">+{additions}</span>{" "}
             <span className="text-red">−{deletions}</span>
           </span>
-          {reviewMode && (
-            <IconChevronDown
-              size={14}
-              className={cn(
-                "shrink-0 text-faint transition-transform motion-reduce:transition-none",
-                changesOpen && "rotate-180",
-              )}
-            />
-          )}
+          <IconChevronDown
+            size={14}
+            className={cn(
+              "shrink-0 text-faint transition-transform motion-reduce:transition-none",
+              changesOpen && "rotate-180",
+            )}
+          />
         </button>
-        {reviewMode && changesOpen && pr?.files?.length ? (
-          <div className="pb-1">
-            {pr.files.map((file) => (
-              <div
-                key={file.path}
-                className="mx-2 flex min-h-7 min-w-0 items-center gap-1.5 px-2 text-label text-dim"
-              >
-                <span className={WS_SUMMARY_RAIL} aria-hidden />
-                <span className={WS_SUMMARY_LABEL} title={file.path}>
-                  {file.path}
-                </span>
-                <span className={WS_SUMMARY_COUNT}>
-                  {file.additions > 0 && (
-                    <span className="text-green">+{file.additions}</span>
-                  )}{" "}
-                  {file.deletions > 0 && (
-                    <span className="text-red">−{file.deletions}</span>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
+        {changesOpen && changeFiles.length > 0 ? (
+          <div className="pb-1">{changeFiles.map(fileChangeRow)}</div>
         ) : null}
       </>
     );
@@ -902,7 +1049,7 @@ export function WorkspaceSummaryBody({
       return;
     }
     setOpenCommit({ sha, status: "loading" });
-    fetchCommit(sha, repo)
+    fetchCommit(sha, repo, { includeChanges: true })
       .then((details) => {
         setOpenCommit((current) => {
           if (current?.sha !== sha) return current;
@@ -945,6 +1092,30 @@ export function WorkspaceSummaryBody({
       details?.repo ||
       (target.kind === "workspace" ? target.commit.repo : session.repo);
     const shortSha = details?.shortSha || sha.slice(0, 8);
+    const prPatchIsCurrent =
+      target.kind === "pr" &&
+      prCommits.length === 1 &&
+      (!pr?.headRefOid || prDiffResource.data?.headRefOid === pr.headRefOid);
+    const rawPatch =
+      details?.rawPatch ||
+      (prPatchIsCurrent ? prDiffResource.data?.patch : undefined);
+    const commitDiffs = (() => {
+      if (!rawPatch?.trim()) return [];
+      try {
+        return parsePatchFiles(rawPatch).flatMap(
+          (parsedPatch) => parsedPatch.files,
+        );
+      } catch {
+        return [];
+      }
+    })();
+    const commitDiffOptions = {
+      diffStyle: "unified" as const,
+      overflow: "scroll" as const,
+      enableLineSelection: false,
+      theme: diffTheme === "light" ? "pierre-light" : "pierre-dark",
+      themeType: diffTheme,
+    };
 
     return (
       <Popover.Popup
@@ -954,7 +1125,7 @@ export function WorkspaceSummaryBody({
         side={embedded ? "top" : "left"}
         align="start"
         sideOffset={10}
-        className="flex max-h-[min(560px,70vh,var(--available-height))] w-[min(440px,calc(100vw-24px))] flex-col overflow-hidden p-0"
+        className="flex max-h-[min(720px,82vh,var(--available-height))] w-[min(760px,calc(100vw-24px))] flex-col overflow-hidden p-0"
       >
         <div className="flex items-baseline justify-between gap-2.5 border-b border-divider bg-surface px-3 py-[9px]">
           <span className="text-label font-semibold text-fg">Commit</span>
@@ -965,30 +1136,52 @@ export function WorkspaceSummaryBody({
             Loading commit…
           </div>
         ) : (
-          <div className="overflow-y-auto p-3 text-meta text-dim">
-            <div className="text-label font-semibold leading-relaxed text-fg">
-              {title}
+          <div className="overflow-y-auto">
+            <div className="p-3 text-meta text-dim">
+              <div className="text-label font-semibold leading-relaxed text-fg">
+                {title}
+              </div>
+              {body && (
+                <div className="mt-2 whitespace-pre-wrap leading-relaxed">
+                  {body}
+                </div>
+              )}
+              <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                {author && <span>{author}</span>}
+                {repo && <span>{repo}</span>}
+                {committedAt && <span>{fullTime(committedAt)}</span>}
+                {details && (
+                  <span className="inline-flex gap-1.5 tabular-nums">
+                    <span>
+                      {details.filesChanged} file
+                      {details.filesChanged === 1 ? "" : "s"}
+                    </span>
+                    <span className="text-green">+{details.additions}</span>
+                    <span className="text-red">−{details.deletions}</span>
+                  </span>
+                )}
+              </div>
             </div>
-            {body && (
-              <div className="mt-2 whitespace-pre-wrap leading-relaxed">
-                {body}
+            {commitDiffs.length > 0 && (
+              <div className="border-t border-divider bg-code-well text-label">
+                <div className="px-3 py-2 text-meta font-semibold text-dim">
+                  Changes
+                </div>
+                {commitDiffs.map((file) => (
+                  <FileDiff
+                    key={`${diffTheme}:${file.prevName ?? ""}:${file.name}`}
+                    fileDiff={file}
+                    options={commitDiffOptions}
+                    disableWorkerPool
+                  />
+                ))}
               </div>
             )}
-            <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              {author && <span>{author}</span>}
-              {repo && <span>{repo}</span>}
-              {committedAt && <span>{fullTime(committedAt)}</span>}
-              {details && (
-                <span className="inline-flex gap-1.5 tabular-nums">
-                  <span>
-                    {details.filesChanged} file
-                    {details.filesChanged === 1 ? "" : "s"}
-                  </span>
-                  <span className="text-green">+{details.additions}</span>
-                  <span className="text-red">−{details.deletions}</span>
-                </span>
-              )}
-            </div>
+            {details?.patchTruncated && (
+              <div className="border-t border-divider bg-surface p-3 text-meta text-faint">
+                Some large changes aren’t shown.
+              </div>
+            )}
           </div>
         )}
       </Popover.Popup>
@@ -1184,7 +1377,7 @@ export function WorkspaceSummaryBody({
         <div
           className={cn(
             WS_SUMMARY_SECTION,
-            "ws-summary-review-heading justify-between",
+            "ws-summary-review-heading",
             embedded
               ? "h-11"
               : cn(
@@ -1195,94 +1388,145 @@ export function WorkspaceSummaryBody({
                 ),
           )}
         >
-          <span>Review</span>
-          {!reviewMode && (
+          {reviewMode ? (
+            <span>Review</span>
+          ) : (
             <Button
               variant="ghost"
               size="sm"
-              className="min-h-6 px-2 text-meta phone:min-h-11"
+              className="group/review h-full min-h-0 gap-0 rounded-sm p-0 [color:inherit] [font-size:inherit] [font-weight:inherit] hover:bg-transparent hover:[color:inherit] active:scale-100"
               onClick={() => go(onOpenPr)}
+              aria-label="Open review"
             >
-              Open
+              <span>Review</span>
+              <IconChevronRight
+                size={14}
+                className="text-faint opacity-50 transition-[color,opacity,transform] group-hover/review:translate-x-0.5 group-hover/review:text-fg group-hover/review:opacity-100 phone:opacity-100"
+              />
             </Button>
           )}
         </div>
         {showOsReview && (
           <>
-            <button
-              className={cn(
-                WS_SUMMARY_ROW,
-                "disabled:cursor-default disabled:opacity-70",
-              )}
-              onClick={
-                osReviewActive
-                  ? () => void cancelOsReview()
-                  : canFixOsReview
-                    ? () => void fixOsReview()
-                    : () => go(() => onOpenPanelTab("info"))
-              }
-              disabled={reviewCancelling || fixBusy}
-              aria-label={
-                osReviewActive
-                  ? `Cancel ${AGENT_NAME} review`
-                  : canFixOsReview
-                    ? `Fix ${AGENT_NAME} review findings`
-                    : undefined
-              }
-              title={`${AGENT_NAME}${osScore ? ` · ${osScore}/5` : ""} · ${
-                reviewCancelling ? "Cancelling…" : osReviewState
-              }`}
-            >
-              <span className={WS_SUMMARY_RAIL}>
-                <IconRobot
-                  size={20}
+            {canRerunOsReview && !osReviewActive ? (
+              <div className="mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-stretch gap-1 phone:h-11">
+                <button
+                  type="button"
                   className={cn(
-                    WS_SUMMARY_ICON,
-                    osReviewActive && "animate-pulse",
+                    WS_SUMMARY_ROW,
+                    "mx-0 h-full w-auto min-w-0 flex-1",
                   )}
-                />
-              </span>
-              <span className={WS_SUMMARY_LABEL}>
-                {AGENT_NAME}
-                {osReviewActive ? (
-                  <>
-                    <span className="text-faint"> · </span>
-                    <span className="text-dim">
-                      {reviewCancelling ? "Cancelling…" : "Reviewing…"}
-                    </span>
-                  </>
-                ) : osScore ? (
-                  <>
-                    <span className="text-faint"> · </span>
-                    <span className={cn("tabular-nums", osScoreTone)}>
-                      {osScore}/5
-                    </span>
-                  </>
-                ) : null}
-              </span>
-              {osReviewActive ? (
-                <span className={WS_SUMMARY_ACTION}>
-                  {reviewCancelling ? "Stopping" : "Cancel"}
-                </span>
-              ) : canFixOsReview ? (
-                <span className={cn(WS_SUMMARY_ACTION, "text-red")}>
-                  {fixBusy ? "Starting…" : "Fix"}
-                </span>
-              ) : (
-                <span
-                  className={cn(
-                    WS_SUMMARY_STATE,
-                    osReview?.stale
-                      ? "text-faint"
-                      : osReview?.blocking
-                        ? "text-red"
-                        : "text-dim",
-                  )}
+                  onClick={() => go(() => onOpenPanelTab("info"))}
+                  title={`${AGENT_NAME}${osScore ? ` · ${osScore}/5` : ""} · ${osReviewState}`}
                 >
-                  {osReviewState}
+                  <span className={WS_SUMMARY_RAIL}>
+                    <IconRobot size={20} className={WS_SUMMARY_ICON} />
+                  </span>
+                  <span className={WS_SUMMARY_LABEL}>
+                    {AGENT_NAME}
+                    {osScore ? (
+                      <>
+                        <span className="text-faint"> · </span>
+                        <span className={cn("tabular-nums", osScoreTone)}>
+                          {osScore}/5
+                        </span>
+                      </>
+                    ) : null}
+                  </span>
+                  <span className={cn(WS_SUMMARY_STATE, "text-faint")}>
+                    New commits
+                  </span>
+                </button>
+                <span
+                  className="self-center text-meta text-faint"
+                  aria-hidden="true"
+                >
+                  ·
                 </span>
-              )}
-            </button>
+                <button
+                  type="button"
+                  className={cn(
+                    WS_SUMMARY_ACTION,
+                    "focus-ring shrink-0 cursor-pointer rounded-row border-none bg-transparent px-1 transition-[color,scale] hover:text-accent active:scale-[0.96] disabled:cursor-default disabled:opacity-50",
+                  )}
+                  onClick={() => void rerunOsReview()}
+                  disabled={reviewStarting}
+                >
+                  Re-review
+                </button>
+              </div>
+            ) : (
+              <button
+                className={cn(
+                  WS_SUMMARY_ROW,
+                  "disabled:cursor-default disabled:opacity-70",
+                )}
+                onClick={
+                  osReviewActive
+                    ? () => void cancelOsReview()
+                    : canFixOsReview
+                      ? () => void fixOsReview()
+                      : () => go(() => onOpenPanelTab("info"))
+                }
+                disabled={reviewStarting || reviewCancelling || fixBusy}
+                aria-label={
+                  osReviewActive
+                    ? `Cancel ${AGENT_NAME} review`
+                    : canFixOsReview
+                      ? `Fix ${AGENT_NAME} review findings`
+                      : undefined
+                }
+                title={`${AGENT_NAME}${osScore ? ` · ${osScore}/5` : ""} · ${
+                  reviewCancelling ? "Cancelling…" : osReviewState
+                }`}
+              >
+                <span className={WS_SUMMARY_RAIL}>
+                  <IconRobot
+                    size={20}
+                    className={cn(
+                      WS_SUMMARY_ICON,
+                      osReviewActive && "animate-pulse",
+                    )}
+                  />
+                </span>
+                <span className={WS_SUMMARY_LABEL}>
+                  {AGENT_NAME}
+                  {osReviewActive ? (
+                    <>
+                      <span className="text-faint"> · </span>
+                      <span className="text-dim">
+                        {reviewCancelling ? "Cancelling…" : "Reviewing…"}
+                      </span>
+                    </>
+                  ) : osScore ? (
+                    <>
+                      <span className="text-faint"> · </span>
+                      <span className={cn("tabular-nums", osScoreTone)}>
+                        {osScore}/5
+                      </span>
+                    </>
+                  ) : null}
+                </span>
+                {osReviewActive ? (
+                  <span className={WS_SUMMARY_ACTION}>
+                    {reviewCancelling ? "Stopping" : "Cancel"}
+                  </span>
+                ) : canFixOsReview ? (
+                  <span className={cn(WS_SUMMARY_ACTION, "text-red")}>
+                    {fixBusy ? "Starting…" : "Fix"}
+                  </span>
+                ) : (
+                  <span
+                    className={cn(
+                      WS_SUMMARY_STATE,
+                      osReview?.blocking ? "text-red" : "text-dim",
+                    )}
+                  >
+                    {osReviewState}
+                  </span>
+                )}
+              </button>
+            )}
             {fixError && (
               <div className="px-4 py-1 text-supporting text-red" role="alert">
                 {fixError}
@@ -1455,36 +1699,30 @@ export function WorkspaceSummaryBody({
         )}
       </div>
 
-      {(diffIsCommitted || hasCommitDetails) && (
+      {hasCommitDetails && (
         <div className={groupClass}>
-          {hasCommitDetails ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                WS_SUMMARY_SECTION,
-                "group/committed w-full cursor-pointer justify-between gap-2 border-none bg-transparent text-left",
-              )}
-              onClick={() => setCommitsOpen((open) => !open)}
-              aria-expanded={commitsOpen}
-              title={commitsOpen ? "Hide commits" : "Show all commits"}
-            >
-              <span>Committed</span>
-              <IconChevronDown
-                size={14}
-                className={cn(
-                  "shrink-0 transition-transform motion-reduce:transition-none",
-                  commitsOpen && "rotate-180",
-                )}
-              />
-            </Button>
-          ) : (
-            <div className={WS_SUMMARY_SECTION}>Committed</div>
-          )}
-          {diffIsCommitted &&
-            diffChangeRow(
-              `${changedFiles} file${changedFiles === 1 ? "" : "s"} committed`,
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              WS_SUMMARY_SECTION,
+              "w-full cursor-pointer justify-between gap-2 border-none bg-transparent text-left hover:bg-transparent hover:text-faint active:scale-100",
             )}
+            onClick={() => setCommitsOpen((open) => !open)}
+            aria-expanded={commitsOpen}
+          >
+            <span className="flex items-baseline gap-1.5">
+              <span>Committed</span>
+              <span className="text-meta tabular-nums">{commitCount}</span>
+            </span>
+            <IconChevronRight
+              size={14}
+              className={cn(
+                "shrink-0 transition-transform motion-reduce:transition-none",
+                commitsOpen && "rotate-90",
+              )}
+            />
+          </Button>
           {commitsOpen
             ? prCommits.length > 0
               ? prCommits.map(prCommittedRow)
@@ -1493,7 +1731,7 @@ export function WorkspaceSummaryBody({
         </div>
       )}
 
-      {showDiffChanges && !diffIsCommitted && (
+      {showDiffChanges && (
         <div className={groupClass}>
           <div className={WS_SUMMARY_SECTION}>Changes</div>
           {diffChangeRow(

@@ -47,7 +47,7 @@ export function imageRegionPixels(
   region: ImageRegion,
   naturalWidth: number,
   naturalHeight: number,
-): { x: number; y: number; width: number; height: number } {
+) {
   const sourceWidth = Math.max(1, Math.round(naturalWidth) || 1);
   const sourceHeight = Math.max(1, Math.round(naturalHeight) || 1);
   const x = Math.min(
@@ -76,10 +76,7 @@ export function imageRegionPixels(
 }
 
 /** Output size for the derived attachment. Large retina crops are reduced. */
-export function imageRegionOutputSize(
-  width: number,
-  height: number,
-): { width: number; height: number; scale: number } {
+export function imageRegionOutputSize(width: number, height: number) {
   const w = Math.max(1, Math.round(width) || 1);
   const h = Math.max(1, Math.round(height) || 1);
   const scale = Math.min(1, MAX_CROP_EDGE / Math.max(w, h));
@@ -197,6 +194,12 @@ export interface ScreenRect {
   height: number;
 }
 
+export interface AnchoredCommentPosition {
+  left: number;
+  top: number;
+  placement: "below" | "above" | "clamped";
+}
+
 /**
  * Where the comment card sits relative to the region it is about.
  *
@@ -211,7 +214,7 @@ export function anchoredCommentPosition(
   viewport: { width: number; height: number },
   gap = 10,
   margin = 12,
-): { left: number; top: number; placement: "below" | "above" | "clamped" } {
+): AnchoredCommentPosition {
   const maxLeft = Math.max(margin, viewport.width - card.width - margin);
   const left = Math.min(Math.max(margin, region.left), maxLeft);
   const below = region.top + region.height + gap;
@@ -233,8 +236,9 @@ async function decodedImage(blob: Blob): Promise<{
   height: number;
   close: () => void;
 }> {
-  if (typeof createImageBitmap === "function") {
-    const bitmap = await createImageBitmap(blob);
+  const createBitmap = globalThis.createImageBitmap;
+  if (createBitmap instanceof Function) {
+    const bitmap = await createBitmap(blob);
     return {
       source: bitmap,
       width: bitmap.width,

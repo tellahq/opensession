@@ -3,12 +3,35 @@ import {
   cachedPrDetailsForSession,
   ghApiErrorMessage,
   isNoPrError,
+  knownPrNumberForBranch,
   latestWorkflowChecks,
+  notePrNumberForBranch,
   prApiErrorMessage,
   reconcilePrDetails,
   type PrDetails,
 } from "./pr-info";
 import type { UnifiedSession } from "./types";
+
+describe("branch to PR number memo", () => {
+  const repo = "tellahq/pr-info-memo-test";
+
+  test("remembers an open PR and forgets it once it is not open", () => {
+    notePrNumberForBranch(repo, "feature", 41, "OPEN");
+    expect(knownPrNumberForBranch(repo, "feature")).toBe(41);
+    notePrNumberForBranch(repo, "feature", 41, "MERGED");
+    expect(knownPrNumberForBranch(repo, "feature")).toBeUndefined();
+  });
+
+  test("never memoizes a malformed number", () => {
+    notePrNumberForBranch(repo, "odd", "41", "OPEN");
+    expect(knownPrNumberForBranch(repo, "odd")).toBeUndefined();
+  });
+
+  test("keys by repository so a shared branch name cannot collide", () => {
+    notePrNumberForBranch(repo, "shared", 7, "OPEN");
+    expect(knownPrNumberForBranch("tellahq/other", "shared")).toBeUndefined();
+  });
+});
 
 describe("isNoPrError", () => {
   test("only accepts GitHub's explicit no-PR response", () => {

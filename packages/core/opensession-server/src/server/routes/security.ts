@@ -119,6 +119,7 @@ export async function handleSecurityRoutes(
         mode: "code",
         repo: repos[0],
         user: createdBy,
+        createdByLogin: ctx.authUser?.login,
       });
       const scan = createScanRecord({
         repos,

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
+import { readBaseCss } from "./base-css-test-support";
 
 const HTML = new URL("../index.html", import.meta.url);
-const CSS = new URL("./base.css", import.meta.url);
 const USER_PICKER = new URL("../components/UserPicker.tsx", import.meta.url);
 const APP_SHELL = new URL("../components/AppShell.tsx", import.meta.url);
 const FIRST_MILE = new URL("../components/FirstMile.tsx", import.meta.url);
@@ -19,7 +19,7 @@ test("Electron titlebar drag regions do not depend on WCO visibility", async () 
     settingsClasses,
   ] = await Promise.all([
     Bun.file(HTML).text(),
-    Bun.file(CSS).text(),
+    readBaseCss(),
     Bun.file(USER_PICKER).text(),
     Bun.file(APP_SHELL).text(),
     Bun.file(FIRST_MILE).text(),

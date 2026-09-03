@@ -19,16 +19,16 @@
  * over the parent; per-directory sums double-count shared inodes.
  */
 
+import type { Dirent } from "node:fs";
 import {
-  type Dirent,
-  readdirSync,
-  readFileSync,
-  readlinkSync,
-  realpathSync,
-  statfsSync,
-  statSync,
-} from "node:fs";
-import { rm } from "node:fs/promises";
+  readdir,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  stat,
+  statfs,
+} from "node:fs/promises";
 import { basename, join } from "node:path";
 import { audit } from "./audit";
 import { configuredPaths } from "./config";
@@ -83,13 +83,13 @@ export interface DiskGcResult {
 }
 
 /** Disk usage of the filesystem holding `path`, as df reports it. */
-export function diskUsagePct(path = "/"): number {
+export async function diskUsagePct(path = "/"): Promise<number> {
   try {
-    const s = statfsSync(path);
-    const used = Number(s.blocks) - Number(s.bfree);
-    const avail = Number(s.bavail);
-    const denom = used + avail;
-    return denom > 0 ? (used / denom) * 100 : 0;
+    const filesystem = await statfs(path);
+    const used = Number(filesystem.blocks) - Number(filesystem.bfree);
+    const available = Number(filesystem.bavail);
+    const total = used + available;
+    return total > 0 ? (used / total) * 100 : 0;
   } catch {
     return 0;
   }
@@ -133,12 +133,14 @@ const BUILD_PROCESS_NAMES = new Set([
  * lookup. Returns null when the platform cannot provide a trustworthy answer,
  * so callers skip the sweep rather than guess.
  */
-export function worktreesInUse(root: string): Set<string> | null {
-  if (process.platform === "darwin") return macWorktreesInUse(root);
+export async function worktreesInUse(
+  root: string,
+): Promise<Set<string> | null> {
+  if (process.platform === "darwin") return await macWorktreesInUse(root);
 
   let pids: string[];
   try {
-    pids = readdirSync("/proc").filter((p) => /^\d+$/.test(p));
+    pids = (await readdir("/proc")).filter((pid) => /^\d+$/.test(pid));
   } catch {
     return null;
   }
@@ -147,12 +149,12 @@ export function worktreesInUse(root: string): Set<string> | null {
   for (const pid of pids) {
     let cwd: string;
     try {
-      cwd = readlinkSync(`/proc/${pid}/cwd`);
+      cwd = await readlink(`/proc/${pid}/cwd`);
     } catch {
       continue; // process exited, or not ours to inspect
     }
     if (!cwd.startsWith(prefix)) continue;
-    if (!isBuildProcess(pid)) continue;
+    if (!(await isBuildProcess(pid))) continue;
     const rest = cwd.slice(prefix.length);
     const name = rest.split("/")[0];
     if (name) inUse.add(join(root, name));
@@ -160,15 +162,26 @@ export function worktreesInUse(root: string): Set<string> | null {
   return inUse;
 }
 
-function macWorktreesInUse(root: string): Set<string> | null {
-  const ps = Bun.spawnSync(["ps", "-axo", "pid=,comm="], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+async function subprocessOutput(
+  command: string[],
+): Promise<{ exitCode: number; stdout: string }> {
+  try {
+    const child = Bun.spawn(command, { stdout: "pipe", stderr: "ignore" });
+    const [stdout, exitCode] = await Promise.all([
+      new Response(child.stdout).text(),
+      child.exited,
+    ]);
+    return { exitCode, stdout };
+  } catch {
+    return { exitCode: -1, stdout: "" };
+  }
+}
+
+async function macWorktreesInUse(root: string): Promise<Set<string> | null> {
+  const ps = await subprocessOutput(["ps", "-axo", "pid=,comm="]);
   if (ps.exitCode !== 0) return null;
 
   const builds = ps.stdout
-    .toString()
     .split("\n")
     .map((line) => line.match(/^\s*(\d+)\s+(.+?)\s*$/))
     .filter(
@@ -176,20 +189,24 @@ function macWorktreesInUse(root: string): Set<string> | null {
         !!match && BUILD_PROCESS_NAMES.has(basename(match[2]!)),
     );
   if (!builds.length) return new Set();
-  if (!Bun.which("lsof")) return null;
 
   const inUse = new Set<string>();
   let canonicalRoot = root;
   try {
-    canonicalRoot = realpathSync(root);
+    canonicalRoot = await realpath(root);
   } catch {}
   const prefix = `${canonicalRoot}/`;
   for (const match of builds) {
     const pid = match[1]!;
-    const lsof = Bun.spawnSync(["lsof", "-a", "-p", pid, "-d", "cwd", "-Fn"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const lsof = await subprocessOutput([
+      "lsof",
+      "-a",
+      "-p",
+      pid,
+      "-d",
+      "cwd",
+      "-Fn",
+    ]);
     if (lsof.exitCode !== 0) {
       try {
         process.kill(Number(pid), 0);
@@ -199,7 +216,6 @@ function macWorktreesInUse(root: string): Set<string> | null {
       }
     }
     const cwd = lsof.stdout
-      .toString()
       .split("\n")
       .find((line) => line.startsWith("n"))
       ?.slice(1);
@@ -214,10 +230,10 @@ function macWorktreesInUse(root: string): Set<string> | null {
  * Whether `pid` looks like a build. Unreadable comm counts as a build so an
  * unknown process errs toward sparing the cache.
  */
-function isBuildProcess(pid: string): boolean {
+async function isBuildProcess(pid: string): Promise<boolean> {
   let comm: string;
   try {
-    comm = readFileSync(`/proc/${pid}/comm`, "utf8").trim();
+    comm = (await readFile(`/proc/${pid}/comm`, "utf8")).trim();
   } catch {
     return true;
   }
@@ -230,55 +246,59 @@ function isBuildProcess(pid: string): boolean {
  * with an early exit, so this stays cheap over a multi-GB tree: a build always
  * touches the shallow levels (target/debug, .fingerprint, the binaries).
  */
-export function hasEntryNewerThan(
+export async function hasEntryNewerThan(
   dir: string,
   cutoffMs: number,
   maxDepth = 3,
-): boolean {
-  const walk = (d: string, depth: number): boolean => {
+): Promise<boolean> {
+  const walk = async (current: string, depth: number): Promise<boolean> => {
     let entries: Dirent[];
     try {
-      entries = readdirSync(d, { withFileTypes: true });
+      entries = await readdir(current, { withFileTypes: true });
     } catch {
       return false;
     }
-    for (const e of entries) {
-      const p = join(d, e.name);
+    for (const entry of entries) {
+      const path = join(current, entry.name);
       try {
-        if (statSync(p).mtimeMs > cutoffMs) return true;
+        if ((await stat(path)).mtimeMs > cutoffMs) return true;
       } catch {
         continue;
       }
-      if (depth < maxDepth && e.isDirectory() && walk(p, depth + 1))
+      if (
+        depth < maxDepth &&
+        entry.isDirectory() &&
+        (await walk(path, depth + 1))
+      )
         return true;
     }
     return false;
   };
-  return walk(dir, 1);
+  return await walk(dir, 1);
 }
 
 /** Newest mtime at bounded depth — a proxy for "when was this last built". */
-function newestMtime(dir: string, maxDepth = 2): number {
+async function newestMtime(dir: string, maxDepth = 2): Promise<number> {
   let newest = 0;
-  const walk = (d: string, depth: number) => {
+  const walk = async (current: string, depth: number): Promise<void> => {
     let entries: Dirent[];
     try {
-      entries = readdirSync(d, { withFileTypes: true });
+      entries = await readdir(current, { withFileTypes: true });
     } catch {
       return;
     }
-    for (const e of entries) {
-      const p = join(d, e.name);
+    for (const entry of entries) {
+      const path = join(current, entry.name);
       try {
-        const m = statSync(p).mtimeMs;
-        if (m > newest) newest = m;
+        const modifiedAt = (await stat(path)).mtimeMs;
+        if (modifiedAt > newest) newest = modifiedAt;
       } catch {
         continue;
       }
-      if (depth < maxDepth && e.isDirectory()) walk(p, depth + 1);
+      if (depth < maxDepth && entry.isDirectory()) await walk(path, depth + 1);
     }
   };
-  walk(dir, 1);
+  await walk(dir, 1);
   return newest;
 }
 
@@ -286,9 +306,9 @@ function newestMtime(dir: string, maxDepth = 2): number {
  * A cargo target dir, identified by the `CACHEDIR.TAG` cargo writes into it —
  * so a JS directory that happens to be named `target` is never a candidate.
  */
-function isCargoTarget(dir: string): boolean {
+async function isCargoTarget(dir: string): Promise<boolean> {
   try {
-    return statSync(join(dir, "CACHEDIR.TAG")).isFile();
+    return (await stat(join(dir, "CACHEDIR.TAG"))).isFile();
   } catch {
     return false;
   }
@@ -299,42 +319,51 @@ function isCargoTarget(dir: string): boolean {
  * a repo can have a nested one, e.g. packages/core/webapp/wasm-bindings/target
  * alongside the workspace root's.
  */
-export function findTargetCaches(root: string, maxDepth = 5): TargetCache[] {
+export async function findTargetCaches(
+  root: string,
+  maxDepth = 5,
+): Promise<TargetCache[]> {
   let worktrees: string[];
   try {
-    worktrees = readdirSync(root, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name);
+    worktrees = (await readdir(root, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
   } catch {
     return [];
   }
 
   const found: TargetCache[] = [];
   for (const name of worktrees) {
-    if (PROTECTED_SUFFIXES.some((s) => name.endsWith(s))) continue;
+    if (PROTECTED_SUFFIXES.some((suffix) => name.endsWith(suffix))) continue;
     const worktree = join(root, name);
 
-    const walk = (dir: string, depth: number) => {
+    const walk = async (dir: string, depth: number): Promise<void> => {
       let entries: Dirent[];
       try {
-        entries = readdirSync(dir, { withFileTypes: true });
+        entries = await readdir(dir, { withFileTypes: true });
       } catch {
         return;
       }
-      for (const e of entries) {
-        if (!e.isDirectory() || e.name === "node_modules" || e.name === ".git")
+      for (const entry of entries) {
+        if (
+          !entry.isDirectory() ||
+          entry.name === "node_modules" ||
+          entry.name === ".git"
+        )
           continue;
-        const p = join(dir, e.name);
-        if (e.name === "target") {
-          if (isCargoTarget(p)) {
-            found.push({ worktree, path: p, mtimeMs: newestMtime(p) });
-            continue; // never descend into a target dir
-          }
+        const path = join(dir, entry.name);
+        if (entry.name === "target" && (await isCargoTarget(path))) {
+          found.push({
+            worktree,
+            path,
+            mtimeMs: await newestMtime(path),
+          });
+          continue; // never descend into a target dir
         }
-        if (depth < maxDepth) walk(p, depth + 1);
+        if (depth < maxDepth) await walk(path, depth + 1);
       }
     };
-    walk(worktree, 1);
+    await walk(worktree, 1);
   }
   return found;
 }
@@ -356,7 +385,7 @@ async function removeCache(dir: string): Promise<boolean> {
     await Bun.$`sudo rm -rf ${dir}`.nothrow().quiet();
   }
   try {
-    statSync(dir);
+    await stat(dir);
     return false; // still there
   } catch {
     return true;
@@ -371,7 +400,7 @@ export async function sweepDiskGc(
   opts: { dryRun?: boolean } = {},
 ): Promise<DiskGcResult> {
   const root = configuredPaths().worktreesDir;
-  const pctBefore = diskUsagePct();
+  const pctBefore = await diskUsagePct();
   const result: DiskGcResult = {
     reclaimed: [],
     freedBytes: 0,
@@ -381,7 +410,7 @@ export async function sweepDiskGc(
     skippedHot: 0,
   };
 
-  const inUse = worktreesInUse(root);
+  const inUse = await worktreesInUse(root);
   if (!inUse) {
     console.warn(
       "[disk-gc] cannot inspect build processes — skipping sweep (never GC without the in-use check)",
@@ -389,7 +418,7 @@ export async function sweepDiskGc(
     return result;
   }
 
-  const candidates = findTargetCaches(root).filter((c) => {
+  const candidates = (await findTargetCaches(root)).filter((c) => {
     if (inUse.has(c.worktree)) {
       result.skippedInUse++;
       return false;
@@ -432,13 +461,13 @@ export async function sweepDiskGc(
   }
 
   // Pass 2 — disk pressure. Stalest first, and never a cache built recently.
-  if (diskUsagePct() >= PRESSURE_PCT) {
+  if ((await diskUsagePct()) >= PRESSURE_PCT) {
     console.log(
-      `[disk-gc] disk at ${diskUsagePct().toFixed(1)}% — reclaiming stale caches`,
+      `[disk-gc] disk at ${(await diskUsagePct()).toFixed(1)}% — reclaiming stale caches`,
     );
     for (const c of remaining.sort((a, b) => a.mtimeMs - b.mtimeMs)) {
-      if (diskUsagePct() < RELIEF_PCT) break;
-      if (hasEntryNewerThan(c.path, hotCutoff)) {
+      if ((await diskUsagePct()) < RELIEF_PCT) break;
+      if (await hasEntryNewerThan(c.path, hotCutoff)) {
         result.skippedHot++;
         continue;
       }
@@ -451,21 +480,21 @@ export async function sweepDiskGc(
     // back to a much shorter window. Nothing has written to these in
     // URGENT_HOT_HOURS, so no build is in flight; the cost is a rebuild on
     // resume, cushioned by the shared sccache.
-    if (diskUsagePct() >= PRESSURE_PCT) {
+    if ((await diskUsagePct()) >= PRESSURE_PCT) {
       const urgentCutoff = now - URGENT_HOT_HOURS * HOUR;
       console.warn(
-        `[disk-gc] still at ${diskUsagePct().toFixed(1)}% with all caches inside the ` +
+        `[disk-gc] still at ${(await diskUsagePct()).toFixed(1)}% with all caches inside the ` +
           `${HOT_HOURS}h window — escalating to caches idle >${URGENT_HOT_HOURS}h`,
       );
       for (const c of remaining.sort((a, b) => a.mtimeMs - b.mtimeMs)) {
-        if (diskUsagePct() < RELIEF_PCT) break;
+        if ((await diskUsagePct()) < RELIEF_PCT) break;
         if (result.reclaimed.includes(c.path)) continue;
-        if (hasEntryNewerThan(c.path, urgentCutoff)) continue;
+        if (await hasEntryNewerThan(c.path, urgentCutoff)) continue;
         await reclaim(c, `disk-pressure idle>${URGENT_HOT_HOURS}h`);
       }
     }
 
-    const pct = diskUsagePct();
+    const pct = await diskUsagePct();
     if (pct >= PRESSURE_PCT) {
       console.warn(
         `[disk-gc] still at ${pct.toFixed(1)}% after GC — look beyond worktrees ` +
@@ -474,7 +503,7 @@ export async function sweepDiskGc(
     }
   }
 
-  result.pctAfter = diskUsagePct();
+  result.pctAfter = await diskUsagePct();
   if (result.reclaimed.length) {
     audit({
       event: "disk_gc_sweep",
@@ -500,10 +529,16 @@ export function startDiskGc(): void {
     console.log("[disk-gc] disabled (OPENSESSION_DISK_GC=0)");
     return;
   }
-  const run = () =>
-    void sweepDiskGc().catch((e) =>
-      console.error("[disk-gc] sweep failed:", e),
-    );
+  let running = false;
+  const run = () => {
+    if (running) return;
+    running = true;
+    void sweepDiskGc()
+      .catch((error) => console.error("[disk-gc] sweep failed:", error))
+      .finally(() => {
+        running = false;
+      });
+  };
   setTimeout(run, FIRST_SWEEP_DELAY_MS);
   sweepTimer = setInterval(run, SWEEP_INTERVAL_MS);
   console.log(

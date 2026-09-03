@@ -94,5 +94,5 @@ export function seededBlockEstimate(
   blockKey: string,
 ): number {
   const cached = seeded?.blockHeights.get(blockKey);
-  return typeof cached === "number" && cached > 0 ? cached : heuristic;
+  return cached !== undefined && cached > 0 ? cached : heuristic;
 }

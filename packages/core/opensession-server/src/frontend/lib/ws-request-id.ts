@@ -1,7 +1,7 @@
 import type { WSClientMessage } from "./types";
 import { randomUUID } from "./random-uuid";
 
-const MUTATION_TYPES = new Set<WSClientMessage["type"]>([
+const MUTATION_TYPE_LIST = [
   "prompt",
   "interrupt_prompt",
   "delete_queued_prompt",
@@ -14,16 +14,23 @@ const MUTATION_TYPES = new Set<WSClientMessage["type"]>([
   "cancel",
   "answer_question",
   "create_session",
-]);
+] satisfies WSClientMessage["type"][];
 
-type MessageWithRequestId = WSClientMessage & { requestId?: string };
+type MutationType = (typeof MUTATION_TYPE_LIST)[number];
+type MutationMessage = Extract<WSClientMessage, { type: MutationType }>;
+
+const MUTATION_TYPES = new Set<WSClientMessage["type"]>(MUTATION_TYPE_LIST);
+
+function isMutationMessage(
+  message: WSClientMessage,
+): message is MutationMessage {
+  return MUTATION_TYPES.has(message.type);
+}
 
 /** Stamp an intent once, before it enters the reconnect outbox. */
 export function withMutationRequestId(
   message: WSClientMessage,
 ): WSClientMessage {
-  if (!MUTATION_TYPES.has(message.type)) return message;
-  const mutation = message as MessageWithRequestId;
-  if (mutation.requestId) return message;
-  return { ...message, requestId: randomUUID() } as WSClientMessage;
+  if (!isMutationMessage(message) || message.requestId) return message;
+  return { ...message, requestId: randomUUID() };
 }

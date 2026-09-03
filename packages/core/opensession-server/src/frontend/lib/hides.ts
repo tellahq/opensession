@@ -21,7 +21,7 @@
 // (an in-memory cache) mirroring snoozes.ts: the store is a lib/user-map
 // instance, which owns hydration and ordered per-key delta writes.
 import { fetchHides, saveHidesApi } from "./api";
-import { makeUserMap } from "./user-map";
+import * as userMap from "./user-map";
 
 const CHANGE_EVENT = "opensession-hides-changed";
 
@@ -29,7 +29,7 @@ const CHANGE_EVENT = "opensession-hides-changed";
 // lives in makeUserMap; it also keeps the module
 // importable outside a browser, which `partitionHidden` below is unit-tested
 // through.
-const store = makeUserMap<string>({
+const store = userMap.makeUserMap<string>({
   changeEvent: CHANGE_EVENT,
   fetchMap: fetchHides,
   saveDelta: saveHidesApi,
@@ -105,10 +105,15 @@ export function onHidesChanged(handler: () => void): () => void {
  * one-shot — the row then stays visible until it's hidden again, instead of
  * flickering as questions get asked and answered.
  */
+type HiddenPartition<T> = {
+  hiddenKeys: Set<string>;
+  resurfaced: T[];
+};
+
 export function partitionHidden<T extends { key: string; status: string }>(
   rows: T[],
   hides: Record<string, string>,
-): { hiddenKeys: Set<string>; resurfaced: T[] } {
+): HiddenPartition<T> {
   const hiddenKeys = new Set<string>();
   const resurfaced: T[] = [];
   for (const row of rows) {

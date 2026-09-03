@@ -34,6 +34,7 @@ export interface PendingPrompt {
 
 export interface OptimisticPendingPrompt extends PendingPrompt {
   images?: string[];
+  pastedTexts?: string[];
   busyMode?: "queue" | "steer";
 }
 
@@ -76,16 +77,20 @@ export function optimisticOutboxFallbacks(
         !landedIds.has(id)
       );
     })
-    .map((item) => ({
-      id: `outbox-${item.clientId}`,
-      content: item.content,
-      user: item.user,
-      sentAt: item.createdAt,
-      transcriptAfterEntryId: item.transcriptAfterEntryId,
-      transcriptAfterSeq: item.transcriptAfterSeq,
-      ...(item.busyMode === "steer" ? { busyMode: "steer" as const } : {}),
-      ...(item.images?.length ? { images: item.images } : {}),
-    }));
+    .map((item) => {
+      const prompt: OptimisticPendingPrompt = {
+        id: `outbox-${item.clientId}`,
+        content: item.content,
+        user: item.user,
+        sentAt: item.createdAt,
+        transcriptAfterEntryId: item.transcriptAfterEntryId,
+        transcriptAfterSeq: item.transcriptAfterSeq,
+      };
+      if (item.busyMode === "steer") prompt.busyMode = "steer";
+      if (item.images?.length) prompt.images = item.images;
+      if (item.pastedTexts?.length) prompt.pastedTexts = item.pastedTexts;
+      return prompt;
+    });
 }
 
 /**

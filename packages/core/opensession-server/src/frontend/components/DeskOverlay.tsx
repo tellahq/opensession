@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { z } from "zod";
 import { BASE_PATH } from "../lib/base";
 import { getCurrentUser } from "./UserPicker";
 import { DeskConversation } from "./DeskConversation";
@@ -105,11 +106,18 @@ function DeskBody({
           body: JSON.stringify({ user }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as {
-          sessionId: string;
-          clearedAt: string | null;
-          session: { model?: string; effort?: string } | null;
-        };
+        const data = z
+          .object({
+            sessionId: z.string(),
+            clearedAt: z.string().nullable(),
+            session: z
+              .object({
+                model: z.string().optional(),
+                effort: z.string().optional(),
+              })
+              .nullable(),
+          })
+          .parse(await res.json());
         if (cancelled) return;
         setSessionId(data.sessionId);
         setSettings({
@@ -134,7 +142,9 @@ function DeskBody({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user }),
       });
-      const data = (await res.json()) as { clearedAt?: string };
+      const data = z
+        .object({ clearedAt: z.string().optional() })
+        .parse(await res.json());
       if (data.clearedAt) setClearedAt(data.clearedAt);
     })().catch(async () => {});
   }

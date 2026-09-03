@@ -15,7 +15,7 @@ function interfaceBody(sourceText: string, name: string) {
 test("SessionViewer receives app-owned composer wiring through one binding", async () => {
   const [viewer, app, binding] = await Promise.all([
     source("../SessionViewer.tsx"),
-    source("../../App.tsx"),
+    source("../AppSessionPane.tsx"),
     source("../../lib/session-viewer-bindings.ts"),
   ]);
 
@@ -44,7 +44,7 @@ test("SessionViewer receives app-owned composer wiring through one binding", asy
   expect(binding).toContain("onPrefillConsumed?: (seq: number) => void;");
 
   const invocationStart = app.indexOf("<SessionViewer\n");
-  const invocationEnd = app.indexOf("\n        />", invocationStart);
+  const invocationEnd = app.indexOf("\n      />", invocationStart);
   const invocation = app.slice(invocationStart, invocationEnd);
   expect(invocationStart).toBeGreaterThanOrEqual(0);
   expect(invocationEnd).toBeGreaterThan(invocationStart);

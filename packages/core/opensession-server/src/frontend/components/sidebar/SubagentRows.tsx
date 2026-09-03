@@ -19,6 +19,8 @@ import { IconArchive, IconArrowTurnDownRight } from "../icons";
 import { WsPrStatusMark } from "./HoverCards";
 import { SIDEBAR_ROW_TITLE } from "./SidebarItem";
 
+type SidebarIconStyle = CSSProperties & { "--sidebar-icon-left": string };
+
 function stateLabel(session: UnifiedSession): string {
   if (session.waitingForInput) return "Waiting for input";
   if (session.isRunning) return "Running";
@@ -44,14 +46,18 @@ export function SubagentRows({
   if (items.length === 0) return null;
   return (
     <div data-subagents="">
-      {items.map(({ session, depth }) => {
+      {items.map(({ session, depth, sharesRootPr }) => {
         const selected = session.id === selectedId;
         const label = stateLabel(session);
         const showPrStatus =
+          !sharesRootPr &&
           !session.waitingForInput &&
           !session.isRunning &&
           (session.queuedCount ?? 0) === 0 &&
           sessionHasPr(session);
+        const iconStyle: SidebarIconStyle = {
+          "--sidebar-icon-left": `${29 + Math.min(depth - 1, 2) * 10}px`,
+        };
         return (
           <div className="group relative" key={session.id}>
             <button
@@ -67,11 +73,7 @@ export function SubagentRows({
               // read as nested without spending a full icon column on empty
               // space. Deeper levels take two smaller steps, then stop so a
               // long delegation chain keeps room for its title.
-              style={
-                {
-                  "--sidebar-icon-left": `${29 + Math.min(depth - 1, 2) * 10}px`,
-                } as CSSProperties
-              }
+              style={iconStyle}
               data-sidebar-row=""
               data-sidebar-item-key={`session:${session.id}`}
               data-subagent-row=""

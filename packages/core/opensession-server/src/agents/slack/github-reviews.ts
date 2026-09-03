@@ -24,8 +24,11 @@ const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 // ---------------------------------------------------------------------------
 
 export async function githubApi(path: string): Promise<any> {
-  const { githubToken } = await import("../../server/github-app");
-  const token = await githubToken();
+  const { githubRepoFromApiPath, githubToken } =
+    await import("../../server/github-app");
+  // A /repos/{owner}/{name} path mints against that owner's installation.
+  const repo = githubRepoFromApiPath(path);
+  const token = await githubToken(repo ? { repo } : {});
   if (!token) return null;
   try {
     const resp = await fetchWithTimeout(`https://api.github.com${path}`, {

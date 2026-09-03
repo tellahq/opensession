@@ -13,7 +13,7 @@ type DeferredMergeEntry = {
   token: number;
   phase: Exclude<DeferredMergePhase, "idle">;
   timer: ReturnType<typeof setTimeout> | null;
-  run: () => Promise<unknown> | unknown;
+  run: () => void;
   undo: UndoHandle | null;
 };
 
@@ -57,7 +57,7 @@ export function deferredMergePhase(key: string | null): DeferredMergePhase {
  */
 export function scheduleDeferredMerge(
   key: string,
-  run: () => Promise<unknown> | unknown,
+  run: () => void,
   delayMs = MERGE_UNDO_DELAY_MS,
 ): DeferredMergeHandle | null {
   if (entries.has(key)) return null;

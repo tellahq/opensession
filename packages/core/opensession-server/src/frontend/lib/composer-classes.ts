@@ -358,3 +358,5 @@ export const composerQueueBodyTone = {
 } as const;
 /** The "from" label ahead of the body — a teammate's name, or "GitHub". */
 export const composerQueueFrom = "mr-1.5 font-semibold text-faint";
+/** The attachment note after a queued message's text: "· Pasted text +60 lines". */
+export const composerQueuePasted = "whitespace-nowrap text-faint";

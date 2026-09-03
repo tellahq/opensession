@@ -2,7 +2,7 @@
 
 Open Session sends every production model turn through the bundled Pi runtime;
 there is no separate `pi` executable to install. Model ids use
-`pi/<provider>/<model>`. Recognized bare ids such as `claude-fable-5` and
+`pi/<provider>/<model>`. Recognized bare ids such as `claude-fable-5-1` and
 `gpt-5.6-sol`, and provider paths such as `openai/gpt-5.6-sol`, normalize to
 that form at dispatch. See the [generated engine catalog](../generated/engines.md)
 for the current routing table.
@@ -65,19 +65,95 @@ The UI writes these files with mode `0600`:
 | ------------------------------------- | ----------------------------------------------------------------------------------- |
 | `~/.opensession/claude-accounts.json` | Claude setup tokens and optional usage credentials                                  |
 | `~/.opensession/codex-accounts.json`  | ChatGPT sign-ins and OpenAI API keys                                                |
+| `~/.opensession/xai-accounts.json`    | SuperGrok / X Premium sign-ins (xAI OAuth tokens)                                   |
 | `~/.opensession/model-providers.json` | Third-party provider keys, base URLs, picker models, and optional pool restrictions |
+
+SuperGrok accounts sign in by device code from Settings → Providers. Their
+models appear in the picker as `pi/xai-oauth/<model>` and every request goes
+through xAI's `cli-chat-proxy.grok.com`, so it draws on the subscription's
+quota rather than API credits. Pay-per-token xAI keys stay a separate `xai`
+provider under Your own providers. `bridge.xaiAccounts` in
+`model-providers.json` restricts which accounts serve Grok runs, like
+`bridge.openaiAccounts` does for the ChatGPT pool.
+
+Sandboxes never hold the xAI refresh grant. Docker mounts the store read-only
+and remote sandboxes receive a scoped copy with fresh access tokens and no
+refresh token, so a sandbox can neither rotate nor kill the host's sign-in;
+the host keeps every stored token ahead of expiry on its own.
 
 Legacy top-level counterparts such as `~/.opensession-claude-accounts.json`
 remain supported when the grouped path is absent. Run `opensession doctor`
 after setup to verify that the engine and the default model have usable
 capacity.
 
+### Custom OpenAI-compatible providers
+
+A provider id Pi does not know runs when its entry in
+`~/.opensession/model-providers.json` declares the protocol. Only
+`openai-completions` is accepted, and it needs a base URL. Each provider under
+`providers.<id>` takes:
+
+| Field            | Meaning                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------- |
+| `apiKey`         | Bearer key sent to the provider                                                                         |
+| `baseURL`        | OpenAI-compatible base URL, for example `https://gateway.example/v1`                                    |
+| `api`            | `openai-completions`; lets an id unknown to Pi and Open Session run                                     |
+| `name`           | Display name in Settings                                                                                |
+| `catalog`        | Per-model metadata keyed by model id (see below)                                                        |
+| `catalogFile`    | JSON file with more catalog rows; relative paths resolve next to `model-providers.json`                 |
+| `discoverModels` | `true` to read `GET {baseURL}/models` on save and from **Discover models** in Settings; picker ids only |
+| `discovered`     | Written by discovery: the last listed ids and any extended fields the gateway sent                      |
+
+A catalog row fills the fields a model unknown to every catalog would otherwise
+get from the conservative stub (131072 context, 32768 output tokens, text
+only, zero cost). Rows accept our camelCase names or the snake_case fields
+gateway model objects tend to carry: `name` or `display_name`, `contextWindow`
+or `context_length`, `maxTokens` or `max_output_tokens`, `input` or
+`input_modalities` (`["text", "image"]`), `reasoning`, `efforts` (the
+reasoning levels the gateway accepts, from `none`, `low`, `medium`, `high`,
+`xhigh`, `max`), and `cost` with `input`, `output`, `cacheRead` and
+`cacheWrite` in USD per million tokens. Layers apply weakest first: discovered
+fields, then `catalogFile`, then inline `catalog`. A row for a model id Pi or
+Open Session already knows overrides that entry.
+
+```json
+{
+  "providers": {
+    "my-gateway": {
+      "apiKey": "…",
+      "baseURL": "https://gateway.example/v1",
+      "api": "openai-completions",
+      "name": "My gateway",
+      "catalogFile": "my-gateway-catalog.json",
+      "catalog": {
+        "big-model": {
+          "name": "Big Model",
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "input": ["text", "image"],
+          "efforts": ["low", "high"],
+          "cost": { "input": 1, "output": 4, "cacheRead": 0.1, "cacheWrite": 0 }
+        }
+      },
+      "discoverModels": true
+    }
+  },
+  "pickerModels": ["pi/my-gateway/big-model"]
+}
+```
+
+The catalog file holds the same rows, either as a map keyed by model id or as
+a list of objects with `id`. Discovery only adds ids to `pickerModels`; it
+never removes hand-written ones, and a failed poll leaves the file untouched.
+The stock OpenAI models object carries no limits or pricing, so keep those in
+the catalog. Settings writes preserve every field the form does not edit.
+
 ## Defaults and fallbacks
 
 **Settings → Providers** controls the default model and whether interactive
 runs switch models automatically. The selected default is stored in
 `~/.opensession/default-model.json`; without an override, `OPENSESSION_MODEL`
-is used, then `claude-fable-5`.
+is used, then `claude-fable-5-1`.
 
 Interactive auto-fallback is on by default. Its preferred model comes from
 `OPENSESSION_FALLBACK_MODEL`, defaulting to `claude-opus-5`; set the variable to

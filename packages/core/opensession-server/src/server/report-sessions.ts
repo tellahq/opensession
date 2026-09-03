@@ -58,6 +58,7 @@ export async function startReportSessions(input: {
   reportId: string;
   tasks?: number[];
   user?: string;
+  createdByLogin?: string;
 }): Promise<StartedReportSession[]> {
   const report = getReport(input.automationId, input.reportId);
   if (!report) throw new ReportSessionsError("No such report", 404);
@@ -89,6 +90,7 @@ export async function startReportSessions(input: {
         branch,
         isolatedWorktree: true,
         agentStarted: true,
+        createdByLogin: input.createdByLogin,
         ...(repo ? { repo } : {}),
         ...(input.user ? { user: input.user } : {}),
       });

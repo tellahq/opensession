@@ -88,7 +88,7 @@ export function GithubAppFields({
               spellCheck={false}
             />
             <span className="text-meta leading-snug text-faint">
-              The GitHub account or organization where the App is installed.
+              Optional default for GitHub calls that do not name a repository.
             </span>
           </Field>
         )}

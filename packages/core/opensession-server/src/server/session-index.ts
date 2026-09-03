@@ -38,7 +38,7 @@ import type { TranscriptEntry, UnifiedSession } from "./types";
 const g = globalThis as typeof globalThis & {
   __sessionSearchStore?: SessionSearchStore;
   __sessionHistoryTimerRegistered?: boolean;
-  __sessionHistoryDistillTail?: Promise<void>;
+  __sessionHistoryDistillBusy?: boolean;
 };
 
 const DB_PATH = process.env.OPENSESSION_SEARCH_DB || stateDir("search.db");
@@ -50,6 +50,9 @@ const BACKFILL_BATCH = 400;
 const DISTILL_RECENT_DAYS = 7;
 const IDLE_MS = 10 * 60_000;
 const DISTILL_RETRY_MS = 10 * 60_000;
+/** Retry window when another session's distillation holds the model slot. */
+const DISTILL_BUSY_MIN_MS = 15_000;
+const DISTILL_BUSY_JITTER_MS = 15_000;
 const MIN_DISTILL_CHARS = 400;
 
 export function searchIndex(): SessionSearchStore {
@@ -409,19 +412,26 @@ async function scheduleDistillation(
   });
 }
 
-async function serialDistill<T>(task: () => Promise<T>): Promise<T> {
-  const previous = g.__sessionHistoryDistillTail ?? Promise.resolve();
-  let release!: () => void;
-  const current = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  g.__sessionHistoryDistillTail = previous.catch(() => {}).then(() => current);
-  await previous.catch(() => {});
-  try {
-    return await task();
-  } finally {
-    release();
-  }
+/**
+ * One model distillation runs per process. A timer that finds the slot taken
+ * must not wait in-handler: waiting holds a kernel timer slot for the whole
+ * queue, which starves unrelated timers such as scheduled prompts and ask
+ * escalations. Callers reschedule instead and return immediately.
+ */
+export function acquireDistillSlot(): (() => void) | null {
+  if (g.__sessionHistoryDistillBusy) return null;
+  g.__sessionHistoryDistillBusy = true;
+  return () => {
+    g.__sessionHistoryDistillBusy = false;
+  };
+}
+
+export function distillBusyRetryAt(now = Date.now()): number {
+  return (
+    now +
+    DISTILL_BUSY_MIN_MS +
+    Math.floor(Math.random() * DISTILL_BUSY_JITTER_MS)
+  );
 }
 
 async function handleSessionHistoryTimer(timer: DurableTimer): Promise<void> {
@@ -441,12 +451,33 @@ async function handleSessionHistoryTimer(timer: DurableTimer): Promise<void> {
     return;
   }
 
-  const result = await serialDistill(() =>
-    indexSessionHistory(timer.sessionId, {
+  const release = acquireDistillSlot();
+  if (!release) {
+    // Same timer id, fresh token: this firing settles as a no-op and the
+    // replacement fires once the slot has likely freed.
+    await sessionKernel(timer.sessionId).scheduleTimer({
+      timerId: DISTILL_TIMER_ID,
+      kind: TIMER_KIND,
+      dueAt: distillBusyRetryAt(),
+      payload: {
+        phase: "distill",
+        projectionId: payload.projectionId,
+        ...(payload.expectedActivityTs !== undefined
+          ? { expectedActivityTs: payload.expectedActivityTs }
+          : {}),
+      } satisfies HistoryTimerPayload,
+    });
+    return;
+  }
+  let result: SessionHistoryIndexResult;
+  try {
+    result = await indexSessionHistory(timer.sessionId, {
       mode: "distill",
       expectedActivityTs: payload.expectedActivityTs,
-    }),
-  );
+    });
+  } finally {
+    release();
+  }
   if (result.kind === "indexed" && result.distillable && !result.distilled)
     await scheduleDistillation(
       timer.sessionId,

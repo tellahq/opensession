@@ -14,6 +14,7 @@ struct SubagentView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("os1.appearance.turnActivity") private var turnWork = "running"
     @AppStorage("os1.appearance.toolCalls") private var toolCalls = "folded"
+    @AppStorage(ThinkingMessages.storageKey) private var thinkingMessages = "latest"
     private var turnActivity: TurnActivity {
         TurnActivity(work: turnWork, tools: toolCalls)
     }
@@ -51,7 +52,7 @@ struct SubagentView: View {
                 }
             }
         }
-        .task {
+        .task(id: thinkingMessages) {
             await load()
             // A worker keeps writing while its parent runs; stop as soon as
             // the parent settles rather than polling a finished transcript.
@@ -120,7 +121,8 @@ struct SubagentView: View {
             let next = TranscriptGrouping.blocks(
                 from: TranscriptGrouping.displayItems(from: entries),
                 live: loaded.sessionRunning == true,
-                worktreeDir: worktreeDir
+                worktreeDir: worktreeDir,
+                thinkingMessages: ThinkingMessages(thinkingMessages)
             )
             transcript = loaded
             if next != blocks { blocks = next }

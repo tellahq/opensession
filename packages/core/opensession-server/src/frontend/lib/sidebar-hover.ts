@@ -15,11 +15,13 @@ import {
 // sidebar row's own subtree, still on the legacy sheet) or a plain colour
 // utility for the states only the hover card shows. Both are just a class on
 // the same span, and the two sets never co-occur.
-export function hoverState(s: UnifiedSession): {
+export interface HoverState {
   label: string;
   tone: HoverTone;
   dotClass: string;
-} {
+}
+
+export function hoverState(s: UnifiedSession): HoverState {
   if (s.waitingForInput)
     return {
       label: "Waiting for your input",

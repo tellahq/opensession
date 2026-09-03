@@ -20,6 +20,17 @@
  */
 
 /**
+ * The summary's complete surface treatment. Review's changed-file tree reuses
+ * it so the two adjacent containers have the same glass, soft ring, and corner.
+ */
+export const WS_SUMMARY_SURFACE =
+  "[--popup-glass:color-mix(in_srgb,var(--popup-surface)_58%,transparent)] " +
+  "[--popup-blur:blur(32px)_saturate(1.6)_brightness(1.12)] " +
+  "[--smooth-ring-color:color-mix(in_srgb,var(--popup-ring)_65%,var(--popup-surface))] " +
+  "[border-radius:calc(18px*var(--rf))]! [corner-shape:squircle] " +
+  "bg-popup-glass [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-sm";
+
+/**
  * The popup body. Fixed width, so the rows truncate rather than reflow and a
  * long branch name cannot make the card wider than the header it hangs from.
  *
@@ -37,9 +48,7 @@
  */
 export const WS_SUMMARY_CARD =
   "flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto py-2 " +
-  "[--popup-glass:color-mix(in_srgb,var(--popup-surface)_58%,transparent)] " +
-  "[--popup-blur:blur(32px)_saturate(1.6)_brightness(1.12)] " +
-  "[border-radius:calc(18px*var(--rf))]!";
+  WS_SUMMARY_SURFACE;
 
 /** Wide Review keeps its scroller full width so the native scrollbar stays at
  * the window edge, beyond the summary card. These child clearances reserve the

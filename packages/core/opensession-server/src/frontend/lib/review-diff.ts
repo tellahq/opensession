@@ -5,14 +5,7 @@ const LOCK_FILE =
   /(^|\/)(bun\.lockb?|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|Gemfile\.lock|composer\.lock|poetry\.lock|uv\.lock|go\.sum|flake\.lock|Podfile\.lock|Package\.resolved)$/;
 
 /** Keep large reviews interactive instead of eagerly mounting every diff row. */
-export function reviewDiffLoadPolicy(
-  patchLength: number,
-  fileCount: number,
-): {
-  defaultExpandedFiles: number;
-  groupFiles: boolean;
-  allowExpandAll: boolean;
-} {
+export function reviewDiffLoadPolicy(patchLength: number, fileCount: number) {
   const large =
     patchLength >= LARGE_REVIEW_PATCH_LENGTH ||
     fileCount >= LARGE_REVIEW_FILE_COUNT;

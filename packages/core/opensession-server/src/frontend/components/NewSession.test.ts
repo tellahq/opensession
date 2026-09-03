@@ -18,7 +18,7 @@ test("a long phone prompt scrolls without moving the title bar or send button", 
 
 test("the phone footer drops the covered safe-area inset while the keyboard is open", async () => {
   const source = await Bun.file(
-    new URL("./NewSession.tsx", import.meta.url),
+    new URL("../lib/new-session-classes.ts", import.meta.url),
   ).text();
   const footerStart = source.indexOf("const FOOTER =");
   const footerEnd = source.indexOf(";", footerStart);
@@ -33,7 +33,7 @@ test("the phone footer drops the covered safe-area inset while the keyboard is o
 
 test("the phone title bar's project trigger carries no surface of its own", async () => {
   const source = await Bun.file(
-    new URL("./NewSession.tsx", import.meta.url),
+    new URL("../lib/new-session-classes.ts", import.meta.url),
   ).text();
   const triggerStart = source.indexOf("const MOBILE_TRIGGER =");
   const triggerEnd = source.indexOf(";", triggerStart);
@@ -48,7 +48,7 @@ test("the phone title bar's project trigger carries no surface of its own", asyn
 
 test("the new composer keeps the full model name ahead of its effort suffix", async () => {
   const source = await Bun.file(
-    new URL("./NewSession.tsx", import.meta.url),
+    new URL("../lib/new-session-classes.ts", import.meta.url),
   ).text();
   const pillStart = source.indexOf("const MODEL_PILL");
   const pillEnd = source.indexOf(");", pillStart);
@@ -162,7 +162,9 @@ test("immediate create consumes the sent draft before opening the session", asyn
 });
 
 test("a failed immediate create restores the submitted composer payload", async () => {
-  const source = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+  const source = await Bun.file(
+    new URL("../AppContent.tsx", import.meta.url),
+  ).text();
   const errorStart = source.indexOf('if (msg.type === "error")');
   const errorEnd = source.indexOf(
     'if (msg.type === "pins_changed")',
@@ -235,11 +237,14 @@ test("the phone composer keeps its buttons concentric with the sheet corner", as
   const source = await Bun.file(
     new URL("./NewSession.tsx", import.meta.url),
   ).text();
+  const classes = await Bun.file(
+    new URL("../lib/new-session-classes.ts", import.meta.url),
+  ).text();
 
   expect(source).toContain("<PhoneTopBar");
   expect(source).toContain("<PhoneTopBarAction");
   expect(source).toContain("phone:rounded-t-[calc(40px*var(--rf))]");
-  expect(source).toContain("phone:px-[18px] phone:pb-3 phone:pt-[18px]");
+  expect(classes).toContain("phone:px-[18px] phone:pb-3 phone:pt-[18px]");
 });
 
 test("a parked draft keeps the composer copy and carries its attachments", async () => {

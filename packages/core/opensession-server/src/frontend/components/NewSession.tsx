@@ -18,7 +18,6 @@ import {
   fetchProviderAccounts,
   fetchRepos,
   cachedRepos,
-  type OpenPr,
   type RepoInfo,
   createWorkspaceApi,
   updateWorkspaceApi,
@@ -30,6 +29,10 @@ import {
 } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { type FileAttachment } from "../lib/images";
+import {
+  createPastedTextAttachment,
+  type PastedTextAttachment,
+} from "../lib/pasted-text";
 import {
   loadDraft,
   saveDraft,
@@ -53,15 +56,11 @@ import { projectComposerSessions } from "../lib/composer-session-projection";
 import { baseModelId, modelEngine } from "./ModelEffortSelect";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { effectiveSendKey, MOD_ENTER_GLYPH } from "../lib/send-key";
-import { isApple } from "../lib/platform";
 import { NO_REPO } from "../lib/session-repo";
-import {
-  getDefaultRepoPref,
-  setDefaultRepoPref,
-} from "../lib/default-repo-pref";
 import {
   getSessionCheckoutPrefs,
   onSessionCheckoutPrefChanged,
+  resolveSessionCheckoutPref,
 } from "../lib/session-checkout-pref";
 import { repoSelectionHint, toggleRepoSelection } from "../lib/repo-selection";
 import { fallbackBranchName } from "../lib/workspace-draft";
@@ -80,16 +79,10 @@ import {
   IconReturn,
   IconBox,
   IconMessage,
-  IconStack,
   IconNewBranch,
   IconX,
 } from "./icons";
-import type {
-  UnifiedSession,
-  Workspace,
-  WSClientMessage,
-  WSServerMessage,
-} from "../lib/types";
+import type { WSClientMessage, WSServerMessage } from "../lib/types";
 import { findPrWorkspaceId } from "../lib/pr-workspace";
 import { newClientSessionId } from "../lib/session-id";
 import { errorMatchesPendingCreate } from "../lib/new-session-navigation";
@@ -113,11 +106,6 @@ import { Modal, useEnterOnMount } from "../ui/modal";
 import { composerMorph } from "../ui/motion";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
 import { matchesShortcut } from "../lib/shortcuts";
-import {
-  composerBox,
-  composerSend,
-  composerSendDefault,
-} from "../lib/composer-classes";
 import { foregroundFileComposerOwns, hasDraggedFiles } from "../lib/file-drag";
 import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
 import { NewSessionPrPicker } from "./NewSessionPrPicker";
@@ -125,403 +113,66 @@ import { askSurface } from "../lib/tinted-surface";
 import { toast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { PhoneTopBar, PhoneTopBarAction } from "../ui/top-bar";
+import { paletteIconBtnOn } from "../lib/palette-classes";
 import {
-  paletteIconBtn,
-  paletteIconBtnOn,
-  palettePill,
-} from "../lib/palette-classes";
+  ASK_BTN_ON,
+  ASK_SURFACE,
+  CHEVRON,
+  CREATE_ACTIONS,
+  CREATE_CARET,
+  CREATE_KBD,
+  CREATE_LABELS,
+  CREATE_MAIN,
+  CREATE_MAIN_SPLIT,
+  CREATE_MAIN_WHOLE,
+  CREATE_MENU,
+  CREATE_MENU_ITEM,
+  CREATE_SPLIT,
+  CYCLE_SHORTCUT,
+  EDGE_DIVIDER,
+  ERROR,
+  FOOTER,
+  FOOTER_ICON_BTN,
+  FOOTER_LEFT,
+  FOOTER_RIGHT,
+  HEADER,
+  INLINE_CARD,
+  MOBILE_PICKER,
+  MOBILE_TRIGGER,
+  MODEL_PILL,
+  MULTI_MODIFIER,
+  PHONE_SEND,
+  TRIGGER_STRONG,
+  type CreateAction,
+  type CreateStatus,
+} from "../lib/new-session-classes";
+import {
+  consumePendingDraftParks,
+  draftParkInFlight,
+  firstNonEmptyLine,
+  migratedRepoPref,
+  pendingDraftParks,
+  readPrefill,
+  type NewSessionCreateDraft,
+  type NewSessionProps,
+  type PendingDraftPark,
+  type RepoOption,
+  type SessionStartPoint,
+  type Worktree,
+} from "../lib/new-session-state";
 
-interface Props {
-  /** Close the palette (Esc, backdrop click, or after a create without "Create more"). */
-  onBack: () => void;
-  /**
-   * Render the same card on the page instead of over a backdrop: the empty
-   * state's session input. There is no view behind it to dismiss back to, so
-   * the create options collapse to the one that means anything (open what you
-   * just made) and `onBack` is only the reset after a create.
-   */
-  inline?: boolean;
-  /** Inline only: bumping this puts the caret back in the prompt. The sidebar's
-      draft row points at this field. */
-  focusSeq?: number;
-  send: (msg: WSClientMessage) => void;
-  addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
-  connected: boolean;
-  /** Prefill the prompt (e.g. from the Home "New session" box). */
-  prefillPrompt?: string;
-  /** Services selected before the palette opens, such as from a command-menu
-   *  shortcut. They use the same chips and create payload as manual picks. */
-  initialMcpServers?: string[];
-  forceMode?: "ask" | "code" | "scratch";
-  /** When starting a session inside a workspace, the session joins that workspace… */
-  workspaceId?: string;
-  /** Workspace whose model combinations this new, independent session can use. */
+export type { NewSessionCreateDraft } from "../lib/new-session-state";
+
+type NewSessionCreateMessage = Extract<
+  WSClientMessage,
+  { type: "create_session" }
+> & {
+  attachRepos?: string[];
   modelWorkspaceId?: string;
-  /** …and defaults to the workspace's shared repo + worktree (a sibling's branch). */
-  forceRepo?: string;
-  forceBranch?: string;
-  /** Known workspaces and sessions let a PR create adopt the PR's existing
-      workspace instead of opening a duplicate lane for the same branch. */
-  workspaces: Workspace[];
-  sessions: UnifiedSession[];
-  /** Lets App render the pending session shell before the created session appears
-      in the polled session list. */
-  onCreateStarted?: (draft: NewSessionCreateDraft) => void;
-}
-
-export interface NewSessionCreateDraft {
-  /** The client-minted id the server persists for this session. */
-  id: string;
-  prompt: string;
-  mode: "ask" | "code" | "scratch";
-  repo: string;
-  branch: string | null;
-  workspaceId?: string;
-  model?: string;
-  images?: string[];
-  files?: FileAttachment[];
-  /** Open the optimistic session as soon as the create message is sent. */
-  openImmediately?: boolean;
-  /** Start the session without following it. */
-  background?: boolean;
-}
-
-interface Worktree {
-  branch: string;
-  path: string;
-}
-
-type SessionStartPoint =
-  | { kind: "new" }
-  | { kind: "worktree"; branch: string }
-  | { kind: "pull-request"; pullRequest: OpenPr };
-
-interface RepoOption {
-  id: string;
-  label: string;
-  default?: boolean;
-  /** A repo whose sessions share one live checkout can be the session's own
-   *  repo, but never a second one: there is no isolated worktree to attach. */
-  sharedCheckout?: boolean;
-}
-
-const LAST_REPO_KEY = "opensession-new-session-repo";
-
-/* ── Palette chrome ───────────────────────────────────────────────────────
-   Every class is written out in full: Tailwind scans source TEXT, so a name
-   assembled from a variable compiles to nothing. Variants that differ in
-   colour or corner carry a COMPLETE string rather than stacking a second
-   colour utility onto a shared base — two competing colour utilities on one
-   element don't compose, the compiled sheet's order picks the winner.
-
-   The icon button and the model pill are shared with the composer toolbar, so
-   they live in lib/palette-classes.ts rather than being restated here. */
-
-/** The hairline is a cutoff for content passing under the header, so it stays
- *  transparent until the prompt has actually scrolled beneath it. The border
- *  itself is always present: switching the colour keeps the height steady,
- *  where toggling `border-b` would jog the layout by a pixel.
- *
- *  Padding is asymmetric for the same reason the footer's is: the top is the
- *  card's own edge, the bottom only a hairline. The picker is a 32px box that
- *  fills on hover, so 16px above it matches the 16px beside it.
- *
- *  One control wide on a desktop, since the branch moved into the footer's
- *  overflow menu. On a phone this row IS the sheet's title bar: dismiss on the
- *  left, the project in the middle, commit on the right. It used to be a
- *  second row under that bar, and the two rows together pushed the sheet taller
- *  than the strip a keyboard leaves visible, which cut the bar off the top of
- *  the screen as soon as an attachment took its own space. */
-const HEADER =
-  "flex items-center gap-2 border-b border-transparent px-4 pt-4 pb-[11px] phone:h-auto phone:px-[18px] phone:pb-3 phone:pt-[18px]";
-/** Merged onto HEADER/FOOTER by `cn()`, which drops the transparent colour. */
-const EDGE_DIVIDER = "border-line";
-/** The header's picker, which doubles as the palette's title: bigger, solid,
- *  heavier than a footer control.
- *
- *  `relative` is load-bearing — PaletteSelect's phone branch stacks an
- *  invisible native <select> over the trigger. So is `min-w-0`: the label
- *  already truncates, but a flex item whose own overflow is visible cannot be
- *  sized below its content, so a long repo name would push the row wider than
- *  the card instead of ellipsizing. */
-const TRIGGER_STRONG =
-  "relative inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
-const CHEVRON = "-ml-0.5 shrink-0 text-faint phone:size-4";
-/** A pass-through on a desktop, where the picker is the header's one control.
- *  On a phone it is the middle slot of the title bar: it takes the space the
- *  two discs leave and centres the title inside it, so the row reads as one
- *  balanced bar rather than a label pushed against the close button. */
-const MOBILE_PICKER =
-  "desktop:contents phone:flex phone:min-w-0 phone:flex-1 phone:justify-center";
-/** On a phone the trigger is the sheet's title: the row's name, centred
- *  between the two discs that dismiss and commit. It carries no fill and no
- *  edge of its own. Those discs are the bar's only surfaces, and a third one
- *  between them read as an empty field rather than as the heading it is. The
- *  label and its chevron are the whole control; pressing it still paints the
- *  shared hover wash from `TRIGGER_STRONG`.
- *
- *  Smaller than the header's desktop title: between two 44px discs it is the
- *  quiet one of the three, so it drops to the label size and medium weight the
- *  rest of the chrome's chips wear. It keeps the full 44px height as a touch
- *  target, and it has to fit the row it shares, which is what `max-w-full`
- *  plus the label's own truncation buy. */
-const MOBILE_TRIGGER =
-  "phone:min-h-11 phone:gap-1 phone:rounded-[999px] phone:px-2.5 phone:py-1.5 phone:text-label phone:font-medium phone:[&_svg:first-child]:size-4";
-/** The composer's own send disc, so the gesture that commits a prompt looks the
- *  same in the palette as it does in a session. Sized up to the 44px target the
- *  rest of this bar keeps. */
-const PHONE_SEND = cn(composerSend, composerSendDefault, "phone:size-11");
-
-/* (The prompt's own surface — the scroller and the field — moved to
-   NewSessionPrompt, with the draft state it belongs to.) */
-const ERROR =
-  "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting text-red";
-
-/* Single-line footer: the model pill is the only flexible item — it gives way
-   (its label ellipsizes) while the icon buttons and Create keep their size.
-   Phones let the row wrap instead of crushing every pill to one letter.
-
-   The bottom pad is deeper than the top one because it is measured against a
-   different thing: the top is a hairline, the bottom is the card's own edge,
-   rounded at ~30px. Create is a 36px plate inside a 40px row, so 14px here
-   leaves it the same 16px clearance the side padding gives it. The safe-area
-   inset clears the home indicator at rest, but the keyboard covers that edge
-   while a field is focused, so the ordinary 12px pad takes over then. */
-const FOOTER =
-  "flex items-center justify-between gap-x-2 gap-y-2 border-t border-transparent px-4 pt-[9px] pb-3.5 phone:flex-wrap phone:px-3 phone:pb-[calc(0.75rem+env(safe-area-inset-bottom))] phone:[body.kb-open_&]:pb-3 max-[560px]:gap-x-1.5";
-const FOOTER_LEFT =
-  "flex min-w-0 items-center gap-1.5 phone:flex-1 max-[560px]:gap-1";
-const FOOTER_RIGHT =
-  "flex min-w-0 items-center gap-1.5 phone:contents max-[560px]:gap-1";
-/** Round on a phone, where the bar's two controls are discs and the repo is a
- *  pill: a 12px corner among them is the one square thing on the card. The
- *  hover wash rides a pseudo-element, so it has to be rounded with them. */
-const FOOTER_ICON_BTN = cn(
-  paletteIconBtn,
-  "shrink-0 phone:size-11 phone:rounded-[999px] phone:before:rounded-[999px]",
-);
-/** Ask mode's toggle. Off, it is one of the footer's quiet icon tools. On, it
- *  wears the same green marker the session composer's toolbar shows for the
- *  same mode, so one mode reads identically in both places — and it names
- *  itself, because the mode governs the whole session and an unlabelled glyph
- *  would leave read-only running silently.
- *
- *  A complete string rather than a variant stacked on FOOTER_ICON_BTN: the two
- *  states differ in width, height and colour, and the icon button's square
- *  `size-11` would crush the labelled chip on phones. 32px tall on a desktop,
- *  the size the icon buttons' hover wash paints, so the row keeps one rhythm;
- *  44px on a phone, where the whole row is thumb-sized. */
-const ASK_BTN_ON =
-  "inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-label font-medium transition-colors phone:min-h-11 phone:rounded-[999px] phone:px-3.5 bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
-/** Ask mode paints the whole card, not just its toggle — the same thing the
- *  session composer does for ask and for note mode, because the mode governs
- *  everything you are about to type rather than one control in the corner.
- *
- *  A pseudo-element rather than a background on the card, because the palette
- *  is glass over a dimmed page: the tint has to sit ON the blur and fade in and
- *  out with it intact. Children are lifted above it, and the shell's own
- *  `overflow-hidden` clips it to the rounded corner. */
-const ASK_SURFACE =
-  "isolate " +
-  "before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--palette-ask-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] " +
-  "[&>*]:relative [&>*]:z-[1]";
-/** The one flexible footer item. The palette has room for the model's full
- *  name, so it opts out of palettePill's generic 180px cap. On phones the
- *  effort suffix steps aside first and leaves that room to the model. */
-const MODEL_PILL = cn(
-  palettePill,
-  "shrink min-w-0 max-w-none phone:ml-auto phone:min-h-11 phone:[&_[data-effort]]:hidden max-[560px]:px-[9px]",
-);
-
-/* What a create does with the view behind the palette: "open" follows the new
-   session, "background" leaves you where you were, and "more" keeps the palette
-   up for the next task. The order is the dropdown's, so the cycle shortcut and
-   the menu step the same way. */
-const CREATE_ACTIONS = ["open", "background", "more"] as const;
-type CreateAction = (typeof CREATE_ACTIONS)[number];
-
-// A dropped socket is recoverable: the same idempotent create is replayed as
-// soon as the connection returns. "failed" is reserved for a server response.
-type CreateStatus =
-  | { kind: "idle" }
-  | { kind: "creating" }
-  | { kind: "reconnecting" }
-  | { kind: "failed"; message: string };
-/** ⌘⌥↓ / ⌘⌥↑ (Ctrl+Alt elsewhere). Vertical rather than horizontal because
- *  Chrome and Safari own ⌘⌥← / ⌘⌥→ for tab switching. */
-const CYCLE_SHORTCUT = isApple ? ["⌘", "⌥", "↓"] : ["Ctrl", "Alt", "↓"];
-/** Held while picking a repo, it adds one instead of replacing the choice. */
-const MULTI_MODIFIER = isApple ? "⌘" : "Ctrl";
-
-const CREATE_LABELS: Record<CreateAction, string> = {
-  open: "Create",
-  background: "Create in background",
-  more: "Create more",
 };
 
-/* Split button: primary Create action + a caret that opens a mode dropdown.
-   The two halves' corners are scoped to mutually exclusive media queries, so
-   no two radius utilities ever race: phones drop the caret and round the main
-   button out to a full pill.
-
-   Desktop rounds on `rounded-control`, the corner every other button in the
-   chrome shares (the Button primitive, the header CTAs). It used to be
-   `rounded-md` — one step down, 9.45px against 13.5px — which on a 36px-tall
-   plate read visibly square next to its neighbours. */
-const CREATE_SPLIT =
-  "relative inline-flex shrink-0 items-stretch phone:order-2 phone:mt-0.5 phone:w-full";
-const CREATE_MAIN =
-  "inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40 phone:min-h-11 phone:flex-1 phone:justify-center max-[560px]:px-3";
-/** The desktop corner, split between the two shapes the button takes: half of
- *  a split button beside its caret, or the whole button when there is no caret
- *  (inline). Written as two whole classes rather than one plus an override,
- *  because both set `border-top-left-radius`, and which one wins is decided by
- *  the compiled sheet's order rather than the order they are listed here.
- *
- *  The phone overlay moves Create into its title bar and does not render this
- *  pair. Only the inline card reaches these phone classes, where it has no
- *  caret and rounds the whole button. */
-const CREATE_MAIN_SPLIT =
-  "desktop:rounded-l-control phone:rounded-l-[999px] phone:rounded-r-none";
-const CREATE_MAIN_WHOLE = "desktop:rounded-control phone:rounded-[999px]";
-const CREATE_CARET =
-  "inline-flex cursor-pointer items-center gap-[7px] rounded-r-control phone:min-w-11 phone:justify-center phone:rounded-r-[999px] border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40";
-const CREATE_KBD = "opacity-70";
-const CREATE_MENU =
-  "absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-[5px] smooth-shadow-ring-md";
-const CREATE_MENU_ITEM =
-  "flex w-full cursor-pointer items-start gap-[9px] rounded-md border-none bg-transparent px-[9px] py-[7px] text-left text-fg transition-colors hover:bg-hover";
-
-/**
- * The same card rendered on the page rather than over a dimmed one: what the
- * empty state shows when there is no session to open yet.
- *
- * Not the palette's glass: `--palette-glass` is mixed to composite over a
- * backdrop, and on the pane's own surface there is little behind it to blur
- * (nothing at all under the mac shell's vibrancy, where the app's layers go
- * transparent). So it takes the composer's lift instead, the tokens for the
- * surface you type into, which is also what the workspace home's first-session
- * composer already wears.
- *
- * The layout half is the palette's and is load-bearing, not decoration: BODY is
- * `min-h-0 flex-1` and only scrolls inside a bounded column, and the header and
- * footer hairlines are keyed off that scroll. `relative` anchors the dictation
- * HUD; `overflow-hidden` keeps the rows' dividers inside the rounded shell.
- */
-const INLINE_CARD = cn(
-  "relative flex w-full flex-col overflow-hidden rounded-2xl",
-  "max-h-[min(560px,68dvh)]",
-  composerBox,
-);
-
-/**
- * The repo a fresh palette starts on, for someone who hasn't set a preference.
- *
- * This used to be stickiness: whatever you picked last was silently pinned as
- * your default. Carry that value into the real preference once, then retire the
- * old key.
- */
-function migratedRepoPref(): string {
-  const preferred = getDefaultRepoPref();
-  if (preferred) return preferred;
-  try {
-    const sticky = localStorage.getItem(LAST_REPO_KEY);
-    if (!sticky) return "";
-    localStorage.removeItem(LAST_REPO_KEY);
-    if (sticky === "auto") return "";
-    setDefaultRepoPref(sticky);
-    return sticky;
-  } catch {
-    return "";
-  }
-}
-
-// The repo the sidebar is currently filtered to (persisted by Sidebar.tsx under
-// this key). When set to a real repo, a new session should default to it so
-// creating from a repo-filtered view lands on that repo.
-function filteredRepo(): string | null {
-  try {
-    const v = JSON.parse(
-      localStorage.getItem("opensession-sidebar-filter") || "{}",
-    );
-    return typeof v.repo === "string" ? v.repo : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Deep-link prefill: <base>/new?mode=ask|code&prompt=…&branch=…&repo= */
-function readPrefill() {
-  const params = new URLSearchParams(location.search);
-  // An explicit ?repo= wins (legacy ?project= still honored); otherwise keep
-  // the user's last picker choice across closes/reloads, then use the sidebar
-  // filter. The configured default is applied once `/repos` resolves.
-  const rawRepoParam = params.get("repo") ?? params.get("project");
-  // "auto" was a short-lived picker sentinel, never a repository id.
-  const repoParam = rawRepoParam === "auto" ? "" : rawRepoParam;
-  const mode =
-    params.get("mode") === "ask" ? ("ask" as const) : ("code" as const);
-  // `?repo=none` is honored in either mode: Ask with no repo reads nothing,
-  // Code with no repo is a scratch session. Ask defaults to no repo, matching
-  // the toggle — otherwise an Ask deep link would silently inherit whichever
-  // repo the last code session used.
-  const repo =
-    repoParam ||
-    (mode === "ask" ? NO_REPO : migratedRepoPref() || filteredRepo() || "");
-  return {
-    mode,
-    prompt: params.get("prompt") || "",
-    branch: params.get("branch") || "",
-    repo,
-  };
-}
-
-/** The workspace name a draft auto-follows: the prompt's first non-empty
- *  line, trimmed and capped. Mirrors the server's own follow in
- *  updateWorkspace (workspaces.ts). */
-function firstNonEmptyLine(text: string): string {
-  return (
-    text
-      .split("\n")
-      .find((l) => l.trim())
-      ?.trim() ?? ""
-  );
-}
-
-type PendingDraftPark = {
-  text: string;
-  workspaceId?: string;
-  consumed: boolean;
-  /** The existing workspace the create adopted. When absent, the create made
-   *  another workspace and a late unscoped park can be deleted outright. */
-  consumedIntoWorkspaceId?: string;
-};
-
-// A dismissed palette can be reopened while its workspace request is still in
-// flight. If that prompt starts a session first, the late response must not
-// leave a second, stale draft workspace behind.
-const pendingDraftParks = new Set<PendingDraftPark>();
-
-function consumePendingDraftParks(
-  text: string,
-  workspaceId: string | undefined,
-  consumedIntoWorkspaceId?: string,
-) {
-  for (const operation of pendingDraftParks) {
-    if (operation.text === text && operation.workspaceId === workspaceId) {
-      operation.consumed = true;
-      operation.consumedIntoWorkspaceId = consumedIntoWorkspaceId;
-    }
-  }
-}
-
-function draftParkInFlight(text: string, workspaceId?: string): boolean {
-  return [...pendingDraftParks].some(
-    (operation) =>
-      !operation.consumed &&
-      operation.text === text &&
-      operation.workspaceId === workspaceId,
-  );
+interface AskSurfaceStyle extends React.CSSProperties {
+  "--palette-ask-bg": string;
 }
 
 export function NewSession({
@@ -541,7 +192,7 @@ export function NewSession({
   workspaces,
   sessions,
   onCreateStarted,
-}: Props) {
+}: NewSessionProps) {
   const [prefill] = useState(readPrefill);
   // What the session may do, and nothing else — the footer's Ask toggle. The
   // repo is a separate axis, so Scratch is not a third value here: it is what
@@ -608,7 +259,7 @@ export function NewSession({
       ),
     [],
   );
-  const checkoutPref = checkoutPrefs[repo] ?? "default";
+  const checkoutPref = resolveSessionCheckoutPref(checkoutPrefs, repo);
   const repoOptions = (items: RepoInfo[]): RepoOption[] =>
     items.map((item) => ({
       id: item.id,
@@ -715,6 +366,11 @@ export function NewSession({
   const [files, setFiles] = useState<FileAttachment[]>(
     () => loadDraft(DRAFT_KEY).files,
   );
+  // Large pastes, held as chips beside the field and sent as `pastedTexts`.
+  // Same home as the other attachments: the draft store, mirrored here.
+  const [pastedTexts, setPastedTexts] = useState<PastedTextAttachment[]>(
+    () => loadDraft(DRAFT_KEY).pastedTexts,
+  );
   const uploads = useAttachmentUploads();
   const staging = uploads.staging;
   const [fileDragActive, setFileDragActive] = useState(false);
@@ -728,6 +384,12 @@ export function NewSession({
       sameImages(prev, stored.images) ? prev : stored.images,
     );
     setFiles((prev) => (sameFiles(prev, stored.files) ? prev : stored.files));
+    setPastedTexts((prev) =>
+      prev.length === stored.pastedTexts.length &&
+      prev.every((item, i) => item.id === stored.pastedTexts[i]?.id)
+        ? prev
+        : stored.pastedTexts,
+    );
   }, []);
   // An upload that lands while this palette is open belongs on screen even
   // though it was staged by the instance that closed: the store fires on an
@@ -746,7 +408,19 @@ export function NewSession({
   // The shared model settings menu carries the same choices as an existing
   // session's composer. Both values persist on the new session and apply to
   // its opening turn.
-  const [effort, setEffort] = useState("high");
+  const [effort, setKnownEffort] =
+    useState<NonNullable<NewSessionCreateMessage["effort"]>>("high");
+  function setEffort(nextEffort: string) {
+    switch (nextEffort) {
+      case "none":
+      case "low":
+      case "medium":
+      case "high":
+      case "xhigh":
+      case "max":
+        setKnownEffort(nextEffort);
+    }
+  }
   const [fastMode, setFastMode] = useState(false);
   // Pinned provider account for the new session ("" = auto pool pick).
   // Soft pin: the runner prefers it and falls back on exhaustion. Only
@@ -821,7 +495,7 @@ export function NewSession({
         .filter((connection) => connection.state === "ready")
         .map((connection) => ({
           id: connection.provider,
-          note: undefined as string | undefined,
+          note: undefined,
         }))
     : (sandboxStatus?.providers || []).filter(
         (p) => p.configured && p.certified,
@@ -967,7 +641,8 @@ export function NewSession({
     function onDown(e: MouseEvent) {
       if (
         createSplitRef.current &&
-        !createSplitRef.current.contains(e.target as Node)
+        e.target instanceof Node &&
+        !createSplitRef.current.contains(e.target)
       ) {
         setCreateMenuOpen(false);
       }
@@ -1135,6 +810,7 @@ export function NewSession({
         promptHandle.current?.setText("");
         setImages([]);
         setFiles([]);
+        setPastedTexts([]);
         setNewBranch("");
         setBranchEdited(false);
         promptRef.current?.focus();
@@ -1209,12 +885,14 @@ export function NewSession({
       by: getCurrentUser(),
     };
     await (async () => {
-      const createWorkspace = () =>
-        createWorkspaceApi({
+      const createWorkspace = () => {
+        const input: Parameters<typeof createWorkspaceApi>[0] = {
           name: firstNonEmptyLine(text).slice(0, 80) || "Draft",
-          ...(repo && repo !== NO_REPO ? { repo } : {}),
           draft: { ...draft, autoName: true },
-        });
+        };
+        if (repo && repo !== NO_REPO) input.repo = repo;
+        return createWorkspaceApi(input);
+      };
       const parkedId = getParkedNewSessionWorkspaceId();
       const workspace = workspaceId
         ? // Scoped to an existing workspace: update its draft, never rename it.
@@ -1253,6 +931,7 @@ export function NewSession({
           text,
           images: staged.images,
           files: staged.files,
+          pastedTexts: staged.pastedTexts,
         });
       }
       window.dispatchEvent(new Event("opensession:workspaces-changed"));
@@ -1319,6 +998,7 @@ export function NewSession({
     // that known choice into the optimistic shell so the phone title bar does
     // not wait for its own catalog fetch before naming the model.
     const optimisticModel = model || defaultModel;
+    const pastedBlocks = pastedTexts.map((item) => item.text);
     const optimisticCreate: NewSessionCreateDraft = {
       id: clientSessionId,
       prompt,
@@ -1326,16 +1006,21 @@ export function NewSession({
       // The optimistic shell is replaced once the persisted record lands.
       repo: createRepo,
       branch: createMode === "code" || selectedPullRequest ? branch : null,
-      ...(createWorkspaceId ? { workspaceId: createWorkspaceId } : {}),
-      ...(optimisticModel ? { model: optimisticModel } : {}),
-      ...(images.length ? { images } : {}),
-      ...(files.length ? { files } : {}),
-      // The default action opens against this deterministic id without waiting
-      // for workspace or model setup. The other actions keep their own surface.
-      ...(createAction === "open" ? { openImmediately: true } : {}),
-      ...(createAction === "background" ? { background: true } : {}),
     };
-    const createMessage = {
+    if (createWorkspaceId) optimisticCreate.workspaceId = createWorkspaceId;
+    // Replaces `...(optimisticModel ? { model: optimisticModel } : {})`.
+    if (optimisticModel) optimisticCreate.model = optimisticModel;
+    if (images.length) optimisticCreate.images = images;
+    if (files.length) optimisticCreate.files = files;
+    if (pastedBlocks.length) optimisticCreate.pastedTexts = pastedBlocks;
+    // The default action opens against this deterministic id without waiting
+    // for workspace or model setup. This assignment replaces the former
+    // `createAction === "open" ? { openImmediately: true }` fragment.
+    // The other actions keep their own surface.
+    if (createAction === "open") optimisticCreate.openImmediately = true;
+    if (createAction === "background") optimisticCreate.background = true;
+
+    const createMessage: NewSessionCreateMessage = {
       type: "create_session",
       clientSessionId,
       mode: createMode,
@@ -1343,46 +1028,54 @@ export function NewSession({
       // A branch or PR picked in this palette is more specific than the standing
       // preference, so it keeps its isolated worktree.
       checkoutMode: startPoint.kind === "new" ? checkoutPref : "worktree",
-      // Repos to work in beside `repo`. The server cuts each an isolated
-      // worktree on this session's branch before the first turn runs, so the
-      // agent is told about them in the same breath as its own checkout.
-      ...(attachRepos.length && canAddRepos ? { attachRepos } : {}),
-      ...(createWorkspaceId
-        ? { workspaceId: createWorkspaceId, worktreeMode }
-        : {
-            createWorkspace: selectedPullRequest
-              ? {
-                  name: `PR #${selectedPullRequest.number}: ${selectedPullRequest.title}`
-                    .trim()
-                    .slice(0, 80),
-                }
-              : {},
-          }),
-      ...(modelWorkspaceId ? { modelWorkspaceId } : {}),
       branch: createMode === "code" || selectedPullRequest ? branch : "",
-      ...(selectedPullRequest ? { fromPr: true } : {}),
       prompt,
       titlePrompt: projectComposerSessions(prompt).displayText,
       user: getCurrentUser(),
-      ...(model ? { model } : {}),
       effort,
-      ...(fastMode ? { fastMode: true } : {}),
-      ...(accountProvider && accountId ? { accountId } : {}),
-      // Once defaults have loaded, Host is an explicit override ("local").
-      // Omitting the field would make the server re-apply the user's default.
-      ...(sandboxStatus ? { sandbox: sandboxProvider || "local" } : {}),
-      ...(selectedMcpServers.length ? { mcpServers: selectedMcpServers } : {}),
-      ...(images.length ? { images } : {}),
-      ...(files.length
+    };
+    // Repos to work in beside `repo`. The server cuts each an isolated
+    // worktree on this session's branch before the first turn runs, so the
+    // agent is told about them in the same breath as its own checkout.
+    if (attachRepos.length && canAddRepos)
+      createMessage.attachRepos = attachRepos;
+    if (createWorkspaceId) {
+      // Replaces `{ workspaceId: createWorkspaceId, worktreeMode }` in the
+      // wire message and `{ workspaceId: createWorkspaceId }` in its optimistic
+      // counterpart.
+      createMessage.workspaceId = createWorkspaceId;
+      createMessage.worktreeMode = worktreeMode;
+    } else {
+      createMessage.createWorkspace = selectedPullRequest
         ? {
-            files: files.map((f) =>
-              f.path
-                ? { name: f.name, path: f.path }
-                : { name: f.name, dataUrl: f.dataUrl },
-            ),
+            name: `PR #${selectedPullRequest.number}: ${selectedPullRequest.title}`
+              .trim()
+              .slice(0, 80),
           }
-        : {}),
-    } as WSClientMessage;
+        : {};
+    }
+    if (modelWorkspaceId) createMessage.modelWorkspaceId = modelWorkspaceId;
+    // This assignment replaces `selectedPullRequest ? { fromPr: true } : {}`.
+    if (selectedPullRequest) createMessage.fromPr = true;
+    if (model) createMessage.model = model;
+    // This assignment replaces `...(fastMode ? { fastMode: true } : {})`.
+    if (fastMode) createMessage.fastMode = true;
+    if (accountProvider && accountId) createMessage.accountId = accountId;
+    // Once defaults have loaded, Host is an explicit override ("local").
+    // Omitting the field would make the server re-apply the user's default.
+    if (sandboxStatus) createMessage.sandbox = sandboxProvider || "local";
+    if (selectedMcpServers.length) {
+      createMessage.mcpServers = selectedMcpServers;
+    }
+    if (images.length) createMessage.images = images;
+    if (pastedBlocks.length) createMessage.pastedTexts = pastedBlocks;
+    if (files.length) {
+      createMessage.files = files.map((file) =>
+        file.path
+          ? { name: file.name, path: file.path }
+          : { name: file.name, dataUrl: file.dataUrl },
+      );
+    }
     createSessionIdRef.current = clientSessionId;
     createMessageRef.current = createMessage;
     // A globally selected PR adopts its workspace, but its composer draft did
@@ -1430,7 +1123,10 @@ export function NewSession({
     // create with the same message (resolveRequestedSandbox). Block here
     // so the wall is discovered before submit, not after.
     !sandboxModelWarning &&
-    (hasPromptText || images.length > 0 || files.length > 0);
+    (hasPromptText ||
+      images.length > 0 ||
+      files.length > 0 ||
+      pastedTexts.length > 0);
 
   /** The latest `handleCreate`, for a caller that has to wait a render before
    *  it can create. The dictation bar's ↑ is the one: it writes the transcript
@@ -1580,9 +1276,9 @@ export function NewSession({
   // strength wherever you meet it. Only the base differs: mixed into
   // `transparent` rather than an opaque colour, because the palette is glass
   // and an opaque tint would paint the blur out.
-  const askSurfaceStyle = {
+  const askSurfaceStyle: AskSurfaceStyle = {
     "--palette-ask-bg": askSurface("transparent"),
-  } as React.CSSProperties;
+  };
 
   // The card itself: the same rows whether it floats over the page as a
   // palette or sits on it as the empty state's session input.
@@ -1631,8 +1327,10 @@ export function NewSession({
                 // so it can be the session's repo but never a second one.
                 singleOnly:
                   startPoint.kind === "new" &&
-                  ((checkoutPrefs[p.id] ?? "default") === "checkout" ||
-                    ((checkoutPrefs[p.id] ?? "default") === "default" &&
+                  (resolveSessionCheckoutPref(checkoutPrefs, p.id) ===
+                    "checkout" ||
+                    (resolveSessionCheckoutPref(checkoutPrefs, p.id) ===
+                      "default" &&
                       p.sharedCheckout)),
               })),
               // Either mode can run without a repo, and the Ask toggle in the
@@ -1787,6 +1485,7 @@ export function NewSession({
               disabled: busy,
               images,
               files,
+              pastedTexts,
               staging,
               sendKey,
               canCreate,
@@ -1808,6 +1507,16 @@ export function NewSession({
                 adoptDraftAttachments();
               },
               addAttachments: (picked) => void addAttachments(picked),
+              addPastedText: (text) => {
+                const next = [...pastedTexts, createPastedTextAttachment(text)];
+                setPastedTexts(next);
+                saveDraft(DRAFT_KEY, { pastedTexts: next });
+              },
+              removePastedText: (id) => {
+                const next = pastedTexts.filter((item) => item.id !== id);
+                setPastedTexts(next);
+                saveDraft(DRAFT_KEY, { pastedTexts: next });
+              },
               create: handleCreate,
               changeHasText: setHasPromptText,
               settleDraft: setSettledPrompt,
@@ -1983,7 +1692,7 @@ export function NewSession({
                       </Menu.SubmenuTrigger>
                       <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
                         {[
-                          { id: "", note: undefined as string | undefined },
+                          { id: "", note: undefined },
                           ...visibleSandboxChoices,
                         ].map((opt) => {
                           const selected = sandboxProvider === opt.id;

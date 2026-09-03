@@ -15,7 +15,20 @@
 export type IsoDay = string;
 
 const DAY_MS = 86_400_000;
-const ISO_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+interface LocaleWeekInfo {
+  firstDay: number;
+}
+
+declare global {
+  namespace Intl {
+    interface Locale {
+      getWeekInfo?: () => LocaleWeekInfo;
+      readonly weekInfo?: LocaleWeekInfo;
+    }
+  }
+}
 
 function utcMs(day: IsoDay): number {
   return Date.UTC(
@@ -33,7 +46,7 @@ export function toIsoDay(ms: number): IsoDay {
  *  normalises month 13 and day 40 into the next year, so only re-formatting
  *  tells a real day from a plausible-looking string. */
 export function isIsoDay(value: string | null | undefined): value is IsoDay {
-  if (!value || !ISO_SHAPE.test(value)) return false;
+  if (!value || !ISO_DAY_PATTERN.test(value)) return false;
   const ms = utcMs(value);
   return !Number.isNaN(ms) && toIsoDay(ms) === value;
 }
@@ -105,13 +118,10 @@ export function clampDay(day: IsoDay, min?: IsoDay, max?: IsoDay): IsoDay {
  */
 export function weekStartFor(locale?: string): number {
   try {
-    const info = new Intl.Locale(locale ?? resolvedLocale()) as Intl.Locale & {
-      getWeekInfo?: () => { firstDay: number };
-      weekInfo?: { firstDay: number };
-    };
+    const info = new Intl.Locale(locale ?? resolvedLocale());
     const first = info.getWeekInfo?.().firstDay ?? info.weekInfo?.firstDay;
     // Intl counts Monday 1 through Sunday 7; JS counts Sunday 0.
-    if (typeof first === "number") return first % 7;
+    if (first !== undefined) return first % 7;
   } catch {
     // An engine without week info, or a locale tag it won't parse.
   }

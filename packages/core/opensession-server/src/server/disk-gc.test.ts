@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import {
   copyFileSync,
   mkdirSync,
@@ -73,8 +73,13 @@ mkdirSync(join(root, "tella-fusion-fresh", "node_modules", "pkg", "target"), {
 });
 
 describe("findTargetCaches", () => {
-  const found = findTargetCaches(root);
-  const paths = found.map((c) => c.path.slice(root.length + 1));
+  let found: Awaited<ReturnType<typeof findTargetCaches>>;
+  let paths: string[];
+
+  beforeAll(async () => {
+    found = await findTargetCaches(root);
+    paths = found.map((cache) => cache.path.slice(root.length + 1));
+  });
 
   it("finds cargo target dirs, including nested ones", () => {
     expect(paths).toContain("tella-fusion-cold/target");
@@ -122,38 +127,44 @@ describe("findTargetCaches", () => {
 describe("hasEntryNewerThan", () => {
   const cutoff = Date.now() - 24 * 3_600_000;
 
-  it("is true for a freshly built cache", () => {
+  it("is true for a freshly built cache", async () => {
     expect(
-      hasEntryNewerThan(join(root, "tella-fusion-fresh", "target"), cutoff),
+      await hasEntryNewerThan(
+        join(root, "tella-fusion-fresh", "target"),
+        cutoff,
+      ),
     ).toBe(true);
   });
 
-  it("is false for a cache untouched since the cutoff", () => {
+  it("is false for a cache untouched since the cutoff", async () => {
     expect(
-      hasEntryNewerThan(join(root, "tella-fusion-cold", "target"), cutoff),
+      await hasEntryNewerThan(
+        join(root, "tella-fusion-cold", "target"),
+        cutoff,
+      ),
     ).toBe(false);
   });
 
-  it("is false for a path that does not exist", () => {
-    expect(hasEntryNewerThan(join(root, "nope"), cutoff)).toBe(false);
+  it("is false for a path that does not exist", async () => {
+    expect(await hasEntryNewerThan(join(root, "nope"), cutoff)).toBe(false);
   });
 });
 
 describe("worktreesInUse", () => {
-  it("returns a set on supported hosts and never invents entries for an empty root", () => {
-    const inUse = worktreesInUse(root);
+  it("returns a set on supported hosts and never invents entries for an empty root", async () => {
+    const inUse = await worktreesInUse(root);
     if (process.platform === "linux" || process.platform === "darwin")
       expect(inUse).not.toBeNull();
     if (inUse !== null) expect(inUse.size).toBe(0);
   });
 
-  it("ignores a non-build process's cwd", () => {
+  it("ignores a non-build process's cwd", async () => {
     // This test runs under `bun`, which never writes to a cargo target/. Idle
     // session subprocesses (stdio MCP servers, engine servers) sit in a
     // worktree for hours the same way; treating them as in-use pinned every
     // worktree and made the sweep reclaim nothing.
     const cwd = process.cwd();
-    const inUse = worktreesInUse(join(cwd, ".."));
+    const inUse = await worktreesInUse(join(cwd, ".."));
     if (inUse !== null) expect(inUse.has(cwd)).toBe(false);
   });
 
@@ -168,7 +179,7 @@ describe("worktreesInUse", () => {
     const proc = Bun.spawn([fakeCargo, "30"], { cwd: wt });
     try {
       await Bun.sleep(150);
-      const inUse = worktreesInUse(root);
+      const inUse = await worktreesInUse(root);
       if (inUse !== null) expect(inUse.has(wt)).toBe(true);
     } finally {
       proc.kill();
@@ -178,9 +189,20 @@ describe("worktreesInUse", () => {
 });
 
 describe("diskUsagePct", () => {
-  it("reports a plausible percentage", () => {
-    const pct = diskUsagePct("/");
+  it("reports a plausible percentage", async () => {
+    const pct = await diskUsagePct("/");
     expect(pct).toBeGreaterThan(0);
     expect(pct).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("event-loop safety", () => {
+  it("does not use synchronous filesystem or subprocess APIs", async () => {
+    const source = await Bun.file(
+      new URL("./disk-gc.ts", import.meta.url),
+    ).text();
+    expect(source).not.toMatch(
+      /\b(?:readdir|readFile|readlink|realpath|stat|statfs|spawn)Sync\b/,
+    );
   });
 });

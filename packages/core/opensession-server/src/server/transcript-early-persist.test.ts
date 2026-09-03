@@ -50,29 +50,65 @@ describe("intake-time user-line persist", () => {
     const source = await Bun.file(
       new URL("./session-create.ts", import.meta.url),
     ).text();
-    const persisted = source.indexOf("await persist();");
-    const promptWrite = source.indexOf("storeAppendUserLineEarly(", persisted);
+    // The prompt row is one required write keyed by the durable dispatch id.
+    const helper = source.indexOf("async function appendOpeningPromptLine(");
+    const helperEnd = source.indexOf("\n}\n", helper);
+    const promptWrite = source.indexOf(
+      "await storeAppendUserLineEarly(",
+      helper,
+    );
+    expect(helper).toBeGreaterThan(-1);
+    expect(promptWrite).toBeGreaterThan(helper);
+    expect(promptWrite).toBeLessThan(helperEnd);
+    expect(source.slice(promptWrite, helperEnd)).toContain("required: true");
+
+    // An accepted create writes its session file and that row before any git
+    // work runs, so a setup failure or a slow effect cannot leave a titled but
+    // empty session, or no session at all.
+    const projection = source.indexOf("async function projectAcceptedCreate(");
+    const fileWrite = source.indexOf("await updateSessionFile(", projection);
+    const projectedPrompt = source.indexOf(
+      "await appendOpeningPromptLine(",
+      fileWrite,
+    );
+    expect(fileWrite).toBeGreaterThan(projection);
+    expect(projectedPrompt).toBeGreaterThan(fileWrite);
+    const opening = source.indexOf("export function runOpeningCreateOnce(");
+    const projected = source.indexOf("await projectAcceptedCreate(", opening);
     const workspaceSetup = source.indexOf(
       "await spec.materializeWorktree();",
-      persisted,
+      projected,
     );
+    expect(projected).toBeGreaterThan(opening);
+    expect(workspaceSetup).toBeGreaterThan(projected);
 
+    // The opening turn repeats both writes after its own persist, so a
+    // restart-recovered opening reaches the same state.
+    const persisted = source.indexOf("await persist();");
     expect(persisted).toBeGreaterThan(-1);
-    expect(promptWrite).toBeGreaterThan(persisted);
-    expect(source.slice(promptWrite - 10, promptWrite)).toContain("await");
-    expect(source.slice(promptWrite, workspaceSetup)).toContain(
-      "required: true",
-    );
-    expect(workspaceSetup).toBeGreaterThan(promptWrite);
+    expect(
+      source.indexOf("await appendOpeningPromptLine(", persisted),
+    ).toBeGreaterThan(persisted);
   });
 
-  test("run intake awaits the actor write at its documented durability boundary", async () => {
+  test("run intake persists sender attribution at its durability boundary", async () => {
     const source = await Bun.file(
       new URL("./run-session.ts", import.meta.url),
     ).text();
-    const promptWrite = source.indexOf("storeAppendUserLineEarly(");
-    expect(promptWrite).toBeGreaterThan(-1);
+    const runStart = source.indexOf("async function runSessionPromptInner(");
+    const attribution = source.indexOf(
+      "let prompt = withPromptAttribution(",
+      runStart,
+    );
+    const promptWrite = source.indexOf("storeAppendUserLineEarly(", runStart);
+
+    expect(runStart).toBeGreaterThan(-1);
+    expect(attribution).toBeGreaterThan(runStart);
+    expect(promptWrite).toBeGreaterThan(attribution);
     expect(source.slice(promptWrite - 10, promptWrite)).toContain("await");
+    expect(source.slice(promptWrite, promptWrite + 500)).toContain(
+      "transcriptLineUser(\n        prompt,",
+    );
     expect(source.slice(promptWrite, promptWrite + 500)).toContain(
       "required: true",
     );

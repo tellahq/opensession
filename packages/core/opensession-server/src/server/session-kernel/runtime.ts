@@ -39,6 +39,25 @@ const OUTBOX_CONCURRENCY = envCapacity(
   1,
   64,
 );
+// Session projection starts only after these setup effects settle. Keep them
+// out of the generic effect pool: unrelated delivery, sandbox, and projection
+// work must not turn an accepted create into a minutes-long invisible session.
+// The separate bound still caps concurrent git and attachment I/O.
+const CREATION_PREPARATION_KINDS = [
+  "creation_workspace_prepare",
+  "creation_credential_resolve",
+  "creation_branch_prepare",
+  "creation_attachment_stage",
+] as const;
+const CREATION_PREPARATION_KIND_SET = new Set<string>(
+  CREATION_PREPARATION_KINDS,
+);
+const CREATION_PREPARATION_OUTBOX_CONCURRENCY = envCapacity(
+  "OPENSESSION_KERNEL_CREATION_PREPARATION_OUTBOX_CONCURRENCY",
+  16,
+  1,
+  64,
+);
 const OPENING_OUTBOX_CONCURRENCY = envCapacity(
   "OPENSESSION_KERNEL_OPENING_OUTBOX_CONCURRENCY",
   100,
@@ -117,6 +136,7 @@ type RuntimeState = {
   maintenancePending?: boolean;
   activeTimers?: Set<string>;
   activeOutbox?: Map<number, string>;
+  activeCreationPreparationOutbox?: Map<number, string>;
   activeOpeningOutbox?: Map<number, string>;
   pendingOutbox?: Map<number, DurableOutboxItem>;
   lastRuntimePollErrorAt?: number;
@@ -217,10 +237,13 @@ export async function drainSessionKernelRuntime(): Promise<void> {
     const openingKind = "creation_opening_turn";
     const now = Date.now();
     const activeOutbox = (runtime.activeOutbox ??= new Map());
+    const activeCreationPreparationOutbox =
+      (runtime.activeCreationPreparationOutbox ??= new Map());
     const activeOpeningOutbox = (runtime.activeOpeningOutbox ??= new Map());
     const pendingOutbox = (runtime.pendingOutbox ??= new Map());
     const activeEffects = new Map<number, string>([
       ...activeOutbox.entries(),
+      ...activeCreationPreparationOutbox.entries(),
       ...activeOpeningOutbox.entries(),
     ]);
     for (const item of pendingOutbox.values())
@@ -230,12 +253,34 @@ export async function drainSessionKernelRuntime(): Promise<void> {
     // of per-session SQLite databases every second.
     const work = await sessionKernelRuntimeWork(
       timerKinds,
-      effectKinds.filter((kind) => kind !== openingKind),
+      effectKinds.filter(
+        (kind) =>
+          kind !== openingKind && !CREATION_PREPARATION_KIND_SET.has(kind),
+      ),
       now,
       100,
-      effectKinds.includes(openingKind)
-        ? [{ effectKinds: [openingKind], limit: OPENING_OUTBOX_CONCURRENCY }]
-        : [],
+      [
+        ...(CREATION_PREPARATION_KINDS.some((kind) =>
+          effectKinds.includes(kind),
+        )
+          ? [
+              {
+                effectKinds: CREATION_PREPARATION_KINDS.filter((kind) =>
+                  effectKinds.includes(kind),
+                ),
+                limit: CREATION_PREPARATION_OUTBOX_CONCURRENCY,
+              },
+            ]
+          : []),
+        ...(effectKinds.includes(openingKind)
+          ? [
+              {
+                effectKinds: [openingKind],
+                limit: OPENING_OUTBOX_CONCURRENCY,
+              },
+            ]
+          : []),
+      ],
       [...activeEffects].map(([id, sessionId]) => ({ id, sessionId })),
       now + ACTIVE_OUTBOX_RECHECK_MS,
     );
@@ -275,14 +320,19 @@ export async function drainSessionKernelRuntime(): Promise<void> {
       // Opening turns can legitimately last for hours. Keep their bounded
       // execution pool separate so eight accepted openings cannot starve
       // delivery, preparation, or projection effects globally.
+      const creationPreparation = CREATION_PREPARATION_KIND_SET.has(item.kind);
       const active =
         item.kind === "creation_opening_turn"
           ? activeOpeningOutbox
-          : activeOutbox;
+          : creationPreparation
+            ? activeCreationPreparationOutbox
+            : activeOutbox;
       const admissionLimit =
-        item.kind === openingKind
+        item.kind === "creation_opening_turn"
           ? OPENING_OUTBOX_CONCURRENCY
-          : OUTBOX_CONCURRENCY;
+          : creationPreparation
+            ? CREATION_PREPARATION_OUTBOX_CONCURRENCY
+            : OUTBOX_CONCURRENCY;
       if (active.has(item.id)) {
         pendingOutbox.delete(item.id);
         continue;
@@ -461,6 +511,7 @@ export async function waitForSessionKernelRuntimeIdle(
   while (
     (runtime.activeTimers?.size || 0) > 0 ||
     (runtime.activeOutbox?.size || 0) > 0 ||
+    (runtime.activeCreationPreparationOutbox?.size || 0) > 0 ||
     (runtime.activeOpeningOutbox?.size || 0) > 0
   ) {
     if (Date.now() >= deadline) return false;

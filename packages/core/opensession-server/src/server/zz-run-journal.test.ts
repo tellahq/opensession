@@ -428,7 +428,7 @@ describe("run journal", () => {
       osSessionId: sessionId,
       prompt: "continue",
       cwd: "/tmp",
-      model: "claude-fable-5",
+      model: "claude-fable-5-1",
       startedAt: new Date().toISOString(),
     });
     await clearRunState(sessionId);
@@ -585,7 +585,7 @@ describe("run journal", () => {
         prompt: "continue",
         cwd: "/tmp",
         mcpServers: [],
-        model: "claude-fable-5",
+        model: "claude-fable-5-1",
         fallbackModel: "none",
         journal: { osSessionId: sessionId, kind: "prompt" },
         startToken,
@@ -615,7 +615,7 @@ describe("run journal", () => {
         prompt: "continue",
         cwd: "/tmp",
         mcpServers: [],
-        model: "claude-fable-5",
+        model: "claude-fable-5-1",
         fallbackModel: "none",
         journal: { osSessionId: sessionId, kind: "prompt" },
         startToken,
@@ -650,7 +650,7 @@ describe("run journal", () => {
         prompt: "continue",
         cwd: "/tmp",
         mcpServers: [],
-        model: "claude-fable-5",
+        model: "claude-fable-5-1",
         fallbackModel: "none",
         journal: { osSessionId: sessionId, kind: "prompt" },
         startToken,
@@ -681,7 +681,7 @@ describe("run journal", () => {
         prompt: "continue",
         cwd: "/tmp",
         mcpServers: [],
-        model: "claude-fable-5",
+        model: "claude-fable-5-1",
         fallbackModel: "none",
         journal: { osSessionId: sessionId, kind: "prompt" },
         startToken,
@@ -720,7 +720,7 @@ describe("run journal", () => {
           prompt: "continue",
           cwd: "/tmp",
           mcpServers: [],
-          model: "claude-fable-5",
+          model: "claude-fable-5-1",
           fallbackModel: "none",
           journal: { osSessionId: sessionId, kind: "prompt" },
           startToken: token,
@@ -924,7 +924,7 @@ describe("run journal", () => {
       prompt: "wake",
       cwd: "/tmp",
       mcpServers: [],
-      model: "claude-fable-5",
+      model: "claude-fable-5-1",
       fallbackModel: "none",
       journal: { osSessionId: sessionId, kind: "goal" },
     })) {
@@ -946,7 +946,7 @@ describe("run journal", () => {
         prompt: "triage",
         cwd: "/tmp",
         mcpServers: [],
-        model: "claude-fable-5",
+        model: "claude-fable-5-1",
         fallbackModel: "none",
         journal: { kind: "linear" },
         transcriptSessionId: sessionId,
@@ -983,7 +983,7 @@ describe("run journal", () => {
         prompt: "run",
         cwd: "/tmp",
         mcpServers: [],
-        model: "claude-fable-5",
+        model: "claude-fable-5-1",
         fallbackModel: "none",
         journal: { osSessionId: sessionId, kind: "prompt" },
         startToken,
@@ -1441,7 +1441,7 @@ describe("run journal", () => {
       claudeSessionId: "engine-2",
       prompt: "continue",
       cwd: "/tmp",
-      model: "claude-fable-5",
+      model: "claude-fable-5-1",
       startedAt: new Date().toISOString(),
     });
 
@@ -1482,7 +1482,7 @@ describe("run journal", () => {
       event: {
         type: "done",
         provider: "pi",
-        model: "pi/anthropic/claude-fable-5",
+        model: "pi/anthropic/claude-fable-5-1",
         usageLimitExhausted: true,
       },
     });
@@ -1627,7 +1627,7 @@ describe("restart recovery queue", () => {
           claudeSessionId: `engine-${sessionId}`,
           prompt: "continue",
           cwd: "/tmp",
-          model: "claude-fable-5",
+          model: "claude-fable-5-1",
           startedAt: new Date(Date.now() - i * 1000).toISOString(),
         });
         await clearRunState(sessionId);

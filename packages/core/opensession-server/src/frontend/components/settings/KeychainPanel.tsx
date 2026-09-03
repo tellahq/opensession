@@ -251,15 +251,16 @@ function AddCredentialForm({
     event.preventDefault();
     if (!ready) return;
     setBusy(true);
-    addKeychainCredential({
+    const credential: Parameters<typeof addKeychainCredential>[0] = {
       service: service.trim(),
       host: host.trim(),
       secret,
-      ...(description.trim() ? { description: description.trim() } : {}),
-      ...(header.trim() ? { injection: { header: header.trim() } } : {}),
-      ...(methods.trim() ? { allowedMethods: list(methods) } : {}),
-      ...(prefixes.trim() ? { allowedPathPrefixes: list(prefixes) } : {}),
-    })
+    };
+    if (description.trim()) credential.description = description.trim();
+    if (header.trim()) credential.injection = { header: header.trim() };
+    if (methods.trim()) credential.allowedMethods = list(methods);
+    if (prefixes.trim()) credential.allowedPathPrefixes = list(prefixes);
+    addKeychainCredential(credential)
       .then(() => {
         // Clear the secret first and always — it must not survive a
         // failed reload in a React state a devtools user can read back.

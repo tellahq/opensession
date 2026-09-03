@@ -51,12 +51,12 @@ export async function uploadFile(
 // Extensions the server can read a staged image back from (mirrors
 // STAGED_IMAGE_MEDIA_TYPES in src/server/uploads.ts). A pasted screenshot often
 // arrives unnamed, so the upload has to carry one of these itself.
-const STAGEABLE_IMAGE_TYPES: Record<string, string> = {
-  "image/png": ".png",
-  "image/jpeg": ".jpg",
-  "image/gif": ".gif",
-  "image/webp": ".webp",
-};
+const STAGEABLE_IMAGE_TYPES = new Map<string, string>([
+  ["image/png", ".png"],
+  ["image/jpeg", ".jpg"],
+  ["image/gif", ".gif"],
+  ["image/webp", ".webp"],
+]);
 const MAX_NORMALIZED_IMAGE_EDGE = 4096;
 // An image small enough to keep inline when staging isn't available. Pasting
 // while the server is unreachable still works below this; above it the send
@@ -68,7 +68,7 @@ const MAX_INLINE_IMAGE_BYTES = 512 * 1024;
  *  type, so supply one when the file doesn't. */
 function imageUploadName(file: File): string {
   if (/\.[a-z0-9]{1,5}$/i.test(file.name)) return file.name;
-  return `pasted-${Date.now()}${STAGEABLE_IMAGE_TYPES[file.type] ?? ".png"}`;
+  return `pasted-${Date.now()}${STAGEABLE_IMAGE_TYPES.get(file.type) ?? ".png"}`;
 }
 
 async function convertImageToJpeg(source: Blob): Promise<Blob> {
@@ -114,7 +114,7 @@ export async function preparePromptImages(
     images.map(async (image) => {
       if (image.startsWith("/media?")) return image;
       const match = image.match(/^data:([^;]+);base64,([\s\S]+)$/);
-      if (match && STAGEABLE_IMAGE_TYPES[match[1]]) return image;
+      if (match && STAGEABLE_IMAGE_TYPES.has(match[1])) return image;
       if (!match?.[1].startsWith("image/")) throw unsupportedPromptImage();
       try {
         const response = await fetch(image);
@@ -162,7 +162,7 @@ async function stageImage(
     return null;
   }
   let stageable = file;
-  if (!STAGEABLE_IMAGE_TYPES[file.type]) {
+  if (!STAGEABLE_IMAGE_TYPES.has(file.type)) {
     try {
       const jpeg = await convertImageToJpeg(file);
       stageable = new File([jpeg], convertedImageName(file.name), {
@@ -186,7 +186,7 @@ async function stageImage(
     if (signal?.aborted) return null;
     if (file.size <= MAX_INLINE_IMAGE_BYTES) return inline();
     rejected.push(
-      `${file.name || "image"} (${(e as Error)?.message || "upload failed"})`,
+      `${file.name || "image"} (${e instanceof Error ? e.message : "upload failed"})`,
     );
     return null;
   }
@@ -228,7 +228,7 @@ export async function splitAttachments(
       } catch (e) {
         if (signal?.aborted) return null;
         rejected.push(
-          `${f.name} (${(e as Error)?.message || "upload failed"})`,
+          `${f.name} (${e instanceof Error ? e.message : "upload failed"})`,
         );
         return null;
       }

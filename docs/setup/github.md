@@ -41,9 +41,11 @@ The UI will not overwrite or delete an operator-managed key.
 Environment overrides for the App identity are
 `OPENSESSION_GITHUB_CLIENT_ID`, `OPENSESSION_GITHUB_CLIENT_SECRET`,
 `OPENSESSION_GITHUB_APP_SLUG`, and `OPENSESSION_GITHUB_APP_KEY` (a path, not PEM
-contents). Environment values win over config. `installationOwner` is required
-for service work and verifies repository ownership; `installationId` may also
-pin its known numeric installation.
+contents). Environment values win over config. Install the same App on every
+account whose repositories this instance should use. Open Session resolves each
+repository through the installation for its owner and caches tokens per
+installation. `installationOwner` is an optional default for calls that do not
+name a repository; `installationId` may pin that default by numeric id.
 
 ### Required permissions
 
@@ -63,13 +65,15 @@ canonical permission set used when tokens are minted:
 | Members (organization) | Read           | roster and attribution                  |
 
 Enable **Device Flow**, generate a client secret and private key, then install
-the App only on the organization and repositories Open Session should reach.
-When permissions change, approve the updated installation permissions too.
+the App only on the accounts and repositories Open Session should reach. One
+instance can use every installation of that App at the same time. When
+permissions change, approve the updated installation permissions too.
 
-GitHub service authority is fail-closed. A missing key, wrong installation
-owner, unapproved permission, or failed token mint never falls back to ambient
-`gh`, a host SSH key, or a connected human. Installation tokens remain process-local and
-short-lived; repository code runs receive a token scoped to that one verified
+GitHub service authority is fail-closed. A missing key, missing installation
+for a repository owner, unapproved permission, or failed token mint never falls
+back to ambient `gh`, a host SSH key, or a connected human. Installation tokens
+remain process-local and short-lived. Each server call mints against one owner,
+and repository code runs receive a token narrowed to that one verified
 repository.
 
 ### Bot identity and mention handles
@@ -233,8 +237,9 @@ neither `GH_TOKEN` nor `GITHUB_TOKEN`. Only interactive trusted runs and the
 dedicated `github-*` code workflows receive a user or repository-scoped App
 credential. An ordinary automation therefore cannot push or open a GitHub PR.
 Its optional `prReviewer` value is validated, preserved across resume, and
-added to the run instructions, but it grants no GitHub authority. Do not rely
-on it to publish or surface automation work.
+added to unattended run instructions, but it grants no GitHub authority. The
+reviewer is not added to existing PRs or PRs created from human-steered turns.
+Do not rely on this setting to publish or surface automation work.
 
 For a PR created by an authorized path, request a GitHub login or `org/team`
 reviewer directly. The reviewer must be a repository collaborator; a requested

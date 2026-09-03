@@ -1,4 +1,3 @@
-import type React from "react";
 import { avatarUrl, type Provider } from "../../lib/provider";
 import type { PrFile, PrReviewer } from "../../lib/types";
 import { IconCheck, IconClock, IconFile, IconMessage, IconX } from "../icons";
@@ -47,11 +46,7 @@ export function ReviewerRow({
   );
 }
 
-export function reviewerStateMeta(state: PrReviewer["state"]): {
-  label: string;
-  tone: "green" | "red" | "muted" | "yellow";
-  icon: React.ReactNode;
-} {
+export function reviewerStateMeta(state: PrReviewer["state"]) {
   switch (state) {
     case "APPROVED":
       return {

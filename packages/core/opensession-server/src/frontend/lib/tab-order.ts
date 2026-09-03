@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 // Per-workspace order of the session tab strip (the "main bar" session tabs).
 //
 // Unlike pins (a curated, cross-device set stored server-side), a strip's
@@ -10,6 +12,8 @@ const KEY = "opensession-tab-order";
 const CHANGE_EVENT = "opensession-tab-order-changed";
 
 type OrderMap = Record<string, string[]>;
+
+const orderMapSchema = z.record(z.string(), z.array(z.string()));
 
 /**
  * Keep every existing tab where it is and append ids that have just appeared.
@@ -28,9 +32,10 @@ export function appendNewTabs(
 
 function read(): OrderMap {
   try {
-    const v = JSON.parse(localStorage.getItem(KEY) || "{}");
-    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
-    return v as OrderMap;
+    const parsed = orderMapSchema.safeParse(
+      JSON.parse(localStorage.getItem(KEY) || "{}"),
+    );
+    return parsed.success ? parsed.data : {};
   } catch {
     return {};
   }
@@ -59,8 +64,8 @@ export function applyTabOrder(workspaceId: string, ids: string[]): string[] {
   return ids
     .map((id, i) => ({ id, i }))
     .sort((a, b) => {
-      const pa = pos.has(a.id) ? (pos.get(a.id) as number) : Infinity;
-      const pb = pos.has(b.id) ? (pos.get(b.id) as number) : Infinity;
+      const pa = pos.get(a.id) ?? Infinity;
+      const pb = pos.get(b.id) ?? Infinity;
       return pa !== pb ? pa - pb : a.i - b.i;
     })
     .map((e) => e.id);

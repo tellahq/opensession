@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 export type DiffStyle = "unified" | "split";
 export type CodeTheme = "system" | "light" | "dark";
@@ -31,15 +31,24 @@ export interface CodeOrganizationSettingsState {
 
 const SETTING_EVENT = "opensession-code-setting";
 
+function allowedSetting<T extends string>(
+  stored: string | null,
+  allowed: readonly T[],
+): T | undefined {
+  return allowed.find((value) => value === stored);
+}
+
 export function useStoredCodeSetting<T extends string>(
   key: string,
   allowed: readonly T[],
   fallback: T,
 ): [T, (next: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    const stored = localStorage.getItem(key) as T | null;
-    return stored && allowed.includes(stored) ? stored : fallback;
-  });
+  const [value, setValue] = useState<T>(
+    () => allowedSetting(localStorage.getItem(key), allowed) ?? fallback,
+  );
+  const parseAllowed = useEffectEvent((stored: string | null) =>
+    allowedSetting(stored, allowed),
+  );
   const change = (next: T) => {
     setValue(next);
     try {
@@ -54,11 +63,10 @@ export function useStoredCodeSetting<T extends string>(
     // Rebuild the validation list from the joined key so the listener only
     // resubscribes when the allowed values actually change.
     const allowedValues = allowedKey.split("\0");
-    const sync = (event: Event) => {
-      const detail = (event as CustomEvent<{ key?: string; value?: string }>)
-        .detail;
-      if (detail?.key === key && allowedValues.includes(detail.value as T)) {
-        setValue(detail.value as T);
+    const sync = () => {
+      const stored = parseAllowed(localStorage.getItem(key));
+      if (stored !== undefined && allowedValues.includes(stored)) {
+        setValue(stored);
       }
     };
     window.addEventListener(SETTING_EVENT, sync);

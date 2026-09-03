@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 
-const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+const appSource = await Promise.all([
+  Bun.file(new URL("../AppContent.tsx", import.meta.url)).text(),
+  Bun.file(new URL("useAppGlobalHotkeys.ts", import.meta.url)).text(),
+  Bun.file(new URL("useSessionTabs.tsx", import.meta.url)).text(),
+  Bun.file(new URL("useNewSessionCreateStart.ts", import.meta.url)).text(),
+]).then((sources) => sources.join("\n"));
 const hookSource = await Bun.file(
   new URL("./useNewSessionPalette.ts", import.meta.url),
 ).text();
@@ -32,7 +37,7 @@ test("the hook owns lazy route initialization and every replacement open", () =>
   const opens = hookSource.slice(openStart, openEnd);
 
   expect(openStart).toBeGreaterThan(-1);
-  expect(opens.match(/setPalette\(\{/g)).toHaveLength(2);
+  expect(opens.match(/setPalette\(/g)).toHaveLength(2);
   expect(opens).not.toContain("setPaletteState");
   expect(opens).not.toContain("workspaceId: modelWorkspaceId");
   expect(opens).toContain("setPalette({ open: true, ...prefill })");
@@ -85,7 +90,7 @@ test("App keeps Escape dismissal and workspace prefills on the controller", () =
     workspaceOpenStart,
   );
   const workspaceOpen = appSource.slice(workspaceOpenStart, workspaceOpenEnd);
-  expect(workspaceOpen).toContain("openPrefilledSession({");
-  expect(workspaceOpen).toContain("workspaceId: src.workspaceId");
-  expect(workspaceOpen).toContain("modelWorkspaceId: src.workspaceId");
+  expect(workspaceOpen).toContain("openPrefilledSession(prefill);");
+  expect(workspaceOpen).toContain("prefill.workspaceId = src.workspaceId");
+  expect(workspaceOpen).toContain("prefill.modelWorkspaceId = src.workspaceId");
 });

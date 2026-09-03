@@ -3,6 +3,7 @@ import type { SeqEntry } from "./transcript-store";
 import {
   clampV2InitEntries,
   INIT_COLLAPSED_MESSAGE_CLAMP_BYTES,
+  INIT_MESSAGE_CLAMP_BYTES,
   INIT_TOOL_RESULT_CLAMP_BYTES,
   v2SnapshotEntryWeight,
 } from "./transcript-wire";
@@ -60,9 +61,30 @@ describe("v2 transcript wire previews", () => {
     expect(clamped[4].content).toHaveLength(3_000);
   });
 
-  test("keeps assistant-only conversations visible in full", () => {
-    const entries = [entry("a", "assistant", "a".repeat(3_000))];
-    expect(clampV2InitEntries(entries)).toBe(entries);
+  test("does not send message text the UI would hide behind its expander", () => {
+    const visible = entry("visible", "assistant", "a".repeat(3_000));
+    const long = entry("long", "assistant", "b".repeat(9_000));
+
+    const clamped = clampV2InitEntries([visible, long]);
+
+    expect(clamped[0]).toBe(visible);
+    expect(clamped[1]).toMatchObject({
+      contentClamped: true,
+      contentLength: 9_000,
+    });
+    expect(clamped[1].content).toHaveLength(INIT_MESSAGE_CLAMP_BYTES);
+  });
+
+  test("cuts the uncompressed size of a long 100-message opening batch", () => {
+    const entries = Array.from({ length: 100 }, (_, index) =>
+      entry(`a-${index}`, "assistant", "answer ".repeat(1_300)),
+    );
+    const originalBytes = Buffer.byteLength(JSON.stringify(entries));
+    const clampedBytes = Buffer.byteLength(
+      JSON.stringify(clampV2InitEntries(entries)),
+    );
+
+    expect(clampedBytes).toBeLessThan(originalBytes * 0.7);
   });
 
   test("returns the original batch when no entry needs clamping", () => {
@@ -74,7 +96,9 @@ describe("v2 transcript wire previews", () => {
     expect(v2SnapshotEntryWeight("tool_result", 100_000)).toBe(
       INIT_TOOL_RESULT_CLAMP_BYTES + 512,
     );
-    expect(v2SnapshotEntryWeight("assistant", 100_000)).toBe(8 * 1024);
+    expect(v2SnapshotEntryWeight("assistant", 100_000)).toBe(
+      INIT_MESSAGE_CLAMP_BYTES,
+    );
     expect(v2SnapshotEntryWeight("assistant", 900)).toBe(900);
   });
 });

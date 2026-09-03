@@ -30,6 +30,8 @@ struct PeopleLens {
     /// Identity strings that count as you: display name, its first token
     /// (sessions store first names, e.g. "Jaap"), and the GitHub login.
     let names: Set<String>
+    /// First-name key to the roster's canonical display name.
+    var roster: [String: String] = [:]
     /// Session ids you have claimed (`LaneStore`).
     let claims: Set<String>
     /// Session ids where a teammate tagged you (`MentionStore`).
@@ -50,6 +52,7 @@ struct PeopleLens {
         if !login.isEmpty { names.insert(login.lowercased()) }
         return PeopleLens(
             names: names,
+            roster: TeamDirectory.shared.displayNames,
             claims: LaneStore.shared.claims,
             mentions: MentionStore.shared.sessionIds
         )
@@ -58,10 +61,15 @@ struct PeopleLens {
     /// A single session under the lens: yours to start with, or claimed.
     func isMine(_ session: Session) -> Bool {
         if claims.contains(session.id) { return true }
-        guard !session.isAutomation, let startedBy = session.startedBy?.lowercased() else {
+        guard !session.isAutomation, let startedBy = session.startedBy else {
             return false
         }
-        return names.contains(startedBy)
+        let normalized = startedBy.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if names.contains(normalized) { return true }
+        guard let canonical = ArchivedOwners.canonical(startedBy, in: roster)?.lowercased() else {
+            return false
+        }
+        return names.contains(canonical)
     }
 
     /// A sidebar row under the lens. A row is yours as soon as ONE of its

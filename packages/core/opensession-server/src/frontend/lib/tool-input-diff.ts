@@ -3,6 +3,7 @@ import {
   toolFilePath,
   toolInputString,
 } from "@tellahq/opensession-protocol/tool-presentation";
+import { z } from "zod";
 
 export interface ToolInputDiff {
   patch: string;
@@ -18,22 +19,31 @@ export interface ToolInputDiff {
  * which lets the step use the same syntax + addition/deletion treatment as
  * Files changed instead of falling back to a JSON payload.
  */
+const toolInputSchema = z.looseObject({});
+const toolInputBoundarySchema = z.unknown().pipe(toolInputSchema);
+const toolInputListSchema = z.array(z.unknown());
+const toolContentSchema = z.string();
+
+type RawToolInput = z.input<typeof toolInputBoundarySchema>;
+
 export function toolInputDiff(
   toolName: string,
-  input: unknown,
+  input: RawToolInput,
 ): ToolInputDiff | null {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const parsedInput = toolInputBoundarySchema.safeParse(input);
+  if (!parsedInput.success) return null;
   const canonical = canonicalToolName(toolName);
   if (canonical !== "Edit" && canonical !== "Write") return null;
 
-  const inp = input as Record<string, unknown>;
+  const inp = parsedInput.data;
   const path = safeDiffPath(toolFilePath(inp) || "file.txt");
 
   if (canonical === "Write") {
-    if (typeof inp.content !== "string") return null;
+    const content = toolContentSchema.safeParse(inp.content);
+    if (!content.success) return null;
     return {
       path,
-      patch: unifiedPatch(path, [{ oldText: "", newText: inp.content }], true),
+      patch: unifiedPatch(path, [{ oldText: "", newText: content.data }], true),
     };
   }
 
@@ -42,11 +52,13 @@ export function toolInputDiff(
   // remains the honest rendering rather than inventing file boundaries here.
   if (toolInputString(inp, "patchText", "patch")) return null;
 
-  const values = Array.isArray(inp.edits) ? inp.edits : [inp];
+  const parsedEdits = toolInputListSchema.safeParse(inp.edits);
+  const values = parsedEdits.success ? parsedEdits.data : [inp];
   const edits: Replacement[] = [];
   for (const value of values) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const edit = value as Record<string, unknown>;
+    const parsedEdit = toolInputSchema.safeParse(value);
+    if (!parsedEdit.success) continue;
+    const edit = parsedEdit.data;
     const oldText = toolInputString(edit, "old_string", "oldString", "oldText");
     const newText = toolInputString(edit, "new_string", "newString", "newText");
     if (!oldText && !newText) continue;

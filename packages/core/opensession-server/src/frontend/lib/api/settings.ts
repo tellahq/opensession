@@ -1,10 +1,39 @@
+import { z } from "zod";
 import { API_BASE, ApiError, request } from "./request";
 
 // ── Audit log ──
 
+export type AuditEventValue =
+  | string
+  | number
+  | boolean
+  | null
+  | AuditEventValue[]
+  | { [key: string]: AuditEventValue };
+
+export interface AuditEventDto extends Record<
+  string,
+  AuditEventValue | undefined
+> {
+  time?: string;
+  kind?: string;
+  msg?: string;
+  tool_name?: string;
+  action?: string;
+  context?: string;
+  decision?: string;
+  account?: string;
+  model?: string;
+  ok?: boolean;
+  error?: string;
+  text_snippet?: string;
+  bks_session_id?: string;
+  run_kind?: string;
+}
+
 export interface AuditPage {
   dates: string[];
-  events?: Array<Record<string, unknown>>;
+  events?: AuditEventDto[];
   total?: number;
   types?: string[];
 }
@@ -310,6 +339,14 @@ export interface OrganizationSettingsDto {
   configPath: string;
 }
 
+const ORGANIZATION_SETTINGS_SCHEMA = z.object({
+  organizationName: z.string(),
+  organizationIconUrl: z.string().nullable(),
+  organizationIconRevision: z.string().nullable(),
+  configPath: z.string(),
+});
+const ERROR_RESPONSE_SCHEMA = z.object({ error: z.string() });
+
 export async function fetchOrganizationSettings(): Promise<OrganizationSettingsDto> {
   return request("/settings/general", {
     label: "Failed to fetch organization settings",
@@ -331,18 +368,20 @@ export async function uploadOrganizationIcon(
     headers: { "Content-Type": "image/png" },
     body: png,
   });
-  const body = (await res.json().catch(() => null)) as
-    | (OrganizationSettingsDto & { error?: string })
-    | null;
+  const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
+    const error = ERROR_RESPONSE_SCHEMA.safeParse(body);
     throw new ApiError(
-      body?.error || `Failed to upload the organization icon: ${res.status}`,
+      error.success
+        ? error.data.error
+        : `Failed to upload the organization icon: ${res.status}`,
       res.status,
     );
   }
-  if (!body)
+  const settings = ORGANIZATION_SETTINGS_SCHEMA.safeParse(body);
+  if (!settings.success)
     throw new ApiError("The server returned an empty response", res.status);
-  return body;
+  return settings.data;
 }
 
 export async function removeOrganizationIcon(): Promise<OrganizationSettingsDto> {

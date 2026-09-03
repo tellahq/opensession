@@ -8,6 +8,7 @@ import type { UnifiedSession } from "./types";
 export function isReusableEmptySession(session: UnifiedSession): boolean {
   return (
     session.source === "opensession" &&
+    !session.duplicatedFromSessionId &&
     !session.archived &&
     !session.claudeSessionId &&
     !session.codexThreadId &&

@@ -12,6 +12,7 @@ import {
   draftAutomationApi,
   fetchConnections,
   fetchProviderAccounts,
+  fetchSandboxStatus,
   relativeTime,
   type ModelOption,
   type ProviderAccountOption,
@@ -21,6 +22,7 @@ import {
   type AutomationOutput,
   type AutomationTemplate,
   type AutomationDraft,
+  type SandboxStatusInfo,
 } from "../lib/api";
 import { fetchWorkspaces } from "../lib/api/workspaces";
 import { providerAccountLabel } from "../lib/provider-account";
@@ -53,6 +55,12 @@ import { WorkingPill } from "../ui/status";
 import { Switch } from "../ui/switch";
 import { formatDuration } from "../lib/time";
 import { errorMessage } from "../lib/error-message";
+import {
+  FIELD_LABEL,
+  FORM_ROW,
+  sandboxProviderLabel,
+} from "../lib/automation-form";
+import { AutomationDataFlowEditor } from "./AutomationDataFlowEditor";
 
 /* The old .automation-form family, as utilities. Two of its rules reached in
    from the form to the fields inside it and have to stay descendant selectors:
@@ -65,14 +73,8 @@ const FORM_FIELDS =
  *  detail drawer, the create dialog) already provides the surface, the padding
  *  and the heading. */
 const FORM_INLINE = `flex flex-col gap-3.5 ${FORM_FIELDS}`;
-/** .automation-form label */
-const FIELD_LABEL =
-  "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
-
 /** .automation-form-actions */
 const FORM_ACTIONS = "flex justify-end gap-2.5";
-/** .automation-form-row */
-const FORM_ROW = "flex gap-3.5 phone:flex-col";
 /** .automations-drawer-section-label */
 const SECTION_LABEL = "mb-1.5 text-label font-semibold text-faint";
 /** .automation-session-link */
@@ -137,6 +139,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   const toggleRequest = React.useRef(0);
   const [defaultModel, setDefaultModel] = useState("");
   const [modelLoadError, setModelLoadError] = useState<string | null>(null);
+  const [sandboxStatus, setSandboxStatus] = useState<SandboxStatusInfo | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const {
     accounts: providerAccounts,
@@ -150,6 +155,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
       .catch((cause: unknown) =>
         setModelLoadError(errorMessage(cause, "Could not load models")),
       );
+    fetchSandboxStatus(getCurrentUser())
+      .then(setSandboxStatus)
+      .catch(() => setSandboxStatus(null));
   }, []);
   // The modal is create-only; editing happens inline in the detail drawer.
   const [showModal, setShowModal] = useState(false);
@@ -201,9 +209,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
     if (!hasSelection || showModal) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      const t = e.target as HTMLElement | null;
+      const t = e.target;
       if (
-        t &&
+        t instanceof HTMLElement &&
         (t.tagName === "INPUT" ||
           t.tagName === "TEXTAREA" ||
           t.isContentEditable)
@@ -591,16 +599,22 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
 
                     <DetailKey>Mode</DetailKey>
                     <span className="text-dim">
-                      {sel.sandbox
-                        ? "Unavailable legacy sandbox configuration"
-                        : sel.mode === "ask"
-                          ? "Ask · read-only on the main checkout"
+                      {sel.mode === "ask"
+                        ? sel.sandbox
+                          ? "Ask · disposable Sandbox workspace"
+                          : "Ask · read-only on the main checkout"
+                        : sel.sandbox
+                          ? "Code · disposable Sandbox workspace"
                           : "Code · isolated worktree, can open PRs"}
                     </span>
 
                     <DetailKey>Environment</DetailKey>
                     <span className="text-dim">
-                      {sel.sandbox ? "Unavailable" : "Host worktree"}
+                      {sel.sandbox
+                        ? sandboxStatus?.automation?.available
+                          ? `${sandboxProviderLabel(sandboxStatus.automation.provider)} · fresh disposable Executor`
+                          : `Sandbox unavailable${sandboxStatus?.automation?.reason ? ` · ${sandboxStatus.automation.reason}` : ""}`
+                        : "Host worktree"}
                     </span>
 
                     <DetailKey>Model</DetailKey>
@@ -1424,451 +1438,8 @@ function McpPicker({
 function accountPoolSuffix(m: ModelOption): string {
   if (m.accountProvider === "codex") return " (OpenAI Codex)";
   if (m.accountProvider === "claude") return " (Claude)";
+  if (m.accountProvider === "xai") return " (SuperGrok)";
   return "";
-}
-
-function uniqueFlowId(prefix: string, used: string[]): string {
-  let candidate = prefix;
-  let index = 2;
-  while (used.includes(candidate)) candidate = `${prefix}-${index++}`;
-  return candidate;
-}
-
-function DataFlowEditor({
-  inputs,
-  outputs,
-  onInputsChange,
-  onOutputsChange,
-}: {
-  inputs: AutomationInput[];
-  outputs: AutomationOutput[];
-  onInputsChange: (value: AutomationInput[]) => void;
-  onOutputsChange: (value: AutomationOutput[]) => void;
-}) {
-  const updateInput = (index: number, value: AutomationInput) =>
-    onInputsChange(inputs.map((input, at) => (at === index ? value : input)));
-  const updateOutput = (index: number, value: AutomationOutput) =>
-    onOutputsChange(
-      outputs.map((output, at) => (at === index ? value : output)),
-    );
-
-  return (
-    <div className="flex flex-col gap-2.5">
-      <div>
-        <span className="text-label font-medium text-fg">Data flow</span>
-        <span className="ml-2 text-label text-dim">
-          Gather and flatten inputs before each run, then publish the result
-        </span>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <div className="flex min-h-10 items-center gap-2">
-          <span className="text-label font-medium text-dim">Inputs</span>
-          <span className="text-supporting text-faint">
-            Each source is bounded and treated as untrusted data
-          </span>
-          <div className="ml-auto flex gap-1.5">
-            <Button
-              size="sm"
-              onClick={() =>
-                onInputsChange([
-                  ...inputs,
-                  {
-                    id: uniqueFlowId(
-                      "slack",
-                      inputs.map((input) => input.id),
-                    ),
-                    label: "Slack channel",
-                    window: {
-                      mode: "since_last_success",
-                      minutes: 120,
-                      overlapMinutes: 10,
-                    },
-                    reduce: { model: "claude-haiku-4-5", maxOutputChars: 8000 },
-                    source: {
-                      type: "slack_channel",
-                      channel: "",
-                      includeThreads: true,
-                      includeBots: false,
-                      limit: 200,
-                    },
-                  },
-                ])
-              }
-            >
-              + Slack
-            </Button>
-            <Button
-              size="sm"
-              onClick={() =>
-                onInputsChange([
-                  ...inputs,
-                  {
-                    id: uniqueFlowId(
-                      "reports",
-                      inputs.map((input) => input.id),
-                    ),
-                    label: "Previous reports",
-                    source: { type: "reports", automationId: "self", limit: 3 },
-                  },
-                ])
-              }
-            >
-              + Reports
-            </Button>
-          </div>
-        </div>
-
-        {inputs.length === 0 ? (
-          <div className="rounded-panel border border-dashed border-line px-3 py-3 text-label text-faint">
-            No collected inputs. The run receives only its instructions and
-            trigger context.
-          </div>
-        ) : (
-          inputs.map((input, index) => {
-            const slack =
-              input.source.type === "slack_channel" ? input.source : null;
-            const reports =
-              input.source.type === "reports" ? input.source : null;
-            return (
-              <div key={input.id} className="rounded-panel bg-surface p-3">
-                <div className="mb-2 flex min-h-10 items-center gap-2">
-                  <Select
-                    className="max-w-[150px]"
-                    value={input.source.type}
-                    onChange={(e) => {
-                      const source =
-                        e.target.value === "slack_channel"
-                          ? {
-                              type: "slack_channel" as const,
-                              channel: "",
-                              includeThreads: true,
-                              includeBots: false,
-                              limit: 200,
-                            }
-                          : {
-                              type: "reports" as const,
-                              automationId: "self",
-                              limit: 3,
-                            };
-                      updateInput(index, {
-                        id: input.id,
-                        label: input.label,
-                        source,
-                      });
-                    }}
-                  >
-                    <option value="slack_channel">Slack channel</option>
-                    <option value="reports">Report history</option>
-                  </Select>
-                  <Input
-                    value={input.label || ""}
-                    onChange={(e) =>
-                      updateInput(index, { ...input, label: e.target.value })
-                    }
-                    placeholder="Label"
-                  />
-                  <Button
-                    size="sm"
-                    className="shrink-0 text-dim hover:text-red"
-                    onClick={() =>
-                      onInputsChange(inputs.filter((_, at) => at !== index))
-                    }
-                  >
-                    Remove
-                  </Button>
-                </div>
-
-                {slack && (
-                  <>
-                    <div className={FORM_ROW}>
-                      <label className={FIELD_LABEL}>
-                        Channel ID
-                        <Input
-                          className="mono-input"
-                          value={slack.channel}
-                          onChange={(e) =>
-                            updateInput(index, {
-                              ...input,
-                              source: {
-                                ...slack,
-                                channel: e.target.value.toUpperCase(),
-                              },
-                            })
-                          }
-                          placeholder="C0123456789"
-                        />
-                      </label>
-                      <label className={FIELD_LABEL}>
-                        Initial lookback
-                        <Input
-                          type="number"
-                          min={15}
-                          max={10080}
-                          value={input.window?.minutes ?? 120}
-                          onChange={(e) =>
-                            updateInput(index, {
-                              ...input,
-                              window: {
-                                ...input.window,
-                                minutes: Number(e.target.value),
-                              },
-                            })
-                          }
-                        />
-                      </label>
-                      <label className={FIELD_LABEL}>
-                        Reducer model
-                        <Input
-                          value={input.reduce?.model || ""}
-                          onChange={(e) =>
-                            updateInput(index, {
-                              ...input,
-                              reduce: {
-                                ...input.reduce,
-                                model: e.target.value,
-                              },
-                            })
-                          }
-                          placeholder="Default Haiku"
-                        />
-                      </label>
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-label text-dim">
-                      <label className="flex min-h-10 items-center gap-2">
-                        <Checkbox
-                          checked={slack.includeThreads !== false}
-                          onCheckedChange={(checked) =>
-                            updateInput(index, {
-                              ...input,
-                              source: { ...slack, includeThreads: checked },
-                            })
-                          }
-                        />
-                        Include thread replies
-                      </label>
-                      <label className="flex min-h-10 items-center gap-2">
-                        <Checkbox
-                          checked={slack.includeBots === true}
-                          onCheckedChange={(checked) =>
-                            updateInput(index, {
-                              ...input,
-                              source: { ...slack, includeBots: checked },
-                            })
-                          }
-                        />
-                        Include bot messages
-                      </label>
-                    </div>
-                  </>
-                )}
-
-                {reports && (
-                  <div className={FORM_ROW}>
-                    <label className={FIELD_LABEL}>
-                      Automation ID
-                      <Input
-                        className="mono-input"
-                        value={reports.automationId}
-                        onChange={(e) =>
-                          updateInput(index, {
-                            ...input,
-                            source: {
-                              ...reports,
-                              automationId: e.target.value,
-                            },
-                          })
-                        }
-                        placeholder="self"
-                      />
-                    </label>
-                    <label className={FIELD_LABEL}>
-                      Reports to include
-                      <Input
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={reports.limit ?? 3}
-                        onChange={(e) =>
-                          updateInput(index, {
-                            ...input,
-                            source: {
-                              ...reports,
-                              limit: Number(e.target.value),
-                            },
-                          })
-                        }
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      <div className="mt-1 flex flex-col gap-2">
-        <div className="flex min-h-10 items-center gap-2">
-          <span className="text-label font-medium text-dim">Outputs</span>
-          <span className="text-supporting text-faint">
-            Reports are durable; Slack delivery is optional
-          </span>
-          <div className="ml-auto flex gap-1.5">
-            {!outputs.some((output) => output.type === "report") && (
-              <Button
-                size="sm"
-                onClick={() =>
-                  onOutputsChange([
-                    ...outputs,
-                    {
-                      id: uniqueFlowId(
-                        "report",
-                        outputs.map((output) => output.id),
-                      ),
-                      type: "report",
-                      enabled: true,
-                      publish: "always",
-                    },
-                  ])
-                }
-              >
-                + Report
-              </Button>
-            )}
-            <Button
-              size="sm"
-              onClick={() =>
-                onOutputsChange([
-                  ...outputs,
-                  {
-                    id: uniqueFlowId(
-                      "slack",
-                      outputs.map((output) => output.id),
-                    ),
-                    type: "slack",
-                    enabled: false,
-                    channel: "",
-                    minUrgency: "high",
-                    minConfidence: "high",
-                  },
-                ])
-              }
-            >
-              + Slack
-            </Button>
-          </div>
-        </div>
-
-        {outputs.length === 0 ? (
-          <div className="rounded-panel border border-dashed border-line px-3 py-3 text-label text-faint">
-            No required output. The run behaves like a normal automation
-            session.
-          </div>
-        ) : (
-          outputs.map((output, index) => (
-            <div key={output.id} className="rounded-panel bg-surface p-3">
-              <div className="flex min-h-10 items-center gap-2">
-                <span className="w-[110px] shrink-0 text-label font-medium text-fg">
-                  {output.type === "report" ? "Report" : "Slack"}
-                </span>
-                {output.type === "report" ? (
-                  <Select
-                    value={output.publish || "always"}
-                    onChange={(e) =>
-                      updateOutput(index, {
-                        ...output,
-                        publish: e.target.value as "always" | "on_findings",
-                      })
-                    }
-                  >
-                    <option value="always">Publish every run</option>
-                    <option value="on_findings">Only with findings</option>
-                  </Select>
-                ) : (
-                  <>
-                    <Input
-                      className="mono-input"
-                      value={output.channel}
-                      onChange={(e) =>
-                        updateOutput(index, {
-                          ...output,
-                          channel: e.target.value.toUpperCase(),
-                        })
-                      }
-                      placeholder="C0123456789"
-                    />
-                    <label className="flex min-h-10 shrink-0 items-center gap-2 text-label text-dim">
-                      <Checkbox
-                        checked={output.enabled !== false}
-                        onCheckedChange={(checked) =>
-                          updateOutput(index, { ...output, enabled: checked })
-                        }
-                      />
-                      Send
-                    </label>
-                  </>
-                )}
-                <Button
-                  size="sm"
-                  className="shrink-0 text-dim hover:text-red"
-                  onClick={() =>
-                    onOutputsChange(outputs.filter((_, at) => at !== index))
-                  }
-                >
-                  Remove
-                </Button>
-              </div>
-              {output.type === "slack" && (
-                <div className="mt-2 grid grid-cols-2 gap-3 phone:grid-cols-1">
-                  <label className={FIELD_LABEL}>
-                    Minimum urgency
-                    <Select
-                      value={output.minUrgency || "high"}
-                      onChange={(e) =>
-                        updateOutput(index, {
-                          ...output,
-                          minUrgency: e.target.value as
-                            | "low"
-                            | "medium"
-                            | "high"
-                            | "critical",
-                        })
-                      }
-                    >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                      <option value="critical">Critical</option>
-                    </Select>
-                  </label>
-                  <label className={FIELD_LABEL}>
-                    Minimum confidence
-                    <Select
-                      value={output.minConfidence || "high"}
-                      onChange={(e) =>
-                        updateOutput(index, {
-                          ...output,
-                          minConfidence: e.target.value as
-                            | "low"
-                            | "medium"
-                            | "high",
-                        })
-                      }
-                    >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                    </Select>
-                  </label>
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
 }
 
 /** The fields themselves. Both hosts (the detail drawer and the create dialog)
@@ -1944,7 +1515,13 @@ function AutomationForm({
     initial?.accountStrict !== false,
   );
   const [usageCredits, setUsageCredits] = useState(!!initial?.usageCredits);
-  const sandbox = false;
+  const [sandbox, setSandbox] = useState(!!initial?.sandbox);
+  const [sandboxAvailability, setSandboxAvailability] = useState<
+    SandboxStatusInfo["automation"] | null
+  >(null);
+  const [sandboxProviders, setSandboxProviders] = useState<
+    SandboxStatusInfo["providers"]
+  >([]);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   const [modelLoadError, setModelLoadError] = useState<string | null>(null);
@@ -1970,6 +1547,27 @@ function AutomationForm({
       onError: (cause) =>
         setWorkspaceLoadError(errorMessage(cause, "Could not load workspaces")),
     }).then(setWorkspaces);
+    fetchSandboxStatus(getCurrentUser())
+      .then((status) => {
+        setSandboxProviders(status.providers);
+        setSandboxAvailability(
+          status.automation || {
+            provider: "daytona",
+            available: false,
+            reason: "The server does not support sandbox automations yet.",
+          },
+        );
+      })
+      .catch((cause: unknown) =>
+        setSandboxAvailability({
+          provider: "daytona",
+          available: false,
+          reason: errorMessage(
+            cause,
+            "Could not check sandbox automation availability",
+          ),
+        }),
+      );
   }, []);
   const effectiveModel = model || defaultModel;
   const accountProvider = models.find(
@@ -2202,7 +1800,7 @@ function AutomationForm({
       <McpPicker value={mcpServers} onChange={setMcpServers} />
 
       {!isWatch && (
-        <DataFlowEditor
+        <AutomationDataFlowEditor
           inputs={inputs}
           outputs={outputs}
           onInputsChange={setInputs}
@@ -2221,16 +1819,58 @@ function AutomationForm({
       </div>
 
       {showAdvanced && (
-        <div className={FORM_ROW}>
+        <div className={cn(FORM_ROW, "desktop:flex-wrap")}>
           <label className={FIELD_LABEL}>
             Mode
             <Select
               value={mode}
-              onChange={(e) => setMode(e.target.value as "ask" | "code")}
+              onChange={(e) =>
+                setMode(e.target.value === "code" ? "code" : "ask")
+              }
             >
               <option value="ask">Ask · read-only on main</option>
               <option value="code">Code · fresh worktree per run</option>
             </Select>
+          </label>
+
+          <label
+            className={cn(FIELD_LABEL, "desktop:w-full desktop:flex-none")}
+          >
+            Execution environment
+            <Select
+              value={sandbox ? "daytona" : ""}
+              onChange={(event) => {
+                const checked = event.target.value === "daytona";
+                setSandbox(checked);
+                if (checked) {
+                  setAccountStrict(true);
+                  setFallbackModel("");
+                  setMcpServers((current) => current ?? []);
+                }
+              }}
+            >
+              <option value="">Host worktree</option>
+              <option
+                value="daytona"
+                disabled={!sandbox && !sandboxAvailability?.available}
+              >
+                Daytona
+                {sandboxAvailability?.available ? "" : " · unavailable"}
+              </option>
+              {sandboxProviders
+                .filter((provider) => provider.id !== "daytona")
+                .map((provider) => (
+                  <option key={provider.id} value={provider.id} disabled>
+                    {sandboxProviderLabel(provider.id)} · unavailable for
+                    automations
+                  </option>
+                ))}
+            </Select>
+            <span className="mt-1 text-supporting leading-snug text-faint">
+              {sandboxAvailability?.available
+                ? "Daytona uses a fresh disposable Executor with pinned credentials and restricted network access."
+                : sandboxAvailability?.reason || "Checking availability"}
+            </span>
           </label>
 
           <label className={FIELD_LABEL}>
@@ -2368,7 +2008,7 @@ function AutomationForm({
             !prompt.trim() ||
             !scheduleValid ||
             !watchValid ||
-            (sandbox && !accountId)
+            (sandbox && (!accountId || sandboxAvailability?.available !== true))
           }
         >
           {saving ? "Saving…" : initial ? "Save changes" : "Create automation"}

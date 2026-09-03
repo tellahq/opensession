@@ -2,12 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { parsePatchFiles } from "@pierre/diffs";
 import { toolInputDiff } from "./tool-input-diff";
 
-function parsed(toolName: string, input: unknown) {
+function parsed<Input extends object>(toolName: string, input: Input) {
   const value = toolInputDiff(toolName, input);
   expect(value).not.toBeNull();
+  if (!value) throw new Error("Expected tool input to produce a diff");
   return {
-    value: value!,
-    file: parsePatchFiles(value!.patch)[0].files[0],
+    value,
+    file: parsePatchFiles(value.patch)[0].files[0],
   };
 }
 

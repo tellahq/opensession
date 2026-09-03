@@ -35,7 +35,13 @@
 
 import type { Daytona, Sandbox as DaytonaSandbox } from "@daytonaio/sdk";
 import { getRepo, worktreePathFor } from "../../worktree";
-import { sandboxConfig } from "../config";
+import { sandboxConfig, remoteSandboxCallbackBaseUrl } from "../config";
+import { audit } from "../../audit";
+import {
+  automationEgressDomains,
+  automationEgressProbeBlockedUrl,
+  daytonaDomainAllowList,
+} from "../automation-egress";
 import {
   getSandboxConnection,
   sandboxProviderCredential,
@@ -81,6 +87,52 @@ import {
 
 const SESSION_LABEL = "opensession.session";
 const DEFAULT_IDLE_STOP_MINUTES = 30;
+/** Automation Executors are destroyed by the launcher after the run; the
+ *  provider-side stop/delete intervals only catch a crashed coordinator. */
+const AUTOMATION_IDLE_STOP_MINUTES = 60;
+/**
+ * Prove the domain allowlist is enforced inside the guest: the dial-back host
+ * must answer and a host outside the list must not. Qualification confirms the
+ * Daytona base image provides curl before automation use is enabled.
+ */
+export async function assertAutomationEgressRestricted(
+  driver: RemoteDriver,
+  callbackBaseUrl: string,
+  blockedUrl: string,
+): Promise<void> {
+  const httpBase = callbackBaseUrl
+    .replace(/\/+$/, "")
+    .replace(/^ws(s?):\/\//, "http$1://");
+  const probe = await driver.exec(
+    `command -v curl >/dev/null 2>&1 || { echo __OPENSESSION_NO_CURL__; exit 0; }; ` +
+      `a=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' ${shellQuoteWord(`${httpBase}/`)} 2>/dev/null || true); ` +
+      `b=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' ${shellQuoteWord(blockedUrl)} 2>/dev/null || true); ` +
+      `echo "allowed=$a blocked=$b"`,
+    { timeoutMs: 40_000 },
+  );
+  if (probe.stdout.includes("__OPENSESSION_NO_CURL__")) {
+    throw new Error(
+      "automation egress policy cannot be verified: curl is missing in the Executor",
+    );
+  }
+  const match = /allowed=(\d{3}) blocked=(\d{3})/.exec(probe.stdout);
+  if (!match) {
+    throw new Error(
+      `automation egress probe failed: ${(probe.stderr || probe.stdout).trim().slice(0, 300)}`,
+    );
+  }
+  const [, allowed, blocked] = match;
+  if (allowed === "000") {
+    throw new Error(
+      `automation egress policy blocks the dial-back URL ${httpBase}; check callbackBaseUrl and the Daytona org tier`,
+    );
+  }
+  if (blocked !== "000") {
+    throw new Error(
+      `automation egress policy is not enforced by this Daytona org (unlisted host answered ${blocked}); sandbox automations need a Tier 3+ or self-hosted Daytona`,
+    );
+  }
+}
 // Daytona's image keeps the process user + passwordless-sudo contract that
 // bootstrapRemoteSandbox needs. A plain Ubuntu image launches correctly but
 // cannot create the stable /home/ubuntu layout.
@@ -444,8 +496,28 @@ export class DaytonaProvider implements SandboxProvider {
         "source verification requires the automation trust profile and a credential-free clone",
       );
     }
+    // Unattended runs (public review and sandboxed automations) get a fresh
+    // disposable Executor: no prewarm or repo-template adoption, short
+    // provider-side auto-delete backstops, and strict disposal on failure.
+    const disposable =
+      sourceVerification || trust.trustProfile === "automation";
     const repo = getRepo(spec.repo || prevState?.repoId);
     const branch = spec.branch || prevState?.branch || repo.defaultBranch;
+    const cloneUrl = await remoteCloneUrl(repo, {
+      credential: spec.cloneCredential,
+    });
+    const automationDomains =
+      trust.trustProfile === "automation" && !sourceVerification
+        ? automationEgressDomains({
+            callbackBaseUrl: remoteSandboxCallbackBaseUrl(),
+            cloneUrl,
+            extra: [
+              ...trust.egressAllowlist,
+              ...(cfg.runnerBundleUrl ? [cfg.runnerBundleUrl] : []),
+              ...(cfg.runnerRepoUrl ? [cfg.runnerRepoUrl] : []),
+            ],
+          })
+        : undefined;
     const verificationKey = spec.sessionId.replace(/[^A-Za-z0-9_.-]+/g, "-");
     const cwd =
       spec.cwd ||
@@ -467,7 +539,7 @@ export class DaytonaProvider implements SandboxProvider {
       } catch {}
     }
     if (sbx && stateOf(sbx) === "gone") sbx = null;
-    if (!sbx && !sourceVerification) {
+    if (!sbx && !disposable) {
       // Warm-on-typing adoption (src/server/sandbox/prewarm.ts): a ready
       // prewarm for (daytona, repo) whose runner pin + snapshot still match
       // is claimed atomically and relabeled to this session — the expensive
@@ -518,7 +590,7 @@ export class DaytonaProvider implements SandboxProvider {
       // 2026-07). Unset = Daytona's default snapshot (1 vCPU/1GB/3GiB disk),
       // too small for real repo workspaces: the runner payload alone is ~2GB
       // and a large repo's clone died on ENOSPC. See SandboxDaytonaConfig.
-      const template = sourceVerification
+      const template = disposable
         ? undefined
         : await recoverDaytonaRepoTemplate(client, repo.id);
       // A prepared repo template already carries its machine shape. When the
@@ -538,18 +610,26 @@ export class DaytonaProvider implements SandboxProvider {
               ...(sourceVerification
                 ? { "opensession.public-review": "1" }
                 : {}),
+              ...(trust.trustProfile === "automation" && !sourceVerification
+                ? { "opensession.automation": "1" }
+                : {}),
             },
             autoStopInterval: sourceVerification
               ? 10
-              : cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES,
-            ...(sourceVerification ? { autoDeleteInterval: 30 } : {}),
+              : disposable
+                ? AUTOMATION_IDLE_STOP_MINUTES
+                : cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES,
+            ...(automationDomains
+              ? { domainAllowList: daytonaDomainAllowList(automationDomains) }
+              : {}),
+            ...(disposable ? { autoDeleteInterval: 30 } : {}),
           } as any,
           { timeout: 300 },
         );
       };
       try {
         sbx = await create(
-          sourceVerification
+          disposable
             ? undefined
             : template?.artifactId || cfg.daytona?.snapshot,
         );
@@ -591,6 +671,29 @@ export class DaytonaProvider implements SandboxProvider {
       // A second refresh/start round trip added 2–3s to every snapshot restore.
       if (!newlyCreated) await driver.ensureStarted();
       mark("sandbox started");
+      if (automationDomains) {
+        // Enforce before bootstrap, repository setup hooks, private workspace
+        // seeds, or model credentials can enter the guest. Reapplying also
+        // closes a crash-recovery path where the provider created the sandbox
+        // but had not yet persisted its network policy.
+        await sbx.updateNetworkSettings({
+          domainAllowList: daytonaDomainAllowList(automationDomains),
+        });
+        await assertAutomationEgressRestricted(
+          driver,
+          remoteSandboxCallbackBaseUrl(),
+          automationEgressProbeBlockedUrl(automationDomains),
+        );
+        audit({
+          kind: "sandbox_automation_egress",
+          session_id: spec.sessionId,
+          provider: this.id,
+          sandbox_id: sbx.id,
+          resolved_targets: automationDomains,
+          outcome: "ok",
+        });
+        mark("egress restricted");
+      }
       const prepareRunner = async () => {
         if (sourceVerification) return;
         // A sandbox that cannot reach our callback URL can never run anything.
@@ -603,7 +706,7 @@ export class DaytonaProvider implements SandboxProvider {
         await setupRemoteWorkspace(
           driver,
           cwd,
-          await remoteCloneUrl(repo, { credential: spec.cloneCredential }),
+          cloneUrl,
           branch,
           repo.defaultBranch,
           repo.id,
@@ -615,7 +718,8 @@ export class DaytonaProvider implements SandboxProvider {
             trustProfile: trust.trustProfile,
           },
           {
-            seedPrivateFiles: !sourceVerification,
+            seedPrivateFiles:
+              trust.trustProfile !== "automation" && !sourceVerification,
             runLifecycleHooks: !sourceVerification,
           },
         );
@@ -644,13 +748,13 @@ export class DaytonaProvider implements SandboxProvider {
       });
       return this.makeHandle(sbx, spec.sessionId, cwd);
     } catch (error) {
-      if (sourceVerification) {
+      if (disposable) {
         try {
           await this.destroy(sbx.id, { strict: true });
         } catch (cleanupError) {
           throw new AggregateError(
             [error, cleanupError],
-            "public review Executor setup failed and strict disposal also failed",
+            "disposable Executor setup failed and strict disposal also failed",
           );
         }
       }
@@ -953,6 +1057,19 @@ export async function qualifyDaytonaConnection(): Promise<void> {
     );
     if (lifecycle.exitCode !== 0)
       throw new Error("Daytona stop/start lost filesystem state");
+    await source.updateNetworkSettings({ domainAllowList: "example.com" });
+    const egress = await sourceDriver.exec(
+      "a=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' https://example.com/ 2>/dev/null || true); " +
+        "b=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' https://www.iana.org/ 2>/dev/null || true); " +
+        'echo "allowed=$a blocked=$b"',
+      { timeoutMs: 40_000 },
+    );
+    if (!/allowed=(?!000)\d{3} blocked=000/.test(egress.stdout)) {
+      throw new Error(
+        "Daytona runner did not enforce the sandbox domain allowlist",
+      );
+    }
+    await source.updateNetworkSettings({ networkBlockAll: false });
     // Even a nearly-empty Daytona sandbox can take 8–10 minutes to seal when
     // the provider is busy. Keep this aligned with repository templates: a
     // shorter client wait reports a false SNAPSHOT_FAILED while Daytona keeps

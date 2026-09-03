@@ -26,9 +26,8 @@ describe("TranscriptViewStore", () => {
   test("publishes durable appends immediately when their index updates with them", () => {
     const originalRaf = globalThis.requestAnimationFrame;
     const originalCancel = globalThis.cancelAnimationFrame;
-    globalThis.requestAnimationFrame = (() =>
-      1) as typeof requestAnimationFrame;
-    globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
+    globalThis.requestAnimationFrame = (_callback: FrameRequestCallback) => 1;
+    globalThis.cancelAnimationFrame = (_handle: number) => {};
     try {
       const store = new TranscriptViewStore([entry("1")]);
       store.merge([entry("2")]);

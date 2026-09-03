@@ -5,7 +5,12 @@ import {
   shouldOpenCreatedSession,
 } from "./new-session-navigation";
 
-const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+const appSource = await Bun.file(
+  new URL("../AppContent.tsx", import.meta.url),
+).text();
+const createStartSource = await Bun.file(
+  new URL("../hooks/useNewSessionCreateStart.ts", import.meta.url),
+).text();
 
 describe("errorMatchesPendingCreate", () => {
   test("only accepts an error scoped to the deterministic create id", () => {
@@ -83,9 +88,12 @@ describe("shouldOpenCreatedSession", () => {
   });
 
   test("opens a deterministic local shell before the server responds", () => {
-    const start = appSource.indexOf("const startNewSessionCreate");
-    const end = appSource.indexOf("useEffect(() => {", start);
-    const handler = appSource.slice(start, end);
+    const start = createStartSource.indexOf("const startNewSessionCreate");
+    const end = createStartSource.indexOf(
+      "return { closePalette, startNewSessionCreate }",
+      start,
+    );
+    const handler = createStartSource.slice(start, end);
 
     expect(start).toBeGreaterThan(-1);
     expect(handler).toContain("if (!started.openImmediately) return;");
@@ -105,5 +113,6 @@ describe("shouldOpenCreatedSession", () => {
     expect(handler.indexOf("setActiveViewTabState(null)")).toBeLessThan(
       handler.indexOf('navigate({ view: "session", id: started.id })'),
     );
+    expect(handler).not.toContain("setTimeout(");
   });
 });

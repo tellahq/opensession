@@ -150,7 +150,7 @@ export const msgSystemToned =
  * source, so an assembled one compiles to nothing at all. Same shape as
  * `sourceChipTone` in lib/source-chip-classes.
  */
-const SYSTEM_TONE: Record<string, string> = {
+const SYSTEM_TONE = {
   error: "data-[tone=error]:bg-red-soft data-[tone=error]:text-red",
   warn:
     "data-[tone=warn]:bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)] " +
@@ -159,7 +159,8 @@ const SYSTEM_TONE: Record<string, string> = {
 
 /** `info` deliberately resolves to nothing: it is the pill's resting look. */
 export function msgSystemTone(tone: string): string {
-  return SYSTEM_TONE[tone] ?? "";
+  if (tone === "error" || tone === "warn") return SYSTEM_TONE[tone];
+  return "";
 }
 
 /** Inline attachments under a turn. Right-aligned inside a bubble's column. */

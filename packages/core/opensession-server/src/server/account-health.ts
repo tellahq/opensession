@@ -28,6 +28,7 @@ import { existsSync, readFileSync } from "fs";
 import { listAccountsPublic } from "./claude-accounts";
 import { listCodexAccountsPublic } from "./codex-accounts";
 import { refreshIdleCodexTokens } from "./codex-token-refresh";
+import { xaiRefreshFailures } from "./xai-accounts";
 import { stateDir } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
 import { writeFileAtomic } from "./shared/atomic-write";
@@ -229,6 +230,28 @@ function codexIssues(): Issue[] {
   return issues;
 }
 
+/** SuperGrok accounts refresh in-process on every pick and usage poll, so
+ * the only thing left to tell a human is a refresh xAI itself rejected. */
+function xaiIssues(): Issue[] {
+  return xaiRefreshFailures().flatMap(
+    ({ account, message, reloginRequired }) => {
+      if (!reloginRequired) return [];
+      const who = account.owner || FALLBACK_TEAMMATE;
+      const identity = account.email?.trim() || account.name;
+      const label = account.owner
+        ? `your personal SuperGrok account "${identity}"`
+        : `pool SuperGrok account "${identity}"`;
+      return [
+        {
+          key: `xai:${account.id}:relogin`,
+          message: `It's ${personaName()} — ${label} needs a fresh sign-in (${message}); Grok runs on it will fail. Remove it under Settings → Providers and add it again with the device code.`,
+          notify: who,
+        },
+      ];
+    },
+  );
+}
+
 async function dmTeammate(
   teammateRef: string,
   message: string,
@@ -244,7 +267,7 @@ async function dmTeammate(
 
 /** Detection only, no DMs/state — for dry runs and tests. */
 export function detectAccountIssues(): Issue[] {
-  return [...claudeIssues(), ...codexIssues()];
+  return [...claudeIssues(), ...codexIssues(), ...xaiIssues()];
 }
 
 /**

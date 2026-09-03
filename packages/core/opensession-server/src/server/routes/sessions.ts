@@ -31,6 +31,10 @@ import {
 import { prepareEntriesForWire, transcriptMatchSnippet } from "../jsonl-parser";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import {
+  pastedTextsFromWire,
+  withPastedTexts,
+} from "@tellahq/opensession-protocol/pasted-text";
+import {
   inWorkspaceGroup,
   type WorkspaceGroup,
 } from "@tellahq/opensession-protocol/workspace-group";
@@ -49,12 +53,7 @@ import {
 } from "../queue-state";
 
 import { markPrReviewNotified } from "../pr-review-notifications";
-import {
-  footerPrsFor,
-  getPrsByRepo,
-  prsBySessionRef,
-  type PrInfo,
-} from "../pr-cache";
+import { footerPrsFor, getPrsByRepo, prsBySessionRef } from "../pr-cache";
 import {
   getReviewRequest,
   setReviewAccepted,
@@ -78,7 +77,14 @@ import {
   sessionRuntimeSnapshot,
   type SessionRuntimeSnapshot,
 } from "../session-cache";
-import { asDataUrlList, countImageRefs, parseImageDataUrls } from "../uploads";
+import {
+  asDataUrlList,
+  countImageRefs,
+  InvalidUploadError,
+  parseImageDataUrls,
+} from "../uploads";
+import { MAX_PROMPT_IMAGES } from "@tellahq/opensession-protocol/session";
+import { SessionKernelActorError } from "../session-kernel/actor-client";
 import { notifyMentions } from "../mentions";
 import { reviewTeamFor } from "../people";
 import { sendPushToUser } from "../push";
@@ -147,13 +153,19 @@ import {
   githubMutationCredential,
 } from "./github-credential";
 import { defaultRepo } from "../config";
-import type { SessionPrRef, UnifiedSession } from "../types";
-import { shareWorkspacePrRefs } from "../session-pr-target";
+import type { UnifiedSession } from "../types";
+import {
+  enrichSessionPrRefs,
+  projectWorkspacePrRefs,
+  shareWorkspacePrRefs,
+} from "../session-pr-target";
 import {
   indexedSessions,
   indexedSidebarSessions,
+  indexedWorkspaceMemberSessions,
   indexedWorkspaceSessions,
 } from "../session-list-store";
+import { buildAtCurrentSessionListRevision } from "../session-list-response-revision";
 import {
   loadSidebarSessionScopeContext,
   parseSidebarSessionScope,
@@ -439,48 +451,6 @@ type SessionEnrichmentContext = {
   workspaceNames: ReadonlyMap<string, string>;
 };
 
-type FooterPrMatch = { repo: string; branch: string; pr: PrInfo };
-
-/**
- * Restore PRs discovered from attribution footers on materialized list rows.
- *
- * Native session writes update one SQLite row from the durable session file,
- * which deliberately contains no derived PR fields. The list route therefore
- * has to reapply footer discovery just like the full session assembly does.
- */
-export function mergeFooterPrRefs(
-  session: UnifiedSession,
-  matches: readonly FooterPrMatch[],
-): SessionPrRef[] {
-  const refs = [...(session.prs || [])];
-  for (const { repo, branch, pr } of matches) {
-    const current = refs.findIndex(
-      (ref) => ref.repo === repo && ref.branch === branch,
-    );
-    const discovered: SessionPrRef = {
-      repo,
-      branch,
-      source: "discovered",
-      url: pr.url,
-      state: pr.state,
-      number: pr.number,
-      title: pr.title,
-      isDraft: pr.isDraft,
-      reviewDecision: pr.reviewDecision,
-      mergeable: pr.mergeable,
-      additions: pr.additions,
-      deletions: pr.deletions,
-      checks: pr.checks,
-    };
-    if (current < 0) refs.push(discovered);
-    else {
-      const existing = refs[current]!;
-      refs[current] = { ...discovered, source: existing.source };
-    }
-  }
-  return refs;
-}
-
 function sessionEnrichmentContext(): SessionEnrichmentContext {
   const prsByRepo = getPrsByRepo();
   return {
@@ -511,16 +481,17 @@ function enrichSession(
   const reviewRequest =
     getReviewRequest(s.id) ??
     s.aliasIds?.map((id) => getReviewRequest(id)).find(Boolean);
-  const currentPr = s.branch
-    ? context.prsByRepo.get(s.repo || context.defaultRepoId)?.get(s.branch)
-    : undefined;
-  const prs = mergeFooterPrRefs(s, footerPrsFor(context.prsBySession, s));
+  const prSession = enrichSessionPrRefs(s, {
+    defaultRepoId: context.defaultRepoId,
+    prsByRepo: context.prsByRepo,
+    footerMatches: footerPrsFor(context.prsBySession, s),
+  });
   const quarantine = signals?.quarantines.get(s.id);
   const safety = quarantine
     ? publicSessionSafety(quarantine, signals?.runtime.claimedJournalSessions)
     : undefined;
   return {
-    ...s,
+    ...prSession,
     ...(safety
       ? {
           isRunning: false,
@@ -533,26 +504,6 @@ function enrichSession(
     ...(titleOverride ? { title: titleOverride, titleOverridden: true } : {}),
     ...(manualStatus ? { manualStatus } : {}),
     ...(reviewRequest ? { reviewRequest } : {}),
-    ...(currentPr
-      ? {
-          prUrl: currentPr.url,
-          prState: currentPr.state,
-          prMergeable: currentPr.mergeable,
-          prNumber: currentPr.number,
-          prTitle: currentPr.title,
-          prIsDraft: currentPr.isDraft,
-          prAdditions: currentPr.additions,
-          prDeletions: currentPr.deletions,
-          prChangedFiles: currentPr.changedFiles,
-          prReviewDecision: currentPr.reviewDecision,
-          prReviewRequested: currentPr.reviewRequested,
-          prReviewedBy: currentPr.reviewedBy,
-          prAuthor: currentPr.author,
-          prUpdatedAt: currentPr.updatedAt,
-          prChecks: currentPr.checks,
-        }
-      : {}),
-    ...(prs.length ? { prs } : {}),
     repo: s.repo || context.defaultRepoId,
     // The name of the workspace this session is filed under. A sidebar row
     // names a workspace, never one of its tabs, and the workspace list is
@@ -907,7 +858,7 @@ function refreshSidebarSessionsResponse(
   const key = sidebarSessionScopeKey(scope);
   const current = sessionsResponseRefreshes.get(key);
   if (current) return current;
-  const refresh = (async () => {
+  const refresh = buildAtCurrentSessionListRevision(async () => {
     const signals = await sessionListRuntimeSignals();
     const context = sessionEnrichmentContext();
     const indexed = indexedSidebarSessions(scope.selectedSessionId);
@@ -922,16 +873,19 @@ function refreshSidebarSessionsResponse(
       loadSidebarSessionScopeContext(scope, bounded),
     );
     const text = JSON.stringify(scoped.map(sessionListRow));
-    const snapshot: SessionsResponseSnapshot = {
+    return {
       text,
       hash: Bun.hash(text).toString(16),
       expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
     };
-    sessionsResponseSnapshots.set(key, snapshot);
-    return snapshot;
-  })().finally(() => {
-    sessionsResponseRefreshes.delete(key);
-  });
+  })
+    .then((snapshot) => {
+      sessionsResponseSnapshots.set(key, snapshot);
+      return snapshot;
+    })
+    .finally(() => {
+      sessionsResponseRefreshes.delete(key);
+    });
   sessionsResponseRefreshes.set(key, refresh);
   return refresh;
 }
@@ -941,7 +895,7 @@ function refreshSessionsResponse(
 ): Promise<SessionsResponseSnapshot> {
   const current = sessionsResponseRefreshes.get(variant);
   if (current) return current;
-  const refresh = (async () => {
+  const refresh = buildAtCurrentSessionListRevision(async () => {
     const signals = await sessionListRuntimeSignals();
     const context = sessionEnrichmentContext();
     const slice =
@@ -963,17 +917,20 @@ function refreshSessionsResponse(
         ? listed.map(archivedIndexRow)
         : listed.map(sessionListRow),
     );
-    const snapshot: SessionsResponseSnapshot = {
+    return {
       text,
       hash: Bun.hash(text).toString(16),
       expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
     };
-    sessionsResponseSnapshots.set(variant, snapshot);
-    if (variant === "exclude") persistDiskLiveList(text);
-    return snapshot;
-  })().finally(() => {
-    sessionsResponseRefreshes.delete(variant);
-  });
+  })
+    .then((snapshot) => {
+      sessionsResponseSnapshots.set(variant, snapshot);
+      if (variant === "exclude") persistDiskLiveList(snapshot.text);
+      return snapshot;
+    })
+    .finally(() => {
+      sessionsResponseRefreshes.delete(variant);
+    });
   sessionsResponseRefreshes.set(variant, refresh);
   return refresh;
 }
@@ -997,21 +954,24 @@ export async function handleSessionsRoutes(
       fastMode?: unknown;
       images?: unknown;
       files?: unknown;
+      pastedTexts?: unknown;
       branch?: unknown;
       user?: unknown;
       workspaceId?: unknown;
       sandbox?: unknown;
+      forkFrom?: unknown;
       requestId?: unknown;
       clientId?: unknown;
     } | null;
     const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
     const files = Array.isArray(body?.files) ? body.files : undefined;
+    const pastedTexts = pastedTextsFromWire(body?.pastedTexts);
     const imageUrls = Array.isArray(body?.images)
       ? body.images.filter(
           (value): value is string => typeof value === "string",
         )
       : [];
-    if (!prompt && !files?.length && !imageUrls.length) {
+    if (!prompt && !files?.length && !imageUrls.length && !pastedTexts) {
       return Response.json(
         { error: "prompt or attachment required" },
         { status: 400 },
@@ -1029,11 +989,39 @@ export async function handleSessionsRoutes(
         : body?.mode === "scratch"
           ? ("scratch" as const)
           : ("ask" as const);
+    let forkFrom: { sourceId: string; messageId?: string } | undefined;
+    if (body?.forkFrom !== undefined) {
+      const candidate = body.forkFrom;
+      if (
+        !candidate ||
+        typeof candidate !== "object" ||
+        Array.isArray(candidate) ||
+        !("sourceId" in candidate) ||
+        typeof candidate.sourceId !== "string" ||
+        !candidate.sourceId.trim()
+      ) {
+        return Response.json({ error: "invalid forkFrom" }, { status: 400 });
+      }
+      const messageId =
+        "messageId" in candidate ? candidate.messageId : undefined;
+      if (
+        messageId !== undefined &&
+        (typeof messageId !== "string" || !messageId.trim())
+      ) {
+        return Response.json({ error: "invalid forkFrom" }, { status: 400 });
+      }
+      forkFrom = {
+        sourceId: candidate.sourceId.trim(),
+        ...(typeof messageId === "string"
+          ? { messageId: messageId.trim() }
+          : {}),
+      };
+    }
     let branch = typeof body?.branch === "string" ? body.branch.trim() : "";
     const joinsWorktree = !!(
       workspaceId && getWorkspace(workspaceId)?.worktreeDir
     );
-    if (mode === "code" && !branch && !joinsWorktree) {
+    if (!forkFrom && mode === "code" && !branch && !joinsWorktree) {
       const attachmentName =
         typeof (files?.[0] as { name?: unknown } | undefined)?.name === "string"
           ? String((files?.[0] as { name: string }).name)
@@ -1062,10 +1050,12 @@ export async function handleSessionsRoutes(
         id: targetId,
         requestId,
         requestScope: actorScope,
+        createdByLogin: ctx.authUser?.login,
         prompt,
         mode,
         ...(mode === "code" && branch ? { branch } : {}),
         ...(workspaceId ? { workspaceId } : {}),
+        ...(forkFrom ? { forkFrom } : {}),
         ...nativeCreateRepoOptions(mode, body?.repo),
         ...(typeof body?.model === "string" && body.model
           ? { model: body.model }
@@ -1087,6 +1077,7 @@ export async function handleSessionsRoutes(
         // Image and file attachments from the native create path.
         ...(imageUrls.length ? { images: imageUrls } : {}),
         ...(files?.length ? { files } : {}),
+        ...(pastedTexts ? { pastedTexts } : {}),
         user: actor,
       });
       return Response.json({
@@ -1240,6 +1231,7 @@ export async function handleSessionsRoutes(
         fastMode?: unknown;
         busyMode?: unknown;
         files?: unknown;
+        pastedTexts?: unknown;
         contextSessions?: unknown;
         clientId?: unknown;
       } | null;
@@ -1249,7 +1241,12 @@ export async function handleSessionsRoutes(
           : typeof body?.prompt === "string"
             ? body.prompt
             : "";
-      const content = raw.trim();
+      // Pasted blocks fold in at intake, after the message, so every path
+      // below (queue, steer, run, persistence) carries one string.
+      const content = withPastedTexts(
+        raw.trim(),
+        pastedTextsFromWire(body?.pastedTexts),
+      );
       const images = parseImageDataUrls(body?.images);
       const imageUrls = asDataUrlList(body?.images);
       // An image-only send is a real message, so only reject an empty one.
@@ -1267,6 +1264,15 @@ export async function handleSessionsRoutes(
           {
             error: "An attached image is no longer available. Attach it again.",
           },
+          { status: 400 },
+        );
+      }
+      // Same terminal answer for a list the queue would refuse to stage. Ask
+      // before delivery so the kernel never records a receipt for a message
+      // that can only ever fail the same way.
+      if ((images?.length ?? 0) > MAX_PROMPT_IMAGES) {
+        return Response.json(
+          { error: `Attach up to ${MAX_PROMPT_IMAGES} images per message.` },
           { status: 400 },
         );
       }
@@ -1299,20 +1305,38 @@ export async function handleSessionsRoutes(
           typeof body?.fastMode === "boolean" ? body.fastMode : undefined,
         );
       }
-      const result = await getSessionControl().deliverToSession(
-        sessionId,
-        content,
-        user,
-        {
-          busy: busyMode,
-          hold: busyMode === "queue",
-          images,
-          imageUrls,
-          files,
-          contextSessions,
-          ...(clientId ? { deliveryId: clientId } : {}),
-        },
-      );
+      let result: Awaited<
+        ReturnType<ReturnType<typeof getSessionControl>["deliverToSession"]>
+      >;
+      try {
+        result = await getSessionControl().deliverToSession(
+          sessionId,
+          content,
+          user,
+          {
+            busy: busyMode,
+            hold: busyMode === "queue",
+            images,
+            imageUrls,
+            files,
+            contextSessions,
+            ...(clientId ? { deliveryId: clientId } : {}),
+          },
+        );
+      } catch (error) {
+        // A rejected attachment list, or the kernel replaying the failure it
+        // recorded for this client id, will not change on retry. Say so with
+        // a 4xx: a 500 reads as transient and keeps the outbox looping on a
+        // message nobody can edit or discard.
+        if (error instanceof InvalidUploadError)
+          return Response.json(
+            { error: error.message },
+            { status: error.status },
+          );
+        if (error instanceof SessionKernelActorError && !error.retryable)
+          return Response.json({ error: error.message }, { status: 409 });
+        throw error;
+      }
       if (result.status === "error") {
         return Response.json(
           { ...result, error: result.message },
@@ -1405,24 +1429,31 @@ export async function handleSessionsRoutes(
         // content keeps its exact legacy shape; toolInput/images are
         // additive (existing clients ignore them) — they carry the
         // unstripped fields the bounded store row summarized away.
-        if (full)
+        if (full) {
+          // Same stripping the wire path applies, so expanding a
+          // clamped notice doesn't suddenly reveal the sentinel and
+          // "[Name] " prefix its folded form hid. The store row
+          // carries no type; a user turn is the only kind that
+          // arrives with delivery plumbing, and the detectors are
+          // conservative enough to leave anything else alone. Pasted
+          // blocks lift the same way, whole: this is where a card
+          // whose block the wire clamped fetches the rest.
+          const classified = classifyEntry({
+            id: entryId,
+            type: "user",
+            content: full.content,
+            timestamp: "",
+          });
           return Response.json({
-            // Same stripping the wire path applies, so expanding a
-            // clamped notice doesn't suddenly reveal the sentinel and
-            // "[Name] " prefix its folded form hid. The store row
-            // carries no type; a user turn is the only kind that
-            // arrives with delivery plumbing, and the detectors are
-            // conservative enough to leave anything else alone.
-            content: classifyEntry({
-              id: entryId,
-              type: "user",
-              content: full.content,
-              timestamp: "",
-            }).content,
+            content: classified.content,
+            ...(classified.pastedTexts
+              ? { pastedTexts: classified.pastedTexts }
+              : {}),
             toolInput: full.toolInput,
             images: full.images,
             featuredMedia: full.featuredMedia,
           });
+        }
       } catch {
         // store read failed — the legacy scan below still serves the entry
       }
@@ -1434,6 +1465,7 @@ export async function handleSessionsRoutes(
       const entry = classifyEntry(found);
       return Response.json({
         content: entry.content,
+        ...(entry.pastedTexts ? { pastedTexts: entry.pastedTexts } : {}),
         toolInput: entry.toolInput,
         images: entry.images,
         featuredMedia: entry.featuredMedia,
@@ -1947,7 +1979,21 @@ export async function handleSessionsRoutes(
       if (!session)
         return Response.json({ error: "Session not found" }, { status: 404 });
       const signals = await sessionListRuntimeSignals();
-      return Response.json(enrichSession(session, signals), {
+      const context = sessionEnrichmentContext();
+      const enriched = enrichSession(session, signals, context);
+      const detail = enriched.workspaceId
+        ? projectWorkspacePrRefs(
+            enriched,
+            indexedWorkspaceMemberSessions(enriched.workspaceId).map((member) =>
+              enrichSessionPrRefs(member, {
+                defaultRepoId: context.defaultRepoId,
+                prsByRepo: context.prsByRepo,
+                footerMatches: footerPrsFor(context.prsBySession, member),
+              }),
+            ),
+          )
+        : enriched;
+      return Response.json(detail, {
         headers: { "Cache-Control": "private, no-cache" },
       });
     }

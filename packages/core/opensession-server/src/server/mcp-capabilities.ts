@@ -115,6 +115,11 @@ export const INTERNAL_MCP_CAPABILITIES = {
     guidance:
       "List or update the user's Desk tasks and reminders when they ask to track work.",
   },
+  "opensession-schedule": {
+    summary: "Schedule a prompt for this session at a future time.",
+    guidance:
+      "Check back on slow external work (a release workflow, CI, a deploy) by scheduling a prompt to this session and ending the turn, instead of polling, sleeping, or reaching for harness cron tools.",
+  },
   "opensession-papercuts": {
     summary: "Append-only friction log.",
     guidance:

@@ -215,8 +215,18 @@ final class TranscriptGroupingTests: XCTestCase {
             ),
         ]
         let items = TranscriptGrouping.displayItems(from: entries)
-        let live = TranscriptGrouping.blocks(from: items, live: true, worktreeDir: nil)
-        let durable = TranscriptGrouping.blocks(from: items, live: false, worktreeDir: nil)
+        let live = TranscriptGrouping.blocks(
+            from: items,
+            live: true,
+            worktreeDir: nil,
+            thinkingMessages: .all
+        )
+        let durable = TranscriptGrouping.blocks(
+            from: items,
+            live: false,
+            worktreeDir: nil,
+            thinkingMessages: .all
+        )
 
         guard case .work(let liveTurn) = live[1],
               case .work(let durableTurn) = durable[1] else {
@@ -224,6 +234,54 @@ final class TranscriptGroupingTests: XCTestCase {
         }
         XCTAssertEqual(liveTurn.items.map(\.id), ["r1", "tool-t1", "r2"])
         XCTAssertEqual(durableTurn.items.map(\.id), liveTurn.items.map(\.id))
+    }
+
+    func testThinkingMessagePreferenceKeepsOnlyTheLatestByDefault() {
+        let entries = [
+            TranscriptEntry(id: "u1", type: "user", content: "check it"),
+            TranscriptEntry(
+                id: "r1", type: "assistant", content: "**Reading logs**", isReasoning: true
+            ),
+            toolUse("t1", name: "Bash"),
+            TranscriptEntry(
+                id: "r2", type: "assistant", content: "Still comparing.", isReasoning: true
+            ),
+            TranscriptEntry(id: "a1", type: "assistant", content: "Done."),
+        ]
+        let items = TranscriptGrouping.displayItems(from: entries)
+
+        let latest = TranscriptGrouping.blocks(
+            from: items,
+            live: false,
+            worktreeDir: nil,
+            thinkingMessages: .latest
+        )
+        guard case .work(let latestTurn) = latest[1] else {
+            return XCTFail("expected the remaining thinking message inside work")
+        }
+        XCTAssertEqual(latestTurn.items.map(\.id), ["tool-t1", "r2"])
+
+        let none = TranscriptGrouping.blocks(
+            from: items,
+            live: false,
+            worktreeDir: nil,
+            thinkingMessages: .none
+        )
+        guard case .work(let noneTurn) = none[1] else {
+            return XCTFail("expected the tool call to keep the work fold")
+        }
+        XCTAssertEqual(noneTurn.items.map(\.id), ["tool-t1"])
+
+        let all = TranscriptGrouping.blocks(
+            from: items,
+            live: false,
+            worktreeDir: nil,
+            thinkingMessages: .all
+        )
+        guard case .work(let allTurn) = all[1] else {
+            return XCTFail("expected all thinking messages inside work")
+        }
+        XCTAssertEqual(allTurn.items.map(\.id), ["r1", "tool-t1", "r2"])
     }
 
     func testLegacyBoldIntermediateSummaryIsNormalizedButBoldFinalIsNot() {
@@ -1296,10 +1354,36 @@ final class ToolPresentationTests: XCTestCase {
     func testBashSummaryFlattensNewlines() {
         let presentation = ToolPresentation.make(
             toolName: "Bash",
-            input: .object(["command": .string("cd src\nbun test")])
+            input: .object(["command": .string("bun install\nbun test")])
         )
-        XCTAssertEqual(presentation.summary, "cd src ⏎ bun test")
+        XCTAssertEqual(presentation.summary, "bun install ⏎ bun test")
         XCTAssertEqual(presentation.family, .run)
+    }
+
+    func testBashSummaryHidesLeadingCd() {
+        let chained = ToolPresentation.make(
+            toolName: "Bash",
+            input: .object(["command": .string("cd ~/scratch/thinking-status && grep -n foo a.ts | head")])
+        )
+        XCTAssertEqual(chained.summary, "grep -n foo a.ts | head")
+
+        let quoted = ToolPresentation.make(
+            toolName: "Bash",
+            input: .object(["command": .string("cd '/tmp/my dir'; bun test\nbun run check")])
+        )
+        XCTAssertEqual(quoted.summary, "bun test ⏎ bun run check")
+
+        let bareCd = ToolPresentation.make(
+            toolName: "Bash",
+            input: .object(["command": .string("cd /tmp/scratch")])
+        )
+        XCTAssertEqual(bareCd.summary, "cd /tmp/scratch")
+
+        let prefixOnly = ToolPresentation.make(
+            toolName: "Bash",
+            input: .object(["command": .string("cdparanoia && ls")])
+        )
+        XCTAssertEqual(prefixOnly.summary, "cdparanoia && ls")
     }
 
     func testPathsAreRepoRelativeInsideTheWorktree() {

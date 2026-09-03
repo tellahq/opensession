@@ -174,18 +174,13 @@ export function GithubManifestSetup({
     setStarting(true);
     setError(null);
     try {
+      const json =
+        owner === "organization"
+          ? { owner, returnTo, organization: installationOwner.trim() }
+          : { owner, returnTo };
       const body = await setupRequest<{ action: string; manifest: string }>(
         "/api/setup/github/manifest",
-        {
-          method: "POST",
-          json: {
-            owner,
-            returnTo,
-            ...(owner === "organization"
-              ? { organization: installationOwner.trim() }
-              : {}),
-          },
-        },
+        { method: "POST", json },
       );
       const action = githubManifestAction(body.action);
       if (!action) {
@@ -259,7 +254,11 @@ export function GithubManifestSetup({
         <Segmented
           label="GitHub App owner"
           value={owner}
-          onValueChange={(value) => setOwner(value as GithubAppOwnerType)}
+          onValueChange={(value) => {
+            if (value === "personal" || value === "organization") {
+              setOwner(value);
+            }
+          }}
           className="w-full"
         >
           <SegmentedOption

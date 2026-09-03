@@ -62,7 +62,10 @@ import {
 import {
   getSessionCheckoutPrefs,
   onSessionCheckoutPrefChanged,
+  sessionCheckoutDefault,
+  setSessionCheckoutDefault,
   setSessionCheckoutPref,
+  type SessionCheckoutOverride,
   type SessionCheckoutPrefs,
 } from "../../lib/session-checkout-pref";
 import {
@@ -77,6 +80,12 @@ import {
   onLiveTypingChanged,
   setLiveTypingPref,
 } from "../../lib/live-typing-pref";
+import {
+  getThinkingMessagesPref,
+  onThinkingMessagesChanged,
+  setThinkingMessagesPref,
+  type ThinkingMessagesPref,
+} from "../../lib/thinking-messages-pref";
 import {
   getReplySuggestionsPref,
   onReplySuggestionsChanged,
@@ -114,9 +123,10 @@ import {
   SidebarItemsSection,
 } from "./AppearancePanel";
 import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
+import { PendingSendsSection } from "./PendingSendsSection";
 import { RepoTile } from "../RepoTile";
 import { ModelMark } from "../ModelMark";
-import { IconRepo } from "../icons";
+import { IconPlus, IconRepo } from "../icons";
 
 // ── Desk voice ─────────────────────────────────────────────────────────────
 
@@ -136,7 +146,7 @@ function DeskVoiceApiKeyRow() {
       label: "Failed to load voice settings",
     })
       .then(setStatus)
-      .catch((error: unknown) =>
+      .catch((error) =>
         setError(errorMessage(error, "Failed to load voice settings")),
       );
   }, []);
@@ -173,14 +183,7 @@ function DeskVoiceApiKeyRow() {
       )}
       <SettingRow
         title={status?.configured ? "Replace key" : "OpenAI API key"}
-        desc={
-          error || (
-            <>
-              Stored on the server, used only for Desk voice calls. Any
-              signed-in user can start voice calls once set.
-            </>
-          )
-        }
+        desc={error || "Anyone signed in can start calls."}
         control={
           <div className="flex items-center gap-2">
             <Input
@@ -228,9 +231,8 @@ function DeskVoicePanel() {
         </SettingGroup>
       </SettingCard>
       <SettingsHint>
-        Talk to your Desk, the standing session you summon with ⌘J, instead of
-        typing. Voice mode adds a microphone button to the Desk overlay. The API
-        key is shared by everyone on this instance.
+        Adds a microphone to Desk, opened with ⌘J. The API key is shared across
+        this instance.
       </SettingsHint>
     </>
   );
@@ -253,7 +255,7 @@ function PersonalOutputStyleRow() {
         setError(null);
       })
       .catch(
-        (error: unknown) =>
+        (error) =>
           alive && setError(errorMessage(error, "Failed to load output style")),
       );
     return () => {
@@ -281,10 +283,7 @@ function PersonalOutputStyleRow() {
   return (
     <SettingRow
       title="Output style"
-      desc={
-        error ||
-        "Concise leads with the result and skips preamble and narration without reducing the work."
-      }
+      desc={error || "Concise skips preamble without reducing the work."}
       control={
         <Select
           label="Output style"
@@ -320,7 +319,7 @@ function PersonalPromptPanel() {
         setSavedPrompt(result.prompt);
       })
       .catch(
-        (error: unknown) =>
+        (error) =>
           alive && setError(errorMessage(error, "Failed to load your prompt")),
       );
     return () => {
@@ -390,7 +389,7 @@ function PersonalPromptPanel() {
       <SettingsSection>
         <Textarea
           rows={10}
-          placeholder='e.g. "Keep answers short. Prefer tables for comparisons. Always mention which files you touched."'
+          placeholder='e.g. "Keep answers short. Prefer tables."'
           value={prompt}
           onChange={(e) => {
             setPrompt(e.target.value);
@@ -409,9 +408,8 @@ function PersonalPromptPanel() {
         </div>
       </SettingsSection>
       <SettingsHint>
-        Added to the system prompt of every session you ({user}) start: tone,
-        preferences, how you like work reported. It follows you across devices
-        and is never given to automations. Leave it empty to turn it off.
+        Used in every session you start. Syncs across devices. Automations never
+        receive it.
       </SettingsHint>
     </>
   );
@@ -510,6 +508,10 @@ export function PreferencesPanel() {
   const [checkoutPrefs, setCheckoutPrefs] = useState<SessionCheckoutPrefs>(
     getSessionCheckoutPrefs,
   );
+  const [checkoutOverrideDraft, setCheckoutOverrideDraft] = useState<{
+    repo: string;
+    mode: SessionCheckoutOverride;
+  } | null>(null);
   useEffect(
     () =>
       onSessionCheckoutPrefChanged(() =>
@@ -523,6 +525,15 @@ export function PreferencesPanel() {
     () => onTurnActivityChanged(() => setTurnActivity(getTurnActivityPrefs())),
     [],
   );
+  const [thinkingMessages, setThinkingMessages] =
+    useState<ThinkingMessagesPref>(getThinkingMessagesPref);
+  useEffect(
+    () =>
+      onThinkingMessagesChanged(() =>
+        setThinkingMessages(getThinkingMessagesPref()),
+      ),
+    [],
+  );
   const [liveTyping, setLiveTyping] = useState<boolean>(getLiveTypingPref);
   useEffect(
     () => onLiveTypingChanged(() => setLiveTyping(getLiveTypingPref())),
@@ -531,17 +542,26 @@ export function PreferencesPanel() {
   useEffect(() => {
     fetchModels()
       .then((models) => setModelOptions(models.models))
-      .catch((error: unknown) =>
+      .catch((error) =>
         setModelOptionsError(errorMessage(error, "Failed to load models")),
       );
   }, []);
   useEffect(() => {
     fetchRepos()
       .then(setRepoOptions)
-      .catch((error: unknown) =>
+      .catch((error) =>
         setRepoOptionsError(errorMessage(error, "Failed to load repositories")),
       );
   }, []);
+
+  const checkoutDefault = sessionCheckoutDefault(checkoutPrefs);
+  const checkoutOverrideRepos = repoOptions.filter((repo) => {
+    const override = checkoutPrefs[repo.id];
+    return override !== undefined && override !== checkoutDefault;
+  });
+  const availableCheckoutRepos = repoOptions.filter(
+    (repo) => checkoutPrefs[repo.id] === undefined,
+  );
 
   return (
     <SettingsPanel>
@@ -582,7 +602,7 @@ export function PreferencesPanel() {
 
           <SettingRow
             title="Default repository"
-            desc={repoOptionsError || "Where a new session starts."}
+            desc={repoOptionsError}
             control={
               <Select
                 label="Default repository"
@@ -614,8 +634,8 @@ export function PreferencesPanel() {
             title="Send messages with"
             desc={
               sendKey === "mod-enter"
-                ? "↵ makes a new line."
-                : "⇧↵ makes a new line. On a phone ↵ always makes one, so send with the button."
+                ? "↵ adds a new line."
+                : "⇧↵ adds a new line. On phones, use the send button."
             }
             control={
               <Select
@@ -631,7 +651,7 @@ export function PreferencesPanel() {
           />
           <SettingRow
             title="Follow-up while busy"
-            desc="Queue waits until the run fully finishes; steer folds your message into the running turn without stopping it."
+            desc="Queue waits for the run to finish. Steer adds the message to the current turn."
             control={
               <div className="flex flex-wrap items-end justify-end gap-x-3 gap-y-2">
                 <BusyGestureSelect
@@ -654,7 +674,7 @@ export function PreferencesPanel() {
         </SettingGroup>
         <SettingRow
           title="Quick replies"
-          desc="Suggest short follow-ups above the composer when a turn ends on a choice. Picking one fills the draft."
+          desc="Suggest follow-ups when a turn ends on a choice."
           control={
             <Switch
               aria-label="Quick replies"
@@ -665,7 +685,6 @@ export function PreferencesPanel() {
         />
         <SettingRow
           title="Next button"
-          desc="Show the Next button above the composer."
           control={
             <Switch
               aria-label="Next button"
@@ -676,7 +695,6 @@ export function PreferencesPanel() {
         />
         <SettingRow
           title="Vim mode"
-          desc="Modal editing in the composer. Esc for normal mode, i to type. Enter still sends."
           control={
             <Switch
               aria-label="Vim mode"
@@ -686,11 +704,62 @@ export function PreferencesPanel() {
           }
         />
       </SettingCard>
-      <SettingsGroupLabel>Code workspaces</SettingsGroupLabel>
+      <SettingsGroupLabel
+        actions={
+          !checkoutOverrideDraft && availableCheckoutRepos.length > 0 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<IconPlus size={16} />}
+              className="phone:min-h-11"
+              onClick={() =>
+                setCheckoutOverrideDraft({
+                  repo: "",
+                  mode:
+                    checkoutDefault === "checkout" ? "worktree" : "checkout",
+                })
+              }
+            >
+              Add override
+            </Button>
+          ) : undefined
+        }
+      >
+        Code workspaces
+      </SettingsGroupLabel>
       <SettingCard>
-        {repoOptions.map((repo) => {
+        <SettingRow
+          title="Default for all repositories"
+          desc="Where new code sessions make changes."
+          controlClassName="phone:ml-0 phone:w-full phone:max-w-none phone:basis-full"
+          control={
+            <Select
+              label="Default code workspace"
+              value={checkoutDefault}
+              options={[
+                { value: "default", label: "Use repository defaults" },
+                { value: "checkout", label: "Local checkout" },
+                { value: "worktree", label: "Separate worktree" },
+              ]}
+              className="phone:min-h-11 phone:w-full"
+              onChange={(value) => {
+                setSessionCheckoutDefault(value);
+                setCheckoutOverrideDraft((draft) =>
+                  draft?.mode === value
+                    ? {
+                        ...draft,
+                        mode: value === "checkout" ? "worktree" : "checkout",
+                      }
+                    : draft,
+                );
+              }}
+            />
+          }
+        />
+        {checkoutOverrideRepos.map((repo) => {
           const label = repo.label || repo.id;
-          const checkoutPref = checkoutPrefs[repo.id] ?? "default";
+          const checkoutPref = checkoutPrefs[repo.id];
+          if (!checkoutPref) return null;
           return (
             <SettingRow
               key={repo.id}
@@ -700,31 +769,99 @@ export function PreferencesPanel() {
                   <span className="truncate">{label}</span>
                 </span>
               }
-              desc={
-                checkoutPref === "default"
-                  ? `Repository default: ${repo.sharedCheckout ? "local checkout" : "separate worktree"}.`
-                  : "Personal override for new code sessions."
-              }
+              desc="Overrides the default above."
+              controlClassName="phone:ml-0 phone:w-full phone:max-w-none phone:basis-full"
               control={
                 <Select
                   label={`${label} code workspace`}
                   value={checkoutPref}
                   options={[
-                    { value: "default", label: "Use repository default" },
+                    { value: "default", label: "Use default for all" },
                     { value: "checkout", label: "Local checkout" },
                     { value: "worktree", label: "Separate worktree" },
                   ]}
+                  className="phone:min-h-11 phone:w-full"
                   onChange={(value) => setSessionCheckoutPref(repo.id, value)}
                 />
               }
             />
           );
         })}
+        {checkoutOverrideDraft && (
+          <SettingRow
+            title="New override"
+            desc="Choose a repository and workspace."
+            controlClassName="phone:ml-0 phone:w-full phone:max-w-none phone:basis-full"
+            control={
+              <div className="flex flex-wrap items-center justify-end gap-2 phone:w-full">
+                <Select
+                  label="Repository to override"
+                  value={checkoutOverrideDraft.repo}
+                  options={[
+                    {
+                      value: "",
+                      label: "Choose repository",
+                      icon: <IconRepo size={16} />,
+                    },
+                    ...availableCheckoutRepos.map((repo) => ({
+                      value: repo.id,
+                      label: repo.label || repo.id,
+                      icon: <RepoTile name={repo.id} size={16} />,
+                    })),
+                  ]}
+                  className="phone:min-h-11 phone:max-w-full"
+                  onChange={(repo) =>
+                    setCheckoutOverrideDraft((draft) =>
+                      draft ? { ...draft, repo } : draft,
+                    )
+                  }
+                />
+                <Select
+                  label="Override code workspace"
+                  value={checkoutOverrideDraft.mode}
+                  options={(
+                    [
+                      { value: "checkout", label: "Local checkout" },
+                      { value: "worktree", label: "Separate worktree" },
+                    ] satisfies {
+                      value: SessionCheckoutOverride;
+                      label: string;
+                    }[]
+                  ).filter((option) => option.value !== checkoutDefault)}
+                  className="phone:min-h-11"
+                  onChange={(mode) =>
+                    setCheckoutOverrideDraft((draft) =>
+                      draft ? { ...draft, mode } : draft,
+                    )
+                  }
+                />
+                <Button
+                  variant="soft"
+                  className="phone:min-h-11"
+                  disabled={!checkoutOverrideDraft.repo}
+                  onClick={() => {
+                    setSessionCheckoutPref(
+                      checkoutOverrideDraft.repo,
+                      checkoutOverrideDraft.mode,
+                    );
+                    setCheckoutOverrideDraft(null);
+                  }}
+                >
+                  Add
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="phone:min-h-11"
+                  onClick={() => setCheckoutOverrideDraft(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            }
+          />
+        )}
       </SettingCard>
-      <SettingsHint>
-        Personal choices apply to new sessions only and override each
-        repository&apos;s default.
-      </SettingsHint>
+      <SettingsHint>Changes apply to new sessions only.</SettingsHint>
       <AppearanceSection />
       <SettingsGroupLabel>Sidebar</SettingsGroupLabel>
       <SettingCard>
@@ -758,7 +895,7 @@ export function PreferencesPanel() {
         <SettingGroup>
           <SettingRow
             title="Steps"
-            desc="Choose whether steps stay closed, open when the agent writes updates, or remain open."
+            desc="Choose when steps open."
             control={
               <Select
                 label="Steps"
@@ -773,8 +910,22 @@ export function PreferencesPanel() {
             }
           />
           <SettingRow
+            title="Thinking messages"
+            control={
+              <Select
+                label="Thinking messages"
+                value={thinkingMessages}
+                options={[
+                  { value: "none", label: "None" },
+                  { value: "latest", label: "Latest" },
+                  { value: "all", label: "All" },
+                ]}
+                onChange={setThinkingMessagesPref}
+              />
+            }
+          />
+          <SettingRow
             title="Tool calls"
-            desc="Choose whether tool calls start open or stay folded into a single step."
             control={
               <Select
                 label="Tool calls"
@@ -790,7 +941,7 @@ export function PreferencesPanel() {
         </SettingGroup>
         <SettingRow
           title="Live typing"
-          desc="Type the reply out as the model writes it. Off, each part appears when it is finished."
+          desc="Show replies as the model writes them."
           control={
             <Switch
               aria-label="Live typing"
@@ -803,6 +954,7 @@ export function PreferencesPanel() {
 
       <DeskVoicePanel />
       <PersonalPromptPanel />
+      <PendingSendsSection />
     </SettingsPanel>
   );
 }

@@ -1,4 +1,6 @@
+import { os1Shell } from "../lib/os1-shell";
 import React, { useEffect, useState } from "react";
+import { z } from "zod";
 import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { subscribeFrontendVersion } from "../lib/frontend-version";
@@ -17,29 +19,46 @@ interface Props {
  *  protocol-break deploy converges in under a minute. */
 const FORCE_GRACE_MS = 20_000;
 
-type ShellUpdateState = {
-  state: "idle" | "available" | "downloaded";
-  version?: string | null;
+const shellUpdateStateSchema = z.object({
+  state: z.enum(["idle", "available", "downloaded"]),
+  version: z.string().nullable().optional(),
+});
+
+type ShellUpdateState = z.infer<typeof shellUpdateStateSchema>;
+
+type ShellUpdates = {
+  onState: (cb: (state: ShellUpdateState) => void) => (() => void) | undefined;
+  install: () => void;
 };
 
 /** The mac shell's updater bridge — absent in a browser. `onState` replays the
  *  current state on subscribe, so a reload re-surfaces a staged update. */
-function os1Updates():
-  | {
-      onState: (cb: (s: ShellUpdateState) => void) => (() => void) | void;
-      install: () => void;
-    }
-  | undefined {
-  return (
-    window as {
-      os1?: {
-        updates?: {
-          onState: (cb: (s: ShellUpdateState) => void) => (() => void) | void;
-          install: () => void;
-        };
+function os1Updates(): ShellUpdates | undefined {
+  const updates = os1Shell()?.updates;
+  if (
+    !(updates instanceof Object) ||
+    !("onState" in updates) ||
+    !(updates.onState instanceof Function) ||
+    !("install" in updates) ||
+    !(updates.install instanceof Function)
+  )
+    return undefined;
+
+  const onState = updates.onState.bind(updates);
+  const install = updates.install.bind(updates);
+  return {
+    onState: (callback) => {
+      const handleState = (
+        value: Parameters<typeof shellUpdateStateSchema.safeParse>[0],
+      ) => {
+        const state = shellUpdateStateSchema.safeParse(value);
+        if (state.success) callback(state.data);
       };
-    }
-  ).os1?.updates;
+      const unsubscribe = onState(handleState);
+      return unsubscribe instanceof Function ? () => unsubscribe() : undefined;
+    },
+    install: () => install(),
+  };
 }
 
 /**
@@ -112,11 +131,10 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
   useEffect(() => {
     const updates = os1Updates();
     if (!updates?.onState) return;
-    const off = updates.onState((s) => {
+    return updates.onState((s) => {
       setShellReady(s.state === "downloaded");
       setShellVersion(s.version ?? null);
     });
-    return typeof off === "function" ? off : undefined;
   }, []);
 
   useEffect(() => {

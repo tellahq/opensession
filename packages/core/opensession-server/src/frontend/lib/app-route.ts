@@ -54,22 +54,22 @@ const SETTINGS_SECTIONS: ReadonlySet<string> = new Set<SettingsSectionKey>([
   "audit",
   "downloads",
 ]);
-const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSectionKey> = {
-  appearance: "preferences",
-  model: "providers",
-  models: "providers",
-  modelProviders: "providers",
-  usage: "providers",
-  warmPreviews: "prewarming",
-  previewPool: "prewarming",
-  workspace: "setup",
-  personalPrompt: "preferences",
-  deskVoice: "preferences",
-  composer: "preferences",
-  keychain: "myAccounts",
-  profile: "myAccounts",
-  identity: "general",
-};
+const LEGACY_SETTINGS_SECTIONS = new Map<string, SettingsSectionKey>([
+  ["appearance", "preferences"],
+  ["model", "providers"],
+  ["models", "providers"],
+  ["modelProviders", "providers"],
+  ["usage", "providers"],
+  ["warmPreviews", "prewarming"],
+  ["previewPool", "prewarming"],
+  ["workspace", "setup"],
+  ["personalPrompt", "preferences"],
+  ["deskVoice", "preferences"],
+  ["composer", "preferences"],
+  ["keychain", "myAccounts"],
+  ["profile", "myAccounts"],
+  ["identity", "general"],
+]);
 
 export function isToolView(
   view: string,
@@ -105,13 +105,13 @@ export function parseRoute(pathname: string): Route {
   );
   if (workspace) {
     const tab = workspace[2];
-    return {
+    const route: Extract<Route, { view: "workspace" }> = {
       view: "workspace",
       id: decodeURIComponent(workspace[1]!),
-      ...(tab === "review" || tab === "conversation" || tab === "video"
-        ? { tab }
-        : {}),
     };
+    if (tab === "review" || tab === "conversation" || tab === "video")
+      route.tab = tab;
+    return route;
   }
 
   const session = path.match(/^\/session\/(.+)$/);
@@ -132,18 +132,16 @@ export function parseRoute(pathname: string): Route {
   }
   const plain = path.match(/^\/plain(?:\/(.+))?$/);
   if (plain) {
-    return {
-      view: "plain",
-      ...(plain[1] ? { threadId: decodeURIComponent(plain[1]) } : {}),
-    };
+    const route: Extract<Route, { view: "plain" }> = { view: "plain" };
+    if (plain[1]) route.threadId = decodeURIComponent(plain[1]);
+    return route;
   }
   const reports = path.match(/^\/reports(?:\/([^/]+)(?:\/([^/]+))?)?$/);
   if (reports) {
-    return {
-      view: "reports",
-      ...(reports[1] ? { automationId: decodeURIComponent(reports[1]) } : {}),
-      ...(reports[2] ? { reportId: decodeURIComponent(reports[2]) } : {}),
-    };
+    const route: Extract<Route, { view: "reports" }> = { view: "reports" };
+    if (reports[1]) route.automationId = decodeURIComponent(reports[1]);
+    if (reports[2]) route.reportId = decodeURIComponent(reports[2]);
+    return route;
   }
 
   if (path === "/analytics") return { view: "analytics" };
@@ -153,18 +151,18 @@ export function parseRoute(pathname: string): Route {
 
   const automation = path.match(/^\/automations(?:\/(.+))?$/);
   if (automation) {
-    return {
+    const route: Extract<Route, { view: "automations" }> = {
       view: "automations",
-      ...(automation[1] ? { id: decodeURIComponent(automation[1]) } : {}),
     };
+    if (automation[1]) route.id = decodeURIComponent(automation[1]);
+    return route;
   }
   if (path === "/security") return { view: "security" };
   const goal = path.match(/^\/goals(?:\/(.+))?$/);
   if (goal) {
-    return {
-      view: "goals",
-      ...(goal[1] ? { id: decodeURIComponent(goal[1]) } : {}),
-    };
+    const route: Extract<Route, { view: "goals" }> = { view: "goals" };
+    if (goal[1]) route.id = decodeURIComponent(goal[1]);
+    return route;
   }
   if (path === "/connections") {
     return { view: "settings", section: "connections" };
@@ -177,7 +175,7 @@ export function parseRoute(pathname: string): Route {
     if (key && isSettingsSection(key)) {
       return { view: "settings", section: key };
     }
-    const legacySection = key ? LEGACY_SETTINGS_SECTIONS[key] : undefined;
+    const legacySection = key ? LEGACY_SETTINGS_SECTIONS.get(key) : undefined;
     return legacySection
       ? { view: "settings", section: legacySection }
       : { view: "settings" };
@@ -188,10 +186,9 @@ export function parseRoute(pathname: string): Route {
   if (path === "/support-tinder") return { view: "supporttinder" };
   const reviews = path.match(/^\/reviews(?:\/(.+))?$/);
   if (reviews) {
-    return {
-      view: "reviews",
-      ...(reviews[1] ? { id: decodeURIComponent(reviews[1]) } : {}),
-    };
+    const route: Extract<Route, { view: "reviews" }> = { view: "reviews" };
+    if (reviews[1]) route.id = decodeURIComponent(reviews[1]);
+    return route;
   }
   return { view: "prs" };
 }

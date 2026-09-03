@@ -7,7 +7,8 @@ import {
   measureTranscriptElement,
   VirtualTranscriptList,
   shouldAdjustTranscriptScroll,
-  shouldTransitionTranscriptItemPosition,
+  shouldCaptureReaderAnchor,
+  shouldDeferReaderCorrection,
   transcriptOverscan,
   transcriptViewportNeedsHistory,
   type VirtualTranscriptItem,
@@ -24,40 +25,18 @@ function item(index: number): VirtualTranscriptItem {
   };
 }
 
-const source = await Bun.file(
-  new URL("./VirtualTranscriptList.tsx", import.meta.url),
-).text();
-
+// The adapter's scrolling contract (native keyed prepend anchoring, the
+// reader anchor captured before the DOM mutates and settled as a delta, one
+// writer per commit, touch deferral, rows that never glide) is asserted in a
+// real browser by tools/transcript-scroll-regression.ts and its in-page
+// probe. These tests cover the pure decision helpers only.
 describe("VirtualTranscriptList", () => {
-  test("defers observer fallback while keeping semantic measurement pre-paint", () => {
-    expect(source).toContain("useAnimationFrameWithResizeObserver: true");
-    expect(source).toContain("this.measureCommittedRows(prevProps)");
-  });
-
-  test("does not flush virtualizer notifications from a React lifecycle", () => {
-    expect(source).toContain("this.runCommitLifecycle(() =>");
-    expect(source).toMatch(
-      /if \(this\.committing\) \{[\s\S]*this\.renderAfterCommit = true;/,
-    );
-    expect(source).toContain("if (this.rendering || sync) this.queueRender()");
-    expect(source).not.toContain("flushSync");
-  });
-
-  test("captures history intent before scroll-driven rerenders", () => {
-    expect(source).toContain("capture: true");
-    expect(source).toMatch(/removeEventListener\(\s*"scroll"/);
-  });
-
   test("loads history when the opening content cannot scroll", () => {
     expect(transcriptViewportNeedsHistory(700, 700)).toBe(true);
     expect(transcriptViewportNeedsHistory(699, 700)).toBe(true);
     expect(transcriptViewportNeedsHistory(701, 700)).toBe(true);
     expect(transcriptViewportNeedsHistory(702, 700)).toBe(false);
     expect(transcriptViewportNeedsHistory(0, 0)).toBe(false);
-    expect(source).toContain("this.scheduleUnderfilledHistory()");
-    expect(source).toContain(
-      "if (callback()) this.scheduleUnderfilledHistory()",
-    );
   });
 
   test("keeps the live-edge tail in the same virtual coordinate space", () => {
@@ -82,6 +61,31 @@ describe("VirtualTranscriptList", () => {
     expect(didScrollTranscriptTowardHistory(0, 0, 745, 6_226)).toBe(true);
     expect(didScrollTranscriptTowardHistory(0, 500, 745, 6_226)).toBe(false);
     expect(didScrollTranscriptTowardHistory(0, 0, 745, 900)).toBe(false);
+  });
+
+  test("captures the reader anchor only from a consistent, non-following DOM", () => {
+    const base = { held: false, virtualizerWrote: false, following: false };
+    expect(shouldCaptureReaderAnchor(base)).toBe(true);
+    // The host's live-edge glue owns a following reader.
+    expect(shouldCaptureReaderAnchor({ ...base, following: true })).toBe(false);
+    // Rows have not re-rendered against a virtualizer scroll write: that DOM
+    // is no viewport a reader ever saw. Keep the earlier anchor instead.
+    expect(shouldCaptureReaderAnchor({ ...base, virtualizerWrote: true })).toBe(
+      false,
+    );
+    expect(shouldCaptureReaderAnchor({ ...base, held: true })).toBe(false);
+  });
+
+  test("defers corrections while touch momentum may be in flight", () => {
+    expect(
+      shouldDeferReaderCorrection({ touching: true, sinceTouchEnd: 5_000 }),
+    ).toBe(true);
+    expect(
+      shouldDeferReaderCorrection({ touching: false, sinceTouchEnd: 40 }),
+    ).toBe(true);
+    expect(
+      shouldDeferReaderCorrection({ touching: false, sinceTouchEnd: 400 }),
+    ).toBe(false);
   });
 
   test("keeps TanStack's ordinary measurement anchoring semantics", () => {
@@ -117,40 +121,6 @@ describe("VirtualTranscriptList", () => {
     ).toBe(false);
   });
 
-  test("compensates only hydration that grows at the row start", () => {
-    expect(
-      shouldAdjustTranscriptScroll({
-        itemStart: 200,
-        itemEnd: 1_200,
-        scrollOffset: 600,
-        growsAtStart: true,
-      }),
-    ).toBe(true);
-    expect(
-      shouldAdjustTranscriptScroll({
-        itemStart: 700,
-        itemEnd: 1_200,
-        scrollOffset: 600,
-        growsAtStart: true,
-      }),
-    ).toBe(false);
-    // A continuation page appends below the point being read inside this row.
-    expect(
-      shouldAdjustTranscriptScroll({
-        itemStart: 200,
-        itemEnd: 1_200,
-        scrollOffset: 600,
-      }),
-    ).toBe(false);
-  });
-
-  test("uses native keyed prepend anchoring without a competing end owner", () => {
-    expect(source).toContain('anchorTo: "end"');
-    expect(source).toContain("scrollEndThreshold: -1");
-    expect(source).toContain("this.props.shouldMaintainEnd?.()");
-    expect(source).not.toContain("getSnapshotBeforeUpdate");
-  });
-
   test("remeasures semantic changes through the observed measurement path", () => {
     const element = {
       getBoundingClientRect: () => ({
@@ -166,17 +136,6 @@ describe("VirtualTranscriptList", () => {
       }),
     };
     expect(measureTranscriptElement(element, undefined)).toBe(144);
-    expect(source).toContain("measureElement: measureTranscriptElement");
-    expect(source).toContain("this.virtualizer.measureElement(node)");
-    expect(source).not.toContain("this.virtualizer.resizeItem(");
-  });
-
-  test("reaffirms following after measured virtual extent changes", () => {
-    expect(source).toContain("this.renderedTotalSize = totalSize");
-    expect(source).toContain(
-      "if (this.renderedTotalSize === this.notifiedTotalSize) return",
-    );
-    expect(source).toContain("this.props.onLayout?.()");
   });
 
   test("keeps positive live-edge growth pinned in the measurement frame", () => {
@@ -194,22 +153,6 @@ describe("VirtualTranscriptList", () => {
         itemEnd: 1_200,
         scrollOffset: 600,
         liveEdgeDelta: -140,
-      }),
-    ).toBe(false);
-  });
-
-  test("keeps prompt reconciliation out of position transitions", () => {
-    expect(shouldTransitionTranscriptItemPosition(item(0))).toBe(true);
-    expect(
-      shouldTransitionTranscriptItemPosition({
-        ...item(0),
-        arrivalAliases: ["outbox-prompt"],
-      }),
-    ).toBe(false);
-    expect(
-      shouldTransitionTranscriptItemPosition({
-        ...item(0),
-        animatePositionChanges: false,
       }),
     ).toBe(false);
   });

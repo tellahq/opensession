@@ -6,6 +6,15 @@ const panelSource = await Bun.file(
 const viewerSource = await Bun.file(
   new URL("./SessionViewer.tsx", import.meta.url),
 ).text();
+const chromeSource = await Bun.file(
+  new URL("./session-viewer/SessionViewerChrome.tsx", import.meta.url),
+).text();
+const sidePanelSource = await Bun.file(
+  new URL("./session-viewer/SessionViewerSidePanel.tsx", import.meta.url),
+).text();
+const viewerOwnersSource = [viewerSource, chromeSource, sidePanelSource].join(
+  "\n",
+);
 
 test("workflow session rows keep link styling and in-app navigation", () => {
   const rowStart = panelSource.indexOf("function NestedSessionRow(");
@@ -25,9 +34,11 @@ test("workflow session rows keep link styling and in-app navigation", () => {
 });
 
 test("both Agents panel layouts provide the app navigation handler", () => {
-  const workflowPanels = viewerSource.match(/<WorkflowPanel[\s\S]*?\/>/g) ?? [];
+  const workflowPanels =
+    viewerOwnersSource.match(/<WorkflowPanel[\s\S]*?\/>/g) ?? [];
   expect(workflowPanels).toHaveLength(2);
   expect(workflowPanels[0]).toContain("onOpenSession=");
   expect(workflowPanels[0]).toContain("setInfoPageOpen(false);");
-  expect(workflowPanels[1]).toContain("onOpenSession={openSession}");
+  expect(workflowPanels[1]).toContain("onOpenSession={agents.onOpenSession}");
+  expect(viewerSource).toContain("onOpenSession: openSession,");
 });

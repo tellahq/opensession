@@ -85,7 +85,7 @@ export function Reports({
   });
 
   async function loadGroups() {
-    await (async () => {
+    try {
       const next = await fetchReportGroups();
       setGroups(next);
       setError("");
@@ -93,10 +93,10 @@ export function Reports({
       // auto-select — that would skip straight past it into the detail.
       if (!selectionRef.current && !isPhoneRef.current && next[0])
         onSelect(next[0].automationId);
-    })().catch(async (error: unknown) => {
+    } catch (error) {
       setError(errorMessage(error, "Failed to load reports"));
       setGroups([]);
-    });
+    }
   }
 
   // Effect-event wrapper: effects can call it with a stable trigger set

@@ -229,8 +229,11 @@ export function CatchUpDeck({
     if (e.key === "Escape") return onExit();
     if (!card) return;
     // Don't hijack arrows while typing a reply.
-    const el = e.target as HTMLElement | null;
-    if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT")) return;
+    if (
+      e.target instanceof HTMLTextAreaElement ||
+      e.target instanceof HTMLInputElement
+    )
+      return;
     if (e.key === "ArrowLeft") {
       e.preventDefault();
       act("archive");
@@ -647,9 +650,19 @@ function CatchUpComposer({
   const isNative = target.source === "opensession";
   // Send the reply into the target session (images fold in as content blocks;
   // files route to the queue server-side), then advance the deck.
-  function handleSend(raw: string): boolean {
+  function handleSend(
+    raw: string,
+    opts?: { steer?: boolean; pastedTexts?: string[] },
+  ): boolean {
     const text = raw.trim();
-    if (!text && images.length === 0 && files.length === 0) return false;
+    const pastedTexts = opts?.pastedTexts ?? [];
+    if (
+      !text &&
+      images.length === 0 &&
+      files.length === 0 &&
+      pastedTexts.length === 0
+    )
+      return false;
     if (!connected) return false;
     // Prefer the staged disk path (HTTP upload); fall back to inline dataUrl.
     const filePayload = files.map((f) =>
@@ -657,15 +670,17 @@ function CatchUpComposer({
         ? { name: f.name, path: f.path }
         : { name: f.name, dataUrl: f.dataUrl },
     );
-    send({
+    const message: Extract<WSClientMessage, { type: "prompt" }> = {
       type: "prompt",
       sessionId: target.id,
       content: text,
       user: currentUser,
       effort,
-      ...(images.length ? { images } : {}),
-      ...(files.length ? { files: filePayload } : {}),
-    });
+    };
+    if (images.length > 0) message.images = images;
+    if (files.length > 0) message.files = filePayload;
+    if (pastedTexts.length > 0) message.pastedTexts = pastedTexts;
+    send(message);
     setImages([]);
     setFiles([]);
     onReplied();

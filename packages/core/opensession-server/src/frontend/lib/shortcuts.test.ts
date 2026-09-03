@@ -27,6 +27,24 @@ Object.assign(globalThis, {
       this.type = type;
     }
   },
+  KeyboardEvent: class {
+    constructor(type: string, init: KeyboardEventInit = {}) {
+      Object.assign(
+        this,
+        {
+          type,
+          isComposing: false,
+          metaKey: false,
+          ctrlKey: false,
+          altKey: false,
+          shiftKey: false,
+          key: "",
+          code: "",
+        },
+        init,
+      );
+    }
+  },
   fetch: () => Promise.reject(new Error("offline in tests")),
 });
 
@@ -37,8 +55,8 @@ let apple = false;
 /** An event carrying the platform's own command modifier, which is the whole
  *  point of spelling it `mod`: the same stored chord has to match ⌘ on a Mac
  *  and Ctrl everywhere else. */
-function modEvent(init: Partial<KeyboardEvent> = {}): KeyboardEvent {
-  return {
+function modEvent(init: KeyboardEventInit = {}): KeyboardEvent {
+  return new KeyboardEvent("keydown", {
     isComposing: false,
     metaKey: apple,
     ctrlKey: !apple,
@@ -47,7 +65,7 @@ function modEvent(init: Partial<KeyboardEvent> = {}): KeyboardEvent {
     key: "k",
     code: "KeyK",
     ...init,
-  } as KeyboardEvent;
+  });
 }
 
 beforeAll(async () => {
@@ -86,10 +104,9 @@ describe("shortcut registry", () => {
   });
 
   test("every command lands in a rendered group", () => {
+    const renderedGroups = new Set<string>(mod.SHORTCUT_GROUPS);
     for (const command of mod.SHORTCUT_COMMANDS) {
-      expect(mod.SHORTCUT_GROUPS).toContain(
-        command.group as (typeof mod.SHORTCUT_GROUPS)[number],
-      );
+      expect(renderedGroups.has(command.group)).toBe(true);
     }
   });
 

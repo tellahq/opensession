@@ -35,6 +35,7 @@ import {
   onSidebarToolsChanged,
   readHiddenSidebarTools,
   setSidebarToolVisible,
+  SIDEBAR_TOOL_IDS,
   toolFitsViewport,
   type SidebarToolId,
 } from "../../lib/sidebar-tools";
@@ -100,14 +101,14 @@ type Glyph = { icon: ComponentType<{ size?: number }>; tone: MarkTone };
 
 /** Per tool, because a tool is a place in the app and its glyph is how the
  *  sidebar already names it. */
-const TOOL_GLYPHS: Record<string, Glyph> = {
-  tasks: { icon: IconListCircles, tone: "sky" },
-  plain: { icon: IconMail, tone: "orange" },
-  catchup: { icon: IconInbox, tone: "green" },
-  supporttinder: { icon: IconMessages, tone: "coral" },
-  reports: { icon: IconStack, tone: "indigo" },
-  analytics: { icon: IconChart, tone: "sky" },
-};
+const TOOL_GLYPHS = new Map<string, Glyph>([
+  ["tasks", { icon: IconListCircles, tone: "sky" }],
+  ["plain", { icon: IconMail, tone: "orange" }],
+  ["catchup", { icon: IconInbox, tone: "green" }],
+  ["supporttinder", { icon: IconMessages, tone: "coral" }],
+  ["reports", { icon: IconStack, tone: "indigo" }],
+  ["analytics", { icon: IconChart, tone: "sky" }],
+]);
 
 /**
  * An automation's glyph, read off what the job is about. Every automation is
@@ -170,7 +171,7 @@ function brandFor(entry: LibraryEntry): string | undefined {
 }
 
 function glyphFor(entry: LibraryEntry): Glyph {
-  const perTool = TOOL_GLYPHS[entry.slug];
+  const perTool = TOOL_GLYPHS.get(entry.slug);
   if (perTool) return perTool;
   if (entry.type === "automation") {
     const name = `${entry.slug} ${entry.name}`.toLowerCase();
@@ -223,6 +224,11 @@ function entryHref(entry: LibraryEntry): string {
   return /^https?:\/\//.test(entry.href)
     ? entry.href
     : `${BASE_PATH}${entry.href}`;
+}
+
+function sidebarToolId(entry: LibraryEntry): SidebarToolId | undefined {
+  if (entry.type !== "tool") return undefined;
+  return SIDEBAR_TOOL_IDS.find((id) => id === entry.slug);
 }
 
 function EntryControl({
@@ -399,12 +405,12 @@ export function LibraryPanel() {
     [],
   );
 
-  const visible = (entries || []).filter(
+  const visible = (entries || []).filter((entry) => {
+    if (entry.type !== "tool") return true;
     // A tool this width never shows can't be switched on here either.
-    (entry) =>
-      entry.type !== "tool" ||
-      toolFitsViewport(entry.slug as SidebarToolId, isPhone),
-  );
+    const toolId = sidebarToolId(entry);
+    return toolId !== undefined && toolFitsViewport(toolId, isPhone);
+  });
 
   const groups = (() => {
     const needle = query.trim().toLowerCase();
@@ -503,9 +509,10 @@ export function LibraryPanel() {
             label="Filter the library"
             size="sm"
             value={filter}
-            onValueChange={(next) =>
-              setFilter(next as "all" | LibraryEntryType)
-            }
+            onValueChange={(next) => {
+              const selected = FILTERS.find((option) => option.key === next);
+              if (selected) setFilter(selected.key);
+            }}
           >
             {FILTERS.map((option) => (
               <SegmentedOption key={option.key} value={option.key}>
@@ -534,19 +541,21 @@ export function LibraryPanel() {
 					    apart. */}
           <div className="@container">
             <div className="grid grid-cols-1 gap-x-12 @[560px]:grid-cols-2">
-              {group.entries.map((entry) => (
-                <EntryCard
-                  key={entry.id}
-                  entry={entry}
-                  toolVisible={
-                    entry.type === "tool" &&
-                    !hiddenTools.has(entry.slug as SidebarToolId)
-                  }
-                  onToggleTool={(next) =>
-                    setSidebarToolVisible(entry.slug as SidebarToolId, next)
-                  }
-                />
-              ))}
+              {group.entries.map((entry) => {
+                const toolId = sidebarToolId(entry);
+                return (
+                  <EntryCard
+                    key={entry.id}
+                    entry={entry}
+                    toolVisible={
+                      toolId !== undefined && !hiddenTools.has(toolId)
+                    }
+                    onToggleTool={(next) => {
+                      if (toolId) setSidebarToolVisible(toolId, next);
+                    }}
+                  />
+                );
+              })}
             </div>
           </div>
           <SettingsHint className="mt-4 px-0">

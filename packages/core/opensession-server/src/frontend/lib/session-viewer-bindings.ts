@@ -52,6 +52,7 @@ export interface SessionViewerLifecycleBinding {
     user: string;
     sentAt: number;
     images?: string[];
+    pastedTexts?: string[];
   };
   /** Archive through the sidebar so the nearest visible row becomes active. */
   onArchive?: () => void;

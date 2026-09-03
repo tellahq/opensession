@@ -67,6 +67,7 @@ export interface TranscriptController {
   indexExpectedRef: React.RefObject<boolean>;
   indexEpochRef: React.RefObject<number | null>;
   rangeRetryGeneration: number;
+  rangesLoading: boolean;
   existingIndexForInit: (v2: boolean) => TranscriptIndexEntry[] | null;
   setIndexMode: (v2: boolean) => void;
   acceptInitTail: (
@@ -129,6 +130,9 @@ export function useTranscript({
   const pendingIndexPositionRef = useRef<PendingIndexPosition | null>(null);
   const completedRangeKeysRef = useRef(new Set<string>());
   const rangeRequestsRef = useRef(new Map<string, TranscriptRangeRequest>());
+  const [rangesLoading, setRangesLoading] = useState(false);
+  const syncRangesLoading = () =>
+    setRangesLoading(rangeRequestsRef.current.size > 0);
   const settledIndexRef = useRef<TranscriptIndexEntry[] | null>(null);
 
   const cancelIndexAnchorHold = () => {
@@ -141,6 +145,7 @@ export function useTranscript({
       clearTimeout(request.timer);
     rangeRequestsRef.current.clear();
     completedRangeKeysRef.current.clear();
+    syncRangesLoading();
   };
 
   const existingIndexForInit = (v2: boolean) =>
@@ -235,6 +240,7 @@ export function useTranscript({
       const requestId = randomUUID();
       const timer = setTimeout(() => {
         rangeRequestsRef.current.delete(key);
+        syncRangesLoading();
         setRangeRetryGeneration((generation) => generation + 1);
       }, RANGE_REQUEST_TIMEOUT_MS);
       rangeRequestsRef.current.set(key, { range, requestId, timer });
@@ -248,6 +254,7 @@ export function useTranscript({
         epoch,
       });
     }
+    syncRangesLoading();
   };
 
   const acceptRange = (message: TranscriptRangeMessage) => {
@@ -262,11 +269,13 @@ export function useTranscript({
     if (message.complete) {
       completedRangeKeysRef.current.add(key);
       rangeRequestsRef.current.delete(key);
+      syncRangesLoading();
       setRangeRetryGeneration((generation) => generation + 1);
       return;
     }
     request.timer = setTimeout(() => {
       rangeRequestsRef.current.delete(key);
+      syncRangesLoading();
       setRangeRetryGeneration((generation) => generation + 1);
     }, RANGE_REQUEST_TIMEOUT_MS);
     send({
@@ -293,7 +302,7 @@ export function useTranscript({
           }
         : current,
     );
-    if (entries.length === 0 && typeof firstSeq === "number")
+    if (entries.length === 0 && firstSeq !== undefined)
       send({ type: "load_transcript_index", sessionId });
   };
 
@@ -375,6 +384,7 @@ export function useTranscript({
     indexExpectedRef,
     indexEpochRef,
     rangeRetryGeneration,
+    rangesLoading,
     existingIndexForInit,
     setIndexMode,
     acceptInitTail,

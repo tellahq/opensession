@@ -11,7 +11,7 @@ export const API_BASE = BASE;
 // loads without turning the API layer into a stale response cache. Requests
 // with an AbortSignal stay independent because one caller must not be able to
 // cancel another caller's work.
-const inflightGets = new Map<string, Promise<unknown>>();
+const inflightGets = new Map<string, Promise<Response>>();
 
 /** Single error shape for every API failure: HTTP status + the server's
  * `error` field when it sent one, else a "<label>: <status>" message. */
@@ -49,40 +49,45 @@ export function request<T>(
     );
   }
   const share = method === "GET" && opts.body === undefined && !opts.signal;
-  if (share) {
-    const existing = inflightGets.get(path);
-    if (existing) return existing as Promise<T>;
-  }
-
-  const pending = (async () => {
-    const res = await fetch(`${BASE}${path}`, {
+  const createResponse = () => {
+    const init: RequestInit = {
       method,
       signal: opts.signal,
       keepalive: opts.keepalive,
-      ...(opts.body !== undefined
-        ? {
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(opts.body),
-          }
-        : {}),
-    });
+    };
+    if (opts.body !== undefined) {
+      init.headers = { "Content-Type": "application/json" };
+      init.body = JSON.stringify(opts.body);
+    }
+    return fetch(`${BASE}${path}`, init);
+  };
+
+  let responsePending = share ? inflightGets.get(path) : undefined;
+  const ownsSharedRequest = share && !responsePending;
+  if (!responsePending) responsePending = createResponse();
+  if (ownsSharedRequest) inflightGets.set(path, responsePending);
+
+  const pending = responsePending.then(async (sharedResponse) => {
+    const res = share ? sharedResponse.clone() : sharedResponse;
     if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as {
-        error?: string;
-      } | null;
+      const body: { error?: string } | null = await res
+        .json()
+        .catch(() => null);
       throw new ApiError(
         body?.error || `${opts.label || "Failed"}: ${res.status}`,
         res.status,
       );
     }
-    return (await res.json().catch(() => null)) as T;
-  })();
+    const body: T = await res.json().catch(() => null);
+    return body;
+  });
 
-  if (share) {
-    inflightGets.set(path, pending);
+  if (ownsSharedRequest) {
     void pending
       .finally(() => {
-        if (inflightGets.get(path) === pending) inflightGets.delete(path);
+        if (inflightGets.get(path) === responsePending) {
+          inflightGets.delete(path);
+        }
       })
       .catch(() => {});
   }

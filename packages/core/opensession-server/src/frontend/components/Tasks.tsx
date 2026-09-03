@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { z } from "zod";
 import { BASE_PATH } from "../lib/base";
 import { DEFAULT_DOC_TITLE, docTitle } from "../lib/brand";
 import type { TodoItem, WSServerMessage } from "../lib/types";
@@ -15,6 +16,29 @@ interface TasksProps {
   addHandler: (handler: (message: WSServerMessage) => void) => () => void;
   onOpenSession: (sessionId: string) => void;
 }
+
+const todoItemSchema = z.object({
+  id: z.string(),
+  user: z.string(),
+  text: z.string(),
+  status: z.enum(["open", "done", "dropped"]),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  completedAt: z.string().optional(),
+  note: z.string().optional(),
+  due: z.string().optional(),
+  remindAt: z.string().optional(),
+  remindedAt: z.string().optional(),
+  source: z.object({
+    kind: z.enum(["session", "manual"]),
+    sessionId: z.string().optional(),
+    by: z.string().optional(),
+  }),
+}) satisfies z.ZodType<TodoItem>;
+
+const todosResponseSchema = z.object({
+  todos: z.array(todoItemSchema).optional(),
+});
 
 function formatReminder(iso: string): string {
   const date = new Date(iso);
@@ -119,7 +143,7 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
         `${BASE_PATH}/api/todos?status=all&user=${encodeURIComponent(user)}`,
       );
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = (await response.json()) as { todos?: TodoItem[] };
+      const data = todosResponseSchema.parse(await response.json());
       setTasks(data.todos || []);
       setError(null);
     })().catch(async () => {
@@ -144,7 +168,7 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
     [addHandler, load],
   );
 
-  async function patchTask(id: string, patch: Record<string, unknown>) {
+  async function patchTask(id: string, patch: Pick<TodoItem, "status">) {
     await (async () => {
       const response = await fetch(
         `${BASE_PATH}/api/todos/${encodeURIComponent(id)}`,

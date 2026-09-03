@@ -21,11 +21,13 @@ function invocation(sourceText: string, component: string, from = 0) {
 }
 
 test("SessionViewer receives its socket capabilities from context", async () => {
-  const [viewer, app, bindings] = await Promise.all([
+  const [viewer, pane, appContent, bindings] = await Promise.all([
     source("./SessionViewer.tsx"),
-    source("../App.tsx"),
+    source("./AppSessionPane.tsx"),
+    source("../AppContent.tsx"),
     source("../lib/session-viewer-bindings.ts"),
   ]);
+  const app = `${pane}\n${appContent}`;
   const props = interfaceBody(bindings, "SessionViewerProps");
   const lifecycle = interfaceBody(bindings, "SessionViewerLifecycleBinding");
   expect(props).not.toContain("send:");
@@ -58,18 +60,39 @@ test("SessionViewer receives its socket capabilities from context", async () => 
   expect(app).toContain("socket={sessionSocket}");
   expect(app).toContain("<SessionPaneProviders");
   expect(app).toContain(
-    "const sessionSocket = pendingSocket\n      ? socket.sessionSocketIgnoringMessages\n      : socket.sessionSocket;",
+    "const sessionSocket = pendingSocket\n    ? socket.sessionSocketIgnoringMessages\n    : socket.sessionSocket;",
   );
   expect(app).toMatch(/renderSessionPane\(\s*session,\s*socket,/);
   expect(app).toMatch(/renderSessionPane\(\s*currentSession,\s*mainSocket,/);
 });
 
-test("SessionViewer descendants no longer receive socket props", async () => {
-  const [viewer, sidePanelHost, terminal] = await Promise.all([
+test("SessionViewer delegates its session subscription once", async () => {
+  const [viewer, subscription] = await Promise.all([
     source("./SessionViewer.tsx"),
-    source("./session/SidePanelHost.tsx"),
-    source("./TerminalPanel.tsx"),
+    source("../hooks/useSessionViewerSubscription.ts"),
   ]);
+
+  expect(viewer.match(/useSessionViewerSubscription\(/g)).toHaveLength(1);
+  expect(viewer).not.toContain('case "transcript_init"');
+  expect(viewer).not.toContain('type: "watch"');
+  expect(subscription).toContain('case "transcript_init"');
+  expect(subscription).toContain('case "transcript_append"');
+  const register = subscription.indexOf("const unsubscribe = addHandler(");
+  const watch = subscription.indexOf('type: "watch"');
+  expect(register).toBeGreaterThanOrEqual(0);
+  expect(watch).toBeGreaterThan(register);
+});
+
+test("SessionViewer descendants no longer receive socket props", async () => {
+  const [viewerSource, mainRegion, sidePanelHost, terminal] = await Promise.all(
+    [
+      source("./SessionViewer.tsx"),
+      source("./session-viewer/SessionViewerMainRegion.tsx"),
+      source("./session/SidePanelHost.tsx"),
+      source("./TerminalPanel.tsx"),
+    ],
+  );
+  const viewer = `${viewerSource}\n${mainRegion}`;
   const prPanel = invocation(viewer, "PrPanel");
   expect(prPanel).not.toContain("send=");
   expect(prPanel).not.toContain("addHandler=");

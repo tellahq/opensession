@@ -5,7 +5,8 @@
  * finishing, a merge from github.com) instead of waiting out polling TTLs:
  *
  *  - the per-branch detail cache (pr-info.ts) is invalidated for the event's
- *    head branch, so the next fetch re-reads GitHub;
+ *    head branch, so the next fetch re-reads GitHub. CI deliveries do this on
+ *    a coalescing timer instead of per delivery (see CI_COALESCE_MS);
  *  - `pull_request` / `pull_request_review` payloads are written through into
  *    the bulk open-PR cache (sessions.ts) — zero GitHub quota spent;
  *  - a debounced `pr_updated` broadcast tells open tabs to refetch now,
@@ -93,6 +94,42 @@ function branchesFor(
 const pendingBroadcasts = new Map<string, ReturnType<typeof setTimeout>>();
 let pendingSessionsInvalidation: ReturnType<typeof setTimeout> | undefined;
 const BROADCAST_DEBOUNCE_MS = 2_000;
+
+// CI deliveries stream for as long as a workflow runs: every job start and
+// finish is a check_run, workflow_job, or status delivery for the same head
+// branch. Each one used to drop the detail cache and broadcast two seconds
+// later, so every open tab re-read the PR once per delivery — a 25-minute
+// pipeline across a few branches spent the installation's hourly GraphQL
+// budget (2026-09-03). Fold CI activity per branch into one refresh per
+// window; PR, review, comment, and push deliveries still refresh promptly.
+export const CI_COALESCE_MS = 30_000;
+const CI_EVENTS = new Set([
+  "check_suite",
+  "check_run",
+  "status",
+  "workflow_run",
+]);
+const pendingCiRefresh = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Whether a delivery only reports check or workflow progress. */
+export function isCiWebhookEvent(event: string): boolean {
+  return CI_EVENTS.has(event);
+}
+
+function scheduleCiRefresh(repoId: string, ghRepo: string, branch: string) {
+  const key = `${ghRepo}\u0000${branch}`;
+  if (pendingCiRefresh.has(key)) return;
+  pendingCiRefresh.set(
+    key,
+    setTimeout(() => {
+      pendingCiRefresh.delete(key);
+      // Invalidate at broadcast time, not delivery time, so a poll landing
+      // inside the window still serves the cached PR instead of re-reading.
+      invalidatePrInfo(ghRepo, branch);
+      broadcastToAll({ type: "pr_updated", repo: repoId, ghRepo, branch });
+    }, CI_COALESCE_MS),
+  );
+}
 
 function scheduleSessionsInvalidation(): void {
   if (pendingSessionsInvalidation) return;
@@ -212,6 +249,10 @@ export function handlePrWebhookEvent(event: string, payload: any): void {
     // branch-specific detail broadcasts stay independently coalesced below.
     scheduleSessionsInvalidation();
     for (const branch of prBranches) {
+      if (isCiWebhookEvent(event)) {
+        scheduleCiRefresh(repoId, ghRepo, branch);
+        continue;
+      }
       invalidatePrInfo(ghRepo, branch);
       scheduleBroadcast(repoId, ghRepo, branch, number);
     }

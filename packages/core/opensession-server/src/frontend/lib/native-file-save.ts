@@ -1,5 +1,3 @@
-type IOSNavigator = Navigator & { standalone?: boolean };
-
 export function shouldUseNativeIOSShare(input: {
   userAgent: string;
   platform: string;
@@ -24,15 +22,15 @@ export function shouldUseNativeIOSShare(input: {
 export function canUseNativeIOSShare(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined")
     return false;
-  const nav = navigator as IOSNavigator;
+  const standalone = "standalone" in navigator && navigator.standalone === true;
   return shouldUseNativeIOSShare({
     userAgent: navigator.userAgent,
     platform: navigator.platform,
     maxTouchPoints: navigator.maxTouchPoints,
-    standalone: nav.standalone === true,
+    standalone,
     displayModeStandalone: window.matchMedia("(display-mode: standalone)")
       .matches,
-    hasShare: typeof navigator.share === "function",
+    hasShare: navigator.share !== undefined,
   });
 }
 
@@ -47,7 +45,7 @@ export async function saveFileWithNativeShare(
     type: blob.type || "application/octet-stream",
   });
   if (
-    typeof navigator.canShare === "function" &&
+    navigator.canShare !== undefined &&
     !navigator.canShare({ files: [file] })
   ) {
     throw new Error("This file cannot be saved on this device");
@@ -59,6 +57,6 @@ export function shareURL(url: string): Promise<void> {
   return navigator.share({ url: new URL(url, location.href).href });
 }
 
-export function nativeShareWasCancelled(error: unknown): boolean {
+export function nativeShareWasCancelled<Rejected>(error: Rejected): boolean {
   return error instanceof DOMException && error.name === "AbortError";
 }

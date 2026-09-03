@@ -103,8 +103,13 @@ type CreationIntentOptions = {
 export class CreationEffectPendingError extends Error {
   readonly retryable = true;
 
-  constructor(message: string) {
-    super(message);
+  constructor(
+    readonly sessionId: string,
+    readonly effectId: string,
+  ) {
+    super(
+      `Session ${sessionId} creation effect ${effectId} remains durably pending`,
+    );
     this.name = "CreationEffectPendingError";
   }
 }
@@ -293,9 +298,7 @@ export async function requestCreationAttachment(
   const deadline = Date.now() + (options.timeoutMs ?? 30_000);
   while (!state.completedEffectIds.includes(effectId)) {
     if (Date.now() >= deadline)
-      throw new CreationEffectPendingError(
-        `Creation attachment effect ${effectId} remains durably pending`,
-      );
+      throw new CreationEffectPendingError(input.sessionId, effectId);
     await Bun.sleep(options.pollMs ?? 25);
     const current = await kernel.creationState();
     if (!current)
@@ -396,9 +399,7 @@ export async function requestCreationOpening(
         "Session creation was cancelled while opening was pending",
       );
     if (Date.now() >= deadline)
-      throw new CreationEffectPendingError(
-        `Creation opening effect ${effectId} remains durably pending`,
-      );
+      throw new CreationEffectPendingError(input.sessionId, effectId);
     await Bun.sleep(options.pollMs ?? 25);
     const current = await kernel.creationState();
     if (!current)
@@ -460,9 +461,7 @@ export async function requestCreationWorkspace(
   const deadline = Date.now() + (options.timeoutMs ?? 30_000);
   while (!state.completedEffectIds.includes(effectId)) {
     if (Date.now() >= deadline)
-      throw new CreationEffectPendingError(
-        `Creation workspace effect ${effectId} remains durably pending`,
-      );
+      throw new CreationEffectPendingError(input.sessionId, effectId);
     await Bun.sleep(options.pollMs ?? 25);
     const current = await kernel.creationState();
     if (!current)
@@ -523,9 +522,7 @@ export async function requestCreationBranch(
   const deadline = Date.now() + (options.timeoutMs ?? 30_000);
   while (!state.completedEffectIds.includes(effectId)) {
     if (Date.now() >= deadline)
-      throw new CreationEffectPendingError(
-        `Creation branch effect ${effectId} remains durably pending`,
-      );
+      throw new CreationEffectPendingError(input.sessionId, effectId);
     await Bun.sleep(options.pollMs ?? 25);
     const current = await kernel.creationState();
     if (!current)
@@ -581,9 +578,7 @@ export async function requestCreationCredential(
   const deadline = Date.now() + (options.timeoutMs ?? 30_000);
   while (!state.completedEffectIds.includes(effectId)) {
     if (Date.now() >= deadline)
-      throw new CreationEffectPendingError(
-        `Creation credential effect ${effectId} remains durably pending`,
-      );
+      throw new CreationEffectPendingError(input.sessionId, effectId);
     await Bun.sleep(options.pollMs ?? 25);
     const current = await kernel.creationState();
     if (!current)
@@ -647,9 +642,7 @@ export async function requestCreationSandbox(
   const deadline = Date.now() + (options.timeoutMs ?? 30_000);
   while (!state.completedEffectIds.includes(effectId)) {
     if (Date.now() >= deadline)
-      throw new CreationEffectPendingError(
-        `Creation sandbox effect ${effectId} remains durably pending`,
-      );
+      throw new CreationEffectPendingError(input.sessionId, effectId);
     await Bun.sleep(options.pollMs ?? 25);
     const current = await kernel.creationState();
     if (!current)

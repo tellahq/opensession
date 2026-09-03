@@ -4,7 +4,9 @@ import { useNavigation } from "../hooks/useNavigation";
 import type { NavigationActions } from "../lib/navigation";
 import { NavigationProvider } from "./NavigationProvider";
 
-const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+const appSource = await Bun.file(
+  new URL("../AppContent.tsx", import.meta.url),
+).text();
 const providerSource = await Bun.file(
   new URL("./NavigationProvider.tsx", import.meta.url),
 ).text();
@@ -35,6 +37,7 @@ function navigationFixture(openPrs: () => void): NavigationActions {
     openNewSessionInRepo() {},
     openDraft() {},
     async openNewSessionInWorkspace() {},
+    async duplicateSession() {},
     startNewChat() {},
     openPrefilledSession() {},
     openReview() {},

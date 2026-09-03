@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { WS_SUMMARY_SURFACE } from "../../lib/workspace-summary-classes";
 import type { PrFile } from "../../lib/types";
 
 const WIDTH_KEY = "opensession-pr-file-tree-width";
@@ -144,13 +145,13 @@ export function PrFileTree({
       ref={rootRef}
       id="pr-file-tree"
       aria-label="Changed files"
-      className="sticky top-[var(--review-file-tree-top,0px)] mb-2 ml-2 mt-[var(--review-file-tree-gap,8px)] flex max-h-[calc(100dvh-var(--review-file-tree-top,0px)-16px)] min-h-0 shrink-0 flex-col rounded-lg border border-line bg-surface desktop:max-h-[calc(100dvh-var(--desktop-header-h)-var(--review-file-tree-top,0px)-16px)]"
+      className={`${WS_SUMMARY_SURFACE} sticky top-[var(--review-file-tree-top,0px)] mb-2 ml-2 mt-[var(--review-file-tree-gap,8px)] flex max-h-[calc(100dvh-var(--review-file-tree-top,0px)-16px)] min-h-0 shrink-0 flex-col desktop:max-h-[calc(100dvh-var(--desktop-header-h)-var(--review-file-tree-top,0px)-16px)]`}
       style={{
         width: renderedWidth,
         maxWidth: `calc(100% - ${MIN_DIFF_WIDTH}px)`,
       }}
     >
-      <div className="flex h-11 shrink-0 items-center gap-2 px-3 text-label font-medium text-fg shadow-[inset_0_-1px_0_var(--divider)]">
+      <div className="flex h-11 shrink-0 items-center gap-2 px-3 text-label font-medium text-fg">
         <span className="min-w-0 flex-1 truncate">Changed files</span>
         <span className="text-meta font-normal tabular-nums text-faint">
           {files.length}

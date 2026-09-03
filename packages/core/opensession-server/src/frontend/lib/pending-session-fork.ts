@@ -1,38 +1,18 @@
-export type PendingSessionFork =
-  | { kind: "tip" }
-  | { kind: "message"; messageId: string };
+const pendingForks = new Map<string, string>();
 
-type PendingSessionForkListener = (sessionId: string) => void;
-
-const pendingForks = new Map<string, PendingSessionFork>();
-const listeners = new Set<PendingSessionForkListener>();
-
-/** Carry a duplicate request across in-app navigation. Omitting messageId
- * duplicates the current tip; message menus can target an earlier answer. */
+/** Carry a fork request across an in-app navigation from a workspace pane to
+ * the source session. The composer owns fork mode, so the workspace menu parks
+ * the selected assistant message here before opening that session. */
 export function setPendingSessionFork(
   sessionId: string,
-  messageId?: string,
+  messageId: string,
 ): void {
-  pendingForks.set(
-    sessionId,
-    messageId ? { kind: "message", messageId } : { kind: "tip" },
-  );
-  for (const listener of listeners) listener(sessionId);
+  pendingForks.set(sessionId, messageId);
 }
 
-/** Read once: returning to the session later must not re-enter duplicate mode. */
-export function takePendingSessionFork(
-  sessionId: string,
-): PendingSessionFork | null {
-  const target = pendingForks.get(sessionId) ?? null;
+/** Read once: returning to the session later must not re-enter fork mode. */
+export function takePendingSessionFork(sessionId: string): string | null {
+  const messageId = pendingForks.get(sessionId) ?? null;
   pendingForks.delete(sessionId);
-  return target;
-}
-
-/** Notify the already-open viewer when its sidebar row is duplicated. */
-export function onPendingSessionFork(
-  listener: PendingSessionForkListener,
-): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+  return messageId;
 }

@@ -284,11 +284,28 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
       SANDBOX_MODEL_FAMILIES,
     );
   });
+
+  test("sandbox automations require a qualified Daytona provider and dial-back URL", () => {
+    write({
+      provider: "daytona",
+      callbackBaseUrl: "wss://sessions.example.com",
+    });
+    expect(sandboxCapabilityStatus().automation).toMatchObject({
+      provider: "daytona",
+      available: false,
+    });
+
+    ready("daytona");
+    expect(sandboxCapabilityStatus().automation).toEqual({
+      provider: "daytona",
+      available: true,
+    });
+  });
 });
 
 describe("provider-independent model-family sandboxability", () => {
   test("family derivation follows the resolved engine provider", () => {
-    expect(sandboxModelFamilyFor("claude-fable-5").id).toBe("pi");
+    expect(sandboxModelFamilyFor("claude-fable-5-1").id).toBe("pi");
     expect(sandboxModelFamilyFor("gpt-5.5").id).toBe("pi");
     expect(sandboxModelFamilyFor("codex").id).toBe("pi"); // alias resolves
     expect(sandboxModelFamilyFor("pi/openai/gpt-5.4-mini").id).toBe("pi");
@@ -300,7 +317,7 @@ describe("provider-independent model-family sandboxability", () => {
 
   test("Claude, Pi, and every Pi provider are sandboxable", () => {
     for (const model of [
-      "claude-fable-5",
+      "claude-fable-5-1",
       "pi/anthropic/claude-sonnet-5",
       "pi/openai/gpt-5.5",
       "pi/openai/gpt-5.6-sol",
@@ -322,7 +339,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
         undefined,
         "sandbox-default-test-user",
         undefined,
-        "claude-fable-5",
+        "claude-fable-5-1",
       ),
     ).toEqual({ ok: true, provider: "docker" });
     expect(
@@ -330,7 +347,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
         "local",
         "sandbox-default-test-user",
         undefined,
-        "claude-fable-5",
+        "claude-fable-5-1",
       ),
     ).toEqual({ ok: true, provider: null });
   });
@@ -487,7 +504,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     ready("daytona");
     // Supported combos pass through.
     expect(
-      resolveRequestedSandbox("daytona", undefined, "claude-fable-5"),
+      resolveRequestedSandbox("daytona", undefined, "claude-fable-5-1"),
     ).toEqual({
       ok: true,
       provider: "daytona",

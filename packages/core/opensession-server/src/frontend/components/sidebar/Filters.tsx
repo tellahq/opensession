@@ -1,9 +1,4 @@
-import type {
-  FilterState,
-  GroupBy,
-  PrsFilter,
-  SortBy,
-} from "../../lib/sidebar-filter";
+import type { FilterState } from "../../lib/sidebar-filter";
 import {
   DENSITY_OPTIONS,
   getSidebarDensity,
@@ -67,16 +62,16 @@ const FILTER_POPOVER =
 /** The same control as a row inside the Advanced menu: label, current value,
  *  and its options one level in. Reads as a menu row rather than a panel row,
  *  because that is where it now lives. */
-function FilterSubmenu({
+function FilterSubmenu<Value extends string>({
   label,
   value,
   options,
   onSelect,
 }: {
   label: string;
-  value: string;
-  options: SettingOption[];
-  onSelect: (value: string) => void;
+  value: Value;
+  options: Array<SettingOption & { value: Value }>;
+  onSelect: (value: Value) => void;
 }) {
   const current = options.find((option) => option.value === value);
   return (
@@ -92,7 +87,14 @@ function FilterSubmenu({
         </span>
       </Menu.SubmenuTrigger>
       <Menu.Popup>
-        <ValueOptions value={value} options={options} onSelect={onSelect} />
+        <ValueOptions
+          value={value}
+          options={options}
+          onSelect={(selected) => {
+            const option = options.find(({ value }) => value === selected);
+            if (option) onSelect(option.value);
+          }}
+        />
       </Menu.Popup>
     </Menu.SubmenuRoot>
   );
@@ -158,7 +160,12 @@ export function FilterPopover({
           label="Group by"
           value={filter.groupBy}
           options={GROUP_BY_OPTIONS}
-          onSelect={(v) => onChange({ groupBy: v as GroupBy })}
+          onSelect={(selected) => {
+            const option = GROUP_BY_OPTIONS.find(
+              ({ value }) => value === selected,
+            );
+            if (option) onChange({ groupBy: option.value });
+          }}
         />
         <button
           type="button"
@@ -243,7 +250,7 @@ export function FilterPopover({
                   { value: "updated", label: "Updated" },
                   { value: "created", label: "Created" },
                 ]}
-                onSelect={(v) => onChange({ sort: v as SortBy })}
+                onSelect={(sort) => onChange({ sort })}
               />
             )}
             {/* Session-less PR rows in the project sections (the dissolved
@@ -252,7 +259,7 @@ export function FilterPopover({
               label="Pull requests"
               value={filter.prs}
               options={PR_FILTER_OPTIONS}
-              onSelect={(v) => onChange({ prs: v as PrsFilter })}
+              onSelect={(prs) => onChange({ prs })}
             />
             {/* Workspaces an agent started for itself. They sit in the
 						    ordinary sections wearing a robot, so this is how you get a
@@ -310,14 +317,14 @@ export function FilterPopover({
                   label,
                   icon: <Icon size={16} />,
                 }))}
-                onSelect={(v) => setSidebarDensity(v as SidebarDensity)}
+                onSelect={setSidebarDensity}
               />
             )}
             <FilterSubmenu
               label="Last used time"
               value={wsTime}
               options={LAST_USED_TIME_OPTIONS}
-              onSelect={(v) => setWsTimePref(v as WsTimePref)}
+              onSelect={setWsTimePref}
             />
           </Menu.Popup>
         </Menu.Root>

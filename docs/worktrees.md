@@ -71,8 +71,9 @@ deletes any work not pushed elsewhere. See
 
 A repository can set `sharedCheckout: true`, making new interactive code
 sessions work directly in its registered main checkout. The built-in Open
-Session repository uses this mode so sessions improving Open Session edit the
-code that is running. Settings → Repositories exposes the choice as **Use
+Session repository uses this mode by default. Note that the live services run
+from an immutable release, so an edit in the shared checkout is not live until
+it is committed, pushed, and deployed. Settings → Repositories exposes the choice as **Use
 isolated worktrees**; changing it affects new sessions, while existing sessions
 keep their recorded checkout. The top-level `selfDev: "worktree"` setting also
 opts Open Session self-development into isolated worktrees. PR-branch sessions,
@@ -87,6 +88,18 @@ This is a deliberate trade with sharp edges. In a shared checkout:
   in the same tree. Inspect the staged diff before committing.
 - **Commit and push often.** Keep shared uncommitted work brief and coordinate
   changes to the same file.
+- **Keep `main` at `origin/main` with `bun scripts/shared-checkout-sync.ts`.**
+  A plain `git pull --ff-only` refuses the checkout as soon as one dirty file
+  overlaps an upstream commit, and nobody may discard another session's edit,
+  so without a tool the branch drifts behind for everyone. The sync tool
+  fetches, follows upstream for clean paths, adopts local edits that already
+  landed upstream, three-way merges genuine local edits onto the new base
+  (index and worktree separately, with a copy of the pre-merge file under
+  `.git/shared-checkout-sync/`), leaves conflicting edits untouched and lists
+  them, then moves the branch with a compare-and-swap. Exit code 2 means the
+  branch is current but listed edits still sit on the old base and must be
+  reapplied by their owner before staging. It never touches untracked files or
+  other branches, and it refuses to run when local commits are unpushed.
 
 If sessions do not need to edit the running checkout, use isolated worktrees.
 

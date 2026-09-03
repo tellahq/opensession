@@ -31,14 +31,14 @@ type InstanceBrand = {
   agentationEnabled?: boolean;
 };
 
+declare global {
+  interface Window {
+    __OPENSESSION_INSTANCE__?: InstanceBrand;
+  }
+}
+
 const INSTANCE: InstanceBrand =
-  typeof window === "undefined"
-    ? {}
-    : (
-        window as typeof window & {
-          __OPENSESSION_INSTANCE__?: InstanceBrand;
-        }
-      ).__OPENSESSION_INSTANCE__ || {};
+  typeof window === "undefined" ? {} : window.__OPENSESSION_INSTANCE__ || {};
 
 export const PRODUCT_NAME = INSTANCE.productName || "Open Session";
 
@@ -85,14 +85,14 @@ export const sessionSourceLabel = (source: string) =>
  * lowercase chip id reads as a typo ("From slack"). Unknown origins fall back
  * to the chip label, which is the id itself.
  */
-const SOURCE_NAMES: Record<string, string> = {
-  slack: "Slack",
-  linear: "Linear",
-  cli: "the CLI",
-};
+const SOURCE_NAMES = new Map<string, string>([
+  ["slack", "Slack"],
+  ["linear", "Linear"],
+  ["cli", "the CLI"],
+]);
 
 export const sessionSourceName = (source: string) =>
-  SOURCE_NAMES[source] ?? sessionSourceLabel(source);
+  SOURCE_NAMES.get(source) ?? sessionSourceLabel(source);
 
 /** Default document.title when no view-specific title applies. */
 export const DEFAULT_DOC_TITLE = PRODUCT_NAME;

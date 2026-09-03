@@ -12,7 +12,7 @@ const both = new Set(["anthropic", "openai"]);
 describe("model catalog provider availability", () => {
   test("resolves native and Pi model ids to their upstream provider", () => {
     expect(modelUpstreamProvider("gpt-5.6-sol")).toBe("openai");
-    expect(modelUpstreamProvider("pi/anthropic/claude-fable-5")).toBe(
+    expect(modelUpstreamProvider("pi/anthropic/claude-fable-5-1")).toBe(
       "anthropic",
     );
   });
@@ -20,6 +20,9 @@ describe("model catalog provider availability", () => {
   test("keeps preset ids intact for picker defaults", () => {
     expect(pickerModelId("dial/high")).toBe("pi/dial/high");
     expect(pickerModelId("pi/orchestrator/sol")).toBe("pi/orchestrator/sol");
+    expect(pickerModelId("orchestrator/fable-sol")).toBe(
+      "pi/orchestrator/fable-sol",
+    );
   });
 
   test("keeps the whole Dial hidden until both account providers exist", () => {
@@ -38,7 +41,7 @@ describe("model catalog provider availability", () => {
         {
           group: "custom",
           lead: { model: "pi/openai/gpt-5.6-sol" },
-          supporting: [{ model: "pi/anthropic/claude-fable-5" }],
+          supporting: [{ model: "pi/anthropic/claude-fable-5-1" }],
         },
         openaiOnly,
       ),
@@ -55,14 +58,27 @@ describe("model catalog provider availability", () => {
     ).toBe(true);
   });
 
+  test("requires every provider used by a global orchestrator", () => {
+    expect(
+      chooseConfiguredDefaultModel(
+        "orchestrator/fable-sol",
+        new Set(["anthropic"]),
+        ["pi/anthropic/claude-fable-5-1"],
+      ),
+    ).toBe("pi/anthropic/claude-fable-5-1");
+    expect(
+      chooseConfiguredDefaultModel("orchestrator/fable-sol", both, []),
+    ).toBe("pi/orchestrator/fable-sol");
+  });
+
   test("replaces an unavailable default with the first configured model", () => {
     const fallbacks = [
-      "pi/anthropic/claude-fable-5",
+      "pi/anthropic/claude-fable-5-1",
       "pi/openai/gpt-5.6-sol",
       "pi/openai/gpt-5.6-terra",
     ];
     expect(
-      chooseConfiguredDefaultModel("claude-fable-5", openaiOnly, fallbacks),
+      chooseConfiguredDefaultModel("claude-fable-5-1", openaiOnly, fallbacks),
     ).toBe("pi/openai/gpt-5.6-sol");
     expect(
       chooseConfiguredDefaultModel("dial/medium", openaiOnly, fallbacks),

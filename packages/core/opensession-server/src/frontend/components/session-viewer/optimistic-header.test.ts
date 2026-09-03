@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 
 test("the optimistic phone header uses the repo before a worktree exists", async () => {
-  const source = await Bun.file(
-    new URL("../SessionViewer.tsx", import.meta.url),
-  ).text();
+  const source = await Promise.all([
+    Bun.file(new URL("../SessionViewer.tsx", import.meta.url)).text(),
+    Bun.file(new URL("./SessionViewerChrome.tsx", import.meta.url)).text(),
+  ]).then((parts) => parts.join("\n"));
 
   expect(source).toContain(
     "(session.archived || session.desk || session.repo || hasWorkspace)",
@@ -11,9 +12,10 @@ test("the optimistic phone header uses the repo before a worktree exists", async
 });
 
 test("the optimistic phone header names the model before its catalog loads", async () => {
-  const viewer = await Bun.file(
-    new URL("../SessionViewer.tsx", import.meta.url),
-  ).text();
+  const viewer = await Promise.all([
+    Bun.file(new URL("../SessionViewer.tsx", import.meta.url)).text(),
+    Bun.file(new URL("./SessionViewerChrome.tsx", import.meta.url)).text(),
+  ]).then((parts) => parts.join("\n"));
   const create = await Bun.file(
     new URL("../NewSession.tsx", import.meta.url),
   ).text();

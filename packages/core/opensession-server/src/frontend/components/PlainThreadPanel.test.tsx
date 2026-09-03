@@ -7,29 +7,37 @@ import type { PlainTimelineEntry } from "../lib/types";
 // that in localStorage. Same stub as WalkthroughCard.test.tsx, including the
 // `??=`: one process, so whichever test file ran first may already have
 // installed (and frozen) these globals.
-Object.assign(
-  ((
-    globalThis as unknown as { localStorage?: Record<string, unknown> }
-  ).localStorage ??= {}),
-  {
-    getItem: () => null,
-    setItem: () => {},
-    removeItem: () => {},
-  },
-);
-Object.assign(
-  ((globalThis as unknown as { window?: Record<string, unknown> }).window ??=
-    {}),
-  {
+const storage = globalThis.localStorage ?? {};
+Object.assign(storage, {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+});
+if (!globalThis.localStorage) {
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: storage,
+    writable: true,
+  });
+}
+
+const testWindow = globalThis.window ?? {};
+Object.assign(testWindow, {
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  matchMedia: () => ({
+    matches: false,
     addEventListener: () => {},
     removeEventListener: () => {},
-    matchMedia: () => ({
-      matches: false,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    }),
-  },
-);
+  }),
+});
+if (!globalThis.window) {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: testWindow,
+    writable: true,
+  });
+}
 
 /**
  * A support message is prose a person wrote, so it renders as markdown and its

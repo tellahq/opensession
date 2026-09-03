@@ -1,4 +1,9 @@
+import { z } from "zod";
 import { ApiError, BASE, request } from "./request";
+
+const apiErrorResponseSchema = z
+  .object({ error: z.string().optional() })
+  .nullable();
 
 export interface PreviewService {
   name: string;
@@ -96,9 +101,10 @@ export async function capturePreviewShot(sessionId: string): Promise<string> {
     { method: "POST" },
   );
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as {
-      error?: string;
-    } | null;
+    const parsed = apiErrorResponseSchema.safeParse(
+      await res.json().catch(() => null),
+    );
+    const body = parsed.success ? parsed.data : null;
     throw new ApiError(
       body?.error || `Screenshot failed: ${res.status}`,
       res.status,

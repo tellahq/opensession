@@ -301,11 +301,9 @@ export function setResolvedSessionTitles(
       continue;
     }
     const tab = cleanSessionTitle(String(entry.tabTitle ?? "").trim());
-    const name: SessionName = {
-      label,
-      ...(tab && tab !== label ? { tab } : {}),
-      ...(entry.archived ? { archived: true } : {}),
-    };
+    const name: SessionName = { label };
+    if (tab && tab !== label) name.tab = tab;
+    if (entry.archived) name.archived = true;
     const ids = [entry.requestedId, entry.id, ...(entry.aliases ?? [])].filter(
       (id): id is string => !!id,
     );
@@ -368,7 +366,8 @@ export function setSessionTitles(
     const label = cleanSessionTitle(String(title ?? "").trim());
     const tab = cleanSessionTitle(String(tabTitle ?? "").trim());
     const ids = [id, ...(aliases ?? [])].filter(Boolean);
-    const name = { label, ...(tab && tab !== label ? { tab } : {}) };
+    const name: SessionName = { label };
+    if (tab && tab !== label) name.tab = tab;
     if (label)
       for (const knownId of ids) {
         next.set(knownId, name);
@@ -504,11 +503,7 @@ function personChip(person: { name: string; github?: string }): string {
 
 /** Keep already-rendered session chips in step with who is running now. */
 function syncRenderedSessionRuns(): void {
-  if (
-    typeof document === "undefined" ||
-    typeof document.querySelectorAll !== "function"
-  )
-    return;
+  if (typeof document === "undefined") return;
   for (const anchor of document.querySelectorAll<HTMLAnchorElement>(
     "a.session-link[data-session-id]",
   )) {
@@ -521,11 +516,7 @@ function syncRenderedSessionRuns(): void {
 
 /** Name chips that mounted before the polled session registry was published. */
 function syncRenderedSessionTitles(): void {
-  if (
-    typeof document === "undefined" ||
-    typeof document.querySelectorAll !== "function"
-  )
-    return;
+  if (typeof document === "undefined") return;
   for (const anchor of document.querySelectorAll<HTMLAnchorElement>(
     "a.session-link[data-session-id]",
   )) {
@@ -1054,22 +1045,34 @@ function outsideCodeFences(src: string, fn: (chunk: string) => string): string {
 function collapseDuplicatePrReferences(src: string): string {
   if (!src.includes("/pull/")) return src;
   return outsideCodeFences(src, (chunk) =>
-    chunk.replace(DUPLICATE_PR_PAIR, (match, ...args) => {
-      const g = args[args.length - 1] as Record<string, string | undefined>;
-      const lead = g.lead ?? "";
-      const target = githubPrTarget(g.url);
-      if (!target) return match;
-      const repo = prMentionRepo(g.qualifier);
-      if (repo !== target.repo || g.number !== target.number) return match;
-      // A mention that wouldn't chip on its own is prose, and dropping the URL
-      // next to it would leave the reference with nothing to open.
-      if (!g.qualifier && !g.cue && !bareMentionLinks(repo, g.number!))
-        return match;
-      // An unbalanced parenthesis means the separator wasn't one.
-      if (g.sep?.includes("(") && !g.close) return match;
-      const close = g.sep?.includes("(") ? "" : (g.close ?? "");
-      return `${lead}${g.mention}${close}`;
-    }),
+    chunk.replace(
+      DUPLICATE_PR_PAIR,
+      (
+        match: string,
+        lead: string | undefined,
+        mention: string | undefined,
+        cue: string | undefined,
+        _wrap: string | undefined,
+        qualifier: string | undefined,
+        number: string | undefined,
+        sep: string | undefined,
+        url: string | undefined,
+        close: string | undefined,
+      ) => {
+        if (!mention || !number || !url) return match;
+        const target = githubPrTarget(url);
+        if (!target) return match;
+        const repo = prMentionRepo(qualifier);
+        if (repo !== target.repo || number !== target.number) return match;
+        // A mention that wouldn't chip on its own is prose, and dropping the URL
+        // next to it would leave the reference with nothing to open.
+        if (!qualifier && !cue && !bareMentionLinks(repo, number)) return match;
+        // An unbalanced parenthesis means the separator wasn't one.
+        if (sep?.includes("(") && !close) return match;
+        const trailing = sep?.includes("(") ? "" : (close ?? "");
+        return `${lead ?? ""}${mention}${trailing}`;
+      },
+    ),
   );
 }
 
@@ -1100,8 +1103,8 @@ const COMMIT_REF_START = new RegExp(
   "i",
 );
 
-/** Whether an abbreviation is shaped like a sha rather than a number. */
-function shaIsCommitShaped(sha: string): boolean {
+/** Whether an abbreviation can identify a commit rather than a number. */
+function isCommitSha(sha: string): boolean {
   return sha.length === 40 || /[a-f]/i.test(sha);
 }
 
@@ -1442,7 +1445,7 @@ md.use({
           : { type: "text", raw, text: raw };
         // Nowhere to resolve it against: a sha alone doesn't say which repo,
         // the same rule a bare `#123` follows.
-        if (!renderRepo || !shaIsCommitShaped(sha)) return asWritten;
+        if (!renderRepo || !isCommitSha(sha)) return asWritten;
         return {
           type: "commitRef",
           raw,
@@ -1580,7 +1583,9 @@ export function renderMarkdown(src: string, ctx?: MarkdownContext): string {
   renderAssetSessionId = ctx?.sessionId;
   renderRawHtml = ctx?.rawHtml ?? "escape";
   try {
-    out = md.parse(collapseDuplicatePrReferences(src)) as string;
+    const parsed = md.parse(collapseDuplicatePrReferences(src));
+    if (parsed instanceof Promise) throw new Error("Unexpected async markdown");
+    out = parsed;
   } catch {
     out = src;
   } finally {

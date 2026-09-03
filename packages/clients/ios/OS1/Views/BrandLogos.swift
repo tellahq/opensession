@@ -60,6 +60,7 @@ enum Brand {
         "claude": (Color(hex: 0xd97757), .white),
         "codex": (Color(hex: 0x000000), .white),
         "dub": (Color(hex: 0x000000), .white),
+        "xai": (Color(hex: 0x000000), .white),
         "elevenlabs": (Color(hex: 0x000000), .white),
         "figma": (Color(hex: 0x1e1e1e), .white),
         "github": (Color(hex: 0x24292e), .white),

@@ -1,4 +1,6 @@
+import { os1Shell } from "../lib/os1-shell";
 import React, { useState } from "react";
+import { z } from "zod";
 import { useOrganizationName } from "../hooks/useOrganizationIcon";
 import { APP_LOGO_STATUS } from "../lib/app-header-classes";
 import { BASE_PATH } from "../lib/base";
@@ -51,9 +53,32 @@ type OrganizationBridge = {
   manage?: () => void;
 };
 
+const organizationBridgeSchema = z.object({
+  inlineAdd: z.boolean().optional(),
+  list: z
+    .custom<NonNullable<OrganizationBridge["list"]>>(
+      (value) => value instanceof Function,
+    )
+    .optional(),
+  switch: z
+    .custom<NonNullable<OrganizationBridge["switch"]>>(
+      (value) => value instanceof Function,
+    )
+    .optional(),
+  add: z
+    .custom<NonNullable<OrganizationBridge["add"]>>(
+      (value) => value instanceof Function,
+    )
+    .optional(),
+  manage: z
+    .custom<NonNullable<OrganizationBridge["manage"]>>(
+      (value) => value instanceof Function,
+    )
+    .optional(),
+});
+
 function organizationBridge(): OrganizationBridge | undefined {
-  return (window as unknown as { os1?: { organizations?: OrganizationBridge } })
-    .os1?.organizations;
+  return organizationBridgeSchema.safeParse(os1Shell()?.organizations).data;
 }
 
 /** Active organization identity and account switcher. */

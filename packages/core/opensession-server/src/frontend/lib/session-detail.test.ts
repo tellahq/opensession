@@ -14,7 +14,7 @@ import { sessionNeverRan } from "./landing-session";
 import type { UnifiedSession } from "./types";
 
 function listRow(over: Partial<UnifiedSession> = {}): UnifiedSession {
-  return {
+  const base = {
     id: "os-019fea32-b27e-7000-9131-0f5484659833",
     source: "opensession",
     branch: "feature/thing",
@@ -25,8 +25,8 @@ function listRow(over: Partial<UnifiedSession> = {}): UnifiedSession {
     createdAt: "2026-08-09T09:00:00.000Z",
     isRunning: false,
     ran: true,
-    ...over,
-  } as UnifiedSession;
+  } satisfies UnifiedSession;
+  return Object.assign(base, over);
 }
 
 describe("mergeSessionDetail", () => {
@@ -90,7 +90,9 @@ describe("mergeSessionDetail", () => {
     // Both responses carry it (enrichSession derives it either side), so
     // overlaying it would be harmless — but listing it here would mean the
     // list's freshest answer could be overwritten by a snapshot.
-    expect(SESSION_DETAIL_ONLY).not.toContain("ran" as never);
+    expect(new Set<keyof UnifiedSession>(SESSION_DETAIL_ONLY).has("ran")).toBe(
+      false,
+    );
   });
 });
 

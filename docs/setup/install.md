@@ -344,6 +344,16 @@ set +a
 opensession start --foreground
 ```
 
+Settings writes integration credentials, `ENABLE_*` flags, and ingress origins
+back into this file. Each write copies the current file to `.bak-<n>` and then
+replaces it through an atomic rename, both created beside it, so the service
+user must own the directory, not just the file. `OPENSESSION_ENV_FILE` moves
+the file, but keep it somewhere the service user can write. Do not put it in
+`/etc/opensession`: that directory holds the root-only executor and session
+kernel credentials, every install and deploy resets it to `root:root 0700`,
+and `service install --system` and `deploy/deploy.sh` refuse an env file the
+service user cannot edit.
+
 The server settings are optional, but an enabled integration needs the
 credentials its setup page marks as required. Common operator-facing variables:
 
@@ -371,7 +381,7 @@ credentials its setup page marks as required. Common operator-facing variables:
 | `OPENSESSION_CLAUDE_ACCOUNTS_PATH`               | `~/.opensession/claude-accounts.json` | Claude account store override                                                   |
 | `OPENSESSION_PI_CONFIG`                          | `~/.opensession/pi.json`              | Pi engine config path override (primarily a test/verification seam)             |
 | `OPENSESSION_MODEL_PROVIDERS_CONFIG`             | `~/.opensession/model-providers.json` | provider API-key config path override (primarily a test/verification seam)      |
-| `OPENSESSION_MODEL`                              | `claude-fable-5`                      | default model, below the persisted UI override                                  |
+| `OPENSESSION_MODEL`                              | `claude-fable-5-1`                    | default model, below the persisted UI override                                  |
 | `OPENSESSION_FALLBACK_MODEL`                     | `claude-opus-5`                       | global fallback model; `none` disables                                          |
 | `OPENSESSION_HAIKU_FALLBACK_MODEL`               | `gpt-5.6-luna`                        | OpenAI fallback for exhausted Haiku runs and derived one-shots; `none` disables |
 | `OPENSESSION_MCP_CONFIG`                         | `<checkout>/mcp-config.json`          | MCP config path override                                                        |
@@ -381,7 +391,7 @@ credentials its setup page marks as required. Common operator-facing variables:
 
 | Feature                   | Vars                                                                                                                                                                   | Page                                                                                   |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Slack                     | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` or `SLACK_SIGNING_SECRET`, `ALLOWED_SLACK_USER_ID`, `WORKTREE_HOOK_SECRET`, `SLACK_MENTION_INTENT_MODEL`, `SCHEDULE_WHEN_MODEL`   | [slack.md](slack.md)                                                                   |
+| Slack                     | `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `ALLOWED_SLACK_USER_ID`, `WORKTREE_HOOK_SECRET`, `SLACK_MENTION_INTENT_MODEL`, `SCHEDULE_WHEN_MODEL`                        | [slack.md](slack.md)                                                                   |
 | GitHub                    | App: `OPENSESSION_GITHUB_CLIENT_ID`, `OPENSESSION_GITHUB_CLIENT_SECRET`, `OPENSESSION_GITHUB_APP_SLUG`, `OPENSESSION_GITHUB_APP_KEY`; webhook: `GITHUB_WEBHOOK_SECRET` | [github.md](github.md)                                                                 |
 | Linear                    | `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET`, `LINEAR_WEBHOOK_SECRET`, `LINEAR_API_KEY`                                                                                  | [linear.md](linear.md)                                                                 |
 | Plain                     | `PLAIN_API_KEY`, `PLAIN_WEBHOOK_SECRET`, `PLAIN_*_MODEL` ×2                                                                                                            | [plain.md](plain.md)                                                                   |
@@ -447,7 +457,7 @@ GitHub bot identities are also injected into the SPA bootstrap.
 
 ## 6. Model capacity
 
-The default `claude-fable-5` model needs a Claude subscription account. Mint a
+The default `claude-fable-5-1` model needs a Claude subscription account. Mint a
 token on a Claude Max login:
 
 ```sh
@@ -455,13 +465,16 @@ claude setup-token   # prints sk-ant-…
 ```
 
 With the server running, open **Workspace → Providers** and paste the token.
-The same page can sign in a ChatGPT-plan account by device code, or add a
-third-party provider API key and select one of its models. Subscription account
-stores live at `~/.opensession/claude-accounts.json` and
-`~/.opensession/codex-accounts.json`; provider keys live at
+The same page can sign in a ChatGPT-plan or SuperGrok account by device code,
+or add a third-party provider API key and select one of its models.
+Subscription account stores live at `~/.opensession/claude-accounts.json`,
+`~/.opensession/codex-accounts.json` and `~/.opensession/xai-accounts.json`;
+provider keys live at
 `~/.opensession/model-providers.json`. All are server-managed mode-`0600`
-files, so use the UI rather than hand-editing them. Pi configuration is covered
-in [engines.md](engines.md).
+files, so use the UI rather than hand-editing them. The exception is a custom
+OpenAI-compatible gateway's per-model catalog, which is hand-written and
+preserved across Settings writes. Pi configuration, including custom providers
+and catalogs, is covered in [engines.md](engines.md).
 
 ## 7. `mcp-config.json`
 
@@ -570,7 +583,9 @@ Unit choices worth knowing (comments in the file itself):
 - `ExecStart` uses the stable installed shim for compiled releases and Bun for
   source installs.
 - The gateway's `EnvironmentFile=<your home>/.opensession.env` loads your
-  secrets. It is optional in user scope and required in system scope.
+  secrets. It is optional in user scope and required in system scope. Its
+  directory must be writable by the service user so Settings can edit it; see
+  [section 4](#4-secrets-opensessionenv).
 - System scope loads separate executor and session-kernel credentials. User
   scope keeps its session-kernel token under `~/.opensession/` and disables the
   executor and detached runs.

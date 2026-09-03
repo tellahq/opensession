@@ -244,6 +244,19 @@ export function githubLoginFor(ref?: string | null): string | null {
 }
 
 /**
+ * Resolve an authenticated Slack sender to the GitHub login on that same
+ * roster entry. Display names and legacy Slack aliases are not authority.
+ */
+export function githubLoginForTrustedSlackId(
+  slackId?: string | null,
+): string | null {
+  if (!slackId) return null;
+  const matches = identity.team.filter((member) => member.slackId === slackId);
+  if (matches.length !== 1) return null;
+  return matches[0]?.github ?? null;
+}
+
+/**
  * Ground-truth git identities — the exact (name, email) each teammate's
  * commits already use, so GitHub attributes commits we author on their behalf
  * to the right account (`noreply` addresses where the person commits with

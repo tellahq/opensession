@@ -17,6 +17,7 @@
  */
 
 import { chmodSync, existsSync, readFileSync, rmSync } from "fs";
+import { dirname } from "path";
 import { statePath } from "./paths";
 import { backupFile } from "./config-mutation";
 import { writeFileAtomic } from "./shared/atomic-write";
@@ -25,6 +26,38 @@ import { writeFileAtomic } from "./shared/atomic-write";
  *  then the dual-read home path. Read per call so tests can repoint it. */
 export function envFilePath(): string {
   return process.env.OPENSESSION_ENV_FILE || statePath(".opensession.env");
+}
+
+const PERMISSION_CODES = new Set(["EACCES", "EPERM", "EROFS"]);
+
+/**
+ * The env file cannot be edited from this process. Every write creates two
+ * siblings (`.bak-<n>`, then the atomic `.tmp.*` rename source), so write
+ * access on the file alone is not enough: the directory must be writable by
+ * the service user. A system-scope install that points OPENSESSION_ENV_FILE
+ * into root-only `/etc/opensession` hits this on every Settings save.
+ */
+export class EnvFileWriteError extends Error {
+  readonly path: string;
+  constructor(path: string, cause: unknown) {
+    super(envFileWriteRequirement(path), { cause });
+    this.name = "EnvFileWriteError";
+    this.path = path;
+  }
+}
+
+/** One sentence shared by the server error and the installer check. */
+export function envFileWriteRequirement(path: string): string {
+  return (
+    `Cannot write the env file ${path}: the service user needs write access to ${dirname(path)} ` +
+    "because backups and atomic writes create files beside it. Move the file to a directory " +
+    "the service user owns, set OPENSESSION_ENV_FILE to match, and reinstall the service."
+  );
+}
+
+function isPermissionError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && PERMISSION_CODES.has(code);
 }
 
 export const WEB_SETUP_MARKER = "# --- added via web setup ---";
@@ -130,8 +163,13 @@ export function prepareEnvFileEdits(
   return {
     commit() {
       if (committed) return;
-      backupFile(path);
-      writeFileAtomic(path, after);
+      try {
+        backupFile(path);
+        writeFileAtomic(path, after);
+      } catch (error) {
+        if (isPermissionError(error)) throw new EnvFileWriteError(path, error);
+        throw error;
+      }
       committed = true;
       try {
         chmodSync(path, 0o600);

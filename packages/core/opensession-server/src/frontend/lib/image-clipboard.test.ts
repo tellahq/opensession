@@ -48,10 +48,11 @@ test("starts the clipboard write before the image finishes loading", async () =>
       },
     },
   });
-  globalThis.fetch = (async () =>
-    new Response(
-      new Blob(["png"], { type: "image/png" }),
-    )) as unknown as typeof fetch;
+  const fetchImage = Object.assign(
+    async () => new Response(new Blob(["png"], { type: "image/png" })),
+    { preconnect() {} },
+  );
+  globalThis.fetch = fetchImage;
 
   const copying = copyImageToClipboard("/image.png");
   expect(wrote).toBe(true);

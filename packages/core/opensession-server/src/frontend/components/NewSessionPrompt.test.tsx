@@ -7,7 +7,9 @@ import type {
 } from "../lib/new-session-prompt-types";
 
 function field(overrides: Partial<NewSessionPromptConfig> = {}) {
-  const handle: { current: NewSessionPromptHandle | null } = { current: null };
+  const handle = { current: null } satisfies {
+    current: NewSessionPromptHandle | null;
+  };
   const config: NewSessionPromptConfig = {
     initialText: "",
     repo: "opensession",
@@ -15,6 +17,7 @@ function field(overrides: Partial<NewSessionPromptConfig> = {}) {
     disabled: false,
     images: [],
     files: [],
+    pastedTexts: [],
     staging: { images: 0, files: 0 },
     sendKey: "enter",
     canCreate: false,
@@ -34,6 +37,8 @@ function field(overrides: Partial<NewSessionPromptConfig> = {}) {
       removePendingImage: () => {},
       removePendingFile: () => {},
       addAttachments: () => {},
+      addPastedText: () => {},
+      removePastedText: () => {},
       create: () => {},
       changeHasText: () => {},
       settleDraft: () => {},

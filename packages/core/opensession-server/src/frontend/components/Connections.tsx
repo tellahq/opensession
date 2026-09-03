@@ -7,7 +7,6 @@ import React, {
   useRef,
 } from "react";
 import { Menu } from "../ui/menu";
-import { OptionSelect } from "../ui/select";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { DeviceCode } from "../ui/device-code";
@@ -23,11 +22,6 @@ import {
   SettingRowDescription,
   SettingRowText,
   SettingRowTitle,
-  SettingsField,
-  SettingsForm,
-  SettingsFormActions,
-  SettingsFormRow,
-  SettingsFormTitle,
   SettingsGroupLabel,
   SettingsHeader,
   SettingsHint,
@@ -53,24 +47,8 @@ import { ProjectsSection } from "./ProjectsSection";
 import { GithubPrivateKeyField } from "./GithubPrivateKeyField";
 import { request } from "../lib/api/request";
 import { errorMessage } from "../lib/error-message";
-import { parseMcpEnvironment } from "../lib/mcp-form";
-
-interface McpConnection {
-  name: string;
-  transport: "http" | "stdio";
-  target: string;
-  envKeys: string[];
-  status:
-    | "connected"
-    | "ready"
-    | "needs-env"
-    | "needs-auth"
-    | "unreachable"
-    | "missing";
-  detail?: string;
-  /** Per-user allowlist, if this server is restricted (absent = everyone). */
-  allowedUsers?: string[];
-}
+import type { McpConnection } from "../lib/mcp-connections";
+import { AddMcpForm, ConnectTokenDialog } from "./McpConnectionForms";
 
 interface ConnectionsData {
   mcpServers: McpConnection[];
@@ -88,25 +66,25 @@ const STATUS_META: Record<
   missing: { label: "Missing", dot: "var(--red)", bad: true },
 };
 
-const MCP_BLURBS: Record<string, string> = {
-  linear: "Issues and projects: read and update Linear",
-  plain: "Customer support threads from Plain",
-  sentry: "Errors and performance issues",
-  workos: "User & organization admin",
-  tinybird: "Analytics queries over product events",
-  stripe: "Billing, subscriptions & refunds",
-  amplitude: "Product analytics events",
-  grafana: "Dashboards, logs & metrics",
-  incident: "incident.io: incidents and on-call",
-  slack: "Post & read Slack messages",
-  ahrefs: "SEO, keywords & backlink data",
-  github: "Repos, issues & pull requests",
-  circle: "Community & support workspace",
-  "apple-build": "Credential-free Swift and unsigned iOS builds",
-  "apple-release": "Restricted ad-hoc and TestFlight release tools",
-  vercel: "Projects, deployments & logs",
-  vero: "Broadcasts and customer journeys",
-};
+const MCP_BLURBS = new Map<string, string>([
+  ["linear", "Issues and projects: read and update Linear"],
+  ["plain", "Customer support threads from Plain"],
+  ["sentry", "Errors and performance issues"],
+  ["workos", "User & organization admin"],
+  ["tinybird", "Analytics queries over product events"],
+  ["stripe", "Billing, subscriptions & refunds"],
+  ["amplitude", "Product analytics events"],
+  ["grafana", "Dashboards, logs & metrics"],
+  ["incident", "incident.io: incidents and on-call"],
+  ["slack", "Post & read Slack messages"],
+  ["ahrefs", "SEO, keywords & backlink data"],
+  ["github", "Repos, issues & pull requests"],
+  ["circle", "Community & support workspace"],
+  ["apple-build", "Credential-free Swift and unsigned iOS builds"],
+  ["apple-release", "Restricted ad-hoc and TestFlight release tools"],
+  ["vercel", "Projects, deployments & logs"],
+  ["vero", "Broadcasts and customer journeys"],
+]);
 
 function LockIcon({ size = 12 }: { size?: number }) {
   return (
@@ -410,7 +388,7 @@ export function Connections() {
                       ) : null}
                     </div>
                     <div className="truncate text-label text-dim">
-                      {MCP_BLURBS[s.name] || "MCP server"}
+                      {MCP_BLURBS.get(s.name) || "MCP server"}
                     </div>
                     <div className="mt-0.5 flex items-center gap-1.5 text-meta text-faint">
                       <span className="rounded bg-active px-1.5 py-px">
@@ -595,21 +573,26 @@ function buildGithubAppCreateUrl(
     name,
     url: "http://localhost:3850",
     public: "false",
-    ...(webhookBaseUrl
-      ? {
-          webhook_url: `${webhookBaseUrl.replace(/\/$/, "")}/github/webhook`,
-          webhook_active: "true",
-        }
-      : {}),
-    // The canonical grant set — the same permissions the install tokens mint
-    // request, so the App is not born missing `issues` or `checks` (the drift
-    // this builder used to have: no issues, no checks).
-    ...GITHUB_APP_GRANT_PERMISSIONS,
-  }).toString();
+  });
+  if (webhookBaseUrl) {
+    params.set(
+      "webhook_url",
+      `${webhookBaseUrl.replace(/\/$/, "")}/github/webhook`,
+    );
+    params.set("webhook_active", "true");
+  }
+  // The canonical grant set is the same permissions the install tokens mint
+  // request, so the App is not born missing `issues` or `checks` (the drift
+  // this builder used to have: no issues, no checks).
+  for (const [permission, access] of Object.entries(
+    GITHUB_APP_GRANT_PERMISSIONS,
+  )) {
+    params.set(permission, access);
+  }
   const base = org.trim()
     ? `https://github.com/organizations/${encodeURIComponent(org.trim())}/settings/apps/new`
     : "https://github.com/settings/apps/new";
-  return `${base}?${params}`;
+  return `${base}?${params.toString()}`;
 }
 
 // GitHub derives the app slug from its name: lowercased, every run of
@@ -792,6 +775,7 @@ function GithubAppWizard({
                 size="sm"
                 value={appOwner}
                 onValueChange={(next) => {
+                  if (next !== "you" && next !== "org") return;
                   // Switching to a personal App drops the captured org owner,
                   // but sign-in is still enabled only after GitHub connects.
                   if (next === "you" && intentOrg) {
@@ -801,7 +785,7 @@ function GithubAppWizard({
                       return;
                     onClearIntent();
                   }
-                  setAppOwner(next as "you" | "org");
+                  setAppOwner(next);
                 }}
               >
                 <SegmentedOption value="you">You</SegmentedOption>
@@ -1882,289 +1866,5 @@ export function GithubAccounts({
         </SettingsHint>
       )}
     </>
-  );
-}
-
-const TOKEN_CONNECT_URLS: Record<string, { url: string; label: string }> = {
-  vercel: {
-    url: "https://vercel.com/account/settings/tokens",
-    label: "vercel.com/account/settings/tokens",
-  },
-  vero: {
-    url: "https://help.getvero.com/vero-ai/mcp-authentication",
-    label: "Vero's MCP authentication guide",
-  },
-};
-
-/**
- * Paste-a-token connect for providers whose hosted MCP gates OAuth client
- * registration (Vercel approves only clients it has reviewed). Any teammate
- * can mint a personal token; the server validates it live against the
- * provider's API before storing it as a grant.
- */
-function ConnectTokenDialog({
-  server,
-  onClose,
-  onConnected,
-}: {
-  server: McpConnection | null;
-  onClose: () => void;
-  onConnected: () => void;
-}) {
-  const [scope, setScope] = useState<"shared" | "me">("shared");
-  const [token, setToken] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (server) {
-      setScope("shared");
-      setToken("");
-      setError(null);
-    }
-  }, [server]);
-  if (!server) return null;
-  const active = server;
-  const tokenPage = TOKEN_CONNECT_URLS[active.name];
-
-  async function connect() {
-    if (!token.trim() || saving) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await request(
-        `/connections/mcp/${encodeURIComponent(active.name)}/token`,
-        {
-          method: "POST",
-          body: { token: token.trim(), scope },
-          label: `Could not connect ${active.name}`,
-        },
-      );
-      onConnected();
-    } catch (cause) {
-      setError(errorMessage(cause, `Could not connect ${active.name}`));
-    }
-    setSaving(false);
-  }
-
-  return (
-    <Modal.Root
-      open={!!server}
-      onOpenChange={(next) => {
-        if (!next && !saving) onClose();
-      }}
-    >
-      <Modal.Content widthClassName="max-w-[30rem]">
-        <Modal.Header
-          title={`Connect ${displayName(server.name)} with an API token`}
-          description="The token is checked with the provider, then stored for agent runs."
-        />
-        <div className="flex flex-col gap-4">
-          {tokenPage ? (
-            <div className="text-supporting leading-snug text-dim">
-              Create a token at{" "}
-              <a
-                className="underline hover:text-fg"
-                href={tokenPage.url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {tokenPage.label}
-              </a>
-              , then paste it here.
-            </div>
-          ) : null}
-          <div className="flex flex-col gap-1.5">
-            <span className="text-supporting text-dim">Connect as</span>
-            <Segmented
-              label="Connect as"
-              size="sm"
-              value={scope}
-              onValueChange={(next) => setScope(next as "shared" | "me")}
-            >
-              <SegmentedOption value="shared">Workspace</SegmentedOption>
-              <SegmentedOption value="me">My account</SegmentedOption>
-            </Segmented>
-          </div>
-          <input
-            type="password"
-            className={cn(settingsInputClass, "font-mono")}
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="Paste API token"
-            autoComplete="off"
-            spellCheck={false}
-            aria-label="API token"
-          />
-          {error && <InlineAlert>{error}</InlineAlert>}
-          <Modal.Footer>
-            <Button variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              disabled={!token.trim() || saving}
-              onClick={() => void connect()}
-            >
-              {saving ? "Checking" : "Connect"}
-            </Button>
-          </Modal.Footer>
-        </div>
-      </Modal.Content>
-    </Modal.Root>
-  );
-}
-
-function AddMcpForm({
-  onClose,
-  onAdded,
-}: {
-  onClose: () => void;
-  onAdded: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [transport, setTransport] = useState<"http" | "stdio">("http");
-  const [url, setUrl] = useState("");
-  const [command, setCommand] = useState("");
-  const [args, setArgs] = useState("");
-  const [env, setEnv] = useState("");
-  const [allowedUsers, setAllowedUsers] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleAdd() {
-    setSaving(true);
-    setError(null);
-    try {
-      const envValues = parseMcpEnvironment(env);
-      const allowed = allowedUsers
-        .split(",")
-        .map((user) => user.trim())
-        .filter(Boolean);
-      await request("/connections/mcp", {
-        method: "POST",
-        body: {
-          name,
-          transport,
-          url: transport === "http" ? url.trim() : undefined,
-          command: transport === "stdio" ? command.trim() : undefined,
-          args:
-            transport === "stdio"
-              ? args.split(/\s+/).filter(Boolean)
-              : undefined,
-          env: transport === "stdio" ? envValues : undefined,
-          allowedUsers: allowed.length ? allowed : undefined,
-        },
-        label: "Could not add MCP server",
-      });
-      onAdded();
-    } catch (cause) {
-      setError(errorMessage(cause, "Could not add MCP server"));
-      setSaving(false);
-    }
-  }
-
-  const valid =
-    name.trim() && (transport === "http" ? url.trim() : command.trim());
-
-  return (
-    <SettingsForm className="mb-[18px] flex flex-col gap-3.5">
-      <SettingsFormTitle>Add MCP server</SettingsFormTitle>
-
-      <SettingsFormRow>
-        <SettingsField>
-          Name
-          <input
-            className={settingsInputClass}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="github"
-          />
-        </SettingsField>
-        <SettingsField>
-          Transport
-          <OptionSelect
-            label="Transport"
-            value={transport}
-            options={[
-              { value: "http", label: "http · remote MCP endpoint" },
-              { value: "stdio", label: "stdio · local command" },
-            ]}
-            onChange={(next) => {
-              if (next === "http" || next === "stdio") setTransport(next);
-            }}
-          />
-        </SettingsField>
-      </SettingsFormRow>
-
-      {transport === "http" ? (
-        <SettingsField>
-          URL
-          <input
-            className={settingsInputClass}
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://api.example.com/mcp"
-          />
-        </SettingsField>
-      ) : (
-        <>
-          <SettingsFormRow>
-            <SettingsField>
-              Command
-              <input
-                className={settingsInputClass}
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                placeholder="~/bin/my-mcp"
-              />
-            </SettingsField>
-            <SettingsField>
-              Args (space-separated)
-              <input
-                className={settingsInputClass}
-                value={args}
-                onChange={(e) => setArgs(e.target.value)}
-                placeholder="run /path/to/server.ts"
-              />
-            </SettingsField>
-          </SettingsFormRow>
-          <SettingsField>
-            Env (KEY=VALUE, one per line, stored in mcp-config.json)
-            <textarea
-              className={cn(settingsInputClass, "resize-y font-mono")}
-              value={env}
-              onChange={(e) => setEnv(e.target.value)}
-              rows={2}
-              placeholder={"API_KEY=${MY_API_KEY}"}
-            />
-          </SettingsField>
-        </>
-      )}
-
-      <SettingsField>
-        Allowed users (optional, comma-separated, blank for everyone)
-        <input
-          className={settingsInputClass}
-          value={allowedUsers}
-          onChange={(e) => setAllowedUsers(e.target.value)}
-          placeholder="Alice, Bob"
-        />
-      </SettingsField>
-
-      {error && <InlineAlert>{error}</InlineAlert>}
-
-      <SettingsFormActions>
-        <Button variant="soft" onClick={onClose} disabled={saving}>
-          Cancel
-        </Button>
-        <Button
-          variant="primary"
-          onClick={handleAdd}
-          disabled={saving || !valid}
-        >
-          {saving ? "Adding…" : "Add server"}
-        </Button>
-      </SettingsFormActions>
-    </SettingsForm>
   );
 }

@@ -172,8 +172,8 @@ This is a boot path, so it needs a real restart.
 ## 5. Sandbox providers — run sessions somewhere else
 
 `packages/core/opensession-server/src/server/sandbox/` holds the local and Docker
-providers at the root, with Daytona, E2B, Box, Modal, MicroVM, and Lambda
-MicroVM under `adapters/`. Implement `SandboxProvider.ensure()`, `get()`, and
+providers at the root, with Daytona, E2B, Box, Modal, and Lambda MicroVM under
+`adapters/`. Implement `SandboxProvider.ensure()`, `get()`, and
 `destroy()`, returning a `Sandbox` that implements `exec()`, `launchRun()`,
 `ports()`, and `status()`.
 
@@ -247,7 +247,10 @@ enforced at the tool and environment layer, never in a prompt:
   opt into Claude or Codex CLI credentials.
 - Automations can carry an MCP-server allowlist. Omitted means all configured
   servers for host runs, so explicitly name only the servers a job needs.
-  Sandbox automations require an explicit list; use `[]` for none.
+  Sandbox automations use a fresh disposable Daytona Executor and require a
+  qualified provider, a hard-pinned Anthropic or OpenAI subscription account,
+  and an explicit list; use `[]` for none. They fail closed without provider-
+  enforced egress.
 - Customer, identity, and money protections are literal tool-ID catalogs in
   `AUTOMATION_DENIED_TOOLS` and `STRIPE_CONFIRM_TOOLS`. When adding a dangerous
   tool, add its exact ID and tests to the appropriate catalog, or keep its server

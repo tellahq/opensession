@@ -155,4 +155,39 @@ describe("GitHub App identity settings", () => {
       installationOwner: "acme",
     });
   });
+
+  test("clears a legacy installation id when changing owners", async () => {
+    const config = setupFiles();
+    const current = JSON.parse(readFileSync(config, "utf8"));
+    current.integrations.github.installationId = 123;
+    writeFileSync(config, JSON.stringify(current));
+
+    const response = await handleSetupRoutes(
+      githubRequest({ installationOwner: "other-owner" }),
+    );
+
+    expect(response?.status).toBe(200);
+    const written = JSON.parse(readFileSync(config, "utf8"));
+    expect(written.integrations.github.installationOwner).toBe("other-owner");
+    expect(written.integrations.github.installationId).toBeUndefined();
+  });
+
+  test("allows clearing the optional default installation owner", async () => {
+    const config = setupFiles();
+    const url = new URL("http://localhost/api/setup/github");
+    const response = await handleSetupRoutes({
+      req: new Request(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ installationOwner: "" }),
+      }),
+      url,
+      path: url.pathname,
+      publicPrefix: "",
+    });
+
+    expect(response?.status).toBe(200);
+    const written = JSON.parse(readFileSync(config, "utf8"));
+    expect(written.integrations.github.installationOwner).toBeUndefined();
+  });
 });

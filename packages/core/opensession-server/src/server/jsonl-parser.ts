@@ -1358,10 +1358,34 @@ function projectContextForWire(entries: TranscriptEntry[]): TranscriptEntry[] {
   return projected;
 }
 
+/** Parser and persistence metadata has done its job by this point. Keeping it
+ * on every assistant and tool row repeats opaque ids a client never reads. */
+function stripInternalWireFields(
+  entries: TranscriptEntry[],
+): TranscriptEntry[] {
+  let changed = false;
+  const projected = entries.map((entry) => {
+    if (
+      entry.requestId === undefined &&
+      entry.noticeKind === undefined &&
+      entry.contextInjection === undefined
+    )
+      return entry;
+    changed = true;
+    const clean = { ...entry };
+    delete clean.requestId;
+    delete clean.noticeKind;
+    delete clean.contextInjection;
+    return clean;
+  });
+  return changed ? projected : entries;
+}
+
 /**
  * Everything a batch of entries needs before it leaves the server: strip
  * injected context, classify how each entry reads (notices.ts), say what each
- * tool call is (tool-presentation.ts), then clamp what's left.
+ * tool call is (tool-presentation.ts), and remove server-only metadata before
+ * the caller clamps what's left.
  *
  * That order is load-bearing. The context pass strips fenced and legacy
  * injections; the classifier strips delivery plumbing such as "[Name] "
@@ -1375,8 +1399,10 @@ function projectContextForWire(entries: TranscriptEntry[]): TranscriptEntry[] {
 export function prepareEntriesForWire(
   entries: TranscriptEntry[],
 ): TranscriptEntry[] {
-  return withToolPresentations(
-    classifyEntries(stripStoredUserContext(projectContextForWire(entries))),
+  return stripInternalWireFields(
+    withToolPresentations(
+      classifyEntries(stripStoredUserContext(projectContextForWire(entries))),
+    ),
   );
 }
 

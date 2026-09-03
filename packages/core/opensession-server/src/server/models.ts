@@ -7,15 +7,24 @@ import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
   canonicalProviderPickerModelId,
+  configuredCatalogModel,
   configuredPickerModels,
   modelProviders,
   waferModelEfforts,
   waferModelName,
   BRIDGE_PROVIDER_IDS,
   GLM_5_3_MODEL_ID,
+  type ModelProviderConfig,
 } from "./model-providers";
 import { stateDir } from "./paths";
 import { piEngineEnabled, piPickerModels } from "./pi-config";
+import {
+  hasXaiAccounts,
+  xaiSubscriptionModelEfforts,
+  xaiSubscriptionModelName,
+  xaiSubscriptionPickerModels,
+} from "./xai-accounts";
+import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
 // Workspace ("Custom") presets live in the workspace store, so the one thing
 // this module needs from them — a preset's lead model — has to be read there.
 // The import cycle back into this module is inert: workspace-model-presets
@@ -80,7 +89,10 @@ const CLAUDE_EFFORTS: SessionEffort[] = [
 /** Pi variants exposed by the configured model. Keep this aligned with
  * `Pi models <provider> --verbose`; the selected value is sent verbatim
  * as the prompt's `variant`. */
-export function modelEfforts(model: string): SessionEffort[] {
+export function modelEfforts(
+  model: string,
+  providers: Record<string, ModelProviderConfig> = modelProviders(),
+): SessionEffort[] {
   // Every engine exposes the same variants as its Pi sibling: our
   // effort levels map 1:1 onto pi's ThinkingLevel (pi-runner.ts) and onto the
   // direct SDKs' reasoning levels.
@@ -114,6 +126,13 @@ export function modelEfforts(model: string): SessionEffort[] {
     if (efforts.length) return [...efforts];
   }
   if (provider === "meta" && slug === "muse-spark-1.1") return OPENAI_EFFORTS;
+  // SuperGrok: the subscription catalog says which models take an effort.
+  if (provider === XAI_OAUTH_PROVIDER) return xaiSubscriptionModelEfforts(slug);
+  // An operator's catalog row names the levels its gateway accepts.
+  const configured = provider
+    ? configuredCatalogModel(provider, slug, providers)
+    : null;
+  if (configured?.efforts?.length) return [...configured.efforts];
   return [];
 }
 
@@ -129,8 +148,22 @@ export function normalizeModelEffort(
   return supported.includes("high") ? "high" : supported[0];
 }
 
+/** Retired Claude slugs upgrade persisted sessions to the current release. */
+const RETIRED_CLAUDE_REROUTE: Record<string, string> = {
+  "claude-fable-5": "claude-fable-5-1",
+};
+
+function rerouteRetiredClaudeModel(model: string): string {
+  const segments = model.split("/");
+  const tail = segments.at(-1) || "";
+  const replacement = RETIRED_CLAUDE_REROUTE[tail];
+  if (!replacement) return model;
+  segments[segments.length - 1] = replacement;
+  return segments.join("/");
+}
+
 export const DEFAULT_BRIDGE_PICKER_MODELS = [
-  "claude-fable-5",
+  "claude-fable-5-1",
   "claude-opus-5",
   "claude-sonnet-5",
   "claude-haiku-4-5",
@@ -141,10 +174,18 @@ export const DEFAULT_BRIDGE_PICKER_MODELS = [
 
 export const KNOWN_MODELS: ModelInfo[] = [
   {
+    id: "claude-fable-5-1",
+    provider: "claude",
+    label: "Claude Fable 5.1",
+    aliases: ["fable", "fable5.1"],
+  },
+  // Keep the old id resolvable for persisted sessions. Dispatch upgrades it
+  // to Fable 5.1 through RETIRED_CLAUDE_REROUTE.
+  {
     id: "claude-fable-5",
     provider: "claude",
     label: "Claude Fable 5",
-    aliases: ["fable"],
+    aliases: ["fable5"],
   },
   {
     id: "claude-opus-5",
@@ -279,11 +320,11 @@ export const DIAL_ORACLE_AGENTS: Record<
   { model: string; variant: SessionEffort; label: string; description: string }
 > = {
   "oracle-fable": {
-    model: "anthropic/claude-fable-5",
+    model: "anthropic/claude-fable-5-1",
     variant: "high",
-    label: "Claude Fable 5",
+    label: "Claude Fable 5.1",
     description:
-      "Oracle: senior-engineer second opinion on Claude Fable 5 — plan review, " +
+      "Oracle: senior-engineer second opinion on Claude Fable 5.1 — plan review, " +
       "architecture decisions, deep debugging, reviewing significant work. Read-only advisor.",
   },
   "oracle-sol": {
@@ -361,8 +402,8 @@ export const DIAL_PRESETS: DialPreset[] = [
     id: "dial/ultra",
     label: "Dial · Ultra",
     description:
-      "The most capable combo for hard, open-ended tasks — Fable 5 high with a Sol-xhigh oracle",
-    model: "claude-fable-5",
+      "The most capable combo for hard, open-ended tasks — Fable 5.1 high with a Sol-xhigh oracle",
+    model: "claude-fable-5-1",
     effort: "high",
     oracleAgent: "oracle-sol",
   },
@@ -370,7 +411,7 @@ export const DIAL_PRESETS: DialPreset[] = [
     id: "dial/high",
     label: "Dial · High",
     description:
-      "Deep reasoning for hard tasks — Sol at extra-high effort with a Fable 5-high oracle",
+      "Deep reasoning for hard tasks — Sol at extra-high effort with a Fable 5.1-high oracle",
     model: "gpt-5.6-sol",
     effort: "xhigh",
     oracleAgent: "oracle-fable",
@@ -397,7 +438,7 @@ export const DIAL_PRESETS: DialPreset[] = [
     id: "dial/opus-fable",
     label: "Opus 5 + Fable oracle",
     description:
-      "Custom combo — Opus 5 at extra-high effort with a Fable 5-high oracle",
+      "Custom combo — Opus 5 at extra-high effort with a Fable 5.1-high oracle",
     model: "claude-opus-5",
     effort: "xhigh",
     oracleAgent: "oracle-fable",
@@ -416,15 +457,11 @@ export function dialPreset(model?: string | null): DialPreset | undefined {
 
 // ── The Orchestrator ──────────────────────────────────────────────────────
 //
-// The Dial reversed (Cursor's agent-swarm economics: "few moments in a large
-// task genuinely require frontier intelligence" — workers burn most tokens,
-// so the cheap seats go to execution): a frontier MAIN model leads — plans,
-// decides, reviews, integrates — and delegates well-scoped execution subtasks
-// to cheaper WORKER models wired in as Pi subagents. Same mechanics as
-// the dial throughout: the session stores `orchestrator/<name>` as its model,
-// everything resolves at dispatch, and only orchestrator runs are told the
-// workers exist. Opt-in via orchestratorEnabled() — the presets stay
-// out of the picker by default.
+// The Dial reversed: a frontier main model plans, decides, reviews, and
+// integrates, while focused worker sessions handle implementation. A preset
+// stores `orchestrator/<name>` on the session and resolves its lead and workers
+// at dispatch. Only orchestrator runs are told the workers exist. The global
+// presets remain opt-in via orchestratorEnabled().
 
 export interface OrchestratorPreset {
   /** Stored as the session's model id, e.g. "orchestrator/fable". */
@@ -441,15 +478,11 @@ export interface OrchestratorPreset {
 }
 
 /**
- * The worker subagents, keyed by Pi agent name. Like the oracles they're
- * defined STATICALLY in every engine server config (stable agent set ⇒ stable
- * config hash ⇒ server reuse) and invisible in practice to non-orchestrator
- * runs — only orchestrator runs get the instructions block naming them.
- *
- * Worker NAMES are role-based, not model-based. Each name has a same-bridge
- * fallback, while configured third-party providers can supply a universal
- * backing: `worker-fast` prefers Cerebras GPT OSS when its key is available.
- * The orchestrator's prompts and task tool list stay identical either way.
+ * Worker roles are stable while their backing model may follow the lead's
+ * provider. Pi delegates them through Open Session worker sessions, so an
+ * explicit cross-provider role such as `worker-sol` can deliberately stay on
+ * OpenAI while Fable leads on Anthropic. Only orchestrator runs receive the
+ * instructions that name these workers.
  */
 export const ORCHESTRATOR_WORKER_AGENTS: Record<
   string,
@@ -511,6 +544,24 @@ export const ORCHESTRATOR_WORKER_AGENTS: Record<
       },
     },
   },
+  "worker-sol": {
+    label: "Implementation worker",
+    description:
+      "Implementation worker: GPT-5.6 Sol at high effort executes one well-scoped " +
+      "implementation task end to end. Give it exact files, constraints, and acceptance criteria.",
+    bridges: {
+      anthropic: {
+        model: "openai/gpt-5.6-sol",
+        variant: "high",
+        label: "GPT-5.6 Sol",
+      },
+      openai: {
+        model: "openai/gpt-5.6-sol",
+        variant: "high",
+        label: "GPT-5.6 Sol",
+      },
+    },
+  },
 };
 
 /** The backing (model/variant/label) a worker NAME resolves to. A configured
@@ -519,7 +570,7 @@ export const ORCHESTRATOR_WORKER_AGENTS: Record<
 export function orchestratorWorkerForBridge(
   name: string,
   mainProviderID: string,
-  availableProviderIDs = new Set(
+  availableProviderIDs: ReadonlySet<string> = new Set(
     Object.entries(modelProviders())
       .filter(([, config]) => !!config.apiKey)
       .map(([id]) => id),
@@ -532,14 +583,40 @@ export function orchestratorWorkerForBridge(
   return w.bridges[mainProviderID] ?? w.bridges.anthropic;
 }
 
+export function orchestratorWorkerModels(
+  preset: OrchestratorPreset,
+  availableProviderIDs?: ReadonlySet<string>,
+): string[] {
+  const mainProviderID = preset.model.startsWith("claude-")
+    ? "anthropic"
+    : "openai";
+  return preset.workerAgents.flatMap((name) => {
+    const worker = orchestratorWorkerForBridge(
+      name,
+      mainProviderID,
+      availableProviderIDs,
+    );
+    return worker ? [worker.model] : [];
+  });
+}
+
 export const ORCHESTRATOR_PRESETS: OrchestratorPreset[] = [
   {
     id: "orchestrator/fable",
-    label: "Orchestrator · Fable 5",
-    description: "Fable 5 high leads planning, review, and integration",
-    model: "claude-fable-5",
+    label: "Orchestrator · Fable 5.1",
+    description: "Fable 5.1 high leads planning, review, and integration",
+    model: "claude-fable-5-1",
     effort: "high",
     workerAgents: ["worker", "worker-fast"],
+  },
+  {
+    id: "orchestrator/fable-sol",
+    label: "Orchestrator · Fable + Sol",
+    description:
+      "Fable 5.1 high leads planning, review, and integration; Sol high implements",
+    model: "claude-fable-5-1",
+    effort: "high",
+    workerAgents: ["worker-sol"],
   },
   {
     id: "orchestrator/sol",
@@ -558,8 +635,8 @@ function orchestratorPickerDescription(preset: OrchestratorPreset): string {
   const workers = preset.workerAgents.flatMap((name) => {
     const backing = orchestratorWorkerForBridge(name, mainProviderID);
     if (!backing) return [];
-    const role = name === "worker-fast" ? "fast worker" : "worker";
-    return [`${role}: ${backing.label} ${backing.variant}`];
+    const role = ORCHESTRATOR_WORKER_AGENTS[name]?.label || name;
+    return [`${role.toLowerCase()}: ${backing.label} ${backing.variant}`];
   });
   return `${preset.description}; delegates to ${workers.join(" and ")}`;
 }
@@ -628,13 +705,27 @@ function prettifyModelSlug(slug: string): string {
 
 /** Friendly model label for a Pi model id. The engine is now an
  * implementation detail, so names stay model-first in every picker. */
-export function piModelLabel(id: string): string {
+export function piModelLabel(
+  id: string,
+  providers: Record<string, ModelProviderConfig> = modelProviders(),
+): string {
   const preset = modelPreset(id);
   if (preset) return preset.label;
   const canonical = canonicalProviderPickerModelId(
     id.startsWith("pi/") ? id : `pi/${id}`,
   );
   const tail = canonical.split("/").pop() || id;
+  // A configured catalog row's name beats the generic prettifier.
+  const [, provider, ...rest] = canonical.split("/");
+  const configured =
+    provider && rest.length
+      ? configuredCatalogModel(provider, rest.join("/"), providers)
+      : undefined;
+  if (configured?.name) return configured.name;
+  if (provider === XAI_OAUTH_PROVIDER) {
+    const name = xaiSubscriptionModelName(rest.join("/"));
+    if (name) return name;
+  }
   const native = KNOWN_MODELS.find((m) => m.provider !== "pi" && m.id === tail);
   return (native?.label || prettifyModelSlug(tail))
     .replace(/^Claude\s+/i, "")
@@ -661,14 +752,22 @@ export function refreshPickerModels(): void {
     if (KNOWN_MODELS[i].provider === "pi") KNOWN_MODELS.splice(i, 1);
   }
   try {
+    // One config read per refresh: the per-model label lookup below would
+    // otherwise reparse the file (and every catalog file) once per entry.
+    const providers = modelProviders();
     const keyed = new Set(
-      Object.entries(modelProviders())
+      Object.entries(providers)
         .filter(([, provider]) => !!provider.apiKey)
         .map(([id]) => id),
     );
+    const subscriptionXai = hasXaiAccounts();
     const usable = (id: string) => {
       const provider = id.split("/")[1] || "";
-      return BRIDGE_PROVIDER_IDS.has(provider) || keyed.has(provider);
+      return (
+        BRIDGE_PROVIDER_IDS.has(provider) ||
+        keyed.has(provider) ||
+        (provider === XAI_OAUTH_PROVIDER && subscriptionXai)
+      );
     };
     // Subscription-backed models are the normal catalog, not legacy direct-SDK
     // entries. Surface their Pi ids whenever Pi is enabled; the models route
@@ -676,6 +775,7 @@ export function refreshPickerModels(): void {
     const bridgeModels = piEngineEnabled() ? DEFAULT_BRIDGE_PICKER_MODELS : [];
     const configuredModels = [
       ...bridgeModels,
+      ...(piEngineEnabled() ? xaiSubscriptionPickerModels() : []),
       ...piPickerModels(),
       ...configuredPickerModels(),
     ];
@@ -690,7 +790,7 @@ export function refreshPickerModels(): void {
       KNOWN_MODELS.push({
         id,
         provider: "pi",
-        label: piModelLabel(id),
+        label: piModelLabel(id, providers),
         aliases: [],
       });
     }
@@ -698,8 +798,8 @@ export function refreshPickerModels(): void {
 }
 refreshPickerModels();
 
-/** Per-provider defaults: claude-fable-5 for Anthropic, gpt-5.6-sol for OpenAI. */
-export const DEFAULT_CLAUDE_MODEL = "claude-fable-5";
+/** Per-provider defaults: claude-fable-5-1 for Anthropic, gpt-5.6-sol for OpenAI. */
+export const DEFAULT_CLAUDE_MODEL = "claude-fable-5-1";
 export const DEFAULT_CODEX_MODEL = "gpt-5.6-sol";
 export const BEST_AVAILABLE_CODEX_MODEL = "codex-best-available";
 
@@ -717,7 +817,7 @@ const CODEX_MODEL_ORDER = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
  * primary, so the human is asked — the safe default).
  */
 const FALLBACK_TIER: Record<string, number> = {
-  "claude-fable-5": 3,
+  "claude-fable-5-1": 3,
   "gpt-5.6-sol": 3,
   "claude-opus-5": 3,
   "gpt-5.6-terra": 3,
@@ -980,13 +1080,26 @@ const RETIRED_CODEX_REROUTE: Record<string, string> = {
   "gpt-5.3-codex-spark": "gpt-5.6-luna",
 };
 
-/** Route a model or preset to Pi. */
+function isAppRoutedPiProvider(provider: string): boolean {
+  return (
+    provider === "dial" ||
+    provider === "orchestrator" ||
+    provider === "workspace-preset"
+  );
+}
+
+/** Route a model or preset to Pi. Explicit Pi ids keep the model suffix's
+ * casing because OpenAI-compatible gateways may treat model ids as
+ * case-sensitive; only the provider and app-owned routing ids are normalized. */
 export function toPiModel(model?: string | null): string | undefined {
-  let requested = (model || "").trim().toLowerCase();
+  const raw = (model || "").trim();
+  let requested = raw.toLowerCase();
   if (!requested) return model ?? undefined;
+  const inputLower = requested;
   if (requested.startsWith("claude/") || requested.startsWith("codex/")) {
     requested = requested.slice(requested.indexOf("/") + 1);
   }
+  requested = rerouteRetiredClaudeModel(requested);
   const pickerId = requested.startsWith("pi/")
     ? requested.slice("pi/".length)
     : requested;
@@ -1000,7 +1113,24 @@ export function toPiModel(model?: string | null): string | undefined {
   if (requested.startsWith("pi/")) {
     const match = requested.match(/^pi\/openai\/(.+)$/);
     const replacement = match && RETIRED_CODEX_REROUTE[match[1]];
-    return replacement ? `pi/openai/${replacement}` : requested;
+    if (replacement) return `pi/openai/${replacement}`;
+
+    const explicitSource = requested !== inputLower ? requested : raw;
+    const explicit = explicitSource.match(/^pi\/([^/]+)\/(.+)$/i);
+    if (explicit) {
+      const provider = explicit[1]!.toLowerCase();
+      const suffix = explicit[2]!;
+      // App-owned preset ids are case-insensitive routing keys. Provider model
+      // ids are not, so prefer the picker/catalog's exact casing when known
+      // and otherwise preserve what the caller supplied.
+      if (isAppRoutedPiProvider(provider)) return requested;
+      const lowerId = `pi/${provider}/${suffix.toLowerCase()}`;
+      const known = KNOWN_MODELS.find(
+        (candidate) => candidate.id.toLowerCase() === lowerId,
+      );
+      return known?.id ?? `pi/${provider}/${suffix}`;
+    }
+    return requested;
   }
   if (requested.startsWith("openai/")) {
     const native = requested.slice("openai/".length);
@@ -1062,7 +1192,7 @@ export function routeModel(
   };
 }
 
-export type AccountProvider = "claude" | "codex";
+export type AccountProvider = "claude" | "codex" | "xai";
 
 /** Account pool used by a model after resolving presets and legacy ids. */
 export function accountProviderForModel(
@@ -1083,6 +1213,7 @@ export function accountProviderForModel(
   ) {
     return "codex";
   }
+  if (upstream === XAI_OAUTH_PROVIDER) return "xai";
   return undefined;
 }
 
@@ -1214,11 +1345,13 @@ export function fallbackPlan(
  * registry bump; anything else is rejected.
  */
 export function resolveModel(input: string): ModelInfo | null {
-  const value = input.trim().toLowerCase();
+  const raw = input.trim();
+  const value = raw.toLowerCase();
   if (!value) return null;
   for (const model of KNOWN_MODELS) {
-    if (model.id === value || model.aliases.includes(value)) {
-      const replacement = RETIRED_CODEX_REROUTE[model.id];
+    if (model.id.toLowerCase() === value || model.aliases.includes(value)) {
+      const replacement =
+        RETIRED_CLAUDE_REROUTE[model.id] || RETIRED_CODEX_REROUTE[model.id];
       return replacement
         ? KNOWN_MODELS.find((candidate) => candidate.id === replacement)!
         : model;
@@ -1232,7 +1365,8 @@ export function resolveModel(input: string): ModelInfo | null {
   const pickerAlias = value.replace(/\s+/g, "-");
   const pickerMatches = KNOWN_MODELS.filter(
     (model) =>
-      model.provider === "pi" && model.id.split("/").at(-1) === pickerAlias,
+      model.provider === "pi" &&
+      model.id.split("/").at(-1)?.toLowerCase() === pickerAlias,
   );
   if (pickerMatches.length === 1) return pickerMatches[0];
   if (value.startsWith("dial/") || value.startsWith("orchestrator/")) {
@@ -1249,7 +1383,7 @@ export function resolveModel(input: string): ModelInfo | null {
       : null;
   }
   if (value.startsWith("pi/")) {
-    const routed = toPiModel(value) || value;
+    const routed = toPiModel(raw) || raw;
     return routed.slice("pi/".length).includes("/")
       ? { id: routed, provider: "pi", label: piModelLabel(routed), aliases: [] }
       : null;
@@ -1263,7 +1397,7 @@ export function resolveModel(input: string): ModelInfo | null {
     return resolveModel(value.slice(value.indexOf("/") + 1));
   }
   if (value.includes("/")) {
-    const id = toPiModel(value);
+    const id = toPiModel(raw);
     return id
       ? { id, provider: "pi", label: piModelLabel(id), aliases: [] }
       : null;
@@ -1290,7 +1424,7 @@ export function modelLabel(model?: string | null): string {
 // only context ceilings here for the live context-fill gauge.
 
 const CONTEXT_WINDOWS: Record<string, number> = {
-  "claude-fable-5": 1_000_000,
+  "claude-fable-5-1": 1_000_000,
   "claude-opus-5": 1_000_000,
   "claude-opus-4-8": 1_000_000,
   "claude-opus-4-7": 1_000_000,

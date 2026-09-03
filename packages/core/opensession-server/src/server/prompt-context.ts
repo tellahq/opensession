@@ -49,6 +49,7 @@ export type ContextSource =
   | "steer-note"
   | "uploads-note"
   | "pinned-goal"
+  | "session"
   | "unknown";
 
 const SOURCES = new Set<string>([
@@ -65,6 +66,7 @@ const SOURCES = new Set<string>([
   "steer-note",
   "uploads-note",
   "pinned-goal",
+  "session",
   "unknown",
 ]);
 
@@ -139,6 +141,25 @@ export function stripContext(text: string): string {
  *  delivery attribution: there'd be no message to attribute it to. */
 export function isContextOnly(text: string): boolean {
   return !!text.trim() && !stripContext(text).trim();
+}
+
+/** Preserve a teammate's identity in the stored transcript and model input.
+ *  Bare user turns belong to the session owner, so every other sender needs an
+ *  explicit prefix before the intake row is persisted. */
+export function withPromptAttribution(
+  text: string,
+  sender: string | undefined,
+  owner: string | null | undefined,
+): string {
+  if (
+    !sender ||
+    sender === owner ||
+    isContextOnly(text) ||
+    text.startsWith(`[${sender}] `)
+  ) {
+    return text;
+  }
+  return `[${sender}] ${text}`;
 }
 
 const BLOCK_RE =

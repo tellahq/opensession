@@ -499,6 +499,21 @@ export function cachedPrBranchByNumber(
   return undefined;
 }
 
+/** The number of the cached open PR on a branch, so detail fetches can go by
+ *  number (one GraphQL point) instead of by branch (32). Closed and merged
+ *  rows are skipped: a reused branch name may carry a newer PR this cache has
+ *  not seen yet, and the branch lookup is what finds it. */
+export function cachedPrNumberByBranch(
+  ghRepo: string,
+  branch: string,
+): number | undefined {
+  const repoId = prRepos().find(
+    (repo) => repo.ghRepo.toLowerCase() === ghRepo.toLowerCase(),
+  )?.id;
+  const pr = repoId ? prCache.data.get(repoId)?.get(branch) : undefined;
+  return pr?.state === "OPEN" ? pr.number : undefined;
+}
+
 // Webhook write-throughs can burst (a push lands synchronize + several check
 // events within seconds) — debounce the disk snapshot instead of rewriting it
 // per delivery. The in-memory cache is always current; the snapshot only

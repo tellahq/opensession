@@ -5,6 +5,7 @@ import { sessionSourceLabel } from "../lib/brand";
 import { SOURCE_CHIP, sourceChipTone } from "../lib/source-chip-classes";
 import {
   ARCHIVED_LIST,
+  ARCHIVED_PAGE_COLUMN,
   ARCHIVED_PHONE_SEARCH_DOCK,
   ARCHIVED_ROW,
   ARCHIVED_ROW_ACTION,
@@ -15,11 +16,13 @@ import {
   ARCHIVED_ROW_TRAIL,
   ARCHIVED_ROW_TIME,
   ARCHIVED_ROW_TITLE,
+  ARCHIVED_ROW_TITLE_ROW,
   ARCHIVED_SECTION_LABEL,
   ARCHIVED_SECTION_ROWS,
 } from "../lib/archived-classes";
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { z } from "zod";
 import type { UnifiedSession } from "../lib/types";
 import { relativeTime, archiveSessionApi } from "../lib/api";
 import { useCurrentUser } from "./UserPicker";
@@ -36,7 +39,13 @@ import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
 import { EmptyState, ListSkeleton } from "../ui/state";
-import { IconChevronRight, IconFilter, IconUnarchive } from "./icons";
+import {
+  IconChevronRight,
+  IconFilter,
+  IconPeople,
+  IconRepo,
+  IconUnarchive,
+} from "./icons";
 import { RepoTile } from "./RepoTile";
 import { UserAvatar } from "./UserAvatar";
 
@@ -53,13 +62,12 @@ interface Props {
   onChanged: () => void;
   /** The desktop pane's top bar, where this page's controls go. */
   topbarActionsEl?: HTMLElement | null;
-  /** The phone header's trailing slot, where Filters goes. */
-  mobileActionsEl?: HTMLElement | null;
 }
 
 // Same key the sidebar persists its group/repo/sort choices under, so the
 // archived page opens with the repo filter the sidebar is already showing.
 const SIDEBAR_FILTER_KEY = "opensession-sidebar-filter";
+const sidebarFilterSchema = z.object({ repo: z.string().optional() });
 
 /** How many rows the list draws before asking for a narrower search. */
 const PAGE_SIZE = 200;
@@ -76,6 +84,14 @@ type RestoreSwipeOrigin = {
   allowRight: boolean;
 };
 
+interface RestoreActionStyle extends React.CSSProperties {
+  "--swipe-action-w": string;
+}
+
+interface RestoreRowStyle extends React.CSSProperties {
+  "--swipe-x": string;
+}
+
 /** Follow the finger 1:1, then add light resistance past the revealed action. */
 function restoreSwipeOffset(dx: number): number {
   if (dx >= 0) return 0;
@@ -88,6 +104,7 @@ function restoreSwipeOffset(dx: number): number {
  * archive is shared, so "whose is this" is a person, not a boolean.
  */
 type OwnerFilter = "mine" | "everyone" | (string & {});
+type PopupAlign = "start" | "end";
 type ReasonFilter = "all" | "manual" | "auto";
 
 const ARCHIVE_SECTION_ORDER = ["today", "yesterday", "week", "older"] as const;
@@ -156,8 +173,10 @@ function sessionRepo(s: UnifiedSession): string {
 // so we inherit it as the archived page's starting repo.
 function sidebarRepo(): string {
   try {
-    const v = JSON.parse(localStorage.getItem(SIDEBAR_FILTER_KEY) || "{}");
-    return typeof v.repo === "string" ? v.repo : "all";
+    const parsed = sidebarFilterSchema.safeParse(
+      JSON.parse(localStorage.getItem(SIDEBAR_FILTER_KEY) || "{}"),
+    );
+    return parsed.success ? (parsed.data.repo ?? "all") : "all";
   } catch {
     return "all";
   }
@@ -188,7 +207,6 @@ export function Archived({
   onSelect,
   onChanged,
   topbarActionsEl,
-  mobileActionsEl,
 }: Props) {
   const currentUser = useCurrentUser();
   const isPhone = useIsPhone();
@@ -223,10 +241,6 @@ export function Archived({
 
   const allArchived = sessions.filter((s) => s.archived);
   const hasAutoArchived = allArchived.some(isAutoReason);
-  const activeFilterCount =
-    (owner !== "everyone" ? 1 : 0) +
-    (repo !== "all" ? 1 : 0) +
-    (reason !== "all" ? 1 : 0);
 
   // Teammates who archived something, most-archived first — the Owner options
   // beyond you. Built from the whole archived set, not the filtered one, so
@@ -382,8 +396,8 @@ export function Archived({
     closeRestoreSwipe();
   }
 
-  // Match Pull requests on desktop. On a phone the title and filter share the
-  // top bar, while Search floats at the thumb edge below the list.
+  // Match Pull requests on desktop. On a phone the pickers sit in a row above
+  // the list, as on Feed, while Search floats at the thumb edge below it.
   const searchAction = (
     <Input
       className="w-[200px] min-w-[90px] shrink-[100] phone:min-h-11 phone:w-full phone:px-3.5 phone:text-input-phone"
@@ -395,150 +409,191 @@ export function Archived({
       spellCheck={false}
     />
   );
-  const filterAction = (
-    <>
+  // Owner and repository are pickers side by side, each wearing its value, so
+  // the scope reads without opening anything. Reason stays behind an icon: it
+  // only exists once something was auto-archived, and rarely changes.
+  const ownerLabel =
+    owner === "mine"
+      ? "My archived"
+      : owner === "everyone"
+        ? "Everyone"
+        : (people.find((p) => p.key === owner)?.label ?? owner);
+  const renderOwnerPicker = (align: PopupAlign) => (
+    <Menu.Root>
+      <Menu.Trigger
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={
+              owner === "everyone" ? (
+                <IconPeople size={18} />
+              ) : (
+                <UserAvatar
+                  name={owner === "mine" ? currentUser : ownerLabel}
+                  size={18}
+                />
+              )
+            }
+            caret
+            aria-label={`Owner, ${ownerLabel}`}
+            className="shrink-0 phone:min-h-11"
+          >
+            <span className="max-w-[150px] truncate">{ownerLabel}</span>
+          </Button>
+        }
+      />
+      <Menu.Popup align={align} className="min-w-[200px]">
+        <Menu.RadioGroup
+          value={owner}
+          onValueChange={(value) => setOwner(String(value))}
+        >
+          <Menu.RadioItem value="mine" closeOnClick>
+            <UserAvatar name={currentUser} size={18} />
+            <span className="min-w-0 flex-1">My archived</span>
+            <Menu.Check on={owner === "mine"} />
+          </Menu.RadioItem>
+          {people.map(({ key, label }) => (
+            <Menu.RadioItem key={key} value={key} closeOnClick>
+              <UserAvatar name={label} size={18} />
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+              <Menu.Check on={owner === key} />
+            </Menu.RadioItem>
+          ))}
+          <Menu.RadioItem value="everyone" closeOnClick>
+            <IconPeople size={18} className="shrink-0 text-dim" />
+            <span className="min-w-0 flex-1">Everyone</span>
+            <Menu.Check on={owner === "everyone"} />
+          </Menu.RadioItem>
+        </Menu.RadioGroup>
+      </Menu.Popup>
+    </Menu.Root>
+  );
+  const renderRepoPicker = (align: PopupAlign) =>
+    repos.length > 1 && (
       <Menu.Root>
         <Menu.Trigger
           render={
             <Button
               variant="ghost"
-              icon={<IconFilter size={18} />}
-              aria-label={`Filters, ${activeFilterCount} active`}
-              className={
-                activeFilterCount > 0 ? "shrink-0 text-fg" : "shrink-0"
+              size="sm"
+              icon={
+                repo === "all" ? (
+                  <IconRepo size={18} />
+                ) : (
+                  <RepoTile name={repo} size={18} />
+                )
               }
+              caret
+              aria-label={`Repository, ${repo === "all" ? "All repos" : repoLabel(repo)}`}
+              className="shrink-0 phone:min-h-11"
             >
-              Filters{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
+              <span className="max-w-[150px] truncate">
+                {repo === "all" ? "All repos" : repoLabel(repo)}
+              </span>
             </Button>
           }
         />
-        <Menu.Popup align="end" className="min-w-[220px]">
-          <Menu.Group>
-            <Menu.GroupLabel>Owner</Menu.GroupLabel>
-            <Menu.RadioGroup
-              value={owner}
-              onValueChange={(value) => setOwner(String(value))}
-            >
-              <Menu.RadioItem value="mine" closeOnClick>
-                <UserAvatar name={currentUser} size={18} />
-                <span className="min-w-0 flex-1">My archived</span>
-                <Menu.Check on={owner === "mine"} />
+        <Menu.Popup align={align} className="min-w-[200px]">
+          <Menu.RadioGroup
+            value={repo}
+            onValueChange={(value) => setRepo(String(value))}
+          >
+            <Menu.RadioItem value="all" closeOnClick>
+              {/* Sized to the tiles below so every label shares one edge. */}
+              <span className="size-[18px] shrink-0" />
+              <span className="min-w-0 flex-1">All repos</span>
+              <Menu.Check on={repo === "all"} />
+            </Menu.RadioItem>
+            {repos.map((name) => (
+              <Menu.RadioItem key={name} value={name} closeOnClick>
+                <RepoTile name={name} size={18} />
+                <span className="min-w-0 flex-1 truncate">
+                  {repoLabel(name)}
+                </span>
+                <Menu.Check on={repo === name} />
               </Menu.RadioItem>
-              {people.map(({ key, label }) => (
-                <Menu.RadioItem key={key} value={key} closeOnClick>
-                  <UserAvatar name={label} size={18} />
-                  <span className="min-w-0 flex-1 truncate">{label}</span>
-                  <Menu.Check on={owner === key} />
-                </Menu.RadioItem>
-              ))}
-              <Menu.RadioItem value="everyone" closeOnClick>
-                <span className="size-[18px] shrink-0" />
-                <span className="min-w-0 flex-1">Everyone</span>
-                <Menu.Check on={owner === "everyone"} />
-              </Menu.RadioItem>
-            </Menu.RadioGroup>
-          </Menu.Group>
-          {repos.length > 1 && (
-            <>
-              <Menu.Separator />
-              <Menu.Group>
-                <Menu.GroupLabel>Repository</Menu.GroupLabel>
-                <Menu.RadioGroup
-                  value={repo}
-                  onValueChange={(value) => setRepo(String(value))}
-                >
-                  <Menu.RadioItem value="all" closeOnClick>
-                    <span className="size-[18px] shrink-0" />
-                    <span className="min-w-0 flex-1">All repos</span>
-                    <Menu.Check on={repo === "all"} />
-                  </Menu.RadioItem>
-                  {repos.map((name) => (
-                    <Menu.RadioItem key={name} value={name} closeOnClick>
-                      <RepoTile name={name} size={18} />
-                      <span className="min-w-0 flex-1 truncate">
-                        {repoLabel(name)}
-                      </span>
-                      <Menu.Check on={repo === name} />
-                    </Menu.RadioItem>
-                  ))}
-                </Menu.RadioGroup>
-              </Menu.Group>
-            </>
-          )}
-          {hasAutoArchived && (
-            <>
-              <Menu.Separator />
-              <Menu.Group>
-                <Menu.GroupLabel>Reason</Menu.GroupLabel>
-                <Menu.RadioGroup
-                  value={reason}
-                  onValueChange={(value) => setReason(value as ReasonFilter)}
-                >
-                  {(["all", "auto", "manual"] as const).map((value) => (
-                    <Menu.RadioItem key={value} value={value} closeOnClick>
-                      <span className="min-w-0 flex-1">
-                        {
-                          {
-                            all: "All",
-                            auto: "Auto-archived",
-                            manual: "Manual",
-                          }[value]
-                        }
-                      </span>
-                      <Menu.Check on={reason === value} />
-                    </Menu.RadioItem>
-                  ))}
-                </Menu.RadioGroup>
-              </Menu.Group>
-            </>
-          )}
-          {activeFilterCount > 0 && (
-            <>
-              <Menu.Separator />
-              <Menu.Item
-                onClick={() => {
-                  setOwner("everyone");
-                  setRepo("all");
-                  setReason("all");
-                }}
-              >
-                Clear filters
-              </Menu.Item>
-            </>
-          )}
+            ))}
+          </Menu.RadioGroup>
         </Menu.Popup>
       </Menu.Root>
+    );
+  const REASON_LABEL: Record<ReasonFilter, string> = {
+    all: "All",
+    auto: "Auto-archived",
+    manual: "Manual",
+  };
+  const renderReasonPicker = (align: PopupAlign) =>
+    hasAutoArchived && (
+      <Menu.Root>
+        <Menu.Trigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<IconFilter size={18} />}
+              aria-label={`Reason, ${REASON_LABEL[reason]}`}
+              className={cn(
+                "shrink-0 phone:min-h-11",
+                reason !== "all" && "text-fg",
+              )}
+            />
+          }
+        />
+        <Menu.Popup align={align} className="min-w-[180px]">
+          <Menu.RadioGroup
+            value={reason}
+            onValueChange={(value) => {
+              if (value === "all" || value === "auto" || value === "manual") {
+                setReason(value);
+              }
+            }}
+          >
+            {(["all", "auto", "manual"] as const).map((value) => (
+              <Menu.RadioItem key={value} value={value} closeOnClick>
+                <span className="min-w-0 flex-1">{REASON_LABEL[value]}</span>
+                <Menu.Check on={reason === value} />
+              </Menu.RadioItem>
+            ))}
+          </Menu.RadioGroup>
+        </Menu.Popup>
+      </Menu.Root>
+    );
+  const renderFilters = (align: PopupAlign) => (
+    <>
+      {renderOwnerPicker(align)}
+      {renderRepoPicker(align)}
+      {renderReasonPicker(align)}
     </>
   );
+  // No match count: the list itself shows what matched, and the pickers
+  // already say why.
   const actions = (
     <>
       {searchAction}
-      {filterAction}
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {renderFilters("end")}
+      </div>
     </>
   );
 
-  const count = loaded
-    ? archived.length === allArchived.length
-      ? `${archived.length} archived session${archived.length === 1 ? "" : "s"}`
-      : `${archived.length} of ${allArchived.length} archived sessions`
-    : "Loading archived sessions";
-
   const desktopPortaled = !!topbarActionsEl && !isPhone;
-  const mobileFilterPortaled = !!mobileActionsEl && isPhone;
 
   return (
     <div data-page-scroll className="min-h-0 w-full flex-1 overflow-y-auto">
       {desktopPortaled ? createPortal(actions, topbarActionsEl) : null}
-      {mobileFilterPortaled
-        ? createPortal(filterAction, mobileActionsEl)
-        : null}
-      <div className="mx-auto w-full max-w-[860px] px-6 pb-[60px] pt-7 phone:px-3.5 phone:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] phone:pt-2 phone:[body.kb-open_&]:pb-[5rem] phone:[body.kb-open_&]:pt-[max(env(safe-area-inset-top,0px),8px)]">
+      <div
+        className={cn(
+          ARCHIVED_PAGE_COLUMN,
+          "pb-[60px] pt-7 phone:px-3.5 phone:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] phone:pt-2 phone:[body.kb-open_&]:pb-[5rem] phone:[body.kb-open_&]:pt-[max(env(safe-area-inset-top,0px),8px)]",
+        )}
+      >
         {!isPhone && !desktopPortaled ? (
           <div className="mb-3 flex items-center gap-2">{actions}</div>
         ) : null}
-        <p className="m-0 mb-[18px] text-supporting text-dim phone:mb-3.5">
-          {count}
-        </p>
+        <div className="mb-3 hidden min-w-0 items-center gap-1 overflow-x-auto phone:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {renderFilters("start")}
+        </div>
         {archived.length === 0 && !loaded ? (
           // Not "nothing archived" — nothing YET. Claiming the list is empty
           // while it is still in flight is what makes a slow load read as data
@@ -566,7 +621,7 @@ export function Archived({
             {sections.map((section, sectionIndex) => (
               <section
                 key={section.key}
-                className={sectionIndex > 0 ? "mt-4" : undefined}
+                className={sectionIndex > 0 ? "mt-6" : undefined}
               >
                 <h2 className={ARCHIVED_SECTION_LABEL}>{section.label}</h2>
                 <ul className={ARCHIVED_SECTION_ROWS}>
@@ -577,11 +632,6 @@ export function Archived({
                     // while looking at everyone's; why, while not filtered by
                     // reason. The repo is the tile, which carries it in a glance.
                     const meta = [
-                      chip && (
-                        <span key="chip" className={cn(SOURCE_CHIP, chip.tone)}>
-                          {chip.label}
-                        </span>
-                      ),
                       owner === "everyone" && s.startedBy && (
                         <span key="by" className="truncate">
                           {s.startedBy}
@@ -600,21 +650,24 @@ export function Archived({
                     const swipeOffset =
                       restoreSwipe?.id === s.id ? restoreSwipe.offset : 0;
                     const dragging = draggingRestoreId === s.id;
+                    const actionStyle: RestoreActionStyle | undefined =
+                      swipeOffset
+                        ? {
+                            "--swipe-action-w": `${Math.max(
+                              RESTORE_SWIPE_PX,
+                              Math.abs(swipeOffset),
+                            )}px`,
+                          }
+                        : undefined;
+                    const rowStyle: RestoreRowStyle | undefined = swipeOffset
+                      ? { "--swipe-x": `${swipeOffset}px` }
+                      : undefined;
                     return (
                       <li
                         key={s.id}
                         className={ARCHIVED_SWIPE_ROW}
                         data-swipe-row=""
-                        style={
-                          swipeOffset
-                            ? ({
-                                "--swipe-action-w": `${Math.max(
-                                  RESTORE_SWIPE_PX,
-                                  Math.abs(swipeOffset),
-                                )}px`,
-                              } as React.CSSProperties)
-                            : undefined
-                        }
+                        style={actionStyle}
                       >
                         <button
                           type="button"
@@ -639,13 +692,7 @@ export function Archived({
                                     "phone:transition-none phone:will-change-transform",
                                   swipeOffset && "phone:will-change-transform",
                                 )}
-                                style={
-                                  swipeOffset
-                                    ? ({
-                                        "--swipe-x": `${swipeOffset}px`,
-                                      } as React.CSSProperties)
-                                    : undefined
-                                }
+                                style={rowStyle}
                                 onTouchStart={(e) => restoreTouchStart(s.id, e)}
                                 onTouchMove={(e) => restoreTouchMove(s.id, e)}
                                 onTouchEnd={(e) => restoreTouchEnd(s.id, e)}
@@ -665,8 +712,15 @@ export function Archived({
                                 onSelect(s);
                               }}
                             >
-                              <span className={ARCHIVED_ROW_TITLE}>
-                                {s.title}
+                              <span className={ARCHIVED_ROW_TITLE_ROW}>
+                                <span className={ARCHIVED_ROW_TITLE}>
+                                  {s.title}
+                                </span>
+                                {chip && (
+                                  <span className={cn(SOURCE_CHIP, chip.tone)}>
+                                    {chip.label}
+                                  </span>
+                                )}
                               </span>
                               {meta.length > 0 ? (
                                 <span className={ARCHIVED_ROW_META}>

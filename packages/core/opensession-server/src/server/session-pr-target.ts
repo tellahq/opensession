@@ -1,5 +1,6 @@
 import type { SessionPrRef, UnifiedSession } from "./types";
 import { defaultRepo } from "./config";
+import type { PrInfo } from "./pr-cache";
 import { getWorkspace, type Workspace } from "./workspaces";
 
 /** The PR branch `session` can take from `workspace`, or null. Never across
@@ -91,6 +92,81 @@ function flatPrRef(session: UnifiedSession): SessionPrRef | null {
   };
 }
 
+export type FooterPrMatch = { repo: string; branch: string; pr: PrInfo };
+
+/** Restore PRs discovered from attribution footers on a materialized row. */
+export function mergeFooterPrRefs(
+  session: UnifiedSession,
+  matches: readonly FooterPrMatch[],
+): SessionPrRef[] {
+  const refs = [...(session.prs || [])];
+  for (const { repo, branch, pr } of matches) {
+    const current = refs.findIndex(
+      (ref) => ref.repo === repo && ref.branch === branch,
+    );
+    const discovered: SessionPrRef = {
+      repo,
+      branch,
+      source: "discovered",
+      url: pr.url,
+      state: pr.state,
+      number: pr.number,
+      title: pr.title,
+      isDraft: pr.isDraft,
+      reviewDecision: pr.reviewDecision,
+      mergeable: pr.mergeable,
+      additions: pr.additions,
+      deletions: pr.deletions,
+      checks: pr.checks,
+    };
+    if (current < 0) refs.push(discovered);
+    else {
+      const existing = refs[current]!;
+      refs[current] = { ...discovered, source: existing.source };
+    }
+  }
+  return refs;
+}
+
+/** Refresh the PR fields omitted by targeted native-session reads. */
+export function enrichSessionPrRefs(
+  session: UnifiedSession,
+  context: {
+    defaultRepoId: string;
+    prsByRepo: ReadonlyMap<string, ReadonlyMap<string, PrInfo>>;
+    footerMatches: readonly FooterPrMatch[];
+  },
+): UnifiedSession {
+  const branch = sessionPrBranch(session);
+  const currentPr = branch
+    ? context.prsByRepo.get(session.repo || context.defaultRepoId)?.get(branch)
+    : undefined;
+  const prs = mergeFooterPrRefs(session, context.footerMatches);
+  return {
+    ...session,
+    ...(currentPr
+      ? {
+          prUrl: currentPr.url,
+          prState: currentPr.state,
+          prMergeable: currentPr.mergeable,
+          prNumber: currentPr.number,
+          prTitle: currentPr.title,
+          prIsDraft: currentPr.isDraft,
+          prAdditions: currentPr.additions,
+          prDeletions: currentPr.deletions,
+          prChangedFiles: currentPr.changedFiles,
+          prReviewDecision: currentPr.reviewDecision,
+          prReviewRequested: currentPr.reviewRequested,
+          prReviewedBy: currentPr.reviewedBy,
+          prAuthor: currentPr.author,
+          prUpdatedAt: currentPr.updatedAt,
+          prChecks: currentPr.checks,
+        }
+      : {}),
+    ...(prs.length ? { prs } : {}),
+  };
+}
+
 function mergePrRef(owned: SessionPrRef, shared: SessionPrRef): SessionPrRef {
   // Keep how THIS session owns the target, but take any richer cache fields a
   // sibling received. The same PR can be primary here and linked there.
@@ -174,4 +250,31 @@ export function shareWorkspacePrRefs(sessions: UnifiedSession[]): void {
       if (refs.length > 0) session.prs = refs;
     }
   }
+}
+
+/**
+ * Add a workspace projection to one authoritative session without mutating it.
+ *
+ * Detail and PR routes load one session actor, while workspace PRs come from
+ * the bounded materialized workspace index. Include the indexed copy of the
+ * same session: it may carry derived footer PRs that are intentionally absent
+ * from the durable actor record.
+ */
+export function projectWorkspacePrRefs(
+  session: UnifiedSession,
+  workspaceSessions: readonly UnifiedSession[],
+): UnifiedSession {
+  if (!session.workspaceId) return session;
+  const projected: UnifiedSession = {
+    ...session,
+    ...(session.prs ? { prs: [...session.prs] } : {}),
+  };
+  const members = workspaceSessions
+    .filter((candidate) => candidate.workspaceId === session.workspaceId)
+    .map((candidate) => ({
+      ...candidate,
+      ...(candidate.prs ? { prs: [...candidate.prs] } : {}),
+    }));
+  shareWorkspacePrRefs([projected, ...members]);
+  return projected;
 }

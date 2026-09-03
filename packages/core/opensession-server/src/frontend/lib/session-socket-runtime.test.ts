@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
@@ -36,6 +36,26 @@ function noopCallbacks() {
   };
 }
 
+function installWindowTarget(target: EventTarget): () => void {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: target,
+  });
+  return () => {
+    if (previous) Object.defineProperty(globalThis, "window", previous);
+    else Reflect.deleteProperty(globalThis, "window");
+  };
+}
+
+let windowTarget = new EventTarget();
+let restoreWindow = () => {};
+beforeEach(() => {
+  windowTarget = new EventTarget();
+  restoreWindow = installWindowTarget(windowTarget);
+});
+afterEach(() => restoreWindow());
+
 describe("session socket Effect lifecycle", () => {
   test("delays are deterministic under TestClock", async () => {
     let fired = false;
@@ -62,7 +82,6 @@ describe("session socket Effect lifecycle", () => {
       registry,
       streams: controlledStreams(() => streamCount++),
       isVisible: () => true,
-      windowTarget: () => new EventTarget() as unknown as Window,
     });
 
     expect(streamCount).toBe(0);
@@ -78,7 +97,6 @@ describe("session socket Effect lifecycle", () => {
       registry,
       streams: controlledStreams(() => streamCount++),
       isVisible: () => true,
-      windowTarget: () => new EventTarget() as unknown as Window,
     });
     runtime.configure(noopCallbacks());
 
@@ -113,7 +131,6 @@ describe("session socket Effect lifecycle", () => {
       registry,
       streams: controlledStreams(() => {}),
       isVisible: () => true,
-      windowTarget: () => new EventTarget() as unknown as Window,
       makeLifecycle: () => lifecycle,
     });
     runtime.configure({
@@ -165,13 +182,11 @@ describe("session socket Effect lifecycle", () => {
 
   test("native listeners are synchronously fenced on stop", async () => {
     const registry = AtomRegistry.make();
-    const target = new EventTarget();
     let activity = 0;
     const runtime = makeSessionSocketRuntime({
       registry,
       streams: controlledStreams(() => {}),
       isVisible: () => true,
-      windowTarget: () => target as unknown as Window,
     });
     runtime.configure({
       ...noopCallbacks(),
@@ -181,12 +196,12 @@ describe("session socket Effect lifecycle", () => {
     });
     const stop = runtime.start();
     await Promise.resolve();
-    target.dispatchEvent(new Event("pointerdown"));
+    windowTarget.dispatchEvent(new Event("pointerdown"));
     await Promise.resolve();
     expect(activity).toBe(1);
 
     stop();
-    target.dispatchEvent(new Event("pointerdown"));
+    windowTarget.dispatchEvent(new Event("pointerdown"));
     await Promise.resolve();
     expect(activity).toBe(1);
   });

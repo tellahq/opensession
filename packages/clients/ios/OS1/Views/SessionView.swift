@@ -41,6 +41,49 @@ private struct SessionSceneLifecycle: View {
     }
 }
 
+struct SessionForkState: Equatable {
+    enum Point: Equatable {
+        case tip
+        case message(String)
+    }
+
+    private(set) var point: Point?
+    private(set) var creating = false
+    private(set) var error: String?
+
+    mutating func enter(messageId: String? = nil) {
+        point = messageId.map(Point.message) ?? .tip
+        creating = false
+        error = nil
+    }
+
+    mutating func cancel() {
+        self = SessionForkState()
+    }
+
+    mutating func begin(sourceId: String) -> OS1API.ForkFrom? {
+        guard let point, !creating else { return nil }
+        creating = true
+        error = nil
+        switch point {
+        case .tip:
+            return OS1API.ForkFrom(sourceId: sourceId)
+        case .message(let messageId):
+            return OS1API.ForkFrom(sourceId: sourceId, messageId: messageId)
+        }
+    }
+
+    mutating func fail(_ message: String) {
+        creating = false
+        error = message
+    }
+
+    mutating func complete(sessionId: String) -> String {
+        self = SessionForkState()
+        return sessionId
+    }
+}
+
 struct SessionView: View {
     @State private var viewModel: SessionViewModel
     private let tabs: [Session]
@@ -58,6 +101,8 @@ struct SessionView: View {
     private let onNewSession: (() -> Void)?
     /// Moves to the next visible chat, prioritizing settled unread work.
     private let onNextChat: (() -> Void)?
+    /// Opens a newly created fork without changing this view's transcript.
+    private let onForkCreated: ((String) async -> Void)?
     /// Worktree-level actions behind the iOS overflow menu. They belong to the
     /// sessions list, which owns the optimistic row removal and the refresh
     /// that follows — nil simply leaves those entries out of the menu.
@@ -122,6 +167,7 @@ struct SessionView: View {
     /// web.
     @AppStorage("os1.appearance.turnActivity") private var turnWork = "running"
     @AppStorage("os1.appearance.toolCalls") private var toolCalls = "folded"
+    @AppStorage(ThinkingMessages.storageKey) private var thinkingMessages = "latest"
     private var turnActivity: TurnActivity {
         TurnActivity(work: turnWork, tools: toolCalls)
     }
@@ -174,6 +220,7 @@ struct SessionView: View {
 
     /// Model/effort catalog for the toolbar picker; fetched on first open.
     @State private var catalog: ModelCatalog?
+    @State private var forkState = SessionForkState()
 
     /// PR details sheet — the macOS toolbar PR chip, the iOS overflow menu.
     @State private var showPrPanel = false
@@ -275,6 +322,7 @@ struct SessionView: View {
         onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)? = nil,
         onNewSession: (() -> Void)? = nil,
         onNextChat: (() -> Void)? = nil,
+        onForkCreated: ((String) async -> Void)? = nil,
         onRenameWorkspace: ((String) -> Void)? = nil,
         onArchiveWorkspace: (() -> Void)? = nil,
         onDeleteWorkspace: (() -> Void)? = nil,
@@ -293,6 +341,7 @@ struct SessionView: View {
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
         self.onNextChat = onNextChat
+        self.onForkCreated = onForkCreated
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
         self.onDeleteWorkspace = onDeleteWorkspace
@@ -308,6 +357,7 @@ struct SessionView: View {
         onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)? = nil,
         onNewSession: (() -> Void)? = nil,
         onNextChat: (() -> Void)? = nil,
+        onForkCreated: ((String) async -> Void)? = nil,
         onRenameWorkspace: ((String) -> Void)? = nil,
         onArchiveWorkspace: (() -> Void)? = nil,
         onDeleteWorkspace: (() -> Void)? = nil,
@@ -322,6 +372,7 @@ struct SessionView: View {
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
         self.onNextChat = onNextChat
+        self.onForkCreated = onForkCreated
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
         self.onDeleteWorkspace = onDeleteWorkspace
@@ -783,6 +834,16 @@ struct SessionView: View {
                 }
             }
             ToolbarItem(placement: .principal) { macSessionTitle }
+            if canForkSession {
+                ToolbarItem(placement: .topTrailingCompat) {
+                    Button {
+                        forkState.enter()
+                    } label: {
+                        Label("Fork", systemImage: "arrow.triangle.branch")
+                    }
+                    .help("Fork from the current history")
+                }
+            }
             ToolbarItem(placement: .topTrailingCompat) {
                 AddToSidebarButton(session: viewModel.session, siblings: tabs)
             }
@@ -872,6 +933,9 @@ struct SessionView: View {
                 if ProcessInfo.processInfo.environment["OS1_SHOW_STEERED_MESSAGE"] == "1" {
                     viewModel.showSteeredMessageForScreenshot()
                 }
+                if ProcessInfo.processInfo.environment["OS1_SHOW_FORK_MODE"] == "1" {
+                    forkState.enter()
+                }
                 if ProcessInfo.processInfo.environment["OS1_SHOW_ATTACHMENT_ANNOTATION"] == "1",
                    viewModel.attachedImages.isEmpty {
                     let renderer = UIGraphicsImageRenderer(size: CGSize(width: 900, height: 600))
@@ -940,6 +1004,13 @@ struct SessionView: View {
                 let remote = DraftsStore.shared.mountedText(for: viewModel.session.id)
                 if viewModel.draft != remote { viewModel.draft = remote }
             }
+            .onChange(of: thinkingMessages, initial: true) { _, value in
+                viewModel.setThinkingMessages(ThinkingMessages(value))
+            }
+    }
+
+    private var canForkSession: Bool {
+        viewModel.session.source == "opensession" && viewModel.session.ran == true
     }
 
     /// A separate view struct on purpose: typing mutates `viewModel.draft` on
@@ -962,6 +1033,8 @@ struct SessionView: View {
                 horizontalInset: contentInset,
                 autoFocusWhenNeverRan: emptyContent == nil,
                 onNextChat: onNextChat,
+                forkState: $forkState,
+                onForkCreated: onForkCreated,
                 // The session's actions ride above the composer on iOS (see
                 // `SessionActionBar`), which is why the navigation bar has no
                 // ⋯ of its own there.
@@ -994,6 +1067,7 @@ struct SessionView: View {
                 workspaceNames: workspaceNames,
                 catalog: catalog,
                 onNewSession: onNewSession,
+                onFork: canForkSession ? { forkState.enter() } : nil,
                 onRenameWorkspace: onRenameWorkspace,
                 onArchiveWorkspace: onArchiveWorkspace,
                 onDeleteWorkspace: onDeleteWorkspace,
@@ -1063,6 +1137,7 @@ struct SessionView: View {
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
+        .onAppear { requestEarlier() }
     }
 
     private func requestEarlier() {
@@ -1560,6 +1635,9 @@ struct SessionView: View {
             onDeleteNote: { note in
                 try await viewModel.deleteSessionNote(note)
             },
+            onForkMessage: canForkSession ? { entry in
+                forkState.enter(messageId: entry.id)
+            } : nil,
             failureContinuation: continuation
         )
         .id(block.id)
@@ -1750,6 +1828,7 @@ private struct SessionActionsMenu: View {
     /// `/api/models` fetch lands, which only costs the Model row.
     let catalog: ModelCatalog?
     let onNewSession: (() -> Void)?
+    let onFork: (() -> Void)?
     let onRenameWorkspace: ((String) -> Void)?
     let onArchiveWorkspace: (() -> Void)?
     let onDeleteWorkspace: (() -> Void)?
@@ -1797,6 +1876,12 @@ private struct SessionActionsMenu: View {
                         ? "New session"
                         : "New session in this workspace"
                 )
+            }
+            if let onFork {
+                Button(action: onFork) {
+                    Label("Fork", systemImage: "arrow.triangle.branch")
+                }
+                .accessibilityHint("Starts a new session from the current history")
             }
             if !workerSessions.isEmpty {
                 Menu {
@@ -2189,6 +2274,7 @@ struct SessionTabsView: View {
     let onNewSession: () async -> Session?
     /// Move from this workspace to the next visible chat in the sidebar.
     let onNextChat: (() -> Void)?
+    let onForkCreated: (String) async -> Void
     /// Rename the worktree these sessions share, from the session's overflow menu.
     let onRenameWorkspace: (String) -> Void
     /// Archive every session of the worktree, from the session's overflow menu.
@@ -2246,6 +2332,7 @@ struct SessionTabsView: View {
         onSaveComposerDraft: @escaping (Session, SessionViewModel.ComposerDraft) -> Void,
         onNewSession: @escaping () async -> Session?,
         onNextChat: (() -> Void)?,
+        onForkCreated: @escaping (String) async -> Void,
         onRenameWorkspace: @escaping (String) -> Void,
         onArchiveWorkspace: @escaping () -> Void,
         onDeleteWorkspace: @escaping () -> Void,
@@ -2260,6 +2347,7 @@ struct SessionTabsView: View {
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
         self.onNextChat = onNextChat
+        self.onForkCreated = onForkCreated
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
         self.onDeleteWorkspace = onDeleteWorkspace
@@ -2350,6 +2438,7 @@ struct SessionTabsView: View {
                         },
                         onNewSession: openNewTab,
                         onNextChat: onNextChat,
+                        onForkCreated: onForkCreated,
                         onRenameWorkspace: onRenameWorkspace,
                         // Archiving the worktree from within it leaves nothing to
                         // show here, so pop back to the sessions list — the same
@@ -2920,6 +3009,8 @@ private struct SessionInputBar: View {
     var autoFocusWhenNeverRan = true
     /// Kept optional so non-sidebar conversations, such as the Desk, draw no row.
     var onNextChat: (() -> Void)?
+    @Binding var forkState: SessionForkState
+    var onForkCreated: ((String) async -> Void)?
     /// The rest of the iOS action bar above the composer. Each is optional
     /// for the same reason: a conversation with no workspace behind it (the
     /// Desk) simply draws fewer buttons.
@@ -3028,6 +3119,13 @@ private struct SessionInputBar: View {
             }
             #endif
 
+            if forkState.point != nil {
+                forkModeChip
+                    .transition(
+                        .opacity.combined(with: .scale(scale: 0.94, anchor: .bottomLeading))
+                    )
+            }
+
             if viewModel.quoteSelection.text != nil {
                 selectedTextChip
                     .transition(
@@ -3127,6 +3225,7 @@ private struct SessionInputBar: View {
         .animation(.smooth(duration: 0.18), value: noteMode)
         .animation(.smooth(duration: 0.2), value: viewModel.replySuggestions)
         .animation(.smooth(duration: 0.18), value: viewModel.quoteSelection.text)
+        .animation(.smooth(duration: 0.18), value: forkState.point)
         // Stopping a turn is the one thing in the composer you can't take
         // back, and the stop disc sits a thumb's width from send — so it asks
         // first, in the web composer's words. Deliberately an alert rather
@@ -3355,6 +3454,50 @@ private struct SessionInputBar: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityHint(notice == nil ? "" : "Dismisses the notice")
+    }
+
+    private var forkModeChip: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "arrow.triangle.branch")
+            VStack(alignment: .leading, spacing: 1) {
+                Text(forkModeTitle)
+                if let error = forkState.error {
+                    Text(error)
+                        .font(.caption2)
+                        .foregroundStyle(OS1VisualStyle.redInk)
+                }
+            }
+            Spacer(minLength: 8)
+            if forkState.creating {
+                ProgressView().controlSize(.small)
+            } else {
+                Button {
+                    forkState.cancel()
+                    inputFocused = true
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.semibold))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Cancel fork")
+            }
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(OS1VisualStyle.text)
+        .padding(.leading, 10)
+        .padding(.trailing, 3)
+        .padding(.vertical, 3)
+        .background(OS1VisualStyle.accent.opacity(0.12), in: Capsule())
+    }
+
+    private var forkModeTitle: String {
+        switch forkState.point {
+        case .tip: "Forking from current history. Type the new direction."
+        case .message: "Forking from selected message. Type the new direction."
+        case nil: ""
+        }
     }
 
     private var noteModeChip: some View {
@@ -4024,12 +4167,19 @@ private struct SessionInputBar: View {
                 && (!viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     || !viewModel.attachedImages.isEmpty)
         }
+        if forkState.point != nil {
+            return !forkState.creating && (!viewModel.draft
+                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !viewModel.attachedImages.isEmpty)
+        }
         return viewModel.canSend
     }
 
     private func send(busyModeOverride: String? = nil) {
         guard canSubmit else { return }
-        if noteMode {
+        if forkState.point != nil {
+            createFork()
+        } else if noteMode {
             addingNote = true
             Task {
                 if await viewModel.addSessionNote() {
@@ -4045,6 +4195,31 @@ private struct SessionInputBar: View {
             // menu picks, and keyboard sends all get one firm confirmation,
             // while a full outbox gets the warning cue instead.
             if viewModel.sendSeq != previousSend { Haptics.play(.send) }
+        }
+    }
+
+    private func createFork() {
+        guard let forkFrom = forkState.begin(sourceId: viewModel.session.id) else { return }
+        let prompt = viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let images = viewModel.attachedImages.map(\.dataURL)
+        Task {
+            do {
+                let id = try await OS1API.createSession(
+                    prompt: prompt.isEmpty ? "Continue from here." : prompt,
+                    repo: viewModel.session.effectiveRepo,
+                    mode: viewModel.session.mode ?? "ask",
+                    images: images,
+                    forkFrom: forkFrom
+                )
+                viewModel.draft = ""
+                viewModel.attachedImages = []
+                DraftsStore.shared.setText("", for: viewModel.session.id)
+                Haptics.play(.send)
+                let destination = forkState.complete(sessionId: id)
+                await onForkCreated?(destination)
+            } catch {
+                forkState.fail(error.localizedDescription)
+            }
         }
     }
 

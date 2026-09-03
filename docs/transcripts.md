@@ -111,11 +111,16 @@ non-`plain-` sessions whose store is current and whose running process is owned
 by Open Session:
 
 - **Initial snapshot:** `transcript_init` has a floor of the latest 132 entries.
-  It extends backward until it includes four user/assistant messages and, when
-  tool work is present, at least one user boundary. Extension stops at 1,400
-  rows or an estimated 850,000 wire bytes. Ordinary opening content is clamped
-  to 8,192 characters; folded tool results and intermediate assistant notes
-  get 512-character previews.
+  It extends backward until it includes 100 user/assistant messages. Tool-heavy
+  windows must also include 50 user messages, because intermediate assistant
+  notes collapse into the work fold and do not add visible conversation rows.
+  Extension stops at 1,400 rows or an estimated 850,000 uncompressed wire
+  bytes. Ordinary opening content is clamped to the 6,000 characters the web
+  client can render eagerly; folded tool results and intermediate assistant
+  notes get 256-character previews. Parser-only request ids, raw notice kinds,
+  and context provenance are removed after classification. Large transcript
+  frames use WebSocket per-message deflate when the client negotiates it, with
+  a shared server compressor to bound memory.
 - **Index:** web clients advertising `supportsTranscriptIndex` receive a
   complete content-free `transcript_index` after the snapshot. It gives the
   virtualizer the full scroll range without downloading every message.
@@ -145,6 +150,21 @@ polls the external transcript once per second and can feed parsed appends into
 an already-imported store, but the running external session remains on the
 legacy serving path. Watch-setup failures fall back to that path; the client
 detects the active mode from the fields on `transcript_init`.
+
+## Pasted text
+
+A composer collapses a large paste into a chip and sends it beside the message
+as `pastedTexts`, never inside `content`. At intake (`/api/sessions/:id/prompt`,
+the `prompt`, `interrupt_prompt` and `create_session` frames, `POST
+/api/sessions`) the server folds each block into the prompt after the message
+inside a `<pasted-text>` fence (`packages/core/protocol/src/pasted-text.ts`), so
+the instruction leads and the material is delimited. That folded string is what
+the queue, the steer channel, the store, and search carry. On the way to a
+client, `classifyEntry` lifts the blocks back onto `entry.pastedTexts` and the
+queue projection does the same for queued items, so every client renders the
+message and a card per paste. The clamp cuts content from the tail, which means
+only the last block can arrive truncated; the full-entry endpoint returns the
+whole list.
 
 ## Model-visible means logged
 

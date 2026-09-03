@@ -399,6 +399,39 @@ enum SettingsAPI {
         try await request("/api/codex-accounts/device-login/\(segment(id))", method: "DELETE")
     }
 
+    // SuperGrok pool: sign-in is device code only, so there is no create call.
+    static func xaiAccounts() async throws -> [ProviderAccount] {
+        let response: ProviderAccountsResponse = try await request("/api/xai-accounts")
+        return response.accounts ?? []
+    }
+
+    static func refreshXaiAccounts() async throws -> [ProviderAccount] {
+        let response: ProviderAccountsResponse = try await request("/api/xai-accounts/refresh", method: "POST")
+        return response.accounts ?? []
+    }
+
+    static func updateXaiAccount(id: String, patch: [String: Any]) async throws -> ProviderAccount {
+        try await request("/api/xai-accounts/\(segment(id))", method: "PUT", body: patch)
+    }
+
+    static func deleteXaiAccount(id: String) async throws -> SettingsOK {
+        try await request("/api/xai-accounts/\(segment(id))", method: "DELETE")
+    }
+
+    static func startXaiDeviceLogin(owner: String? = nil) async throws -> XaiDeviceLogin {
+        var body: [String: Any] = [:]
+        if let owner { body["owner"] = owner }
+        return try await request("/api/xai-accounts/device-login", method: "POST", body: body)
+    }
+
+    static func xaiDeviceLogin(id: String) async throws -> XaiDeviceLogin {
+        try await request("/api/xai-accounts/device-login/\(segment(id))")
+    }
+
+    static func cancelXaiDeviceLogin(id: String) async throws -> SettingsOK {
+        try await request("/api/xai-accounts/device-login/\(segment(id))", method: "DELETE")
+    }
+
     static func modelProviders() async throws -> ModelProvidersResponse {
         try await request("/api/settings/model-providers")
     }

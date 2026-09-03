@@ -22,7 +22,7 @@ export interface EffectLifecycle<Key> {
 function reportLifecycleCause(cause: Cause.Cause<unknown>) {
   if (Cause.hasInterruptsOnly(cause)) return;
   const error = Cause.squash(cause);
-  if (typeof globalThis.reportError === "function") {
+  if (globalThis.reportError) {
     globalThis.reportError(error);
     return;
   }

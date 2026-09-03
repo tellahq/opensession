@@ -52,19 +52,19 @@ import { errorMessage } from "../lib/error-message";
 import { useStickyEdges } from "../hooks/useStickyEdges";
 import { UserAvatar } from "./UserAvatar";
 import { ExtBadge, fileExt } from "./lang-marks";
+import { cn } from "../ui/cn";
 
 /* The +/− counts. DiffPanel's summary strip carries the same pair, and the two
    must read alike. */
 const DIFF_ADD = "font-semibold text-green";
 const DIFF_DEL = "font-semibold text-red";
 
-/* Each filename stays on the canvas while its code owns the quieter inset
-   well. Spacing and that fill separate files without nesting bordered cards. */
+/* Review joins each filename and its code in one inset well. Sidebar Changes
+   keeps its sticky filename and code as separate surfaces. */
 const FILE_ROW = "min-w-0 max-w-full";
 const FILE_HEADER =
   "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 overflow-clip rounded-md px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
-const FILE_BODY =
-  "relative z-0 mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well";
+const FILE_BODY = "relative z-0 mt-1.5 max-w-full overflow-clip rounded-lg";
 // Sidebar Changes still pins filenames. Its canvas fill masks passing code;
 // the filename row draws its own edge only while pinned.
 const STICKY_FILE_HEADER =
@@ -72,9 +72,40 @@ const STICKY_FILE_HEADER =
 const STICKY_FILE_HEADER_SURFACE =
   "rounded-md bg-surface group-data-[stuck]:shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)]";
 
-const DIFF_SURFACE_STYLE: React.CSSProperties & { "--diffs-bg": string } = {
-  "--diffs-bg": "var(--code-well)",
-  backgroundColor: "var(--code-well)",
+/* Review headers stay neutral while Pierre's omitted-context rows carry the
+   blue cue. Both follow the selected code theme, not the app theme. */
+type DiffSurfaceStyle = React.CSSProperties & {
+  "--diffs-bg": string;
+  "--diffs-bg-separator-override": string;
+  "--review-file-border": string;
+  "--review-file-header-bg": string;
+  "--review-file-header-hover": string;
+};
+const DIFF_SURFACE_STYLE: Record<"light" | "dark", DiffSurfaceStyle> = {
+  light: {
+    "--diffs-bg": "var(--review-code-light)",
+    "--diffs-bg-separator-override":
+      "color-mix(in srgb, var(--blue) 12%, var(--review-code-light))",
+    "--review-file-border":
+      "color-mix(in srgb, var(--review-code-light) 90%, var(--review-code-dark))",
+    "--review-file-header-bg":
+      "color-mix(in srgb, var(--review-code-light) 96%, var(--review-code-dark))",
+    "--review-file-header-hover":
+      "color-mix(in srgb, var(--review-code-light) 92%, var(--review-code-dark))",
+    backgroundColor: "var(--review-code-light)",
+  },
+  dark: {
+    "--diffs-bg": "var(--review-code-dark)",
+    "--diffs-bg-separator-override":
+      "color-mix(in srgb, var(--blue) 12%, var(--review-code-dark))",
+    "--review-file-border":
+      "color-mix(in srgb, var(--review-code-dark) 90%, var(--review-code-light))",
+    "--review-file-header-bg":
+      "color-mix(in srgb, var(--review-code-dark) 94%, var(--review-code-light))",
+    "--review-file-header-hover":
+      "color-mix(in srgb, var(--review-code-dark) 90%, var(--review-code-light))",
+    backgroundColor: "var(--review-code-dark)",
+  },
 };
 const FILE_TOGGLE =
   "focus-ring flex min-w-0 cursor-pointer items-center gap-2 self-stretch border-none bg-transparent p-0 text-left text-fg";
@@ -155,7 +186,7 @@ function parseFileDiffs(
 }
 
 /** Per-file +/- counts, summed from the parsed hunks. */
-function fileStats(file: FileDiffMetadata): { add: number; del: number } {
+function fileStats(file: FileDiffMetadata) {
   let add = 0;
   let del = 0;
   for (const h of file.hunks) {
@@ -486,13 +517,12 @@ export function CommentableDiff({ patch, options }: Props) {
       editFile.load(fd, "base"),
       editFile.load(fd, "new"),
     ]);
+    const newFile = { name: fd.name, contents: newText ?? "" };
+    if (oldText == null) return { oldFile: null, newFile };
     return {
-      oldFile:
-        oldText == null
-          ? null
-          : { name: fd.prevName || fd.name, contents: oldText },
-      newFile: { name: fd.name, contents: newText ?? "" },
-    } as FileDiffLoadedFiles;
+      oldFile: { name: fd.prevName || fd.name, contents: oldText },
+      newFile,
+    };
   };
 
   const {
@@ -632,13 +662,11 @@ export function CommentableDiff({ patch, options }: Props) {
     const dir = slash >= 0 ? file.name.slice(0, slash) : "";
     const base = slash >= 0 ? file.name.slice(slash + 1) : file.name;
     const fileUrl = fileActions?.url(file) ?? null;
-    const annotations = isDraftFile
+    const annotations: DiffLineAnnotation<Meta>[] = isDraftFile
       ? [
           ...pend,
           {
-            side: (draft!.range.side === "deletions"
-              ? "deletions"
-              : "additions") as "additions" | "deletions",
+            side: draft!.range.side === "deletions" ? "deletions" : "additions",
             lineNumber: Math.max(draft!.range.start, draft!.range.end),
             metadata: { kind: "draft" as const },
           },
@@ -647,9 +675,14 @@ export function CommentableDiff({ patch, options }: Props) {
 
     return (
       <div
-        className={FILE_ROW}
+        className={cn(
+          FILE_ROW,
+          !stickyFileHeaders &&
+            "mx-2 overflow-clip rounded-lg border border-[var(--review-file-border)]",
+        )}
         key={`${file.name}-${i}`}
         data-diff-file={file.name}
+        style={stickyFileHeaders ? undefined : DIFF_SURFACE_STYLE[theme]}
       >
         <div
           className={`group ${stickyFileHeaders ? STICKY_FILE_HEADER : ""}`}
@@ -659,7 +692,12 @@ export function CommentableDiff({ patch, options }: Props) {
             // `diff-file-header` is a DOM hook, not styling — no rule reaches it
             // any more: PrPanel's Files card finds this row by that class to
             // scroll to and expand a file (`el.querySelector(".diff-file-header")`).
-            className={`${FILE_HEADER} ${stickyFileHeaders ? STICKY_FILE_HEADER_SURFACE : "bg-transparent"}`}
+            className={cn(
+              FILE_HEADER,
+              stickyFileHeaders
+                ? STICKY_FILE_HEADER_SURFACE
+                : "w-auto rounded-none bg-[var(--review-file-header-bg)] hover:bg-[var(--review-file-header-hover)]",
+            )}
           >
             <button
               type="button"
@@ -890,7 +928,10 @@ export function CommentableDiff({ patch, options }: Props) {
           </div>
         </div>
         {(isOpen || resolved.length > 0) && (
-          <div className={FILE_BODY}>
+          <div
+            className={cn(FILE_BODY, !stickyFileHeaders && "mt-0 rounded-none")}
+            style={DIFF_SURFACE_STYLE[theme]}
+          >
             {isOpen &&
               (imageSrcs && IMAGE_EXT.test(file.name) ? (
                 <ImageDiffRow file={file} srcs={imageSrcs(file)} />
@@ -974,7 +1015,10 @@ export function CommentableDiff({ patch, options }: Props) {
   );
 
   return (
-    <div ref={setStickyRoot} className="flex flex-col gap-2.5">
+    <div
+      ref={setStickyRoot}
+      className={cn("flex flex-col", stickyFileHeaders ? "gap-2.5" : "gap-4")}
+    >
       {confirmation && (
         <div className="rounded-md bg-green-soft px-3 py-1.5 text-label font-semibold text-green">
           {confirmation}
@@ -1041,7 +1085,12 @@ export function CommentableDiff({ patch, options }: Props) {
                   )}
                 </button>
                 {!collapsed && (
-                  <div className="flex flex-col gap-[7px] border-l border-line pl-3">
+                  <div
+                    className={cn(
+                      "flex flex-col border-l border-line pl-3",
+                      stickyFileHeaders ? "gap-[7px]" : "gap-4",
+                    )}
+                  >
                     {group.indices.map((index) =>
                       renderFile(files[index], index),
                     )}
@@ -1337,10 +1386,10 @@ const FileDiffRow = function FileDiffRow({
     // Line selection drives commenting; while editing, clicks place the
     // caret instead.
     enableLineSelection: !editing,
-    ...(loadDiffFiles ? { loadDiffFiles } : {}),
     onLineSelected: (range: SelectedLineRange | null) =>
       onSelect(fileIndex, file.name, range),
   };
+  if (loadDiffFiles) Object.assign(options, { loadDiffFiles });
 
   const fileDiff = (
     <FileDiff<Meta>
@@ -1350,7 +1399,7 @@ const FileDiffRow = function FileDiffRow({
       lineAnnotations={annotations}
       selectedLines={selectedLines}
       renderAnnotation={renderAnnotation}
-      style={DIFF_SURFACE_STYLE}
+      style={DIFF_SURFACE_STYLE[theme]}
       // Not the lever it looks like: the prop only decides whether to pass the
       // pool down from @pierre/diffs' WorkerPoolContext, and nothing in this
       // app mounts that provider, so highlighting is on the main thread either

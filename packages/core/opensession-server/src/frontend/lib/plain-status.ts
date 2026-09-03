@@ -29,11 +29,11 @@ import {
   IconStatusRing,
 } from "../components/icons";
 
-export const STATUS_LABEL: Record<string, string> = {
-  TODO: "Todo",
-  SNOOZED: "Snoozed",
-  DONE: "Done",
-};
+export const STATUS_LABEL = Object.fromEntries([
+  ["TODO", "Todo"],
+  ["SNOOZED", "Snoozed"],
+  ["DONE", "Done"],
+]);
 
 /**
  * The box. 26px is the `sm` Button's height, so in the Support bar the badge
@@ -45,11 +45,14 @@ export const STATUS_LABEL: Record<string, string> = {
 const BASE =
   "inline-flex size-[26px] shrink-0 items-center justify-center rounded-control";
 
-const TONES: Record<string, string> = {
-  todo: "bg-[color-mix(in_srgb,var(--blue)_18%,transparent)] text-blue",
-  done: "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green",
-  snoozed: "bg-[color-mix(in_srgb,var(--yellow)_20%,transparent)] text-yellow",
-};
+const TONES = Object.fromEntries([
+  ["todo", "bg-[color-mix(in_srgb,var(--blue)_18%,transparent)] text-blue"],
+  ["done", "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green"],
+  [
+    "snoozed",
+    "bg-[color-mix(in_srgb,var(--yellow)_20%,transparent)] text-yellow",
+  ],
+]);
 
 /**
  * The glyphs. None of them is a circle: the badge is a rounded tint and a ring
@@ -57,11 +60,11 @@ const TONES: Record<string, string> = {
  * state. Todo is the inbox the queue is named after, Snoozed is asleep rather
  * than the clock its own Snooze button wears, and Done is the bare check.
  */
-const ICONS: Record<string, typeof IconCheck> = {
-  todo: IconInbox,
-  done: IconCheck,
-  snoozed: IconMoon,
-};
+const ICONS = Object.fromEntries([
+  ["todo", IconInbox],
+  ["done", IconCheck],
+  ["snoozed", IconMoon],
+]);
 
 export function plainStatusClass(status: string): string {
   const tone = TONES[status.toLowerCase()] ?? "bg-active text-faint";

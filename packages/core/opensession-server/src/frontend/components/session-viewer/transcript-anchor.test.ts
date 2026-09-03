@@ -44,16 +44,18 @@ afterEach(() => {
   else Reflect.deleteProperty(globalThis, "window");
 });
 
-function element(top: number) {
-  return {
+function element(top: number): HTMLElement {
+  const node: HTMLElement = Object.create(null);
+  return Object.assign(node, {
     getBoundingClientRect: () => ({ top }),
-  } as unknown as HTMLElement;
+  });
 }
 
 function container(target: HTMLElement | null) {
   let currentTarget = target;
   const listeners = new Map<string, EventListener>();
-  const node = {
+  const node: HTMLElement = Object.create(null);
+  Object.assign(node, {
     isConnected: true,
     scrollTop: 200,
     scrollHeight: 1_000,
@@ -66,7 +68,7 @@ function container(target: HTMLElement | null) {
     removeEventListener: (type: string) => {
       listeners.delete(type);
     },
-  } as unknown as HTMLElement;
+  });
   return {
     node,
     setTarget(next: HTMLElement | null) {

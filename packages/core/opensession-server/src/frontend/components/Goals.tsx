@@ -121,12 +121,12 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
     if (!hasSelection) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      const t = e.target as HTMLElement | null;
+      const target = e.target;
       if (
-        t &&
-        (t.tagName === "INPUT" ||
-          t.tagName === "TEXTAREA" ||
-          t.isContentEditable)
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
       )
         return;
       if (editMode) setEditMode(false);
@@ -136,7 +136,10 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [hasSelection, editMode, onSelect]);
 
-  async function act(action: () => Promise<unknown>, refreshDelay = 400) {
+  async function act<Result>(
+    action: () => Promise<Result>,
+    refreshDelay = 400,
+  ) {
     try {
       await action();
       setTimeout(load, refreshDelay);
@@ -606,6 +609,7 @@ function formatNext(iso: string): string {
 function accountPoolSuffix(m: ModelOption): string {
   if (m.accountProvider === "codex") return " (OpenAI Codex)";
   if (m.accountProvider === "claude") return " (Claude)";
+  if (m.accountProvider === "xai") return " (SuperGrok)";
   return "";
 }
 
@@ -725,7 +729,7 @@ function GoalForm({
 
       <FieldGrid>
         <Field label="Mode">
-          <OptionSelect
+          <OptionSelect<"ask" | "code">
             label="Mode"
             value={mode}
             options={[
@@ -738,7 +742,7 @@ function GoalForm({
                 label: "Code · persistent worktree, can open PRs",
               },
             ]}
-            onChange={(next) => setMode(next as "ask" | "code")}
+            onChange={setMode}
           />
         </Field>
 

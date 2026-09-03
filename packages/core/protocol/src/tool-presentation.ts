@@ -377,6 +377,15 @@ export function isHiddenToolInputKey(key: string): boolean {
   return HIDDEN_INPUT_KEYS.has(key);
 }
 
+// A leading `cd <dir> &&` only sets up the working directory. The summary
+// line shows the command that follows; the expanded view keeps the full text.
+const LEADING_CD = /^cd[ \t]+(?:"[^"]*"|'[^']*'|\S+)[ \t]*(?:&&|;|\n)\s*/;
+
+function stripLeadingCd(command: string): string {
+  const rest = command.replace(LEADING_CD, "");
+  return rest.trim() ? rest : command;
+}
+
 function truncate(str: string, max: number): string {
   return str.length > max ? `${str.slice(0, max - 1)}…` : str;
 }
@@ -467,7 +476,10 @@ export function toolDetail(toolName: string, input: unknown): ToolDetail {
       if (!command) return { kind: "none" };
       return {
         kind: "command",
-        command: truncate(command.replace(/\s*\n\s*/g, " ⏎ "), 160),
+        command: truncate(
+          stripLeadingCd(command).replace(/\s*\n\s*/g, " ⏎ "),
+          160,
+        ),
       };
     }
     case "Grep": {

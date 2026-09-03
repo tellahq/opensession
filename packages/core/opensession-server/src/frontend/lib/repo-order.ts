@@ -1,6 +1,7 @@
 // Per-user order for repository bands. The server-side ui-pref follows the
 // user across devices; user-scoped localStorage keeps startup synchronous.
 
+import { z } from "zod";
 import { getCurrentUser } from "../components/UserPicker";
 import { fetchUiPrefs, saveUiPrefsApi } from "./api";
 import { whenCurrentUserReady } from "./auth-ready";
@@ -19,13 +20,25 @@ function dirtyKey(user: string): string {
   return `${DIRTY_KEY_PREFIX}${user.trim().toLowerCase() || "anonymous"}`;
 }
 
-export function normalizeRepoOrder(value: unknown): string[] {
+const repoNameSchema = z.string();
+const eventListenerSchema = z.function();
+
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
+export function normalizeRepoOrder(value: JsonValue | undefined): string[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
   const order: string[] = [];
   for (const item of value) {
-    if (typeof item !== "string") continue;
-    const repo = item.trim();
+    const parsed = repoNameSchema.safeParse(item);
+    if (!parsed.success) continue;
+    const repo = parsed.data.trim();
     if (!repo || seen.has(repo)) continue;
     seen.add(repo);
     order.push(repo);
@@ -151,8 +164,8 @@ async function hydrate(user: string) {
     persist(user, dirtyValue);
     return;
   }
-  const serverValue = prefs[PREF_KEY];
-  if (typeof serverValue !== "string") {
+  const parsedServerValue = repoNameSchema.safeParse(prefs[PREF_KEY]);
+  if (!parsedServerValue.success) {
     const localOrder = readLocal(user);
     if (localOrder.length) {
       const value = JSON.stringify(localOrder);
@@ -163,7 +176,7 @@ async function hydrate(user: string) {
     return;
   }
   try {
-    const serverOrder = normalizeRepoOrder(JSON.parse(serverValue));
+    const serverOrder = normalizeRepoOrder(JSON.parse(parsedServerValue.data));
     if (JSON.stringify(serverOrder) !== JSON.stringify(readLocal(user))) {
       writeLocal(user, serverOrder);
       window.dispatchEvent(new Event(CHANGE_EVENT));
@@ -179,8 +192,8 @@ export function onRepoOrderChanged(handler: () => void): () => void {
 // Capability check, not just `typeof window`: test runners can leave a bare
 // `window` global without DOM methods, which must not break module import.
 if (
-  typeof window !== "undefined" &&
-  typeof window.addEventListener === "function"
+  "window" in globalThis &&
+  eventListenerSchema.safeParse(window.addEventListener).success
 ) {
   whenCurrentUserReady((user) => void hydrate(user));
   window.addEventListener(USER_CHANGE_EVENT, () => {

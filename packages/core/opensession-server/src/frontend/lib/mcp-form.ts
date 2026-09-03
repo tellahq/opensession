@@ -1,5 +1,5 @@
-export function parseMcpEnvironment(source: string): Record<string, string> {
-  const environment: Record<string, string> = {};
+export function parseMcpEnvironment(source: string) {
+  const entries: Array<[string, string]> = [];
   for (const line of source.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -7,9 +7,10 @@ export function parseMcpEnvironment(source: string): Record<string, string> {
     if (separator === -1) {
       throw new Error(`Env line "${trimmed}" must be KEY=VALUE`);
     }
-    environment[trimmed.slice(0, separator).trim()] = trimmed
-      .slice(separator + 1)
-      .trim();
+    entries.push([
+      trimmed.slice(0, separator).trim(),
+      trimmed.slice(separator + 1).trim(),
+    ]);
   }
-  return environment;
+  return Object.fromEntries(entries);
 }

@@ -15,12 +15,15 @@ function session(over: Partial<UnifiedSession>): UnifiedSession {
   return {
     id: "bks-x",
     source: "opensession",
+    branch: null,
+    worktreeDir: null,
+    startedBy: null,
     title: "New session",
     createdAt: "2026-07-01T00:00:00.000Z",
     lastActivity: "2026-07-01T00:00:00.000Z",
     isRunning: false,
     ...over,
-  } as UnifiedSession;
+  };
 }
 
 describe("sessionNeverRan", () => {
@@ -29,6 +32,11 @@ describe("sessionNeverRan", () => {
   });
   test("false once the session has run a turn", () => {
     expect(sessionNeverRan(session({ ran: true }))).toBe(false);
+  });
+  test("false when the tab contains a duplicated chat", () => {
+    expect(
+      sessionNeverRan(session({ duplicatedFromSessionId: "bks-source" })),
+    ).toBe(false);
   });
   test("false while running or queued", () => {
     expect(sessionNeverRan(session({ isRunning: true }))).toBe(false);

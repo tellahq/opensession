@@ -5,6 +5,7 @@
 // one browser-wide localStorage key, so a tool switched off at a desk was
 // still on the phone.
 
+import { z } from "zod";
 import { getCurrentUser } from "../components/UserPicker";
 import { fetchUiPrefs, saveUiPrefsApi } from "./api";
 import { whenCurrentUserReady } from "./auth-ready";
@@ -48,10 +49,24 @@ export const SIDEBAR_TOOL_LABELS: Record<SidebarToolId, string> = {
  * rather than dropped, which would silently un-hide a tool someone had turned
  * off.
  */
-const RENAMED_TOOL_IDS: Record<string, SidebarToolId> = {
+const RENAMED_TOOL_IDS = {
   home: "prs",
   people: "feed",
-};
+} satisfies Record<string, SidebarToolId>;
+
+const SIDEBAR_TOOL_ID_SCHEMA = z.enum(SIDEBAR_TOOL_IDS);
+const STORED_TOOL_IDS_SCHEMA = z.array(z.unknown()).transform((items) =>
+  items.flatMap((item) => {
+    const parsed = z.string().safeParse(item);
+    return parsed.success ? [parsed.data] : [];
+  }),
+);
+
+function renamedToolId(id: string): string {
+  if (id === "home") return RENAMED_TOOL_IDS.home;
+  if (id === "people") return RENAMED_TOOL_IDS.people;
+  return id;
+}
 
 // The swipe decks are one card at a time, moved on with a thumb. That is the
 // wrong shape for a desktop window, which already shows the same unread
@@ -104,30 +119,29 @@ function localKey(user: string): string {
 }
 
 /** Stored ids as tool ids: renames applied, unknown ids and duplicates dropped. */
-export function normalizeHiddenSidebarTools(value: unknown): SidebarToolId[] {
-  if (!Array.isArray(value)) return [];
+function normalizeStoredSidebarTools<Input>(value: Input): SidebarToolId[] {
+  const stored = STORED_TOOL_IDS_SCHEMA.safeParse(value);
+  if (!stored.success) return [];
   return [
     ...new Set(
-      value
-        .map((id) => RENAMED_TOOL_IDS[id as string] ?? id)
-        .filter((id): id is SidebarToolId =>
-          SIDEBAR_TOOL_IDS.includes(id as SidebarToolId),
-        ),
+      stored.data.flatMap((id) => {
+        const parsed = SIDEBAR_TOOL_ID_SCHEMA.safeParse(renamedToolId(id));
+        return parsed.success ? [parsed.data] : [];
+      }),
     ),
   ];
 }
 
-export function normalizeSidebarToolOrder(value: unknown): SidebarToolId[] {
-  if (!Array.isArray(value)) return [];
-  return [
-    ...new Set(
-      value
-        .map((id) => RENAMED_TOOL_IDS[id as string] ?? id)
-        .filter((id): id is SidebarToolId =>
-          SIDEBAR_TOOL_IDS.includes(id as SidebarToolId),
-        ),
-    ),
-  ];
+export function normalizeHiddenSidebarTools<Input>(
+  value: Input,
+): SidebarToolId[] {
+  return normalizeStoredSidebarTools(value);
+}
+
+export function normalizeSidebarToolOrder<Input>(
+  value: Input,
+): SidebarToolId[] {
+  return normalizeStoredSidebarTools(value);
 }
 
 export function mergeSidebarToolOrder(
@@ -304,11 +318,11 @@ async function hydrate(user: string) {
     return;
   }
   if (writeStamp !== stampAtStart) return;
-  const serverValue = prefs[PREF_KEY];
-  if (typeof serverValue === "string") {
+  const serverValue = z.string().safeParse(prefs[PREF_KEY]);
+  if (serverValue.success) {
     try {
       const serverHidden = new Set(
-        normalizeHiddenSidebarTools(JSON.parse(serverValue)),
+        normalizeHiddenSidebarTools(JSON.parse(serverValue.data)),
       );
       const local = readStored(user);
       if (
@@ -333,11 +347,11 @@ async function hydrate(user: string) {
     }
   }
 
-  const serverOrderValue = prefs[ORDER_PREF_KEY];
-  if (typeof serverOrderValue === "string") {
+  const serverOrderValue = z.string().safeParse(prefs[ORDER_PREF_KEY]);
+  if (serverOrderValue.success) {
     try {
       const serverOrder = mergeSidebarToolOrder(
-        normalizeSidebarToolOrder(JSON.parse(serverOrderValue)),
+        normalizeSidebarToolOrder(JSON.parse(serverOrderValue.data)),
       );
       if (
         JSON.stringify(serverOrder) !==
@@ -362,10 +376,7 @@ export function onSidebarToolsChanged(listener: () => void) {
   return () => window.removeEventListener(TOOLS_CHANGED_EVENT, listener);
 }
 
-if (
-  typeof window !== "undefined" &&
-  typeof window.addEventListener === "function"
-) {
+if (typeof window !== "undefined" && window.addEventListener) {
   whenCurrentUserReady((user) => void hydrate(user));
   window.addEventListener(USER_CHANGE_EVENT, () => {
     writeStamp++;

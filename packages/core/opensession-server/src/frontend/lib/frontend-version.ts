@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { fetchHealthStatus } from "./health";
 
 /**
@@ -13,6 +14,7 @@ import { fetchHealthStatus } from "./health";
  * Subscribers surface the same non-blocking "Update" nudge as the broadcast.
  */
 const POLL_MS = 30_000;
+const frontendVersionSchema = z.string().min(1);
 
 let seen: string | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -24,8 +26,11 @@ async function check() {
   if (document.hidden) return;
   try {
     const data = await fetchHealthStatus();
-    const version = data?.frontendVersion;
-    if (typeof version !== "string" || !version) return;
+    const versionResult = frontendVersionSchema.safeParse(
+      data?.frontendVersion,
+    );
+    if (!versionResult.success) return;
+    const version = versionResult.data;
     if (seen === null) {
       seen = version;
       return;

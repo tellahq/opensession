@@ -241,5 +241,31 @@ describe("activateFrontendRelease", () => {
     expect(
       JSON.parse(readFileSync(join(scratch, "stable-frontend.json"), "utf8")),
     ).toMatchObject({ releaseRoot, version });
+
+    publishStableFrontendSnapshot(scratch, {
+      releaseRoot: previousRoot,
+      version: "App-old.js|global-old.css|no-tw",
+      indexHtml: '<script src="/App-old.js"></script>',
+    });
+    activateFrontendRelease({
+      sha,
+      baseSha,
+      releaseRoot,
+      promotedAt: "2026-08-27T10:01:00.000Z",
+    });
+    expect(
+      JSON.parse(readFileSync(join(scratch, "stable-frontend.json"), "utf8")),
+    ).toMatchObject({ releaseRoot: previousRoot });
+
+    process.env.OPENSESSION_GATEWAY_ROLE = "active";
+    activateFrontendRelease({
+      sha,
+      baseSha,
+      releaseRoot,
+      promotedAt: "2026-08-27T10:02:00.000Z",
+    });
+    expect(
+      JSON.parse(readFileSync(join(scratch, "stable-frontend.json"), "utf8")),
+    ).toMatchObject({ releaseRoot, version });
   });
 });

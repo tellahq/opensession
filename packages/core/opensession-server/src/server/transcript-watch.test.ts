@@ -19,11 +19,13 @@ function setup() {
   const dir = mkdtempSync(join(tmpdir(), "transcript-watch-"));
   const store = new TranscriptStore(join(dir, "transcripts.db"));
   const frames: any[] = [];
+  const compression: boolean[] = [];
   const socket = {
     onSend: null as null | ((frame: any) => void),
-    send(payload: string) {
+    send(payload: string, compress = false) {
       const frame = JSON.parse(payload);
       frames.push(frame);
+      compression.push(compress);
       this.onSend?.(frame);
     },
   };
@@ -31,7 +33,7 @@ function setup() {
     store.close();
     rmSync(dir, { recursive: true, force: true });
   });
-  return { store, frames, socket };
+  return { store, frames, compression, socket };
 }
 
 function entry(id: string, content: string): TranscriptEntry {
@@ -278,18 +280,19 @@ describe("race-free transcript watch", () => {
       id: "e139",
       seq: 140,
     });
+    expect(state.compression).toEqual([true]);
     handle.unsubscribe();
     expect(state.frames).toHaveLength(1);
   });
 
-  test("an assistant-heavy tool tail reaches back to its user message", async () => {
-    // The bug this fixes: a turn's tools and intermediate assistant notes
-    // collapse into ONE fold. A flat 132-entry tail, or a floor that counts
-    // those notes alone, can still render as one line with no user message.
+  test("an assistant-heavy tool tail opens with substantial conversation context", async () => {
+    // A turn's tools and intermediate assistant notes collapse into one fold.
+    // The opening payload should carry enough earlier conversation that later
+    // hydration does not have to grow the visible transcript after open.
     const state = setup();
     const sid = `bks-window-${crypto.randomUUID()}`;
     const rows: TranscriptEntry[] = [];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 60; i++) {
       rows.push({ ...entry(`msg-${i}`, `question ${i}`), type: "user" });
       rows.push(entry(`ans-${i}`, `answer ${i}`));
     }
@@ -310,8 +313,10 @@ describe("race-free transcript watch", () => {
     const messages = sent.filter(
       (e) => e.type === "user" || e.type === "assistant",
     );
+    const userMessages = sent.filter((e) => e.type === "user");
     expect(sent.length).toBeGreaterThan(132);
-    expect(messages.length).toBeGreaterThanOrEqual(4);
+    expect(messages.length).toBeGreaterThanOrEqual(100);
+    expect(userMessages.length).toBeGreaterThanOrEqual(50);
     expect(sent.some((e) => e.id === "current-user")).toBe(true);
     expect(sent.at(-1)?.id).toBe("current-answer");
     expect(state.frames[0].truncated).toBe(true);

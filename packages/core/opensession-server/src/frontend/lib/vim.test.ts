@@ -38,7 +38,7 @@ function press(engine: VimEngine, keys: string, doc: VimDoc): VimDoc {
   return cur;
 }
 
-function fresh(text: string, caret = 0): { engine: VimEngine; doc: VimDoc } {
+function fresh(text: string, caret = 0) {
   const engine = new VimEngine();
   // Engines start in insert; Escape into normal for command tests.
   engine.handleKey(

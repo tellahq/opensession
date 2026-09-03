@@ -14,15 +14,17 @@ const NO_SUBAGENTS: SubagentRef[] = [];
 // tab only wears this until that lands.
 const SUBAGENT_LINK_LABEL = "Sub-agent";
 
+type SubagentTabsBySession = Record<string, SubagentRef[]>;
+
 /** The sub-agent breadcrumb a URL opens with, as the tab state keyed by session. */
-function routeSubagentTabs(route: Route): Record<string, SubagentRef[]> {
+function routeSubagentTabs(route: Route) {
   if (route.view !== "session" || !route.subagent?.length) return {};
   return {
     [route.id]: route.subagent.map((agentId) => ({
       agentId,
       label: SUBAGENT_LINK_LABEL,
     })),
-  };
+  } satisfies SubagentTabsBySession;
 }
 
 export function useSubagentTabs({
@@ -40,9 +42,9 @@ export function useSubagentTabs({
   // itself: the transcript is re-fetched whenever it's reopened. A link that
   // names a sub-agent seeds the stack here, so the pane is open before the
   // session has even finished loading.
-  const [subagentTabs, setSubagentTabs] = useState<
-    Record<string, SubagentRef[]>
-  >(() => routeSubagentTabs(route));
+  const [subagentTabs, setSubagentTabs] = useState<SubagentTabsBySession>(() =>
+    routeSubagentTabs(route),
+  );
   const stackFor = (sessionId: string | undefined): SubagentRef[] =>
     sessionId === undefined
       ? NO_SUBAGENTS

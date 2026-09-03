@@ -11,7 +11,8 @@
 // The store is built on first use rather than at import: makeUserPref touches
 // localStorage and window immediately, and the pure helpers below are unit
 // tested outside a browser.
-import { makeUserPref, type UserPref } from "./user-pref";
+import { z } from "zod";
+import * as userPref from "./user-pref";
 
 const LOCAL_KEY = "opensession-slack-share-dismissed";
 const PREF_KEY = "slack-share-dismissed";
@@ -20,6 +21,12 @@ const CHANGE_EVENT = "opensession-slack-share-dismiss-changed";
 // PRs, and an unbounded one would grow with every session you ever closed a
 // card in.
 const CAP = 200;
+const DISMISSED_LIST_SCHEMA = z.array(z.unknown()).transform((entries) =>
+  entries.flatMap((entry) => {
+    const parsed = z.string().safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
+  }),
+);
 
 /** Identity of one card: the session it renders in, and the PR it announces. */
 export function slackShareDismissKey(
@@ -32,9 +39,8 @@ export function slackShareDismissKey(
 export function parseDismissed(raw: string | null | undefined): string[] {
   if (!raw) return [];
   try {
-    const value = JSON.parse(raw);
-    if (!Array.isArray(value)) return [];
-    return value.filter((entry): entry is string => typeof entry === "string");
+    const parsed = DISMISSED_LIST_SCHEMA.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : [];
   } catch {
     return [];
   }
@@ -47,16 +53,16 @@ export function withDismissed(list: string[], key: string): string[] {
   return [key, ...list].slice(0, CAP);
 }
 
-let store: UserPref<string> | null = null;
+let store: userPref.UserPref<string> | null = null;
 
-function prefStore(): UserPref<string> {
+function prefStore(): userPref.UserPref<string> {
   if (!store) {
-    store = makeUserPref<string>({
+    store = userPref.makeUserPref<string>({
       localKey: LOCAL_KEY,
       prefKey: PREF_KEY,
       changeEvent: CHANGE_EVENT,
       defaultValue: "",
-      decode: (raw) => (typeof raw === "string" ? raw : null),
+      decode: (raw) => raw ?? null,
       encode: (value) => value,
     });
   }

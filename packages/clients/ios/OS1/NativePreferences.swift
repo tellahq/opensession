@@ -162,6 +162,13 @@ enum NativePreferences {
             resetMissing: changedIdentity,
             in: defaults
         )
+        set(
+            prefs[ThinkingMessages.prefKey].flatMap(ThinkingMessages.init(rawValue:))?.rawValue,
+            default: ThinkingMessages.standard.rawValue,
+            key: ThinkingMessages.storageKey,
+            resetMissing: true,
+            in: defaults
+        )
         setBool(
             replySuggestionsEnabled(prefs["reply-suggestions"]),
             default: true,
@@ -247,9 +254,9 @@ enum NativePreferences {
         return value == "auto" ? "" : value
     }
 
-    /// The web stores one JSON object whose keys are repository ids. Invalid
-    /// entries are dropped independently so one newer or damaged value cannot
-    /// hide the valid choices for other repositories.
+    /// The web stores one JSON object whose keys are repository ids. `*` is
+    /// the choice for all repositories. Invalid entries are dropped
+    /// independently so one newer or damaged value cannot hide valid choices.
     static func validatedSessionCheckouts(_ value: String?) -> String? {
         guard let value else { return nil }
         guard !value.isEmpty else { return "" }
@@ -267,7 +274,8 @@ enum NativePreferences {
     }
 
     static func sessionCheckoutMode(for repository: String, in value: String?) -> String {
-        sessionCheckoutPreferences(value)[repository] ?? "default"
+        let preferences = sessionCheckoutPreferences(value)
+        return preferences[repository] ?? preferences["*"] ?? "default"
     }
 
     static func settingSessionCheckout(
@@ -276,7 +284,7 @@ enum NativePreferences {
         in value: String?
     ) -> String {
         var preferences = sessionCheckoutPreferences(value)
-        if mode == "checkout" || mode == "worktree" {
+        if (mode == "checkout" || mode == "worktree"), mode != preferences["*"] {
             preferences[repository] = mode
         } else {
             preferences.removeValue(forKey: repository)

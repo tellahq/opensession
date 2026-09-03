@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 
 test("every new-session palette opener primes the phone keyboard", async () => {
-  const app = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+  const app = await Bun.file(
+    new URL("../AppContent.tsx", import.meta.url),
+  ).text();
   const hook = await Bun.file(
     new URL("../hooks/useNewSessionPalette.ts", import.meta.url),
   ).text();
@@ -17,7 +19,7 @@ test("every new-session palette opener primes the phone keyboard", async () => {
   const openStart = hook.indexOf("const openPalette =");
   const openEnd = hook.indexOf("const hidePalette =", openStart);
   const opens = hook.slice(openStart, openEnd);
-  expect(opens.match(/setPalette\(\{/g)).toHaveLength(2);
+  expect(opens.match(/setPalette\(/g)).toHaveLength(2);
   expect(opens).not.toContain("setPaletteState");
   expect(app).not.toContain("primeSoftKeyboard");
   expect(app).not.toContain("setPaletteState");

@@ -311,7 +311,10 @@ final class CatchUpViewModel {
             from: items,
             live: session.isRunning == true,
             worktreeDir: session.worktreeDir,
-            walkthrough: session.walkthrough
+            walkthrough: session.walkthrough,
+            thinkingMessages: ThinkingMessages(
+                UserDefaults.standard.string(forKey: ThinkingMessages.storageKey)
+            )
         ))
     }
 }

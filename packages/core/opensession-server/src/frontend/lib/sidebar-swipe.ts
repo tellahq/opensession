@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 // The sidebar's chords themselves live in lib/shortcuts, which is where every
 // rebindable command is declared and where the keycaps to advertise come from
 // (shortcutKeys / useShortcutKeys). What stays here is the touch behaviour of
@@ -7,8 +9,36 @@
 const EDITABLE =
   "input, textarea, select, [contenteditable='true'], [contenteditable='']";
 
-function editableAncestor(target: EventTarget | null): HTMLElement | null {
-  return (target as HTMLElement | null)?.closest<HTMLElement>(EDITABLE) ?? null;
+interface ClosestTarget extends EventTarget {
+  closest(selectors: string): EditableElement | null;
+}
+
+interface EditableElement {
+  classList: { contains(name: string): boolean };
+  value?: string;
+}
+
+const callablePropertySchema = z.object({
+  closest: z.instanceof(Function),
+});
+const editableElementContract = z.object({
+  classList: z.object({ contains: z.instanceof(Function) }),
+  value: z.string().optional(),
+});
+const closestTargetSchema = z.custom<ClosestTarget>(
+  (value) => callablePropertySchema.safeParse(value).success,
+);
+const editableElementSchema = z.custom<EditableElement>(
+  (value) => editableElementContract.safeParse(value).success,
+);
+
+function editableAncestor(target: EventTarget | null): EditableElement | null {
+  const owner = closestTargetSchema.safeParse(target);
+  if (!owner.success) return null;
+  const editable = editableElementSchema.safeParse(
+    owner.data.closest(EDITABLE),
+  );
+  return editable.success ? editable.data : null;
 }
 
 /** True when an editable element owns focus and should keep the archive
@@ -38,7 +68,7 @@ export function editableOwnsCaretChord(target: EventTarget | null): boolean {
   const editable = editableAncestor(target);
   if (!editable) return false;
   if (!editable.classList.contains("composer-textarea")) return true;
-  return ((editable as HTMLTextAreaElement).value ?? "").length > 0;
+  return !!editable.value?.length;
 }
 
 // Long-press (touch) tuning for the mobile action sheet.

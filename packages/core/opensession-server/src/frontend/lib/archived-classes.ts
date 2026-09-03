@@ -20,7 +20,7 @@ export const ARCHIVED_PHONE_SEARCH_DOCK =
 /** Section labels and row contents share the page's content edge. The list
  * itself extends 12px beyond it so the hover wash has room to breathe. */
 export const ARCHIVED_SECTION_LABEL =
-  "m-0 px-3 pb-1.5 text-meta font-semibold text-faint";
+  "m-0 px-3 pb-1.5 text-body font-semibold text-faint";
 
 export const ARCHIVED_SECTION_ROWS = "m-0 list-none p-0";
 
@@ -72,8 +72,13 @@ export const ARCHIVED_ROW_OPEN =
   "focus-ring min-w-0 flex-1 cursor-pointer rounded-sm border-none bg-transparent p-0 " +
   "text-left after:absolute after:inset-0 after:content-['']";
 
+/** The title line: the name, then the origin chip trailing it. The chip sits
+ *  here rather than on the meta line under the title so a row with nothing
+ *  else to say stays one line tall. */
+export const ARCHIVED_ROW_TITLE_ROW = "flex min-w-0 items-center gap-2";
+
 export const ARCHIVED_ROW_TITLE =
-  "block truncate text-label text-fg phone:text-body";
+  "block min-w-0 truncate text-label text-fg phone:text-body";
 
 /** The line under the title, and only when it has something to say — see the
  *  meta rules in the component: a field the current filter already fixes is
@@ -98,3 +103,7 @@ export const ARCHIVED_ROW_ACTION =
   "absolute right-3 top-1.5 z-[1] opacity-0 transition-opacity " +
   "duration-[var(--dur-micro)] ease-[var(--ease)] group-hover:opacity-100 " +
   "focus-visible:opacity-100 phone:hidden";
+
+/** The page column. The archive top bar uses the same width so its search,
+ *  count, and filter align with the list below, the way Pull requests does. */
+export const ARCHIVED_PAGE_COLUMN = "mx-auto w-full max-w-[860px] px-6";

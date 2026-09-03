@@ -14,6 +14,7 @@
 import { copyFileSync, existsSync, readFileSync, rmSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { setTranscriptAppendListener } from "./file-watcher";
+import { splitPastedTexts } from "@tellahq/opensession-protocol/pasted-text";
 import { stripContext } from "./prompt-context";
 import { SESSIONS_DIR } from "./session-cache";
 import { setAppendHook } from "./transcript-store";
@@ -55,6 +56,9 @@ export type QueueItem = {
   user?: string;
   images?: string[];
   files?: unknown;
+  /** Display-only: pasted blocks lifted out of `content` by queueItemForClient.
+   *  Stored items carry them folded inside `content` instead. */
+  pastedTexts?: string[];
   /** Sibling-session transcript ids attached when this message starts a turn. */
   contextSessions?: string[];
   /** Slack thread this message came from — the turn's reply is mirrored back
@@ -273,6 +277,25 @@ export const QUEUE_STORE = `${SESSIONS_DIR}/prompt-queues.json`;
 export function queueItem(item: QueueItem): QueueItem & { id: string } {
   if (item.id) return item as QueueItem & { id: string };
   return { ...item, id: crypto.randomUUID() };
+}
+
+/**
+ * A queued item as a client shows it: fenced <opensession:context> blocks
+ * stripped, and pasted blocks lifted out of the content onto `pastedTexts` so
+ * the flap shows the message and a take-back restores the chips. Display copy
+ * only; the stored item keeps the folded content the model will receive.
+ */
+export function queueItemForClient<T extends QueueItem>(item: T): T {
+  const shown = stripContext(item.content);
+  const content =
+    shown === item.content ? item.content : shown || "(auto-continue)";
+  const split = splitPastedTexts(content);
+  if (!split) return content === item.content ? item : { ...item, content };
+  return {
+    ...item,
+    content: split.content,
+    pastedTexts: [...(item.pastedTexts ?? []), ...split.pastedTexts],
+  };
 }
 
 /** Store attachment references, never inline attachment bodies, in actor state. */
@@ -921,18 +944,13 @@ export async function queueDisplayState(sessionId: string) {
   const dispatching =
     (snapshot.dispatch as PromptDispatch | undefined)?.items ?? [];
   // Display copy only: automated turns remain in the internal queue until
-  // dispatch but never enter a client's message surface. Strip fenced
-  // <opensession:context> blocks from the remaining human-authored rows. The
-  // stored items keep their full content for delivery.
+  // dispatch but never enter a client's message surface. The stored items
+  // keep their full content for delivery.
   const forDisplay = (items: typeof queued) =>
-    items.filter(isClientVisibleQueueItem).map((i) => {
-      const shown = stripContext(i.content);
-      return {
-        ...i,
-        content: shown === i.content ? i.content : shown || "(auto-continue)",
-        editable: isEditableQueueItem(i),
-      };
-    });
+    items.filter(isClientVisibleQueueItem).map((i) => ({
+      ...queueItemForClient(i),
+      editable: isEditableQueueItem(i),
+    }));
   const pendingDeliveryIds = [
     ...queued,
     ...steered,

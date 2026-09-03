@@ -30,6 +30,13 @@ The lease is an independent fence, not an optimization. If the supervisor is
 stale or crashes, a replacement child fails closed while the surviving gateway
 still holds the lock.
 
+These invariants describe a source install. A compiled release runs
+`opensession server` directly under `opensession.service`: it binds the public
+port itself, has no ingress process, and installs no `opensession.socket`.
+`opensession service install` removes a socket unit that an older compiled
+install left behind, since a systemd-held listener would keep the server from
+binding.
+
 ## Handoff sequence
 
 `deploy/self-deploy.sh` prepares and validates the candidate frontend first. A

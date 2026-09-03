@@ -1,11 +1,24 @@
 import { expect, test } from "bun:test";
+import { readBaseCss } from "../styles/base-css-test-support";
 
 const source = await Bun.file(
   new URL("./WorkspacePane.tsx", import.meta.url),
 ).text();
-const viewerSource = await Bun.file(
-  new URL("./SessionViewer.tsx", import.meta.url),
-).text();
+const viewerSource = await Promise.all([
+  Bun.file(new URL("./SessionViewer.tsx", import.meta.url)).text(),
+  Bun.file(
+    new URL("./session-viewer/SessionViewerChrome.tsx", import.meta.url),
+  ).text(),
+  Bun.file(
+    new URL("./session-viewer/SessionViewerSidePanel.tsx", import.meta.url),
+  ).text(),
+  Bun.file(
+    new URL("./session-viewer/SessionViewerMainRegion.tsx", import.meta.url),
+  ).text(),
+  Bun.file(
+    new URL("../hooks/useSessionReviewController.ts", import.meta.url),
+  ).text(),
+]).then((parts) => parts.join("\n"));
 const prPanelSource = await Bun.file(
   new URL("./PrPanel.tsx", import.meta.url),
 ).text();
@@ -36,6 +49,7 @@ const reviewToolbarSource = await Bun.file(
 const summarySource = await Bun.file(
   new URL("./WorkspaceSummary.tsx", import.meta.url),
 ).text();
+const baseCssSource = await readBaseCss();
 
 test("workspace draft composers accept and persist attachments", () => {
   const composerStart = source.lastIndexOf("<Composer");
@@ -66,8 +80,8 @@ test("the first workspace session receives its draft attachments", () => {
   const payload = source.slice(sendStart, sendEnd);
 
   expect(sendStart).toBeGreaterThan(-1);
-  expect(payload).toContain("...(images.length ? { images } : {})");
-  expect(payload).toContain("files: files.map");
+  expect(payload).toContain("if (images.length) message.images = images;");
+  expect(payload).toContain("message.files = files.map");
   expect(source).toContain("dropStagingAttachments(draftKey)");
 });
 
@@ -183,9 +197,61 @@ test("sidebar Changes shares Review's code display options", () => {
   expect(commentableDiffSource).toContain("z-[6] bg-surface");
   expect(commentableDiffSource).toContain("rounded-md bg-surface");
   expect(commentableDiffSource).toContain(
-    "mt-1.5 max-w-full overflow-clip rounded-lg bg-code-well",
+    ': "w-auto rounded-none bg-[var(--review-file-header-bg)] hover:bg-[var(--review-file-header-hover)]"',
   );
-  expect(commentableDiffSource).toContain('"--diffs-bg": "var(--code-well)"');
+  expect(commentableDiffSource).toContain(
+    "mt-1.5 max-w-full overflow-clip rounded-lg",
+  );
+  expect(commentableDiffSource).not.toContain("rounded-lg bg-code-well");
+  expect(commentableDiffSource).toContain(
+    '"mx-2 overflow-clip rounded-lg border border-[var(--review-file-border)]"',
+  );
+  expect(commentableDiffSource).toContain(
+    '!stickyFileHeaders && "mt-0 rounded-none"',
+  );
+  expect(commentableDiffSource).toContain(
+    "style={stickyFileHeaders ? undefined : DIFF_SURFACE_STYLE[theme]}",
+  );
+  expect(commentableDiffSource).toContain(
+    'stickyFileHeaders ? "gap-2.5" : "gap-4"',
+  );
+  expect(commentableDiffSource).toContain(
+    'stickyFileHeaders ? "gap-[7px]" : "gap-4"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"--diffs-bg": "var(--review-code-light)"',
+  );
+  expect(commentableDiffSource).toContain(
+    'backgroundColor: "var(--review-code-light)"',
+  );
+  expect(commentableDiffSource).toContain('"--diffs-bg-separator-override":');
+  expect(commentableDiffSource).toContain(
+    '"color-mix(in srgb, var(--blue) 12%, var(--review-code-light))"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"color-mix(in srgb, var(--review-code-light) 96%, var(--review-code-dark))"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"color-mix(in srgb, var(--review-code-light) 90%, var(--review-code-dark))"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"--diffs-bg": "var(--review-code-dark)"',
+  );
+  expect(commentableDiffSource).toContain(
+    'backgroundColor: "var(--review-code-dark)"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"color-mix(in srgb, var(--blue) 12%, var(--review-code-dark))"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"color-mix(in srgb, var(--review-code-dark) 94%, var(--review-code-light))"',
+  );
+  expect(commentableDiffSource).toContain(
+    '"color-mix(in srgb, var(--review-code-dark) 90%, var(--review-code-light))"',
+  );
+  expect(commentableDiffSource).toContain("style={DIFF_SURFACE_STYLE[theme]}");
+  expect(baseCssSource).toContain("--review-code-light: #ffffff");
+  expect(baseCssSource).toContain("--review-code-dark: #1c1c1c");
   expect(commentableDiffSource).not.toContain("border border-line bg-bg");
   expect(commentableDiffSource).not.toContain("data-[stuck]:overflow-visible");
   expect(commentableDiffSource).not.toContain("-inset-x-px");
@@ -207,6 +273,12 @@ test("wide Review keeps page navigation in the identity bar", () => {
   expect(source).toContain("page={reviewPage}");
   expect(source).not.toContain("onReviewPageChange={setReviewPage}");
   expect(source).toContain("compactToolbar={reviewSummaryVisible}");
+  expect(source).toContain("ref={setReviewSessionActionTarget}");
+  expect(source).toContain("sessionActionTarget={");
+  expect(prPanelSource).toContain(
+    "createPortal(sessionActionButton, sessionActionTarget)",
+  );
+  expect(prPanelSource).toContain("sessionActionTarget === undefined");
   expect(prPanelSource).toContain('label="Pull request pages"');
   expect(prPanelSource).toContain('className="shrink-0 phone:hidden"');
   expect(prPanelSource).toContain('className="flex h-11');

@@ -14,6 +14,7 @@
  * start on the fallback hash colour and change under you a moment later.
  */
 
+import { z } from "zod";
 import { rememberRepoColors } from "./repo-colors";
 import type { RepoInfo } from "./api/repos";
 
@@ -24,6 +25,27 @@ interface CachedRepoList {
   /** The workspace's default repo for new sessions. */
   newSessionRepo: string;
 }
+
+const repoInfoSchema = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+  description: z.string().optional(),
+  ghRepo: z.string().optional(),
+  defaultBranch: z.string(),
+  sharedCheckout: z.boolean(),
+  default: z.boolean().optional(),
+  color: z.string().optional(),
+  colorChosen: z.boolean().optional(),
+  autoColor: z.string().optional(),
+  hasIcon: z.boolean().optional(),
+  iconSource: z.enum(["github", "upload"]).nullable().optional(),
+  iconRev: z.number().nullable().optional(),
+}) satisfies z.ZodType<RepoInfo>;
+
+const cachedRepoListSchema = z.object({
+  repos: z.array(repoInfoSchema),
+  newSessionRepo: z.string().optional(),
+});
 
 function concreteDefault(repos: RepoInfo[], value: string): string {
   return (
@@ -43,19 +65,13 @@ function read(): CachedRepoList | null {
   cached = null;
   try {
     const raw = localStorage.getItem(KEY);
-    const parsed = raw ? (JSON.parse(raw) as CachedRepoList) : null;
-    if (
-      parsed &&
-      Array.isArray(parsed.repos) &&
-      parsed.repos.every((repo) => typeof repo?.id === "string")
-    ) {
+    const parsed = raw ? cachedRepoListSchema.safeParse(JSON.parse(raw)) : null;
+    if (parsed?.success) {
       cached = {
-        repos: parsed.repos,
+        repos: parsed.data.repos,
         newSessionRepo: concreteDefault(
-          parsed.repos,
-          typeof parsed.newSessionRepo === "string"
-            ? parsed.newSessionRepo
-            : "",
+          parsed.data.repos,
+          parsed.data.newSessionRepo ?? "",
         ),
       };
     }

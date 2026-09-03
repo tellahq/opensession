@@ -5,13 +5,17 @@ import { mineStatus, ownedBy } from "./sidebar-lanes";
 function session(overrides: Partial<UnifiedSession>): UnifiedSession {
   return {
     id: "session-1",
+    source: "opensession",
+    branch: null,
+    worktreeDir: null,
+    startedBy: null,
     title: "Session",
     createdAt: "2026-08-22T12:00:00Z",
     lastActivity: "2026-08-22T12:00:00Z",
     isRunning: false,
     transcriptPath: null,
     ...overrides,
-  } as UnifiedSession;
+  };
 }
 
 describe("ownedBy", () => {

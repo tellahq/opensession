@@ -327,6 +327,18 @@ if [ -z "$RUN_HOST_ENV_FILE" ]; then
   echo "[deploy] ERROR: gateway EnvironmentFile is required for run hosts" >&2
   exit 1
 fi
+# Settings edits this file through a .bak-<n> copy and an atomic .tmp rename,
+# both created beside it, so the service user needs the directory, not just
+# the file. Root-only /etc/opensession is reset to 0700 below and never works.
+RUN_HOST_ENV_DIR="$(dirname "$RUN_HOST_ENV_FILE")"
+if ! run_as_service_user test -w "$RUN_HOST_ENV_DIR" || ! run_as_service_user test -x "$RUN_HOST_ENV_DIR"; then
+  echo "[deploy] ERROR: env file directory $RUN_HOST_ENV_DIR is not writable by $SERVICE_USER; move $RUN_HOST_ENV_FILE to a directory the service user owns and update EnvironmentFile=" >&2
+  exit 1
+fi
+if [ -e "$RUN_HOST_ENV_FILE" ] && ! run_as_service_user test -w "$RUN_HOST_ENV_FILE"; then
+  echo "[deploy] ERROR: env file $RUN_HOST_ENV_FILE is not writable by $SERVICE_USER" >&2
+  exit 1
+fi
 SESSIONS_DIR="$(read_env_value OPENSESSION_SESSIONS_DIR "$RUN_HOST_ENV_FILE")"
 STATE_DIR="$(read_env_value OPENSESSION_STATE_DIR "$RUN_HOST_ENV_FILE")"
 if [ -z "$SESSIONS_DIR" ]; then

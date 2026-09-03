@@ -5,9 +5,9 @@
 // Default on to preserve the existing composer. A makeUserPref instance keeps
 // the choice in sync across the web and native clients.
 
-import { makeUserPref } from "./user-pref";
+import * as userPref from "./user-pref";
 
-const pref = makeUserPref<boolean>({
+const pref = userPref.makeUserPref<boolean>({
   localKey: "opensession-next-chat-button",
   prefKey: "next-chat-button",
   changeEvent: "opensession-next-chat-button-changed",

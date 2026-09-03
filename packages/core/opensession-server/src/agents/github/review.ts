@@ -1133,7 +1133,7 @@ async function postReview(
   // Only ever touches bot-rooted threads; human threads are never resolved here.
   for (const t of existingThreads) {
     if (!t.isResolved && t.isOutdated && isGithubBotLogin(t.rootAuthor)) {
-      await resolveReviewThread(t.id).catch(() => {});
+      await resolveReviewThread(t.id, pr.ghRepo).catch(() => {});
     }
   }
 }

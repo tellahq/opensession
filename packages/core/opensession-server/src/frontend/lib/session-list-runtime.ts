@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { BrowserSignalStreams } from "./effect-browser-events";
 import { browserSignalStreams } from "./effect-browser-events";
-import { makeEffectLifecycle, type EffectLifecycle } from "./effect-lifecycle";
+import * as EffectLifecycle from "./effect-lifecycle";
 import { ARCHIVED_POLL_MS } from "./session-list-state";
 
 type SessionListFiber =
@@ -39,14 +39,15 @@ const NO_OPTIONS: SessionListRuntimeOptions = {
 export function makeSessionListRuntime({
   streams = browserSignalStreams,
   isVisible = () => document.visibilityState !== "hidden",
-  makeLifecycle = () => makeEffectLifecycle<SessionListFiber>(),
+  makeLifecycle = () => EffectLifecycle.makeEffectLifecycle<SessionListFiber>(),
 }: {
   streams?: BrowserSignalStreams;
   isVisible?: () => boolean;
-  makeLifecycle?: () => EffectLifecycle<SessionListFiber>;
+  makeLifecycle?: () => EffectLifecycle.EffectLifecycle<SessionListFiber>;
 } = {}): SessionListRuntime {
   let options = NO_OPTIONS;
-  let lifecycle: EffectLifecycle<SessionListFiber> | null = null;
+  let lifecycle: EffectLifecycle.EffectLifecycle<SessionListFiber> | null =
+    null;
   let lifecycleId = 0;
 
   const visible = isVisible;

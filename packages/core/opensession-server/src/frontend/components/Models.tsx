@@ -76,7 +76,7 @@ function DefaultModelRow({
         setModels(body.models);
         setCurrent(body.default);
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         setError(errorMessage(error, "Failed to load models"));
       });
   }, []);
@@ -95,7 +95,7 @@ function DefaultModelRow({
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       setCurrent(body.default);
       await onChanged?.();
-    })().catch(async (error: unknown) => {
+    })().catch(async (error) => {
       setError(errorMessage(error, "Failed to update the default model"));
     });
     setSaving(false);
@@ -114,7 +114,7 @@ function DefaultModelRow({
   const engineLabel = (m: (typeof primaryModels)[number]) =>
     m.provider === "pi" ? m.label : shortModelLabel(m.id, models || []);
   // The trigger reads the selected model's label from this flat list, so a
-  // closed select shows "Fable 5" rather than pi/anthropic/claude-fable-5.
+  // closed select shows "Fable 5.1" rather than pi/anthropic/claude-fable-5-1.
   const items = [
     ...primaryModels.map((m) => ({ value: m.id, label: engineLabel(m) })),
     ...claudeModels.map((m) => ({ value: m.id, label: m.label })),
@@ -202,7 +202,7 @@ function AutoFallbackRow() {
         return response.json();
       })
       .then((body) => setAuto(body.autoFallback !== false))
-      .catch((error: unknown) => {
+      .catch((error) => {
         setError(errorMessage(error, "Failed to load auto-switching"));
       });
   }, []);
@@ -222,7 +222,7 @@ function AutoFallbackRow() {
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       setAuto(body.autoFallback);
-    })().catch(async (error: unknown) => {
+    })().catch(async (error) => {
       setError(errorMessage(error, "Failed to update auto-switching"));
       setAuto(prev ?? null);
     });

@@ -4,11 +4,19 @@ import { expect, test } from "bun:test";
 // "no cache" rather than an error, so the persistence half would silently pass
 // on nothing. Stand one up before the module reads it.
 const store = new Map<string, string>();
-(globalThis as { localStorage?: unknown }).localStorage ??= {
-  getItem: (key: string) => store.get(key) ?? null,
-  setItem: (key: string, value: string) => void store.set(key, String(value)),
-  removeItem: (key: string) => void store.delete(key),
-};
+if (!("localStorage" in globalThis)) {
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) =>
+        void store.set(key, String(value)),
+      removeItem: (key: string) => void store.delete(key),
+    },
+  });
+}
 
 import { cachedNewSessionRepo, cachedRepos, rememberRepos } from "./repo-cache";
 

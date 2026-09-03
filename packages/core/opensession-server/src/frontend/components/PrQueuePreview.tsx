@@ -11,6 +11,8 @@ interface Props {
   branch: string;
   sessions: UnifiedSession[];
   onOpenSession: (id: string) => void;
+  /** Open the PR's workspace home so a new session can start there. */
+  onStartSession?: () => void;
   /** Open another PR in the review panel (stack map layer links). */
   onOpenPr?: (repo: string, branch: string) => void;
   send?: (msg: WSClientMessage) => void;
@@ -27,6 +29,7 @@ export function PrQueuePreview({
   branch,
   sessions,
   onOpenSession,
+  onStartSession,
   onOpenPr,
   send,
   addHandler,
@@ -47,7 +50,7 @@ export function PrQueuePreview({
         send={send}
         addHandler={addHandler}
         sessions={sessions}
-        onOpenSessionById={onOpenSession}
+        onStartSession={onStartSession}
         onOpenSession={session ? () => onOpenSession(session.id) : undefined}
         walkthrough={session?.walkthrough}
       />

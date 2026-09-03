@@ -14,7 +14,9 @@ test("the phone palette rests on top of the keyboard instead of behind it", asyn
 });
 
 test("the same focus that flags the keyboard measures it, for every surface", async () => {
-  const app = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+  const app = await Bun.file(
+    new URL("../hooks/useAppDocumentInteractions.ts", import.meta.url),
+  ).text();
   const start = app.indexOf("// Track the on-screen keyboard via input focus");
   const effect = app.slice(start, app.indexOf("}, []);", start));
 

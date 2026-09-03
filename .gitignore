@@ -116,8 +116,14 @@ deploy/sandbox/microvm/.cache-busybox-source.tar.bz2
 !.agents/skills/vercel-composition-patterns/**
 !.agents/skills/workflow-authoring/
 !.agents/skills/workflow-authoring/**
+!.agents/skills/effect-ts/
+!.agents/skills/effect-ts/**
 .claude/skills
 skills-lock.json
+
+# Shallow source mirrors that skills tell agents to clone for API lookups
+# (for example .agent-sources/effect at the pinned effect tag).
+.agent-sources/
 .css-shots/
 .css-ab/
 

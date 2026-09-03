@@ -40,6 +40,14 @@ import { useAuthStatus } from "./UserPicker";
 // member row stays concise while every identifier remains available in the
 // edit dialog. Add/edit go through a small dialog; remove is confirmed.
 
+type TeamMemberUpdate = Partial<{
+  name: string;
+  email: string | null;
+  github: string | null;
+  slackId: string | null;
+  aliases: string[] | null;
+}>;
+
 export function TeamSection({
   onChanged,
   title,
@@ -514,20 +522,22 @@ function MemberDialog({
     setError(null);
     try {
       if (!member) {
-        const body: Record<string, unknown> = { name: trimmed };
-        if (email.trim()) body.email = email.trim();
-        if (github.trim()) body.github = github.trim();
-        if (slackId.trim()) body.slackId = slackId.trim();
-        if (parsedAliases.length) body.aliases = parsedAliases;
+        const body = {
+          name: trimmed,
+          email: email.trim() || undefined,
+          github: github.trim() || undefined,
+          slackId: slackId.trim() || undefined,
+          aliases: parsedAliases.length ? parsedAliases : undefined,
+        };
         await setupRequest("/api/setup/team", { method: "POST", json: body });
         toast(`${trimmed} added`);
       } else {
         // Partial update: only changed fields ride; an emptied field that was
         // set is deleted with null; a changed name renames.
-        const patch: Record<string, unknown> = {};
+        const patch: TeamMemberUpdate = {};
         if (trimmed !== member.name) patch.name = trimmed;
         const diffField = (
-          key: string,
+          key: "email" | "github" | "slackId",
           next: string,
           prev: string | undefined,
         ) => {

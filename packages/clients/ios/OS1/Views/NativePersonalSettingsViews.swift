@@ -111,6 +111,7 @@ struct PreferencesSettingsView: View {
     @AppStorage("os1.composer.busySendMod") private var nativeBusySendMod = "steer"
     @AppStorage("os1.appearance.turnActivity") private var nativeTurnWork = "running"
     @AppStorage("os1.appearance.toolCalls") private var nativeToolCalls = "folded"
+    @AppStorage(ThinkingMessages.storageKey) private var nativeThinkingMessages = "latest"
     @AppStorage("os1.composer.replySuggestions") private var nativeReplySuggestions = true
     @AppStorage("os1.composer.nextChatButton") private var nativeNextChatButton = true
     @AppStorage("os1.transcript.liveTyping") private var nativeLiveTyping = false
@@ -132,6 +133,7 @@ struct PreferencesSettingsView: View {
     @State private var busySendMod: String
     @State private var turnWork: String
     @State private var toolCalls: String
+    @State private var thinkingMessages: String
     @State private var replySuggestions: Bool
     @State private var nextChatButton: Bool
     @State private var liveTyping: Bool
@@ -172,6 +174,9 @@ struct PreferencesSettingsView: View {
             "busy-send-mod": defaults.string(forKey: "os1.composer.busySendMod") ?? "steer",
             "turn-activity": activity.work.rawValue,
             "tool-calls": activity.tools.rawValue,
+            ThinkingMessages.prefKey: ThinkingMessages(
+                defaults.string(forKey: ThinkingMessages.storageKey)
+            ).rawValue,
             "reply-suggestions": (defaults.object(forKey: "os1.composer.replySuggestions") as? Bool ?? true) ? "on" : "off",
             "next-chat-button": (defaults.object(forKey: "os1.composer.nextChatButton") as? Bool ?? true) ? "on" : "off",
             "live-typing": (defaults.object(forKey: "os1.transcript.liveTyping") as? Bool ?? false) ? "on" : "off",
@@ -186,6 +191,9 @@ struct PreferencesSettingsView: View {
         _busySendMod = State(initialValue: seeded["busy-send-mod"] ?? "steer")
         _turnWork = State(initialValue: seeded["turn-activity"] ?? "running")
         _toolCalls = State(initialValue: seeded["tool-calls"] ?? "folded")
+        _thinkingMessages = State(
+            initialValue: seeded[ThinkingMessages.prefKey] ?? ThinkingMessages.standard.rawValue
+        )
         _replySuggestions = State(initialValue: seeded["reply-suggestions"] != "off")
         _nextChatButton = State(initialValue: seeded["next-chat-button"] != "off")
         _liveTyping = State(initialValue: seeded["live-typing"] == "on")
@@ -334,6 +342,11 @@ struct PreferencesSettingsView: View {
                     Text("With updates").tag("running")
                     Text("Open").tag("open")
                 }
+                Picker("Thinking messages", selection: $thinkingMessages) {
+                    Text("None").tag(ThinkingMessages.none.rawValue)
+                    Text("Latest").tag(ThinkingMessages.latest.rawValue)
+                    Text("All").tag(ThinkingMessages.all.rawValue)
+                }
                 Picker("Tool calls", selection: $toolCalls) {
                     Text("Closed").tag("folded")
                     Text("Open").tag("open")
@@ -342,7 +355,7 @@ struct PreferencesSettingsView: View {
             } header: {
                 Text("Transcript")
             } footer: {
-                Text("By default, steps stay open while a turn runs, then close. Closed tool calls stay one tap away. Live typing types the reply out as the model writes it. Off, each part appears when it is finished.")
+                Text("By default, steps stay open while a turn runs, then close. Latest keeps only the newest thinking message. Closed tool calls stay one tap away. Live typing types the reply out as the model writes it. Off, each part appears when it is finished.")
             }
 
             Section {
@@ -378,6 +391,7 @@ struct PreferencesSettingsView: View {
         .onChange(of: busySendMod) { _, _ in commit() }
         .onChange(of: turnWork) { _, _ in commit() }
         .onChange(of: toolCalls) { _, _ in commit() }
+        .onChange(of: thinkingMessages) { _, _ in commit() }
         .onChange(of: replySuggestions) { _, _ in commit() }
         .onChange(of: nextChatButton) { _, _ in commit() }
         .onChange(of: liveTyping) { _, _ in commit() }
@@ -435,6 +449,9 @@ struct PreferencesSettingsView: View {
                 // picker to a default the account never chose.
                 "turn-activity": remoteActivity.work.rawValue,
                 "tool-calls": remoteActivity.tools.rawValue,
+                ThinkingMessages.prefKey: ThinkingMessages(
+                    prefs[ThinkingMessages.prefKey]
+                ).rawValue,
                 "reply-suggestions": (
                     NativePreferences.replySuggestionsEnabled(prefs["reply-suggestions"])
                         ?? replySuggestions
@@ -462,6 +479,9 @@ struct PreferencesSettingsView: View {
             if busySendMod == seededPrefs["busy-send-mod"] { busySendMod = server["busy-send-mod"] ?? busySendMod }
             if turnWork == seededPrefs["turn-activity"] { turnWork = server["turn-activity"] ?? turnWork }
             if toolCalls == seededPrefs["tool-calls"] { toolCalls = server["tool-calls"] ?? toolCalls }
+            if thinkingMessages == seededPrefs[ThinkingMessages.prefKey] {
+                thinkingMessages = server[ThinkingMessages.prefKey] ?? thinkingMessages
+            }
             if (replySuggestions ? "on" : "off") == seededPrefs["reply-suggestions"] {
                 replySuggestions = server["reply-suggestions"] != "off"
             }
@@ -481,6 +501,7 @@ struct PreferencesSettingsView: View {
             nativeBusySendMod = busySendMod
             nativeTurnWork = turnWork
             nativeToolCalls = toolCalls
+            nativeThinkingMessages = thinkingMessages
             nativeReplySuggestions = replySuggestions
             nativeNextChatButton = nextChatButton
             nativeLiveTyping = liveTyping
@@ -583,6 +604,9 @@ struct PreferencesSettingsView: View {
             busySendMod = confirmed["busy-send-mod"] == "queue" ? "queue" : "steer"
             turnWork = TurnActivity.Work(rawValue: confirmed["turn-activity"] ?? "")?.rawValue ?? turnWork
             toolCalls = TurnActivity.Tools(rawValue: confirmed["tool-calls"] ?? "")?.rawValue ?? toolCalls
+            thinkingMessages = ThinkingMessages(
+                confirmed[ThinkingMessages.prefKey] ?? thinkingMessages
+            ).rawValue
             replySuggestions = NativePreferences.replySuggestionsEnabled(
                 confirmed["reply-suggestions"]
             ) ?? replySuggestions
@@ -603,6 +627,7 @@ struct PreferencesSettingsView: View {
             nativeBusySendMod = busySendMod
             nativeTurnWork = turnWork
             nativeToolCalls = toolCalls
+            nativeThinkingMessages = thinkingMessages
             nativeReplySuggestions = replySuggestions
             nativeNextChatButton = nextChatButton
             nativeLiveTyping = liveTyping
@@ -646,6 +671,7 @@ struct PreferencesSettingsView: View {
             "busy-send-mod": busySendMod,
             "turn-activity": turnWork,
             "tool-calls": toolCalls,
+            ThinkingMessages.prefKey: thinkingMessages,
             "reply-suggestions": replySuggestions ? "on" : "off",
             "next-chat-button": nextChatButton ? "on" : "off",
             "live-typing": liveTyping ? "on" : "off",
@@ -788,7 +814,7 @@ struct AppearanceSettingsView: View {
                 } header: {
                     Text("Support tickets")
                 } footer: {
-                    Text("Choose where the Plain queue lives. This setting follows your account across the web and native apps.")
+                    Text("Choose where the Support queue lives. This setting follows your account across the web and native apps.")
                 }
             }
 

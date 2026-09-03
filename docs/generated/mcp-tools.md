@@ -59,6 +59,7 @@ touches an in-process tool:
 | [`opensession-workflows`](#opensession-workflows) | 8 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
 | [`opensession-assets`](#opensession-assets) | 4 | interactive | Needs a session id. Works in read-only Ask mode — assets land outside the checkout. |
 | [`opensession-todos`](#opensession-todos) | 5 | interactive | Needs a session id. |
+| [`opensession-schedule`](#opensession-schedule) | 3 | interactive | Needs a session id. |
 | [`opensession-papercuts`](#opensession-papercuts) | 2 | interactive, automation | Dropped when the session's repo opted out (Settings → Papercuts). |
 | [`opensession-report`](#opensession-report) | 1 | automation | – |
 | [`opensession-turn`](#opensession-turn) | 2 | automation | – |
@@ -68,7 +69,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-27 servers, 118 tools.
+28 servers, 121 tools.
 
 ## opensession-sessions
 
@@ -209,13 +210,13 @@ List all of Assistant's automations (routines): scheduled, event- and webhook-tr
 
 ### `create_automation`
 
-`mcp__opensession-admin__create_automation` · input: `name` (string, required), `prompt` (string, required), `schedule` (string), `mode` ("ask" | "code"), `repo` (string), `mcpServers` (string[]), `model` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `owner` (string), `workspaceId` (string)
+`mcp__opensession-admin__create_automation` · input: `name` (string, required), `prompt` (string, required), `schedule` (string), `mode` ("ask" | "code"), `repo` (string), `mcpServers` (string[]), `sandbox` (boolean), `model` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `owner` (string), `workspaceId` (string)
 
-Create a new automation (routine). Provide a clear prompt describing the task. Set `repo` to the repository it works in, or it runs against the instance default. Use a 5-field UTC cron `schedule` for recurring jobs (omit for manual/webhook only). Pick mode 'ask' for read-only or 'code' if it must edit and commit files. Ordinary automations receive no GitHub credential, so code mode alone cannot push or open a GitHub PR. Optionally restrict tools with mcpServers and set a model.
+Create a new automation (routine). Provide a clear prompt describing the task. Set `repo` to the repository it works in, or it runs against the instance default. Use a 5-field UTC cron `schedule` for recurring jobs (omit for manual/webhook only). Pick mode 'ask' for read-only or 'code' if it must edit and commit files. Ordinary automations receive no GitHub credential, so code mode alone cannot push or open a GitHub PR. Set sandbox true to use a fresh disposable Executor. Sandboxed automations require an explicit mcpServers list, a pinned accountId, a supported model, and a configured qualified provider.
 
 ### `update_automation`
 
-`mcp__opensession-admin__update_automation` · input: `id` (string, required), `name` (string), `prompt` (string), `schedule` (string), `mode` ("ask" | "code"), `enabled` (boolean), `repo` (string), `mcpServers` (string[]), `model` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `owner` (string), `workspaceId` (string)
+`mcp__opensession-admin__update_automation` · input: `id` (string, required), `name` (string), `prompt` (string), `schedule` (string), `mode` ("ask" | "code"), `enabled` (boolean), `repo` (string), `mcpServers` (string[]), `sandbox` (boolean), `model` (string), `fallbackModel` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `owner` (string), `workspaceId` (string)
 
 Update an existing automation by id. Only provided fields change. Use enabled to pause/resume.
 
@@ -649,9 +650,9 @@ Restart one supervised Portal using its registered command and port. Repository-
 
 ### `set_editor_preview_path`
 
-`mcp__opensession-portals__set_editor_preview_path` · input: `path` (string, required), `exclusiveKey` (string, required), `durationSeconds` (number, required), `clipCount` (integer, required), `transcriptWordCount` (integer, required), `leaseMinutes` (integer)
+`mcp__opensession-portals__set_editor_preview_path` · input: `fixtureLeaseId` (string, required)
 
-Set and exclusively reserve the staging route for an editor feature. Call this only after verifying the staging record is at least 60 seconds long, has multiple clips, and has a ready non-empty transcript.
+Verify a Tella editor fixture lease server-side, then set and exclusively reserve its authoritative editor route. Invented, expired, mismatched, or inaccessible fixtures are rejected.
 
 ### `set_portal_path`
 
@@ -676,9 +677,9 @@ Publish a walkthrough of this session's change: a demo video, before/after scree
 
 ### `comment_on_pr_with_images`
 
-`mcp__opensession-walkthrough__comment_on_pr_with_images` · input: `comment` (string, required), `images` (object[], required), `repo` (string), `pr_number` (number)
+`mcp__opensession-walkthrough__comment_on_pr_with_images` · input: `comment` (string, required), `media` (object[]), `images` (object[]), `repo` (string), `pr_number` (number)
 
-Post a comment on this session's PR (or an explicit PR) with screenshots that RENDER INLINE on GitHub. Images are copied to durable storage and served from unguessable URLs on the configured public media origin. This requires a GitHub-reachable HTTPS origin configured through OPENSESSION_PR_IMAGES_BASE, integrations.media.publicBaseUrl, or server.publicBaseUrl; loopback, private-network, and tailnet URLs will not render. The URLs are capability links: anyone holding one can fetch the image, so don't attach anything that must stay strictly repo-member-only. Place images in the markdown with {{image:1}}, {{image:2}}, … (1-based); images you don't reference are appended at the end.
+Post a comment on this session's PR (or an explicit PR) with images or videos that render inline on GitHub. Files become repository-scoped GitHub user attachments, so private-repo media stays private and no public Open Session media origin is required. Place files with {{media:1}}, {{media:2}}, and so on. Put video placeholders on their own line so GitHub renders a player. Unreferenced files are appended in order. The old images input and {{image:N}} placeholders remain accepted for existing callers.
 
 ## opensession-slack
 
@@ -840,6 +841,34 @@ Drop a todo — the user consciously decided NOT to do it. Only on the user's ex
 `mcp__opensession-todos__update_todo` · input: `id` (string, required), `text` (string), `note` (string), `due` (string), `remindAt` (string), `status` ("open" | "done" | "dropped")
 
 Edit a todo's text, note, or due date, or reopen a done/dropped one (status "open").
+
+## opensession-schedule
+
+Schedule a prompt for this session at a future time.
+
+- **Source** `packages/core/opensession-server/src/server/schedule-mcp.ts`
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
+- **Runs** interactive
+- **Condition** Needs a session id.
+- **Note** Delivery is a SessionKernel timer (scheduled-prompts.ts), so it survives restarts. Delivery times are described in the user's configured timezone.
+
+### `schedule_prompt`
+
+`mcp__opensession-schedule__schedule_prompt` · input: `at` (string, required), `prompt` (string, required)
+
+Schedule a prompt to be sent to THIS session at a future time, then end your turn. Use it to check back on something that takes a while (a release workflow, CI, a deploy, a long job) instead of polling or sleeping. The prompt arrives as a normal message in this conversation, so write it to your future self with everything needed to pick the work up: what to run, what "done" looks like, what to do on failure. Fires once; survives restarts. Do not use harness built-ins like CronCreate or ScheduleWakeup here; they do not exist in this session.
+
+### `list_scheduled_prompts`
+
+`mcp__opensession-schedule__list_scheduled_prompts` · input: none
+
+List prompts scheduled for this session, soonest first.
+
+### `cancel_scheduled_prompt`
+
+`mcp__opensession-schedule__cancel_scheduled_prompt` · input: `id` (string, required)
+
+Cancel a prompt scheduled for this session by id.
 
 ## opensession-papercuts
 

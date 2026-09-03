@@ -19,15 +19,23 @@ const MARKERS = [
   ".session-delete-overlay",
 ];
 
-function root(match: unknown): ParentNode {
-  return {
+let asked = "";
+let queryMatch: Element | null = null;
+Object.defineProperty(globalThis, "document", {
+  configurable: true,
+  value: {
+    createElement: () => ({}),
     querySelector: (selector: string) => {
       asked = selector;
-      return match;
+      return queryMatch;
     },
-  } as unknown as ParentNode;
+  },
+});
+
+function root(match: Element | null): ParentNode {
+  queryMatch = match;
+  return document;
 }
-let asked = "";
 
 describe("blockingOverlayOpen", () => {
   // The Desk keeps its palette mounted, so every marker is in the DOM from
@@ -50,7 +58,7 @@ describe("blockingOverlayOpen", () => {
 
   test("reports what the root found", () => {
     expect(blockingOverlayOpen(root(null))).toBe(false);
-    expect(blockingOverlayOpen(root({}))).toBe(true);
+    expect(blockingOverlayOpen(root(document.createElement("div")))).toBe(true);
     expect(asked).toBe(BLOCKING_OVERLAY_SELECTOR);
   });
 });

@@ -20,11 +20,12 @@ export function apiResourceSWRConfig<Data>(
   refreshInterval: number,
   compare?: SWRConfiguration<Data>["compare"],
 ): SWRConfiguration<Data> {
-  return {
+  const config: SWRConfiguration<Data> = {
     ...API_SWR_OPTIONS,
     refreshInterval,
-    ...(compare === undefined ? {} : { compare }),
   };
+  if (compare !== undefined) config.compare = compare;
+  return config;
 }
 
 // Keep resource identities in one place so separate surfaces share both the

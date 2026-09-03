@@ -232,6 +232,10 @@ const iconDim: Record<Variant, string> = {
   "success-strong": "opacity-80",
 };
 
+type ButtonRenderProps = React.ComponentPropsWithoutRef<"button"> & {
+  ref?: React.ForwardedRef<HTMLButtonElement>;
+};
+
 export type ButtonProps = React.ComponentPropsWithoutRef<"button"> & {
   variant?: Variant;
   size?: Size;
@@ -277,7 +281,7 @@ export type ButtonProps = React.ComponentPropsWithoutRef<"button"> & {
    * `<button>` attribute and does nothing on an anchor: an anchor that
    * should not be followed has no href.
    */
-  render?: React.ReactElement;
+  render?: React.ReactElement<ButtonRenderProps>;
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -307,12 +311,14 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     // every font but the one it was measured in. It only applies to a
     // plain string child: an element child brings its own layout, and
     // wrapping it would make it a flex item of a flex item.
-    const label =
-      typeof children === "string" || typeof children === "number" ? (
-        <span className="[text-box:trim-both_cap_alphabetic]">{children}</span>
-      ) : (
-        children
-      );
+    const hasPlainLabel =
+      children != null &&
+      (children.constructor === String || children.constructor === Number);
+    const label = hasPlainLabel ? (
+      <span className="[text-box:trim-both_cap_alphabetic]">{children}</span>
+    ) : (
+      children
+    );
     const content = (
       <>
         {icon != null && (
@@ -366,16 +372,13 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       // The caller's element is the more specific of the two, so its own
       // className lands last and wins the merge. `type="button"` is not
       // forced on: it means nothing on an anchor.
-      const own = render.props as { className?: string };
-      return React.cloneElement(
-        render as React.ReactElement<Record<string, unknown>>,
-        {
-          ...rest,
-          ref,
-          className: cn(optics, own.className),
-          children: content,
-        },
-      );
+      const own = render.props;
+      return React.cloneElement(render, {
+        ...rest,
+        ref,
+        className: cn(optics, own.className),
+        children: content,
+      });
     }
 
     return (

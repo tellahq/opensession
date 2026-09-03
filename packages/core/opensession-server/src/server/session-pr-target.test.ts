@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { sessionPrBranch, shareWorkspacePrRefs } from "./session-pr-target";
+import type { PrInfo } from "./pr-cache";
+import {
+  enrichSessionPrRefs,
+  projectWorkspacePrRefs,
+  sessionPrBranch,
+  shareWorkspacePrRefs,
+} from "./session-pr-target";
 import type { UnifiedSession } from "./types";
 import type { Workspace } from "./workspaces";
 
@@ -88,6 +94,84 @@ describe("shareWorkspacePrRefs", () => {
 
     expect(first.prs).toEqual([pr, { ...secondPr, source: "discovered" }]);
     expect(second.prs).toEqual([secondPr, { ...pr, source: "discovered" }]);
+  });
+
+  test("restores footer PRs omitted from a targeted session read", () => {
+    const detail = {
+      id: "os-detail",
+      workspaceId: "ws-one",
+      repo: "tella-fusion",
+      branch: "parent-branch",
+    } as UnifiedSession;
+    const footerPr = {
+      url: "https://github.com/tellahq/opensession/pull/257",
+      state: "MERGED",
+      number: 257,
+      title: "Keep workspace reviews populated",
+      isDraft: false,
+      additions: 12,
+      deletions: 4,
+      changedFiles: 2,
+      reviewDecision: "APPROVED",
+      mergeable: "UNKNOWN",
+      checks: { total: 1, passed: 1, failed: 0, pending: 0 },
+    } as PrInfo;
+
+    const enriched = enrichSessionPrRefs(detail, {
+      defaultRepoId: "tella-fusion",
+      prsByRepo: new Map(),
+      footerMatches: [
+        {
+          repo: "opensession",
+          branch: "workspace-review-fix",
+          pr: footerPr,
+        },
+      ],
+    });
+
+    expect(enriched.prs).toEqual([
+      expect.objectContaining({
+        repo: "opensession",
+        branch: "workspace-review-fix",
+        number: 257,
+        state: "MERGED",
+        source: "discovered",
+      }),
+    ]);
+    expect(detail.prs).toBeUndefined();
+  });
+
+  test("projects indexed sibling PRs onto one authoritative detail row", () => {
+    const detail = {
+      id: "os-detail",
+      workspaceId: "ws-one",
+      repo: "tella-fusion",
+      branch: "parent-branch",
+    } as UnifiedSession;
+    const indexedDetail = {
+      ...detail,
+      prs: [
+        {
+          repo: "opensession",
+          branch: "footer-pr",
+          source: "discovered" as const,
+          number: 122,
+        },
+      ],
+    };
+    const sibling = {
+      id: "os-sibling",
+      workspaceId: "ws-one",
+      prs: [pr],
+    } as UnifiedSession;
+
+    const projected = projectWorkspacePrRefs(detail, [indexedDetail, sibling]);
+
+    expect(projected.prs).toEqual([
+      { ...indexedDetail.prs[0], source: "discovered" },
+      { ...pr, source: "discovered" },
+    ]);
+    expect(detail.prs).toBeUndefined();
   });
 
   test("does not leak PRs across workspaces", () => {

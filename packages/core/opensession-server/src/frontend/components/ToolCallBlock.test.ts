@@ -122,6 +122,28 @@ test("bash, grep, find and glob summaries drop their plumbing", () => {
   );
   expect(
     toolSummary(
+      "bash",
+      { command: "cd ~/scratch/thinking-status && grep -n foo a.ts | head" },
+      "",
+      roots,
+    ),
+  ).toBe("grep -n foo a.ts | head");
+  expect(
+    toolSummary(
+      "bash",
+      { command: "cd '/tmp/my dir'; bun test\nbun run check" },
+      "",
+      roots,
+    ),
+  ).toBe("bun test ⏎ bun run check");
+  expect(toolSummary("bash", { command: "cd /tmp/scratch" }, "", roots)).toBe(
+    "cd /tmp/scratch",
+  );
+  expect(toolSummary("bash", { command: "cdparanoia && ls" }, "", roots)).toBe(
+    "cdparanoia && ls",
+  );
+  expect(
+    toolSummary(
       "grep",
       {
         pattern: "foo",

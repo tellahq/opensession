@@ -18,7 +18,8 @@
  *       The full release artefact `opensession-<ver>-<os>-<arch>.tar.gz`:
  *         opensession                 the target binary
  *         node_modules/               sharp + @img/sharp-<target> sidecar
- *         opensession*.service        system service templates
+ *         opensession*.service        system service and socket templates
+ *         opensession.socket          (see scripts/lib/release-artefact.ts)
  *         deploy/                     fixed executor credential/helper policy
  *         LICENSE + notices + SBOM    project and third-party licensing
  *         release.json                version, commit, target, kind
@@ -43,6 +44,7 @@ import {
 } from "fs";
 import { dirname, join, relative, resolve } from "path";
 import { generateReleaseMetadata } from "./generate-release-metadata";
+import { RELEASE_SERVICE_TEMPLATES } from "./lib/release-artefact";
 
 const REPO_ROOT = resolve(import.meta.dir, "..");
 const EMBED_MODULE = join(
@@ -445,18 +447,7 @@ async function main(): Promise<void> {
   // System scope is optional, but it must be fully installable from the same
   // binary artifact. These root-owned policy files are inputs to the installer,
   // never caller-controlled argv passed across the executor boundary.
-  for (const rel of [
-    "opensession.service",
-    "opensession-executor.service",
-    "opensession-session-kernel.service",
-    "deploy/install-resource-control.sh",
-    "deploy/install-executor-credential.sh",
-    "deploy/install-session-kernel-credential.sh",
-    "deploy/install-run-host-helper.sh",
-    "deploy/opensession-run-host",
-    "deploy/systemd/opensession-control.slice",
-    "deploy/systemd/opensession-workloads.slice",
-  ]) {
+  for (const rel of RELEASE_SERVICE_TEMPLATES) {
     const source = join(REPO_ROOT, rel);
     const destination = join(stage, rel);
     mkdirSync(dirname(destination), { recursive: true });

@@ -169,7 +169,7 @@ export function RunnersPanel() {
         );
         return true;
       })
-      .catch((error: unknown) => {
+      .catch((error) => {
         toast(
           error instanceof Error ? error.message : "Could not update Runner",
           { variant: "error" },
@@ -547,24 +547,23 @@ function RunnerDetails({
   // leaves Cancel meaning different things in one form.
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    const saved = await onChange(runner, {
+    const patch: Parameters<typeof updateRunner>[1] = {
       label: label.trim() || undefined,
       capabilities: { tags: list(tags) },
       allowedUsers: list(users),
       allowedRepos: list(repos),
       maintenance,
       permissions: { commands },
-      ...(inference
-        ? {
-            localInferencePolicy: {
-              enabled: inferenceEnabled,
-              allowedUsers: list(users),
-              allowedModels: list(inferenceModels),
-              allowedTasks: ["chat", "embedding", "image", "video"],
-            },
-          }
-        : {}),
-    });
+    };
+    if (inference) {
+      patch.localInferencePolicy = {
+        enabled: inferenceEnabled,
+        allowedUsers: list(users),
+        allowedModels: list(inferenceModels),
+        allowedTasks: ["chat", "embedding", "image", "video"],
+      };
+    }
+    const saved = await onChange(runner, patch);
     if (saved) onSaved();
   };
   return (

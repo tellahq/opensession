@@ -24,6 +24,7 @@ import {
 } from "../lib/msg-classes";
 import {
   isLegacyReasoningHeading,
+  reasoningBody,
   reasoningDisplay,
 } from "../lib/reasoning-display";
 import { formatDuration, fullTime } from "../lib/time";
@@ -145,6 +146,22 @@ export const TurnBlock = function TurnBlock({
   const timing = blockTiming(items, toolResults);
   const duration = timing.duration;
   const lastTool = tools[tools.length - 1];
+  // The collapsed live line names the current activity: the thought the rail
+  // ends on, otherwise its newest step.
+  const lastItem = items[items.length - 1];
+  const activity =
+    !live || !hasNarration || !lastItem
+      ? null
+      : lastItem.type === "assistant" && reasoningEntry(lastItem)
+        ? reasoningDisplay(lastItem.content).title || "Thinking"
+        : lastTool
+          ? `${toolDisplayName(lastTool.toolName)}: ${toolSummary(
+              lastTool.toolName || "Tool",
+              lastTool.toolInput,
+              lastTool.content,
+              pathRoots,
+            )}`
+          : null;
 
   // Memoized against the house rule: a live turn re-renders on every stream
   // event, and this walks every step it has taken so far (collectTouchedFiles
@@ -260,15 +277,9 @@ export const TurnBlock = function TurnBlock({
             {toolOnlyAggregate.mediaLabel}
           </span>
         )}
-        {live && !expanded && hasNarration && lastTool && (
+        {!expanded && activity && (
           <span className="min-w-0 truncate text-label leading-4 text-faint">
-            {toolDisplayName(lastTool.toolName)}:{" "}
-            {toolSummary(
-              lastTool.toolName || "Tool",
-              lastTool.toolInput,
-              lastTool.content,
-              pathRoots,
-            )}
+            {activity}
           </span>
         )}
       </button>
@@ -752,6 +763,7 @@ function ReasoningMessage({
             content={body}
             entry={entry}
             sessionId={sessionId}
+            transformContent={reasoningBody}
           />
         ) : null;
       })}
@@ -780,10 +792,15 @@ function ReasoningMessage({
  * time, so dedupe by src: the strip is what the turn produced, not how many
  * times it wrote the file.
  */
+interface FeaturedTurnMedia {
+  images: string[];
+  videos: string[];
+}
+
 function featuredTurnMedia(
   items: TranscriptEntry[],
   toolResults: Map<string, TranscriptEntry>,
-): { images: string[]; videos: string[] } {
+): FeaturedTurnMedia {
   const images: string[] = [];
   const videos: string[] = [];
   const seen = new Set<string>();
@@ -826,10 +843,15 @@ function turnBlockPropsEqual(prev: Props, next: Props): boolean {
   return true;
 }
 
+interface BlockTiming {
+  duration: string | null;
+  completedAt: string;
+}
+
 function blockTiming(
   items: TranscriptEntry[],
   toolResults: Map<string, TranscriptEntry>,
-): { duration: string | null; completedAt: string } {
+): BlockTiming {
   if (items.length === 0) return { duration: null, completedAt: "" };
   const first = new Date(items[0].timestamp).getTime();
   const lastItem = items[items.length - 1];

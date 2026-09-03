@@ -1,5 +1,6 @@
 import { Glob } from "bun";
 import { describe, expect, test } from "bun:test";
+import { readBaseCss } from "./base-css-test-support";
 
 /**
  * Guards the one scrollbar rule that cannot be checked by looking at the app
@@ -27,7 +28,7 @@ async function frontendSources() {
 
 describe("scrollbar policy", () => {
   test("base.css thins every scrollbar with the standard properties", async () => {
-    const css = await Bun.file(`${ROOT}styles/base.css`).text();
+    const css = await readBaseCss();
     expect(css).toMatch(/\*\s*\{[^}]*scrollbar-width:\s*thin/);
     expect(css).toMatch(
       /scrollbar-color:\s*var\(--scrollbar-thumb\)\s+transparent/,

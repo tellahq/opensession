@@ -1,10 +1,9 @@
 import { expect, test } from "bun:test";
-
-const CSS = new URL("./base.css", import.meta.url);
+import { readBaseCss } from "./base-css-test-support";
 const MODAL = new URL("../ui/modal.tsx", import.meta.url);
 
 test("an open palette holds the page behind it still", async () => {
-  const css = await Bun.file(CSS).text();
+  const css = await readBaseCss();
 
   // The lock is on the app root, not on body: the palette and the mention
   // popup are portaled outside .app and must keep taking touches.

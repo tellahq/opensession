@@ -22,18 +22,16 @@ export const LIGHTBOX_PREVIEW_LABEL: Record<LightboxItem["kind"], string> = {
 
 /** One node as an item, or null when it cannot be shown. */
 function galleryItem(node: Element): LightboxItem | null {
-  if (node.tagName === "IMG" || node.tagName === "VIDEO") {
-    const media = node as HTMLImageElement | HTMLVideoElement;
+  if (node instanceof HTMLImageElement) {
     return {
-      kind: node.tagName === "VIDEO" ? "video" : "image",
-      src:
-        node.tagName === "IMG"
-          ? (media as HTMLImageElement).currentSrc || media.src
-          : media.src,
-      commentSessionId:
-        node.tagName === "IMG" ? commentSessionIdFor(node) : undefined,
-      sessionTitle: (node as HTMLImageElement).alt?.trim() || undefined,
+      kind: "image",
+      src: node.currentSrc || node.src,
+      commentSessionId: commentSessionIdFor(node),
+      sessionTitle: node.alt.trim() || undefined,
     };
+  }
+  if (node instanceof HTMLVideoElement) {
+    return { kind: "video", src: node.src };
   }
   const diagram = readDiagramSvg(node.outerHTML);
   return diagram

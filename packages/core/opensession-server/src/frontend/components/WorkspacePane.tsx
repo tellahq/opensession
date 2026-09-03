@@ -509,10 +509,14 @@ export function WorkspacePane({
   const presentationSession =
     listedPresentationSession ?? hydratedPresentationSession ?? reviewSession;
 
-  function handleStart() {
+  function handleStart(_text: string, opts?: { pastedTexts?: string[] }) {
     const q = prompt.trim();
+    const pastedTexts = opts?.pastedTexts ?? [];
     if (
-      (!q && images.length === 0 && files.length === 0) ||
+      (!q &&
+        images.length === 0 &&
+        files.length === 0 &&
+        pastedTexts.length === 0) ||
       isStaging(staging) ||
       starting ||
       !connected
@@ -535,24 +539,23 @@ export function WorkspacePane({
     // it came from. Ticket workspaces without a draft remain Ask, while repo-less
     // feed workspaces start in Scratch.
     const target = workspaceComposerTarget(workspace, q);
-    send({
+    const message: WSClientMessage = {
       type: "create_session",
       ...target,
       workspaceId: workspace.id,
       prompt: q,
       user: currentUser,
-      ...(model ? { model } : {}),
-      ...(images.length ? { images } : {}),
-      ...(files.length
-        ? {
-            files: files.map((file) =>
-              file.path
-                ? { name: file.name, path: file.path }
-                : { name: file.name, dataUrl: file.dataUrl },
-            ),
-          }
-        : {}),
-    });
+    };
+    if (model) message.model = model;
+    if (images.length) message.images = images;
+    if (files.length)
+      message.files = files.map((file) =>
+        file.path
+          ? { name: file.name, path: file.path }
+          : { name: file.name, dataUrl: file.dataUrl },
+      );
+    if (pastedTexts.length) message.pastedTexts = pastedTexts;
+    send(message);
     // App navigates into the session on session_created.
   }
 
@@ -598,6 +601,8 @@ export function WorkspacePane({
   // session's header does — beside the pane, not across the panel.
   const headerRef = useRef<HTMLDivElement>(null);
   const headerActionsRef = useRef<HTMLDivElement>(null);
+  const [reviewSessionActionTarget, setReviewSessionActionTarget] =
+    useState<HTMLDivElement | null>(null);
   const [headerW, setHeaderW] = useState(0);
   const [reviewSummaryOpen, setReviewSummaryOpen] =
     useState(workspaceSummaryOpen);
@@ -736,6 +741,8 @@ export function WorkspacePane({
     </Menu.Root>
   );
 
+  const showWorkspaceNewSessionAction =
+    !tabStripVisible && onNewSession && !(tab === "review" && reviewTarget);
   const header = !isPhone && (
     <TopBar ref={headerRef} className={VIEWER_HEADER}>
       <TopBarLeading className={VIEWER_TITLE}>
@@ -788,37 +795,42 @@ export function WorkspacePane({
             {workspace.name}
           </OverflowFadeText>
         )}
-        {workspaceMenu}
-        {!tabStripVisible && onNewSession && (
-          <Tooltip label="New tab in this workspace">
-            <Button
-              variant="ghost"
-              size="md"
-              className="-ml-1 flex-none rounded-control"
-              onClick={(event) => {
-                const reduceMotion = window.matchMedia(
-                  "(prefers-reduced-motion: reduce)",
-                ).matches;
-                const rect =
-                  event.detail > 0 && !reduceMotion
-                    ? event.currentTarget.getBoundingClientRect()
-                    : null;
-                onNewSession(
-                  rect
-                    ? {
-                        left: rect.left,
-                        top: rect.top,
-                        width: rect.width,
-                        height: rect.height,
-                      }
-                    : undefined,
-                );
-              }}
-              aria-label="New tab"
-              icon={<IconPlus size={22} />}
-            />
-          </Tooltip>
-        )}
+        <div className="-ml-1 flex flex-none items-center gap-0.5">
+          {workspaceMenu}
+          {tab === "review" && reviewTarget && (
+            <div ref={setReviewSessionActionTarget} className="contents" />
+          )}
+          {showWorkspaceNewSessionAction && (
+            <Tooltip label="New tab in this workspace">
+              <Button
+                variant="ghost"
+                size="md"
+                className="flex-none rounded-control"
+                onClick={(event) => {
+                  const reduceMotion = window.matchMedia(
+                    "(prefers-reduced-motion: reduce)",
+                  ).matches;
+                  const rect =
+                    event.detail > 0 && !reduceMotion
+                      ? event.currentTarget.getBoundingClientRect()
+                      : null;
+                  onNewSession(
+                    rect
+                      ? {
+                          left: rect.left,
+                          top: rect.top,
+                          width: rect.width,
+                          height: rect.height,
+                        }
+                      : undefined,
+                  );
+                }}
+                aria-label="New tab"
+                icon={<IconPlus size={22} />}
+              />
+            </Tooltip>
+          )}
+        </div>
       </TopBarLeading>
       <TopBarActions ref={headerActionsRef} className={VIEWER_HEADER_ACTIONS}>
         {tab === "review" && presentationSession && !panelOpen && (
@@ -880,7 +892,8 @@ export function WorkspacePane({
           send={send}
           addHandler={addHandler}
           sessions={sessions}
-          onOpenSessionById={onOpenSession}
+          onStartSession={onNewSession ? () => onNewSession() : undefined}
+          sessionActionTarget={isPhone ? undefined : reviewSessionActionTarget}
           onOpenSession={
             reviewSession ? () => onOpenSession(reviewSession.id) : undefined
           }

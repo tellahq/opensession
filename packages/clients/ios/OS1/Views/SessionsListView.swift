@@ -620,6 +620,7 @@ struct SessionsListView: View {
                     onSaveComposerDraft: { draft in
                         saveComposerDraft(draft, for: archivedSession.id)
                     },
+                    onForkCreated: openFork,
                     onRestoreArchivedSession: { archived in
                         let restored = await restoreArchived(archived)
                         openedArchivedSession = nil
@@ -649,6 +650,7 @@ struct SessionsListView: View {
                     onSaveComposerDraft: { draft in
                         saveComposerDraft(draft, for: session.id)
                     },
+                    onForkCreated: openFork,
                     onRestoreArchivedSession: { archived in
                         let restored = await restoreArchived(archived)
                         openedArchivedSession = nil
@@ -1175,6 +1177,12 @@ struct SessionsListView: View {
                     // scripted run cannot reach a borrowed list any other way.
                     if let lens = env["OS1_PERSON_LENS"], !lens.isEmpty {
                         peopleFilterRaw = lens
+                    }
+                    // Open a commit directly for UI verification.
+                    if let raw = env["OS1_OPEN_COMMIT"],
+                       let url = URL(string: "\(CommitLinks.scheme)://\(raw)"),
+                       let reference = CommitLinks.reference(from: url) {
+                        commitReference = reference
                     }
                     #endif
                 }
@@ -2181,6 +2189,7 @@ struct SessionsListView: View {
                     return nil
                 },
                 onNextChat: nextChatAction(after: session),
+                onForkCreated: openFork,
                 onRenameWorkspace: { name in
                     guard let workspace = workspace(containing: session) else { return }
                     viewModel.rename(workspace, to: name)
@@ -2205,6 +2214,23 @@ struct SessionsListView: View {
         }
     }
     #endif
+
+    @MainActor
+    private func openFork(_ id: String) async {
+        do {
+            let session = try await OS1API.session(id: id)
+            await viewModel.refresh()
+            #if os(iOS)
+            path.append(session)
+            #else
+            openedArchivedSession = nil
+            selectedSessionID = session.id
+            #endif
+        } catch {
+            createErrorTitle = "Couldn't open fork"
+            createError = error.localizedDescription
+        }
+    }
 
     /// A scoped history row is deliberately slim. Restore the whole session so
     /// selecting it immediately has its model, walkthrough and PR rather than
@@ -3198,7 +3224,7 @@ struct SessionsListView: View {
                     #else
                     RepoTile(name: "plain", size: plainRowTileSize)
                     #endif
-                    Text("Plain")
+                    Text(SidebarFeeds.supportTitle)
                         #if os(iOS)
                         .font(.callout.weight(.medium))
                         .foregroundStyle(OS1VisualStyle.textDim)
@@ -3221,8 +3247,8 @@ struct SessionsListView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(
                 urgentPlainTicketCount > 0
-                    ? "Open Plain, \(supportQueue.threads.count) tickets, \(urgentPlainTicketCount) urgent"
-                    : "Open Plain, \(supportQueue.threads.count) tickets"
+                    ? "Open \(SidebarFeeds.supportTitle), \(supportQueue.threads.count) tickets, \(urgentPlainTicketCount) urgent"
+                    : "Open \(SidebarFeeds.supportTitle), \(supportQueue.threads.count) tickets"
             )
             // The long press the web sidebar answers with a right-click on the
             // same band. One item, like that menu: this row leads somewhere

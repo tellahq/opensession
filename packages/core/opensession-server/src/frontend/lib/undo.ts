@@ -55,8 +55,11 @@ export function hasUndoAction(): boolean {
 
 /** Keep native field history in charge while a person is editing text. */
 export function isEditableUndoTarget(target: EventTarget | null): boolean {
-  return !!(target as HTMLElement | null)?.closest?.(
-    "input, textarea, select, [contenteditable='true'], [contenteditable='']",
+  return (
+    target instanceof Element &&
+    !!target.closest(
+      "input, textarea, select, [contenteditable='true'], [contenteditable='']",
+    )
   );
 }
 

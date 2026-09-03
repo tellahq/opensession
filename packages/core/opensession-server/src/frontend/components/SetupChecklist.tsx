@@ -79,11 +79,12 @@ export function EngineRow({
   }
 
   const pool =
-    engine.claudeAccounts + engine.codexAccounts === 0
+    engine.claudeAccounts + engine.codexAccounts + engine.xaiAccounts === 0
       ? "no accounts"
       : [
           engine.claudeAccounts && `${engine.claudeAccounts} Claude`,
           engine.codexAccounts && `${engine.codexAccounts} ChatGPT`,
+          engine.xaiAccounts && `${engine.xaiAccounts} SuperGrok`,
         ]
           .filter(Boolean)
           .join(", ");

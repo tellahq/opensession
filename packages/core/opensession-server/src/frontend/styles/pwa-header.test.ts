@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test";
 import { MOBILE_BACK } from "../lib/app-header-classes";
 import { VIEWER_HEADER_ACTIONS } from "../lib/session-viewer-classes";
-
-const CSS = new URL("./base.css", import.meta.url);
+import { readBaseCss } from "./base-css-test-support";
 
 test("installed phone header controls use larger foreground icons", async () => {
-  const css = await Bun.file(CSS).text();
+  const css = await readBaseCss();
   const mediaStart = css.indexOf(
     "@media (display-mode: standalone) and (max-width: 720px)",
   );

@@ -1,24 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  publicWebhookAvailable,
-  savedSlackTransport,
-  slackCredentialRequired,
-} from "./slack-setup";
-
-describe("savedSlackTransport", () => {
-  test("preserves configured Socket Mode and HTTP installs", () => {
-    expect(
-      savedSlackTransport([{ name: "SLACK_APP_TOKEN", present: true }]),
-    ).toBe("socket");
-    expect(
-      savedSlackTransport([{ name: "SLACK_SIGNING_SECRET", present: true }]),
-    ).toBe("http");
-  });
-
-  test("prefers Socket Mode for a new install", () => {
-    expect(savedSlackTransport([])).toBe("socket");
-  });
-});
+import { publicWebhookAvailable } from "./slack-setup";
 
 describe("publicWebhookAvailable", () => {
   test("rejects simple-mode and loopback URLs", () => {
@@ -35,29 +16,5 @@ describe("publicWebhookAvailable", () => {
 
   test("accepts an internet-facing webhook URL", () => {
     expect(publicWebhookAvailable("https://hooks.example.com")).toBe(true);
-  });
-});
-
-describe("slackCredentialRequired", () => {
-  test("follows the transport currently selected in the UI", () => {
-    expect(slackCredentialRequired("SLACK_APP_TOKEN", false, "socket")).toBe(
-      true,
-    );
-    expect(
-      slackCredentialRequired("SLACK_SIGNING_SECRET", false, "socket"),
-    ).toBe(false);
-    expect(slackCredentialRequired("SLACK_APP_TOKEN", false, "http")).toBe(
-      false,
-    );
-    expect(slackCredentialRequired("SLACK_SIGNING_SECRET", false, "http")).toBe(
-      true,
-    );
-  });
-
-  test("keeps unconditional requirements", () => {
-    expect(slackCredentialRequired("SLACK_BOT_TOKEN", true, "socket")).toBe(
-      true,
-    );
-    expect(slackCredentialRequired("SLACK_BOT_TOKEN", true, "http")).toBe(true);
   });
 });

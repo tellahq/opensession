@@ -2,7 +2,7 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import type { BrowserSignalStreams } from "./effect-browser-events";
 import { browserSignalStreams } from "./effect-browser-events";
-import { makeEffectLifecycle, type EffectLifecycle } from "./effect-lifecycle";
+import * as EffectLifecycle from "./effect-lifecycle";
 
 const ACTIVITY_EVENTS = [
   "pointerdown",
@@ -75,17 +75,19 @@ export function makeSessionSocketRuntime({
   streams = browserSignalStreams,
   isVisible = () => document.visibilityState === "visible",
   windowTarget = () => window,
-  makeLifecycle = () => makeEffectLifecycle<SessionSocketFiber>(),
+  makeLifecycle = () =>
+    EffectLifecycle.makeEffectLifecycle<SessionSocketFiber>(),
 }: {
   registry: AtomRegistry.AtomRegistry;
   streams?: BrowserSignalStreams;
   isVisible?: () => boolean;
   windowTarget?: () => Window;
-  makeLifecycle?: () => EffectLifecycle<SessionSocketFiber>;
+  makeLifecycle?: () => EffectLifecycle.EffectLifecycle<SessionSocketFiber>;
 }): SessionSocketRuntime {
   const connectedAtom = Atom.make(false);
   let callbacks = NOOP_CALLBACKS;
-  let lifecycle: EffectLifecycle<SessionSocketFiber> | null = null;
+  let lifecycle: EffectLifecycle.EffectLifecycle<SessionSocketFiber> | null =
+    null;
   let lifecycleId = 0;
 
   const schedule: SessionSocketRuntime["schedule"] = (

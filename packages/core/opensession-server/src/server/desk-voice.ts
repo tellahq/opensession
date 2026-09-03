@@ -395,6 +395,7 @@ export async function executeVoiceTool(
         repo: typeof args.repo === "string" ? args.repo : undefined,
         mode,
         user,
+        createdByLogin: control.getSession(desk.sessionId)?.createdByLogin,
         parentSessionId: desk.sessionId,
       });
       return { id, started: true, mode };

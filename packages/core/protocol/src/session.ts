@@ -109,6 +109,12 @@ export interface TranscriptEntry {
   // Non-media composer attachments (staged to disk server-side) — rendered as
   // downloadable chips on the user bubble.
   files?: { name: string; path: string }[];
+  /** Large pastes sent beside the message (pasted-text.ts). The model saw
+   *  them after the message in `<pasted-text>` fences; a client renders each
+   *  as a card under the bubble. The last one is truncated whenever
+   *  `contentClamped` is set, since the clamp cuts from the tail: the full
+   *  entry endpoint returns the whole list. */
+  pastedTexts?: string[];
   // Set when `content` was clamped for the WebSocket wire — `contentLength`
   // is the full length; the full entry is at GET /api/sessions/:id/entry/:id.
   contentClamped?: boolean;
@@ -218,6 +224,8 @@ export interface QueuedPrompt {
   user?: string;
   images?: string[];
   files?: unknown;
+  /** Pasted blocks lifted out of `content` for display and take-back. */
+  pastedTexts?: string[];
   /** Sibling-session transcripts attached to this prompt. */
   contextSessions?: string[];
   /** False for routed/system items that must keep queue-only metadata. */
@@ -309,6 +317,8 @@ export type ProtocolClientMessage =
       user?: string;
       images?: string[];
       files?: unknown;
+      /** Large pastes, sent beside the message rather than inside it. */
+      pastedTexts?: string[];
       busyMode?: "queue" | "steer";
       /** Reasoning effort — persisted on the session and enforced per run. */
       effort?: "low" | "medium" | "high" | string;
@@ -326,6 +336,7 @@ export type ProtocolClientMessage =
       user?: string;
       images?: string[];
       files?: unknown;
+      pastedTexts?: string[];
       effort?: "low" | "medium" | "high" | string;
       fastMode?: boolean;
     }
@@ -419,6 +430,8 @@ export type ProtocolClientMessage =
       images?: string[];
       /** Non-image composer attachments, staged server-side or kept inline. */
       files?: unknown;
+      /** Large pastes, folded after the opening prompt (pasted-text.ts). */
+      pastedTexts?: string[];
       /** Reasoning effort persisted on the new session and enforced per run. */
       effort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
       /** OpenAI priority service tier for the opening and later turns. */
@@ -488,6 +501,9 @@ export type SessionLiveEvent =
       isRunning: boolean;
       safety?: SessionSafetyState;
     };
+
+export const RESTART_QUEUE_NOTICE_MESSAGE =
+  "The server is restarting. Your message is queued and will be delivered when it's back.";
 
 /**
  * Core server → client frames. sessionId on the session-scoped messages lets
@@ -683,3 +699,8 @@ export type ProtocolServerMessage =
   | { type: "notice"; sessionId?: string; message: string }
   | { type: "pong" }
   | { type: "error"; sessionId?: string; message: string };
+
+/** Images one message may carry. The server refuses a longer list at intake
+ * and every composer stops at the same count, so a sender learns while
+ * attaching rather than from a rejected send. */
+export const MAX_PROMPT_IMAGES = 6;

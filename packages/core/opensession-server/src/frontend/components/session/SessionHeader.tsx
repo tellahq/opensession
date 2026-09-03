@@ -51,6 +51,7 @@ interface SessionHeaderProps {
   onCancelRename: () => void;
   canRename: boolean;
   menu: ReactNode;
+  menuTrailing?: ReactNode;
   isPhone: boolean;
   openNewSession?: NavigationActions["openNewSessionInWorkspace"];
   tabStripVisible?: boolean;
@@ -79,6 +80,7 @@ export function SessionHeader({
   onCancelRename,
   canRename,
   menu,
+  menuTrailing,
   isPhone,
   openNewSession,
   tabStripVisible,
@@ -281,17 +283,18 @@ export function SessionHeader({
           />
         )}
         {/* This workspace's own controls, at the end of its own cluster: the
-            ⋯ menu, then the lone-session "+ New tab". The menu used to sit at
-            the far right of the bar, a whole header away from the thing it
-            acts on and mixed in with the status controls; here it reads as
-            belonging to the name, and the right end is left to say what the
-            workspace is doing. The two are 32px ghost squares, so they take
-            the icon cluster's own 2px gap rather than the row's 10px and read
-            as one pair, and the pair is pulled in a little because each
-            button already pads its own glyph. */}
+            ⋯ menu, then a contextual action such as the PR-session + or the
+            lone-session "+ New tab". The menu used to sit at the far right of
+            the bar, a whole header away from the thing it acts on and mixed in
+            with the status controls; here it reads as belonging to the name,
+            and the right end is left to say what the workspace is doing. The
+            two are 32px ghost squares, so they take the icon cluster's own 2px
+            gap rather than the row's 10px and read as one pair, and the pair
+            is pulled in a little because each button already pads its glyph. */}
         {!isPhone && (
           <div className="-ml-1 flex flex-none items-center gap-0.5">
             {menu}
+            {menuTrailing}
             {/* With no tab strip on screen the affordance to spawn a sibling
                 session lives here beside the title (⌘⌥N does the same). The
                 moment the strip appears, whether from a second session, an
@@ -306,6 +309,7 @@ export function SessionHeader({
                 a new tab belongs to the session above it. */}
             {!session.desk &&
               openNewSession &&
+              !menuTrailing &&
               !tabStripVisible &&
               !parentSession &&
               workspaceSessionCount === 1 && (

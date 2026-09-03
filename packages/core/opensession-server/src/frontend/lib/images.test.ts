@@ -15,7 +15,13 @@ class TestFileReader {
     });
   }
 }
-(globalThis as { FileReader?: unknown }).FileReader ??= TestFileReader;
+if (globalThis.FileReader === undefined) {
+  Object.defineProperty(globalThis, "FileReader", {
+    configurable: true,
+    writable: true,
+    value: TestFileReader,
+  });
+}
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -28,16 +34,23 @@ function imageFile(name: string, type: string, bytes = 32): File {
 
 /** Stand in for POST /api/upload. Records what it was asked to stage. */
 function uploadServer(staged: { name: string }[]) {
-  globalThis.fetch = (async (_url: string, init: RequestInit) => {
-    const name = decodeURIComponent(
-      String((init.headers as Record<string, string>)["x-file-name"]),
-    );
-    staged.push({ name });
-    return new Response(
-      JSON.stringify({ ok: true, name, path: `/uploads/staged/${name}` }),
-      { headers: { "content-type": "application/json" } },
-    );
-  }) as unknown as typeof fetch;
+  const uploadFetch: typeof fetch = Object.assign(
+    async (
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      const encodedName = new Headers(init?.headers).get("x-file-name");
+      if (!encodedName) throw new Error("Upload request omitted x-file-name");
+      const name = decodeURIComponent(encodedName);
+      staged.push({ name });
+      return new Response(
+        JSON.stringify({ ok: true, name, path: `/uploads/staged/${name}` }),
+        { headers: { "content-type": "application/json" } },
+      );
+    },
+    { preconnect: realFetch.preconnect },
+  );
+  globalThis.fetch = uploadFetch;
 }
 
 describe("splitAttachments", () => {
@@ -75,9 +88,13 @@ describe("splitAttachments", () => {
   });
 
   test("falls back to inline when staging fails for a small image", async () => {
-    globalThis.fetch = (async () => {
-      throw new Error("offline");
-    }) as unknown as typeof fetch;
+    const offlineFetch: typeof fetch = Object.assign(
+      async () => {
+        throw new Error("offline");
+      },
+      { preconnect: realFetch.preconnect },
+    );
+    globalThis.fetch = offlineFetch;
     const { images, rejected } = await splitAttachments([
       imageFile("small.png", "image/png"),
     ]);
@@ -88,9 +105,13 @@ describe("splitAttachments", () => {
   // Above the inline ceiling there is nowhere to put the bytes, so say so at
   // attach time rather than failing the send later.
   test("reports a large image that could not be staged", async () => {
-    globalThis.fetch = (async () => {
-      throw new Error("offline");
-    }) as unknown as typeof fetch;
+    const offlineFetch: typeof fetch = Object.assign(
+      async () => {
+        throw new Error("offline");
+      },
+      { preconnect: realFetch.preconnect },
+    );
+    globalThis.fetch = offlineFetch;
     const { images, rejected } = await splitAttachments([
       imageFile("huge.png", "image/png", 1024 * 1024),
     ]);
@@ -121,22 +142,27 @@ describe("preparePromptImages", () => {
   test("converts an older unsupported inline image before retrying it", async () => {
     const originalBitmap = globalThis.createImageBitmap;
     const originalDocument = globalThis.document;
-    globalThis.createImageBitmap = (async () => ({
+    const testCreateImageBitmap: typeof createImageBitmap = async () => ({
       width: 2,
       height: 1,
       close() {},
-    })) as typeof createImageBitmap;
-    globalThis.document = {
-      createElement: () => ({
-        width: 0,
-        height: 0,
-        getContext: () => ({ drawImage() {} }),
-        toBlob: (callback: BlobCallback) =>
-          callback(
-            new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" }),
-          ),
-      }),
-    } as unknown as Document;
+    });
+    globalThis.createImageBitmap = testCreateImageBitmap;
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      writable: true,
+      value: {
+        createElement: () => ({
+          width: 0,
+          height: 0,
+          getContext: () => ({ drawImage() {} }),
+          toBlob: (callback: BlobCallback) =>
+            callback(
+              new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" }),
+            ),
+        }),
+      },
+    });
     try {
       const result = await preparePromptImages([
         "data:image/heic;base64,aGVsbG8=",
@@ -144,7 +170,11 @@ describe("preparePromptImages", () => {
       expect(result?.[0]).toStartWith("data:image/jpeg;base64,");
     } finally {
       globalThis.createImageBitmap = originalBitmap;
-      globalThis.document = originalDocument;
+      Object.defineProperty(globalThis, "document", {
+        configurable: true,
+        writable: true,
+        value: originalDocument,
+      });
     }
   });
 

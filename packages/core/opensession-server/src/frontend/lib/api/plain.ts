@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { BASE, request } from "./request";
 import type {
   PlainThread,
@@ -59,6 +60,11 @@ export const PLAIN_REPLY_ATTACHMENT_MAX_BYTES = 6 * 1024 * 1024;
 export const PLAIN_NOTE_ATTACHMENTS_MAX_BYTES = 50 * 1024 * 1024;
 export const PLAIN_ATTACHMENTS_MAX_COUNT = 20;
 
+const attachmentResponseSchema = z.object({
+  attachmentId: z.string().optional(),
+  error: z.string().optional(),
+});
+
 /** Upload a file to Plain for the active reply/note mode. */
 export async function uploadPlainAttachmentApi(
   threadId: string,
@@ -80,10 +86,10 @@ export async function uploadPlainAttachmentApi(
       body: file,
     },
   );
-  const body = (await res.json().catch(() => null)) as {
-    attachmentId?: string;
-    error?: string;
-  } | null;
+  const parsedBody = attachmentResponseSchema.safeParse(
+    await res.json().catch(() => null),
+  );
+  const body = parsedBody.success ? parsedBody.data : null;
   if (!res.ok || !body?.attachmentId) {
     throw new Error(body?.error || `Attachment upload failed (${res.status})`);
   }

@@ -8,6 +8,7 @@ import React, {
   useState,
   useRef,
 } from "react";
+import { createPortal } from "react-dom";
 import type {
   PrCheck,
   PrDetails,
@@ -16,10 +17,10 @@ import type {
   WSClientMessage,
   WSServerMessage,
 } from "../lib/types";
-import { PrSessionsList, prRelatedSessions } from "./PrSessions";
 import { WalkthroughCard } from "./WalkthroughCard";
 import { PrOverviewPage } from "./pr/PrOverviewPage";
 import { PrFilesPage } from "./pr/PrFilesPage";
+import { FinishReviewDialog, type ReviewEvent } from "./pr/FinishReviewDialog";
 import { DiffPanel } from "./DiffPanel";
 import {
   API_BASE,
@@ -40,7 +41,6 @@ import {
   closePrPreviewApi,
 } from "../lib/api";
 import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
 import { toast } from "../ui/toast";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { CommentTarget, PendingComment } from "../lib/commentable-diff";
@@ -57,7 +57,6 @@ import {
 } from "../lib/pr-focus";
 import { providerFromUrl, prCapabilities } from "../lib/provider";
 import { WS_SUMMARY_REVIEW_CANVAS_CLEARANCE } from "../lib/workspace-summary-classes";
-import { Textarea } from "../ui/input";
 import { errorMessage } from "../lib/error-message";
 import {
   IconBranches,
@@ -68,14 +67,13 @@ import {
   IconGitMerge,
   IconGlobe,
   IconMessage,
-  IconMessages,
+  IconPlus,
   IconPullRequest,
   IconSliders,
   IconUndo,
   IconX,
 } from "./icons";
 import { Menu, MENU_ICON } from "../ui/menu";
-import { Modal, useEnterOnMount } from "../ui/modal";
 import { Tooltip } from "../ui/tooltip";
 import { TopBar } from "../ui/top-bar";
 import { Popover } from "../ui/popover";
@@ -104,8 +102,6 @@ import { ReviewRail } from "./pr/ReviewRail";
 import { GitStatusRows } from "./pr/GitStatus";
 import { ReviewToolbar } from "./pr/ReviewToolbar";
 import { EmptyState, LoadingState } from "../ui/state";
-import { ResponsiveDialog } from "../ui/sheet";
-import { useIsPhone } from "../hooks/useIsPhone";
 import { revealDiffFile } from "../lib/diff-navigation";
 import { BrandMark } from "./BrandTile";
 import { useCopy } from "../ui/copy";
@@ -118,8 +114,6 @@ import {
   deferredMergeKey,
   scheduleDeferredMerge,
 } from "../lib/deferred-merge";
-
-type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 
 type CodeView = "all" | "guide" | "flow";
 type DiffSource = "pull-request" | "worktree";
@@ -178,14 +172,14 @@ interface Props {
   editGate?: boolean;
   /** Session-less PR target; uses the same canvas with repo+branch APIs. */
   previewTarget?: { repo: string; branch: string };
-  /**
-   * Live sessions list. When provided, the panel surfaces every session
-   * linked to the shown PR (matched by repo + head branch / number) and — with
-   * `send` — offers starting a new session on the PR's head branch.
-   */
+  /** Live sessions list; tells the panel whether the hosting session runs. */
   sessions?: UnifiedSession[];
-  /** Navigate to a session picked from the linked-sessions list. */
-  onOpenSessionById?: (id: string) => void;
+  /** Open a new session tab in the PR's workspace. Existing sessions are
+   * already the tabs above the panel, so this is the only session action. */
+  onStartSession?: () => void;
+  /** Host the session action in surrounding workspace chrome. `undefined`
+   * keeps it in this PR toolbar for standalone review views. */
+  sessionActionTarget?: HTMLElement | null;
   /** Open another PR in this panel — used by the stack map to move between
    *  layers in-app. Without it the layer rows still link, just via a full
    *  page load. */
@@ -229,7 +223,8 @@ export function PrPanel({
   editGate,
   previewTarget,
   sessions,
-  onOpenSessionById,
+  onStartSession,
+  sessionActionTarget,
   onOpenPr,
   addHandler: addHandlerProp,
   hideWideOverviewRail = false,
@@ -332,8 +327,6 @@ export function PrPanel({
   // Merging is a separate decision from approving, so it starts off: the
   // reviewer opts into it, and the primary action stays "Approve".
   const [mergeAfterReview, setMergeAfterReview] = useState(false);
-  const [sessionsOpen, setSessionsOpen] = useState(false);
-  const isPhone = useIsPhone();
   /**
    * The review is two places, not six tabs: Overview (the conversation and the
    * PR's metadata) and Files changed (the code). `codeView` is which lens the
@@ -546,11 +539,9 @@ export function PrPanel({
             comment.startLine !== comment.endLine
               ? comment.startLine
               : undefined,
-          side: (comment.side === "deletions" ? "LEFT" : "RIGHT") as
-            | "LEFT"
-            | "RIGHT",
+          side: comment.side === "deletions" ? "LEFT" : "RIGHT",
         })),
-      };
+      } satisfies Parameters<typeof submitPrReviewApi>[1];
       const result = previewTarget
         ? await submitPrPreviewReviewApi(
             previewTarget.repo,
@@ -867,7 +858,13 @@ export function PrPanel({
     };
     // Optimistic: flip locally, revert if GitHub rejects the mutation.
     setPrViewed({ ...info, viewed: apply(info.viewed, next) });
-    void setPrFileViewed(info.prId, path, next, getCurrentUser()).catch(() => {
+    void setPrFileViewed(
+      activeRepoId,
+      info.prId,
+      path,
+      next,
+      getCurrentUser(),
+    ).catch(() => {
       setPrViewed((prev) =>
         prev && prev.key === info.key
           ? { ...prev, viewed: apply(prev.viewed, !next) }
@@ -900,13 +897,32 @@ export function PrPanel({
   // Tab bar across the top: one tab per PR (primary repo, attached repos,
   // linked PRs) plus the link affordance. With a single target the bar
   // disappears and "Link PR" moves into the actions row instead.
-  // Sessions linked to the shown PR — only when the caller wires the list.
-  // Matched against the ACTIVE target (linked PRs carry their own branch; the
-  // primary/attached branch resolves through the loaded PR's headRefName).
-  const relatedSessions =
-    sessions && active
-      ? prRelatedSessions(sessions, active.repo, active.branch, pr)
-      : [];
+  // Starting a session opens a new tab in the PR's workspace with the composer
+  // at the bottom. Existing sessions are the tabs above, so there is no list.
+  const sessionActionLabel = "New session";
+  const sessionActionButton = onStartSession ? (
+    sessionActionTarget === undefined ? (
+      <Button
+        variant="default"
+        size="sm"
+        icon={<IconPlus size={18} />}
+        onClick={onStartSession}
+      >
+        {sessionActionLabel}
+      </Button>
+    ) : (
+      <Tooltip label={sessionActionLabel}>
+        <Button
+          variant="ghost"
+          size="md"
+          className="flex-none rounded-control"
+          aria-label={sessionActionLabel}
+          icon={<IconPlus size={22} />}
+          onClick={onStartSession}
+        />
+      </Tooltip>
+    )
+  ) : null;
 
   const files = pr?.files ?? NO_PR_FILES;
   const reviewedFiles =
@@ -1087,7 +1103,9 @@ export function PrPanel({
               Try again
             </Button>
           }
-        />
+        >
+          <span className="text-pretty">{loadError}</span>
+        </EmptyState>
       </div>
     );
 
@@ -1240,8 +1258,7 @@ export function PrPanel({
       mergeError={mergeError}
       onOpenFile={scrollToFile}
       onOpenFiles={() => setPage("files")}
-      onOpenSessions={sessions ? () => setSessionsOpen(true) : undefined}
-      sessionCount={relatedSessions.length}
+      onStartSession={onStartSession}
       focusChecksSeq={focusChecksSeq}
       compact={railStacked}
     />
@@ -1287,11 +1304,11 @@ export function PrPanel({
             size="sm"
             value={codeView}
             onValueChange={(next) => {
-              const key = next as CodeView;
-              if (key === "flow" && codeView !== "flow" && codeFlowError) {
+              if (next !== "all" && next !== "guide" && next !== "flow") return;
+              if (next === "flow" && codeView !== "flow" && codeFlowError) {
                 resetCodeFlowError();
               }
-              setCodeView(key);
+              setCodeView(next);
             }}
           >
             <SegmentedOption value="all">Changes</SegmentedOption>
@@ -1425,6 +1442,9 @@ export function PrPanel({
       data-review-canvas="true"
       ref={setRoot}
     >
+      {sessionActionTarget && sessionActionButton
+        ? createPortal(sessionActionButton, sessionActionTarget)
+        : null}
       {/* Desktop keeps page navigation and file controls in the identity row.
           Phone keeps one edge-to-edge navigation and controls row below it. */}
       <ReviewToolbar compact={compactToolbar}>
@@ -1538,20 +1558,9 @@ export function PrPanel({
                 Review
               </Button>
             )}
-          {sessions && !headerCompact && (
-            <Button
-              variant="default"
-              size="sm"
-              icon={<IconMessages size={18} />}
-              onClick={() => setSessionsOpen(true)}
-            >
-              {relatedSessions.length === 0
-                ? "Start session"
-                : relatedSessions.length === 1
-                  ? "Open session"
-                  : `${relatedSessions.length} sessions`}
-            </Button>
-          )}
+          {sessionActionTarget === undefined &&
+            !headerCompact &&
+            sessionActionButton}
           <Menu.Root>
             <Tooltip label="Pull request actions">
               <Menu.Trigger
@@ -1585,18 +1594,16 @@ export function PrPanel({
                     </span>
                   </Menu.Item>
                 )}
-              {sessions && headerCompact && (
-                <Menu.Item onClick={() => setSessionsOpen(true)}>
-                  <IconMessages size={18} className={MENU_ICON} />
-                  <span className="min-w-0 flex-1 truncate">
-                    {relatedSessions.length === 0
-                      ? "Start a session"
-                      : relatedSessions.length === 1
-                        ? "Open session"
-                        : `Open ${relatedSessions.length} sessions`}
-                  </span>
-                </Menu.Item>
-              )}
+              {onStartSession &&
+                sessionActionTarget === undefined &&
+                headerCompact && (
+                  <Menu.Item onClick={onStartSession}>
+                    <IconPlus size={18} className={MENU_ICON} />
+                    <span className="min-w-0 flex-1 truncate">
+                      {sessionActionLabel}
+                    </span>
+                  </Menu.Item>
+                )}
               <Menu.Item
                 render={<a href={pr.url} target="_blank" rel="noopener" />}
               >
@@ -1727,51 +1734,6 @@ export function PrPanel({
         />
       )}
 
-      <ResponsiveDialog
-        open={sessionsOpen}
-        onClose={() => setSessionsOpen(false)}
-        phone={isPhone}
-        label="Sessions on this pull request"
-        sheetClassName="max-h-[88dvh]"
-        modalClassName="w-[min(460px,calc(100vw-32px))]"
-      >
-        <div className="flex min-h-0 flex-col">
-          <div className="flex shrink-0 items-center gap-3 px-5 pb-3 pt-5 phone:pt-2">
-            <div className="min-w-0 flex-1">
-              <h2 className="text-item-title font-semibold text-fg">
-                Sessions on this PR
-              </h2>
-              <p className="mt-0.5 text-supporting text-dim">
-                Open existing work or start something new on this branch.
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              className="size-10 shrink-0 phone:size-11"
-              icon={<IconX size={20} />}
-              aria-label="Close sessions"
-              onClick={() => setSessionsOpen(false)}
-            />
-          </div>
-          <div className="min-h-0 overflow-y-auto px-5 pb-5">
-            <PrSessionsList
-              sessions={relatedSessions}
-              repo={active?.repo || ""}
-              branch={active?.branch}
-              pr={pr}
-              currentSessionId={sessionId || undefined}
-              onOpenSession={(id) => {
-                setSessionsOpen(false);
-                onOpenSessionById?.(id);
-              }}
-              send={send}
-              addHandler={addHandler}
-              compose
-            />
-          </div>
-        </div>
-      </ResponsiveDialog>
-
       {/* Review controls only exist while the person is actively reviewing.
           Passive PR browsing should not imply that a review is in progress. */}
       {reviewing && (
@@ -1852,167 +1814,5 @@ export function PrPanel({
         />
       )}
     </div>
-  );
-}
-
-/**
- * The review canvas' "Finish review" dialog: pick a verdict, add an optional
- * summary, submit.
- *
- * Approving and merging are separate decisions, so they are separate controls.
- * The verdict rows are the choice; merging is an opt-in that starts off, which
- * keeps the primary action "Approve" until someone asks for more.
- *
- * The summary is held here rather than by the canvas: the canvas re-renders the
- * whole diff, and this is a field someone types a paragraph into. It is seeded
- * from `defaultSummary` and handed back on both exits, so closing the dialog
- * and reopening it still finds the draft.
- */
-function FinishReviewDialog({
-  prNumber,
-  pendingCount,
-  event,
-  onEventChange,
-  defaultSummary,
-  canMerge,
-  onFixChecks,
-  mergeAfterReview,
-  onMergeAfterReviewChange,
-  error,
-  submitting,
-  submitLabel,
-  onSubmit,
-  onClose,
-}: {
-  prNumber: number;
-  pendingCount: number;
-  event: ReviewEvent;
-  onEventChange: (event: ReviewEvent) => void;
-  defaultSummary: string;
-  canMerge: boolean;
-  onFixChecks?: (summary: string) => void;
-  mergeAfterReview: boolean;
-  onMergeAfterReviewChange: (merge: boolean) => void;
-  error: string | null;
-  submitting: boolean;
-  submitLabel: string;
-  onSubmit: (summary: string) => void;
-  onClose: (summary: string) => void;
-}) {
-  const [summary, setSummary] = useState(defaultSummary);
-  const open = useEnterOnMount();
-  // Without this Base UI focuses the first tabbable, which is the header's
-  // close. A focus ring on the ✕ is the wrong first read for a dialog you
-  // opened in order to write in it.
-  const summaryRef = useRef<HTMLTextAreaElement>(null);
-  const verdicts: Array<{ event: ReviewEvent; label: string; hint: string }> = [
-    { event: "APPROVE", label: "Approve", hint: "Sign off on these changes" },
-    {
-      event: "COMMENT",
-      label: "Comment",
-      hint: "Leave feedback without a verdict",
-    },
-    {
-      event: "REQUEST_CHANGES",
-      label: "Request changes",
-      hint: "Ask for another pass before merging",
-    },
-  ];
-  return (
-    <Modal.Root open={open} onOpenChange={(next) => !next && onClose(summary)}>
-      <Modal.Content
-        widthClassName="max-w-[30rem]"
-        className="bottom-[max(1rem,env(safe-area-inset-bottom))] left-auto right-4 top-auto translate-x-0 translate-y-0 origin-bottom-right phone:left-1/2 phone:right-auto phone:-translate-x-1/2 phone:origin-bottom"
-        initialFocus={summaryRef}
-      >
-        <Modal.Header
-          title="Finish review"
-          description={
-            pendingCount > 0
-              ? `Your ${pendingCount} pending comment${pendingCount === 1 ? "" : "s"} on #${prNumber} are sent with this review.`
-              : `Leave a review on #${prNumber}.`
-          }
-        />
-        <div
-          className="flex flex-col gap-1.5"
-          role="radiogroup"
-          aria-label="Review verdict"
-        >
-          {verdicts.map((verdict) => (
-            <button
-              key={verdict.event}
-              type="button"
-              role="radio"
-              aria-checked={event === verdict.event}
-              data-active={event === verdict.event || undefined}
-              className="group focus-ring flex cursor-pointer items-start gap-2.5 rounded-row border border-line bg-surface px-3 py-2.5 text-left transition-[background-color,border-color] hover:bg-hover data-active:border-accent data-active:bg-accent-soft"
-              onClick={() => onEventChange(verdict.event)}
-            >
-              <span className="mt-px flex size-4 shrink-0 items-center justify-center rounded-full border border-line-strong transition-colors group-data-active:border-accent group-data-active:bg-accent">
-                <span className="size-1.5 rounded-full bg-on-accent opacity-0 group-data-active:opacity-100" />
-              </span>
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-label font-semibold text-fg">
-                  {verdict.label}
-                </span>
-                <span className="text-supporting text-dim">{verdict.hint}</span>
-              </span>
-            </button>
-          ))}
-        </div>
-        <Textarea
-          ref={summaryRef}
-          size="sm"
-          className="h-20 resize-none"
-          placeholder={
-            event === "APPROVE" || pendingCount > 0
-              ? "Summary (optional)"
-              : "Summary"
-          }
-          value={summary}
-          onChange={(e) => setSummary(e.target.value)}
-        />
-        {event === "APPROVE" &&
-          canMerge && (
-            // Quieter than the verdict rows on purpose: merging is an extra you
-            // opt into here, not a fourth thing to choose between.
-            <label className="flex cursor-pointer items-center gap-2.5 px-0.5">
-              <Checkbox
-                checked={mergeAfterReview}
-                onCheckedChange={onMergeAfterReviewChange}
-              />
-              <span className="text-supporting text-dim">
-                Squash and merge as well
-              </span>
-            </label>
-          )}
-        {event === "APPROVE" && !canMerge && onFixChecks && (
-          <div className="flex items-center justify-between gap-3 rounded-row bg-red-soft px-3 py-2">
-            <span className="text-supporting text-red">
-              Checks must pass before you can merge.
-            </span>
-            <Button
-              variant="danger"
-              size="sm"
-              className="shrink-0"
-              onClick={() => onFixChecks(summary)}
-            >
-              Fix checks
-            </Button>
-          </div>
-        )}
-        {error && <div className="text-supporting text-red">{error}</div>}
-        <Modal.Footer>
-          <Button onClick={() => onClose(summary)}>Cancel</Button>
-          <Button
-            variant="primary"
-            onClick={() => onSubmit(summary)}
-            disabled={submitting}
-          >
-            {submitting ? "Submitting…" : submitLabel}
-          </Button>
-        </Modal.Footer>
-      </Modal.Content>
-    </Modal.Root>
   );
 }

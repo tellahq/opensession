@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 import {
   projectRemoteClaudeAccounts,
@@ -8,6 +9,7 @@ import {
   remoteModelProviderId,
   remoteRunNeedsAnthropic,
   remoteRunNeedsOpenai,
+  remoteRunNeedsXai,
   warmRemoteWorkspace,
 } from "./bootstrap";
 import type { RemoteDriver } from "./bootstrap";
@@ -101,6 +103,16 @@ describe("remote engine credential projection", () => {
       remoteRunNeedsOpenai("pi/dial/opus-fable", "pi/anthropic/claude-opus-5"),
     ).toBe(true);
     expect(remoteRunNeedsOpenai("pi/dial/opus-fable", "none")).toBe(false);
+    expect(remoteRunNeedsXai("pi/xai-oauth/grok-4.6", "none")).toBe(true);
+    expect(remoteRunNeedsXai("pi/openai/gpt-5.6-sol", "none")).toBe(false);
+    expect(
+      remoteRunNeedsXai(
+        "pi/anthropic/claude-sonnet-5",
+        "pi/xai-oauth/grok-4.6",
+      ),
+    ).toBe(true);
+    // API-key xAI stays a third-party provider, not the subscription pool.
+    expect(remoteRunNeedsXai("pi/xai/grok-4", "none")).toBe(false);
   });
 
   test("Claude projection strips host paths and unknown future fields", () => {
@@ -205,6 +217,44 @@ describe("remote engine credential projection", () => {
     });
   });
 
+  test("projects merged catalog-file rows without exposing the host path", () => {
+    const dir = mkdtempSync(join(tmpdir(), "os-sandbox-catalog-"));
+    const configPath = join(dir, "model-providers.json");
+    const previous = process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
+    process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = configPath;
+    writeFileSync(
+      join(dir, "gateway-catalog.json"),
+      JSON.stringify({ m: { contextWindow: 32_000, maxTokens: 4_000 } }),
+    );
+    const source = {
+      providers: {
+        gateway: {
+          apiKey: "secret",
+          api: "openai-completions",
+          baseURL: "https://gateway.test/v1",
+          catalogFile: "gateway-catalog.json",
+        },
+      },
+    };
+    writeFileSync(configPath, JSON.stringify(source));
+    try {
+      const projected = projectRemoteModelProviderConfig(
+        source,
+        "pi/gateway/m",
+      );
+      const provider = JSON.parse(projected.content).providers.gateway;
+      expect(provider.catalog).toEqual({
+        m: { id: "m", contextWindow: 32_000, maxTokens: 4_000 },
+      });
+      expect(provider.catalogFile).toBeUndefined();
+    } finally {
+      if (previous === undefined)
+        delete process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
+      else process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = previous;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("interactive provider projection follows only the reachable fallback walk", () => {
     const projected = projectRemoteModelProviderConfig(
       {
@@ -231,6 +281,7 @@ describe("remote engine credential projection", () => {
         bridge: {
           accounts: ["wide-claude"],
           openaiAccounts: ["wide-openai"],
+          xaiAccounts: ["wide-xai"],
         },
         providers: {
           cerebras: { apiKey: "selected" },
@@ -248,8 +299,19 @@ describe("remote engine credential projection", () => {
       bridge: {
         accounts: ["pinned-account"],
         openaiAccounts: ["pinned-account"],
+        xaiAccounts: ["pinned-account"],
       },
       providers: { cerebras: { apiKey: "selected" } },
+    });
+  });
+
+  test("interactive projection keeps the designated SuperGrok list", () => {
+    const projected = projectRemoteModelProviderConfig(
+      { bridge: { xaiAccounts: ["grok-a", 7, "grok-b"] } },
+      "pi/xai-oauth/grok-4.6",
+    );
+    expect(JSON.parse(projected.content)).toEqual({
+      bridge: { xaiAccounts: ["grok-a", "grok-b"] },
     });
   });
 });

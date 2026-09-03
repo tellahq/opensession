@@ -19,7 +19,7 @@ import { useCurrentUser } from "./UserPicker";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { DeckDone, SwipeCard } from "../ui/swipe-deck";
-import { dismissToast, toast } from "../ui/toast";
+import { dismissToast, toast, type ToastOptions } from "../ui/toast";
 import { UNDO_MS, ageLabel, ageTone, shuffle } from "../lib/swipe-deck";
 import { errorMessage } from "../lib/error-message";
 
@@ -55,12 +55,12 @@ interface Props {
 /** Plain thread priorities, as Plain's own UI names them. Filled, not drawn:
  *  the app's chips are a wash of their own tone (lib/plain-status.ts, the
  *  source chips), so an outlined one here read as a different family. */
-const PRIORITY: Record<number, { label: string; cls: string }> = {
-  0: { label: "Urgent", cls: "bg-red-soft text-red" },
-  1: { label: "High", cls: "bg-yellow-soft text-yellow" },
-  2: { label: "Normal", cls: "bg-active text-dim" },
-  3: { label: "Low", cls: "bg-active text-faint" },
-};
+const PRIORITY = new Map([
+  [0, { label: "Urgent", cls: "bg-red-soft text-red" }],
+  [1, { label: "High", cls: "bg-yellow-soft text-yellow" }],
+  [2, { label: "Normal", cls: "bg-active text-dim" }],
+  [3, { label: "Low", cls: "bg-active text-faint" }],
+]);
 
 /** The deck's action row keeps a 44px touch target: it is the phone's only
  * path through the queue, and `lg` alone is 36px. */
@@ -149,15 +149,12 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 
   function showToast(text: string, undo?: () => void) {
     if (toastId.current !== null) dismissToast(toastId.current);
-    toastId.current = toast(text, {
-      duration: UNDO_MS,
-      ...(undo
-        ? {
-            variant: "success" as const,
-            action: { label: "Undo", onClick: undo },
-          }
-        : {}),
-    });
+    const options: ToastOptions = { duration: UNDO_MS };
+    if (undo) {
+      options.variant = "success";
+      options.action = { label: "Undo", onClick: undo };
+    }
+    toastId.current = toast(text, options);
   }
   useEffect(
     () => () => {
@@ -253,7 +250,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
       setIndex(entry.at);
       showToast(msg);
     };
-    const fail = (error: unknown) => {
+    const fail = (error: Parameters<typeof errorMessage>[0]) => {
       setBusy(false);
       showToast(`Undo failed: ${errorMessage(error, "unknown error")}`);
     };
@@ -285,7 +282,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
     if (e.key === "Escape") {
       return onExit();
     }
-    const el = e.target as HTMLElement | null;
+    const el = e.target instanceof HTMLElement ? e.target : null;
     if (
       el &&
       (el.tagName === "TEXTAREA" ||
@@ -501,7 +498,8 @@ function TicketCard({
   onSkip: () => void;
   onSpam: () => void;
 }) {
-  const prio = thread.priority != null ? PRIORITY[thread.priority] : null;
+  const prio =
+    thread.priority != null ? PRIORITY.get(thread.priority) : undefined;
 
   return (
     // Exit flings left for spam/done (dealt with and gone), right for skip;

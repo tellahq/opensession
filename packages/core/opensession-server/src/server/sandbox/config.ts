@@ -175,6 +175,18 @@ export interface SandboxAwsLambdaMicrovmConfig {
   logGroup?: string;
 }
 
+export interface SandboxAutomationConfig {
+  /** Unattended runs are admitted only on a provider whose outbound policy is
+   *  enforced natively per sandbox. Daytona applies a per-sandbox domain
+   *  allowlist on its runner, so it is the only admitted backend. */
+  provider: "daytona";
+  /** Extra hostnames (or URLs, or `*.example.com` wildcards) an automation may
+   *  contact. Model, git, and the Open Session callback hosts are added by the
+   *  launcher. IP addresses and CIDRs are refused: Daytona's domain and CIDR
+   *  allowlists are mutually exclusive. */
+  egressAllowlist?: string[];
+}
+
 export interface SandboxConfig {
   provider: SandboxProviderId;
   /** Shared default for NEW interactive sessions. Absent/"none" = host. */
@@ -219,6 +231,8 @@ export interface SandboxConfig {
   modal?: SandboxModalConfig;
   /** AWS Lambda MicroVM adapter (provider "lambda-microvm"). */
   awsLambdaMicrovm?: SandboxAwsLambdaMicrovmConfig;
+  /** Credential-minimal unattended-run profile. */
+  automation?: SandboxAutomationConfig;
   /** Clone auth for remote-provider workspaces + runner bootstrap. The selected
    *  live GitHub service credential takes precedence; App mode never falls back
    *  to a persisted token because it may be stale static authority. */
@@ -230,9 +244,11 @@ export interface SandboxConfig {
    *  precedence over the git-clone fallback). */
   runnerBundleUrl?: string;
   /** Git URL of the opensession repo for remote bootstrap (default: this
-   *  checkout's origin). */
+   *  checkout's origin; a release install with no checkout falls back to the
+   *  public tellahq/opensession repo). */
   runnerRepoUrl?: string;
-  /** Pinned sha/ref the remote bootstrap checks out (default: origin default). */
+  /** Pinned sha/ref the remote bootstrap checks out (default: origin default
+   *  branch, or the installed release's tag for a release install). */
   runnerSha?: string;
 }
 
@@ -383,6 +399,23 @@ export function sandboxConfig(): SandboxConfig {
                 logGroup: str(raw.awsLambdaMicrovm.logGroup),
               }
             : undefined,
+        automation:
+          raw?.automation && typeof raw.automation === "object"
+            ? {
+                provider: "daytona",
+                egressAllowlist: Array.isArray(raw.automation.egressAllowlist)
+                  ? raw.automation.egressAllowlist
+                      .filter(
+                        (value: unknown): value is string =>
+                          typeof value === "string" &&
+                          value.trim().length > 0 &&
+                          value.trim().length <= 512,
+                      )
+                      .map((value: string) => value.trim())
+                      .slice(0, 128)
+                  : undefined,
+              }
+            : undefined,
         cloneCredential:
           raw?.cloneCredential?.type === "https-token" ||
           raw?.cloneCredential?.type === "none"
@@ -486,6 +519,38 @@ export function sandboxPrewarmConfig(): SandboxPrewarmConfig {
  *  their own "ws" regardless). */
 export function sandboxTransport(): SandboxTransport {
   return sandboxConfig().transport === "ws" ? "ws" : "socket";
+}
+
+/** Effective unattended-run policy. The provider is deliberately not a
+ *  generic selector: Daytona is the only backend whose per-sandbox outbound
+ *  policy Open Session can install and verify before a run starts. */
+export function sandboxAutomationConfig(): SandboxAutomationConfig {
+  return sandboxConfig().automation || { provider: "daytona" };
+}
+
+export interface SandboxAutomationAvailability {
+  provider: "daytona";
+  available: boolean;
+  /** Operator-facing reason when unavailable. */
+  reason?: string;
+}
+
+/** Whether a sandboxed automation can be created, updated, or launched right
+ *  now. Fails closed on every provider gate an interactive Daytona session
+ *  also passes through, plus the dial-back URL a detached run needs. */
+export function sandboxAutomationAvailability(): SandboxAutomationAvailability {
+  const provider = sandboxAutomationConfig().provider;
+  const error = sandboxProviderSelectionError(provider);
+  if (error) return { provider, available: false, reason: error };
+  if (!sandboxConfig().callbackBaseUrl && !configuredIngress().publicBaseUrl) {
+    return {
+      provider,
+      available: false,
+      reason:
+        "sandbox automations need a dial-back URL: set callbackBaseUrl or enable public ingress in Workspace > Sandboxes",
+    };
+  }
+  return { provider, available: true };
 }
 
 // ── Provider capability status (per-session provider picker) ────────────────
@@ -790,6 +855,8 @@ export interface SandboxCapabilityStatus {
   killSwitch: boolean;
   /** Provider-independent family sandboxability for the NewSession picker. */
   modelFamilies: SandboxModelFamily[];
+  /** Whether automations may opt into a disposable Executor right now. */
+  automation: SandboxAutomationAvailability;
 }
 
 function sandboxProviderSelectionError(
@@ -955,6 +1022,7 @@ export function sandboxCapabilityStatus(): SandboxCapabilityStatus {
     providers,
     killSwitch: !sandboxesEnabled(),
     modelFamilies: SANDBOX_MODEL_FAMILIES,
+    automation: sandboxAutomationAvailability(),
   };
 }
 

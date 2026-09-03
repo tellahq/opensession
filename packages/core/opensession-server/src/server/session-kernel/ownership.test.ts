@@ -431,6 +431,45 @@ describe("single session ownership", () => {
     expect(routes).not.toContain("requeuePromptDispatch(targetId)");
   });
 
+  test("accepted creates are projected before their environment setup", () => {
+    const create = read("session-create.ts");
+    // The create dispatch is durable first; the session file and announce
+    // follow immediately, before credential, branch or attachment effects
+    // and before the opening-turn queue. A create that exists only as a
+    // client-side shell reads as lost the moment that shell is gone.
+    const opening = create.slice(
+      create.indexOf("export function runOpeningCreateOnce("),
+      create.indexOf("export function actorWorktreeMaterializer("),
+    );
+    expect(opening.indexOf("await beginPromptDispatch(")).toBeLessThan(
+      opening.indexOf("await projectAcceptedCreate("),
+    );
+    expect(opening.indexOf("await projectAcceptedCreate(")).toBeLessThan(
+      opening.indexOf("await spec.materializeWorktree()"),
+    );
+    expect(opening.indexOf("await spec.materializeWorktree()")).toBeLessThan(
+      opening.indexOf("await requestCreationOpening("),
+    );
+    // Persisted before admission means busy until admission: prompt
+    // admission and the list both read the pending-opening hold, and the
+    // opening turn releases it only once the run state owns the session.
+    expect(create).toContain("holdPendingOpening(spec.id)");
+    expect(
+      create.indexOf("startGeneration = admittedRun.generation"),
+    ).toBeLessThan(create.indexOf("releasePendingOpening(bksId)"));
+    expect(read("agent-runner.ts")).toContain("hasPendingOpening(id)");
+    expect(read("session-cache.ts")).toContain("hasPendingOpening(s.id)");
+    // A setup failure after the announce lands on the visible session and
+    // retires its create dispatch instead of leaving a busy, empty row.
+    const failure = create.slice(
+      create.indexOf("async function failProjectedCreate("),
+      create.indexOf("function announceOnce("),
+    );
+    expect(failure).toContain("await reportSetupFailure(");
+    expect(failure).toContain("await settleCreationFailed(");
+    expect(failure).toContain("await acknowledgePromptDispatch(");
+  });
+
   test("create replay waits for a resolvable projection before success", () => {
     const create = read("session-create.ts");
     const wiring = read("session-control-wiring.ts");
@@ -468,15 +507,31 @@ describe("single session ownership", () => {
     expect(wiring).toContain("patchCreationSetupPlan(bksId, createIdentity");
     expect(wiring).toContain("createPlan.resolved");
     expect(wiring).toContain("actorCreationSetupPlan(bksId, createIdentity)");
+    expect(wiring).toContain("createdByLogin,");
+    expect(wiring).not.toContain(
+      "createdByLogin: parentSession?.createdByLogin",
+    );
+    for (const route of [
+      read("routes/sessions.ts"),
+      read("routes/reports.ts"),
+      read("routes/security.ts"),
+    ]) {
+      expect(route).toContain("createdByLogin: ctx.authUser?.login");
+    }
+    expect(read("report-sessions.ts")).toContain(
+      "createdByLogin: input.createdByLogin",
+    );
+    expect(read("../agents/slack/handlers.ts")).toContain(
+      "createdByLogin: githubLoginForTrustedSlackId(msg.userId) || undefined",
+    );
     expect(wiring).not.toContain("updateCreatePlan(");
     expect(wiring).toContain("await requestCreationWorkspace({");
-    expect(wiring.match(/await requestCreationCredential\(\{/g)?.length).toBe(
-      2,
-    );
-    expect(wiring.match(/await requestCreationBranch\(\{/g)?.length).toBe(2);
-    expect(wiring).toContain("baseBranch: baseRef || repo.defaultBranch");
+    // Both adapters materialize through the one actor-backed materializer, so
+    // the credential-then-branch order and the setup wait bound cannot drift.
+    expect(wiring.match(/actorWorktreeMaterializer\(\{/g)?.length).toBe(2);
+    expect(wiring).not.toContain("requestCreationCredential(");
+    expect(wiring).not.toContain("requestCreationBranch(");
     expect(wiring).toContain("restoredSpec.worktreeBaseRef ||");
-    expect(wiring).toContain("getRepo(restoredSpec.repoId!).defaultBranch");
     expect(wiring).not.toMatch(/\bcreateWorkspace\(/);
     expect(wiring).not.toMatch(/\bcreateWorktree\(/);
     const create = read("session-create.ts");
@@ -488,8 +543,8 @@ describe("single session ownership", () => {
     );
     expect(create.match(/await requestCreationWorkspace\(\{/g)?.length).toBe(2);
     expect(create).toContain("actorWorktreeMaterializer({");
-    expect(create).toContain("await requestCreationCredential({");
-    expect(create).toContain("await requestCreationBranch({");
+    expect(create.match(/await requestCreationCredential\(/g)?.length).toBe(1);
+    expect(create.match(/await requestCreationBranch\(/g)?.length).toBe(1);
     expect(create).not.toContain("requestCreationSandbox");
     // The opening effect holds the creation fence, so provisioning rides
     // the launch-time idempotent provider.ensure instead of a second
@@ -730,6 +785,11 @@ describe("single session ownership", () => {
     const runtime = read("session-kernel/runtime.ts");
     expect(runtime).toContain('item.kind === "creation_opening_turn"');
     expect(runtime).toContain("activeOpeningOutbox");
+    expect(runtime).toContain('"creation_workspace_prepare"');
+    expect(runtime).toContain('"creation_credential_resolve"');
+    expect(runtime).toContain('"creation_branch_prepare"');
+    expect(runtime).toContain('"creation_attachment_stage"');
+    expect(runtime).toContain("activeCreationPreparationOutbox");
     for (const relative of [
       "sandbox/docker.ts",
       "sandbox/adapters/bootstrap.ts",
@@ -851,7 +911,6 @@ describe("single session ownership", () => {
     expect(unmarkBeforeThrow).toBeGreaterThan(0);
     expect(unmarkBeforeThrow).toBeLessThan(admissionLoss);
     for (const backend of [
-      "host-client.ts",
       "runner-session.ts",
       "sandbox/docker.ts",
       "sandbox/adapters/bootstrap.ts",
@@ -860,6 +919,11 @@ describe("single session ownership", () => {
       expect(source).toContain("journalRecordAbnormalCompletion(");
       expect(source).toContain("sourceCompleted && sawTerminal");
     }
+    const hostClient = read("host-client.ts");
+    expect(hostClient).toContain("journalRecordAbnormalCompletion(");
+    expect(hostClient).toContain(
+      "sawTerminal || handle.endedAfterCancellation",
+    );
 
     const cache = read("session-cache.ts");
     const outcome = cache.indexOf("if (errorMessage) {");

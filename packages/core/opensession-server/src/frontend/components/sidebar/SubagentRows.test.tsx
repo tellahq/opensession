@@ -1,40 +1,29 @@
 import { describe, expect, test } from "bun:test";
-import React, { type ReactElement } from "react";
+import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { z } from "zod";
 import type { UnifiedSession } from "../../lib/types";
 
-Object.assign(
-  ((globalThis as unknown as { window?: Record<string, unknown> }).window ??=
-    {}),
-  {
+Object.assign(globalThis, {
+  window: Object.assign(globalThis.window ?? {}, {
     addEventListener: () => {},
     removeEventListener: () => {},
     dispatchEvent: () => true,
     matchMedia: () => ({ matches: false }),
     setInterval: () => 0,
-  },
-);
-Object.assign(
-  ((
-    globalThis as unknown as { localStorage?: Record<string, unknown> }
-  ).localStorage ??= {}),
-  {
+  }),
+  localStorage: Object.assign(globalThis.localStorage ?? {}, {
     getItem: () => null,
     setItem: () => {},
     removeItem: () => {},
-  },
-);
-Object.assign(
-  ((
-    globalThis as unknown as { document?: Record<string, unknown> }
-  ).document ??= {}),
-  {
+  }),
+  document: Object.assign(globalThis.document ?? {}, {
     documentElement: { dataset: {}, style: { colorScheme: "" } },
     querySelector: () => null,
     addEventListener: () => {},
     visibilityState: "visible",
-  },
-);
+  }),
+});
 
 const { SubagentRows } = await import("./SubagentRows");
 
@@ -59,17 +48,30 @@ function session(
   };
 }
 
-function rowButtons(tree: ReactElement<{ children: React.ReactNode }>) {
-  const row = React.Children.toArray(tree.props.children)[0] as ReactElement<{
-    children: React.ReactNode;
-  }>;
-  const children = React.Children.toArray(row.props.children);
-  const open = children[0] as ReactElement<{ onClick: () => void }>;
-  const tooltip = children[1] as ReactElement<{ children: React.ReactNode }>;
-  const archive = tooltip.props.children as ReactElement<{
-    onClick: () => void;
-  }>;
-  return { open, archive };
+const clickHandler = z.function({ input: [], output: z.void() });
+const clickableElement = z.object({
+  props: z.object({ onClick: clickHandler }),
+});
+const subagentTree = z.object({
+  props: z.object({
+    children: z.array(
+      z.object({
+        props: z.object({
+          children: z.tuple([
+            clickableElement,
+            z.object({ props: z.object({ children: clickableElement }) }),
+          ]),
+        }),
+      }),
+    ),
+  }),
+});
+
+function rowButtons(tree: NonNullable<ReturnType<typeof SubagentRows>>) {
+  const [row] = subagentTree.parse(tree).props.children;
+  if (!row) throw new Error("Expected a rendered subagent row");
+  const [open, tooltip] = row.props.children;
+  return { open, archive: tooltip.props.children };
 }
 
 describe("SubagentRows", () => {
@@ -79,8 +81,8 @@ describe("SubagentRows", () => {
     const html = renderToStaticMarkup(
       <SubagentRows
         items={[
-          { session: direct, depth: 1 },
-          { session: nested, depth: 2 },
+          { session: direct, depth: 1, inline: false, sharesRootPr: false },
+          { session: nested, depth: 2, inline: false, sharesRootPr: false },
         ]}
         selectedId="nested"
         onSelect={() => {}}
@@ -110,7 +112,9 @@ describe("SubagentRows", () => {
     });
     const html = renderToStaticMarkup(
       <SubagentRows
-        items={[{ session: worker, depth: 1 }]}
+        items={[
+          { session: worker, depth: 1, inline: false, sharesRootPr: false },
+        ]}
         selectedId={null}
         onSelect={() => {}}
         onArchive={() => {}}
@@ -122,25 +126,48 @@ describe("SubagentRows", () => {
     expect(html).toContain("text-purple");
   });
 
+  test("does not repeat the root workspace's PR icon", () => {
+    const worker = session("same-pr", {
+      isRunning: false,
+      prUrl: "https://github.com/tellahq/example/pull/1",
+      prState: "MERGED",
+    });
+    const html = renderToStaticMarkup(
+      <SubagentRows
+        items={[
+          { session: worker, depth: 1, inline: false, sharesRootPr: true },
+        ]}
+        selectedId={null}
+        onSelect={() => {}}
+        onArchive={() => {}}
+      />,
+    );
+
+    expect(html).toContain("Worker same-pr, subagent, Merged");
+    expect(html).not.toContain('title="PR merged"');
+    expect(html).not.toContain("text-purple");
+  });
+
   test("opens and archives the exact child session", () => {
     const child = session("child");
-    let opened: UnifiedSession | null = null;
-    let archived: UnifiedSession | null = null;
+    const opened: UnifiedSession[] = [];
+    const archived: UnifiedSession[] = [];
     const tree = SubagentRows({
-      items: [{ session: child, depth: 1 }],
+      items: [{ session: child, depth: 1, inline: false, sharesRootPr: false }],
       selectedId: null,
       onSelect: (session) => {
-        opened = session;
+        opened.push(session);
       },
       onArchive: (session) => {
-        archived = session;
+        archived.push(session);
       },
-    }) as ReactElement<{ children: React.ReactNode }>;
+    });
+    if (!tree) throw new Error("Expected rendered subagent rows");
     const buttons = rowButtons(tree);
 
     buttons.open.props.onClick();
     buttons.archive.props.onClick();
-    expect((opened as UnifiedSession | null)?.id).toBe("child");
-    expect((archived as UnifiedSession | null)?.id).toBe("child");
+    expect(opened).toEqual([child]);
+    expect(archived).toEqual([child]);
   });
 });

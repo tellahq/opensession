@@ -134,6 +134,23 @@ describe("entriesForWire", () => {
     ).toEqual([]);
   });
 
+  it("drops parser-only metadata after classifying an entry", () => {
+    const [entry] = entriesForWire([
+      {
+        id: "recap",
+        type: "system",
+        content: "Work completed",
+        timestamp: TS,
+        requestId: "provider-request-id",
+        noticeKind: "recap",
+      },
+    ]);
+
+    expect(entry.notice?.kind).toBe("recap");
+    expect("requestId" in entry).toBe(false);
+    expect("noticeKind" in entry).toBe(false);
+  });
+
   it("projects a background wait as a private turn boundary", () => {
     expect(
       entriesForWire([

@@ -454,7 +454,7 @@ async function* runAgentInProcess(
  * host itself ended (terminal or quiet cancel). A consumer teardown mid-run
  * (server restart) keeps the record. That is the reattach affordance.
  */
-async function* hostedEventsWithJournal(
+export async function* hostedEventsWithJournal(
   handle: HostHandle,
   spec: RunHostSpec,
 ): AsyncGenerator<StreamEvent> {
@@ -525,7 +525,11 @@ async function* hostedEventsWithJournal(
     }
     sourceCompleted = true;
   } finally {
-    if (handle.ended && sourceCompleted && sawTerminal)
+    if (
+      handle.ended &&
+      sourceCompleted &&
+      (sawTerminal || handle.endedAfterCancellation)
+    )
       journalClear(record.runKey);
     else if (handle.ended && sourceCompleted)
       await hostedKernelCall(spec, "abnormal_completion_journal", () =>
@@ -995,6 +999,7 @@ export class HostHandle {
   private pendingSteerTranscripts: Array<{ id: string; text: string }> = [];
   private respawns = 0;
   private stopRequested = false;
+  private cancelledCompletion = false;
   private projectionTail: Promise<void> | undefined;
   private projectionFailure: unknown;
   private readonly ctl: HostRunControl;
@@ -1096,6 +1101,11 @@ export class HostHandle {
     return this.stopRequested || this.endedClean;
   }
 
+  /** Whether this host ended quietly in response to Stop. */
+  get endedAfterCancellation(): boolean {
+    return this.cancelledCompletion;
+  }
+
   setHostChangeHandler(
     handler: (hostId: string) => void | Promise<void>,
   ): void {
@@ -1160,6 +1170,7 @@ export class HostHandle {
       if (this.endedClean) return;
       try {
         await this.launcher.stop!(this.ctl.hostId, this.dir);
+        this.cancelledCompletion = true;
         this.finish();
       } catch (error) {
         this.stopRequested = false;
@@ -1509,6 +1520,7 @@ export class HostHandle {
         break;
       }
       case "end": {
+        if (!msg.done && this.stopRequested) this.cancelledCompletion = true;
         if (msg.done && !this.sawTerminal) {
           this.sawTerminal = true;
           this.terminalEvent = msg.done;

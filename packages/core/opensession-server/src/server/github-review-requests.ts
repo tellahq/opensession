@@ -87,7 +87,7 @@ export async function fetchReviewTeamLogins(
   const cached = reviewTeamCache.get(key);
   if (cached?.expiresAt && cached.expiresAt > Date.now()) return cached.logins;
   if (ghRateLimited("rest")) return cached?.logins || null;
-  const token = await botGhToken();
+  const token = await botGhToken({ owner });
   if (!token) return cached?.logins || null;
 
   const logins: string[] = [];

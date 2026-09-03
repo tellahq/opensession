@@ -23,10 +23,12 @@ export function SettingRow({
   title,
   desc,
   control,
+  controlClassName,
 }: {
   title: React.ReactNode;
   desc?: React.ReactNode;
   control: React.ReactNode;
+  controlClassName?: string;
 }) {
   return (
     <SettingsRow>
@@ -34,7 +36,9 @@ export function SettingRow({
         <SettingRowTitle>{title}</SettingRowTitle>
         {desc != null && <SettingRowDescription>{desc}</SettingRowDescription>}
       </SettingRowText>
-      <SettingRowControl>{control}</SettingRowControl>
+      <SettingRowControl className={controlClassName}>
+        {control}
+      </SettingRowControl>
     </SettingsRow>
   );
 }

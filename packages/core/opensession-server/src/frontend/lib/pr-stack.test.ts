@@ -39,7 +39,7 @@ function pr(stack: PrStack | null, over: Partial<PrDetails> = {}): PrDetails {
     checks: [],
     stack,
     ...over,
-  } as PrDetails;
+  };
 }
 
 function stackOf(layers: PrStackLayer[], position: number): PrStack {

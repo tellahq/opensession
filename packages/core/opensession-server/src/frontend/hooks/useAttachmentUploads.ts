@@ -61,7 +61,7 @@ export function useAttachmentUploads() {
         ),
       ),
     );
-    return results.flatMap((result) => (result ? [result.value as T] : []));
+    return results.flatMap((result) => (result ? [result.value] : []));
   }
 
   function cancel(kind: PendingUpload["kind"], index: number) {

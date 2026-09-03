@@ -35,6 +35,7 @@ import {
 } from "./src/server/automations";
 import { startUsagePoller } from "./src/server/claude-accounts";
 import { startCodexUsagePoller } from "./src/server/codex-accounts";
+import { startXaiUsagePoller } from "./src/server/xai-accounts";
 import {
   FRONTEND_SRC,
   IS_DEV,
@@ -210,6 +211,10 @@ if (!gatewayOwnership.__opensessionGatewayActivationLease) {
   gatewayOwnership.__opensessionGatewayActivationLease =
     await acquireGatewayActivationLease();
 }
+// Standby describes only the preload phase. After the nonce and ownership
+// fences release, this child owns ingress and later frontend promotions must
+// be allowed to replace the stable shell served by the supervisor.
+process.env.OPENSESSION_GATEWAY_ROLE = "active";
 
 // A dev instance (OPENSESSION_DEV=1, src/server/dev-mode.ts) sharing the live
 // state is the fleet-outage class bug: the run-rpc unix socket lives under the
@@ -799,6 +804,8 @@ if (!g.__opensessionBooted) {
     startUsagePoller();
     // Poll supported ChatGPT/Codex rate-limit windows per registered CODEX_HOME.
     startCodexUsagePoller();
+    // Poll SuperGrok credit usage and the live Grok catalog per xAI account.
+    startXaiUsagePoller();
 
     // DM account owners when pool credentials expire or break (account-health.ts)
     startAccountHealthMonitor();

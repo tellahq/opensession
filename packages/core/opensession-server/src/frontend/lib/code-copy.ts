@@ -160,11 +160,13 @@ export function decorateCodeBlocks(root: HTMLElement): void {
  */
 export function attachCodeCopy(root: HTMLElement): () => void {
   function onClick(e: MouseEvent) {
-    const target = e.target as HTMLElement | null;
-    const settingsButton = target?.closest?.(
-      `button.${SETTINGS_BUTTON_CLASS}`,
-    ) as HTMLElement | null;
-    if (settingsButton && root.contains(settingsButton)) {
+    if (!(e.target instanceof Element)) return;
+    const target = e.target;
+    const settingsButton = target.closest(`button.${SETTINGS_BUTTON_CLASS}`);
+    if (
+      settingsButton instanceof HTMLElement &&
+      root.contains(settingsButton)
+    ) {
       const opening = settingsButton.getAttribute("aria-expanded") !== "true";
       closeSettings(opening ? settingsButton : undefined);
       setSettingsOpen(settingsButton, opening);
@@ -172,12 +174,10 @@ export function attachCodeCopy(root: HTMLElement): () => void {
       return;
     }
 
-    const wrapButton = target?.closest?.(
-      `button.${WRAP_BUTTON_CLASS}`,
-    ) as HTMLElement | null;
-    if (wrapButton && root.contains(wrapButton)) {
-      const wrap = wrapButton.closest(`.${WRAP_CLASS}`) as HTMLElement | null;
-      if (!wrap) return;
+    const wrapButton = target.closest(`button.${WRAP_BUTTON_CLASS}`);
+    if (wrapButton instanceof HTMLElement && root.contains(wrapButton)) {
+      const wrap = wrapButton.closest(`.${WRAP_CLASS}`);
+      if (!(wrap instanceof HTMLElement)) return;
       const wrapped = wrap.dataset.wrapped !== "false";
       wrap.dataset.wrapped = String(!wrapped);
       wrapButton.setAttribute("aria-checked", String(!wrapped));
@@ -188,23 +188,23 @@ export function attachCodeCopy(root: HTMLElement): () => void {
       return;
     }
 
-    const copyButton = target?.closest?.(
-      `button.${COPY_BUTTON_CLASS}`,
-    ) as HTMLElement | null;
-    if (!copyButton || !root.contains(copyButton)) return;
-    const pre = copyButton.closest(`.${WRAP_CLASS}`)?.querySelector("pre");
+    const copyButton = target.closest(`button.${COPY_BUTTON_CLASS}`);
+    if (!(copyButton instanceof HTMLElement) || !root.contains(copyButton))
+      return;
+    const pre = copyButton
+      .closest(`.${WRAP_CLASS}`)
+      ?.querySelector<HTMLElement>("pre");
     if (!pre) return;
     e.preventDefault();
-    copyToClipboard(codeText(pre as HTMLElement), () =>
-      flashCopied(copyButton),
-    );
+    copyToClipboard(codeText(pre), () => flashCopied(copyButton));
   }
 
   function onPointerDown(e: PointerEvent) {
-    const target = e.target as HTMLElement | null;
+    if (!(e.target instanceof Element)) return;
+    const target = e.target;
     if (
-      target?.closest?.(`.${SETTINGS_PANEL_CLASS}`) ||
-      target?.closest?.(`.${SETTINGS_BUTTON_CLASS}`)
+      target.closest(`.${SETTINGS_PANEL_CLASS}`) ||
+      target.closest(`.${SETTINGS_BUTTON_CLASS}`)
     )
       return;
     closeSettings();

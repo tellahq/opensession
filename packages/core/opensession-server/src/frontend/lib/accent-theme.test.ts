@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { readBaseCss } from "../styles/base-css-test-support";
 import {
   ACCENT_THEME_OPTIONS,
   type AccentTheme,
@@ -74,7 +75,7 @@ describe("accent theme", () => {
 
   test("the CSS tokens and pre-paint bootstrap contain the same palette", async () => {
     const [css, html] = await Promise.all([
-      Bun.file(new URL("../styles/base.css", import.meta.url)).text(),
+      readBaseCss(),
       Bun.file(new URL("../index.html", import.meta.url)).text(),
     ]);
     for (const option of ACCENT_THEME_OPTIONS) {

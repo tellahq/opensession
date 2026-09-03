@@ -8,14 +8,16 @@ const models = [
     provider: "pi",
     label: "Opus 5 + Fable oracle",
     aliases: [],
+    efforts: [],
   },
   {
     id: "pi/anthropic/claude-sonnet-5",
     provider: "pi",
     label: "Claude Sonnet 5",
     aliases: [],
+    efforts: [],
   },
-] as unknown as ModelOption[];
+] satisfies ModelOption[];
 
 describe("workspace preset labels", () => {
   it("names the preset in its own workspace", () => {
