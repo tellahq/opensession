@@ -5,125 +5,7 @@ import {
   setSandboxConnectionQualification,
   type WorkspaceSandboxProvider,
 } from "./connections";
-import { sandboxConfig } from "./config";
 import { verifyPublicSandboxIngress } from "./ingress-check";
-
-interface CommandResult {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}
-
-async function command(
-  argv: string[],
-  timeoutMs = 120_000,
-): Promise<CommandResult> {
-  const child = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const exitCode = await Promise.race([
-    child.exited,
-    new Promise<number>((resolve) => {
-      timer = setTimeout(() => {
-        child.kill();
-        resolve(124);
-      }, timeoutMs);
-    }),
-  ]);
-  if (timer) clearTimeout(timer);
-  return {
-    exitCode,
-    stdout: await new Response(child.stdout).text(),
-    stderr: await new Response(child.stderr).text(),
-  };
-}
-
-async function qualifyDocker(): Promise<void> {
-  if (!Bun.which("docker")) {
-    throw Object.assign(new Error("Docker is not installed"), {
-      code: "DOCKER_NOT_INSTALLED",
-    });
-  }
-  const info = await command(
-    ["docker", "info", "--format", "{{.ServerVersion}}"],
-    30_000,
-  );
-  if (info.exitCode !== 0) {
-    throw Object.assign(new Error("Docker daemon is unavailable"), {
-      code: "DOCKER_DAEMON_UNAVAILABLE",
-    });
-  }
-  const image = sandboxConfig().image || "opensession-runner:latest";
-  const inspect = await command(["docker", "image", "inspect", image], 30_000);
-  if (inspect.exitCode !== 0) {
-    throw Object.assign(
-      new Error("Open Session sandbox image is not installed"),
-      {
-        code: "DOCKER_IMAGE_MISSING",
-      },
-    );
-  }
-  const suffix = crypto.randomUUID().slice(0, 12);
-  const source = `opensession-qualification-${suffix}`;
-  const snapshot = `opensession-qualification:${suffix}`;
-  try {
-    const run = await command([
-      "docker",
-      "run",
-      "-d",
-      "--name",
-      source,
-      "--network",
-      "none",
-      "--cap-drop",
-      "ALL",
-      image,
-      "sh",
-      "-lc",
-      "sleep 300",
-    ]);
-    if (run.exitCode !== 0)
-      throw new Error("Docker qualification container failed to start");
-    const probe = await command([
-      "docker",
-      "exec",
-      source,
-      "sh",
-      "-lc",
-      "uname -s && printf opensession-qualified > /tmp/opensession-qualification",
-    ]);
-    if (probe.exitCode !== 0)
-      throw new Error("Docker qualification command failed");
-    const commit = await command(
-      ["docker", "commit", source, snapshot],
-      180_000,
-    );
-    if (commit.exitCode !== 0)
-      throw new Error("Docker qualification snapshot failed");
-    const restored = await command([
-      "docker",
-      "run",
-      "--rm",
-      "--network",
-      "none",
-      snapshot,
-      "sh",
-      "-lc",
-      'test "$(cat /tmp/opensession-qualification)" = opensession-qualified',
-    ]);
-    if (restored.exitCode !== 0) {
-      throw new Error(
-        "Docker qualification snapshot did not restore filesystem state",
-      );
-    }
-  } finally {
-    await command(["docker", "rm", "-f", source], 30_000).catch(
-      () => undefined,
-    );
-    await command(["docker", "image", "rm", "-f", snapshot], 30_000).catch(
-      () => undefined,
-    );
-  }
-}
 
 function failureCode(error: unknown): string {
   const code = (error as { code?: unknown })?.code;
@@ -158,11 +40,6 @@ function failureSummary(code: string): string {
       "The provider account has insufficient quota for a disposable test sandbox.",
     SNAPSHOT_FAILED:
       "The provider could not restore a distinct qualification snapshot.",
-    DOCKER_NOT_INSTALLED: "Install Docker, then run the enable command again.",
-    DOCKER_DAEMON_UNAVAILABLE:
-      "Start Docker and make it available to the Open Session service user.",
-    DOCKER_IMAGE_MISSING:
-      "Build or install the Open Session sandbox image, then test again.",
   };
   return (
     summaries[code] ||
@@ -190,24 +67,18 @@ export async function qualifySandboxConnection(
 ): Promise<void> {
   setSandboxConnectionQualification(provider, { status: "checking" });
   try {
-    if (provider === "daytona" || provider === "box" || provider === "modal") {
-      // Prove ingress before allocating paid provider compute.
-      update({ stage: "Checking public ingress", progress: 10 });
-      await verifyPublicSandboxIngress();
-    }
+    // Prove ingress before allocating paid provider compute.
+    update({ stage: "Checking public ingress", progress: 10 });
+    await verifyPublicSandboxIngress();
     update({ stage: "Checking provider", progress: 20 });
-    if (provider === "docker") await qualifyDocker();
-    else if (provider === "daytona") {
+    if (provider === "daytona") {
       const { qualifyDaytonaConnection } = await import("./adapters/daytona");
       await qualifyDaytonaConnection();
-    } else if (provider === "box") {
+    } else {
       const { qualifyBoxConnection } = await import("./adapters/box");
       await qualifyBoxConnection((stage, progress) =>
         update({ stage, progress }),
       );
-    } else {
-      const { qualifyModalConnection } = await import("./adapters/modal");
-      await qualifyModalConnection();
     }
     setSandboxConnectionQualification(provider, {
       status: "ready",

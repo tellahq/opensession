@@ -142,7 +142,6 @@ describe("config loader", () => {
             label: "Acme App",
             deploymentTracking: true,
             warmCachePaths: ["dist/client.js"],
-            previewAwsProfile: "acme-dev",
             securityInstructions: "Read SECURITY.md.",
           },
         },
@@ -161,7 +160,6 @@ describe("config loader", () => {
       default: true,
       deploymentTracking: true,
       warmCachePaths: ["dist/client.js"],
-      previewAwsProfile: "acme-dev",
       securityInstructions: "Read SECURITY.md.",
     });
     expect(repos.opensession).toBeUndefined();

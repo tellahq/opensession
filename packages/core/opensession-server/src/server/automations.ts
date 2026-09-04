@@ -4,6 +4,7 @@
  * normal opensession session so it shows up in the sessions list and UI.
  */
 import { randomUUIDv7 } from "bun";
+import { automationBranchName } from "./automation-branch";
 import { OPENSESSION_SESSIONS_DIR, newSessionId } from "./paths";
 import {
   mkdirSync,
@@ -1363,16 +1364,6 @@ export function automationModel(model?: string): string | undefined {
   return toPiModel(requested) || requested;
 }
 
-function slugify(name: string): string {
-  return (
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 40) || "automation"
-  );
-}
-
 const automationPreparations = new Set<string>();
 const activeAutomationIntentSessions = new Set<string>();
 
@@ -1637,10 +1628,11 @@ export async function runAutomation(
     let branch = "";
     let sandbox: Sandbox | undefined;
     if (automation.mode === "code") {
-      branch = `auto-${slugify(automation.name)}-${startedAt
-        .toISOString()
-        .slice(0, 16)
-        .replace(/[-T:]/g, "")}`;
+      branch = automationBranchName({
+        automationName: automation.name,
+        startedAt,
+        sessionId: bksId,
+      });
       if (!automation.sandbox) {
         const worktrees = await listWorktrees(repo.id);
         cwd =

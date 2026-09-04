@@ -115,7 +115,6 @@ export interface RepoSection {
   /** Overrides the tile color the server would otherwise assign, as
    *  "#rrggbb". Set from Settings → Setup; see repo-tile-colors.ts. */
   color?: string;
-  previewCommand?: string;
   /** One-time setup command run in a fresh worktree before depsInstall. */
   worktreeSetup?: string;
   depsInstall?: string;
@@ -125,8 +124,6 @@ export interface RepoSection {
   prCacheRecentLimit?: number;
   /** Repo-relative files worth retaining in warm preview snapshots. */
   warmCachePaths?: string[];
-  /** Optional AWS profile name a preview expects in addition to `default`. */
-  previewAwsProfile?: string;
   /** Track the deployment workflow after a PR is merged. */
   deploymentTracking?: boolean;
   /** Repo-specific threat-model/build notes appended to security scan prompts. */
@@ -283,8 +280,6 @@ export interface Repo {
   iconSource?: "github" | "upload";
   /** Chosen tile color, "#rrggbb" (see RepoSection.color). */
   color?: string;
-  /** Dev-server bring-up command for previews. */
-  previewCommand?: string;
   worktreeSetup?: string;
   /** Shell command (run with cwd = the fresh worktree) that installs deps.
    *  Unset = `bun install` at the repo root when package.json exists. */
@@ -293,7 +288,6 @@ export interface Repo {
   prCacheOpenLimit?: number;
   prCacheRecentLimit?: number;
   warmCachePaths?: string[];
-  previewAwsProfile?: string;
   deploymentTracking?: boolean;
   securityInstructions?: string;
 }
@@ -398,14 +392,12 @@ function parseRepoSection(v: unknown): RepoSection | undefined {
     icon: str(o.icon),
     iconSource,
     color: str(o.color),
-    previewCommand: str(o.previewCommand),
     worktreeSetup: str(o.worktreeSetup),
     depsInstall: str(o.depsInstall),
     prCache: bool(o.prCache),
     prCacheOpenLimit: num(o.prCacheOpenLimit),
     prCacheRecentLimit: num(o.prCacheRecentLimit),
     warmCachePaths: strArray(o.warmCachePaths),
-    previewAwsProfile: str(o.previewAwsProfile),
     deploymentTracking: bool(o.deploymentTracking),
     securityInstructions: str(o.securityInstructions),
   });
@@ -786,14 +778,12 @@ export function configuredRepos(): Record<string, Repo> {
           icon: entry.icon,
           iconSource: entry.iconSource,
           color: entry.color,
-          previewCommand: entry.previewCommand,
           worktreeSetup: entry.worktreeSetup,
           depsInstall: entry.depsInstall,
           prCache: entry.prCache,
           prCacheOpenLimit: entry.prCacheOpenLimit,
           prCacheRecentLimit: entry.prCacheRecentLimit,
           warmCachePaths: entry.warmCachePaths,
-          previewAwsProfile: entry.previewAwsProfile,
           deploymentTracking: entry.deploymentTracking,
           securityInstructions: entry.securityInstructions,
         }),

@@ -67,59 +67,6 @@ import { makeAskHandler } from "./asks";
 import { createScheduleMcpServer } from "./schedule-mcp";
 import { activeSandboxFor } from "./session-sandbox";
 
-type PreviewAction = "start" | "status" | "stop";
-type PreviewModule = typeof import("./preview");
-
-interface PreviewLifecycleDeps {
-  findSession: typeof findSession;
-  activeSandboxFor: typeof activeSandboxFor;
-  loadPreview: () => Promise<PreviewModule>;
-}
-
-const previewLifecycleDeps: PreviewLifecycleDeps = {
-  findSession,
-  activeSandboxFor,
-  loadPreview: () => import("./preview"),
-};
-
-/**
- * Execute the same Preview lifecycle for an agent tool as the session UI.
- * Sandboxed workspaces must never fall through to host Preview: the host path
- * is a different checkout and cannot observe or control the sandbox service.
- */
-export async function runSessionPreviewAction(
-  sessionId: string,
-  action: PreviewAction,
-  deps: PreviewLifecycleDeps = previewLifecycleDeps,
-) {
-  const session = deps.findSession(sessionId);
-  const worktreeDir = session?.worktreeDir;
-  if (!session || !worktreeDir)
-    throw new Error("this session has no worktree to preview");
-
-  const sandbox = await deps.activeSandboxFor(session, {
-    wake: action === "start",
-  });
-  if (!sandbox && session.sandbox?.sandboxId) {
-    throw new Error(
-      `this session's ${session.sandbox.provider} sandbox is not available`,
-    );
-  }
-
-  const preview = await deps.loadPreview();
-  if (sandbox) {
-    if (action === "start")
-      return preview.startSandboxPreview(sandbox, worktreeDir, sessionId);
-    if (action === "stop")
-      return preview.stopSandboxPreview(sandbox, worktreeDir);
-    return preview.getSandboxPreviewStatus(sandbox, worktreeDir);
-  }
-
-  if (action === "start") return preview.startPreview(worktreeDir);
-  if (action === "stop") return preview.stopPreview(worktreeDir);
-  return preview.getPreviewStatus(worktreeDir);
-}
-
 /** The session's primary repo id, for the papercuts toggle (undefined =
  *  session-only session, which logs under no repo and is always enabled). */
 function repoIdForSessionId(sessionId: string): string | undefined {

@@ -9,6 +9,7 @@
  * individual key, and needs a separate organization-level integration.
  */
 
+import { readFileSync } from "fs";
 import type { CodexAccount } from "./codex-accounts";
 import { withCodexAuthLock } from "./codex-auth-lock";
 import { homeDir } from "./paths";
@@ -19,12 +20,32 @@ export interface CodexUsageWindow {
   windowDurationMins: number | null;
 }
 
+/** Prepaid credits on the bucket. Only present when the account has some
+ * (or an unlimited grant); a bucket without credits carries nothing. */
+export interface CodexUsageCredits {
+  hasCredits: boolean;
+  unlimited: boolean;
+  /** Provider-formatted amount, or null when only the presence is known. */
+  balance: string | null;
+}
+
+/** The spend cap a ChatGPT workspace set on this member. `limit` and `used`
+ * are the provider's own formatted amounts, passed through untouched. */
+export interface CodexSpendLimit {
+  limit: string;
+  used: string;
+  remainingPercent: number | null;
+  resetsAt: string | null;
+}
+
 export interface CodexUsageBucket {
   id: string;
   label?: string;
   plan?: string;
   primary: CodexUsageWindow | null;
   secondary: CodexUsageWindow | null;
+  credits?: CodexUsageCredits;
+  spendLimit?: CodexSpendLimit;
   rateLimitReachedType?: string;
 }
 
@@ -40,6 +61,10 @@ const usageCache: Map<string, CodexAccountUsage> = ((
 ).__codexAccountUsage ??= new Map());
 const DEFAULT_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 60 * 60 * 1000;
+// Same window codex-token-refresh.ts uses: refresh only near expiry, so an
+// account with live codex traffic (which the CLI refreshes itself) is never
+// asked to rotate its refresh-token family from here as well.
+const REFRESH_AHEAD_MS = 24 * 60 * 60 * 1000;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 function usageError(message: string): CodexAccountUsage {
@@ -68,6 +93,65 @@ function normalizeWindow(value: any): CodexUsageWindow | null {
   };
 }
 
+function normalizeCredits(value: any): CodexUsageCredits | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const hasCredits = value.hasCredits === true;
+  const unlimited = value.unlimited === true;
+  if (!hasCredits && !unlimited) return undefined;
+  return {
+    hasCredits,
+    unlimited,
+    balance:
+      typeof value.balance === "string" && value.balance ? value.balance : null,
+  };
+}
+
+function normalizeSpendLimit(value: any): CodexSpendLimit | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  if (typeof value.limit !== "string" || typeof value.used !== "string")
+    return undefined;
+  const remaining = Number(value.remainingPercent);
+  return {
+    limit: value.limit,
+    used: value.used,
+    remainingPercent: Number.isFinite(remaining) ? remaining : null,
+    resetsAt: isoFromUnixSeconds(value.resetsAt),
+  };
+}
+
+/** ms-epoch expiry from a JWT's `exp` claim, or null if unparseable. */
+function jwtExpMs(jwt: string): number | null {
+  try {
+    const payload = jwt.split(".")[1];
+    if (!payload) return null;
+    const claims = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf-8"),
+    );
+    return typeof claims.exp === "number" ? claims.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether the home's ChatGPT access token is expired or about to be, so the
+ * probe should ask the app-server to refresh it before reading limits. An
+ * unreadable auth.json or an API-key login answers false: there is nothing
+ * for the app-server to refresh, and the read itself reports the real error. */
+export function codexAccessTokenNeedsRefresh(
+  codexHome: string,
+  now = Date.now(),
+): boolean {
+  try {
+    const access = JSON.parse(readFileSync(`${codexHome}/auth.json`, "utf-8"))
+      ?.tokens?.access_token;
+    if (typeof access !== "string" || !access) return false;
+    const exp = jwtExpMs(access);
+    return exp !== null && exp <= now + REFRESH_AHEAD_MS;
+  } catch {
+    return false;
+  }
+}
+
 /** Convert the versioned app-server wire result into the small stable shape
  * the settings UI needs. Supports both the newer multi-bucket map and the
  * backward-compatible singular `rateLimits` field. */
@@ -85,21 +169,27 @@ export function normalizeCodexRateLimits(
     : result?.rateLimits
       ? [[result.rateLimits.limitId || "codex", result.rateLimits]]
       : [];
-  const buckets = entries.map(([key, raw]) => ({
-    id: String(raw?.limitId || key),
-    ...(typeof raw?.limitName === "string" && raw.limitName
-      ? { label: raw.limitName }
-      : {}),
-    ...(typeof raw?.planType === "string" && raw.planType
-      ? { plan: raw.planType }
-      : {}),
-    primary: normalizeWindow(raw?.primary),
-    secondary: normalizeWindow(raw?.secondary),
-    ...(typeof raw?.rateLimitReachedType === "string" &&
-    raw.rateLimitReachedType
-      ? { rateLimitReachedType: raw.rateLimitReachedType }
-      : {}),
-  }));
+  const buckets = entries.map(([key, raw]): CodexUsageBucket => {
+    const credits = normalizeCredits(raw?.credits);
+    const spendLimit = normalizeSpendLimit(raw?.individualLimit);
+    return {
+      id: String(raw?.limitId || key),
+      ...(typeof raw?.limitName === "string" && raw.limitName
+        ? { label: raw.limitName }
+        : {}),
+      ...(typeof raw?.planType === "string" && raw.planType
+        ? { plan: raw.planType }
+        : {}),
+      primary: normalizeWindow(raw?.primary),
+      secondary: normalizeWindow(raw?.secondary),
+      ...(credits ? { credits } : {}),
+      ...(spendLimit ? { spendLimit } : {}),
+      ...(typeof raw?.rateLimitReachedType === "string" &&
+      raw.rateLimitReachedType
+        ? { rateLimitReachedType: raw.rateLimitReachedType }
+        : {}),
+    };
+  });
   const available = Number(result?.rateLimitResetCredits?.availableCount);
   return {
     fetchedAt,
@@ -170,6 +260,9 @@ async function probeCodexUsageUnlocked(
   return await new Promise<CodexAccountUsage>((resolve) => {
     let settled = false;
     let buffer = "";
+    // A failed refresh is worth naming only if the limits read fails too:
+    // a still-valid token reads fine regardless.
+    let refreshError: string | null = null;
     const decoder = new TextDecoder();
     const finish = (usage: CodexAccountUsage, kill = true) => {
       if (settled) return;
@@ -219,13 +312,33 @@ async function probeCodexUsageUnlocked(
                 return;
               }
               send({ method: "initialized", params: {} });
-              send({ method: "account/rateLimits/read", id: 2, params: {} });
+              // The limits read does not refresh an expired access token on
+              // its own; it just fails. Ask the app-server to refresh first
+              // when the token is near expiry, through the same code path
+              // and auth.json write the CLI uses.
+              send({
+                method: "account/read",
+                id: 2,
+                params: {
+                  refreshToken: codexAccessTokenNeedsRefresh(codexHome),
+                },
+              });
             }
             if (message.id === 2) {
+              if (message.error) {
+                refreshError =
+                  message.error.message || "Codex account read failed";
+              }
+              send({ method: "account/rateLimits/read", id: 3, params: {} });
+            }
+            if (message.id === 3) {
               finish(
                 message.error
                   ? usageError(
-                      message.error.message || "Codex usage check failed",
+                      (message.error.message || "Codex usage check failed") +
+                        (refreshError
+                          ? ` (token refresh: ${refreshError})`
+                          : ""),
                     )
                   : normalizeCodexRateLimits(message.result),
               );

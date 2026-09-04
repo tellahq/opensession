@@ -171,9 +171,9 @@ This is a boot path, so it needs a real restart.
 
 ## 5. Sandbox providers — run sessions somewhere else
 
-`packages/core/opensession-server/src/server/sandbox/` holds the local and Docker
-providers at the root, with Daytona, E2B, Box, Modal, and Lambda MicroVM under
-`adapters/`. Implement `SandboxProvider.ensure()`, `get()`, and
+`packages/core/opensession-server/src/server/sandbox/` holds the local provider
+at the root, with Daytona and Box under `adapters/` sharing the remote
+bootstrap. Implement `SandboxProvider.ensure()`, `get()`, and
 `destroy()`, returning a `Sandbox` that implements `exec()`, `launchRun()`,
 `ports()`, and `status()`.
 

@@ -17,13 +17,9 @@ import { Select, SettingRow } from "./shared";
 type Scope = "workspace" | "personal";
 
 function providerLabel(id: string): string {
-  if (id === "none") return "None";
-  if (id === "docker") return "Docker";
-  if (id === "daytona") return "Daytona";
-  if (id === "e2b") return "E2B";
-  if (id === "box") return "Box";
-  if (id === "modal") return "Modal";
-  if (id === "lambda-microvm") return "AWS Lambda MicroVM";
+  if (id === "none") return "This machine";
+  if (id === "daytona") return "Sandbox · Daytona";
+  if (id === "box") return "Sandbox · Box";
   return id;
 }
 
@@ -92,7 +88,7 @@ function SandboxDefaultRow({
           },
         ]
       : []),
-    { value: "none", label: "None" },
+    { value: "none", label: "This machine" },
     ...unavailableSelection,
     ...providers.map((provider) => ({
       value: provider.id,
@@ -125,16 +121,16 @@ function SandboxDefaultRow({
 
   return (
     <SettingRow
-      title="Default sandbox"
+      title="New sessions run in"
       desc={
         scope === "personal"
-          ? "Your environment for new sessions."
-          : "The environment for new sessions."
+          ? "Where your new sessions run. The Sandbox choice in the new session menu overrides this per session."
+          : "Where new sessions run for everyone, and which provider a Sandbox means."
       }
       control={
         <div className={saving ? "pointer-events-none opacity-60" : undefined}>
           <Select
-            label={`${scope === "personal" ? "Personal" : "Workspace"} default sandbox`}
+            label={`${scope === "personal" ? "Personal" : "Workspace"} default environment`}
             value={value}
             options={options}
             onChange={(next) => void save(next)}
@@ -164,7 +160,8 @@ export function WorkspaceSandboxDefaults({
         <SandboxDefaultRow scope="workspace" canManage={canManage} />
       </SettingCard>
       <SettingsHint>
-        None uses this host. Only tested providers appear here.
+        This machine runs sessions in a worktree on this server. Only tested
+        providers appear here.
       </SettingsHint>
     </>
   );

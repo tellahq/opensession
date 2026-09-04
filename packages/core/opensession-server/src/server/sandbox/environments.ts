@@ -38,7 +38,7 @@ export interface SandboxEnvironment {
   failureSummary?: string;
   /** Persisted backoff for recoverable provider/setup failures. */
   retryAt?: string;
-  mode?: "template" | "per_session";
+  mode?: "template";
   settings?: SandboxMachineSettings;
 }
 
@@ -106,10 +106,7 @@ function normalizeMachineSettings(
   if (!raw) return undefined;
   const settings: SandboxMachineSettings = {};
   if (raw.cpu != null) {
-    const validCpu =
-      provider === "modal"
-        ? Number.isFinite(raw.cpu) && raw.cpu >= 0.125 && raw.cpu <= 16
-        : Number.isInteger(raw.cpu) && raw.cpu >= 1 && raw.cpu <= 64;
+    const validCpu = Number.isInteger(raw.cpu) && raw.cpu >= 1 && raw.cpu <= 64;
     if (!validCpu) {
       throw Object.assign(
         new Error("CPU is outside this provider's supported range"),
@@ -197,29 +194,17 @@ async function derivedEnvironment(
       updatedAt: stored?.updatedAt || now,
     };
   }
-  if (provider === "docker") {
+  const template = readRemoteRepoTemplate(provider, repo);
+  if (template) {
     return {
       repo,
       provider,
       state: "ready",
-      mode: "per_session",
-      updatedAt: stored?.updatedAt || now,
-      preparedAt: stored?.preparedAt || now,
+      mode: "template",
+      updatedAt: template.createdAt,
+      preparedAt: template.createdAt,
+      ...(stored?.settings ? { settings: stored.settings } : {}),
     };
-  }
-  if (provider === "daytona" || provider === "box" || provider === "modal") {
-    const template = readRemoteRepoTemplate(provider, repo);
-    if (template) {
-      return {
-        repo,
-        provider,
-        state: "ready",
-        mode: "template",
-        updatedAt: template.createdAt,
-        preparedAt: template.createdAt,
-        ...(stored?.settings ? { settings: stored.settings } : {}),
-      };
-    }
   }
   return (
     interruptedPreparation(stored) || {
@@ -233,12 +218,7 @@ async function derivedEnvironment(
 
 export async function listSandboxEnvironments(): Promise<SandboxEnvironment[]> {
   const out: SandboxEnvironment[] = [];
-  const providers: WorkspaceSandboxProvider[] = [
-    "docker",
-    "daytona",
-    "box",
-    "modal",
-  ];
+  const providers: WorkspaceSandboxProvider[] = ["daytona", "box"];
   for (const repo of Object.keys(REPOS)) {
     for (const provider of providers)
       out.push(await derivedEnvironment(repo, provider));
@@ -254,21 +234,15 @@ async function removeTemplate(
   repo: string,
   provider: WorkspaceSandboxProvider,
 ): Promise<void> {
-  if (provider === "daytona" || provider === "box" || provider === "modal") {
-    const previous = invalidateRemoteRepoTemplate(provider, repo);
-    if (previous?.artifactId) {
-      if (provider === "daytona") {
-        const { deleteDaytonaTemplateArtifact } =
-          await import("./adapters/daytona");
-        await deleteDaytonaTemplateArtifact(previous.artifactId);
-      } else if (provider === "box") {
-        const { deleteBoxTemplateArtifact } = await import("./adapters/box");
-        await deleteBoxTemplateArtifact(previous.artifactId);
-      } else {
-        const { deleteModalTemplateArtifact } =
-          await import("./adapters/modal");
-        await deleteModalTemplateArtifact(previous.artifactId);
-      }
+  const previous = invalidateRemoteRepoTemplate(provider, repo);
+  if (previous?.artifactId) {
+    if (provider === "daytona") {
+      const { deleteDaytonaTemplateArtifact } =
+        await import("./adapters/daytona");
+      await deleteDaytonaTemplateArtifact(previous.artifactId);
+    } else {
+      const { deleteBoxTemplateArtifact } = await import("./adapters/box");
+      await deleteBoxTemplateArtifact(previous.artifactId);
     }
   }
 }
@@ -282,49 +256,26 @@ export async function invalidateSandboxEnvironmentsForRepo(
   repo: string,
 ): Promise<void> {
   if (!(repo in REPOS)) return;
-  for (const provider of ["daytona", "box", "modal"] as const) {
+  for (const provider of ["daytona", "box"] as const) {
     const stored = storedEnvironment(repo, provider);
     if (!stored) continue;
     // Remote repo templates contain a credential-free warm clone. Adoption
     // fetches the current default branch before creating the session branch,
     // so deleting a multi-gigabyte provider snapshot on every push creates a
     // minutes-long cold-start gap without improving source freshness.
-    if (provider === "daytona" || provider === "box" || provider === "modal") {
-      const current = await derivedEnvironment(repo, provider);
-      writeEnvironment(
-        current.state === "ready"
-          ? current
-          : {
-              repo,
-              provider,
-              state: "stale",
-              mode: "template",
-              updatedAt: new Date().toISOString(),
-              ...(stored.settings ? { settings: stored.settings } : {}),
-            },
-      );
-      continue;
-    }
-    await invalidatePrewarm(provider, repo).catch((error) => {
-      console.warn(
-        `[sandbox:${provider}] failed to release prewarm for ${repo}:`,
-        error,
-      );
-    });
-    await removeTemplate(repo, provider).catch((error) => {
-      console.warn(
-        `[sandbox:${provider}] failed to delete stale template for ${repo}:`,
-        error,
-      );
-    });
-    writeEnvironment({
-      repo,
-      provider,
-      state: "stale",
-      mode: "template",
-      updatedAt: new Date().toISOString(),
-      ...(stored.settings ? { settings: stored.settings } : {}),
-    });
+    const current = await derivedEnvironment(repo, provider);
+    writeEnvironment(
+      current.state === "ready"
+        ? current
+        : {
+            repo,
+            provider,
+            state: "stale",
+            mode: "template",
+            updatedAt: new Date().toISOString(),
+            ...(stored.settings ? { settings: stored.settings } : {}),
+          },
+    );
   }
 }
 
@@ -365,17 +316,6 @@ export async function prepareSandboxEnvironment(
       code: "CONNECTION_NOT_READY",
     });
   }
-  if (provider === "docker") {
-    writeEnvironment({
-      repo,
-      provider,
-      state: "ready",
-      mode: "per_session",
-      preparedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-    return;
-  }
   const previousSettings = storedEnvironment(repo, provider)?.settings;
   const settings = normalizeMachineSettings(
     provider,
@@ -405,8 +345,7 @@ export async function prepareSandboxEnvironment(
         {
           refreshTemplate: options.refresh,
           // Daytona and Box can retain a stopped disk with zero compute. It
-          // removes slow snapshot materialization from the first-turn path;
-          // Modal has no park() and therefore keeps image-only behavior.
+          // removes slow snapshot materialization from the first-turn path.
           standby: true,
         },
       );
@@ -511,7 +450,7 @@ let maintenanceTimer: ReturnType<typeof setInterval> | undefined = (
 function maintainSandboxEnvironments(): void {
   for (const environment of readStored()) {
     if (
-      !["daytona", "box", "modal"].includes(environment.provider) ||
+      !["daytona", "box"].includes(environment.provider) ||
       (environment.mode !== "template" && environment.state !== "preparing") ||
       !sandboxConnectionReady(environment.provider)
     )
@@ -527,7 +466,7 @@ function maintainSandboxEnvironments(): void {
       if (!Number.isFinite(retryAt) || retryAt > Date.now()) continue;
     }
     const template = readRemoteRepoTemplate(
-      environment.provider as "daytona" | "box" | "modal",
+      environment.provider,
       environment.repo,
     );
     if (template && !remoteRepoTemplateNeedsRefresh(template)) {

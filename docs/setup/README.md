@@ -96,7 +96,7 @@ separate app listener on 3850 serves the private UI and API.
   installer can add it with `--tailscale`; on macOS install the Tailscale app.
   The default install binds loopback, and joining a tailnet is a separate step
   that needs your account or an auth key.
-- Optional: **Docker** (sandboxed sessions —
+- Optional: a **Daytona or Box account** (Sandbox sessions —
   [self-hosting-sandboxes](../self-hosting-sandboxes.md)), **Caddy** (direct
   HTTPS for public callbacks and TLS for live previews), **cloudflared**
   (custom-domain public callbacks, or an externally configured Access-protected
@@ -163,27 +163,27 @@ that touches them.
 
 ## Pages
 
-| Page                                                         | Covers                                                                                                                            |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| [install.md](install.md)                                     | installer → onboarding → env vars → config.json → accounts → systemd → health                                                     |
-| [../instance-configuration.md](../instance-configuration.md) | repos, identity, branding, policy, seeds, and integration settings in `~/.opensession/config.json`                                |
-| [networking.md](networking.md)                               | **keeping it private** — Tailscale, SSH tunnels, verifying exposure                                                               |
-| [ec2.md](ec2.md)                                             | provisioning a clean EC2 box, networking, SSH debugging                                                                           |
-| [../../recipes/README.md](../../recipes/README.md)           | bundled automation recipes, and what belongs in the repo                                                                          |
-| [slack.md](slack.md)                                         | Slack app, token, scopes, event intake, admin gating                                                                              |
-| [github.md](github.md)                                       | GitHub App, public ingress, PR agent, deploy script                                                                               |
-| [codestorage.md](codestorage.md)                             | code.storage as an alternative git host — signing key, repos, branch reviews                                                      |
-| [linear.md](linear.md)                                       | Linear OAuth app, webhooks, the Linear agent                                                                                      |
-| [plain.md](plain.md)                                         | Plain support tickets, the triage automation                                                                                      |
-| [integrations-misc.md](integrations-misc.md)                 | Stripe, WorkOS, Grafana/Sentry/Tinybird, web push, voice                                                                          |
-| [apple-mobile.md](apple-mobile.md)                           | SwiftPM/xtool development builds and user-restricted Xcode release tools                                                          |
-| [engines.md](engines.md)                                     | the Pi engine, account pools, provider keys, run isolation                                                                        |
-| [../self-hosting-sandboxes.md](../self-hosting-sandboxes.md) | certified Docker, Daytona, Box, and Modal sandboxes; implemented E2B and Lambda adapters remain unavailable pending certification |
-| [../runners.md](../runners.md)                               | attaching a Mac/Linux/Windows box as a Runner                                                                                     |
-| [../worktrees.md](../worktrees.md)                           | how sessions map to git worktrees, and where the disk goes                                                                        |
-| [../../CLIENTS.md](../../CLIENTS.md)                         | web UI, PWA, Electron shell, Swift app, Chrome extension                                                                          |
-| [../security-model.md](../security-model.md)                 | automation, credential, connector, webhook, and self-management boundaries                                                        |
-| [../extending.md](../extending.md)                           | MCP servers, feeds, recipes, integrations, providers, skills                                                                      |
+| Page                                                         | Covers                                                                                             |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| [install.md](install.md)                                     | installer → onboarding → env vars → config.json → accounts → systemd → health                      |
+| [../instance-configuration.md](../instance-configuration.md) | repos, identity, branding, policy, seeds, and integration settings in `~/.opensession/config.json` |
+| [networking.md](networking.md)                               | **keeping it private** — Tailscale, SSH tunnels, verifying exposure                                |
+| [ec2.md](ec2.md)                                             | provisioning a clean EC2 box, networking, SSH debugging                                            |
+| [../../recipes/README.md](../../recipes/README.md)           | bundled automation recipes, and what belongs in the repo                                           |
+| [slack.md](slack.md)                                         | Slack app, token, scopes, event intake, admin gating                                               |
+| [github.md](github.md)                                       | GitHub App, public ingress, PR agent, deploy script                                                |
+| [codestorage.md](codestorage.md)                             | code.storage as an alternative git host — signing key, repos, branch reviews                       |
+| [linear.md](linear.md)                                       | Linear OAuth app, webhooks, the Linear agent                                                       |
+| [plain.md](plain.md)                                         | Plain support tickets, the triage automation                                                       |
+| [integrations-misc.md](integrations-misc.md)                 | Stripe, WorkOS, Grafana/Sentry/Tinybird, web push, voice                                           |
+| [apple-mobile.md](apple-mobile.md)                           | SwiftPM/xtool development builds and user-restricted Xcode release tools                           |
+| [engines.md](engines.md)                                     | the Pi engine, account pools, provider keys, run isolation                                         |
+| [../self-hosting-sandboxes.md](../self-hosting-sandboxes.md) | per-session Sandboxes on Daytona or Box: sleep/wake, project snapshots, Portals                    |
+| [../runners.md](../runners.md)                               | attaching a Mac/Linux/Windows box as a Runner                                                      |
+| [../worktrees.md](../worktrees.md)                           | how sessions map to git worktrees, and where the disk goes                                         |
+| [../../CLIENTS.md](../../CLIENTS.md)                         | web UI, PWA, Electron shell, Swift app, Chrome extension                                           |
+| [../security-model.md](../security-model.md)                 | automation, credential, connector, webhook, and self-management boundaries                         |
+| [../extending.md](../extending.md)                           | MCP servers, feeds, recipes, integrations, providers, skills                                       |
 
 Implementation references include [transcripts.md](../transcripts.md), which
 covers the transcript store and serve protocol, and

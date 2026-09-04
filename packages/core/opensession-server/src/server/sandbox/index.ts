@@ -2,21 +2,16 @@
  * Sandbox provider registry (docs/self-hosting-sandboxes.md).
  *
  * `getSandboxProvider()` resolves the provider for a run: an explicit spec
- * wins, otherwise the config file (~/.opensession-sandbox.json) decides, and the
- * kill-switch file (<sessions-dir>/disable-sandboxes) forces "local".
- * Every registered provider is implemented (local host, Docker, Lambda
- * MicroVM, and the remote Daytona/E2B/Box/Modal adapters); an unknown id
- * still throws at run start instead of silently running unsandboxed.
+ * wins, otherwise the config file (~/.opensession/sandbox.json) decides, and
+ * the kill-switch file (<sessions-dir>/disable-sandboxes) forces "local".
+ * Two Sandbox backends are implemented, Daytona and Box; a retired or unknown
+ * id throws at dispatch instead of silently running unsandboxed.
  */
 
 import { LocalProvider } from "./local";
-import { DockerProvider } from "./docker";
 import { DaytonaProvider } from "./adapters/daytona";
-import { E2bProvider } from "./adapters/e2b";
 import { BoxProvider } from "./adapters/box";
-import { ModalProvider } from "./adapters/modal";
-import { LambdaMicrovmProvider } from "./adapters/lambda-microvm";
-import { effectiveSandboxProvider } from "./config";
+import { effectiveSandboxProvider, isRetiredSandboxProvider } from "./config";
 import type { SandboxProvider, SandboxProviderId } from "./provider";
 
 export type {
@@ -36,7 +31,6 @@ export {
   sandboxesEnabled,
   effectiveSandboxProvider,
   type SandboxConfig,
-  type SandboxWorkspaceMode,
 } from "./config";
 export {
   workspaceExecFor,
@@ -51,12 +45,8 @@ export { LocalProvider } from "./local";
 // provider, not here. The remote adapters import their SDKs lazily inside
 // methods, so constructing them is free at boot.
 const localProvider = new LocalProvider();
-const dockerProvider = new DockerProvider();
 const daytonaProvider = new DaytonaProvider();
-const e2bProvider = new E2bProvider();
 const boxProvider = new BoxProvider();
-const modalProvider = new ModalProvider();
-const lambdaMicrovmProvider = new LambdaMicrovmProvider();
 
 /**
  * Resolve a SandboxProvider. `spec` (a provider id, e.g. from a session file's
@@ -71,23 +61,15 @@ export function getSandboxProvider(
   switch (id) {
     case "local":
       return localProvider;
-    case "docker":
-      return dockerProvider;
     case "daytona":
       return daytonaProvider;
-    case "e2b":
-      return e2bProvider;
     case "box":
       return boxProvider;
-    case "modal":
-      return modalProvider;
-    case "microvm":
-      throw new Error(
-        "Local MicroVM has been retired; choose a managed remote provider",
-      );
-    case "lambda-microvm":
-      return lambdaMicrovmProvider;
     default:
+      if (isRetiredSandboxProvider(id))
+        throw new Error(
+          `Sandbox provider "${id}" has been retired; this session's Sandbox can no longer be reached. Start a new session on Daytona or Box.`,
+        );
       throw new Error(`unknown sandbox provider "${id}"`);
   }
 }

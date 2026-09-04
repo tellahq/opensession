@@ -72,9 +72,9 @@ output/os1-icons/icon-512-padded.png
 deploy/sandbox/microvm/.cache-busybox
 deploy/sandbox/microvm/.cache-busybox-source.tar.bz2
 
-# Self-preview dev-instance state + preview-flow port seeds (.agents/start.sh
-# boots a dev instance with OPENSESSION_STATE_DIR=$PWD/.dev-state; the Preview
-# flow writes .ports.conf/.ports/ into the session's working dir)
+# Dev Portal state + Portal port seeds (.agents/start.sh boots a dev instance
+# with OPENSESSION_STATE_DIR=$PWD/.dev-state; Portals write .ports.conf and
+# .ports/ into the session's working dir)
 .dev-state/
 .ports.conf
 .ports/
@@ -116,8 +116,16 @@ deploy/sandbox/microvm/.cache-busybox-source.tar.bz2
 !.agents/skills/vercel-composition-patterns/**
 !.agents/skills/workflow-authoring/
 !.agents/skills/workflow-authoring/**
+!.agents/skills/effect-ts/
+!.agents/skills/effect-ts/**
+!.agents/skills/show-me/
+!.agents/skills/show-me/**
 .claude/skills
 skills-lock.json
+
+# Shallow source mirrors that skills tell agents to clone for API lookups
+# (for example .agent-sources/effect at the pinned effect tag).
+.agent-sources/
 .css-shots/
 .css-ab/
 

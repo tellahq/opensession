@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
+  PASTED_TEXT_FILE_NAME,
+  PASTED_TEXT_FILE_THRESHOLD,
   PASTED_TEXT_THRESHOLD,
   composePastedText,
+  pastedTextFile,
   pastedTextLineLabel,
+  shouldAttachPastedTextAsFile,
   shouldCollapsePastedText,
 } from "./pasted-text";
 
@@ -14,6 +18,30 @@ describe("pasted text attachments", () => {
     expect(shouldCollapsePastedText("x".repeat(PASTED_TEXT_THRESHOLD))).toBe(
       true,
     );
+  });
+
+  test("a paste past the file threshold goes as a file", () => {
+    expect(
+      shouldAttachPastedTextAsFile("x".repeat(PASTED_TEXT_FILE_THRESHOLD - 1)),
+    ).toBe(false);
+    expect(
+      shouldAttachPastedTextAsFile("x".repeat(PASTED_TEXT_FILE_THRESHOLD)),
+    ).toBe(true);
+    // A chip still collapses a paste of that size, so a surface without a
+    // file channel has a fallback.
+    expect(
+      shouldCollapsePastedText("x".repeat(PASTED_TEXT_FILE_THRESHOLD)),
+    ).toBe(true);
+  });
+
+  test("the file keeps the text verbatim as plain text", async () => {
+    const text = "line one\nline two\n";
+    const file = pastedTextFile(text);
+    expect(file.name).toBe(PASTED_TEXT_FILE_NAME);
+    // Bun's File adds a charset the browser's does not; the media type is
+    // what the upload and the image/file split read.
+    expect(file.type.startsWith("text/plain")).toBe(true);
+    expect(await file.text()).toBe(text);
   });
 
   test("summarizes Unix and Windows line endings", () => {

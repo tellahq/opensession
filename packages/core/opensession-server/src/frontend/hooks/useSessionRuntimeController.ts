@@ -68,7 +68,6 @@ interface RuntimeControllerOptions {
 }
 
 type PreviewStatusEffectOptions = {
-  showPreviewTab: boolean;
   showPortal: boolean;
   activePanelOpen: boolean;
   infoPageOpen: boolean;
@@ -554,7 +553,6 @@ export function useSessionRuntimeController({
 export function useSessionPreviewStatusEffect(
   preview: ReturnType<typeof useSessionRuntimeController>["preview"],
   {
-    showPreviewTab,
     showPortal,
     activePanelOpen,
     infoPageOpen,
@@ -565,16 +563,12 @@ export function useSessionPreviewStatusEffect(
   const setPreviewStatus = useEffectEvent((status: PreviewStatus) => {
     preview.setStatus(status);
   });
-  // The header preview control used to keep this status warm. Now that the
-  // launcher lives in the overflow menu. Keep status warm while Preview or the
-  // portal browser is up, and while the workspace panel is open. Its bottom
-  // bar counts live portals and its portals page lists them. Status requests
-  // also renew the authenticated Caddy routes for remote sandbox services.
+  // Keep status warm while the portal browser is up and while the workspace
+  // panel is open. Its bottom bar counts live portals and its portals page
+  // lists them. Status requests also renew the authenticated Caddy routes for
+  // remote sandbox services.
   useEffect(() => {
-    if (
-      (!showPreviewTab && !showPortal && !activePanelOpen && !infoPageOpen) ||
-      !worktreeDir
-    )
+    if ((!showPortal && !activePanelOpen && !infoPageOpen) || !worktreeDir)
       return;
     let alive = true;
     const load = () =>
@@ -589,12 +583,5 @@ export function useSessionPreviewStatusEffect(
       alive = false;
       stop();
     };
-  }, [
-    showPreviewTab,
-    showPortal,
-    activePanelOpen,
-    infoPageOpen,
-    sessionId,
-    worktreeDir,
-  ]);
+  }, [showPortal, activePanelOpen, infoPageOpen, sessionId, worktreeDir]);
 }

@@ -377,7 +377,7 @@ function sandboxFor(cwd: string, port: number): Sandbox {
       : command;
   return {
     id: "sandbox-portal-test",
-    provider: "docker",
+    provider: "local",
     cwd,
     async exec(command, options) {
       if (options?.background) {

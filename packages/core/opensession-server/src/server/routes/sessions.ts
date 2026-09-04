@@ -540,6 +540,31 @@ function enrichSession(
 }
 
 /**
+ * One session as the detail and create responses serialize it: enriched like
+ * a list row, plus the PR refs its workspace siblings contribute. A new tab
+ * shows the workspace's PR from its first paint this way, instead of waiting
+ * for the next list poll to project it.
+ */
+export async function sessionDetail(
+  session: UnifiedSession,
+): Promise<UnifiedSession> {
+  const signals = await sessionListRuntimeSignals();
+  const context = sessionEnrichmentContext();
+  const enriched = enrichSession(session, signals, context);
+  if (!enriched.workspaceId) return enriched;
+  return projectWorkspacePrRefs(
+    enriched,
+    indexedWorkspaceMemberSessions(enriched.workspaceId).map((member) =>
+      enrichSessionPrRefs(member, {
+        defaultRepoId: context.defaultRepoId,
+        prsByRepo: context.prsByRepo,
+        footerMatches: footerPrsFor(context.prsBySession, member),
+      }),
+    ),
+  );
+}
+
+/**
  * A session as list clients consume it.
  *
  * The detail route keeps the full UnifiedSession. The list drops fields used
@@ -1978,22 +2003,7 @@ export async function handleSessionsRoutes(
       const session = await findSessionAsync(sessionId);
       if (!session)
         return Response.json({ error: "Session not found" }, { status: 404 });
-      const signals = await sessionListRuntimeSignals();
-      const context = sessionEnrichmentContext();
-      const enriched = enrichSession(session, signals, context);
-      const detail = enriched.workspaceId
-        ? projectWorkspacePrRefs(
-            enriched,
-            indexedWorkspaceMemberSessions(enriched.workspaceId).map((member) =>
-              enrichSessionPrRefs(member, {
-                defaultRepoId: context.defaultRepoId,
-                prsByRepo: context.prsByRepo,
-                footerMatches: footerPrsFor(context.prsBySession, member),
-              }),
-            ),
-          )
-        : enriched;
-      return Response.json(detail, {
+      return Response.json(await sessionDetail(session), {
         headers: { "Cache-Control": "private, no-cache" },
       });
     }

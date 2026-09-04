@@ -45,47 +45,43 @@ afterEach(() => {
 });
 
 describe("sandbox project environments", () => {
-  test("Docker is prepared per session and disabling its connection removes readiness", async () => {
+  test("every provider starts unprepared and a disabled connection removes readiness", async () => {
     const repo = Object.keys(REPOS)[0]!;
-    connectSandboxProvider("docker", {});
-    setSandboxConnectionQualification("docker", {
+    connectSandboxProvider("daytona", { secret: "test-daytona-key" });
+    setSandboxConnectionQualification("daytona", {
       status: "ready",
       checkedAt: new Date().toISOString(),
     });
-    await prepareSandboxEnvironment(repo, "docker");
     expect(
       (await listSandboxEnvironments()).find(
         (environment) =>
-          environment.repo === repo && environment.provider === "docker",
+          environment.repo === repo && environment.provider === "daytona",
       ),
-    ).toMatchObject({ state: "ready", mode: "per_session" });
+    ).toMatchObject({ state: "not_prepared" });
 
-    updateSandboxConnection("docker", { enabled: false });
+    updateSandboxConnection("daytona", { enabled: false });
     expect(
       (await listSandboxEnvironments()).find(
         (environment) =>
-          environment.repo === repo && environment.provider === "docker",
+          environment.repo === repo && environment.provider === "daytona",
       )?.state,
     ).toBe("not_prepared");
   });
 
   test("rejects unknown repositories before allocating provider work", async () => {
-    connectSandboxProvider("docker", {});
-    setSandboxConnectionQualification("docker", { status: "ready" });
+    connectSandboxProvider("daytona", { secret: "test-daytona-key" });
+    setSandboxConnectionQualification("daytona", { status: "ready" });
     await expect(
-      prepareSandboxEnvironment("not-a-repository", "docker"),
+      prepareSandboxEnvironment("not-a-repository", "daytona"),
     ).rejects.toMatchObject({ code: "REPO_UNKNOWN" });
   });
 
   test("rejects invalid project machine settings before allocating provider work", async () => {
     const repo = Object.keys(REPOS)[0]!;
-    connectSandboxProvider("modal", {
-      tokenId: "test-id",
-      tokenSecret: "test-secret",
-    });
-    setSandboxConnectionQualification("modal", { status: "ready" });
+    connectSandboxProvider("daytona", { secret: "test-daytona-key" });
+    setSandboxConnectionQualification("daytona", { status: "ready" });
     await expect(
-      prepareSandboxEnvironment(repo, "modal", { settings: { cpu: 0 } }),
+      prepareSandboxEnvironment(repo, "daytona", { settings: { cpu: 0 } }),
     ).rejects.toMatchObject({ code: "MACHINE_SETTINGS_INVALID" });
 
     connectSandboxProvider("box", { secret: "test-box-key" });
@@ -104,7 +100,7 @@ describe("sandbox project environments", () => {
       path,
       JSON.stringify({
         version: 1,
-        environments: ["daytona", "box", "modal"].map((provider) => ({
+        environments: ["daytona", "box"].map((provider) => ({
           repo,
           provider,
           state: "ready",
@@ -115,7 +111,7 @@ describe("sandbox project environments", () => {
     );
     await invalidateSandboxEnvironmentsForRepo(repo);
     const stored = JSON.parse(readFileSync(path, "utf-8"));
-    expect(stored.environments).toHaveLength(3);
+    expect(stored.environments).toHaveLength(2);
     expect(
       stored.environments.every(
         (environment: any) => environment.state === "stale",

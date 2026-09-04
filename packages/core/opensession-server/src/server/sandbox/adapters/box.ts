@@ -53,6 +53,7 @@ import type {
   SandboxProvider,
   SandboxSessionSpec,
   SandboxStatus,
+  SandboxDesktop,
 } from "../provider";
 import {
   assertDialbackReachable,
@@ -60,6 +61,7 @@ import {
   findRemoteStateBySession,
   makeRemoteSandbox,
   readRemoteState,
+  runResumeHook,
   remoteCloneUrl,
   removeRemoteState,
   resolveTrustPolicy,
@@ -96,6 +98,16 @@ const TEMPLATE_WAIT_MS = 15 * 60_000;
 /** States where the VM is up and can take commands. `running` is their
  *  "agent busy" state — still a live VM. */
 const LIVE_STATES = new Set(["ready", "idle", "running"]);
+
+/** `POST /boxes/{id}/desktop` answers with a tokenized 60fps stream page.
+ * The token rides in the URL fragment, so the URL itself is the secret. */
+export function boxDesktopUrl(response: { desktopUrl?: unknown }): string {
+  const url =
+    typeof response.desktopUrl === "string" ? response.desktopUrl : "";
+  if (!/^https:\/\//.test(url))
+    throw new Error("Box did not return a desktop URL");
+  return url;
+}
 
 interface BoxRecord {
   id: string;
@@ -381,18 +393,28 @@ function primeBoxWorkspaceAfterResume(driver: RemoteDriver, cwd: string): void {
     });
 }
 
+/** Printed by BOX_RUNTIME_HOME_COMMAND when /home/ubuntu is served by a
+ *  mount that is not our plain bind of /home/user. After an archive/resume
+ *  Box restores the home lazily through a FUSE layer mounted at /home/ubuntu
+ *  and leaves /home/user as the raw backing store: content written to
+ *  /home/user (including through Box's native file API) is invisible at
+ *  /home/ubuntu until hydrated, while writes through /home/ubuntu land in
+ *  both. That mount must be kept, never unmounted from under a running
+ *  workspace, and every file write must go through the shell path. */
+export const BOX_RUNTIME_HOME_LAZY_MARKER = "__OPENSESSION_BOX_HOME_LAZY__";
+
 export const BOX_RUNTIME_HOME_COMMAND =
   "test -d /home/user && test -w /home/user && " +
   "if mountpoint -q /home/ubuntu; then " +
   "if ! test /home/ubuntu -ef /home/user; then " +
-  "sudo -n umount /home/ubuntu && sudo -n mount --bind /home/user /home/ubuntu; fi; " +
+  `if test -w /home/ubuntu; then echo ${BOX_RUNTIME_HOME_LAZY_MARKER}; ` +
+  "else sudo -n umount /home/ubuntu && sudo -n mount --bind /home/user /home/ubuntu; fi; fi; " +
   "else " +
   "if [ -L /home/ubuntu ]; then sudo -n rm /home/ubuntu; " +
   'elif [ -d /home/ubuntu ] && [ -z "$(ls -A /home/ubuntu)" ]; then sudo -n rmdir /home/ubuntu; ' +
   "elif [ -e /home/ubuntu ]; then echo 'cannot replace non-empty /home/ubuntu' >&2; exit 1; fi; " +
   "sudo -n mkdir -p /home/ubuntu && sudo -n mount --bind /home/user /home/ubuntu; " +
-  "fi && test ! -L /home/ubuntu && mountpoint -q /home/ubuntu && " +
-  "test /home/ubuntu -ef /home/user && test -w /home/ubuntu";
+  "fi && test ! -L /home/ubuntu && mountpoint -q /home/ubuntu && test -w /home/ubuntu";
 
 function boxSshTargets(): Map<string, BoxSshTarget> {
   const global = globalThis as typeof globalThis & {
@@ -544,6 +566,9 @@ async function boxSshWriteFile(
 
 export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
   let runtimeHomeReady = false;
+  // False once the home command reports a lazily restored /home/ubuntu: the
+  // native file API writes the backing store, which that mount does not show.
+  let nativeFilesCoherent = true;
   let commandPlaneReady = false;
   const result = (response: BoxCommandResponse) => ({
     exitCode: response.timedOut ? 124 : Number(response.exitCode ?? 1),
@@ -585,6 +610,8 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
           .slice(0, 200)}`,
       );
     }
+    if (response.stdout.includes(BOX_RUNTIME_HOME_LAZY_MARKER))
+      nativeFilesCoherent = false;
     runtimeHomeReady = true;
   };
 
@@ -765,6 +792,24 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     async writeFile(path: string, content: string) {
       const ssh = boxSshTargets().get(boxId);
       if (ssh) return boxSshWriteFile(ssh, path, content);
+      if (!runtimeHomeReady) {
+        if (!commandPlaneReady) await waitForCommandPlane();
+        await ensureRuntimeHome();
+      }
+      if (!nativeFilesCoherent) {
+        // A lazily restored home only shows writes made through /home/ubuntu.
+        const shell = `mkdir -p ${shellQuoteWord(dirname(path))} && printf %s ${shellQuoteWord(
+          Buffer.from(content, "utf8").toString("base64"),
+        )} | base64 -d > ${shellQuoteWord(path)}`;
+        const written = result(
+          await afterCommandPlaneReady(() => execOnce(shell, 60_000)),
+        );
+        if (written.exitCode !== 0)
+          throw new Error(
+            `Box writeFile(${path}) failed: ${written.stderr.trim().slice(0, 300)}`,
+          );
+        return;
+      }
       // Box canonicalizes file paths and permits only /home/user or /tmp.
       // /home/ubuntu is our bind mount of that persistent home, so translate
       // the prefix explicitly and use the native file API instead of serializing
@@ -814,6 +859,8 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
               `Box SSH could not restore /home/ubuntu: ${(home.stderr || home.stdout).trim().slice(0, 200)}`,
             );
           }
+          if (home.stdout.includes(BOX_RUNTIME_HOME_LAZY_MARKER))
+            nativeFilesCoherent = false;
           runtimeHomeReady = true;
           commandPlaneReady = true;
           return;
@@ -1125,6 +1172,15 @@ export class BoxProvider implements SandboxProvider {
       },
     );
     mark("workspace ready");
+    if (resumingExistingWorkspace) {
+      await runResumeHook(driver, this.id, box.id, {
+        cwd,
+        sessionId: spec.sessionId,
+        repoId: repo.id,
+        trustProfile: trust.trustProfile,
+      });
+      mark("resume hook ran");
+    }
     writeRemoteState({
       sandboxId: box.id,
       provider: this.id,
@@ -1136,7 +1192,9 @@ export class BoxProvider implements SandboxProvider {
       lastActivityAt: new Date().toISOString(),
       ...trust,
     });
-    return this.makeHandle(cfg, box.id, spec.sessionId, cwd);
+    return Object.assign(this.makeHandle(cfg, box.id, spec.sessionId, cwd), {
+      wokeFromSleep: resumingExistingWorkspace,
+    });
   }
 
   private makeHandle(
@@ -1156,7 +1214,6 @@ export class BoxProvider implements SandboxProvider {
       async ports(requestedPorts = []): Promise<PortMap> {
         const map: PortMap = {};
         const ports = new Set([
-          ...(sandboxConfig().previewPorts || []),
           ...requestedPorts.filter(
             (port) => Number.isInteger(port) && port > 0 && port <= 65_535,
           ),
@@ -1220,6 +1277,21 @@ export class BoxProvider implements SandboxProvider {
     }
   }
 
+  async desktop(sandboxId: string): Promise<SandboxDesktop> {
+    const cfg = boxClientConfig();
+    const box = await getBox(cfg, sandboxId);
+    if (!box || !LIVE_STATES.has(String(box.state || "")))
+      throw new Error("Wake the sandbox first");
+    const response = await boxApi<{ desktopUrl?: unknown }>(
+      cfg,
+      "POST",
+      `/boxes/${sandboxId}/desktop`,
+      undefined,
+      60_000,
+    );
+    return { url: boxDesktopUrl(response) };
+  }
+
   async pause(sandboxId: string): Promise<void> {
     const cfg = boxClientConfig();
     const box = await getBox(cfg, sandboxId);
@@ -1252,8 +1324,14 @@ export class BoxProvider implements SandboxProvider {
     }
     const driver = boxDriver(cfg, sandboxId);
     await driver.ensureStarted();
-    if (resumed) primeBoxWorkspaceAfterResume(driver, state.cwd);
-    return this.makeHandle(cfg, sandboxId, state.sessionId, state.cwd);
+    if (resumed) {
+      primeBoxWorkspaceAfterResume(driver, state.cwd);
+      await runResumeHook(driver, this.id, sandboxId, state);
+    }
+    return Object.assign(
+      this.makeHandle(cfg, sandboxId, state.sessionId, state.cwd),
+      { wokeFromSleep: resumed },
+    );
   }
 
   /** Box's public API exposes durable archival rather than hard deletion.
@@ -1556,7 +1634,8 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
 
 async function assertBoxRuntimeHome(driver: RemoteDriver): Promise<void> {
   const probe = await driver.exec(
-    "test ! -L /home/ubuntu && mountpoint -q /home/ubuntu && test /home/ubuntu -ef /home/user && " +
+    "test ! -L /home/ubuntu && mountpoint -q /home/ubuntu && test -w /home/ubuntu && " +
+      "echo probe > /home/ubuntu/.opensession-home-probe && test -e /home/user/.opensession-home-probe && rm -f /home/ubuntu/.opensession-home-probe && " +
       "temporary=$(mktemp -d) && case $temporary in /home/ubuntu/.tmp/*) rmdir $temporary ;; *) exit 1 ;; esac",
   );
   if (probe.exitCode !== 0) {

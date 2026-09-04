@@ -16,16 +16,10 @@ export function useOnDemandViewTabs({
 }) {
   const stagingActive = activeViewTab === "staging";
   const assetsActive = activeViewTab === "assets";
-  const previewLiveActive = activeViewTab === "preview";
   const portalActive = activeViewTab === "portal";
   const terminalActive = activeViewTab === "terminal";
   const [stagingOpen, setStagingOpen] = useState<Set<string>>(
     () => new Set(getActiveViewTabKeys("staging")),
-  );
-  // Sessions whose local-dev Preview view-tab is open (full-width iframe of
-  // the running dev server — sibling of Staging, which shows the PR deploy).
-  const [previewTabOpen, setPreviewTabOpen] = useState<Set<string>>(
-    () => new Set(getActiveViewTabKeys("preview")),
   );
   // One transient browser target per workspace. Selecting another service
   // reuses the same center pane instead of filling the tab strip with ports.
@@ -51,30 +45,6 @@ export function useOnDemandViewTabs({
       return new Set(prev).add(key);
     });
     setActiveViewTab("staging");
-  }
-  // Open/foreground this workspace's local-dev Preview view-tab (the header
-  // Preview button routes here instead of window.open — the Mac shell was
-  // turning those into stray Electron windows).
-  function openPreviewTab() {
-    if (!workspaceKey) return;
-    const key = workspaceKey;
-    setPreviewTabOpen((prev) => {
-      if (prev.has(key)) return prev;
-      return new Set(prev).add(key);
-    });
-    setActiveViewTab("preview");
-  }
-  function closePreviewTab() {
-    if (workspaceKey) {
-      const key = workspaceKey;
-      setPreviewTabOpen((prev) => {
-        if (!prev.has(key)) return prev;
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    }
-    if (previewLiveActive) setActiveViewTab(null);
   }
   function openPortal(target: PortalTarget) {
     if (!workspaceKey) return;
@@ -154,14 +124,11 @@ export function useOnDemandViewTabs({
 
   return {
     stagingOpen,
-    previewTabOpen,
     assetsOpen,
     terminalOpen,
     currentPortalTarget,
     openStaging,
     closeStagingTab,
-    openPreviewTab,
-    closePreviewTab,
     openAssets,
     closeAssetsTab,
     openTerminal,

@@ -54,6 +54,27 @@ describe("runner payload resolution", () => {
     });
   });
 
+  test("a source checkout without a runnerSha runs the runner at its own HEAD", () => {
+    const payload = resolveRunnerPayload({
+      origin: "https://github.com/someone/opensession.git",
+      head: "0123456789abcdef0123456789abcdef01234567",
+      release: null,
+    });
+    expect(payload).toEqual({
+      repoUrl: "https://github.com/someone/opensession.git",
+      pin: "0123456789abcdef0123456789abcdef01234567",
+      source: "origin",
+    });
+    expect(
+      resolveRunnerPayload({
+        origin: "https://github.com/someone/opensession.git",
+        head: "0123456789abcdef0123456789abcdef01234567",
+        release: null,
+        runnerSha: "abc",
+      }).pin,
+    ).toBe("abc");
+  });
+
   test("runnerRepoUrl overrides the origin and is credential-scrubbed", () => {
     const payload = resolveRunnerPayload({
       origin: "git@github.com:someone/fork.git",

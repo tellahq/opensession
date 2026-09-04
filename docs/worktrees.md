@@ -33,9 +33,9 @@ of that attempt but does not block the session. Interactive creation starts this
 work in the background, so the first turn may begin before dependencies finish
 installing.
 
-Commit `.agents/setup` and `.agents/start.sh` to let each workspace provision
-itself and boot its dev server on demand. This also lets an agent open its own
-change in a browser. See [repo-lifecycle.md](repo-lifecycle.md).
+Commit `.agents/setup` and `.agents/portals.json` to let each workspace
+provision itself and expose its app as a Portal on demand. This also lets an
+agent open its own change in a browser. See [repo-lifecycle.md](repo-lifecycle.md).
 
 ## Modes
 
@@ -59,20 +59,18 @@ workspaces cannot attach repositories. A repository configured as a shared
 checkout cannot itself be attached unless shared-checkout behavior has been
 disabled.
 
-Remote Sandbox providers, and Docker configured with a `volume` workspace, clone
-inside provider-owned storage and create no host worktree. Docker `bind`
-workspaces use the host worktree described here. The low-level schema defaults
-to `bind`, but `opensession sandbox enable docker` currently configures
-`volume`. Provider-owned cleanup is separate, and destroying a volume workspace
-deletes any work not pushed elsewhere. See
+Sandbox sessions clone inside the Sandbox's own disk and create no host
+worktree. Provider-owned cleanup is separate, and destroying a Sandbox deletes
+any work not pushed elsewhere. See
 [self-hosting-sandboxes.md](self-hosting-sandboxes.md).
 
 ## The shared-checkout exception
 
 A repository can set `sharedCheckout: true`, making new interactive code
 sessions work directly in its registered main checkout. The built-in Open
-Session repository uses this mode so sessions improving Open Session edit the
-code that is running. Settings → Repositories exposes the choice as **Use
+Session repository uses this mode by default. Note that the live services run
+from an immutable release, so an edit in the shared checkout is not live until
+it is committed, pushed, and deployed. Settings → Repositories exposes the choice as **Use
 isolated worktrees**; changing it affects new sessions, while existing sessions
 keep their recorded checkout. The top-level `selfDev: "worktree"` setting also
 opts Open Session self-development into isolated worktrees. PR-branch sessions,
@@ -87,6 +85,18 @@ This is a deliberate trade with sharp edges. In a shared checkout:
   in the same tree. Inspect the staged diff before committing.
 - **Commit and push often.** Keep shared uncommitted work brief and coordinate
   changes to the same file.
+- **Keep `main` at `origin/main` with `bun scripts/shared-checkout-sync.ts`.**
+  A plain `git pull --ff-only` refuses the checkout as soon as one dirty file
+  overlaps an upstream commit, and nobody may discard another session's edit,
+  so without a tool the branch drifts behind for everyone. The sync tool
+  fetches, follows upstream for clean paths, adopts local edits that already
+  landed upstream, three-way merges genuine local edits onto the new base
+  (index and worktree separately, with a copy of the pre-merge file under
+  `.git/shared-checkout-sync/`), leaves conflicting edits untouched and lists
+  them, then moves the branch with a compare-and-swap. Exit code 2 means the
+  branch is current but listed edits still sit on the old base and must be
+  reapplied by their owner before staging. It never touches untracked files or
+  other branches, and it refuses to run when local commits are unpushed.
 
 If sessions do not need to edit the running checkout, use isolated worktrees.
 

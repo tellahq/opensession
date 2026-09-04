@@ -54,9 +54,8 @@ export interface SetupGithub {
 export interface SetupRepoLifecycle {
   dir: string | null;
   setup: boolean;
-  start: boolean;
-  previewJson: boolean;
-  previewCommand: boolean;
+  resume: boolean;
+  portals: boolean;
 }
 
 export interface SetupRepo {
@@ -198,22 +197,20 @@ export function githubAuthState(g: SetupGithub): ChipState {
   return { tone: "on", label: g.userPrAuth ? "GitHub" : "None" };
 }
 
-/** Does this repo carry what a session needs to provision and boot it on its
- *  own? `.agents/start.sh` (or an instance `previewCommand`) is the
- *  load-bearing half — without it the Preview button has nothing to run and an
- *  agent can't see its own UI change. `.agents/setup` alone still helps:
- *  worktrees provision, but nothing boots. Explained in
- *  docs/repo-lifecycle.md.
+/** Does this repo carry what a session needs to prepare itself and expose
+ *  its app? `.agents/portals.json` is the load-bearing half — without a
+ *  declared Portal an agent has nothing to open and can't see its own UI
+ *  change. `.agents/setup` alone still helps: workspaces provision, but
+ *  nothing is exposed. Explained in docs/repo-lifecycle.md.
  *
  *  The chip label is the whole answer a row gives. A sentence under every
  *  repo restated the same mechanism once per row, so the footer says it once
  *  and the label carries the state. */
 export function repoLifecycleState(repo: SetupRepo): ChipState {
-  const { setup, start, previewCommand } = repo.lifecycle;
-  if (start) return { tone: "on", label: setup ? "Ready" : "Boots previews" };
-  if (previewCommand) return { tone: "on", label: "Instance preview" };
+  const { setup, portals } = repo.lifecycle;
+  if (portals) return { tone: "on", label: setup ? "Ready" : "Portals only" };
   if (setup) return { tone: "warn", label: "Setup only" };
-  return { tone: "off", label: "No previews" };
+  return { tone: "off", label: "No Portals" };
 }
 
 export function StateChip({ tone, label }: { tone: ChipTone; label: string }) {

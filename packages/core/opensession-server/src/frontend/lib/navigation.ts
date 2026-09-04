@@ -60,7 +60,6 @@ export interface NavigationActions {
 
   openReview(): void;
   openStaging(): void;
-  openPreview(): void;
   openPortal(target: PortalTarget): void;
   openAssets(): void;
   openTerminal(): void;

@@ -3,31 +3,17 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  defaultPortalRecipe,
   getPreviewStatus,
   listenerLinesForPort,
   parsePreviewPortalRecipes,
   recipeStartOptions,
   repoLifecycle,
-  resolvePreviewBoot,
   sandboxPreviewIdentityContext,
-  seedSandboxPortsConf,
-  startPreview,
 } from "./preview";
 
-// The resolver is the ONE bring-up chain shared by host and sandbox previews:
-// repo-committed .agents/start.sh → configured previewCommand.
-// `exists` abstracts host-fs vs in-container checks, so these tests drive it
-// with plain sets of paths.
-
-const WT = "/srv/worktrees/widget-some-branch";
-const PREVIEW_COMMAND = "/srv/opensession/bin/start-widget-preview";
-
-function existsIn(paths: string[]) {
-  return (p: string) => paths.includes(p);
-}
-
-describe("sandbox preview identity", () => {
-  test("carries the sandbox trust profile into the preview grant", () => {
+describe("sandbox portal identity", () => {
+  test("carries the sandbox trust profile into the Portal grant", () => {
     expect(
       sandboxPreviewIdentityContext(
         { id: "sandbox-1", provider: "daytona" },
@@ -41,111 +27,6 @@ describe("sandbox preview identity", () => {
       repoId: "tella-fusion",
       trustProfile: "interactive",
     });
-  });
-
-  test("adds WEBAPP_PORT when Portal records created the registry first", async () => {
-    const scratch = mkdtempSync(join(tmpdir(), "sandbox-preview-ports-"));
-    const conf = join(scratch, ".ports.conf");
-    writeFileSync(
-      conf,
-      "# opensession-portal {}\nPORTAL_RELAY_SMOKE_PORT=4000\n",
-    );
-    const sandbox = {
-      async exec(command: string[]) {
-        const proc = Bun.spawn(command, {
-          cwd: scratch,
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-        const [stdout, stderr, exitCode] = await Promise.all([
-          new Response(proc.stdout).text(),
-          new Response(proc.stderr).text(),
-          proc.exited,
-        ]);
-        return { stdout, stderr, exitCode };
-      },
-    } as any;
-    try {
-      await seedSandboxPortsConf(sandbox, scratch, 3300);
-      expect(await Bun.file(conf).text()).toContain("WEBAPP_PORT=3300");
-      expect(await Bun.file(conf).text()).toContain(
-        "PORTAL_RELAY_SMOKE_PORT=4000",
-      );
-    } finally {
-      rmSync(scratch, { recursive: true, force: true });
-    }
-  });
-});
-
-describe("resolvePreviewBoot", () => {
-  test("repo-committed .agents/start.sh wins over previewCommand", async () => {
-    const boot = await resolvePreviewBoot(
-      WT,
-      { id: "widget", previewCommand: PREVIEW_COMMAND },
-      existsIn([`${WT}/.agents/start.sh`, PREVIEW_COMMAND]),
-    );
-    expect(boot).toEqual({
-      kind: "repo-script",
-      cmd: `bash ${WT}/.agents/start.sh`,
-      setupScript: undefined,
-    });
-  });
-
-  test("start.sh resolution picks up the sibling .agents/setup one-shot hook", async () => {
-    const boot = await resolvePreviewBoot(
-      WT,
-      { id: "widget" },
-      existsIn([`${WT}/.agents/start.sh`, `${WT}/.agents/setup`]),
-    );
-    expect(boot?.kind).toBe("repo-script");
-    expect(boot?.setupScript).toBe(`${WT}/.agents/setup`);
-  });
-
-  test("previewCommand runs with the worktree as $1", async () => {
-    const boot = await resolvePreviewBoot(
-      WT,
-      { id: "widget", previewCommand: PREVIEW_COMMAND },
-      existsIn([PREVIEW_COMMAND]),
-    );
-    expect(boot).toEqual({
-      kind: "preview-command",
-      cmd: `${PREVIEW_COMMAND} ${WT}`,
-    });
-  });
-
-  test("non-absolute previewCommand is trusted without an existence check", async () => {
-    const boot = await resolvePreviewBoot(
-      "/srv/worktrees/docs-some-branch",
-      { id: "docs", previewCommand: "npm run dev --" },
-      existsIn([]),
-    );
-    expect(boot).toEqual({
-      kind: "preview-command",
-      cmd: "npm run dev -- /srv/worktrees/docs-some-branch",
-    });
-  });
-
-  test("missing absolute previewCommand leaves the repo unbootable", async () => {
-    const boot = await resolvePreviewBoot(
-      WT,
-      { id: "widget", previewCommand: "/nonexistent/bring-up.sh" },
-      existsIn([PREVIEW_COMMAND]),
-    );
-    expect(boot).toBeNull();
-  });
-
-  test("a retired .opensession/ dir no longer resolves", async () => {
-    const boot = await resolvePreviewBoot(
-      WT,
-      { id: "widget" },
-      existsIn([`${WT}/.opensession/start.sh`, `${WT}/.opensession/setup.sh`]),
-    );
-    expect(boot).toBeNull();
-  });
-
-  test("no mechanism at all resolves to null (UI: disabled Start)", async () => {
-    const boot = await resolvePreviewBoot(WT, { id: "widget" }, existsIn([]));
-    expect(boot).toBeNull();
   });
 });
 
@@ -165,21 +46,12 @@ describe("listenerLinesForPort", () => {
 });
 
 describe("getPreviewStatus", () => {
-  test("a repo-less scratch workspace is not bootable", async () => {
+  test("a workspace without services or declared Portals reports nothing", async () => {
     const scratch = mkdtempSync(join(tmpdir(), "preview-scratch-"));
     try {
-      expect(await getPreviewStatus(scratch)).toMatchObject({
-        hasPortsConf: false,
-        running: false,
-        starting: false,
-        previewUrl: null,
-        bootable: false,
+      expect(await getPreviewStatus(scratch)).toEqual({
         services: [],
-      });
-      expect(await startPreview(scratch)).toMatchObject({
-        running: false,
-        starting: false,
-        bootable: false,
+        portalRecipes: [],
       });
     } finally {
       rmSync(scratch, { recursive: true, force: true });
@@ -188,13 +60,14 @@ describe("getPreviewStatus", () => {
 });
 
 // repoLifecycle reads a real checkout (Settings → Setup asks "can sessions in
-// this repo boot themselves?"), so these drive it against temp trees.
+// this repo prepare themselves and expose their app?"), so these drive it
+// against temp trees.
 describe("repoLifecycle", () => {
-  function repoWith(files: string[]): string {
+  function repoWith(files: Record<string, string>): string {
     const root = mkdtempSync(join(tmpdir(), "lifecycle-"));
-    for (const f of files) {
+    for (const [f, body] of Object.entries(files)) {
       mkdirSync(dirname(join(root, f)), { recursive: true });
-      writeFileSync(join(root, f), "");
+      writeFileSync(join(root, f), body);
     }
     return root;
   }
@@ -202,40 +75,44 @@ describe("repoLifecycle", () => {
   test("reports each committed lifecycle file", () => {
     expect(
       repoLifecycle(
-        repoWith([".agents/setup", ".agents/start.sh", ".agents/preview.json"]),
+        repoWith({
+          ".agents/setup": "",
+          ".agents/resume": "",
+          ".agents/portals.json": JSON.stringify({
+            portals: [{ id: "web", name: "Web", command: "bun dev" }],
+          }),
+        }),
       ),
-    ).toEqual({
-      dir: ".agents",
-      setup: true,
-      start: true,
-      previewJson: true,
-    });
+    ).toEqual({ dir: ".agents", setup: true, resume: true, portals: true });
+  });
+
+  test("an empty portals.json declares nothing", () => {
+    expect(
+      repoLifecycle(
+        repoWith({ ".agents/setup": "", ".agents/portals.json": "{}" }),
+      ),
+    ).toEqual({ dir: ".agents", setup: true, resume: false, portals: false });
   });
 
   test("a repo with no lifecycle dir reports nothing", () => {
-    expect(repoLifecycle(repoWith(["package.json"]))).toEqual({
+    expect(repoLifecycle(repoWith({ "package.json": "{}" }))).toEqual({
       dir: null,
       setup: false,
-      start: false,
-      previewJson: false,
+      resume: false,
+      portals: false,
     });
   });
 
   test("the retired .opensession/ dir contributes nothing", () => {
     expect(
       repoLifecycle(
-        repoWith([".opensession/start.sh", ".opensession/setup.sh"]),
+        repoWith({ ".opensession/start.sh": "", ".opensession/setup.sh": "" }),
       ),
-    ).toEqual({
-      dir: null,
-      setup: false,
-      start: false,
-      previewJson: false,
-    });
+    ).toEqual({ dir: null, setup: false, resume: false, portals: false });
   });
 });
 
-describe("preview portal recipes", () => {
+describe("portal recipes", () => {
   test("reads direct supervised starters from portals.json", () => {
     expect(
       parsePreviewPortalRecipes(
@@ -281,6 +158,19 @@ describe("preview portal recipes", () => {
       key: "WEBAPP_PORT",
       readyTimeoutMs: 180_000,
     });
+  });
+
+  test("the main app is the WEBAPP_PORT recipe, else the first one", () => {
+    const api = { id: "api", name: "API", command: "bun api" };
+    const web = {
+      id: "web",
+      name: "Web",
+      command: "bun dev",
+      serviceKey: "WEBAPP_PORT",
+    };
+    expect(defaultPortalRecipe([api, web])).toBe(web);
+    expect(defaultPortalRecipe([api])).toBe(api);
+    expect(defaultPortalRecipe([])).toBeUndefined();
   });
 
   test("drops recipes that could inject a prompt or invalid port key", () => {

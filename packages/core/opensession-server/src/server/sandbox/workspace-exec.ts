@@ -8,9 +8,8 @@
  * `workspaceExecFor(session, dir)`:
  *
  *  - No sandbox: a host exec via Bun's `$` in the workspace dir.
- *  - ACTIVE docker sandbox (session opted in, provider materialized, config
- *    still says docker, kill-switch absent, container ACTUALLY running): a
- *    `docker exec -w <dir>` in the session's container.
+ *  - Sandbox (session opted in, provider materialized, kill-switch absent):
+ *    an exec inside the session's remote sandbox.
  *
  * A stopped durable remote sandbox is transparently resumed for a read. That
  * is the orb-style contract: diff/status/@-mentions are user intent and must
@@ -18,20 +17,14 @@
  * provider without an explicit resume capability still fails closed; falling
  * back to a stale/nonexistent host path could inspect or mutate the wrong tree.
  *
- * With Phase 1 bind mounts this routing is functionally redundant — host git
- * sees the same files. The POINT is the seam: volume-only workspaces (below)
- * and Phase 3 remote providers have no host copy at all, and every surface
- * that goes through here keeps working there unchanged.
- *
- * The decision (config read + one docker inspect) is made once per
- * `workspaceExecFor` call and cached on the returned closure — call it once
- * per request, not per command. No global state.
+ * The decision is made once per `workspaceExecFor` call and cached on the
+ * returned closure — call it once per request, not per command. No global
+ * state.
  */
 
 import { $ } from "bun";
 import { sandboxesEnabled, sandboxProviderConfigured } from "./config";
 import { isRemoteSandboxProvider } from "./config";
-import { dockerContainerStatus, rawDockerExec } from "./docker";
 import type { ExecOpts, ExecResult } from "./provider";
 
 /**
@@ -43,7 +36,7 @@ export type WorkspaceExec = ((
   cmd: string[],
   opts?: ExecOpts,
 ) => Promise<ExecResult>) & {
-  /** Commands run inside a sandbox container (docker exec). */
+  /** Commands run inside the session's Sandbox. */
   readonly sandboxed: boolean;
   /** The workspace exists ONLY inside the sandbox (volume mode / remote
    *  provider) — host fs reads of workspace files won't work. */
@@ -186,16 +179,8 @@ export async function workspaceExecFor(
         { sandboxed: true, remote: true } as const,
       );
     }
-    if (sb.provider !== "docker") return host;
-    // Provider-configured, not config-default: a session may have picked
-    // docker explicitly while the config default is another provider.
-    if (!sandboxProviderConfigured("docker")) return host;
-    if ((await dockerContainerStatus(sb.sandboxId)) !== "running") return host;
-    const exec = rawDockerExec(sb.sandboxId, cwd);
-    return Object.assign((cmd: string[], opts?: ExecOpts) => exec(cmd, opts), {
-      sandboxed: true,
-      remote: sb.workspace === "volume",
-    } as const);
+    // A retired provider's workspace only ever existed inside that sandbox.
+    return sb.workspace === "volume" ? unavailableRemote : host;
   } catch {
     return sb.workspace === "volume" ? unavailableRemote : host;
   }

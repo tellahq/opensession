@@ -66,7 +66,6 @@ interface ChromeDeleteState {
 }
 interface ChromePreview {
   controller: Parameters<typeof useSessionPreviewStatusEffect>[0];
-  showPreviewTab: boolean;
   showPortal: boolean;
   activePanelOpen: boolean;
   worktreeDir?: string | null;
@@ -218,7 +217,6 @@ export function useSessionChromeController({
     if (showAssets && assetFileCount === 0) onCloseAssets?.();
   }, [showAssets, assetFileCount, onCloseAssets]);
   useSessionPreviewStatusEffect(preview.controller, {
-    showPreviewTab: preview.showPreviewTab,
     showPortal: preview.showPortal,
     activePanelOpen: preview.activePanelOpen,
     infoPageOpen,

@@ -468,13 +468,12 @@ export function NewSession({
   const sendKey = effectiveSendKey(storedSendKey);
   const attachKeys = useShortcutKeys("composer-attach");
 
-  // Sandbox provider picker: the complete model engine + workspace run in the
-  // selected environment; native Codex is the sole host-only family.
-  // "" = This machine (host, no sandbox); otherwise an explicit provider id
-  // sent as the create's `sandbox` string. Options come from
-  // /api/sandbox/status (fetched once when the palette opens) — only
-  // configured providers are offered, and the whole control hides when the
-  // server has no sandbox config or the kill switch is on.
+  // One choice: This machine or a Sandbox. Which provider backs "Sandbox" is
+  // the workspace's decision (its default, else the one ready connection), so
+  // the picker never asks. "" = This machine (host); otherwise the provider id
+  // the workspace resolved, sent as the create's `sandbox` string. Fetched
+  // once when the palette opens; the whole control hides when the server has
+  // no sandbox config or the kill switch is on.
   const [sandboxProvider, setSandboxProvider] = useState("");
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatusInfo | null>(
     null,
@@ -490,46 +489,31 @@ export function NewSession({
       })
       .catch(() => {});
   }, []);
-  const sandboxChoices = sandboxStatus?.connections?.length
+  const readySandboxProviders: string[] = sandboxStatus?.connections?.length
     ? sandboxStatus.connections
         .filter((connection) => connection.state === "ready")
-        .map((connection) => ({
-          id: connection.provider,
-          note: undefined,
-        }))
-    : (sandboxStatus?.providers || []).filter(
-        (p) => p.configured && p.certified,
-      );
+        .map((connection) => connection.provider)
+    : (sandboxStatus?.providers || [])
+        .filter((p) => p.configured && p.certified)
+        .map((p) => p.id);
+  // The provider "Sandbox" means here: the workspace default when it is
+  // ready, else the first ready connection.
+  const workspaceSandbox = (() => {
+    const preferred = sandboxStatus?.defaults?.effective;
+    if (
+      preferred &&
+      preferred !== "none" &&
+      readySandboxProviders.includes(preferred)
+    )
+      return preferred;
+    return readySandboxProviders[0] ?? "";
+  })();
+  const sandboxAvailable = workspaceSandbox !== "";
   const selectedSandboxAvailable =
-    !sandboxProvider ||
-    sandboxChoices.some((choice) => choice.id === sandboxProvider);
-  const visibleSandboxChoices =
-    sandboxProvider && !selectedSandboxAvailable
-      ? [
-          {
-            id: sandboxProvider,
-            note: "Unavailable. Choose This machine or a ready Sandbox before creating.",
-          },
-          ...sandboxChoices,
-        ]
-      : sandboxChoices;
-  const showSandboxPicker = !!sandboxStatus;
-  const sandboxLabel = (id: string) =>
-    id === ""
-      ? "This machine"
-      : id === "docker"
-        ? "Docker"
-        : id === "daytona"
-          ? "Daytona"
-          : id === "e2b"
-            ? "E2B"
-            : id === "box"
-              ? "Box"
-              : id === "modal"
-                ? "Modal"
-                : id === "lambda-microvm"
-                  ? "AWS Lambda MicroVM"
-                  : id;
+    !sandboxProvider || readySandboxProviders.includes(sandboxProvider);
+  const showSandboxPicker =
+    !!sandboxStatus && (sandboxAvailable || !!sandboxProvider);
+  const sandboxLabel = (id: string) => (id === "" ? "This machine" : "Sandbox");
 
   // Provider-independent family check, driven by the same server list the
   // create path enforces.
@@ -542,7 +526,7 @@ export function NewSession({
   );
   const sandboxModelWarning = (() => {
     if (sandboxProvider && !selectedSandboxAvailable) {
-      return `${sandboxLabel(sandboxProvider)} is unavailable. Choose This machine or a ready Sandbox.`;
+      return "The Sandbox is unavailable. Choose This machine or connect a provider in Workspace > Sandboxes.";
     }
     if (!sandboxProvider || !modelFamily) return null;
     if (modelFamily.sandboxable) return null;
@@ -553,15 +537,10 @@ export function NewSession({
     );
   })();
 
-  // Brain-inside remote/MicroVM sessions all adopt a full-runner prewarm.
-  // Strictly fire-and-forget: failure must never surface or block typing.
-  const isRemoteSandbox =
-    sandboxProvider === "daytona" ||
-    sandboxProvider === "e2b" ||
-    sandboxProvider === "box" ||
-    sandboxProvider === "modal" ||
-    sandboxProvider === "lambda-microvm";
-  const shouldPrewarm = isRemoteSandbox;
+  // Sandbox sessions adopt a full-runner prewarm that starts on the first
+  // keystroke. Strictly fire-and-forget: failure must never surface or block
+  // typing.
+  const shouldPrewarm = sandboxProvider !== "" && selectedSandboxAvailable;
   const [sandboxWarmed, setSandboxWarmed] = useState(false);
   const lastPrewarmAtRef = useRef(0);
   useEffect(() => {
@@ -1677,7 +1656,7 @@ export function NewSession({
                       <Menu.SubmenuTrigger className="justify-between gap-3">
                         <span className="flex min-w-0 items-center gap-2">
                           <IconBox className="shrink-0 text-dim" size={20} />
-                          <span className="truncate">Sandbox</span>
+                          <span className="truncate">Run in</span>
                         </span>
                         <span className="flex flex-none items-center gap-1 text-dim">
                           {sandboxLabel(sandboxProvider)}
@@ -1692,8 +1671,19 @@ export function NewSession({
                       </Menu.SubmenuTrigger>
                       <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
                         {[
-                          { id: "", note: undefined },
-                          ...visibleSandboxChoices,
+                          {
+                            id: "",
+                            note: "Runs on this server, in a worktree.",
+                          },
+                          {
+                            id:
+                              sandboxProvider && !selectedSandboxAvailable
+                                ? sandboxProvider
+                                : workspaceSandbox,
+                            note: selectedSandboxAvailable
+                              ? "Its own machine that sleeps between turns and wakes with files and Portals intact."
+                              : "Unavailable. Choose This machine or connect a provider in Workspace > Sandboxes.",
+                          },
                         ].map((opt) => {
                           const selected = sandboxProvider === opt.id;
                           return (

@@ -237,6 +237,15 @@ describe("worktree reaper wiring", () => {
       "startWorktreeReaper(() => enrichSessionRuntime(getCachedSessions()))",
     );
   });
+
+  it("never synchronously stats untracked files in the gateway", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "worktree-reaper.ts"),
+      "utf8",
+    );
+    expect(source).toContain("await lstat(join(dir, file))");
+    expect(source).not.toContain("lstatSync");
+  });
 });
 
 describe("bankWorkingState", () => {

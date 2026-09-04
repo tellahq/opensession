@@ -6,7 +6,6 @@ export const FIELD_LABEL =
 export const FORM_ROW = "flex gap-3.5 phone:flex-col";
 
 export function sandboxProviderLabel(id: string): string {
-  if (id === "docker") return "Docker";
   if (id === "daytona") return "Daytona";
   if (id === "e2b") return "E2B";
   if (id === "box") return "Box";

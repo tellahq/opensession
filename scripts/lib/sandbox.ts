@@ -1,41 +1,22 @@
-/** `opensession sandbox …` — one-command local provider setup. */
+/** `opensession sandbox …` — Sandbox provider maintenance from the shell. */
 
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
-  connectSandboxProvider,
   getSandboxConnection,
   isWorkspaceSandboxProvider,
   updateSandboxConnection,
+  type WorkspaceSandboxProvider,
 } from "../../packages/core/opensession-server/src/server/sandbox/connections";
-import { qualifySandboxConnection } from "../../packages/core/opensession-server/src/server/sandbox/qualification";
 import { upsertCaddyIngress } from "../../packages/core/opensession-server/src/server/sandbox/caddy-ingress";
 import { savePublicIngress } from "../../packages/core/opensession-server/src/server/ingress-settings";
 import { configuredServer } from "../../packages/core/opensession-server/src/server/config";
-import { stateDir } from "../../packages/core/opensession-server/src/server/paths";
-import { writeJsonAtomic } from "../../packages/core/opensession-server/src/server/shared/atomic-write";
-import { REPO_ROOT } from "./paths";
 import { localAutomationToken } from "./local-auth";
-import { dim, fail, heading, info, ok, run, runInherit, warn } from "./ui";
-
-function sandboxConfigPath(): string {
-  return process.env.OPENSESSION_SANDBOX_CONFIG || stateDir("sandbox.json");
-}
-
-function updateSandboxConfig(patch: Record<string, unknown>): void {
-  let raw: Record<string, unknown> = {};
-  try {
-    const parsed = JSON.parse(readFileSync(sandboxConfigPath(), "utf-8"));
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
-      raw = parsed;
-  } catch {}
-  writeJsonAtomic(sandboxConfigPath(), { ...raw, ...patch });
-  chmodSync(sandboxConfigPath(), 0o600);
-}
+import { dim, fail, heading, info, ok, run } from "./ui";
 
 async function qualifyRemoteThroughServer(
-  provider: "daytona" | "box" | "modal",
+  provider: WorkspaceSandboxProvider,
 ): Promise<number> {
   const token = localAutomationToken();
   if (!token) {
@@ -61,7 +42,7 @@ async function qualifyRemoteThroughServer(
   } catch {
     fail(
       "Open Session is not reachable on its local port",
-      "start the service before testing Daytona, Box or Modal",
+      "start the service before testing Daytona or Box",
     );
     return 1;
   }
@@ -121,153 +102,6 @@ async function requireCommand(name: string, hint: string): Promise<boolean> {
   }
   fail(`${name} is missing`, hint);
   return false;
-}
-
-async function installPersistentHostFirewall(): Promise<boolean> {
-  const setup = `${REPO_ROOT}/deploy/sandbox/setup-host.sh`;
-  const unitPath = "/etc/systemd/system/opensession-sandbox-host.service";
-  if (
-    !(await requireCommand(
-      "sudo",
-      "install sudo and grant this operator host setup access",
-    ))
-  ) {
-    return false;
-  }
-  const scratch = mkdtempSync(join(tmpdir(), "opensession-sandbox-unit-"));
-  const staged = join(scratch, "opensession-sandbox-host.service");
-  const unit = `[Unit]\nDescription=Open Session sandbox host firewall\nAfter=docker.service network-online.target\nWants=docker.service network-online.target\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/bash ${setup}\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\n`;
-  try {
-    await Bun.write(staged, unit);
-    for (const argv of [
-      ["sudo", "-n", "install", "-m", "0644", staged, unitPath],
-      ["sudo", "-n", "systemctl", "daemon-reload"],
-      [
-        "sudo",
-        "-n",
-        "systemctl",
-        "enable",
-        "--now",
-        "opensession-sandbox-host.service",
-      ],
-    ]) {
-      const result = await run(argv);
-      if (result.code !== 0) {
-        fail(
-          "could not install the persistent sandbox firewall",
-          result.stderr || argv.join(" "),
-        );
-        return false;
-      }
-    }
-    ok("persistent metadata-service firewall", unitPath);
-    return true;
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
-  }
-}
-
-async function releaseVersion(): Promise<string> {
-  const pkg = await Bun.file(`${REPO_ROOT}/package.json`).json();
-  return String(pkg.version || "latest");
-}
-
-async function installDockerImage(): Promise<string | null> {
-  const version = await releaseVersion();
-  const releaseImage = `ghcr.io/tellahq/opensession-runner:${version}`;
-  heading("Runner image");
-  const pull = await run(["docker", "pull", releaseImage]);
-  if (pull.code === 0) {
-    if (!Bun.which("cosign")) {
-      fail(
-        "cosign is required to verify the published runner image",
-        "install cosign, then rerun this command",
-      );
-      return null;
-    }
-    const verify = await run([
-      "cosign",
-      "verify",
-      "--certificate-identity-regexp",
-      "^https://github.com/tellahq/opensession/.github/workflows/sandbox-release.yml@refs/.*$",
-      "--certificate-oidc-issuer",
-      "https://token.actions.githubusercontent.com",
-      releaseImage,
-    ]);
-    if (verify.code !== 0) {
-      fail("runner image signature verification failed");
-      return null;
-    }
-    ok("verified release image", releaseImage);
-    return releaseImage;
-  }
-
-  warn(
-    "no matching published image; building this checkout for the local architecture",
-  );
-  const code = await runInherit(
-    ["bash", `${REPO_ROOT}/deploy/sandbox/build.sh`],
-    REPO_ROOT,
-  );
-  if (code !== 0) {
-    fail("runner image build failed");
-    return null;
-  }
-  return "opensession-runner:latest";
-}
-
-async function enableDocker(): Promise<number> {
-  heading("Docker sandbox");
-  if (
-    !(await requireCommand(
-      "docker",
-      "install Docker Engine, then rerun this command",
-    ))
-  )
-    return 1;
-  const daemon = await run([
-    "docker",
-    "info",
-    "--format",
-    "{{.ServerVersion}}",
-  ]).catch(() => ({ code: 1, stdout: "", stderr: "" }));
-  if (daemon.code !== 0) {
-    fail(
-      "Docker daemon is unavailable",
-      "start Docker and allow this user to access its socket",
-    );
-    return 1;
-  }
-  ok("Docker daemon", daemon.stdout);
-  const image = await installDockerImage();
-  if (!image) return 1;
-  if (!(await installPersistentHostFirewall())) return 1;
-
-  updateSandboxConfig({
-    workspace: "volume",
-    transport: "ws",
-    snapshots: {
-      enabled: true,
-      onIdle: true,
-      maxPerSession: 2,
-      quickSyncOnRestore: true,
-    },
-  });
-  connectSandboxProvider("docker", {
-    settings: { image, cpu: 4, memoryMb: 8192 },
-  });
-  heading("Qualification");
-  try {
-    await qualifySandboxConnection("docker");
-  } catch (error) {
-    fail(
-      "Docker needs attention",
-      error instanceof Error ? error.message : String(error),
-    );
-    return 1;
-  }
-  ok("Docker is Ready", "select it in Workspace → Sandboxes");
-  return 0;
 }
 
 async function installCaddyIngress(
@@ -400,21 +234,13 @@ export async function sandbox(args: string[]): Promise<number> {
     return installCaddyIngress(args[2]);
   }
   if (!isWorkspaceSandboxProvider(provider)) {
-    fail("usage: opensession sandbox enable docker");
-    info(
-      dim(
-        "Also available: opensession sandbox test|disable docker|daytona|box|modal",
-      ),
-    );
+    fail("usage: opensession sandbox test|disable daytona|box");
     info(dim("Provider accounts are connected in Workspace → Sandboxes."));
     return 1;
   }
   if (action === "enable") {
-    if (provider !== "docker") {
-      fail(`${provider} credentials are connected in Workspace → Sandboxes`);
-      return 1;
-    }
-    return enableDocker();
+    fail(`${provider} credentials are connected in Workspace → Sandboxes`);
+    return 1;
   }
   if (action === "disable") {
     if (!getSandboxConnection(provider)) {
@@ -434,26 +260,8 @@ export async function sandbox(args: string[]): Promise<number> {
       return 1;
     }
     heading(`${provider} qualification`);
-    if (provider === "daytona" || provider === "box" || provider === "modal") {
-      return qualifyRemoteThroughServer(provider);
-    }
-    try {
-      await qualifySandboxConnection(provider);
-      ok(`${provider} is Ready`);
-      return 0;
-    } catch (error) {
-      fail(
-        `${provider} needs attention`,
-        error instanceof Error ? error.message : String(error),
-      );
-      return 1;
-    }
+    return qualifyRemoteThroughServer(provider);
   }
-  fail("usage: opensession sandbox enable docker");
-  info(
-    dim(
-      "Also available: opensession sandbox test|disable docker|daytona|box|modal",
-    ),
-  );
+  fail("usage: opensession sandbox test|disable daytona|box");
   return 1;
 }

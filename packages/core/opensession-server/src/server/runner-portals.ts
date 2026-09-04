@@ -363,18 +363,7 @@ export async function runnerPortalPreviewStatus(
       managed: true,
     })),
   );
-  const webapp =
-    services.find((service) => service.key === "WEBAPP_PORT") ?? services[0];
-  return {
-    hasPortsConf: services.length > 0,
-    webappPort: webapp?.port ?? null,
-    running: Boolean(webapp?.running),
-    starting: services.some((service) => service.state === "starting"),
-    previewUrl: webapp?.previewUrl ?? null,
-    bootable: true,
-    services,
-    portalRecipes: [],
-  };
+  return { services, portalRecipes: [] };
 }
 
 /** Tear down every relay and Caddy allocation when a Runner session is

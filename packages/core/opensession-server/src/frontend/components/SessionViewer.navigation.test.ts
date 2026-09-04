@@ -49,7 +49,6 @@ const callbackOwners = {
     "onCloseStaging",
     "onCloseAssets",
     "onCloseTerminal",
-    "onClosePreviewTab",
   ],
   SessionViewerSubagentsBinding: [
     "onOpenSubagent",

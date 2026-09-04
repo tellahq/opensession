@@ -11,6 +11,7 @@ import {
   sessionPrPresentation,
   sessionPrRefs,
   sessionUsesPrLink,
+  siblingTabPrRefs,
 } from "./session-prs";
 
 function session(overrides: Partial<UnifiedSession>): UnifiedSession {
@@ -466,5 +467,53 @@ describe("sessionCarriesPr", () => {
     expect(sessionCarriesPr(value, { repo: "tella-fusion", number: 955 })).toBe(
       false,
     );
+  });
+});
+
+describe("siblingTabPrRefs", () => {
+  test("a new tab inherits the workspace's PRs as shared refs", () => {
+    const source = session({
+      repo: "opensession",
+      branch: "feature",
+      prNumber: 42,
+      prUrl: "https://github.com/tellahq/opensession/pull/42",
+      prState: "OPEN",
+      prAuthor: "kent",
+      prs: [
+        { repo: "tella-fusion", branch: "feature", source: "attached" },
+        {
+          repo: "tella-fusion",
+          branch: "other",
+          source: "linked",
+          number: 7,
+          url: "https://github.com/tellahq/tella-fusion/pull/7",
+        },
+      ],
+    });
+
+    const refs = siblingTabPrRefs(source);
+
+    expect(refs).toEqual([
+      {
+        repo: "opensession",
+        branch: "feature",
+        source: "discovered",
+        number: 42,
+        url: "https://github.com/tellahq/opensession/pull/42",
+        state: "OPEN",
+      },
+      {
+        repo: "tella-fusion",
+        branch: "other",
+        source: "discovered",
+        number: 7,
+        url: "https://github.com/tellahq/tella-fusion/pull/7",
+      },
+    ]);
+    expect(refs[0]).not.toHaveProperty("author");
+  });
+
+  test("a tab without a PR opens without one", () => {
+    expect(siblingTabPrRefs(session({}))).toEqual([]);
   });
 });

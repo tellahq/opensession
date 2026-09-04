@@ -357,10 +357,7 @@ export async function handleSetupRoutes(
         isolatedWorktrees: !sharedCheckoutForNewSessions(r),
         // Can sessions in this repo provision and boot themselves? Read off
         // the main checkout — worktrees carry the same committed files.
-        lifecycle: {
-          ...repoLifecycle(r.repo),
-          previewCommand: !!r.previewCommand,
-        },
+        lifecycle: repoLifecycle(r.repo),
       })),
       team: (() => {
         const team = configuredIdentity().team;

@@ -1840,15 +1840,8 @@ export async function resumeInterruptedRuns(
     // out of processes that never touch them.
     if (
       run.sandboxId &&
-      (run.sandboxProvider === "docker" ||
-        run.sandboxProvider === "daytona" ||
-        run.sandboxProvider === "e2b" ||
-        run.sandboxProvider === "box" ||
-        run.sandboxProvider === "modal" ||
-        run.sandboxProvider === "microvm" ||
-        run.sandboxProvider === "lambda-microvm")
+      (run.sandboxProvider === "daytona" || run.sandboxProvider === "box")
     ) {
-      const isDocker = run.sandboxProvider === "docker";
       rememberHandledSession(run);
       trackRecovery(run);
       recoveryTasks.push(
@@ -1875,10 +1868,8 @@ export async function resumeInterruptedRuns(
           try {
             if (await checkpointStoppedRecovery(run)) return;
             Object.assign(run, journalStartRecovery(run));
-            const resume = isDocker
-              ? (await import("./sandbox/docker")).resumeDockerSandboxRun
-              : (await import("./sandbox/adapters/bootstrap"))
-                  .resumeRemoteSandboxRun;
+            const resume = (await import("./sandbox/adapters/bootstrap"))
+              .resumeRemoteSandboxRun;
             if (await checkpointStoppedRecovery(run)) return;
             const events = await resume(run, {
               onAskUser: run.osSessionId

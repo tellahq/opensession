@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { ApiError, BASE, request } from "./request";
+import {
+  accountLimitsFromUsage,
+  accountUsageSchema,
+  type AccountLimit,
+} from "../account-limits";
 
 // ── Automations ──
 
@@ -90,6 +95,9 @@ export interface ProviderAccountOption {
   usable: boolean;
   /** Credential mechanism; Fast mode is unavailable for direct API keys. */
   kind?: string;
+  /** The limits the account last reported, for the model menu's weekly
+   * overview. Absent when usage is unknown. */
+  limits?: AccountLimit[];
 }
 
 const providerAccountRecordSchema = z.object({
@@ -99,6 +107,7 @@ const providerAccountRecordSchema = z.object({
   owner: z.string().optional(),
   usable: z.boolean().optional(),
   kind: z.string().optional(),
+  usage: accountUsageSchema,
 });
 
 const providerAccountsResponseSchema = z.object({
@@ -116,15 +125,20 @@ export async function fetchProviderAccounts(options?: {
       const data = providerAccountsResponseSchema.parse(
         await request<object>(path),
       );
-      return (data.accounts ?? []).map((account) => ({
-        id: account.id,
-        name: account.name,
-        email: account.email,
-        provider,
-        owner: account.owner,
-        usable: account.usable !== false,
-        kind: account.kind,
-      }));
+      return (data.accounts ?? []).map((account) => {
+        const option: ProviderAccountOption = {
+          id: account.id,
+          name: account.name,
+          email: account.email,
+          provider,
+          owner: account.owner,
+          usable: account.usable !== false,
+          kind: account.kind,
+        };
+        const limits = accountLimitsFromUsage(provider, account.usage);
+        if (limits.length > 0) option.limits = limits;
+        return option;
+      });
     } catch (cause: unknown) {
       options?.onPoolError?.(cause);
       // Account pins are optional because automatic pool selection remains
@@ -331,7 +345,7 @@ export interface SandboxStatusInfo {
   enabled: boolean;
   defaultProvider: string;
   providers: Array<{
-    id: "docker" | "daytona" | "e2b" | "box" | "modal" | "lambda-microvm";
+    id: "daytona" | "box";
     configured: boolean;
     certified: boolean;
     lastPassedAt?: string;
@@ -366,7 +380,7 @@ export type SandboxConnectionState =
 
 export interface SandboxConnectionInfo {
   id: string;
-  provider: "docker" | "daytona" | "box" | "modal";
+  provider: "daytona" | "box";
   enabled: boolean;
   settings: Record<string, string | number | boolean | undefined>;
   qualification?: {

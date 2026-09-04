@@ -22,10 +22,9 @@ describe("preview routing while a sandbox is unavailable", () => {
       unavailableSandboxPreviewStatus({
         sandbox: { provider: "daytona", lifecycle: "preparing" },
       }),
-    ).toMatchObject({
-      running: false,
-      starting: true,
-      bootable: false,
+    ).toEqual({
+      services: [],
+      portalRecipes: [],
       sandboxLifecycle: "preparing",
     });
   });
@@ -39,7 +38,7 @@ describe("preview routing while a sandbox is unavailable", () => {
           lifecycle: "awake",
         },
       }),
-    ).toMatchObject({ running: false, starting: false, bootable: false });
+    ).toEqual({ services: [], portalRecipes: [], sandboxLifecycle: "awake" });
   });
 
   test("leaves non-sandbox sessions on the host preview path", () => {

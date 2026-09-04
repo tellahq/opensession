@@ -10,7 +10,6 @@ const VIEW_TABS = [
   "video",
   "staging",
   "assets",
-  "preview",
   // An interactive shell in the session's workspace. Never persisted
   // (saveActiveViewTab drops it): restoring it on load would spawn a PTY for
   // anyone who once opened one.
@@ -40,7 +39,6 @@ function read(): ActiveViewTabMap {
         case "video":
         case "staging":
         case "assets":
-        case "preview":
         case "terminal":
         case "portal":
         case "subagent":

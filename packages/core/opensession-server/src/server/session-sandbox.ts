@@ -1,7 +1,7 @@
 /**
- * Per-session sandbox lifecycle helpers (docker/daytona/e2b): tear-down on
+ * Per-session sandbox lifecycle helpers (Daytona/Box): tear-down on
  * delete/archive and "is the sandbox actually live right now" checks used by
- * the preview routes. The run-path launch lives in run-session.ts.
+ * the Portal routes. The run-path launch lives in run-session.ts.
  */
 
 import { getSandboxProvider, type Sandbox } from "./sandbox";
@@ -10,16 +10,26 @@ import {
   sandboxesEnabled,
   sandboxProviderConfigured,
 } from "./sandbox/config";
-import { dockerContainerStatus } from "./sandbox/docker";
 import { touchNativeSession } from "./session-cache";
 import { dropSandboxPreviewRoutes } from "./preview";
+import {
+  readSandboxPortalRecords,
+  restartSandboxPortalService,
+} from "./portal-supervisor";
+import {
+  recipeStartOptions,
+  sandboxPortalRecipes,
+  sandboxPreviewIdentityContext,
+} from "./preview";
+import { createWorkloadIdentityEnv } from "./workload-identity";
+import { getRepo } from "./worktree";
 import { revokeWorkloadIdentityForSandbox } from "./workload-identity";
 import type { UnifiedSession } from "./types";
 
 /**
- * Tear down a session's sandbox (container + engine-state volumes; in
- * volume-workspace mode also the workspace volume — documented data loss).
- * Best-effort and detached so a docker hiccup never blocks the caller
+ * Tear down a session's sandbox, including its workspace disk (documented
+ * data loss: push your work). Best-effort and detached so a provider hiccup
+ * never blocks the caller
  * (session delete, archive sweep). `clearSandboxId` drops the stale id from
  * the session file so later sweeps don't re-destroy — only for sessions that
  * keep existing (the archive sweep); a deleted session has no file to touch.
@@ -31,6 +41,7 @@ export function destroySessionSandbox(
 ): void {
   const sb = session.sandbox;
   if (!sb?.sandboxId) return;
+  if (!isRemoteSandboxProvider(sb.provider)) return;
   void (async () => {
     try {
       revokeWorkloadIdentityForSandbox(sb.sandboxId!);
@@ -70,6 +81,7 @@ export async function activeSandboxFor(
     try {
       const provider = getSandboxProvider(sb.provider);
       let sandbox = await provider.get(sb.sandboxId);
+      let woke = false;
       if (
         sandbox &&
         (await sandbox.status()) === "stopped" &&
@@ -85,6 +97,7 @@ export async function activeSandboxFor(
             },
           });
         sandbox = await provider.resume(sb.sandboxId);
+        woke = true;
         if (
           sandbox &&
           (await sandbox.status()) === "running" &&
@@ -98,7 +111,11 @@ export async function activeSandboxFor(
             },
           });
       }
-      return sandbox && (await sandbox.status()) === "running" ? sandbox : null;
+      if (sandbox && (await sandbox.status()) === "running") {
+        if (woke) await restoreSandboxPortals(session, sandbox);
+        return sandbox;
+      }
+      return null;
     } catch (error) {
       if (options.wake && session.source === "opensession")
         touchNativeSession(session.id, {
@@ -114,14 +131,60 @@ export async function activeSandboxFor(
       return null;
     }
   }
-  if (sb.provider !== "docker") return null;
-  // Provider-configured, not config-default: a session may have picked
-  // docker explicitly while the config default is another provider.
-  if (!sandboxProviderConfigured("docker")) return null;
+  return null;
+}
+
+/**
+ * Bring a woken Sandbox's Portals back. A sleeping sandbox keeps its disk and
+ * therefore its `.ports.conf` registry, but none of its processes: every
+ * record still marked live is a service the user had running when the
+ * sandbox went to sleep. Restart each one with the same command, port, and
+ * (for declared Portals) trusted recipe env, so the URLs the user already has
+ * keep working after the wake. Failures are logged per Portal and never fail
+ * the wake itself.
+ */
+export async function restoreSandboxPortals(
+  session: UnifiedSession,
+  sandbox: Sandbox,
+): Promise<void> {
+  let records;
   try {
-    if ((await dockerContainerStatus(sb.sandboxId)) !== "running") return null;
-    return await getSandboxProvider("docker").get(sb.sandboxId);
-  } catch {
-    return null;
+    records = await readSandboxPortalRecords(sandbox);
+  } catch (error) {
+    console.warn(`[sandbox] ${sandbox.id}: could not read Portals:`, error);
+    return;
+  }
+  const live = records.filter(
+    (record) => record.state !== "stopped" && record.state !== "failed",
+  );
+  if (!live.length) return;
+  const recipes = await sandboxPortalRecipes(sandbox).catch(() => []);
+  const repoId = session.repo ? getRepo(session.repo).id : undefined;
+  const env = repoId
+    ? createWorkloadIdentityEnv(
+        sandboxPreviewIdentityContext(sandbox, repoId, "interactive"),
+      )
+    : undefined;
+  for (const record of live) {
+    const recipe = recipes.find(
+      (candidate) => candidate.id === record.name && candidate.command,
+    );
+    try {
+      await restartSandboxPortalService({
+        sessionId: session.id,
+        sandbox,
+        ...(recipe ? recipeStartOptions(recipe) : { name: record.name }),
+        port: record.port,
+        env,
+      });
+      console.log(
+        `[sandbox] ${sandbox.id}: restored Portal ${record.name} on ${record.port}`,
+      );
+    } catch (error) {
+      console.warn(
+        `[sandbox] ${sandbox.id}: could not restore Portal ${record.name}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 }

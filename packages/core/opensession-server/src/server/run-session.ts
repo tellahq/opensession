@@ -58,6 +58,7 @@ import {
 import { cacheMissNotice } from "@tellahq/opensession-protocol/notices";
 import { RESTART_QUEUE_NOTICE_MESSAGE } from "@tellahq/opensession-protocol/session";
 import { dropSandboxPreviewRoutes } from "./preview";
+import { restoreSandboxPortals } from "./session-sandbox";
 import {
   wrapContext,
   stripContext,
@@ -2025,6 +2026,16 @@ export async function maybeLaunchSandboxedRun(
       await disposeResumeSandbox();
       return cancelledRun(sandbox);
     }
+    // A sandbox that slept between turns comes back with its disk but none of
+    // its processes. Bring its Portals back before the agent's first tool
+    // call so the URLs the user already has keep working.
+    if (sandbox.wokeFromSleep && !disposableAutomationResume)
+      await restoreSandboxPortals(session, sandbox).catch((error) =>
+        console.warn(
+          `[sandbox] Portal restore for ${session.id} failed:`,
+          error,
+        ),
+      );
     // Remote engine databases live inside the sandbox. A replacement VM cannot
     // resume the old engine id, even when its git workspace was safely pushed.
     const previousSandboxId = session.sandbox?.sandboxId;

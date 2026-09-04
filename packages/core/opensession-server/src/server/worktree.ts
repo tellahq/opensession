@@ -9,7 +9,7 @@ import {
 } from "fs";
 import { resolve as resolvePath } from "path";
 import type { UnifiedSession } from "./types";
-import { stopPreview } from "./preview";
+import { stopAllPortalServices } from "./portal-supervisor";
 import {
   canonicalRepoId,
   configuredPaths,
@@ -573,11 +573,12 @@ export async function removeWorktree(
   const repo = getRepo(repoId);
   try {
     const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
-    // Stop any running dev server before removing the directory — reads the
-    // PGID from .ports/dev-pgid (written by ensure-up.sh) so it works even
-    // after a opensession restart or when the server was started by an agent.
+    // Stop the workspace's supervised Portals before removing the directory.
     try {
-      await stopPreview(wtPath);
+      await stopAllPortalServices({
+        sessionId: "worktree-cleanup",
+        worktreeDir: wtPath,
+      });
     } catch {}
     await $`git -C ${repo.repo} worktree remove ${wtPath} --force`.quiet();
   } catch (e) {

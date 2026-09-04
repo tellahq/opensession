@@ -1,10 +1,7 @@
 import type { ComponentProps } from "react";
-import type { PreviewStatus } from "../../lib/api";
 import { VIEWER_REVIEW_MAIN } from "../../lib/session-viewer-classes";
-import type { UnifiedSession } from "../../lib/types";
 import { IconArrowUpRight, IconCopy, IconGlobe } from "../icons";
 import { PortalPane } from "../PortalPane";
-import { PreviewPane } from "../PreviewPane";
 
 interface StagingDeployment {
   status: string;
@@ -26,12 +23,6 @@ type PreviewSurface =
       target: ComponentProps<typeof PortalPane>["target"];
     }
   | {
-      kind: "preview";
-      session: UnifiedSession;
-      status: PreviewStatus | null;
-      onClose: () => void;
-    }
-  | {
       kind: "staging";
       deployment: StagingDeployment | null;
       url: string;
@@ -49,16 +40,6 @@ export function SessionPreviewSurface({
       return (
         <div className={VIEWER_REVIEW_MAIN}>
           <PortalPane target={surface.target} />
-        </div>
-      );
-    case "preview":
-      return (
-        <div className={VIEWER_REVIEW_MAIN}>
-          <PreviewPane
-            session={surface.session}
-            status={surface.status}
-            onClose={surface.onClose}
-          />
         </div>
       );
     case "staging":

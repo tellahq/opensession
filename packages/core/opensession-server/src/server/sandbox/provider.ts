@@ -1,9 +1,8 @@
 /**
  * Sandbox seam (docs/self-hosting-sandboxes.md): the interfaces every execution
  * backend implements. A "sandbox" is where a session's work happens — a git
- * worktree on this host (LocalProvider, src/server/sandbox/local.ts), a
- * Docker container, AWS Lambda MicroVM, or a remote Daytona/E2B/Box/Modal
- * sandbox, all behind these two interfaces.
+ * worktree on this host (LocalProvider, src/server/sandbox/local.ts) or a
+ * remote Daytona/Box sandbox, all behind these two interfaces.
  *
  * Deliberately small, mirroring the existing run-host layer's idioms:
  *  - `launchRun` takes the same serializable `RunHostSpec` the detached
@@ -21,17 +20,10 @@ import type { StreamEvent, ImageInput } from "../run-events";
 import type { RunAgentOpts } from "../agent-runner";
 import type { RunHostSpec } from "../../runner-host/protocol";
 
-/** The provider ids the registry knows (all implemented — see index.ts). */
-export type SandboxProviderId =
-  | "local"
-  | "docker"
-  | "daytona"
-  | "e2b"
-  | "box"
-  | "modal"
-  /** Parsed only so persisted legacy sessions fail explicitly at dispatch. */
-  | "microvm"
-  | "lambda-microvm";
+/** The provider ids the registry knows (all implemented — see index.ts).
+ *  Persisted sessions may still carry a retired id (docker, modal, e2b,
+ *  microvm, lambda-microvm); those fail explicitly at dispatch. */
+export type SandboxProviderId = "local" | "daytona" | "box";
 
 /** Selection authority for starting new work on a configured provider. */
 export type SandboxProviderUsability =
@@ -63,10 +55,8 @@ export interface SandboxSessionSpec {
   /** Stack base: branch the new worktree branches off (createWorktree opts.base). */
   base?: string;
   /**
-   * Attached-repo worktree dirs (multi-repo sessions). Bind-mode docker
-   * sandboxes mount each at its identical path (plus its repo's common .git)
-   * so the agent can cd into them; a change to this set recreates the
-   * container on the next ensure. Volume-mode workspaces reject attachments.
+   * Attached-repo worktree dirs (multi-repo sessions). Remote workspaces
+   * reject attachments; the field remains for the local provider.
    */
   attachedDirs?: string[];
   /** Automation sandboxes fail closed unless the provider can install its
@@ -102,14 +92,13 @@ export interface ExecResult {
   stderr: string;
 }
 
-/** One published sandbox port. Docker publishes to a loopback host port
- *  (Caddy fronts it); remote providers only hand out a preview URL on their
- *  own domain — either field may be present. */
+/** One published sandbox port. Remote providers hand out a preview URL on
+ *  their own domain; a host-published loopback port is the local shape. */
 export interface PortEntry {
-  /** Host loopback port the sandbox port is published on (docker). */
+  /** Host loopback port the sandbox port is published on. */
   hostPort?: number;
   /** Caddy-reachable dial address for private runtimes that do not publish a
-   *  loopback port (for example a local Firecracker guest veth). */
+   *  loopback port. */
   upstream?: string;
   /** Direct preview URL (remote providers' port-forward domains). */
   url?: string;
@@ -119,9 +108,9 @@ export interface PortEntry {
   requestHeaders?: Record<string, string>;
 }
 
-/** Preview port mapping: port inside the sandbox → where to reach it. A bare
- *  number is shorthand for `{hostPort}` (the docker provider's shape).
- *  Local sandboxes run on the host network, so theirs is always empty. */
+/** Port mapping: port inside the sandbox → where to reach it. A bare number
+ *  is shorthand for `{hostPort}`. Local sandboxes run on the host network, so
+ *  theirs is always empty. */
 export type PortMap = Record<number, number | PortEntry>;
 
 export type SandboxStatus = "running" | "stopped" | "gone";
@@ -172,17 +161,19 @@ export interface RunHandle {
 export interface Sandbox {
   id: string;
   provider: SandboxProviderId;
-  /** Workspace path *inside* the sandbox (== host path for local + bind-mount Docker). */
+  /** Workspace path *inside* the sandbox (== host path for local). */
   cwd: string;
-  /** How the workspace is materialized (docker only): "bind" = host worktree
-   *  bind-mounted at the identical path; "volume" = cloned into a per-session
-   *  volume, no host copy. Undefined for local (the host dir IS the workspace). */
+  /** How the workspace is materialized: "volume" = cloned into the sandbox's
+   *  own disk, no host copy (every remote provider). Undefined for local (the
+   *  host dir IS the workspace). "bind" only survives on legacy records. */
   workspace?: "bind" | "volume";
-  /** How the current container came to exist (docker only): "fresh" = created
-   *  from the base image, "snapshot-restore" = recreated from a per-session
-   *  snapshot image. Lifecycle scripts get it as OPENSESSION_BOOT_MODE (the
-   *  background-agents boot-mode pattern). */
+  /** How the current sandbox came to exist: "fresh" = created from the base
+   *  image, "snapshot-restore" = restored from a project snapshot. Lifecycle
+   *  scripts get it as OPENSESSION_BOOT_MODE. */
   bootMode?: "fresh" | "snapshot-restore";
+  /** True when this handle started a sleeping sandbox: `.agents/resume` ran
+   *  and the session's Portals need restoring (session-sandbox.ts). */
+  wokeFromSleep?: boolean;
   /** One-shot commands in the workspace (git status, ls-files, …). Never throws
    *  on non-zero exit — inspect `exitCode`. */
   exec(cmd: string[], opts?: ExecOpts): Promise<ExecResult>;
@@ -206,6 +197,13 @@ export interface Sandbox {
   status(): Promise<SandboxStatus>;
 }
 
+export interface SandboxDesktop {
+  /** Opens straight into the live desktop; treat it like a password. */
+  url: string;
+  /** Epoch ms after which the URL stops working, when the provider says. */
+  expiresAt?: number;
+}
+
 export interface SandboxProvider {
   id: SandboxProviderId;
   /** Create-or-reuse the sandbox for a session. Idempotent. */
@@ -215,6 +213,10 @@ export interface SandboxProvider {
   /** Release compute while retaining the durable workspace. Optional only for
    *  providers whose own idle policy cannot expose this directly. */
   pause?(sandboxId: string): Promise<void>;
+  /** A desktop a person can watch and control from the browser. The URL is a
+   *  bearer secret minted for one viewer; providers that cannot expose a
+   *  desktop leave this undefined. Rejects while the sandbox is asleep. */
+  desktop?(sandboxId: string): Promise<SandboxDesktop>;
   /** Wake a paused sandbox and return its live handle. */
   resume?(sandboxId: string): Promise<Sandbox | null>;
   /** Persist a session-owned filesystem checkpoint after a clean turn.

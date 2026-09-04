@@ -790,20 +790,11 @@ describe("single session ownership", () => {
     expect(runtime).toContain('"creation_branch_prepare"');
     expect(runtime).toContain('"creation_attachment_stage"');
     expect(runtime).toContain("activeCreationPreparationOutbox");
-    for (const relative of [
-      "sandbox/docker.ts",
-      "sandbox/adapters/bootstrap.ts",
-    ]) {
+    for (const relative of ["sandbox/adapters/bootstrap.ts"]) {
       const source = read(relative);
       const eager = source.indexOf("launchRunEager");
       const record = source.indexOf("journalSet(record);", eager);
-      const specWrite =
-        relative === "sandbox/docker.ts"
-          ? source.indexOf(
-              "writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, spec)",
-              eager,
-            )
-          : source.indexOf("launcher.writeSpec!(dir, spec)", eager);
+      const specWrite = source.indexOf("launcher.writeSpec!(dir, spec)", eager);
       const launch = source.indexOf("launcher.launch", record);
       const launching = source.indexOf(
         'record.launchPhase = "launching"',
@@ -811,10 +802,10 @@ describe("single session ownership", () => {
       );
       const connect = source.indexOf("new HostHandle", launching);
       const dispatchCallback = source.indexOf("onDispatching?.()");
-      const processDispatch =
-        relative === "sandbox/docker.ts"
-          ? source.indexOf("await docker(args)", dispatchCallback)
-          : source.indexOf("driver.execBackground(", dispatchCallback);
+      const processDispatch = source.indexOf(
+        "driver.execBackground(",
+        dispatchCallback,
+      );
       expect(specWrite).toBeGreaterThan(0);
       expect(specWrite).toBeLessThan(record);
       expect(record).toBeGreaterThan(0);
@@ -912,7 +903,6 @@ describe("single session ownership", () => {
     expect(unmarkBeforeThrow).toBeLessThan(admissionLoss);
     for (const backend of [
       "runner-session.ts",
-      "sandbox/docker.ts",
       "sandbox/adapters/bootstrap.ts",
     ]) {
       const source = read(backend);

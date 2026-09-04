@@ -84,8 +84,7 @@ ${bold("Setup")}
   doctor                   check tooling, config, integrations and the server
   service install          install and start the user service (--system: root unit)
   service uninstall        stop and remove it
-  sandbox enable docker    install, configure and qualify local Docker
-  sandbox test <provider>  re-run a connection qualification
+  sandbox test <provider>  re-run a connection qualification (daytona, box)
   sandbox disable <provider> stop new use without deleting live sandboxes
   sandbox ingress install <https-origin> install an owned Caddy fragment
 

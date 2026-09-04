@@ -47,3 +47,18 @@ test("workspace deletion ignores a raced 404 but stops on another session failur
   expect(calls).toBe(2);
   expect(failure?.status).toBe(409);
 });
+
+test("every new-session response carries the workspace PR projection", async () => {
+  const source = await Bun.file(
+    new URL("./workspace.ts", import.meta.url),
+  ).text();
+  const route = source.slice(
+    source.indexOf("/new-session$/"),
+    source.indexOf("/promote$/"),
+  );
+  // The existing tab, the reusable empty tab, and the freshly created one.
+  expect(route.match(/await sessionDetail\(/g)).toHaveLength(3);
+  expect(route).not.toContain("session: existing }");
+  expect(route).not.toContain("session: reusable }");
+  expect(route).not.toContain("session: (await findSessionAsync(bksId))");
+});

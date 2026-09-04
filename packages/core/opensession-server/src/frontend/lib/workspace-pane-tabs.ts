@@ -26,7 +26,6 @@ interface BuildWorkspacePaneTabsInput {
   videoLabel: string | null;
   videoClosed: ReadonlySet<string>;
   stagingOpen: ReadonlySet<string>;
-  previewOpen: ReadonlySet<string>;
   portalLabel: string | null;
   assetsOpen: ReadonlySet<string>;
   terminalOpen: ReadonlySet<string>;
@@ -47,7 +46,6 @@ export function buildWorkspacePaneTabs({
   videoLabel,
   videoClosed,
   stagingOpen,
-  previewOpen,
   portalLabel,
   assetsOpen,
   terminalOpen,
@@ -92,14 +90,6 @@ export function buildWorkspacePaneTabs({
       active: activeViewTab === "staging",
       dotClass: null,
       icon: "globe",
-    });
-  }
-  if (previewOpen.has(workspaceKey)) {
-    tabs.push({
-      id: `preview:${workspaceKey}`,
-      label: "Preview",
-      active: activeViewTab === "preview",
-      dotClass: null,
     });
   }
   if (portalLabel) {
@@ -180,7 +170,6 @@ export function viewTabKind(id: string): Exclude<ActiveViewTab, null> | null {
   if (id.startsWith("staging:")) return "staging";
   if (id.startsWith("assets:")) return "assets";
   if (id.startsWith("terminal:")) return "terminal";
-  if (id.startsWith("preview:")) return "preview";
   if (id.startsWith("portal:")) return "portal";
   if (id.startsWith("conversation:")) return "conversation";
   if (id.startsWith("video:")) return "video";

@@ -474,8 +474,6 @@ export function SessionViewer({
     showVideo = false,
     videoPanel = null,
     videoTitle = null,
-    showPreviewTab = false,
-    onClosePreviewTab,
     showPortal = false,
     portalTarget = null,
   },
@@ -513,7 +511,6 @@ export function SessionViewer({
       showStaging,
       showAssets,
       showTerminal,
-      showPreviewTab,
       showPortal,
       hasPortalTarget: !!portalTarget,
       showSubagent,
@@ -1323,7 +1320,6 @@ export function SessionViewer({
     },
     preview: {
       controller: previewController,
-      showPreviewTab,
       showPortal,
       activePanelOpen,
       worktreeDir: session.worktreeDir,
@@ -1582,8 +1578,6 @@ export function SessionViewer({
           surfaces={{
             showPortal,
             portalTarget,
-            showPreviewTab,
-            onClosePreviewTab,
             showStaging,
             staging,
             stagingUrl,

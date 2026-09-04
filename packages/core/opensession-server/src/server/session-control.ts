@@ -74,16 +74,7 @@ export type ReparentSessionResult =
  * request against this instance's providers and fails the create with its own
  * message, so every create path enforces the same rules.
  */
-export type SandboxRequest =
-  | boolean
-  | "local"
-  | "docker"
-  | "daytona"
-  | "e2b"
-  | "box"
-  | "modal"
-  | "microvm"
-  | "lambda-microvm";
+export type SandboxRequest = boolean | "local" | "daytona" | "box";
 
 export interface CreateSessionOpts {
   prompt: string;

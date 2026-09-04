@@ -33,7 +33,7 @@ describe("automation descendant opening policy", () => {
     expect(() =>
       assertAutomationDescendantOpeningIsolation({
         automationDescendantPolicy: descendant,
-        sandboxProvider: "docker",
+        sandboxProvider: "daytona",
         runnerTarget: undefined,
       }),
     ).not.toThrow();

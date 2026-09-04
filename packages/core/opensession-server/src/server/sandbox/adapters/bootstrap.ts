@@ -799,6 +799,8 @@ export interface RunnerPayloadInputs {
   runnerSha?: string;
   /** `git remote get-url origin` of the host source tree, "" when none. */
   origin: string;
+  /** `git rev-parse HEAD` of the host source tree, undefined when unknown. */
+  head?: string;
   /** `release.json` of a release install, null for a source checkout. */
   release: { version?: string; commit?: string } | null;
 }
@@ -835,7 +837,14 @@ export function resolveRunnerPayload(
   }
   const origin = input.origin && toHttpsUrl(input.origin);
   if (origin) {
-    return { repoUrl: credentialFreeHttpsUrl(origin), pin, source: "origin" };
+    // A source install runs its sandboxes at the commit it runs itself, so
+    // every deploy carries the runner along. An explicit runnerSha still
+    // wins for a deliberate hold or rollback.
+    return {
+      repoUrl: credentialFreeHttpsUrl(origin),
+      pin: pin || input.head || undefined,
+      source: "origin",
+    };
   }
   if (input.release) {
     const tag = pin ? undefined : releaseTag(input.release.version);
@@ -864,7 +873,11 @@ function installRoot(): string {
 }
 
 let hostRunnerSourceCache:
-  | { origin: string; release: RunnerPayloadInputs["release"] }
+  | {
+      origin: string;
+      head?: string;
+      release: RunnerPayloadInputs["release"];
+    }
   | undefined;
 
 /** Origin and release manifest of the host install. Neither changes while
@@ -872,6 +885,7 @@ let hostRunnerSourceCache:
  *  not something the server edits), so read once. */
 function hostRunnerSource(): {
   origin: string;
+  head?: string;
   release: RunnerPayloadInputs["release"];
 } {
   if (hostRunnerSourceCache) return hostRunnerSourceCache;
@@ -889,15 +903,22 @@ function hostRunnerSource(): {
     }
   } catch {}
   let origin = "";
+  let head: string | undefined;
   if (!isCompiledBinary()) {
-    const proc = Bun.spawnSync({
-      cmd: ["git", "-C", REPO_ROOT, "remote", "get-url", "origin"],
-      stdout: "pipe",
-      stderr: "ignore",
-    });
-    origin = proc.exitCode === 0 ? proc.stdout.toString().trim() : "";
+    const git = (...args: string[]) => {
+      const proc = Bun.spawnSync({
+        cmd: ["git", "-C", REPO_ROOT, ...args],
+        stdout: "pipe",
+        stderr: "ignore",
+      });
+      return proc.exitCode === 0 ? proc.stdout.toString().trim() : "";
+    };
+    origin = git("remote", "get-url", "origin");
+    head = /^[0-9a-f]{40}$/.test(git("rev-parse", "HEAD"))
+      ? git("rev-parse", "HEAD")
+      : undefined;
   }
-  hostRunnerSourceCache = { origin, release };
+  hostRunnerSourceCache = { origin, head, release };
   return hostRunnerSourceCache;
 }
 
@@ -1962,6 +1983,47 @@ export async function runRemoteLifecycleHook(
   return { ran: true, log };
 }
 
+/**
+ * `.agents/resume` on every real wake. A sandbox that slept keeps its disk but
+ * loses every process, so the repository gets one idempotent chance to repair
+ * what a fresh boot needs (caches, daemons, generated files) before the agent
+ * or a Portal restart runs. Never fails the wake: the log is surfaced in the
+ * Sandbox badge instead.
+ */
+export async function runResumeHook(
+  driver: RemoteDriver,
+  providerId: SandboxProviderId,
+  sandboxId: string,
+  state: {
+    cwd: string;
+    sessionId: string;
+    repoId?: string;
+    trustProfile?: "interactive" | "automation";
+  },
+): Promise<void> {
+  try {
+    await runRemoteLifecycleHook(
+      driver,
+      state.cwd,
+      "resume",
+      "resume",
+      state.repoId,
+      {
+        sandboxId,
+        provider: providerId,
+        sessionId: state.sessionId,
+        repoId: state.repoId || "",
+        trustProfile: state.trustProfile || "interactive",
+      },
+    );
+  } catch (error) {
+    console.warn(
+      `[sandbox:${providerId}] ${sandboxId}: .agents/resume failed:`,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
 // ── Run launching (WS transport only — there is no socket option remotely) ───
 
 function sessionRunsDir(sessionId: string): string {
@@ -2354,6 +2416,9 @@ function makeRemoteLauncher(
           NODE_ENV: "production",
           OPENSESSION_MCP_CONFIG: REMOTE_MCP_CONFIG,
           OPENSESSION_RUN_JOURNAL: `${dir}/journal.json`,
+          // Lets the engine tell the model it is inside a Sandbox
+          // (run-instructions.ts): one boolean, never a per-session fact.
+          OPENSESSION_SANDBOX: "1",
           // Where bindOpenaiAccount finds the uploaded rotation-proof openai
           // seeds (only set when something was uploaded this launch).
           ...(openaiUpload.seeds.length

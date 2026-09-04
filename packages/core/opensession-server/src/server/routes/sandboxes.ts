@@ -157,9 +157,6 @@ export async function handleSandboxesRoutes(
               : typeof body.apiKey === "string"
                 ? body.apiKey
                 : undefined,
-          tokenId: typeof body.tokenId === "string" ? body.tokenId : undefined,
-          tokenSecret:
-            typeof body.tokenSecret === "string" ? body.tokenSecret : undefined,
           settings:
             body.settings && typeof body.settings === "object"
               ? (body.settings as SandboxConnectionSettings)

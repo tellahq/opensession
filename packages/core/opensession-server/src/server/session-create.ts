@@ -2618,19 +2618,11 @@ export async function handleCreateSessionMessage(
         wtPath = worktreePathFor(branch, repo.id, {
           isolated: isolatesConfiguredSharedCheckout,
         });
-        // Volume-mode sandbox (docs/self-hosting-sandboxes.md): the
-        // workspace is cloned into a per-session volume INSIDE the
-        // sandbox — skip host createWorktree entirely. The session
-        // keeps the canonical path; the provider's ensure()
-        // materializes it on the opening run below. Docker only in
-        // volume config; remote providers (daytona/e2b) always.
-        if (
-          createSandboxProvider &&
-          sandboxesEnabled() &&
-          (remoteSandbox ||
-            (createSandboxProvider === "docker" &&
-              sandboxConfig().workspace === "volume"))
-        ) {
+        // Sandbox workspaces (docs/self-hosting-sandboxes.md) are cloned
+        // INSIDE the sandbox — skip host createWorktree entirely. The
+        // session keeps the canonical path; the provider's ensure()
+        // materializes it on the opening run below.
+        if (createSandboxProvider && sandboxesEnabled() && remoteSandbox) {
           volumeWorkspace = true;
         } else {
           needsWorktree = true;

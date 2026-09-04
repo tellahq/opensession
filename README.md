@@ -130,10 +130,8 @@ requires Bun and git.
   and providers
 - [docs/security-model.md](docs/security-model.md) — least-privilege
   automations, per-user MCP/GitHub scoping, self-management boundaries
-- [docs/self-hosting-sandboxes.md](docs/self-hosting-sandboxes.md) — certified
-  Docker, Daytona, Box, Modal, and local Firecracker MicroVM sandboxes;
-  implemented E2B and AWS Lambda MicroVM adapters remain unavailable until
-  live-certified
+- [docs/self-hosting-sandboxes.md](docs/self-hosting-sandboxes.md) — per-session
+  Sandboxes on Daytona or Box: sleep/wake, project snapshots, Portals
 - [docs/instance-configuration.md](docs/instance-configuration.md) — repos,
   identity, branding, integrations, deployment policy
 

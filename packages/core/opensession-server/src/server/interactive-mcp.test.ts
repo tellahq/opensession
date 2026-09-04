@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { Sandbox } from "./sandbox/provider";
 import type { SessionControl, SessionSummary } from "./session-control";
 import { registerSessionControl } from "./session-control";
 import {
@@ -7,10 +6,7 @@ import {
   registerRunToken,
   unregisterRunToken,
 } from "./run-rpc";
-import {
-  editorFixtureGrantUser,
-  runSessionPreviewAction,
-} from "./interactive-mcp";
+import { editorFixtureGrantUser } from "./interactive-mcp";
 
 function session(
   id: string,
@@ -91,95 +87,6 @@ describe("interactive opensession-sessions MCP", () => {
     } finally {
       unregisterRunToken(token);
     }
-  });
-});
-
-describe("interactive opensession-preview MCP lifecycle", () => {
-  const status = {
-    hasPortsConf: true,
-    webappPort: 3300,
-    running: false,
-    starting: true,
-    previewUrl: null,
-    bootable: true,
-    services: [],
-  };
-
-  function deps(sandbox: Sandbox | null, calls: string[]) {
-    return {
-      findSession: (() => ({
-        id: "os-preview",
-        worktreeDir: "/remote/worktree",
-        sandbox: sandbox
-          ? { provider: "daytona" as const, sandboxId: sandbox.id }
-          : undefined,
-      })) as any,
-      activeSandboxFor: (async () => sandbox) as any,
-      loadPreview: async () =>
-        ({
-          startPreview: async () => {
-            calls.push("host:start");
-            return status;
-          },
-          getPreviewStatus: async () => {
-            calls.push("host:status");
-            return status;
-          },
-          stopPreview: async () => {
-            calls.push("host:stop");
-            return status;
-          },
-          startSandboxPreview: async (actual: Sandbox) => {
-            calls.push(`sandbox:start:${actual.id}`);
-            return status;
-          },
-          getSandboxPreviewStatus: async (actual: Sandbox) => {
-            calls.push(`sandbox:status:${actual.id}`);
-            return status;
-          },
-          stopSandboxPreview: async (actual: Sandbox) => {
-            calls.push(`sandbox:stop:${actual.id}`);
-            return status;
-          },
-        }) as any,
-    };
-  }
-
-  test("starts, polls, and stops inside the active sandbox", async () => {
-    const calls: string[] = [];
-    const sandbox = { id: "daytona-1" } as Sandbox;
-    const injected = deps(sandbox, calls);
-
-    await runSessionPreviewAction("os-preview", "start", injected);
-    await runSessionPreviewAction("os-preview", "status", injected);
-    await runSessionPreviewAction("os-preview", "stop", injected);
-
-    expect(calls).toEqual([
-      "sandbox:start:daytona-1",
-      "sandbox:status:daytona-1",
-      "sandbox:stop:daytona-1",
-    ]);
-  });
-
-  test("keeps unsandboxed sessions on the host lifecycle", async () => {
-    const calls: string[] = [];
-    await runSessionPreviewAction("os-preview", "start", deps(null, calls));
-    expect(calls).toEqual(["host:start"]);
-  });
-
-  test("does not fall through to the host when a session sandbox is unavailable", async () => {
-    const calls: string[] = [];
-    const injected = deps(null, calls);
-    injected.findSession = (() => ({
-      id: "os-preview",
-      worktreeDir: "/remote/worktree",
-      sandbox: { provider: "daytona", sandboxId: "missing" },
-    })) as any;
-
-    await expect(
-      runSessionPreviewAction("os-preview", "start", injected),
-    ).rejects.toThrow("daytona sandbox is not available");
-    expect(calls).toEqual([]);
   });
 });
 

@@ -6,7 +6,15 @@
  * agent can inspect services without becoming their process manager.
  */
 
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "fs";
 import { join, resolve } from "path";
 import { audit } from "./audit";
 import { configuredPaths, configuredServer } from "./config";
@@ -300,6 +308,19 @@ function upsert(records: PortalRecord[], next: PortalRecord): PortalRecord[] {
   return copy;
 }
 
+/** " See <log>" plus the last lines of the log when it is readable here. */
+function portalLogHint(logPath: string | undefined): string {
+  if (!logPath) return "";
+  let tail = "";
+  try {
+    if (existsSync(logPath)) {
+      const lines = readFileSync(logPath, "utf8").trimEnd().split("\n");
+      tail = lines.slice(-12).join("\n").slice(-1_500);
+    }
+  } catch {}
+  return tail ? ` Log (${logPath}):\n${tail}` : ` Log: ${logPath}`;
+}
+
 async function listPortals(ops: PortalOps): Promise<PortalRecord[]> {
   const records = await ops.readRegistry();
   let changed = false;
@@ -361,6 +382,10 @@ async function startPortal(
     /** Extra, side-specific qualification of the chosen port (published Sandbox ports). */
     qualifyPort?: (port: number, records: PortalRecord[]) => Promise<void>;
     urlFor: (port: number) => string;
+    /** Where the service's stdout/stderr land. Named in failure messages so
+     *  an agent can read why a Portal died; the tail is inlined when the file
+     *  is readable from here (host Portals). */
+    logPath?: string;
     launch: (context: {
       name: string;
       command: string;
@@ -434,9 +459,10 @@ async function startPortal(
   const readiness = await waitForPortalPort(ops, port, pid, readyTimeoutMs);
   if (readiness !== "ready") {
     const lastError =
-      readiness === "exited"
+      (readiness === "exited"
         ? "The Portal process exited before it started listening."
-        : `Nothing listened on port ${port} within ${Math.round(readyTimeoutMs / 1_000)} seconds.`;
+        : `Nothing listened on port ${port} within ${Math.round(readyTimeoutMs / 1_000)} seconds.`) +
+      portalLogHint(input.logPath);
     // A timed-out process may still be compiling and can leave watchers or
     // lock files behind. Never lose its PID by overwriting the failed record
     // before the complete process group has been terminated.
@@ -509,13 +535,18 @@ export async function startPortalService(input: {
   /** Narrow, caller-owned additions for a trusted declared recipe. */
   env?: Record<string, string>;
 }): Promise<PortalRecord & { url: string }> {
+  const logDir = join(sessionScratchRoot(), input.sessionId, "portals");
+  const logPath = join(logDir, `${input.name}.log`);
   const started = await startPortal(hostPortalOps(input.worktreeDir), {
     ...input,
     ownsProcess: true,
+    logPath,
     allocatePort: () => allocatePort(input.worktreeDir),
     urlFor: (port) =>
       `https://${configuredServer().previewHost}:${port + 6_000}`,
     launch: async ({ name, command, port, url }) => {
+      mkdirSync(logDir, { recursive: true });
+      const log = openSync(logPath, "w");
       const proc = Bun.spawn(["setsid", "bash", "-lc", `exec ${command}`], {
         cwd: input.worktreeDir,
         // Portal commands are user-authored code. Do not hand them the Open
@@ -532,9 +563,10 @@ export async function startPortalService(input: {
           NEXT_TELEMETRY_DISABLED: "1",
         },
         stdin: "ignore",
-        stdout: "ignore",
-        stderr: "ignore",
+        stdout: log,
+        stderr: log,
       });
+      closeSync(log);
       proc.unref();
       return proc.pid;
     },
@@ -887,6 +919,15 @@ export async function listSandboxPortalServices(
   return listPortals(sandboxPortalOps(sandbox));
 }
 
+/** The registry as persisted, without the liveness probe. A sandbox that just
+ * woke has no processes left, so every record still marked live is a Portal
+ * to restore rather than one to declare failed. */
+export async function readSandboxPortalRecords(
+  sandbox: Sandbox,
+): Promise<PortalRecord[]> {
+  return (await readSandboxPortalRegistry(sandbox)).records;
+}
+
 type SandboxPortalStartInput = {
   sessionId: string;
   sandbox: Sandbox;
@@ -925,6 +966,11 @@ function withSandboxPortalOperation(
 async function startSandboxPortalServiceInner(
   input: SandboxPortalStartInput,
 ): Promise<PortalRecord> {
+  const sandboxRuntimeDir = join(
+    sessionScratchRoot(),
+    input.sessionId,
+    "portals",
+  );
   const awake = await startPortal(
     sandboxPortalOps(input.sandbox, input.sessionId),
     {
@@ -940,12 +986,9 @@ async function startSandboxPortalServiceInner(
       },
       urlFor: (port) =>
         `https://${configuredServer().previewHost}:${sandboxHttpsPortFor(input.sandbox.id, port)}`,
+      logPath: `${sandboxRuntimeDir}/${input.name}.log`,
       launch: async ({ name, command, port, url }) => {
-        const runtimeDir = join(
-          sessionScratchRoot(),
-          input.sessionId,
-          "portals",
-        );
+        const runtimeDir = sandboxRuntimeDir;
         const legacyLogPath = `.opensession-portal-${name}.log`;
         const legacyPidPath = `.opensession-portal-${name}.pid`;
         const logPath = `${runtimeDir}/${name}.log`;

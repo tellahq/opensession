@@ -3,6 +3,7 @@
 import { existsSync } from "fs";
 import { resolve } from "path";
 import { SHIM_PATH } from "../../../../../scripts/lib/paths";
+import { isCompiledBinary } from "../runner-host/exe";
 
 const GH_CREDENTIAL_SCRIPT = resolve(
   import.meta.dir,
@@ -16,14 +17,20 @@ function shellQuoteWord(word: string): string {
 
 /**
  * Use the stable installed command so compiled releases need neither Bun nor a
- * scripts sidecar. The source-tree fallback keeps direct development runs
- * useful before install.sh creates the shim.
+ * scripts sidecar. A compiled binary without the shim, such as the Sandbox
+ * runner host, re-invokes itself: its `import.meta.dir` is virtual, so the
+ * source-tree path would name a file that does not exist in the guest. The
+ * source-tree fallback keeps direct development runs useful before install.sh
+ * creates the shim.
  */
 export function githubCredentialHelperCommand(
   shimPath = SHIM_PATH,
   shimExists = existsSync(shimPath),
+  compiled = isCompiledBinary(),
+  execPath = process.execPath,
 ): string {
   if (shimExists) return `!${shellQuoteWord(shimPath)} github-credential`;
+  if (compiled) return `!${shellQuoteWord(execPath)} github-credential`;
   return `!bun ${shellQuoteWord(GH_CREDENTIAL_SCRIPT)}`;
 }
 

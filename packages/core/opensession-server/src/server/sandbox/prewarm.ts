@@ -1,13 +1,11 @@
 /**
- * Warm-on-typing sandbox PREWARM pool for sandbox providers (Daytona, Box,
- * Modal, and the local Firecracker MicroVM) — the background-agents pattern:
- * sandbox provisioning starts when the user begins typing.
+ * Warm-on-typing sandbox PREWARM pool for the Sandbox providers (Daytona and
+ * Box) — the background-agents pattern: sandbox provisioning starts when the
+ * user begins typing.
  *
- * Preparation is provider-specific. Daytona warms its sandbox runner; the
- * local MicroVM restores the credential-free workspace golden and pre-clones
- * the selected repo without installing dependencies. The branch need not
- * exist yet: adoption moves the default-branch clone into the session cwd,
- * refreshes it, then creates the requested branch. The frontend POSTs
+ * The pool warms the runner and pre-clones the selected repo. The branch need
+ * not exist yet: adoption moves the default-branch clone into the session
+ * cwd, refreshes it, then creates the requested branch. The frontend POSTs
  * /api/sandbox/prewarm on first input; session creation atomically adopts the
  * prepared sandbox instead of creating a racing sibling.
  *
@@ -29,11 +27,6 @@
  * can never adopt the same sandbox. A claim whose bootstrap signature
  * (runnerSha/runnerBundleUrl) no longer matches the current config is
  * refused and the stale sandbox destroyed — the caller cold-creates.
- *
- * Docker is deliberately NOT pooled here: its mounts (workspace bind/volume,
- * per-session state volumes) are fixed at `docker create` time so a
- * pre-session container couldn't get them, and a cold docker ensure is
- * ~2-3s anyway. See the note in docker.ts.
  */
 
 import {
@@ -255,21 +248,18 @@ function removeFile(entry: Pick<PrewarmEntry, "provider" | "repoId">): void {
 
 /** What must match between prewarm time and claim time for adoption to be
  *  safe: the runner-payload pin (bootstrapSignature) PLUS the provider's
- *  create-shape — daytona's org snapshot decides the sandbox's cpu/mem/disk
- *  and e2b's template its image, neither changeable after create. */
+ *  create-shape — daytona's org snapshot decides the sandbox's cpu/mem/disk,
+ *  not changeable after create. */
 function prewarmSignature(
   provider: string,
   resources?: SandboxMachineSettings,
 ): string {
-  const cfg = sandboxConfig();
   const shape =
     provider === "daytona"
       ? getSandboxConnection("daytona")?.settings.snapshot || "default"
       : provider === "box"
         ? "named-snapshot"
-        : provider === "e2b"
-          ? cfg.e2b?.template || "base"
-          : "";
+        : "";
   return `${bootstrapSignature()}|${shape}|${JSON.stringify(resources || {})}`;
 }
 
@@ -352,12 +342,6 @@ async function adapterFor(provider: string): Promise<PrewarmAdapter | null> {
     const { boxPrewarmAdapter } = await import("./adapters/box");
     return boxPrewarmAdapter;
   }
-  if (provider === "modal") {
-    const { modalPrewarmAdapter } = await import("./adapters/modal");
-    return modalPrewarmAdapter;
-  }
-  // e2b: no prewarm adapter yet — requests answer "unsupported" until one
-  // registers here (the pool itself is already provider-agnostic).
   return null;
 }
 
@@ -605,7 +589,7 @@ async function runPrewarmBootstrap(
         await import("./remote-repo-template");
       await validateRemoteRepoTemplate(
         driver,
-        entry.provider as "daytona" | "box" | "modal",
+        entry.provider as "daytona" | "box",
         repo,
       );
       if (entry.refreshTemplate) {
@@ -1190,7 +1174,7 @@ async function auditProviderOrphans(now: number): Promise<void> {
   const g = globalThis as unknown as { __prewarmOrphanAuditAt?: number };
   if (now - (g.__prewarmOrphanAuditAt || 0) < ORPHAN_AUDIT_INTERVAL_MS) return;
   g.__prewarmOrphanAuditAt = now;
-  for (const provider of ["daytona", "box", "e2b", "modal"] as const) {
+  for (const provider of ["daytona", "box"] as const) {
     if (!sandboxProviderConfigured(provider)) continue;
     // A create in flight has a live sandbox with no recorded id yet — skip
     // this provider's audit round rather than destroy it mid-bootstrap.

@@ -1,9 +1,4 @@
-import { z } from "zod";
-import { ApiError, BASE, request } from "./request";
-
-const apiErrorResponseSchema = z
-  .object({ error: z.string().optional() })
-  .nullable();
+import { request } from "./request";
 
 export interface PreviewService {
   name: string;
@@ -29,47 +24,28 @@ export interface PreviewPortalRecipe {
   readyTimeoutSeconds?: number;
 }
 
+/** A session workspace's Portals: the services listening in it plus the
+ *  Portals its repository declares in .agents/portals.json. */
 export interface PreviewStatus {
-  hasPortsConf: boolean;
-  webappPort: number | null;
-  running: boolean;
-  starting: boolean;
-  previewUrl: string | null;
-  /** Whether the repo has any bring-up mechanism (committed
-   *  .agents/start.sh, configured previewCommand, or a built-in
-   *  fallback). Absent on servers that predate the field — treat as true. */
-  bootable?: boolean;
   services: PreviewService[];
-  /** Skill-backed starters declared in .agents/portals.json. */
   portalRecipes?: PreviewPortalRecipe[];
-  /** Whose preview this is — shown on the interstitial so a reused tab can
-   *  never masquerade as another session's wait. */
-  sessionTitle?: string | null;
-  sessionBranch?: string | null;
+  /** Set while the session's Sandbox cannot be inspected (asleep, waking,
+   *  preparing, or needing attention). */
+  sandboxLifecycle?:
+    | "preparing"
+    | "awake"
+    | "sleeping"
+    | "waking"
+    | "needs_attention";
 }
 
-export async function fetchPreview(sessionId: string): Promise<PreviewStatus> {
+export async function fetchPreview(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<PreviewStatus> {
   return request<PreviewStatus>(
     `/sessions/${encodeURIComponent(sessionId)}/preview`,
-    { label: "Failed to fetch preview" },
-  );
-}
-
-export async function startPreviewApi(
-  sessionId: string,
-): Promise<PreviewStatus> {
-  return request<PreviewStatus>(
-    `/sessions/${encodeURIComponent(sessionId)}/preview/start`,
-    { method: "POST", label: "Failed to start preview" },
-  );
-}
-
-export async function stopPreviewApi(
-  sessionId: string,
-): Promise<PreviewStatus> {
-  return request<PreviewStatus>(
-    `/sessions/${encodeURIComponent(sessionId)}/preview/stop`,
-    { method: "POST", label: "Failed to stop preview" },
+    { label: "Failed to fetch Portals", signal },
   );
 }
 
@@ -94,32 +70,7 @@ export async function portalActionApi(
   );
 }
 
-/** Screenshot the session's running preview; resolves to a data: URL (PNG). */
-export async function capturePreviewShot(sessionId: string): Promise<string> {
-  const res = await fetch(
-    `${BASE}/sessions/${encodeURIComponent(sessionId)}/preview/screenshot`,
-    { method: "POST" },
-  );
-  if (!res.ok) {
-    const parsed = apiErrorResponseSchema.safeParse(
-      await res.json().catch(() => null),
-    );
-    const body = parsed.success ? parsed.data : null;
-    throw new ApiError(
-      body?.error || `Screenshot failed: ${res.status}`,
-      res.status,
-    );
-  }
-  const blob = await res.blob();
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Failed to read screenshot"));
-    reader.readAsDataURL(blob);
-  });
-}
-
-// ── Warm preview templates (Settings → Warm previews) ──
+// ── Warm dependency templates (Settings → Warm previews) ──
 
 export interface WarmTemplateEntry {
   repoId: string;
@@ -160,56 +111,6 @@ export async function refreshWarmTemplateNow(
   repoId: string,
 ): Promise<{ repos: WarmTemplateEntry[] }> {
   return request(`/warm-templates/${encodeURIComponent(repoId)}/refresh`, {
-    method: "POST",
-  });
-}
-
-// ── Preview pool (Settings → Preview pool: warm pre-booted dev servers) ──
-
-export interface PreviewPoolEntry {
-  repoId: string;
-  config: {
-    enabled: boolean;
-    backend: "docker" | "daytona" | "microvm";
-    running: number;
-    paused: number;
-    cpus: number;
-    memory: string;
-    goldenIntervalHours: number;
-    devAuthBypass: boolean;
-    claimIdleMinutes: number;
-  };
-  golden: { sha: string; builtAt: string; lastError?: string } | null;
-  goldenBuilding: boolean;
-  containers: {
-    name: string;
-    state: "warming" | "ready" | "paused" | "claimed";
-    hostPort: number;
-    sessionWorktree?: string;
-    claimedAt?: string;
-  }[];
-}
-
-export async function fetchPreviewPool(): Promise<{
-  repos: PreviewPoolEntry[];
-}> {
-  return request("/preview-pool", { label: "Failed to fetch preview pool" });
-}
-
-export async function updatePreviewPool(
-  repoId: string,
-  patch: Partial<PreviewPoolEntry["config"]>,
-): Promise<{ repos: PreviewPoolEntry[] }> {
-  return request(`/preview-pool/${encodeURIComponent(repoId)}`, {
-    method: "PUT",
-    body: patch,
-  });
-}
-
-export async function refreshPreviewPoolGolden(
-  repoId: string,
-): Promise<{ repos: PreviewPoolEntry[] }> {
-  return request(`/preview-pool/${encodeURIComponent(repoId)}/refresh`, {
     method: "POST",
   });
 }

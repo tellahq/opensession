@@ -1290,15 +1290,12 @@ export async function handleSetupRepoRoutes(
         const [
           { scheduleSandboxEnvironmentInvalidation },
           { invalidateAskCheckoutRefresh },
-          { invalidatePreviewPoolDefaultBranch },
         ] = await Promise.all([
           import("../sandbox/environments"),
           import("../worktree"),
-          import("../preview-pool"),
         ]);
         invalidateAskCheckoutRefresh(id);
         scheduleSandboxEnvironmentInvalidation(id);
-        invalidatePreviewPoolDefaultBranch(id);
       }
       return Response.json(updated);
     } catch (e) {

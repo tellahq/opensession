@@ -76,9 +76,9 @@ provider under Your own providers. `bridge.xaiAccounts` in
 `model-providers.json` restricts which accounts serve Grok runs, like
 `bridge.openaiAccounts` does for the ChatGPT pool.
 
-Sandboxes never hold the xAI refresh grant. Docker mounts the store read-only
-and remote sandboxes receive a scoped copy with fresh access tokens and no
-refresh token, so a sandbox can neither rotate nor kill the host's sign-in;
+Sandboxes never hold the xAI refresh grant. They receive a scoped copy with
+fresh access tokens and no refresh token, so a sandbox can neither rotate nor
+kill the host's sign-in;
 the host keeps every stored token ahead of expiry on its own.
 
 Legacy top-level counterparts such as `~/.opensession-claude-accounts.json`

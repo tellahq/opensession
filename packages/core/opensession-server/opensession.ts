@@ -723,13 +723,6 @@ if (!g.__opensessionBooted) {
         const { startSandboxEnvironmentMaintenance } =
           await import("./src/server/sandbox/environments");
         startSandboxEnvironmentMaintenance();
-        // Modal has no docker daemon to piggyback on: its idle stop is a
-        // server-owned sweep (checkpoint → terminate → lifecycle sleeping).
-        // Armed here so an idle sandbox left by a previous process is still
-        // stopped even if no new ensure/get ever runs.
-        const { ensureModalIdleSweep } =
-          await import("./src/server/sandbox/adapters/modal");
-        ensureModalIdleSweep();
         await poolStartup;
       })
       .catch((e) => console.error("[sandbox-prewarm] startup failed:", e));

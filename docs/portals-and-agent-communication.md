@@ -6,52 +6,39 @@ for cloud sandboxes.
 ## Portals
 
 A Portal is an authenticated HTTPS route from the Open Session host to a
-service running in a session workspace. A repo publishes services by writing
-`.ports.conf`:
+service running in a session workspace, on this machine or inside the
+session's Sandbox. The Portals panel lists the Portals a repository declares in
+`.agents/portals.json` with a Start button, plus every service currently
+listening in the workspace.
+
+The agent has the same surface through `opensession-portals`:
+`start_declared_portal` for a declared Portal, `start_portal` for any command,
+`list_portals`, `stop_portal`, `restart_portal`, and `set_portal_path` for the
+route a Portal should open on. Open Session allocates the port, runs the
+process under a session-scoped supervisor with `PORT` and `PORTAL_URL`, waits
+for it to listen, and returns the URL. Supervisor records live in the
+workspace's `.ports.conf` next to the stable `*_PORT` entries repository
+tooling reads:
 
 ```sh
+# opensession-portal {"name":"web","key":"WEBAPP_PORT","command":"...","port":3300,"state":"awake"}
 WEBAPP_PORT=3300
 INSTANT_PORT=5968
-WEBAPP_WORKFLOW_PORT=7233
 ```
 
-Every parsed `*_PORT` entry appears under **Dev services**. A listening entry
-gets a link only when Open Session can allocate and install a route; otherwise
-it remains visible without an openable URL. The **Portals** panel labels a
-listening but unroutable service unavailable, while **Dev services** still
-labels it running.
+Every listening `*_PORT` service is a Portal. Host services map to
+`https://<host>:<port+6000>`; Sandbox services get an allocated route in
+20000–27999 that relays over the Sandbox's authenticated outbound connection,
+so the browser never receives a provider URL. Caddy forward-authenticates
+every request against Open Session before proxying it, so possession of a
+Portal URL does not bypass the app's sign-in boundary. The route registry is
+process-owned even though Caddy survives restarts: forward auth rejects a
+retained route until the restarted server has rediscovered that exact port.
 
-Normal Portal routes support host worktrees, Docker, private Firecracker veth
-addresses, and remote sandboxes. Caddy forward-authenticates the browser
-against Open Session before proxying each route, so possession of its service
-URL does not bypass the app's sign-in boundary. The browser never receives a
-MicroVM's private address.
-
-Two optional preview-pool backends are exceptions. A Daytona pool claim returns
-a public provider URL directly, while a Firecracker pool claim uses a direct
-Caddy proxy without forward auth. These origins do not inherit the Portal
-sign-in guarantee.
-
-The normal Portal route registry is process-owned even though Caddy survives
-Open Session restarts. Forward auth rejects a retained Caddy route until the
-restarted server has rediscovered that exact port, preventing a stale upstream
-from being reused as somebody else's Portal. Stopping a dev server removes
-every normal service route, not only the webapp route.
-
-Sessions may expose an ad-hoc service by adding a descriptive `*_PORT` entry to
-`.ports.conf` and listening on that port. Remote sandboxes use an authenticated
-outbound relay: Daytona, E2B, Box, Modal, and lambda-microvm start a short-lived
-sidecar for each listening port as status discovers it. Docker and self-hosted
-microVM routes are limited to the configured preview-port set; other listening
-services remain visible without an openable URL.
-
-The Preview button normally opens the `WEBAPP_PORT` Portal, but can instead open
-a preview-pool origin when that feature is enabled for the repo. The service
-menu is the multi-port surface. `.agents/start.sh` receives `WEBAPP_PORT`,
-`PREVIEW_URL` and `OPENSESSION_BOOT_MODE`, while `.tunnels.env` exposes the
-generated Portal URLs back inside the workspace as `PREVIEW_URL`,
-`PREVIEW_URL_<port>` and `PORTAL_<service>_URL`. The same contract now applies
-to host worktrees and sandbox-only workspaces.
+Portals follow the Sandbox lifecycle. While a Sandbox sleeps the panel still
+shows its Portals, without URLs and without waking anything; the next wake
+restarts every Portal that was awake, with the same command and port, after
+`.agents/resume` has run. Stopping a Portal removes its route.
 
 Current boundary: Portals inherit the instance's authenticated team boundary;
 there is no per-session ACL narrower than that team boundary yet.

@@ -54,13 +54,11 @@ test("SessionViewer keeps preview selection and state ownership", async () => {
     viewer.indexOf(") : showAssets ? ("),
   );
   const portal = branch.indexOf('kind: "portal"');
-  const preview = branch.indexOf('kind: "preview"');
   const staging = branch.indexOf('kind: "staging"');
 
   expect(branch).toContain("<SessionPreviewSurface");
   expect(portal).toBeGreaterThan(-1);
-  expect(preview).toBeGreaterThan(portal);
-  expect(staging).toBeGreaterThan(preview);
+  expect(staging).toBeGreaterThan(portal);
   expect(branch).toContain("deployment: staging");
   expect(branch).toContain("url: stagingUrl");
   expect(branch).toContain("shareLink,");

@@ -1,9 +1,8 @@
 /**
  * Durable post-setup repo templates for remote sandbox providers.
  *
- * Daytona stores templates as provider snapshots, Box as named snapshots,
- * and Modal as Image ids returned by Sandbox.snapshotFilesystem(). This file owns only the
- * small local index that maps (provider, repo, runtime/create signature and
+ * Daytona stores templates as provider snapshots and Box as named snapshots.
+ * This file owns only the small local index that maps (provider, repo, runtime/create signature and
  * project preparation inputs) to the provider artifact. The artifact itself
  * is credential-free and durable; adapters replace it only when an input that
  * affects setup changes.
@@ -24,7 +23,7 @@ import {
 import { getSandboxConnection } from "./connections";
 import { configuredRepos } from "../config";
 
-export type RemoteTemplateProvider = "daytona" | "box" | "modal";
+export type RemoteTemplateProvider = "daytona" | "box";
 
 export interface RemoteRepoTemplate {
   provider: RemoteTemplateProvider;
@@ -330,15 +329,7 @@ export function remoteRepoTemplateSignature(
   const shape =
     provider === "daytona"
       ? { baseSnapshot: settings.snapshot || "default" }
-      : provider === "box"
-        ? { machineProfile: settings.profile || "default" }
-        : {
-            image: settings.image || "daytonaio/sandbox:0.8.0",
-            cpu: settings.cpu || null,
-            memory: settings.memoryMb || null,
-            region: settings.region || null,
-            cloud: settings.cloud || null,
-          };
+      : { machineProfile: settings.profile || "default" };
   return createHash("sha256")
     .update(
       `repo-template-v3|${runnerToolchainSignature()}|${JSON.stringify(shape)}`,

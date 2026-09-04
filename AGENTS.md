@@ -37,10 +37,16 @@ immutable release worktree selected by `~/.opensession/deploy/current`. Other
 sessions may edit and stage files in the shared checkout at the same time.
 Uncommitted checkout edits never become live, including frontend edits.
 
-- Start every task by pulling the latest remote history with
-  `git fetch origin --prune` and checking
-  `git rev-list --left-right --count HEAD...origin/main`. Do not start or
-  continue edits from a stale or diverged `main`.
+- **Local `main` must always equal `origin/main`.** Start every task, and
+  finish every push, with `bun scripts/shared-checkout-sync.ts`. It fetches,
+  fast-forwards `main` in place, and carries every uncommitted edit, yours or
+  another session's, onto the new base without stash or reset. It is the only
+  sanctioned way to move `main`. If it reports a conflict in a file you own,
+  reapply that edit onto the current content before staging it; if the file
+  is not yours, continue, its owner is responsible for it. Never work around
+  a stale checkout by rebasing only your own commit, by committing from a
+  throwaway worktree, or by leaving `main` behind: each of those leaves the
+  shared checkout stale for everyone.
 - **Do not commit until `bun run check` passes in the checkout.** Run it after
   finishing the change and before the final fetch and commit. It checks
   formatting, type-checking, lint, isolated unit tests, and strict transcript
@@ -48,19 +54,25 @@ Uncommitted checkout edits never become live, including frontend edits.
   so installer or service-definition changes also need their documented
   platform-specific verification.
 - **Do not commit until your branch includes the latest `origin/main`.** After
-  the checkout gate passes, immediately before every `git commit`, run
-  `git fetch origin --prune`. Then run
-  `git merge-base --is-ancestor origin/main HEAD`. If it fails, do not commit:
-  rebase the local commits onto `origin/main` and resolve every conflict first.
-  Fetch again immediately before pushing; if the remote moved after your commit,
-  rebase that commit onto the new `origin/main` before pushing.
-- Keep one session responsible for synchronizing the shared checkout at a time.
-  Preserve every staged, unstaged, and untracked change while rebasing. Never
-  use `git stash`, autostash, `git pull --rebase --autostash`, reset, clean,
+  the checkout gate passes, immediately before every `git commit`, run the
+  sync tool again, then `git merge-base --is-ancestor origin/main HEAD`. If it
+  fails, do not commit: rebase the local commits onto `origin/main` and resolve
+  every conflict first. Run the sync tool again immediately before pushing; if
+  the remote moved after your commit, rebase that commit onto the new
+  `origin/main` before pushing.
+- Rebasing your own unpushed commits is the only manual sync left. Preserve
+  every staged, unstaged, and untracked change while doing it. Never use
+  `git stash`, autostash, `git pull --rebase --autostash`, reset, clean,
   force-push, or an ordinary pull that creates a merge commit in this checkout.
-  After pushing, fetch once more and verify
+  After pushing, run the sync tool once more and verify
   `git rev-list --left-right --count HEAD...origin/main` reports `0 0` before
   continuing.
+- Leave no residue. Once your change has landed, from here or from anywhere
+  else, the files you edited must be clean in this checkout. An edit that
+  landed elsewhere becomes clean the next time the sync tool runs; an
+  abandoned half-edit does not, and it sits on every later sync report until
+  its owner deals with it. Before a session ends, commit your work or restore
+  only your own files with `git checkout origin/main -- <your files>`.
 - Never reset, revert, switch branches, or discard unrelated work.
 - Stage only your files. Use `git add -p` for shared high-traffic files.
 - Inspect `git diff --cached --name-only` and `git diff --cached` before every

@@ -87,38 +87,32 @@ describe("workspace sandbox connections", () => {
     });
   });
 
-  test("rotates Modal credentials in place and disconnect deletes the secret", () => {
-    const first = connectSandboxProvider("modal", {
-      tokenId: "modal-id-one",
-      tokenSecret: "modal-secret-one",
-    });
+  test("rotates Box credentials in place and disconnect deletes the secret", () => {
+    const first = connectSandboxProvider("box", { secret: "box_one" });
     const ref = first.credentialRef;
-    const second = connectSandboxProvider("modal", {
-      tokenId: "modal-id-two",
-      tokenSecret: "modal-secret-two",
-    });
+    const second = connectSandboxProvider("box", { secret: "box_two" });
     expect(second.id).toBe(first.id);
     expect(second.credentialRef).toBe(ref);
-    expect(sandboxProviderCredential("modal")).toEqual({
-      tokenId: "modal-id-two",
-      tokenSecret: "modal-secret-two",
-    });
+    expect(sandboxProviderCredential("box")).toEqual({ apiKey: "box_two" });
 
-    expect(disconnectSandboxProvider("modal")).toBe(true);
-    expect(getSandboxConnection("modal")).toBeUndefined();
-    expect(sandboxProviderCredential("modal")).toBeUndefined();
+    expect(disconnectSandboxProvider("box")).toBe(true);
+    expect(getSandboxConnection("box")).toBeUndefined();
+    expect(sandboxProviderCredential("box")).toBeUndefined();
   });
 
   test("only enabled, successfully qualified connections become Ready", () => {
-    connectSandboxProvider("docker", { settings: { cpu: 4, memoryMb: 8192 } });
-    expect(sandboxConnectionReady("docker")).toBe(false);
-    setSandboxConnectionQualification("docker", {
+    connectSandboxProvider("daytona", {
+      secret: "daytona-secret",
+      settings: { cpu: 4, memoryMb: 8192 },
+    });
+    expect(sandboxConnectionReady("daytona")).toBe(false);
+    setSandboxConnectionQualification("daytona", {
       status: "ready",
       checkedAt: "2026-08-11T00:00:00.000Z",
     });
-    expect(sandboxConnectionReady("docker")).toBe(true);
+    expect(sandboxConnectionReady("daytona")).toBe(true);
     expect(
-      safeSandboxConnections().find((value) => value.provider === "docker")
+      safeSandboxConnections().find((value) => value.provider === "daytona")
         ?.state,
     ).toBe("ready");
   });
@@ -143,20 +137,19 @@ describe("workspace sandbox connections", () => {
   });
 
   test("an adapter signature change makes a previous qualification stale", () => {
-    connectSandboxProvider("docker", {});
-    setSandboxConnectionQualification("docker", {
+    connectSandboxProvider("box", { secret: "box_key" });
+    setSandboxConnectionQualification("box", {
       status: "ready",
       checkedAt: "2026-08-11T00:00:00.000Z",
     });
     const path = process.env.OPENSESSION_SANDBOX_CONFIG!;
     const raw = JSON.parse(readFileSync(path, "utf-8"));
-    raw.connections[0].qualification.adapterSignature = "docker:old-adapter";
+    raw.connections[0].qualification.adapterSignature = "box:old-adapter";
     writeFileSync(path, JSON.stringify(raw));
 
-    expect(sandboxConnectionReady("docker")).toBe(false);
+    expect(sandboxConnectionReady("box")).toBe(false);
     expect(
-      safeSandboxConnections().find((value) => value.provider === "docker")
-        ?.state,
+      safeSandboxConnections().find((value) => value.provider === "box")?.state,
     ).toBe("needs_attention");
   });
 });

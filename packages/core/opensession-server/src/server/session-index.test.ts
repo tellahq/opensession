@@ -85,3 +85,21 @@ describe("pushed session history indexing", () => {
     expect(extracted.files).toEqual(["src/session-index.ts"]);
   });
 });
+
+describe("distillation slot", () => {
+  test("second acquirer is refused until the first releases", async () => {
+    const { acquireDistillSlot, distillBusyRetryAt } =
+      await import("./session-index");
+    const release = acquireDistillSlot();
+    expect(release).not.toBeNull();
+    expect(acquireDistillSlot()).toBeNull();
+    release!();
+    const again = acquireDistillSlot();
+    expect(again).not.toBeNull();
+    again!();
+    const now = 1_000_000;
+    const retryAt = distillBusyRetryAt(now);
+    expect(retryAt).toBeGreaterThanOrEqual(now + 15_000);
+    expect(retryAt).toBeLessThan(now + 30_000);
+  });
+});

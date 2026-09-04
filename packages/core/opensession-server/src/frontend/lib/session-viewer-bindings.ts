@@ -194,10 +194,6 @@ export interface SessionViewerViewTabsBinding {
   videoPanel?: RefWebPanel | null;
   /** The feed item's title (pane header). */
   videoTitle?: string | null;
-  /** Foregrounded full-width local-dev Preview view-tab (App state). */
-  showPreviewTab?: boolean;
-  /** Close the Preview view-tab (its Stop button / tab close). */
-  onClosePreviewTab?: () => void;
   /** Foregrounded browser pane for a service selected in Portals. */
   showPortal?: boolean;
   /** The service currently loaded in the center-panel browser. */

@@ -270,8 +270,9 @@ export function PortalsPage({
                   })
                 ) : (
                   <div className="px-2 py-[7px] text-label text-dim">
-                    {status.starting
-                      ? "Starting services…"
+                    {status.sandboxLifecycle === "waking" ||
+                    status.sandboxLifecycle === "preparing"
+                      ? "Waking the Sandbox…"
                       : "No Portals are running. Start one above, or ask the agent to expose a service."}
                   </div>
                 )}

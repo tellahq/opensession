@@ -7,8 +7,8 @@ describe("sandbox default precedence", () => {
   });
 
   test("workspace applies until a person overrides it", () => {
-    expect(effectiveSandboxDefault("docker", "workspace")).toBe("docker");
-    expect(effectiveSandboxDefault("docker", "none")).toBe("none");
-    expect(effectiveSandboxDefault("docker", "modal")).toBe("modal");
+    expect(effectiveSandboxDefault("daytona", "workspace")).toBe("daytona");
+    expect(effectiveSandboxDefault("daytona", "none")).toBe("none");
+    expect(effectiveSandboxDefault("daytona", "box")).toBe("box");
   });
 });

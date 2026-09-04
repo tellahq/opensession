@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  boxDesktopUrl,
   BOX_RUNTIME_HOME_COMMAND,
+  BOX_RUNTIME_HOME_LAZY_MARKER,
   boxCommandPlaneUnavailable,
   boxComposeShell,
   boxKnownHostsKey,
@@ -65,6 +67,18 @@ describe("Box persistent file paths", () => {
     expect(BOX_RUNTIME_HOME_COMMAND).toContain("test ! -L /home/ubuntu");
     expect(BOX_RUNTIME_HOME_COMMAND).toContain("umount /home/ubuntu");
     expect(BOX_RUNTIME_HOME_COMMAND).not.toContain("ln -s");
+  });
+
+  test("keeps a writable foreign /home/ubuntu mount and reports it as lazy", () => {
+    // After archive/resume Box serves the home through a FUSE layer at
+    // /home/ubuntu; unmounting it from under a live workspace is the bug this
+    // guards against, and the marker switches file writes to the shell path.
+    expect(BOX_RUNTIME_HOME_COMMAND).toContain(
+      `if test -w /home/ubuntu; then echo ${BOX_RUNTIME_HOME_LAZY_MARKER}; else sudo -n umount /home/ubuntu`,
+    );
+    expect(BOX_RUNTIME_HOME_COMMAND).not.toContain(
+      "test /home/ubuntu -ef /home/user && test -w /home/ubuntu",
+    );
   });
 
   test("maps the cross-provider home to Box's native durable home", () => {
@@ -138,5 +152,21 @@ describe("Box command readiness", () => {
     expect(boxCommandPlaneUnavailable({ status: 409, code: "other" })).toBe(
       false,
     );
+  });
+});
+
+describe("Box desktop", () => {
+  test("returns the tokenized stream page Box mints", () => {
+    expect(
+      boxDesktopUrl({
+        desktopUrl:
+          "https://name-desktop.on.ascii.dev/stream.html?fps=60#token=abc",
+      }),
+    ).toBe("https://name-desktop.on.ascii.dev/stream.html?fps=60#token=abc");
+  });
+
+  test("refuses a missing or non-https desktop URL", () => {
+    expect(() => boxDesktopUrl({})).toThrow(/did not return a desktop URL/);
+    expect(() => boxDesktopUrl({ desktopUrl: "http://x" })).toThrow();
   });
 });

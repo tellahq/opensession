@@ -49,6 +49,8 @@ import { ComposerContextChip } from "./ComposerContextChip";
 import {
   composePastedText,
   createPastedTextAttachment,
+  pastedTextFile,
+  shouldAttachPastedTextAsFile,
   shouldCollapsePastedText,
 } from "../lib/pasted-text";
 import { useFileMentions } from "./useFileMentions";
@@ -715,6 +717,13 @@ export function Composer({
     // in a third of the room and chips the same way (lib/session-url.ts).
     if (insertPastedSessionId(e)) return;
     const pastedText = e.clipboardData?.getData("text/plain") ?? "";
+    // A paste too long to ride the prompt goes as a file the agent reads with
+    // its tools. A note has no agent and no file channel, so it keeps the chip.
+    if (canAttachFiles && shouldAttachPastedTextAsFile(pastedText)) {
+      e.preventDefault();
+      void addFiles([pastedTextFile(pastedText)]);
+      return;
+    }
     if (shouldCollapsePastedText(pastedText)) {
       e.preventDefault();
       setPastedTexts((current) => [

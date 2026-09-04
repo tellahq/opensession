@@ -111,14 +111,21 @@ Fresh installs keep dedup state in
 `~/.opensession-grafana-poll` exists and the new path does not, Open Session
 continues using the legacy path.
 
-## Sentry and Tinybird
+## Sentry, Tinybird, and Braintrust
 
 MCP-only, with no integration agent or dedicated server env vars. Configure
 them as HTTP MCP servers in the effective `mcp-config.json`:
-`https://mcp.sentry.dev/mcp` and
-`https://mcp.tinybird.co?token=<token>`. These entries are shown in
+`https://mcp.sentry.dev/mcp`, `https://mcp.tinybird.co?token=<token>`, and
+`https://api.braintrust.dev/mcp` with a Braintrust API key in its
+`Authorization: Bearer` header. These entries are shown in
 `mcp-config.example.json`. Omit them and runs simply do not receive those
 tools.
+
+The [Braintrust MCP](https://www.braintrust.dev/docs/integrations/developer-tools/mcp)
+is hosted and read-write: it can query logs, author prompts and scorers,
+configure Loop automations, and run evals. It only reaches an automation when
+that automation's `mcpServers` allowlist names `braintrust`; add
+`allowedUsers` to the entry if it should be limited to specific people.
 
 ## Web push
 

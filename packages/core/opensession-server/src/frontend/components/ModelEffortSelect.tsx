@@ -15,9 +15,23 @@ import {
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
-import { IconBolt, IconChevronRight, IconSparkle, IconUndo } from "./icons";
+import {
+  IconBolt,
+  IconChevronRight,
+  IconPeople,
+  IconSparkle,
+  IconUndo,
+} from "./icons";
 import { ModelMark } from "./ModelMark";
+import { BrandMark } from "./BrandTile";
+import { UserAvatar } from "./UserAvatar";
+import { useCurrentUser } from "./UserPicker";
 import type { ModelEffortSelectProps } from "../lib/model-effort-select-types";
+import {
+  lowestRemaining,
+  weeklyRemainingRows,
+  type WeeklyRemainingRow,
+} from "../lib/account-limits";
 import { UsageCost, UsageDetails } from "./UsageMeter";
 
 export const EFFORTS = [
@@ -293,6 +307,20 @@ type ModelMenuOption = {
 
 const PICKER_ROW_GAP = "mb-0.5 last:mb-0";
 
+/** Ink for a weekly-remaining figure: colour only once it is running out. */
+const REMAINING_TONE: Record<WeeklyRemainingRow["tone"], string> = {
+  low: "text-red",
+  warn: "text-yellow",
+  ok: "text-green",
+};
+
+/** Brand mark for an account pool, keyed by ProviderAccountOption.provider. */
+const ACCOUNT_BRAND: Record<WeeklyRemainingRow["provider"], string> = {
+  claude: "claude",
+  codex: "codex",
+  xai: "xai",
+};
+
 /**
  * Combined model + reasoning-effort menu: one trigger opens a short list of
  * settings rows (Model, Effort, Speed, Account), each showing its current value
@@ -417,6 +445,18 @@ export function ModelEffortSelect({
   const accountLabel = currentAccount
     ? providerAccountLabel(currentAccount)
     : "Auto";
+  // Weekly budget left on every account this person can spend (the pool plus
+  // their own), all providers: the question it answers is "which account
+  // still has a week in it", and that is also why a row for the current
+  // model's pool pins that account.
+  const viewer = useCurrentUser();
+  const weeklyRows = weeklyRemainingRows(accounts ?? [], viewer);
+  const weeklyRowsForModel = weeklyRows.filter(
+    (row) => row.provider === accountProvider,
+  );
+  const weeklyReadout = lowestRemaining(
+    weeklyRowsForModel.length > 0 ? weeklyRowsForModel : weeklyRows,
+  );
   // Routing stays sticky across model changes even though engine selection is
   // no longer exposed. Existing sessions keep their stored routing prefix.
   const activeEngine = modelEngine(effectiveModel);
@@ -811,6 +851,97 @@ export function ModelEffortSelect({
               </Menu.SubmenuTrigger>
               <Menu.Popup className="w-64 max-w-[min(360px,calc(100vw-1rem))]">
                 <UsageDetails usage={usage} className="p-1.5" />
+              </Menu.Popup>
+            </Menu.SubmenuRoot>
+            <Menu.Separator className="my-1" />
+          </>
+        )}
+        {weeklyRows.length > 0 && (
+          <>
+            <Menu.SubmenuRoot>
+              <Menu.SubmenuTrigger className="justify-between gap-3">
+                <span className="min-w-0 truncate">Weekly remaining</span>
+                <span className="flex flex-none items-center gap-1 text-dim">
+                  {weeklyReadout && (
+                    <span
+                      className={cn(
+                        "tabular-nums",
+                        REMAINING_TONE[weeklyReadout.tone],
+                      )}
+                    >
+                      {weeklyReadout.remaining}%
+                    </span>
+                  )}
+                  <IconChevronRight className="shrink-0" size={17} />
+                </span>
+              </Menu.SubmenuTrigger>
+              <Menu.Popup className="w-72 max-w-[min(360px,calc(100vw-1rem))]">
+                {weeklyRows.map((row, i) => {
+                  const pinnable =
+                    hasAccount && row.provider === accountProvider;
+                  const selected = pinnable && row.accountId === accountId;
+                  return (
+                    <Menu.Item
+                      key={`${row.accountId}-${i}`}
+                      onClick={() => onAccountChange!(row.accountId)}
+                      disabled={!pinnable}
+                      title={
+                        pinnable
+                          ? `Use ${row.label} for this session`
+                          : hasAccount
+                            ? "Not for this model"
+                            : undefined
+                      }
+                      className={cn(
+                        PICKER_ROW_GAP,
+                        "justify-between gap-3",
+                        selected && "bg-hover",
+                        !pinnable && "opacity-70",
+                      )}
+                    >
+                      <span className="flex min-w-0 flex-1 items-center gap-2">
+                        <span className="flex size-4 shrink-0 items-center justify-center text-dim">
+                          <BrandMark
+                            name={ACCOUNT_BRAND[row.provider]}
+                            size={15}
+                          />
+                        </span>
+                        <span className="min-w-0 truncate">{row.label}</span>
+                      </span>
+                      <span className="flex flex-none items-center gap-2 tabular-nums">
+                        {row.owner ? (
+                          <UserAvatar
+                            name={row.owner}
+                            size={14}
+                            edge={false}
+                            title="Yours"
+                          />
+                        ) : (
+                          <IconPeople
+                            size={14}
+                            className="text-faint"
+                            aria-label="Shared"
+                          />
+                        )}
+                        <span className="text-faint" title={row.resetTitle}>
+                          {row.day}
+                        </span>
+                        <span
+                          className={cn(
+                            "min-w-9 text-right",
+                            REMAINING_TONE[row.tone],
+                          )}
+                        >
+                          {row.remaining}%
+                        </span>
+                      </span>
+                      <Menu.Check on={selected} className="text-dim" />
+                    </Menu.Item>
+                  );
+                })}
+                {hasAccount && weeklyRowsForModel.length > 0 && (
+                  <MenuHint>Choose one to use it for this session</MenuHint>
+                )}
               </Menu.Popup>
             </Menu.SubmenuRoot>
             <Menu.Separator className="my-1" />

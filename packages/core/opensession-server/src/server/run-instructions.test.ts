@@ -69,7 +69,7 @@ describe("buildRunInstructions", () => {
       "## Working directory",
       "## PR attribution",
       "## New sessions",
-      "## Preview links",
+      "## Portals",
       "## Media",
     ]);
     expect(prompt).toContain(
@@ -77,9 +77,20 @@ describe("buildRunInstructions", () => {
     );
     expect(prompt).toContain("`tella-stage` `lease_editor_fixture`");
     expect(prompt).toContain("this Open Session id as `leaseKey`");
-    expect(prompt).toContain("Pass only its `leaseId`");
-    expect(prompt).toContain("verifies the lease directly with Tella");
-    expect(prompt.length).toBeLessThan(1_300);
+    expect(prompt).toContain("pass only its `leaseId`");
+    expect(prompt).not.toContain("## Sandbox");
+    expect(prompt.length).toBeLessThan(1_500);
+  });
+
+  test("tells a sandboxed run where it is, in one shared paragraph", () => {
+    const prompt = buildRunInstructions({
+      isAsk: false,
+      hasSession: true,
+      sandboxed: true,
+      inProcessMcp: { "opensession-portals": {} },
+    });
+    expect(prompt).toContain("## Sandbox");
+    expect(prompt).toContain("Push your branch before ending");
   });
 
   test("carries no per-session facts", () => {

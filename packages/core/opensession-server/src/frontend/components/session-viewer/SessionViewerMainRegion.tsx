@@ -105,6 +105,7 @@ type PreviewController = ReturnType<
   typeof useSessionRuntimeController
 >["preview"];
 type PreviewSurface = ComponentProps<typeof SessionPreviewSurface>["surface"];
+type PreviewStatus = import("../../lib/api").PreviewStatus;
 type ComposerProps = ComponentProps<typeof Composer>;
 type TranscriptProps = ComponentProps<typeof TranscriptView>;
 type PrPanelProps = ComponentProps<typeof PrPanel>;
@@ -134,8 +135,6 @@ type SlackComposerDraft = {
 interface SurfaceRegion {
   showPortal: boolean;
   portalTarget: SessionViewerProps["viewTabs"]["portalTarget"];
-  showPreviewTab: boolean;
-  onClosePreviewTab: SessionViewerProps["viewTabs"]["onClosePreviewTab"];
   showStaging: boolean;
   staging: Extract<PreviewSurface, { kind: "staging" }>["deployment"];
   stagingUrl?: string | null;
@@ -164,7 +163,7 @@ interface PaneRegion {
   hasWorkspace: boolean;
   waitingForWorkspace: boolean;
   terminalTabOpen: boolean;
-  previewStatus: Extract<PreviewSurface, { kind: "preview" }>["status"];
+  previewStatus: PreviewStatus | null;
 }
 
 interface ReviewRegion {
@@ -413,8 +412,6 @@ export function SessionViewerMainRegion({
   const {
     showPortal,
     portalTarget,
-    showPreviewTab,
-    onClosePreviewTab,
     showStaging,
     staging,
     stagingUrl,
@@ -627,15 +624,6 @@ export function SessionViewerMainRegion({
       {showPortal && portalTarget ? (
         <SessionPreviewSurface
           surface={{ kind: "portal", target: portalTarget }}
-        />
-      ) : showPreviewTab ? (
-        <SessionPreviewSurface
-          surface={{
-            kind: "preview",
-            session,
-            status: previewStatus,
-            onClose: () => onClosePreviewTab?.(),
-          }}
         />
       ) : showStaging && stagingUrl ? (
         <SessionPreviewSurface

@@ -1,22 +1,18 @@
 /**
- * Sandbox provider CONFORMANCE suite (the sandbox rollout plan, Phase 3.3) —
- * the verify.ts checks parameterized over providers. Run MANUALLY:
+ * Sandbox provider CONFORMANCE suite — the live certification matrix for the
+ * Daytona and Box adapters. Run MANUALLY:
  *
- *   bun run deploy/sandbox/conformance.ts [docker-socket] [docker-ws] [daytona] [e2b] [box] [modal] [lambda-microvm]
+ *   bun run deploy/sandbox/conformance.ts [daytona] [box]
  *
- * (no args = the full matrix). Per entry: ensure/reuse, exec argv+stderr
- * semantics, workspace git (bind worktree for docker, in-sandbox volume-style
- * clone for remote), ports() shape, a real launchRun round-trip + steer +
- * cancel (cheapest Claude model, only when an account pool exists — and for
- * remote entries only when the sandbox can actually reach this host's
- * dial-back listener), get() reattach, destroy.
+ * (no args = both). Per entry: ensure/reuse, exec argv+stderr semantics,
+ * in-sandbox volume-style workspace git, ports() shape, a real launchRun
+ * round-trip + steer + cancel (cheapest Claude model, only when an account
+ * pool exists and the sandbox can actually reach this host's dial-back
+ * listener), get() reattach, destroy.
  *
- * - docker-socket / docker-ws ALWAYS run (docker is the self-host default —
- *   this host must keep them fully green).
- * - daytona / e2b / box run ONLY when credentials are configured — the suite
+ * - daytona / box run ONLY when credentials are configured — the suite
  *   reads workspace-owned Daytona/Box credentials through their opaque secret
- *   references and the experimental E2B key from the live config. Without
- *   credentials the section prints
+ *   references. Without credentials the section prints
  *   `SKIPPED: no credentials` and does NOT fake success; a key-holder gets
  *   the full matrix. Remote entries create the minimum sandbox set needed for
  *   the matrix: one source sandbox, plus one distinct restore sandbox for
@@ -71,13 +67,6 @@ const {
   remoteRepoTemplateProofPath,
 } =
   await import("../../packages/core/opensession-server/src/server/sandbox/remote-repo-template");
-// The orphan-snapshot sweep (docker.ts, piggybacked on the idle sweep) reads
-// session/state files through the — now scratch-redirected — chats dir, so it
-// would see every LIVE session as gone. Arm its once-an-hour throttle up
-// front so it never runs inside this suite.
-(
-  globalThis as unknown as { __sandboxSnapOrphanSweepAt?: number }
-).__sandboxSnapOrphanSweepAt = Date.now();
 type RunHostSpec =
   import("../../packages/core/opensession-server/src/runner-host/protocol").RunHostSpec;
 type Sandbox =
@@ -159,20 +148,10 @@ const daytonaKey: string =
   liveCfg?.daytona?.apiKey ||
   process.env.DAYTONA_API_KEY ||
   "";
-const e2bKey: string = liveCfg?.e2b?.apiKey || process.env.E2B_API_KEY || "";
 const boxKey: string =
   liveWorkspaceSecret(liveConnection("box")?.credentialRef) || "";
 const boxApiUrl: string =
   liveConnection("box")?.settings?.apiUrl || "https://ascii.dev/api/box/v1";
-const modalTokenId: string =
-  liveCfg?.modal?.tokenId || process.env.MODAL_TOKEN_ID || "";
-const modalTokenSecret: string =
-  liveCfg?.modal?.tokenSecret || process.env.MODAL_TOKEN_SECRET || "";
-const modalProfileAvailable = existsSync(
-  process.env.MODAL_CONFIG_PATH || `${HOME}/.modal.toml`,
-);
-const lambdaMicrovmImage: string =
-  liveCfg?.awsLambdaMicrovm?.imageIdentifier || "";
 
 // ── account pool gate (real model runs) ───────────────────────────────────────
 
@@ -189,8 +168,7 @@ try {
 } catch {}
 
 // ── scratch repos ─────────────────────────────────────────────────────────────
-// Local repo + worktree for the docker (bind) entries; a public GitHub repo
-// registration for remote volume-style clones.
+// A public GitHub repo registration for remote volume-style clones.
 
 const MAIN = `${SCRATCH}/main-repo`;
 const WT = `${SCRATCH}/wt-conf`;
@@ -251,7 +229,7 @@ await Bun.write(
   }),
 );
 
-// ── shared dial-back WS server (docker-ws + remote entries) ──────────────────
+// ── shared dial-back WS server ────────────────────────────────────────────────
 
 // Overrides for hosts where the public IP doesn't accept inbound connections
 // (typical cloud security groups): pin the listener port and front it with any
@@ -292,17 +270,6 @@ const wsSrv = Bun.serve({
     },
   },
 });
-const bridgeGw =
-  (
-    await sh([
-      "docker",
-      "network",
-      "inspect",
-      "bridge",
-      "-f",
-      "{{(index .IPAM.Config 0).Gateway}}",
-    ])
-  ).out.trim() || "172.17.0.1";
 const publicIp = await (async () => {
   try {
     return (
@@ -316,11 +283,11 @@ const publicIp = await (async () => {
     return "";
   }
 })();
-/** Base URL remote sandboxes dial back to; docker uses the bridge gateway. */
+/** Base URL remote sandboxes dial back to. */
 const remoteBase =
   PUBLIC_BASE || (publicIp ? `ws://${publicIp}:${wsSrv.port}` : "");
 console.log(
-  `dial-back listener on 0.0.0.0:${wsSrv.port} (bridge ${bridgeGw}, remote base ${remoteBase || "unknown"})`,
+  `dial-back listener on 0.0.0.0:${wsSrv.port} (remote base ${remoteBase || "unknown"})`,
 );
 
 // A production Open Session process already owns the permanent public-ingress
@@ -400,7 +367,7 @@ async function removeScratchIngress(): Promise<void> {
 
 interface Entry {
   name: string;
-  providerId: "docker" | "daytona" | "e2b" | "box" | "modal" | "lambda-microvm";
+  providerId: "daytona" | "box";
   /** null = run it; string = print SKIPPED reason. */
   skip: string | null;
   /** Scratch config for this entry (credentials included, never logged). */
@@ -423,31 +390,6 @@ const PREVIEW_PORT = 18755;
 
 const entries: Entry[] = [
   {
-    name: "docker-socket",
-    providerId: "docker",
-    skip: null,
-    config: { provider: "docker", previewPorts: [PREVIEW_PORT] },
-    repoId: "sbxtest",
-    cwd: WT,
-    expectPort: "hostPort",
-    remote: false,
-  },
-  {
-    name: "docker-ws",
-    providerId: "docker",
-    skip: null,
-    config: {
-      provider: "docker",
-      transport: "ws",
-      callbackBaseUrl: `ws://${bridgeGw}:${wsSrv.port}`,
-      previewPorts: [PREVIEW_PORT],
-    },
-    repoId: "sbxtest",
-    cwd: WT,
-    expectPort: "hostPort",
-    remote: false,
-  },
-  {
     name: "daytona",
     providerId: "daytona",
     skip: daytonaKey
@@ -456,7 +398,6 @@ const entries: Entry[] = [
     config: {
       provider: "daytona",
       callbackBaseUrl: remoteBase,
-      previewPorts: [8080],
       // Keep the operator's sized snapshot/endpoint. Daytona's default
       // 1GB/3GiB image cannot install this repo and is not representative of
       // the production provider configuration being certified.
@@ -472,30 +413,12 @@ const entries: Entry[] = [
     remote: true,
   },
   {
-    name: "e2b",
-    providerId: "e2b",
-    skip: e2bKey
-      ? null
-      : "SKIPPED: no credentials (set e2b.apiKey in ~/.opensession-sandbox.json or E2B_API_KEY)",
-    config: {
-      provider: "e2b",
-      callbackBaseUrl: remoteBase,
-      previewPorts: [8080],
-      e2b: { apiKey: e2bKey },
-    },
-    repoId: PUB_REPO_ID,
-    branch: PUB_BRANCH,
-    expectPort: "url",
-    remote: true,
-  },
-  {
     name: "box",
     providerId: "box",
     skip: boxKey ? null : "SKIPPED: connect Box in Workspace → Sandboxes first",
     config: {
       provider: "box",
       callbackBaseUrl: remoteBase,
-      previewPorts: [8080],
       prewarm: { enabled: true, ttlMinutes: 20, maxLive: 2 },
     },
     repoId: PUB_REPO_ID,
@@ -503,47 +426,6 @@ const entries: Entry[] = [
     expectPort: "url",
     remote: true,
     concurrentAttachMaxMs: 45_000,
-  },
-  {
-    name: "modal",
-    providerId: "modal",
-    skip:
-      (modalTokenId && modalTokenSecret) || modalProfileAvailable
-        ? null
-        : "SKIPPED: no credentials (set modal.tokenId/tokenSecret in ~/.opensession-sandbox.json or MODAL_TOKEN_ID/MODAL_TOKEN_SECRET)",
-    config: {
-      provider: "modal",
-      callbackBaseUrl: remoteBase,
-      previewPorts: [8080],
-      prewarm: { enabled: true, ttlMinutes: 20, maxLive: 2 },
-      modal: {
-        ...(liveCfg?.modal || {}),
-        ...(modalTokenId && modalTokenSecret
-          ? { tokenId: modalTokenId, tokenSecret: modalTokenSecret }
-          : {}),
-        publicPreviews: true,
-      },
-    },
-    repoId: PUB_REPO_ID,
-    branch: PUB_BRANCH,
-    expectPort: "url",
-    remote: true,
-  },
-  {
-    name: "lambda-microvm",
-    providerId: "lambda-microvm",
-    skip: lambdaMicrovmImage
-      ? null
-      : "SKIPPED: no image (set awsLambdaMicrovm.imageIdentifier in ~/.opensession-sandbox.json)",
-    config: {
-      provider: "lambda-microvm",
-      callbackBaseUrl: remoteBase,
-      awsLambdaMicrovm: liveCfg?.awsLambdaMicrovm || {},
-    },
-    repoId: PUB_REPO_ID,
-    branch: PUB_BRANCH,
-    expectPort: "none",
-    remote: true,
   },
 ];
 
@@ -581,12 +463,7 @@ async function waitForPrewarm(
 }
 
 async function cleanupCertificationTemplate(entry: Entry): Promise<void> {
-  if (
-    entry.providerId !== "daytona" &&
-    entry.providerId !== "box" &&
-    entry.providerId !== "modal"
-  )
-    return;
+  if (entry.providerId !== "daytona" && entry.providerId !== "box") return;
   const template = readRemoteRepoTemplate(entry.providerId, entry.repoId);
   if (!template) return;
   try {
@@ -604,25 +481,6 @@ async function cleanupCertificationTemplate(entry: Entry): Promise<void> {
           signal: AbortSignal.timeout(60_000),
         },
       );
-    } else {
-      const { ModalClient } = await import("modal");
-      const modalCfg = liveCfg?.modal || {};
-      const previousProfile = process.env.MODAL_PROFILE;
-      if (modalCfg.profile) process.env.MODAL_PROFILE = modalCfg.profile;
-      try {
-        const client = new ModalClient({
-          tokenId: modalTokenId || undefined,
-          tokenSecret: modalTokenSecret || undefined,
-          environment: modalCfg.environment,
-          endpoint: modalCfg.endpoint,
-        });
-        await client.images.delete(template.artifactId);
-      } finally {
-        if (modalCfg.profile) {
-          if (previousProfile === undefined) delete process.env.MODAL_PROFILE;
-          else process.env.MODAL_PROFILE = previousProfile;
-        }
-      }
     }
     invalidateRemoteRepoTemplate(entry.providerId, entry.repoId);
     ok(
@@ -790,11 +648,7 @@ async function runEntry(entry: Entry): Promise<void> {
     // different sandbox from it, retain the exact seal nonce + prepared repo
     // artifact, and be adopted by a second session. Repeating cold setup
     // cannot satisfy the nonce equality check.
-    if (
-      entry.providerId === "daytona" ||
-      entry.providerId === "box" ||
-      entry.providerId === "modal"
-    ) {
+    {
       const proofPath = remoteRepoTemplateProofPath(entry.repoId);
       const firstSeal = await sandbox.exec(["cat", proofPath]);
       const firstPrepared = await sandbox.exec([
@@ -895,14 +749,13 @@ async function runEntry(entry: Entry): Promise<void> {
     }
 
     // 5. dial-back reachability (remote entries must reach this listener for
-    //    launchRun; docker reaches it via the bridge gateway).
+    //    launchRun).
     // Remote entries probe /ingress-health — the path a publicIngress front
     // (Caddy/tunnel) actually forwards; /ping only exists on direct listeners.
     const callbackBase = String(entry.config.callbackBaseUrl || "");
-    const probeUrl = entry.remote
-      ? callbackBase &&
-        `${callbackBase.replace(/^ws(s?):\/\//, "http$1://")}/ingress-health`
-      : `http://${bridgeGw}:${wsSrv.port}/ping`;
+    const probeUrl =
+      callbackBase &&
+      `${callbackBase.replace(/^ws(s?):\/\//, "http$1://")}/ingress-health`;
     let reachable = false;
     if (probeUrl) {
       const probe = await sandbox.exec([
@@ -1227,56 +1080,6 @@ async function auditDaytonaLeftovers(): Promise<void> {
   }
 }
 
-async function auditE2bLeftovers(): Promise<void> {
-  if (!e2bKey) return;
-  section = "e2b";
-  try {
-    const { Sandbox } = await import("e2b");
-    const listLeftovers = async (): Promise<string[]> => {
-      // Same paginator dance as the adapter's findSandboxId — the SDK's list
-      // return shape varies across versions.
-      const paginator: any = (Sandbox as any).list({
-        apiKey: e2bKey,
-        query: { metadata: { opensessionSandbox: "1" } },
-      });
-      const infos: any[] = Array.isArray(paginator)
-        ? paginator
-        : typeof paginator?.nextItems === "function"
-          ? await paginator.nextItems()
-          : await paginator;
-      // Same live-account guard as the daytona audit: only sbxtest sessions
-      // are suite leftovers — never reap a real session's sandbox.
-      return (infos || [])
-        .filter((s: any) =>
-          String(s.metadata?.bksSession || "").startsWith("sbxtest-"),
-        )
-        .map((s: any) => String(s.sandboxId || s.id || ""))
-        .filter(Boolean);
-    };
-    let leftovers = await listLeftovers();
-    if (leftovers.length) {
-      // Kills are async server-side — give in-flight teardowns a moment.
-      await new Promise((r) => setTimeout(r, 15_000));
-      leftovers = await listLeftovers();
-    }
-    ok(
-      "no backstage-labeled e2b sandboxes left behind",
-      leftovers.length === 0,
-      leftovers.join(",") || "none",
-    );
-    for (const id of leftovers) {
-      console.warn(`  cleaning up leftover e2b sandbox ${id}`);
-      try {
-        await (Sandbox as any).kill(id, { apiKey: e2bKey });
-      } catch (e) {
-        console.warn(`  cleanup of ${id} failed:`, String(e).slice(0, 200));
-      }
-    }
-  } catch (e) {
-    ok("e2b leftovers audit ran", false, String(e).slice(0, 200));
-  }
-}
-
 async function auditBoxLeftovers(): Promise<void> {
   if (!boxKey) return;
   section = "box";
@@ -1340,60 +1143,6 @@ async function auditBoxLeftovers(): Promise<void> {
   }
 }
 
-async function auditModalLeftovers(): Promise<void> {
-  if ((!modalTokenId || !modalTokenSecret) && !modalProfileAvailable) return;
-  section = "modal";
-  try {
-    const { ModalClient } = await import("modal");
-    const client = new ModalClient({
-      ...(modalTokenId && modalTokenSecret
-        ? { tokenId: modalTokenId, tokenSecret: modalTokenSecret }
-        : {}),
-      environment: liveCfg?.modal?.environment,
-    });
-    const app = await client.apps.fromName(
-      liveCfg?.modal?.app || "opensession-sandboxes",
-      {
-        createIfMissing: true,
-      },
-    );
-    const listLeftovers = async () => {
-      const out: Array<{ id: string; session: string }> = [];
-      for await (const sandbox of client.sandboxes.list({
-        appId: app.appId,
-        tags: { "opensession.sandbox": "1" },
-      })) {
-        const tags = await sandbox.getTags();
-        const session = String(tags["opensession.session"] || "");
-        if (session.startsWith("sbxtest-"))
-          out.push({ id: sandbox.sandboxId, session });
-      }
-      return out;
-    };
-    let leftovers = await listLeftovers();
-    if (leftovers.length) {
-      await new Promise((r) => setTimeout(r, 15_000));
-      leftovers = await listLeftovers();
-    }
-    ok(
-      "no backstage-tagged modal sandboxes left behind",
-      leftovers.length === 0,
-      leftovers.map((l) => `${l.id}(${l.session})`).join(",") || "none",
-    );
-    for (const { id } of leftovers) {
-      console.warn(`  cleaning up leftover modal sandbox ${id}`);
-      try {
-        await (await client.sandboxes.fromId(id)).terminate();
-      } catch (e) {
-        console.warn(`  cleanup of ${id} failed:`, String(e).slice(0, 200));
-      }
-    }
-    client.close();
-  } catch (e) {
-    ok("modal leftovers audit ran", false, String(e).slice(0, 200));
-  }
-}
-
 // ── run the matrix ────────────────────────────────────────────────────────────
 
 try {
@@ -1406,32 +1155,13 @@ try {
     }
   }
   await auditDaytonaLeftovers();
-  await auditE2bLeftovers();
   await auditBoxLeftovers();
-  await auditModalLeftovers();
 } finally {
   console.log("\n── cleanup ──");
   try {
     await removeScratchIngress();
   } catch (e) {
     console.warn("  scratch ingress cleanup failed:", String(e).slice(0, 200));
-  }
-  // Docker scratch containers/volumes/state for both docker entries.
-  const { containerNameFor } =
-    await import("../../packages/core/opensession-server/src/server/sandbox/docker");
-  for (const e of entries.filter((x) => x.providerId === "docker")) {
-    const c = containerNameFor(`sbxtest-conf-${e.name}-${RUN_TS}`);
-    await sh(["docker", "rm", "-f", c]);
-    await sh([
-      "docker",
-      "volume",
-      "rm",
-      "-f",
-      `${c}-claude`,
-      `${c}-codex`,
-      `${c}-ws`,
-    ]);
-    rmSync(`${OPENSESSION_SESSIONS_DIR}/sandboxes/${c}.json`, { force: true });
   }
   for (const e of entries) {
     rmSync(

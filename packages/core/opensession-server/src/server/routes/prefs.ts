@@ -45,11 +45,6 @@ import {
   setWarmTemplateConfig,
   warmTemplateStatus,
 } from "../warm-template";
-import {
-  previewPoolStatus,
-  refreshGoldenImage,
-  setPreviewPoolConfig,
-} from "../preview-pool";
 import { REPOS } from "../worktree";
 import { conditionalJsonResponse } from "../http-json";
 
@@ -120,57 +115,6 @@ export async function handlePrefsRoutes(
         // the UI polls GET for progress via `refreshing`.
         void refreshWarmTemplate(repoId, { force: true }).catch(() => {});
         return Response.json({ repos: warmTemplateStatus() });
-      }
-    }
-  }
-
-  // ── Preview pool (warm, pre-booted dev-server containers per repo) ──
-  if (path === "/api/preview-pool" && req.method === "GET") {
-    return Response.json({ repos: previewPoolStatus() });
-  }
-
-  {
-    const m = path.match(/^\/api\/preview-pool\/([^/]+)(\/refresh)?$/);
-    if (m) {
-      const repoId = decodeURIComponent(m[1]);
-      if (!(repoId in REPOS))
-        return Response.json(
-          { error: `unknown repo "${repoId}"` },
-          { status: 404 },
-        );
-      if (!m[2] && req.method === "PUT") {
-        const body = await req.json().catch(() => null);
-        if (!body)
-          return Response.json({ error: "Invalid JSON" }, { status: 400 });
-        const patch: Record<string, unknown> = {};
-        if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
-        if (typeof body.devAuthBypass === "boolean")
-          patch.devAuthBypass = body.devAuthBypass;
-        if (["docker", "daytona", "microvm"].includes(body.backend))
-          patch.backend = body.backend;
-        for (const k of [
-          "running",
-          "paused",
-          "cpus",
-          "goldenIntervalHours",
-          "claimIdleMinutes",
-        ] as const) {
-          if (typeof body[k] === "number") patch[k] = body[k];
-        }
-        if (typeof body.memory === "string") patch.memory = body.memory;
-        setPreviewPoolConfig(repoId, patch);
-        return Response.json({ repos: previewPoolStatus() });
-      }
-      if (m[2] && req.method === "POST") {
-        // Fire-and-forget: a golden rebuild boots a dev server (minutes);
-        // the UI polls GET for progress via `goldenBuilding`. Refill the
-        // warm pool right after (the rebuild retires old-image spares).
-        void refreshGoldenImage(repoId, true)
-          .then(() =>
-            import("../preview-pool").then((p) => p.previewPoolSweepNow()),
-          )
-          .catch(() => {});
-        return Response.json({ repos: previewPoolStatus() });
       }
     }
   }

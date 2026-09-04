@@ -107,9 +107,8 @@ describe("sidebar setup checklist", () => {
               lifecycle: {
                 dir: null,
                 setup: false,
-                start: false,
-                previewJson: false,
-                previewCommand: false,
+                resume: false,
+                portals: false,
               },
             },
           ],

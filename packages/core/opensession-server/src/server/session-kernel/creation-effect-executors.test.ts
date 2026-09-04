@@ -107,7 +107,7 @@ function sandboxItem(): CreationSandboxEffectItem {
     payload: {
       creationIdentity: "create-one",
       creationGeneration: 1,
-      provider: "modal",
+      provider: "daytona",
       sandboxKey: "session-one",
       repo: "opensession",
       branch: "feature/create-one",
@@ -434,7 +434,7 @@ describe("creation sandbox effect executor", () => {
         mode: "code",
         trustProfile: "interactive",
       });
-      return { id: "sandbox-one", provider: "modal" as const };
+      return { id: "sandbox-one", provider: "daytona" as const };
     };
     await expect(
       executeCreationSandboxPrepare(sandboxItem(), {
@@ -476,7 +476,7 @@ describe("creation sandbox effect executor", () => {
 
     await expect(
       executeCreationSandboxPrepare(sandboxItem(), {
-        ensure: async () => ({ id: "sandbox-one", provider: "docker" }),
+        ensure: async () => ({ id: "sandbox-one", provider: "box" }),
         result: () => {
           throw new Error("must not result");
         },

@@ -4,6 +4,19 @@ export { pastedTextLineLabel } from "@tellahq/opensession-protocol/pasted-text";
 
 export const PASTED_TEXT_THRESHOLD = 2_500;
 
+/**
+ * Past this, a paste goes to the model as a file rather than inside the
+ * prompt. A chip's text is folded into the turn verbatim, so a paste of a few
+ * megabytes lands the whole thing in context and the request is refused as
+ * too long before the model sees a word of it (a single exchange cannot be
+ * compacted). 200k characters is roughly 50k tokens: still a quarter of the
+ * smallest context in use, and past the point where reading through file
+ * tools serves the model better than a wall of text.
+ */
+export const PASTED_TEXT_FILE_THRESHOLD = 200_000;
+
+export const PASTED_TEXT_FILE_NAME = "pasted-text.txt";
+
 export interface PastedTextAttachment {
   id: string;
   text: string;
@@ -11,6 +24,15 @@ export interface PastedTextAttachment {
 
 export function shouldCollapsePastedText(text: string): boolean {
   return text.length >= PASTED_TEXT_THRESHOLD;
+}
+
+export function shouldAttachPastedTextAsFile(text: string): boolean {
+  return text.length >= PASTED_TEXT_FILE_THRESHOLD;
+}
+
+/** The paste as a file the attachment path can stage and hand to the agent. */
+export function pastedTextFile(text: string): File {
+  return new File([text], PASTED_TEXT_FILE_NAME, { type: "text/plain" });
 }
 
 export function createPastedTextAttachment(text: string): PastedTextAttachment {

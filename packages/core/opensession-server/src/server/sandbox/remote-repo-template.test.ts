@@ -15,10 +15,9 @@ beforeEach(async () => {
     process.env.OPENSESSION_SANDBOX_CONFIG,
     JSON.stringify({ runnerSha: "abc" }),
   );
-  connectSandboxProvider("modal", {
-    tokenId: "test-id",
-    tokenSecret: "test-secret",
-    settings: { image: "base:v1" },
+  connectSandboxProvider("daytona", {
+    secret: "test-daytona-key",
+    settings: { snapshot: "base-v1" },
   });
 });
 
@@ -34,20 +33,20 @@ describe("remote repo template index", () => {
     const mod = await import(
       `./remote-repo-template?roundtrip=${Math.random()}`
     );
-    mod.writeRemoteRepoTemplate("modal", "app", "im-1", 1_000);
-    expect(mod.readRemoteRepoTemplate("modal", "app", 2_000)?.artifactId).toBe(
-      "im-1",
-    );
+    mod.writeRemoteRepoTemplate("daytona", "app", "im-1", 1_000);
     expect(
-      mod.readRemoteRepoTemplate("modal", "app", 365 * 24 * 60 * 60_000)
+      mod.readRemoteRepoTemplate("daytona", "app", 2_000)?.artifactId,
+    ).toBe("im-1");
+    expect(
+      mod.readRemoteRepoTemplate("daytona", "app", 365 * 24 * 60 * 60_000)
         ?.artifactId,
     ).toBe("im-1");
   });
 
-  test("refreshes source images every 30 minutes without expiring the old mapping", async () => {
+  test("refreshes source snapshots every 30 minutes without expiring the old mapping", async () => {
     const mod = await import(`./remote-repo-template?refresh=${Math.random()}`);
     const { current } = mod.writeRemoteRepoTemplate(
-      "modal",
+      "daytona",
       "app",
       "im-1",
       1_000,
@@ -59,7 +58,7 @@ describe("remote repo template index", () => {
       mod.remoteRepoTemplateNeedsRefresh(current, 1_000 + 30 * 60_000),
     ).toBe(true);
     expect(
-      mod.readRemoteRepoTemplate("modal", "app", 1_000 + 30 * 60_000)
+      mod.readRemoteRepoTemplate("daytona", "app", 1_000 + 30 * 60_000)
         ?.artifactId,
     ).toBe("im-1");
   });
@@ -84,21 +83,23 @@ describe("remote repo template index", () => {
 
   test("a runner commit pin bump alone keeps the artifact mapping", async () => {
     const mod = await import(`./remote-repo-template?pin=${Math.random()}`);
-    mod.writeRemoteRepoTemplate("modal", "app", "im-1");
+    mod.writeRemoteRepoTemplate("daytona", "app", "im-1");
     // Every deploy bumps runnerSha; the template must survive it — adoption's
     // bootstrap reconciles the pin inside the restored filesystem instead.
     // (Read-modify-write: connectSandboxProvider persists into this same file.)
     const cfgPath = process.env.OPENSESSION_SANDBOX_CONFIG!;
     const cfg = JSON.parse(await Bun.file(cfgPath).text());
     await Bun.write(cfgPath, JSON.stringify({ ...cfg, runnerSha: "def" }));
-    expect(mod.readRemoteRepoTemplate("modal", "app")?.artifactId).toBe("im-1");
+    expect(mod.readRemoteRepoTemplate("daytona", "app")?.artifactId).toBe(
+      "im-1",
+    );
   });
 
   test("create-shape changes invalidate the local artifact mapping", async () => {
     const mod = await import(`./remote-repo-template?shape=${Math.random()}`);
-    mod.writeRemoteRepoTemplate("modal", "app", "im-1");
-    updateSandboxConnection("modal", { settings: { image: "base:v2" } });
-    expect(mod.readRemoteRepoTemplate("modal", "app")).toBeNull();
+    mod.writeRemoteRepoTemplate("daytona", "app", "im-1");
+    updateSandboxConnection("daytona", { settings: { snapshot: "base-v2" } });
+    expect(mod.readRemoteRepoTemplate("daytona", "app")).toBeNull();
   });
 
   test("replacements report the old artifact for provider cleanup", async () => {

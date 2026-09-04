@@ -119,18 +119,7 @@ export function sleepingSandboxPortalStatus(
       pids: [],
     };
   });
-  const webapp =
-    services.find((service) => service.key === "WEBAPP_PORT") ?? services[0];
-  return {
-    hasPortsConf: services.length > 0,
-    webappPort: webapp?.port ?? null,
-    running: false,
-    starting: false,
-    previewUrl: null,
-    bootable: true,
-    services,
-    portalRecipes: [],
-  };
+  return { services, portalRecipes: [] };
 }
 
 /** Find the session that last registered this sandbox service. The caller

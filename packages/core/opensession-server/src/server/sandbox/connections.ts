@@ -8,6 +8,10 @@
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { dirname } from "path";
 import { audit } from "../audit";
+import {
+  sandboxAdapterSignature,
+  sandboxAdapterSignatureCurrent,
+} from "./adapter-signature";
 import { stateDir } from "../paths";
 import { writeJsonAtomic } from "../shared/atomic-write";
 import {
@@ -16,15 +20,10 @@ import {
   resolveWorkspaceSecret,
   workspaceSecretExists,
 } from "../workspace-secrets";
-export const WORKSPACE_SANDBOX_PROVIDERS = [
-  "docker",
-  "daytona",
-  "box",
-  "modal",
-] as const;
+export { sandboxAdapterSignature } from "./adapter-signature";
+export const WORKSPACE_SANDBOX_PROVIDERS = ["daytona", "box"] as const;
 export type WorkspaceSandboxProvider =
-  | (typeof WORKSPACE_SANDBOX_PROVIDERS)[number]
-  | "microvm";
+  (typeof WORKSPACE_SANDBOX_PROVIDERS)[number];
 
 export type SandboxQualificationStatus = "checking" | "ready" | "failed";
 
@@ -221,31 +220,6 @@ export function getSandboxConnection(
   );
 }
 
-export function sandboxAdapterSignature(
-  provider: WorkspaceSandboxProvider,
-): string {
-  const version =
-    provider === "box"
-      ? "connection-v4"
-      : provider === "daytona"
-        ? "connection-v2"
-        : "connection-v1";
-  return `${provider}:${version}`;
-}
-
-/** Connection qualification proves provider credentials and control-plane
- * semantics. Runner pins and remote bootstrap revisions have their own
- * re-bootstrap lifecycle and must not make a healthy connection disappear
- * after every deploy. Accept the previous signature shape once so existing
- * qualified connections migrate without another destructive provider test. */
-function sandboxAdapterSignatureCurrent(
-  provider: WorkspaceSandboxProvider,
-  stored: string | undefined,
-): boolean {
-  const current = sandboxAdapterSignature(provider);
-  return stored === current || stored?.startsWith(`${current}:`) === true;
-}
-
 export function safeSandboxConnections(): SafeSandboxConnection[] {
   return WORKSPACE_SANDBOX_PROVIDERS.map((provider) => {
     const connection = getSandboxConnection(provider);
@@ -263,7 +237,7 @@ export function safeSandboxConnections(): SafeSandboxConnection[] {
     }
     const hasCredentials = connection.credentialRef
       ? workspaceSecretExists(connection.credentialRef)
-      : provider === "docker";
+      : false;
     const signatureCurrent = sandboxAdapterSignatureCurrent(
       provider,
       connection.qualification?.adapterSignature,
@@ -294,8 +268,6 @@ function replaceConnection(connection: SandboxConnection): void {
 
 export interface ConnectSandboxInput {
   secret?: string;
-  tokenId?: string;
-  tokenSecret?: string;
   settings?: SandboxConnectionSettings;
 }
 
@@ -305,37 +277,17 @@ export function connectSandboxProvider(
 ): SandboxConnection {
   const previous = getSandboxConnection(provider);
   let credentialRef = previous?.credentialRef;
-  if (provider === "daytona" || provider === "box") {
-    if (input.secret) {
-      credentialRef = putWorkspaceSecret(
-        `sandbox.${provider}`,
-        input.secret.trim(),
-        credentialRef,
-      );
-    }
-    if (!credentialRef) {
-      throw new Error(
-        `${provider === "box" ? "Box" : "Daytona"} API key is required`,
-      );
-    }
-  } else if (provider === "modal") {
-    const tokenId = input.tokenId;
-    const tokenSecret = input.tokenSecret;
-    if (tokenId || tokenSecret) {
-      if (!tokenId || !tokenSecret) {
-        throw new Error("Modal token ID and token secret are both required");
-      }
-      credentialRef = putWorkspaceSecret(
-        "sandbox.modal",
-        JSON.stringify({
-          tokenId: tokenId.trim(),
-          tokenSecret: tokenSecret.trim(),
-        }),
-        credentialRef,
-      );
-    }
-    if (!credentialRef)
-      throw new Error("Modal token ID and token secret are required");
+  if (input.secret) {
+    credentialRef = putWorkspaceSecret(
+      `sandbox.${provider}`,
+      input.secret.trim(),
+      credentialRef,
+    );
+  }
+  if (!credentialRef) {
+    throw new Error(
+      `${provider === "box" ? "Box" : "Daytona"} API key is required`,
+    );
   }
   const now = new Date().toISOString();
   const connection: SandboxConnection = {
@@ -445,33 +397,18 @@ export function sandboxConnectionReady(
     )
   )
     return false;
-  if (provider === "daytona" || provider === "box" || provider === "modal") {
-    return Boolean(
-      connection.credentialRef &&
-      workspaceSecretExists(connection.credentialRef),
-    );
-  }
-  return true;
+  return Boolean(
+    connection.credentialRef && workspaceSecretExists(connection.credentialRef),
+  );
 }
 
 /** Internal-only account credential resolution for SDK construction. */
 export function sandboxProviderCredential(
-  provider: "daytona" | "box" | "modal",
-): { apiKey: string } | { tokenId: string; tokenSecret: string } | undefined {
+  provider: WorkspaceSandboxProvider,
+): { apiKey: string } | undefined {
   const connection = getSandboxConnection(provider);
   const raw = connection?.credentialRef
     ? resolveWorkspaceSecret(connection.credentialRef)
     : undefined;
-  if (!raw) return undefined;
-  if (provider === "daytona" || provider === "box") return { apiKey: raw };
-  try {
-    const parsed = JSON.parse(raw);
-    if (
-      typeof parsed.tokenId === "string" &&
-      typeof parsed.tokenSecret === "string"
-    ) {
-      return { tokenId: parsed.tokenId, tokenSecret: parsed.tokenSecret };
-    }
-  } catch {}
-  return undefined;
+  return raw ? { apiKey: raw } : undefined;
 }

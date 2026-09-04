@@ -1,9 +1,7 @@
 /**
- * Dev-server ("Preview") lifecycle for a session's worktree: status, screenshot, start, stop.
- *
- * Extracted verbatim from the opensession.ts fetch chain. Every handler
- * returns a Response for a matched route or undefined to fall through to the
- * next handler (see routes/index.ts for the dispatch order).
+ * Portal routes for a session workspace: status, declared-Portal start, and
+ * per-Portal stop/restart. Every handler returns a Response for a matched
+ * route or undefined to fall through (see routes/index.ts).
  */
 
 import type { RouteContext } from "./context";
@@ -13,10 +11,7 @@ import {
   portalRouteAuthorized,
   recipeStartOptions,
   sandboxPreviewIdentityContext,
-  startPreview,
-  startSandboxPreview,
-  stopPreview,
-  stopSandboxPreview,
+  type PreviewStatus,
 } from "../preview";
 import { findSessionAsync } from "../session-cache";
 import { activeSandboxFor } from "../session-sandbox";
@@ -42,20 +37,15 @@ import { createWorkloadIdentityEnv } from "../workload-identity";
 
 export { recipeCommand } from "../preview";
 
+const EMPTY_STATUS: PreviewStatus = { services: [], portalRecipes: [] };
+
 export function unavailableSandboxPreviewStatus(
   session: Pick<UnifiedSession, "sandbox">,
-) {
+): PreviewStatus | null {
   const sandbox = session.sandbox;
   if (!sandbox?.provider) return null;
   return {
-    hasPortsConf: false,
-    webappPort: null,
-    running: false,
-    starting:
-      sandbox.lifecycle === "preparing" || sandbox.lifecycle === "waking",
-    previewUrl: null,
-    bootable: false,
-    services: [],
+    ...EMPTY_STATUS,
     sandboxLifecycle: sandbox.lifecycle || "preparing",
   };
 }
@@ -63,7 +53,7 @@ export function unavailableSandboxPreviewStatus(
 export async function handlePreviewRoutes(
   ctx: RouteContext,
 ): Promise<Response | undefined> {
-  const { req, url, path, publicPrefix } = ctx;
+  const { req, path } = ctx;
 
   // Caddy-backed Portals authenticate every request through this endpoint
   // before proxying it to a session service. The global API auth gate has
@@ -91,7 +81,7 @@ export async function handlePreviewRoutes(
         }
       }
     } catch (error) {
-      console.warn(`[preview] Portal ${httpsPort} recovery failed:`, error);
+      console.warn(`[portals] Portal ${httpsPort} recovery failed:`, error);
       return Response.json(
         { error: "Portal route is not active" },
         { status: 404, headers: { "Cache-Control": "no-store" } },
@@ -116,216 +106,42 @@ export async function handlePreviewRoutes(
     });
   }
 
-  // Local dev-server ("Preview") status for a session's worktree — which
-  // services (.ports.conf) are listening, so the header can link to the
-  // webapp and show/stop running processes.
+  // Portal status for a session workspace: which services (.ports.conf) are
+  // listening and the Portals the repository declares. Never wakes a Sandbox.
   {
     const m = path.match(/^\/api\/sessions\/(.+)\/preview$/);
     if (m && req.method === "GET") {
       const session = await findSessionAsync(decodeURIComponent(m[1]));
       if (!session)
         return Response.json({ error: "Session not found" }, { status: 404 });
-      // Sandboxed session with a running container: the dev server (if
-      // any) lives in-container — status/ports/Caddy go through the
-      // sandbox. Otherwise the host path below, unchanged.
-      // Who this preview belongs to — the interstitial displays it so a
-      // stale/reused tab can never masquerade as another session's wait.
-      const who = {
-        sessionTitle: session.title || null,
-        sessionBranch: session.branch || null,
-      };
       if (session.runner)
-        return Response.json({
-          ...(await runnerPortalPreviewStatus(
-            session,
-            session.startedBy || undefined,
-          )),
-          ...who,
-        });
-      const sbx = session.worktreeDir ? await activeSandboxFor(session) : null;
-      if (sbx)
-        return Response.json({
-          ...(await getSandboxPreviewStatus(
-            sbx,
-            session.worktreeDir!,
-            session.id,
-          )),
-          ...who,
-        });
-      if (session.sandbox?.sandboxId) {
-        const sleeping = sleepingSandboxPortalStatus(
-          session.id,
-          session.sandbox.sandboxId,
-        );
-        if (sleeping) return Response.json({ ...sleeping, ...who });
-      }
-      const unavailableSandbox = unavailableSandboxPreviewStatus(session);
-      if (unavailableSandbox)
-        return Response.json({ ...unavailableSandbox, ...who });
-      if (!session.worktreeDir || !existsSync(session.worktreeDir)) {
-        return Response.json({
-          hasPortsConf: false,
-          webappPort: null,
-          running: false,
-          starting: false,
-          previewUrl: null,
-          services: [],
-          ...who,
-        });
-      }
-      return Response.json({
-        ...(await getPreviewStatus(session.worktreeDir)),
-        ...who,
-      });
-    }
-  }
-
-  // Screenshot the running preview (headless Chrome → PNG).
-  {
-    const m = path.match(/^\/api\/sessions\/(.+)\/preview\/screenshot$/);
-    if (m && req.method === "POST") {
-      const session = await findSessionAsync(decodeURIComponent(m[1]));
-      if (!session)
-        return Response.json({ error: "Session not found" }, { status: 404 });
-      const runnerStatus = session.runner
-        ? await runnerPortalPreviewStatus(
-            session,
-            session.startedBy || undefined,
-          )
-        : null;
-      const sbx = session.worktreeDir
-        ? await activeSandboxFor(session, { wake: true })
-        : null;
-      const unavailableSandbox = unavailableSandboxPreviewStatus(session);
-      if (!sbx && unavailableSandbox)
-        return Response.json(
-          { ...unavailableSandbox, error: "Sandbox is not ready for Preview" },
-          { status: 409 },
-        );
-      if (
-        !session.worktreeDir ||
-        (!existsSync(session.worktreeDir) && !sbx && !runnerStatus)
-      )
-        return Response.json(
-          { error: "Session has no worktree" },
-          { status: 400 },
-        );
-      try {
-        const { capturePreviewScreenshot } =
-          await import("../../server/preview");
-        // Sandboxed previews: hand the capture the sandbox-derived status
-        // (host status can't see in-container listeners); the URL itself
-        // is an ordinary Caddy-fronted https origin either way.
-        const png = await capturePreviewScreenshot(session.worktreeDir, {
-          ...(runnerStatus
-            ? { status: runnerStatus }
-            : sbx
-              ? {
-                  status: await getSandboxPreviewStatus(
-                    sbx,
-                    session.worktreeDir,
-                    session.id,
-                  ),
-                }
-              : {}),
-        });
-        return new Response(new Uint8Array(png), {
-          headers: { "Content-Type": "image/png" },
-        });
-      } catch (e: any) {
-        return Response.json(
-          { error: e?.message || "Screenshot failed" },
-          { status: 500 },
-        );
-      }
-    }
-  }
-
-  // Start the session's dev server if it isn't up yet.
-  {
-    const m = path.match(/^\/api\/sessions\/(.+)\/preview\/start$/);
-    if (m && req.method === "POST") {
-      const session = await findSessionAsync(decodeURIComponent(m[1]));
-      if (!session)
-        return Response.json({ error: "Session not found" }, { status: 404 });
-      const sbx = session.worktreeDir
-        ? await activeSandboxFor(session, { wake: true })
-        : null;
-      if (sbx)
-        return Response.json(
-          await startSandboxPreview(sbx, session.worktreeDir!, session.id),
-        );
-      const unavailableSandbox = unavailableSandboxPreviewStatus(session);
-      if (unavailableSandbox)
-        return Response.json(
-          { ...unavailableSandbox, error: "Sandbox is not ready for Preview" },
-          { status: 409 },
-        );
-      if (session.runner) {
-        const status = await runnerPortalPreviewStatus(
-          session,
-          session.startedBy || undefined,
-        );
-        if (status.running || status.starting) return Response.json(status);
-        const repo = session.repo ? getRepo(session.repo) : undefined;
-        const command = repo?.previewCommand
-          ? `${repo.previewCommand} .`
-          : "exec bash .agents/start.sh";
-        await startRunnerPortal({
-          session,
-          user: session.startedBy || undefined,
-          name: "webapp",
-          command,
-          description: "Repository app",
-        });
         return Response.json(
           await runnerPortalPreviewStatus(
             session,
             session.startedBy || undefined,
           ),
         );
-      }
-      if (!session.worktreeDir || !existsSync(session.worktreeDir)) {
-        return Response.json({
-          hasPortsConf: false,
-          webappPort: null,
-          running: false,
-          starting: false,
-          previewUrl: null,
-          services: [],
-        });
-      }
-      return Response.json(await startPreview(session.worktreeDir));
-    }
-  }
-
-  // Stop the session's dev server (scoped to its worktree's process group).
-  {
-    const m = path.match(/^\/api\/sessions\/(.+)\/preview\/stop$/);
-    if (m && req.method === "POST") {
-      const session = await findSessionAsync(decodeURIComponent(m[1]));
-      if (!session)
-        return Response.json({ error: "Session not found" }, { status: 404 });
-      // Sandboxed dev servers are stopped in-container (host pgids can't
-      // reach them); also drops the Caddy route.
       const sbx = session.worktreeDir ? await activeSandboxFor(session) : null;
       if (sbx)
         return Response.json(
-          await stopSandboxPreview(sbx, session.worktreeDir!),
+          await getSandboxPreviewStatus(sbx, session.worktreeDir!, session.id),
         );
+      if (session.sandbox?.sandboxId) {
+        const sleeping = sleepingSandboxPortalStatus(
+          session.id,
+          session.sandbox.sandboxId,
+        );
+        if (sleeping)
+          return Response.json({
+            ...sleeping,
+            sandboxLifecycle: session.sandbox.lifecycle || "sleeping",
+          });
+      }
       const unavailableSandbox = unavailableSandboxPreviewStatus(session);
       if (unavailableSandbox) return Response.json(unavailableSandbox);
-      if (!session.worktreeDir || !existsSync(session.worktreeDir)) {
-        return Response.json({
-          hasPortsConf: false,
-          webappPort: null,
-          running: false,
-          starting: false,
-          previewUrl: null,
-          services: [],
-        });
-      }
-      return Response.json(await stopPreview(session.worktreeDir));
+      if (!session.worktreeDir || !existsSync(session.worktreeDir))
+        return Response.json(EMPTY_STATUS);
+      return Response.json(await getPreviewStatus(session.worktreeDir));
     }
   }
 

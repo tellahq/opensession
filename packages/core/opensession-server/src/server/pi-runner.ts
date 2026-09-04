@@ -2309,6 +2309,7 @@ async function* runPiAttempt(
       repoHost: isScratch ? undefined : cwdRepo?.host,
       localInstructions: readLocalInstructions(cwd),
       inProcessMcp: opts.inProcessMcp,
+      sandboxed: process.env.OPENSESSION_SANDBOX === "1",
       hasSession: !!journal?.osSessionId,
       dialOracle:
         resolved?.dial && dialOracleAgent

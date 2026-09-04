@@ -14,14 +14,15 @@ adopting the Orb name or requiring a managed Open Session cloud.
 
 ## Status
 
-This began as a proposal. The supervised Portal layer, generated `.ports.conf`
-records, six-tool MCP, declared-Portal HTTP controls, outbound relay, sidebar
-controls, Sandbox badge, and serialized durable queue are implemented. The
-legacy repository Preview start path remains. The main unfinished work here is
-an explicit opt-in Project preparation model, provider-neutral `.agents/resume`
-and Portal restoration on every wake, and complete provider security and
-lifecycle verification. Sections below distinguish current behavior from
-targets where the difference matters.
+Implemented: the supervised Portal layer, generated `.ports.conf` records,
+the `opensession-portals` MCP, declared-Portal HTTP controls, the outbound
+relay, sidebar controls, the Sandbox badge, the serialized durable queue,
+`.agents/resume` on every wake, Portal restoration after a wake, and the
+one-choice session picker (This machine or Sandbox). The legacy repository
+Preview path, the Docker provider, and the uncertified E2B, Modal, and Lambda
+MicroVM adapters were removed in September 2026; Daytona and Box are the two
+Sandbox providers. Remaining: per-session Portal ACLs and a Sandbox default
+for new sessions once the two providers have run this way for a while.
 
 ## Product model
 
@@ -52,13 +53,13 @@ sticky ports and authenticated Portals.
 Open Session already has more execution mechanisms, but they currently leak
 into the product:
 
-| Layer              | Current Open Session behavior                                                                                                    | Target presentation                                                   |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| New session        | Provider-specific Sandbox, optionally adopted from a prewarm                                                                     | A fresh **Sandbox**.                                                  |
-| Project setup      | Warm-on-typing automatically prepares and may publish credential-free templates for template-capable providers                   | Explicitly opted-in **Project preparation ready**.                    |
-| Session durability | Provider-specific checkpoints, snapshots, pause, or archival; durable sleep/wake exists only where the provider implements it    | **Sandbox sleeping**.                                                 |
-| Wake               | Provider resume/restore; `.agents/resume` remains reserved until a selectable provider wires it                                  | **Waking Sandbox**, with the hook run before work resumes.            |
-| Services           | Supervised Portals through `opensession-portals` and generated `.ports.conf`, alongside the legacy repository Preview start path | Multiple supervised **Portals**, without a competing Preview concept. |
+| Layer              | Current Open Session behavior                                                                                                 | Target presentation                                                   |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| New session        | Provider-specific Sandbox, optionally adopted from a prewarm                                                                  | A fresh **Sandbox**.                                                  |
+| Project setup      | Warm-on-typing automatically prepares and may publish credential-free templates for template-capable providers                | Explicitly opted-in **Project preparation ready**.                    |
+| Session durability | Provider-specific checkpoints, snapshots, pause, or archival; durable sleep/wake exists only where the provider implements it | **Sandbox sleeping**.                                                 |
+| Wake               | Provider resume, then `.agents/resume`, then Portal restoration, then the queued turn                                         | **Waking Sandbox**, with the hook run before work resumes.            |
+| Services           | Supervised Portals through `opensession-portals` and generated `.ports.conf`                                                  | Multiple supervised **Portals**, without a competing Preview concept. |
 
 Keep the stronger implementation layers. Simplify the visible model to fresh
 Sandbox, optional Project preparation, and session-specific sleep/wake.
@@ -109,8 +110,8 @@ I can test UI with.”
 
 ## 3. Reverse Portal relay for remote Sandboxes
 
-Daytona, E2B, Box, Modal, and AWS Lambda MicroVM use the outbound Portal relay,
-with the Open Session-owned Portal route as the user path. Provider preview
+Daytona and Box use the outbound Portal relay, with the Open Session-owned
+Portal route as the user path. Provider preview
 URLs are not part of the browser flow.
 
 ```text
@@ -136,9 +137,8 @@ Security constraints:
 - Provider preview URLs and tokens are used only for qualification/internal
   diagnostics, never in UI, transcripts, MCP results, or browser requests.
 
-Docker can reach private service addresses directly behind the same Portal
-abstraction. Users and agents receive the same
-Open Session Portal URLs for every provider.
+Users and agents receive the same Open Session Portal URLs for every
+provider.
 
 ## 4. Agent instructions and repository declarations
 
@@ -236,9 +236,10 @@ Target behavior while a Sandbox is Sleeping or Waking:
   restores as appropriate, and only then does the queue drain;
 - a failed wake preserves the queue and offers Retry in the Sandbox popover.
 
-The provider-neutral resume step is still outstanding. Daytona and Box resume without the
-hook. Run `.agents/resume` after every successful provider wake, before
-restoring Portals or draining queued work.
+Daytona and Box both run `.agents/resume` after every successful provider
+wake (`runResumeHook` in `adapters/bootstrap.ts`), then
+`restoreSandboxPortals` restarts every Portal record still marked live, and
+only then does the queued turn run.
 
 ## 8. Project preparation and acceleration
 
@@ -261,8 +262,8 @@ Present only these normal user-facing facts:
 - **Project preparation ready** — new Sandboxes start faster.
 - **Sandbox sleeping** — this session resumes where it left off.
 
-Keep host dependency caches and preview pools in advanced workspace
-acceleration settings. Do not conflate them with Sandbox Project preparation.
+Keep host dependency caches in advanced workspace acceleration settings. Do
+not conflate them with Sandbox Project preparation.
 
 ## 9. Explicit non-goal: transplanting a live local session
 
@@ -285,12 +286,8 @@ when guarding against regressions, prove:
   report stopped state after wake;
 - sleeping transcripts remain readable;
 - multiple queued messages initiate one wake and execute in order;
-- the Portal relay and security matrix covers Daytona, E2B, Box, Modal, and
-  AWS Lambda MicroVM;
-- the durable sleep/wake and queue matrix covers the providers that implement
-  pause/resume: Daytona and Box. Record Docker as not exposing
-  provider pause/resume. E2B and Modal are ephemeral here, while AWS Lambda
-  MicroVM has a hard lifetime; none currently exposes this durable contract.
+- the Portal relay, security, and durable sleep/wake matrix covers both
+  providers, Daytona and Box.
 
 ## Acceptance outcome
 

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  assertAutomationEgressRestricted,
+  daytonaDesktopUrl,
   daytonaCreateResources,
   daytonaCreateSource,
   daytonaSnapshotIsRecent,
@@ -89,5 +91,75 @@ describe("Daytona exec transport", () => {
       stdout: "timed out",
       stderr: "",
     });
+  });
+});
+
+describe("Daytona egress policy probe", () => {
+  const driverFor = (samples: string[]) => {
+    const seen: string[] = [];
+    return {
+      seen,
+      driver: {
+        exec: async () => {
+          seen.push("probe");
+          const stdout = samples.length > 1 ? samples.shift()! : samples[0]!;
+          return { exitCode: 0, stdout, stderr: "" };
+        },
+      } as any,
+    };
+  };
+  const clock = () => {
+    let t = 0;
+    return { now: () => t, sleep: async (ms: number) => void (t += ms) };
+  };
+
+  test("waits for Daytona to apply the allowlist instead of judging the first sample", async () => {
+    const { driver, seen } = driverFor([
+      "allowed=200 blocked=200",
+      "allowed=000 blocked=000",
+      "allowed=200 blocked=000",
+    ]);
+    await assertAutomationEgressRestricted(
+      driver,
+      "wss://ingress.example.test",
+      "https://www.iana.org/",
+      { intervalMs: 1_000, settleMs: 10_000, ...clock() },
+    );
+    expect(seen).toHaveLength(3);
+  });
+
+  test("reports an unenforced policy only after the settle window", async () => {
+    const { driver, seen } = driverFor(["allowed=200 blocked=200"]);
+    await expect(
+      assertAutomationEgressRestricted(
+        driver,
+        "https://example.com",
+        "https://www.iana.org/",
+        { intervalMs: 1_000, settleMs: 3_000, ...clock() },
+      ),
+    ).rejects.toThrow(/not enforced by this Daytona org/);
+    expect(seen).toHaveLength(4);
+  });
+
+  test("reports a blocked dial-back once the policy has settled", async () => {
+    const { driver } = driverFor(["allowed=000 blocked=000"]);
+    await expect(
+      assertAutomationEgressRestricted(
+        driver,
+        "https://example.com",
+        "https://www.iana.org/",
+        { intervalMs: 1_000, settleMs: 2_000, ...clock() },
+      ),
+    ).rejects.toThrow(/blocks the dial-back URL/);
+  });
+});
+
+describe("Daytona desktop", () => {
+  test("opens noVNC on the signed preview host with autoconnect", () => {
+    expect(
+      daytonaDesktopUrl("https://6080-4kvyxv1qzdawyntz.daytonaproxy01.net"),
+    ).toBe(
+      "https://6080-4kvyxv1qzdawyntz.daytonaproxy01.net/vnc.html?autoconnect=1&resize=scale",
+    );
   });
 });

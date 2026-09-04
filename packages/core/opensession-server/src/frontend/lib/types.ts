@@ -928,7 +928,7 @@ export type WSServerMessage =
   | {
       type: "term_ready";
       termId?: string;
-      target: "host" | "docker" | "daytona" | "runner";
+      target: "host" | "daytona" | "box" | "runner";
       cwd?: string;
     }
   | { type: "term_notice"; termId?: string; message: string }

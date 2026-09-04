@@ -47,6 +47,9 @@ export function buildRunInstructions(input: {
    *  slug, or comma-separated list) — see RunAgentOpts.prReviewer. */
   prReviewer?: string;
   inProcessMcp?: Record<string, unknown>;
+  /** The run executes inside the session's Sandbox (Daytona or Box). One
+   *  boolean, not a per-session fact, so the prompt prefix stays shared. */
+  sandboxed?: boolean;
   /** The run belongs to a session, so PRs it opens get attributed. The id
    *  itself is session context, never prompt text. */
   hasSession?: boolean;
@@ -164,15 +167,24 @@ export function buildRunInstructions(input: {
         "in-process worker.",
     );
   }
+  if (input.sandboxed) {
+    parts.push(
+      "## Sandbox\nThis session runs in its own Sandbox: a Linux machine with the " +
+        "repository checked out, its `.agents/setup` already run, and a durable disk. It " +
+        "sleeps between turns and wakes with files and Portals intact. Install what you need " +
+        "with apt, bun, or the repository's own tooling; nothing here touches another " +
+        "session. Push your branch before ending: only pushed work leaves the Sandbox.",
+    );
+  }
   if (!input.isAsk && inproc["opensession-portals"]) {
     parts.push(
-      "## Preview links\nFor user-facing web changes, set the exact root-relative route, " +
-        "query included. For editors, call `tella-stage` `lease_editor_fixture` with " +
-        "fixture `multi_clip_transcript_v1` and this Open Session id as `leaseKey`. Pass only " +
-        "its `leaseId` to `opensession-portals` `set_editor_preview_path`; Open Session " +
-        "verifies the lease directly with Tella. Never construct a video id or report evidence " +
-        "yourself. Otherwise call `set_portal_path` without a name. Open the staging URL and " +
-        "verify the changed feature.",
+      "## Portals\nShow running software through `opensession-portals`: `start_declared_portal` " +
+        "for a Portal the repository declares, else `start_portal` with the command. Open the " +
+        "Portal URL, exercise the changed feature, and report the URL. For user-facing web " +
+        "changes, set the exact root-relative route with `set_portal_path`, query included. " +
+        "For Tella editor routes, call `tella-stage` `lease_editor_fixture` (fixture " +
+        "`multi_clip_transcript_v1`, this Open Session id as `leaseKey`) and pass only its " +
+        "`leaseId` to `set_editor_preview_path`; never construct a video id yourself.",
     );
   }
 

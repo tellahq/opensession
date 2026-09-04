@@ -49,15 +49,13 @@ describe("on-demand view tab ownership", () => {
   });
 
   test("keeps existing tab-strip, viewer, and navigation consumers", () => {
-    expect(appSource).toContain("previewOpen: previewTabOpen");
     expect(appSource).toContain(
       "terminalTabOpen: !!wsKey && terminalOpen.has(wsKey)",
     );
-    expect(appSource).toContain("openPreview: openPreviewTab");
   });
 
   test("restores only persistent on-demand tabs", () => {
-    for (const tab of ["staging", "preview", "assets"]) {
+    for (const tab of ["staging", "assets"]) {
       expect(hookSource).toContain(`new Set(getActiveViewTabKeys("${tab}"))`);
     }
     expect(hookSource).toMatch(
@@ -72,7 +70,6 @@ describe("on-demand view tab ownership", () => {
 
   test("falls back only when the closed tab is active", () => {
     for (const [tab, active] of [
-      ["preview", "previewLiveActive"],
       ["portal", "portalActive"],
       ["staging", "stagingActive"],
       ["assets", "assetsActive"],

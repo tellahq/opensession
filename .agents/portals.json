@@ -1,0 +1,13 @@
+{
+  "$comment": "Open Session's own dev instance as a Portal; see docs/self-development.md.",
+  "portals": [
+    {
+      "id": "dev",
+      "name": "Open Session dev",
+      "description": "A dev instance of this checkout with its own state dir.",
+      "command": "./.agents/start.sh",
+      "serviceKey": "WEBAPP_PORT",
+      "readyTimeoutSeconds": 120
+    }
+  ]
+}

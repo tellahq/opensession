@@ -3,6 +3,7 @@ import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 import {
   fetchSessionSandbox,
+  openSandboxDesktop,
   sandboxAction,
   type SessionSandboxStatus,
 } from "../lib/api/sandboxes";
@@ -161,6 +162,30 @@ export function SandboxBadge({
       });
   }
 
+  async function openDesktop() {
+    // Open the tab inside the click so popup blockers allow it, then point it
+    // at the minted URL once the provider answers.
+    const tab = window.open("", "_blank");
+    setWorking("desktop");
+    setError(null);
+    await (async () => {
+      const desktop = await openSandboxDesktop(sessionId);
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = desktop.url;
+      } else {
+        window.location.assign(desktop.url);
+      }
+    })()
+      .catch(async (cause) => {
+        tab?.close();
+        setError(errorMessage(cause, "Could not open the desktop"));
+      })
+      .finally(async () => {
+        setWorking(null);
+      });
+  }
+
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
@@ -185,7 +210,7 @@ export function SandboxBadge({
             <span className="ml-auto font-medium text-faint">Runtime</span>
           </div>
           <div className="mt-1 text-meta text-dim">
-            {sandbox.provider} · session workspace
+            Its own machine · sleeps between turns
           </div>
           {status?.cwd ? (
             <div
@@ -196,6 +221,15 @@ export function SandboxBadge({
             </div>
           ) : null}
         </div>
+        {lifecycle === "awake" && status?.canDesktop ? (
+          <button
+            className={actionClass}
+            disabled={Boolean(working)}
+            onClick={() => void openDesktop()}
+          >
+            {working === "desktop" ? "Opening desktop…" : "Open desktop"}
+          </button>
+        ) : null}
         {lifecycle === "awake" && status?.canPause ? (
           <button
             className={actionClass}
@@ -215,13 +249,17 @@ export function SandboxBadge({
             {working === "resume" ? "Waking…" : "Wake sandbox"}
           </button>
         ) : null}
-        <button
-          className={cn(actionClass, "text-red hover:text-red")}
-          disabled={Boolean(working || status?.busy)}
-          onClick={() => void act("recreate")}
-        >
-          {working === "recreate" ? "Recreating…" : "Recreate from clean image"}
-        </button>
+        {status?.materialized !== false || state !== "gone" ? (
+          <button
+            className={cn(actionClass, "text-red hover:text-red")}
+            disabled={Boolean(working || status?.busy)}
+            onClick={() => void act("recreate")}
+          >
+            {working === "recreate"
+              ? "Recreating…"
+              : "Recreate from clean image"}
+          </button>
+        ) : null}
         {status?.logs?.setup || status?.logs?.resume ? (
           <details className="mt-1 rounded-md bg-surface px-2.5 py-2 text-meta text-dim">
             <summary className="cursor-pointer font-semibold text-fg">

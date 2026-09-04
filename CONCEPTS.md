@@ -69,14 +69,14 @@ project's workspaces are _adopted_ as items arrive.
 ### Registering a repository project
 
 A repository entry identifies its checkout and default branch. It can carry
-setup, dependency and preview commands, plus host-specific review metadata:
+setup and dependency commands, plus host-specific review metadata:
 `ghRepo` for GitHub, or `host: "codestorage"` plus `csRepo` for code.storage.
 They live in `~/.opensession/config.json` — see
 [docs/instance-configuration.md](docs/instance-configuration.md).
 
-A repo can also commit its own lifecycle scripts (`.agents/setup`,
-`.agents/start.sh`) so every worktree provisions and boots itself without
-instance config. That convention is what lets an agent open its own change in a
+A repo can also commit its own lifecycle files (`.agents/setup`,
+`.agents/portals.json`) so every workspace provisions itself and exposes its
+app without instance config. That convention is what lets an agent open its own change in a
 real browser — see [docs/repo-lifecycle.md](docs/repo-lifecycle.md).
 
 One repository can be marked a **shared checkout**, meaning ordinary sessions
@@ -176,10 +176,10 @@ clone instead. Creating a worktree installs dependencies up front. This is also
 where your disk goes:
 [docs/worktrees.md](docs/worktrees.md).
 
-**Sandboxes** are optional provider-backed execution environments used instead
-of the host. Implementations include local Docker containers, local Firecracker
-MicroVMs, and remote container or VM providers:
-[docs/self-hosting-sandboxes.md](docs/self-hosting-sandboxes.md).
+**Sandboxes** are optional per-session machines used instead of the host: a
+Daytona or Box VM with the repository checked out and a durable disk that
+sleeps between turns, wakes with files and Portals intact, and can show you
+its desktop: [docs/self-hosting-sandboxes.md](docs/self-hosting-sandboxes.md).
 
 **Runners** are trusted persistent machines paired with
 `opensession runner connect` for platform-, toolchain-, or GPU-specific work.

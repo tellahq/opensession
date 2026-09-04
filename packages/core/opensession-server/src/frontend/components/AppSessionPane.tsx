@@ -67,7 +67,6 @@ interface AppSessionPaneProps {
     | "stagingActive"
     | "assetsActive"
     | "terminalActive"
-    | "previewLiveActive"
     | "portalActive"
     | "reviewFocusPr"
   >;
@@ -85,7 +84,6 @@ interface AppSessionPaneProps {
     | "subagentActive"
     | "terminalOpen"
     | "closeStagingTab"
-    | "closePreviewTab"
     | "closeAssetsTab"
     | "closeTerminalTab"
   >;
@@ -151,7 +149,6 @@ export function AppSessionPane({
     stagingActive,
     assetsActive,
     terminalActive,
-    previewLiveActive,
     portalActive,
     reviewFocusPr,
   },
@@ -165,7 +162,6 @@ export function AppSessionPane({
     subagentActive,
     terminalOpen,
     closeStagingTab,
-    closePreviewTab,
     closeAssetsTab,
     closeTerminalTab,
   },
@@ -321,16 +317,12 @@ export function AppSessionPane({
           // Presence, not foreground: the shells stay mounted behind whatever
           // else is in front, and only unmount when the tab is closed.
           terminalTabOpen: !!wsKey && terminalOpen.has(wsKey),
-          showPreviewTab: splitMode
-            ? viewTabKind(surfaceId) === "preview"
-            : focused && previewLiveActive,
           showPortal: splitMode
             ? viewTabKind(surfaceId) === "portal"
             : focused && portalActive,
           portalTarget: currentPortalTarget,
           reviewFocusPr,
           onCloseStaging: closeStagingTab,
-          onClosePreviewTab: closePreviewTab,
           onCloseAssets: closeAssetsTab,
           onCloseTerminal: closeTerminalTab,
         }}

@@ -41,35 +41,18 @@ const PROVIDERS: Array<{
   id: SandboxConnectionInfo["provider"];
   label: string;
   description: string;
-  command: string;
 }> = [
-  {
-    id: "docker",
-    label: "Docker",
-    description:
-      "Local container isolation using the Open Session runner image.",
-    command: "opensession sandbox enable docker",
-  },
   {
     id: "daytona",
     label: "Daytona",
     description:
       "Remote workspaces in your Daytona account, connected with your workspace API key.",
-    command: "",
   },
   {
     id: "box",
     label: "Box",
     description:
-      "Persistent Linux VMs in your Box account with fast snapshot restores and private previews.",
-    command: "",
-  },
-  {
-    id: "modal",
-    label: "Modal",
-    description:
-      "Remote sandboxes in your Modal account, connected with a token pair.",
-    command: "",
+      "Persistent Linux VMs in your Box account with fast snapshot restores and private Portals.",
   },
 ];
 
@@ -110,9 +93,7 @@ function machineSummary(environment: SandboxEnvironmentInfo): string {
     return "Provider defaults";
   }
   return [
-    settings.cpu
-      ? `${settings.cpu} ${environment.provider === "modal" ? "physical CPU" : "vCPU"}`
-      : undefined,
+    settings.cpu ? `${settings.cpu} vCPU` : undefined,
     settings.memoryMb
       ? `${settings.memoryMb >= 1024 ? `${settings.memoryMb / 1024} GB` : `${settings.memoryMb} MB`} memory`
       : undefined,
@@ -129,91 +110,59 @@ type MachineProfile = {
   settings: SandboxMachineSettings;
 };
 
-const MACHINE_PROFILES: Record<"daytona" | "box" | "modal", MachineProfile[]> =
-  {
-    daytona: [
-      {
-        id: "small",
-        label: "Small",
-        detail: "1 vCPU · 1 GB · 3 GB disk",
-        settings: { cpu: 1, memoryMb: 1024, diskGb: 3 },
-      },
-      {
-        id: "medium",
-        label: "Medium",
-        detail: "2 vCPU · 4 GB · 8 GB disk",
-        settings: { cpu: 2, memoryMb: 4096, diskGb: 8 },
-      },
-      {
-        id: "large",
-        label: "Large",
-        detail: "4 vCPU · 8 GB · 10 GB disk",
-        settings: { cpu: 4, memoryMb: 8192, diskGb: 10 },
-      },
-    ],
-    box: [
-      {
-        id: "small",
-        label: "Small",
-        detail: "2 shared vCPU · 4 GB · 40+ GB SSD",
-        settings: { cpu: 2, memoryMb: 4096, diskGb: 40 },
-      },
-      {
-        id: "default",
-        label: "Default",
-        detail: "4 shared vCPU · 8 GB · 80+ GB SSD",
-        settings: { cpu: 4, memoryMb: 8192, diskGb: 80 },
-      },
-      {
-        id: "large",
-        label: "Large",
-        detail: "8 shared vCPU · 16 GB · 100+ GB SSD",
-        settings: { cpu: 8, memoryMb: 16_384, diskGb: 100 },
-      },
-    ],
-    modal: [
-      {
-        id: "efficient",
-        label: "Efficient",
-        detail: "0.5 physical CPU · 2 GB",
-        settings: { cpu: 0.5, memoryMb: 2048 },
-      },
-      {
-        id: "balanced",
-        label: "Balanced",
-        detail: "1 physical CPU · 4 GB",
-        settings: { cpu: 1, memoryMb: 4096 },
-      },
-      {
-        id: "performance",
-        label: "Performance",
-        detail: "2 physical CPUs · 8 GB",
-        settings: { cpu: 2, memoryMb: 8192 },
-      },
-      {
-        id: "power",
-        label: "Power",
-        detail: "8 physical CPUs · 16 GB",
-        settings: { cpu: 8, memoryMb: 16_384 },
-      },
-    ],
-  };
+const MACHINE_PROFILES: Record<"daytona" | "box", MachineProfile[]> = {
+  daytona: [
+    {
+      id: "small",
+      label: "Small",
+      detail: "1 vCPU · 1 GB · 3 GB disk",
+      settings: { cpu: 1, memoryMb: 1024, diskGb: 3 },
+    },
+    {
+      id: "medium",
+      label: "Medium",
+      detail: "2 vCPU · 4 GB · 8 GB disk",
+      settings: { cpu: 2, memoryMb: 4096, diskGb: 8 },
+    },
+    {
+      id: "large",
+      label: "Large",
+      detail: "4 vCPU · 8 GB · 10 GB disk",
+      settings: { cpu: 4, memoryMb: 8192, diskGb: 10 },
+    },
+  ],
+  box: [
+    {
+      id: "small",
+      label: "Small",
+      detail: "2 shared vCPU · 4 GB · 40+ GB SSD",
+      settings: { cpu: 2, memoryMb: 4096, diskGb: 40 },
+    },
+    {
+      id: "default",
+      label: "Medium",
+      detail: "4 shared vCPU · 8 GB · 80+ GB SSD",
+      settings: { cpu: 4, memoryMb: 8192, diskGb: 80 },
+    },
+    {
+      id: "large",
+      label: "Large",
+      detail: "8 shared vCPU · 16 GB · 100+ GB SSD",
+      settings: { cpu: 8, memoryMb: 16_384, diskGb: 100 },
+    },
+  ],
+};
 
 function machineProfiles(
   provider: SandboxConnectionInfo["provider"],
 ): MachineProfile[] {
-  return provider === "daytona" || provider === "box" || provider === "modal"
-    ? MACHINE_PROFILES[provider]
-    : [];
+  return MACHINE_PROFILES[provider];
 }
 
 function defaultMachineProfile(
   provider: SandboxConnectionInfo["provider"],
 ): string {
-  if (provider === "daytona") return "medium";
-  if (provider === "box") return "default";
-  if (provider === "modal") return "balanced";
-  return "large";
+  return provider === "daytona" ? "medium" : "default";
 }
 
 function machineProfileForSettings(
@@ -246,17 +195,11 @@ function ConnectDialog({
     (candidate) => candidate.id === connection.provider,
   )!;
   const [apiKey, setApiKey] = useState("");
-  const [tokenId, setTokenId] = useState("");
-  const [tokenSecret, setTokenSecret] = useState("");
   const [region, setRegion] = useState(
     String(connection.settings.region || ""),
   );
   const [snapshot, setSnapshot] = useState(
     String(connection.settings.snapshot || ""),
-  );
-  const [app, setApp] = useState(String(connection.settings.app || ""));
-  const [environment, setEnvironment] = useState(
-    String(connection.settings.environment || ""),
   );
   const [cpu, setCpu] = useState(String(connection.settings.cpu || ""));
   const [memoryMb, setMemoryMb] = useState(
@@ -265,9 +208,7 @@ function ConnectDialog({
   const [saving, setSaving] = useState(false);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   // The credential field, so the dialog opens ready to paste rather than with
-  // focus on its close button. Only one of the two branches below renders, so
-  // they share the ref; Docker has no field at all and leaves it null, which
-  // Base UI treats as "focus the first tabbable" exactly as before.
+  // focus on its close button.
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
   async function connect() {
@@ -278,12 +219,8 @@ function ConnectDialog({
       > = {};
       const body: Parameters<typeof connectSandbox>[1] = { settings };
       if (apiKey) body.apiKey = apiKey;
-      if (tokenId) body.tokenId = tokenId;
-      if (tokenSecret) body.tokenSecret = tokenSecret;
       if (region) settings.region = region;
       if (snapshot) settings.snapshot = snapshot;
-      if (app) settings.app = app;
-      if (environment) settings.environment = environment;
       if (cpu) settings.cpu = Number(cpu);
       if (memoryMb) settings.memoryMb = Number(memoryMb);
       const response = await connectSandbox(connection.provider, body);
@@ -322,10 +259,6 @@ function ConnectDialog({
   }
 
   const exists = connection.state !== "not_configured";
-  const remote =
-    connection.provider === "daytona" ||
-    connection.provider === "box" ||
-    connection.provider === "modal";
   return (
     <Modal.Root
       open={open}
@@ -341,147 +274,80 @@ function ConnectDialog({
         <Modal.Header
           title={`${exists ? "Configure" : "Connect"} ${provider.label}`}
           description={
-            remote
-              ? connection.provider === "box"
-                ? "Credentials stay on this server. Open Session tests ingress, creates a disposable Box, verifies archive/resume and snapshot restore, then archives it."
-                : "Credentials stay on this server. Open Session tests ingress, creates a disposable sandbox, restores a snapshot, and cleans up."
-              : "Run the setup command on this machine, then let Open Session verify the runtime and snapshot path."
+            connection.provider === "box"
+              ? "Credentials stay on this server. Open Session tests ingress, creates a disposable Box, verifies archive/resume and snapshot restore, then archives it."
+              : "Credentials stay on this server. Open Session tests ingress, creates a disposable sandbox, restores a snapshot, and cleans up."
           }
         />
 
-        {(connection.provider === "daytona" ||
-          connection.provider === "box") && (
-          <Field
-            label={
-              connection.provider === "box" ? "Box API key" : "Daytona API key"
+        <Field
+          label={
+            connection.provider === "box" ? "Box API key" : "Daytona API key"
+          }
+        >
+          <Input
+            ref={firstFieldRef}
+            type="password"
+            autoComplete="off"
+            placeholder={
+              connection.hasCredentials
+                ? "Leave blank to keep current key"
+                : `Enter ${connection.provider === "box" ? "box_…" : "API key"}`
             }
-          >
-            <Input
-              ref={firstFieldRef}
-              type="password"
-              autoComplete="off"
-              placeholder={
-                connection.hasCredentials
-                  ? "Leave blank to keep current key"
-                  : `Enter ${connection.provider === "box" ? "box_…" : "API key"}`
-              }
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-            />
-          </Field>
-        )}
+            value={apiKey}
+            onChange={(event) => setApiKey(event.target.value)}
+          />
+        </Field>
 
-        {connection.provider === "modal" && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Modal token ID">
-              <Input
-                ref={firstFieldRef}
-                type="password"
-                autoComplete="off"
-                placeholder={
-                  connection.hasCredentials ? "Keep current token" : "Token ID"
-                }
-                value={tokenId}
-                onChange={(event) => setTokenId(event.target.value)}
-              />
-            </Field>
-            <Field label="Modal token secret">
-              <Input
-                type="password"
-                autoComplete="off"
-                placeholder={
-                  connection.hasCredentials
-                    ? "Keep current secret"
-                    : "Token secret"
-                }
-                value={tokenSecret}
-                onChange={(event) => setTokenSecret(event.target.value)}
-              />
-            </Field>
-          </div>
-        )}
-
-        {!remote && (
-          <div className="rounded-lg bg-surface p-3">
-            <div className="mb-1 text-label font-medium text-dim">
-              Setup command
-            </div>
-            <code className="block select-all overflow-x-auto text-sm text-fg">
-              {provider.command}
-            </code>
-          </div>
-        )}
-
-        {remote && (
-          <>
-            <p className="m-0 text-supporting text-dim">
-              Remote providers use Public callback under Domains for webhooks
-              and workload identity.
-            </p>
-            {connection.provider !== "box" && (
-              <details className="rounded-lg bg-surface p-3 text-supporting text-dim">
-                <summary className="cursor-pointer font-medium text-fg">
-                  Provider settings
-                </summary>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <Field label="Region">
+        <>
+          <p className="m-0 text-supporting text-dim">
+            Sandboxes reach this server through Public callback under Domains
+            for run streaming and workload identity.
+          </p>
+          {connection.provider !== "box" && (
+            <details className="rounded-lg bg-surface p-3 text-supporting text-dim">
+              <summary className="cursor-pointer font-medium text-fg">
+                Provider settings
+              </summary>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Field label="Region">
+                  <Input
+                    value={region}
+                    onChange={(event) => setRegion(event.target.value)}
+                    placeholder="Provider default"
+                  />
+                </Field>
+                <Field label="CPU">
+                  <Input
+                    type="number"
+                    min="1"
+                    value={cpu}
+                    onChange={(event) => setCpu(event.target.value)}
+                    placeholder="Provider default"
+                  />
+                </Field>
+                <Field label="Memory (MB)">
+                  <Input
+                    type="number"
+                    min="512"
+                    value={memoryMb}
+                    onChange={(event) => setMemoryMb(event.target.value)}
+                    placeholder="Provider default"
+                  />
+                </Field>
+                {connection.provider === "daytona" ? (
+                  <Field label="Base snapshot">
                     <Input
-                      value={region}
-                      onChange={(event) => setRegion(event.target.value)}
-                      placeholder="Provider default"
+                      value={snapshot}
+                      onChange={(event) => setSnapshot(event.target.value)}
+                      placeholder="Daytona default"
                     />
                   </Field>
-                  <Field label="CPU">
-                    <Input
-                      type="number"
-                      min="1"
-                      value={cpu}
-                      onChange={(event) => setCpu(event.target.value)}
-                      placeholder="Provider default"
-                    />
-                  </Field>
-                  <Field label="Memory (MB)">
-                    <Input
-                      type="number"
-                      min="512"
-                      value={memoryMb}
-                      onChange={(event) => setMemoryMb(event.target.value)}
-                      placeholder="Provider default"
-                    />
-                  </Field>
-                  {connection.provider === "daytona" ? (
-                    <Field label="Base snapshot">
-                      <Input
-                        value={snapshot}
-                        onChange={(event) => setSnapshot(event.target.value)}
-                        placeholder="Daytona default"
-                      />
-                    </Field>
-                  ) : connection.provider === "modal" ? (
-                    <>
-                      <Field label="Modal app">
-                        <Input
-                          value={app}
-                          onChange={(event) => setApp(event.target.value)}
-                          placeholder="opensession-sandboxes"
-                        />
-                      </Field>
-                      <Field label="Environment">
-                        <Input
-                          value={environment}
-                          onChange={(event) =>
-                            setEnvironment(event.target.value)
-                          }
-                          placeholder="Modal default"
-                        />
-                      </Field>
-                    </>
-                  ) : null}
-                </div>
-              </details>
-            )}
-          </>
-        )}
+                ) : null}
+              </div>
+            </details>
+          )}
+        </>
 
         <Modal.Footer className="mt-1">
           {exists &&
@@ -524,7 +390,7 @@ function ConnectDialog({
             onClick={() => void connect()}
             disabled={saving}
           >
-            {saving ? "Starting…" : remote ? "Connect and test" : "Test setup"}
+            {saving ? "Starting…" : "Connect and test"}
           </Button>
         </Modal.Footer>
       </Modal.Content>
@@ -633,7 +499,7 @@ function ConnectionCard({
                 onClick={() => setDialogOpen(true)}
                 disabled={!canManage || checking}
               >
-                {connection.provider === "docker" ? "Enable" : "Connect"}
+                Connect
               </Button>
             ) : (
               <Switch
@@ -871,8 +737,6 @@ function ProjectEnvironmentDialog({
             "Daytona supports custom resource combinations, but these documented sizes avoid invalid or undersized setups."}
           {provider === "box" &&
             "Box exposes three fixed machine types. Stop and resume retain the disk, and new sandboxes restore from this project's named snapshot."}
-          {provider === "modal" &&
-            "Modal CPU values are physical cores and memory is a guaranteed request; workloads may burst when capacity is available."}
         </div>
 
         <Modal.Footer>
@@ -988,14 +852,12 @@ export function SandboxesPanel() {
     );
   }
 
-  const reusableEnvironments = environments.filter(
-    (environment) =>
-      environment.provider !== "docker" &&
-      connections.some(
-        (connection) =>
-          connection.provider === environment.provider &&
-          connection.state === "ready",
-      ),
+  const reusableEnvironments = environments.filter((environment) =>
+    connections.some(
+      (connection) =>
+        connection.provider === environment.provider &&
+        connection.state === "ready",
+    ),
   );
   const configuredEnvironments = reusableEnvironments.filter(
     (environment) => environment.state !== "not_prepared",
@@ -1039,8 +901,8 @@ export function SandboxesPanel() {
         ))}
       </div>
       <SettingsHint>
-        None remains the default. Personal and per-session choices can override
-        the workspace default.
+        This machine remains the default. Personal and per-session choices can
+        override the workspace default.
       </SettingsHint>
       {reusableEnvironments.length > 0 && (
         <>

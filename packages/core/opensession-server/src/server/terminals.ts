@@ -115,13 +115,7 @@ export interface TerminalOpts {
   send: (msg: object) => void;
 }
 
-type TermTargetKind =
-  | "host"
-  | "docker"
-  | "daytona"
-  | "box"
-  | "microvm"
-  | "runner";
+type TermTargetKind = "host" | "daytona" | "box" | "microvm" | "runner";
 
 /** A shell realized as a host process wrapped in a Bun PTY (host, docker, or
  * an SSH transport such as Box). */
@@ -277,43 +271,6 @@ async function resolveTarget(
     const { sandboxesEnabled, sandboxProviderConfigured } =
       await import("./sandbox/config");
     if (!sandboxesEnabled()) return hostShellTarget(session); // kill-switch
-
-    if (sb.provider === "docker" && sandboxProviderConfigured("docker")) {
-      // Wake on demand — `docker start` is a no-op on a running container.
-      const start = Bun.spawn(["docker", "start", sb.sandboxId], {
-        stdout: "ignore",
-        stderr: "pipe",
-      });
-      const [code, err] = await Promise.all([
-        start.exited,
-        new Response(start.stderr).text(),
-      ]);
-      if (code !== 0) {
-        return hostShellTarget(
-          session,
-          `sandbox container unavailable (${err.trim().slice(0, 120)}) — opened a host shell instead`,
-        );
-      }
-      const { touchSandboxActivity } = await import("./sandbox/docker");
-      touchSandboxActivity(sb.sandboxId);
-      return {
-        kind: "spawn",
-        argv: [
-          "docker",
-          "exec",
-          "-it",
-          "-e",
-          "TERM=xterm-256color",
-          "-w",
-          cwd,
-          sb.sandboxId,
-          "bash",
-          "-il",
-        ],
-        target: "docker",
-        displayCwd: cwd,
-      };
-    }
 
     if (sb.provider === "daytona" && sandboxProviderConfigured("daytona")) {
       const { daytonaPtySession } = await import("./sandbox/adapters/daytona");

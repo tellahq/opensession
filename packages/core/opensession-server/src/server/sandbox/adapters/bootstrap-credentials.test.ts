@@ -61,7 +61,7 @@ describe("remote engine credential projection", () => {
   });
 
   test("every remote provider delegates launch credential projection to bootstrap", () => {
-    for (const provider of ["daytona", "box", "e2b", "modal"]) {
+    for (const provider of ["daytona", "box"]) {
       const source = readFileSync(
         join(import.meta.dir, `${provider}.ts`),
         "utf-8",

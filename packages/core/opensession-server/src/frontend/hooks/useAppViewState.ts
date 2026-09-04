@@ -62,7 +62,6 @@ export function useAppViewState({
   const videoActive = activeViewTab === "video";
   const stagingActive = activeViewTab === "staging";
   const assetsActive = activeViewTab === "assets";
-  const previewLiveActive = activeViewTab === "preview";
   const portalActive = activeViewTab === "portal";
   const terminalActive = activeViewTab === "terminal";
   const subagentSelected = activeViewTab === "subagent";
@@ -265,7 +264,6 @@ export function useAppViewState({
     videoActive,
     stagingActive,
     assetsActive,
-    previewLiveActive,
     portalActive,
     terminalActive,
     subagentSelected,

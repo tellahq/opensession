@@ -18,7 +18,23 @@ export interface SessionSandboxStatus {
   cwd?: string | null;
   canPause?: boolean;
   canResume?: boolean;
+  canDesktop?: boolean;
   logs?: { setup?: string; resume?: string };
+}
+
+export interface SandboxDesktopLink {
+  url: string;
+  expiresAt?: number;
+}
+
+/** Mints a one-viewer desktop URL. Open it in a new tab; never persist it. */
+export function openSandboxDesktop(
+  sessionId: string,
+): Promise<SandboxDesktopLink> {
+  return request(`/sessions/${encodeURIComponent(sessionId)}/sandbox/desktop`, {
+    method: "POST",
+    label: "Failed to open the sandbox desktop",
+  });
 }
 
 export function fetchSessionSandbox(
