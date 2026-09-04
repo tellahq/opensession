@@ -32,56 +32,25 @@ import {
   type MentionSuggestion,
 } from "../lib/mention-palette";
 import { emojiContextAt, emojiMentionSuggestions } from "../lib/emoji";
+import {
+  isSpacedQuery,
+  mentionContextAt,
+  slashContextAt,
+} from "../lib/mention-trigger";
 import { caretPoint } from "../lib/caret-coords";
 import { PHONE_QUERY } from "../lib/breakpoints";
 
-/**
- * Find the active "@"-mention being typed at the caret. Returns the index of
- * the "@" and the query typed after it, or null when the caret isn't inside a
- * mention token. A mention starts at "@" that is at the start of the text or
- * preceded by whitespace, and runs until the first whitespace.
- */
+/** The inline token the popup is open for (see lib/mention-trigger). */
 interface TriggerContext {
   start: number;
   query: string;
   kind: "file" | "skill" | "emoji";
 }
 
-function mentionContextAt(
-  value: string,
-  caret: number,
-): { start: number; query: string } | null {
-  // Walk back from the caret to the "@", bailing on whitespace.
-  let i = caret - 1;
-  while (i >= 0) {
-    const ch = value[i];
-    if (ch === "@") {
-      const prev = i > 0 ? value[i - 1] : " ";
-      if (prev === " " || prev === "\n" || prev === "\t") {
-        return { start: i, query: value.slice(i + 1, caret) };
-      }
-      return null;
-    }
-    if (ch === " " || ch === "\n" || ch === "\t") return null;
-    i--;
-  }
-  return null;
-}
-
-/**
- * Find the active "/"-skill being typed. Only triggers when "/" is the very
- * first character of the whole input (like a CLI slash command) and the caret
- * is still inside that first token — so typing a path like `src/foo` mid-text
- * never opens it.
- */
-function slashContextAt(
-  value: string,
-  caret: number,
-): { start: number; query: string } | null {
-  if (value[0] !== "/" || caret < 1) return null;
-  const query = value.slice(1, caret);
-  if (/\s/.test(query)) return null;
-  return { start: 0, query };
+/** A trigger whose spaced query is over: the rest of the line is prose. */
+interface SettledTrigger {
+  start: number;
+  kind: TriggerContext["kind"];
 }
 
 function sameTrigger(
@@ -184,6 +153,11 @@ export function useFileMentions({
   // its query changes. A ref rather than state: it must be readable by the
   // sync() that the very same key's keyup runs, before any re-render.
   const dismissed = useRef<TriggerContext | null>(null);
+  // Queries may run past their first word, like Notion's slash menu, so the
+  // token needs an end: a row was inserted, Escape closed it, or the spaced
+  // query matched nothing. From then on the same token stays closed while its
+  // query still holds a space. Deleting back into the first word reopens it.
+  const settled = useRef<SettledTrigger | null>(null);
   // Latest fetchers in refs: callers pass inline closures, so depending on
   // them directly would re-run the fetch effect on every render — which loops
   // (fetch → setSuggestions → render → new closure → fetch) while open.
@@ -239,13 +213,23 @@ export function useFileMentions({
     // in every host the hook is wired into, including ones with no repository
     // search behind them.
     const colon = !slash && !at ? emojiContextAt(el.value, caret) : null;
-    const ctx: TriggerContext | null = slash
+    let ctx: TriggerContext | null = slash
       ? { ...slash, kind: "skill" }
       : at
         ? { ...at, kind: "file" }
         : colon
           ? { ...colon, kind: "emoji" }
           : null;
+    if (
+      ctx &&
+      settled.current?.start === ctx.start &&
+      settled.current.kind === ctx.kind
+    ) {
+      if (isSpacedQuery(ctx.query)) ctx = null;
+      else settled.current = null;
+    } else {
+      settled.current = null;
+    }
     // Escape dismissed this exact token, and the caret has not left it since.
     // sync() runs on keyup, so without this the picker reopened between the
     // keydown that closed it and the release of the same key — Escape looked
@@ -259,6 +243,29 @@ export function useFileMentions({
     dismissed.current = null;
     setMention((prev) => (sameTrigger(prev, ctx) ? prev : ctx));
     if (!ctx) clearSuggestions();
+  }
+
+  function settle(ctx: TriggerContext) {
+    settled.current = { start: ctx.start, kind: ctx.kind };
+    setMention(null);
+    clearSuggestions();
+  }
+
+  // A spaced query with no rows is prose, not a search, and a first word that
+  // already spells a row followed by a space ("@kent ") is that row typed by
+  // hand. Close the token for good in both cases so the rest of the sentence
+  // stops hitting the fetchers and Enter sends instead of inserting.
+  function settleIfEmpty(
+    ctx: TriggerContext,
+    rows: ReadonlyArray<{ insert: string }>,
+  ) {
+    if (!isSpacedQuery(ctx.query)) return;
+    const typed = ctx.query.trim().toLowerCase();
+    const done =
+      rows.length === 0 ||
+      (/\s$/.test(ctx.query) &&
+        rows.some((row) => row.insert.toLowerCase() === typed));
+    if (done) settle(ctx);
   }
 
   // Controlled textarea updates are not guaranteed to commit before a caller's
@@ -305,6 +312,7 @@ export function useFileMentions({
           suggestionsFor.current = mention;
           setActiveIdx(0);
           setSuggestions(items);
+          settleIfEmpty(mention, items);
         })
         .catch(() => {
           if (seq === fetchSeq.current) clearSuggestions();
@@ -317,29 +325,39 @@ export function useFileMentions({
     setSuggestions(local);
     let paletteItems: FileMention[] = [];
     let fileItems: FileMention[] = [];
+    const merged = () =>
+      mergeMentionSuggestions(local, paletteItems, fileItems);
     const publish = () => {
       if (seq !== fetchSeq.current) return;
       suggestionsFor.current = mention;
-      setSuggestions(mergeMentionSuggestions(local, paletteItems, fileItems));
+      setSuggestions(merged());
     };
+    const tasks: Promise<void>[] = [];
     const paletteFetcher = paletteFetchRef.current;
     if (paletteFetcher) {
-      void paletteFetcher(mention.query)
-        .then((items) => {
-          paletteItems = items;
-          publish();
-        })
-        .catch(() => {});
+      tasks.push(
+        paletteFetcher(mention.query)
+          .then((items) => {
+            paletteItems = items;
+            publish();
+          })
+          .catch(() => {}),
+      );
     }
     const fileFetcher = mentionFetchRef.current;
     if (fileFetcher) {
-      void fileFetcher(mention.query)
-        .then((items) => {
-          fileItems = items;
-          publish();
-        })
-        .catch(() => {});
+      tasks.push(
+        fileFetcher(mention.query)
+          .then((items) => {
+            fileItems = items;
+            publish();
+          })
+          .catch(() => {}),
+      );
     }
+    void Promise.allSettled(tasks).then(() => {
+      if (seq === fetchSeq.current) settleIfEmpty(mention, merged());
+    });
   });
   useEffect(() => {
     loadSuggestions();
@@ -458,7 +476,9 @@ export function useFileMentions({
         : `${mention.kind === "skill" ? "/" : "@"}${item.insert} `;
     const next = before + insert + after;
     const nextCaret = before.length + insert.length;
-    setMention(null);
+    // The trailing space keeps the caret on the token, so mark it done or the
+    // popup would reopen on the inserted row and follow the sentence.
+    settle(mention);
     setSuggestions([]);
     pendingCaret.current = onChange(next, nextCaret, nextCaret) ?? nextCaret;
   }
@@ -496,7 +516,8 @@ export function useFileMentions({
       e.preventDefault();
       e.stopPropagation();
       dismissed.current = mention;
-      setMention(null);
+      if (mention) settle(mention);
+      else setMention(null);
       setSuggestions([]);
       return true;
     }

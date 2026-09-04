@@ -13,6 +13,7 @@ import { InlineAlert } from "../ui/state";
 import { PulseDot } from "../ui/status";
 import { AUTH_STATUS_EVENT, authGatesOut } from "../lib/auth-ready";
 import { errorMessage } from "../lib/error-message";
+import { returnToPortalAfterSignIn } from "../lib/portal-return";
 
 /**
  * Mutable compatibility view for older consumers. `usePeople()` owns the
@@ -253,6 +254,9 @@ export function UserGate({ children }: { children: React.ReactNode }) {
         if (body.required && body.authenticated && body.name) {
           const user = body.name.split(" ")[0];
           setStoredUser(user);
+          // Already signed in here: a Portal that redirected this browser
+          // over only needed the cookie this origin holds.
+          if (returnToPortalAfterSignIn()) return;
         } else if (!body.required && getCurrentUser() === "Anonymous") {
           // A fresh local instance has nobody to choose between. Wait for the
           // roster so a configured team still gets its picker, then enter an
@@ -280,15 +284,17 @@ export function UserGate({ children }: { children: React.ReactNode }) {
   // signal so the sign-in card, not a "reconnecting" overlay, stands in for a
   // browser the server will no longer accept.
   const liveAuth = useAuthStatus();
+  const signedIn = (status: AuthStatus) => {
+    if (returnToPortalAfterSignIn()) return;
+    setAuth(status);
+    setAuthStatusCache(status);
+  };
   if (authGatesOut(liveAuth) && !(auth?.required && auth.authenticated)) {
     return (
       <GithubSignIn
         reconnect={liveAuth!.reconnectRequired === true}
         login={liveAuth!.login}
-        onSignedIn={(status) => {
-          setAuth(status);
-          setAuthStatusCache(status);
-        }}
+        onSignedIn={signedIn}
       />
     );
   }
@@ -331,10 +337,7 @@ export function UserGate({ children }: { children: React.ReactNode }) {
       <GithubSignIn
         reconnect={auth.reconnectRequired === true}
         login={auth.login}
-        onSignedIn={(status) => {
-          setAuth(status);
-          setAuthStatusCache(status);
-        }}
+        onSignedIn={signedIn}
       />
     );
   }

@@ -45,6 +45,7 @@ function navigationFixture(openPrs: () => void): NavigationActions {
     openPortal() {},
     openAssets() {},
     openTerminal() {},
+    openDesktop() {},
     openCurrentWorkspace() {},
   };
 }

@@ -122,8 +122,15 @@ describe("single session ownership", () => {
     );
     expect(read("session-kernel/kernel.ts")).not.toContain("getRuntime<");
     expect(read("session-kernel/kernel.ts")).not.toContain("setRuntime<");
-    expect(read("session-cache.ts")).toContain("sessionGatewayCommand");
-    expect(read("session-cache.ts")).toContain("sessionDeliveryProjection");
+    // Session metadata is an actor document: the facade reads it, mutates,
+    // and commits with a compare-and-set put; the file is a derived export.
+    const sessionCache = read("session-cache.ts");
+    expect(sessionCache).toContain('sessionMetadata({ op: "get", sessionId })');
+    expect(sessionCache).toContain('op: "put"');
+    expect(sessionCache).toContain("expectedRev: stored ? stored.rev : null");
+    expect(sessionCache).toContain('sessionMetadata({ op: "exported"');
+    expect(sessionCache).not.toContain("sessionGatewayCommand");
+    expect(sessionCache).toContain("sessionDeliveryProjection");
     expect(read("session-cache.ts")).not.toContain("__promptQueues");
   });
 

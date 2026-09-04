@@ -388,8 +388,8 @@ export function useSessionRuntimeController({
       return;
     }
     let alive = true;
-    const load = () =>
-      fetchPr(session.id, phonePr?.repo, phonePr?.branch)
+    const load = (signal?: AbortSignal) =>
+      fetchPr(session.id, phonePr?.repo, phonePr?.branch, { signal })
         .then((pullRequest) => {
           if (alive) {
             setStaging(pullRequest?.staging ?? null);
@@ -397,7 +397,6 @@ export function useSessionRuntimeController({
           }
         })
         .catch(() => {});
-    load();
     const stop = pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
     return () => {
       alive = false;
@@ -571,13 +570,12 @@ export function useSessionPreviewStatusEffect(
     if ((!showPortal && !activePanelOpen && !infoPageOpen) || !worktreeDir)
       return;
     let alive = true;
-    const load = () =>
-      fetchPreview(sessionId)
+    const load = (signal?: AbortSignal) =>
+      fetchPreview(sessionId, signal)
         .then((status) => {
           if (alive) setPreviewStatus(status);
         })
         .catch(() => {});
-    load();
     const stop = pollWhileVisible(load, 3000);
     return () => {
       alive = false;

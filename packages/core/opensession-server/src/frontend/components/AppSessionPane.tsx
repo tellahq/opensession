@@ -67,6 +67,7 @@ interface AppSessionPaneProps {
     | "stagingActive"
     | "assetsActive"
     | "terminalActive"
+    | "desktopActive"
     | "portalActive"
     | "reviewFocusPr"
   >;
@@ -86,6 +87,7 @@ interface AppSessionPaneProps {
     | "closeStagingTab"
     | "closeAssetsTab"
     | "closeTerminalTab"
+    | "closeDesktopTab"
   >;
   tabs: {
     context: Pick<
@@ -149,6 +151,7 @@ export function AppSessionPane({
     stagingActive,
     assetsActive,
     terminalActive,
+    desktopActive,
     portalActive,
     reviewFocusPr,
   },
@@ -164,6 +167,7 @@ export function AppSessionPane({
     closeStagingTab,
     closeAssetsTab,
     closeTerminalTab,
+    closeDesktopTab,
   },
   tabs: {
     context: { activeWorkspaceId, workspaceSessions, emptyWorkspaceSession },
@@ -321,10 +325,14 @@ export function AppSessionPane({
             ? viewTabKind(surfaceId) === "portal"
             : focused && portalActive,
           portalTarget: currentPortalTarget,
+          showDesktop: splitMode
+            ? viewTabKind(surfaceId) === "desktop"
+            : focused && desktopActive,
           reviewFocusPr,
           onCloseStaging: closeStagingTab,
           onCloseAssets: closeAssetsTab,
           onCloseTerminal: closeTerminalTab,
+          onCloseDesktop: closeDesktopTab,
         }}
         subagents={{
           // The sub-agent drill-in, opened from this pane's own transcript.

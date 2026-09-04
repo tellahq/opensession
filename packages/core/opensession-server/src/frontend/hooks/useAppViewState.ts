@@ -63,6 +63,7 @@ export function useAppViewState({
   const stagingActive = activeViewTab === "staging";
   const assetsActive = activeViewTab === "assets";
   const portalActive = activeViewTab === "portal";
+  const desktopActive = activeViewTab === "desktop";
   const terminalActive = activeViewTab === "terminal";
   const subagentSelected = activeViewTab === "subagent";
   // Workspaces whose Review / Conversation / Preview environment view-tab is
@@ -265,6 +266,7 @@ export function useAppViewState({
     stagingActive,
     assetsActive,
     portalActive,
+    desktopActive,
     terminalActive,
     subagentSelected,
     reviewOpen,

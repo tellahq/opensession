@@ -2,6 +2,13 @@ import {
   DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS,
   GATEWAY_COMMAND_OPERATIONS,
 } from "./gateway-command-protocol";
+import type {
+  MetadataActorRequest,
+  SessionMetadataCatalogRow,
+  SessionMetadataPutResult,
+  SessionMetadataRecord,
+} from "./metadata-protocol";
+import * as metadataStore from "./metadata-store";
 import { decodeExecutorId } from "@tellahq/opensession-protocol/executor";
 /**
  * Durable state for the session actor boundary.
@@ -243,7 +250,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
     bootId: linuxBootId(),
     start: linuxProcessStart(process.pid),
   } satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 32;
+export const SESSION_KERNEL_SCHEMA_VERSION = 33;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -1564,6 +1571,7 @@ export class SessionKernelStore {
     migrateQuarantineProjectionSchema30(this.db, schemaVersion);
     migrateTranscriptAuthoritySchema31(this.db, schemaVersion);
     migrateAgentOperationCancellationSchema32(this.db, schemaVersion);
+    metadataStore.migrateSessionMetadataSchema33(this.db, schemaVersion);
     assertAgentOperationSchema28(this.db);
     assertAgentOperationCancellationSchema32(this.db);
     if (path !== ":memory:") {
@@ -2839,6 +2847,8 @@ export class SessionKernelStore {
         "session_kernel_changes",
         "session_kernel_timers",
         "session_kernel_outbox",
+        "session_kernel_metadata",
+        "session_kernel_metadata_catalog",
       ])
         this.db.run(`DELETE FROM ${table} WHERE session_id = ?`, [sessionId]);
       this.db.run(
@@ -2871,6 +2881,8 @@ export class SessionKernelStore {
         "session_kernel_changes",
         "session_kernel_timers",
         "session_kernel_outbox",
+        "session_kernel_metadata",
+        "session_kernel_metadata_catalog",
       ]) {
         this.db.run(`DELETE FROM ${table} WHERE session_id = ?`, [sessionId]);
       }
@@ -5530,7 +5542,8 @@ export class SessionKernelStore {
 
   hasSessionDurableState(sessionId: string): boolean {
     const row = this.db
-      .query(`
+      .query(
+        `
 			SELECT 1 AS present FROM (
 				SELECT session_id FROM session_kernel_tombstones WHERE session_id = ?
 				UNION ALL SELECT session_id FROM session_kernel_quarantine WHERE session_id = ?
@@ -5544,9 +5557,11 @@ export class SessionKernelStore {
 				UNION ALL SELECT session_id FROM session_kernel_changes WHERE session_id = ?
 				UNION ALL SELECT session_id FROM session_kernel_timers WHERE session_id = ?
 				UNION ALL SELECT session_id FROM session_kernel_outbox WHERE session_id = ?
+				UNION ALL SELECT session_id FROM session_kernel_metadata WHERE session_id = ?
 			) LIMIT 1
-		`)
-      .get(...Array(12).fill(sessionId)) as { present: number } | null;
+		`,
+      )
+      .get(...Array(13).fill(sessionId)) as { present: number } | null;
     return row !== null;
   }
 
@@ -5555,7 +5570,8 @@ export class SessionKernelStore {
       throw new Error("Invalid legacy migration limit");
     return (
       this.db
-        .query(`
+        .query(
+          `
 			SELECT session_id FROM (
 				SELECT session_id FROM session_kernel_tombstones
 				UNION SELECT session_id FROM session_kernel_quarantine
@@ -5576,7 +5592,8 @@ export class SessionKernelStore {
 			)
 			ORDER BY session_id
 			LIMIT ?
-		`)
+		`,
+        )
         .all(limit) as Array<{ session_id: string }>
     ).map((row) => row.session_id);
   }
@@ -5667,22 +5684,26 @@ export class SessionKernelStore {
           throw new Error(`Session migration count mismatch for ${table}`);
         const columns = columnsByTable.get(table)!;
         const sourceDifference = this.db
-          .query(`
+          .query(
+            `
 					SELECT 1 AS differs FROM (
 						SELECT ${columns} FROM main.${table} WHERE session_id = ?
 						EXCEPT
 						SELECT ${columns} FROM session_migration.${table} WHERE session_id = ?
 					) LIMIT 1
-				`)
+				`,
+          )
           .get(sessionId, sessionId);
         const targetDifference = this.db
-          .query(`
+          .query(
+            `
 					SELECT 1 AS differs FROM (
 						SELECT ${columns} FROM session_migration.${table} WHERE session_id = ?
 						EXCEPT
 						SELECT ${columns} FROM main.${table} WHERE session_id = ?
 					) LIMIT 1
-				`)
+				`,
+          )
           .get(sessionId, sessionId);
         if (sourceDifference || targetDifference)
           throw new Error(`Session migration row mismatch for ${table}`);
@@ -5695,18 +5716,22 @@ export class SessionKernelStore {
           `Session migration integrity check failed: ${integrity.integrity_check}`,
         );
       const timerWake = this.db
-        .query(`
+        .query(
+          `
 				SELECT MIN(CASE WHEN next_attempt_at > due_at THEN next_attempt_at ELSE due_at END) AS next_at
 				FROM session_migration.session_kernel_timers
 				WHERE session_id = ? AND dead_lettered_at IS NULL
-			`)
+			`,
+        )
         .get(sessionId) as { next_at: number | null };
       const outboxWake = this.db
-        .query(`
+        .query(
+          `
 				SELECT MIN(next_attempt_at) AS next_at
 				FROM session_migration.session_kernel_outbox
 				WHERE session_id = ? AND dead_lettered_at IS NULL
-			`)
+			`,
+        )
         .get(sessionId) as { next_at: number | null };
       nextTimerAt =
         timerWake.next_at === null ? undefined : Number(timerWake.next_at);
@@ -5737,10 +5762,12 @@ export class SessionKernelStore {
         if (!this.hasSessionDurableState(sessionId))
           throw new Error("Legacy session state disappeared before cutover");
         const outboxIds = this.db
-          .query(`
+          .query(
+            `
 					SELECT id FROM session_kernel_outbox
 					WHERE session_id = ? ORDER BY id
-				`)
+				`,
+          )
           .all(sessionId) as Array<{ id: number }>;
         for (const row of outboxIds)
           this.db.run(
@@ -5790,12 +5817,14 @@ export class SessionKernelStore {
 
   sessionPlacement(sessionId: string): DurableSessionPlacement | undefined {
     const row = this.db
-      .query(`
+      .query(
+        `
 			SELECT session_id, placement, transcript_authority,
                    transcript_migration_receipt, transcript_published_at,
                    needs_scan, next_timer_at, next_outbox_at, updated_at
 			FROM session_kernel_placements WHERE session_id = ?
-		`)
+		`,
+      )
       .get(sessionId) as {
       session_id: string;
       placement: "isolated";
@@ -5832,13 +5861,15 @@ export class SessionKernelStore {
   actorTranscriptSessionIds(limit = 100, afterSessionId = ""): string[] {
     return (
       this.db
-        .query(`
+        .query(
+          `
       SELECT session_id FROM session_kernel_placements
       WHERE placement = 'isolated'
         AND transcript_authority = 'actor'
         AND session_id > ?
       ORDER BY session_id LIMIT ?
-    `)
+    `,
+        )
         .all(afterSessionId, Math.max(1, limit)) as Array<{
         session_id: string;
       }>
@@ -5850,7 +5881,8 @@ export class SessionKernelStore {
       throw new Error("Invalid transcript migration session limit");
     return (
       this.db
-        .query(`
+        .query(
+          `
       SELECT session_id FROM (
         SELECT session_id FROM session_kernel_tombstones
         UNION SELECT session_id FROM session_kernel_quarantine
@@ -5869,7 +5901,8 @@ export class SessionKernelStore {
       ) candidates
       WHERE session_id > ?
       ORDER BY session_id LIMIT ?
-    `)
+    `,
+        )
         .all(afterSessionId, limit) as Array<{ session_id: string }>
     ).map((row) => row.session_id);
   }
@@ -6090,7 +6123,8 @@ export class SessionKernelStore {
   isolatedProjectionPendingSessionIds(limit = 16): string[] {
     return (
       this.db
-        .query(`
+        .query(
+          `
 			SELECT placement.session_id
 			FROM session_kernel_placements placement
 			LEFT JOIN session_kernel_sparse_projections projection
@@ -6099,7 +6133,8 @@ export class SessionKernelStore {
 			  AND (projection.session_id IS NULL OR projection.dirty = 1)
 			ORDER BY placement.session_id
 			LIMIT ?
-		`)
+		`,
+        )
         .all(Math.max(1, limit)) as Array<{ session_id: string }>
     ).map((row) => row.session_id);
   }
@@ -6148,15 +6183,73 @@ export class SessionKernelStore {
     );
   }
 
+  // ── Session metadata ───────────────────────────────────────────────────
+  // The document is actor-owned; see metadata-store.ts for the SQL and
+  // metadata-protocol.ts for the contract.
+
+  sessionMetadata(sessionId: string): SessionMetadataRecord | null {
+    return metadataStore.readSessionMetadata(this.db, sessionId);
+  }
+
+  putSessionMetadata(
+    input: Extract<MetadataActorRequest, { op: "put" }>,
+  ): SessionMetadataPutResult {
+    if (this.isTombstoned(input.sessionId))
+      throw new Error(`Session ${input.sessionId} was deleted`);
+    return metadataStore.putSessionMetadata(this.db, input);
+  }
+
+  settleSessionMetadataCatalog(
+    sessionId: string,
+    current: SessionMetadataRecord | undefined,
+  ): void {
+    metadataStore.settleSessionMetadataCatalog(this.db, sessionId, current);
+  }
+
+  markSessionMetadataExported(sessionId: string, rev: number): void {
+    metadataStore.markSessionMetadataExported(this.db, sessionId, rev);
+  }
+
+  sessionMetadataCatalogPage(
+    afterSessionId: string,
+    limit: number,
+  ): SessionMetadataCatalogRow[] {
+    return metadataStore.sessionMetadataCatalogPage(
+      this.db,
+      afterSessionId,
+      limit,
+    );
+  }
+
+  sessionMetadataPendingExports(
+    limit: number,
+  ): Array<{ sessionId: string; rev: number; exportedRev: number }> {
+    return metadataStore.sessionMetadataPendingExports(this.db, limit);
+  }
+
+  sessionMetadataCatalogCount(): number {
+    return metadataStore.sessionMetadataCatalogCount(this.db);
+  }
+
+  sessionMetadataCatalogComplete(): boolean {
+    return metadataStore.sessionMetadataCatalogComplete(this.db);
+  }
+
+  markSessionMetadataCatalogComplete(): void {
+    metadataStore.markSessionMetadataCatalogComplete(this.db);
+  }
+
   isolatedQuarantineProjectionEntries(): DurableSessionQuarantine[] {
     return (
       this.db
-        .query(`
+        .query(
+          `
 			SELECT quarantine_state
 			FROM session_kernel_sparse_projections
 			WHERE dirty = 0 AND quarantine_state IS NOT NULL
 			ORDER BY session_id
-		`)
+		`,
+        )
         .all() as Array<{ quarantine_state: string }>
     ).map((row) => parsed(row.quarantine_state) as DurableSessionQuarantine);
   }
@@ -6164,12 +6257,14 @@ export class SessionKernelStore {
   isolatedAskProjectionEntries(): Array<[string, unknown]> {
     return (
       this.db
-        .query(`
+        .query(
+          `
 			SELECT session_id, ask_record
 			FROM session_kernel_sparse_projections
 			WHERE dirty = 0 AND ask_record IS NOT NULL
 			ORDER BY session_id
-		`)
+		`,
+        )
         .all() as Array<{ session_id: string; ask_record: string }>
     ).map((row) => [row.session_id, parsed(row.ask_record)]);
   }
@@ -6178,12 +6273,14 @@ export class SessionKernelStore {
     slot: DeliverySlot,
   ): Array<[string, unknown]> {
     const states = this.db
-      .query(`
+      .query(
+        `
 			SELECT session_id, delivery_state
 			FROM session_kernel_sparse_projections
 			WHERE dirty = 0 AND delivery_state IS NOT NULL
 			ORDER BY session_id
-		`)
+		`,
+      )
       .all() as Array<{ session_id: string; delivery_state: string }>;
     const entries: Array<[string, unknown]> = [];
     for (const row of states) {
@@ -6203,12 +6300,14 @@ export class SessionKernelStore {
 
   isolatedPendingSteerProjectionSessionIds(): string[] {
     const rows = this.db
-      .query(`
+      .query(
+        `
 			SELECT session_id, delivery_state
 			FROM session_kernel_sparse_projections
 			WHERE dirty = 0 AND delivery_state IS NOT NULL
 			ORDER BY session_id
-		`)
+		`,
+      )
       .all() as Array<{ session_id: string; delivery_state: string }>;
     return rows
       .filter((row) => {
@@ -6255,7 +6354,8 @@ export class SessionKernelStore {
   ): string[] {
     return (
       this.db
-        .query(`
+        .query(
+          `
 			SELECT session_id FROM session_kernel_placements
 			WHERE placement = 'isolated'
 			  AND session_id > ?
@@ -6266,7 +6366,8 @@ export class SessionKernelStore {
 			  AND (needs_scan = 1 OR next_timer_at <= ? OR next_outbox_at <= ?)
 			ORDER BY session_id
 			LIMIT ?
-		`)
+		`,
+        )
         .all(afterSessionId, now, now, Math.max(1, limit)) as Array<{
         session_id: string;
       }>
@@ -6281,7 +6382,8 @@ export class SessionKernelStore {
   isolatedRecentDirtyWakeCandidates(limit = 4): string[] {
     return (
       this.db
-        .query(`
+        .query(
+          `
 			SELECT session_id FROM session_kernel_placements
 			WHERE placement = 'isolated'
 			  AND needs_scan = 1
@@ -6291,7 +6393,8 @@ export class SessionKernelStore {
 			  )
 			ORDER BY updated_at DESC, session_id
 			LIMIT ?
-		`)
+		`,
+        )
         .all(Math.max(1, limit)) as Array<{ session_id: string }>
     ).map((row) => row.session_id);
   }
@@ -6306,7 +6409,8 @@ export class SessionKernelStore {
   ): string[] {
     return (
       this.db
-        .query(`
+        .query(
+          `
 			SELECT session_id FROM session_kernel_placements
 			WHERE placement = 'isolated'
 			  AND needs_scan = 0
@@ -6318,7 +6422,8 @@ export class SessionKernelStore {
 			  )
 			ORDER BY session_id
 			LIMIT ?
-		`)
+		`,
+        )
         .all(afterSessionId, now, now, Math.max(1, limit)) as Array<{
         session_id: string;
       }>
@@ -6327,10 +6432,12 @@ export class SessionKernelStore {
 
   nextTimerWakeAt(): number | undefined {
     const row = this.db
-      .query(`
+      .query(
+        `
 			SELECT MIN(CASE WHEN next_attempt_at > due_at THEN next_attempt_at ELSE due_at END) AS next_at
 			FROM session_kernel_timers WHERE dead_lettered_at IS NULL
-		`)
+		`,
+      )
       .get() as { next_at: number | null };
     return row.next_at === null ? undefined : Number(row.next_at);
   }
@@ -6343,10 +6450,12 @@ export class SessionKernelStore {
       ? `CASE WHEN id IN (${activeIds.map(() => "?").join(",")}) THEN ? ELSE next_attempt_at END`
       : "next_attempt_at";
     const row = this.db
-      .query(`
+      .query(
+        `
 			SELECT MIN(${activeWake}) AS next_at
 			FROM session_kernel_outbox WHERE dead_lettered_at IS NULL
-		`)
+		`,
+      )
       .get(...activeIds, ...(activeIds.length ? [activeRecheckAt] : [])) as {
       next_at: number | null;
     };
@@ -6387,10 +6496,12 @@ export class SessionKernelStore {
   ): Array<{ id: number; sessionId: string }> {
     return (
       this.db
-        .query(`
+        .query(
+          `
 			SELECT id, session_id FROM session_kernel_outbox_routes
 			WHERE id > ? ORDER BY id LIMIT ?
-		`)
+		`,
+        )
         .all(afterId, Math.max(1, limit)) as Array<{
         id: number;
         session_id: string;

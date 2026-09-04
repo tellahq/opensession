@@ -5,11 +5,30 @@ import { join } from "node:path";
 import {
   ensureSessionScratch,
   removeSessionScratch,
+  sandboxSessionScratchDir,
   type ScratchSweepSession,
   scratchDirsToSweep,
   sessionScratchRoot,
   sweepSessionScratch,
 } from "./session-scratch";
+
+describe("sandboxSessionScratchDir", () => {
+  it("resolves the Sandbox runner's layout, not the host state dir", () => {
+    expect(sandboxSessionScratchDir("bks-abc")).toBe(
+      "/home/ubuntu/.opensession/session-scratch/bks-abc",
+    );
+    expect(sandboxSessionScratchDir("bks-abc")).not.toStartWith(STATE);
+  });
+
+  it("sanitizes the id the same way as the host scratch dir", () => {
+    expect(sandboxSessionScratchDir("a/b c")).toBe(
+      "/home/ubuntu/.opensession/session-scratch/a_b_c",
+    );
+    expect(sandboxSessionScratchDir("..")).toBe(
+      "/home/ubuntu/.opensession/session-scratch/_",
+    );
+  });
+});
 
 const STATE = mkdtempSync(join(tmpdir(), "session-scratch-test-"));
 const PREV_STATE = process.env.OPENSESSION_STATE_DIR;

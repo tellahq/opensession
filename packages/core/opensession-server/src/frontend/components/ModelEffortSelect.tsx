@@ -26,9 +26,11 @@ import { ModelMark } from "./ModelMark";
 import { BrandMark } from "./BrandTile";
 import { UserAvatar } from "./UserAvatar";
 import { useCurrentUser } from "./UserPicker";
+import { useNavigation } from "../hooks/useNavigation";
+import { usePeople } from "../lib/people";
 import type { ModelEffortSelectProps } from "../lib/model-effort-select-types";
 import {
-  lowestRemaining,
+  weeklyRemainingReadout,
   weeklyRemainingRows,
   type WeeklyRemainingRow,
 } from "../lib/account-limits";
@@ -445,18 +447,26 @@ export function ModelEffortSelect({
   const accountLabel = currentAccount
     ? providerAccountLabel(currentAccount)
     : "Auto";
-  // Weekly budget left on every account this person can spend (the pool plus
-  // their own), all providers: the question it answers is "which account
-  // still has a week in it", and that is also why a row for the current
-  // model's pool pins that account.
+  // The submenu inventories every account this person can spend. Its compact
+  // readout is narrower: the current main model's cap on the account automatic
+  // routing will prefer (personal first, then pool), or the explicit pin.
   const viewer = useCurrentUser();
+  const navigation = useNavigation();
+  // The owner avatars resolve through the people directory; subscribing here
+  // fetches it if nothing else has yet and redraws the rows when it lands.
+  usePeople();
   const weeklyRows = weeklyRemainingRows(accounts ?? [], viewer);
   const weeklyRowsForModel = weeklyRows.filter(
     (row) => row.provider === accountProvider,
   );
-  const weeklyReadout = lowestRemaining(
-    weeklyRowsForModel.length > 0 ? weeklyRowsForModel : weeklyRows,
-  );
+  const weeklyReadout = weeklyRemainingReadout({
+    rows: weeklyRows,
+    accounts: accounts ?? [],
+    viewer,
+    provider: accountProvider,
+    model: modelInfo?.composition?.[0] ?? effectiveBase,
+    accountId,
+  });
   // Routing stays sticky across model changes even though engine selection is
   // no longer exposed. Existing sessions keep their stored routing prefix.
   const activeEngine = modelEngine(effectiveModel);
@@ -942,6 +952,14 @@ export function ModelEffortSelect({
                 {hasAccount && weeklyRowsForModel.length > 0 && (
                   <MenuHint>Choose one to use it for this session</MenuHint>
                 )}
+                <Menu.Separator className="my-1" />
+                <Menu.Item
+                  className="justify-between gap-3"
+                  onClick={() => navigation.openSettings("providers")}
+                >
+                  <span className="min-w-0 truncate">Manage accounts</span>
+                  <IconChevronRight className="shrink-0 text-dim" size={17} />
+                </Menu.Item>
               </Menu.Popup>
             </Menu.SubmenuRoot>
             <Menu.Separator className="my-1" />

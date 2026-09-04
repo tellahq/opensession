@@ -1013,11 +1013,11 @@ export function PrStatusBar({
 
   // The summary card: one row for the PR, the way a sidebar row carries its
   // own subtext. One row for all of it, including the preview deploy, which
-  // sits beside the primary action instead of taking a line of its own to say a
-  // name the globe already says. Where the work stands is the line that matters,
-  // so the headline leads and the PR number sits under it as secondary. The PR
-  // title is gone: it restates the session title the card already hangs from,
-  // and it cost the card a whole row to do it.
+  // leads the row as a mark instead of taking a line of its own to say a name
+  // the globe already says. Where the work stands is the line that matters, so
+  // the headline follows the mark and the PR number sits under it as secondary.
+  // The PR title is gone: it restates the session title the card already hangs
+  // from, and it cost the card a whole row to do it.
   //
   // The row is a div holding two targets rather than one row-wide button,
   // which is the card's only departure from "the whole row is the target". It
@@ -1086,6 +1086,11 @@ export function PrStatusBar({
     // trigger, and without one it is a plain div. Same children either way.
     const rowBody = (
       <>
+        {/* The preview environment this PR deployed leads the row, at the far
+            end from Merge, Push or Pull: a 28px link next to the merge button
+            was too easy to hit by mistake. Renders nothing when the PR has no
+            preview, and the row closes up. */}
+        {children}
         {/* When checks exist, the headline is their control: hovering lists
 				    them and clicking opens Review's Checks tab. The PR's own title
 				    stays as the native fallback. */}
@@ -1155,10 +1160,6 @@ export function PrStatusBar({
             </button>
           </Tooltip>
         )}
-        {/* Keep the preview environment with the action it informs. It sits
-				    immediately left of Merge, Push or Pull, and renders nothing when
-				    this PR has no preview. */}
-        {children}
         {renderAction()}
       </>
     );

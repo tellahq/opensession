@@ -4,7 +4,9 @@ import {
   accountUsageSchema,
   lowestRemaining,
   remainingTone,
+  weeklyRemainingReadout,
   weeklyRemainingRows,
+  type AccountLimitSource,
 } from "./account-limits";
 
 const NOW = Date.parse("2026-09-03T20:40:00Z");
@@ -240,5 +242,131 @@ describe("weeklyRemainingRows", () => {
     );
     expect(lowestRemaining(rows)?.accountId).toBe("b");
     expect(lowestRemaining([])).toBeUndefined();
+  });
+});
+
+describe("weeklyRemainingReadout", () => {
+  test("shows the current model bucket on the viewer's personal account", () => {
+    const accounts = [
+      {
+        id: "pool",
+        name: "Pool",
+        provider: "claude",
+        usable: true,
+        limits: [
+          { utilization: 100, resetsAt: null, weekly: true },
+          {
+            scope: "Fable",
+            utilization: 100,
+            resetsAt: null,
+            weekly: true,
+          },
+        ],
+      },
+      {
+        id: "mine",
+        name: "Main",
+        provider: "claude",
+        owner: "Kent",
+        usable: true,
+        limits: [
+          { utilization: 100, resetsAt: null, weekly: true },
+          {
+            scope: "Fable",
+            utilization: 45,
+            resetsAt: null,
+            weekly: true,
+          },
+        ],
+      },
+    ] satisfies AccountLimitSource[];
+    const rows = weeklyRemainingRows(accounts, "Kent", NOW);
+
+    expect(
+      weeklyRemainingReadout({
+        rows,
+        accounts,
+        viewer: "Kent",
+        provider: "claude",
+        model: "claude-fable-5-1",
+      }),
+    ).toMatchObject({ accountId: "mine", scope: "Fable", remaining: 55 });
+  });
+
+  test("uses an explicit usable account pin", () => {
+    const accounts = [
+      {
+        id: "pool",
+        name: "Pool",
+        provider: "claude",
+        usable: true,
+        limits: [{ utilization: 80, resetsAt: null, weekly: true }],
+      },
+      {
+        id: "mine",
+        name: "Mine",
+        provider: "claude",
+        owner: "Kent",
+        usable: true,
+        limits: [{ utilization: 20, resetsAt: null, weekly: true }],
+      },
+    ] satisfies AccountLimitSource[];
+    const rows = weeklyRemainingRows(accounts, "Kent", NOW);
+
+    expect(
+      weeklyRemainingReadout({
+        rows,
+        accounts,
+        viewer: "Kent",
+        provider: "claude",
+        model: "claude-sonnet-5",
+        accountId: "pool",
+      })?.accountId,
+    ).toBe("pool");
+  });
+
+  test("falls back to the shared pool when the personal model cap is spent", () => {
+    const accounts = [
+      {
+        id: "pool",
+        name: "Pool",
+        provider: "claude",
+        usable: true,
+        limits: [
+          {
+            scope: "Fable",
+            utilization: 40,
+            resetsAt: null,
+            weekly: true,
+          },
+        ],
+      },
+      {
+        id: "mine",
+        name: "Mine",
+        provider: "claude",
+        owner: "Kent",
+        usable: true,
+        limits: [
+          {
+            scope: "Fable",
+            utilization: 100,
+            resetsAt: null,
+            weekly: true,
+          },
+        ],
+      },
+    ] satisfies AccountLimitSource[];
+    const rows = weeklyRemainingRows(accounts, "Kent", NOW);
+
+    expect(
+      weeklyRemainingReadout({
+        rows,
+        accounts,
+        viewer: "Kent",
+        provider: "claude",
+        model: "claude-fable-5-1",
+      }),
+    ).toMatchObject({ accountId: "pool", remaining: 60 });
   });
 });

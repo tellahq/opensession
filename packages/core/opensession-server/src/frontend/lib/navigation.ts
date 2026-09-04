@@ -63,5 +63,7 @@ export interface NavigationActions {
   openPortal(target: PortalTarget): void;
   openAssets(): void;
   openTerminal(): void;
+  /** Foreground the Sandbox desktop as a view tab in this workspace. */
+  openDesktop(): void;
   openCurrentWorkspace(): void;
 }

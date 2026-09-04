@@ -890,6 +890,10 @@ export type WSClientMessage =
   // untouched — the transcript keeps streaming — but an away socket stops
   // showing this person's face to teammates.
   | { type: "away"; away: boolean }
+  // The sidebar query this client renders (the same string it sends to
+  // GET /api/sessions). The server evaluates row changes against it and pushes
+  // session_row frames instead of asking every client to refetch.
+  | { type: "sessions_subscribe"; query: string }
   // Short-lived composer activity. The server expires it unless refreshed.
   | { type: "typing"; sessionId: string; typing: boolean }
   // Interactive shell frames. The terminal tab multiplexes PTYs by termId.
@@ -919,6 +923,12 @@ export type WSServerMessage =
   // The materialized session list changed. Web clients refetch their scoped
   // sidebar projection; older and native clients safely ignore this frame.
   | { type: "sessions_invalidated" }
+  // One session's list row changed and is visible in this socket's subscribed
+  // sidebar scope (sessions_subscribe). Replaces a whole-list refetch for the
+  // common write. `session_row_removed` is the same change for a row the
+  // scope no longer shows (archived, hidden, or deleted).
+  | { type: "session_row"; row: UnifiedSession }
+  | { type: "session_row_removed"; id: string }
   // term_* frames carry the termId of the shell tab (PTY) they belong to;
   // absent on frames from servers that predate multi-tab shells.
   | { type: "term_data"; termId?: string; data: string }

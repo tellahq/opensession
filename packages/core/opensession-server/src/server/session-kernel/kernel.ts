@@ -23,6 +23,10 @@ import type {
 } from "./gateway-command-protocol";
 import type { CoreActorRequest, CoreActorResult } from "./core-protocol";
 import type {
+  MetadataActorRequest,
+  MetadataActorResult,
+} from "./metadata-protocol";
+import type {
   TranscriptActorRequest,
   TranscriptActorResult,
 } from "./transcript-protocol";
@@ -74,7 +78,14 @@ const globalState = globalThis as typeof globalThis & {
 };
 const state = (globalState.__opensessionSessionKernel ??= {});
 function compatibilityStoreForTest(
-  domain: "ask" | "core" | "creation" | "delivery" | "gateway command" | "turn",
+  domain:
+    | "ask"
+    | "core"
+    | "creation"
+    | "delivery"
+    | "gateway command"
+    | "metadata"
+    | "turn",
 ) {
   if (process.env.NODE_ENV !== "test")
     throw new Error(
@@ -179,6 +190,41 @@ export async function sessionCore<T extends CoreActorRequest>(
   if (request.op === "clear")
     return store.clearSession(request.sessionId) as CoreActorResult<T>;
   return store.tombstoneSession(request.sessionId) as CoreActorResult<T>;
+}
+
+/** Session metadata: the actor owns the document; the catalog projects it. */
+export async function sessionMetadata<T extends MetadataActorRequest>(
+  request: T,
+): Promise<MetadataActorResult<T>> {
+  if (state.actor) return state.actor.decideMetadataAsync(request);
+  const store = compatibilityStoreForTest("metadata");
+  type R = MetadataActorResult<T>;
+  if (request.op === "get")
+    return store.sessionMetadata(request.sessionId) as R;
+  if (request.op === "put") {
+    const result = store.putSessionMetadata(request);
+    if (result.status === "committed")
+      store.settleSessionMetadataCatalog(
+        request.sessionId,
+        store.sessionMetadata(request.sessionId) ?? undefined,
+      );
+    return result as R;
+  }
+  if (request.op === "exported")
+    return store.markSessionMetadataExported(
+      request.sessionId,
+      request.rev,
+    ) as R;
+  if (request.op === "catalog_page")
+    return store.sessionMetadataCatalogPage(
+      request.afterSessionId,
+      request.limit,
+    ) as R;
+  if (request.op === "pending_exports")
+    return store.sessionMetadataPendingExports(request.limit) as R;
+  if (request.op === "catalog_complete")
+    return store.sessionMetadataCatalogComplete() as R;
+  return store.markSessionMetadataCatalogComplete() as R;
 }
 
 export async function sessionCoreAsync<T extends CoreActorRequest>(

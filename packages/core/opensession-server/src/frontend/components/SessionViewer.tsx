@@ -476,6 +476,7 @@ export function SessionViewer({
     videoTitle = null,
     showPortal = false,
     portalTarget = null,
+    showDesktop = false,
   },
   subagents: {
     parentSession,
@@ -511,6 +512,7 @@ export function SessionViewer({
       showStaging,
       showAssets,
       showTerminal,
+      showDesktop,
       showPortal,
       hasPortalTarget: !!portalTarget,
       showSubagent,
@@ -1578,6 +1580,7 @@ export function SessionViewer({
           surfaces={{
             showPortal,
             portalTarget,
+            showDesktop,
             showStaging,
             staging,
             stagingUrl,

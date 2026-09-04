@@ -51,9 +51,11 @@ const ICON_REBUILDING =
   "cursor-pointer text-yellow opacity-72 hover:bg-yellow/13 hover:opacity-100";
 const ICON_PENDING = "cursor-default text-dim";
 
-/* The summary card's preview mark. It rides immediately before the PR band's
-   primary action, so the place to test the work stays with Merge, Push or Pull
-   instead of floating at the far edge of the status row.
+/* The summary card's preview mark. It leads the PR band's status row, at the
+   far end from Merge, Push or Pull. It sat beside that action for a while so
+   the place to test the work stayed with the action it informs, but a 28px
+   target next to the one button that is hard to undo is a fat-finger trap. Its
+   old place at the head of the row keeps the two apart.
 
    A 28px square rather than the card's 20px rail, which every other leading
    mark takes. Those marks are decoration on a row whose whole width is the
@@ -71,10 +73,10 @@ const SUMMARY_MARK_HOVER =
   "hover:bg-[color-mix(in_srgb,currentColor_26%,transparent)] " +
   "active:scale-[0.96] active:bg-[color-mix(in_srgb,currentColor_34%,transparent)]";
 /* The mark's 20px glyph sits inside a 28px target, so its visible edge already
-   sits 4px inside the box. Push the box 2px off the following action to land a
-   12px gap between the globe and Merge: the two are a pair, not one control,
-   and at the row's bare 6px they read as a split button. */
-const SUMMARY_MARK_PAIR = "mr-0.5";
+   sits 4px inside the box. Push the box another 4px off the headline to land a
+   14px gap between the globe and the words: at the row's bare 6px the glyph
+   reads as the headline's own icon, not as a separate link. */
+const SUMMARY_MARK_PAIR = "mr-1";
 
 /* Spinning ring around the globe while the preview environment builds.
    border-t-current picks up the amber/green icon tone; the ring sits just

@@ -17,6 +17,9 @@ const VIEW_TABS = [
   // A portal target only lives in memory, so this center-panel browser is
   // transient for the same reason as a sub-agent drill-in.
   "portal",
+  // The Sandbox desktop. Never persisted: opening it mints a bearer URL and
+  // may wake the Sandbox, which a page load should not do on its own.
+  "desktop",
   // A sub-agent drill-in opened from a session's transcript. Transient: its
   // breadcrumb stack only lives in memory, so this one is never persisted
   // (saveActiveViewTab drops it) — a reload would restore an empty tab.
@@ -41,6 +44,7 @@ function read(): ActiveViewTabMap {
         case "assets":
         case "terminal":
         case "portal":
+        case "desktop":
         case "subagent":
           tabs.push([workspaceId, tab]);
       }
@@ -66,7 +70,13 @@ export function saveActiveViewTab(
   // Sub-agent tabs are transient — leave the workspace's remembered pane
   // alone rather than restoring a tab whose stack is gone. Terminal is
   // dropped for a stronger reason: restoring it would spawn a PTY on load.
-  if (tab === "subagent" || tab === "portal" || tab === "terminal") return;
+  if (
+    tab === "subagent" ||
+    tab === "portal" ||
+    tab === "terminal" ||
+    tab === "desktop"
+  )
+    return;
   const map = read();
   map[workspaceId] = tab;
   try {

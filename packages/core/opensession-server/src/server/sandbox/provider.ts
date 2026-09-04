@@ -204,6 +204,60 @@ export interface SandboxDesktop {
   expiresAt?: number;
 }
 
+/** A screenshot of the whole desktop. `data` is base64 of `mimeType`. */
+export interface SandboxScreenshot {
+  data: string;
+  mimeType: "image/png" | "image/jpeg";
+  /** Desktop size in pixels, the coordinate space every control call uses. */
+  width: number;
+  height: number;
+}
+
+export interface SandboxDesktopWindow {
+  id: string;
+  title: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  active: boolean;
+}
+
+export type SandboxMouseButton = "left" | "middle" | "right";
+
+/** Drive the Sandbox desktop the way a person at the keyboard would. Every
+ *  coordinate is a desktop pixel as reported by `screenshot()`. */
+export interface SandboxDesktopControl {
+  screenshot(options?: {
+    /** 0 < scale <= 1 shrinks the image before it is encoded. */
+    scale?: number;
+    format?: "png" | "jpeg";
+  }): Promise<SandboxScreenshot>;
+  display(): Promise<{ width: number; height: number }>;
+  windows(): Promise<SandboxDesktopWindow[]>;
+  move(x: number, y: number): Promise<void>;
+  click(
+    x: number,
+    y: number,
+    options?: { button?: SandboxMouseButton; double?: boolean },
+  ): Promise<void>;
+  drag(
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    options?: { button?: SandboxMouseButton },
+  ): Promise<void>;
+  scroll(
+    x: number,
+    y: number,
+    direction: "up" | "down",
+    amount?: number,
+  ): Promise<void>;
+  /** Type literal text into the focused window. */
+  type(text: string): Promise<void>;
+  /** Press one chord such as `Return`, `ctrl+l`, `alt+F4`. */
+  key(chord: string): Promise<void>;
+}
+
 export interface SandboxProvider {
   id: SandboxProviderId;
   /** Create-or-reuse the sandbox for a session. Idempotent. */
@@ -217,6 +271,9 @@ export interface SandboxProvider {
    *  bearer secret minted for one viewer; providers that cannot expose a
    *  desktop leave this undefined. Rejects while the sandbox is asleep. */
   desktop?(sandboxId: string): Promise<SandboxDesktop>;
+  /** The same desktop for the agent: screenshots plus mouse and keyboard.
+   *  Rejects while the sandbox is asleep. */
+  desktopControl?(sandboxId: string): Promise<SandboxDesktopControl>;
   /** Wake a paused sandbox and return its live handle. */
   resume?(sandboxId: string): Promise<Sandbox | null>;
   /** Persist a session-owned filesystem checkpoint after a clean turn.

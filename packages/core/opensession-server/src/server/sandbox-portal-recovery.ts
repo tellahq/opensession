@@ -15,7 +15,7 @@ import {
 import { sandboxAllocationForHttpsPort } from "./sandbox/preview-ports";
 import { cachedSandboxPortalOwner } from "./sandbox-portals";
 import { findSessionAsync } from "./session-cache";
-import { activeSandboxFor } from "./session-sandbox";
+import { activeSandboxFor, restoreSandboxPortals } from "./session-sandbox";
 
 const recovering = new Map<number, Promise<boolean>>();
 
@@ -69,6 +69,12 @@ async function recoverSandboxPortalRouteInner(
     return false;
   const sandbox = await activeSandboxFor(session);
   if (!sandbox) return false;
+  // A missing relay can also mean the provider restarted the Sandbox on its
+  // own (an idle stop), which took every Portal process with it while the
+  // session's lifecycle never saw a wake. Relaunch the dead ones now, before
+  // the relay comes back, or the route would connect to nothing and answer
+  // 502 until the person restarts the Portal by hand.
+  await restoreSandboxPortals(session, sandbox, { onlyDead: true });
   const relayIdentity = {
     sessionId,
     sandboxId: allocation.sandboxId,

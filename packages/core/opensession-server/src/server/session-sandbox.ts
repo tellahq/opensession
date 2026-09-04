@@ -13,6 +13,8 @@ import {
 import { touchNativeSession } from "./session-cache";
 import { dropSandboxPreviewRoutes } from "./preview";
 import {
+  listSandboxPortalServices,
+  portalsToRestore,
   readSandboxPortalRecords,
   restartSandboxPortalService,
 } from "./portal-supervisor";
@@ -142,10 +144,16 @@ export async function activeSandboxFor(
  * (for declared Portals) trusted recipe env, so the URLs the user already has
  * keep working after the wake. Failures are logged per Portal and never fail
  * the wake itself.
+ *
+ * `onlyDead` is for a Sandbox this process did not wake: the provider may
+ * have stopped and restarted it on its own, leaving the registry intact and
+ * the processes gone. Probe first and restart only the Portals whose process
+ * is missing, so a healthy dev server survives a mere gateway restart.
  */
 export async function restoreSandboxPortals(
   session: UnifiedSession,
   sandbox: Sandbox,
+  options: { onlyDead?: boolean } = {},
 ): Promise<void> {
   let records;
   try {
@@ -154,9 +162,17 @@ export async function restoreSandboxPortals(
     console.warn(`[sandbox] ${sandbox.id}: could not read Portals:`, error);
     return;
   }
-  const live = records.filter(
+  let live = records.filter(
     (record) => record.state !== "stopped" && record.state !== "failed",
   );
+  if (live.length && options.onlyDead) {
+    try {
+      live = portalsToRestore(live, await listSandboxPortalServices(sandbox));
+    } catch (error) {
+      console.warn(`[sandbox] ${sandbox.id}: could not probe Portals:`, error);
+      return;
+    }
+  }
   if (!live.length) return;
   const recipes = await sandboxPortalRecipes(sandbox).catch(() => []);
   const repoId = session.repo ? getRepo(session.repo).id : undefined;

@@ -13,6 +13,7 @@ import {
   type SetupStatus,
 } from "../components/setup-shared";
 import { BASE_PATH } from "../lib/base";
+import { waitForSetupHealth } from "../lib/setup-restart";
 import { toast } from "../ui/toast";
 
 // GET /api/setup/status, plus the restart choreography every page built on it
@@ -21,8 +22,6 @@ import { toast } from "../ui/toast";
 // Workspace settings pages that hold the same sections (Repositories, Members,
 // Integrations, Identity) share this one controller, so they can't drift on
 // what "saved" means or on which of them can bring the change into effect.
-
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export type RestartState = "idle" | "working" | "failed";
 
@@ -56,6 +55,7 @@ export function useSetupStatus(): SetupController {
   const [restartNeeded, setRestartNeeded] = useState(false);
   const [restartState, setRestartState] = useState<RestartState>("idle");
   const statusRef = useRef<SetupStatus | null>(null);
+  const restartAbortRef = useRef<AbortController | null>(null);
   useLayoutEffect(() => {
     statusRef.current = status;
   });
@@ -76,6 +76,7 @@ export function useSetupStatus(): SetupController {
 
   useEffect(() => {
     refetch();
+    return () => restartAbortRef.current?.abort();
   }, [refetch]);
 
   const applyIntegration = (
@@ -119,43 +120,53 @@ export function useSetupStatus(): SetupController {
   const requireRestart = () => setRestartNeeded(true);
 
   const restartServer = async (post = true) => {
+    restartAbortRef.current?.abort();
+    const controller = new AbortController();
+    restartAbortRef.current = controller;
     setRestartState("working");
     if (post) {
-      await (async () => {
+      try {
         const res = await fetch(`${BASE_PATH}/api/setup/restart`, {
           method: "POST",
+          signal: controller.signal,
         });
+        if (controller.signal.aborted || restartAbortRef.current !== controller)
+          return;
         // 409 = nothing would revive this process, so it refused. Say so
         // rather than polling a server that was never going to go down.
         if (res.status === 409) {
           const body = await res.json().catch(() => null);
+          if (restartAbortRef.current === controller)
+            restartAbortRef.current = null;
           setRestartState("idle");
           toast(body?.error || "This server can't restart itself.");
           return;
         }
-      })().catch(async () => {
-        // The connection can drop as the server goes down — that's fine,
-        // the health poll below is the real signal.
-      });
+      } catch {
+        // The connection can drop as the server goes down. The health check is
+        // the real signal, unless this attempt was explicitly cancelled.
+        if (controller.signal.aborted) return;
+      }
     }
-    const deadline = Date.now() + 30_000;
-    await sleep(1000);
-    while (Date.now() < deadline) {
-      await (async () => {
-        const res = await fetch(`${BASE_PATH}/api/health`, {
-          cache: "no-store",
-        });
-        if (res.ok) {
-          await refetch();
-          setRestartNeeded(false);
-          setRestartState("idle");
-          toast("Server restarted. Changes applied.");
-          return;
-        }
-      })().catch(async () => {});
-      await sleep(1000);
+    const healthy = await waitForSetupHealth(
+      (signal) =>
+        fetch(`${BASE_PATH}/api/health`, { cache: "no-store", signal }),
+      { signal: controller.signal },
+    );
+    if (controller.signal.aborted || restartAbortRef.current !== controller)
+      return;
+    if (!healthy) {
+      restartAbortRef.current = null;
+      setRestartState("failed");
+      return;
     }
-    setRestartState("failed");
+    await refetch();
+    if (controller.signal.aborted || restartAbortRef.current !== controller)
+      return;
+    restartAbortRef.current = null;
+    setRestartNeeded(false);
+    setRestartState("idle");
+    toast("Server restarted. Changes applied.");
   };
 
   return {

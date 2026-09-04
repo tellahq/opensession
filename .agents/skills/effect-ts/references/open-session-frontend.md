@@ -13,6 +13,7 @@ decision changes it. Pins: `effect`, `@effect/atom-react`,
 |---|---|
 | `lib/effect-lifecycle.ts` | `makeEffectLifecycle<Key>()`: one `Scope` + `FiberMap.makeRuntime` per runtime object. Exposes `run`, `sleep`, `cancel`, `repeat`, `stream`, `acquire`, `stop`. Every failure is reported through `reportError` and the runtime keeps going; interrupts are silent. `effectDelay(ms, action)` is the TestClock-friendly delay. |
 | `lib/effect-browser-events.ts` | `browserSignalStreams`: `Stream`s for `visibilitychange`, `focus`, `online`, `pageshow`, `beforeunload` built on `Stream.fromEventListener` / `Stream.callback`. |
+| `lib/poll.ts` | The shared visibility-aware poller. `Stream.tick` supplies the cadence, the visibility stream refreshes on foregrounding, and a keyed request fiber aborts superseded or stopped fetches. |
 | `lib/session-socket-runtime.ts` | Keyed fibers for reconnect, heartbeat, presence lease, typing, visibility; owns the browser listeners; publishes `connectedAtom` through `effect/unstable/reactivity/Atom`. Consumed by `hooks/useWebSocket.ts`. |
 | `lib/session-list-runtime.ts` + `lib/session-list-state.ts` | Visibility-aware polling with fallback timers and debounced invalidation; `Effect.tryPromise(pollLive)`. Consumed by `hooks/useSessions.ts`. |
 | `components/EffectRegistryProvider.tsx` | App-owned `AtomRegistry` via `@effect/atom-react/RegistryContext`. Must stay inert under SSR. |
@@ -26,10 +27,13 @@ state. The only way they meet is a plain object:
 
 ```ts
 export interface SessionListRuntime {
-  configure(options: { pollInterval: number; onTick: () => Promise<void> }): void
+  configure(options: {
+    pollInterval: number
+    pollLive: (signal: AbortSignal) => Promise<void>
+  }): void
   start(): () => void   // synchronous, idempotent, Strict Mode safe
   refresh(): void
-  invalidate(reason: () => void): void
+  invalidate(options?: { refreshArchived?: boolean }): void
 }
 ```
 
@@ -41,9 +45,9 @@ export interface SessionListRuntime {
 - Callbacks passed into the runtime are wrapped with `observed(...)`: a throw
   is reported and the fiber continues on the next tick.
 - Use `Effect.tryPromise((signal) => fetch(url, { signal }))` so interruption
-  aborts the real request. Today `session-list-runtime.ts` discards that
-  signal and `useSessions.ts` keeps its own `AbortController`; closing that
-  gap is the first improvement to make.
+  aborts the real request. `session-list-runtime.ts` passes that signal through
+  `useSessions.ts` into `fetchSessionsSnapshot`; do not add a second
+  `AbortController` in the hook.
 - Subpath imports only: `import * as Effect from "effect/Effect"`. The root
   barrel pulls the whole library into the bundle.
 
@@ -101,29 +105,27 @@ Re-measure before adding `Schema`, `HttpClient`, `BrowserSocket`, or `Atom.kvs`.
 - Zod for wire validation; do not introduce `Schema` as a second schema library
   unless `packages/core/protocol` adopts one for every client.
 
+## Implemented baseline
+
+- `pollWhileVisible` uses `Stream.tick`, browser visibility events, and a keyed
+  request fiber while preserving its `(task, milliseconds) => stop` boundary.
+- Session-list requests receive Effect's `AbortSignal`; refresh, invalidation,
+  route changes, and unmount interrupt superseded fetches.
+- Setup restart health checks use `Schedule.spaced("1 second")` under a
+  30-second timeout, with `TestClock` coverage.
+
 ## Ranked next steps
 
-1. **One polling primitive.** Fold `lib/poll.ts` (`pollWhileVisible`) into
-   `EffectLifecycle`: `Stream.tick` merged with the visibility stream,
-   `Effect.tryPromise` so unmount cancels the in-flight fetch, same
-   `(fn, ms) => stop` signature so the ~45 `setInterval` sites migrate
-   mechanically. Cached reads should use SWR `refreshInterval` instead.
-2. **Retry policy as data.** Replace the hand-rolled loops in
+1. **Retry policy as data.** Replace the hand-rolled loops in
    `lib/prompt-outbox.ts` (`retryDelay`, `schedule()`, `flushSessionOwned`),
    `lib/api/repos.ts`, `hooks/usePrData.ts`, `lib/drafts.ts` with
    `Effect.retry(eff, { schedule: Schedule.exponential(...).pipe(Schedule.jittered), times, while })`.
    For `PromptOutbox`, move only the sender and retry driver onto a
    per-session `FiberMap` fiber; freeze the v1 storage shape; test with `TestClock`.
-3. **Finish request cancellation** in `session-list-runtime.ts` /
-   `useSessions.ts` by passing the fiber's `AbortSignal` into
-   `fetchSessionsSnapshot`.
-4. **Transcript range concurrency** in `hooks/useTranscript.ts`:
+2. **Transcript range concurrency** in `hooks/useTranscript.ts`:
    `Semaphore.makeUnsafe(6)` + `FiberMap` keyed by range + `Effect.timeout("15 seconds")`;
    keep `TranscriptViewStore.mergeRange` and scroll anchoring untouched.
-5. **Finite restart workflow** in `hooks/useSetupStatus.ts`:
-   `Effect.retry(healthCheck, { schedule: Schedule.spaced("1 second") })`
-   under `Effect.timeout("30 seconds")`.
-6. **Decide the Atom story** (grow or remove).
+3. **Decide the Atom story** (grow or remove).
 
 Deliberately not now: `Schema` for the WS protocol, `BrowserSocket`,
 `HttpClient`, `Context.Service` layers (no third lifecycle consumer yet),

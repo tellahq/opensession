@@ -336,7 +336,10 @@ describe("GET /api/setup/github/repos with several App installations", () => {
     expect(body.source).toBe("app");
     expect(body.repos).toEqual([]);
     expect(body.unavailableInstallations).toEqual(["acme-org"]);
-    expect(listCalls).toEqual(["Bearer ghs_install_1", "Bearer ghs_install_2"]);
+    expect(listCalls.toSorted()).toEqual([
+      "Bearer ghs_install_1",
+      "Bearer ghs_install_2",
+    ]);
   });
 
   test("still names the installations when no installation can mint", async () => {

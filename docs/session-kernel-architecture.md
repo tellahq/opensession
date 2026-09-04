@@ -377,9 +377,29 @@ The following public compatibility modules delegate writes to SessionKernel:
 - `session-control-wiring.ts`
 - `ws-handlers.ts`
 
-`updateSessionFile` remains the session JSON compatibility facade, but its
-per-session serialization belongs to the kernel. Direct session JSON writes
-outside that facade are rejected by a structural test.
+`updateSessionFile` is the one session metadata writer. The document (title,
+model, workspace, activity, PR refs, and every other `NativeSessionFile`
+field) is an actor record: the gateway reads it with `metadata get`, applies
+the field-scoped mutator, and commits with `metadata put`, a compare-and-set on
+`rev` with request-id replay. A conflict returns the committed document so the
+mutator re-applies on top of it. The per-session gateway mutex only keeps one
+process from racing itself; the actor's revision check is the authority.
+
+Every commit is projected into `session_kernel_metadata_catalog` in the central
+database in the same lane pass (`SessionKernelStoreHost.settleSessionMetadataCatalog`).
+The catalog is the only multi-session read surface for metadata: list
+rebuilds page it, and `pending_exports` is a bounded work index. Nothing
+walks the placement catalog to find documents.
+
+`<sessions dir>/<id>.json` is a derived export written after the commit for
+out-of-process readers (agents, scripts, run hosts) and for this process's
+synchronous detail reads until every historical session has been seeded into
+the catalog. The gateway confirms each export with `metadata exported`; a
+crash in between leaves `exported_rev < rev`, and boot repairs exactly those
+sessions (`reconcileSessionMetadataExports`) instead of scanning the
+directory. A session written before the actor owned metadata seeds from its
+file on its first write. Direct session JSON writes outside the facade are
+rejected by a structural test.
 
 The transcript database keeps its own `changeSeq`, which is the client replay
 cursor. SessionKernel also records lifecycle and metadata changes in its own
@@ -428,6 +448,17 @@ The existing session-list cache, list snapshots, search index, and workspace
 summaries are read projections. They may be rebuilt or served stale while a
 refresh runs. Admission and recovery consult SessionKernel and the engine
 control plane, never those projections.
+
+A metadata commit publishes one row, not a whole-list invalidation. Web
+clients send `sessions_subscribe` with the sidebar query they render; the
+gateway evaluates the changed session against each distinct subscribed scope
+(its workspace or worktree group and parent chain, from the list index) and
+sends `session_row` or `session_row_removed` only to the sockets whose lens
+shows it, coalesced per session (`session-row-events.ts`). The cost of a write
+is O(distinct scopes) and a few hundred bytes per socket. `sessions_invalidated`
+remains for mutations that have no row to send yet (overrides, PR state,
+auth); the client's slow fallback poll and reconnect refetch heal a lost frame
+either way.
 
 Transcript clients already reconnect by durable `changeSeq`. Current user
 entries also carry the stable source delivery ids that formed the turn, so

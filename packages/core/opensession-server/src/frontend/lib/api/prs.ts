@@ -283,12 +283,13 @@ export interface PrReviewThread {
 export async function fetchPrReviewThreads(
   repo: string | undefined,
   number: number,
+  signal?: AbortSignal,
 ): Promise<PrReviewThread[]> {
   const qs = new URLSearchParams({ number: String(number) });
   if (repo) qs.set("repo", repo);
   const data = await request<{ threads: PrReviewThread[] }>(
     `/pr-review-threads?${qs}`,
-    { label: "Failed to load resolved comments" },
+    { label: "Failed to load resolved comments", signal },
   );
   return data?.threads || [];
 }
@@ -383,19 +384,25 @@ export async function fetchPr(
   sessionId: string,
   repo?: string,
   branch?: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<PrDetails | null> {
   const qs = prTargetQs(repo, branch);
   return request(`/sessions/${encodeURIComponent(sessionId)}/pr${qs}`, {
     label: "Failed to fetch PR",
+    signal: options.signal,
   });
 }
 
 /** Local git state (ahead/behind, dirty tree) for the status header. */
-export async function fetchGitStatus(sessionId: string, repo?: string) {
+export async function fetchGitStatus(
+  sessionId: string,
+  repo?: string,
+  signal?: AbortSignal,
+) {
   const qs = repo ? `?repo=${encodeURIComponent(repo)}` : "";
   return request<import("../types").GitStatusInfo | null>(
     `/sessions/${encodeURIComponent(sessionId)}/git-status${qs}`,
-    { label: "Failed to fetch git status" },
+    { label: "Failed to fetch git status", signal },
   );
 }
 
@@ -430,10 +437,12 @@ export async function fetchPrDiff(
   sessionId: string,
   repo?: string,
   branch?: string,
+  signal?: AbortSignal,
 ): Promise<PrDiffResponse | null> {
   const qs = prTargetQs(repo, branch);
   return request(`/sessions/${encodeURIComponent(sessionId)}/pr-diff${qs}`, {
     label: "Failed to fetch PR diff",
+    signal,
   });
 }
 
@@ -494,20 +503,22 @@ export async function unlinkPrApi(
 export async function fetchPrPreview(
   repo: string,
   branch: string,
+  signal?: AbortSignal,
 ): Promise<PrDetails | null> {
   return request(
     `/pr-preview?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`,
-    { label: "Failed to fetch PR" },
+    { label: "Failed to fetch PR", signal },
   );
 }
 
 export async function fetchPrPreviewDiff(
   repo: string,
   branch: string,
+  signal?: AbortSignal,
 ): Promise<PrDiffResponse | null> {
   return request(
     `/pr-preview-diff?repo=${encodeURIComponent(repo)}&branch=${encodeURIComponent(branch)}`,
-    { label: "Failed to fetch PR diff" },
+    { label: "Failed to fetch PR diff", signal },
   );
 }
 

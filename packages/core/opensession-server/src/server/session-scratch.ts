@@ -51,6 +51,21 @@ function scratchName(sessionId: string): string | null {
 }
 
 /**
+ * The session's scratch dir as the runner inside a Sandbox resolves it, so
+ * host code that writes Sandbox-side files (Portal logs, relay sidecars) lands
+ * them where `$OPENSESSION_SCRATCH` points for the agent. A Sandbox is a fresh
+ * install under /home/ubuntu with no legacy `.opensession-*` entries, so it
+ * always takes the `~/.opensession/<name>` layout; the host's own root may be
+ * a legacy path or an isolated state dir and must not leak in.
+ */
+export function sandboxSessionScratchDir(sessionId: string): string {
+  return join(
+    "/home/ubuntu/.opensession/session-scratch",
+    scratchName(sessionId) ?? "_",
+  );
+}
+
+/**
  * Ensure the session's scratch dir exists and return its path. Undefined on
  * an unusable id or an fs failure — callers treat scratch as best-effort and
  * a run without one simply gets no scratch section.

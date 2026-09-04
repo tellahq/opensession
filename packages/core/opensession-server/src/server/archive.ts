@@ -11,6 +11,16 @@ import type { UnifiedSession } from "./types";
 import { setIndexedSessionArchived } from "./session-list-store";
 import { releasePreviewPathLease } from "./preview-path-leases";
 
+/** Tell subscribed sidebars the row changed. Loaded on demand: the sidebar
+ * scope module reaches the sandbox adapters, which reach back here, and a
+ * static edge would close that cycle at import time. The publish is
+ * coalesced, so the extra tick costs nothing. */
+function publishSessionRow(id: string): void {
+  void import("./session-row-events")
+    .then((events) => events.publishSessionRow(id))
+    .catch(() => {});
+}
+
 const REGISTRY_PATH = `${OPENSESSION_SESSIONS_DIR}/archive-registry.json`;
 
 /** Why a session ended up archived — drives the "Auto-archived" filter. */
@@ -109,6 +119,7 @@ export function setArchived(
   else delete registry[id];
   save(registry);
   setIndexedSessionArchived(id, archived, archived ? reason : undefined);
+  publishSessionRow(id);
   // Archived work shouldn't stay pinned (for anyone) — it would resurface in
   // the Pinned band on unarchive. Callers that know more keys (alias ids, the
   // workspace pin) drop those on top of this.
@@ -143,6 +154,7 @@ export function archiveOlderThan(
     for (const session of justArchived) {
       releasePreviewLease(session.id);
       setIndexedSessionArchived(session.id, true, "idle");
+      publishSessionRow(session.id);
     }
     // Registry is written, so isArchivedId now reflects this batch — drop the
     // stale session/alias pins and any workspace pin whose last session just went.

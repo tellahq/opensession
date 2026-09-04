@@ -231,3 +231,144 @@ describe("asynchronous session kernel actor boundary", () => {
     ).resolves.toBeUndefined();
   });
 });
+
+describe("actor-owned session metadata", () => {
+  // `expect(promise).rejects` does not pump Worker messages in bun test, so a
+  // rejection carried by the actor worker is awaited by hand.
+  async function rejection(work: Promise<unknown>): Promise<string> {
+    try {
+      await work;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+    throw new Error("expected the actor to reject");
+  }
+  const doc = (sessionId: string, rev: number) =>
+    JSON.stringify({
+      id: sessionId,
+      title: `title ${rev}`,
+      lastActivity: "2026-09-01T00:00:00.000Z",
+      rev,
+    });
+  const put = (
+    host: SessionKernelActorClient,
+    sessionId: string,
+    rev: number,
+    expectedRev: number | null,
+    requestId = crypto.randomUUID(),
+  ) =>
+    host.decideMetadataAsync({
+      op: "put",
+      sessionId,
+      requestId,
+      expectedRev,
+      rev,
+      doc: doc(sessionId, rev),
+      archived: false,
+      lastActivityMs: Date.parse("2026-09-01T00:00:00.000Z"),
+    });
+
+  test("commits with compare-and-set, projects to the catalog, and tracks exports", async () => {
+    const host = await actor();
+    const sessionId = `metadata-${crypto.randomUUID()}`;
+    expect(await host.decideMetadataAsync({ op: "get", sessionId })).toBeNull();
+
+    expect(await put(host, sessionId, 1, null)).toEqual({
+      status: "committed",
+      rev: 1,
+    });
+    const stored = await host.decideMetadataAsync({ op: "get", sessionId });
+    expect(stored).toMatchObject({ sessionId, rev: 1, doc: doc(sessionId, 1) });
+
+    // The catalog is a projection of the commit and knows the file is stale.
+    const page = await host.decideMetadataAsync({
+      op: "catalog_page",
+      afterSessionId: "",
+      limit: 1000,
+    });
+    expect(page.find((row) => row.sessionId === sessionId)).toMatchObject({
+      rev: 1,
+      exportedRev: 0,
+      archived: false,
+    });
+    const pending = await host.decideMetadataAsync({
+      op: "pending_exports",
+      limit: 1000,
+    });
+    expect(pending).toContainEqual({ sessionId, rev: 1, exportedRev: 0 });
+
+    await host.decideMetadataAsync({ op: "exported", sessionId, rev: 1 });
+    const settled = await host.decideMetadataAsync({
+      op: "pending_exports",
+      limit: 1000,
+    });
+    expect(settled.some((row) => row.sessionId === sessionId)).toBe(false);
+
+    // A stale writer is told the truth instead of clobbering it.
+    expect(await put(host, sessionId, 1, null)).toMatchObject({
+      status: "conflict",
+      current: { rev: 1 },
+    });
+    expect(await put(host, sessionId, 3, 2)).toMatchObject({
+      status: "conflict",
+      current: { rev: 1 },
+    });
+    // A replayed request id returns its receipt.
+    const requestId = crypto.randomUUID();
+    expect(await put(host, sessionId, 2, 1, requestId)).toEqual({
+      status: "committed",
+      rev: 2,
+    });
+    expect(await put(host, sessionId, 2, 1, requestId)).toEqual({
+      status: "duplicate",
+      rev: 2,
+    });
+    // Advancing the catalog reopens the export gap.
+    expect(
+      await host.decideMetadataAsync({ op: "pending_exports", limit: 1000 }),
+    ).toContainEqual({ sessionId, rev: 2, exportedRev: 1 });
+  });
+
+  test("a deleted session leaves neither document nor catalog row", async () => {
+    const host = await actor();
+    const sessionId = `metadata-deleted-${crypto.randomUUID()}`;
+    await put(host, sessionId, 1, null);
+    await host.decideCoreAsync({ op: "tombstone", sessionId });
+    expect(await host.decideMetadataAsync({ op: "get", sessionId })).toBeNull();
+    expect(await rejection(put(host, sessionId, 2, 1))).toMatch(/deleted/);
+    const page = await host.decideMetadataAsync({
+      op: "catalog_page",
+      afterSessionId: "",
+      limit: 1000,
+    });
+    expect(page.some((row) => row.sessionId === sessionId)).toBe(false);
+  });
+
+  test("rejects malformed metadata commands before touching storage", async () => {
+    const host = await actor();
+    const sessionId = `metadata-invalid-${crypto.randomUUID()}`;
+    expect(
+      await rejection(
+        host.decideMetadataAsync({
+          op: "put",
+          sessionId,
+          requestId: crypto.randomUUID(),
+          expectedRev: 4,
+          rev: 9,
+          doc: "{}",
+          archived: false,
+          lastActivityMs: 0,
+        }),
+      ),
+    ).toMatch(/advance by one/);
+    expect(
+      await rejection(
+        host.decideMetadataAsync({
+          op: "catalog_page",
+          afterSessionId: "",
+          limit: 0,
+        }),
+      ),
+    ).toMatch(/page size/);
+  });
+});

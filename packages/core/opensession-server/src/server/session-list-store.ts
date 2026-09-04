@@ -193,6 +193,50 @@ export class SessionListStore {
     this.db.run("DELETE FROM session_list WHERE id = ?", [id]);
   }
 
+  get(id: string): UnifiedSession | null {
+    const row = this.db
+      .query("SELECT payload FROM session_list WHERE id = ?")
+      .get(id) as StoredRow | null;
+    return row ? (decodeRows([row])[0] ?? null) : null;
+  }
+
+  /**
+   * The rows a sidebar scope consults to decide one session's visibility:
+   * its workspace or worktree group and its parent chain. Group rules
+   * (workspace owner, selection, overlays, PR ownership) read siblings and
+   * ancestors, so a lone row would be misjudged; the whole list is never
+   * needed.
+   */
+  listVisibilityGroup(session: UnifiedSession): UnifiedSession[] {
+    const rows = new Map<string, UnifiedSession>([[session.id, session]]);
+    // Live siblings only: the sidebar scopes its live slice, so an archived
+    // sibling must not lend ownership or attention to this row.
+    const members = session.workspaceId
+      ? (this.db
+          .query(
+            "SELECT payload FROM session_list WHERE workspace_id = ? AND archived = 0",
+          )
+          .all(session.workspaceId) as StoredRow[])
+      : session.worktreeDir?.includes("/worktrees/")
+        ? (this.db
+            .query(
+              "SELECT payload FROM session_list WHERE worktree_dir = ? AND archived = 0",
+            )
+            .all(session.worktreeDir) as StoredRow[])
+        : [];
+    for (const member of decodeRows(members)) rows.set(member.id, member);
+    const seen = new Set<string>();
+    let parentId = session.parentSessionId;
+    while (parentId && !seen.has(parentId) && seen.size < 16) {
+      seen.add(parentId);
+      const parent = rows.get(parentId) ?? this.get(parentId);
+      if (!parent) break;
+      rows.set(parent.id, parent);
+      parentId = parent.parentSessionId;
+    }
+    return [...rows.values()];
+  }
+
   setArchived(id: string, archived: boolean, reason?: string): void {
     const row = this.db
       .query("SELECT payload FROM session_list WHERE id = ?")
@@ -241,11 +285,13 @@ export class SessionListStore {
   /** Every materialized member of one known workspace, live or archived. */
   listWorkspaceMembers(workspaceId: string): UnifiedSession[] {
     const rows = this.db
-      .query(`
+      .query(
+        `
         SELECT payload FROM session_list
         WHERE workspace_id = ?
         ORDER BY last_activity_ms DESC
-      `)
+      `,
+      )
       .all(workspaceId) as StoredRow[];
     return decodeRows(rows);
   }
@@ -259,18 +305,22 @@ export class SessionListStore {
       : null;
     const rows = isolatedWorktree
       ? (this.db
-          .query(`
+          .query(
+            `
 						SELECT payload FROM session_list
 						WHERE archived = 1 AND (workspace_id = ? OR worktree_dir = ?)
 						ORDER BY last_activity_ms DESC
-					`)
+					`,
+          )
           .all(workspaceId, isolatedWorktree) as StoredRow[])
       : (this.db
-          .query(`
+          .query(
+            `
 						SELECT payload FROM session_list
 						WHERE workspace_id = ? AND archived = 1
 						ORDER BY last_activity_ms DESC
-					`)
+					`,
+          )
           .all(workspaceId) as StoredRow[]);
     return decodeRows(rows);
   }
@@ -294,7 +344,8 @@ export class SessionListStore {
    */
   listSidebar(selectedSessionId?: string): UnifiedSession[] {
     const rows = this.db
-      .query(`
+      .query(
+        `
 				WITH ranked_automation AS (
 					SELECT payload, id, last_activity_ms, is_running,
 						waiting_for_input, manual_status,
@@ -322,7 +373,8 @@ export class SessionListStore {
 				SELECT payload, automation_run_count
 				FROM selected
 				ORDER BY last_activity_ms DESC
-			`)
+			`,
+      )
       .all(selectedSessionId || "", selectedSessionId || "") as StoredRow[];
     return decodeRows(rows);
   }
@@ -416,6 +468,16 @@ export function rebuildSessionListIndex(sessions: UnifiedSession[]): void {
 
 export function removeIndexedSession(id: string): void {
   sessionListStore().remove(id);
+}
+
+export function indexedSession(id: string): UnifiedSession | null {
+  return sessionListStore().get(id);
+}
+
+export function indexedVisibilityGroup(
+  session: UnifiedSession,
+): UnifiedSession[] {
+  return sessionListStore().listVisibilityGroup(session);
 }
 
 export function setIndexedSessionArchived(

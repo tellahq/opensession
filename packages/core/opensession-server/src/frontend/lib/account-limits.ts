@@ -126,6 +126,7 @@ export interface AccountLimitSource {
   name: string;
   provider: "claude" | "codex" | "xai";
   owner?: string;
+  usable?: boolean;
   limits?: AccountLimit[];
 }
 
@@ -133,6 +134,8 @@ export interface AccountLimitSource {
 export interface WeeklyRemainingRow {
   accountId: string;
   provider: "claude" | "codex" | "xai";
+  /** Model the cap is scoped to ("Fable"), or undefined for the account. */
+  scope?: string;
   /** Account name, with the model a scoped cap applies to. */
   label: string;
   /** Weekday the window refills, or "" when unknown. */
@@ -206,7 +209,7 @@ export function weeklyRemainingRows(
       );
       if (used === null) continue;
       const remaining = Math.max(0, Math.min(100, Math.round(100 - used)));
-      rows.push({
+      const row: WeeklyRemainingRow = {
         accountId: account.id,
         provider: account.provider,
         label: limit.scope ? `${account.name} · ${limit.scope}` : account.name,
@@ -215,7 +218,9 @@ export function weeklyRemainingRows(
         remaining,
         tone: remainingTone(remaining),
         owner: account.owner,
-      });
+      };
+      if (limit.scope) row.scope = limit.scope;
+      rows.push(row);
     }
   }
   // Your own subscriptions first: they are the ones routing spends before the
@@ -231,4 +236,106 @@ export function lowestRemaining(
   for (const row of rows)
     if (!lowest || row.remaining < lowest.remaining) lowest = row;
   return lowest;
+}
+
+const CLAUDE_SCOPED_MODEL_FAMILIES = ["fable", "opus", "sonnet", "haiku"];
+
+/** Pick the limit that can stop `model` on one account. A Claude model with a
+ * dedicated weekly bucket uses that bucket instead of the general 7-day one. */
+function rowsForModel(
+  rows: WeeklyRemainingRow[],
+  model: string,
+): WeeklyRemainingRow[] {
+  if (rows[0]?.provider !== "claude") return rows;
+  const normalizedModel = model.toLowerCase();
+  const family = normalizedModel.includes("mythos")
+    ? "fable"
+    : CLAUDE_SCOPED_MODEL_FAMILIES.find((candidate) =>
+        normalizedModel.includes(candidate),
+      );
+  if (!family) return rows.filter((row) => !row.scope);
+  const scoped = rows.filter((row) =>
+    row.scope?.toLowerCase().includes(family),
+  );
+  return scoped.length > 0 ? scoped : rows.filter((row) => !row.scope);
+}
+
+interface WeeklyReadoutOptions {
+  rows: WeeklyRemainingRow[];
+  accounts: AccountLimitSource[];
+  viewer: string;
+  provider?: AccountLimitSource["provider"];
+  model: string;
+  accountId?: string;
+}
+
+/**
+ * The weekly number for the account automatic routing will use: a usable pin,
+ * otherwise the viewer's personal subscription before the shared pool. Within
+ * a group, prefer the account with the most model-specific headroom, matching
+ * the pool's least-used choice closely enough without exposing runner state.
+ */
+export function weeklyRemainingReadout({
+  rows,
+  accounts,
+  viewer,
+  provider,
+  model,
+  accountId,
+}: WeeklyReadoutOptions): WeeklyRemainingRow | undefined {
+  const providerRows = provider
+    ? rows.filter((row) => row.provider === provider)
+    : rows;
+  const candidates = accounts
+    .filter(
+      (account) =>
+        (!provider || account.provider === provider) &&
+        accountAvailableTo(account, viewer),
+    )
+    .map((account) => ({
+      account,
+      row: lowestRemaining(
+        rowsForModel(
+          providerRows.filter((row) => row.accountId === account.id),
+          model,
+        ),
+      ),
+    }))
+    .filter(
+      (
+        candidate,
+      ): candidate is {
+        account: AccountLimitSource;
+        row: WeeklyRemainingRow;
+      } => !!candidate.row,
+    );
+
+  const available = candidates.filter(
+    ({ account, row }) => account.usable !== false && row.remaining > 0,
+  );
+  const best = (choices: typeof candidates) =>
+    choices.reduce<(typeof candidates)[number] | undefined>(
+      (current, candidate) =>
+        !current || candidate.row.remaining > current.row.remaining
+          ? candidate
+          : current,
+      undefined,
+    )?.row;
+
+  if (accountId) {
+    const pinned = available.find(
+      ({ account }) => account.id === accountId,
+    )?.row;
+    if (pinned) return pinned;
+  }
+
+  const personal = available.filter(({ account }) => !!account.owner);
+  const pool = available.filter(({ account }) => !account.owner);
+  return (
+    best(personal) ??
+    best(pool) ??
+    best(candidates.filter(({ account }) => !!account.owner)) ??
+    best(candidates.filter(({ account }) => !account.owner)) ??
+    lowestRemaining(providerRows)
+  );
 }

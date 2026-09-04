@@ -24,7 +24,13 @@ test("uses a slow safety poll behind WebSocket invalidations", () => {
 describe("session feed socket ownership", () => {
   test("keeps invalidation and reconnect transport concerns in useSessions", () => {
     expect(hookSource).toContain(
-      'socket?: Pick<SessionSocket, "addHandler"> & { connected: boolean }',
+      'socket?: Pick<SessionSocket, "addHandler" | "send"> & {',
+    );
+    expect(hookSource).toContain(
+      'else if (message.type === "session_row") onRow(message.row);',
+    );
+    expect(hookSource).toContain(
+      'send({ type: "sessions_subscribe", query: liveQuery });',
     );
     expect(hookSource).toContain(
       'if (message.type === "sessions_invalidated") onInvalidated()',

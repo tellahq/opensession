@@ -44,6 +44,7 @@ interface ReviewVisibility {
   showStaging: boolean;
   showAssets: boolean;
   showTerminal: boolean;
+  showDesktop: boolean;
   showPortal: boolean;
   hasPortalTarget: boolean;
   showSubagent: boolean;
@@ -277,6 +278,7 @@ export function useSessionReviewController({
     visibility.showStaging ||
     visibility.showAssets ||
     visibility.showTerminal ||
+    visibility.showDesktop ||
     (visibility.showPortal && visibility.hasPortalTarget) ||
     (visibility.showSubagent && visibility.hasSubagent) ||
     (visibility.showConversation && visibility.hasConversation) ||

@@ -110,17 +110,19 @@ export function usePrData({
   const loadInFlightRef = useRef<{
     key: string;
     promise: Promise<void>;
+    signal?: AbortSignal;
   } | null>(null);
   useLayoutEffect(() => {
     activeLoadTargetRef.current = loadTargetKey;
   }, [loadTargetKey]);
 
-  const load = (force = false): Promise<void> => {
+  const load = (force = false, signal?: AbortSignal): Promise<void> => {
     if (loadTargetKey !== activeLoadTargetRef.current) {
       return Promise.resolve();
     }
     const existing = loadInFlightRef.current;
-    if (!force && existing?.key === loadTargetKey) return existing.promise;
+    if (!force && existing?.key === loadTargetKey && !existing.signal?.aborted)
+      return existing.promise;
 
     const generation = ++loadGenerationRef.current;
     setDiffLoading(true);
@@ -141,8 +143,8 @@ export function usePrData({
 
     const prRequest = (
       previewRepo && previewBranch
-        ? fetchPrPreview(previewRepo, previewBranch)
-        : fetchPr(sessionId, loadRepo, loadBranch)
+        ? fetchPrPreview(previewRepo, previewBranch, signal)
+        : fetchPr(sessionId, loadRepo, loadBranch, { signal })
     )
       .then((data) => {
         prSettled = true;
@@ -166,8 +168,8 @@ export function usePrData({
       });
     const diffRequest = (
       previewRepo && previewBranch
-        ? fetchPrPreviewDiff(previewRepo, previewBranch)
-        : fetchPrDiff(sessionId, loadRepo, loadBranch)
+        ? fetchPrPreviewDiff(previewRepo, previewBranch, signal)
+        : fetchPrDiff(sessionId, loadRepo, loadBranch, signal)
     )
       .then((data) => {
         diffSettled = true;
@@ -188,7 +190,7 @@ export function usePrData({
     const gitRequest = (
       previewRepo || loadLinked
         ? Promise.resolve(null)
-        : fetchGitStatus(sessionId, loadRepo)
+        : fetchGitStatus(sessionId, loadRepo, signal)
     )
       .then((data) => {
         if (isCurrent()) setGit(data);
@@ -199,7 +201,11 @@ export function usePrData({
     const reviewThreadsRequest = prRequest.then(async () => {
       if (!prResult) return;
       try {
-        const threads = await fetchPrReviewThreads(loadRepo, prResult.number);
+        const threads = await fetchPrReviewThreads(
+          loadRepo,
+          prResult.number,
+          signal,
+        );
         if (isCurrent()) setReviewThreads({ key: loadTargetKey, threads });
       } catch {
         // Resolved threads are supporting context and never block the diff.
@@ -212,7 +218,7 @@ export function usePrData({
       gitRequest,
       reviewThreadsRequest,
     ]).then(() => undefined);
-    loadInFlightRef.current = { key: loadTargetKey, promise };
+    loadInFlightRef.current = { key: loadTargetKey, promise, signal };
     void promise.then(() => {
       if (loadInFlightRef.current?.promise === promise) {
         loadInFlightRef.current = null;
@@ -221,7 +227,9 @@ export function usePrData({
     return promise;
   };
 
-  const loadForEffect = useEffectEvent((force = false) => load(force));
+  const loadForEffect = useEffectEvent((force = false, signal?: AbortSignal) =>
+    load(force, signal),
+  );
   const resetTargetState = useEffectEvent(onTargetReset);
   useEffect(() => {
     setLoading(true);
@@ -237,11 +245,10 @@ export function usePrData({
     setCodeFlowLoading(false);
     setCodeFlowError(null);
     codeFlowGenerationRef.current += 1;
-    void loadForEffect();
     // useEffectEvent functions must be called, not passed: hand the poller a
     // plain closure so the Effect Event is only ever invoked directly.
     const stopPolling = pollWhileVisible(
-      () => loadForEffect(),
+      (signal) => loadForEffect(false, signal),
       PR_WEBHOOK_FALLBACK_POLL_MS,
     );
     return () => {

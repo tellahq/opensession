@@ -20,6 +20,7 @@ import {
   upsertIndexedSession,
   upsertIndexedSessions,
 } from "./session-list-store";
+import { publishSessionRow } from "./session-row-events";
 import { activeRunRecords } from "./run-journal";
 import {
   getRunState,
@@ -45,9 +46,9 @@ import {
   sessionDeliveryProjectionCached,
   quarantineSessionForSafety,
   releaseSessionQuarantine,
-  sessionGatewayCommand,
   sessionKernel,
   sessionKernelActorActive,
+  sessionMetadata,
   sessionQuarantines,
   sessionRunStateProjections,
   sessionTurn,
@@ -101,6 +102,18 @@ const CACHE_TTL = 10_000;
  * a routine session write cannot make unrelated HTTP requests wait for a scan
  * of every historical session. */
 export function invalidateSessionsCache(): void {
+  markSessionListStale();
+  // Publish only after every cache layer is stale, so a client reacting
+  // immediately cannot race ahead of the invalidation it was told about.
+  // Older and native clients safely ignore unknown server frames.
+  broadcastToAll({ type: "sessions_invalidated" });
+}
+
+/** Mark every list cache stale without telling clients to refetch. Row-level
+ * writes publish their own `session_row` frame instead (session-row-events),
+ * so the whole-list broadcast stays reserved for mutations that have no row
+ * to send yet. */
+export function markSessionListStale(): void {
   for (const slice of CACHE_SLICES) {
     sessionsCacheGenerations[slice]++;
     if (sessionsCaches[slice]) sessionsCaches[slice]!.invalidated = true;
@@ -117,10 +130,6 @@ export function invalidateSessionsCache(): void {
     | Map<string, { expiresAt: number }>
     | undefined;
   for (const snapshot of responses?.values() || []) snapshot.expiresAt = 0;
-  // Publish only after every cache layer is stale, so a client reacting
-  // immediately cannot race ahead of the invalidation it was told about.
-  // Older and native clients safely ignore unknown server frames.
-  broadcastToAll({ type: "sessions_invalidated" });
 }
 
 export interface SessionRuntimeSnapshot {
@@ -577,71 +586,148 @@ export async function sessionIdsForAsync(sessionId: string): Promise<string[]> {
     : [sessionId];
 }
 
-// ── Serialized session-file writes ────────────────────────────────────────────
-// Every session-file writer goes through updateSessionFile: fresh read →
-// field-scoped mutator → atomic write, serialized per session id by a
-// promise-chain mutex (parked on globalThis so hot reloads keep in-flight
-// chains). This replaces the blind full-object rebuilds that let concurrent
-// writers clobber each other's fields (docs/transcripts.md §6).
-// Each write bumps a `rev` counter on the file — readers ignore it; it exists
-// so lost updates are observable.
+// ── Serialized session metadata writes ────────────────────────────────────────
+// Every session metadata writer goes through updateSessionFile: read the
+// actor-owned document → field-scoped mutator → compare-and-set put in the
+// session's actor → derived `<id>.json` export. The per-session promise-chain
+// mutex (parked on globalThis so hot reloads keep in-flight chains) keeps one
+// gateway from racing itself; the actor's `rev` check is the authority when
+// anything else wrote in between. This replaces the blind full-object rebuilds
+// that let concurrent writers clobber each other's fields
+// (docs/transcripts.md §6).
+//
+// The file is an export for out-of-process readers (agents, scripts, run
+// hosts) and for this process's synchronous detail reads until every session
+// has been seeded into the catalog. The catalog remembers which revision
+// reached the file; reconcileSessionMetadataExports repairs the gap at boot.
 
 /** Receives the fresh on-disk session file ({} as the type when the file
  *  doesn't exist yet — create-if-absent) and returns the object to write.
  *  Sites overlay ONLY the fields they own; unknown/foreign fields survive. */
 export type SessionFileMutator = (data: NativeSessionFile) => NativeSessionFile;
 
+const SESSION_METADATA_PUT_ATTEMPTS = 3;
+
+function sessionFileRev(data: NativeSessionFile): number {
+  const rev = (data as { rev?: unknown }).rev;
+  return typeof rev === "number" && Number.isInteger(rev) && rev >= 0 ? rev : 0;
+}
+
+function sessionActivityMs(data: NativeSessionFile): number {
+  const value = Date.parse(data.lastActivity || data.createdAt || "");
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
 export function updateSessionFile(
   sessionId: string,
   mutator: SessionFileMutator,
 ): Promise<void> {
   return withSessionMutationLock(sessionId, async () => {
-    const requestId = `session-file:${crypto.randomUUID()}`;
-    const plan = await sessionGatewayCommand({
-      op: "request",
-      sessionId,
-      requestId,
-      operation: "session_file_updated",
-    });
-    if (plan.status !== "execute")
-      throw new Error("Unexpected duplicate session-file command");
-    let physicalFinished = false;
-    try {
-      const path = `${SESSIONS_DIR}/${sessionId}.json`;
-      const current: NativeSessionFile = existsSync(path)
-        ? JSON.parse(readFileSync(path, "utf-8"))
-        : ({} as NativeSessionFile);
+    const path = `${SESSIONS_DIR}/${sessionId}.json`;
+    let stored = await sessionMetadata({ op: "get", sessionId });
+    for (let attempt = 1; ; attempt++) {
+      // A session written before the actor owned its metadata seeds from its
+      // file on the first write. From then on the file is derived.
+      const current: NativeSessionFile = stored
+        ? JSON.parse(stored.doc)
+        : existsSync(path)
+          ? JSON.parse(readFileSync(path, "utf-8"))
+          : ({} as NativeSessionFile);
       const next = mutator(current) ?? current;
-      const rev = (current as { rev?: unknown }).rev;
-      (next as { rev?: number }).rev = (typeof rev === "number" ? rev : 0) + 1;
-      writeJsonAtomic(path, next);
-      const indexed = readNativeSessionListRow(sessionId);
-      if (indexed) {
-        enrichSessionRuntime([indexed]);
-        upsertIndexedSession(indexed);
-      }
-      invalidateSessionsCache();
-      physicalFinished = true;
-      await sessionGatewayCommand({
-        op: "complete",
+      const rev = (stored ? stored.rev : sessionFileRev(current)) + 1;
+      (next as { rev?: number }).rev = rev;
+      const result = await sessionMetadata({
+        op: "put",
         sessionId,
-        requestId,
-        operation: "session_file_updated",
-        result: null,
+        requestId: `session-metadata:${crypto.randomUUID()}`,
+        expectedRev: stored ? stored.rev : null,
+        rev,
+        doc: JSON.stringify(next),
+        archived: !!next.archived,
+        lastActivityMs: sessionActivityMs(next),
       });
-    } catch (error) {
-      if (!physicalFinished)
-        await sessionGatewayCommand({
-          op: "fail",
-          sessionId,
-          requestId,
-          operation: "session_file_updated",
-          error: error instanceof Error ? error.message : String(error),
-          retryable: false,
-        });
-      throw error;
+      if (result.status === "conflict") {
+        // Another writer committed between our read and put. Re-apply the
+        // mutator on the committed truth; the lock makes this rare.
+        if (attempt >= SESSION_METADATA_PUT_ATTEMPTS)
+          throw new Error(
+            `Session ${sessionId} metadata changed under a serialized write`,
+          );
+        stored = result.current;
+        continue;
+      }
+      writeJsonAtomic(path, next);
+      void afterSessionMetadataExport(sessionId, result.rev).catch((error) =>
+        console.warn(
+          `[session-metadata] export receipt failed for ${sessionId}:`,
+          error instanceof Error ? error.message : error,
+        ),
+      );
+      return;
     }
   });
+}
+
+/** The file changed: refresh the list projection, publish the row, and tell
+ * the catalog which revision the export now carries. */
+function afterSessionMetadataExport(
+  sessionId: string,
+  rev: number,
+): Promise<void> {
+  const indexed = readNativeSessionListRow(sessionId);
+  if (indexed) {
+    enrichSessionRuntime([indexed]);
+    upsertIndexedSession(indexed);
+  }
+  markSessionListStale();
+  publishSessionRow(sessionId);
+  return sessionMetadata({ op: "exported", sessionId, rev });
+}
+
+export const SESSION_METADATA_EXPORT_REPAIR_LIMIT = 500;
+
+/**
+ * Boot repair for the derived session files. A crash between an actor commit
+ * and the file write leaves the catalog's `exported_rev` behind `rev`; that
+ * bounded work index names exactly the sessions to re-export, so boot never
+ * scans the sessions directory or opens every actor.
+ */
+export async function reconcileSessionMetadataExports(
+  limit = SESSION_METADATA_EXPORT_REPAIR_LIMIT,
+): Promise<number> {
+  if (!sessionKernelActorActive()) return 0;
+  let repaired = 0;
+  const pageSize = Math.min(100, Math.max(1, limit));
+  while (repaired < limit) {
+    const pending = await sessionMetadata({
+      op: "pending_exports",
+      limit: pageSize,
+    });
+    if (pending.length === 0) break;
+    for (const item of pending) {
+      await withSessionMutationLock(item.sessionId, async () => {
+        const stored = await sessionMetadata({
+          op: "get",
+          sessionId: item.sessionId,
+        });
+        // The catalog can trail a clear or delete; a missing document has no
+        // file to write and the next settle drops the row.
+        if (!stored) return;
+        writeJsonAtomic(
+          `${SESSIONS_DIR}/${item.sessionId}.json`,
+          JSON.parse(stored.doc),
+        );
+        await afterSessionMetadataExport(item.sessionId, stored.rev);
+      });
+      repaired++;
+    }
+    if (pending.length < pageSize) break;
+  }
+  if (repaired > 0)
+    console.log(
+      `[session-metadata] re-exported ${repaired} session file(s) from the catalog`,
+    );
+  return repaired;
 }
 
 export function touchNativeSessionStrict(

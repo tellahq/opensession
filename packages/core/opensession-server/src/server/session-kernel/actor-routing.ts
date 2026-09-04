@@ -4,6 +4,7 @@ import type {
 } from "./actor-protocol";
 import { isDeliveryReadRequest } from "./delivery-protocol";
 import type { SessionActorReducerCommand } from "./lifecycle-protocol";
+import { isMetadataCatalogRequest, isMetadataRead } from "./metadata-protocol";
 import { sessionKernelStoreRoute } from "./store-routing";
 import { isTranscriptRead } from "./transcript-protocol";
 
@@ -21,6 +22,7 @@ export function isReadReducer(command: SessionActorReducerCommand): boolean {
   if (command.kind === "delivery")
     return isDeliveryReadRequest(command.request);
   if (command.kind === "transcript") return isTranscriptRead(command.request);
+  if (command.kind === "metadata") return isMetadataRead(command.request);
   return command.kind === "turn" && command.request.op === "snapshot";
 }
 
@@ -60,6 +62,20 @@ export function sessionActorReducerRoute(
         sessionId: command.request.sessionId,
         mutation: true,
       };
+    case "metadata":
+      // Catalog pages and export bookkeeping read the central projection
+      // only; they must not wait behind any session mailbox.
+      if (isMetadataCatalogRequest(command.request))
+        return isMetadataRead(command.request)
+          ? { scope: "catalog_read" }
+          : { scope: "global" };
+      return "sessionId" in command.request
+        ? {
+            scope: "session",
+            sessionId: command.request.sessionId,
+            mutation: !isReadReducer(command),
+          }
+        : { scope: "global" };
     default: {
       const exhaustive: never = command;
       return exhaustive;

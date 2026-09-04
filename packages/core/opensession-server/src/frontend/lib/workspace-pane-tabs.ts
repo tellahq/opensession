@@ -27,6 +27,7 @@ interface BuildWorkspacePaneTabsInput {
   videoClosed: ReadonlySet<string>;
   stagingOpen: ReadonlySet<string>;
   portalLabel: string | null;
+  desktopOpen: ReadonlySet<string>;
   assetsOpen: ReadonlySet<string>;
   terminalOpen: ReadonlySet<string>;
   subagentLabel: string | null;
@@ -47,6 +48,7 @@ export function buildWorkspacePaneTabs({
   videoClosed,
   stagingOpen,
   portalLabel,
+  desktopOpen,
   assetsOpen,
   terminalOpen,
   subagentLabel,
@@ -99,6 +101,14 @@ export function buildWorkspacePaneTabs({
       active: activeViewTab === "portal",
       dotClass: "bg-green",
       icon: "globe",
+    });
+  }
+  if (desktopOpen.has(workspaceKey)) {
+    tabs.push({
+      id: `desktop:${workspaceKey}`,
+      label: "Desktop",
+      active: activeViewTab === "desktop",
+      dotClass: null,
     });
   }
   if (assetsOpen.has(workspaceKey)) {
@@ -171,6 +181,7 @@ export function viewTabKind(id: string): Exclude<ActiveViewTab, null> | null {
   if (id.startsWith("assets:")) return "assets";
   if (id.startsWith("terminal:")) return "terminal";
   if (id.startsWith("portal:")) return "portal";
+  if (id.startsWith("desktop:")) return "desktop";
   if (id.startsWith("conversation:")) return "conversation";
   if (id.startsWith("video:")) return "video";
   if (id.startsWith("review:")) return "review";

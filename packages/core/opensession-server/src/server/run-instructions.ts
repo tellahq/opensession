@@ -188,6 +188,16 @@ export function buildRunInstructions(input: {
     );
   }
 
+  if (!input.isAsk && inproc["opensession-desktop"]) {
+    parts.push(
+      "## Desktop\nThe Sandbox has a desktop you can drive through `opensession-desktop` when a task " +
+        "needs a real browser or GUI app: `screenshot` first, act with `click`, `type`, `key`, " +
+        "`scroll` and `drag` in desktop pixels, then `screenshot` again to confirm. Prefer the " +
+        "shell and Portals for anything that does not need a screen. The person can watch and take " +
+        "over in the session's Desktop tab.",
+    );
+  }
+
   parts.push(
     "## Media\nShow selected results with `OPENSESSION_IMAGE: /abs/path.png` or " +
       "`OPENSESSION_VIDEO: /abs/path.mp4`.",

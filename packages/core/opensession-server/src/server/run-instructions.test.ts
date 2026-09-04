@@ -91,6 +91,22 @@ describe("buildRunInstructions", () => {
     });
     expect(prompt).toContain("## Sandbox");
     expect(prompt).toContain("Push your branch before ending");
+    expect(prompt).not.toContain("## Desktop");
+  });
+
+  test("points a sandboxed run at its desktop only when the tools are there", () => {
+    const prompt = buildRunInstructions({
+      isAsk: false,
+      hasSession: true,
+      sandboxed: true,
+      inProcessMcp: {
+        "opensession-portals": {},
+        "opensession-desktop": {},
+      },
+    });
+    expect(prompt).toContain("## Desktop");
+    expect(prompt).toContain("`opensession-desktop`");
+    expect(prompt).toContain("Desktop tab");
   });
 
   test("carries no per-session facts", () => {

@@ -194,6 +194,10 @@ export interface SessionViewerViewTabsBinding {
   videoPanel?: RefWebPanel | null;
   /** The feed item's title (pane header). */
   videoTitle?: string | null;
+  /** Foregrounded Sandbox desktop pane (the Desktop view-tab). */
+  showDesktop?: boolean;
+  /** Close this session's Desktop view-tab, dropping the stream. */
+  onCloseDesktop?: () => void;
   /** Foregrounded browser pane for a service selected in Portals. */
   showPortal?: boolean;
   /** The service currently loaded in the center-panel browser. */

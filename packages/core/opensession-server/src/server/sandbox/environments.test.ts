@@ -20,6 +20,7 @@ const keys = [
   "OPENSESSION_SANDBOX_CONFIG",
   "OPENSESSION_WORKSPACE_SECRETS_STORE",
   "OPENSESSION_SANDBOX_ENVIRONMENTS_STORE",
+  "OPENSESSION_SESSIONS_DIR",
 ] as const;
 
 beforeEach(() => {
@@ -34,6 +35,7 @@ beforeEach(() => {
     scratch,
     "environments.json",
   );
+  process.env.OPENSESSION_SESSIONS_DIR = join(scratch, "sessions");
 });
 
 afterEach(() => {

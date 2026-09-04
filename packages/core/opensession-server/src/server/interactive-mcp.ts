@@ -23,6 +23,8 @@ import { createPublishMcpServer } from "../agents/slack/publish-tools";
 import { createAskUserMcpServer } from "../agents/slack/ask-tools";
 import { createReposMcpServer } from "../agents/slack/repos-tools";
 import { createPortalsMcpServer } from "./portals-mcp";
+import { createDesktopMcpServer } from "./desktop-mcp";
+import { getSandboxProvider } from "./sandbox";
 import { createWalkthroughMcpServer } from "../agents/slack/walkthrough-tools";
 import { createSlackComposeMcpServer } from "../agents/slack/slack-compose-tools";
 import { createMemoryMcpServer } from "../agents/slack/memory-tools";
@@ -101,6 +103,25 @@ export function editorFixtureGrantUser(
   session: { createdByLogin?: string | null } | undefined,
 ): string | undefined {
   return session?.createdByLogin || undefined;
+}
+
+function desktopServerFor(sessionId: string): Record<string, unknown> {
+  if (!findSession(sessionId)?.sandbox?.provider) return {};
+  return {
+    "opensession-desktop": createDesktopMcpServer({
+      sessionId,
+      control: async () => {
+        const session = findSession(sessionId);
+        if (!session) return null;
+        const sandbox = await activeSandboxFor(session, { wake: true });
+        if (!sandbox) return null;
+        const provider = getSandboxProvider(sandbox.provider);
+        return provider.desktopControl
+          ? provider.desktopControl(sandbox.id)
+          : null;
+      },
+    }),
+  };
 }
 
 export function interactiveMcpServers(
@@ -375,6 +396,10 @@ export function interactiveMcpServers(
           // Friction log — log_papercut/list_papercuts, per-repo toggle in
           // Settings → Papercuts (dropped here when the repo opted out).
           ...papercutsServerFor(sessionId, "prompt", createdBy),
+          // The Sandbox desktop for the agent: screenshot, mouse, keyboard.
+          // Only a sandboxed session has one; the person watches the same
+          // screen in the session's Desktop tab.
+          ...desktopServerFor(sessionId),
         }
       : {}),
   };

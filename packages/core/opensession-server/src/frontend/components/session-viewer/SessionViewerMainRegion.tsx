@@ -20,6 +20,7 @@ import { fetchSlackChannels } from "../../lib/api/shipped-changes";
 import { getCurrentUser } from "../UserPicker";
 import { SessionPreviewSurface } from "../session/SessionPreviewSurface";
 import { AssetsPanel } from "../AssetsPanel";
+import { SandboxDesktopPane } from "../SandboxDesktopPane";
 import { SubagentPane } from "../SubagentPane";
 import { ConversationPane } from "../ConversationPane";
 import { SlackChannelPane } from "../SlackChannelPane";
@@ -135,6 +136,7 @@ type SlackComposerDraft = {
 interface SurfaceRegion {
   showPortal: boolean;
   portalTarget: SessionViewerProps["viewTabs"]["portalTarget"];
+  showDesktop: boolean;
   showStaging: boolean;
   staging: Extract<PreviewSurface, { kind: "staging" }>["deployment"];
   stagingUrl?: string | null;
@@ -412,6 +414,7 @@ export function SessionViewerMainRegion({
   const {
     showPortal,
     portalTarget,
+    showDesktop,
     showStaging,
     staging,
     stagingUrl,
@@ -625,6 +628,12 @@ export function SessionViewerMainRegion({
         <SessionPreviewSurface
           surface={{ kind: "portal", target: portalTarget }}
         />
+      ) : showDesktop ? (
+        // The Sandbox desktop, full-width like a Portal. Mounted only while
+        // in front: the pane mints a one-viewer URL each time it opens.
+        <div className={VIEWER_REVIEW_MAIN}>
+          <SandboxDesktopPane sessionId={session.id} />
+        </div>
       ) : showStaging && stagingUrl ? (
         <SessionPreviewSurface
           surface={{

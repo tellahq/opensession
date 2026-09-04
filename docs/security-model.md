@@ -257,6 +257,10 @@ Enabling `userPrAuth` activates both halves below:
   lease-gated token endpoints; and machine WebSocket transports authenticated
   by their own transport credentials. Page and static-asset loads remain open
   so sign-in can render, while published `/d` applications are authenticated.
+  Portal ports are forward-authenticated through `/api/portal-auth/<port>`;
+  a browser navigation without a session is redirected to the app's own
+  origin with a same-host `return` URL and sent back after sign-in
+  (portal-sign-in.ts), never to another host.
   Only logins on identity.team may sign in. The verified identity OVERRIDES
   client-claimed `user` on every WS message and stamps `createdByLogin` on
   new sessions; a one-time boot migration backfills `createdByLogin` onto

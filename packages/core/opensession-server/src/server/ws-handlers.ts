@@ -5,6 +5,7 @@
  * run-ws.ts before any of this runs.
  */
 
+import { parseSidebarSessionScope } from "./sidebar-session-scope";
 import type { WebSocketHandler } from "bun";
 import type { WSClientData } from "./ws-hub";
 import { sessionRunningWithHolds } from "./session-state-events";
@@ -948,6 +949,21 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
             // ended one while nobody was here (reply-suggestions.ts).
             maybeSuggestRepliesOnReturn(returnedTo, ws.data?.user || undefined);
           }
+          break;
+        }
+
+        case "sessions_subscribe": {
+          // The sidebar query this socket renders. Row frames are evaluated
+          // against it (session-row-events) so a write reaches only the
+          // sockets whose lens can show the row. A non-sidebar query still
+          // subscribes, unscoped, and hears about every live row.
+          const raw = typeof msg.query === "string" ? msg.query : "";
+          const params = new URLSearchParams(
+            raw.startsWith("?") ? raw.slice(1, 2049) : raw.slice(0, 2048),
+          );
+          const user =
+            ws.data.authUser || ws.data.user || params.get("user") || "";
+          ws.data.sidebarScope = parseSidebarSessionScope(params, user);
           break;
         }
 

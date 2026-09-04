@@ -767,6 +767,8 @@ export function AppContent({
     closeAssetsTab,
     openTerminal,
     closeTerminalTab,
+    openDesktop,
+    closeDesktopTab,
     openPortal,
     closePortalTab,
     prRefMissing,
@@ -858,6 +860,7 @@ export function AppContent({
         closeStagingTab: workspacePanes.closeStagingTab,
         closeAssetsTab: workspacePanes.closeAssetsTab,
         closeTerminalTab: workspacePanes.closeTerminalTab,
+        closeDesktopTab: workspacePanes.closeDesktopTab,
         closePortalTab: workspacePanes.closePortalTab,
         closeConversationTab: workspacePanes.closeConversationTab,
         closeVideoTab: workspacePanes.closeVideoTab,
@@ -1125,6 +1128,7 @@ export function AppContent({
         stagingActive: appViewState.stagingActive,
         assetsActive: appViewState.assetsActive,
         terminalActive: appViewState.terminalActive,
+        desktopActive: appViewState.desktopActive,
         portalActive: appViewState.portalActive,
         reviewFocusPr: appViewState.reviewFocusPr,
       }}
@@ -1145,6 +1149,7 @@ export function AppContent({
         closeStagingTab: workspacePanes.closeStagingTab,
         closeAssetsTab: workspacePanes.closeAssetsTab,
         closeTerminalTab: workspacePanes.closeTerminalTab,
+        closeDesktopTab: workspacePanes.closeDesktopTab,
       }}
       tabs={{
         context: {
@@ -1203,6 +1208,7 @@ export function AppContent({
     openPortal,
     openAssets,
     openTerminal,
+    openDesktop,
     openCurrentWorkspace: () => setActiveViewTab(null),
   } satisfies NavigationActions;
 

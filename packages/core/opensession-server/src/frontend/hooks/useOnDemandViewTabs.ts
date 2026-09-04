@@ -17,6 +17,7 @@ export function useOnDemandViewTabs({
   const stagingActive = activeViewTab === "staging";
   const assetsActive = activeViewTab === "assets";
   const portalActive = activeViewTab === "portal";
+  const desktopActive = activeViewTab === "desktop";
   const terminalActive = activeViewTab === "terminal";
   const [stagingOpen, setStagingOpen] = useState<Set<string>>(
     () => new Set(getActiveViewTabKeys("staging")),
@@ -34,6 +35,9 @@ export function useOnDemandViewTabs({
   const [terminalOpen, setTerminalOpen] = useState<Set<string>>(
     () => new Set(),
   );
+  // Workspaces with the Sandbox Desktop view-tab open. Also starts empty:
+  // the pane mints a one-viewer URL and may wake the Sandbox when it mounts.
+  const [desktopOpen, setDesktopOpen] = useState<Set<string>>(() => new Set());
 
   // Open/foreground this workspace's Preview environment view-tab (the Info
   // panel button). Adds the tab to the strip if absent.
@@ -118,6 +122,27 @@ export function useOnDemandViewTabs({
     if (terminalActive) setActiveViewTab(null);
   }
 
+  // Open/foreground this workspace's Desktop view-tab (the Sandbox popover's
+  // Open desktop). Closing it drops the embedded stream.
+  function openDesktop() {
+    if (!workspaceKey) return;
+    const key = workspaceKey;
+    setDesktopOpen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+    setActiveViewTab("desktop");
+  }
+  function closeDesktopTab() {
+    if (workspaceKey) {
+      const key = workspaceKey;
+      setDesktopOpen((prev) => {
+        if (!prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+    if (desktopActive) setActiveViewTab(null);
+  }
+
   const currentPortalTarget = workspaceKey
     ? (portalTargets[workspaceKey] ?? null)
     : null;
@@ -126,6 +151,7 @@ export function useOnDemandViewTabs({
     stagingOpen,
     assetsOpen,
     terminalOpen,
+    desktopOpen,
     currentPortalTarget,
     openStaging,
     closeStagingTab,
@@ -133,6 +159,8 @@ export function useOnDemandViewTabs({
     closeAssetsTab,
     openTerminal,
     closeTerminalTab,
+    openDesktop,
+    closeDesktopTab,
     openPortal,
     closePortalTab,
   };

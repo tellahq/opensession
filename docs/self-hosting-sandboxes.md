@@ -73,10 +73,20 @@ Terminal tabs land inside the Sandbox (Daytona's native PTY, Box's SSH).
 ## Desktop
 
 Both providers can show a person the Sandbox's screen. The Sandbox popover in a
-session offers **Open desktop** while the Sandbox is awake; it opens a new tab
-with a live, controllable desktop. The agent keeps working underneath it, so
-this is the way to watch a browser test, log into something the agent cannot,
-or take over for a moment.
+session offers **Open desktop** while the Sandbox is awake; it opens a
+**Desktop** tab next to Review and Terminal with the live, controllable
+desktop embedded (the tab's header can also pop it into a browser window). The
+agent keeps working underneath it, so this is the way to watch a browser test,
+log into something the agent cannot, or take over for a moment.
+
+The agent gets the same screen through the `opensession-desktop` MCP, wired
+only into sandboxed sessions: `screenshot`, `click`, `move`, `drag`, `scroll`,
+`type`, `key` and `windows`, all in desktop pixels. Daytona serves it from its
+computer-use API, except `windows`, which reads real geometry from the X
+server with `xprop` and `xwininfo` because Daytona's own list puts every
+window at 0x0. Box has no control API, so Open Session drives the box's own X
+display (`:0`) with `xdotool` and ImageMagick over the command channel. A call
+on a sleeping Sandbox wakes it first.
 
 - **Box** mints a 60fps stream page (`POST /boxes/{id}/desktop`).
 - **Daytona** starts its computer-use stack (Xvfb, xfce4, x11vnc, noVNC) on

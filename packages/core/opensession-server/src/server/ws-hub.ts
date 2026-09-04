@@ -15,6 +15,8 @@ const g = globalThis as any;
 // clients can tell a fresh instance from a draining one and reload at the right
 // moment. Every connected WebSocket is also tracked so we can warn them all
 // before the process goes down for a deploy.
+import type { SidebarSessionScope } from "./sidebar-session-scope";
+
 export const BOOT_ID: string = (g.__bootId ??= crypto.randomUUID());
 export const allClients: Set<WebSocketClient> = (g.__allClients ??= new Set());
 
@@ -70,6 +72,13 @@ export interface WSClientData {
   /** Typing is a short lease refreshed by composer input. The deadline makes
    * stale indicators self-clear when a client disappears without stopping. */
   typingUntil?: number;
+  /**
+   * The sidebar projection this socket renders (sessions_subscribe). Row
+   * frames are evaluated against it so a client only hears about sessions its
+   * lens can show. `null` is a subscribed client without a sidebar lens (the
+   * plain live list); `undefined` never subscribed and receives no row frames.
+   */
+  sidebarScope?: SidebarSessionScope | null;
 }
 
 interface WebSocketClient {

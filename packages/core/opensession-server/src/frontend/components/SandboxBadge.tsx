@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { use, useCallback, useEffect, useState } from "react";
+import { NavigationContext } from "../hooks/useNavigation";
 import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 import {
@@ -40,6 +41,9 @@ export function SandboxBadge({
   runner?: RunnerRef;
 }) {
   const [open, setOpen] = useState(false);
+  // Null outside the app shell (a bare badge in a test); then the desktop
+  // falls back to a browser tab.
+  const navigation = use(NavigationContext);
   const [status, setStatus] = useState<SessionSandboxStatus | null>(null);
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -163,8 +167,15 @@ export function SandboxBadge({
   }
 
   async function openDesktop() {
-    // Open the tab inside the click so popup blockers allow it, then point it
-    // at the minted URL once the provider answers.
+    // Inside the app the desktop is a view tab next to Review and Terminal.
+    if (navigation) {
+      setOpen(false);
+      navigation.openDesktop();
+      return;
+    }
+    // Without a workspace to host the tab, open the desktop in a browser tab
+    // inside the click so popup blockers allow it, then point it at the
+    // minted URL once the provider answers.
     const tab = window.open("", "_blank");
     setWorking("desktop");
     setError(null);
@@ -191,7 +202,7 @@ export function SandboxBadge({
       <Popover.Trigger
         className="flex min-h-10 flex-none items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-meta font-medium text-dim outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg focus-visible:border-line-strong active:scale-[0.96]"
         data-testid="sandbox-badge"
-        aria-label={`Sandbox · ${lifecycleLabel}`}
+        aria-label={`Sandbox · ${lifecycleLabel[lifecycle]}`}
       >
         <span className={cn("size-2 rounded-full", dot)} aria-hidden="true" />
         <IconBox size={20} className="text-faint" />

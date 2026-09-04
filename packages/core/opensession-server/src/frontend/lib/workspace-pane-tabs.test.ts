@@ -26,6 +26,7 @@ function build(
     videoClosed: NONE,
     stagingOpen: NONE,
     portalLabel: null,
+    desktopOpen: NONE,
     assetsOpen: NONE,
     terminalOpen: NONE,
     subagentLabel: null,
@@ -45,6 +46,7 @@ describe("buildWorkspacePaneTabs", () => {
       videoLabel: "Video",
       stagingOpen: open,
       portalLabel: "Web app",
+      desktopOpen: open,
       assetsOpen: open,
       terminalOpen: open,
       subagentLabel: "Investigate",
@@ -56,6 +58,7 @@ describe("buildWorkspacePaneTabs", () => {
       "video:workspace-1",
       "staging:workspace-1",
       "portal:workspace-1",
+      "desktop:workspace-1",
       "assets:workspace-1",
       "terminal:workspace-1",
       "subagent:session-1",
@@ -125,6 +128,7 @@ describe("viewTabKind", () => {
   test("maps tab ids and rejects session and home tabs", () => {
     expect(viewTabKind("review:workspace-1")).toBe("review");
     expect(viewTabKind("subagent:session-1")).toBe("subagent");
+    expect(viewTabKind("desktop:workspace-1")).toBe("desktop");
     expect(viewTabKind("session-1")).toBeNull();
     expect(viewTabKind("home:workspace-1")).toBeNull();
   });

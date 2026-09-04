@@ -54,7 +54,9 @@ import type {
   SandboxSessionSpec,
   SandboxStatus,
   SandboxDesktop,
+  SandboxDesktopControl,
 } from "../provider";
+import { x11DesktopControl } from "../x11-desktop";
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
@@ -1290,6 +1292,17 @@ export class BoxProvider implements SandboxProvider {
       60_000,
     );
     return { url: boxDesktopUrl(response) };
+  }
+
+  /** Box has no control API, but every box runs a real X display on `:0`
+   *  with xdotool and ImageMagick installed, so the agent drives it over exec. */
+  async desktopControl(sandboxId: string): Promise<SandboxDesktopControl> {
+    const box = await getBox(boxClientConfig(), sandboxId);
+    if (!box || !LIVE_STATES.has(String(box.state || "")))
+      throw new Error("Wake the sandbox first");
+    const sandbox = await this.get(sandboxId);
+    if (!sandbox) throw new Error("Wake the sandbox first");
+    return x11DesktopControl((cmd, opts) => sandbox.exec(cmd, opts));
   }
 
   async pause(sandboxId: string): Promise<void> {

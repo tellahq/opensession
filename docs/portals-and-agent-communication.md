@@ -31,14 +31,24 @@ Every listening `*_PORT` service is a Portal. Host services map to
 20000–27999 that relays over the Sandbox's authenticated outbound connection,
 so the browser never receives a provider URL. Caddy forward-authenticates
 every request against Open Session before proxying it, so possession of a
-Portal URL does not bypass the app's sign-in boundary. The route registry is
+Portal URL does not bypass the app's sign-in boundary. A browser that opens
+a Portal without a web session (a phone's Safari, opened from the native app
+or the home-screen web app, keeps its own cookies) is redirected to the app
+to sign in and then returned to the Portal; the cookie is host-scoped, so
+one sign-in covers every Portal port on that host
+(`src/server/portal-sign-in.ts`, `src/frontend/lib/portal-return.ts`).
+Fetches and asset loads still get the plain 401. The route registry is
 process-owned even though Caddy survives restarts: forward auth rejects a
 retained route until the restarted server has rediscovered that exact port.
 
 Portals follow the Sandbox lifecycle. While a Sandbox sleeps the panel still
 shows its Portals, without URLs and without waking anything; the next wake
 restarts every Portal that was awake, with the same command and port, after
-`.agents/resume` has run. Stopping a Portal removes its route.
+`.agents/resume` has run. A provider that stops and restarts a Sandbox on its
+own (an idle timeout) leaves the registry intact and the processes gone; the
+next request to such a Portal relaunches the dead ones while it rebuilds the
+relay (`src/server/sandbox-portal-recovery.ts`), so the first load waits for
+the service rather than answering 502. Stopping a Portal removes its route.
 
 Current boundary: Portals inherit the instance's authenticated team boundary;
 there is no per-session ACL narrower than that team boundary yet.

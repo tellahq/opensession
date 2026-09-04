@@ -565,6 +565,30 @@ export async function sessionDetail(
 }
 
 /**
+ * One changed session as a row frame, plus the enriched rows its sidebar
+ * visibility depends on. session-row-events evaluates each subscribed scope
+ * against `group` and sends `row` to the sockets whose lens shows it.
+ */
+export async function sidebarRowProjection(
+  session: UnifiedSession,
+  group: UnifiedSession[],
+): Promise<{
+  row: SessionListRow;
+  group: Array<UnifiedSession & SessionListSignals>;
+}> {
+  const signals = await sessionListRuntimeSignals();
+  const context = sessionEnrichmentContext();
+  const enrichedGroup = group.map((member) =>
+    enrichSession(member, signals, context),
+  );
+  shareWorkspacePrRefs(enrichedGroup);
+  const enriched =
+    enrichedGroup.find((member) => member.id === session.id) ??
+    enrichSession(session, signals, context);
+  return { row: sessionListRow(enriched), group: enrichedGroup };
+}
+
+/**
  * A session as list clients consume it.
  *
  * The detail route keeps the full UnifiedSession. The list drops fields used

@@ -148,6 +148,7 @@ interface UseSessionTabsOptions {
       | "closeStagingTab"
       | "closeAssetsTab"
       | "closeTerminalTab"
+      | "closeDesktopTab"
       | "closePortalTab"
       | "closeConversationTab"
       | "closeVideoTab"
@@ -231,6 +232,7 @@ export function useSessionTabs({
       closeStagingTab,
       closeAssetsTab,
       closeTerminalTab,
+      closeDesktopTab,
       closePortalTab,
       closeConversationTab,
       closeVideoTab,
@@ -690,6 +692,7 @@ export function useSessionTabs({
             else if (id.startsWith("staging:")) closeStagingTab();
             else if (id.startsWith("assets:")) closeAssetsTab();
             else if (id.startsWith("terminal:")) closeTerminalTab();
+            else if (id.startsWith("desktop:")) closeDesktopTab();
             else if (id.startsWith("portal:")) closePortalTab();
             else {
               const closingTab = id.startsWith("conversation:")

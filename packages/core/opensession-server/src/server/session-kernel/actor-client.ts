@@ -28,6 +28,10 @@ import type {
   GatewayCommandResult,
 } from "./gateway-command-protocol";
 import type { CoreActorRequest, CoreActorResult } from "./core-protocol";
+import type {
+  MetadataActorRequest,
+  MetadataActorResult,
+} from "./metadata-protocol";
 import {
   assertTranscriptActorRequest,
   decodeAgentTranscriptActorRequest,
@@ -406,6 +410,19 @@ export class SessionKernelActorClient {
         command: { kind: "core", commandId: crypto.randomUUID(), request },
       },
       `core ${request.op}`,
+    );
+  }
+
+  decideMetadataAsync<T extends MetadataActorRequest>(
+    request: T,
+  ): Promise<MetadataActorResult<T>> {
+    return this.callAsync<MetadataActorResult<T>>(
+      {
+        t: "reduce",
+        command: { kind: "metadata", commandId: crypto.randomUUID(), request },
+      },
+      `metadata ${request.op}`,
+      request.op === "catalog_page",
     );
   }
 

@@ -490,6 +490,20 @@ export class SessionKernelStoreHost {
     return result;
   }
 
+  /** Project one session's committed metadata document into the central
+   * catalog. Works for isolated and legacy central placements alike; an absent
+   * document (cleared or deleted session) removes the catalog row. */
+  settleSessionMetadataCatalog(sessionId: string): void {
+    const store = this.storeForSession(sessionId);
+    const record =
+      store === this.central
+        ? this.centralOperation(() => this.central.sessionMetadata(sessionId))
+        : store.sessionMetadata(sessionId);
+    this.centralOperation(() =>
+      this.central.settleSessionMetadataCatalog(sessionId, record ?? undefined),
+    );
+  }
+
   refreshSessionProjections(sessionId: string): void {
     if (!this.isIsolated(sessionId)) return;
     const store = this.storeForSession(sessionId);

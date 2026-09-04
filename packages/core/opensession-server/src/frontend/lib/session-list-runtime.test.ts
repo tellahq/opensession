@@ -4,7 +4,6 @@ import * as Stream from "effect/Stream";
 import type { BrowserSignalStreams } from "./effect-browser-events";
 import type { EffectLifecycle } from "./effect-lifecycle";
 import { makeSessionListRuntime } from "./session-list-runtime";
-import { detachPendingRequest } from "./session-list-state";
 
 const quietStreams: BrowserSignalStreams = {
   visibility: () => Stream.empty,
@@ -18,31 +17,6 @@ async function drainFibers() {
   await Promise.resolve();
   await Promise.resolve();
 }
-
-interface NullableRef<T> {
-  current: T | null;
-}
-
-function nullableRef<T>(current: T): NullableRef<T> {
-  return { current };
-}
-
-test("Strict Mode cleanup detaches an aborted request before restart", () => {
-  const oldRequest = Promise.resolve();
-  const controller = new AbortController();
-  const requestRef = nullableRef(oldRequest);
-  const abortRef = nullableRef(controller);
-
-  detachPendingRequest(requestRef, abortRef);
-  expect(requestRef.current).toBeNull();
-  expect(abortRef.current).toBeNull();
-  expect(controller.signal.aborted).toBe(true);
-
-  const replacement = Promise.resolve();
-  requestRef.current = replacement;
-  if (requestRef.current === oldRequest) requestRef.current = null;
-  expect(requestRef.current).toBe(replacement);
-});
 
 test("session list construction is inert and start performs the initial poll", async () => {
   let polls = 0;
@@ -65,6 +39,39 @@ test("session list construction is inert and start performs the initial poll", a
   await drainFibers();
   expect(polls).toBe(1);
   stop();
+});
+
+test("refresh and stop abort superseded list requests", async () => {
+  const requestSignals: AbortSignal[] = [];
+  const runtime = makeSessionListRuntime({
+    streams: quietStreams,
+    isVisible: () => true,
+  });
+  runtime.configure({
+    pollInterval: 60_000,
+    loadArchived: false,
+    loading: true,
+    pollLive: (signal) => {
+      requestSignals.push(signal);
+      return new Promise<void>(() => {});
+    },
+    pollArchived: async () => {},
+  });
+
+  const stop = runtime.start();
+  await drainFibers();
+  expect(requestSignals).toHaveLength(1);
+  expect(requestSignals[0]?.aborted).toBe(false);
+
+  runtime.refresh();
+  await drainFibers();
+  expect(requestSignals).toHaveLength(2);
+  expect(requestSignals[0]?.aborted).toBe(true);
+  expect(requestSignals[1]?.aborted).toBe(false);
+
+  stop();
+  await drainFibers();
+  expect(requestSignals[1]?.aborted).toBe(true);
 });
 
 test("poll interval changes restart the live cadence", () => {

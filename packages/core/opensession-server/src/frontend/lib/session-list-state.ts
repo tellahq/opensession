@@ -90,16 +90,6 @@ export function liveSnapshotMatchesQuery(
   return requestQuery === currentQuery;
 }
 
-export function detachPendingRequest<T>(
-  requestRef: { current: T | null },
-  abortRef: { current: AbortController | null },
-): void {
-  const controller = abortRef.current;
-  requestRef.current = null;
-  abortRef.current = null;
-  controller?.abort();
-}
-
 export interface PendingSessionPatch {
   values: Partial<UnifiedSession>;
   /** Runtime revision when a WebSocket status frame was applied. */
@@ -152,33 +142,62 @@ export function reconcilePendingSessionPatches(
       if (pending.values.archived === true && !present.has(id))
         pendingPatches.delete(id);
   }
-  return sessions.map((session) => {
-    const pending = pendingPatches.get(session.id);
-    if (!pending) return session;
-    if (
-      pending.runtimeRevision !== undefined &&
-      snapshotRuntimeRevision >= pending.runtimeRevision
-    ) {
-      delete pending.values.isRunning;
-      delete pending.values.runStartedAt;
-      delete pending.runtimeRevision;
-    }
-    if (Object.keys(pending.values).length === 0) {
-      pendingPatches.delete(session.id);
-      return session;
-    }
-    const acknowledged = Object.entries(pending.values).every(([key, value]) =>
-      key === "reviewRequest"
-        ? reviewRequestAcknowledged(
-            session.reviewRequest,
-            pending.values.reviewRequest,
-          )
-        : Object.getOwnPropertyDescriptor(session, key)?.value === value,
-    );
-    if (acknowledged) {
-      pendingPatches.delete(session.id);
-      return session;
-    }
-    return { ...session, ...pending.values };
-  });
+  return sessions.map((session) =>
+    reconcilePendingSessionPatch(
+      session,
+      pendingPatches,
+      snapshotRuntimeRevision,
+    ),
+  );
+}
+
+/** One server row against this session's optimistic patch. A `session_row`
+ * frame is a server snapshot of exactly one row, so it reconciles the same
+ * way a poll does, without touching other sessions' pending patches. */
+export function reconcilePendingSessionPatch(
+  session: UnifiedSession,
+  pendingPatches: Map<string, PendingSessionPatch>,
+  snapshotRuntimeRevision = -1,
+): UnifiedSession {
+  const pending = pendingPatches.get(session.id);
+  if (!pending) return session;
+  if (
+    pending.runtimeRevision !== undefined &&
+    snapshotRuntimeRevision >= pending.runtimeRevision
+  ) {
+    delete pending.values.isRunning;
+    delete pending.values.runStartedAt;
+    delete pending.runtimeRevision;
+  }
+  if (Object.keys(pending.values).length === 0) {
+    pendingPatches.delete(session.id);
+    return session;
+  }
+  const acknowledged = Object.entries(pending.values).every(([key, value]) =>
+    key === "reviewRequest"
+      ? reviewRequestAcknowledged(
+          session.reviewRequest,
+          pending.values.reviewRequest,
+        )
+      : Object.getOwnPropertyDescriptor(session, key)?.value === value,
+  );
+  if (acknowledged) {
+    pendingPatches.delete(session.id);
+    return session;
+  }
+  return { ...session, ...pending.values };
+}
+
+/** Replace a row in place, or append it when the list did not have it. Keeps
+ * array identity when the server copy is the one already rendered. */
+export function upsertSessionRow(
+  sessions: UnifiedSession[],
+  row: UnifiedSession,
+): UnifiedSession[] {
+  const index = sessions.findIndex((session) => session.id === row.id);
+  if (index < 0) return [...sessions, row];
+  if (sessions[index] === row) return sessions;
+  const next = sessions.slice();
+  next[index] = row;
+  return next;
 }

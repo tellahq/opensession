@@ -53,6 +53,7 @@ touches an in-process tool:
 | [`opensession-memory`](#opensession-memory) | 9 | interactive | Needs a session id. |
 | [`opensession-web`](#opensession-web) | 3 | interactive, goal wake | Needs a session id. |
 | [`opensession-portals`](#opensession-portals) | 7 | interactive | Needs a session id. |
+| [`opensession-desktop`](#opensession-desktop) | 8 | interactive | Needs a sandboxed session. |
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | Needs a session id. |
 | [`opensession-slack`](#opensession-slack) | 1 | interactive | Needs a session id. |
 | [`opensession-ask`](#opensession-ask) | 1 | interactive, Slack loop | Needs a session id. |
@@ -69,7 +70,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-28 servers, 121 tools.
+29 servers, 129 tools.
 
 ## opensession-sessions
 
@@ -659,6 +660,63 @@ Verify a Tella editor fixture lease server-side, then set and exclusively reserv
 `mcp__opensession-portals__set_portal_path` · input: `name` (string), `path` (string, required)
 
 Set the root-relative route a Portal should open by default. Omit name to set the session's default testing route.
+
+## opensession-desktop
+
+See and drive the Sandbox desktop: screenshot, click, type, keys, windows.
+
+- **Source** `packages/core/opensession-server/src/server/desktop-mcp.ts`
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
+- **Runs** interactive
+- **Condition** Needs a sandboxed session.
+
+### `screenshot`
+
+`mcp__opensession-desktop__screenshot` · input: `scale` (number), `format` ("png" | "jpeg")
+
+Capture the Sandbox desktop. Coordinates for every other desktop tool are pixels of the full desktop, whose size the result states; the image itself may be scaled down. Take one before acting and after anything that should have changed the screen.
+
+### `click`
+
+`mcp__opensession-desktop__click` · input: `x` (number, required), `y` (number, required), `button` ("left" | "middle" | "right"), `double` (boolean)
+
+Click at a desktop pixel. Double-click with double: true.
+
+### `move`
+
+`mcp__opensession-desktop__move` · input: `x` (number, required), `y` (number, required)
+
+Move the pointer without clicking, for hover states.
+
+### `drag`
+
+`mcp__opensession-desktop__drag` · input: `fromX` (number, required), `fromY` (number, required), `toX` (number, required), `toY` (number, required), `button` ("left" | "middle" | "right")
+
+Press at one point, move to another, release.
+
+### `scroll`
+
+`mcp__opensession-desktop__scroll` · input: `x` (number, required), `y` (number, required), `direction` ("up" | "down", required), `amount` (integer)
+
+Scroll the wheel over a point. amount is wheel clicks, default 3.
+
+### `type`
+
+`mcp__opensession-desktop__type` · input: `text` (string, required)
+
+Type literal text into whatever has keyboard focus. Click a field first. Use key for Enter, Tab and shortcuts.
+
+### `key`
+
+`mcp__opensession-desktop__key` · input: `chord` (string, required)
+
+Press one key or chord: Return, Escape, Tab, ctrl+l, ctrl+shift+t, alt+F4, cmd+a (cmd maps to the super key on Linux).
+
+### `windows`
+
+`mcp__opensession-desktop__windows` · input: none
+
+List the desktop size and visible windows with their positions, so you can find an app or bring one to the front by clicking it.
 
 ## opensession-walkthrough
 

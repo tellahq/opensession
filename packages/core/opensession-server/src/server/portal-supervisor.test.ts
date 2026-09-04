@@ -7,6 +7,8 @@ import {
   listPortalServices,
   listSandboxPortalServices,
   normalizePortalPath,
+  type PortalRecord,
+  portalsToRestore,
   readPortalRegistry,
   reapOrphanedPortalServices,
   SANDBOX_PORTAL_AGENT_ENTRY,
@@ -52,6 +54,54 @@ afterAll(() => {
   if (previousPath == null) delete process.env.PATH;
   else process.env.PATH = previousPath;
   rmSync(processTools, { recursive: true, force: true });
+});
+
+describe("portalsToRestore", () => {
+  const record = (
+    name: string,
+    state: PortalRecord["state"],
+    pid = 100,
+  ): PortalRecord => ({
+    name,
+    key: `${name.toUpperCase()}_PORT`,
+    command: `serve ${name}`,
+    port: 4000,
+    state,
+    pid,
+  });
+
+  test("restarts only live-marked Portals the probe found dead", () => {
+    const marked = [
+      record("web", "awake"),
+      record("api", "awake"),
+      record("old", "stopped"),
+      record("broken", "failed"),
+    ];
+    const probed = [
+      record("web", "awake"),
+      record("api", "failed"),
+      record("old", "stopped"),
+      record("broken", "failed"),
+    ];
+    expect(portalsToRestore(marked, probed).map((r) => r.name)).toEqual([
+      "api",
+    ]);
+  });
+
+  test("treats a Portal the probe no longer lists as dead", () => {
+    expect(
+      portalsToRestore([record("web", "awake")], []).map((r) => r.name),
+    ).toEqual(["web"]);
+  });
+
+  test("leaves a starting Portal alone", () => {
+    expect(
+      portalsToRestore(
+        [record("web", "starting")],
+        [record("web", "starting")],
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe("session Portal supervisor", () => {
