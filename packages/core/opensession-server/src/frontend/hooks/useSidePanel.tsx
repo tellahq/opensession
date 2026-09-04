@@ -107,9 +107,8 @@ export function useSidePanel(): SidePanel {
   });
   function startResize(e: React.MouseEvent) {
     e.preventDefault();
-    const right =
-      e.currentTarget.parentElement?.getBoundingClientRect().right ??
-      window.innerWidth;
+    const panel = e.currentTarget.parentElement;
+    const right = panel?.getBoundingClientRect().right ?? window.innerWidth;
     document.body.classList.add("resizing-panel");
     // Snap Motion layout morphs while dragging — the composer re-measures on
     // every step, so springing it reads as funky text (mirrors the sidebar).
@@ -123,13 +122,14 @@ export function useSidePanel(): SidePanel {
         Math.max(MIN_W, Math.round(right - ev.clientX)),
       );
       widthRef.current = next;
-      setWidth(next);
+      panel?.style.setProperty("--panel-w", `${next}px`);
     };
     const onUp = () => {
       document.body.classList.remove("resizing-panel");
       restoreMotion();
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      setWidth(widthRef.current);
       localStorage.setItem(WIDTH_KEY, String(Math.round(widthRef.current)));
     };
     window.addEventListener("mousemove", onMove);

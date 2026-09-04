@@ -9,6 +9,17 @@ import { fetchGitStatus } from "../lib/api";
 import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { PHONE_QUERY } from "../lib/breakpoints";
 import { matchesShortcut } from "../lib/shortcuts";
+import { WS_SUMMARY_ROOM_W } from "../lib/workspace-summary-open";
+
+const COMPACT_HEADER_W = 740;
+
+type HeaderLayout = "unmeasured" | "compact" | "standard" | "summary";
+
+function headerLayoutAt(width: number): HeaderLayout {
+  if (width < COMPACT_HEADER_W) return "compact";
+  if (width < WS_SUMMARY_ROOM_W) return "standard";
+  return "summary";
+}
 
 interface ShippedShareIdentity {
   sessionId: string;
@@ -52,7 +63,7 @@ export function useSessionHeaderLayout(identity: HeaderLayoutIdentity) {
   const [reviewSessionActionTarget, setReviewSessionActionTarget] =
     useState<HTMLDivElement | null>(null);
   const desktopChangesRef = useRef<HTMLDivElement>(null);
-  const [headerW, setHeaderW] = useState(0);
+  const [headerLayout, setHeaderLayout] = useState<HeaderLayout>("unmeasured");
   // Whether the header's workspace-summary card is up. The transcript and
   // composer shift out from under it while it is, and the header's own PR
   // strip and preview globe stand down, so this lives here rather than inside
@@ -67,14 +78,15 @@ export function useSessionHeaderLayout(identity: HeaderLayoutIdentity) {
     // lands after it, and this width decides whether the summary card has room
     // to stand open. A frame late is a frame of a card lying across a narrow
     // transcript. Content box, to match what the observer reports below.
+    const updateWidth = (next: number) => setHeaderLayout(headerLayoutAt(next));
     const box = getComputedStyle(el);
-    setHeaderW(
+    updateWidth(
       el.clientWidth -
         parseFloat(box.paddingLeft) -
         parseFloat(box.paddingRight),
     );
     const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) setHeaderW(entry.contentRect.width);
+      for (const entry of entries) updateWidth(entry.contentRect.width);
     });
     observer.observe(el);
     return () => observer.disconnect();
@@ -82,7 +94,9 @@ export function useSessionHeaderLayout(identity: HeaderLayoutIdentity) {
   // Collapse before the inline row can overrun: the title's non-shrinkable
   // floor (source chip + Working pill) plus the inline actions (facepile,
   // links, Share) needs ~740px, so below that Share moves into the ⋯ menu.
-  const compactHeader = headerW > 0 && headerW < 740;
+  const compactHeader = headerLayout === "compact";
+  const summaryHasRoom =
+    headerLayout === "unmeasured" || headerLayout === "summary";
   // Phone layout (same 720px breakpoint as the CSS page-stack): the header
   // actions portal into the top bar next to the centered title, and every
   // secondary action folds into the ⋯ menu so the bar holds just ⋯ + Workspace.
@@ -105,7 +119,7 @@ export function useSessionHeaderLayout(identity: HeaderLayoutIdentity) {
       setReviewSessionActionTarget,
       desktopChangesRef,
     },
-    width: { headerW, compactHeader },
+    width: { compactHeader, summaryHasRoom },
     summary: { summaryOpen, setSummaryOpen },
     viewport: { isPhone },
   };

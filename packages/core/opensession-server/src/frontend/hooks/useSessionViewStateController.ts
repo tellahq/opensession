@@ -45,8 +45,7 @@ import { useCopy } from "../ui/copy";
 import { useSessionHeaderLayout } from "./useSessionViewerActionsController";
 import {
   workspaceSummaryOpen,
-  WS_SUMMARY_ROOM_W,
-  workspaceSummaryShift,
+  WS_SUMMARY_MAX_SHIFT,
 } from "../lib/workspace-summary-open";
 import { useLivePlan } from "../components/session-viewer/use-live-plan";
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
@@ -499,7 +498,7 @@ export function useSessionHeaderLayoutController(
     topbarEl,
     workspaceSummaryOpen,
   });
-  const { headerW } = headerLayout.width;
+  const { summaryHasRoom } = headerLayout.width;
   const { summaryOpen } = headerLayout.summary;
   const { isPhone } = headerLayout.viewport;
   useEffect(() => {
@@ -509,14 +508,13 @@ export function useSessionHeaderLayoutController(
       setPanelTerminalMounted(true);
     }
   }, [activePanelOpen, desktopPanelPage, isPhone, setPanelTerminalMounted]);
-  const summaryHasRoom = headerW === 0 || headerW >= WS_SUMMARY_ROOM_W;
   const summaryVisible =
     summaryOpen &&
     summaryHasRoom &&
     !activePanelOpen &&
     !isPhone &&
     hasRepoWork;
-  const summaryStep = summaryVisible ? workspaceSummaryShift(headerW) : 0;
+  const summaryStep = summaryVisible ? WS_SUMMARY_MAX_SHIFT : 0;
   const summaryStepStyle: WorkspaceSummaryStyle | undefined =
     summaryStep > 0 ? { "--ws-summary-step": `-${summaryStep}px` } : undefined;
   useEffect(() => {

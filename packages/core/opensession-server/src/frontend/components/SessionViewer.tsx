@@ -1252,7 +1252,7 @@ export function SessionViewer({
   const { headerRef, headerActionsRef } = headerController.layout;
   const { reviewSessionActionTarget, setReviewSessionActionTarget } =
     headerController.layout;
-  const { desktopChangesRef, headerW, compactHeader } = headerController.layout;
+  const { desktopChangesRef, compactHeader } = headerController.layout;
   const { summaryOpen, setSummaryOpen, isPhone } = headerController.layout;
   const { summaryHasRoom, summaryVisible } = headerController.summary;
   const { summaryStep, summaryStepStyle } = headerController.summary;
