@@ -222,9 +222,15 @@ export async function sessionMetadata<T extends MetadataActorRequest>(
     ) as R;
   if (request.op === "pending_exports")
     return store.sessionMetadataPendingExports(request.limit) as R;
+  if (request.op === "seed_catalog")
+    return store.seedSessionMetadataCatalog(request.rows) as R;
   if (request.op === "catalog_complete")
     return store.sessionMetadataCatalogComplete() as R;
-  return store.markSessionMetadataCatalogComplete() as R;
+  if (request.op === "mark_catalog_complete")
+    return store.markSessionMetadataCatalogComplete() as R;
+  throw new Error(
+    `Unknown session metadata op ${String((request as { op?: unknown }).op)}`,
+  );
 }
 
 export async function sessionCoreAsync<T extends CoreActorRequest>(

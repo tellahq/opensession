@@ -16,6 +16,7 @@ import {
   type SessionMetadataCatalogRow,
   type SessionMetadataPutResult,
   type SessionMetadataRecord,
+  type SessionMetadataSeedRow,
 } from "./metadata-protocol";
 
 const CATALOG_COMPLETE_MIGRATION = "session_metadata_catalog_v1";
@@ -179,6 +180,39 @@ export function settleSessionMetadataCatalog(
       Date.now(),
     ],
   );
+}
+
+/** Central only. Project historical session files that predate actor-owned
+ * metadata. A row that already exists, whether from an earlier seed or a live
+ * commit, is left untouched; the file already carries the seeded revision, so
+ * the row starts exported. Returns the number of rows inserted. */
+export function seedSessionMetadataCatalog(
+  db: Database,
+  rows: SessionMetadataSeedRow[],
+): number {
+  assertMetadataActorRequest({ op: "seed_catalog", rows });
+  const insert = db.query(
+    `INSERT OR IGNORE INTO session_kernel_metadata_catalog
+       (session_id, doc, rev, exported_rev, archived, last_activity_ms, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const tx = db.transaction((): number => {
+    const now = Date.now();
+    let inserted = 0;
+    for (const row of rows) {
+      inserted += insert.run(
+        row.sessionId,
+        row.doc,
+        row.rev,
+        row.rev,
+        row.archived ? 1 : 0,
+        row.lastActivityMs,
+        now,
+      ).changes;
+    }
+    return inserted;
+  });
+  return tx.immediate();
 }
 
 export function markSessionMetadataExported(

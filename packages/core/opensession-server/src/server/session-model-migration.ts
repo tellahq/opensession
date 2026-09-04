@@ -22,7 +22,7 @@
 import { executeSessionProjection } from "./session-projection-executor";
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { updateSessionFile } from "./session-cache";
 import { explicitEngineFor, resolveModel } from "./models";
 import type { ActiveRunRecord } from "./run-journal";
 import type { NativeSessionFile } from "./types";
@@ -135,18 +135,21 @@ export async function migrateSessionEngine(
     return { ok: true, sessionId, from: data.model, to: resolved.id };
   }
 
-  const from = data.model;
+  let from = data.model;
   await executeSessionProjection(sessionId, "model_migration", () =>
-    writeJsonAtomic(path, {
-      ...data,
-      model: resolved.id,
-      modelHistory: [
-        ...(data.modelHistory || []),
-        { model: resolved.id, from, at: new Date().toISOString(), by },
-      ],
-      ...(options.preserveActivity
-        ? {}
-        : { lastActivity: new Date().toISOString() }),
+    updateSessionFile(sessionId, (current) => {
+      from = current.model;
+      return {
+        ...current,
+        model: resolved.id,
+        modelHistory: [
+          ...(current.modelHistory || []),
+          { model: resolved.id, from, at: new Date().toISOString(), by },
+        ],
+        ...(options.preserveActivity
+          ? {}
+          : { lastActivity: new Date().toISOString() }),
+      };
     }),
   );
   return { ok: true, sessionId, from, to: resolved.id };

@@ -114,7 +114,7 @@ export const INTERNAL_MCP_CAPABILITIES = {
   "opensession-assets": {
     summary: "Per-session scratch assets, previewed in the Assets tab.",
     guidance:
-      "Save uncommitted reports, diagrams, visualizations, or sample data that should be previewable from this session.",
+      "Save uncommitted reports, diagrams, visualizations, or sample data that should be previewable from this session. Publish existing workspace files with write_asset.sourcePath, especially binary outputs such as DOCX, PDF, and ZIP files.",
   },
   "opensession-todos": {
     summary: "The user's Desk todo list.",

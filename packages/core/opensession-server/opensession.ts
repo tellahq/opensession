@@ -102,6 +102,7 @@ import {
   reconcileRecoverableSafetyFences,
   recordRunOutcome,
   startSessionOwnershipWatchdog,
+  primeSessionListIndex,
   reconcileSessionMetadataExports,
   stopSessionOwnershipWatchdog,
 } from "./src/server/session-cache";
@@ -159,7 +160,7 @@ import {
   pauseWorkflowsForShutdown,
 } from "./src/server/workflow-store";
 import { recoverInterruptedWorkflows } from "./src/server/workflow-runner";
-import "./src/server/session-control-wiring"; // opensession-sessions MCP + Slack-link bridge
+import { ensureSlackLinkIndex } from "./src/server/session-control-wiring"; // opensession-sessions MCP + Slack-link bridge
 import "./src/server/keychain"; // registers the keychain human-ask domain handler
 import { websocketHandlers } from "./src/server/ws-handlers";
 import { routeHandlers, type RouteContext } from "./src/server/routes";
@@ -263,6 +264,12 @@ const g = globalThis as any;
 
 // The actor owns the writable kernel store before any gateway projection hydrates.
 if (!g.__opensessionBooted) await startSessionKernelActor();
+// The first list read fills the list index. With the actor up it can come
+// from the metadata catalog; before this point it would have to read every
+// session file. Prime it here so no later boot step or route pays that scan,
+// then build the Slack thread index from the same snapshot.
+if (!g.__opensessionBooted) await primeSessionListIndex();
+void ensureSlackLinkIndex();
 
 // Loaded agents (Plain/Linear/Slack/Stripe/…). Module-scoped because request
 // handlers (health routes) read it, and globalThis-backed so the set survives a

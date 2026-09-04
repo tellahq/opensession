@@ -344,6 +344,73 @@ describe("actor-owned session metadata", () => {
     expect(page.some((row) => row.sessionId === sessionId)).toBe(false);
   });
 
+  test("seeds historical files into the catalog without touching the actor", async () => {
+    const host = await actor();
+    const legacy = `metadata-seed-${crypto.randomUUID()}`;
+    const owned = `metadata-seed-owned-${crypto.randomUUID()}`;
+    // A session the actor already owns keeps its committed row.
+    await put(host, owned, 1, null);
+    const seed = (sessionId: string, rev: number) => ({
+      sessionId,
+      doc: doc(sessionId, rev),
+      rev,
+      archived: false,
+      lastActivityMs: Date.parse("2026-09-01T00:00:00.000Z"),
+    });
+    expect(
+      await host.decideMetadataAsync({
+        op: "seed_catalog",
+        rows: [seed(legacy, 4), seed(owned, 9)],
+      }),
+    ).toBe(1);
+    // Re-running the seed is a no-op.
+    expect(
+      await host.decideMetadataAsync({
+        op: "seed_catalog",
+        rows: [seed(legacy, 4)],
+      }),
+    ).toBe(0);
+    const page = await host.decideMetadataAsync({
+      op: "catalog_page",
+      afterSessionId: "",
+      limit: 1000,
+    });
+    // The file already carries the seeded revision: nothing to re-export.
+    expect(page.find((row) => row.sessionId === legacy)).toMatchObject({
+      rev: 4,
+      exportedRev: 4,
+    });
+    expect(page.find((row) => row.sessionId === owned)).toMatchObject({
+      rev: 1,
+    });
+    // No actor document exists until the session's first real write, which
+    // seeds from the file at the next revision and supersedes the row.
+    expect(
+      await host.decideMetadataAsync({ op: "get", sessionId: legacy }),
+    ).toBeNull();
+    expect(await put(host, legacy, 5, null)).toEqual({
+      status: "committed",
+      rev: 5,
+    });
+    const after = await host.decideMetadataAsync({
+      op: "catalog_page",
+      afterSessionId: "",
+      limit: 1000,
+    });
+    expect(after.find((row) => row.sessionId === legacy)).toMatchObject({
+      rev: 5,
+      exportedRev: 4,
+    });
+
+    expect(await host.decideMetadataAsync({ op: "catalog_complete" })).toBe(
+      false,
+    );
+    await host.decideMetadataAsync({ op: "mark_catalog_complete" });
+    expect(await host.decideMetadataAsync({ op: "catalog_complete" })).toBe(
+      true,
+    );
+  });
+
   test("rejects malformed metadata commands before touching storage", async () => {
     const host = await actor();
     const sessionId = `metadata-invalid-${crypto.randomUUID()}`;

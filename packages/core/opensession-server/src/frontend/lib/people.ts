@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { fuzzyMatch } from "../../shared/fuzzy-match";
 import { z } from "zod";
 import { BASE_PATH } from "./base";
 import {
@@ -154,15 +155,9 @@ export function peopleMentionMatches(
   roster: Person[] = getPeople(),
   currentUser = "",
 ): FileMention[] {
-  const q = query.trim().toLowerCase();
   const current = currentUser.trim().toLowerCase();
   return roster
-    .filter(
-      (p) =>
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.fullName.toLowerCase().includes(q),
-    )
+    .filter((p) => fuzzyMatch(query, [p.name, p.fullName]) > 0)
     .sort((a, b) => {
       const aIsCurrent = a.name.toLowerCase() === current;
       const bIsCurrent = b.name.toLowerCase() === current;

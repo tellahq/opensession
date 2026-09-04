@@ -6,6 +6,9 @@ import { __setSessionsDirForTest } from "./paths";
 
 const scratch = mkdtempSync(join(tmpdir(), "migrate-engine-test-"));
 const prevDir = __setSessionsDirForTest(scratch);
+// The migration commits through the metadata facade, whose export refreshes
+// the list index. Keep that index in the scratch state dir too.
+process.env.OPENSESSION_STATE_DIR = scratch;
 
 // Import AFTER repointing the sessions dir isn't required (the module reads the
 // live binding per call), but cache-bust anyway for isolation.

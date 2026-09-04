@@ -547,18 +547,30 @@ try {
           type: "touchEnd",
           touchPoints: [],
         });
+        const touchEndedAt = await evaluate<number>(`performance.now()`);
         let previousTop = await readScrollTop();
         let moving = 0;
-        for (let index = 0; index < 20 && moving < 2; index++) {
+        let lateMomentum = false;
+        for (let index = 0; index < 30 && !lateMomentum; index++) {
           await Bun.sleep(30);
-          const top = await readScrollTop();
-          if (top !== previousTop) moving++;
-          previousTop = top;
+          const sample = await evaluate<{ top: number; at: number }>(`(() => {
+            const scroller = document.querySelector("[data-transcript-motion-scroller]");
+            return { top: scroller.scrollTop, at: performance.now() };
+          })()`);
+          if (sample.top !== previousTop) {
+            moving++;
+            lateMomentum = sample.at - touchEndedAt > 250;
+          }
+          previousTop = sample.top;
         }
         assert(moving >= 2, "touch fling produced no momentum");
-        // The momentum keeps carrying the reader toward history, so grow a
-        // reply well above where they are now: it must still be above them
-        // when they stop, or there is nothing to correct.
+        assert(
+          lateMomentum,
+          "touch fling ended before delayed hydration could be tested",
+        );
+        // Hydration can arrive hundreds of milliseconds after touchend. Grow
+        // above the reader only once momentum has crossed that delay, so a
+        // touchend-only settle window cannot make this test pass by accident.
         const midFling = await probe.pick();
         const midTurn = midFling ? turnOf(midFling.id) : null;
         assert(

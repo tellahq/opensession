@@ -1,4 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import type { PrInfo } from "./pr-cache";
 import {
   enrichSessionPrRefs,
@@ -241,13 +244,28 @@ describe("sessionPrBranch", () => {
     expect(sessionPrBranch(session, workspace)).toBe("add-lottie-primitive");
   });
 
-  test("does not rewrite ordinary session branches", () => {
+  // A tab the user opens in a PR workspace inherits the review checkout branch
+  // rather than the PR head, so it must resolve like the review session does.
+  test("a user tab on the derived review checkout resolves to the PR head", () => {
     expect(
       sessionPrBranch(
         { ...session, automation: undefined } as UnifiedSession,
         workspace,
       ),
-    ).toBe("add-lottie-primitive-os-review");
+    ).toBe("add-lottie-primitive");
+  });
+
+  test("does not rewrite ordinary session branches", () => {
+    expect(
+      sessionPrBranch(
+        {
+          ...session,
+          automation: undefined,
+          branch: "my-own-branch",
+        } as UnifiedSession,
+        workspace,
+      ),
+    ).toBe("my-own-branch");
   });
 
   test("requires a structurally PR-backed workspace", () => {
@@ -315,5 +333,52 @@ describe("sessionPrBranch", () => {
         },
       ),
     ).toBe("add-lottie-primitive");
+  });
+});
+
+describe("flat PR fields on a review checkout", () => {
+  // The workspace has to come from disk here: shareWorkspacePrRefs reads it
+  // through the default reader, the same way the list and detail routes do.
+  const stateDir = mkdtempSync(join(tmpdir(), "pr-target-"));
+  const previous = process.env.OPENSESSION_STATE_DIR;
+  process.env.OPENSESSION_STATE_DIR = stateDir;
+  mkdirSync(join(stateDir, ".opensession-workspaces"), { recursive: true });
+  writeFileSync(
+    join(stateDir, ".opensession-workspaces", `${workspace.id}.json`),
+    JSON.stringify({ ...workspace, repo: "tella-fusion" }),
+  );
+  afterEach(() => {
+    process.env.OPENSESSION_STATE_DIR = previous;
+    rmSync(stateDir, { recursive: true, force: true });
+  });
+
+  test("projects the primary ref on the PR head, not the review branch", () => {
+    const tab = {
+      id: "os-user-tab",
+      repo: "tella-fusion",
+      workspaceId: workspace.id,
+      branch: "add-lottie-primitive-os-review",
+      prNumber: 5286,
+      prUrl: "https://github.com/tellahq/tella-fusion/pull/5286",
+      prState: "OPEN",
+    } as UnifiedSession;
+    const sibling = {
+      id: "os-head-tab",
+      repo: "tella-fusion",
+      workspaceId: workspace.id,
+      branch: "add-lottie-primitive",
+      prNumber: 5286,
+      prUrl: "https://github.com/tellahq/tella-fusion/pull/5286",
+      prState: "OPEN",
+    } as UnifiedSession;
+
+    shareWorkspacePrRefs([tab, sibling]);
+
+    // One ref, on the branch GitHub actually has the PR for. The PR routes
+    // resolve their target from this ref, so a review-branch ref sent them
+    // after a PR that never existed.
+    expect(tab.prs?.map((ref) => [ref.branch, ref.source, ref.number])).toEqual(
+      [["add-lottie-primitive", "primary", 5286]],
+    );
   });
 });

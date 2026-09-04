@@ -346,6 +346,14 @@ describe("single session ownership", () => {
       }
     }
     expect(offenders).toEqual([]);
+    // These two used to write through a `path` variable, which the literal
+    // guard above cannot see. They commit through the facade now, so the
+    // catalog never diverges from the exported file.
+    for (const module of ["plain-archive.ts", "session-model-migration.ts"]) {
+      const source = read(module);
+      expect(source).not.toContain("writeJsonAtomic");
+      expect(source).toContain("updateSessionFile(");
+    }
   });
 
   test("the gateway boots an IPC actor before hydrating session projections", () => {

@@ -79,6 +79,13 @@ configuration for the run.
   strictly deletes the Executor after the run. There is no host fallback.
 - When adding an automation, scope it: pick ask mode unless it must write, and
   name only the MCP servers it uses.
+- Interactive sessions may publish an existing workspace file through
+  `opensession-assets` `write_asset.sourcePath`. The server resolves the path
+  inside that session's host, runner, or Sandbox workspace, rejects absolute
+  paths, traversal, control characters, and symlinks escaping the workspace,
+  checks the 4 MiB limit before reading, then writes through the configured
+  asset store. Agents do not need direct access to the asset storage directory,
+  and successful publication sends the normal `assets_changed` event.
 - A code automation's `prReviewer` is preserved and added to its instructions,
   but it grants no GitHub authority. It matters only when the run already has
   an authorized publication path. See

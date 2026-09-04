@@ -26,6 +26,7 @@ import {
   sessionUsesPrLink,
 } from "../lib/session-prs";
 import { usePeople } from "../lib/people";
+import { fuzzyMatch, fuzzyScore } from "../../shared/fuzzy-match";
 import {
   canonicalNames,
   sessionHasOwner,
@@ -416,11 +417,10 @@ export function SessionSearch({
     // typing never mounts hundreds of rows before the person can read them.
     const prLimit = hasQuery ? 20 : 8;
     const sessionLimit = hasQuery || hasSessionFilter ? 40 : 12;
-    const matches = (values: Array<string | undefined>) => {
-      if (terms.length === 0) return true;
-      const text = values.filter(Boolean).join(" ").toLowerCase();
-      return terms.every((term) => text.includes(term));
-    };
+    // Typo-tolerant: every term must land in the joined text, exactly or
+    // within a small edit distance, so "relase" still finds "Release".
+    const matches = (values: Array<string | undefined>) =>
+      terms.length === 0 || fuzzyScore(q, values.filter(Boolean).join(" ")) > 0;
     const actionResults: PaletteResult[] = (hasSessionFilter ? [] : actions)
       .filter((action) =>
         matches([
@@ -460,9 +460,8 @@ export function SessionSearch({
       if (terms.length === 0) return true;
       // A session shows if its metadata matches every term OR the query turned
       // up inside its conversation, or the pasted PR link belongs to it.
-      const hay = hayOf(s);
       return (
-        terms.every((t) => hay.includes(t)) ||
+        fuzzyMatch(q, [hayOf(s)]) > 0 ||
         sessionUsesPrLink(s, q) ||
         snippets.has(s.id)
       );

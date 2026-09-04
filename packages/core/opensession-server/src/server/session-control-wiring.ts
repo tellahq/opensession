@@ -236,16 +236,24 @@ function listSessionSummaries(): SessionSummary[] {
 }
 
 // --- Session control surface (powers the opensession-sessions MCP) ---
-// Wire the Slack thread index (thread replies → owning session). Re-run on
-// every hot reload (cheap) so the index stays fresh.
-void getSessionListSnapshotAsync()
-  .then((sessions) => {
-    rebuildIndex(sessions);
-    // rebuildIndex() clears the index, so replay the links the session files
-    // don't hold: a human-ask DM thread belongs to the session that raised it.
-    relinkAskThreads();
-  })
-  .catch((error) => console.warn("[slack-links] index rebuild failed:", error));
+/**
+ * Wire the Slack thread index (thread replies → owning session). Boot calls
+ * this after the session actor is up, so the list snapshot it needs comes
+ * from the primed list index (or the metadata catalog) rather than a
+ * pre-actor scan of every session file. Cheap to re-run on a hot reload.
+ */
+export function ensureSlackLinkIndex(): Promise<void> {
+  return getSessionListSnapshotAsync()
+    .then((sessions) => {
+      rebuildIndex(sessions);
+      // rebuildIndex() clears the index, so replay the links the session files
+      // don't hold: a human-ask DM thread belongs to the session that raised it.
+      relinkAskThreads();
+    })
+    .catch((error) =>
+      console.warn("[slack-links] index rebuild failed:", error),
+    );
+}
 
 // Wires the MCP's tools into the same in-process state and helpers the
 // WebSocket handlers use, so a management session steers/answers/creates the

@@ -10,6 +10,7 @@ import {
   engineSessionIdFor,
   getAllSessions,
   getAllSessionsAsync,
+  nativeSessionRow,
   readNativeSession,
   readNativeSessionListRow,
   readSlackSession,
@@ -297,7 +298,10 @@ export async function getCachedSessionsAsync(
   if (!sessionsRefreshes[slice]) {
     const generation = ++sessionsCacheGenerations[slice];
     const startingCache = sessionsCaches[slice];
-    sessionsRefreshes[slice] = getAllSessionsAsync(slice)
+    sessionsRefreshes[slice] = getAllSessionsAsync(
+      slice,
+      catalogNativeSessionRows,
+    )
       .then((data) => {
         upsertIndexedSessions(data, slice);
         const current = sessionsCaches[slice];
@@ -682,6 +686,89 @@ function afterSessionMetadataExport(
   markSessionListStale();
   publishSessionRow(sessionId);
   return sessionMetadata({ op: "exported", sessionId, rev });
+}
+
+const SESSION_METADATA_CATALOG_PAGE = 500;
+
+// Monotonic: once an operator marked the catalog complete it stays complete,
+// so the flag is asked once per process and then remembered.
+let metadataCatalogComplete = false;
+
+/**
+ * Native rows for a cold list rebuild. Once every historical session file has
+ * been seeded (scripts/seed-session-metadata-catalog.ts) the central catalog
+ * is the source: pages of committed documents from one database instead of a
+ * readdir and parse over every session file. Until then, or if the catalog
+ * cannot be read, the caller falls back to the directory scan.
+ */
+async function catalogNativeSessionRows(): Promise<
+  UnifiedSession[] | undefined
+> {
+  // Before the actor is up the facade cannot answer; scan instead of logging
+  // a failure. Tests run the facade on the in-process compatibility store.
+  if (!sessionKernelActorActive() && process.env.NODE_ENV !== "test")
+    return undefined;
+  try {
+    if (!metadataCatalogComplete) {
+      metadataCatalogComplete = await sessionMetadata({
+        op: "catalog_complete",
+      });
+      if (!metadataCatalogComplete) return undefined;
+      console.log(
+        "[session-metadata] catalog is complete; list rebuilds page it instead of scanning session files",
+      );
+    }
+    const rows: UnifiedSession[] = [];
+    let afterSessionId = "";
+    for (;;) {
+      const page = await sessionMetadata({
+        op: "catalog_page",
+        afterSessionId,
+        limit: SESSION_METADATA_CATALOG_PAGE,
+      });
+      for (const row of page) {
+        let data: NativeSessionFile | null = null;
+        try {
+          data = JSON.parse(row.doc);
+        } catch {
+          continue;
+        }
+        if (data?.id === row.sessionId) rows.push(nativeSessionRow(data));
+      }
+      if (page.length < SESSION_METADATA_CATALOG_PAGE) break;
+      afterSessionId = page[page.length - 1]!.sessionId;
+      // Let request traffic through between pages, as the file scan does.
+      await Bun.sleep(0);
+    }
+    return rows;
+  } catch (error) {
+    console.warn(
+      "[session-metadata] catalog read failed; scanning session files instead:",
+      error instanceof Error ? error.message : error,
+    );
+    return undefined;
+  }
+}
+
+/**
+ * Boot: make sure the list index has coverage before any boot step or route
+ * reads the session list. Called right after the session actor starts, so
+ * an index that is missing (first boot, operator rebuild) fills from the
+ * metadata catalog when it is complete. Without this the first synchronous
+ * `getCachedSessions()` reader would fill it by reading every session file.
+ */
+export async function primeSessionListIndex(): Promise<void> {
+  if (indexedSessions("include")) return;
+  const startedAt = performance.now();
+  const sessions = await getAllSessionsAsync(
+    "include",
+    catalogNativeSessionRows,
+  );
+  upsertIndexedSessions(sessions, "include");
+  enrichCachedSessions("include", sessions);
+  console.log(
+    `[session-cache] primed the list index with ${sessions.length} session(s) in ${Math.round(performance.now() - startedAt)}ms`,
+  );
 }
 
 export const SESSION_METADATA_EXPORT_REPAIR_LIMIT = 500;

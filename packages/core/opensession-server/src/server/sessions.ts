@@ -888,7 +888,10 @@ function scanLinearSessions(): UnifiedSession[] {
   return [...linearSessionRows()];
 }
 
-function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
+/** The list row for one native session document, before overlays. Exported
+ * so the catalog-backed rebuild in session-cache builds rows from committed
+ * documents the same way the file scan does. */
+export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
   const archived = !!data.archived || isArchivedId(data.id);
   return {
     id: data.id,
@@ -1408,9 +1411,16 @@ export function getAllSessions(
   );
 }
 
+/** Alternative source of native rows for a cold rebuild. Returning undefined
+ * falls back to the session directory scan. */
+export type NativeSessionRowSource = () => Promise<
+  UnifiedSession[] | undefined
+>;
+
 /** Cooperative counterpart for request paths that can await a cold scan. */
 export async function getAllSessionsAsync(
   slice: SessionArchiveSlice = "include",
+  nativeSource?: NativeSessionRowSource,
 ): Promise<UnifiedSession[]> {
   // Warm the indexes before row parsing starts. Running these in the same
   // Promise.all as the scans lets the first transcript miss fall back to the
@@ -1419,7 +1429,11 @@ export async function getAllSessionsAsync(
   const [slackSessions, linearSessions, nativeSessions] = await Promise.all([
     collectSessionRows(slackSessionRows()),
     collectSessionRows(linearSessionRows()),
-    collectSessionRows(nativeSessionRows()),
+    nativeSource
+      ? nativeSource().then(
+          (rows) => rows ?? collectSessionRows(nativeSessionRows()),
+        )
+      : collectSessionRows(nativeSessionRows()),
   ]);
   // These overlays read and mutate process-local state, so they deliberately
   // remain on the server thread rather than crossing a Worker boundary.

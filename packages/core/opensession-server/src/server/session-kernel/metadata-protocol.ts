@@ -29,6 +29,16 @@ export type SessionMetadataCatalogRow = SessionMetadataRecord & {
   exportedRev: number;
 };
 
+/** A historical session file projected into the catalog as-is. The file
+ * already carries this revision, so the row starts fully exported. */
+export type SessionMetadataSeedRow = {
+  sessionId: string;
+  doc: string;
+  rev: number;
+  archived: boolean;
+  lastActivityMs: number;
+};
+
 export type MetadataActorRequest =
   | { op: "get"; sessionId: string }
   | {
@@ -48,6 +58,10 @@ export type MetadataActorRequest =
       lastActivityMs: number;
     }
   | { op: "exported"; sessionId: string; rev: number }
+  /** Operator seeding of sessions written before the actor owned metadata.
+   * Central only; a session that already has a row is left alone, and the
+   * actor document still materializes from the file on its first write. */
+  | { op: "seed_catalog"; rows: SessionMetadataSeedRow[] }
   | { op: "catalog_page"; afterSessionId: string; limit: number }
   | { op: "pending_exports"; limit: number }
   | { op: "catalog_complete" }
@@ -64,13 +78,15 @@ export type MetadataActorResult<T extends MetadataActorRequest> = T extends {
   ? SessionMetadataRecord | null
   : T extends { op: "put" }
     ? SessionMetadataPutResult
-    : T extends { op: "catalog_page" }
-      ? SessionMetadataCatalogRow[]
-      : T extends { op: "pending_exports" }
-        ? Array<{ sessionId: string; rev: number; exportedRev: number }>
-        : T extends { op: "catalog_complete" }
-          ? boolean
-          : void;
+    : T extends { op: "seed_catalog" }
+      ? number
+      : T extends { op: "catalog_page" }
+        ? SessionMetadataCatalogRow[]
+        : T extends { op: "pending_exports" }
+          ? Array<{ sessionId: string; rev: number; exportedRev: number }>
+          : T extends { op: "catalog_complete" }
+            ? boolean
+            : void;
 
 export const SESSION_METADATA_MAX_DOC_BYTES = 4 * 1024 * 1024;
 export const SESSION_METADATA_CATALOG_PAGE_LIMIT = 1_000;
@@ -125,6 +141,26 @@ export function assertMetadataActorRequest(
   if (request.op === "exported") {
     if (!Number.isInteger(request.rev) || request.rev < 1)
       throw new Error("Invalid session metadata export revision");
+  }
+  if (request.op === "seed_catalog") {
+    if (
+      !Array.isArray(request.rows) ||
+      request.rows.length < 1 ||
+      request.rows.length > SESSION_METADATA_CATALOG_PAGE_LIMIT
+    )
+      throw new Error("Invalid session metadata seed batch");
+    for (const row of request.rows) {
+      if (typeof row.sessionId !== "string" || !row.sessionId)
+        throw new Error("Session metadata seed row requires a session id");
+      if (!Number.isInteger(row.rev) || row.rev < 1)
+        throw new Error(`Invalid seed revision for ${row.sessionId}`);
+      if (typeof row.doc !== "string" || !row.doc)
+        throw new Error(`Seed document is required for ${row.sessionId}`);
+      if (Buffer.byteLength(row.doc) > SESSION_METADATA_MAX_DOC_BYTES)
+        throw new Error(`Seed document is too large for ${row.sessionId}`);
+      if (!Number.isInteger(row.lastActivityMs) || row.lastActivityMs < 0)
+        throw new Error(`Invalid seed activity timestamp for ${row.sessionId}`);
+    }
   }
   if (request.op === "catalog_page" || request.op === "pending_exports") {
     if (

@@ -76,15 +76,24 @@ describe("VirtualTranscriptList", () => {
     expect(shouldCaptureReaderAnchor({ ...base, held: true })).toBe(false);
   });
 
-  test("defers corrections while touch momentum may be in flight", () => {
+  test("defers corrections until touch scrolling is quiet", () => {
     expect(
-      shouldDeferReaderCorrection({ touching: true, sinceTouchEnd: 5_000 }),
+      shouldDeferReaderCorrection({
+        touching: true,
+        sinceTouchActivity: 5_000,
+      }),
     ).toBe(true);
     expect(
-      shouldDeferReaderCorrection({ touching: false, sinceTouchEnd: 40 }),
+      shouldDeferReaderCorrection({
+        touching: false,
+        sinceTouchActivity: 40,
+      }),
     ).toBe(true);
     expect(
-      shouldDeferReaderCorrection({ touching: false, sinceTouchEnd: 400 }),
+      shouldDeferReaderCorrection({
+        touching: false,
+        sinceTouchActivity: 400,
+      }),
     ).toBe(false);
   });
 

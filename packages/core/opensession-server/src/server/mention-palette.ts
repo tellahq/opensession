@@ -1,3 +1,5 @@
+import { fuzzyMatch } from "../shared/fuzzy-match";
+
 export interface MentionPaletteSession {
   id: string;
   title?: string | null;
@@ -31,12 +33,18 @@ interface Options {
   currentSessionId?: string | null;
 }
 
-function includesQuery(
+/** Score an item's fields, keeping the item only when something matched. */
+function scored<T>(
   query: string,
-  ...values: Array<string | null | undefined>
-): boolean {
-  if (!query) return true;
-  return values.some((value) => value?.toLowerCase().includes(query));
+  items: T[],
+  fields: (item: T) => Array<string | null | undefined>,
+): Array<{ item: T; score: number }> {
+  const out: Array<{ item: T; score: number }> = [];
+  for (const item of items) {
+    const score = fuzzyMatch(query, fields(item));
+    if (score > 0) out.push({ item, score });
+  }
+  return out;
 }
 
 /** Non-file rows for the @ palette. Tools are intentionally uncapped: the
@@ -50,58 +58,60 @@ export function mentionPaletteItems({
   sessions,
   currentSessionId,
 }: Options): MentionPaletteItem[] {
-  const q = query.trim().toLowerCase();
-  const tools = [...new Set(toolNames)]
-    .filter((name) => includesQuery(q, name))
-    .sort((a, b) => a.localeCompare(b))
-    .map((name) => ({
+  const q = query.trim();
+  const tools = scored(q, [...new Set(toolNames)], (name) => [name])
+    .sort((a, b) => b.score - a.score || a.item.localeCompare(b.item))
+    .map(({ item: name }) => ({
       display: name,
       insert: name,
       kind: "tool" as const,
     }));
-  const workspaceRows = workspaces
-    .filter((workspace) =>
-      includesQuery(
-        q,
-        workspace.name,
-        workspace.repo,
-        workspace.branch,
-        workspace.id,
-      ),
-    )
+  // Typos are forgiven, so a close name outranks a loose one. Sort is stable,
+  // so equal scores keep the catalog's own order.
+  const workspaceRows = scored(q, workspaces, (workspace) => [
+    workspace.name,
+    workspace.repo,
+    workspace.branch,
+    workspace.id,
+  ])
+    .sort((a, b) => b.score - a.score)
     .slice(0, 6)
-    .map((workspace) => ({
+    .map(({ item: workspace }) => ({
       display: workspace.name,
       insert: `workspace:${workspace.id}`,
       kind: "workspace" as const,
       sub: workspace.branch || workspace.repo || undefined,
     }));
-  const matchingSessions = sessions
-    .filter((session) => !session.archived && session.id !== currentSessionId)
-    .filter((session) =>
-      includesQuery(
-        q,
-        session.title,
-        session.branch,
-        session.repo,
-        session.source,
-        session.id,
-      ),
-    );
-  // Keep only the six newest matches while walking the catalog. Sorting the
-  // entire session history on every character made a small picker scale with
-  // years of archived work.
-  const recent: MentionPaletteSession[] = [];
-  for (const session of matchingSessions) {
-    const at = session.lastActivity || "";
+  const matchingSessions = scored(
+    q,
+    sessions.filter(
+      (session) => !session.archived && session.id !== currentSessionId,
+    ),
+    (session) => [
+      session.title,
+      session.branch,
+      session.repo,
+      session.source,
+      session.id,
+    ],
+  );
+  // Keep only the six best matches, newest first among equals, while walking
+  // the catalog. Sorting the entire session history on every character made a
+  // small picker scale with years of archived work.
+  const recent: Array<{ item: MentionPaletteSession; score: number }> = [];
+  for (const entry of matchingSessions) {
+    const at = entry.item.lastActivity || "";
     const index = recent.findIndex(
-      (candidate) => at > (candidate.lastActivity || ""),
+      (candidate) =>
+        entry.score > candidate.score ||
+        (entry.score === candidate.score &&
+          at > (candidate.item.lastActivity || "")),
     );
-    if (index < 0) recent.push(session);
-    else recent.splice(index, 0, session);
+    if (index < 0) recent.push(entry);
+    else recent.splice(index, 0, entry);
     if (recent.length > 6) recent.pop();
   }
-  const sessionRows = recent.map((session) => ({
+  const sessionRows = recent.map(({ item: session }) => ({
     display: session.title || session.branch || session.id,
     insert: `session:${session.id}`,
     kind: "session" as const,

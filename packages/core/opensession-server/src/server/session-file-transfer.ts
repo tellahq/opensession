@@ -12,9 +12,10 @@ import { basename } from "node:path";
 import { MAX_WRITE_BYTES, readAssetAcross, writeAsset } from "./session-assets";
 import { sessionIdsForAsync } from "./session-cache";
 import type { SessionSummary } from "./session-control";
-import { workspaceExecFor } from "./sandbox";
+import { workspaceExecFor, type WorkspaceExecSession } from "./sandbox";
 
 export type SessionFileSource = "workspace" | "assets";
+type SessionFileWorkspace = WorkspaceExecSession & { id: string };
 
 export interface TransferSessionFileInput {
   fromSession: SessionSummary;
@@ -31,11 +32,21 @@ export interface TransferSessionFileResult {
   source: SessionFileSource;
 }
 
+export interface PublishSessionFileInput {
+  session: SessionFileWorkspace;
+  sourcePath: string;
+  destination: string;
+  description?: string;
+}
+
 type MaybePromise<T> = T | Promise<T>;
 
 interface TransferDeps {
   readAsset?: (sessionId: string, rel: string) => MaybePromise<Buffer>;
-  readWorkspace?: (session: SessionSummary, rel: string) => Promise<Buffer>;
+  readWorkspace?: (
+    session: SessionFileWorkspace,
+    rel: string,
+  ) => Promise<Buffer>;
   write?: (
     sessionId: string,
     rel: string,
@@ -52,6 +63,7 @@ export function safeTransferPath(path: string): string {
     !rel ||
     rel.startsWith("/") ||
     rel.includes("\\") ||
+    /[\0\r\n]/.test(rel) ||
     rel.split("/").some((part) => !part || part === "." || part === "..")
   ) {
     throw new Error(
@@ -62,13 +74,25 @@ export function safeTransferPath(path: string): string {
 }
 
 async function readWorkspaceFile(
-  session: SessionSummary,
+  session: SessionFileWorkspace,
   rel: string,
 ): Promise<Buffer> {
   if (!session.worktreeDir)
     throw new Error("the sending session has no workspace");
   const exec = await workspaceExecFor(session, session.worktreeDir);
-  const size = await exec(["stat", "-c", "%s", "--", rel]);
+  const resolved = await exec(["realpath", "--", ".", rel]);
+  const [resolvedRoot, source, ...extra] = resolved.stdout.trim().split("\n");
+  if (resolved.exitCode !== 0 || !resolvedRoot || !source || extra.length)
+    throw new Error(`no readable workspace file at ${rel}`);
+  const root = resolvedRoot.replace(/\/$/, "");
+  if (!root || (source !== root && !source.startsWith(`${root}/`)))
+    throw new Error(`workspace file escapes the session workspace: ${rel}`);
+
+  // Read the canonical path, not the user-supplied path. Besides rejecting a
+  // symlink that already points out of the workspace, this keeps a later
+  // symlink swap from changing what stat and base64 inspect.
+  let size = await exec(["stat", "-c", "%s", "--", source]);
+  if (size.exitCode !== 0) size = await exec(["stat", "-f", "%z", source]);
   if (size.exitCode !== 0)
     throw new Error(`no readable workspace file at ${rel}`);
   const bytes = Number(size.stdout.trim());
@@ -78,10 +102,13 @@ async function readWorkspaceFile(
     throw new Error(
       `file is too large to send (${bytes} bytes > ${MAX_WRITE_BYTES})`,
     );
-  const encoded = await exec(["base64", "-w0", "--", rel]);
+  // macOS base64 uses -i for its input file; GNU base64 reads the same argv as
+  // "ignore garbage, then this input file". Buffer's base64 decoder accepts
+  // the optional line wrapping from either implementation.
+  const encoded = await exec(["base64", "-i", source]);
   if (encoded.exitCode !== 0)
     throw new Error(`could not read workspace file ${rel}`);
-  const data = Buffer.from(encoded.stdout.trim(), "base64");
+  const data = Buffer.from(encoded.stdout, "base64");
   if (data.byteLength !== bytes)
     throw new Error(`workspace file changed while it was being sent: ${rel}`);
   return data;
@@ -100,6 +127,59 @@ async function readSessionAsset(
   return found.data;
 }
 
+interface CopyToSessionAssetsInput {
+  fromSession: SessionFileWorkspace;
+  toSessionId: string;
+  source: SessionFileSource;
+  sourcePath: string;
+  destination: (sourcePath: string) => string;
+  description: (sourcePath: string) => string;
+}
+
+async function copyToSessionAssets(
+  input: CopyToSessionAssetsInput,
+  deps: TransferDeps,
+): Promise<TransferSessionFileResult> {
+  const sourcePath = safeTransferPath(input.sourcePath);
+  const data =
+    input.source === "assets"
+      ? await (deps.readAsset || readSessionAsset)(
+          input.fromSession.id,
+          sourcePath,
+        )
+      : await (deps.readWorkspace || readWorkspaceFile)(
+          input.fromSession,
+          sourcePath,
+        );
+  const destination = safeTransferPath(input.destination(sourcePath));
+  const written = await (deps.write || writeAsset)(
+    input.toSessionId,
+    destination,
+    data,
+    input.description(sourcePath),
+  );
+  return { path: written.path, size: written.size, source: input.source };
+}
+
+export async function publishSessionFile(
+  input: PublishSessionFileInput,
+  deps: Pick<TransferDeps, "readWorkspace" | "write"> = {},
+): Promise<TransferSessionFileResult> {
+  return copyToSessionAssets(
+    {
+      fromSession: input.session,
+      toSessionId: input.session.id,
+      source: "workspace",
+      sourcePath: input.sourcePath,
+      destination: () => input.destination,
+      description: (sourcePath) =>
+        input.description ||
+        `Published from session ${input.session.id} (workspace:${sourcePath})`,
+    },
+    deps,
+  );
+}
+
 export async function transferSessionFile(
   input: TransferSessionFileInput,
   deps: TransferDeps = {},
@@ -107,23 +187,19 @@ export async function transferSessionFile(
   if (input.fromSession.id === input.toSession.id)
     throw new Error("source and destination sessions must be different");
   const source = input.source || "workspace";
-  const rel = safeTransferPath(input.path);
-  const data =
-    source === "assets"
-      ? await (deps.readAsset || readSessionAsset)(input.fromSession.id, rel)
-      : await (deps.readWorkspace || readWorkspaceFile)(input.fromSession, rel);
-  const destination = safeTransferPath(
-    input.destination ||
-      `inbox/${input.fromSession.id}/${basename(rel) || "attachment"}`,
+  return copyToSessionAssets(
+    {
+      fromSession: input.fromSession,
+      toSessionId: input.toSession.id,
+      source,
+      sourcePath: input.path,
+      destination: (sourcePath) =>
+        input.destination ||
+        `inbox/${input.fromSession.id}/${basename(sourcePath) || "attachment"}`,
+      description: (sourcePath) =>
+        input.description ||
+        `Sent from session ${input.fromSession.id} (${source}:${sourcePath})`,
+    },
+    deps,
   );
-  const description =
-    input.description ||
-    `Sent from session ${input.fromSession.id} (${source}:${rel})`;
-  const written = await (deps.write || writeAsset)(
-    input.toSession.id,
-    destination,
-    data,
-    description,
-  );
-  return { path: written.path, size: written.size, source };
 }

@@ -1,5 +1,6 @@
 import type React from "react";
 import type { FileMention } from "./api";
+import { fuzzyMatch } from "../../shared/fuzzy-match";
 
 export type MentionSuggestionKind =
   | NonNullable<FileMention["kind"]>
@@ -59,14 +60,14 @@ export function actionMentionSuggestions(
   query: string,
   actions: MentionAction[],
 ): MentionSuggestion[] {
-  const q = query.trim().toLowerCase();
   return actions
-    .filter((action) =>
-      !q
-        ? true
-        : [action.label, action.description, ...(action.keywords || [])]
-            .filter(Boolean)
-            .some((value) => value?.toLowerCase().includes(q)),
+    .filter(
+      (action) =>
+        fuzzyMatch(query, [
+          action.label,
+          action.description,
+          ...(action.keywords || []),
+        ]) > 0,
     )
     .map((action) => ({
       display: action.label,

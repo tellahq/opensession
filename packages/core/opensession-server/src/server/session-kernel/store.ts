@@ -7,6 +7,7 @@ import type {
   SessionMetadataCatalogRow,
   SessionMetadataPutResult,
   SessionMetadataRecord,
+  SessionMetadataSeedRow,
 } from "./metadata-protocol";
 import * as metadataStore from "./metadata-store";
 import { decodeExecutorId } from "@tellahq/opensession-protocol/executor";
@@ -6208,6 +6209,10 @@ export class SessionKernelStore {
 
   markSessionMetadataExported(sessionId: string, rev: number): void {
     metadataStore.markSessionMetadataExported(this.db, sessionId, rev);
+  }
+
+  seedSessionMetadataCatalog(rows: SessionMetadataSeedRow[]): number {
+    return metadataStore.seedSessionMetadataCatalog(this.db, rows);
   }
 
   sessionMetadataCatalogPage(

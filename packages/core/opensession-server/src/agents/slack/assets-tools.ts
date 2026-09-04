@@ -21,7 +21,11 @@ import {
   writeAsset,
   MAX_WRITE_BYTES,
 } from "../../server/session-assets";
-import { sessionIdsFor } from "../../server/session-cache";
+import { findSession, sessionIdsFor } from "../../server/session-cache";
+import {
+  publishSessionFile,
+  type PublishSessionFileInput,
+} from "../../server/session-file-transfer";
 
 const READ_CAP = 256 * 1024;
 
@@ -35,22 +39,44 @@ function fmtSize(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function createAssetsMcpServer(ctx: { sessionId: string }) {
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+interface AssetsToolsDeps {
+  findSession?: (
+    sessionId: string,
+  ) => PublishSessionFileInput["session"] | undefined;
+  publishSessionFile?: typeof publishSessionFile;
+  writeAsset?: typeof writeAsset;
+}
+
+export function createAssetsMcpServer(
+  ctx: { sessionId: string },
+  deps: AssetsToolsDeps = {},
+) {
   const assetSessionIds = () => sessionIdsFor(ctx.sessionId);
   const tools = [
     tool(
       "write_asset",
-      "Save a file into this session's asset storage for preview in the Assets tab or a direct link in chat: interactive HTML/JS visualizations, generated reports, diagrams, and sample data. Add a short description so the viewer explains what the asset shows. Assets are outside every repo and never committed. HTML previews live in the UI and relative references resolve, so multi-file pages work. Overwrites silently. Works in read-only Ask sessions too.",
+      "Save a file into this session's asset storage for preview in the Assets tab or a direct link in chat. Provide content for authored text/base64 data, or sourcePath to publish an existing workspace file such as a DOCX, PDF, or ZIP without re-encoding it yourself. sourcePath is binary-safe, workspace-contained, and works with sandbox-only workspaces. Use exactly one of content or sourcePath. Assets are outside every repo and never committed. Overwrites silently. Works in read-only Ask sessions too.",
       {
         path: z
           .string()
           .describe(
-            "Relative asset path, e.g. 'report.html' or 'viz/index.html'.",
+            "Relative destination in Assets, e.g. 'report.html' or 'exports/report.docx'.",
           ),
         content: z
           .string()
+          .optional()
           .describe(
-            "The file content (UTF-8 text, or base64 with encoding: 'base64').",
+            "Authored file content (UTF-8 text, or base64 with encoding: 'base64'). Use either content or sourcePath.",
+          ),
+        sourcePath: z
+          .string()
+          .optional()
+          .describe(
+            "Relative path to an existing file in this session's workspace. Use for generated binary files instead of base64 or shell-copying into Assets.",
           ),
         description: z
           .string()
@@ -63,35 +89,54 @@ export function createAssetsMcpServer(ctx: { sessionId: string }) {
           .enum(["utf8", "base64"])
           .optional()
           .describe(
-            "How `content` is encoded. Default utf8; use base64 for binary files (images, pdf).",
+            "How content is encoded. Default utf8; use base64 for binary content. Only valid with content.",
           ),
       },
       async (args: {
         path: string;
-        content: string;
+        content?: string;
+        sourcePath?: string;
         description?: string;
         encoding?: "utf8" | "base64";
       }) => {
         try {
-          const sessionId = assetSessionIds()[0] || ctx.sessionId;
-          const data = Buffer.from(
-            args.content,
-            args.encoding === "base64" ? "base64" : "utf8",
-          );
-          const f = await writeAsset(
-            sessionId,
-            args.path,
-            data,
-            args.description,
-          );
+          const hasContent = args.content !== undefined;
+          const hasSourcePath = args.sourcePath !== undefined;
+          if (hasContent === hasSourcePath)
+            throw new Error("provide exactly one of content or sourcePath");
+          if (hasSourcePath && args.encoding !== undefined)
+            throw new Error("encoding is only valid with content");
+
+          let f: { path: string; size: number };
+          const sourcePath = args.sourcePath;
+          if (sourcePath !== undefined) {
+            const session =
+              deps.findSession?.(ctx.sessionId) || findSession(ctx.sessionId);
+            if (!session) throw new Error("this session no longer exists");
+            f = await (deps.publishSessionFile || publishSessionFile)({
+              session,
+              sourcePath,
+              destination: args.path,
+              description: args.description,
+            });
+          } else {
+            const sessionId = assetSessionIds()[0] || ctx.sessionId;
+            f = await (deps.writeAsset || writeAsset)(
+              sessionId,
+              args.path,
+              Buffer.from(
+                args.content ?? "",
+                args.encoding === "base64" ? "base64" : "utf8",
+              ),
+              args.description,
+            );
+          }
           return text(
             `Saved ${f.path} (${fmtSize(f.size)}). It's visible in this session's Assets tab now.\n` +
               `Reference \`${f.path}\` in chat to give the reader a direct open link.`,
           );
-        } catch (e: any) {
-          return text(
-            `Couldn't write ${args.path}: ${e?.message || String(e)}`,
-          );
+        } catch (error) {
+          return text(`Couldn't write ${args.path}: ${errorMessage(error)}`);
         }
       },
     ),
@@ -133,8 +178,8 @@ export function createAssetsMcpServer(ctx: { sessionId: string }) {
               ? `${found.path} (${fmtSize(found.size)}, first ${fmtSize(READ_CAP)} shown):\n${body}`
               : `${found.path} (${fmtSize(found.size)}):\n${body}`,
           );
-        } catch (e: any) {
-          return text(`Couldn't read ${args.path}: ${e?.message || String(e)}`);
+        } catch (error) {
+          return text(`Couldn't read ${args.path}: ${errorMessage(error)}`);
         }
       },
     ),
@@ -148,10 +193,8 @@ export function createAssetsMcpServer(ctx: { sessionId: string }) {
         try {
           await deleteAssetAcross(assetSessionIds(), args.path);
           return text(`Deleted ${args.path}.`);
-        } catch (e: any) {
-          return text(
-            `Couldn't delete ${args.path}: ${e?.message || String(e)}`,
-          );
+        } catch (error) {
+          return text(`Couldn't delete ${args.path}: ${errorMessage(error)}`);
         }
       },
     ),

@@ -393,13 +393,26 @@ walks the placement catalog to find documents.
 
 `<sessions dir>/<id>.json` is a derived export written after the commit for
 out-of-process readers (agents, scripts, run hosts) and for this process's
-synchronous detail reads until every historical session has been seeded into
-the catalog. The gateway confirms each export with `metadata exported`; a
-crash in between leaves `exported_rev < rev`, and boot repairs exactly those
-sessions (`reconcileSessionMetadataExports`) instead of scanning the
-directory. A session written before the actor owned metadata seeds from its
-file on its first write. Direct session JSON writes outside the facade are
-rejected by a structural test.
+synchronous detail reads. The gateway confirms each export with `metadata
+exported`; a crash in between leaves `exported_rev < rev`, and boot repairs
+exactly those sessions (`reconcileSessionMetadataExports`) instead of
+scanning the directory. A session written before the actor owned metadata
+seeds from its file on its first write. Direct session JSON writes outside
+the facade are rejected by a structural test.
+
+Historical files are projected into the catalog once by an operator:
+`bun scripts/seed-session-metadata-catalog.ts` runs online against the live
+kernel service, inserts a row for every file that has none (`metadata
+seed_catalog`, central only, already exported, no actor database opened),
+verifies coverage, and marks the catalog complete. From then on a cold list
+rebuild pages `catalog_page` from the central database instead of reading
+every session file (`catalogNativeSessionRows` in `session-cache.ts`); the
+directory scan remains the fallback while the catalog is incomplete or
+unreadable. Boot primes the list index this way right after the actor
+starts (`primeSessionListIndex`), before any boot step or route reads the
+list, and only then builds the Slack thread index from that snapshot
+(`ensureSlackLinkIndex`). A seeded session's first real write commits the
+next revision from the file and supersedes the seeded row.
 
 The transcript database keeps its own `changeSeq`, which is the client replay
 cursor. SessionKernel also records lifecycle and metadata changes in its own

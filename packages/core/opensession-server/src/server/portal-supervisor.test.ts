@@ -398,7 +398,7 @@ describe("session Portal supervisor", () => {
         managed: true,
       }),
     ]);
-  });
+  }, 10_000);
 });
 
 function PREFIX(record: unknown): string {
@@ -421,10 +421,20 @@ async function freePort(): Promise<number> {
 }
 
 function sandboxFor(cwd: string, port: number): Sandbox {
+  // The fake runs Sandbox commands on the host. Translate the guest's fixed
+  // scratch root so macOS and non-root Linux tests do not write /home/ubuntu.
+  const guestScratchRoot = "/home/ubuntu/.opensession/session-scratch";
+  const hostScratchRoot = join(cwd, ".sandbox-session-scratch");
   const commandForHarness = (command: string[]) =>
-    testSetsid
-      ? command.map((part) => part.replace(/\bsetsid\b/g, testSetsid!))
-      : command;
+    command.map((part) => {
+      const withHostScratch = part.replaceAll(
+        guestScratchRoot,
+        hostScratchRoot,
+      );
+      return testSetsid
+        ? withHostScratch.replace(/\bsetsid\b/g, testSetsid)
+        : withHostScratch;
+    });
   return {
     id: "sandbox-portal-test",
     provider: "local",

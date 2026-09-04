@@ -147,12 +147,13 @@ describe("renameUserState", () => {
     expect(getPins("Kentaro")).toEqual(["os-existing"]);
   });
 
-  // canonicalName hashes the LOWERCASED name but keeps the original case in
-  // the filename stem, so a capitalization fix is still a different file and
-  // still has to carry. This is the case that would otherwise look harmless.
+  // canonicalName hashes the lowercased name but keeps the original case in
+  // the filename stem. Linux copies that differently-cased path; a default
+  // macOS filesystem already resolves both spellings to the same file. Either
+  // way, the corrected name must retain the state.
   test("carries a capitalization fix", () => {
     setPins("kent", ["os-1"]);
-    expect(renameUserState("kent", "Kent")).toContain("pins");
+    renameUserState("kent", "Kent");
     expect(getPins("Kent")).toEqual(["os-1"]);
   });
 

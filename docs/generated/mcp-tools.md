@@ -838,9 +838,9 @@ Per-session scratch assets, previewed in the Assets tab.
 
 ### `write_asset`
 
-`mcp__opensession-assets__write_asset` · input: `path` (string, required), `content` (string, required), `description` (string), `encoding` ("utf8" | "base64")
+`mcp__opensession-assets__write_asset` · input: `path` (string, required), `content` (string), `sourcePath` (string), `description` (string), `encoding` ("utf8" | "base64")
 
-Save a file into this session's asset storage for preview in the Assets tab or a direct link in chat: interactive HTML/JS visualizations, generated reports, diagrams, and sample data. Add a short description so the viewer explains what the asset shows. Assets are outside every repo and never committed. HTML previews live in the UI and relative references resolve, so multi-file pages work. Overwrites silently. Works in read-only Ask sessions too.
+Save a file into this session's asset storage for preview in the Assets tab or a direct link in chat. Provide content for authored text/base64 data, or sourcePath to publish an existing workspace file such as a DOCX, PDF, or ZIP without re-encoding it yourself. sourcePath is binary-safe, workspace-contained, and works with sandbox-only workspaces. Use exactly one of content or sourcePath. Assets are outside every repo and never committed. Overwrites silently. Works in read-only Ask sessions too.
 
 ### `list_assets`
 

@@ -8,7 +8,6 @@ describe("Plain archive sweep", () => {
     const released: string[] = [];
     const failures: Array<[string, unknown]> = [];
     const sessions = ["quarantined", "healthy"].map((id) => ({
-      path: `/unused/${id}.json`,
       data: { id, plainThreadId: "thread-1" } as NativeSessionFile,
     }));
 

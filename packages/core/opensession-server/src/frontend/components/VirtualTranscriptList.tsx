@@ -123,8 +123,8 @@ interface ReaderAnchor {
   top: number;
 }
 
-/** How long after the last touch a momentum scroll may still be in flight.
- * Writing scrollTop inside that window cancels the fling on touch browsers. */
+/** How long the scroller must be quiet after touch activity before an anchor
+ * correction is safe. Writing scrollTop sooner cancels the native fling. */
 const TOUCH_SETTLE_MS = 150;
 
 /** Imperative adapter for TanStack Virtual core. Class components are outside
@@ -163,7 +163,7 @@ class TranscriptVirtualizer extends React.Component<
   private writeAwaitingRender = false;
   private readerInputContainer: HTMLDivElement | null = null;
   private touching = false;
-  private touchEndedAt = Number.NEGATIVE_INFINITY;
+  private lastTouchActivityAt = Number.NEGATIVE_INFINITY;
   private deferredDelta = 0;
   private deferredFlushTimer: number | undefined;
   private topApproachContainer: HTMLDivElement | null = null;
@@ -471,10 +471,11 @@ class TranscriptVirtualizer extends React.Component<
   }
 
   private correctReader(container: HTMLDivElement, delta: number) {
+    const now = performance.now();
     if (
       shouldDeferReaderCorrection({
         touching: this.touching,
-        sinceTouchEnd: performance.now() - this.touchEndedAt,
+        sinceTouchActivity: now - this.lastTouchActivityAt,
       })
     ) {
       this.deferredDelta += delta;
@@ -492,10 +493,11 @@ class TranscriptVirtualizer extends React.Component<
       const container = this.readerInputContainer;
       const delta = this.deferredDelta;
       if (!container || delta === 0) return;
+      const now = performance.now();
       if (
         shouldDeferReaderCorrection({
           touching: this.touching,
-          sinceTouchEnd: performance.now() - this.touchEndedAt,
+          sinceTouchActivity: now - this.lastTouchActivityAt,
         })
       ) {
         this.scheduleDeferredFlush();
@@ -508,17 +510,22 @@ class TranscriptVirtualizer extends React.Component<
 
   private onReaderTouchStart = () => {
     this.touching = true;
+    this.lastTouchActivityAt = performance.now();
   };
 
   private onReaderTouchEnd = () => {
     this.touching = false;
-    this.touchEndedAt = performance.now();
+    this.lastTouchActivityAt = performance.now();
     if (this.deferredDelta !== 0) this.scheduleDeferredFlush();
   };
 
   private onReaderScroll = () => {
-    // Momentum keeps scrolling after the finger lifts. Restart the settle
-    // window on every scroll event so the flush lands once movement stops.
+    const now = performance.now();
+    // Keep following the scroll-event chain started by the touch. A network
+    // response can change row geometry long after touchend but while momentum
+    // is still producing scroll events; that correction must wait as well.
+    if (this.touching || now - this.lastTouchActivityAt < TOUCH_SETTLE_MS)
+      this.lastTouchActivityAt = now;
     if (this.deferredDelta !== 0) this.scheduleDeferredFlush();
   };
 
@@ -535,6 +542,7 @@ class TranscriptVirtualizer extends React.Component<
     this.deferredFlushTimer = undefined;
     this.deferredDelta = 0;
     this.touching = false;
+    this.lastTouchActivityAt = Number.NEGATIVE_INFINITY;
     this.readerInputContainer = null;
   }
 
@@ -996,15 +1004,15 @@ export function shouldCaptureReaderAnchor({
 
 export function shouldDeferReaderCorrection({
   touching,
-  sinceTouchEnd,
+  sinceTouchActivity,
 }: {
   touching: boolean;
-  sinceTouchEnd: number;
+  sinceTouchActivity: number;
 }): boolean {
   // Touch browsers cancel an in-flight fling on any programmatic scroll
   // write. A wheel animation survives one (measured in Chrome), so only touch
-  // input defers. The residual is applied once movement settles.
-  return touching || sinceTouchEnd < TOUCH_SETTLE_MS;
+  // input defers. Scroll events extend touch activity until the fling settles.
+  return touching || sinceTouchActivity < TOUCH_SETTLE_MS;
 }
 
 export function transcriptViewportNeedsHistory(

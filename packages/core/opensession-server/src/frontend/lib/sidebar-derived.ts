@@ -10,6 +10,7 @@ import {
 import { AGENT_NAME } from "./brand";
 import type { AutomationOverviewByName } from "./automation-overview";
 import type { FilterState } from "./sidebar-filter";
+import { fuzzyMatch } from "../../shared/fuzzy-match";
 import { includesEmptyRepoBands, sessionRepo } from "./sidebar-filter";
 import { mergeRepoOrder, normalizeRepoOrder } from "./repo-order";
 import { ownerKeyOf, sessionOwners } from "./session-owner";
@@ -312,15 +313,24 @@ export function filterSidebarSessions({
     );
   }
 
-  if (!search) return visible;
-  const query = search.toLowerCase();
+  if (!search.trim()) return visible;
+  // A workspace shows through its sessions, so its name has to count for
+  // them, and a typo or a near-miss still finds it.
+  const workspaceNames = new Map(
+    workspaces.map((workspace) => [workspace.id, workspace.name]),
+  );
   return visible.filter(
     (session) =>
       belongsToSelection(session) ||
-      session.title.toLowerCase().includes(query) ||
-      (session.branch || "").toLowerCase().includes(query) ||
-      (session.startedBy || "").toLowerCase().includes(query) ||
-      (session.automation || "").toLowerCase().includes(query),
+      fuzzyMatch(search, [
+        session.title,
+        session.branch,
+        session.startedBy,
+        session.automation,
+        session.workspaceId
+          ? workspaceNames.get(session.workspaceId)
+          : undefined,
+      ]) > 0,
   );
 }
 
