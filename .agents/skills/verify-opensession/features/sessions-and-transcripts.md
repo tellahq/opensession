@@ -24,10 +24,10 @@ Preconditions:
 - Doctor passes for the isolated demo run.
 - Demo session `bks-demo-pr` exists with title `Fix flaky upload retry test`.
 
-- **Open a direct session link.** Run `verify-opensession browser "$RUN_ID" open --route /session/bks-demo-pr --width 1440 --height 900`. Wait with `verify-opensession browser "$RUN_ID" wait --role heading --name "Fix flaky upload retry test"`. The session title and transcript appear.
+- **Open a direct session link.** Run `verify-opensession browser "$RUN_ID" open --route /session/bks-demo-pr --width 1440 --height 900`. Wait with `verify-opensession browser "$RUN_ID" wait --role button --name "More actions"`, then take a snapshot and require the static text `Fix flaky upload retry test`. The session title and transcript appear.
 - **Inspect transcript semantics.** Run `verify-opensession browser "$RUN_ID" snapshot`. The tree contains the upload retry prompt and transcript controls. Capture a screenshot after expanding any collapsed tool call through its visible button.
 - **Inspect a failure.** Open `/session/bks-demo-failed`. The page identifies `Investigate memory spike in export worker` and shows its run failure instead of presenting the transcript as complete.
-- **Open the global composer.** Open `/new`, then wait for `group` named `New session`. The textbox placeholder is `What do you want to work on?`. Choose `Ask mode` and verify the placeholder changes to `What do you want to find out?`.
+- **Open the global composer.** Open `/new`, then wait for `dialog` named `New session`. The `combobox` is named `What do you want to work on?`. Choose `Ask mode` and wait for the combobox name to change to `What do you want to find out?`.
 - **Check phone layout.** Reopen `/session/bks-demo-pr` at 390x844. Capture the transcript, then focus the composer and verify its controls remain reachable without horizontal scrolling.
 - **Proof.** Save before and after accessibility snapshots and screenshots. If the check creates a session, confirm its new ID through `/api/sessions` and reopen it from the sidebar before reporting persistence.
 
