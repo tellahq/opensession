@@ -53,6 +53,7 @@ import type {
   SandboxProvider,
   SandboxSessionSpec,
   SandboxStatus,
+  SandboxDesktop,
 } from "../provider";
 import {
   assertDialbackReachable,
@@ -97,6 +98,16 @@ const TEMPLATE_WAIT_MS = 15 * 60_000;
 /** States where the VM is up and can take commands. `running` is their
  *  "agent busy" state — still a live VM. */
 const LIVE_STATES = new Set(["ready", "idle", "running"]);
+
+/** `POST /boxes/{id}/desktop` answers with a tokenized 60fps stream page.
+ * The token rides in the URL fragment, so the URL itself is the secret. */
+export function boxDesktopUrl(response: { desktopUrl?: unknown }): string {
+  const url =
+    typeof response.desktopUrl === "string" ? response.desktopUrl : "";
+  if (!/^https:\/\//.test(url))
+    throw new Error("Box did not return a desktop URL");
+  return url;
+}
 
 interface BoxRecord {
   id: string;
@@ -1264,6 +1275,21 @@ export class BoxProvider implements SandboxProvider {
       console.warn(`[sandbox:box] get(${sandboxId}) failed:`, e);
       return null;
     }
+  }
+
+  async desktop(sandboxId: string): Promise<SandboxDesktop> {
+    const cfg = boxClientConfig();
+    const box = await getBox(cfg, sandboxId);
+    if (!box || !LIVE_STATES.has(String(box.state || "")))
+      throw new Error("Wake the sandbox first");
+    const response = await boxApi<{ desktopUrl?: unknown }>(
+      cfg,
+      "POST",
+      `/boxes/${sandboxId}/desktop`,
+      undefined,
+      60_000,
+    );
+    return { url: boxDesktopUrl(response) };
   }
 
   async pause(sandboxId: string): Promise<void> {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  boxDesktopUrl,
   BOX_RUNTIME_HOME_COMMAND,
   BOX_RUNTIME_HOME_LAZY_MARKER,
   boxCommandPlaneUnavailable,
@@ -151,5 +152,21 @@ describe("Box command readiness", () => {
     expect(boxCommandPlaneUnavailable({ status: 409, code: "other" })).toBe(
       false,
     );
+  });
+});
+
+describe("Box desktop", () => {
+  test("returns the tokenized stream page Box mints", () => {
+    expect(
+      boxDesktopUrl({
+        desktopUrl:
+          "https://name-desktop.on.ascii.dev/stream.html?fps=60#token=abc",
+      }),
+    ).toBe("https://name-desktop.on.ascii.dev/stream.html?fps=60#token=abc");
+  });
+
+  test("refuses a missing or non-https desktop URL", () => {
+    expect(() => boxDesktopUrl({})).toThrow(/did not return a desktop URL/);
+    expect(() => boxDesktopUrl({ desktopUrl: "http://x" })).toThrow();
   });
 });

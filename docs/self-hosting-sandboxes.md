@@ -70,6 +70,23 @@ Needs attention, with manual sleep, wake, and recreate, plus the `setup` and
 
 Terminal tabs land inside the Sandbox (Daytona's native PTY, Box's SSH).
 
+## Desktop
+
+Both providers can show a person the Sandbox's screen. The Sandbox popover in a
+session offers **Open desktop** while the Sandbox is awake; it opens a new tab
+with a live, controllable desktop. The agent keeps working underneath it, so
+this is the way to watch a browser test, log into something the agent cannot,
+or take over for a moment.
+
+- **Box** mints a 60fps stream page (`POST /boxes/{id}/desktop`).
+- **Daytona** starts its computer-use stack (Xvfb, xfce4, x11vnc, noVNC) on
+  first use and hands out a signed preview URL for noVNC; it stops working
+  after an hour, so click again for a fresh one.
+
+The URL is a bearer secret minted for one viewer: the API returns it once and
+the audit log records the request, not the URL. Asleep Sandboxes answer
+"Wake the sandbox first".
+
 ## Project snapshots
 
 The slow part of a fresh Sandbox is `.agents/setup`. Opt a project into

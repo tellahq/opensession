@@ -3,6 +3,7 @@ import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 import {
   fetchSessionSandbox,
+  openSandboxDesktop,
   sandboxAction,
   type SessionSandboxStatus,
 } from "../lib/api/sandboxes";
@@ -161,6 +162,30 @@ export function SandboxBadge({
       });
   }
 
+  async function openDesktop() {
+    // Open the tab inside the click so popup blockers allow it, then point it
+    // at the minted URL once the provider answers.
+    const tab = window.open("", "_blank");
+    setWorking("desktop");
+    setError(null);
+    await (async () => {
+      const desktop = await openSandboxDesktop(sessionId);
+      if (tab) {
+        tab.opener = null;
+        tab.location.href = desktop.url;
+      } else {
+        window.location.assign(desktop.url);
+      }
+    })()
+      .catch(async (cause) => {
+        tab?.close();
+        setError(errorMessage(cause, "Could not open the desktop"));
+      })
+      .finally(async () => {
+        setWorking(null);
+      });
+  }
+
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
@@ -196,6 +221,15 @@ export function SandboxBadge({
             </div>
           ) : null}
         </div>
+        {lifecycle === "awake" && status?.canDesktop ? (
+          <button
+            className={actionClass}
+            disabled={Boolean(working)}
+            onClick={() => void openDesktop()}
+          >
+            {working === "desktop" ? "Opening desktop…" : "Open desktop"}
+          </button>
+        ) : null}
         {lifecycle === "awake" && status?.canPause ? (
           <button
             className={actionClass}

@@ -52,6 +52,7 @@ import type {
   SandboxProvider,
   SandboxSessionSpec,
   SandboxStatus,
+  SandboxDesktop,
 } from "../provider";
 import {
   assertDialbackReachable,
@@ -476,6 +477,18 @@ export async function daytonaPtySession(
   };
 }
 
+/** Daytona's computer-use stack serves noVNC (websockify) on this port. */
+const DAYTONA_NOVNC_PORT = 6080;
+const DAYTONA_DESKTOP_URL_TTL_SECONDS = 60 * 60;
+
+/** The signed preview host is the secret; noVNC's page and its websocket
+ * both resolve relative to it, verified live 2026-09-04 (RFB banner over wss). */
+export function daytonaDesktopUrl(signedPreviewUrl: string): string {
+  const url = new URL("/vnc.html", signedPreviewUrl);
+  url.search = "?autoconnect=1&resize=scale";
+  return url.toString();
+}
+
 function stateOf(sbx: DaytonaSandbox): SandboxStatus {
   const s = String((sbx as any).state || "");
   if (s === "started") return "running";
@@ -869,6 +882,24 @@ export class DaytonaProvider implements SandboxProvider {
   }
 
   /** Release compute while retaining the session's exact volume workspace. */
+  async desktop(sandboxId: string): Promise<SandboxDesktop> {
+    const client = await daytonaClient();
+    const sbx = await client.get(sandboxId);
+    if (!sbx || stateOf(sbx) !== "running")
+      throw new Error("Wake the sandbox first");
+    // Xvfb + xfce4 + x11vnc + noVNC. start() is not idempotent, so ask first.
+    const status = await sbx.computerUse.getStatus().catch(() => null);
+    if (status?.status !== "active") await sbx.computerUse.start();
+    const signed = await sbx.getSignedPreviewUrl(
+      DAYTONA_NOVNC_PORT,
+      DAYTONA_DESKTOP_URL_TTL_SECONDS,
+    );
+    return {
+      url: daytonaDesktopUrl(signed.url),
+      expiresAt: Date.now() + DAYTONA_DESKTOP_URL_TTL_SECONDS * 1000,
+    };
+  }
+
   async pause(sandboxId: string): Promise<void> {
     const client = await daytonaClient();
     const sbx = await client.get(sandboxId);

@@ -197,6 +197,13 @@ export interface Sandbox {
   status(): Promise<SandboxStatus>;
 }
 
+export interface SandboxDesktop {
+  /** Opens straight into the live desktop; treat it like a password. */
+  url: string;
+  /** Epoch ms after which the URL stops working, when the provider says. */
+  expiresAt?: number;
+}
+
 export interface SandboxProvider {
   id: SandboxProviderId;
   /** Create-or-reuse the sandbox for a session. Idempotent. */
@@ -206,6 +213,10 @@ export interface SandboxProvider {
   /** Release compute while retaining the durable workspace. Optional only for
    *  providers whose own idle policy cannot expose this directly. */
   pause?(sandboxId: string): Promise<void>;
+  /** A desktop a person can watch and control from the browser. The URL is a
+   *  bearer secret minted for one viewer; providers that cannot expose a
+   *  desktop leave this undefined. Rejects while the sandbox is asleep. */
+  desktop?(sandboxId: string): Promise<SandboxDesktop>;
   /** Wake a paused sandbox and return its live handle. */
   resume?(sandboxId: string): Promise<Sandbox | null>;
   /** Persist a session-owned filesystem checkpoint after a clean turn.

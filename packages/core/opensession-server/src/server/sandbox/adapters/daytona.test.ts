@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   assertAutomationEgressRestricted,
+  daytonaDesktopUrl,
   daytonaCreateResources,
   daytonaCreateSource,
   daytonaSnapshotIsRecent,
@@ -150,5 +151,15 @@ describe("Daytona egress policy probe", () => {
         { intervalMs: 1_000, settleMs: 2_000, ...clock() },
       ),
     ).rejects.toThrow(/blocks the dial-back URL/);
+  });
+});
+
+describe("Daytona desktop", () => {
+  test("opens noVNC on the signed preview host with autoconnect", () => {
+    expect(
+      daytonaDesktopUrl("https://6080-4kvyxv1qzdawyntz.daytonaproxy01.net"),
+    ).toBe(
+      "https://6080-4kvyxv1qzdawyntz.daytonaproxy01.net/vnc.html?autoconnect=1&resize=scale",
+    );
   });
 });

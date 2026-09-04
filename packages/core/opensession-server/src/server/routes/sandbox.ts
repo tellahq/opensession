@@ -112,6 +112,7 @@ async function sandboxView(
     cwd: sandbox?.cwd || session.worktreeDir || null,
     canPause: Boolean(provider.pause),
     canResume: Boolean(provider.resume),
+    canDesktop: Boolean(provider.desktop),
     logs,
   };
 }
@@ -120,7 +121,7 @@ export async function handleSandboxRoutes(
   ctx: RouteContext,
 ): Promise<Response | undefined> {
   const match = ctx.path.match(
-    /^\/api\/sessions\/([^/]+)\/sandbox(?:\/(pause|resume|recreate))?$/,
+    /^\/api\/sessions\/([^/]+)\/sandbox(?:\/(pause|resume|recreate|desktop))?$/,
   );
   if (!match) return undefined;
   const session = await findSessionAsync(decodeURIComponent(match[1]!));
@@ -151,6 +152,33 @@ export async function handleSandboxRoutes(
       },
       { status: 410 },
     );
+  if (action === "desktop") {
+    // Watching the desktop is the point while the agent is working, so this
+    // is not behind the lifecycle lock. The URL is a bearer secret; log the
+    // request, never the URL.
+    const provider = getSandboxProvider(recorded.provider);
+    if (!provider.desktop)
+      return Response.json(
+        { error: `${recorded.provider} does not expose a desktop` },
+        { status: 400 },
+      );
+    try {
+      const desktop = await provider.desktop(recorded.sandboxId);
+      audit({
+        msg: "sandbox_desktop",
+        session_id: session.id,
+        provider: recorded.provider,
+        sandbox_id: recorded.sandboxId,
+      });
+      return Response.json(desktop);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return Response.json(
+        { error: message },
+        { status: /wake the sandbox/i.test(message) ? 409 : 502 },
+      );
+    }
+  }
   if (hostRunBusy(session.id))
     return Response.json(
       { error: "Sandbox lifecycle is locked while the agent is running" },
