@@ -29,7 +29,7 @@ Preconditions:
 - **Clear and filter.** Refill the searchbox with an empty value. The owner picker is named `Owner, My archived`. Repository and reason pickers appear only when the archived records contain more than one repository or an auto-archive reason. Use the exact names from a current snapshot and capture any applicable narrowed state.
 - **Open a result.** Choose a visible archived session title. Its transcript opens and keeps the archived state visible.
 - **Restore.** From `/archived`, choose `Restore session` on one disposable demo result. Confirm it disappears from the matching archived results and reappears in its active workspace or `/api/sessions` response.
-- **Check phone layout.** Repeat search and result opening at 390x844. Search and filters must remain reachable without desktop hover.
+- **Check phone layout.** Repeat search and result opening at 390x844. Search and filters must remain reachable without desktop hover. Restore is a left-swipe row action on phone, not the desktop button.
 - **Proof.** Capture unfiltered, filtered, and resulting states. For restore behavior, save a read-only session API response after the UI action.
 
 ## Gotchas
