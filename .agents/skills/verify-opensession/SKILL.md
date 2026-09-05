@@ -120,4 +120,4 @@ Both shipped helpers are executable:
 - `bin/verify-opensession` owns launch, doctor, API reads, browser delegation, and cleanup. Invoke it exactly as shown above.
 - `bin/browser.mjs` is the CDP implementation. Do not call it directly because it needs run metadata. Use `verify-opensession browser`.
 
-The browser subcommands are `open`, `click`, `fill`, `press`, `wait`, `snapshot`, `screenshot`, `url`, and `eval`. Reserve `eval` for read-only diagnosis. It is not acceptable proof of a user path or mutation.
+The browser subcommands are `open`, `click`, `fill`, `press`, `wait`, `snapshot`, `screenshot`, `url`, and `eval`. `press` takes a bare key (`b`, `Enter`) or a chord with the modifiers first (`Control+i`, `Meta+Shift+g`). Reserve `eval` for read-only diagnosis. It is not acceptable proof of a user path or mutation.
