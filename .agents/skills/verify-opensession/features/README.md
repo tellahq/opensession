@@ -17,7 +17,8 @@ This directory is the maintained source for verifying Open Session's user-facing
 - Every browser command takes `"$RUN_ID"` before its subcommand.
 - Prefer accessibility roles and exact accessible names. Take a current `snapshot` when a lookup fails.
 - Desktop and phone are one web bundle. Check both widths for visible changes.
-- The demo seed is synthetic. Its stable sessions include `bks-demo-pr`, `bks-demo-failed`, and `bks-demo-automation-run`.
+- The demo seed is synthetic. Its stable sessions include `bks-demo-pr`, `bks-demo-failed`, `bks-demo-cancelled`, and `bks-demo-automation-run`.
+- The seed has no archived records. Archive a disposable seeded session through its visible session menu before checking archive results.
 - External integrations, schedulers, and engine execution are disabled. Report those paths as unproved rather than steering production.
 
 ## Proof and skip reporting
