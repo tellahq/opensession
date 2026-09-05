@@ -21,7 +21,7 @@ export RUN_ID="verify-$(date +%Y%m%d-%H%M%S)-$$"
 
 The command prints `APP_URL`, `STATE_DIR`, and `EVIDENCE_DIR`. It starts the real Bun gateway and SessionKernel with a shared scratch credential, `OPENSESSION_DEV=1`, `OPENSESSION_DEMO=1`, and a disposable `OPENSESSION_STATE_DIR` under `/tmp`. The demo seed supplies sessions, transcripts, a repository, pull request state, automations, and a paused goal. External agents, schedulers, webhooks, executor work, and live credentials stay off.
 
-The instance is ready when launch returns successfully. Its log remains at `/tmp/opensession-verify-$RUN_ID/server.log` until cleanup.
+The instance is ready when launch returns successfully. Its log remains at `/tmp/opensession-verify-$RUN_ID/server.log` until cleanup. The demo does not seed archived records. Archive checks need a session archived through the UI first.
 
 Teardown what this run started:
 
@@ -67,7 +67,7 @@ Common actions:
 ./.agents/skills/verify-opensession/bin/verify-opensession browser "$RUN_ID" url
 ```
 
-`wait`, `click`, and `fill` require one exact accessible match. Add `--index 1` only when the UI intentionally exposes duplicate names. A lookup failure prints nearby names for that role. Use `snapshot` to inspect the current tree instead of guessing selectors:
+`wait`, `click`, and `fill` require one exact accessible match. `click` scrolls an off-screen match into view before pressing it. Add `--index 1` only when the UI intentionally exposes duplicate names. A lookup failure prints nearby names for that role. Use `snapshot` to inspect the current tree instead of guessing selectors:
 
 ```bash
 ./.agents/skills/verify-opensession/bin/verify-opensession browser "$RUN_ID" snapshot

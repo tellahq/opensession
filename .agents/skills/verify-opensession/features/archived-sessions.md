@@ -22,11 +22,11 @@ Archived sessions are removed from active workspace lanes but remain searchable,
 Preconditions:
 
 - Doctor passes for the isolated demo run.
-- The demo seed has finished and cancelled sessions available to the archive UI.
+- The demo seed has no archived records. Open `/session/bks-demo-cancelled`, choose `More actions`, then choose menu item `Archive session Ctrl+Shift+A`. Require the action to finish before opening the archive. If it remains `Archiving… Ctrl+Shift+A`, run doctor, capture the stuck state, and report the archive feature as unreachable.
 
-- **Open the index.** Run `verify-opensession browser "$RUN_ID" open --route /archived --width 1440 --height 900`. Wait for textbox `Search archived sessions` and capture the unfiltered state.
-- **Search.** Run `verify-opensession browser "$RUN_ID" fill --role textbox --name "Search archived sessions" --value "retry"`. The visible results narrow to archived work matching `retry`, or an explicit no-results state appears if the seed's archive rules changed.
-- **Clear and filter.** Refill the search textbox with an empty value, choose the `Filters` button using the exact accessible name from the current snapshot, and select one visible repository or person. Capture the filter state and narrowed result list.
+- **Open the index.** Run `verify-opensession browser "$RUN_ID" open --route /archived --width 1440 --height 900`. Wait for searchbox `Search archived sessions` and capture the unfiltered state.
+- **Search.** Run `verify-opensession browser "$RUN_ID" fill --role searchbox --name "Search archived sessions" --value "date helpers"`. The visible results narrow to the session archived during setup.
+- **Clear and filter.** Refill the searchbox with an empty value. The owner picker is named `Owner, My archived`. Repository and reason pickers appear only when the archived records contain more than one repository or an auto-archive reason. Use the exact names from a current snapshot and capture any applicable narrowed state.
 - **Open a result.** Choose a visible archived session title. Its transcript opens and keeps the archived state visible.
 - **Restore.** From `/archived`, choose `Restore session` on one disposable demo result. Confirm it disappears from the matching archived results and reappears in its active workspace or `/api/sessions` response.
 - **Check phone layout.** Repeat search and result opening at 390x844. Search and filters must remain reachable without desktop hover.
@@ -36,6 +36,6 @@ Preconditions:
 
 - Searching is read-only. It does not prove restore behavior.
 - A session may be hidden by archive reason or current-person defaults. Record active filters in proof.
-- The filter button's accessible name includes the active-filter count. Take a fresh snapshot after each change.
-- Restoring mutates disposable demo state. Run it last if later checks depend on the seeded archive list.
+- Filter controls are separate pickers whose names include their current values. Take a fresh snapshot after each change.
+- Restoring mutates disposable demo state. Run it last if later checks depend on the archived setup record.
 - Opening a direct session URL does not prove the archived index entry point.
