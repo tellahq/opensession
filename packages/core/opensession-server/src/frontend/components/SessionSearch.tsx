@@ -560,7 +560,9 @@ export function SessionSearch({
             className="flex-1 border-none bg-transparent font-sans text-input-phone leading-[1.4] text-fg outline-none placeholder:text-faint"
             value={query}
             onChange={(e) => {
-              setQuery(e.target.value);
+              const nextQuery = e.target.value;
+              setQuery(nextQuery);
+              setSearching(nextQuery.trim().length >= 2);
               setActiveKey(null);
             }}
             placeholder="Search actions, pull requests & conversations…"
