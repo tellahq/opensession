@@ -22,12 +22,12 @@ Sessions are conversations with an agent. Users open them from a workspace or di
 Preconditions:
 
 - Doctor passes for the isolated demo run.
-- Demo session `bks-demo-pr` exists with title `Fix flaky upload retry test`.
+- Demo session `bks-demo-pr` exists with title `Fix flaky upload retry test` in workspace `demo/fix-flaky-upload`.
 
-- **Open a direct session link.** Run `verify-opensession browser "$RUN_ID" open --route /session/bks-demo-pr --width 1440 --height 900`. Wait with `verify-opensession browser "$RUN_ID" wait --role heading --name "Fix flaky upload retry test"`. The session title and transcript appear.
+- **Open a direct session link.** Run `verify-opensession browser "$RUN_ID" open --route /session/bks-demo-pr --width 1440 --height 900`. Wait with `verify-opensession browser "$RUN_ID" wait --role RootWebArea --name "demo/fix-flaky-upload"`. The workspace name and transcript appear. The session title remains available in the archived index.
 - **Inspect transcript semantics.** Run `verify-opensession browser "$RUN_ID" snapshot`. The tree contains the upload retry prompt and transcript controls. Capture a screenshot after expanding any collapsed tool call through its visible button.
 - **Inspect a failure.** Open `/session/bks-demo-failed`. The page identifies `Investigate memory spike in export worker` and shows its run failure instead of presenting the transcript as complete.
-- **Open the global composer.** Open `/new`, then wait for `group` named `New session`. The textbox placeholder is `What do you want to work on?`. Choose `Ask mode` and verify the placeholder changes to `What do you want to find out?`.
+- **Open the global composer.** Open `/new`, then wait for `dialog` named `New session`. The composer is a `combobox` named `What do you want to work on?`. Choose `Ask mode` and verify its name changes to `What do you want to find out?`.
 - **Check phone layout.** Reopen `/session/bks-demo-pr` at 390x844. Capture the transcript, then focus the composer and verify its controls remain reachable without horizontal scrolling.
 - **Proof.** Save before and after accessibility snapshots and screenshots. If the check creates a session, confirm its new ID through `/api/sessions` and reopen it from the sidebar before reporting persistence.
 

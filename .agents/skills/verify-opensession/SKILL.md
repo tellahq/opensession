@@ -19,7 +19,7 @@ export RUN_ID="verify-$(date +%Y%m%d-%H%M%S)-$$"
 ./.agents/skills/verify-opensession/bin/verify-opensession launch "$RUN_ID"
 ```
 
-The command prints `APP_URL`, `STATE_DIR`, and `EVIDENCE_DIR`. It starts the real Bun gateway and SessionKernel with a shared scratch credential, `OPENSESSION_DEV=1`, `OPENSESSION_DEMO=1`, and a disposable `OPENSESSION_STATE_DIR` under `/tmp`. The demo seed supplies sessions, transcripts, a repository, pull request state, automations, and a paused goal. External agents, schedulers, webhooks, executor work, and live credentials stay off.
+The command prints `APP_URL`, `STATE_DIR`, and `EVIDENCE_DIR`. It writes the demo dataset before starting the real Bun gateway and SessionKernel, then archives three stable fixtures for archive verification. Both services use a shared scratch credential, `OPENSESSION_DEV=1`, `OPENSESSION_DEMO=1`, and a disposable `OPENSESSION_STATE_DIR` under `/tmp`. The demo seed supplies sessions, transcripts, a repository, pull request state, automations, and a paused goal. External agents, schedulers, webhooks, executor work, and live credentials stay off.
 
 The instance is ready when launch returns successfully. Its log remains at `/tmp/opensession-verify-$RUN_ID/server.log` until cleanup.
 
