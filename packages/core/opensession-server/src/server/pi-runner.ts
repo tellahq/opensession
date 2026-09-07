@@ -1389,8 +1389,18 @@ export function piBashHomeEnv(input: {
   isolated: boolean;
   hostHome?: string;
 }): Record<string, string> {
-  if (!input.isolated) return input.hostHome ? { HOME: input.hostHome } : {};
-  const home = `${input.scratchDir || "/tmp"}/automation-home-${input.runKey.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+  const key = input.runKey.replace(/[^A-Za-z0-9_-]/g, "_");
+  if (!input.isolated)
+    return {
+      ...(input.hostHome ? { HOME: input.hostHome } : {}),
+      // Without GH_TOKEN in its env, gh resolves whatever identity the host's
+      // ~/.config/gh/hosts.yml holds. A run must never inherit that ambient
+      // login: a run-scoped config dir makes a credential-free run fail with
+      // a clear "not logged in" instead of silently acting as the host
+      // operator — the same fail-closed posture server-owned gh calls have.
+      GH_CONFIG_DIR: `${input.scratchDir || "/tmp"}/gh-config-${key}`,
+    };
+  const home = `${input.scratchDir || "/tmp"}/automation-home-${key}`;
   return {
     HOME: home,
     XDG_CONFIG_HOME: `${home}/.config`,
@@ -2150,6 +2160,8 @@ async function* runPiAttempt(
     });
     if (opts.publicationPolicy && homeEnv.HOME)
       mkdirSync(homeEnv.HOME, { recursive: true, mode: 0o700 });
+    if (homeEnv.GH_CONFIG_DIR)
+      mkdirSync(homeEnv.GH_CONFIG_DIR, { recursive: true, mode: 0o700 });
     const bashEnv: Record<string, string> = {
       ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
       ...homeEnv,

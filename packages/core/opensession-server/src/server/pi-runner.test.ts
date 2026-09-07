@@ -1309,6 +1309,20 @@ describe("local-tool path containment", () => {
   );
 });
 
+test("host runs never resolve the operator's ambient gh identity", () => {
+  const env = piBashHomeEnv({
+    runKey: "run/unsafe",
+    scratchDir: "/scratch/session",
+    isolated: false,
+    hostHome: "/Users/operator",
+  });
+  expect(env.HOME).toBe("/Users/operator");
+  // gh answers from GH_TOKEN when a credential was injected; without one it
+  // must fail "not logged in" rather than act as whatever identity the host's
+  // ~/.config/gh/hosts.yml holds.
+  expect(env.GH_CONFIG_DIR).toBe("/scratch/session/gh-config-run_unsafe");
+});
+
 test("automation descendants receive an isolated CLI home", () => {
   expect(
     piBashHomeEnv({
