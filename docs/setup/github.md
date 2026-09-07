@@ -92,6 +92,13 @@ rewritten to HTTPS for that process so host keys cannot bypass the App.
 
 ## Separate git-transport credential
 
+By default, one credential does everything a session needs on GitHub. If you
+prefer that the identity-bearing session token never be able to write
+repository contents, you can split the roles: keep the session token for PR,
+review, and comment operations, and give git transport (push) its own
+narrower credential. Combined with branch rulesets, this makes merging
+something no credential on the host can do alone.
+
 Opt-in: set `OPENSESSION_GITHUB_PUSH_TOKEN` (in `~/.opensession.env`) and the
 credential helper answers git transport — clone, pull, push — with it instead
 of the run's session token, on every run that already carries a GitHub
