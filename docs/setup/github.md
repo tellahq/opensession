@@ -90,6 +90,28 @@ calls receive a short-lived App token in their process environment. HTTPS Git
 operations use a process-local credential helper, and SSH GitHub remotes are
 rewritten to HTTPS for that process so host keys cannot bypass the App.
 
+## Separate git-transport credential
+
+Opt-in: set `OPENSESSION_GITHUB_PUSH_TOKEN` (in `~/.opensession.env`) and the
+credential helper answers git transport — clone, pull, push — with it instead
+of the run's session token, on every run that already carries a GitHub
+credential. API calls (`gh`, octokit tooling) keep `GH_TOKEN` unchanged, and a
+run that carries no GitHub credential still receives nothing. Unset, git
+transport uses the run's session token.
+
+The hardened deployment this enables: cap the GitHub App at **Contents: read**
+so no App or user-to-server token can write repository contents, then mint a
+fine-grained PAT on the bot account with **Contents: read and write** — plus
+**Workflows: read and write** if sessions push workflow files — restricted to
+the repositories this instance should push to, and set it as
+`OPENSESSION_GITHUB_PUSH_TOKEN`. Add branch rulesets so the bot identity can
+push branches but never merge to protected ones.
+
+Threat model: agent bash shares the server's uid, so every credential present
+on an Open Session host should be scoped as if the agent will read and use it
+directly. The split does not hide the push token from the agent — it bounds
+what any token on the box can do on GitHub.
+
 ## Webhook intake
 
 The fail-closed public ingress gateway listens on `127.0.0.1:3860`. Choose
