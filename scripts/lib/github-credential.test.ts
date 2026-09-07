@@ -1,10 +1,18 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { githubCredentialResponse } from "./github-credential";
 
+beforeEach(() => {
+  delete process.env.OPENSESSION_GITHUB_PUSH_TOKEN;
+});
+
 const savedToken = process.env.GH_TOKEN;
+const savedPushToken = process.env.OPENSESSION_GITHUB_PUSH_TOKEN;
 afterEach(() => {
   if (savedToken === undefined) delete process.env.GH_TOKEN;
   else process.env.GH_TOKEN = savedToken;
+  if (savedPushToken === undefined)
+    delete process.env.OPENSESSION_GITHUB_PUSH_TOKEN;
+  else process.env.OPENSESSION_GITHUB_PUSH_TOKEN = savedPushToken;
 });
 
 describe("GitHub credential helper", () => {
@@ -22,6 +30,28 @@ describe("GitHub credential helper", () => {
         "get",
         "protocol=https\nhost=github.com\nusername=alice\n\n",
       ),
+    ).toBe("");
+  });
+
+  test("prefers the dedicated push credential over the session token", () => {
+    process.env.GH_TOKEN = "ghu_run_scoped";
+    process.env.OPENSESSION_GITHUB_PUSH_TOKEN = "github_pat_push_only";
+    expect(
+      githubCredentialResponse("get", "protocol=https\nhost=github.com\n\n"),
+    ).toBe("username=x-access-token\npassword=github_pat_push_only\n");
+  });
+
+  test("answers with the session token when no push credential is configured", () => {
+    process.env.GH_TOKEN = "ghu_run_scoped";
+    expect(
+      githubCredentialResponse("get", "protocol=https\nhost=github.com\n\n"),
+    ).toBe("username=x-access-token\npassword=ghu_run_scoped\n");
+  });
+
+  test("answers nothing for a credential-free run even with both unset", () => {
+    delete process.env.GH_TOKEN;
+    expect(
+      githubCredentialResponse("get", "protocol=https\nhost=github.com\n\n"),
     ).toBe("");
   });
 
