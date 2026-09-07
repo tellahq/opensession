@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { GITHUB_PUSH_TOKEN_RUN_ENV } from "../../../../../scripts/lib/github-credential";
 import {
   githubCredentialHelperCommand,
   githubGitCredentialEnv,
@@ -32,7 +33,7 @@ describe("GitHub Git credential environment", () => {
       "!credential-helper",
       "github_pat_push_only",
     );
-    expect(env.OPENSESSION_GITHUB_PUSH_TOKEN).toBe("github_pat_push_only");
+    expect(env[GITHUB_PUSH_TOKEN_RUN_ENV]).toBe("github_pat_push_only");
     expect(env.GH_TOKEN).toBe("projected-token");
   });
 
@@ -42,7 +43,7 @@ describe("GitHub Git credential environment", () => {
       "!credential-helper",
       undefined,
     );
-    expect(env).not.toHaveProperty("OPENSESSION_GITHUB_PUSH_TOKEN");
+    expect(env).not.toHaveProperty(GITHUB_PUSH_TOKEN_RUN_ENV);
   });
 
   test("keeps a credential-free run credential-free despite a push token", () => {
@@ -51,7 +52,7 @@ describe("GitHub Git credential environment", () => {
       "!credential-helper",
       "github_pat_push_only",
     );
-    expect(env).not.toHaveProperty("OPENSESSION_GITHUB_PUSH_TOKEN");
+    expect(env).not.toHaveProperty(GITHUB_PUSH_TOKEN_RUN_ENV);
     expect(env.GH_TOKEN).toBe("");
   });
 });

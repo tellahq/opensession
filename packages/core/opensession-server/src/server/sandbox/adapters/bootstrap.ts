@@ -101,6 +101,7 @@ import {
   toPiModel,
 } from "../../models";
 import { filterMcpServers } from "../../runner-shared";
+import { GITHUB_PUSH_TOKEN_RUN_ENV } from "../../../../../../../scripts/lib/github-credential";
 import { GITHUB_RUN_AUTH_FILE_ENV, githubAuthEnv } from "../../github-auth";
 import {
   appendTranscriptEntries,
@@ -2196,12 +2197,12 @@ function makeRemoteLauncher(
         // token — the remote host cannot read ~/.opensession.env. It rides
         // only with a real token, so credential-free runs stay that way.
         if (
-          !githubAuth.OPENSESSION_GITHUB_PUSH_TOKEN &&
+          !githubAuth[GITHUB_PUSH_TOKEN_RUN_ENV] &&
           process.env.OPENSESSION_GITHUB_PUSH_TOKEN
         )
           githubAuth = {
             ...githubAuth,
-            OPENSESSION_GITHUB_PUSH_TOKEN:
+            [GITHUB_PUSH_TOKEN_RUN_ENV]:
               process.env.OPENSESSION_GITHUB_PUSH_TOKEN,
           };
         await driver.writeFile(githubAuthPath, JSON.stringify(githubAuth));

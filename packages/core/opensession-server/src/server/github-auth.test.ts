@@ -32,6 +32,7 @@ import {
   startGithubDeviceFlow,
   validateGithubTokenLogin,
 } from "./github-auth";
+import { GITHUB_PUSH_TOKEN_RUN_ENV } from "../../../../../scripts/lib/github-credential";
 import { botGhToken } from "./github-limit";
 import {
   ensureAutomationWebSession,
@@ -49,6 +50,7 @@ const ENV_KEYS = [
   "OPENSESSION_GITHUB_AUTH_STORE",
   GITHUB_RUN_AUTH_FILE_ENV,
   "OPENSESSION_GITHUB_PUSH_TOKEN",
+  GITHUB_PUSH_TOKEN_RUN_ENV,
   "OPENSESSION_WEB_SESSIONS_STORE",
   "KEYPAD_TOKEN",
 ] as const;
@@ -249,13 +251,11 @@ describe("token lookups + runner env", () => {
     seedToken();
     expect(githubRunEnv("Alice")).toMatchObject({
       GH_TOKEN: "gho_test123",
-      OPENSESSION_GITHUB_PUSH_TOKEN: "github_pat_push_only",
+      [GITHUB_PUSH_TOKEN_RUN_ENV]: "github_pat_push_only",
     });
     // An unconnected user resolves no session token; the push credential must
     // not turn that credential-free run into one that can push.
-    expect(githubRunEnv("Bob")).not.toHaveProperty(
-      "OPENSESSION_GITHUB_PUSH_TOKEN",
-    );
+    expect(githubRunEnv("Bob")).not.toHaveProperty(GITHUB_PUSH_TOKEN_RUN_ENV);
   });
 
   test("projected file carries the push credential to the remote run", () => {
@@ -264,13 +264,13 @@ describe("token lookups + runner env", () => {
       projected,
       JSON.stringify({
         GH_TOKEN: "ghu_remote123",
-        OPENSESSION_GITHUB_PUSH_TOKEN: "github_pat_push_only",
+        [GITHUB_PUSH_TOKEN_RUN_ENV]: "github_pat_push_only",
       }),
     );
     process.env[GITHUB_RUN_AUTH_FILE_ENV] = projected;
     expect(githubRunEnv("Alice")).toMatchObject({
       GH_TOKEN: "ghu_remote123",
-      OPENSESSION_GITHUB_PUSH_TOKEN: "github_pat_push_only",
+      [GITHUB_PUSH_TOKEN_RUN_ENV]: "github_pat_push_only",
     });
   });
 
