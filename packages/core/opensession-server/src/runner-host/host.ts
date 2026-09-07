@@ -602,6 +602,7 @@ try {
     accountStrict: spec.accountStrict,
     usageCredits: spec.usageCredits,
     prReviewer: spec.prReviewer,
+    githubFixRound: spec.githubFixRound,
     journal: {
       ...(spec.lifecycle === "auxiliary"
         ? {}

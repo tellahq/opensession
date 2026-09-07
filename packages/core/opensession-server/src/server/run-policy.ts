@@ -26,6 +26,45 @@ export function isUnattendedKind(base: string): boolean {
   return UNATTENDED_KINDS.has(base) || base.startsWith("github-");
 }
 
+/**
+ * Trusted GitHub-automation code runs that may carry a repo-scoped App
+ * credential (githubCodeRunEnv). These are the GitHub agent's own `github-*`
+ * code workflows — review, autofix, simplify, mention, followup, adversarial,
+ * public-review — every one launched as `github-<kind>` by the agent's runner.
+ * A predicate rather than an inline prefix test so the one credential-gating
+ * rule has a name and a test. Event-driven automations (slack/linear/plain/
+ * webhook intake) are deliberately absent and stay credential-free.
+ */
+export function githubAutomationKind(kind?: string): boolean {
+  return baseJournalKind(kind).startsWith("github-");
+}
+
+/** Which GitHub credential a run's child environment earns:
+ *  - "code": the repo-scoped App credential (githubCodeRunEnv) — for the
+ *    GitHub agent's `github-*` code workflows and for review/handoff fix
+ *    rounds (`fixRound`), which push fixes and reply in review threads;
+ *  - "user": the run owner's own token (githubRunEnv), for ordinary
+ *    interactive turns;
+ *  - "none": nothing — every unattended, event-driven automation
+ *    (slack/linear/plain/webhook intake) that is not one of the two above.
+ *  The App code credential is reserved for code-mode runs; it never reaches an
+ *  event automation, which carries neither a `github-*` kind nor a fix-round
+ *  mark. */
+export function githubRunCredentialKind(input: {
+  mode?: string;
+  kind?: string;
+  fixRound?: boolean;
+  /** interactiveGithub: a non-unattended run of an INTERACTIVE_KIND. */
+  interactive: boolean;
+}): "code" | "user" | "none" {
+  if (
+    input.mode === "code" &&
+    (githubAutomationKind(input.kind) || Boolean(input.fixRound))
+  )
+    return "code";
+  return input.interactive ? "user" : "none";
+}
+
 const POOL_WAIT_UNATTENDED_MS = Number(
   process.env.OPENSESSION_POOL_WAIT_MS || 10 * 60_000,
 );

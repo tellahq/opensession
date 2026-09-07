@@ -1510,6 +1510,11 @@ async function drainQueueInner(sessionId: string): Promise<void> {
     const slackReplyTo = [...batch]
       .reverse()
       .find((m) => m.slackReplyTo)?.slackReplyTo;
+    // A review/handoff fix round enters the queue with this flag. The drained
+    // turn must carry the repo-scoped GitHub App credential so it can push
+    // fixes and reply in review threads — its auto-continue driver resolves no
+    // session user token.
+    const reviewHandoff = batch.some((m) => m.reviewHandoff);
     const sourceMessageIds = batch.flatMap((item) =>
       item.id ? [item.id] : [],
     );
@@ -1524,6 +1529,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
         slackReplyTo,
         promptEntryId,
         sourceMessageIds,
+        reviewHandoff,
       );
     } catch (e) {
       // The batch was already spliced out and persisted away — put it back at
@@ -2495,6 +2501,9 @@ export async function runSessionPrompt(
   slackReplyTo?: { channel: string; threadTs: string },
   promptEntryId?: string,
   sourceMessageIds?: string[],
+  /** This turn is a review/handoff fix round — carry the repo-scoped GitHub
+   *  App credential into the run so it can push fixes and reply in threads. */
+  reviewHandoff?: boolean,
 ): Promise<void> {
   // Any explicit new run lifts a user stop — the queue may drain again.
   stoppedSessions.delete(sessionId);
@@ -2563,6 +2572,7 @@ export async function runSessionPrompt(
       startToken,
       durablePromptEntryId,
       sourceMessageIds,
+      reviewHandoff,
     );
     // Sandboxes and non-standard runners may not create an active-run journal.
     // A completed turn is nevertheless a safe acknowledgement of its dispatch.
@@ -2599,6 +2609,7 @@ async function runSessionPromptInner(
   startToken?: string,
   promptEntryId?: string,
   sourceMessageIds?: string[],
+  reviewHandoff?: boolean,
 ): Promise<void> {
   const autoRetry = await retryAutoFallbackModel(sessionId);
   const session = findSession(sessionId);
@@ -3138,6 +3149,7 @@ async function runSessionPromptInner(
           accountId: session.accountId,
           trustProfile: isAutomationSession ? "automation" : "interactive",
           journalKind: "prompt",
+          githubFixRound: reviewHandoff,
           onAskUser: makeAskHandler(sessionId),
           onSteerFailed: (text) => requeueFailedSteer(session.id, text, user),
           fallbackInProcessMcp: () =>
@@ -3252,6 +3264,7 @@ async function runSessionPromptInner(
       // synthetic continuations such as worker reports and restart recovery.
       mcpGrantUser: runInputs.mcpGrantUser,
       journal: { osSessionId: session.id, kind: "prompt" },
+      githubFixRound: reviewHandoff,
       startToken,
       onAskUser: makeAskHandler(sessionId),
     })) {

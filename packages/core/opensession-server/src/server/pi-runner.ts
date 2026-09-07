@@ -86,6 +86,7 @@ import {
   INTERACTIVE_KINDS,
   isUnattendedKind,
   baseJournalKind,
+  githubRunCredentialKind,
   runToolPolicy,
   readLocalInstructions,
 } from "./run-policy";
@@ -2015,18 +2016,25 @@ async function* runPiAttempt(
     const githubUserLogin = interactiveGithub
       ? githubUserLoginForRun(user || author?.name)
       : null;
-    // Only the dedicated GitHub code workflows may inject a service
-    // credential into an unattended run. Other automations remain credential-
-    // free even if a caller accidentally supplies githubEnv.
-    const githubCodeRun =
-      mode === "code" && baseJournalKind(journal?.kind).startsWith("github-");
-    const githubEnv = githubCodeRun
-      ? opts.githubEnv?.GH_TOKEN
-        ? opts.githubEnv
-        : await githubCodeRunEnv(cwd)
-      : interactiveGithub
-        ? githubRunEnv(user || author?.name)
-        : {};
+    // Which GitHub credential this run earns: the repo-scoped App credential
+    // for `github-*` code workflows and review/handoff fix rounds, the owner's
+    // own token for ordinary interactive turns, nothing for event automations.
+    // A dedicated github- code run may hand its pre-minted env in via
+    // opts.githubEnv; every other "code" case re-mints from the cwd.
+    const githubCred = githubRunCredentialKind({
+      mode,
+      kind: journal?.kind,
+      fixRound: opts.githubFixRound,
+      interactive: interactiveGithub,
+    });
+    const githubEnv =
+      githubCred === "code"
+        ? opts.githubEnv?.GH_TOKEN
+          ? opts.githubEnv
+          : await githubCodeRunEnv(cwd)
+        : githubCred === "user"
+          ? githubRunEnv(user || author?.name)
+          : {};
 
     const binding = await createPiRuntimeBinding({
       providerID: parsed.providerID,
