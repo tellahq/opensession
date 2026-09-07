@@ -39,14 +39,21 @@ export function githubCredentialHelperCommand(
  * environment. Git receives only process-local helper and URL-rewrite config,
  * so existing SSH checkouts use the projected HTTPS identity without mutating
  * .git/config or falling through to a host SSH key.
+ *
+ * An operator-configured OPENSESSION_GITHUB_PUSH_TOKEN rides along so the
+ * credential helper answers git transport with it while API calls keep
+ * GH_TOKEN — but only next to a real session token: a run that carries no
+ * GitHub credential must stay credential-free.
  */
 export function githubGitCredentialEnv(
   token: string,
   helper = githubCredentialHelperCommand(),
+  pushToken = process.env.OPENSESSION_GITHUB_PUSH_TOKEN,
 ): Record<string, string> {
   return {
     GH_TOKEN: token,
     GITHUB_TOKEN: token,
+    ...(token && pushToken ? { OPENSESSION_GITHUB_PUSH_TOKEN: pushToken } : {}),
     GIT_TERMINAL_PROMPT: "0",
     GIT_CONFIG_COUNT: "4",
     GIT_CONFIG_KEY_0: "credential.https://github.com.helper",

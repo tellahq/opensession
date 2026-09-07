@@ -2192,6 +2192,18 @@ function makeRemoteLauncher(
       }
       const githubAuthPath = `${dir}/github-auth.json`;
       if (githubAuth.GH_TOKEN) {
+        // Project the operator's git-transport credential alongside the run
+        // token — the remote host cannot read ~/.opensession.env. It rides
+        // only with a real token, so credential-free runs stay that way.
+        if (
+          !githubAuth.OPENSESSION_GITHUB_PUSH_TOKEN &&
+          process.env.OPENSESSION_GITHUB_PUSH_TOKEN
+        )
+          githubAuth = {
+            ...githubAuth,
+            OPENSESSION_GITHUB_PUSH_TOKEN:
+              process.env.OPENSESSION_GITHUB_PUSH_TOKEN,
+          };
         await driver.writeFile(githubAuthPath, JSON.stringify(githubAuth));
         secureFiles.push(githubAuthPath);
       } else {

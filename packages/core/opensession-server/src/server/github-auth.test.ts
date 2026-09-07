@@ -48,6 +48,7 @@ const ENV_KEYS = [
   "OPENSESSION_GITHUB_CLIENT_ID",
   "OPENSESSION_GITHUB_AUTH_STORE",
   GITHUB_RUN_AUTH_FILE_ENV,
+  "OPENSESSION_GITHUB_PUSH_TOKEN",
   "OPENSESSION_WEB_SESSIONS_STORE",
   "KEYPAD_TOKEN",
 ] as const;
@@ -240,6 +241,37 @@ describe("token lookups + runner env", () => {
     expect(JSON.stringify(githubRunEnv("Alice"))).not.toContain(
       "must-not-be-read",
     );
+  });
+
+  test("run env carries the operator push credential only with a session token", () => {
+    process.env.OPENSESSION_GITHUB_PUSH_TOKEN = "github_pat_push_only";
+    enableFeature();
+    seedToken();
+    expect(githubRunEnv("Alice")).toMatchObject({
+      GH_TOKEN: "gho_test123",
+      OPENSESSION_GITHUB_PUSH_TOKEN: "github_pat_push_only",
+    });
+    // An unconnected user resolves no session token; the push credential must
+    // not turn that credential-free run into one that can push.
+    expect(githubRunEnv("Bob")).not.toHaveProperty(
+      "OPENSESSION_GITHUB_PUSH_TOKEN",
+    );
+  });
+
+  test("projected file carries the push credential to the remote run", () => {
+    const projected = join(dir, "run-github-auth.json");
+    writeFileSync(
+      projected,
+      JSON.stringify({
+        GH_TOKEN: "ghu_remote123",
+        OPENSESSION_GITHUB_PUSH_TOKEN: "github_pat_push_only",
+      }),
+    );
+    process.env[GITHUB_RUN_AUTH_FILE_ENV] = projected;
+    expect(githubRunEnv("Alice")).toMatchObject({
+      GH_TOKEN: "ghu_remote123",
+      OPENSESSION_GITHUB_PUSH_TOKEN: "github_pat_push_only",
+    });
   });
 
   test("connectedGithubAccounts never exposes tokens", () => {
