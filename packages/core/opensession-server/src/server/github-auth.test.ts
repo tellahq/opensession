@@ -33,6 +33,7 @@ import {
   validateGithubTokenLogin,
 } from "./github-auth";
 import { GITHUB_PUSH_TOKEN_RUN_ENV } from "../../../../../scripts/lib/github-credential";
+import { AUTO_CONTINUE_USER, githubCredentialUser } from "./auto-continue";
 import { botGhToken } from "./github-limit";
 import {
   ensureAutomationWebSession,
@@ -256,6 +257,24 @@ describe("token lookups + runner env", () => {
     // An unconnected user resolves no session token; the push credential must
     // not turn that credential-free run into one that can push.
     expect(githubRunEnv("Bob")).not.toHaveProperty(GITHUB_PUSH_TOKEN_RUN_ENV);
+  });
+
+  test("an auto-continue turn resolves the session owner's credential; automations still get nothing", () => {
+    enableFeature();
+    seedToken();
+    // A drained nudge/handoff turn is sent by the synthetic auto-continue
+    // driver while the commit author carries the session owner. The
+    // credential follows the owner — the same token every other turn in the
+    // session resolves.
+    expect(
+      githubRunEnv(githubCredentialUser(AUTO_CONTINUE_USER, "Alice Example")),
+    ).toMatchObject({ GH_TOKEN: "gho_test123" });
+    // An automation-owned turn has no sender and a non-roster owner label, so
+    // it still resolves no token (and unattended journal kinds never reach
+    // the interactive credential path at all).
+    expect(
+      githubRunEnv(githubCredentialUser(undefined, "Nightly sweep")),
+    ).toMatchObject({ GH_TOKEN: "" });
   });
 
   test("projected file carries the push credential to the remote run", () => {

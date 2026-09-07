@@ -101,7 +101,10 @@ import {
   sessionStartContext,
 } from "./context-log";
 import { wrapContext } from "./prompt-context";
-import { EMPTY_REPLY_RETRY_PROMPT } from "./auto-continue";
+import {
+  EMPTY_REPLY_RETRY_PROMPT,
+  githubCredentialUser,
+} from "./auto-continue";
 import {
   bashAskPolicyReply,
   publicationPolicyDenyReason,
@@ -2012,8 +2015,12 @@ async function* runPiAttempt(
     const interactiveGithub =
       !policy.unattended &&
       INTERACTIVE_KINDS.has(baseJournalKind(journal?.kind));
+    // The sender, unless it is the synthetic auto-continue driver — the
+    // author fallback then names the session owner, whose credential this
+    // turn deserves like any other turn in the session.
+    const githubUser = githubCredentialUser(user, author?.name);
     const githubUserLogin = interactiveGithub
-      ? githubUserLoginForRun(user || author?.name)
+      ? githubUserLoginForRun(githubUser)
       : null;
     // Only the dedicated GitHub code workflows may inject a service
     // credential into an unattended run. Other automations remain credential-
@@ -2025,7 +2032,7 @@ async function* runPiAttempt(
         ? opts.githubEnv
         : await githubCodeRunEnv(cwd)
       : interactiveGithub
-        ? githubRunEnv(user || author?.name)
+        ? githubRunEnv(githubUser)
         : {};
 
     const binding = await createPiRuntimeBinding({

@@ -102,6 +102,7 @@ import {
 } from "../../models";
 import { filterMcpServers } from "../../runner-shared";
 import { GITHUB_PUSH_TOKEN_RUN_ENV } from "../../../../../../../scripts/lib/github-credential";
+import { githubCredentialUser } from "../../auto-continue";
 import { GITHUB_RUN_AUTH_FILE_ENV, githubAuthEnv } from "../../github-auth";
 import {
   appendTranscriptEntries,
@@ -2170,7 +2171,7 @@ function makeRemoteLauncher(
       // every other automation stays credential-free.
       let githubAuth = automationProfile
         ? {}
-        : githubAuthEnv(spec.user || spec.author?.name);
+        : githubAuthEnv(githubCredentialUser(spec.user, spec.author?.name));
       const githubCodeAutomation =
         automationProfile &&
         spec.mode === "code" &&
