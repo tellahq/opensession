@@ -12,6 +12,7 @@
  * inside the session's sandbox. Omitted = the host path, unchanged.
  */
 import { $ } from "bun";
+import { GITHUB_PUSH_TOKEN_RUN_ENV } from "../../../../../scripts/lib/github-credential";
 import { audited } from "./audit";
 import { personaName } from "./config";
 import { isSharedCheckoutDir } from "./worktree";
@@ -99,7 +100,11 @@ export function gitCredentialEnvForExec(
   if (!env) return undefined;
   if (exec?.remote) return undefined;
   if (!exec?.sandboxed) return env;
-  const token = env.GH_TOKEN || env.GITHUB_TOKEN;
+  // `gh auth git-credential` answers from GH_TOKEN, so hand it the run's
+  // git-transport credential when one was injected — the session token can be
+  // read-only for repository contents in a split-credential deployment.
+  const token =
+    env[GITHUB_PUSH_TOKEN_RUN_ENV] || env.GH_TOKEN || env.GITHUB_TOKEN;
   if (!token) return undefined;
   return {
     GH_TOKEN: token,
