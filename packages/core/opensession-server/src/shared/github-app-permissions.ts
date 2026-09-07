@@ -11,6 +11,14 @@
  * A mint is all-or-nothing: it succeeds only if every requested scope is a
  * subset of what the installation holds. So each mint set below is a strict
  * subset of the grant set, and the grant set is what the create URL requests.
+ *
+ * Split-credential deployments (docs/setup/github.md, "Separate git-transport
+ * credential") cap the installation itself at contents:read: git transport
+ * rides the dedicated push credential, so App tokens never push. Because
+ * mints are all-or-nothing, a write mint still requesting contents:write
+ * against that capped installation would 422 and take every App write
+ * operation down with it — githubAppMintPermissions() below narrows the
+ * request instead.
  */
 
 /** The full set the App is granted at creation — the create-URL permission
@@ -19,7 +27,7 @@ export const GITHUB_APP_GRANT_PERMISSIONS: Record<string, string> = {
   actions: "read", // workflow runs/logs for trusted autofix diagnosis
   checks: "read", // CI check runs
   statuses: "read", // commit statuses, the other half of the status rollup
-  contents: "write", // push fixes, clone
+  contents: "write", // clone; pushes only while git transport rides App tokens
   pull_requests: "write", // reviews, comments, open/merge
   issues: "write", // issue and PR comments
   members: "read", // team roster / attribution
@@ -70,3 +78,18 @@ export const GITHUB_APP_CODE_PERMISSIONS: Record<string, string> = {
   checks: "read",
   statuses: "read",
 };
+
+/** The set a mint actually requests. With a dedicated git-transport
+ * credential configured, git pushes never ride App tokens, so no mint asks
+ * for contents:write — which also keeps write mints viable against an
+ * installation the operator capped at contents:read (all-or-nothing: the
+ * over-request would fail the whole token, reviews and comments included).
+ * Without the split, the sets pass through unchanged and code workflows keep
+ * pushing with the App token. */
+export function githubAppMintPermissions(
+  set: Record<string, string>,
+  pushCredentialConfigured = Boolean(process.env.OPENSESSION_GITHUB_PUSH_TOKEN),
+): Record<string, string> {
+  if (!pushCredentialConfigured || set.contents !== "write") return set;
+  return { ...set, contents: "read" };
+}

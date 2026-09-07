@@ -30,6 +30,7 @@ import {
   GITHUB_APP_CODE_PERMISSIONS as CODE_PERMISSIONS,
   GITHUB_APP_READ_PERMISSIONS as READ_PERMISSIONS,
   GITHUB_APP_WRITE_PERMISSIONS as WRITE_PERMISSIONS,
+  githubAppMintPermissions,
 } from "../shared/github-app-permissions";
 
 let keyPathOverride: string | undefined;
@@ -300,7 +301,9 @@ export async function githubAppInstallationToken(
         method: "POST",
         headers,
         body: JSON.stringify({
-          permissions: opts.write ? WRITE_PERMISSIONS : READ_PERMISSIONS,
+          permissions: githubAppMintPermissions(
+            opts.write ? WRITE_PERMISSIONS : READ_PERMISSIONS,
+          ),
         }),
       },
     );
@@ -531,7 +534,7 @@ export async function githubAppRepositoryToken(
           repositories: [repo],
           // Trusted repository code runs can push/reply and inspect the
           // failing checks and Actions logs they are expected to repair.
-          permissions: CODE_PERMISSIONS,
+          permissions: githubAppMintPermissions(CODE_PERMISSIONS),
         }),
       },
     );
