@@ -602,7 +602,7 @@ try {
     accountStrict: spec.accountStrict,
     usageCredits: spec.usageCredits,
     prReviewer: spec.prReviewer,
-    githubFixRound: spec.githubFixRound,
+    githubFixRoundRepo: spec.githubFixRoundRepo,
     journal: {
       ...(spec.lifecycle === "auxiliary"
         ? {}

@@ -105,11 +105,13 @@ export interface RunAgentOpts {
   /** Ephemeral GitHub capability for a narrowly scoped trusted GitHub code run.
    * Never persist this value in a host spec, journal, or session file. */
   githubEnv?: Record<string, string>;
-  /** This code-mode turn is a review/handoff fix round in an owning
-   * interactive session: resolve the repo-scoped App credential
-   * (githubCodeRunEnv) so it can push fixes and reply in review threads, even
-   * though its auto-continue sender resolves no session user token. */
-  githubFixRound?: boolean;
+  /** `owner/name` of the PR a review/handoff fix round targets. Presence marks
+   * this code-mode turn a fix round: resolve the repo-scoped App credential
+   * for this repository (githubServiceCredentialEnv) so it can push fixes and
+   * reply in review threads, even though its auto-continue sender resolves no
+   * session user token. The repository may be one attached to the session, not
+   * its primary, so the credential binds to this id rather than the cwd. */
+  githubFixRoundRepo?: string;
   /** Session-scoped scratch dir (session-scratch.ts). runAgent ensures it for
    *  any run with an osSessionId; engines export it (pi sets TMPDIR +
    *  OPENSESSION_SCRATCH in the bash env) and the run instructions name it,

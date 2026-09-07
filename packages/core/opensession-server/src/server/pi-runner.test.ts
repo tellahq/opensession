@@ -8,7 +8,15 @@
  * A real engine turn is covered by the smoke harness
  * (POST /api/admin/pi-smoke) against a live bridge, not unit tests.
  */
-import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  spyOn,
+  test,
+} from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
@@ -30,6 +38,7 @@ import {
   makeGuardedToolOps,
   makePiBashTool,
   parsePiModel,
+  githubFixRoundEnv,
   piBashHomeEnv,
   piAssistantTranscriptEntries,
   PI_STATE_DIR,
@@ -1307,6 +1316,44 @@ describe("local-tool path containment", () => {
       expect(res.content[0]?.text).toContain("needle-inside");
     },
   );
+});
+
+describe("githubFixRoundEnv (review/handoff fix-round credential)", () => {
+  const savedAuthFile = process.env.OPENSESSION_GITHUB_RUN_AUTH_FILE;
+  const fixRoundDirs: string[] = [];
+  afterEach(() => {
+    if (savedAuthFile === undefined)
+      delete process.env.OPENSESSION_GITHUB_RUN_AUTH_FILE;
+    else process.env.OPENSESSION_GITHUB_RUN_AUTH_FILE = savedAuthFile;
+    for (const dir of fixRoundDirs.splice(0))
+      rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("mints nothing without a target repository", async () => {
+    // A fix round binds to the PR's own repo id, never the run cwd. With no
+    // repo it must resolve nothing rather than silently minting for a cwd repo.
+    delete process.env.OPENSESSION_GITHUB_RUN_AUTH_FILE;
+    expect(await githubFixRoundEnv("")).toEqual({});
+  });
+
+  test("a remote run consumes its projected credential file, not a fresh mint", async () => {
+    // On a Runner/sandbox the launcher writes the run's credential to a private
+    // file; the fix round reads THAT (repo-scoped, projected) rather than
+    // minting in-process, so remote fix rounds are credentialed too.
+    const dir = mkdtempSync(join(tmpdir(), "fixround-projected-"));
+    fixRoundDirs.push(dir);
+    const file = join(dir, "github-auth.json");
+    writeFileSync(
+      file,
+      JSON.stringify({
+        GH_TOKEN: "ghs_projected",
+        GITHUB_TOKEN: "ghs_projected",
+      }),
+    );
+    process.env.OPENSESSION_GITHUB_RUN_AUTH_FILE = file;
+    const env = await githubFixRoundEnv("tellahq/attached-repo");
+    expect(env.GH_TOKEN).toBe("ghs_projected");
+  });
 });
 
 test("host runs never resolve the operator's ambient gh identity", () => {

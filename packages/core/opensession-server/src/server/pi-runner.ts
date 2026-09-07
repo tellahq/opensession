@@ -179,6 +179,21 @@ export async function githubCodeRunEnv(
   return githubServiceCredentialEnv(repo.ghRepo);
 }
 
+/** Fresh authority for a review/handoff fix round, minted for the PR's own
+ * repository rather than the run cwd: a handoff can target a repo attached to
+ * the session, whose PR lives outside the primary worktree. The mint is
+ * owner-verified against the App installation (githubServiceCredentialEnv →
+ * githubAppRepositoryToken), so the repo id it binds to cannot escalate beyond
+ * what the App already reaches. Remote runners consume the projected file. */
+export async function githubFixRoundEnv(
+  ghRepo: string,
+): Promise<Record<string, string>> {
+  if (process.env[GITHUB_RUN_AUTH_FILE_ENV]) return projectedGithubRunEnv();
+  if (!ghRepo) return {};
+  const { githubServiceCredentialEnv } = await import("./github-app");
+  return githubServiceCredentialEnv(ghRepo);
+}
+
 /** State root: server-owned agentDir, per-unified-session pi session dirs,
  *  and the smoke-turn scratch cwd. Never ~/.pi. */
 export const PI_STATE_DIR = stateDir("pi");
@@ -2021,17 +2036,20 @@ async function* runPiAttempt(
     // own token for ordinary interactive turns, nothing for event automations.
     // A dedicated github- code run may hand its pre-minted env in via
     // opts.githubEnv; every other "code" case re-mints from the cwd.
+    const fixRoundRepo = opts.githubFixRoundRepo;
     const githubCred = githubRunCredentialKind({
       mode,
       kind: journal?.kind,
-      fixRound: opts.githubFixRound,
+      fixRound: Boolean(fixRoundRepo),
       interactive: interactiveGithub,
     });
     const githubEnv =
       githubCred === "code"
         ? opts.githubEnv?.GH_TOKEN
           ? opts.githubEnv
-          : await githubCodeRunEnv(cwd)
+          : fixRoundRepo
+            ? await githubFixRoundEnv(fixRoundRepo)
+            : await githubCodeRunEnv(cwd)
         : githubCred === "user"
           ? githubRunEnv(user || author?.name)
           : {};

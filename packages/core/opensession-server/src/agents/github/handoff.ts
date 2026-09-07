@@ -159,6 +159,9 @@ export async function maybeHandoffFindings(
     const res = await control.deliverToSession(target.id, message, "GitHub", {
       busy: "queue",
       reviewHandoff: true,
+      // The fix round pushes and replies against THIS PR's repository, which
+      // may be one attached to the target session rather than its primary.
+      githubFixRoundRepo: repoFull,
       deliveryId: `github-handoff:${repoFull}:${pr.number}:${sha}:${round}`,
     });
     if (res.status === "error") {

@@ -59,6 +59,9 @@ type RunnerLaunchOpts = {
   mcpServers?: McpScope;
   user?: string;
   reposNote?: string;
+  /** `owner/name` of the PR a review/handoff fix round targets — carried into
+   *  the Runner spec so the fix round mints the repo-scoped App credential. */
+  githubFixRoundRepo?: string;
   shouldCancel?: () => boolean;
 };
 
@@ -186,6 +189,9 @@ export async function maybeLaunchRunnerRun(
     fallbackModel: interactiveFallbackModel(session.model),
     journalKind: runInputs.isAutomationSession ? "automation" : "prompt",
     trustProfile: runInputs.isAutomationSession ? "automation" : "interactive",
+    githubFixRoundRepo: runInputs.isAutomationSession
+      ? undefined
+      : opts.githubFixRoundRepo,
   };
   if (!spec.rpcToken || !spec.wsToken)
     throw new Error(

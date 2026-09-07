@@ -332,6 +332,7 @@ registerSessionControl({
       busy: opts?.busy,
       hold: opts?.hold,
       reviewHandoff: opts?.reviewHandoff,
+      githubFixRoundRepo: opts?.githubFixRoundRepo,
       admissionKey: opts?.admissionKey,
       contextSessions: opts?.contextSessions,
       slackReplyTo: opts?.slackReplyTo,
@@ -416,6 +417,9 @@ registerSessionControl({
         slackReplyTo: opts?.slackReplyTo,
         ...(opts?.hold ? { hold: true } : {}),
         ...(opts?.reviewHandoff ? { reviewHandoff: true } : {}),
+        ...(opts?.githubFixRoundRepo
+          ? { githubFixRoundRepo: opts.githubFixRoundRepo }
+          : {}),
       };
 
       // A draining server accepts durable intake but must not steer it into an
@@ -453,6 +457,9 @@ registerSessionControl({
             contextSessions: opts?.contextSessions,
             ...(opts?.hold ? { hold: true } : {}),
             ...(opts?.reviewHandoff ? { reviewHandoff: true } : {}),
+            ...(opts?.githubFixRoundRepo
+              ? { githubFixRoundRepo: opts.githubFixRoundRepo }
+              : {}),
           });
           const steerResult = await prepareAndSteerQueuedPrompt({
             sessionId: id,

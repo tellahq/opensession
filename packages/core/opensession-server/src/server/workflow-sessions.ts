@@ -492,10 +492,17 @@ export function createWorkflowSessionController(
       ]
         .filter(Boolean)
         .join("\n\n");
+      // `owner/name` from the PR URL: the fix round pushes and replies against
+      // this PR's repository, which may be attached to the session, not its
+      // primary. The mint stays owner-verified against the App installation.
+      const prRepo = current.prUrl.match(
+        /github\.com\/([^/]+\/[^/]+)\/pull\//,
+      )?.[1];
       return await control.deliverToSession(id, prompt, opts.user, {
         deliveryId: requestId,
         busy: "queue",
         reviewHandoff: true,
+        githubFixRoundRepo: prRepo,
       });
     },
 

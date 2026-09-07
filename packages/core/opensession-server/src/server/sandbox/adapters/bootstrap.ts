@@ -2179,16 +2179,25 @@ function makeRemoteLauncher(
         !githubAuth.GH_TOKEN &&
         (!automationProfile || githubCodeAutomation)
       ) {
-        // The sandbox origin is mutable by repository setup code. Bind service
-        // authority only to the server-owned repo id recorded at ensure time.
+        // A review/handoff fix round names the PR's own repository (possibly
+        // one attached to the session, not its primary). Otherwise bind to the
+        // server-owned repo id recorded at ensure time — the sandbox origin is
+        // mutable by repository setup code. Either way the mint is
+        // owner-verified against the App installation, so the id it names
+        // cannot reach a repository the App does not already hold.
         const repoId = readRemoteState(provider, sandboxId)?.repoId;
         const registeredRepo = repoId
           ? (await import("../../worktree")).getRepo(repoId)
           : undefined;
-        if (registeredRepo?.host !== "codestorage" && registeredRepo?.ghRepo) {
+        const ghRepo =
+          spec.githubFixRoundRepo ||
+          (registeredRepo?.host !== "codestorage"
+            ? registeredRepo?.ghRepo
+            : undefined);
+        if (ghRepo) {
           const { githubServiceCredentialEnv } =
             await import("../../github-app");
-          githubAuth = await githubServiceCredentialEnv(registeredRepo.ghRepo);
+          githubAuth = await githubServiceCredentialEnv(ghRepo);
         }
       }
       const githubAuthPath = `${dir}/github-auth.json`;

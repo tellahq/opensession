@@ -72,6 +72,10 @@ export type QueueItem = {
   /** Review feedback must start its own turn after any user work already in
    * flight. Never batch it into that work or steer it mid-turn. */
   reviewHandoff?: boolean;
+  /** `owner/name` of the PR a review/handoff fix round targets — the drained
+   * turn mints the repo-scoped GitHub App credential for it so the fix round
+   * can push and reply in review threads. */
+  githubFixRoundRepo?: string;
   /** When the engine ACCEPTED this message as a steer (epoch ms). Set by
    * acceptQueuedSteer, read by the clients to show how long the fold-in has been
    * waiting. Acceptance is not delivery: the current tool or assistant message

@@ -244,9 +244,10 @@ export interface HostedRunOpts {
    *  automation-owned sessions, defaults to interactive. */
   trustProfile?: "interactive" | "automation";
   journalKind?: string;
-  /** Review/handoff fix round: earn the repo-scoped App credential in the
-   *  host even though the auto-continue sender resolves no user token. */
-  githubFixRound?: boolean;
+  /** `owner/name` of the PR a review/handoff fix round targets. Presence earns
+   *  the repo-scoped App credential for that repo in the host, even though the
+   *  auto-continue sender resolves no user token. */
+  githubFixRoundRepo?: string;
   firstJournaledAt?: string;
   resumeAttempts?: number;
   lastResumeAt?: string;
@@ -436,7 +437,7 @@ async function* runAgentInProcess(
     accountStrict: opts.accountStrict,
     usageCredits: opts.usageCredits,
     prReviewer: opts.prReviewer,
-    githubFixRound: opts.githubFixRound,
+    githubFixRoundRepo: opts.githubFixRoundRepo,
     journal: {
       ...(lifecycle === "auxiliary" ? {} : { osSessionId: opts.osSessionId }),
       kind: opts.journalKind || "prompt",
@@ -630,7 +631,7 @@ async function spawnHostRun(
     prReviewer: opts.prReviewer,
     trustProfile: opts.trustProfile,
     journalKind: opts.journalKind,
-    githubFixRound: opts.githubFixRound,
+    githubFixRoundRepo: opts.githubFixRoundRepo,
     firstJournaledAt: opts.firstJournaledAt || new Date().toISOString(),
     resumeAttempts: opts.resumeAttempts,
     lastResumeAt: opts.lastResumeAt,

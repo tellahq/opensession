@@ -242,6 +242,9 @@ export interface SessionControl {
       deliveryId?: string;
       /** Automated PR findings wait behind an active user turn and drain alone. */
       reviewHandoff?: boolean;
+      /** `owner/name` of the PR a review/handoff fix round targets, so the
+       *  drained turn mints the repo-scoped GitHub App credential for it. */
+      githubFixRoundRepo?: string;
       /** Stable identity included in the durable command payload. */
       admissionKey?: string;
       /** Trusted synchronous precondition checked inside the session lease. */

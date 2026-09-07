@@ -125,11 +125,13 @@ export interface RunHostSpec {
    *  automation's PR-review policy when its turn moves into a host. */
   prReviewer?: string;
   journalKind?: string;
-  /** This interactive turn is a review/handoff fix round: it must push fixes
-   *  and reply in review threads with the repo-scoped GitHub App credential,
-   *  not the (absent) session user token. The host re-mints from the cwd; no
-   *  token is ever serialized here. */
-  githubFixRound?: boolean;
+  /** `owner/name` of the PR a review/handoff fix round targets. Presence marks
+   *  the turn a fix round: it must push fixes and reply in review threads with
+   *  the repo-scoped GitHub App credential for THIS repository (which may be an
+   *  attached repo, not the session's primary), not the absent session user
+   *  token. The host mints the credential itself, owner-verified against the
+   *  App installation; no token is ever serialized here. */
+  githubFixRoundRepo?: string;
   /** Durable restart-recovery lineage (see server/run-journal.ts). */
   firstJournaledAt?: string;
   resumeAttempts?: number;

@@ -1510,11 +1510,14 @@ async function drainQueueInner(sessionId: string): Promise<void> {
     const slackReplyTo = [...batch]
       .reverse()
       .find((m) => m.slackReplyTo)?.slackReplyTo;
-    // A review/handoff fix round enters the queue with this flag. The drained
-    // turn must carry the repo-scoped GitHub App credential so it can push
-    // fixes and reply in review threads — its auto-continue driver resolves no
-    // session user token.
-    const reviewHandoff = batch.some((m) => m.reviewHandoff);
+    // A review/handoff fix round enters the queue flagged, carrying the PR's
+    // own `owner/name` (which may be a repo attached to the session, not its
+    // primary). The drained turn must mint the repo-scoped GitHub App
+    // credential for THAT repo so it can push fixes and reply in review
+    // threads — its auto-continue driver resolves no session user token.
+    const githubFixRoundRepo = [...batch]
+      .reverse()
+      .find((m) => m.reviewHandoff && m.githubFixRoundRepo)?.githubFixRoundRepo;
     const sourceMessageIds = batch.flatMap((item) =>
       item.id ? [item.id] : [],
     );
@@ -1529,7 +1532,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
         slackReplyTo,
         promptEntryId,
         sourceMessageIds,
-        reviewHandoff,
+        githubFixRoundRepo,
       );
     } catch (e) {
       // The batch was already spliced out and persisted away — put it back at
@@ -1892,6 +1895,9 @@ export async function maybeLaunchSandboxedRun(
     deniedTools?: Record<string, string>;
     isAutomationSession: boolean;
     startToken?: string;
+    /** `owner/name` of the PR a review/handoff fix round targets — minted for
+     *  in the sandbox bootstrap so the turn can push fixes and reply. */
+    githubFixRoundRepo?: string;
   },
 ): Promise<
   | (AsyncGenerator<StreamEvent> & {
@@ -2185,6 +2191,7 @@ export async function maybeLaunchSandboxedRun(
       usageCredits: disposableAutomationResume
         ? owningAutomation?.usageCredits
         : undefined,
+      githubFixRoundRepo: opts.githubFixRoundRepo,
     };
     if (isAgentSessionCancelled(session.id, opts.startToken)) {
       unregisterRunToken(rpcToken);
@@ -2501,9 +2508,10 @@ export async function runSessionPrompt(
   slackReplyTo?: { channel: string; threadTs: string },
   promptEntryId?: string,
   sourceMessageIds?: string[],
-  /** This turn is a review/handoff fix round — carry the repo-scoped GitHub
-   *  App credential into the run so it can push fixes and reply in threads. */
-  reviewHandoff?: boolean,
+  /** `owner/name` of the PR a review/handoff fix round targets — carry the
+   *  repo-scoped GitHub App credential for it into the run so the turn can
+   *  push fixes and reply in threads. */
+  githubFixRoundRepo?: string,
 ): Promise<void> {
   // Any explicit new run lifts a user stop — the queue may drain again.
   stoppedSessions.delete(sessionId);
@@ -2572,7 +2580,7 @@ export async function runSessionPrompt(
       startToken,
       durablePromptEntryId,
       sourceMessageIds,
-      reviewHandoff,
+      githubFixRoundRepo,
     );
     // Sandboxes and non-standard runners may not create an active-run journal.
     // A completed turn is nevertheless a safe acknowledgement of its dispatch.
@@ -2609,7 +2617,7 @@ async function runSessionPromptInner(
   startToken?: string,
   promptEntryId?: string,
   sourceMessageIds?: string[],
-  reviewHandoff?: boolean,
+  githubFixRoundRepo?: string,
 ): Promise<void> {
   const autoRetry = await retryAutoFallbackModel(sessionId);
   const session = findSession(sessionId);
@@ -3033,6 +3041,7 @@ async function runSessionPromptInner(
     images,
     mcpServers: mcpServers ?? "all",
     user,
+    githubFixRoundRepo,
     reposNote: isAutomationSession
       ? undefined
       : await buildSessionNote(session, user),
@@ -3052,6 +3061,7 @@ async function runSessionPromptInner(
         deniedTools,
         isAutomationSession,
         startToken,
+        githubFixRoundRepo,
       });
 
   // Defensive guard: a session with an explicit runnable provider must never
@@ -3149,7 +3159,7 @@ async function runSessionPromptInner(
           accountId: session.accountId,
           trustProfile: isAutomationSession ? "automation" : "interactive",
           journalKind: "prompt",
-          githubFixRound: reviewHandoff,
+          githubFixRoundRepo,
           onAskUser: makeAskHandler(sessionId),
           onSteerFailed: (text) => requeueFailedSteer(session.id, text, user),
           fallbackInProcessMcp: () =>
@@ -3264,7 +3274,7 @@ async function runSessionPromptInner(
       // synthetic continuations such as worker reports and restart recovery.
       mcpGrantUser: runInputs.mcpGrantUser,
       journal: { osSessionId: session.id, kind: "prompt" },
-      githubFixRound: reviewHandoff,
+      githubFixRoundRepo,
       startToken,
       onAskUser: makeAskHandler(sessionId),
     })) {
