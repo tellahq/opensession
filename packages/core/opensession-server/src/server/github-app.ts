@@ -367,9 +367,7 @@ export function githubConfiguredCredential(): boolean {
  * every default-installation GitHub request update this state through
  * installation-token minting. */
 export function githubAppCredentialHealth():
-  | "operational"
-  | "unavailable"
-  | "unchecked" {
+  "operational" | "unavailable" | "unchecked" {
   if (!githubConfiguredCredential()) return "unavailable";
   const identity = `${githubUserAuthSettings().clientId || ""}:${installationSelector()}`;
   if (
@@ -591,5 +589,9 @@ export async function githubServiceReadOnlyEnv(
   const token = ghRepo
     ? await githubAppRepositoryToken(ghRepo, { readOnly: true })
     : await githubToken();
-  return githubGitCredentialEnv(token || "");
+  // The empty push token matters: by default the operator's git-transport
+  // credential rides along next to any real session token, and ask-mode runs
+  // can print their environment — the write-capable credential must never be
+  // readable from a run whose whole point is a read-only ceiling.
+  return githubGitCredentialEnv(token || "", undefined, "");
 }
