@@ -895,9 +895,11 @@ export function demoReplayScript(): Array<() => JsonlLine[]> {
         transcriptLineToolResult(id, output, isError, t()),
       ];
     };
-  const say = (id: string, text: string) => (): JsonlLine[] => [
-    transcriptLineAssistantText(text, id, t(), MODEL_FABLE),
-  ];
+  const say =
+    (id: string, text: string, phase?: "commentary" | "final_answer") =>
+    (): JsonlLine[] => [
+      transcriptLineAssistantText(text, id, t(), MODEL_FABLE, false, phase),
+    ];
 
   return [
     (): JsonlLine[] => [
@@ -910,6 +912,7 @@ export function demoReplayScript(): Array<() => JsonlLine[]> {
     say(
       "demo-live-a1",
       "Plan: find the route registration choke point, wrap it once instead of editing 40 handlers, then verify a trace end-to-end.",
+      "commentary",
     ),
     step(
       1,
@@ -954,6 +957,7 @@ export function demoReplayScript(): Array<() => JsonlLine[]> {
     say(
       "demo-live-a3",
       "The smoke run needs an exporter endpoint — defaulting to the console exporter when OTLP is unconfigured, so local dev traces still show up.",
+      "commentary",
     ),
     step(
       7,
@@ -975,6 +979,14 @@ export function demoReplayScript(): Array<() => JsonlLine[]> {
     say(
       "demo-live-a4",
       "Traces verified end-to-end on the hot paths. Next loop: tag spans with tenant id and wire the sampler config.",
+      "final_answer",
+    ),
+    // Follow-up work must not swallow the answer or the unclassified finding.
+    step(
+      9,
+      "Bash",
+      { command: "git diff --stat" },
+      "2 files changed, 34 insertions(+)",
     ),
   ];
 }

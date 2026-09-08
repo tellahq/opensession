@@ -516,7 +516,7 @@ describe("TranscriptBlocks compact tool runs", () => {
     setTurnPrefs(null);
   });
 
-  test("keeps intermediate messages and tool runs in one worker", () => {
+  test("keeps unclassified intermediate results between tool folds", () => {
     setTurnPrefs(null);
     const html = renderToStaticMarkup(
       <TranscriptBlocks
@@ -536,9 +536,9 @@ describe("TranscriptBlocks compact tool runs", () => {
     );
 
     expect(html).toContain("The repository is clean.");
-    expect(html).toContain('data-narration=""');
-    expect(html.match(/>Working<\/span>/g)).toHaveLength(1);
-    expect(html.match(/data-tool-run="true"/g)).toHaveLength(2);
+    expect(html).not.toContain('data-narration=""');
+    expect(html.match(/>Working<\/span>/g)).toHaveLength(2);
+    expect(html).not.toContain('data-tool-run="true"');
     expect(html).not.toContain("git status");
     expect(html).not.toContain("bun test");
     expect(html).not.toContain("git diff");
@@ -696,17 +696,18 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
       id: "note",
       type: "assistant",
       content: "The repository is clean.",
+      assistantPhase: "commentary",
       timestamp: "2026-08-19T06:00:05Z",
     },
     {
       id: "answer",
       type: "assistant",
       content: "All good.",
+      assistantPhase: "final_answer",
       timestamp: "2026-08-19T06:00:06Z",
     },
   ];
-  // A live message remains inside the work only after another step follows it.
-  // Until then it is the visible streaming tail outside the disclosure.
+  // Progress remains visible while tools continue, until an answer arrives.
   const liveNarratedTurn: TranscriptEntry[] = [
     ...narratedTurn.slice(0, -1),
     {
@@ -740,8 +741,8 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     setTurnPrefs(null);
   });
 
-  test("opens grouped calls independently of the step timing", () => {
-    setTurnPrefs("running", "open");
+  test("opens grouped calls inside always-open work", () => {
+    setTurnPrefs("open", "open");
     const html = renderToStaticMarkup(
       <TranscriptBlocks live entries={liveNarratedTurn} />,
     );
@@ -764,7 +765,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     setTurnPrefs(null);
   });
 
-  test("folds intermediate narration but never the final output", () => {
+  test("folds explicitly superseded progress but never the answer", () => {
     setTurnPrefs("folded", "open");
     const html = renderToStaticMarkup(
       <TranscriptBlocks entries={narratedTurn} />,
@@ -777,17 +778,17 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
     setTurnPrefs(null);
   });
 
-  test("shows narration while working and folds it when the turn settles", () => {
+  test("keeps progress visible while working and folds it after an answer", () => {
     setTurnPrefs("running", "folded");
     const running = renderToStaticMarkup(
       <TranscriptBlocks live entries={liveNarratedTurn} />,
     );
-    expect(running.match(/>Working<\/span>/g)).toHaveLength(1);
+    expect(running.match(/>Working<\/span>/g)).toHaveLength(2);
     expect(running).toContain("The repository is clean.");
-    expect(running).toContain('data-narration=""');
-    expect(running).toContain('data-tool-run="true"');
+    expect(running).not.toContain('data-narration=""');
+    expect(running).not.toContain('data-tool-run="true"');
     expect(running).not.toContain("git status");
-    expect(running).toContain("bun test");
+    expect(running).not.toContain("bun test");
 
     const settled = renderToStaticMarkup(
       <TranscriptBlocks entries={narratedTurn} />,
@@ -808,6 +809,7 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
             id: "bold-answer",
             type: "assistant",
             content: "**All good**",
+            assistantPhase: "final_answer",
             timestamp: "2026-08-19T06:00:06Z",
           },
         ]}
@@ -1024,8 +1026,9 @@ describe("TranscriptBlocks turn work and tool call preferences", () => {
         timestamp: "2026-08-28T06:00:02Z",
       },
       {
-        id: "legacy-reasoning",
+        id: "reasoning-2",
         type: "assistant",
+        isReasoning: true,
         content: "**Verifying the release**",
         timestamp: "2026-08-28T06:00:03Z",
       },

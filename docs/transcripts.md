@@ -104,6 +104,23 @@ watchers reconcile from SQLite by `changeSeq`; the in-process notification is
 not itself the replay buffer. This avoids polling for server-owned sessions and
 makes delayed or duplicate notifications harmless.
 
+## Assistant message disclosure
+
+`TranscriptEntry.assistantPhase` preserves the provider's `commentary` or
+`final_answer` classification. Pi carries this in its versioned text signature;
+the live runner, native replay, and JSONL normalization retain it. Reasoning
+remains separately tagged with `isReasoning`. Other providers and old records
+without a phase stay unclassified. No content-based classification is applied.
+
+The web keeps answers and unclassified text visible even when tools follow.
+Explicit commentary can join the work fold only after a later explicit answer
+in the same conversation turn. Progress following that answer stays visible
+until another answer arrives. Cancellation and background-wake boundaries do
+not count as answers. Commentary carrying shared media, files, a question
+record, or an error stays visible. Thinking visibility retains its separate
+preference. Snapshot/history clamping uses the same disclosure rule, so a
+visible intermediate response receives the ordinary message budget.
+
 ## Serving to clients
 
 A client requests seq mode with `supportsSeq` on `watch`. The server uses it for
@@ -112,12 +129,11 @@ by Open Session:
 
 - **Initial snapshot:** `transcript_init` has a floor of the latest 132 entries.
   It extends backward until it includes 100 user/assistant messages. Tool-heavy
-  windows must also include 50 user messages, because intermediate assistant
-  notes collapse into the work fold and do not add visible conversation rows.
+  windows must also include 50 user messages, to retain enough conversation boundaries even in tool-heavy turns.
   Extension stops at 1,400 rows or an estimated 850,000 uncompressed wire
   bytes. Ordinary opening content is clamped to the 6,000 characters the web
-  client can render eagerly; folded tool results and intermediate assistant
-  notes get 256-character previews. Parser-only request ids, raw notice kinds,
+  client can render eagerly; folded tool results, reasoning, and explicitly superseded progress get
+  256-character previews. Parser-only request ids, raw notice kinds,
   and context provenance are removed after classification. Large transcript
   frames use WebSocket per-message deflate when the client negotiates it, with
   a shared server compressor to bound memory.

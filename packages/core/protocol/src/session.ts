@@ -86,6 +86,9 @@ export interface TranscriptEntry {
    * output. It remains visible in the timeline, but clients present it as
    * quiet activity instead of answer markdown. */
   isReasoning?: boolean;
+  /** Provider-declared purpose of ordinary assistant text. Missing metadata
+   * stays visible: clients must not infer progress from a later tool call. */
+  assistantPhase?: "commentary" | "final_answer";
   // Set on a Task/Agent tool_result: the spawned sub-agent's id, linking a
   // tool call to that sub-agent's own transcript.
   agentId?: string;

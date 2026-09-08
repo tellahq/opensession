@@ -26,6 +26,7 @@ import {
 } from "fs";
 import { basename, join } from "path";
 import type { TranscriptEntry } from "@tellahq/opensession-protocol/session";
+import { piMessagePhase } from "./pi-message-phase";
 import { stateDir } from "./paths";
 import { toolResultMedia } from "./transcript-media";
 
@@ -36,6 +37,7 @@ function piSessionsRoot(): string {
 interface PiNativeBlock {
   type?: string;
   text?: string;
+  textSignature?: unknown;
   thinking?: string;
   id?: string;
   name?: string;
@@ -237,12 +239,17 @@ export function readPiNativeTranscript(
             ? block.thinking
             : undefined;
       if (prose?.trim()) {
+        const phase =
+          block.type === "text"
+            ? piMessagePhase(block.textSignature)
+            : undefined;
         entries.push({
           id: proseIndex === 0 ? messageId : `${messageId}-b${proseIndex}`,
           type: role === "assistant" ? "assistant" : "user",
           content: prose,
           timestamp: ts,
           ...(isReasoning ? { isReasoning: true } : {}),
+          ...(phase ? { assistantPhase: phase } : {}),
         });
         proseIndex++;
       } else if (block.type === "toolCall" && block.name) {

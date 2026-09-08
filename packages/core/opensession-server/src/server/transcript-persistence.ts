@@ -323,12 +323,14 @@ export function transcriptLineAssistantText(
   ts?: string,
   model?: string,
   isReasoning?: boolean,
+  assistantPhase?: TranscriptEntry["assistantPhase"],
 ): JsonlLine {
   return {
     type: "assistant",
     uuid: id || crypto.randomUUID(),
     timestamp: ts || new Date().toISOString(),
     ...(isReasoning ? { isReasoning: true } : {}),
+    ...(assistantPhase ? { assistantPhase } : {}),
     message: {
       role: "assistant",
       content: [{ type: "text", text }],
@@ -418,6 +420,7 @@ export function transcriptLineForEntry(e: TranscriptEntry): JsonlLine | null {
         e.timestamp,
         e.model,
         e.isReasoning,
+        e.assistantPhase,
       );
     case "tool_use":
       return transcriptLineToolUse(

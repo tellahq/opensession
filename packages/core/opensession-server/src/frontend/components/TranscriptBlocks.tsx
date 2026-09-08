@@ -1,3 +1,4 @@
+import { foldedAssistantIds } from "@tellahq/opensession-protocol/message-disclosure";
 import React, { useEffect, useEffectEvent, useRef } from "react";
 import type {
   SessionNote,
@@ -60,7 +61,12 @@ import {
 
 type RenderBlock =
   | { kind: "entry"; entry: TranscriptEntry; reasoning?: boolean }
-  | { kind: "turn"; items: TranscriptEntry[]; expandWhileRunning: boolean }
+  | {
+      kind: "turn";
+      items: TranscriptEntry[];
+      expandWhileRunning: boolean;
+      mountScope?: string;
+    }
   | {
       kind: "footer";
       entry: TranscriptEntry;
@@ -295,7 +301,8 @@ function renderBlockKey(
   index: number,
   turnMountScope?: string,
 ): string {
-  if (block.kind === "turn") return turnMountKey(block.items, turnMountScope);
+  if (block.kind === "turn")
+    return turnMountKey(block.items, block.mountScope ?? turnMountScope);
   if (block.kind === "walkthrough") return "walkthrough";
   if (block.kind === "note") return `note:${block.note.id}`;
   if (block.kind === "footer") return `${block.entry.id}:footer`;
@@ -332,8 +339,8 @@ function renderBlockEstimate(block: RenderBlock): number {
 
 /**
  * Groups a flat transcript into per-turn work folds and message bubbles, then
- * renders them. Tool calls and intermediate assistant narration share one
- * TurnBlock; the turn's final assistant output always stays outside the fold.
+ * renders them. Tools, reasoning, and superseded progress can share a
+ * TurnBlock. Answers and unclassified text always stay outside the fold.
  * Shared by the main session view and the sub-agent sidebar so both render
  * identically.
  */
@@ -438,36 +445,46 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   }
 
   const blocks: RenderBlock[] = [];
-  // The current assistant turn: consecutive assistant/tool_use entries between
-  // user/system boundaries. Everything except the final ordinary assistant
-  // entry is work; keeping it in one block prevents narration from splitting a
-  // run into a ladder of one-step disclosures.
+  // Preserve response order. Only explicit progress with a later answer can
+  // join tools and reasoning in a fold; another step cannot demote a response.
+  const foldedAssistants = foldedAssistantIds(renderedEntries);
   let turn: TranscriptEntry[] = [];
 
   const flushTurn = (trailing = false) => {
     if (turn.length === 0) return;
     const last = turn[turn.length - 1];
-    // Provider-tagged reasoning is work even when it is the last persisted
-    // entry. An ordinary last assistant entry is the only safe final-output
-    // candidate, so it always remains outside the fold. As a live turn grows,
-    // an earlier candidate moves into work only once a later step proves it was
-    // intermediate narration.
     const final = last.type === "assistant" && !last.isReasoning ? last : null;
-    // Thinking is laid out per rail: a status at the tail of the live turn, or
-    // the full trace in place. See arrangeThinkingMessages.
-    const work = arrangeThinkingMessages(
-      final ? turn.slice(0, -1) : turn,
-      thinkingMessages,
-      Boolean(live) && trailing,
-    );
-    if (work.length > 0) {
+    let work: TranscriptEntry[] = [];
+    let precedingMessageId = "start";
+    const flushWork = () => {
+      const items = arrangeThinkingMessages(
+        work,
+        thinkingMessages,
+        Boolean(live) && trailing,
+      );
+      work = [];
+      if (!items.length) return;
       blocks.push({
         kind: "turn",
-        items: work,
-        expandWhileRunning: work.some((entry) => entry.type === "assistant"),
+        items,
+        expandWhileRunning: items.some((entry) => entry.type === "assistant"),
+        // A range can now contain several folds. The preceding visible message
+        // disambiguates them without changing keys when live tools append.
+        mountScope: turnMountScope
+          ? `${turnMountScope}:after:${precedingMessageId}`
+          : undefined,
       });
+    };
+    for (const entry of turn) {
+      if (entry.type === "tool_use" || foldedAssistants.has(entry.id)) {
+        work.push(entry);
+      } else {
+        flushWork();
+        blocks.push({ kind: "entry", entry });
+        precedingMessageId = entry.id;
+      }
     }
-    if (final) blocks.push({ kind: "entry", entry: final });
+    flushWork();
     // Quiet actions under the settled answer, the files the turn wrote, and
     // scratch files that have no other direct route from the transcript.
     if (final && !(live && trailing)) {
@@ -532,7 +549,9 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   const liveTurnBoundary = groupedBlocks.findLastIndex(
     (block) =>
       block.kind === "entry" &&
-      (block.entry.type === "user" || block.entry.type === "system"),
+      (block.entry.type === "user" ||
+        block.entry.type === "system" ||
+        block.entry.assistantPhase === "final_answer"),
   );
   const lastReviewLoop = groupedBlocks.findLastIndex(
     (block) => block.kind === "review-loop",
@@ -644,9 +663,9 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
         };
       }
 
-      // A live turn may contain several tool folds now that every model message
-      // splits them. Every tool run after the latest conversation boundary is
-      // part of that same active turn, not only the final fold.
+      // Visible messages split tool folds. Only work after the latest answer
+      // or conversation boundary is still active; earlier progress can settle
+      // even when follow-up tools keep the overall run alive.
       const isLiveTail =
         Boolean(live) &&
         (i === groupedBlocks.length - 1 ||

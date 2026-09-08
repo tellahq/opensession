@@ -43,12 +43,16 @@ describe("v2 transcript wire previews", () => {
     expect(clamped[1].content).toHaveLength(INIT_TOOL_RESULT_CLAMP_BYTES);
   });
 
-  test("loads intermediate assistant notes separately from visible answers", () => {
+  test("loads explicitly superseded progress separately from answers", () => {
     const prompt = entry("u", "user", "prompt");
-    const note = entry("n", "assistant", "n".repeat(3_000));
+    const note = entry("n", "assistant", "n".repeat(3_000), {
+      assistantPhase: "commentary",
+    });
     const call = entry("t", "tool_use", "Using Read", { toolUseId: "call" });
     const result = entry("r", "tool_result", "result", { toolUseId: "call" });
-    const answer = entry("a", "assistant", "a".repeat(3_000));
+    const answer = entry("a", "assistant", "a".repeat(3_000), {
+      assistantPhase: "final_answer",
+    });
 
     const clamped = clampV2InitEntries([prompt, note, call, result, answer]);
 
@@ -59,6 +63,19 @@ describe("v2 transcript wire previews", () => {
     expect(clamped[1].content).toHaveLength(INIT_COLLAPSED_MESSAGE_CLAMP_BYTES);
     expect(clamped[4]).toBe(answer);
     expect(clamped[4].content).toHaveLength(3_000);
+  });
+
+  test("keeps progress and unknown results readable when more tools follow", () => {
+    const progress = entry("progress", "assistant", "p".repeat(3_000), {
+      assistantPhase: "commentary",
+    });
+    const unknown = entry("unknown", "assistant", "u".repeat(3_000));
+    const answer = entry("answer", "assistant", "a".repeat(3_000), {
+      assistantPhase: "final_answer",
+    });
+    const tool = entry("tool", "tool_use", "Using read");
+    const entries = [answer, progress, unknown, tool];
+    expect(clampV2InitEntries(entries)).toBe(entries);
   });
 
   test("does not send message text the UI would hide behind its expander", () => {

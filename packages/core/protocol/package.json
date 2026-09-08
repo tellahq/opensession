@@ -17,6 +17,7 @@
     "./stream-cuts": "./src/stream-cuts.ts",
     "./runner": "./src/runner.ts",
     "./session": "./src/session.ts",
+    "./message-disclosure": "./src/message-disclosure.ts",
     "./notices": "./src/notices.ts",
     "./pasted-text": "./src/pasted-text.ts",
     "./todo-plan": "./src/todo-plan.ts",

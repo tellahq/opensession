@@ -1,3 +1,4 @@
+import { piMessagePhase } from "./pi-message-phase";
 /**
  * Pi coding-agent runner. Every production model id routes here.
  *
@@ -273,6 +274,7 @@ export function piAssistantTranscriptEntries(
     const block = raw as {
       type?: string;
       text?: unknown;
+      textSignature?: unknown;
       thinking?: unknown;
       id?: unknown;
       name?: unknown;
@@ -288,6 +290,8 @@ export function piAssistantTranscriptEntries(
         ? block.text
         : reasoning;
     if (prose.trim()) {
+      const phase =
+        block.type === "text" ? piMessagePhase(block.textSignature) : undefined;
       entries.push({
         id: proseIndex === 0 ? messageId : `${messageId}-b${proseIndex}`,
         type: "assistant",
@@ -295,6 +299,7 @@ export function piAssistantTranscriptEntries(
         timestamp,
         model,
         ...(isReasoning ? { isReasoning: true } : {}),
+        ...(phase ? { assistantPhase: phase } : {}),
       });
       proseIndex++;
     } else if (block.type === "toolCall" && block.id) {

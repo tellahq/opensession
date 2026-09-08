@@ -1,3 +1,4 @@
+import { assistantPhase } from "@tellahq/opensession-protocol/message-disclosure";
 import { readFileSync, statSync } from "fs";
 import { openSync, readSync, closeSync, fstatSync } from "fs";
 import { existsSync } from "fs";
@@ -70,6 +71,7 @@ interface RawJsonlEntry {
   // Open Session's Pi normalizer marks provider thinking blocks so they keep
   // their quiet activity presentation after the JSONL normalization round-trip.
   isReasoning?: boolean;
+  assistantPhase?: unknown;
   // Structured companion to an <ask-record> text block. Older parsers ignore
   // the extra line field and keep the markdown fallback in the message.
   ask?: unknown;
@@ -537,6 +539,7 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
   }
 
   if (raw.type === "assistant") {
+    const phase = assistantPhase(raw.assistantPhase);
     const content = raw.message.content;
     const model =
       typeof raw.message.model === "string" ? raw.message.model : undefined;
@@ -559,6 +562,7 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
             requestId: raw.requestId,
             ...(model ? { model } : {}),
             ...(raw.isReasoning ? { isReasoning: true } : {}),
+            ...(phase ? { assistantPhase: phase } : {}),
             ...(assistant.videos.length > 0
               ? { videos: assistant.videos }
               : {}),
@@ -593,6 +597,7 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
           requestId: raw.requestId,
           ...(model ? { model } : {}),
           ...(raw.isReasoning ? { isReasoning: true } : {}),
+          ...(phase ? { assistantPhase: phase } : {}),
           ...(assistant.videos.length > 0 ? { videos: assistant.videos } : {}),
           ...(assistant.images.length > 0 ? { images: assistant.images } : {}),
         });
