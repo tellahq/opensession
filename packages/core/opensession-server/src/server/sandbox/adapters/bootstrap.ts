@@ -2168,17 +2168,18 @@ function makeRemoteLauncher(
       // never spec.json, argv, or the persisted origin. Interactive runs prefer
       // their user's token. GitHub code automations and user-less interactive
       // runs receive a freshly resolved service credential for this one repo;
-      // every other automation stays credential-free.
+      // GitHub ask automations (the review workflows) receive the read-only
+      // credential; every other automation stays credential-free.
       let githubAuth = automationProfile
         ? {}
         : githubAuthEnv(githubCredentialUser(spec.user, spec.author?.name));
-      const githubCodeAutomation =
-        automationProfile &&
-        spec.mode === "code" &&
-        (spec.journalKind || "").startsWith("github-");
+      const githubKindAutomation =
+        automationProfile && (spec.journalKind || "").startsWith("github-");
+      const githubCodeAutomation = githubKindAutomation && spec.mode === "code";
+      const githubReadAutomation = githubKindAutomation && spec.mode !== "code";
       if (
         !githubAuth.GH_TOKEN &&
-        (!automationProfile || githubCodeAutomation)
+        (!automationProfile || githubKindAutomation)
       ) {
         // The sandbox origin is mutable by repository setup code. Bind service
         // authority only to the server-owned repo id recorded at ensure time.
@@ -2187,17 +2188,23 @@ function makeRemoteLauncher(
           ? (await import("../../worktree")).getRepo(repoId)
           : undefined;
         if (registeredRepo?.host !== "codestorage" && registeredRepo?.ghRepo) {
-          const { githubServiceCredentialEnv } =
+          const { githubServiceCredentialEnv, githubServiceReadOnlyEnv } =
             await import("../../github-app");
-          githubAuth = await githubServiceCredentialEnv(registeredRepo.ghRepo);
+          githubAuth = githubReadAutomation
+            ? await githubServiceReadOnlyEnv(registeredRepo.ghRepo)
+            : await githubServiceCredentialEnv(registeredRepo.ghRepo);
         }
       }
       const githubAuthPath = `${dir}/github-auth.json`;
       if (githubAuth.GH_TOKEN) {
         // Project the operator's git-transport credential alongside the run
         // token — the remote host cannot read ~/.opensession.env. It rides
-        // only with a real token, so credential-free runs stay that way.
+        // only with a real token, so credential-free runs stay that way —
+        // and never next to a read-only token: ask-mode review runs process
+        // untrusted PR content and can print their environment, so the
+        // write-capable transport credential stays off those hosts entirely.
         if (
+          !githubReadAutomation &&
           !githubAuth[GITHUB_PUSH_TOKEN_RUN_ENV] &&
           process.env.OPENSESSION_GITHUB_PUSH_TOKEN
         )
