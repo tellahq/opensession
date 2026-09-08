@@ -10,10 +10,9 @@ live in the operator's private notes, not here.
 
 1. A human who explicitly triggers an action in Open Session acts with their
    full GitHub permissions. Merge, close, review, push: whatever they could do
-   on github.com, they can do from the OS UI, attributed to them. Work the
-   agent does at the owner's request (a pull request, a comment, a resolved
-   thread) shows up under the owner's name, and "merge this" from the owner
-   is one tap away.
+   on github.com, they can do from the OS UI, attributed to them. A pull
+   request the agent opens at the owner's request shows up under the owner's
+   name, and "merge this" from the owner is one tap away.
 2. No agent process, in any kind of turn, ever holds a credential that can
    merge a pull request, update a protected branch, or approve a review. An
    unattended run, whether an automation, a `github-*` loop, a review, or a
@@ -159,19 +158,20 @@ mounted; the shell credential is the bot either way.
 | Push the session's own branch       | yes   | own, as bot   | own branch | no       | no      |
 | Force-push own branch               | yes   | lease, as bot | no         | no       | no      |
 | Open or edit a PR                   | yes   | as owner      | as bot     | no       | no      |
-| Comment, reply in threads           | yes   | as owner      | as bot     | as bot   | as bot  |
-| Resolve or unresolve a thread       | yes   | as owner      | as bot     | no       | as bot  |
+| Comment, reply in threads           | yes   | as bot        | as bot     | as bot   | as bot  |
+| Resolve or unresolve a thread       | yes   | as bot        | as bot     | no       | as bot  |
 | Submit an approving review          | yes   | no            | no         | no       | no      |
 | Merge                               | yes   | card          | no         | no       | no      |
 | Update or push the default branch   | yes   | no            | no         | no       | no      |
 | Delete a branch                     | yes   | no            | no         | no       | no      |
 | Repository settings, rulesets, apps | no    | no            | no         | no       | no      |
 
-"as bot" means the agent's shell does it with the installation token. "as
-owner" means the agent calls a gateway tool and the gateway does the request
-with the owner's token, on the server, without a tap: the PR, the comment,
-and the resolved thread are the owner's on GitHub, and the agent never held
-the credential. "lease" means `--force-with-lease` only. "card" means the
+"as bot" means the agent's shell does it with the installation token, in
+every turn kind: a reply in a review thread or a resolved thread is the
+bot's on GitHub, whoever started the turn. "as owner" means the agent calls
+a gateway tool and the gateway does the request with the owner's token, on
+the server, without a tap: the PR is the owner's on GitHub, and the agent
+never held the credential. "lease" means `--force-with-lease` only. "card" means the
 agent cannot do it at all; it writes a merge card into the session and the
 owner's tap calls the same `pr-merge` route the Merge button calls, with the
 owner's token. "Merge this" from the owner is therefore one tap, and a merge
@@ -186,13 +186,14 @@ the rulesets, and the human's own bypass status, apply unchanged.
   `pr-close`, `pr-review`, `pr-comment`, `git-push`). Every client (web,
   phone, Electron, iOS, Chrome) already goes through these routes, so this
   needs no client change.
-- **Delegate**: the Automation token below in the shell, plus the
-  owner-identity tools: `open_pull_request`, `edit_pull_request`,
-  `comment_pull_request`, `reply_review_thread`, `resolve_review_thread`, and
-  `propose_merge`, which only writes the card. Each tool runs one request on
-  the server with the owner's token, scoped to the session's repositories,
-  and is mounted only when `githubCredentialUser` (#322) says the turn's
-  sender is the owner. The token is never in `GH_TOKEN`, an auth file, a
+- **Delegate**: the Automation token below in the shell, plus three
+  owner-identity tools: `open_pull_request`, `edit_pull_request`, and
+  `propose_merge`, which only writes the card. The first two run one request
+  on the server with the owner's token, scoped to the session's
+  repositories, and are mounted only when `githubCredentialUser` (#322) says
+  the turn's sender is the owner. Comments, thread replies, and resolves are
+  not owner-identity actions; the shell does them with the bot token like
+  any other turn. The owner's token is never in `GH_TOKEN`, an auth file, a
   Sandbox volume, or anything else the run can read. `githubRunEnv(user)`
   and the user-token projection into runs are deleted.
 - **Automation**: a repository-scoped installation token with the code
@@ -257,10 +258,11 @@ costs.
 A Delegate turn pushes its branch with the bot token; the commits are still
 authored by the owner. Then it calls `open_pull_request`, and the gateway
 creates the PR as the owner, with the attribution footer from the session
-context. Later, `reply_review_thread` and `resolve_review_thread` post and
-resolve as the owner. On GitHub this reads exactly as if the owner had done
-it, which is what the team wants to see, and the agent's process held
-nothing but a bot token throughout.
+context. On GitHub the PR reads exactly as if the owner had opened it, which
+is what the team wants to see, and the agent's process held nothing but a
+bot token throughout. Review-thread replies and resolves later in the PR's
+life are the bot's, in this turn kind as in every other: the human's name is
+on the PR and the commits, the bot's on the back-and-forth it did.
 
 When the owner says "merge this", the agent calls `propose_merge`. That
 writes a merge card into the transcript: the PR, the method, the check and
@@ -270,9 +272,9 @@ agent has no path to the merge itself: not through a tool, not through the
 shell, not through the API, because nothing in its environment carries a
 token that GitHub would accept for an update to `main`.
 
-The gateway tools are the whole Delegate surface. They are few, they are
-named after their effect, and each does one request. Adding one is a
-security review, not a convenience.
+The gateway tools are the whole Delegate surface. There are two that touch
+GitHub, they are named after their effect, and each does one request.
+Adding one is a security review, not a convenience.
 
 ### Attribution
 
@@ -282,11 +284,10 @@ security review, not a convenience.
   the attribution footer from the session context, no assignee. Automation
   PRs are authored by the bot, carry the footer, and assign the human the
   automation names.
-- Review threads and fix-round replies post as the bot, and the bot resolves
-  the threads it has addressed. This is the decided behavior for handoffs
-  and it is what the Automation credential produces. A Delegate turn replies
-  and resolves as the owner through the gateway tools, the same as the owner
-  would on github.com.
+- Review threads, replies, and resolves post as the bot in every turn kind,
+  Delegate included. This is the decided behavior for handoffs and it is
+  what the shell credential produces without any tool; a human who wants
+  their own name on a reply writes it on github.com.
 
 ### Host hygiene
 
@@ -381,9 +382,9 @@ is what closes requirement 2.
    path untouched.
 5. `githubCredentialUser` decides Delegate versus Automation for every turn,
    defaulting to Automation for any sender that is not the session owner or
-   an auto-continue of the owner. Delegate turns get the owner-identity
-   gateway tools; the tools run the request server-side with the owner's
-   token and refuse repositories outside the session.
+   an auto-continue of the owner. Delegate turns get `open_pull_request`
+   and `edit_pull_request`; the tools run the request server-side with the
+   owner's token and refuse repositories outside the session.
 6. Give ordinary code automations the Automation credential plus a
    `PublicationPolicy`, so they open real PRs instead of pushing with an
    ambient identity.
