@@ -148,6 +148,7 @@ decides this, and it errs toward the bot: an unknown sender is not the owner.
 | Force-push own branch               | yes   | lease    | no         | no       | no      |
 | Open a PR                           | yes   | yes      | yes        | no       | no      |
 | Comment, reply in threads           | yes   | yes      | yes        | yes      | yes     |
+| Resolve or unresolve a thread       | yes   | yes      | yes        | no       | yes     |
 | Submit an approving review          | yes   | ask      | no         | no       | no      |
 | Merge                               | yes   | ask      | no         | no       | no      |
 | Update or push the default branch   | PR    | ask      | no         | no       | no      |
@@ -248,8 +249,10 @@ equivalent.
 - Delegate PRs are authored by the owner and carry the attribution footer
   from the session context, no assignee. Automation PRs are authored by the
   bot, carry the footer, and assign the human the automation names.
-- Review threads and fix-round replies post as the bot. This is the decided
-  behavior for handoffs and it is what the Automation credential produces.
+- Review threads and fix-round replies post as the bot, and the bot resolves
+  the threads it has addressed. This is the decided behavior for handoffs
+  and it is what the Automation credential produces. A Delegate turn replies
+  and resolves as the owner, the same as the owner would on github.com.
 
 ### Host hygiene
 
@@ -275,12 +278,18 @@ equivalent.
 
 `PublicationPolicy` becomes a property of every delegate and automation run,
 not only descendants: `{repo, baseBranch, headBranches}` where `headBranches`
-is the session branch plus each attached repository's branch. It matches
-`gh pr merge`, `gh pr review --approve`, `gh api` with a mutating method,
-`git push` to `baseBranch` or to a branch outside `headBranches`, `--force`
-without `--force-with-lease`, `git push --delete`, and any `--repo` outside the
-session's repositories. Automation turns get a refusal. Delegate turns get a
-question card with the exact command, answered "once", never "always".
+is the session branch plus each attached repository's branch. It matches by
+effect, not by HTTP verb: `gh pr merge`, `gh pr review --approve`, `git push`
+to `baseBranch` or to a branch outside `headBranches`, `--force` without
+`--force-with-lease`, `git push --delete`, any `--repo` outside the session's
+repositories, and the `gh api` forms of the same outcomes (the merge
+endpoints, a review with the `APPROVE` event, ref updates and deletes,
+`mergePullRequest`, `enablePullRequestAutoMerge`). Commenting, replying in a
+thread, and `resolveReviewThread` / `unresolveReviewThread` are not
+publication and pass in every turn kind; an agent that has fixed a finding
+replies and resolves the thread without a card. Automation turns get a
+refusal on the matched set. Delegate turns get a question card with the
+exact command, answered "once", never "always".
 
 For Automation this is a tripwire, as `command-policy.ts` says of itself;
 the boundary is the token and the rulesets. For Delegate the card is the
