@@ -106,6 +106,12 @@ credential. API calls (`gh`, octokit tooling) keep `GH_TOKEN` unchanged, and a
 run that carries no GitHub credential still receives nothing. Unset, git
 transport uses the run's session token.
 
+With the push token set, every session push reaches GitHub as the bot account,
+so the PR webhook sees the bot as the `synchronize` sender. The review
+automation treats those pushes like human pushes; it only skips a bot-sender
+push while one of its own code loops (auto-fix, simplify, adversarial, or an
+@mention reply) is in flight on that PR.
+
 The hardened deployment this enables: cap the GitHub App at **Contents: read**
 so no App or user-to-server token can write repository contents, then mint a
 fine-grained PAT on the bot account with **Contents: read and write** — plus
