@@ -367,7 +367,9 @@ export function githubConfiguredCredential(): boolean {
  * every default-installation GitHub request update this state through
  * installation-token minting. */
 export function githubAppCredentialHealth():
-  "operational" | "unavailable" | "unchecked" {
+  | "operational"
+  | "unavailable"
+  | "unchecked" {
   if (!githubConfiguredCredential()) return "unavailable";
   const identity = `${githubUserAuthSettings().clientId || ""}:${installationSelector()}`;
   if (
