@@ -255,14 +255,15 @@ costs.
 
 ### The owner asks, the gateway acts as the owner
 
-A Delegate turn pushes its branch with the bot token; the commits are still
-authored by the owner. Then it calls `open_pull_request`, and the gateway
-creates the PR as the owner, with the attribution footer from the session
-context. On GitHub the PR reads exactly as if the owner had opened it, which
-is what the team wants to see, and the agent's process held nothing but a
-bot token throughout. Review-thread replies and resolves later in the PR's
-life are the bot's, in this turn kind as in every other: the human's name is
-on the PR and the commits, the bot's on the back-and-forth it did.
+A Delegate turn commits as the bot, with the owner as `Co-authored-by`, and
+pushes its branch with the bot token. Then it calls `open_pull_request`, and
+the gateway creates the PR as the owner, with the attribution footer from
+the session context. On GitHub the PR reads exactly as if the owner had
+opened it, which is what the team wants to see, and the agent's process held
+nothing but a bot identity throughout. Review-thread replies and resolves
+later in the PR's life are the bot's, in this turn kind as in every other:
+the human's name is on the PR and on every commit as co-author, the bot's on
+the commits it wrote and the back-and-forth it did.
 
 When the owner says "merge this", the agent calls `propose_merge`. That
 writes a merge card into the transcript: the PR, the method, the check and
@@ -278,8 +279,13 @@ Adding one is a security review, not a convenience.
 
 ### Attribution
 
-- Commit author stays the human (`gitIdentityEnv(author)`), with the model as
-  `Co-Authored-By`.
+- Commits are authored by the bot in every turn kind, with the human as
+  `Co-authored-by`: the session owner for Delegate, the human the automation
+  names for Automation. `gitIdentityEnv` sets the bot identity and the
+  trailer; no run carries a human `GIT_AUTHOR_*` or `GIT_COMMITTER_*`
+  identity, so nothing an agent commits can be mistaken for something the
+  human typed. Where a repository requires signed commits, the bot's signing
+  key is the only key on the host.
 - Delegate PRs are authored by the owner through the gateway tool and carry
   the attribution footer from the session context, no assignee. Automation
   PRs are authored by the bot, carry the footer, and assign the human the
