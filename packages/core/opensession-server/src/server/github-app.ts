@@ -510,6 +510,7 @@ export function githubRepositoryMatchesInstallation(
 
 export async function githubAppRepositoryToken(
   ghRepo: string,
+  opts: { readOnly?: boolean } = {},
 ): Promise<string | null> {
   if (!githubConfiguredCredential()) return null;
   const owner = githubRepoOwner(ghRepo);
@@ -534,7 +535,11 @@ export async function githubAppRepositoryToken(
           repositories: [repo],
           // Trusted repository code runs can push/reply and inspect the
           // failing checks and Actions logs they are expected to repair.
-          permissions: githubAppMintPermissions(CODE_PERMISSIONS),
+          // Read-only callers (ask-mode github-* runs) get the read set: the
+          // same visibility with no write capability behind it.
+          permissions: githubAppMintPermissions(
+            opts.readOnly ? READ_PERMISSIONS : CODE_PERMISSIONS,
+          ),
         }),
       },
     );
@@ -572,5 +577,19 @@ export async function githubServiceCredentialEnv(
   // Even a failed mint carries the process-local SSH-to-HTTPS rewrite. That
   // turns an existing git@github.com origin into a non-interactive HTTPS
   // failure instead of escaping through a host SSH key.
+  return githubGitCredentialEnv(token || "");
+}
+
+/** Read-only sibling of githubServiceCredentialEnv for runs that inspect
+ * GitHub state through `gh` while processing untrusted repository content:
+ * same fail-closed env shape (including the SSH-to-HTTPS rewrite), minting
+ * the repository-scoped read permission set so nothing behind the token can
+ * write. */
+export async function githubServiceReadOnlyEnv(
+  ghRepo?: string,
+): Promise<Record<string, string>> {
+  const token = ghRepo
+    ? await githubAppRepositoryToken(ghRepo, { readOnly: true })
+    : await githubToken();
   return githubGitCredentialEnv(token || "");
 }

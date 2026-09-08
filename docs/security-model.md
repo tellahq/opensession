@@ -63,9 +63,13 @@ configuration for the run.
   repository configured as a shared self-development checkout uses its live
   checkout. Sandboxed ask runs use the sandbox workspace. Code gets an
   isolated writable workspace/worktree and can edit and commit. Ordinary
-  automations currently receive no GitHub credential, so they cannot push or
-  open a GitHub PR; trusted `github-*` code workflows have a separate,
-  repository-scoped credential path. Every other scope still applies: MCP
+  automations receive no GitHub credential, so they cannot push or open a
+  GitHub PR. Trusted `github-*` workflows have separate, repository-scoped
+  credential paths by mode: code runs mint the code permission set (reply,
+  inspect checks and Actions logs), while ask runs — the review workflows,
+  which process untrusted PR content — mint the read-only set and ignore any
+  launcher-supplied token, so nothing they can be injected into holds write
+  capability. Every other scope still applies: MCP
   allowlist, denied writes, IMDS blocking, and the explicit environment.
 - A sandboxed automation runs in a fresh disposable Daytona Executor. Open
   Session admits it only after Daytona has passed qualification, including a

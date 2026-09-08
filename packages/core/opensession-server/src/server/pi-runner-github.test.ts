@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { GITHUB_RUN_AUTH_FILE_ENV } from "./github-auth";
-import { githubCodeRunEnv } from "./pi-runner";
+import { githubCodeRunEnv, githubReadRunEnv } from "./pi-runner";
 
 const keys = [
   "OPENSESSION_CONFIG",
@@ -62,6 +62,14 @@ describe("recovered GitHub code-run credentials", () => {
       expect(env.GH_TOKEN).toBe("");
       expect(env.GIT_CONFIG_VALUE_2).toBe("git@github.com:");
       expect(Object.values(env)).not.toContain("human-token");
+
+      // The read-run variant holds the same boundary: an unavailable App
+      // mint yields an empty credential with the SSH rewrite, never a
+      // connected human's token.
+      const readEnv = await githubReadRunEnv(cwd);
+      expect(readEnv.GH_TOKEN).toBe("");
+      expect(readEnv.GIT_CONFIG_VALUE_2).toBe("git@github.com:");
+      expect(Object.values(readEnv)).not.toContain("human-token");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

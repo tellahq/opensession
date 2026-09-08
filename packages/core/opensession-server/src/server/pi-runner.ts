@@ -181,6 +181,22 @@ export async function githubCodeRunEnv(
   return githubServiceCredentialEnv(repo.ghRepo);
 }
 
+/** Read-only authority for an unattended GitHub ask run (the review
+ * workflows): they read PR threads, checks, and Actions logs through `gh`
+ * while processing untrusted repository content, so their token is the
+ * repository-scoped read set — visibility with no write capability. Same
+ * fail-closed resolution as githubCodeRunEnv. */
+export async function githubReadRunEnv(
+  cwd: string,
+): Promise<Record<string, string>> {
+  if (process.env[GITHUB_RUN_AUTH_FILE_ENV]) return projectedGithubRunEnv();
+  const { repoForPathOrNull } = await import("./worktree");
+  const repo = repoForPathOrNull(cwd);
+  if (!repo || repo.host === "codestorage" || !repo.ghRepo) return {};
+  const { githubServiceReadOnlyEnv } = await import("./github-app");
+  return githubServiceReadOnlyEnv(repo.ghRepo);
+}
+
 /** State root: server-owned agentDir, per-unified-session pi session dirs,
  *  and the smoke-turn scratch cwd. Never ~/.pi. */
 export const PI_STATE_DIR = stateDir("pi");
@@ -2022,18 +2038,24 @@ async function* runPiAttempt(
     const githubUserLogin = interactiveGithub
       ? githubUserLoginForRun(githubUser)
       : null;
-    // Only the dedicated GitHub code workflows may inject a service
-    // credential into an unattended run. Other automations remain credential-
-    // free even if a caller accidentally supplies githubEnv.
-    const githubCodeRun =
-      mode === "code" && baseJournalKind(journal?.kind).startsWith("github-");
+    // Only the dedicated GitHub workflows may inject a service credential
+    // into an unattended run: code mode gets the repository-scoped code set,
+    // ask mode (the review workflows, which chew on untrusted PR content)
+    // gets the repository-scoped read set and ignores any caller-supplied
+    // githubEnv, so a launcher can never hand a review run a writable token.
+    // Other automations remain credential-free even if a caller accidentally
+    // supplies githubEnv.
+    const githubKindRun = baseJournalKind(journal?.kind).startsWith("github-");
+    const githubCodeRun = mode === "code" && githubKindRun;
     const githubEnv = githubCodeRun
       ? opts.githubEnv?.GH_TOKEN
         ? opts.githubEnv
         : await githubCodeRunEnv(cwd)
-      : interactiveGithub
-        ? githubRunEnv(githubUser)
-        : {};
+      : githubKindRun
+        ? await githubReadRunEnv(cwd)
+        : interactiveGithub
+          ? githubRunEnv(githubUser)
+          : {};
 
     const binding = await createPiRuntimeBinding({
       providerID: parsed.providerID,

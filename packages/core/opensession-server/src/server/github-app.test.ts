@@ -320,4 +320,43 @@ describe("repository-scoped App installation identity", () => {
     expect(githubAppCredentialHealth()).toBe("unavailable");
     expect(await githubToken({ repo: "owner-b/app" })).toBe("ghs_2_read");
   });
+
+  test("a read-only repository token mints the read set", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-github-readonly-"));
+    dirs.push(dir);
+    const config = join(dir, "config.json");
+    const keyPath = join(dir, "github-app.pem");
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    writeFileSync(keyPath, privateKey.export({ format: "pem", type: "pkcs8" }));
+    writeOwnerConfig(config, "owner-a");
+    process.env.OPENSESSION_CONFIG = config;
+    delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
+    __setGithubAppKeyPathForTest(keyPath);
+    const bodies: Array<{
+      repositories?: string[];
+      permissions: Record<string, string>;
+    }> = [];
+    const base = twoInstallationFetch([]);
+    globalThis.fetch = (async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      if (/access_tokens$/.test(String(input)))
+        bodies.push(JSON.parse(String(init?.body)));
+      return base(input as string, init);
+    }) as typeof fetch;
+
+    expect(
+      await githubAppRepositoryToken("owner-a/tool", { readOnly: true }),
+    ).toBe("ghs_1_repo:tool");
+    expect(bodies).toHaveLength(1);
+    // Still repository-scoped, and every requested scope is read: the token
+    // a review run holds must not be able to write anything.
+    expect(bodies[0].repositories).toEqual(["tool"]);
+    expect(bodies[0].permissions.pull_requests).toBe("read");
+    expect(bodies[0].permissions.contents).toBe("read");
+    expect(
+      Object.values(bodies[0].permissions).every((v) => v === "read"),
+    ).toBe(true);
+  });
 });
