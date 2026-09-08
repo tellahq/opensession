@@ -370,15 +370,17 @@ export async function handleGithubPrEvent(
 
 export async function fireReview(
   ref: PrRef,
-  _byLabel: boolean,
+  byLabel: boolean,
   preflightDetails?: PrAutomationDetails,
 ): Promise<ReviewResult | null> {
   const { config } = resolveReviewConfig();
+  // A label is an explicit human ask: force so an already-reviewed head is
+  // re-reviewed instead of dedup-skipped.
   const result = await runReview(
     ref,
     config,
     onSessionInvalidate,
-    false,
+    byLabel,
     undefined,
     preflightDetails,
   ).catch((e) => {
