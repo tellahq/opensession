@@ -42,6 +42,7 @@ touches an in-process tool:
 | --- | --- | --- | --- |
 | [`opensession-sessions`](#opensession-sessions) | 15 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
 | [`opensession-admin`](#opensession-admin) | 14 | interactive, Slack loop | – |
+| [`opensession-settings`](#opensession-settings) | 3 | interactive, Slack loop | Requires a human prompting user. Machine-authored turns, including auto-continue, receive no settings tools. |
 | [`opensession-runners`](#opensession-runners) | 5 | interactive | – |
 | [`opensession-goals`](#opensession-goals) | 8 | interactive | – |
 | [`opensession-search`](#opensession-search) | 2 | interactive | – |
@@ -71,7 +72,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-30 servers, 133 tools.
+31 servers, 136 tools.
 
 ## opensession-sessions
 
@@ -269,6 +270,34 @@ Restrict an existing MCP server to specific people, or lift the restriction. Pas
 `mcp__opensession-admin__remove_mcp_server` · input: `name` (string, required)
 
 Remove a configured MCP server by name.
+
+## opensession-settings
+
+Read and change the prompting user's personal prompt and output style.
+
+- **Source** `packages/core/opensession-server/src/server/settings-mcp.ts`
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`, `packages/core/opensession-server/src/agents/slack/handlers.ts`
+- **Runs** interactive, Slack loop
+- **Condition** Requires a human prompting user. Machine-authored turns, including auto-continue, receive no settings tools.
+- **Note** Identity comes only from the trusted turn context. No target-user argument; workflow scripts and automation-owned resumes cannot access this server.
+
+### `get_settings`
+
+`mcp__opensession-settings__get_settings` · input: none
+
+Read the current prompting user's personal system prompt and output style from Open Session Settings. These are the same preferences used by the web and native apps. No other user's settings or credentials are accessible.
+
+### `update_personal_prompt`
+
+`mcp__opensession-settings__update_personal_prompt` · input: `change` (any, required)
+
+Change the current prompting user's personal system prompt when they ask. Append preserves existing instructions; replace requires the exact current prompt from get_settings and can clear it with empty text. Repeating an append already at the end is a no-op. Changes apply to subsequent interactive turns, not the current turn or automations.
+
+### `set_output_style`
+
+`mcp__opensession-settings__set_output_style` · input: `outputStyle` ("default" | "concise", required)
+
+Set the current prompting user's Open Session output style when they ask. Concise shortens reports without reducing engineering thoroughness; default restores the normal style. Applies to subsequent interactive turns and leaves the personal prompt unchanged.
 
 ## opensession-runners
 

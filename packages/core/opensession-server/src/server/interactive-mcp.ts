@@ -76,6 +76,7 @@ import {
 } from "./session-repos";
 import { makeAskHandler } from "./asks";
 import { createScheduleMcpServer } from "./schedule-mcp";
+import { personalSettingsMcpServers } from "./settings-mcp";
 import { activeSandboxFor } from "./session-sandbox";
 
 /** The session's primary repo id, for the papercuts toggle (undefined =
@@ -139,6 +140,7 @@ export function interactiveMcpServers(
 ): Record<string, unknown> {
   const createdBy = user || productName();
   return {
+    ...personalSettingsMcpServers(user),
     "opensession-sessions": createSessionsMcpServer({
       createdBy,
       createdByLogin: sessionId

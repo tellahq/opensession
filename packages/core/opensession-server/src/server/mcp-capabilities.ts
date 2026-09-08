@@ -25,6 +25,12 @@ export const INTERNAL_MCP_CAPABILITIES = {
     guidance:
       "List, create, update, or run automations and manage configured MCP connections.",
   },
+  "opensession-settings": {
+    summary:
+      "Read and change the prompting user's personal prompt and output style.",
+    guidance:
+      "Use get_settings, update_personal_prompt, and set_output_style when the user asks to change their personal instructions or response style. Append preserves existing instructions; replacement requires reading the current prompt first. These tools act only for the current prompting user, never another person.",
+  },
   "opensession-runners": {
     summary: "Run bounded commands on trusted persistent machines (Runners).",
     guidance:

@@ -132,6 +132,8 @@ export const WORKFLOW_INPROCESS_EXCLUDED: Record<string, string> = {
     "it borrows a teammate's credential on a model-authored purpose string",
   "opensession-admin":
     "it reconfigures automations and MCP connections, so a script could widen its own surface",
+  "opensession-settings":
+    "it changes a person's standing instructions and preferences beyond this session; make the change from a human-authored turn",
   "opensession-sessions":
     "it creates and steers other sessions; fan out with agent() instead",
   "opensession-workflows":

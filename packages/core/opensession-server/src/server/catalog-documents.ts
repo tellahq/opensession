@@ -31,6 +31,8 @@ export const APPLICATION_CATALOG_NAMESPACES = [
   "hides",
   "settlements",
   "mentions",
+  "personal-prompts",
+  "personal-output-styles",
 ] as const;
 
 export type ApplicationCatalogNamespace =

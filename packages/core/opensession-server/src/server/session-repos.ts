@@ -274,8 +274,8 @@ export async function memoryNoteFor(
   sessionId?: string,
 ): Promise<string> {
   const parts: string[] = [
-    personalOutputStyleNoteFor(user),
-    personalPromptNoteFor(user),
+    await personalOutputStyleNoteFor(user),
+    await personalPromptNoteFor(user),
   ];
   try {
     const scopes = sessionMemoryScopes({ user, repos });

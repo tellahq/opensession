@@ -205,7 +205,7 @@ export async function handlePrefsRoutes(
   // a teammate between the web, native app, Slack, and GitHub.
   if (path === "/api/personal-output-style" && req.method === "GET") {
     const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
-    return Response.json({ outputStyle: getPersonalOutputStyle(user) });
+    return Response.json({ outputStyle: await getPersonalOutputStyle(user) });
   }
 
   if (path === "/api/personal-output-style" && req.method === "PUT") {
@@ -225,7 +225,7 @@ export async function handlePrefsRoutes(
     }
     const user = requestUser(ctx, body.user) || "Anonymous";
     return Response.json({
-      outputStyle: setPersonalOutputStyle(user, body.outputStyle),
+      outputStyle: await setPersonalOutputStyle(user, body.outputStyle),
     });
   }
 
@@ -236,7 +236,7 @@ export async function handlePrefsRoutes(
   // PUT replaces it wholesale (empty string clears).
   if (path === "/api/personal-prompt" && req.method === "GET") {
     const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
-    return Response.json({ prompt: getPersonalPrompt(user) });
+    return Response.json({ prompt: await getPersonalPrompt(user) });
   }
 
   if (path === "/api/personal-prompt" && req.method === "PUT") {
@@ -253,7 +253,7 @@ export async function handlePrefsRoutes(
     }
     const user = requestUser(ctx, body.user) || "Anonymous";
     return Response.json({
-      prompt: setPersonalPrompt(user, body.prompt),
+      prompt: await setPersonalPrompt(user, body.prompt),
     });
   }
 

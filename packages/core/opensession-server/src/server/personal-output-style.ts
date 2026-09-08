@@ -1,39 +1,35 @@
 import { personalIdentityKey } from "./personal-prompts";
-import { userStore } from "./shared/user-store";
+import { catalogUserStore } from "./shared/catalog-user-store";
 
 export type PersonalOutputStyle = "default" | "concise";
 
-const store = userStore<PersonalOutputStyle>({
+const store = catalogUserStore<PersonalOutputStyle>({
   name: "personal-output-styles",
   field: "outputStyle",
   clean: (raw) => (raw === "concise" ? "concise" : "default"),
-  identity: personalIdentityKey,
-  extra: () => ({ updatedAt: new Date().toISOString() }),
 });
 
-export function getPersonalOutputStyle(
+export async function getPersonalOutputStyle(
   user: string | undefined | null,
-): PersonalOutputStyle {
-  try {
-    return store.get(user ?? "");
-  } catch {
-    return "default";
-  }
+): Promise<PersonalOutputStyle> {
+  const identity = personalIdentityKey(user);
+  return identity ? store.get(identity) : "default";
 }
 
-export function setPersonalOutputStyle(
+export async function setPersonalOutputStyle(
   user: string | undefined | null,
   style: unknown,
-): PersonalOutputStyle {
-  return store.set(user ?? "", style);
+): Promise<PersonalOutputStyle> {
+  const identity = personalIdentityKey(user);
+  return identity ? store.set(identity, style) : "default";
 }
 
 /** System-prompt guidance for sessions started by a person who chose Concise. */
-export function personalOutputStyleNoteFor(
+export async function personalOutputStyleNoteFor(
   user: string | undefined | null,
-): string {
+): Promise<string> {
   try {
-    if (getPersonalOutputStyle(user) !== "concise") return "";
+    if ((await getPersonalOutputStyle(user)) !== "concise") return "";
     return [
       "## Personal output style: Concise",
       "The prompting user chose brevity over narration. Follow these rules:",

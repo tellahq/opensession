@@ -37,6 +37,7 @@ import { SlackStreamer, buildToolStatus, isSilentTool } from "./streamer";
 import { splitSlackMedia } from "./media";
 import { SlackProgress, taskCardTitle } from "./progress";
 import { createAdminMcpServer } from "./admin-tools";
+import { personalSettingsMcpServers } from "../../server/settings-mcp";
 import { createGithubMcpServer } from "./github-tools";
 import { createSessionsMcpServer } from "./sessions-tools";
 import { createHumansMcpServer } from "./humans-tools";
@@ -969,7 +970,8 @@ export async function processMessage(
     console.warn("[slack] failed to build admin tools / memory:", e);
   }
   const ADMIN_TOOLS_PROMPT =
-    "\n\n## Self-management\nYou can manage your own setup via the opensession-admin MCP tools: " +
+    "\n\n## Self-management\nUse opensession-settings to read or change the prompting user's personal system prompt and output style. " +
+    "You can manage your own setup via the opensession-admin MCP tools: " +
     "channel memory (remember / list_memory / forget) and, for trusted users, automations " +
     "(list/create/update/delete/run_automation — routines on a UTC cron, or event/webhook), one-off " +
     "scheduled runs (schedule_once — 'remind me about this next week', 'run this again in a week', or any " +
@@ -1001,6 +1003,8 @@ export async function processMessage(
     handleAskUserQuestion(sessionKey, input, channel, threadTs);
   const inProcessMcp: Record<string, unknown> = {
     ...adminMcpServers,
+    // Fresh per message, outside the thread cache: settings belong to its sender.
+    ...personalSettingsMcpServers(msg.userId),
     "opensession-ask": createAskUserMcpServer({ ask: askHandler }),
   };
   registerSessionMcpServers(bksId, inProcessMcp);

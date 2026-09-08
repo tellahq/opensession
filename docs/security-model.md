@@ -364,6 +364,31 @@ directly without the MCP. Sessions whose runs aren't owned by this process
 not wire the unrestricted `opensession-sessions` server into automation paths.
 Cross-session control from untrusted ticket text is a privilege-escalation path.
 
+### Personal settings through agents
+
+`opensession-settings` lets a human-authored interactive or Slack turn read and
+change that person's personal prompt and output style. The gateway binds the
+server to the prompting user from the trusted run context. Tool arguments cannot
+select a user, and the server never falls back to the session creator. Missing
+identities and machine actors, including auto-continue and worker reports, receive
+no settings tools. Slack builds this server fresh for each message, outside its
+thread-level tool cache.
+
+The tools use the same identity-resolved stores as Settings in the web and native
+apps. Append preserves existing instructions and rejects overflow instead of
+truncating; replacement requires the exact previous prompt to reject stale edits.
+Reads and mutations use async RPC to the worker-owned application catalog.
+Appends and replacements run inside its compare-and-set operation, so concurrent
+writers cannot erase each other's instructions. Storage failures propagate to the
+tool rather than becoming empty prompts or successful saves. Changes affect
+subsequent interactive turns.
+
+Automation-owned sessions, including interactive resumes, keep the existing
+fail-closed automation server set. Workflow scripts cannot use
+`opensession-settings`, since personal instructions persist beyond the workflow.
+This server exposes no shared configuration, credentials, account changes, or
+other people's settings.
+
 ### Automation-safe in-process servers
 
 Automations never receive `opensession-admin` or the unrestricted interactive

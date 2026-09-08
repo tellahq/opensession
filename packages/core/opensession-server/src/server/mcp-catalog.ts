@@ -55,6 +55,7 @@ import { createAuditMcpServer } from "./audit-mcp";
 import { createHealthMcpServer } from "./health-mcp";
 import { createRunnersMcpServer } from "./runners-mcp";
 import { createScheduleMcpServer } from "./schedule-mcp";
+import { createSettingsMcpServer } from "./settings-mcp";
 import { createPortalsMcpServer } from "./portals-mcp";
 import { createPullRequestMcpServer } from "./pull-request-mcp";
 import { createDesktopMcpServer } from "./desktop-mcp";
@@ -175,6 +176,20 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
         createdBy: USER,
         isAdmin: true,
       }),
+  },
+  {
+    name: "opensession-settings",
+    summary: INTERNAL_MCP_CAPABILITIES["opensession-settings"].summary,
+    source: "packages/core/opensession-server/src/server/settings-mcp.ts",
+    wiring: [
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+      "packages/core/opensession-server/src/agents/slack/handlers.ts",
+    ],
+    runClasses: ["interactive", "slack"],
+    condition:
+      "Requires a human prompting user. Machine-authored turns, including auto-continue, receive no settings tools.",
+    note: "Identity comes only from the trusted turn context. No target-user argument; workflow scripts and automation-owned resumes cannot access this server.",
+    build: () => createSettingsMcpServer(USER),
   },
   {
     name: "opensession-runners",
