@@ -10,14 +10,18 @@ live in the operator's private notes, not here.
 
 1. A human who explicitly triggers an action in Open Session acts with their
    full GitHub permissions. Merge, close, review, push: whatever they could do
-   on github.com, they can do from the OS UI, attributed to them.
-2. An agent, whether it is working on a human's behalf in an interactive
-   session or running unattended in an automation, can never update a
-   protected branch, merge a pull request, or perform a destructive action,
-   no matter what it finds on the host or what its prompt is told.
+   on github.com, they can do from the OS UI, attributed to them. That
+   includes telling the agent in their own session to do it: "merge this"
+   from the session owner merges as the session owner.
+2. An unattended run, whether an automation, a `github-*` loop, a review, or
+   a fix-round handoff into someone's session, can never update a protected
+   branch, merge a pull request, or perform a destructive action, no matter
+   what it finds on the host or what its prompt is told.
 
 These are two different principals with two different ceilings. The current
-system gives them one ceiling and has been moving it up and down.
+system gives them one ceiling and has been moving it up and down. The line
+between them is not "human versus agent"; it is "a human is present and
+asking" versus "nobody is".
 
 ## How a split-credential deployment fails today
 
@@ -47,15 +51,19 @@ receive the session owner's App user token as `GH_TOKEN` so that PRs are
 authored by the human. Whatever the human may do, the agent may do with that
 token. Before the cap this included merging; the cap removed it by removing
 it from the human too. GitHub has no narrower delegated form of a user token,
-so requirement 2 can only be met if agent runs never carry a human token.
+so the choice is binary: the interactive agent either holds the human's
+authority or none of it. This design keeps it, because the session owner
+wants "merge this" to work, and puts the guard on the turn instead: the
+token is present only while the owner is the one prompting.
 
 A related live bug: `agents/github/handoff.ts` delivers fix-round handoffs
 with sender `"GitHub"`. `githubCredentialUser` (#322) treats only the
 auto-continue sender as synthetic, so `"GitHub"` shadows the session owner and
 the turn runs with an empty token. Michiel and John have already decided that
-fix-round replies should post as the bot, not the human. The Delegate
-principal below is exactly that: the turn credential is an installation token
-whatever the sender string says, so the shadowing class of bug disappears.
+fix-round replies should post as the bot, not the human. That is the
+Automation principal below: a turn that no human started gets an
+installation token whatever the sender string says, so the shadowing class
+of bug disappears.
 
 ### Unattended runs
 
@@ -102,9 +110,9 @@ Three facts fix the shape of any working design:
 - GitHub separates identities per ref only through rulesets. That is the one
   place where "the bot may push branches but not `main`" can be enforced
   server-side, independent of which token leaked where.
-- A human's token grants the human's authority to whoever holds it. Agent
-  runs therefore must not hold it; attribution has to come from somewhere
-  else.
+- A human's token grants the human's authority to whoever holds it. Only a
+  turn the human started may hold it, and the human must be able to see and
+  stop what it does with it.
 
 ## Design
 
@@ -113,13 +121,23 @@ Three facts fix the shape of any working design:
 | Principal  | Who                                                                    | GitHub identity   |
 | ---------- | ---------------------------------------------------------------------- | ----------------- |
 | Human      | A signed-in person clicking a button in any OS client                  | Their own account |
-| Delegate   | The agent in an interactive session, acting for the session owner      | `<app-slug>[bot]` |
-| Automation | Unattended code runs: automations, `github-*` code loops, descendants  | `<app-slug>[bot]` |
+| Delegate   | The agent in a turn the session owner started, acting for the owner    | The owner         |
+| Automation | Turns no human started: automations, `github-*` code loops,            | `<app-slug>[bot]` |
+|            | descendants, fix-round handoffs, auto-continue of an automation        |                   |
 | Reviewer   | Unattended ask runs over untrusted content: PR review, merge risk      | `<app-slug>[bot]` |
 | Service    | Server-owned calls: PR cache, review posting, webhooks, worktree setup | `<app-slug>[bot]` |
 
-Human is the only principal that ever holds a user token. Every other
-principal is the App.
+Human and Delegate are the same GitHub identity. Delegate is the human's own
+token in the hands of the agent, for the length of a turn the human started.
+Every other principal is the App.
+
+What makes a turn Delegate rather than Automation is who started it, not
+which session it lands in. A prompt typed by the session owner, an
+auto-continue of that prompt (#322), or a worker report back into that
+session is Delegate. A GitHub webhook, a schedule, a fix-round handoff, or a
+message from another session is Automation, even when it is delivered into
+an interactive session. `githubCredentialUser` becomes the single place that
+decides this, and it errs toward the bot: an unknown sender is not the owner.
 
 ### Capabilities
 
@@ -130,31 +148,39 @@ principal is the App.
 | Force-push own branch               | yes   | lease    | no         | no       | no      |
 | Open a PR                           | yes   | yes      | yes        | no       | no      |
 | Comment, reply in threads           | yes   | yes      | yes        | yes      | yes     |
-| Submit an approving review          | yes   | no       | no         | no       | no      |
-| Merge                               | yes   | no       | no         | no       | no      |
-| Update or push the default branch   | PR    | no       | no         | no       | no      |
-| Delete a branch                     | yes   | no       | no         | no       | no      |
+| Submit an approving review          | yes   | ask      | no         | no       | no      |
+| Merge                               | yes   | ask      | no         | no       | no      |
+| Update or push the default branch   | PR    | ask      | no         | no       | no      |
+| Delete a branch                     | yes   | ask      | no         | no       | no      |
 | Repository settings, rulesets, apps | no    | no       | no         | no       | no      |
 
 "PR" means the human reaches `main` only by merging a PR that satisfies the
-integrity ruleset. "lease" means `--force-with-lease` only.
+integrity ruleset. "lease" means `--force-with-lease` only. "ask" means the
+agent can do it with the owner's token, and the command policy turns it into
+a question card first: the owner sees the exact command and approves it in
+the session. "Merge this" from the owner followed by one approval is the
+intended path; a merge the owner did not ask for never gets past the card.
+The Delegate column is also what the `mergers` roster bounds: an owner who
+is not on the team cannot merge, and neither can their agent.
 
 ### Credentials
 
-- **Human**: the App user token from device-flow sign-in, as today. It is used
-  by server routes for human-initiated actions only (`pr-merge`,
-  `pr-stack-merge`, `pr-close`, `pr-review`, `pr-comment`, `git-push`, and the
-  proposal endpoints below). It is never placed in a run environment, a
-  projected auth file, or a Sandbox. Every client (web, phone, Electron, iOS,
-  Chrome) already goes through these routes, so this needs no client change.
-  Auto-continue keeps resolving the session owner for these routes (#322);
-  the owner's identity is still needed for attribution and for the proposal
-  cards, it just no longer becomes a run credential.
-- **Delegate and Automation**: a repository-scoped installation token with the
-  code permission set (`contents: write`, `pull_requests: write`,
-  `issues: write`, `checks/actions/statuses: read`, `metadata: read`), minted
-  per turn, one hour, never persisted. This is `githubServiceCredentialEnv`,
-  which the `github-*` code loops already use. Interactive runs and fix-round
+- **Human**: the App user token from device-flow sign-in, as today. Server
+  routes use it for click-initiated actions (`pr-merge`, `pr-stack-merge`,
+  `pr-close`, `pr-review`, `pr-comment`, `git-push`). Every client (web,
+  phone, Electron, iOS, Chrome) already goes through these routes, so this
+  needs no client change.
+- **Delegate**: the same token, injected as `GH_TOKEN` into a turn the owner
+  started, exactly as `githubRunEnv(user)` does today, with `githubCredentialUser`
+  (#322) deciding whether the turn's sender is the owner. Nothing else in the
+  run has it: not a projected auth file that outlives the turn, not a Sandbox
+  volume. A turn whose sender is not the owner gets the Automation token
+  instead, never an empty one.
+- **Automation**: a repository-scoped installation token with the code
+  permission set (`contents: write`, `pull_requests: write`, `issues: write`,
+  `checks/actions/statuses: read`, `metadata: read`), minted per turn, one
+  hour, never persisted. This is `githubServiceCredentialEnv`, which the
+  `github-*` code loops already use. Ordinary code automations and fix-round
   handoff turns switch to it.
 - **Reviewer**: the read set, exactly as #325 shipped it. The read-only
   ceiling is preserved by construction: the read set has no `contents: write`
@@ -201,70 +227,66 @@ With these two in place the question "which credential is on the box" stops
 deciding whether `main` is safe. It decides only how much cleanup a leak
 costs.
 
-### Human actions are server-executed; agents propose
+### The owner asks, the agent acts as the owner
 
-Everything in the Human column runs in a server route with the human's token,
-triggered by a click. The agent never calls these itself. Where the agent
-needs the outcome, it proposes and the human confirms:
+A Delegate turn does the work directly: `git push`, `gh pr create`, and when
+the owner asks for it, `gh pr merge`. The push is the owner's, the PR is
+authored by the owner, the merge is performed by the owner, all under the
+owner's login, which is what the team wants to see on GitHub.
 
-- `opensession-repos` gains `propose_pull_request({repo, base, title, body,
-reviewers})` and `propose_merge({repo, number, method})`. Each writes a
-  proposal card into the session transcript. The card's button calls the
-  existing routes with the human's credential, so a PR opened this way is
-  authored by the human and a merge is performed by the human.
-- A delegate may also open a PR directly as the bot when nobody is waiting on
-  the card. That PR carries the attribution footer and the human as assignee,
-  the pre-`userPrAuth` behavior.
-- The existing five-second Merge with Undo in `PrStatusBar` stays as the
-  human's merge control. A `propose_merge` card simply focuses it.
+The guard is the question card, not the token. `PublicationPolicy` runs in
+Delegate turns too, and where it would refuse an Automation it asks the
+owner instead: the card shows the command (`gh pr merge 327 --squash`), and
+"Merge this" from the owner plus one approval is the whole flow. The
+existing five-second Merge with Undo in `PrStatusBar` stays as the click
+equivalent.
 
-### Attribution without authority
+### Attribution
 
 - Commit author stays the human (`gitIdentityEnv(author)`), with the model as
-  `Co-Authored-By`. GitHub shows the human as author and the bot as pusher.
-- PR bodies end with the attribution footer from the session context. Bot
-  authored PRs assign the human; human authored ones do not.
-- Session context text changes from "PRs use @login's account; do not add an
-  assignee" to whichever of the two applies.
+  `Co-Authored-By`.
+- Delegate PRs are authored by the owner and carry the attribution footer
+  from the session context, no assignee. Automation PRs are authored by the
+  bot, carry the footer, and assign the human the automation names.
 - Review threads and fix-round replies post as the bot. This is the decided
-  behavior for handoffs and it is what the Delegate credential produces.
-
-Whether the team prefers bot-authored or human-authored PRs is a review
-policy question, not a security one: a human cannot approve their own PR, so
-bot-authored PRs let the session owner be the reviewer, while human-authored
-PRs force a second person. The proposal card gives either.
+  behavior for handoffs and it is what the Automation credential produces.
 
 ### Host hygiene
 
 - Every run receives the `githubGitCredentialEnv` shape: the credential
   helper, `GIT_TERMINAL_PROMPT=0`, the SSH to HTTPS `insteadOf` rewrite, and
   an isolated `GH_CONFIG_DIR` (#319). The token inside is the principal's:
-  code set for Delegate and Automation, read set for Reviewer. A run that is
-  meant to have no write access gets the read token, not an empty helper,
-  because an empty helper today means "use whatever the host has". Git must
-  fail with a clear authentication error, never fall through.
+  the owner's for Delegate, code set for Automation, read set for Reviewer.
+  A run that is meant to have no write access gets the read token, not an
+  empty helper, because an empty helper today means "use whatever the host
+  has". Git must fail with a clear authentication error, never fall through.
 - No PAT, SSH key, or `gh` login on the host. `~/.opensession/github-auth.json`
   and `github-app.pem` remain, readable by the gateway uid.
-- Agent bash still shares that uid on host runs. That is the residual risk:
-  an adversarial agent can read the human token store. The rulesets bound
-  what the bot can do with the App key, but a human token is the human. The
-  fix is uid separation for run hosts, or Sandboxes by default; until then
-  the invariant is "no human token in any run environment" and the threat
-  model is a confused agent, not a hostile one.
+- Agent bash still shares that uid on host runs, and a Delegate turn holds
+  the owner's token by design. So on a host run the owner's authority is
+  available to the agent for the length of the turn, and the token store is
+  readable between turns. The rulesets bound what the bot can do with the
+  App key; a human token is the human, bounded only by the question card
+  and the `mergers` roster. The threat model for Delegate turns is a
+  confused agent, not a hostile one. Uid separation for run hosts, or
+  Sandboxes by default, closes the between-turns half.
 
 ### Command policy as a tripwire for every agent
 
 `PublicationPolicy` becomes a property of every delegate and automation run,
 not only descendants: `{repo, baseBranch, headBranches}` where `headBranches`
-is the session branch plus each attached repository's branch. It refuses
+is the session branch plus each attached repository's branch. It matches
 `gh pr merge`, `gh pr review --approve`, `gh api` with a mutating method,
 `git push` to `baseBranch` or to a branch outside `headBranches`, `--force`
 without `--force-with-lease`, `git push --delete`, and any `--repo` outside the
-session's repositories. Interactive runs get a question card instead of a
-refusal, and the card offers the server-executed action when one exists.
+session's repositories. Automation turns get a refusal. Delegate turns get a
+question card with the exact command, answered "once", never "always".
 
-This is a tripwire, as `command-policy.ts` says of itself. The boundary is
-the token and the rulesets.
+For Automation this is a tripwire, as `command-policy.ts` says of itself;
+the boundary is the token and the rulesets. For Delegate the card is the
+boundary, because the token is the owner's. That is a deliberate choice: the
+owner asked for an agent that can merge on request, and a card per merge is
+the cheapest way to make "on request" mean something.
 
 ### Observability
 
@@ -304,39 +326,37 @@ deploy. Phases 1 and 2 are code. Phase 3 is infrastructure.
 3. Unset `OPENSESSION_GITHUB_PUSH_TOKEN`; revoke the transport token. Revoke
    and remove every other ambient credential on the host.
 
-After this, humans merge from the UI again and no bot identity can touch
-`main`. Interactive runs still carry the human's token until phase 1, which
-is the pre-2026-09-07 state and should not be left for long.
+After this, humans merge from the UI again, the owner's agent merges on
+request again, and no bot identity can touch `main`.
 
 **Phase 1, credentials and policy**
 
-4. `pi-runner.ts`: interactive runs use `githubCodeRunEnv(cwd)` instead of
-   `githubRunEnv(user)`; fix-round handoff turns take the same path, which
-   also closes the `"GitHub"` sender bug. Remove `githubRunEnv`,
-   `githubAuthEnv`, the token half of `projectedGithubAuthEnv`, and the
-   Sandbox projection of user tokens. `githubCredentialForLogin`,
-   `githubCredentialUser`, and `soleGithubAccount` remain for routes and
-   attribution. Ask-mode `github-*` runs keep the #325 read path untouched.
+4. `githubCredentialUser` decides Delegate versus Automation for every turn,
+   defaulting to Automation for any sender that is not the session owner or
+   an auto-continue of the owner. `pi-runner.ts` injects `githubRunEnv(user)`
+   for Delegate and `githubCodeRunEnv(cwd)` for Automation; fix-round
+   handoff turns land on the Automation path, which closes the `"GitHub"`
+   sender bug. Ask-mode `github-*` runs keep the #325 read path untouched.
 5. Give ordinary code automations the Automation credential plus a
    `PublicationPolicy`, so they open real PRs instead of pushing with an
    ambient identity.
 6. Inject the credential-helper env shape into every run, read token for
-   Reviewer, code token otherwise.
-7. Extend `PublicationPolicy` to every delegate and automation run.
+   Reviewer, code token for Automation, owner token for Delegate.
+7. Extend `PublicationPolicy` to every delegate and automation run: refusal
+   for Automation, question card for Delegate.
 8. Delete the transport-token plumbing and its docs section. Fix
    `audited()`.
 
 **Phase 2, product**
 
-9. `propose_pull_request` and `propose_merge` in `opensession-repos`, proposal
-   cards in the transcript, the routes behind them, session-context wording.
-10. Boot-time posture log and a Settings → Integrations panel that shows
-    installation permissions and missing rulesets per repository.
+9. Boot-time posture log and a Settings → Integrations panel that shows
+   installation permissions and missing rulesets per repository.
 
 **Phase 3, isolation**
 
-11. Run hosts under a separate uid, or Sandboxes by default for interactive
-    sessions, so the human token store is unreadable from agent bash.
+10. Run hosts under a separate uid, or Sandboxes by default for interactive
+    sessions, so the human token store is unreadable from agent bash between
+    turns.
 
 ## What this removes
 
@@ -346,7 +366,8 @@ is the pre-2026-09-07 state and should not be left for long.
   "every agent gets a bot credential sized to its principal and a
   publication policy".
 - The claim that "no credential on the host can merge". The claim becomes "no
-  bot credential can update `main`, and no run holds a human credential".
+  bot credential can update `main`, and a human credential is present only in
+  a turn that human started, behind a card for anything that touches `main`".
 
 ## Open questions
 
@@ -361,14 +382,20 @@ is the pre-2026-09-07 state and should not be left for long.
   `mergers` members; or move `opensession` to PR-only like every other
   repository and let `deploy_self` promote merged commits. This is a
   workflow decision for Michiel and it gates Phase 0 step 1 for
-  `opensession`.
-- Bot-authored or human-authored PRs by default? See Attribution.
+  `opensession`. Under this design a Delegate turn pushes as the owner, so a
+  `mergers` member's session can already update `main` through the
+  humans-only ruleset; the question is only about Automation pushes and
+  about owners who are not on the team.
+- Should the merge card be skippable? A per-session or per-user "merge
+  without asking" toggle would make "merge this" a single step. It also
+  makes the token the only guard for the rest of the session.
 - Should the humans-only bypass stay a team (`mergers`) or become the
   `maintain` role? The team is explicit, auditable, and already evidenced;
   a role follows repository membership.
-- Simple mode (one person, personal App) has one token that is both the human
-  and, in effect, the delegate. The rulesets still hold; the token separation
-  does not. Acceptable for a single-user install, worth stating in the docs.
+- Simple mode (one person, personal App) has one token for every principal,
+  Automation included. The rulesets still hold; the Delegate versus
+  Automation split does not. Acceptable for a single-user install, worth
+  stating in the docs.
 - Code Storage hosts have no rulesets. Their "pushed branch is the change
   request" model already keeps agents off the mainline; document it as the
   equivalent.
