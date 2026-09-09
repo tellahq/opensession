@@ -375,4 +375,72 @@ final class ServerEventTests: XCTestCase {
             return XCTFail("malformed frames must decode to .ignored")
         }
     }
+
+    // MARK: - Session list row frames (sessions_subscribe)
+
+    /// `session_row` carries one list row, the same shape as an element of
+    /// GET /api/sessions, so the list can apply it in place.
+    func testSessionRowDecodesTheRow() {
+        let json = #"""
+        {"type":"session_row","row":{"id":"bks-9","title":"Renamed elsewhere",
+         "workspaceId":"ws-1","isRunning":true,"lastActivity":"2026-09-09T08:00:00.000Z"}}
+        """#
+        guard case .sessionRow(let row) = parse(json) else {
+            return XCTFail("expected .sessionRow")
+        }
+        XCTAssertEqual(row.id, "bks-9")
+        XCTAssertEqual(row.title, "Renamed elsewhere")
+        XCTAssertEqual(row.workspaceId, "ws-1")
+        XCTAssertEqual(row.isRunning, true)
+        XCTAssertEqual(row.lastActivity, "2026-09-09T08:00:00.000Z")
+    }
+
+    func testSessionRowWithoutARowIsIgnored() {
+        guard case .ignored = parse(#"{"type":"session_row"}"#) else {
+            return XCTFail("expected .ignored")
+        }
+    }
+
+    func testSessionRowRemovedDecodesTheId() {
+        guard case .sessionRowRemoved(let id) =
+            parse(#"{"type":"session_row_removed","id":"bks-9"}"#)
+        else {
+            return XCTFail("expected .sessionRowRemoved")
+        }
+        XCTAssertEqual(id, "bks-9")
+    }
+
+    func testSessionRowRemovedWithoutAnIdIsIgnored() {
+        guard case .ignored = parse(#"{"type":"session_row_removed"}"#) else {
+            return XCTFail("expected .ignored")
+        }
+    }
+
+    // MARK: - Queue rows carry their pastes
+
+    func testQueueUpdateDecodesPastedTexts() {
+        let json = #"""
+        {"type":"queue_update","sessionId":"bks-1",
+         "queued":[{"id":"q1","content":"look at this","user":"Kent",
+                    "pastedTexts":["line one\nline two\nline three"]},
+                   {"id":"q2","content":"no paste","user":"Kent"}],
+         "steered":[]}
+        """#
+        guard case .queueUpdate(_, let queued, _, _) = parse(json) else {
+            return XCTFail("expected .queueUpdate")
+        }
+        XCTAssertEqual(queued.map(\.pastedTexts), [["line one\nline two\nline three"], []])
+    }
+
+    /// The take-back reply restores the whole message, paste included.
+    func testQueuedPromptTakenDecodesPastedTexts() {
+        let json = #"""
+        {"type":"queued_prompt_taken","sessionId":"bks-1","queueId":"q1",
+         "item":{"id":"q1","content":"look at this","pastedTexts":["a","b"]}}
+        """#
+        guard case .queuedPromptTaken(_, _, let item, _) = parse(json) else {
+            return XCTFail("expected .queuedPromptTaken")
+        }
+        XCTAssertEqual(item?.pastedTexts, ["a", "b"])
+    }
 }

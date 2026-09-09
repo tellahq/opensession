@@ -159,6 +159,15 @@ final class OS1Socket: SessionSocket {
         send(["type": "typing", "sessionId": sessionId, "typing": typing])
     }
 
+    /// Tell the server which list projection this socket renders (the query
+    /// string the sessions list requests), so a changed row reaches it as a
+    /// `session_row` / `session_row_removed` frame instead of a whole-list
+    /// refetch. Per connection: the server forgets it with the socket, so the
+    /// owner re-sends it after every `hello`. Older servers ignore the frame.
+    func subscribeSessions(query: String) {
+        send(["type": "sessions_subscribe", "query": query])
+    }
+
     /// Page one window of earlier history (arrives as transcript_history).
     /// `beforeRev` guards against the mirror file rotating under the cursor —
     /// on mismatch the server re-sends a fresh transcript_init instead.

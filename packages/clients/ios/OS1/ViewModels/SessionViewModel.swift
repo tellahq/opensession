@@ -2006,7 +2006,14 @@ final class SessionViewModel {
             removeChip(item)
             deliveringItems.removeAll { $0.id == queueId }
             deliveringSince.removeValue(forKey: queueId)
-            draft = draft.isEmpty ? item.content : draft + "\n\n" + item.content
+            // This composer has no paste chip, so a paste taken back with its
+            // message rides in the draft as text: the send folds it after the
+            // message the same way the server did, and nothing is dropped on
+            // the way through an edit.
+            let restored = ([item.content] + item.pastedTexts)
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n\n")
+            draft = draft.isEmpty ? restored : draft + "\n\n" + restored
             attachedImages.append(
                 contentsOf: item.images.compactMap(AttachedImage.init(dataURL:))
             )

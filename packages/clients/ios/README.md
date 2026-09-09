@@ -551,8 +551,17 @@ OS1/
 - Presence is held while the app is active on the selected session. Reading
   without touching the screen does not make the face expire; changing sessions
   moves it, and leaving the app removes it.
+- The active account's socket (`PresenceStore`) sends
+  `{"type":"sessions_subscribe","query":"?archived=exclude"}` after every
+  `hello`, the same query the list polls with. The server answers a changed row
+  with `session_row` (a full list row) or `session_row_removed` (`id`), which
+  `SessionsListViewModel.apply` merges into the list off the main actor. The 5s
+  poll stays as the fallback for a frame lost across a reconnect.
+- Queue rows (`queue_update`, `queued_prompt_taken`) carry `pastedTexts`, the
+  large pastes the server lifted out of the message. The row names them
+  ("Pasted text +60 lines", "2 pasted texts"), and taking a message back into
+  the composer appends them to the draft, since this composer has no paste chip.
 
 ## Next milestones
 
 - Image attachments in assistant markdown
-- Push-style updates for the sessions list (it polls today)

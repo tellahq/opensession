@@ -68,6 +68,14 @@ enum ServerEvent: Sendable {
     /// A git-host webhook changed PR, review, or check state for this branch.
     /// This frame is app-wide and therefore has no session id.
     case prUpdated(repo: String, branch: String)
+    /// One session's list row changed and this socket's `sessions_subscribe`
+    /// scope shows it: a server snapshot of exactly that row, applied in
+    /// place instead of re-reading the whole list. Sent only to sockets that
+    /// subscribed; the 5s poll stays the fallback for a frame that never lands.
+    case sessionRow(Session)
+    /// The same change for a row the scope no longer shows (archived, hidden,
+    /// or deleted).
+    case sessionRowRemoved(id: String)
     case notice(String)
     case serverError(String)
     // Shell output, for the session's terminal panel. Each frame carries the
@@ -225,6 +233,12 @@ enum ServerEvent: Sendable {
         case "pr_updated":
             guard let repo = frame.repo, let branch = frame.branch else { return .ignored }
             return .prUpdated(repo: repo, branch: branch)
+        case "session_row":
+            guard let row = frame.row else { return .ignored }
+            return .sessionRow(row)
+        case "session_row_removed":
+            guard let id = frame.id else { return .ignored }
+            return .sessionRowRemoved(id: id)
         case "notice":
             return .notice(frame.message ?? "")
         case "error":
@@ -366,6 +380,10 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     /// Whether file attachments ride along. The server can't fold a
     /// file-carrying message into a live run, so the chip hides Steer.
     let hasFiles: Bool
+    /// Large pastes sent beside the text (`pastedTexts` on the wire, lifted
+    /// out of the folded content by the server). The row names them so a
+    /// queued paste doesn't read as lost until the turn starts.
+    let pastedTexts: [String]
     let editable: Bool
     let hasContextSessions: Bool
     /// When the engine accepted this message as a steer (receipts only,
@@ -385,6 +403,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         user = wire.user
         images = wire.images ?? []
         hasFiles = !(wire.files ?? []).isEmpty
+        pastedTexts = wire.pastedTexts ?? []
         editable = wire.editable ?? false
         hasContextSessions = !(wire.contextSessions ?? []).isEmpty
         steeredAt = wire.steeredAt.map { Date(timeIntervalSince1970: $0 / 1000) }
@@ -399,6 +418,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         user: String?,
         images: [String] = [],
         hasFiles: Bool = false,
+        pastedTexts: [String] = [],
         editable: Bool = true,
         hasContextSessions: Bool = false,
         steeredAt: Date? = nil
@@ -408,6 +428,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         self.user = user
         self.images = images
         self.hasFiles = hasFiles
+        self.pastedTexts = pastedTexts
         self.editable = editable
         self.hasContextSessions = hasContextSessions
         self.steeredAt = steeredAt
@@ -416,7 +437,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     /// The same entry with new text — and, when the edit touched them, new
     /// attachments — for the optimistic half of an edit. `images: nil` keeps
     /// the ones it already carries, matching what the server does with an
-    /// update that names no images.
+    /// update that names no images; pasted text always rides along, since an
+    /// edit rewrites the typed message and never the paste beside it.
     func withContent(_ content: String, images: [String]? = nil) -> QueueItem {
         QueueItem(
             id: id,
@@ -424,6 +446,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
             user: user,
             images: images ?? self.images,
             hasFiles: hasFiles,
+            pastedTexts: pastedTexts,
             editable: editable,
             hasContextSessions: hasContextSessions,
             steeredAt: steeredAt
@@ -446,6 +469,7 @@ private struct RawFrame: Decodable {
         let user: String?
         let images: [String]?
         let files: [OpaqueFile]?
+        let pastedTexts: [String]?
         let editable: Bool?
         let contextSessions: [String]?
         let steeredAt: Double?
@@ -497,6 +521,10 @@ private struct RawFrame: Decodable {
     let run: WorkflowRun?
     let repo: String?
     let branch: String?
+    // session_row / session_row_removed. The row is the same shape as one
+    // element of GET /api/sessions, so it decodes as a `Session`.
+    let row: Session?
+    let id: String?
     let message: String?
     let queueId: String?
     let truncated: Bool?

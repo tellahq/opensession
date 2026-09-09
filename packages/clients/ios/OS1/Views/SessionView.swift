@@ -3658,7 +3658,8 @@ private struct SessionInputBar: View {
             ForEach(viewModel.queuedItems) { item in
                 let presentation = QueueMessagePresentation(
                     content: item.content,
-                    user: item.user
+                    user: item.user,
+                    pastedTexts: item.pastedTexts
                 )
                 QueuedMessageRow(
                         item: item,
@@ -3782,7 +3783,9 @@ private struct SessionInputBar: View {
         var parts: [String] = []
         parts.append(contentsOf: viewModel.deliveringItems.map { "d\($0.id)" })
         parts.append(contentsOf: viewModel.steeredItems.map { "s\($0.id)" })
-        parts.append(contentsOf: viewModel.queuedItems.map { "q\($0.id):\($0.content.count)" })
+        parts.append(contentsOf: viewModel.queuedItems.map {
+            "q\($0.id):\($0.content.count):\($0.pastedTexts.count)"
+        })
         return parts.joined(separator: "|")
     }
 
@@ -4410,7 +4413,23 @@ private struct SessionInputBar: View {
         /// tag — the queue carries agent-to-agent deliveries, not just what
         /// the person typed.
         private var message: QueueMessagePresentation {
-            QueueMessagePresentation(content: item.content, user: item.user)
+            QueueMessagePresentation(
+                content: item.content,
+                user: item.user,
+                pastedTexts: item.pastedTexts
+            )
+        }
+
+        /// A paste sent on its own has no typed text to lead the row, so its
+        /// name takes the message's place instead of leaving a blank line.
+        private var bodyText: String {
+            message.body.isEmpty ? (message.pastedLabel ?? "") : message.body
+        }
+
+        /// The paste note under the text, when there is text for it to sit
+        /// under; otherwise the body already names it.
+        private var pastedNote: String? {
+            message.body.isEmpty ? nil : message.pastedLabel
         }
 
         /// Only the states worth explaining say so. "Queued" is what the
@@ -4495,7 +4514,7 @@ private struct SessionInputBar: View {
                         }
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(message.body)
+                    Text(bodyText)
                         .font(.subheadline)
                         .lineLimit(2)
                         .foregroundStyle(OS1VisualStyle.text)
@@ -4504,8 +4523,8 @@ private struct SessionInputBar: View {
                         // phase that shows nothing says it here instead.
                         .accessibilityLabel(
                             phase == .queued
-                                ? "\(message.body), queued — delivers after this run"
-                                : message.body
+                                ? "\(bodyText), queued — delivers after this run"
+                                : bodyText
                         )
                     HStack(spacing: 5) {
                         if let label {
@@ -4527,6 +4546,12 @@ private struct SessionInputBar: View {
                             Image(systemName: "paperclip")
                                 .font(.caption2)
                                 .foregroundStyle(OS1VisualStyle.textFaint)
+                        }
+                        if let pastedNote {
+                            Text(pastedNote)
+                                .font(.caption2)
+                                .foregroundStyle(OS1VisualStyle.textFaint)
+                                .lineLimit(1)
                         }
                     }
                 }

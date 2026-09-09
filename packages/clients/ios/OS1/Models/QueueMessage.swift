@@ -23,8 +23,13 @@ struct QueueMessagePresentation: Equatable {
     let isReviewHandoff: Bool
     /// A peer session's agent-authored coordination message, not human prose.
     let isSessionMessage: Bool
+    /// The paste riding beside the text, named: "Pasted text +60 lines" for
+    /// one, "2 pasted texts" for several, nil for none. Mirrors the web's
+    /// queue row, so a queued paste reads as attached rather than lost.
+    let pastedLabel: String?
 
-    init(content: String, user: String?) {
+    init(content: String, user: String?, pastedTexts: [String] = []) {
+        pastedLabel = Self.pastedTextLabel(pastedTexts)
         isGitHub = user == "GitHub" || user == "GitHub (automation)"
         isReviewHandoff = isGitHub && Self.reviewHandoffSentinel.match(content) != nil
         let agentPrefixed = Self.agentAttribution.match(content)
@@ -96,6 +101,26 @@ struct QueueMessagePresentation: Equatable {
             return
         }
         body = Self.stripLeadingSentinels(unprefixed)
+    }
+
+    /// What the queue row says about a message's pastes. One paste is named
+    /// by its size; several are counted, since a row has no room to size each.
+    static func pastedTextLabel(_ pastedTexts: [String]) -> String? {
+        switch pastedTexts.count {
+        case 0: nil
+        case 1: "Pasted text \(lineLabel(pastedTexts[0]))"
+        default: "\(pastedTexts.count) pasted texts"
+        }
+    }
+
+    /// "+N lines", the way the transcript's paste card and the web's chip
+    /// count them (`pastedTextLineLabel`): line breaks plus one, so an empty
+    /// paste is still one line and a trailing newline still counts.
+    static func lineLabel(_ text: String) -> String {
+        // A Swift Character is a grapheme cluster, so "\r\n" is ONE newline
+        // here just as it is one separator in the web's regex.
+        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).count
+        return "+\(lines) \(lines == 1 ? "line" : "lines")"
     }
 
     private static func mayCarryMarker(_ content: String) -> Bool {

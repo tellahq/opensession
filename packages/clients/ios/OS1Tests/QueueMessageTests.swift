@@ -110,4 +110,46 @@ final class QueueMessageTests: XCTestCase {
         XCTAssertNil(message.label)
         XCTAssertEqual(message.body, "PR #42 review feedback · Runs after this turn")
     }
+
+    // MARK: - Pasted text beside a queued message
+
+    /// One paste is named by its size, the way the web's queue row and the
+    /// transcript's paste card count it: line breaks plus one.
+    func testSinglePasteIsNamedWithItsLineCount() {
+        let message = QueueMessagePresentation(
+            content: "review this",
+            user: "Alex",
+            pastedTexts: [Array(repeating: "x", count: 60).joined(separator: "\n")]
+        )
+        XCTAssertEqual(message.pastedLabel, "Pasted text +60 lines")
+        XCTAssertEqual(message.body, "review this")
+    }
+
+    func testOneLinePasteIsSingular() {
+        XCTAssertEqual(QueueMessagePresentation.lineLabel("just one"), "+1 line")
+        XCTAssertEqual(QueueMessagePresentation.lineLabel(""), "+1 line")
+        XCTAssertEqual(QueueMessagePresentation.lineLabel("a\r\nb"), "+2 lines")
+        XCTAssertEqual(QueueMessagePresentation.lineLabel("a\n"), "+2 lines")
+    }
+
+    func testSeveralPastesAreCounted() {
+        XCTAssertEqual(
+            QueueMessagePresentation.pastedTextLabel(["a", "b\nc"]),
+            "2 pasted texts"
+        )
+        XCTAssertNil(QueueMessagePresentation.pastedTextLabel([]))
+        XCTAssertNil(present("plain").pastedLabel)
+    }
+
+    /// An edit rewrites the typed text; the paste beside it is untouched.
+    func testEditedCopyKeepsItsPastes() {
+        let item = QueueItem(
+            id: "q1", content: "before", user: "Alex", pastedTexts: ["pasted block"]
+        )
+        let edited = item.withContent("after", images: ["data:image/png;base64,AA=="])
+        XCTAssertEqual(edited.content, "after")
+        XCTAssertEqual(edited.pastedTexts, ["pasted block"])
+        XCTAssertEqual(edited.images, ["data:image/png;base64,AA=="])
+        XCTAssertTrue(QueueItem(id: "local-1", content: "typed", user: "Alex").pastedTexts.isEmpty)
+    }
 }

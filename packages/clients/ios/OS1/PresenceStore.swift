@@ -12,7 +12,18 @@ final class PresenceStore {
     private(set) var bySession: [String: [String]] = [:]
     private(set) var connectedAccountIDs: Set<String> = []
 
+    /// Where the active account's `session_row` / `session_row_removed`
+    /// frames go: the sessions list, which applies them in place. One slot,
+    /// because there is one list. Frames for a passive account are dropped;
+    /// its list is rebuilt from a poll when it becomes active.
+    @ObservationIgnored var onSessionRow: ((SessionRowChange) -> Void)?
+
     private var sockets: [String: OS1Socket] = [:]
+    /// Accounts whose socket has sent `sessions_subscribe` on its current
+    /// connection. Only the active account subscribes: an unscoped
+    /// subscription hears about every live row, and a passive account has
+    /// no list to spend that traffic on.
+    private var subscribedAccountIDs: Set<String> = []
     private var connectedAccounts: [String: ServerConnection] = [:]
     private var reconnectTasks: [String: Task<Void, Never>] = [:]
     private var presenceByAccount: [String: [String: [String]]] = [:]
@@ -64,6 +75,7 @@ final class PresenceStore {
             sockets.removeValue(forKey: id)?.disconnect()
             connectedAccounts[id] = nil
             connectedAccountIDs.remove(id)
+            subscribedAccountIDs.remove(id)
             reconnectTasks.removeValue(forKey: id)?.cancel()
             presenceByAccount[id] = nil
         }
@@ -72,6 +84,22 @@ final class PresenceStore {
         for (account, connection) in connections where sockets[account.id] == nil {
             connect(account: account, connection: connection)
         }
+        // Switching accounts keeps the sockets; the newly active one has to
+        // start hearing about its rows now, not on its next reconnect.
+        subscribeToSessionRows(accountID: config.activeId)
+    }
+
+    /// Send `sessions_subscribe` on the active account's socket, once per
+    /// connection. A socket that hasn't said `hello` yet subscribes when it
+    /// does; an already subscribed one is left alone.
+    private func subscribeToSessionRows(accountID: String) {
+        guard accountID == ServerConfig.shared.activeId,
+              connectedAccountIDs.contains(accountID),
+              !subscribedAccountIDs.contains(accountID),
+              let socket = sockets[accountID]
+        else { return }
+        subscribedAccountIDs.insert(accountID)
+        socket.subscribeSessions(query: OS1API.liveSessionsQuery)
     }
 
     /// iOS cannot retain network execution indefinitely in the background.
@@ -83,6 +111,7 @@ final class PresenceStore {
         sockets.removeAll()
         connectedAccounts.removeAll()
         connectedAccountIDs.removeAll()
+        subscribedAccountIDs.removeAll()
         for socket in connected { socket.disconnect() }
     }
 
@@ -122,6 +151,11 @@ final class PresenceStore {
         switch event {
         case .hello:
             connectedAccountIDs.insert(account.id)
+            subscribeToSessionRows(accountID: account.id)
+        case .sessionRow(let row):
+            if account.id == config.activeId { onSessionRow?(.row(row)) }
+        case .sessionRowRemoved(let id):
+            if account.id == config.activeId { onSessionRow?(.removed(id: id)) }
         case .globalPresence(let viewing):
             let mapped = mappedPresence(viewing, me: account.userName)
             presenceByAccount[account.id] = mapped
@@ -169,6 +203,7 @@ final class PresenceStore {
         sockets[accountID] = nil
         connectedAccounts[accountID] = nil
         connectedAccountIDs.remove(accountID)
+        subscribedAccountIDs.remove(accountID)
         reconnectTasks[accountID]?.cancel()
         reconnectTasks[accountID] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))

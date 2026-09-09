@@ -30,8 +30,26 @@ struct WorkspaceDeletionState: Equatable {
     }
 }
 
-/// Sessions overview. The server has no push channel for list changes, so this
-/// polls `GET /api/sessions` (server caches for 2s; the web UI polls at 5s too).
+/// One row change pushed by the server over the account socket
+/// (`session_row` / `session_row_removed`), routed here by `PresenceStore`.
+enum SessionRowChange: Sendable {
+    /// A server snapshot of one row the subscribed list shows.
+    case row(Session)
+    /// The list no longer shows this row (archived, hidden, or deleted).
+    case removed(id: String)
+
+    var sessionId: String {
+        switch self {
+        case .row(let session): session.id
+        case .removed(let id): id
+        }
+    }
+}
+
+/// Sessions overview. Polls `GET /api/sessions` every 5s (the server caches for
+/// 2s; the web UI polls at the same rate as its fallback) and, between polls,
+/// applies the row frames the account socket subscribes to, so a change made
+/// elsewhere lands in the list at once instead of on the next tick.
 @Observable
 @MainActor
 final class SessionsListViewModel {
@@ -85,6 +103,12 @@ final class SessionsListViewModel {
     /// Bumped by every mutation of the grouping's inputs, so a detached prime
     /// can tell whether the list moved under it without an O(n) comparison.
     @ObservationIgnored private var sessionsRevision = 0
+
+    /// Row frames waiting to be applied, latest per session. A burst (a run
+    /// finishing across a workspace, a reconnect replay) is folded into one
+    /// off-main pass rather than one regroup per frame.
+    @ObservationIgnored private var pendingRowChanges: [String: SessionRowChange] = [:]
+    @ObservationIgnored private var rowFlushTask: Task<Void, Never>?
 
     /// The sidebar's rows: workspace groups, memoized.
     ///
@@ -220,43 +244,55 @@ final class SessionsListViewModel {
         workspaceNames names: [String: String],
         workspaces: [OS1API.WorkspaceSummary],
         claimed: Set<String>
-    ) async -> (rows: [SidebarWorkspace], titles: [String: String], prs: PrLinks.Index) {
+    ) async -> Grouped {
         await Task.detached(priority: .userInitiated) {
-            var titles: [String: String] = [:]
-            titles.reserveCapacity(sessions.count)
-            for session in sessions {
-                // The WORKSPACE's name, not the session's own. A reference is
-                // read as "that piece of work", and the screen it opens is
-                // titled after the workspace, so labelling the chip after one
-                // of its conversations promised a name the destination never
-                // shows. That name is often a per-run label ("Review · PR
-                // #5741 …"). The web labels its chips from the same rule
-                // (`setSessionTitles` in App.tsx). Session title is the
-                // fallback, for a workspace this client has no name for.
-                let workspace = session.workspaceName ?? ""
-                let title = workspace.isEmpty ? session.displayTitle : workspace
-                if !title.isEmpty {
-                    titles[session.id] = title
-                    for aliasId in session.aliasIds ?? [] { titles[aliasId] = title }
-                }
-            }
-            return (
-                sidebarRows(
-                    in: listedSessions(in: sessions, claimed: claimed),
-                    workspaceNames: names,
-                    workspaces: workspaces,
-                    occupiedWorkspaceIds: Set(sessions.compactMap(\.workspaceId))
-                ),
-                titles,
-                // What tints a `#5528` chip in a transcript, and what tells a
-                // bare one which repo it belongs to — the same fields the web
-                // hands `setKnownPrStates`, off the main actor for the same
-                // reason the titles are. Built from every session, including
-                // the spawned workers the rows leave out: a chip in a
-                // transcript still has to resolve.
-                PrLinks.Index.build(sessions)
-            )
+            grouped(sessions, workspaceNames: names, workspaces: workspaces, claimed: claimed)
         }.value
+    }
+
+    typealias Grouped = (rows: [SidebarWorkspace], titles: [String: String], prs: PrLinks.Index)
+
+    /// The grouping pass itself, for callers already off the main actor.
+    nonisolated private static func grouped(
+        _ sessions: [Session],
+        workspaceNames names: [String: String],
+        workspaces: [OS1API.WorkspaceSummary],
+        claimed: Set<String>
+    ) -> Grouped {
+        var titles: [String: String] = [:]
+        titles.reserveCapacity(sessions.count)
+        for session in sessions {
+            // The WORKSPACE's name, not the session's own. A reference is
+            // read as "that piece of work", and the screen it opens is
+            // titled after the workspace, so labelling the chip after one
+            // of its conversations promised a name the destination never
+            // shows. That name is often a per-run label ("Review · PR
+            // #5741 …"). The web labels its chips from the same rule
+            // (`setSessionTitles` in App.tsx). Session title is the
+            // fallback, for a workspace this client has no name for.
+            let workspace = session.workspaceName ?? ""
+            let title = workspace.isEmpty ? session.displayTitle : workspace
+            if !title.isEmpty {
+                titles[session.id] = title
+                for aliasId in session.aliasIds ?? [] { titles[aliasId] = title }
+            }
+        }
+        return (
+            sidebarRows(
+                in: listedSessions(in: sessions, claimed: claimed),
+                workspaceNames: names,
+                workspaces: workspaces,
+                occupiedWorkspaceIds: Set(sessions.compactMap(\.workspaceId))
+            ),
+            titles,
+            // What tints a `#5528` chip in a transcript, and what tells a
+            // bare one which repo it belongs to — the same fields the web
+            // hands `setKnownPrStates`, off the main actor for the same
+            // reason the titles are. Built from every session, including
+            // the spawned workers the rows leave out: a chip in a
+            // transcript still has to resolve.
+            PrLinks.Index.build(sessions)
+        )
     }
 
     /// Honor the web sidebar's shared order, then append newly seen repositories
@@ -896,10 +932,160 @@ final class SessionsListViewModel {
         hasLoaded = true
         archivedHasLoaded = true
     }
+
+    /// A loaded list without a server, for tests of the row-frame path.
+    func loadFixture(_ sessions: [Session]) {
+        hasLoaded = true
+        setSessions(sessions)
+    }
     #endif
+
+    // MARK: - Row frames
+
+    /// Apply one pushed row change. Cheap on the main actor: the change is
+    /// parked, and a short coalescing window later one detached pass merges
+    /// everything parked into the list and regroups it (`flushRowChanges`).
+    ///
+    /// Frames ahead of the first list are dropped: a one-row list flashing
+    /// up before the real one would be worse than the skeleton it replaces,
+    /// and the poll that lands moments later carries the row anyway.
+    func apply(_ change: SessionRowChange) {
+        guard hasLoaded else { return }
+        pendingRowChanges[change.sessionId] = change
+        scheduleRowFlush()
+    }
+
+    private func scheduleRowFlush() {
+        guard rowFlushTask == nil, !pendingRowChanges.isEmpty else { return }
+        rowFlushTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(50))
+            await self?.flushRowChanges()
+        }
+    }
+
+    /// Merge every parked row change into the list, off the main actor, and
+    /// publish the result with its grouping in one step, the way a poll does.
+    ///
+    /// The local overlays the poll applies apply here too: a row archived on
+    /// this device stays hidden until the server's own copy says so, one
+    /// restored here stays restored, and a server row retires the optimistic
+    /// placeholder it was created from. A poll landing mid-pass bumps the
+    /// revision, and the pass is redone on top of what it published.
+    func flushRowChanges() async {
+        // Whatever is still parked when this pass gives up (the list kept
+        // moving under it) gets its own pass rather than waiting for the
+        // next frame to schedule one.
+        defer {
+            rowFlushTask = nil
+            scheduleRowFlush()
+        }
+        var attempts = 0
+        while !pendingRowChanges.isEmpty, attempts < 3 {
+            attempts += 1
+            let changes = pendingRowChanges
+            pendingRowChanges = [:]
+            var upserts: [Session] = []
+            var removals: Set<String> = []
+            var refreshArchivedIndex = false
+            for (id, change) in changes {
+                switch change {
+                case .removed:
+                    removals.insert(id)
+                case .row(var row):
+                    if row.desk == true || isLocallyArchived(id) {
+                        removals.insert(id)
+                        continue
+                    }
+                    if row.archived == true {
+                        guard isLocallyUnarchived(id) else {
+                            removals.insert(id)
+                            // The archived index runs on its own clock; a
+                            // row that just moved there shouldn't wait for it.
+                            refreshArchivedIndex = archivedHasLoaded
+                            continue
+                        }
+                        row.archived = false
+                    }
+                    optimistic.removeValue(forKey: id)
+                    upserts.append(row)
+                }
+            }
+            let base = sessions
+            let revision = sessionsRevision
+            let names = workspaceNames
+            let nextWorkspaces = workspaces
+            let claimed = claimedSessionIds
+            let result = await Task.detached(priority: .userInitiated) {
+                () -> (next: [Session], grouped: Grouped)? in
+                let next = Self.applyingRowChanges(
+                    to: base, upserting: upserts, removing: removals
+                )
+                guard next != base else { return nil }
+                return (
+                    next,
+                    Self.grouped(
+                        next, workspaceNames: names, workspaces: nextWorkspaces, claimed: claimed
+                    )
+                )
+            }.value
+            if refreshArchivedIndex { Task { await self.refreshArchived(force: true) } }
+            guard revision == sessionsRevision else {
+                // The list moved under the pass. Re-apply on top of what
+                // landed, keeping any newer frame that arrived meanwhile.
+                for (id, change) in changes where pendingRowChanges[id] == nil {
+                    pendingRowChanges[id] = change
+                }
+                continue
+            }
+            guard let result else { continue }
+            SessionLinks.register(titles: result.grouped.titles)
+            PrLinks.register(index: result.grouped.prs)
+            setSessions(result.next, rows: result.grouped.rows)
+        }
+    }
+
+    /// The live list with rows replaced, added or dropped, keeping the order
+    /// the poll publishes (newest activity first).
+    ///
+    /// An upserted row is placed by walking from the front until an older
+    /// row is found: the row that just changed is nearly always the newest,
+    /// so the walk parses one or two dates rather than every row's. A row
+    /// with no activity date sorts last, as it does in `prepared`.
+    nonisolated static func applyingRowChanges(
+        to sessions: [Session],
+        upserting upserts: [Session],
+        removing removals: Set<String>
+    ) -> [Session] {
+        let replaced = Set(upserts.map(\.id)).union(removals)
+        var next = replaced.isEmpty ? sessions : sessions.filter { !replaced.contains($0.id) }
+        for row in upserts {
+            let key = row.lastActivityDate ?? .distantPast
+            let index = next.firstIndex { ($0.lastActivityDate ?? .distantPast) < key }
+                ?? next.endIndex
+            next.insert(row, at: index)
+        }
+        return next
+    }
 
     func startPolling() {
         stopPolling()
+        PresenceStore.shared.onSessionRow = { [weak self] change in
+            self?.apply(change)
+        }
+        #if DEBUG
+        // Dev hook for proving the socket path in a screenshot: poll until
+        // the first list lands, then only row frames can move it.
+        if ProcessInfo.processInfo.environment["OS1_LIST_POLL_OFF"] == "1" {
+            pollTask = Task {
+                while !Task.isCancelled, !hasLoaded {
+                    await refresh()
+                    try? await Task.sleep(for: .seconds(5))
+                }
+                await refreshArchived()
+            }
+            return
+        }
+        #endif
         pollTask = Task {
             while !Task.isCancelled {
                 await refresh()

@@ -57,8 +57,13 @@ enum OS1API {
     /// answers with the whole list, which still splits correctly downstream
     /// (`prepared` sorts archived rows out either way).
     static func sessions() async throws -> [Session] {
-        try await get("/api/sessions?archived=exclude", revalidating: true)
+        try await get("/api/sessions" + liveSessionsQuery, revalidating: true)
     }
+
+    /// The query the live list is requested with. Also what the account
+    /// socket subscribes to (`sessions_subscribe`), so the row frames the
+    /// server pushes are scoped exactly like the list they update.
+    nonisolated static let liveSessionsQuery = "?archived=exclude"
 
     /// Archived sessions, as summaries.
     ///
