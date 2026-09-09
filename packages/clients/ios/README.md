@@ -321,8 +321,11 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   no inbound frame arrives for 30s. The server never initiates pings. An
   announced server restart uses a 250ms retry cadence until the replacement
   handshake arrives; ordinary outages retain the calmer 2s backoff. The UI
-  shows a reconnect banner and keeps an optimistic local echo of prompts until
-  the server's copy arrives.
+  shows a reconnect banner only after a drop outlives 8s of foreground time
+  (`SessionViewModel.presentedConnectionState`; recovery, an announced
+  restart and a real load failure show at once, and background time does not
+  count), and keeps an optimistic local echo of prompts until the server's
+  copy arrives.
 - **Settings** — native SwiftUI Tools, Personal, and Workspace administration,
   plus multi-organization server/GitHub/token configuration and a connection
   test. The top-bar logo on iOS and the row above Feed on macOS switch servers

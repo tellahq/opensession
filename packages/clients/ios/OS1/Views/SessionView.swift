@@ -943,6 +943,11 @@ struct SessionView: View {
             // watchdog window. The zero-sized leaf owns only the side effects.
             .background { SessionSceneLifecycle(viewModel: viewModel) }
             .task {
+                #if DEBUG
+                if let drop = ProcessInfo.processInfo.environment["OS1_SHOW_CONNECTION_DROP"] {
+                    viewModel.dropConnectionForScreenshot(sustained: drop == "sustained")
+                }
+                #endif
                 #if DEBUG && os(iOS)
                 // Install screenshot fixtures before network requests so a
                 // slow catalog cannot leave the capture in the ordinary state.
@@ -1179,7 +1184,7 @@ struct SessionView: View {
             if let safety = viewModel.safety {
                 safetyNotice(safety)
             }
-            switch viewModel.connectionState {
+            switch viewModel.presentedConnectionState {
             case .connected:
                 EmptyView()
             case .connecting:
@@ -3609,7 +3614,7 @@ private struct SessionInputBar: View {
 
     private var visibleNotice: String? {
         guard let notice = viewModel.notice else { return nil }
-        if case .connected = viewModel.connectionState { return notice }
+        if case .connected = viewModel.presentedConnectionState { return notice }
         let normalized = notice.lowercased()
         return normalized.contains("connect") || normalized.contains("socket")
             ? nil
