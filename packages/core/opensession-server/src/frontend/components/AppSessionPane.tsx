@@ -92,7 +92,7 @@ interface AppSessionPaneProps {
   tabs: {
     context: Pick<
       ReturnType<typeof useSessionTabs>["context"],
-      "activeWorkspaceId" | "workspaceSessions" | "emptyWorkspaceSession"
+      "activeWorkspaceId" | "workspaceSessions"
     >;
     archive: Pick<
       ReturnType<typeof useSessionTabs>["archive"],
@@ -170,7 +170,7 @@ export function AppSessionPane({
     closeDesktopTab,
   },
   tabs: {
-    context: { activeWorkspaceId, workspaceSessions, emptyWorkspaceSession },
+    context: { activeWorkspaceId, workspaceSessions },
     archive: { archivedSessions, restoreSession, rememberArchived },
     sessions: { setSessionLanes, closeSession, handleSessionRunningChange },
     workspaces: {
@@ -216,7 +216,7 @@ export function AppSessionPane({
           canRepairSafety: auth?.admin === true,
           canOpenPr: true,
           canOpenNextChat: focused && nextChatAvailable,
-          canStartNewSession: !viewerSession.desk && !emptyWorkspaceSession,
+          canStartNewSession: !viewerSession.desk,
           canOpenNewWorkspace: true,
           canOpenSession: true,
           canOpenReview: true,

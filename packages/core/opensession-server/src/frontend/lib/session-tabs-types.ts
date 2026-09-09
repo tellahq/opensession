@@ -71,8 +71,6 @@ export interface SessionTabsLayout {
   inSplit?: boolean;
   /** Show the archived-sessions menu — only the rightmost bar does. */
   showHistory?: boolean;
-  /** The workspace's reusable empty tab, which morphs from and back into +. */
-  emptySessionId?: string | null;
   /** Client-minted tab id available in the same optimistic render as the click. */
   morphingSessionId?: string | null;
   /** Pointer control rectangle that the opening tab grows from. */

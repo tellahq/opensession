@@ -875,7 +875,6 @@ export function AppContent({
       settingsWorkspaceId,
       copyLinkPath,
       workspaceSessions,
-      emptyWorkspaceSession,
     },
     strip: {
       activeTabSplit,
@@ -1155,7 +1154,6 @@ export function AppContent({
         context: {
           activeWorkspaceId,
           workspaceSessions,
-          emptyWorkspaceSession,
         },
         archive: { archivedSessions, restoreSession, rememberArchived },
         sessions: {
@@ -1459,8 +1457,7 @@ export function AppContent({
                         sessions={sessions}
                         tabStripVisible={tabStripVisible}
                         onNewSession={
-                          workspaceSessions.some((session) => session.desk) ||
-                          emptyWorkspaceSession
+                          workspaceSessions.some((session) => session.desk)
                             ? undefined
                             : (origin) =>
                                 void handleNewSession("share", null, origin)

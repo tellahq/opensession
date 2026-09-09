@@ -182,7 +182,7 @@ test("App passes only SessionViewer navigation availability", async () => {
     "canOpenNextChat: focused && nextChatAvailable",
   );
   expect(viewerInvocation).toContain(
-    "canStartNewSession: !viewerSession.desk && !emptyWorkspaceSession",
+    "canStartNewSession: !viewerSession.desk,",
   );
 
   const openSessionStart = app.indexOf("const openSession =");

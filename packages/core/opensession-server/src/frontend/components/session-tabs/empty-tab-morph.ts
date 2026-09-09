@@ -100,22 +100,13 @@ export function animateEmptyTabOpen(
 /**
  * Finish the empty tab's reverse morph without keeping the live session around.
  * The visual copy can collapse after the real tab closes, so a pending create
- * response cannot race the animation and resurrect the deleted session.
+ * response cannot race the animation and resurrect the deleted session. The
+ * strip's own + stays where it is: a workspace can hold several empty tabs, so
+ * the ghost collapses into a + of its own and fades out beside it.
  */
 export function animateEmptyTabClose(button: HTMLButtonElement): void {
   const tab = button.closest<HTMLElement>('[role="tab"]');
   if (!tab) return;
-
-  const strip = tab.closest<HTMLElement>('[role="tablist"]');
-  const hideReturningPlus = () => {
-    const plus = strip?.querySelector<HTMLElement>(".session-tab-new");
-    if (!plus) return;
-    plus.dataset.emptyTabMorphTarget = "";
-    plus.style.setProperty("opacity", "0", "important");
-  };
-  const plusObserver = strip ? new MutationObserver(hideReturningPlus) : null;
-  if (strip) plusObserver?.observe(strip, { childList: true, subtree: true });
-  hideReturningPlus();
 
   const rect = tab.getBoundingClientRect();
   const collapsedWidth = Math.min(EMPTY_TAB_COLLAPSED_WIDTH, rect.width);
@@ -189,14 +180,6 @@ export function animateEmptyTabClose(button: HTMLButtonElement): void {
   void Promise.allSettled(
     animations.map((animation) => animation.finished),
   ).then(() => {
-    plusObserver?.disconnect();
-    const plus = strip?.querySelector<HTMLElement>(
-      "[data-empty-tab-morph-target]",
-    );
-    if (plus) {
-      delete plus.dataset.emptyTabMorphTarget;
-      plus.style.removeProperty("opacity");
-    }
     ghost.remove();
   });
 }

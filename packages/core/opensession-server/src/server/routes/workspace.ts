@@ -94,7 +94,6 @@ import {
 } from "../worktree";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { isClientSessionId, isNativeSessionId, newSessionId } from "../paths";
-import { isReusableEmptySession } from "../empty-session";
 import { githubMutationCredential } from "./github-credential";
 import { conditionalJsonResponse } from "../http-json";
 import { indexedActiveWorkspaceIds } from "../session-list-store";
@@ -738,24 +737,6 @@ export async function handleWorkspaceRoutes(
       return Response.json({
         id: bksId,
         session: await sessionDetail(existing),
-      });
-    // One reusable empty tab per workspace. This server-side check closes the
-    // multi-window race that hiding the + in one browser cannot prevent.
-    const reusable = body.duplicate
-      ? undefined
-      : src.workspaceId
-        ? (await getCachedSessionsAsync("exclude")).find(
-            (session) =>
-              session.workspaceId === src.workspaceId &&
-              isReusableEmptySession(session),
-          )
-        : isReusableEmptySession(src)
-          ? src
-          : undefined;
-    if (reusable)
-      return Response.json({
-        id: reusable.id,
-        session: await sessionDetail(reusable),
       });
     let branch = src.branch || "";
     let worktreeDir = src.worktreeDir || "";

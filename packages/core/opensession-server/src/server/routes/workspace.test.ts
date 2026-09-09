@@ -56,9 +56,8 @@ test("every new-session response carries the workspace PR projection", async () 
     source.indexOf("/new-session$/"),
     source.indexOf("/promote$/"),
   );
-  // The existing tab, the reusable empty tab, and the freshly created one.
-  expect(route.match(/await sessionDetail\(/g)).toHaveLength(3);
+  // The existing tab and the freshly created one.
+  expect(route.match(/await sessionDetail\(/g)).toHaveLength(2);
   expect(route).not.toContain("session: existing }");
-  expect(route).not.toContain("session: reusable }");
   expect(route).not.toContain("session: (await findSessionAsync(bksId))");
 });
