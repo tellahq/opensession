@@ -18,6 +18,7 @@ import {
 } from "./connections";
 import { userMatchesAny } from "./shared/user-mappings";
 import { configuredPaths } from "./config";
+import { isProviderSafetyBlock } from "./provider-safety";
 
 /** Claude Code CLI binary the Meridian bridge / anthropic-bridge spawn.
  *  OPENSESSION_CLAUDE_BIN env → config `paths.claudeBin` → this VPS's path. */
@@ -325,7 +326,7 @@ export function isCodexUsageLimitError(message: string): boolean {
 export function isTransientRunError(
   message: string | undefined | null,
 ): boolean {
-  if (!message) return false;
+  if (!message || isProviderSafetyBlock(message)) return false;
   if (
     isClaudeMalformedTerminalError(message) ||
     isClaudeBridgeLaunchError(message)

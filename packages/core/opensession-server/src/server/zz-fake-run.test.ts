@@ -196,6 +196,32 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     expect(listed?.lastRunError?.message).toContain("boom");
   });
 
+  test.each([false, true])(
+    "safety block parks without redelivery or fallback (usage flag %s)",
+    async (usageLimitExhausted) => {
+      if (!redirected) return;
+      const sid = `bks-zz-safety-block-${usageLimitExhausted}`;
+      writeSessionFile(sid, { model: "dial/medium" });
+      sessionCache.invalidateSessionsCache();
+      const rejection =
+        "pi: Codex error: This request was blocked by our safety systems. Reason: Potentially unintended activity.";
+      const fake = fakeEngineMod.makeFakeEngine([
+        { kind: "error", content: rejection, usageLimitExhausted },
+        { kind: "clean", text: ["This retry must never run."] },
+      ]);
+      agentRunner.__setEngineForTest(fake.engine);
+
+      await runSession.runSessionPromptAndDrain(sid, "create a PR", "Test");
+
+      expect(fake.calls).toHaveLength(1);
+      expect((await waitForLastRunError(sid)).message).toBe(rejection);
+      expect(runState.getRunState(sid)).toBe("failed");
+      expect(sessionCache.isRunSettled(sid)).toBe(true);
+      expect(queueState.promptQueues.get(sid) || []).toHaveLength(0);
+      expect(sessionJson(sid).model).toBe("dial/medium");
+    },
+  );
+
   // The failure has to reach the TRANSCRIPT, not just the session card: every
   // path that records an outcome (opening runs, resumed runs, setup failures)
   // funnels through recordRunOutcome, so the chip is written there. Before

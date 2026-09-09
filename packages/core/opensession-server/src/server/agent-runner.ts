@@ -25,6 +25,7 @@ import {
 } from "./run-state";
 import type { StreamEvent, ImageInput } from "./run-events";
 import { isShuttingDown } from "./shutdown-state";
+import { isProviderSafetyBlock } from "./provider-safety";
 import { hasPendingOpening } from "./session-state-events";
 import {
   sessionQuarantineSnapshot,
@@ -623,6 +624,10 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
           break;
         }
         if (event.type === "error") {
+          if (isProviderSafetyBlock(event.content)) {
+            yield event;
+            return;
+          }
           if (event.usageLimitExhausted === true) {
             failure = { transient: false, content: event.content };
             break;

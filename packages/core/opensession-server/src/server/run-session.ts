@@ -535,6 +535,7 @@ import {
   WEDGE_RETRY_PROMPT,
 } from "./auto-continue";
 import { SYSTEM_RESTART_USER } from "./session-actors";
+import { isProviderSafetyBlock } from "./provider-safety";
 
 const g = globalThis as any;
 
@@ -2337,6 +2338,16 @@ export async function maybeQueueAutoContinue(opts: {
       });
     return false;
   };
+  // A provider safety rejection is not an interrupted/unread prompt. Never
+  // redeliver its trailing user messages or turn it into a wedge retry.
+  if (isProviderSafetyBlock(runFailure)) {
+    audit({
+      msg: "auto_continue_suppressed",
+      session_id: sessionId,
+      reason: "provider_safety_block",
+    });
+    return false;
+  }
   const session = opts.session ?? findSession(sessionId);
   if (!session) return suppressed("session_not_found");
   const queuedBehind = (promptQueues.get(sessionId) || []).filter(

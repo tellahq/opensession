@@ -53,6 +53,10 @@ import {
   isClaudeUsageLimitError,
   isCodexUsageLimitError,
 } from "./runner-shared";
+import {
+  explainProviderSafetyBlock,
+  isProviderSafetyBlock,
+} from "./provider-safety";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
 import {
   FALLBACK_CONTEXT_WINDOW,
@@ -910,6 +914,7 @@ export function isPiUsageLimitShape(
   message: string,
   providerID: string,
 ): boolean {
+  if (isProviderSafetyBlock(message)) return false;
   if (providerID === "openai") {
     return (
       isCodexUsageLimitError(message) ||
@@ -3039,7 +3044,11 @@ async function* runPiAttempt(
           case "auto_retry_start": {
             const r = ev as any;
             const errText = String(r.errorMessage || "");
-            if (isPiUsageLimitShape(errText, parsed.providerID)) {
+            if (
+              isProviderSafetyBlock(errText) ||
+              isPiUsageLimitShape(errText, parsed.providerID)
+            ) {
+              // Safety blocks are terminal, not retryable provider failures.
               // Usage-limit shapes mean the pool can't serve right now —
               // retrying only delays the fallback walk. abortRetry() cancels
               // the backoff sleep; the microtask matters: the SDK arms the
@@ -3127,6 +3136,7 @@ async function* runPiAttempt(
           promptOutcome.ok &&
           !abort.signal.aborted &&
           liveSession.pendingMessageCount > 0 &&
+          !isProviderSafetyBlock(lastErrorMessage) &&
           steerDrains < 2
         ) {
           steerDrains++;
@@ -3233,7 +3243,7 @@ async function* runPiAttempt(
       sidelineOnUsageLimit(usageLimit);
       terminal = {
         type: "error",
-        content: `pi: ${message}`,
+        content: `pi: ${explainProviderSafetyBlock(message)}`,
         provider: PROVIDER,
         model,
         ...(sawUsage ? { usage: { ...usageTotal } } : {}),
@@ -3247,7 +3257,7 @@ async function* runPiAttempt(
       sidelineOnUsageLimit(usageLimit);
       terminal = {
         type: "error",
-        content: `pi: ${message}`,
+        content: `pi: ${explainProviderSafetyBlock(message)}`,
         provider: PROVIDER,
         model,
         ...(sawUsage ? { usage: { ...usageTotal } } : {}),
@@ -3293,22 +3303,28 @@ async function* runPiAttempt(
     // distinctive text never matches the classifier — previous runner-runner's
     // catch parity.
     const usageLimit =
-      e?.usageLimitExhausted === true ||
-      isPiUsageLimitShape(message, parsed.providerID);
+      !isProviderSafetyBlock(message) &&
+      (e?.usageLimitExhausted === true ||
+        isPiUsageLimitShape(message, parsed.providerID));
     // Sideline ONLY on provider-attributed exhaustion (the explicit flag).
     // A classifier match alone is not enough here: this catch also sees
     // non-provider throws from the run body (fs, journal, SDK init), and a
     // stray shape in one of those must not sideline a healthy account for
     // 60 min across both engines. The in-band terminal branches (provider
     // messages only) keep classifier-driven sidelines.
-    if (e?.usageLimitExhausted === true && sidelineableAccount) {
+    if (usageLimit && e?.usageLimitExhausted === true && sidelineableAccount) {
       sidelineAccount(sidelineableAccount);
     }
     // Rotate rather than end the turn. Gated on the explicit flag for the
     // same reason the sideline above is: this catch also sees non-provider
     // throws from the run body (fs, journal, SDK init), and a stray
     // usage-limit shape in one of those must not burn a healthy account.
-    if (e?.usageLimitExhausted === true && takeAccountRotation(message)) return;
+    if (
+      usageLimit &&
+      e?.usageLimitExhausted === true &&
+      takeAccountRotation(message)
+    )
+      return;
     reachedTerminal = true;
     endTurn({
       ok: false,
@@ -3318,7 +3334,7 @@ async function* runPiAttempt(
     });
     yield {
       type: "error",
-      content: `pi: ${message}`,
+      content: `pi: ${explainProviderSafetyBlock(message)}`,
       provider: PROVIDER,
       model,
       ...(sawUsage ? { usage: { ...usageTotal } } : {}),
