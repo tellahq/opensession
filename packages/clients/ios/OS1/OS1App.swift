@@ -185,8 +185,11 @@ struct RootView: View {
                 // Devices signed in before the app stored the GitHub login
                 // (pre-07-23 builds) hold a valid token but an empty login —
                 // backfill it from the server so the avatar can resolve.
+                // A dev launch that names its viewer (`OS1_USER`) keeps that
+                // name; the token's own identity would overwrite it here.
                 let authContext = NativePreferences.context()
                 if config.isConfigured, config.githubLogin.isEmpty,
+                   ProcessInfo.processInfo.environment["OS1_USER"] == nil,
                    let status = try? await OS1API.authStatus(),
                    status.authenticated == true,
                    NativePreferences.context() == authContext {

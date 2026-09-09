@@ -138,4 +138,204 @@ final class AccountUsageTests: XCTestCase {
     private func iso(_ date: Date) -> String {
         ISO8601DateFormatter().string(from: date)
     }
+
+    // MARK: Weekly remaining
+
+    private func pooled(
+        _ id: String, _ name: String, kind: AccountKind = .claude, owner: String? = nil,
+        usable: Bool? = true, usage: AccountUsage? = nil
+    ) -> PooledAccount {
+        var account = ProviderAccount()
+        account.id = id
+        account.name = name
+        account.owner = owner
+        account.usable = usable
+        account.usage = usage
+        return PooledAccount(account: account, kind: kind)
+    }
+
+    private func claudeUsage(week: Double?, fable: Double? = nil, resets: TimeInterval = 3600 * 70) -> AccountUsage {
+        var usage = AccountUsage()
+        usage.fiveHour = UsageWindow(utilization: 60, resetsAt: iso(now.addingTimeInterval(7200)))
+        usage.sevenDay = UsageWindow(utilization: week, resetsAt: iso(now.addingTimeInterval(resets)))
+        if let fable {
+            usage.scopedLimits = [ScopedUsageLimit(label: "Fable", utilization: fable, resetsAt: iso(now.addingTimeInterval(resets + 3600)))]
+        }
+        return usage
+    }
+
+    /// The 5-hour window stops a turn; the week decides which account to run
+    /// the day on, so only the week and the per-model caps are weekly.
+    func testClaudeWeeklyLimitsAreTheSevenDayWindowAndScopedCaps() {
+        let limits = WeeklyRemaining.limits(claudeUsage(week: 97, fable: 45), kind: .claude)
+        XCTAssertEqual(limits.map(\.scope), [nil, "Fable"])
+        XCTAssertEqual(limits.map(\.utilization), [97, 45])
+    }
+
+    func testCodexWeeklyLimitsAreTheWeekLongWindows() {
+        var usage = AccountUsage()
+        usage.buckets = [
+            CodexUsageBucket(
+                id: "codex",
+                primary: UsageWindow(utilization: 20, resetsAt: nil, windowDurationMins: 300),
+                secondary: UsageWindow(utilization: 98, resetsAt: nil, windowDurationMins: 10_080)
+            ),
+            CodexUsageBucket(
+                id: "spark", label: "Spark",
+                primary: nil,
+                secondary: UsageWindow(utilization: 0, resetsAt: nil, windowDurationMins: 10_080)
+            ),
+        ]
+        let limits = WeeklyRemaining.limits(usage, kind: .codex)
+        XCTAssertEqual(limits.map(\.utilization), [98, 0])
+        XCTAssertEqual(limits.map(\.scope), [nil, "Spark"])
+    }
+
+    /// SuperGrok budgets a billing period rather than a week; it is still the
+    /// number that decides whether the account has anything left.
+    func testXaiCreditPeriodCountsAsTheWeeklyBudget() {
+        var usage = AccountUsage()
+        usage.creditUsagePercent = 12
+        usage.periodEnd = iso(now.addingTimeInterval(86400 * 9))
+        let limits = WeeklyRemaining.limits(usage, kind: .xai)
+        XCTAssertEqual(limits.map(\.utilization), [12])
+        XCTAssertTrue(WeeklyRemaining.limits(AccountUsage(), kind: .xai).isEmpty)
+        XCTAssertTrue(WeeklyRemaining.limits(nil, kind: .claude).isEmpty)
+    }
+
+    /// Yours first, then the pool, and nobody else's personal subscription.
+    func testRowsListYourAccountsThenThePoolAndNobodyElses() {
+        let usage = claudeUsage(week: 50)
+        let rows = WeeklyRemaining.rows(
+            [
+                pooled("pool", "Pool", usage: usage),
+                pooled("mine", "Mine", owner: "Kent", usage: usage),
+                pooled("mine-long", "Mine long", kind: .codex, owner: "Kent de Bruin", usage: usage),
+                pooled("theirs", "Theirs", owner: "Michiel", usage: usage),
+            ],
+            viewer: "Kent",
+            now: now
+        )
+        XCTAssertEqual(rows.map(\.accountId), ["mine", "pool"])
+        XCTAssertEqual(rows.map(\.owner), ["Kent", nil])
+    }
+
+    func testOneRowPerWeeklyLimitWithRemainingAndTone() {
+        let rows = WeeklyRemaining.rows(
+            [pooled("a", "Work", usage: claudeUsage(week: 97, fable: 45)), pooled("c", "No usage")],
+            viewer: "Kent",
+            now: now
+        )
+        XCTAssertEqual(rows.map(\.label), ["Work", "Work · Fable"])
+        XCTAssertEqual(rows.map(\.remaining), [3, 55])
+        XCTAssertEqual(rows.map(\.tone), [.low, .ok])
+        XCTAssertEqual(rows[0].resetsAt, now.addingTimeInterval(3600 * 70))
+    }
+
+    /// A window whose reset already passed reads as full, as it does everywhere else.
+    func testAPassedWeeklyResetReadsAsFull() {
+        let rows = WeeklyRemaining.rows(
+            [pooled("a", "Work", usage: claudeUsage(week: 100, resets: -3600))],
+            viewer: "Kent",
+            now: now
+        )
+        XCTAssertEqual(rows.map(\.remaining), [100])
+        XCTAssertEqual(WeeklyRemaining.resetDay(rows[0].resetsAt, now: now), "now")
+        XCTAssertEqual(WeeklyRemaining.resetDetail(rows[0].resetsAt, now: now), "Resets now")
+    }
+
+    func testResetDayIsTheWeekday() {
+        let locale = Locale(identifier: "en_US")
+        // 1_700_000_000 is a Tuesday (2023-11-14 22:13 UTC).
+        XCTAssertEqual(WeeklyRemaining.resetDay(now.addingTimeInterval(86400 * 2), now: now, locale: locale), "Thu")
+        XCTAssertNil(WeeklyRemaining.resetDay(nil, now: now))
+        XCTAssertEqual(WeeklyRemaining.resetDetail(now.addingTimeInterval(86400 * 2), now: now, locale: locale)?.hasPrefix("Resets Thu"), true)
+    }
+
+    func testTonesAndTheTightestRow() {
+        XCTAssertEqual(RemainingTone(remaining: 0), .low)
+        XCTAssertEqual(RemainingTone(remaining: 10), .low)
+        XCTAssertEqual(RemainingTone(remaining: 30), .warn)
+        XCTAssertEqual(RemainingTone(remaining: 31), .ok)
+        let rows = WeeklyRemaining.rows(
+            [pooled("a", "A", usage: claudeUsage(week: 40)), pooled("b", "B", usage: claudeUsage(week: 90))],
+            viewer: "Kent",
+            now: now
+        )
+        XCTAssertEqual(WeeklyRemaining.lowest(rows)?.accountId, "b")
+        XCTAssertNil(WeeklyRemaining.lowest([]))
+    }
+
+    /// A Claude model with its own weekly bucket is stopped by that bucket,
+    /// not by the general 7-day window.
+    func testReadoutShowsTheModelBucketOnYourOwnAccount() {
+        let accounts = [
+            pooled("pool", "Pool", usage: claudeUsage(week: 100, fable: 100)),
+            pooled("mine", "Main", owner: "Kent", usage: claudeUsage(week: 100, fable: 45)),
+        ]
+        let rows = WeeklyRemaining.rows(accounts, viewer: "Kent", now: now)
+        let readout = WeeklyRemaining.readout(
+            rows: rows, accounts: accounts, viewer: "Kent", kind: .claude,
+            model: "pi/anthropic/claude-fable-5-1", accountId: nil
+        )
+        XCTAssertEqual(readout?.accountId, "mine")
+        XCTAssertEqual(readout?.scope, "Fable")
+        XCTAssertEqual(readout?.remaining, 55)
+    }
+
+    func testReadoutUsesAUsablePin() {
+        let accounts = [
+            pooled("pool", "Pool", usage: claudeUsage(week: 80)),
+            pooled("mine", "Mine", owner: "Kent", usage: claudeUsage(week: 20)),
+        ]
+        let rows = WeeklyRemaining.rows(accounts, viewer: "Kent", now: now)
+        let readout = WeeklyRemaining.readout(
+            rows: rows, accounts: accounts, viewer: "Kent", kind: .claude,
+            model: "claude-sonnet-5", accountId: "pool"
+        )
+        XCTAssertEqual(readout?.accountId, "pool")
+    }
+
+    func testReadoutFallsBackToThePoolWhenYourModelCapIsSpent() {
+        let accounts = [
+            pooled("pool", "Pool", usage: claudeUsage(week: 10, fable: 40)),
+            pooled("mine", "Mine", owner: "Kent", usage: claudeUsage(week: 10, fable: 100)),
+        ]
+        let rows = WeeklyRemaining.rows(accounts, viewer: "Kent", now: now)
+        let readout = WeeklyRemaining.readout(
+            rows: rows, accounts: accounts, viewer: "Kent", kind: .claude,
+            model: "claude-fable-5-1", accountId: nil
+        )
+        XCTAssertEqual(readout?.accountId, "pool")
+        XCTAssertEqual(readout?.remaining, 60)
+    }
+
+    /// The catalog says which pool a model spends from; ids it does not list
+    /// follow the server's prefix rules, and a preset follows its lead model.
+    func testProviderForModel() throws {
+        let data = Data("""
+        {"models":[
+          {"id":"pi/anthropic/claude-fable-5-1","accountProvider":"claude"},
+          {"id":"pi/dial/opus-fable","group":"dial","composition":["pi/anthropic/claude-opus-5"]}
+        ],"default":"pi/anthropic/claude-fable-5-1"}
+        """.utf8)
+        let catalog = try JSONDecoder().decode(ModelCatalog.self, from: data)
+        XCTAssertEqual(WeeklyRemaining.provider(forModel: "pi/anthropic/claude-fable-5-1", catalog: catalog), .claude)
+        XCTAssertEqual(WeeklyRemaining.provider(forModel: "pi/dial/opus-fable", catalog: catalog), .claude)
+        XCTAssertEqual(WeeklyRemaining.provider(forModel: "pi/openai/gpt-5.6-sol", catalog: nil), .codex)
+        XCTAssertEqual(WeeklyRemaining.provider(forModel: "pi/xai-oauth/grok-5", catalog: nil), .xai)
+        XCTAssertNil(WeeklyRemaining.provider(forModel: "pi/google/gemini-4", catalog: nil))
+    }
+
+    func testMenuRowDetailReadsOwnershipDayAndRemaining() {
+        let row = WeeklyRemainingRow(
+            accountId: "a", kind: .claude, scope: "Fable", name: "Main", owner: "Kent",
+            remaining: 8, resetsAt: nil
+        )
+        XCTAssertEqual(ModelSettingsMenu.rowDetail(row, now: now), "Yours · 8% left · running out")
+        XCTAssertEqual(
+            ModelSettingsMenu.rowSpokenLabel(row, pinned: false, pinnable: false, now: now),
+            "Main · Fable, yours, 8 percent left, not for this model"
+        )
+    }
 }

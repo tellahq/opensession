@@ -176,7 +176,7 @@ struct ModelDefaults: Codable, Sendable {
     var autoFallback: Bool?
 }
 
-struct ProviderAccount: Codable, Sendable, Identifiable {
+struct ProviderAccount: Codable, Sendable, Identifiable, Equatable {
     var id: String?
     var name: String?
     var owner: String?

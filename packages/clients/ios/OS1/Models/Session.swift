@@ -33,6 +33,9 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var model: String?
     var effort: String?
     var fastMode: Bool?
+    /// The provider account pinned for this conversation with `/account`;
+    /// nil = automatic (personal first, shared pool fallback).
+    var accountId: String?
     var isRunning: Bool?
     var runState: String?
     /// Present when the server fenced an ambiguous operation rather than risk

@@ -36,7 +36,9 @@ struct ProviderAccountSections: View {
         )
     }
 
-    private static func cacheKey(_ kind: AccountKind) -> String { "\(kind.brand)-accounts" }
+    private static func cacheKey(_ kind: AccountKind) -> String {
+        SettingsAPI.providerAccountsCacheKey(kind)
+    }
 
     var body: some View {
         Section("Accounts") {

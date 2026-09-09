@@ -264,6 +264,9 @@ final class SessionViewModel {
     var effort: String
     /// OpenAI fast-mode flag; rides every send like effort.
     var fastMode: Bool
+    /// Provider account pinned with `/account` ("" = automatic routing). The
+    /// server owns it; this follows its `subscription_changed` broadcasts.
+    private(set) var accountId: String
 
     // ── Earlier-history paging ──
     /// Older history exists server-side (transcript_init/history `truncated`).
@@ -528,6 +531,7 @@ final class SessionViewModel {
         self.model = session.model ?? ""
         self.effort = session.effort ?? ""
         self.fastMode = session.fastMode ?? false
+        self.accountId = session.accountId ?? ""
         if let composerDraft {
             self.draft = composerDraft.text
             self.attachedImages = composerDraft.images
@@ -618,6 +622,7 @@ final class SessionViewModel {
         model = session.model ?? ""
         effort = session.effort ?? ""
         fastMode = session.fastMode ?? false
+        accountId = session.accountId ?? ""
     }
 
     func start() {
@@ -1292,6 +1297,22 @@ final class SessionViewModel {
         )
     }
 
+    /// Pin one provider account for this conversation, or nil for automatic
+    /// routing, through the `/account` slash command: the server validates
+    /// the pool, persists the pin and broadcasts `subscription_changed`.
+    func pinAccount(_ account: ProviderAccount?) {
+        let next = account?.id ?? ""
+        guard next != accountId, let socket else { return }
+        accountId = next
+        // Fast mode is a subscription feature; an API key cannot carry it.
+        if account?.kind == "api_key" { fastMode = false }
+        socket.prompt(
+            sessionId: session.id,
+            content: next.isEmpty ? "/account auto" : "/account \(next)",
+            user: ServerConfig.shared.userName
+        )
+    }
+
     func answer(question: AskQuestion, answers: [String: String]?) {
         socket?.answer(sessionId: session.id, questionId: question.id, answers: answers)
         pendingQuestion = nil
@@ -1911,6 +1932,10 @@ final class SessionViewModel {
 
         case .modelChanged(let id, let model, _) where id == session.id:
             session.model = model
+
+        case .subscriptionChanged(let id, let pinned) where id == session.id:
+            accountId = pinned ?? ""
+            session.accountId = pinned
 
         case .queueUpdate(let id, let queued, let steered, let pendingIds)
             where id == session.id:

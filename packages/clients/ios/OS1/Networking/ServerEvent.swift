@@ -34,6 +34,9 @@ enum ServerEvent: Sendable {
     /// The session's model changed mid-run (a fallback, or a teammate's
     /// switch): apply it now instead of waiting for the next sessions poll.
     case modelChanged(sessionId: String, model: String, by: String?)
+    /// The session's pinned provider account changed (`/account`), here or
+    /// from another viewer; nil = back to automatic routing.
+    case subscriptionChanged(sessionId: String, accountId: String?)
     /// Everyone with this session open right now, by display name. One entry
     /// per socket, so the same person can appear twice (two devices).
     case presence(sessionId: String, viewers: [String])
@@ -136,6 +139,9 @@ enum ServerEvent: Sendable {
         case "model_changed":
             guard let id = frame.sessionId, let model = frame.model else { return .ignored }
             return .modelChanged(sessionId: id, model: model, by: frame.by)
+        case "subscription_changed":
+            guard let id = frame.sessionId else { return .ignored }
+            return .subscriptionChanged(sessionId: id, accountId: frame.accountId)
         case "presence":
             guard let id = frame.sessionId else { return .ignored }
             return .presence(sessionId: id, viewers: frame.viewers ?? [])
@@ -474,6 +480,7 @@ private struct RawFrame: Decodable {
     let safety: SessionSafetyState?
     let ready: Bool?
     let model: String?
+    let accountId: String?
     let by: String?
     let viewers: [String]?
     let users: [String]?

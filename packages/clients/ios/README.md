@@ -137,7 +137,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   above the composer when the keyboard opens. The actions menu carries
   worktree details, the pull request panel, Add to sidebar when needed, rename,
   share, hide or restore, and archive, matching the sidebar row's long-press
-  menu. Completed native sessions can also fork from the current transcript tip
+  menu. The model settings menu (the toolbar's slider control on macOS, nested
+  in the actions menu on iOS) opens with a Weekly remaining row: what is left
+  on the account the current model will run on, over a breakdown of every
+  subscription account you can spend, yours first and then the shared pool,
+  each with its refill day. Choosing one for the current model's pool pins it
+  for the session through `/account`. Completed native sessions can also fork from the current transcript tip
   or a message menu; the composer names the source and opens the new session
   after creation. A bounded cache keeps
   recently visited conversations loaded while their

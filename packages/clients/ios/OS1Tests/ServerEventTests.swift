@@ -375,4 +375,23 @@ final class ServerEventTests: XCTestCase {
             return XCTFail("malformed frames must decode to .ignored")
         }
     }
+
+    /// `/account` pins and clears broadcast the same frame; a cleared pin
+    /// arrives as an explicit null, which must read as "auto", not "ignored".
+    func testSubscriptionChanged() {
+        guard case .subscriptionChanged(let sessionId, let accountId) = parse(
+            #"{"type":"subscription_changed","sessionId":"bks-1","accountId":"acc-9","name":"Main","by":"Kent"}"#
+        ) else {
+            return XCTFail("expected .subscriptionChanged")
+        }
+        XCTAssertEqual(sessionId, "bks-1")
+        XCTAssertEqual(accountId, "acc-9")
+
+        guard case .subscriptionChanged(_, let cleared) = parse(
+            #"{"type":"subscription_changed","sessionId":"bks-1","accountId":null,"name":null,"by":"Kent"}"#
+        ) else {
+            return XCTFail("expected .subscriptionChanged")
+        }
+        XCTAssertNil(cleared)
+    }
 }

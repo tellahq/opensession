@@ -13,6 +13,12 @@ struct ModelOption: Decodable, Identifiable, Hashable, Sendable {
     /// Reasoning-effort variants this model supports (may be empty — presets).
     var efforts: [String]?
     var fastModeSupported: Bool?
+    /// The subscription pool this model spends from ("claude", "codex",
+    /// "xai"), or nil for a model without a managed account pool.
+    var accountProvider: String?
+    /// A preset's member models, lead first. The pool a preset draws on is
+    /// its lead's.
+    var composition: [String]?
 
     var displayLabel: String { label ?? id }
     var isPreset: Bool { group != nil }

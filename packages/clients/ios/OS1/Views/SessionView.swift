@@ -220,6 +220,9 @@ struct SessionView: View {
 
     /// Model/effort catalog for the toolbar picker; fetched on first open.
     @State private var catalog: ModelCatalog?
+    /// The subscription pools, for the model menu's weekly overview. Seeded
+    /// from the last answer this device saw so the menu opens with numbers.
+    @State private var accounts: [PooledAccount] = SettingsAPI.cachedProviderAccountPools()
     @State private var forkState = SessionForkState()
 
     /// PR details sheet — the macOS toolbar PR chip, the iOS overflow menu.
@@ -986,6 +989,7 @@ struct SessionView: View {
                 }
                 #endif
                 catalog = try? await OS1API.models(workspaceId: viewModel.session.workspaceId)
+                accounts = await SettingsAPI.providerAccountPools()
                 #if DEBUG && os(iOS)
                 if ProcessInfo.processInfo.environment["OS1_OPEN_WORKTREE_INFO"] == "1" {
                     showWorktreeInfo = true
@@ -1084,6 +1088,7 @@ struct SessionView: View {
                 workerSessions: workerSessions,
                 workspaceNames: workspaceNames,
                 catalog: catalog,
+                accounts: accounts,
                 onNewSession: onNewSession,
                 onFork: canForkSession ? { forkState.enter() } : nil,
                 onRenameWorkspace: onRenameWorkspace,
@@ -1247,7 +1252,7 @@ struct SessionView: View {
     /// `ModelSettingsMenu`, which the iOS overflow menu mounts as well.
     private var modelMenu: some View {
         Menu {
-            ModelSettingsMenu(viewModel: viewModel, catalog: catalog)
+            ModelSettingsMenu(viewModel: viewModel, catalog: catalog, accounts: accounts)
         } label: {
             Image(systemName: "slider.horizontal.3")
         }
@@ -1847,6 +1852,8 @@ private struct SessionActionsMenu: View {
     /// Model/effort catalog for the nested settings rows; nil until the first
     /// `/api/models` fetch lands, which only costs the Model row.
     let catalog: ModelCatalog?
+    /// The subscription pools behind the nested Weekly remaining row.
+    let accounts: [PooledAccount]
     let onNewSession: (() -> Void)?
     let onFork: (() -> Void)?
     let onRenameWorkspace: ((String) -> Void)?
@@ -1958,7 +1965,9 @@ private struct SessionActionsMenu: View {
             // worktree details sheet, which is a long way to go for a setting
             // the web changes from the composer.
             Menu {
-                ModelSettingsMenu(viewModel: viewModel, catalog: catalog, showsUsage: false)
+                ModelSettingsMenu(
+                    viewModel: viewModel, catalog: catalog, accounts: accounts, showsUsage: false
+                )
             } label: {
                 Label("Model settings", systemImage: "slider.horizontal.3")
             }

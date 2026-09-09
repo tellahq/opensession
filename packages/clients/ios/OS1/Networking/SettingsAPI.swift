@@ -346,6 +346,44 @@ enum SettingsAPI {
         return response.accounts ?? []
     }
 
+    /// Every pool at once, tagged with where it came from, for the model
+    /// menu's weekly overview. A pool that fails keeps its cached answer, so
+    /// one provider being down does not blank the other two.
+    static func providerAccountPools() async -> [PooledAccount] {
+        func attempt(_ fetch: () async throws -> [ProviderAccount]) async -> Result<[ProviderAccount], Error> {
+            do { return .success(try await fetch()) } catch { return .failure(error) }
+        }
+        async let claude = attempt(claudeAccounts)
+        async let codex = attempt(codexAccounts)
+        async let xai = attempt(xaiAccounts)
+        let fetched: [(AccountKind, Result<[ProviderAccount], Error>)] =
+            await [(.claude, claude), (.codex, codex), (.xai, xai)]
+        return fetched.flatMap { kind, result -> [PooledAccount] in
+            let accounts: [ProviderAccount]
+            switch result {
+            case .success(let fresh):
+                SettingsCache.save(providerAccountsCacheKey(kind), fresh)
+                accounts = fresh
+            case .failure:
+                accounts = SettingsCache.value(providerAccountsCacheKey(kind)) ?? []
+            }
+            return accounts.map { PooledAccount(account: $0, kind: kind) }
+        }
+    }
+
+    /// The last answer this device saw for every pool, so a menu can open
+    /// with numbers before the fetch behind it lands.
+    static func cachedProviderAccountPools() -> [PooledAccount] {
+        AccountKind.allCases.flatMap { kind in
+            (SettingsCache.value(providerAccountsCacheKey(kind)) as [ProviderAccount]? ?? [])
+                .map { PooledAccount(account: $0, kind: kind) }
+        }
+    }
+
+    /// Shared with Settings → Providers, which seeds its list from the same
+    /// entries.
+    static func providerAccountsCacheKey(_ kind: AccountKind) -> String { "\(kind.brand)-accounts" }
+
     static func createClaudeAccount(_ body: [String: Any]) async throws -> ProviderAccount {
         try await request("/api/claude-accounts", method: "POST", body: body)
     }
