@@ -160,7 +160,7 @@ final class ConnectionPresentationTests: XCTestCase {
         connect()
         await drop()
         await advance(by: .seconds(9))
-        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting(nil))
+        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting("connection lost"))
 
         // Like the web client while hidden, the outage comes off screen.
         viewModel.appDidEnterBackground()
@@ -180,7 +180,7 @@ final class ConnectionPresentationTests: XCTestCase {
         connect()
         await drop()
         await advance(by: .seconds(9))
-        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting(nil))
+        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting("connection lost"))
 
         viewModel.appDidEnterBackground()
         viewModel.appDidBecomeActive()
@@ -206,11 +206,11 @@ final class ConnectionPresentationTests: XCTestCase {
     func testNeverConnectedReconnectIsNotFoldedBack() async {
         viewModel.start()
         await drop()
-        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting(nil), "a drop before the handshake shows at once")
+        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting("connection lost"), "a drop before the handshake shows at once")
 
         // Nothing was ever on screen to fold back to.
         viewModel.appDidEnterBackground()
-        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting(nil))
+        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting("connection lost"))
     }
 
     func testAnnouncedServerRestartPresentsImmediately() async {
