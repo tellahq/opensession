@@ -105,6 +105,29 @@ Separate Host, SessionKernel, and gateway service identities, private/public key
 provisioning, and detached Host deployment are still required before it can
 authorize production work.
 
+## Offline orphaned local-run recovery
+
+`run_state:*` quarantine intentionally refuses release while the actor still
+claims an unsettled run. A host can finish while catalog saturation prevents
+its gateway settlement, leaving this fence even after the host exits.
+
+`scripts/repair-orphaned-local-runs.ts` repairs explicit session ids only, with
+the gateway, executor and kernel stopped. It requires the exact current host's
+terminal journal event followed by systemd's successful deactivation, an
+inactive unit, an empty cgroup, and no gateway journal ownership or recovery
+claim. It rechecks the actor's run identity, generation and revision before
+applying the normal `run_failed` transition. A finished host does not prove that
+gateway projections succeeded, so the repair never declares the run successful.
+The ordinary quarantine release then checks all remaining commands, timers and
+effects. The script never removes queued prompts or edits transcripts.
+
+Hold the shared deployment lock for the maintenance window, retain the current
+release pin, and use `--dry-run` before applying the same explicit ids. Restore
+kernel, executor and gateway in that order and verify their health before
+resuming unfinished sessions through the session API. Do not use this job for
+remote hosts, missing terminal evidence, other quarantine reasons, or an active
+instance. The existing automation-ledger repair remains a separate operation.
+
 ## Durable state
 
 The storage router uses two durable locations within the active sessions
