@@ -167,7 +167,10 @@ import {
   indexedWorkspaceMemberSessions,
   indexedWorkspaceSessions,
 } from "../session-list-store";
-import { buildAtCurrentSessionListRevision } from "../session-list-response-revision";
+import {
+  buildAtCurrentSessionListRevision,
+  sessionListResponseRevision,
+} from "../session-list-response-revision";
 import {
   loadSidebarSessionScopeContext,
   parseSidebarSessionScope,
@@ -949,7 +952,8 @@ function refreshSidebarSessionsResponse(
       expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
     };
   })
-    .then((snapshot) => {
+    .then(({ value: snapshot, revision }) => {
+      if (revision !== sessionListResponseRevision()) snapshot.expiresAt = 0;
       sessionsResponseSnapshots.set(key, snapshot);
       return snapshot;
     })
@@ -994,7 +998,8 @@ function refreshSessionsResponse(
       expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
     };
   })
-    .then((snapshot) => {
+    .then(({ value: snapshot, revision }) => {
+      if (revision !== sessionListResponseRevision()) snapshot.expiresAt = 0;
       sessionsResponseSnapshots.set(variant, snapshot);
       if (variant === "exclude") persistDiskLiveList(snapshot.text);
       return snapshot;

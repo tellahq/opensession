@@ -9,7 +9,8 @@
  * the sockets rendering that scope. Cost is O(distinct scopes) per coalesced
  * write, and a frame is a few hundred bytes.
  *
- * Bursts inside one turn coalesce per session. The client keeps a slow
+ * A single bounded batch shares catalog reads across changed rows and never
+ * overlaps the next batch. Bursts coalesce per session. The client keeps a slow
  * fallback poll and refetches on reconnect, so a lost frame heals the same
  * way a lost invalidation did.
  */
@@ -31,25 +32,133 @@ type RowSocket = {
   send(data: string): unknown;
 };
 
+type ProjectedRow = Awaited<
+  ReturnType<typeof import("./routes/sessions").sidebarRowProjection>
+>;
+const SESSION_ROW_BATCH_SIZE = 64;
+
+/** One publisher for all rows, not one async flush per session. A slow catalog
+ * read holds this batch while later writes coalesce into the next one. */
+export function createSessionRowPublisher(options: {
+  loadRow: (sessionId: string) => Promise<ProjectedRow | null>;
+  subscribers: typeof sidebarSubscribers;
+  loadContext: typeof loadSidebarSessionScopeContext;
+  onError: (error: unknown) => void;
+}) {
+  const pending = new Set<string>();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let flushing: Promise<void> | undefined;
+
+  function schedule(): void {
+    if (timer || flushing || pending.size === 0) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      void flush().catch(options.onError);
+    }, SESSION_ROW_COALESCE_MS);
+    timer.unref?.();
+  }
+
+  async function publishBatch(ids: string[]): Promise<void> {
+    const subscribers = options.subscribers();
+    if (subscribers.size === 0) return;
+    const rows = new Map<string, ProjectedRow | null>();
+    const group = new Map<string, UnifiedSession>();
+    // Keep index/projection calls bounded too, rather than turning a batch
+    // into another Promise.all burst against a worker mailbox.
+    for (const id of ids) {
+      try {
+        const projected = await options.loadRow(id);
+        rows.set(id, projected);
+        for (const member of projected?.group ?? [])
+          group.set(member.id, member);
+      } catch (error) {
+        options.onError(error);
+      }
+    }
+    const contexts = new Map<string, SidebarSessionScopeContext>();
+    const needsContext = [...rows.values()].some((row) => row !== null);
+    for (const { scope, sockets } of subscribers.values()) {
+      try {
+        let context = scope ? contexts.get(scope.user) : undefined;
+        if (scope && !context && needsContext) {
+          // The union includes every row's workspace and parent dependencies.
+          // Reusing a context loaded for just the first row hides other rows.
+          context = await options.loadContext(scope, [...group.values()]);
+          contexts.set(scope.user, context);
+        }
+        for (const [id, projected] of rows) {
+          const rowId = projected?.row.id ?? id;
+          const visible =
+            projected &&
+            (await sessionRowVisible(rowId, projected.group, scope, context));
+          const payload = JSON.stringify(
+            visible
+              ? { type: "session_row", row: projected.row }
+              : { type: "session_row_removed", id: rowId },
+          );
+          for (const ws of sockets) send(ws, payload);
+        }
+      } catch (error) {
+        // A failed scope read must neither hide its rows nor starve other users.
+        options.onError(error);
+      }
+    }
+  }
+
+  function flush(): Promise<void> {
+    if (flushing) return flushing;
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+    const ids = [...pending].slice(0, SESSION_ROW_BATCH_SIZE);
+    for (const id of ids) pending.delete(id);
+    flushing = publishBatch(ids).finally(() => {
+      flushing = undefined;
+      schedule();
+    });
+    return flushing;
+  }
+
+  return {
+    publish(sessionId: string) {
+      pending.add(sessionId);
+      schedule();
+    },
+    flush,
+    pending: () => [...pending],
+    reset() {
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      pending.clear();
+    },
+  };
+}
+
 const g = globalThis as typeof globalThis & {
-  __osSessionRowPublishes?: Map<string, ReturnType<typeof setTimeout>>;
+  __osSessionRowPublisher?: ReturnType<typeof createSessionRowPublisher>;
 };
-const scheduled = (g.__osSessionRowPublishes ??= new Map());
+function publisher() {
+  return (g.__osSessionRowPublisher ??= createSessionRowPublisher({
+    async loadRow(sessionId) {
+      const stored = await indexedSessionWithVisibilityGroup(sessionId);
+      if (!stored) return null;
+      // routes/sessions imports callers of this module.
+      const { sidebarRowProjection } = await import("./routes/sessions");
+      return sidebarRowProjection(stored.session, stored.group);
+    },
+    subscribers: sidebarSubscribers,
+    loadContext: loadSidebarSessionScopeContext,
+    onError(error) {
+      console.warn(
+        "[session-row] publish failed:",
+        error instanceof Error ? error.message : error,
+      );
+    },
+  }));
+}
 
 /** Tell subscribed sidebars that one session's row changed. Coalesced. */
 export function publishSessionRow(sessionId: string): void {
-  if (scheduled.has(sessionId)) return;
-  const timer = setTimeout(() => {
-    scheduled.delete(sessionId);
-    void flushSessionRow(sessionId).catch((error) => {
-      console.warn(
-        `[session-row] publish failed for ${sessionId}:`,
-        error instanceof Error ? error.message : error,
-      );
-    });
-  }, SESSION_ROW_COALESCE_MS);
-  timer.unref?.();
-  scheduled.set(sessionId, timer);
+  publisher().publish(sessionId);
 }
 
 /** Sockets that asked for row frames, grouped by the scope they render. */
@@ -90,46 +199,6 @@ export async function sessionRowVisible(
   );
 }
 
-async function flushSessionRow(sessionId: string): Promise<void> {
-  const subscribers = sidebarSubscribers();
-  if (subscribers.size === 0) return;
-  // One worker round trip: the row and the rows its visibility depends on.
-  const stored = await indexedSessionWithVisibilityGroup(sessionId);
-  if (!stored) {
-    const payload = JSON.stringify({
-      type: "session_row_removed",
-      id: sessionId,
-    });
-    for (const { sockets } of subscribers.values())
-      for (const ws of sockets) send(ws, payload);
-    return;
-  }
-  // routes/sessions imports this module's callers; load it on demand so the
-  // row projection is shared with the list route without an import cycle.
-  const { sidebarRowProjection } = await import("./routes/sessions");
-  const { row, group } = await sidebarRowProjection(
-    stored.session,
-    stored.group,
-  );
-  const shown = JSON.stringify({ type: "session_row", row });
-  const removed = JSON.stringify({
-    type: "session_row_removed",
-    id: sessionId,
-  });
-  const contexts = new Map<string, SidebarSessionScopeContext>();
-  for (const { scope, sockets } of subscribers.values()) {
-    let context = scope ? contexts.get(scope.user) : undefined;
-    if (scope && !context) {
-      context = await loadSidebarSessionScopeContext(scope, group);
-      contexts.set(scope.user, context);
-    }
-    const payload = (await sessionRowVisible(row.id, group, scope, context))
-      ? shown
-      : removed;
-    for (const ws of sockets) send(ws, payload);
-  }
-}
-
 function send(ws: RowSocket, payload: string): void {
   try {
     ws.send(payload);
@@ -138,10 +207,9 @@ function send(ws: RowSocket, payload: string): void {
 
 /** Session ids with a publish pending, in scheduling order. */
 export function __scheduledSessionRowsForTest(): string[] {
-  return [...scheduled.keys()];
+  return g.__osSessionRowPublisher?.pending() ?? [];
 }
 
 export function __resetSessionRowPublishesForTest(): void {
-  for (const timer of scheduled.values()) clearTimeout(timer);
-  scheduled.clear();
+  g.__osSessionRowPublisher?.reset();
 }

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   advanceSessionListResponseRevision,
   buildAtCurrentSessionListRevision,
+  sessionListResponseRevision,
 } from "./session-list-response-revision";
 
 test("returns the first response when no session mutation overlaps it", async () => {
@@ -9,7 +10,7 @@ test("returns the first response when no session mutation overlaps it", async ()
 
   const result = await buildAtCurrentSessionListRevision(async () => ++builds);
 
-  expect(result).toBe(1);
+  expect(result.value).toBe(1);
   expect(builds).toBe(1);
 });
 
@@ -23,6 +24,32 @@ test("rebuilds a response invalidated while it is in flight", async () => {
     return builds;
   });
 
-  expect(result).toBe(2);
+  expect(result.value).toBe(2);
   expect(builds).toBe(2);
+});
+
+test("continuous mutations return after two builds with a stale revision", async () => {
+  let builds = 0;
+  const result = await buildAtCurrentSessionListRevision(async () => {
+    builds++;
+    // A finite guard also makes the old unbounded implementation fail rather
+    // than hanging the test process.
+    if (builds > 2) throw new Error("unbounded response rebuild");
+    advanceSessionListResponseRevision();
+    return builds;
+  });
+  expect(builds).toBe(2);
+  expect(result.value).toBe(2);
+  expect(result.revision).toBeLessThan(sessionListResponseRevision());
+});
+
+test("a failed build propagates without a retry loop", async () => {
+  let builds = 0;
+  await expect(
+    buildAtCurrentSessionListRevision(async () => {
+      builds++;
+      throw new Error("catalog unavailable");
+    }),
+  ).rejects.toThrow("catalog unavailable");
+  expect(builds).toBe(1);
 });

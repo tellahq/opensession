@@ -54,6 +54,21 @@ The sidebar scope loader reads catalog documents, including automation
 ownership and per-user overlays. It does not run automation scheduling logic
 or scan definition files just to decide which rows a person can see.
 
+Row notifications use one non-overlapping publisher for the instance. Each
+250 ms wave takes at most 64 changed session ids, reads their index rows
+sequentially, and loads one scope context per subscribed user for the union of
+their visibility groups. Changes arriving during a flush coalesce into the next
+wave. Do not restore per-session async flushes: each scope context makes several
+catalog RPCs, so concurrent rows multiply load on the shared catalog lane even
+when every session execution lane is idle. Contexts are discarded after each
+batch so preference changes are read again.
+
+A session-list response retries at most one build invalidated by a concurrent
+mutation. If the retry also overlaps a write, it returns that complete result
+with an expired cache entry. Row notifications and the next list read reconcile
+it. Waiting for a mutation-free build without a bound can spin indefinitely
+under normal concurrent session activity and amplify the same catalog load.
+
 ## Remaining migration work
 
 This establishes catalog ownership for the stores above and moves list-index

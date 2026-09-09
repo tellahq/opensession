@@ -13,16 +13,19 @@ export function advanceSessionListResponseRevision(): void {
 }
 
 /**
- * Rebuild when a session mutation lands while a response is being assembled.
- * Otherwise every request coalesced onto that older build receives its stale
- * result and has no later WebSocket frame to trigger another refresh.
+ * Retry one overlapping mutation, but never wait for the whole instance to
+ * become idle. Under continuous writes an unbounded rebuild loop floods the
+ * catalog and leaves the HTTP request waiting forever. Carry the build's
+ * starting revision so callers cannot cache an overlapped result as fresh.
  */
 export async function buildAtCurrentSessionListRevision<T>(
   build: () => Promise<T>,
-): Promise<T> {
-  while (true) {
-    const revision = sessionListResponseRevision();
-    const result = await build();
-    if (revision === sessionListResponseRevision()) return result;
+): Promise<{ value: T; revision: number }> {
+  let revision = sessionListResponseRevision();
+  let value = await build();
+  if (revision !== sessionListResponseRevision()) {
+    revision = sessionListResponseRevision();
+    value = await build();
   }
+  return { value, revision };
 }
