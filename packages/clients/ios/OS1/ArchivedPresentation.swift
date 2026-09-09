@@ -51,10 +51,40 @@ enum ArchivedPresentation {
         }
     }
 
+    /// The owners the picker lists: those with rows here, plus the selected
+    /// one after its last row was restored, so the selection keeps its mark
+    /// and the way back stays in the same menu.
+    static func ownerOptions(
+        _ owners: [ArchivedOwners.Owner], selected owner: String
+    ) -> [ArchivedOwners.Owner] {
+        if owner == ArchivedOwners.mine || owner == ArchivedOwners.everyone
+            || owners.contains(where: { $0.key == owner }) {
+            return owners
+        }
+        return owners + [ArchivedOwners.Owner(key: owner, label: owner)]
+    }
+
     static let allRepositories = "all"
 
     static func repositoryLabel(_ repo: String) -> String {
         repo == allRepositories ? "All repos" : RepoTile.label(for: repo)
+    }
+
+    /// The repository picker leaves once there is nothing to choose between,
+    /// but never while it holds a choice. Restoring the selected repository's
+    /// last row would otherwise take the only way back to "All repos" with
+    /// it and strand the sheet on "No matches".
+    static func showsRepositoryPicker(repositories: [String], selected repo: String) -> Bool {
+        repositories.count > 1 || repo != allRepositories
+    }
+
+    /// The repositories the picker lists: those with rows here, plus the
+    /// selected one after its rows have gone.
+    static func repositoryOptions(_ repositories: [String], selected repo: String) -> [String] {
+        if repo == allRepositories || repositories.contains(repo) {
+            return repositories
+        }
+        return (repositories + [repo]).sorted()
     }
 
     struct Reason: Identifiable {
@@ -73,5 +103,13 @@ enum ArchivedPresentation {
 
     static func reasonLabel(_ reason: String) -> String {
         reasons.first { $0.key == reason }?.label ?? reason
+    }
+
+    /// The Reason menu exists once something was auto-archived, and stays
+    /// while a reason other than All is selected: restoring the last
+    /// auto-archived row under "Auto-archived" must leave the control that
+    /// can widen the lens again.
+    static func showsReasonMenu(hasAutoArchived: Bool, selected reason: String) -> Bool {
+        hasAutoArchived || reason != "all"
     }
 }

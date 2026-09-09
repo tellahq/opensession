@@ -3967,7 +3967,13 @@ private struct ArchivedSessionsView: View {
         ArchivedPresentation.repositoryLabel(repo)
     }
 
-    private var showsRepositoryPicker: Bool { repositories.count > 1 }
+    private var showsRepositoryPicker: Bool {
+        ArchivedPresentation.showsRepositoryPicker(repositories: repositories, selected: repo)
+    }
+
+    private var showsReasonMenu: Bool {
+        ArchivedPresentation.showsReasonMenu(hasAutoArchived: hasAutoArchived, selected: reason)
+    }
 
     private var filteredSessions: [Session] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -4028,9 +4034,10 @@ private struct ArchivedSessionsView: View {
             .navigationTitle("Archived")
             .inlineTitleBarCompat()
             .toolbar {
-                // Reason stays behind a glyph: it only exists once something
-                // was auto-archived, and rarely changes.
-                if hasAutoArchived {
+                // Reason stays behind a glyph: it exists once something was
+                // auto-archived, rarely changes, and stays while it holds a
+                // choice.
+                if showsReasonMenu {
                     ToolbarItem(placement: .primaryAction) { reasonMenu }
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -4133,7 +4140,7 @@ private struct ArchivedSessionsView: View {
                 Text("My archived").tag(ArchivedOwners.mine)
                 // Teammates who have archived something here, busiest
                 // first. Absent on an instance of one.
-                ForEach(owners) { person in
+                ForEach(ArchivedPresentation.ownerOptions(owners, selected: owner)) { person in
                     Text(person.label).tag(person.key)
                 }
                 Text("Everyone").tag(ArchivedOwners.everyone)
@@ -4161,7 +4168,9 @@ private struct ArchivedSessionsView: View {
         Menu {
             Picker("Repository", selection: $repo) {
                 Text("All repos").tag(ArchivedPresentation.allRepositories)
-                ForEach(repositories, id: \.self) { repository in
+                ForEach(
+                    ArchivedPresentation.repositoryOptions(repositories, selected: repo), id: \.self
+                ) { repository in
                     Label {
                         Text(RepoTile.label(for: repository))
                     } icon: {

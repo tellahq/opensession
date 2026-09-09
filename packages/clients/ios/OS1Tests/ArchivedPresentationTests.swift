@@ -77,6 +77,61 @@ final class ArchivedPresentationTests: XCTestCase {
         XCTAssertEqual(ArchivedPresentation.repositoryLabel("backstage"), "opensession")
     }
 
+    // MARK: - A lens control stays while it holds a choice
+
+    func testTheRepositoryPickerStaysWhileItsFilterIsActive() {
+        // Nothing to choose between, nothing selected: no picker.
+        XCTAssertFalse(ArchivedPresentation.showsRepositoryPicker(
+            repositories: ["b"], selected: ArchivedPresentation.allRepositories
+        ))
+        XCTAssertTrue(ArchivedPresentation.showsRepositoryPicker(
+            repositories: ["a", "b"], selected: ArchivedPresentation.allRepositories
+        ))
+        // A's last row was restored while A was selected: the picker is the
+        // only way back to All repos, so it stays.
+        XCTAssertTrue(ArchivedPresentation.showsRepositoryPicker(repositories: ["b"], selected: "a"))
+        XCTAssertTrue(ArchivedPresentation.showsRepositoryPicker(repositories: [], selected: "a"))
+    }
+
+    func testTheRepositoryPickerKeepsListingTheSelectedRepository() {
+        XCTAssertEqual(
+            ArchivedPresentation.repositoryOptions(["b", "c"], selected: "a"), ["a", "b", "c"]
+        )
+        XCTAssertEqual(ArchivedPresentation.repositoryOptions(["a", "b"], selected: "a"), ["a", "b"])
+        XCTAssertEqual(
+            ArchivedPresentation.repositoryOptions(["b"], selected: ArchivedPresentation.allRepositories),
+            ["b"]
+        )
+    }
+
+    func testTheOwnerPickerKeepsListingTheSelectedTeammate() {
+        let owners = [ArchivedOwners.Owner(key: "michiel", label: "Michiel")]
+
+        XCTAssertEqual(
+            ArchivedPresentation.ownerOptions(owners, selected: "sam").map(\.key), ["michiel", "sam"]
+        )
+        XCTAssertEqual(
+            ArchivedPresentation.ownerOptions(owners, selected: "michiel").map(\.key), ["michiel"]
+        )
+        // The fixed lenses have their own entries and add nothing.
+        XCTAssertEqual(
+            ArchivedPresentation.ownerOptions(owners, selected: ArchivedOwners.mine).map(\.key), ["michiel"]
+        )
+        XCTAssertEqual(
+            ArchivedPresentation.ownerOptions(owners, selected: ArchivedOwners.everyone).map(\.key),
+            ["michiel"]
+        )
+    }
+
+    func testTheReasonMenuStaysWhileANarrowReasonIsSelected() {
+        XCTAssertFalse(ArchivedPresentation.showsReasonMenu(hasAutoArchived: false, selected: "all"))
+        XCTAssertTrue(ArchivedPresentation.showsReasonMenu(hasAutoArchived: true, selected: "all"))
+        // The last auto-archived row was restored under Auto-archived: the
+        // menu is the only way back to All, so it stays.
+        XCTAssertTrue(ArchivedPresentation.showsReasonMenu(hasAutoArchived: false, selected: "auto"))
+        XCTAssertTrue(ArchivedPresentation.showsReasonMenu(hasAutoArchived: false, selected: "manual"))
+    }
+
     func testTheReasonMenuListsAllThenAutoThenManual() {
         XCTAssertEqual(ArchivedPresentation.reasons.map(\.key), ["all", "auto", "manual"])
         XCTAssertEqual(ArchivedPresentation.reasonLabel("auto"), "Auto-archived")
