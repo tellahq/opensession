@@ -357,6 +357,29 @@ enum OS1VisualStyle {
             : NSColor(red: 0.035, green: 0.412, blue: 0.855, alpha: 0.10)
     })
     #endif
+    // The wash under the ask chip on an archived row: the web's `--green-soft`,
+    // ported as a STEP from the surface rather than as its hex. The web mixes
+    // its light green at 12% over a white page and its dark green at 14% over
+    // #1c1c1c. An archived row here sits on white and on #1c1c1e, so the
+    // surfaces nearly match, but the hue does not: light takes `greenInk`'s
+    // green, the colour the chip's own word is written in, so the pill reads
+    // as one colour, and that darker hue lands the web's luminance step below
+    // white at 11% where the web's lighter one needed 12%. Dark keeps the
+    // palette green at 13%, the web's step above its page measured from this
+    // one. `AskChipContrastTests` measures the word over both.
+    #if os(iOS)
+    static let greenSoft = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.247, green: 0.725, blue: 0.314, alpha: 0.13)
+            : UIColor(red: 0.098, green: 0.478, blue: 0.208, alpha: 0.11)
+    })
+    #else
+    static let greenSoft = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.247, green: 0.725, blue: 0.314, alpha: 0.13)
+            : NSColor(red: 0.098, green: 0.478, blue: 0.208, alpha: 0.11)
+    })
+    #endif
     // A check row that wants something, on the PR panel's grouped list.
     //
     // The web tints one summary chip by the worst status it can see. A phone
