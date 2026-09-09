@@ -330,6 +330,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   passive WebSockets remain connected for inactive accounts
   while the app is active so mentions can badge the picker. Cross-device
   composer and session preferences refresh at launch and when the app foregrounds.
+  The new-session model picker and a session's model menu both carry **Set as
+  default**, which writes the account's `default-model` ui-pref the web
+  composer shares, so new sessions on every client start on that model.
   On macOS, custom account keyboard bindings drive the supported app commands and
   their command-menu hints; iOS keeps its system shortcut and widget guide.
   Infrastructure → **Runners** lists the machines this instance trusts, read

@@ -114,7 +114,7 @@ struct NewSessionView: View {
     @AppStorage("os1.newSession.repo") private var lastRepo = ""
     @AppStorage("os1.composer.defaultRepo") private var preferredRepo = ""
     @AppStorage(NativePreferences.sessionCheckoutsStorageKey) private var sessionCheckouts = ""
-    @AppStorage("os1.composer.defaultModel") private var preferredModel = ""
+    @AppStorage(NativePreferences.defaultModelStorageKey) private var preferredModel = ""
     @AppStorage("os1.composer.defaultEngine") private var preferredEngine = ""
 
     var body: some View {
@@ -899,6 +899,26 @@ struct NewSessionView: View {
                         modelButton(option)
                     }
                 }
+                // Same tail as the session menu and the web composer: pin the
+                // current model for every client's new sessions, or put this
+                // composer back where a fresh one starts.
+                Section {
+                    Button {
+                        let model = effectiveModelID
+                        Task { await NativePreferences.setDefaultModel(model) }
+                    } label: {
+                        Label(
+                            "Set as default",
+                            systemImage: isPreferredDefault ? "checkmark" : "pin"
+                        )
+                    }
+                    .disabled(effectiveModelID.isEmpty || isPreferredDefault)
+
+                    Button(action: resetToDefault) {
+                        Label("Reset to default", systemImage: "arrow.uturn.backward")
+                    }
+                    .disabled(isAtDefault)
+                }
             }
         } label: {
             chipLabel(
@@ -1123,20 +1143,42 @@ struct NewSessionView: View {
         sandboxStatus = try? await sandboxFetch
         if let fetched = try? await modelsFetch {
             catalog = fetched
-            let livePreferred = livePrefs?["default-model"] ?? preferredModel
-            let liveEngine = livePrefs?["default-engine"] ?? preferredEngine
-            preferredModel = livePreferred
-            preferredEngine = liveEngine
-            if model.isEmpty {
-                let start = fetched.option(for: livePreferred) != nil
-                    ? livePreferred
-                    : (fetched.defaultModel ?? "")
-                // Start on their default engine too. It then stays with the
-                // composer: selectModel recomposes onto currentEngine.
-                model = fetched.preferredID(start, engine: liveEngine)
-            }
+            preferredModel = livePrefs?[NativePreferences.defaultModelPrefKey] ?? preferredModel
+            preferredEngine = livePrefs?["default-engine"] ?? preferredEngine
+            if model.isEmpty { model = startingModelID }
             defaultEffortForCurrentModel()
         }
+    }
+
+    /// Where a fresh composer starts: the account's default model when this
+    /// instance offers it, else the instance's own, on the account's default
+    /// engine. It then stays with the composer: selectModel recomposes onto
+    /// currentEngine.
+    private var startingModelID: String {
+        guard let catalog else { return "" }
+        let start = catalog.option(for: preferredModel) != nil
+            ? preferredModel
+            : (catalog.defaultModel ?? "")
+        return catalog.preferredID(start, engine: preferredEngine)
+    }
+
+    private var isPreferredDefault: Bool {
+        !effectiveModelID.isEmpty && preferredModel == effectiveModelID
+    }
+
+    /// Nothing to put back: on the starting model, its own default effort, and
+    /// standard speed. Drives the reset row's disabled state.
+    private var isAtDefault: Bool {
+        let start = startingModelID
+        let onStartingModel = start.isEmpty || effectiveModelID == start
+        return onStartingModel && effort == defaultEffort(for: availableEfforts) && !fastMode
+    }
+
+    private func resetToDefault() {
+        let start = startingModelID
+        if !start.isEmpty { model = start }
+        effort = defaultEffort(for: availableEfforts)
+        fastMode = false
     }
 
     private func selectModel(_ option: ModelOption) {
@@ -1151,12 +1193,13 @@ struct NewSessionView: View {
     /// "High" is the palette's default where supported; presets (dial) have
     /// no effort dimension so the chip hides.
     private func defaultEffortForCurrentModel() {
-        let efforts = availableEfforts
-        if efforts.isEmpty {
-            effort = ""
-        } else if !efforts.contains(effort) {
-            effort = efforts.contains("high") ? "high" : efforts[0]
+        if !availableEfforts.contains(effort) {
+            effort = defaultEffort(for: availableEfforts)
         }
+    }
+
+    private func defaultEffort(for efforts: [String]) -> String {
+        efforts.contains("high") ? "high" : (efforts.first ?? "")
     }
 
     /// Match the web palette's two-axis create: a universal Ask starts with no

@@ -13,9 +13,14 @@ enum NativePreferences {
 
     private static var generation = 0
     private static var pendingLocalWrites = 0
+    /// Counts default-model writes so a confirmation that comes back after a
+    /// newer pick left can tell it is describing an older state of the key.
+    private static var defaultModelWriteSerial = 0
     private static let identityKey = "os1.preferences.identity"
     private static let bucketKey = "os1.preferences.bucket"
     static let sessionCheckoutsStorageKey = "os1.composer.sessionCheckouts"
+    static let defaultModelStorageKey = "os1.composer.defaultModel"
+    static let defaultModelPrefKey = "default-model"
 
     static func context() -> Context {
         let config = ServerConfig.shared
@@ -57,6 +62,44 @@ enum NativePreferences {
     static func endLocalWrite() {
         pendingLocalWrites = max(0, pendingLocalWrites - 1)
         generation += 1
+    }
+
+    /// Pin `model` as the account's default for new sessions, the same
+    /// `default-model` ui-pref the web composer writes. This device updates
+    /// immediately so every open picker's checkmark moves at once; the
+    /// confirmed map then goes through `apply`, which drops it if the account
+    /// changed while the write was out. A newer pick made meanwhile wins over
+    /// this write's confirmation, so two quick taps never settle on the first.
+    ///
+    /// Returns whether the server's confirmation was applied.
+    @discardableResult
+    static func setDefaultModel(
+        _ model: String,
+        write: (Context, [String: String?]) async throws -> [String: String] = { context, prefs in
+            try await SettingsAPI.updateUiPrefs(user: context.user, prefs: prefs)
+        }
+    ) async -> Bool {
+        let defaults = UserDefaults.standard
+        guard !model.isEmpty, model != defaults.string(forKey: defaultModelStorageKey) else {
+            return false
+        }
+        let requestContext = context()
+        defaultModelWriteSerial += 1
+        let serial = defaultModelWriteSerial
+        beginLocalWrite()
+        defer { endLocalWrite() }
+        defaults.set(model, forKey: defaultModelStorageKey)
+
+        guard let response = try? await write(requestContext, [defaultModelPrefKey: model]) else {
+            return false
+        }
+        var confirmed = response
+        if serial != defaultModelWriteSerial {
+            confirmed[defaultModelPrefKey] = defaults.string(forKey: defaultModelStorageKey) ?? model
+        } else if confirmed[defaultModelPrefKey] == nil {
+            confirmed[defaultModelPrefKey] = model
+        }
+        return apply(confirmed, for: requestContext)
     }
 
     @discardableResult
@@ -107,9 +150,9 @@ enum NativePreferences {
             in: defaults
         )
         set(
-            prefs["default-model"],
+            prefs[defaultModelPrefKey],
             default: "",
-            key: "os1.composer.defaultModel",
+            key: defaultModelStorageKey,
             resetMissing: changedIdentity,
             in: defaults
         )
