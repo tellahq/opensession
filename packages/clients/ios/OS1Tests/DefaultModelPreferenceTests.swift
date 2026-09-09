@@ -82,17 +82,59 @@ final class DefaultModelPreferenceTests: XCTestCase {
         XCTAssertEqual(writes, 0)
     }
 
-    func testConfirmationForAnotherAccountIsDropped() async {
+    func testConfirmationForAnotherAccountIsDroppedAndTheActiveAccountRehydrates() async {
+        var rehydrated = 0
         let applied = await NativePreferences.setDefaultModel("pi/openai/gpt-6-astra") { _, _ in
             // The account switched while the PUT was out: its answer describes
             // Account A, and Account B's own hydration owns the cache now.
-            ServerConfig.shared.userName = "Account B"
-            ServerConfig.shared.githubLogin = "account-b"
+            self.switchToAccountB()
             return ["default-model": "pi/openai/gpt-6-astra", "default-repo": "repo-a"]
+        } rehydrate: {
+            rehydrated += 1
         }
 
         XCTAssertFalse(applied)
         XCTAssertEqual(UserDefaults.standard.string(forKey: repoKey), "repo-before")
+        XCTAssertEqual(rehydrated, 1, "Account B's hydration skipped during the write, so it runs again now")
+    }
+
+    func testAWriteQueuedForASwitchedAccountNeverLeavesAndTheActiveAccountRehydrates() async {
+        let wire = Wire()
+        var rehydrated = 0
+
+        let first = Task { @MainActor in
+            await NativePreferences.setDefaultModel(
+                "pi/openai/gpt-5.6-sol",
+                write: wire.write(holdingFirst: true)
+            ) { rehydrated += 1 }
+        }
+        await wire.waitUntilHeld()
+        let second = Task { @MainActor in
+            await NativePreferences.setDefaultModel(
+                "pi/openai/gpt-6-astra",
+                write: wire.write()
+            ) { rehydrated += 1 }
+        }
+        await wire.settle()
+        // Account A's second pick is waiting behind the stalled first write
+        // when the user switches to Account B.
+        switchToAccountB()
+        wire.release?.resume()
+
+        let applied = await [first.value, second.value]
+
+        XCTAssertEqual(applied, [false, false])
+        XCTAssertEqual(
+            wire.sent,
+            ["pi/openai/gpt-5.6-sol"],
+            "the queued PUT would carry A's user on B's connection, so it is skipped"
+        )
+        XCTAssertEqual(rehydrated, 1, "one rehydration, after the last pending write released the guard")
+    }
+
+    private func switchToAccountB() {
+        ServerConfig.shared.userName = "Account B"
+        ServerConfig.shared.githubLogin = "account-b"
     }
 
     /// A PUT that stalls until the test releases it, recording every write's

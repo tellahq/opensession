@@ -78,13 +78,21 @@ enum NativePreferences {
     /// never leaves, and a confirmation that arrives after a newer tap keeps
     /// the newer value locally until that tap's own write confirms it.
     ///
+    /// An account or server switch while a write is queued or on the wire
+    /// ends it: the PUT is skipped (it would leave on the new connection with
+    /// the old user), its confirmation is dropped, and once the last pending
+    /// write has released the hydration guard the active account is
+    /// rehydrated, replacing the optimistic value the old account left in
+    /// AppStorage.
+    ///
     /// Returns whether the server's confirmation was applied.
     @discardableResult
     static func setDefaultModel(
         _ model: String,
         write: @escaping (Context, [String: String?]) async throws -> [String: String] = { context, prefs in
             try await SettingsAPI.updateUiPrefs(user: context.user, prefs: prefs)
-        }
+        },
+        rehydrate: @escaping @MainActor () async -> Void = { await hydrate() }
     ) async -> Bool {
         let defaults = UserDefaults.standard
         guard !model.isEmpty, model != defaults.string(forKey: defaultModelStorageKey) else {
@@ -98,24 +106,52 @@ enum NativePreferences {
 
         let previous = lastDefaultModelWrite
         let mine = Task<Bool, Never> { @MainActor in
-            defer { endLocalWrite() }
             _ = await previous?.value
-            // A newer tap is queued behind this one; its write carries the
-            // value that should win, so this one must not reach the server.
-            guard serial == defaultModelWriteSerial else { return false }
-            guard let response = try? await write(requestContext, [defaultModelPrefKey: model]) else {
-                return false
+            let applied = await sendDefaultModel(
+                model,
+                serial: serial,
+                for: requestContext,
+                write: write
+            )
+            endLocalWrite()
+            // The account changed while this write was pending. Its hydration
+            // ran into the guard and skipped, so the old account's optimistic
+            // value is still in AppStorage; fetch the active map now that the
+            // guard is down. A write still queued behind this one does it
+            // instead, either by applying the new account's own confirmation
+            // or by rehydrating here when it is stale too.
+            if pendingLocalWrites == 0, context() != requestContext {
+                await rehydrate()
             }
-            var confirmed = response
-            if serial != defaultModelWriteSerial {
-                confirmed[defaultModelPrefKey] = defaults.string(forKey: defaultModelStorageKey) ?? model
-            } else if confirmed[defaultModelPrefKey] == nil {
-                confirmed[defaultModelPrefKey] = model
-            }
-            return apply(confirmed, for: requestContext)
+            return applied
         }
         lastDefaultModelWrite = mine
         return await mine.value
+    }
+
+    private static func sendDefaultModel(
+        _ model: String,
+        serial: Int,
+        for requestContext: Context,
+        write: (Context, [String: String?]) async throws -> [String: String]
+    ) async -> Bool {
+        // A newer tap is queued behind this one; its write carries the value
+        // that should win, so this one must not reach the server. An account
+        // switch while queued ends it too: `SettingsAPI` resolves server and
+        // token from the connection that is current when the PUT leaves, so
+        // the old account's pick would land on the new account or server.
+        guard serial == defaultModelWriteSerial, context() == requestContext else { return false }
+        guard let response = try? await write(requestContext, [defaultModelPrefKey: model]) else {
+            return false
+        }
+        var confirmed = response
+        if serial != defaultModelWriteSerial {
+            confirmed[defaultModelPrefKey] =
+                UserDefaults.standard.string(forKey: defaultModelStorageKey) ?? model
+        } else if confirmed[defaultModelPrefKey] == nil {
+            confirmed[defaultModelPrefKey] = model
+        }
+        return apply(confirmed, for: requestContext)
     }
 
     @discardableResult
