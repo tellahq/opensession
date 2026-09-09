@@ -33,10 +33,13 @@ final class ConnectionPresentationTests: XCTestCase {
         super.tearDown()
     }
 
-    /// Open the session and land the handshake, so both states read connected.
-    private func connect() {
+    /// Open the session, land the handshake and a transcript, so both states
+    /// read connected. The transcript matters: `connect()` rewrites a
+    /// reconnect on an empty transcript as `.connecting`.
+    private func connect(entries: [TranscriptEntry] = [TranscriptEntry(id: "e1", type: "assistant", content: "hi")]) {
         viewModel.start()
         viewModel.handle(.hello(bootId: "boot-1"))
+        viewModel.handle(.transcriptInit(sessionId: "bks-1", entries: entries, cursor: .empty))
         XCTAssertEqual(viewModel.connectionState, .connected)
         XCTAssertEqual(viewModel.presentedConnectionState, .connected)
     }
@@ -118,6 +121,25 @@ final class ConnectionPresentationTests: XCTestCase {
         XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting(nil))
     }
 
+    func testEmptyTranscriptChurnIsDeferredToo() async {
+        connect(entries: [])
+        viewModel.appDidEnterBackground()
+        await drop()
+        viewModel.appDidBecomeActive()
+        await settle()
+        XCTAssertEqual(viewModel.connectionState, .connecting, "an empty transcript reconnects as connecting")
+        XCTAssertEqual(viewModel.presentedConnectionState, .connected, "still a drop from a presented connection")
+
+        viewModel.handle(.hello(bootId: "boot-2"))
+        XCTAssertEqual(viewModel.presentedConnectionState, .connected)
+
+        await drop()
+        viewModel.appDidEnterBackground()
+        viewModel.appDidBecomeActive()
+        await advance(by: .seconds(8))
+        XCTAssertEqual(viewModel.presentedConnectionState, .connecting, "the grace presents whatever the transport says")
+    }
+
     func testDropWhileBackgroundedWaitsForTheForeground() async {
         connect()
         viewModel.appDidEnterBackground()
@@ -127,6 +149,63 @@ final class ConnectionPresentationTests: XCTestCase {
 
         viewModel.appDidBecomeActive()
         await advance(by: .seconds(8))
+        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting(nil))
+    }
+
+    func testPresentedOutageIsFoldedBackWhileBackgrounded() async {
+        connect()
+        await drop()
+        await advance(by: .seconds(9))
+        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting(nil))
+
+        // Like the web client while hidden, the outage comes off screen.
+        viewModel.appDidEnterBackground()
+        XCTAssertEqual(viewModel.presentedConnectionState, .connected)
+
+        // Connectivity came back meanwhile: the foreground handshake must not
+        // flash the banner it had before.
+        viewModel.appDidBecomeActive()
+        await settle()
+        XCTAssertEqual(viewModel.connectionState, .reconnecting(nil))
+        XCTAssertEqual(viewModel.presentedConnectionState, .connected, "no flash through the handshake")
+        viewModel.handle(.hello(bootId: "boot-2"))
+        XCTAssertEqual(viewModel.presentedConnectionState, .connected)
+    }
+
+    func testOutageThatOutlivesTheBackgroundGetsAFreshGrace() async {
+        connect()
+        await drop()
+        await advance(by: .seconds(9))
+        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting(nil))
+
+        viewModel.appDidEnterBackground()
+        viewModel.appDidBecomeActive()
+        await settle()
+        XCTAssertEqual(viewModel.presentedConnectionState, .connected)
+
+        await advance(by: .seconds(7))
+        XCTAssertEqual(viewModel.presentedConnectionState, .connected, "the earlier outage does not count")
+        await advance(by: .seconds(1))
+        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting(nil))
+    }
+
+    func testAnnouncedServerRestartKeepsItsBannerWhileBackgrounded() async {
+        connect()
+        viewModel.handle(.serverRestarting)
+        await drop("server restarting")
+        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting("server restarting"))
+
+        viewModel.appDidEnterBackground()
+        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting("server restarting"))
+    }
+
+    func testNeverConnectedReconnectIsNotFoldedBack() async {
+        viewModel.start()
+        await drop()
+        XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting(nil), "a drop before the handshake shows at once")
+
+        // Nothing was ever on screen to fold back to.
+        viewModel.appDidEnterBackground()
         XCTAssertEqual(viewModel.presentedConnectionState, .reconnecting(nil))
     }
 

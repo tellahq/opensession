@@ -136,6 +136,10 @@ final class SessionViewModel {
     /// load failure show immediately.
     private(set) var presentedConnectionState: ConnectionState = .connecting
     private var connectionPresentationTask: Task<Void, Never>?
+    /// Set by the first `hello`. Only a session that has actually been
+    /// connected may have a presented outage folded back into `.connected`
+    /// while backgrounded.
+    private var hasCompletedHandshake = false
     private(set) var isLoadingConversation = true
     /// A watch that never receives transcript_init is not a loading state
     /// forever. The reader gets an explicit retry while reconnects continue.
@@ -978,8 +982,20 @@ final class SessionViewModel {
         isAway = true
         // Time away from the foreground never counts toward the reconnect
         // grace; `appDidBecomeActive` restarts it if the drop outlives the
-        // background.
+        // background. An outage already on screen is folded back too, as the
+        // web client does while hidden: the return reconnects on the spot,
+        // and a banner that survived the background would flash through the
+        // handshake even when connectivity came back meanwhile. An announced
+        // server restart keeps its banner.
         cancelConnectionPresentation()
+        switch presentedConnectionState {
+        case .connecting, .reconnecting:
+            if hasCompletedHandshake, !isServerHandoffPending {
+                presentedConnectionState = .connected
+            }
+        case .connected, .failed:
+            break
+        }
         // Coming back has to re-claim the face immediately, not wait out the
         // refresh interval below.
         lastPresenceRefresh = .distantPast
@@ -1686,12 +1702,15 @@ final class SessionViewModel {
 
     /// Fold the transport state into the presented one. Only a drop from a
     /// presented connection is deferred; every other transition is immediate.
+    /// `connect()` rewrites an empty-transcript reconnect as `.connecting`, so
+    /// that counts as the same drop: what matters is what was on screen.
     private func presentConnectionState() {
         let state = connectionState
         let isTransientDrop: Bool
-        if case .reconnecting = state {
+        switch state {
+        case .connecting, .reconnecting:
             isTransientDrop = presentedConnectionState == .connected && !isServerHandoffPending
-        } else {
+        case .connected, .failed:
             isTransientDrop = false
         }
         guard isTransientDrop else {
@@ -1707,7 +1726,7 @@ final class SessionViewModel {
             try? await clock.sleep(for: Self.connectionPresentationGrace)
             guard let self, !Task.isCancelled, !self.stopped, !self.isAway else { return }
             self.connectionPresentationTask = nil
-            if case .reconnecting = self.connectionState {
+            if self.connectionState != .connected {
                 self.presentedConnectionState = self.connectionState
             }
         }
@@ -1739,6 +1758,7 @@ final class SessionViewModel {
         switch event {
         case .hello:
             isServerHandoffPending = false
+            hasCompletedHandshake = true
             connectionState = .connected
             // A replacement socket defaults to present. Restore scene focus
             // before joining the session so a background reconnect never
