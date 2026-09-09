@@ -1015,18 +1015,18 @@ final class SessionsListViewModel {
             let names = workspaceNames
             let nextWorkspaces = workspaces
             let claimed = claimedSessionIds
-            let result = await Task.detached(priority: .userInitiated) {
-                () -> (next: [Session], grouped: Grouped)? in
+            let hideKeys = Set(HideStore.shared.hides.keys)
+            let pass = await Task.detached(priority: .userInitiated) {
+                () -> (result: (next: [Session], grouped: Grouped)?, resurfacedHideKeys: [String]) in
+                let resurfaced = Self.resurfacedHideKeys(in: upserts, hidden: hideKeys)
                 let next = Self.applyingRowChanges(
                     to: base, upserting: upserts, removing: removals
                 )
-                guard next != base else { return nil }
-                return (
-                    next,
-                    Self.grouped(
-                        next, workspaceNames: names, workspaces: nextWorkspaces, claimed: claimed
-                    )
+                guard next != base else { return (nil, resurfaced) }
+                let grouped = Self.grouped(
+                    next, workspaceNames: names, workspaces: nextWorkspaces, claimed: claimed
                 )
+                return ((next, grouped), resurfaced)
             }.value
             if refreshArchivedIndex { Task { await self.refreshArchived(force: true) } }
             guard revision == sessionsRevision else {
@@ -1037,7 +1037,11 @@ final class SessionsListViewModel {
                 }
                 continue
             }
-            guard let result else { continue }
+            // Same rule as the poll: a pushed row that is blocked on a
+            // question consumes the hide covering it, so answering before
+            // the next poll doesn't make the row vanish again.
+            HideStore.shared.clear(pass.resurfacedHideKeys)
+            guard let result = pass.result else { continue }
             SessionLinks.register(titles: result.grouped.titles)
             PrLinks.register(index: result.grouped.prs)
             setSessions(result.next, rows: result.grouped.rows)
@@ -1345,15 +1349,24 @@ final class SessionsListViewModel {
             .map { (session: $0, key: $0.lastActivityDate ?? .distantPast) }
             .sorted { $0.key > $1.key }
             .map(\.session)
+        return (active, archived, resurfacedHideKeys(in: active, hidden: hideKeys))
+    }
+
+    /// The hides that a blocked session consumes: any key its row can sit
+    /// under while it is waiting on a person. Automation rows don't count;
+    /// nobody is being asked anything there.
+    nonisolated static func resurfacedHideKeys(
+        in sessions: [Session],
+        hidden hideKeys: Set<String>
+    ) -> [String] {
+        guard !hideKeys.isEmpty else { return [] }
         var resurfaced = Set<String>()
-        if !hideKeys.isEmpty {
-            for session in active where session.lane == .needsInput && !session.isAutomation {
-                for key in SidebarRowKeys.candidateKeys(for: session) where hideKeys.contains(key) {
-                    resurfaced.insert(key)
-                }
+        for session in sessions where session.lane == .needsInput && !session.isAutomation {
+            for key in SidebarRowKeys.candidateKeys(for: session) where hideKeys.contains(key) {
+                resurfaced.insert(key)
             }
         }
-        return (active, archived, Array(resurfaced))
+        return Array(resurfaced)
     }
 }
 

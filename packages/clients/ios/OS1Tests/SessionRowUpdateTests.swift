@@ -172,4 +172,37 @@ final class SessionRowUpdateTests: XCTestCase {
         XCTAssertEqual(viewModel.sessions.first?.id, "bks-created")
         XCTAssertFalse(viewModel.sessions.first?.isOptimistic == true)
     }
+
+    /// The poll consumes a hide when the hidden row is blocked on a question,
+    /// so the row can't disappear again once it's answered. A pushed row has
+    /// to do the same, or answering before the next poll re-hides it.
+    func testPushedRowThatNeedsInputConsumesItsHide() async {
+        let viewModel = SessionsListViewModel()
+        viewModel.loadFixture(loaded())
+        HideStore.shared.applyHydrated(
+            ["workspace:ws-2": "2026-09-09T08:00:00.000Z", "bks-1": "2026-09-09T08:00:00.000Z"],
+            persist: false
+        )
+        defer { HideStore.shared.applyHydrated([:], persist: false) }
+
+        var blocked = session("bks-2", title: "Two", at: "2026-09-09T08:02:00.000Z", workspaceId: "ws-2")
+        blocked.waitingForInput = true
+        viewModel.apply(.row(blocked))
+        viewModel.apply(.row(session("bks-1", title: "One, still idle", at: "2026-09-09T08:01:00.000Z")))
+        await viewModel.flushRowChanges()
+
+        XCTAssertNil(HideStore.shared.hides["workspace:ws-2"])
+        XCTAssertNotNil(HideStore.shared.hides["bks-1"])
+    }
+
+    func testAutomationRowThatNeedsInputKeepsItsHide() {
+        var bot = session("bks-bot", workspaceId: "ws-bot")
+        bot.waitingForInput = true
+        bot.startedBy = "nightly (automation)"
+
+        XCTAssertEqual(
+            SessionsListViewModel.resurfacedHideKeys(in: [bot], hidden: ["workspace:ws-bot", "bks-bot"]),
+            []
+        )
+    }
 }
