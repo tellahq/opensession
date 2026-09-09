@@ -174,6 +174,41 @@ describe("Pi-only model routing", () => {
     ).toSatisfy((hops) => hops.every((hop) => hop.id.startsWith("pi/")));
   });
 
+  test("falls back from Fable to Astra before configured Sol or Opus", () => {
+    for (const primary of [
+      "claude-fable-5-1",
+      "pi/anthropic/claude-fable-5-1",
+    ]) {
+      for (const preferred of ["pi/openai/gpt-5.6-sol", "claude-opus-5"]) {
+        expect(nextFallbackModel(primary, new Set(), preferred)).toEqual({
+          id: "pi/openai/gpt-6-astra",
+          mode: "auto",
+        });
+        expect(fallbackPlan(primary, preferred).slice(0, 2)).toEqual([
+          { id: "pi/openai/gpt-6-astra", mode: "auto" },
+          { id: "pi/openai/gpt-5.6-sol", mode: "auto" },
+        ]);
+      }
+    }
+  });
+
+  test("keeps Sol available when Astra is exhausted", () => {
+    expect(
+      nextFallbackModel(
+        "pi/anthropic/claude-fable-5-1",
+        new Set(["pi/openai/gpt-6-astra"]),
+        "claude-opus-5",
+      ),
+    ).toEqual({ id: "pi/openai/gpt-5.6-sol", mode: "auto" });
+  });
+
+  test("keeps automatic fallback disabled when requested", () => {
+    expect(fallbackPlan("pi/anthropic/claude-fable-5-1", "none")).toEqual([]);
+    expect(fallbackPlan("pi/anthropic/claude-fable-5-1", undefined)).toEqual(
+      [],
+    );
+  });
+
   test("crosses exhausted Haiku sessions to OpenAI", () => {
     expect(automaticFallbackModel("claude-haiku-4-5")).toBe(
       "pi/openai/gpt-5.6-luna",

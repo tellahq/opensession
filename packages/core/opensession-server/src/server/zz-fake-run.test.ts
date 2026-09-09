@@ -304,10 +304,10 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     const data = sessionJson(sid);
     expect(fake.calls.map((call) => call.model)).toEqual([
       "pi/openai/gpt-5.6-sol",
-      "pi/anthropic/claude-opus-5",
+      "pi/openai/gpt-6-astra",
     ]);
     expect(data.model).toBe("dial/medium");
-    expect(data.lastEngineModel).toBe("pi/anthropic/claude-opus-5");
+    expect(data.lastEngineModel).toBe("pi/openai/gpt-6-astra");
     expect(data.modelHistory).toBeUndefined();
   });
 
@@ -330,7 +330,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 
     const data = sessionJson(sid);
     expect(data.model).toBe("gpt-5.6-sol");
-    expect(data.lastEngineModel).toBe("pi/anthropic/claude-opus-5");
+    expect(data.lastEngineModel).toBe("pi/openai/gpt-6-astra");
     expect(data.modelHistory).toBeUndefined();
   });
 
@@ -352,7 +352,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     await runSession.runSessionPromptAndDrain(sid, "keep going", "Test");
 
     const data = sessionJson(sid);
-    expect(data.model).toBe("pi/anthropic/claude-opus-5");
+    expect(data.model).toBe("pi/openai/gpt-6-astra");
     expect(data.modelHistory).toHaveLength(1);
     expect(data.modelHistory[0].by).toContain("out of credits");
   });
@@ -471,7 +471,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 
     const data = sessionJson(sid);
     expect(data.model).toBe("dial/medium");
-    expect(data.lastEngineModel).toBe("pi/openai/gpt-5.6-terra");
+    expect(data.lastEngineModel).toBe("pi/anthropic/claude-opus-5");
     expect(data.modelHistory).toBeUndefined();
   });
 
