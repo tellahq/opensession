@@ -16,6 +16,10 @@ enum NativePreferences {
     /// Counts default-model writes so a confirmation that comes back after a
     /// newer pick left can tell it is describing an older state of the key.
     private static var defaultModelWriteSerial = 0
+    /// The write currently on the wire, or queued behind it. `/api/ui-prefs`
+    /// keeps whichever PUT arrives last, so writes leave one at a time in tap
+    /// order and the newest pick is always the last one the server sees.
+    private static var lastDefaultModelWrite: Task<Bool, Never>?
     private static let identityKey = "os1.preferences.identity"
     private static let bucketKey = "os1.preferences.bucket"
     static let sessionCheckoutsStorageKey = "os1.composer.sessionCheckouts"
@@ -69,13 +73,16 @@ enum NativePreferences {
     /// immediately so every open picker's checkmark moves at once; the
     /// confirmed map then goes through `apply`, which drops it if the account
     /// changed while the write was out. A newer pick made meanwhile wins over
-    /// this write's confirmation, so two quick taps never settle on the first.
+    /// this write, on the server and on this device: writes go out one at a
+    /// time in tap order, a queued write that a newer tap already replaced
+    /// never leaves, and a confirmation that arrives after a newer tap keeps
+    /// the newer value locally until that tap's own write confirms it.
     ///
     /// Returns whether the server's confirmation was applied.
     @discardableResult
     static func setDefaultModel(
         _ model: String,
-        write: (Context, [String: String?]) async throws -> [String: String] = { context, prefs in
+        write: @escaping (Context, [String: String?]) async throws -> [String: String] = { context, prefs in
             try await SettingsAPI.updateUiPrefs(user: context.user, prefs: prefs)
         }
     ) async -> Bool {
@@ -87,19 +94,28 @@ enum NativePreferences {
         defaultModelWriteSerial += 1
         let serial = defaultModelWriteSerial
         beginLocalWrite()
-        defer { endLocalWrite() }
         defaults.set(model, forKey: defaultModelStorageKey)
 
-        guard let response = try? await write(requestContext, [defaultModelPrefKey: model]) else {
-            return false
+        let previous = lastDefaultModelWrite
+        let mine = Task<Bool, Never> { @MainActor in
+            defer { endLocalWrite() }
+            _ = await previous?.value
+            // A newer tap is queued behind this one; its write carries the
+            // value that should win, so this one must not reach the server.
+            guard serial == defaultModelWriteSerial else { return false }
+            guard let response = try? await write(requestContext, [defaultModelPrefKey: model]) else {
+                return false
+            }
+            var confirmed = response
+            if serial != defaultModelWriteSerial {
+                confirmed[defaultModelPrefKey] = defaults.string(forKey: defaultModelStorageKey) ?? model
+            } else if confirmed[defaultModelPrefKey] == nil {
+                confirmed[defaultModelPrefKey] = model
+            }
+            return apply(confirmed, for: requestContext)
         }
-        var confirmed = response
-        if serial != defaultModelWriteSerial {
-            confirmed[defaultModelPrefKey] = defaults.string(forKey: defaultModelStorageKey) ?? model
-        } else if confirmed[defaultModelPrefKey] == nil {
-            confirmed[defaultModelPrefKey] = model
-        }
-        return apply(confirmed, for: requestContext)
+        lastDefaultModelWrite = mine
+        return await mine.value
     }
 
     @discardableResult

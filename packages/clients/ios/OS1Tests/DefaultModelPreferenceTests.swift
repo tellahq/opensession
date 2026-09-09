@@ -95,34 +95,93 @@ final class DefaultModelPreferenceTests: XCTestCase {
         XCTAssertEqual(UserDefaults.standard.string(forKey: repoKey), "repo-before")
     }
 
-    func testNewerLocalPickOutlivesAnOlderConfirmation() async {
-        final class Gate: @unchecked Sendable { var release: CheckedContinuation<Void, Never>? }
-        let gate = Gate()
+    /// A PUT that stalls until the test releases it, recording every write's
+    /// model so the order the server would see them in can be asserted.
+    @MainActor
+    private final class Wire {
+        var sent: [String] = []
+        var release: CheckedContinuation<Void, Never>?
 
-        let first = Task { @MainActor in
-            await NativePreferences.setDefaultModel("pi/openai/gpt-5.6-sol") { _, _ in
-                await withCheckedContinuation { gate.release = $0 }
-                return ["default-model": "pi/openai/gpt-5.6-sol"]
+        func write(holdingFirst: Bool = false) -> (NativePreferences.Context, [String: String?]) async throws -> [String: String] {
+            { [self] _, prefs in
+                let model = prefs["default-model"].flatMap { $0 } ?? ""
+                let isFirst = sent.isEmpty
+                sent.append(model)
+                if holdingFirst, isFirst {
+                    await withCheckedContinuation { release = $0 }
+                }
+                return ["default-model": model]
             }
         }
-        while gate.release == nil { await Task.yield() }
+
+        func waitUntilHeld() async {
+            while release == nil { await Task.yield() }
+        }
+
+        func settle() async {
+            for _ in 0..<50 { await Task.yield() }
+        }
+    }
+
+    func testANewerPickWaitsForTheOlderWriteAndReachesTheServerLast() async {
+        let wire = Wire()
+
+        let first = Task { @MainActor in
+            await NativePreferences.setDefaultModel("pi/openai/gpt-5.6-sol", write: wire.write(holdingFirst: true))
+        }
+        await wire.waitUntilHeld()
         XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "pi/openai/gpt-5.6-sol")
 
-        let second = await NativePreferences.setDefaultModel("pi/openai/gpt-6-astra") { _, prefs in
-            var confirmed: [String: String] = [:]
-            for (key, value) in prefs { confirmed[key] = value }
-            return confirmed
+        let second = Task { @MainActor in
+            await NativePreferences.setDefaultModel("pi/openai/gpt-6-astra", write: wire.write())
         }
-        XCTAssertTrue(second)
-
-        gate.release?.resume()
-        let firstApplied = await first.value
-
-        XCTAssertTrue(firstApplied, "the late answer still carries the rest of the map")
+        await wire.settle()
         XCTAssertEqual(
             UserDefaults.standard.string(forKey: modelKey),
             "pi/openai/gpt-6-astra",
-            "the pick made while the first write was out is the one that stays"
+            "this device shows the newer pick right away"
         )
+        XCTAssertEqual(wire.sent, ["pi/openai/gpt-5.6-sol"], "the second PUT waits behind the first")
+
+        wire.release?.resume()
+        let firstApplied = await first.value
+        XCTAssertEqual(
+            UserDefaults.standard.string(forKey: modelKey),
+            "pi/openai/gpt-6-astra",
+            "the older confirmation does not flip this device back"
+        )
+        let secondApplied = await second.value
+
+        XCTAssertTrue(firstApplied, "the late answer still carries the rest of the map")
+        XCTAssertTrue(secondApplied)
+        XCTAssertEqual(
+            wire.sent,
+            ["pi/openai/gpt-5.6-sol", "pi/openai/gpt-6-astra"],
+            "the server sees the newer pick last, so its last-write merge keeps it"
+        )
+        XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "pi/openai/gpt-6-astra")
+    }
+
+    func testAQueuedPickThatWasAlreadyReplacedNeverReachesTheServer() async {
+        let wire = Wire()
+
+        let first = Task { @MainActor in
+            await NativePreferences.setDefaultModel("pi/openai/gpt-5.6-sol", write: wire.write(holdingFirst: true))
+        }
+        await wire.waitUntilHeld()
+        let second = Task { @MainActor in
+            await NativePreferences.setDefaultModel("pi/openai/gpt-6-astra", write: wire.write())
+        }
+        let third = Task { @MainActor in
+            await NativePreferences.setDefaultModel("pi/anthropic/claude-nova-6", write: wire.write())
+        }
+        await wire.settle()
+        wire.release?.resume()
+
+        let applied = await [first.value, second.value, third.value]
+
+        XCTAssertEqual(applied, [true, false, true], "the replaced middle pick is skipped, not sent")
+        XCTAssertEqual(wire.sent, ["pi/openai/gpt-5.6-sol", "pi/anthropic/claude-nova-6"])
+        XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "pi/anthropic/claude-nova-6")
     }
 }
