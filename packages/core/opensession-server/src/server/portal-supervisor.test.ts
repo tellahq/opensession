@@ -15,14 +15,17 @@ import {
   listSandboxPortalServices,
   normalizePortalPath,
   portalsNeedingContainment,
+  portalGeneration,
   type PortalRecord,
   portalsToRestore,
   readPortalRegistry,
   reapOrphanedPortalServices,
+  restartPortalService,
   SANDBOX_PORTAL_AGENT_ENTRY,
   setPortalPath,
   startPortalService,
   startSandboxPortalService,
+  stopArchivedSessionPortals,
   stopPortalService,
   stopSandboxPortalService,
 } from "./portal-supervisor";
@@ -175,6 +178,57 @@ describe("host Portal lifecycle cleanup", () => {
       lastError: expect.stringContaining("host memory is nearly full"),
     });
   });
+
+  test("archiving through an alias stops the canonical owner's Portal", async () => {
+    registry("canonical");
+    await stopArchivedSessionPortals("slack-C998-1719860000.000000", {
+      findSession: async () => ({
+        id: "canonical",
+        worktreeDir: worktree,
+        attachedRepos: [],
+      }),
+    });
+    expect(readPortalRegistry(worktree)[0]?.state).toBe("stopped");
+  });
+
+  test("a stale stop queued behind a restart cannot kill the replacement", async () => {
+    const port = 18094;
+    const first = await startPortalService({
+      sessionId: "owner",
+      worktreeDir: worktree,
+      name: "web",
+      port,
+      command:
+        "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"web\")}})'",
+    });
+    const restart = restartPortalService({
+      sessionId: "owner",
+      worktreeDir: worktree,
+      name: "web",
+    });
+    // The restart is inside its stop (SIGTERM plus a grace sleep) when the
+    // sweep's stop arrives holding the old generation.
+    await Bun.sleep(100);
+    const sweep = stopPortalService({
+      sessionId: "owner",
+      worktreeDir: worktree,
+      name: "web",
+      expectedGeneration: portalGeneration(first),
+    });
+    const replacement = await restart;
+    await expect(sweep).rejects.toThrow("Portal changed");
+    expect(replacement.state).toBe("awake");
+    expect(replacement.pid).not.toBe(first.pid);
+    expect((await listPortalServices(worktree))[0]).toMatchObject({
+      state: "awake",
+      pid: replacement.pid,
+    });
+    await stopPortalService({
+      sessionId: "owner",
+      worktreeDir: worktree,
+      name: "web",
+    });
+  }, 20_000);
 
   test("an expired generation cannot stop a replacement", async () => {
     registry();
