@@ -5,9 +5,11 @@ import SwiftUI
 /// A review round arrives as a pile of ordinary rows — the handoff notice, the
 /// fix turns, the push, then the next handoff — which is the noisiest thing a
 /// phone transcript can hold, and none of it is what the reader came for.
-/// Closed, this row says what the loop concluded; opened, it shows the same
-/// icon-led step rows as any other turn, with the verdict at the end. Mirrors
-/// the web viewer's `ReviewLoopBlock`.
+/// Closed, this row says what the loop concluded: GitHub's live verdict while
+/// the PR is open, or the durable outcome the settle notice recorded ("Review
+/// passed", "Over to humans") once it is merged and the live verdict is gone.
+/// Opened, it shows the same icon-led step rows as any other turn, with the
+/// verdict at the end. Mirrors the web viewer's `ReviewLoopBlock`.
 struct ReviewLoopView: View {
     let loop: ReviewLoop
     let sessionId: String
@@ -37,12 +39,14 @@ struct ReviewLoopView: View {
                     ForEach(loop.blocks) { block in
                         // The handoff itself is what the header stands for;
                         // drawing it again inside would say the same thing
-                        // twice, one indent apart.
+                        // twice, one indent apart. The settle notice stays: it
+                        // is the loop's own last word, and the verdict row
+                        // below only exists while GitHub still has one.
                         if !isHandoff(block) {
                             row(for: block)
                         }
                     }
-                    if let result = loop.result {
+                    if let result = loop.result, result.status != .pending {
                         ReviewLoopResultRow(result: result, rounds: loop.rounds)
                     }
                 }

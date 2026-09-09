@@ -92,6 +92,11 @@ struct ReviewLoop: Identifiable, Equatable {
     var blocks: [TranscriptBlock]
     /// The settled verdict, on the final loop only.
     var result: ReviewLoopResult?
+    /// How the transcript says the loop closed, once its settle notice landed
+    /// inside it. Outranked by a live `result`, which only the final loop of
+    /// an open PR carries; every earlier or merged loop keeps this durable
+    /// verdict instead of a bare round count.
+    var settled: ReviewSettledOutcome?
 
     /// What the closed row says. A live loop is always working, whatever
     /// GitHub last reported about the PR.
@@ -101,15 +106,43 @@ struct ReviewLoop: Identifiable, Equatable {
         case .passed: return "Ready to merge"
         case .failed: return "Needs changes"
         case .pending: return "Working"
-        case nil: return roundsLabel
+        case nil: return settled?.label ?? roundsLabel
         }
     }
 
     /// The loop has reached a verdict, so opening it can move that verdict
-    /// down to its own row and give the header the round count instead.
-    var isSettled: Bool { !isLive && result != nil && result?.status != .pending }
+    /// down to its own row (or to the settle notice folded inside) and give
+    /// the header the round count instead.
+    var isSettled: Bool {
+        guard !isLive else { return false }
+        if let result { return result.status != .pending }
+        return settled != nil
+    }
 
     var roundsLabel: String { "\(rounds) round\(rounds == 1 ? "" : "s")" }
+}
+
+/// How the transcript says a review loop closed: the protocol's
+/// `review-settled` notice (`notices.ts`), delivered once the PR passed review
+/// after handed-off fix rounds or the round cap sent the rest to humans. It
+/// outlives the PR: a merged or closed PR has no live verdict, and this is
+/// what the row still says.
+enum ReviewSettledOutcome: Equatable {
+    case passed
+    case capped
+
+    /// The protocol tags a passed loop as a neutral done notice and a capped
+    /// one as a warning; the tone is the outcome's only wire form.
+    init(notice: EntryNotice) {
+        self = notice.tone == "warn" ? .capped : .passed
+    }
+
+    var label: String {
+        switch self {
+        case .passed: "Review passed"
+        case .capped: "Over to humans"
+        }
+    }
 }
 
 /// The latest GitHub facts about the PR a review loop was working on, as the
@@ -591,6 +624,7 @@ enum TranscriptGrouping {
 
     private enum ReviewBlockRole {
         case handoff(prNumber: Int?)
+        case settled(ReviewSettledOutcome)
         case userMessage
         case other
     }
@@ -599,15 +633,42 @@ enum TranscriptGrouping {
     /// message presentation rule so only an actual person's message ends a loop.
     private static func reviewBlockRole(_ block: TranscriptBlock) -> ReviewBlockRole {
         guard case .message(let entry) = block else { return .other }
-        if entry.notice?.kind == "review-handoff" {
-            return .handoff(prNumber: handoffPrNumber(block))
+        guard let notice = entry.notice else {
+            return entry.isUser ? .userMessage : .other
         }
-        return entry.isUser && entry.notice == nil ? .userMessage : .other
+        switch notice.kind {
+        case "review-handoff": return .handoff(prNumber: handoffPrNumber(block))
+        case "review-settled": return .settled(ReviewSettledOutcome(notice: notice))
+        default: return .other
+        }
+    }
+
+    /// Whether the loop open before `index` goes on: its next round's findings
+    /// or its closing settle notice arrive before any human message, note or
+    /// walkthrough.
+    private static func reviewLoopContinues(
+        _ blocks: [TranscriptBlock], from index: Int
+    ) -> Bool {
+        for block in blocks[index...] {
+            switch block {
+            case .note, .walkthrough: return false
+            default: break
+            }
+            switch reviewBlockRole(block) {
+            case .userMessage: return false
+            case .handoff, .settled: return true
+            case .other: continue
+            }
+        }
+        return false
     }
 
     /// A review handoff and the work it triggers form one quiet phase. A real
     /// user message always ends it, so people never lose their own request in
-    /// a collapsed automation trail. Mirrors the web's `groupReviewLoops`.
+    /// a collapsed automation trail. The loop's final report stays outside as
+    /// the answer; each earlier round's report folds in once a later round or
+    /// the settle notice proves it interim. Mirrors the web's
+    /// `groupReviewLoops`.
     private static func groupReviewLoops(
         _ blocks: [TranscriptBlock],
         live: Bool,
@@ -626,6 +687,7 @@ enum TranscriptGrouping {
             var loop: [TranscriptBlock] = [first]
             var rounds = 1
             var prNumber = firstPrNumber
+            var settled: ReviewSettledOutcome?
             while index + 1 < blocks.count {
                 let next = blocks[index + 1]
                 let nextRole = reviewBlockRole(next)
@@ -636,11 +698,25 @@ enum TranscriptGrouping {
                 // A normal user message is a new conversation phase. A second
                 // review handoff belongs to this loop and starts its next round.
                 if case .userMessage = nextRole { break }
+                // A turn's final answer stays outside the fold as the loop's
+                // report, unless the loop goes on past it: the next round's
+                // findings or the settle notice make that answer an interim
+                // report. A settled loop is closed, so its wrap-up always
+                // stays outside.
+                if case .message(let entry) = next, entry.isAssistant,
+                   settled != nil || !reviewLoopContinues(blocks, from: index + 2) {
+                    break
+                }
                 index += 1
                 loop.append(next)
-                if case .handoff(let nextPrNumber) = nextRole {
+                switch nextRole {
+                case .handoff(let nextPrNumber):
                     rounds += 1
                     prNumber = prNumber ?? nextPrNumber
+                case .settled(let outcome):
+                    settled = outcome
+                case .userMessage, .other:
+                    break
                 }
             }
             grouped.append(.reviewLoop(ReviewLoop(
@@ -648,7 +724,8 @@ enum TranscriptGrouping {
                 prNumber: prNumber,
                 rounds: rounds,
                 isLive: false,
-                blocks: loop
+                blocks: loop,
+                settled: settled
             )))
             index += 1
         }
