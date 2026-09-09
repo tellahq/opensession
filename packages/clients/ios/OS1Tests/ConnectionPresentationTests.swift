@@ -54,7 +54,11 @@ final class ConnectionPresentationTests: XCTestCase {
         for _ in 0..<8 { await Task.yield() }
     }
 
+    /// A grace task spawned by the call just before this one has not run yet
+    /// (the test still owns the main actor), so let it register its deadline
+    /// before the clock moves; otherwise it would sleep from the advanced time.
     private func advance(by duration: Duration) async {
+        await settle()
         clock.advance(by: duration)
         await settle()
     }
