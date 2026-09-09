@@ -118,16 +118,20 @@ export function SessionSplit({
     window.addEventListener("pointercancel", cancel);
   }
 
-  const column = (side: SplitSide, socket: Socket) => (
-    <div
-      className={COLUMN}
-      onPointerDownCapture={() => {
-        if (focusedSide !== side) onFocusSide(side);
-      }}
-    >
-      {renderColumn(side, socket, focusedSide === side)}
-    </div>
-  );
+  const column = (side: SplitSide, socket: Socket) => {
+    const focus = () => {
+      if (focusedSide !== side) onFocusSide(side);
+    };
+    return (
+      <div
+        className={COLUMN}
+        onFocusCapture={focus}
+        onPointerDownCapture={focus}
+      >
+        {renderColumn(side, socket, focusedSide === side)}
+      </div>
+    );
+  };
 
   return (
     <div
