@@ -5,6 +5,7 @@ import {
   controlPlaneWorkloadCommand,
   engineScopeSystemdArgs,
   processRunsInControlPlane,
+  previewScopeCommand,
   previewScopeSystemdArgs,
   previewScopeUnit,
 } from "./systemd-scopes";
@@ -106,5 +107,40 @@ describe("systemd scope resource controls", () => {
     expect(first).not.toBe(previewScopeUnit("/srv/worktrees/b"));
     expect(first).toMatch(/^opensession-preview-[a-f0-9]{16}$/);
     expect(first).not.toContain("worktrees");
+    expect(previewScopeUnit("/srv/worktrees/a", "web")).not.toBe(
+      previewScopeUnit("/srv/worktrees/a", "api"),
+    );
+  });
+
+  test("host Portals get a bounded user scope outside the gateway cgroup", () => {
+    const direct = ["setsid", "bash", "-lc", "exec bun dev"];
+    const scoped = previewScopeCommand(direct, "/srv/worktrees/a", "web", {
+      env: { PATH: "/bin", HOME: "/tmp" },
+      scopesAvailable: true,
+    });
+    expect(scoped.unit).toBe(previewScopeUnit("/srv/worktrees/a", "web"));
+    expect(scoped.command).toEqual([
+      "systemd-run",
+      "--user",
+      "--scope",
+      "--collect",
+      "--quiet",
+      `--unit=${scoped.unit}`,
+      "--slice=opensession-previews.slice",
+      "--property=MemoryHigh=8G",
+      "--property=MemoryMax=12G",
+      "--property=MemorySwapMax=1G",
+      "--property=TasksMax=768",
+      "--property=CPUQuota=600%",
+      "--property=OOMPolicy=stop",
+      "--property=TimeoutStopSec=5",
+      "--",
+      ...direct,
+    ]);
+    expect(scoped.env).toMatchObject({
+      PATH: "/bin",
+      HOME: "/tmp",
+      XDG_RUNTIME_DIR: expect.stringContaining("/run/user/"),
+    });
   });
 });

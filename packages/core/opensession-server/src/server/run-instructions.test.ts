@@ -67,7 +67,7 @@ describe("buildRunInstructions", () => {
       "## Finish your turns",
       "## References",
       "## Working directory",
-      "## PR attribution",
+      "## Pull requests",
       "## New sessions",
       "## Portals",
       "## Media",
@@ -129,6 +129,7 @@ describe("buildSessionContext", () => {
       user: "jaap",
       author: { name: "Jaap Frolich", email: "jaap@example.com" },
       githubUserLogin: "jfrolich",
+      coAuthor: "Jaap Frolich <jaap@example.com>",
     });
     expect(ctx).toContain("session: ");
     expect(ctx).toContain("/session/os-test");
@@ -137,7 +138,10 @@ describe("buildSessionContext", () => {
       /PR attribution footer: Started by Jaap Frolich in \[this .* session\]\(.*\/session\/os-test\)/,
     );
     expect(ctx).toContain(
-      "PRs use @jfrolich's account; do not add an assignee.",
+      "PRs open under @jfrolich's account through open_pull_request; do not add an assignee.",
+    );
+    expect(ctx).toContain(
+      "Commit trailer: Co-authored-by: Jaap Frolich <jaap@example.com>",
     );
   });
 
@@ -155,6 +159,7 @@ describe("buildSessionContext", () => {
       });
       expect(ctx).toContain("/session/os-test");
       expect(ctx).not.toContain("PR attribution");
+      expect(ctx).not.toContain("Co-authored-by");
     }
   });
 });

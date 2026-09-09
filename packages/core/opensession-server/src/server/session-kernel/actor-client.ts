@@ -32,6 +32,10 @@ import type {
   MetadataActorRequest,
   MetadataActorResult,
 } from "./metadata-protocol";
+import type {
+  CatalogDocumentRequest,
+  CatalogDocumentResult,
+} from "./catalog-document-protocol";
 import {
   assertTranscriptActorRequest,
   decodeAgentTranscriptActorRequest,
@@ -423,6 +427,23 @@ export class SessionKernelActorClient {
       },
       `metadata ${request.op}`,
       request.op === "catalog_page",
+    );
+  }
+
+  decideCatalogDocumentAsync<T extends CatalogDocumentRequest>(
+    request: T,
+  ): Promise<CatalogDocumentResult<T>> {
+    return this.callAsync<CatalogDocumentResult<T>>(
+      {
+        t: "reduce",
+        command: {
+          kind: "catalog_document",
+          commandId: crypto.randomUUID(),
+          request,
+        },
+      },
+      `catalog document ${request.op}`,
+      request.op === "page" || request.op === "get_many",
     );
   }
 

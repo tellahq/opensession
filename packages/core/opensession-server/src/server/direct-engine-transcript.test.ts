@@ -19,14 +19,29 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import {
+const scratch = mkdtempSync(join(tmpdir(), "direct-engine-transcript-"));
+const previous = {
+  HOME: process.env.HOME,
+  OPENSESSION_STATE_DIR: process.env.OPENSESSION_STATE_DIR,
+  OPENSESSION_SESSIONS_DIR: process.env.OPENSESSION_SESSIONS_DIR,
+};
+// Owner resolution may scan legacy sources. Isolate before importing paths,
+// rather than accidentally scanning the operator's real session history.
+process.env.HOME = scratch;
+process.env.OPENSESSION_STATE_DIR = scratch;
+process.env.OPENSESSION_SESSIONS_DIR = join(scratch, "sessions");
+const {
   readEngineTranscript,
   readEngineTranscriptAsync,
   getEngineTranscriptPath,
-} from "./sessions";
-
-const scratch = mkdtempSync(join(tmpdir(), "direct-engine-transcript-"));
-afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+} = await import("./sessions");
+afterAll(() => {
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  rmSync(scratch, { recursive: true, force: true });
+});
 
 /** Write a claude-shape jsonl where getEngineTranscriptPath will look for it. */
 function writeLegacyJsonl(

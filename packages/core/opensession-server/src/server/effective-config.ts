@@ -272,7 +272,9 @@ export async function inProcessServerNames(
   inputs: SessionRunInputs,
 ): Promise<string[]> {
   if (inputs.inProcessMcpBranch === "automation-self-improve") {
-    return Object.keys(selfImproveMcpForSession(session, session.id) || {});
+    return Object.keys(
+      (await selfImproveMcpForSession(session, session.id)) || {},
+    );
   }
   const { interactiveMcpServers } = await import("./interactive-mcp");
   const servers: Record<string, unknown> = {

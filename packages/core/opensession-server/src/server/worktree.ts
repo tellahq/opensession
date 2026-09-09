@@ -942,27 +942,36 @@ export async function createWorktreeForExistingBranch(
 }
 
 /**
- * Resolve a start-point ref for a new worktree branch: prefer a local ref
- * matching `base`, then `origin/<base>`, then `origin/<defaultBranch>`. Used for
- * stacked worktrees that branch off a workspace's existing branch.
+ * Resolve a start-point ref for a new worktree branch off `base`: the local
+ * ref when it carries commits `origin/<base>` lacks (a stacked worktree off a
+ * session branch with unpushed work), otherwise `origin/<base>`, otherwise
+ * whichever of the two exists, otherwise `origin/<defaultBranch>`.
+ *
+ * Every session passes its repository's default branch as `base`, and a
+ * repository's local default branch is not the canonical state: the shared
+ * tella-fusion checkout sat on a feature branch for three days while its
+ * local `main` stood still, so every new session started 50 commits behind
+ * the `origin/main` the caller had just fetched.
  */
 async function resolveStartPoint(
   repoDir: string,
   base: string,
   defaultBranch: string,
 ): Promise<string> {
-  if (
-    (await $`git -C ${repoDir} rev-parse --verify --quiet ${base}`.nothrow())
-      .exitCode === 0
-  )
-    return base;
-  if (
+  const exists = async (ref: string) =>
     (
-      await $`git -C ${repoDir} rev-parse --verify --quiet origin/${base}`.nothrow()
-    ).exitCode === 0
-  )
-    return `origin/${base}`;
-  return `origin/${defaultBranch}`;
+      await $`git -C ${repoDir} rev-parse --verify --quiet ${ref}^{commit}`.nothrow()
+    ).exitCode === 0;
+  const local = (await exists(base)) ? base : null;
+  const remote = (await exists(`origin/${base}`)) ? `origin/${base}` : null;
+  if (local && remote) {
+    const localBehind =
+      (
+        await $`git -C ${repoDir} merge-base --is-ancestor ${local} ${remote}`.nothrow()
+      ).exitCode === 0;
+    return localBehind ? remote : local;
+  }
+  return local ?? remote ?? `origin/${defaultBranch}`;
 }
 
 /**

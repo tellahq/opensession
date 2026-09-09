@@ -26,7 +26,9 @@ describe("review options", () => {
       summaryOnlyOverFiles: 40,
       skipKeywords: ["[no-review]"],
       secretScan: false,
+      mergeRisk: false,
     });
+    expect(o.mergeRisk).toBe(false);
     expect(o.ignoreGlobs).toEqual(["**/*.lock"]);
     expect(o.minInlineSeverity).toBe("P1");
     expect(o.summaryOnlyOverFiles).toBe(40);
@@ -34,9 +36,11 @@ describe("review options", () => {
     expect(o.secretScan).toBe(false);
   });
 
-  it("defaults secretScan on", () => {
+  it("defaults secretScan and mergeRisk on", () => {
     expect(REVIEW_OPTION_DEFAULTS.secretScan).toBe(true);
     expect(normalizeReviewOptions({}).secretScan).toBe(true);
+    expect(REVIEW_OPTION_DEFAULTS.mergeRisk).toBe(true);
+    expect(normalizeReviewOptions({ mergeRisk: "no" }).mergeRisk).toBe(true);
   });
 
   it("ranks severities with unknowns as least severe", () => {

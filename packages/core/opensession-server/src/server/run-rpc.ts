@@ -90,7 +90,7 @@ export function timingSafeEqStr(a: string, b: string): boolean {
 export type InteractiveMcpBuilder = (
   sessionId: string,
   user?: string,
-) => Record<string, any>;
+) => Record<string, any> | Promise<Record<string, any>>;
 
 export function registerInteractiveMcpBuilder(b: InteractiveMcpBuilder): void {
   g.__runRpcMcpBuilder = b;
@@ -164,7 +164,8 @@ export async function dispatchRunRpc(
   const serverName = String(body?.server || "");
   const perSession = sessionServers.get(ctx.sessionId);
   const cfg =
-    perSession?.[serverName] ?? builder(ctx.sessionId, ctx.user)[serverName];
+    perSession?.[serverName] ??
+    (await builder(ctx.sessionId, ctx.user))[serverName];
   if (!cfg?.instance) {
     // tools/list for a server this session doesn't carry (shared servers list
     // the union of in-process servers in their config) answers with an empty

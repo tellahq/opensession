@@ -21,3 +21,19 @@ test("window navigation is checked against that window's organization", () => {
   expect(source).toContain("inActiveWindow(url, createdWindow)");
   expect(source).toContain('accelerator: "CommandOrControl+N"');
 });
+
+test("removing an organization refuses the requesting window's own account", () => {
+  const start = source.indexOf('ipcMain.handle("os1:organizations-remove"');
+  const end = source.indexOf('ipcMain.on("os1:organizations-manage"', start);
+  const implementation = source.slice(start, end);
+
+  expect(start).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  expect(implementation).toContain("fromActiveOrganizationPicker(e)");
+  expect(implementation).toContain(
+    "accountForWindow(requester, stored)?.id === id",
+  );
+  expect(implementation).toContain("appWindow.destroy()");
+  expect(implementation).toContain("syncBackgroundAccountWindows()");
+  expect(implementation).toContain("buildAppMenu()");
+});

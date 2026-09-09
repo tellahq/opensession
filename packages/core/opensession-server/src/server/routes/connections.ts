@@ -227,7 +227,7 @@ export async function handleConnectionsRoutes(
     const force = url.searchParams.get("refresh") === "1";
     const mcpServers = await getConnections(force);
     const agentHealth: Record<string, unknown> = {};
-    for (const a of getAgents()) agentHealth[a.name] = a.health();
+    for (const a of getAgents()) agentHealth[a.name] = await a.health();
     return Response.json({
       mcpServers,
       agents: agentHealth,

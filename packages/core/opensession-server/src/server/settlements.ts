@@ -5,7 +5,7 @@
  * person's latest explicit Settle or Unsettle action.
  */
 
-import { userStore } from "./shared/user-store";
+import { catalogUserStore } from "./shared/catalog-user-store";
 
 export type SettlementOverride = "settled" | "active";
 
@@ -40,19 +40,19 @@ function clean(raw: unknown): Settlements {
   return out;
 }
 
-const store = userStore<Settlements>({
+const store = catalogUserStore<Settlements>({
   name: "settlements",
   field: "settlements",
   clean,
 });
 
-export function getSettlements(user: string): Settlements {
+export async function getSettlements(user: string): Promise<Settlements> {
   return store.get(user);
 }
 
-export function setSettlements(
+export async function setSettlements(
   user: string,
   settlements: unknown,
-): Settlements {
+): Promise<Settlements> {
   return store.set(user, settlements);
 }

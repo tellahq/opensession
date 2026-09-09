@@ -39,6 +39,11 @@ export function githubCredentialHelperCommand(
  * environment. Git receives only process-local helper and URL-rewrite config,
  * so existing SSH checkouts use the projected HTTPS identity without mutating
  * .git/config or falling through to a host SSH key.
+ *
+ * One token does both API calls and git transport. There is deliberately no
+ * second, git-only credential: the only way a process pushes is with the
+ * identity it was handed, and what that identity may push is GitHub's
+ * ruleset decision (docs/github-authority.md).
  */
 export function githubGitCredentialEnv(
   token: string,

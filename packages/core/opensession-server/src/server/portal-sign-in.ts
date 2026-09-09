@@ -34,6 +34,20 @@ function browserNavigation(headers: Headers): boolean {
 }
 
 /**
+ * True when the Portal request behind this forward-auth probe is a person
+ * opening a page (a GET or HEAD top-level navigation), as opposed to a
+ * fetch, an asset load, or a mutation. Only those get an HTML answer in
+ * place of a JSON status.
+ */
+export function portalNavigationRequest(req: Request): boolean {
+  const method = (
+    req.headers.get("x-forwarded-method") || req.method
+  ).toUpperCase();
+  if (method !== "GET" && method !== "HEAD") return false;
+  return browserNavigation(req.headers);
+}
+
+/**
  * The Portal URL the person was opening, or null when Caddy's forwarded
  * host is not the app's own host. Only same-host targets are handed back
  * after sign-in, so anything else keeps the plain 401.
@@ -64,11 +78,7 @@ export function portalSignInRedirect(
   appBaseUrl: string,
 ): Response | null {
   if (!isPortalAuthPath(path)) return null;
-  const method = (
-    req.headers.get("x-forwarded-method") || req.method
-  ).toUpperCase();
-  if (method !== "GET" && method !== "HEAD") return null;
-  if (!browserNavigation(req.headers)) return null;
+  if (!portalNavigationRequest(req)) return null;
   let signIn: URL;
   try {
     signIn = new URL(appBaseUrl);

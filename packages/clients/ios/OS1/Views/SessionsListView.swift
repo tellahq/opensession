@@ -1164,6 +1164,9 @@ struct SessionsListView: View {
                     // a scripted run would have to find and scroll to.
                     if env["OS1_OPEN_FEED"] != nil { showFeed = true }
                     if env["OS1_OPEN_TASKS"] != nil { showTasks = true }
+                    // Same reason again: Archived is a row at the foot of the
+                    // list, below whatever is live.
+                    if env["OS1_OPEN_ARCHIVED"] != nil { showArchived = true }
                     if env["OS1_OPEN_SETTINGS"] != nil {
                         showSettings = true
                     }
@@ -3914,9 +3917,25 @@ private struct ArchivedSessionsView: View {
     @State private var searchText = ""
     /// "mine", "everyone", or one teammate's canonical key — see
     /// `ArchivedOwners`.
-    @State private var owner = ArchivedOwners.mine
-    @State private var repo = "all"
+    @State private var owner = Self.initialLens("OS1_ARCHIVED_OWNER", or: ArchivedOwners.mine)
+    @State private var repo = Self.initialLens(
+        "OS1_ARCHIVED_REPO", or: ArchivedPresentation.allRepositories
+    )
     @State private var reason = "all"
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// The default lens unless a scripted run asks for another
+    /// (`OS1_ARCHIVED_OWNER=everyone`, `OS1_ARCHIVED_REPO=opensession`): a
+    /// picker is a tap a simulator run cannot make, and Everyone is the lens
+    /// that puts names on the rows.
+    private static func initialLens(_ variable: String, or fallback: String) -> String {
+        #if DEBUG
+        if let lens = ProcessInfo.processInfo.environment[variable], !lens.isEmpty {
+            return lens
+        }
+        #endif
+        return fallback
+    }
     /// The team roster, read in `body` so the owner options appear when it
     /// lands — it can arrive after this screen is already open.
     private var roster: [String: String] { TeamDirectory.shared.displayNames }
@@ -3940,9 +3959,20 @@ private struct ArchivedSessionsView: View {
         sessions.contains(where: isAutoArchived)
     }
 
-    private var activeFilterCount: Int {
-        (owner == ArchivedOwners.everyone ? 0 : 1)
-            + (repo == "all" ? 0 : 1) + (reason == "all" ? 0 : 1)
+    private var ownerLabel: String {
+        ArchivedPresentation.ownerLabel(owner, owners: owners)
+    }
+
+    private var repositoryLabel: String {
+        ArchivedPresentation.repositoryLabel(repo)
+    }
+
+    private var showsRepositoryPicker: Bool {
+        ArchivedPresentation.showsRepositoryPicker(repositories: repositories, selected: repo)
+    }
+
+    private var showsReasonMenu: Bool {
+        ArchivedPresentation.showsReasonMenu(hasAutoArchived: hasAutoArchived, selected: reason)
     }
 
     private var filteredSessions: [Session] {
@@ -3957,7 +3987,9 @@ private struct ArchivedSessionsView: View {
                     return false
                 }
             }
-            if repo != "all", session.effectiveRepo != repo { return false }
+            if repo != ArchivedPresentation.allRepositories, session.effectiveRepo != repo {
+                return false
+            }
             if reason == "auto", !isAutoArchived(session) { return false }
             if reason == "manual", isAutoArchived(session) { return false }
             guard !query.isEmpty else { return true }
@@ -3990,67 +4022,11 @@ private struct ArchivedSessionsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if let loadFailure {
-                    ContentUnavailableView {
-                        Label("Couldn't load archived sessions", systemImage: "exclamationmark.triangle")
-                    } description: {
-                        Text(loadFailure)
-                    } actions: {
-                        Button("Try again", action: onRetry)
-                    }
-                    .listRowSeparator(.hidden)
-                } else if sessions.isEmpty, !loaded {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text("Loading archived sessions…")
-                            .font(.footnote)
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 24)
-                    .listRowSeparator(.hidden)
-                } else if filteredSessions.isEmpty {
-                    ContentUnavailableView(
-                        sessions.isEmpty ? "Nothing archived" : "No matches",
-                        systemImage: sessions.isEmpty ? "archivebox" : "magnifyingglass"
-                    )
-                } else {
-                    Section {
-                        ForEach(filteredSessions) { session in
-                            HStack(spacing: 10) {
-                                RepoTile(name: session.effectiveRepo, size: 24)
-                                #if os(iOS)
-                                Button {
-                                    onOpen(session)
-                                } label: {
-                                    archivedRowLabel(session)
-                                }
-                                .buttonStyle(.plain)
-                                #else
-                                archivedRowLabel(session)
-                                #endif
-                                Button {
-                                    onRestore(session)
-                                } label: {
-                                    Image(systemName: "tray.and.arrow.up")
-                                        .font(.body)
-                                        .frame(width: 44, height: 44)
-                                }
-                                .buttonStyle(.borderless)
-                                .accessibilityLabel("Restore session")
-                            }
-                            .padding(.vertical, 2)
-                        }
-                    } header: {
-                        Text(filteredSessions.count == sessions.count
-                             ? "\(sessions.count) archived"
-                             : "\(filteredSessions.count) of \(sessions.count) archived")
-                    }
-                }
+            VStack(spacing: 0) {
+                filterBar
+                list
             }
             #if os(iOS)
-            .scrollContentBackground(.hidden)
             .background(OS1VisualStyle.background)
             #endif
             .searchable(text: $searchText, prompt: "Search archived")
@@ -4058,54 +4034,11 @@ private struct ArchivedSessionsView: View {
             .navigationTitle("Archived")
             .inlineTitleBarCompat()
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Section("Owner") {
-                            Picker("Owner", selection: $owner) {
-                                Text("My archived").tag(ArchivedOwners.mine)
-                                Text("Everyone").tag(ArchivedOwners.everyone)
-                                // Teammates who have archived something here,
-                                // busiest first. Absent on an instance of one.
-                                ForEach(owners) { person in
-                                    Text(person.label).tag(person.key)
-                                }
-                            }
-                        }
-                        if repositories.count > 1 {
-                            Section("Repository") {
-                                Picker("Repository", selection: $repo) {
-                                    Text("All repos").tag("all")
-                                    ForEach(repositories, id: \.self) { repository in
-                                        Text(RepoTile.label(for: repository)).tag(repository)
-                                    }
-                                }
-                            }
-                        }
-                        if hasAutoArchived {
-                            Section("Reason") {
-                                Picker("Reason", selection: $reason) {
-                                    Text("All").tag("all")
-                                    Text("Auto-archived").tag("auto")
-                                    Text("Manual").tag("manual")
-                                }
-                            }
-                        }
-                        if activeFilterCount > 0 {
-                            Button("Clear filters") {
-                                owner = ArchivedOwners.everyone
-                                repo = "all"
-                                reason = "all"
-                            }
-                        }
-                    } label: {
-                        Label(
-                            activeFilterCount > 0 ? "Filters (\(activeFilterCount))" : "Filters",
-                            systemImage: activeFilterCount > 0
-                                ? "line.3.horizontal.decrease.circle.fill"
-                                : "line.3.horizontal.decrease.circle"
-                        )
-                    }
-                    .accessibilityLabel("Filters, \(activeFilterCount) active")
+                // Reason stays behind a glyph: it exists once something was
+                // auto-archived, rarely changes, and stays while it holds a
+                // choice.
+                if showsReasonMenu {
+                    ToolbarItem(placement: .primaryAction) { reasonMenu }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
@@ -4114,18 +4047,254 @@ private struct ArchivedSessionsView: View {
         }
     }
 
+    // No match count over the rows: the list itself shows what matched, and
+    // the pickers already say why.
+    private var list: some View {
+        List {
+            if let loadFailure {
+                ContentUnavailableView {
+                    Label("Couldn't load archived sessions", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(loadFailure)
+                } actions: {
+                    Button("Try again", action: onRetry)
+                }
+                .listRowSeparator(.hidden)
+            } else if sessions.isEmpty, !loaded {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Loading archived sessions…")
+                        .font(.footnote)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 24)
+                .listRowSeparator(.hidden)
+            } else if filteredSessions.isEmpty {
+                ContentUnavailableView(
+                    sessions.isEmpty ? "Nothing archived" : "No matches",
+                    systemImage: sessions.isEmpty ? "archivebox" : "magnifyingglass"
+                )
+            } else {
+                Section {
+                    ForEach(filteredSessions) { session in
+                        HStack(spacing: 10) {
+                            RepoTile(name: session.effectiveRepo, size: 24)
+                            #if os(iOS)
+                            Button {
+                                onOpen(session)
+                            } label: {
+                                archivedRowLabel(session)
+                            }
+                            .buttonStyle(.plain)
+                            #else
+                            archivedRowLabel(session)
+                            #endif
+                            Button {
+                                onRestore(session)
+                            } label: {
+                                Image(systemName: "tray.and.arrow.up")
+                                    .font(.body)
+                                    .frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Restore session")
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+        }
+        #if os(iOS)
+        .scrollContentBackground(.hidden)
+        .background(OS1VisualStyle.background)
+        // The grouped list's top inset was room for a section header. The
+        // pickers now stand where that header stood, so the rows start under
+        // them rather than a header's height below.
+        .contentMargins(.top, 4, for: .scrollContent)
+        #endif
+    }
+
+    /// Owner and repository as pickers side by side, each wearing its value,
+    /// so the scope reads without opening anything. The row scrolls sideways
+    /// rather than wrapping: a long name or an accessibility text size widens
+    /// the chips, and the row stays one row.
+    private var filterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ownerPicker
+                if showsRepositoryPicker { repositoryPicker }
+            }
+            .padding(.horizontal, 16)
+            #if os(iOS)
+            .padding(.vertical, 2)
+            #else
+            .padding(.vertical, 8)
+            #endif
+        }
+    }
+
+    private var ownerPicker: some View {
+        Menu {
+            Picker("Owner", selection: $owner) {
+                Text("My archived").tag(ArchivedOwners.mine)
+                // Teammates who have archived something here, busiest
+                // first. Absent on an instance of one.
+                ForEach(ArchivedPresentation.ownerOptions(owners, selected: owner)) { person in
+                    Text(person.label).tag(person.key)
+                }
+                Text("Everyone").tag(ArchivedOwners.everyone)
+            }
+        } label: {
+            pickerChip(ownerLabel) {
+                if owner == ArchivedOwners.everyone {
+                    Image(systemName: "person.2")
+                        .font(.caption)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                } else {
+                    UserAvatar(
+                        person: owner == ArchivedOwners.mine ? nil : ownerLabel,
+                        size: 18
+                    )
+                }
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Owner, \(ownerLabel)")
+    }
+
+    private var repositoryPicker: some View {
+        Menu {
+            Picker("Repository", selection: $repo) {
+                Text("All repos").tag(ArchivedPresentation.allRepositories)
+                ForEach(
+                    ArchivedPresentation.repositoryOptions(repositories, selected: repo), id: \.self
+                ) { repository in
+                    Label {
+                        Text(RepoTile.label(for: repository))
+                    } icon: {
+                        if let icon = RepoTile.menuIcon(for: repository) { icon }
+                    }
+                    .tag(repository)
+                }
+            }
+        } label: {
+            pickerChip(repositoryLabel) {
+                if repo == ArchivedPresentation.allRepositories {
+                    Image(systemName: "folder")
+                        .font(.caption)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                } else {
+                    RepoTile(name: repo, size: 18)
+                }
+            }
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityLabel("Repository, \(repositoryLabel)")
+    }
+
+    private var reasonMenu: some View {
+        Menu {
+            Picker("Reason", selection: $reason) {
+                ForEach(ArchivedPresentation.reasons) { option in
+                    Text(option.label).tag(option.key)
+                }
+            }
+        } label: {
+            Label(
+                "Reason",
+                systemImage: reason == "all"
+                    ? "line.3.horizontal.decrease.circle"
+                    : "line.3.horizontal.decrease.circle.fill"
+            )
+        }
+        .accessibilityLabel("Reason, \(ArchivedPresentation.reasonLabel(reason))")
+    }
+
+    /// A picker's face: its value, led by the mark that stands for it and
+    /// trailed by the chevron that says it opens. Capped at the web's 150
+    /// points so one long name cannot push its neighbour off the row.
+    private func pickerChip<Icon: View>(
+        _ text: String, @ViewBuilder icon: () -> Icon
+    ) -> some View {
+        HStack(spacing: 6) {
+            icon()
+                .frame(width: 18, height: 18)
+            Text(text)
+                .lineLimit(1)
+                .frame(maxWidth: 150, alignment: .leading)
+            Image(systemName: "chevron.down")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(OS1VisualStyle.textDim)
+        }
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(OS1VisualStyle.text)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(.fill.tertiary, in: Capsule())
+        #if os(iOS)
+        // The capsule keeps the row's height; the hit target grows to the 44
+        // points a thumb needs.
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+        #else
+        .contentShape(Capsule())
+        #endif
+    }
+
     private func archivedRowLabel(_ session: Session) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(session.displayTitle)
-                .font(.body.weight(.medium))
-                .foregroundStyle(OS1VisualStyle.text)
-                .lineLimit(2)
+            titleRow(for: session)
             Text(metadata(for: session))
                 .font(.footnote)
                 .foregroundStyle(OS1VisualStyle.textDim)
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The title, then the origin chip trailing it. The chip sits here rather
+    /// than on the line under the title so a row with nothing else to say
+    /// stays one line tall. At an accessibility text size the chip drops
+    /// below the title instead of leaving it a few characters a line.
+    @ViewBuilder
+    private func titleRow(for session: Session) -> some View {
+        let title = Text(session.displayTitle)
+            .font(.body.weight(.medium))
+            .foregroundStyle(OS1VisualStyle.text)
+            .lineLimit(2)
+        if let chip = ArchivedPresentation.originChip(for: session) {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    title
+                    originChipView(chip)
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    title
+                    originChipView(chip)
+                }
+            }
+        } else {
+            title
+        }
+    }
+
+    private func originChipView(_ chip: ArchivedPresentation.OriginChip) -> some View {
+        Text(chip.label)
+            .font(.caption2.weight(.bold))
+            .lineLimit(1)
+            .foregroundStyle(chip.tone == .ask ? OS1VisualStyle.greenInk : OS1VisualStyle.textDim)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(
+                chip.tone == .ask ? OS1VisualStyle.greenSoft : OS1VisualStyle.chipFill,
+                in: Capsule()
+            )
+            .fixedSize()
     }
 }
 

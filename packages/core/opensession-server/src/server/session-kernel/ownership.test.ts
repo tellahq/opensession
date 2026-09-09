@@ -354,6 +354,18 @@ describe("single session ownership", () => {
       expect(source).not.toContain("writeJsonAtomic");
       expect(source).toContain("updateSessionFile(");
     }
+    // Agents run in the gateway and read the derived export directly, which
+    // is fine; none of them may write it. The spawn-depth stamp used to.
+    const agentOffenders: string[] = [];
+    for (const path of sourceFiles(resolve(serverDir, "../agents"))) {
+      const source = readFileSync(path, "utf8");
+      if (!/(?:OPENSESSION_)?SESSIONS_DIR\b/.test(source)) continue;
+      if (/writeJsonAtomic\(|writeFileSync\(/.test(source))
+        agentOffenders.push(path.slice(serverDir.length + 1));
+    }
+    expect(agentOffenders).toEqual([]);
+    const spawn = read("../agents/slack/sessions-tools.ts");
+    expect(spawn).toContain("updateSessionFile(id, (current) => ({");
   });
 
   test("the gateway boots an IPC actor before hydrating session projections", () => {

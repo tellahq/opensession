@@ -12,6 +12,7 @@ import {
 
 describe("OpenAI auth", () => {
   test("advertises priority-tier variants for current ChatGPT models", () => {
+    expect(supportsOpenaiFastMode("pi/openai/gpt-6-astra")).toBe(true);
     expect(supportsOpenaiFastMode("pi/openai/gpt-5.6-sol")).toBe(true);
     expect(supportsOpenaiFastMode("openai/gpt-5.6-terra")).toBe(true);
     expect(supportsOpenaiFastMode("gpt-5.6-luna")).toBe(true);

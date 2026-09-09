@@ -321,7 +321,7 @@ export async function runAutoFix(
       };
       const rr = await runReview(
         ref,
-        resolveReviewConfig().config,
+        (await resolveReviewConfig()).config,
         onSessionCreated,
         /*force*/ true,
       ).catch((e) => {
@@ -600,13 +600,12 @@ export async function runAutoFix(
         review.blocking === 0 &&
         (review.findings === 0 || (conf != null && conf >= 4));
       if (satisfied) {
-        const why =
-          conf != null ? `confidence ${conf}/5` : "no blocking findings";
+        const why = conf != null ? `quality ${conf}/5` : "no blocking findings";
         outcome = `✅ Auto-fix complete — CI green and the review is satisfied (${why}, \`${sha7}\`).`;
         break;
       }
       const at =
-        conf != null ? `confidence ${conf}/5` : `${review.blocking} blocking`;
+        conf != null ? `quality ${conf}/5` : `${review.blocking} blocking`;
       await updateStatus(
         `iteration ${iterations}/${MAX_ITERATIONS}: review at ${at} with ${review.findings} open finding(s) — continuing to fix…`,
       );

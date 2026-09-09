@@ -33,6 +33,9 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var model: String?
     var effort: String?
     var fastMode: Bool?
+    /// The provider account pinned for this conversation with `/account`;
+    /// nil = automatic (personal first, shared pool fallback).
+    var accountId: String?
     var isRunning: Bool?
     var runState: String?
     /// Present when the server fenced an ambiguous operation rather than risk
@@ -86,6 +89,10 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     /// GitHub login of whoever opened the PR — who is waiting when one of
     /// those requests is pointed at you (`ReviewRequests`).
     var prAuthor: String?
+    /// GitHub login of the teammate the PR is for: the author, or on a
+    /// bot-authored PR its first human assignee. The server resolves this so
+    /// the face shown here matches the web sidebar's.
+    var prRequester: String?
     /// Person keys whose review has already LANDED on the PR. With
     /// `prUpdatedAt` this is what turns an open request into a completed one
     /// without anybody pressing anything (`WorkspaceReview.completion`).

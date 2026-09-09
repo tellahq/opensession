@@ -75,16 +75,20 @@ describe("session row fan-out", () => {
     ).not.toContain(native);
   });
 
-  test("a row is visible in the lens that owns it and hidden from others", () => {
+  test("a row is visible in the lens that owns it and hidden from others", async () => {
     const row = session("mine");
-    expect(sessionRowVisible(row.id, [row], scope())).toBe(true);
-    expect(sessionRowVisible(row.id, [row], null)).toBe(true);
-    expect(sessionRowVisible(row.id, [], null)).toBe(false);
+    expect(await sessionRowVisible(row.id, [row], scope())).toBe(true);
+    expect(await sessionRowVisible(row.id, [row], null)).toBe(true);
+    expect(await sessionRowVisible(row.id, [], null)).toBe(false);
     expect(
-      sessionRowVisible(row.id, [row], scope({ user: "Grace", person: "me" })),
+      await sessionRowVisible(
+        row.id,
+        [row],
+        scope({ user: "Grace", person: "me" }),
+      ),
     ).toBe(false);
     expect(
-      sessionRowVisible(
+      await sessionRowVisible(
         row.id,
         [row],
         scope({ user: "Grace", person: "everyone" }),
@@ -92,13 +96,13 @@ describe("session row fan-out", () => {
     ).toBe(true);
   });
 
-  test("an archived row is never shown", () => {
+  test("an archived row is never shown", async () => {
     const row = session("done", { archived: true });
-    expect(sessionRowVisible(row.id, [row], scope())).toBe(false);
-    expect(sessionRowVisible(row.id, [row], null)).toBe(false);
+    expect(await sessionRowVisible(row.id, [row], scope())).toBe(false);
+    expect(await sessionRowVisible(row.id, [row], null)).toBe(false);
   });
 
-  test("group rules see siblings: an idle worker stays with its selected parent", () => {
+  test("group rules see siblings: an idle worker stays with its selected parent", async () => {
     const parent = session("parent", { workspaceId: "ws-1" });
     const worker = session("worker", {
       workspaceId: "ws-1",
@@ -109,8 +113,10 @@ describe("session row fan-out", () => {
     });
     const selected = scope({ selectedSessionId: "parent" });
     // Alone, an idle spawned worker from another person is filtered out.
-    expect(sessionRowVisible(worker.id, [worker], selected)).toBe(false);
+    expect(await sessionRowVisible(worker.id, [worker], selected)).toBe(false);
     // With its parent present, it belongs to the selected workspace group.
-    expect(sessionRowVisible(worker.id, [worker, parent], selected)).toBe(true);
+    expect(await sessionRowVisible(worker.id, [worker, parent], selected)).toBe(
+      true,
+    );
   });
 });

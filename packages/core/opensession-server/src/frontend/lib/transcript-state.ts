@@ -239,6 +239,7 @@ export function summarizeInFlightContent(
   for (const entry of entries) {
     switch (entry.notice?.kind) {
       case "review-handoff":
+      case "review-settled":
         summary.reviews++;
         break;
       case "worker-report":

@@ -388,8 +388,8 @@ export class GrafanaPollerAgent implements AgentModule {
   }
 
   /** Automations that are due for a poll this tick. */
-  private due(now: number): Automation[] {
-    return listAutomations().filter((a) => {
+  private async due(now: number): Promise<Automation[]> {
+    return (await listAutomations()).filter((a) => {
       if (!a.enabled || !a.grafanaPoll) return false;
       const intervalMs =
         (a.grafanaPoll.pollMinutes || DEFAULT_POLL_MINUTES) * 60 * 1000;
@@ -410,7 +410,7 @@ export class GrafanaPollerAgent implements AgentModule {
       const m = url.pathname.match(/^\/grafana-poll\/([^/]+)\/([^/]+)$/);
       if (!m) return Response.json({ error: "Bad path" }, { status: 400 });
 
-      const automation = listAutomations().find((a) => a.id === m[1]);
+      const automation = (await listAutomations()).find((a) => a.id === m[1]);
       if (
         !automation ||
         !automation.grafanaPoll ||
@@ -465,13 +465,19 @@ export class GrafanaPollerAgent implements AgentModule {
 
     this.timer = setInterval(() => {
       const now = Date.now();
-      for (const automation of this.due(now)) {
-        this.lastPolled.set(automation.id, now);
-        void pollAutomation(automation, this.onSessionInvalidate);
-      }
+      void this.due(now)
+        .then((due) => {
+          for (const automation of due) {
+            this.lastPolled.set(automation.id, now);
+            void pollAutomation(automation, this.onSessionInvalidate);
+          }
+        })
+        .catch((error) =>
+          console.error("[grafana-poller] poll tick failed:", error),
+        );
     }, TICK_MS);
 
-    const names = listAutomations()
+    const names = (await listAutomations())
       .filter((a) => a.grafanaPoll)
       .map((a) => a.name);
     console.log(
@@ -484,8 +490,8 @@ export class GrafanaPollerAgent implements AgentModule {
     this.timer = null;
   }
 
-  health(): Record<string, unknown> {
-    const polls = listAutomations()
+  async health(): Promise<Record<string, unknown>> {
+    const polls = (await listAutomations())
       .filter((a) => a.grafanaPoll)
       .map((a) => ({
         name: a.name,

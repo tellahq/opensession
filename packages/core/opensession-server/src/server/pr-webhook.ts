@@ -25,7 +25,10 @@ import { invalidatePrInfo } from "./pr-info";
 import { getReviewRequest, setReviewRequest } from "./review-requests";
 import { executeSessionProjection } from "./session-projection-executor";
 import { applyPrWebhookToBulkCache, cachedPrBranchByNumber } from "./sessions";
-import { invalidateSessionsCache } from "./session-cache";
+import {
+  publishSessionChange,
+  publishSessionRowsForBranch,
+} from "./session-cache";
 import { githubLoginFor } from "./shared/user-mappings";
 import { scheduleSandboxEnvironmentInvalidation } from "./sandbox/environments";
 import { broadcastToAll } from "./ws-hub";
@@ -92,7 +95,7 @@ function branchesFor(
 // events; invalidating per delivery made every connected client rebuild its
 // scoped session list in overlapping waves and starved transcript watches.
 const pendingBroadcasts = new Map<string, ReturnType<typeof setTimeout>>();
-let pendingSessionsInvalidation: ReturnType<typeof setTimeout> | undefined;
+const pendingRowPublishes = new Map<string, ReturnType<typeof setTimeout>>();
 const BROADCAST_DEBOUNCE_MS = 2_000;
 
 // CI deliveries stream for as long as a workflow runs: every job start and
@@ -131,12 +134,17 @@ function scheduleCiRefresh(repoId: string, ghRepo: string, branch: string) {
   );
 }
 
-function scheduleSessionsInvalidation(): void {
-  if (pendingSessionsInvalidation) return;
-  pendingSessionsInvalidation = setTimeout(() => {
-    pendingSessionsInvalidation = undefined;
-    invalidateSessionsCache();
-  }, BROADCAST_DEBOUNCE_MS);
+/** Publish the rows on `branch` once the PR cache has had the debounce
+ * window to absorb the delivery burst; one timer per branch. */
+function scheduleBranchRowPublish(branch: string): void {
+  if (pendingRowPublishes.has(branch)) return;
+  pendingRowPublishes.set(
+    branch,
+    setTimeout(() => {
+      pendingRowPublishes.delete(branch);
+      publishSessionRowsForBranch(branch);
+    }, BROADCAST_DEBOUNCE_MS),
+  );
 }
 
 export function reviewerRemovalClearsSessionRequest(
@@ -238,17 +246,17 @@ export function handlePrWebhookEvent(event: string, payload: any): void {
         void executeSessionProjection(sessionId, "review_request", () =>
           setReviewRequest(sessionId, null),
         )
-          .then(() => scheduleSessionsInvalidation())
+          .then(() => publishSessionChange(sessionId))
           .catch((e) =>
             console.error("[pr-webhook] failed to clear review request:", e),
           );
       }
     }
     // Session prState enrichment reads the bulk cache through the session
-    // list snapshots. Invalidate once for the whole delivery burst; the
+    // list rows. Publish the rows on each branch once per delivery burst; the
     // branch-specific detail broadcasts stay independently coalesced below.
-    scheduleSessionsInvalidation();
     for (const branch of prBranches) {
+      scheduleBranchRowPublish(branch);
       if (isCiWebhookEvent(event)) {
         scheduleCiRefresh(repoId, ghRepo, branch);
         continue;

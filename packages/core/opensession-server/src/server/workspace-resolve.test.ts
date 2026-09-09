@@ -1,4 +1,11 @@
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -25,13 +32,28 @@ writeFileSync(
 process.env.OPENSESSION_STATE_DIR = scratch;
 process.env.OPENSESSION_CONFIG = configPath;
 
-const { createWorkspace, getWorkspace } = await import("./workspaces");
+const { SessionKernelStore, __setSessionKernelStoreForTest } =
+  await import("./session-kernel");
+const { __resetWorkspaceProjectionForTest, createWorkspace, getWorkspace } =
+  await import("./workspaces");
 const { resolvePrWorkspace, workspaceBacksOpenPr } =
   await import("./workspace-resolve");
 
+// Workspaces live in the kernel catalog: a fresh in-memory store per test.
+let store: InstanceType<typeof SessionKernelStore>;
+let previousStore: InstanceType<typeof SessionKernelStore> | undefined;
 beforeEach(() => {
   process.env.OPENSESSION_STATE_DIR = scratch;
   process.env.OPENSESSION_CONFIG = configPath;
+  store = new SessionKernelStore(":memory:");
+  previousStore = __setSessionKernelStoreForTest(store);
+  __resetWorkspaceProjectionForTest();
+});
+
+afterEach(() => {
+  __setSessionKernelStoreForTest(previousStore);
+  store.close();
+  __resetWorkspaceProjectionForTest();
 });
 
 afterAll(() => {
@@ -82,7 +104,7 @@ describe("workspaceBacksOpenPr", () => {
 describe("resolvePrWorkspace", () => {
   test("repairs a generated placeholder when the PR title arrives", async () => {
     const number = 9128;
-    const workspace = createWorkspace({
+    const workspace = await createWorkspace({
       name: `#${number}`,
       repo: repoId,
       key: `ghpr-${prKey(number, ghRepo)}`,
@@ -103,14 +125,14 @@ describe("resolvePrWorkspace", () => {
       `#${number} Skip running native Next chat fallbacks`,
     );
     expect(resolved?.workspace.branch).toBe("skip-running-next-fallbacks");
-    expect(getWorkspace(workspace.id)?.name).toBe(
+    expect((await getWorkspace(workspace.id))?.name).toBe(
       `#${number} Skip running native Next chat fallbacks`,
     );
   });
 
   test("preserves a manually chosen workspace name", async () => {
     const number = 9129;
-    const workspace = createWorkspace({
+    const workspace = await createWorkspace({
       name: "Native fallback cleanup",
       repo: repoId,
       key: `ghpr-${prKey(number, ghRepo)}`,
@@ -127,6 +149,8 @@ describe("resolvePrWorkspace", () => {
     });
 
     expect(resolved?.workspace.name).toBe("Native fallback cleanup");
-    expect(getWorkspace(workspace.id)?.name).toBe("Native fallback cleanup");
+    expect((await getWorkspace(workspace.id))?.name).toBe(
+      "Native fallback cleanup",
+    );
   });
 });

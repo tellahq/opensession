@@ -197,6 +197,11 @@ export async function loadSnapshotHarness(): Promise<SnapshotHarness> {
   const memoryV2 = await import("../memory-v2/runtime");
   const prevMemoryDir = memory.__setMemoryDirForTest(d.memory);
 
+  // Automation definitions are catalog documents: the fixture file written by
+  // prepareSnapshotEnv is only visible once the legacy import has run.
+  const catalogDocuments = await import("../catalog-documents");
+  await catalogDocuments.importApplicationCatalog();
+
   const runSession = await import("../run-session");
   const agentRunner = await import("../agent-runner");
   const sessionCache = await import("../session-cache");

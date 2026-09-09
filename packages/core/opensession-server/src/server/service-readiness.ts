@@ -23,6 +23,14 @@ export function setServiceReadiness(
   phase: ServiceReadinessPhase,
   error?: unknown,
 ): void {
+  if (phase !== state.phase) {
+    // The deploy supervisor gates cut-over on this transition; log how long
+    // each phase took so a slow boot is attributable from the journal.
+    const elapsedMs = Date.now() - Date.parse(state.changedAt);
+    console.log(
+      `[readiness] ${state.phase} -> ${phase} after ${(elapsedMs / 1000).toFixed(1)}s`,
+    );
+  }
   state.phase = phase;
   state.error =
     error === undefined

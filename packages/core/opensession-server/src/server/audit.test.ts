@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildAuditDigestFromLines } from "./audit";
+import { buildAuditDigestFromLines, resolvedError } from "./audit";
 
 const digest = (...events: Array<Record<string, unknown>>) =>
   buildAuditDigestFromLines(
@@ -171,5 +171,20 @@ describe("buildAuditDigest", () => {
         runKinds: ["prompt"],
       }),
     ]);
+  });
+});
+
+describe("resolvedError", () => {
+  test("a returned { error } is a failure; ok results and throws are not its business", () => {
+    // Four refused merges once audited as ok: true because only a throw
+    // counted. pr-info's wrappers return { error } instead of throwing.
+    expect(resolvedError({ error: "gh pr merge failed: 403" })).toBe(
+      "gh pr merge failed: 403",
+    );
+    expect(resolvedError({ ok: true, url: "u" })).toBeUndefined();
+    expect(resolvedError({ ok: true, error: "stale" })).toBeUndefined();
+    expect(resolvedError({ error: "" })).toBeUndefined();
+    expect(resolvedError(undefined)).toBeUndefined();
+    expect(resolvedError("done")).toBeUndefined();
   });
 });

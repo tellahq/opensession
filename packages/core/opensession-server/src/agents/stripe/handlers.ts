@@ -69,7 +69,7 @@ export async function handleStripeEvent(event: StripeEvent): Promise<number> {
   };
 
   const { fireAutomationsForEvent } = await import("../../server/automations");
-  const fired = fireAutomationsForEvent(
+  const fired = await fireAutomationsForEvent(
     DISPUTE_CREATED_EVENT,
     JSON.stringify(payload, null, 2),
   );

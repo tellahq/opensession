@@ -123,7 +123,23 @@ final class SessionViewModel {
     /// The request id currently being removed from Slack. Keeping the receipt
     /// visible while this is set makes a failed Undo recoverable.
     private(set) var undoingSlackComposeReceiptId: String?
-    private(set) var connectionState: ConnectionState = .connecting
+    /// The transport truth: sends, paging and presence gate on this. Views
+    /// read `presentedConnectionState` instead.
+    private(set) var connectionState: ConnectionState = .connecting {
+        didSet { presentConnectionState() }
+    }
+    /// What the session screen shows. A drop from a presented connection
+    /// waits out `connectionPresentationGrace` of foreground time before it
+    /// turns into a reconnect banner, so Wi-Fi blips and the socket churn of
+    /// backgrounding and returning never repaint the transcript or composer.
+    /// Recovery, an announced server restart, the first connect and a real
+    /// load failure show immediately.
+    private(set) var presentedConnectionState: ConnectionState = .connecting
+    private var connectionPresentationTask: Task<Void, Never>?
+    /// Set by the first `hello`. Only a session that has actually been
+    /// connected may have a presented outage folded back into `.connected`
+    /// while backgrounded.
+    private var hasCompletedHandshake = false
     private(set) var isLoadingConversation = true
     /// A watch that never receives transcript_init is not a loading state
     /// forever. The reader gets an explicit retry while reconnects continue.
@@ -169,6 +185,31 @@ final class SessionViewModel {
         runStartedAt = nil
         isLoadingConversation = false
     }
+
+    #if DEBUG
+    /// Screenshot fixture. `sustained` takes the socket down for good, so the
+    /// reconnect banner appears once the grace runs out; otherwise the socket
+    /// keeps dropping and rejoining, the transport spends most of the capture
+    /// reconnecting, and the presented state stays quiet throughout.
+    func dropConnectionForScreenshot(sustained: Bool) {
+        holdsScreenshotFixture = true
+        screenshotDropTask?.cancel()
+        screenshotDropTask = Task { [weak self] in
+            var dropped = false
+            repeat {
+                try? await Task.sleep(for: .seconds(3))
+                guard let self, !Task.isCancelled else { return }
+                guard self.connectionState == .connected else { continue }
+                self.socket?.disconnect()
+                self.socket = nil
+                self.scheduleReconnect("Connection lost")
+                if sustained { self.reconnectTask?.cancel() }
+                dropped = true
+            } while !(sustained && dropped)
+        }
+    }
+    private var screenshotDropTask: Task<Void, Never>?
+    #endif
 
     func showSteeredMessageForScreenshot() {
         holdsScreenshotFixture = true
@@ -264,6 +305,9 @@ final class SessionViewModel {
     var effort: String
     /// OpenAI fast-mode flag; rides every send like effort.
     var fastMode: Bool
+    /// Provider account pinned with `/account` ("" = automatic routing). The
+    /// server owns it; this follows its `subscription_changed` broadcasts.
+    private(set) var accountId: String
 
     // ── Earlier-history paging ──
     /// Older history exists server-side (transcript_init/history `truncated`).
@@ -307,6 +351,10 @@ final class SessionViewModel {
     private var isServerHandoffPending = false
     static let reconnectDelay: Duration = .seconds(2)
     static let handoffReconnectDelay: Duration = .milliseconds(250)
+    /// Mirrors the web client's `CONNECTION_PRESENTATION_GRACE_MS`.
+    static let connectionPresentationGrace: Duration = .seconds(8)
+    /// Injection seam so tests drive the grace period without waiting it out.
+    private let clock: any Clock<Duration>
     private var conversationLoadTask: Task<Void, Never>?
     private let conversationLoadTimeout: TimeInterval
     /// Multiple views can briefly overlap during a reversed tab transition.
@@ -506,6 +554,7 @@ final class SessionViewModel {
         socketFactory: @escaping @MainActor () -> any SessionSocket = { OS1Socket() },
         outbox: Outbox = .shared,
         conversationLoadTimeout: TimeInterval = 15,
+        clock: any Clock<Duration> = ContinuousClock(),
         prLoader: @escaping @MainActor (String) async throws -> PrDetails? = {
             try await OS1API.pr(sessionId: $0)
         },
@@ -520,6 +569,7 @@ final class SessionViewModel {
         self.socketFactory = socketFactory
         self.outbox = outbox
         self.conversationLoadTimeout = conversationLoadTimeout
+        self.clock = clock
         self.prLoader = prLoader
         self.slackComposerUndoer = slackComposerUndoer
         self.workflowLoader = workflowLoader
@@ -528,6 +578,7 @@ final class SessionViewModel {
         self.model = session.model ?? ""
         self.effort = session.effort ?? ""
         self.fastMode = session.fastMode ?? false
+        self.accountId = session.accountId ?? ""
         if let composerDraft {
             self.draft = composerDraft.text
             self.attachedImages = composerDraft.images
@@ -618,6 +669,7 @@ final class SessionViewModel {
         model = session.model ?? ""
         effort = session.effort ?? ""
         fastMode = session.fastMode ?? false
+        accountId = session.accountId ?? ""
     }
 
     func start() {
@@ -666,6 +718,10 @@ final class SessionViewModel {
         replySuggestions = []
         outbox.stopObserving(sessionId: session.id)
         reconnectTask?.cancel()
+        cancelConnectionPresentation()
+        #if DEBUG
+        screenshotDropTask?.cancel()
+        #endif
         conversationLoadTask?.cancel()
         resyncProbeTask?.cancel()
         creationRetryTask?.cancel()
@@ -929,6 +985,22 @@ final class SessionViewModel {
         guard !stopped else { return }
         stopTyping()
         isAway = true
+        // Time away from the foreground never counts toward the reconnect
+        // grace; `appDidBecomeActive` restarts it if the drop outlives the
+        // background. An outage already on screen is folded back too, as the
+        // web client does while hidden: the return reconnects on the spot,
+        // and a banner that survived the background would flash through the
+        // handshake even when connectivity came back meanwhile. An announced
+        // server restart keeps its banner.
+        cancelConnectionPresentation()
+        switch presentedConnectionState {
+        case .connecting, .reconnecting:
+            if hasCompletedHandshake, !isServerHandoffPending {
+                presentedConnectionState = .connected
+            }
+        case .connected, .failed:
+            break
+        }
         // Coming back has to re-claim the face immediately, not wait out the
         // refresh interval below.
         lastPresenceRefresh = .distantPast
@@ -955,7 +1027,8 @@ final class SessionViewModel {
         loadPr()
         guard connectionState == .connected, let socket else {
             // Not connected (or a pre-suspension connect is stuck mid
-            // handshake): skip the backoff and reconnect right now.
+            // handshake): skip the backoff and reconnect right now. The
+            // rewrite of `connectionState` restarts the presentation grace.
             reconnectTask?.cancel()
             self.socket?.disconnect()
             self.socket = nil
@@ -1288,6 +1361,22 @@ final class SessionViewModel {
         socket.prompt(
             sessionId: session.id,
             content: "/model \(id)",
+            user: ServerConfig.shared.userName
+        )
+    }
+
+    /// Pin one provider account for this conversation, or nil for automatic
+    /// routing, through the `/account` slash command: the server validates
+    /// the pool, persists the pin and broadcasts `subscription_changed`.
+    func pinAccount(_ account: ProviderAccount?) {
+        let next = account?.id ?? ""
+        guard next != accountId, let socket else { return }
+        accountId = next
+        // Fast mode is a subscription feature; an API key cannot carry it.
+        if account?.kind == "api_key" { fastMode = false }
+        socket.prompt(
+            sessionId: session.id,
+            content: next.isEmpty ? "/account auto" : "/account \(next)",
             user: ServerConfig.shared.userName
         )
     }
@@ -1630,6 +1719,45 @@ final class SessionViewModel {
         connect()
     }
 
+    // MARK: - Connection presentation
+
+    /// Fold the transport state into the presented one. Only a drop from a
+    /// presented connection is deferred; every other transition is immediate.
+    /// `connect()` rewrites an empty-transcript reconnect as `.connecting`, so
+    /// that counts as the same drop: what matters is what was on screen.
+    private func presentConnectionState() {
+        let state = connectionState
+        let isTransientDrop: Bool
+        switch state {
+        case .connecting, .reconnecting:
+            isTransientDrop = presentedConnectionState == .connected && !isServerHandoffPending
+        case .connected, .failed:
+            isTransientDrop = false
+        }
+        guard isTransientDrop else {
+            cancelConnectionPresentation()
+            presentedConnectionState = state
+            return
+        }
+        // A grace period already running keeps its deadline; retries inside
+        // it rewrite `connectionState` without restarting the clock.
+        guard connectionPresentationTask == nil, !isAway, !stopped else { return }
+        connectionPresentationTask = Task { [weak self] in
+            guard let clock = self?.clock else { return }
+            try? await clock.sleep(for: Self.connectionPresentationGrace)
+            guard let self, !Task.isCancelled, !self.stopped, !self.isAway else { return }
+            self.connectionPresentationTask = nil
+            if self.connectionState != .connected {
+                self.presentedConnectionState = self.connectionState
+            }
+        }
+    }
+
+    private func cancelConnectionPresentation() {
+        connectionPresentationTask?.cancel()
+        connectionPresentationTask = nil
+    }
+
     private func armConversationLoadDeadline() {
         conversationLoadTask?.cancel()
         guard isLoadingConversation else { return }
@@ -1651,6 +1779,7 @@ final class SessionViewModel {
         switch event {
         case .hello:
             isServerHandoffPending = false
+            hasCompletedHandshake = true
             connectionState = .connected
             // A replacement socket defaults to present. Restore scene focus
             // before joining the session so a background reconnect never
@@ -1909,8 +2038,17 @@ final class SessionViewModel {
         case .workspaceStatus(let id, let ready) where id == session.id:
             workspaceReadyOverride = ready
 
-        case .modelChanged(let id, let model, _) where id == session.id:
-            session.model = model
+        case .modelChanged(let id, let switched, _) where id == session.id:
+            session.model = switched
+            // The model menu reads `model`, not the snapshot: a teammate's
+            // provider switch must change which accounts it can pin in the
+            // same beat as the `subscription_changed` that follows it, or a
+            // Claude id gets sent to the Codex account command.
+            model = switched
+
+        case .subscriptionChanged(let id, let pinned) where id == session.id:
+            accountId = pinned ?? ""
+            session.accountId = pinned
 
         case .queueUpdate(let id, let queued, let steered, let pendingIds)
             where id == session.id:

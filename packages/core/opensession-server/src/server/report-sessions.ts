@@ -73,7 +73,7 @@ export async function startReportSessions(input: {
     : tasks.map((_, i) => i);
   if (!wanted.length) throw new ReportSessionsError("No tasks selected", 400);
 
-  const repo = getAutomation(input.automationId)?.repo;
+  const repo = (await getAutomation(input.automationId))?.repo;
   const started: StartedReportSession[] = [];
   console.log(
     `[reports] fan-out: ${wanted.length} session(s) from "${report.title}" (repo ${repo || "default"})`,

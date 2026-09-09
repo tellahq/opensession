@@ -33,7 +33,8 @@ enum ReviewRequests {
         }
     }
 
-    /// Who is waiting: the pull request's AUTHOR.
+    /// Who is waiting: the pull request's AUTHOR, or on a bot-authored PR the
+    /// teammate it was opened for (`Session.prRequester`).
     ///
     /// GitHub does not record who added you as a reviewer, so the author is
     /// the closest true answer — and it is the one worth knowing either way,
@@ -56,6 +57,9 @@ enum ReviewRequests {
                         viewerLogin: viewerLogin
                     )
                 }
-        }?.prAuthor
+        }
+        .flatMap { session in
+            session.prRequester?.isEmpty == false ? session.prRequester : session.prAuthor
+        }
     }
 }

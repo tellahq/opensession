@@ -1279,6 +1279,9 @@ export function lastReviewSummary(
   return {
     verdict: last.verdict,
     confidence: last.confidence,
+    ...(last.risk ? { risk: last.risk } : {}),
+    ...(last.recovery ? { recovery: last.recovery } : {}),
+    ...(last.riskFactors?.length ? { riskFactors: last.riskFactors } : {}),
     findings: last.findings,
     blocking: last.blocking,
     stale: !!headRefOid && !!last.sha && headRefOid !== last.sha,

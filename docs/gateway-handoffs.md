@@ -91,8 +91,11 @@ release the candidate. The controller commits after the external health gate;
 until then it can park the target for a fail-closed peer rollback. Every phase is
 atomically journaled in `gateway-handoff.json`, allowing a restarted supervisor
 to reconcile against the authoritative `current` pointer. A three-minute
-deadline terminates an abandoned preparation and supervisor rather than
-guessing protocol compatibility.
+unattended deadline covers each phase where the controller must return
+(parked, active-uncommitted, rollback-parked): it terminates the abandoned
+transaction and supervisor rather than guessing protocol compatibility. It is
+disarmed while activation waits for readiness, which has its own longer budget,
+so a candidate still recovering under load is not killed mid-activation.
 
 Each deploy also writes its generated dependency-impact manifest and runs a
 continuous HTTP/WebSocket canary. Sequential requests wait for a 15-second quiet

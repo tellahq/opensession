@@ -347,7 +347,7 @@ export async function runConversationalMention(
       return;
     }
     headRef = details.headRefName;
-    const model = listAutomations().find(
+    const model = (await listAutomations()).find(
       (a) => a.eventKey === PR_EVENT_KEY,
     )?.model;
     const link = `[📺 open session](${sessionUrl(prNumber, "mention", ghRepo)})`;
@@ -511,7 +511,7 @@ async function runFollowupMention(
     ghRepo,
   );
 
-  const model = listAutomations().find(
+  const model = (await listAutomations()).find(
     (a) => a.eventKey === PR_EVENT_KEY,
   )?.model;
   const worktreeDir = await createWorktreeForFollowup(

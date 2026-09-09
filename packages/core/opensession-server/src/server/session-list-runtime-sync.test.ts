@@ -8,20 +8,21 @@ import {
 afterEach(() => stopSessionListRuntimeSync());
 
 describe("session list runtime sync", () => {
-  test("invalidates the global list when a room-scoped run settles", async () => {
-    let invalidations = 0;
-    startSessionListRuntimeSync(() => invalidations++);
+  test("publishes the changed row once per session when a run starts or settles", async () => {
+    const published: string[] = [];
+    startSessionListRuntimeSync((id) => published.push(id));
 
     emitSessionStateChange({ sessionId: "session-1", isRunning: true, at: 1 });
     emitSessionStateChange({ sessionId: "session-1", isRunning: true, at: 1 });
-    expect(invalidations).toBe(0);
+    emitSessionStateChange({ sessionId: "session-2", isRunning: true, at: 1 });
+    expect(published).toEqual([]);
     await Promise.resolve();
-    expect(invalidations).toBe(1);
+    expect(published).toEqual(["session-1", "session-2"]);
 
     emitSessionStateChange({ sessionId: "session-1", isRunning: false, at: 2 });
     emitSessionStateChange({ sessionId: "session-1", isRunning: false, at: 2 });
     await Promise.resolve();
-    expect(invalidations).toBe(2);
+    expect(published).toEqual(["session-1", "session-2", "session-1"]);
   });
 
   test("starts only one listener", async () => {

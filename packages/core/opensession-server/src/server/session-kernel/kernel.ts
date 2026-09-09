@@ -6,6 +6,10 @@
  * returns their fenced results. Engines and WebSockets never become owners.
  */
 import { audit } from "../audit";
+import {
+  notifyCreationStateChanged,
+  requestSessionKernelRuntimeDrain,
+} from "./wakes";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
 import {
   type SessionActorEffectFor,
@@ -26,6 +30,10 @@ import type {
   MetadataActorRequest,
   MetadataActorResult,
 } from "./metadata-protocol";
+import type {
+  CatalogDocumentRequest,
+  CatalogDocumentResult,
+} from "./catalog-document-protocol";
 import type {
   TranscriptActorRequest,
   TranscriptActorResult,
@@ -85,6 +93,7 @@ function compatibilityStoreForTest(
     | "delivery"
     | "gateway command"
     | "metadata"
+    | "catalog document"
     | "turn",
 ) {
   if (process.env.NODE_ENV !== "test")
@@ -215,6 +224,8 @@ export async function sessionMetadata<T extends MetadataActorRequest>(
       request.sessionId,
       request.rev,
     ) as R;
+  if (request.op === "catalog_get")
+    return store.sessionMetadataCatalogGet(request.sessionId) as R;
   if (request.op === "catalog_page")
     return store.sessionMetadataCatalogPage(
       request.afterSessionId,
@@ -230,6 +241,37 @@ export async function sessionMetadata<T extends MetadataActorRequest>(
     return store.markSessionMetadataCatalogComplete() as R;
   throw new Error(
     `Unknown session metadata op ${String((request as { op?: unknown }).op)}`,
+  );
+}
+
+/** Central catalog documents: namespaced, session-less rows in the central
+ * kernel database. Never opens a per-session actor database and never falls
+ * back to gateway file I/O. */
+export async function sessionCatalogDocument<T extends CatalogDocumentRequest>(
+  request: T,
+): Promise<CatalogDocumentResult<T>> {
+  if (state.actor) return state.actor.decideCatalogDocumentAsync(request);
+  const store = compatibilityStoreForTest("catalog document");
+  type R = CatalogDocumentResult<T>;
+  if (request.op === "get")
+    return store.catalogDocumentGet(request.namespace, request.key) as R;
+  if (request.op === "get_many")
+    return store.catalogDocumentGetMany(request.namespace, request.keys) as R;
+  if (request.op === "page")
+    return store.catalogDocumentPage(
+      request.namespace,
+      request.afterKey,
+      request.limit,
+    ) as R;
+  if (request.op === "put") return store.putCatalogDocument(request) as R;
+  if (request.op === "seed")
+    return store.seedCatalogDocuments(request.namespace, request.rows) as R;
+  if (request.op === "import_complete")
+    return store.catalogDocumentImportComplete(request.namespace) as R;
+  if (request.op === "mark_import_complete")
+    return store.markCatalogDocumentImportComplete(request.namespace) as R;
+  throw new Error(
+    `Unknown catalog document op ${String((request as { op?: unknown }).op)}`,
   );
 }
 
@@ -622,6 +664,13 @@ export class SessionKernel {
         creation_generation: result.state?.generation,
         event: input.event,
       });
+    if (result.accepted) {
+      // The waiters on this session re-read the committed state now instead
+      // of on their next poll, and an emitted effect is drained now instead of
+      // on the runtime's next tick.
+      notifyCreationStateChanged(this.sessionId);
+      if (input.effect) requestSessionKernelRuntimeDrain();
+    }
     return result;
   }
 

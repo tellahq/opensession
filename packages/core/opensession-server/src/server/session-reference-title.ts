@@ -34,7 +34,7 @@ export async function nameKnownSessionReferencesForTitle(
       const session = await findSessionAsync(id);
       if (!session) return;
       const workspaceName = session.workspaceId
-        ? getWorkspace(session.workspaceId)?.name
+        ? (await getWorkspace(session.workspaceId))?.name
         : undefined;
       names.set(id, {
         title: session.title,

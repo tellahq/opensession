@@ -485,9 +485,9 @@ export function resolvePrTarget(
  * instead of minting a second one over it. Repo main checkouts never match —
  * they're shared by every native/ask session, so ownership is meaningless there.
  */
-export function workspaceOwningWorktree(
+export async function workspaceOwningWorktree(
   worktreeDir: string | null | undefined,
-): Workspace | null {
+): Promise<Workspace | null> {
   if (!worktreeDir) return null;
   const cd = canonicalPath(worktreeDir);
   if (Object.values(REPOS).some((r) => canonicalPath(r.repo) === cd))
@@ -693,7 +693,7 @@ export async function switchPrimaryRepo(
   // the stamp isn't ours to move.
   const workspaceId = session.workspaceId;
   if (workspaceId) {
-    const ws = getWorkspace(workspaceId);
+    const ws = await getWorkspace(workspaceId);
     const soleMember = !getCachedSessions().some(
       (s) => s.workspaceId === workspaceId && s.id !== sessionId,
     );
@@ -703,7 +703,7 @@ export async function switchPrimaryRepo(
       ws.repo === session.repo &&
       (!ws.worktreeDir || ws.worktreeDir === session.worktreeDir)
     )
-      restampWorkspaceWorktree(workspaceId, {
+      await restampWorkspaceWorktree(workspaceId, {
         repo: target.id,
         // A shared-checkout repo has no per-session worktree, so the template
         // clears instead of pointing siblings at the live main checkout.

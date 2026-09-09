@@ -51,6 +51,7 @@ import {
   sameImages,
 } from "../lib/attachments";
 import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
+import { useDefaultModelPreference } from "../hooks/useDefaultModelPreference";
 import { resolveNewSessionModel } from "../lib/default-model-pref";
 import { projectComposerSessions } from "../lib/composer-session-projection";
 import { baseModelId, modelEngine } from "./ModelEffortSelect";
@@ -405,6 +406,8 @@ export function NewSession({
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   const [model, setModel] = useState(""); // "" = default
+  const { preferredDefaultModel, setPreferredDefaultModel } =
+    useDefaultModelPreference();
   // The shared model settings menu carries the same choices as an existing
   // session's composer. Both values persist on the new session and apply to
   // its opening turn.
@@ -1810,6 +1813,7 @@ export function NewSession({
                   models,
                   defaultModel,
                   model,
+                  preferredDefaultModel,
                   effort,
                   fastMode,
                   accounts,
@@ -1822,6 +1826,7 @@ export function NewSession({
                 }}
                 actions={{
                   changeModel: setModel,
+                  setAsDefault: setPreferredDefaultModel,
                   changeEffort: setEffort,
                   changeFastMode: setFastMode,
                   changeAccount: setAccountId,

@@ -19,8 +19,11 @@ import { getTitleOverride } from "./title-overrides";
 import { getStatusOverride } from "./status-overrides";
 import { getReviewRequest } from "./review-requests";
 import { getGeneratedTitle } from "./generated-titles";
-import { ensureSessionWorkspaces } from "./session-workspace";
-import { warmWorkspaceNamesAsync } from "./workspaces";
+import {
+  applyPendingSessionWorkspaces,
+  ensureSessionWorkspaces,
+} from "./session-workspace";
+import { warmWorkspacesAsync } from "./workspaces";
 import { findCodexRollout } from "./codex-accounts";
 import { providerFor } from "./models";
 import { parseTranscript, parseTranscriptAsync } from "./jsonl-parser";
@@ -972,25 +975,62 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
  */
 export function readNativeSessionListRow(
   sessionId: string,
+  aliasIds?: readonly string[],
 ): UnifiedSession | undefined {
   if (!/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) return undefined;
   const data = readJsonSafe<NativeSessionFile>(
     `${SESSIONS_DIR}/${sessionId}.json`,
   );
   if (!data?.id || data.id !== sessionId) return undefined;
+  return nativeSessionListRowFromData(data, aliasIds);
+}
+
+/** The list row for a native session document with the sidebar overlays
+ * (generated title, title/status overrides, review request) applied. Shared
+ * by the file reader and the catalog-backed detail read. A native document
+ * does not know the Slack/Linear ids the list scan merged into it; a caller
+ * that does passes them so the row keeps its aliases and the overlays keyed
+ * under them. */
+export function nativeSessionListRowFromData(
+  data: NativeSessionFile,
+  aliasIds?: readonly string[],
+): UnifiedSession {
   const session = nativeSessionRow(data);
-  const generated = getGeneratedTitle(session.id);
+  if (aliasIds?.length) session.aliasIds = [...aliasIds];
+  applySessionOverlays(session);
+  return session;
+}
+
+/**
+ * Apply the registry overlays a list row carries: the generated summary
+ * title (under a manual rename, over the derived first line), the rename,
+ * the manual status lane and the pending review request. Each is keyed by
+ * the unified id or any merged alias id, so a value stored under a historical
+ * Slack/Linear id survives the dedup scan. Every row that reaches the list
+ * index goes through here, and every registry writer republishes the rows it
+ * touched, so list readers serve the stored overlays instead of re-reading
+ * the registries.
+ */
+export function applySessionOverlays(session: UnifiedSession): void {
+  const generated =
+    getGeneratedTitle(session.id) ??
+    session.aliasIds?.map((a) => getGeneratedTitle(a)).find(Boolean);
   if (generated) session.title = generated;
-  const title = getTitleOverride(session.id);
-  if (title) {
-    session.title = title;
+  const override =
+    getTitleOverride(session.id) ??
+    session.aliasIds?.map((a) => getTitleOverride(a)).find(Boolean);
+  if (override) {
+    session.title = override;
     session.titleOverridden = true;
   }
-  const status = getStatusOverride(session.id);
+  const status =
+    getStatusOverride(session.id) ??
+    session.aliasIds?.map((a) => getStatusOverride(a)).find(Boolean);
   if (status) session.manualStatus = status;
-  const review = getReviewRequest(session.id);
+  const review =
+    getReviewRequest(session.id) ??
+    session.aliasIds?.map((a) => getReviewRequest(a)).find(Boolean);
   if (review) session.reviewRequest = review;
-  return session;
 }
 
 /** Read one native session directly. Opening a known session must not wait for
@@ -999,7 +1039,18 @@ export function readNativeSession(
   sessionId: string,
 ): UnifiedSession | undefined {
   const session = readNativeSessionListRow(sessionId);
-  if (!session) return undefined;
+  return session ? withTranscriptPath(session) : undefined;
+}
+
+/** Detail shape of a native session document: the list row plus its resolved
+ * transcript path. */
+export function nativeSessionDetailFromData(
+  data: NativeSessionFile,
+): UnifiedSession {
+  return withTranscriptPath(nativeSessionListRowFromData(data));
+}
+
+function withTranscriptPath(session: UnifiedSession): UnifiedSession {
   session.transcriptPath = resolveTranscriptPath(
     findTranscriptPath(session.worktreeDir, session.claudeSessionId),
     session.codexThreadId,
@@ -1066,12 +1117,18 @@ function getRunningPids(): Map<string, number> {
   return running;
 }
 
+/**
+ * `fileWorkspaces` selects the workspace step: the async runner yields the
+ * catalog-backed filing promise and awaits it; the sync runner can do no I/O,
+ * so it only re-applies filings already pending in memory.
+ */
 function* assembleSessionSteps(
   slackSessions: UnifiedSession[],
   linearSessions: UnifiedSession[],
   nativeSessions: UnifiedSession[],
   slice: SessionArchiveSlice = "include",
-): Generator<void, UnifiedSession[]> {
+  fileWorkspaces = false,
+): Generator<void | Promise<void>, UnifiedSession[]> {
   const runningPids = getRunningPids();
 
   // Merge all sessions, deduplicating by engine id (Claude session or Codex
@@ -1303,55 +1360,21 @@ function* assembleSessionSteps(
   // back onto every live tab so switching chats cannot hide a sibling's PR.
   shareWorkspacePrRefs(selectedSessions);
 
-  // Apply auto-generated summary titles (the short Conductor-style name),
-  // keyed by unified id or merged alias id. Sits UNDER a manual rename (applied
-  // next) but OVER the derived first-line title.
+  // Apply the registry overlays (generated title, rename, manual lane, review
+  // request), keyed by unified id or any merged alias id so they stick across
+  // the dedup above. The merged aliases are known only here, which is why the
+  // stored row carries the overlays already resolved.
   for (const session of selectedSessions) {
     yield;
-    const generated =
-      getGeneratedTitle(session.id) ??
-      session.aliasIds?.map((a) => getGeneratedTitle(a)).find(Boolean);
-    if (generated) session.title = generated;
-  }
-
-  // Apply cross-source manual title overrides (rename). Keyed by the unified id
-  // or any merged alias id, so a rename sticks across the dedup in this scan.
-  for (const session of selectedSessions) {
-    yield;
-    const override =
-      getTitleOverride(session.id) ??
-      session.aliasIds?.map((a) => getTitleOverride(a)).find(Boolean);
-    if (override) {
-      session.title = override;
-      session.titleOverridden = true;
-    }
-  }
-
-  // Apply manual status-lane overrides. Keyed by unified id or any merged alias
-  // id (same as the rename registry) so a pinned lane survives the dedup scan.
-  for (const session of selectedSessions) {
-    yield;
-    const status =
-      getStatusOverride(session.id) ??
-      session.aliasIds?.map((a) => getStatusOverride(a)).find(Boolean);
-    if (status) session.manualStatus = status;
-  }
-
-  // Apply pending review requests (the info panel's Reviewer picker), keyed by
-  // unified id or any merged alias id like the registries above.
-  for (const session of selectedSessions) {
-    yield;
-    const review =
-      getReviewRequest(session.id) ??
-      session.aliasIds?.map((a) => getReviewRequest(a)).find(Boolean);
-    if (review) session.reviewRequest = review;
+    applySessionOverlays(session);
   }
 
   // Every session belongs to exactly one workspace (session-workspace.ts). File any
   // that surfaced without one — in memory now, on disk right after — so the
   // sidebar only ever has workspace rows to render. Runs after the title
   // registries above so a minted workspace takes the session's final name.
-  ensureSessionWorkspaces(selectedSessions);
+  if (fileWorkspaces) yield ensureSessionWorkspaces(selectedSessions);
+  else applyPendingSessionWorkspaces(selectedSessions);
 
   // Sort by lastActivity descending
   selectedSessions.sort(
@@ -1391,11 +1414,13 @@ async function assembleSessionsAsync(
     linearSessions,
     nativeSessions,
     slice,
+    true,
   );
   let batch = 0;
   while (true) {
     const step = steps.next();
     if (step.done) return step.value;
+    if (step.value) await step.value;
     if (++batch % 8 === 0) await Bun.sleep(0);
   }
 }
@@ -1425,7 +1450,7 @@ export async function getAllSessionsAsync(
   // Warm the indexes before row parsing starts. Running these in the same
   // Promise.all as the scans lets the first transcript miss fall back to the
   // synchronous builders while the cooperative warm-up is still in flight.
-  await Promise.all([warmWorkspaceNamesAsync(), warmTranscriptIndexAsync()]);
+  await Promise.all([warmWorkspacesAsync(), warmTranscriptIndexAsync()]);
   const [slackSessions, linearSessions, nativeSessions] = await Promise.all([
     collectSessionRows(slackSessionRows()),
     collectSessionRows(linearSessionRows()),
@@ -1445,7 +1470,7 @@ export async function getAllSessionsAsync(
   );
 }
 
-function removeSessionArtifacts(session: UnifiedSession): void {
+async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
   // Delete the session JSON file based on source.
   switch (session.source) {
     case "slack": {
@@ -1468,7 +1493,7 @@ function removeSessionArtifacts(session: UnifiedSession): void {
       break;
     }
   }
-  removeIndexedSession(session.id);
+  await removeIndexedSession(session.id);
   try {
     releasePreviewPathLease(session.id);
   } catch (error) {
@@ -1486,9 +1511,9 @@ function removeSessionArtifacts(session: UnifiedSession): void {
 }
 
 export async function deleteSession(session: UnifiedSession): Promise<void> {
-  await executeSessionProjection(session.id, "session_delete", () => {
-    removeSessionArtifacts(session);
-  });
+  await executeSessionProjection(session.id, "session_delete", () =>
+    removeSessionArtifacts(session),
+  );
 }
 
 /**
@@ -1499,6 +1524,6 @@ export async function deleteSession(session: UnifiedSession): Promise<void> {
  */
 export function removeTombstonedSessionArtifacts(
   session: UnifiedSession,
-): void {
-  removeSessionArtifacts(session);
+): Promise<void> {
+  return removeSessionArtifacts(session);
 }

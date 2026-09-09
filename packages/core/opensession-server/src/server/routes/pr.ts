@@ -13,7 +13,11 @@ import { hostRepoId, prHostFor } from "../pr-host";
 import { footerPrsFor, getPrsByRepo, prsBySessionRef } from "../pr-cache";
 import { cachedPrDetailsForSession, reconcilePrDetails } from "../pr-info";
 import { getPrStack, linkPrStack, mergePrStack } from "../pr-stack";
-import { findSessionAsync, invalidateSessionsCache } from "../session-cache";
+import {
+  findSessionAsync,
+  publishSessionChange,
+  publishSessionRowsForBranch,
+} from "../session-cache";
 import { getSessionControl } from "../session-control";
 import { indexedWorkspaceMemberSessions } from "../session-list-store";
 import {
@@ -109,7 +113,7 @@ async function findPrSessionAsync(sessionId: string) {
   if (!session.workspaceId) return session;
   return projectWorkspacePrRefs(
     session,
-    indexedWorkspaceMemberSessions(session.workspaceId).map(enrich),
+    (await indexedWorkspaceMemberSessions(session.workspaceId)).map(enrich),
   );
 }
 
@@ -423,7 +427,7 @@ export async function handlePrRoutes(
         number: body.number,
         branch: body.branch,
       });
-      invalidateSessionsCache(); // session.prs / linkedPrs changed
+      publishSessionChange(sessionId); // session.prs / linkedPrs changed
       return Response.json({ ok: true, ...result });
     } catch (e: any) {
       return Response.json({ error: e.message || String(e) }, { status: 400 });
@@ -448,7 +452,7 @@ export async function handlePrRoutes(
     try {
       const { unlinkPr } = await import("../session-repos");
       const all = unlinkPr(sessionId, body.repo, body.branch);
-      invalidateSessionsCache();
+      publishSessionChange(sessionId);
       return Response.json({ ok: true, all });
     } catch (e: any) {
       return Response.json({ error: e.message || String(e) }, { status: 400 });
@@ -641,7 +645,7 @@ export async function handlePrRoutes(
       user.trim().split(/\s+/)[0]?.toLowerCase();
     if (reviewer)
       markCachedPrReviewed(hostRepoId(repo), branch, reviewer, event);
-    invalidateSessionsCache();
+    publishSessionRowsForBranch(branch);
     return Response.json(result);
   }
   if (path === "/api/pr-preview-merge" && req.method === "POST") {
@@ -665,7 +669,7 @@ export async function handlePrRoutes(
       );
       if ("error" in result) return Response.json(result, { status: 502 });
       markCachedPrMerged(hostRepoId(repo), branch);
-      invalidateSessionsCache();
+      publishSessionRowsForBranch(branch);
       return Response.json(result);
     } catch (e: any) {
       return Response.json({ error: e.message || String(e) }, { status: 502 });
@@ -686,7 +690,7 @@ export async function handlePrRoutes(
     );
     if ("error" in result) return Response.json(result, { status: 502 });
     markCachedPrClosed(hostRepoId(repo), result.number);
-    invalidateSessionsCache();
+    publishSessionRowsForBranch(branch);
     return Response.json(result);
   }
 
@@ -793,7 +797,7 @@ export async function handlePrRoutes(
       user.trim().split(/\s+/)[0]?.toLowerCase();
     if (reviewer)
       markCachedPrReviewed(target.ghRepo, target.branch, reviewer, event);
-    invalidateSessionsCache(); // a review can change reviewDecision in the list
+    publishSessionRowsForBranch(target.branch); // a review can change reviewDecision in the list
     return Response.json(result);
   }
 
@@ -834,7 +838,7 @@ export async function handlePrRoutes(
       // rebuild reads that cache stale-while-revalidate, so without this the
       // row stays green/open until the throttled sweep or a webhook lands.
       markCachedPrMerged(target.ghRepo, target.branch);
-      invalidateSessionsCache(); // refresh prState in the sessions list
+      publishSessionRowsForBranch(target.branch); // refresh prState in the sessions list
       return Response.json(result);
     } catch (e: any) {
       return Response.json({ error: e.message || String(e) }, { status: 502 });
@@ -992,8 +996,9 @@ export async function handlePrRoutes(
       for (const layer of merging) {
         markCachedPrMerged(target.ghRepo, layer.headRefName);
         host.invalidatePrInfo(target.ghRepo, layer.headRefName);
+        publishSessionRowsForBranch(layer.headRefName);
       }
-      invalidateSessionsCache();
+      publishSessionRowsForBranch(target.branch);
       return Response.json({
         ok: true,
         merged: merging.map((l) => l.number),
@@ -1031,7 +1036,7 @@ export async function handlePrRoutes(
     );
     if ("error" in result) return Response.json(result, { status: 502 });
     markCachedPrClosed(target.ghRepo, result.number);
-    invalidateSessionsCache();
+    publishSessionRowsForBranch(target.branch);
     return Response.json(result);
   }
 
@@ -1136,7 +1141,7 @@ export async function handlePrRoutes(
         });
         stopped = true;
       }
-      invalidateSessionsCache();
+      publishSessionChange(bksId);
       return Response.json({ ok: true, cancelled: requested || stopped });
     }
 

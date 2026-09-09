@@ -14,7 +14,9 @@ import { touchNativeSession } from "./session-cache";
 import { dropSandboxPreviewRoutes } from "./preview";
 import {
   listSandboxPortalServices,
+  MAX_PORTAL_READY_MS,
   portalsToRestore,
+  SANDBOX_PORTAL_PATH,
   readSandboxPortalRecords,
   restartSandboxPortalService,
 } from "./portal-supervisor";
@@ -23,7 +25,10 @@ import {
   sandboxPortalRecipes,
   sandboxPreviewIdentityContext,
 } from "./preview";
-import { createWorkloadIdentityEnv } from "./workload-identity";
+import {
+  createWorkloadIdentityEnv,
+  workloadIdentityIssuer,
+} from "./workload-identity";
 import { getRepo } from "./worktree";
 import { revokeWorkloadIdentityForSandbox } from "./workload-identity";
 import type { UnifiedSession } from "./types";
@@ -137,6 +142,34 @@ export async function activeSandboxFor(
 }
 
 /**
+ * Page in what a Portal recipe reaches for first. A Sandbox that just woke
+ * sits on a fresh host with a cold volume: measured on Box, the first
+ * `opensession sandbox id-token` (bun, the client script, the TLS path to
+ * the issuer) took 6.5s where a warm one takes 0.4s, and the identity helper
+ * a recipe sources gives it five. Touch those once before any relaunch so
+ * the first Portal is not the one that pays. Best effort; never fails the
+ * restore.
+ */
+async function primeSandboxForPortals(sandbox: Sandbox): Promise<void> {
+  const issuer = workloadIdentityIssuer();
+  try {
+    await sandbox.exec(
+      [
+        "bash",
+        "-c",
+        `export PATH=${SANDBOX_PORTAL_PATH}; opensession sandbox id-token --help >/dev/null 2>&1; curl -fsS --max-time 10 ${issuer}/.well-known/openid-configuration >/dev/null 2>&1; true`,
+      ],
+      { timeoutMs: 90_000 },
+    );
+  } catch (error) {
+    console.warn(
+      `[sandbox] ${sandbox.id}: could not prime for Portals:`,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+/**
  * Bring a woken Sandbox's Portals back. A sleeping sandbox keeps its disk and
  * therefore its `.ports.conf` registry, but none of its processes: every
  * record still marked live is a service the user had running when the
@@ -174,6 +207,7 @@ export async function restoreSandboxPortals(
     }
   }
   if (!live.length) return;
+  await primeSandboxForPortals(sandbox);
   const recipes = await sandboxPortalRecipes(sandbox).catch(() => []);
   const repoId = session.repo ? getRepo(session.repo).id : undefined;
   const env = repoId
@@ -185,14 +219,29 @@ export async function restoreSandboxPortals(
     const recipe = recipes.find(
       (candidate) => candidate.id === record.name && candidate.command,
     );
-    try {
-      await restartSandboxPortalService({
+    const relaunch = () =>
+      restartSandboxPortalService({
         sessionId: session.id,
         sandbox,
         ...(recipe ? recipeStartOptions(recipe) : { name: record.name }),
         port: record.port,
         env,
+        // A recipe's window is tuned for a warm start. A wake pays for a
+        // cold volume first, and the person is looking at the waiting page
+        // rather than a hung tab, so give it the whole bound.
+        readyTimeoutMs: MAX_PORTAL_READY_MS,
       });
+    try {
+      try {
+        await relaunch();
+      } catch (error) {
+        // A recipe that gives up early on a still-cold Sandbox usually
+        // succeeds a moment later; a genuine failure fails again quickly.
+        if (!/exited before it started listening/i.test(String(error)))
+          throw error;
+        await Bun.sleep(5_000);
+        await relaunch();
+      }
       console.log(
         `[sandbox] ${sandbox.id}: restored Portal ${record.name} on ${record.port}`,
       );

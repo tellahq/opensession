@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import {
+  deferredMergeDeadline,
   deferredMergePhase,
   subscribeDeferredMerges,
   type DeferredMergePhase,
@@ -14,5 +15,14 @@ export function useDeferredMergePhase(key: string | null): DeferredMergePhase {
     subscribeDeferredMerges,
     () => deferredMergePhase(key),
     () => deferredMergePhase(key),
+  );
+}
+
+/** When this PR's scheduled merge fires, or null outside the undo window. */
+export function useDeferredMergeDeadline(key: string | null): number | null {
+  return useSyncExternalStore(
+    subscribeDeferredMerges,
+    () => deferredMergeDeadline(key),
+    () => deferredMergeDeadline(key),
   );
 }

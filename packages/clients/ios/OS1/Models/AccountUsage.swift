@@ -247,3 +247,252 @@ enum AccountUsageReading {
         withFractional.date(from: value) ?? plain.date(from: value)
     }
 }
+
+// MARK: - Weekly remaining
+
+/// One account together with the pool it came from. `ProviderAccount` is the
+/// wire record and carries no provider of its own: the route it was fetched
+/// from is what says whether it is a Claude, Codex or SuperGrok account.
+struct PooledAccount: Identifiable, Equatable, Sendable {
+    var account: ProviderAccount
+    var kind: AccountKind
+
+    var id: String { "\(kind.id):\(account.id ?? account.name ?? "account")" }
+}
+
+extension AccountKind {
+    /// The pool key the server uses in `accountProvider` and `/account`
+    /// replies: "claude", "codex" or "xai".
+    init?(providerKey: String?) {
+        guard let providerKey else { return nil }
+        guard let kind = Self.allCases.first(where: { $0.brand == providerKey }) else { return nil }
+        self = kind
+    }
+}
+
+/// A limit that refills on a weekly (or billing-period) cadence: the number
+/// that decides which account to run the day on. The 5-hour window is what
+/// stops a turn; the week is what runs out.
+struct WeeklyLimit: Equatable, Sendable {
+    /// Model the cap is scoped to ("Fable"), or nil for the whole account.
+    var scope: String?
+    var utilization: Double
+    var resetsAt: String?
+}
+
+/// Colour means "this one is running out", nothing else. Same thresholds as
+/// the accounts page reads utilization: 90% used is low, 70% used is a warning.
+enum RemainingTone: Equatable, Sendable {
+    case low, warn, ok
+
+    init(remaining: Int) {
+        self = remaining <= 10 ? .low : remaining <= 30 ? .warn : .ok
+    }
+}
+
+/// One line of the weekly overview in the model menu.
+struct WeeklyRemainingRow: Identifiable, Equatable, Sendable {
+    var accountId: String
+    var kind: AccountKind
+    /// Model the cap is scoped to ("Fable"), or nil for the whole account.
+    var scope: String?
+    var name: String
+    /// The account's owner when it is a personal subscription; nil for the
+    /// shared pool.
+    var owner: String?
+    /// Whole percent left, 0-100.
+    var remaining: Int
+    var resetsAt: Date?
+
+    var id: String { "\(kind.id):\(accountId):\(scope ?? "")" }
+    /// Account name, with the model a scoped cap applies to.
+    var label: String { scope.map { "\(name) · \($0)" } ?? name }
+    var tone: RemainingTone { RemainingTone(remaining: remaining) }
+    var isPersonal: Bool { owner != nil }
+}
+
+/// The weekly budget each subscription account has left, read the way the
+/// model menu shows it. Mirrors `lib/account-limits.ts` on the web: the same
+/// rows, the same order, the same readout for the menu's own line.
+enum WeeklyRemaining {
+    private static let weekMinutes: Double = 7 * 24 * 60
+
+    /// Flatten an account's `usage` into its weekly limits. Unknown or missing
+    /// usage yields nothing rather than a row that claims "0% used".
+    static func limits(_ usage: AccountUsage?, kind: AccountKind) -> [WeeklyLimit] {
+        guard let usage else { return [] }
+        switch kind {
+        case .claude:
+            var out: [WeeklyLimit] = []
+            if let week = usage.sevenDay, let utilization = week.utilization {
+                out.append(WeeklyLimit(scope: nil, utilization: utilization, resetsAt: week.resetsAt))
+            }
+            for limit in usage.scopedLimits ?? [] {
+                guard let utilization = limit.utilization else { continue }
+                out.append(WeeklyLimit(scope: limit.label, utilization: utilization, resetsAt: limit.resetsAt))
+            }
+            return out
+        case .codex:
+            var out: [WeeklyLimit] = []
+            for bucket in usage.buckets ?? [] {
+                for window in [bucket.primary, bucket.secondary].compactMap({ $0 }) {
+                    guard let utilization = window.utilization,
+                          (window.windowDurationMins ?? 0) >= weekMinutes else { continue }
+                    out.append(WeeklyLimit(scope: bucket.label, utilization: utilization, resetsAt: window.resetsAt))
+                }
+            }
+            return out
+        case .xai:
+            // SuperGrok budgets a billing period rather than a week; it is
+            // still the number that decides whether the account has anything
+            // left to give.
+            guard let percent = usage.creditUsagePercent else { return [] }
+            return [WeeklyLimit(scope: nil, utilization: percent, resetsAt: usage.periodEnd)]
+        }
+    }
+
+    /// Can `viewer` run on this account: it sits in the shared pool, or it is
+    /// their own personal subscription. Someone else's personal account is not
+    /// theirs to spend, so its budget is noise here. Same loose name compare
+    /// as the web's `ownerMatchesPerson`.
+    static func isAvailable(_ account: ProviderAccount, to viewer: String) -> Bool {
+        guard let owner = account.owner, !owner.isEmpty else { return true }
+        return SidebarPersonLens.nameMatches(owner, key: viewer)
+    }
+
+    /// The overview: every account `viewer` can use that reports a weekly
+    /// number, one row per limit. Your own subscriptions first: they are the
+    /// ones routing spends before the pool, so they are the numbers you want
+    /// at a glance. A window whose reset already passed reads as full, as it
+    /// does everywhere else.
+    static func rows(_ accounts: [PooledAccount], viewer: String, now: Date = Date()) -> [WeeklyRemainingRow] {
+        var personal: [WeeklyRemainingRow] = []
+        var pool: [WeeklyRemainingRow] = []
+        for pooled in accounts {
+            let account = pooled.account
+            guard let accountId = account.id, !accountId.isEmpty,
+                  isAvailable(account, to: viewer) else { continue }
+            let owner = account.owner?.isEmpty == false ? account.owner : nil
+            for limit in limits(account.usage, kind: pooled.kind) {
+                let window = LimitWindow(label: "", utilization: limit.utilization, resetsAt: limit.resetsAt)
+                guard let used = AccountUsageReading.liveUtilization(window, now: now) else { continue }
+                let row = WeeklyRemainingRow(
+                    accountId: accountId,
+                    kind: pooled.kind,
+                    scope: limit.scope,
+                    name: account.name ?? account.email ?? "Account",
+                    owner: owner,
+                    remaining: max(0, min(100, Int((100 - used).rounded()))),
+                    resetsAt: limit.resetsAt.flatMap(AccountUsageReading.parse)
+                )
+                if owner != nil { personal.append(row) } else { pool.append(row) }
+            }
+        }
+        return personal + pool
+    }
+
+    /// The tightest budget among `rows`.
+    static func lowest(_ rows: [WeeklyRemainingRow]) -> WeeklyRemainingRow? {
+        rows.min { $0.remaining < $1.remaining }
+    }
+
+    /// The day a window refills, as the row prints it: "now" once the reset
+    /// has passed, otherwise the short weekday. Nil when the account does not
+    /// say.
+    static func resetDay(_ resetsAt: Date?, now: Date = Date(), locale: Locale = .current) -> String? {
+        guard let resetsAt else { return nil }
+        if resetsAt <= now { return "now" }
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.setLocalizedDateFormatFromTemplate("EEE")
+        return formatter.string(from: resetsAt)
+    }
+
+    /// The exact refill time, for the row's spoken description.
+    static func resetDetail(_ resetsAt: Date?, now: Date = Date(), locale: Locale = .current) -> String? {
+        guard let resetsAt else { return nil }
+        if resetsAt <= now { return "Resets now" }
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.setLocalizedDateFormatFromTemplate("EEE MMM d HH:mm")
+        return "Resets \(formatter.string(from: resetsAt))"
+    }
+
+    /// Which account pool a model draws on. The catalog says so for every
+    /// model it lists (`accountProvider`); a preset resolves through its lead
+    /// model. Ids the catalog does not know fall back to the server's own
+    /// prefix rules (`accountProviderForModel`).
+    static func provider(forModel model: String, catalog: ModelCatalog?) -> AccountKind? {
+        if let option = catalog?.option(for: model) {
+            if let kind = AccountKind(providerKey: option.accountProvider) { return kind }
+            if let lead = option.composition?.first, lead != model {
+                return provider(forModel: lead, catalog: catalog)
+            }
+        }
+        let tail = model.hasPrefix("pi/") ? String(model.dropFirst(3)) : model
+        let upstream = tail.split(separator: "/", maxSplits: 1).count == 2
+            ? String(tail.split(separator: "/", maxSplits: 1)[0]) : nil
+        if upstream == "anthropic" || tail.hasPrefix("claude-") { return .claude }
+        if upstream == "openai" || tail.hasPrefix("gpt-") || tail.hasPrefix("codex-") { return .codex }
+        if upstream == "xai-oauth" { return .xai }
+        return nil
+    }
+
+    private static let claudeScopedFamilies = ["fable", "opus", "sonnet", "haiku"]
+
+    /// The limit that can stop `model` on one account. A Claude model with a
+    /// dedicated weekly bucket uses that bucket instead of the general 7-day
+    /// one; every other pool reads the account-wide rows.
+    static func rows(for model: String, in rows: [WeeklyRemainingRow]) -> [WeeklyRemainingRow] {
+        guard rows.first?.kind == .claude else { return rows }
+        let normalized = model.lowercased()
+        let family = normalized.contains("mythos")
+            ? "fable"
+            : claudeScopedFamilies.first { normalized.contains($0) }
+        guard let family else { return rows.filter { $0.scope == nil } }
+        let scoped = rows.filter { $0.scope?.lowercased().contains(family) == true }
+        return scoped.isEmpty ? rows.filter { $0.scope == nil } : scoped
+    }
+
+    /// The number for the account automatic routing will use: a usable pin,
+    /// otherwise the viewer's personal subscription before the shared pool.
+    /// Within a group, the account with the most model-specific headroom,
+    /// which is close enough to the pool's least-used choice without exposing
+    /// runner state.
+    static func readout(
+        rows: [WeeklyRemainingRow],
+        accounts: [PooledAccount],
+        viewer: String,
+        kind: AccountKind?,
+        model: String,
+        accountId: String?
+    ) -> WeeklyRemainingRow? {
+        let providerRows = kind.map { kind in rows.filter { $0.kind == kind } } ?? rows
+        struct Candidate {
+            let account: ProviderAccount
+            let row: WeeklyRemainingRow
+        }
+        let candidates: [Candidate] = accounts.compactMap { pooled in
+            guard kind == nil || pooled.kind == kind,
+                  isAvailable(pooled.account, to: viewer),
+                  let id = pooled.account.id else { return nil }
+            let own = self.rows(for: model, in: providerRows.filter { $0.accountId == id })
+            return lowest(own).map { Candidate(account: pooled.account, row: $0) }
+        }
+        let available = candidates.filter { $0.account.usable != false && $0.row.remaining > 0 }
+        func best(_ choices: [Candidate]) -> WeeklyRemainingRow? {
+            choices.max { $0.row.remaining < $1.row.remaining }?.row
+        }
+        if let accountId, !accountId.isEmpty,
+           let pinned = available.first(where: { $0.account.id == accountId }) {
+            return pinned.row
+        }
+        let personal = { (list: [Candidate]) in list.filter { $0.account.owner?.isEmpty == false } }
+        let pool = { (list: [Candidate]) in list.filter { !($0.account.owner?.isEmpty == false) } }
+        return best(personal(available))
+            ?? best(pool(available))
+            ?? best(personal(candidates))
+            ?? best(pool(candidates))
+            ?? lowest(providerRows)
+    }
+}

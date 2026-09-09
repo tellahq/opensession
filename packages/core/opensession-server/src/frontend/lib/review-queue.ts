@@ -146,6 +146,7 @@ export function reviewAskerFor(
       | "reviewRequest"
       | "prReviewRequested"
       | "prAuthor"
+      | "prRequester"
       | "prReviewedBy"
       | "prUpdatedAt"
     >[];
@@ -165,13 +166,16 @@ export function reviewAskerFor(
       return { name: request.by, viaPr: false };
   }
   for (const session of row.sessions) {
+    // A bot-authored PR is for its assignee; the server resolves that once
+    // (prRequester) so this face matches the native app's.
+    const login = session.prRequester || session.prAuthor;
     if (
-      session.prAuthor &&
+      login &&
       (session.prReviewRequested || []).some(
         (reviewer) => reviewer.toLowerCase() === key,
       )
     )
-      return { name: session.prAuthor, login: session.prAuthor, viaPr: true };
+      return { name: login, login, viaPr: true };
   }
   return null;
 }

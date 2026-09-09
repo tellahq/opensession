@@ -32,9 +32,10 @@ export const FLOATING_OVERLAY_LAYER = "z-[2147483647]";
 export const popupSurfaceClasses =
   "min-w-[180px] overflow-hidden rounded-popup [corner-shape:squircle] bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md outline-none origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0";
 
-/** The scroller inside the surface: a long list scrolls, the padding stays. */
+/** The scroller inside the surface: a long list scrolls, the padding stays.
+ * `touch-pan-y` keeps nested menu rows from claiming an iOS swipe as a press. */
 export const popupScrollClasses =
-  "max-h-[min(60vh,420px,var(--available-height))] overflow-y-auto overflow-x-hidden overscroll-contain p-1.5";
+  "max-h-[min(60dvh,420px,var(--available-height))] touch-pan-y overflow-y-auto overflow-x-hidden overscroll-contain p-1.5";
 
 /** One row. Highlight via Base UI's `data-highlighted` so keyboard navigation
  *  lights rows up the same way the pointer does. */

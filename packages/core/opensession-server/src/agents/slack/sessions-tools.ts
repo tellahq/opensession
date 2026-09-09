@@ -44,7 +44,6 @@ import {
   isWorkerActor,
   workerActor,
 } from "../../server/session-actors";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { userMatchesAny } from "../../server/shared/user-mappings";
 import { migrateSessionEngine } from "../../server/session-model-migration";
 import { resolveSessionRepoContext } from "../../server/session-repos";
@@ -361,12 +360,12 @@ function defaultReadSessionFile(id: string): Partial<NativeSessionFile> | null {
 }
 
 /**
- * Persist spawnDepth on the child's session file. The file is first written at
- * the opening run's `init` event (opensession.ts persist(), which builds it from
- * scratch — anything written earlier would be clobbered), so poll until it
- * exists and then MERGE the field; every later update goes through
- * touchNativeSession-style merges, so it sticks. The in-memory depth map
- * (below) covers the guard in the meantime.
+ * Persist spawnDepth on the child's session. The session document is first
+ * committed at the opening run's `init` event (opensession.ts persist(), which
+ * builds it from scratch — anything written earlier would be clobbered), so
+ * poll until its derived file exists and then MERGE the field through the
+ * metadata facade, the only writer of session documents. The in-memory depth
+ * map (below) covers the guard in the meantime.
  */
 async function defaultStampSpawnDepth(
   id: string,
@@ -378,8 +377,16 @@ async function defaultStampSpawnDepth(
       try {
         const data = JSON.parse(readFileSync(path, "utf-8"));
         if (data?.id) {
-          if (data.spawnDepth !== depth)
-            writeJsonAtomic(path, { ...data, spawnDepth: depth });
+          if (data.spawnDepth !== depth) {
+            // Lazy: session-cache pulls in the run stack, which this MCP
+            // module must not load at import time.
+            const { updateSessionFile } =
+              await import("../../server/session-cache");
+            await updateSessionFile(id, (current) => ({
+              ...current,
+              spawnDepth: depth,
+            }));
+          }
           return;
         }
       } catch {}

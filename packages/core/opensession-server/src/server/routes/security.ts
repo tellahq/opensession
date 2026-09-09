@@ -22,7 +22,7 @@ import {
   scannableRepos,
   updateProfile,
 } from "../security";
-import { invalidateSessionsCache } from "../session-cache";
+import { publishSessionChange } from "../session-cache";
 import { getSessionControl } from "../session-control";
 import { getRepo } from "../worktree";
 
@@ -84,7 +84,7 @@ export async function handleSecurityRoutes(
           { error: "Recurring scans support one repository at a time" },
           { status: 400 },
         );
-      const result = createAutomation({
+      const result = await createAutomation({
         name: `deepsec ${recurrence} scan — ${profile?.name || "custom"}`,
         prompt: buildScanPrompt(getRepo(repos[0]), profile, instructions),
         schedule: recurrence === "daily" ? "0 13 * * *" : "0 8 * * 0",
@@ -139,8 +139,8 @@ export async function handleSecurityRoutes(
       createdBy,
     });
     void executeScan(scan, {
-      onSessionCreated: () => {
-        invalidateSessionsCache();
+      onSessionCreated: (sessionId) => {
+        publishSessionChange(sessionId);
       },
     });
     return Response.json({ scan });

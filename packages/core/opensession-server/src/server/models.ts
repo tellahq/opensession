@@ -109,7 +109,11 @@ export function modelEfforts(
       : id.slice(0, slash);
   const slug = slash === -1 ? id : id.slice(slash + 1);
 
-  if (provider === "openai" && /^gpt-5\./.test(slug)) return OPENAI_EFFORTS;
+  if (
+    provider === "openai" &&
+    (/^gpt-5\./.test(slug) || slug === "gpt-6-astra")
+  )
+    return OPENAI_EFFORTS;
   if (provider === "anthropic") {
     if (slug.startsWith("claude-haiku-4-5")) return ["high", "max"];
     if (/^claude-(?:fable|opus|sonnet)-/.test(slug)) return CLAUDE_EFFORTS;
@@ -167,6 +171,7 @@ export const DEFAULT_BRIDGE_PICKER_MODELS = [
   "claude-opus-5",
   "claude-sonnet-5",
   "claude-haiku-4-5",
+  "gpt-6-astra",
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",
@@ -227,6 +232,12 @@ export const KNOWN_MODELS: ModelInfo[] = [
     provider: "codex",
     label: "Best available (Codex)",
     aliases: ["best", "best-available", "best-codex"],
+  },
+  {
+    id: "gpt-6-astra",
+    provider: "codex",
+    label: "GPT-6 Astra",
+    aliases: ["astra", "gpt6"],
   },
   {
     id: "gpt-5.6-sol",
@@ -480,7 +491,7 @@ export interface OrchestratorPreset {
 /**
  * Worker roles are stable while their backing model may follow the lead's
  * provider. Pi delegates them through Open Session worker sessions, so an
- * explicit cross-provider role such as `worker-sol` can deliberately stay on
+ * explicit cross-provider role such as `worker-astra` can deliberately stay on
  * OpenAI while Fable leads on Anthropic. Only orchestrator runs receive the
  * instructions that name these workers.
  */
@@ -544,21 +555,21 @@ export const ORCHESTRATOR_WORKER_AGENTS: Record<
       },
     },
   },
-  "worker-sol": {
+  "worker-astra": {
     label: "Implementation worker",
     description:
-      "Implementation worker: GPT-5.6 Sol at high effort executes one well-scoped " +
+      "Implementation worker: GPT-6 Astra at high effort executes one well-scoped " +
       "implementation task end to end. Give it exact files, constraints, and acceptance criteria.",
     bridges: {
       anthropic: {
-        model: "openai/gpt-5.6-sol",
+        model: "openai/gpt-6-astra",
         variant: "high",
-        label: "GPT-5.6 Sol",
+        label: "GPT-6 Astra",
       },
       openai: {
-        model: "openai/gpt-5.6-sol",
+        model: "openai/gpt-6-astra",
         variant: "high",
-        label: "GPT-5.6 Sol",
+        label: "GPT-6 Astra",
       },
     },
   },
@@ -610,13 +621,14 @@ export const ORCHESTRATOR_PRESETS: OrchestratorPreset[] = [
     workerAgents: ["worker", "worker-fast"],
   },
   {
+    // Keep the persisted preset id so existing selections follow this upgrade.
     id: "orchestrator/fable-sol",
-    label: "Orchestrator · Fable + Sol",
+    label: "Orchestrator · Fable + Astra",
     description:
-      "Fable 5.1 high leads planning, review, and integration; Sol high implements",
+      "Fable 5.1 high leads planning, review, and integration; Astra high implements",
     model: "claude-fable-5-1",
     effort: "high",
-    workerAgents: ["worker-sol"],
+    workerAgents: ["worker-astra"],
   },
   {
     id: "orchestrator/sol",
@@ -818,6 +830,7 @@ const CODEX_MODEL_ORDER = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
  */
 const FALLBACK_TIER: Record<string, number> = {
   "claude-fable-5-1": 3,
+  "gpt-6-astra": 3,
   "gpt-5.6-sol": 3,
   "claude-opus-5": 3,
   "gpt-5.6-terra": 3,

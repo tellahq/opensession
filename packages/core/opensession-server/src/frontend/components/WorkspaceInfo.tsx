@@ -624,6 +624,16 @@ function AgentReviewCard({
   const review = pr.osReview;
   const score = review?.confidence;
   const stale = !!review?.stale;
+  // Merge risk is the second axis: how hard a mistake is to undo, scored
+  // apart from quality. It only colours its own word, never the row.
+  const risk = review?.risk;
+  const riskTone = stale
+    ? "text-faint"
+    : risk === "high"
+      ? "text-red"
+      : risk === "medium"
+        ? "text-yellow"
+        : "text-dim";
   const actionable = pr.state === "OPEN";
   const active =
     (!!pr.reviewActive && !reviewCancelRequested) ||
@@ -834,6 +844,12 @@ function AgentReviewCard({
                     >
                       {score}/5
                     </span>
+                    <span className="text-faint"> · </span>
+                  </>
+                ) : null}
+                {risk ? (
+                  <>
+                    <span className={riskTone}>{risk} risk</span>
                     <span className="text-faint"> · </span>
                   </>
                 ) : null}

@@ -10,9 +10,9 @@
  * that browser); moving them here makes them per-user and synced across devices.
  */
 
-import { existsSync, readFileSync, readdirSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { userStore } from "./shared/user-store";
+import { catalogDocuments } from "./catalog-documents";
+import { documentField } from "./shared/catalog-user-store";
+import { catalogUserStore } from "./shared/catalog-user-store";
 import { broadcastToAll } from "./ws-hub";
 
 /** Keep session-id strings only, de-duped. Defines the empty list too. */
@@ -26,9 +26,13 @@ function clean(input: unknown): string[] {
   );
 }
 
-const store = userStore<string[]>({ name: "pins", field: "pins", clean });
+const store = catalogUserStore<string[]>({
+  name: "pins",
+  field: "pins",
+  clean,
+});
 
-export function getPins(user: string): string[] {
+export async function getPins(user: string): Promise<string[]> {
   return store.get(user);
 }
 
@@ -38,32 +42,33 @@ export function getPins(user: string): string[] {
  * for everyone, and would silently resurface the row on unarchive or when a
  * new session joins the pinned workspace.
  */
-export function unpinEverywhere(keys: string[]): void {
+export async function unpinEverywhere(keys: string[]): Promise<void> {
   const drop = new Set(keys.filter(Boolean));
-  const dir = store.dir();
-  if (!drop.size || !existsSync(dir)) return;
-  // Walks the files, not the users, so legacy-named files are scrubbed too.
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith(".json")) continue;
-    try {
-      const path = `${dir}/${file}`;
-      const pins = clean(JSON.parse(readFileSync(path, "utf8"))?.pins);
-      const next = pins.filter((p) => !drop.has(p));
-      if (next.length !== pins.length) writeJsonAtomic(path, { pins: next });
-    } catch {}
+  if (!drop.size) return;
+  const documents = catalogDocuments("pins");
+  for (const { key } of await documents.list()) {
+    await documents.update(key, (value) =>
+      value === null
+        ? null
+        : {
+            pins: clean(documentField(value, "pins")).filter(
+              (pin) => !drop.has(pin),
+            ),
+          },
+    );
   }
 }
 
 /** Replace a user's pins (de-duped, strings only). Returns the stored list. */
-export function setPins(user: string, pins: unknown): string[] {
+export async function setPins(user: string, pins: unknown): Promise<string[]> {
   return store.set(user, pins);
 }
 
 /** Add a session to the front of a user's pin list without disturbing order. */
-export function pinForUser(user: string, id: string): string[] {
-  const pins = getPins(user);
-  if (pins.includes(id)) return pins;
-  const next = setPins(user, [id, ...pins]);
+export async function pinForUser(user: string, id: string): Promise<string[]> {
+  const next = await store.update(user, (pins) =>
+    pins.includes(id) ? pins : [id, ...pins],
+  );
   broadcastToAll({ type: "pins_changed", user, pins: next });
   return next;
 }

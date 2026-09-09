@@ -21,8 +21,8 @@ import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 export interface SelfImproveContext {
   /** The owning automation's display name (for tool output only). */
   automationName: string;
-  /** Read this automation's own record, fresh from disk. */
-  getOwn: () => {
+  /** Read this automation's own record, fresh from the catalog. */
+  getOwn: () => Promise<{
     name: string;
     prompt: string;
     schedule: string;
@@ -30,12 +30,12 @@ export interface SelfImproveContext {
     repo?: string;
     model?: string;
     mcpServers?: string[];
-  } | null;
+  } | null>;
   /** Backup + persist a new prompt for this automation only. */
   updateOwnPrompt: (
     newPrompt: string,
     reason: string,
-  ) => { ok: true; backupPath: string } | { ok: false; error: string };
+  ) => Promise<{ ok: true; backupPath: string } | { ok: false; error: string }>;
 }
 
 function text(s: string) {
@@ -52,7 +52,7 @@ export function createSelfImproveMcpServer(ctx: SelfImproveContext) {
         `Read your own automation record ("${ctx.automationName}"): the exact prompt that produced this run, plus schedule/mode/repo/model. Read it before update_own_prompt — edits apply to the CURRENT stored prompt, which may already differ from what this run was started with.`,
         {},
         async () => {
-          const a = ctx.getOwn();
+          const a = await ctx.getOwn();
           if (!a)
             return text(
               "Could not read this automation's record (was it deleted?).",
@@ -82,7 +82,7 @@ export function createSelfImproveMcpServer(ctx: SelfImproveContext) {
             .describe("One line: what you changed and why (audited)."),
         },
         async (args: { new_prompt: string; reason: string }) => {
-          const res = ctx.updateOwnPrompt(args.new_prompt, args.reason);
+          const res = await ctx.updateOwnPrompt(args.new_prompt, args.reason);
           if (!res.ok) return text(res.error);
           return text(
             `Prompt updated (takes effect next run). Backup: \`${res.backupPath}\`. Mention this change — and why — in your Slack post/reply so a human sees it.`,

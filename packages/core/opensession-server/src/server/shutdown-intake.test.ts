@@ -20,7 +20,9 @@ describe("shutdown intake fence", () => {
         /return Response\.json\(\{ error: "Server restarting" \}, \{ status: 503 \}\)/g,
       )?.length,
     ).toBe(2);
-    expect(source).toContain("export function resumePendingAutomationRuns(");
+    expect(source).toContain(
+      "export async function resumePendingAutomationRuns(",
+    );
     expect(source).toContain("osSessionId: intent.sessionId");
     expect(source).toContain("acceptedAt: intent.acceptedAt");
     expect(source).toContain("const startedAt = new Date(acceptedAt)");

@@ -1,4 +1,11 @@
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 
@@ -29,7 +36,21 @@ afterAll(() => {
 
 const { handleProfileRoutes } = await import("./profile");
 const { getPins, setPins } = await import("../pins");
+const { SessionKernelStore, __setSessionKernelStoreForTest } =
+  await import("../session-kernel");
 import type { RouteContext } from "./context";
+
+// Per-user state now lives in the kernel catalog: each test gets an empty one.
+let store: InstanceType<typeof SessionKernelStore>;
+let previousStore: InstanceType<typeof SessionKernelStore> | undefined;
+beforeEach(() => {
+  store = new SessionKernelStore(":memory:");
+  previousStore = __setSessionKernelStoreForTest(store);
+});
+afterEach(() => {
+  __setSessionKernelStoreForTest(previousStore);
+  store.close();
+});
 
 function seedRoster(): void {
   writeFileSync(
@@ -185,7 +206,7 @@ describe("your own profile", () => {
   // the old spelling has to survive as an alias and the per-user state has to
   // travel. Without both, mentions stop resolving and the sidebar resets.
   test("a short-name change keeps the old name and carries state", async () => {
-    setPins("Ada", ["os-1"]);
+    await setPins("Ada", ["os-1"]);
     const res = await handleProfileRoutes(
       context("/api/profile", "PUT", {
         authUser: ADA,
@@ -197,7 +218,9 @@ describe("your own profile", () => {
     expect(body.renamedFrom).toBe("Ada");
     expect(body.aliases).toContain("Ada");
     expect(body.carriedState).toContain("pins");
-    expect(getPins("Augusta")).toEqual(["os-1"]);
+    expect(await getPins("Augusta")).toEqual(["os-1"]);
+    // A copy, not a move: the old spelling keeps its state as the rollback.
+    expect(await getPins("Ada")).toEqual(["os-1"]);
   });
 
   test("a signed-in person who is not on the roster cannot edit one", async () => {

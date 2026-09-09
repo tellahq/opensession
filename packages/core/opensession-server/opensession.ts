@@ -11,6 +11,7 @@ import {
 import { startAccountHealthMonitor } from "./src/server/account-health";
 import { startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
+import { installUnhandledRejectionGuard } from "./src/server/process-guards";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
 import { startPortalReaper } from "./src/server/portal-supervisor";
 import { startRunnerPortalReaper } from "./src/server/runner-portals";
@@ -103,6 +104,7 @@ import {
   recordRunOutcome,
   startSessionOwnershipWatchdog,
   primeSessionListIndex,
+  publishSessionChange,
   reconcileSessionMetadataExports,
   stopSessionOwnershipWatchdog,
 } from "./src/server/session-cache";
@@ -193,6 +195,9 @@ function isLoopbackHostname(hostname: string): boolean {
 // peers because those peers start only after the old gateway is fenced.
 const precheckRuntimePeers =
   process.env.OPENSESSION_GATEWAY_PRECHECK_PEERS === "1";
+// Before any effect: an unawaited kernel RPC rejecting during boot or serving
+// must log, not exit the gateway (see process-guards.ts).
+installUnhandledRejectionGuard();
 if (process.env.OPENSESSION_GATEWAY_ROLE === "standby")
   preloadPreparedFrontend();
 if (precheckRuntimePeers)
@@ -264,6 +269,16 @@ const g = globalThis as any;
 
 // The actor owns the writable kernel store before any gateway projection hydrates.
 if (!g.__opensessionBooted) await startSessionKernelActor();
+// Import legacy application documents before any sidebar or scheduler reads.
+// After cutover, their catalog is authoritative; requests never read the files.
+if (!g.__opensessionBooted) {
+  const { importApplicationCatalog } =
+    await import("./src/server/catalog-documents");
+  await importApplicationCatalog();
+  // Pure synchronous readers use this even when the list index has coverage.
+  const { warmWorkspacesAsync } = await import("./src/server/workspaces");
+  await warmWorkspacesAsync();
+}
 // The first list read fills the list index. With the actor up it can come
 // from the metadata catalog; before this point it would have to read every
 // session file. Prime it here so no later boot step or route pays that scan,
@@ -713,6 +728,14 @@ if (!g.__opensessionBooted) {
     }
   }
 
+  // One credential per process does both API calls and git transport. The
+  // retired git-only credential is inert; say so once, so an operator who
+  // still sets it knows to revoke it.
+  if (process.env.OPENSESSION_GITHUB_PUSH_TOKEN)
+    console.warn(
+      "[github] OPENSESSION_GITHUB_PUSH_TOKEN is no longer used: agent runs push with the App installation token. Revoke the token and remove the variable.",
+    );
+
   // Pi's SDK can take over a minute to load cold. Keep the loader import-inert,
   // then warm it explicitly from the process boot owner when Pi is enabled.
   void import("./src/server/pi-config")
@@ -776,7 +799,7 @@ if (!g.__opensessionBooted) {
     // records and anything created through the UI are unaffected.
     if (configuredIntegration("seeds").enabled === true) {
       try {
-        ensureConfiguredAutomations();
+        await ensureConfiguredAutomations();
       } catch (e) {
         console.error("[seeds] Failed to seed instance automations:", e);
       }
@@ -793,10 +816,11 @@ if (!g.__opensessionBooted) {
     }
 
     // Cron-scheduled automations + internal event bus (agents → automations)
-    const onAutomationSession = () => invalidateSessionsCache();
+    const onAutomationSession = (sessionId: string) =>
+      publishSessionChange(sessionId);
     setEventSessionCallback(onAutomationSession);
     const resumedAutomationIntents =
-      resumePendingAutomationRuns(onAutomationSession);
+      await resumePendingAutomationRuns(onAutomationSession);
     if (resumedAutomationIntents)
       console.log(
         `[automations] Resumed ${resumedAutomationIntents} pre-launch intent(s)`,
@@ -809,9 +833,7 @@ if (!g.__opensessionBooted) {
     hydrateScheduledPromptTimers();
 
     // Archive triage sessions when their Plain ticket is done.
-    startPlainArchiveSweep(() => {
-      invalidateSessionsCache();
-    });
+    startPlainArchiveSweep();
 
     // Unattended installs stage a Claude token in the env or a file; import it
     // into the pool before anything can ask for an account.
@@ -870,9 +892,7 @@ if (!g.__opensessionBooted) {
 
     // Re-try sidebar titles whose one-shot died in flight (a restart, or an
     // engine-spawn outage) — without this they stay raw forever.
-    startGeneratedTitleSweep(() => {
-      invalidateSessionsCache();
-    });
+    startGeneratedTitleSweep(publishSessionChange);
   } else {
     agents = [];
     g.__agents = agents;
@@ -975,7 +995,7 @@ if (!g.__opensessionBooted) {
                 }
                 // The in-process settleRun died with the restart — close the
                 // automation ledger entry here or it stays "running" forever.
-                settleResumedAutomationRun(
+                await settleResumedAutomationRun(
                   bksSessionId,
                   failed
                     ? terminalEvent.content ||
@@ -1004,7 +1024,7 @@ if (!g.__opensessionBooted) {
                 return undefined;
               return makeAskHandler(bksSessionId);
             },
-            (bksSessionId, user) => {
+            async (bksSessionId, user) => {
               // Fail-soft: a broken rebuild must degrade the resumed run to
               // tool-less, never wedge the boot-resume sweep.
               try {
@@ -1019,7 +1039,10 @@ if (!g.__opensessionBooted) {
                 // pi — its rebuilt proxies resolve through run-rpc's
                 // fail-closed automation fallback either way.
                 if (session.automation)
-                  return automationResumeMcpForSession(session, bksSessionId);
+                  return await automationResumeMcpForSession(
+                    session,
+                    bksSessionId,
+                  );
                 const servers: Record<string, unknown> = session.goalId
                   ? {
                       ...interactiveMcpServers(user, bksSessionId),
@@ -1117,6 +1140,11 @@ if (!g.__opensessionBooted) {
       // readiness prerequisite and only extended every handoff.
     }, 0);
   } else {
+    // A dev instance has no recovery stage to wait for, but its actors still
+    // need durable timers and creation effects to wake: without the runtime
+    // every create waits on a workspace effect nobody executes and times out.
+    // The state dir is isolated, so this touches nothing live.
+    startSessionKernelRuntime();
     setServiceReadiness("ready");
   }
 

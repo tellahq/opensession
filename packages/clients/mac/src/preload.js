@@ -19,8 +19,10 @@ contextBridge.exposeInMainWorld("os1", {
     inlineAdd: true,
     list: () => ipcRenderer.invoke("os1:organizations-list"),
     switch: (id) => ipcRenderer.send("os1:organizations-switch", id),
-    add: (url, check = true) =>
-      ipcRenderer.invoke("os1:organizations-add", url, check),
+    // `activate` false adds the account without switching this window to it.
+    add: (url, check = true, activate = true) =>
+      ipcRenderer.invoke("os1:organizations-add", url, check, activate),
+    remove: (id) => ipcRenderer.invoke("os1:organizations-remove", id),
     manage: () => ipcRenderer.send("os1:organizations-manage"),
   },
   // Electron does not connect Chromium's Web Speech API to a recognition

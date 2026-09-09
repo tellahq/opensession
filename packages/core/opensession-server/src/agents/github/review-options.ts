@@ -9,7 +9,8 @@
  *     "minInlineSeverity": "P3",                        // post inline comments at or above this
  *     "summaryOnlyOverFiles": 80,                       // giant PRs get a summary, no inline noise
  *     "skipKeywords": ["[skip-review]"],                // in the PR title → no auto review
- *     "secretScan": true                                // TruffleHog scan of the PR's added lines
+ *     "secretScan": true,                               // TruffleHog scan of the PR's added lines
+ *     "mergeRisk": true                                 // diff-only merge-risk (recoverability) score
  *   }
  *
  * Auto-review gating (skipKeywords) reads the repo's MAIN checkout copy (the
@@ -29,6 +30,8 @@ export interface ReviewOptions {
   testOnBase: boolean;
   /** Deterministic TruffleHog secret scan on the PR's added lines. */
   secretScan: boolean;
+  /** Separate tool-less merge-risk score (merge-risk.ts) next to quality. */
+  mergeRisk: boolean;
 }
 
 export const REVIEW_OPTION_DEFAULTS: ReviewOptions = {
@@ -38,6 +41,7 @@ export const REVIEW_OPTION_DEFAULTS: ReviewOptions = {
   skipKeywords: ["[skip-review]"],
   testOnBase: true,
   secretScan: true,
+  mergeRisk: true,
 };
 
 const OPTIONS_FILE = ".os-review.json";
@@ -81,6 +85,7 @@ export function normalizeReviewOptions(raw: any): ReviewOptions {
       typeof raw.testOnBase === "boolean" ? raw.testOnBase : d.testOnBase,
     secretScan:
       typeof raw.secretScan === "boolean" ? raw.secretScan : d.secretScan,
+    mergeRisk: typeof raw.mergeRisk === "boolean" ? raw.mergeRisk : d.mergeRisk,
   };
 }
 

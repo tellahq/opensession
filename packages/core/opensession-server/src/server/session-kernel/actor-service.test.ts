@@ -356,6 +356,142 @@ describe("session kernel actor service", () => {
     }
   });
 
+  test("gives a replacement lane time to start after an actor turn times out", async () => {
+    const failures: Error[] = [];
+    const isolatedService = await startSessionKernelService({
+      port: 0,
+      token,
+      workerCount: 1,
+      responseTimeoutMs: 100,
+      databasePath: join(
+        stateDir,
+        "sessions",
+        "delayed-restart-session-kernel.sqlite",
+      ),
+      workerUrl: new URL(
+        "./testing/delayed-restart-worker.ts",
+        import.meta.url,
+      ),
+      onFailed: (error) => failures.push(error),
+    });
+    try {
+      const helloResponse = await fetch(`${isolatedService.url}/rpc`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: SESSION_KERNEL_TRANSPORT_VERSION,
+          actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+          request: {
+            t: "hello",
+            rpcId: "delayed-restart-handshake",
+            version: SESSION_KERNEL_ACTOR_VERSION,
+          },
+        }),
+      });
+      const hello = (await helloResponse.json()) as { serviceEpoch: string };
+      expect(helloResponse.status).toBe(200);
+
+      const timedOut = await fetch(`${isolatedService.url}/rpc`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: SESSION_KERNEL_TRANSPORT_VERSION,
+          actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+          serviceEpoch: hello.serviceEpoch,
+          request: {
+            t: "call",
+            rpcId: "stalled-session-read",
+            outputBytes: 1024,
+            request: {
+              t: "store",
+              method: "turnSnapshot",
+              args: ["slow-session"],
+            },
+          },
+        }),
+      });
+      expect(timedOut.status).toBe(429);
+
+      await Bun.sleep(400);
+      expect(failures).toEqual([]);
+      expect((await fetch(`${isolatedService.url}/ready`)).status).toBe(200);
+    } finally {
+      isolatedService.stop();
+    }
+  });
+
+  test("a fail-stop withdraws the listener and reports through onFailed", async () => {
+    const failures: Error[] = [];
+    const isolatedService = await startSessionKernelService({
+      port: 0,
+      token,
+      workerCount: 1,
+      responseTimeoutMs: 100,
+      workerUrl: new URL(
+        "./testing/mutation-timeout-worker.ts",
+        import.meta.url,
+      ),
+      onFailed: (error) => failures.push(error),
+    });
+    try {
+      const helloResponse = await fetch(`${isolatedService.url}/rpc`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: SESSION_KERNEL_TRANSPORT_VERSION,
+          actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+          request: {
+            t: "hello",
+            rpcId: "mutation-timeout-handshake",
+            version: SESSION_KERNEL_ACTOR_VERSION,
+          },
+        }),
+      });
+      const hello = (await helloResponse.json()) as { serviceEpoch: string };
+      expect(helloResponse.status).toBe(200);
+
+      // A catalog-lane mutation that never answers is ambiguous placement
+      // authority: the service fail-stops instead of retrying it.
+      await fetch(`${isolatedService.url}/rpc`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: SESSION_KERNEL_TRANSPORT_VERSION,
+          actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+          serviceEpoch: hello.serviceEpoch,
+          request: {
+            t: "call",
+            rpcId: "stalled-mutation",
+            outputBytes: 1024,
+            request: { t: "store", method: "clearAskRecords", args: [] },
+          },
+        }),
+      }).catch(() => undefined);
+      for (let attempt = 0; attempt < 50 && !failures.length; attempt += 1)
+        await Bun.sleep(10);
+      expect(failures.map((error) => error.message)).toEqual([
+        "Session actor lane 0 response timed out",
+      ]);
+      // The listener is gone: a process that stays alive here is a wedge that
+      // only an operator restart clears, which is why the entry point exits.
+      await expect(fetch(`${isolatedService.url}/ready`)).rejects.toThrow();
+    } finally {
+      isolatedService.stop();
+    }
+  });
+
   test("accepts the transport worker's first message immediately", async () => {
     const previousToken = process.env.OPENSESSION_SESSION_KERNEL_TOKEN;
     const previousUrl = process.env.OPENSESSION_SESSION_KERNEL_URL;
@@ -1083,6 +1219,112 @@ describe("session kernel actor service", () => {
       });
       lock.exec("COMMIT;");
       expect(await active).toMatchObject({ t: "call_result", status: -1 });
+    } finally {
+      try {
+        lock.exec("ROLLBACK;");
+      } catch {}
+      lock.close();
+    }
+  });
+
+  test("a central catalog write never waits on a wedged session mailbox", async () => {
+    const sessionId = "central-write-session";
+    await rpc({
+      t: "call",
+      rpcId: "central-write-seed",
+      outputBytes: 256 * 1024,
+      request: {
+        t: "store",
+        method: "setRunState",
+        args: [{ sessionId, state: "idle", event: "seed" }],
+      },
+    });
+    const isolatedRoot = join(stateDir, "sessions", "session-kernel-sessions");
+    const lock = new Database(
+      sessionKernelSessionDbPath(sessionId, isolatedRoot),
+    );
+    lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
+    try {
+      // An unrelated session mutation that holds its mailbox well past the
+      // 100ms global barrier.
+      const active = rpc({
+        t: "call",
+        rpcId: "central-write-active",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "setRunState",
+          args: [{ sessionId, state: "idle", event: "active" }],
+        },
+      });
+      await Bun.sleep(25);
+
+      const namespace = `central-${crypto.randomUUID()}`;
+      const putStartedAt = Date.now();
+      const put = await rpc({
+        t: "call",
+        rpcId: "central-write-put",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "reduce",
+          command: {
+            kind: "catalog_document",
+            commandId: "central-write-put-command",
+            request: {
+              op: "put",
+              namespace,
+              key: "a",
+              expectedRev: null,
+              value: "v1",
+              requestId: "central-write-put-request",
+            },
+          },
+        },
+      });
+      expect(put).toMatchObject({ t: "call_result", status: 1 });
+      expect(JSON.parse(put.body)).toMatchObject({
+        result: { status: "committed", rev: 1 },
+      });
+      expect(Date.now() - putStartedAt).toBeLessThan(400);
+      const read = await rpc({
+        t: "call",
+        rpcId: "central-write-get",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "reduce",
+          command: {
+            kind: "catalog_document",
+            commandId: "central-write-get-command",
+            request: { op: "get", namespace, key: "a" },
+          },
+        },
+      });
+      expect(JSON.parse(read.body)).toMatchObject({
+        result: { key: "a", value: "v1", rev: 1 },
+      });
+
+      // A true global request still takes the barrier and reports the wedge.
+      const global = await fetch(`${service.url}/rpc`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: SESSION_KERNEL_TRANSPORT_VERSION,
+          actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+          serviceEpoch,
+          request: { t: "stats", rpcId: "central-write-global" },
+        }),
+      });
+      expect(global.status).toBe(429);
+      expect(await global.json()).toMatchObject({
+        error: expect.stringContaining("global barrier timed out"),
+      });
+      lock.exec("COMMIT;");
+      // The wedged mutation completes once the lock clears; whether it wins or
+      // gives up depends only on its own busy timeout.
+      expect(await active).toMatchObject({ t: "call_result" });
     } finally {
       try {
         lock.exec("ROLLBACK;");

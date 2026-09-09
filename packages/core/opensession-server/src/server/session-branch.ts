@@ -174,9 +174,9 @@ export async function moveSessionToBranch(
     repo: repo.id,
   });
   if (session.workspaceId) {
-    const workspace = getWorkspace(session.workspaceId);
+    const workspace = await getWorkspace(session.workspaceId);
     if (workspace && !workspace.worktreeDir)
-      updateWorkspace(workspace.id, { branch, worktreeDir });
+      await updateWorkspace(workspace.id, { branch, worktreeDir });
   }
   return {
     branch,

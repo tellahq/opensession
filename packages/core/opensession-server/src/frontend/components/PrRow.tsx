@@ -1,5 +1,6 @@
 import React from "react";
 import type { ReviewQueueItem } from "../lib/review-queue";
+import { isBotAuthor } from "../lib/pr-comments";
 import { prStatusMark } from "../lib/pr-status";
 import {
   SIDEBAR_HOVER_LAYER,
@@ -130,8 +131,10 @@ export function PrRow({
           {needsMyReview && (
             <ReviewAskerFace
               asker={{
+                // `person` already falls back to the assignee behind a
+                // bot-authored PR; the bot's login must not picture it.
                 name: item.pr.person || item.pr.author,
-                login: item.pr.author,
+                login: isBotAuthor(item.pr.author) ? undefined : item.pr.author,
                 viaPr: true,
               }}
             />

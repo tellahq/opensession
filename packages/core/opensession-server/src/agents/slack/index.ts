@@ -174,7 +174,7 @@ export async function dispatchSlackEvent(payload: any): Promise<void> {
     !event.subtype &&
     !event.thread_ts &&
     !(event.text || "").includes(`<@${slackBotUserId}>`) &&
-    isChannelWatched(event.channel)
+    (await isChannelWatched(event.channel))
   ) {
     const watchId = `watch-${event.channel}-${event.ts}`;
     if (!isEventProcessed(watchId)) {
@@ -182,7 +182,7 @@ export async function dispatchSlackEvent(payload: any): Promise<void> {
       const u = event.user
         ? await resolveSlackUser(event.user)
         : { name: "Unknown", avatarUrl: undefined };
-      fireAutomationsForSlackChannel(
+      await fireAutomationsForSlackChannel(
         event.channel,
         JSON.stringify(
           {

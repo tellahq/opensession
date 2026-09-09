@@ -87,12 +87,14 @@ export function ownedWorktree(dir: string | null | undefined): string | null {
  * legacy sessions carry pre-rename branch/repo names getRepo can't resolve,
  * so unresolvable repos are skipped rather than guessed at.
  */
-function workspaceForBranch(session: UnifiedSession): Workspace | null {
+async function workspaceForBranch(
+  session: UnifiedSession,
+): Promise<Workspace | null> {
   if (!session.branch || !ownedWorktree(session.worktreeDir)) return null;
   try {
     const repo = getRepo(session.repo || undefined);
     if (session.branch === repo.defaultBranch) return null;
-    return findWorkspaceByBranch(repo.id, session.branch);
+    return await findWorkspaceByBranch(repo.id, session.branch);
   } catch {
     return null;
   }
@@ -138,11 +140,14 @@ const NAME_BUDGET = 40;
  * named after a real git branch is untouched: the key is `<source>-<name>`
  * matched against the session's own id, which no branch name can spell.
  */
-export function settleProvisionalNames(sessions: UnifiedSession[]): void {
+export async function settleProvisionalNames(
+  sessions: UnifiedSession[],
+): Promise<void> {
   let budget = NAME_BUDGET;
   for (const session of sessions) {
     if (budget <= 0) return;
     if (!session.workspaceId || !session.title) continue;
+    // The projection is warm here: the list path warms it before assembling.
     const name = workspaceName(session.workspaceId);
     // The one name that can only have come from the fallback: this session's
     // own key. A titleless session's title IS that key too (scanSlackSessions
@@ -151,7 +156,7 @@ export function settleProvisionalNames(sessions: UnifiedSession[]): void {
     if (session.title === name) continue;
     budget--;
     try {
-      updateWorkspace(session.workspaceId, { name: session.title });
+      await updateWorkspace(session.workspaceId, { name: session.title });
     } catch (e) {
       console.error(
         `[session-workspace] failed to name ${session.workspaceId}:`,
@@ -176,11 +181,30 @@ function persist(sessionId: string, workspaceId: string): void {
 }
 
 /**
+ * Re-apply filings whose session write has not landed yet, memory only. The
+ * sync list assembly (getAllSessions) can do no catalog I/O, so this is the
+ * whole of its workspace step; the async assembly runs it as the first step
+ * of ensureSessionWorkspaces.
+ */
+export function applyPendingSessionWorkspaces(
+  sessions: UnifiedSession[],
+): void {
+  for (const session of sessions) {
+    if (session.workspaceId || session.archived) continue;
+    const inflight = pending.get(session.id);
+    if (inflight) session.workspaceId = inflight;
+  }
+}
+
+/**
  * File every workspace-less session into a workspace, minting one where needed.
  * Mutates `sessions` in place (the caller's freshly assembled list) and writes
- * the link through best-effort — never throws, never blocks the scan.
+ * the link through best-effort — never throws. The async list assembly awaits
+ * it, so a brand-new orphan is filed on the scan that first sees it.
  */
-export function ensureSessionWorkspaces(sessions: UnifiedSession[]): void {
+export async function ensureSessionWorkspaces(
+  sessions: UnifiedSession[],
+): Promise<void> {
   // Never file from a test process: bun test runs every suite in ONE process,
   // so a fixture session listed by any test would get filed through whatever
   // dirs the module snapshots captured — for years of full-suite runs that
@@ -192,7 +216,7 @@ export function ensureSessionWorkspaces(sessions: UnifiedSession[]): void {
   // A workspace already filed may still be wearing the name it was minted
   // with before its session had a title. Runs whether or not anything needs
   // filing this scan.
-  settleProvisionalNames(sessions);
+  await settleProvisionalNames(sessions);
   // Archived sessions don't render, so they don't need one until they come back:
   // the same sweep files them on the scan right after an un-archive.
   const orphans = sessions.filter(
@@ -205,7 +229,8 @@ export function ensureSessionWorkspaces(sessions: UnifiedSession[]): void {
     const inflight = pending.get(session.id);
     // Drop a stale entry if the workspace was deleted out from under us, so the
     // session gets a new one instead of pointing at nothing.
-    if (inflight && getWorkspace(inflight)) session.workspaceId = inflight;
+    if (inflight && (await getWorkspace(inflight)))
+      session.workspaceId = inflight;
     else {
       if (inflight) pending.delete(session.id);
       fresh.push(session);
@@ -231,16 +256,16 @@ export function ensureSessionWorkspaces(sessions: UnifiedSession[]): void {
       // already working this branch — before minting a second one over it
       // (a sibling session may be filed there already).
       const workspace =
-        (dir ? findWorkspaceByWorktree(dir) : null) ??
-        workspaceForBranch(group[0]) ??
-        createWorkspace({
+        (dir ? await findWorkspaceByWorktree(dir) : null) ??
+        (await workspaceForBranch(group[0])) ??
+        (await createWorkspace({
           name: nameFor(group, !!dir),
           repo: group[0].repo,
           createdBy: group[0].startedBy || "Anonymous",
           createdAt: group[0].createdAt,
           ...(group[0].branch ? { branch: group[0].branch } : {}),
           ...(dir ? { worktreeDir: dir } : {}),
-        });
+        }));
       for (const session of group) {
         session.workspaceId = workspace.id;
         pending.set(session.id, workspace.id);

@@ -12,6 +12,8 @@ export type DeferredMergeHandle = {
 type DeferredMergeEntry = {
   token: number;
   phase: Exclude<DeferredMergePhase, "idle">;
+  /** When the scheduled merge fires, in `Date.now()` terms. */
+  deadline: number;
   timer: ReturnType<typeof setTimeout> | null;
   run: () => void;
   undo: UndoHandle | null;
@@ -51,6 +53,13 @@ export function deferredMergePhase(key: string | null): DeferredMergePhase {
   return entries.get(key)?.phase ?? "idle";
 }
 
+/** The moment a scheduled merge will run, or null once it is no longer undoable. */
+export function deferredMergeDeadline(key: string | null): number | null {
+  if (!key) return null;
+  const entry = entries.get(key);
+  return entry?.phase === "scheduled" ? entry.deadline : null;
+}
+
 /**
  * Hold one merge per PR for an undo window. State stays module-level so a
  * scheduled merge survives navigation and every mounted surface sees it.
@@ -66,6 +75,7 @@ export function scheduleDeferredMerge(
   const entry: DeferredMergeEntry = {
     token,
     phase: "scheduled",
+    deadline: Date.now() + delayMs,
     timer: null,
     run,
     undo: null,

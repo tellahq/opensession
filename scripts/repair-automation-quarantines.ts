@@ -17,12 +17,11 @@
  *   bun scripts/repair-automation-quarantines.ts
  *   sudo systemctl start opensession
  */
-import { dirname } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { assertServicesStopped } from "./migrate-actor-transcripts";
-import {
-  listAutomations,
-  type AutomationRun,
-} from "../packages/core/opensession-server/src/server/automations";
+import type { AutomationRun } from "../packages/core/opensession-server/src/server/automations";
+import { stateDir } from "../packages/core/opensession-server/src/server/paths";
 import { activeRunRecords } from "../packages/core/opensession-server/src/server/run-journal";
 import { sessionKernelDbPath } from "../packages/core/opensession-server/src/server/session-kernel/store";
 import {
@@ -31,12 +30,37 @@ import {
 } from "../packages/core/opensession-server/src/server/session-kernel/automation-quarantine-repair";
 
 /**
+ * Automation records from the catalog's legacy JSON export. The live store is
+ * the session kernel's central catalog, which this job runs without; every
+ * committed mutation also lands in the export directory, so with the services
+ * stopped the export is the complete ledger.
+ */
+export function exportedAutomations(
+  directory = stateDir("automations"),
+): Array<{ runs?: AutomationRun[] }> {
+  let files: string[];
+  try {
+    files = readdirSync(directory);
+  } catch {
+    return [];
+  }
+  return files
+    .filter((file) => file.endsWith(".json"))
+    .map(
+      (file) =>
+        JSON.parse(readFileSync(join(directory, file), "utf8")) as {
+          runs?: AutomationRun[];
+        },
+    );
+}
+
+/**
  * The automation ledger's terminal verdict per session. This is the durable
  * receipt that `runAutomation` drained its stream and reached its completion
  * tail — the exact state the missing settlement stranded.
  */
 export function automationLedgerVerdicts(
-  automations: Array<{ runs?: AutomationRun[] }> = listAutomations(),
+  automations: Array<{ runs?: AutomationRun[] }> = exportedAutomations(),
 ): Map<string, AutomationLedgerStatus> {
   const verdicts = new Map<string, AutomationLedgerStatus>();
   for (const automation of automations) {

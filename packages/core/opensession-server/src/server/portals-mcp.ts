@@ -7,6 +7,7 @@ import {
   getSandboxPreviewStatus,
   recipeStartOptions,
   sandboxPreviewIdentityContext,
+  seedHostEnvFiles,
 } from "./preview";
 import {
   listPortalServices,
@@ -66,6 +67,56 @@ export interface PortalsMcpContext {
 function result(value: string) {
   return { content: [{ type: "text" as const, text: value }] };
 }
+
+/**
+ * How long a Portal tool waits for readiness before answering. The MCP call
+ * itself times out at 120s; a declared dev server may take 180s to boot, and
+ * an answer that arrives after the client gave up reads as a failure, so the
+ * agent starts the Portal again on top of the one still booting.
+ */
+export const PORTAL_TOOL_WAIT_MS = 90_000;
+
+export async function settleWithin<T>(
+  promise: Promise<T>,
+  ms: number,
+): Promise<{ settled: true; value: T } | { settled: false }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const pending = new Promise<{ settled: false }>((resolve) => {
+    timer = setTimeout(() => resolve({ settled: false }), ms);
+  });
+  try {
+    return await Promise.race([
+      promise.then((value) => ({ settled: true as const, value })),
+      pending,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The answer for a Portal still booting when the tool must reply: where it is
+ * and what to do, instead of a timeout the agent reads as failure. The start
+ * keeps running and records awake or failed in the registry.
+ */
+async function stillStarting(
+  ctx: PortalsMcpContext,
+  dir: string,
+  sandbox: Sandbox | null,
+  name: string,
+  started: Promise<unknown>,
+): Promise<string> {
+  void started.catch(() => {});
+  const portals = sandbox
+    ? await listSandboxPortalServices(sandbox)
+    : await listPortalServices(dir);
+  const portal = portals.find((candidate) => candidate.name === name);
+  const where = portal ? ` on port ${portal.port}` : "";
+  return (
+    `${name} is still starting${where}. Do not start it again: check list_portals ` +
+    `in a minute; it reports the URL once something listens, or the error if it died.`
+  );
+}
 function workspace(ctx: PortalsMcpContext): string | Error {
   const dir = ctx.worktreeDir();
   return dir ? dir : new Error("This session has no workspace for a Portal.");
@@ -122,18 +173,23 @@ async function startPortalForContext(
     });
     return `${portal.name} is ready at ${(await runnerPortalUrl(portal)) ?? "its authenticated Portal URL"}.`;
   }
-  const portal = sandbox
-    ? await startSandboxPortalService({
+  if (!sandbox) seedHostEnvFiles(dir);
+  const starting = sandbox
+    ? startSandboxPortalService({
         sessionId: ctx.sessionId,
         sandbox,
         ...input,
         env: sandboxPortalEnv(ctx, sandbox),
       })
-    : await startPortalService({
+    : startPortalService({
         sessionId: ctx.sessionId,
         worktreeDir: dir,
         ...input,
       });
+  const outcome = await settleWithin(starting, PORTAL_TOOL_WAIT_MS);
+  if (!outcome.settled)
+    return stillStarting(ctx, dir, sandbox, input.name, starting);
+  const portal = outcome.value;
   const status = await portalStatus(ctx, dir, sandbox);
   const service = status.services.find(
     (candidate) => candidate.key === portal.key,
@@ -283,7 +339,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
                 const service = status.services.find(
                   (candidate) => candidate.key === portal.key,
                 );
-                return `${portal.name}\nstate: ${portal.state}\nport: ${portal.port}\nurl: ${service?.previewUrl ?? "not ready"}${portal.description ? `\ndescription: ${portal.description}` : ""}`;
+                return `${portal.name}\nstate: ${portal.state}\nport: ${portal.port}\nurl: ${service?.previewUrl ?? "not ready"}${portal.description ? `\ndescription: ${portal.description}` : ""}${portal.state === "failed" && portal.lastError ? `\nerror: ${portal.lastError}` : ""}`;
               })
               .join("\n\n"),
           );
@@ -348,12 +404,21 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
             if (recipe) {
               const options = recipeStartOptions(recipe);
               if (sandbox) {
-                const portal = await restartSandboxPortalService({
+                const restarting = restartSandboxPortalService({
                   sessionId: ctx.sessionId,
                   sandbox,
                   ...options,
                   env: sandboxPortalEnv(ctx, sandbox),
                 });
+                const outcome = await settleWithin(
+                  restarting,
+                  PORTAL_TOOL_WAIT_MS,
+                );
+                if (!outcome.settled)
+                  return result(
+                    await stillStarting(ctx, dir, sandbox, name, restarting),
+                  );
+                const portal = outcome.value;
                 const refreshed = await portalStatus(ctx, dir, sandbox);
                 return result(
                   `${portal.name} restarted at ${refreshed.services.find((candidate) => candidate.key === portal.key)?.previewUrl ?? "its authenticated Portal URL"}.`,
@@ -380,18 +445,24 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
                 `${portal.name} restarted at ${(await runnerPortalUrl(portal)) ?? "its authenticated Portal URL"}.`,
               );
             }
-            const portal = sandbox
-              ? await restartSandboxPortalService({
+            const restarting = sandbox
+              ? restartSandboxPortalService({
                   sessionId: ctx.sessionId,
                   sandbox,
                   name,
                   env: sandboxPortalEnv(ctx, sandbox),
                 })
-              : await restartPortalService({
+              : restartPortalService({
                   sessionId: ctx.sessionId,
                   worktreeDir: dir,
                   name,
                 });
+            const outcome = await settleWithin(restarting, PORTAL_TOOL_WAIT_MS);
+            if (!outcome.settled)
+              return result(
+                await stillStarting(ctx, dir, sandbox, name, restarting),
+              );
+            const portal = outcome.value;
             const refreshed = await portalStatus(ctx, dir, sandbox);
             return result(
               `${portal.name} restarted at ${refreshed.services.find((candidate) => candidate.key === portal.key)?.previewUrl ?? "its authenticated Portal URL"}.`,

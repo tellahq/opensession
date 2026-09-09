@@ -1,5 +1,6 @@
-import { listAutomations } from "./automations";
-import { defaultRepo } from "./config";
+import { catalogDocuments } from "./catalog-documents";
+import { documentField } from "./shared/catalog-user-store";
+import { canonicalRepoId, defaultRepo } from "./config";
 import { getHides } from "./hides";
 import { getLanes } from "./lanes";
 import { listMentions } from "./mentions";
@@ -7,7 +8,7 @@ import { getPins } from "./pins";
 import { getSnoozes } from "./snoozes";
 import { userMatchesAny } from "./shared/user-mappings";
 import type { SessionPrRef, UnifiedSession } from "./types";
-import { getWorkspace, type Workspace } from "./workspaces";
+import type { Workspace } from "./workspaces";
 
 export interface SidebarSessionScope {
   user: string;
@@ -83,49 +84,77 @@ export function sidebarSessionScopeKey(scope: SidebarSessionScope): string {
   ].join("\u0000");
 }
 
-/** Load the per-person overlays that decide which sidebar rows exist. */
-export function loadSidebarSessionScopeContext(
+/** Read catalog-owned overlays. This path has no file or SQLite fallback. */
+export async function loadSidebarSessionScopeContext(
   scope: SidebarSessionScope,
   sessions: readonly UnifiedSession[],
-): SidebarSessionScopeContext {
-  const workspaces = new Map<string, Pick<Workspace, "createdBy" | "repo">>();
-  for (const session of sessions) {
-    if (!session.workspaceId || workspaces.has(session.workspaceId)) continue;
-    const workspace = getWorkspace(session.workspaceId);
-    if (workspace)
-      workspaces.set(session.workspaceId, {
-        createdBy: workspace.createdBy,
-        repo: workspace.repo,
-      });
-  }
-
-  const automations = new Map<string, AutomationAudience>();
-  try {
-    for (const automation of listAutomations()) {
-      const workspaceRepo = automation.workspaceId
-        ? getWorkspace(automation.workspaceId)?.repo
-        : undefined;
-      const audience = {
-        owner: automation.owner,
-        repo: automation.repo,
-        workspaceRepo,
-      };
-      automations.set(automation.id, audience);
-      automations.set(automation.name, audience);
-    }
-  } catch {
-    // A missing or temporarily unreadable automation store should not empty
-    // the person's ordinary sidebar rows.
-  }
-
-  return {
-    pins: new Set(getPins(scope.user)),
-    lanes: new Set(Object.keys(getLanes(scope.user))),
-    snoozes: new Set(Object.keys(getSnoozes(scope.user))),
-    hides: new Set(Object.keys(getHides(scope.user))),
-    mentions: new Set(
-      listMentions(scope.user).map((mention) => mention.sessionId),
+): Promise<SidebarSessionScopeContext> {
+  const [definitions, pins, lanes, snoozes, hides, mentions] =
+    await Promise.all([
+      catalogDocuments("automations").list(),
+      getPins(scope.user),
+      getLanes(scope.user),
+      getSnoozes(scope.user),
+      getHides(scope.user),
+      listMentions(scope.user),
+    ]);
+  const stringField = (value: unknown, field: string): string | undefined => {
+    const entry = documentField(value, field);
+    return typeof entry === "string" ? entry : undefined;
+  };
+  const automationRows = definitions.map(({ key, value }) => ({
+    id: stringField(value, "id") ?? key,
+    name: stringField(value, "name"),
+    owner: stringField(value, "owner"),
+    repo: stringField(value, "repo"),
+    workspaceId: stringField(value, "workspaceId"),
+  }));
+  const workspaceIds = [
+    ...new Set(
+      [
+        ...sessions.map((session) => session.workspaceId),
+        ...automationRows.map((automation) => automation.workspaceId),
+      ].filter((id): id is string => !!id),
     ),
+  ];
+  const workspaces = new Map<string, Pick<Workspace, "createdBy" | "repo">>();
+  for (const { key, value } of await catalogDocuments("workspaces").getMany(
+    workspaceIds,
+  )) {
+    if (
+      stringField(value, "id") === undefined ||
+      stringField(value, "name") === undefined
+    )
+      continue;
+    const repo = stringField(value, "repo");
+    workspaces.set(key, {
+      createdBy: stringField(value, "createdBy") ?? "",
+      repo:
+        repo === "auto"
+          ? defaultRepo().id
+          : repo
+            ? canonicalRepoId(repo)
+            : undefined,
+    });
+  }
+  const automations = new Map<string, AutomationAudience>();
+  for (const automation of automationRows) {
+    const audience = {
+      owner: automation.owner,
+      repo: automation.repo,
+      workspaceRepo: automation.workspaceId
+        ? workspaces.get(automation.workspaceId)?.repo
+        : undefined,
+    };
+    automations.set(automation.id, audience);
+    if (automation.name) automations.set(automation.name, audience);
+  }
+  return {
+    pins: new Set(pins),
+    lanes: new Set(Object.keys(lanes)),
+    snoozes: new Set(Object.keys(snoozes)),
+    hides: new Set(Object.keys(hides)),
+    mentions: new Set(mentions.map((mention) => mention.sessionId)),
     workspaces,
     automations,
     defaultRepo: defaultRepo().id,

@@ -3,6 +3,7 @@ import type { PrDetails } from "../../server/pr-info";
 import {
   buildAutoFixPrompt,
   buildReviewPrompt,
+  buildReviewSettledMessage,
   DEFAULT_REVIEW_PROMPT,
   mergeabilityState,
 } from "./prompts";
@@ -34,6 +35,42 @@ function pr(overrides: Partial<PrDetails> = {}): PrDetails {
     ...overrides,
   };
 }
+
+describe("review settled message", () => {
+  test("opens with the outcome sentinel and asks for a cold-read wrap-up", () => {
+    const passed = buildReviewSettledMessage({
+      prNumber: 42,
+      title: "Test PR",
+      headRef: "fix/test",
+      repoFull: "tellahq/tella-fusion",
+      rounds: 2,
+      outcome: "passed",
+      confidence: 5,
+    });
+    expect(
+      passed.startsWith(
+        "<!--os:review-settled:passed-->\n✅ This session's PR #42 “Test PR”",
+      ),
+    ).toBe(true);
+    expect(passed).toContain("after 2 fix rounds, quality 5/5");
+    expect(passed).toContain("https://github.com/tellahq/tella-fusion/pull/42");
+    expect(passed).toContain("preview URL");
+    expect(passed).toContain("`gh pr merge` is forbidden");
+
+    const capped = buildReviewSettledMessage({
+      prNumber: 42,
+      title: "Test PR",
+      headRef: "fix/test",
+      repoFull: "tellahq/tella-fusion",
+      rounds: 6,
+      outcome: "capped",
+    });
+    expect(capped.startsWith("<!--os:review-settled:capped-->\n")).toBe(true);
+    expect(capped).toContain("after 6 fix rounds.");
+    expect(capped).toContain("over to humans");
+    expect(capped).toContain("which findings are still open");
+  });
+});
 
 describe("auto-fix merge conflicts", () => {
   test("classifies clear, conflicting, stale, and unknown states", () => {

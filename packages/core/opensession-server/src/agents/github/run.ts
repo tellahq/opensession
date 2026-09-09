@@ -84,8 +84,10 @@ export const DEFAULT_GITHUB_FLOW_MCP_SERVERS = ["grafana", "linear"];
  * default is applied here rather than by passing the automation's value
  * straight through.
  */
-export function githubFlowMcpServers(): string[] {
-  const automation = listAutomations().find((a) => a.eventKey === PR_EVENT_KEY);
+export async function githubFlowMcpServers(): Promise<string[]> {
+  const automation = (await listAutomations()).find(
+    (a) => a.eventKey === PR_EVENT_KEY,
+  );
   return automation?.mcpServers ?? DEFAULT_GITHUB_FLOW_MCP_SERVERS;
 }
 
@@ -512,7 +514,7 @@ export async function runGithubAgent(
           aws: true,
           author: opts.author,
           fallbackModel: automaticFallbackModel(effectiveModel),
-          mcpServers: githubFlowMcpServers(),
+          mcpServers: await githubFlowMcpServers(),
           trustProfile: "automation",
           journalKind: `github-${opts.kind}`,
           firstJournaledAt: recoveredRun.firstJournaledAt,
@@ -532,7 +534,7 @@ export async function runGithubAgent(
         aws: true,
         author: opts.author,
         fallbackModel: automaticFallbackModel(effectiveModel),
-        mcpServers: githubFlowMcpServers(),
+        mcpServers: await githubFlowMcpServers(),
         trustProfile: "automation",
         journalKind: `github-${opts.kind}`,
       });
@@ -547,7 +549,7 @@ export async function runGithubAgent(
         aws: true,
         author: opts.author,
         fallbackModel: automaticFallbackModel(effectiveModel),
-        mcpServers: githubFlowMcpServers(),
+        mcpServers: await githubFlowMcpServers(),
         githubEnv,
         journal: { osSessionId: bksId, kind: `github-${opts.kind}` },
       });

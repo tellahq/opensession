@@ -121,12 +121,74 @@ export function controlPlaneWorkloadCommand(
 }
 
 /** Stable, path-private unit name used to stop a preview after a server restart. */
-export function previewScopeUnit(worktreeDir: string): string {
+export function previewScopeUnit(
+  worktreeDir: string,
+  portalName?: string,
+): string {
   const hash = createHash("sha256")
-    .update(worktreeDir)
+    .update(portalName ? `${worktreeDir}\0${portalName}` : worktreeDir)
     .digest("hex")
     .slice(0, 16);
   return `opensession-preview-${hash}`;
+}
+
+/** Put one host Portal in its own bounded, low-priority user scope. */
+export function previewScopeCommand(
+  command: string[],
+  worktreeDir: string,
+  portalName: string,
+  options: { env?: LimitEnv; scopesAvailable?: boolean } = {},
+): { command: string[]; env: Record<string, string>; unit?: string } {
+  const env = options.env ?? process.env;
+  if (!(options.scopesAvailable ?? systemdUserScopesAvailable()))
+    return { command, env: env as Record<string, string> };
+  const unit = previewScopeUnit(worktreeDir, portalName);
+  return {
+    command: [
+      "systemd-run",
+      "--user",
+      "--scope",
+      "--collect",
+      "--quiet",
+      `--unit=${unit}`,
+      ...previewScopeSystemdArgs(env),
+      "--property=TimeoutStopSec=5",
+      "--",
+      ...command,
+    ],
+    env: { ...(env as Record<string, string>), ...systemdUserEnv(env) },
+    unit,
+  };
+}
+
+/** Whether a detached user scope still owns a live process tree. */
+export async function userScopeActive(unit: string): Promise<boolean> {
+  try {
+    const proc = Bun.spawn({
+      cmd: ["systemctl", "--user", "is-active", "--quiet", `${unit}.scope`],
+      env: systemdUserEnv(),
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    return (await proc.exited) === 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Stop a detached user scope and wait until systemd has reaped its tree. */
+export async function stopUserScopeAndWait(unit: string): Promise<void> {
+  try {
+    const proc = Bun.spawn({
+      cmd: ["systemctl", "--user", "stop", `${unit}.scope`],
+      env: systemdUserEnv(),
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    await proc.exited;
+  } catch {}
 }
 
 export function stopUserScope(unit: string): void {

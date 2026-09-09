@@ -556,7 +556,7 @@ async function gateAndFireThreadCreated(
     await import("../../server/automations");
 
   // No subscriber, no run to protect — skip the classifier call too
-  const hasSubscriber = listAutomations().some(
+  const hasSubscriber = (await listAutomations()).some(
     (a) => a.enabled && a.eventKey === "plain:thread_created",
   );
   if (!hasSubscriber) return;
@@ -644,7 +644,7 @@ async function gateAndFireThreadCreated(
     );
   }
 
-  fireAutomationsForEvent(
+  await fireAutomationsForEvent(
     "plain:thread_created",
     JSON.stringify(
       {

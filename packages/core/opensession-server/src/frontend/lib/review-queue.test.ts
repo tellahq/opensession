@@ -248,6 +248,25 @@ describe("reviewAskerFor", () => {
     ).toEqual({ name: "jfrolich", login: "jfrolich", viaPr: true });
   });
 
+  test("names the requester behind a bot-authored pull request", () => {
+    expect(
+      reviewAskerFor(
+        {
+          sessions: [
+            session({
+              id: "butler",
+              branch: "butler",
+              prReviewRequested: ["kent"],
+              prAuthor: "tella-butler",
+              prRequester: "johnnylinsf",
+            }),
+          ],
+        },
+        "Kent de Bruin",
+      ),
+    ).toEqual({ name: "johnnylinsf", login: "johnnylinsf", viaPr: true });
+  });
+
   test("prefers the person who actually asked over the PR author", () => {
     expect(
       reviewAskerFor(

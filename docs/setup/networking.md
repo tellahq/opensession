@@ -364,6 +364,18 @@ reloads Caddy; validation, install, reload, or config-save failures restore the
 prior file. DNS may still be propagating afterward, so health remains
 **Waiting for DNS** rather than rolling back a valid listener.
 
+Portals are Caddy listeners that Open Session adds and removes through the
+admin API, and every such change is a config reload that waits for the previous
+servers to drain. Caddy's default grace period is unlimited, so one long-lived
+connection can hold a reload, and with it every new Portal URL, for minutes or
+hours. Bound it in the Caddyfile's global options:
+
+```text
+{
+	grace_period 5s
+}
+```
+
 If Open Session cannot discover a NATed server's public address, set
 `OPENSESSION_PUBLIC_IPV4` or `OPENSESSION_PUBLIC_IPV6` in
 `~/.opensession.env` and restart. `OPENSESSION_CADDYFILE` overrides the managed

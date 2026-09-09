@@ -11,6 +11,22 @@
 /** Sentinel user for the auto-continue turn (also keys the one-nudge guard). */
 export const AUTO_CONTINUE_USER = "auto-continue";
 
+/**
+ * The identity a turn's GitHub credential resolves for: its sender, unless the
+ * sender is the synthetic auto-continue driver. "auto-continue" is a turn's
+ * sender, not a person — it must not shadow the session owner that
+ * commitAuthorFor already carries as the author fallback, or a nudged turn
+ * loses the owner credential every other turn in the session resolves. A turn
+ * with no resolvable owner still yields nothing.
+ */
+export function githubCredentialUser(
+  user?: string | null,
+  authorName?: string | null,
+): string | undefined {
+  if (user && user !== AUTO_CONTINUE_USER) return user;
+  return authorName || undefined;
+}
+
 export const AUTO_CONTINUE_PROMPT =
   "[auto-continue] Your previous turn ended by announcing a next step without " +
   "executing it. Continue now: perform the step you announced, and keep working " +

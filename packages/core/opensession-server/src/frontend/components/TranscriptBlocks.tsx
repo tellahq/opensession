@@ -40,6 +40,7 @@ import { collectWrittenAssets } from "../lib/open-asset";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import { ReviewLoopBlock } from "./ReviewLoopBlock";
 import type { ReviewLoopResult } from "../lib/review-loop";
+import type { ReviewSettledOutcome } from "@tellahq/opensession-protocol/notices";
 import {
   ShippedChangeComposer,
   type ShippedChangeComposerProps,
@@ -74,6 +75,8 @@ type RenderBlock =
       blocks: RenderBlock[];
       prNumber: number | null;
       rounds: number;
+      /** Present once the loop's settle notice has landed inside it. */
+      settled: ReviewSettledOutcome | null;
     };
 
 interface Props {
@@ -138,6 +141,7 @@ interface Props {
 
 type ReviewBlockRole =
   | { kind: "handoff"; prNumber: number | null }
+  | { kind: "settled"; outcome: ReviewSettledOutcome }
   | { kind: "user-message" }
   | { kind: "other" };
 
@@ -152,14 +156,36 @@ function reviewBlockRole(block: RenderBlock): ReviewBlockRole {
     const match = entry.notice.title.match(/PR #(\d+)/);
     return { kind: "handoff", prNumber: match ? Number(match[1]) : null };
   }
+  if (entry.notice?.kind === "review-settled") {
+    // The protocol tags a passed loop as a neutral done notice and a capped
+    // one as a warning; the tone is the outcome's only wire form.
+    return {
+      kind: "settled",
+      outcome: entry.notice.tone === "warn" ? "capped" : "passed",
+    };
+  }
   return entry.type === "user" && !entry.notice
     ? { kind: "user-message" }
     : { kind: "other" };
 }
 
+/** Whether the loop open at `from` goes on: its next round's findings or its
+ * closing settle notice arrive before any human message, note or walkthrough. */
+function reviewLoopContinues(blocks: RenderBlock[], from: number): boolean {
+  for (let j = from; j < blocks.length; j++) {
+    const block = blocks[j];
+    if (block.kind === "note" || block.kind === "walkthrough") return false;
+    const role = reviewBlockRole(block);
+    if (role.kind === "user-message") return false;
+    if (role.kind === "handoff" || role.kind === "settled") return true;
+  }
+  return false;
+}
+
 /** A review handoff and the work it triggers form one quiet phase. Human
- * requests and final model output stay outside; intermediate narration already
- * belongs to the grouped turn work. */
+ * requests and the loop's final model output stay outside; each round's own
+ * report folds in once a later round or the settle notice proves it interim,
+ * and intermediate narration already belongs to the grouped turn work. */
 function groupReviewLoops(blocks: RenderBlock[]): RenderBlock[] {
   const grouped: RenderBlock[] = [];
   for (let i = 0; i < blocks.length; i++) {
@@ -172,28 +198,42 @@ function groupReviewLoops(blocks: RenderBlock[]): RenderBlock[] {
     const loop: RenderBlock[] = [first];
     let rounds = 1;
     let prNumber = firstRole.prNumber;
+    let settled: ReviewSettledOutcome | null = null;
     while (i + 1 < blocks.length) {
       const next = blocks[i + 1];
       const nextRole = reviewBlockRole(next);
-      // Notes, walkthroughs, and final model output have their own placement and
-      // must never vanish inside an automation disclosure.
-      if (
-        next.kind === "note" ||
-        next.kind === "walkthrough" ||
-        (next.kind === "entry" && next.entry.type === "assistant")
-      )
-        break;
+      // Notes and walkthroughs have their own placement and must never vanish
+      // inside an automation disclosure.
+      if (next.kind === "note" || next.kind === "walkthrough") break;
       // A normal user message is a new conversation phase. A second review
       // handoff belongs to this loop and starts its next round.
       if (nextRole.kind === "user-message") break;
+      // A turn's final answer stays outside the fold as the loop's report,
+      // unless the loop goes on past it: the next round's findings or the
+      // settle notice make that answer an interim report. A settled loop is
+      // closed, so its wrap-up always stays outside.
+      if (
+        next.kind === "entry" &&
+        next.entry.type === "assistant" &&
+        (settled || !reviewLoopContinues(blocks, i + 2))
+      )
+        break;
       i++;
       loop.push(next);
       if (nextRole.kind === "handoff") {
         rounds++;
         prNumber ??= nextRole.prNumber;
+      } else if (nextRole.kind === "settled") {
+        settled = nextRole.outcome;
       }
     }
-    grouped.push({ kind: "review-loop", blocks: loop, prNumber, rounds });
+    grouped.push({
+      kind: "review-loop",
+      blocks: loop,
+      prNumber,
+      rounds,
+      settled,
+    });
   }
   return grouped;
 }
@@ -533,6 +573,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
             <ReviewLoopBlock
               prNumber={block.prNumber}
               rounds={block.rounds}
+              settled={block.settled}
               live={isLive}
               result={
                 showReviewResult && i === lastReviewLoop && !isLive

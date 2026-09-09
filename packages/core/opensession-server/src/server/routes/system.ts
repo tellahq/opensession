@@ -19,7 +19,7 @@ import {
 } from "../frontend-build";
 import { getPins } from "../pins";
 import { getReads, isUnread } from "../reads";
-import { invalidateSessionsCache, runErrors } from "../session-cache";
+import { publishSessionChange, runErrors } from "../session-cache";
 import { getSessionControl } from "../session-control";
 import { MAX_UPLOAD_BYTES, stageHttpUpload } from "../uploads";
 import { systemStats } from "../system-stats";
@@ -188,7 +188,7 @@ export async function handleSystemRoutes(
       if (changed) {
         deadLettersCaches.clear();
         if (validQuarantine) {
-          invalidateSessionsCache();
+          publishSessionChange(body.sessionId as string);
           broadcastToSession(body.sessionId as string, {
             type: "session_status",
             sessionId: body.sessionId,
@@ -264,7 +264,7 @@ export async function handleSystemRoutes(
     }
     const agentHealth: Record<string, unknown> = {};
     for (const a of getAgents()) {
-      agentHealth[a.name] = a.health();
+      agentHealth[a.name] = await a.health();
     }
     return Response.json({
       ok: true,
@@ -305,7 +305,7 @@ export async function handleSystemRoutes(
       status: "idle" | "working" | "needs_input" | "unread" | "error";
       url: string;
     }> = [];
-    for (const key of getPins(user)) {
+    for (const key of await getPins(user)) {
       if (sessions.length >= 8) break;
       // Pins also hold workspace rows (`workspace:<id>`) — not sessions.
       if (key.startsWith("workspace:")) continue;
@@ -544,7 +544,7 @@ export async function handleSystemRoutes(
     const { listAutomations } = await import("../automations");
     const automationRuns: Array<Record<string, unknown>> = [];
     const nameBySession = new Map<string, string>();
-    for (const a of listAutomations()) {
+    for (const a of await listAutomations()) {
       for (const r of a.runs || []) {
         if (String(r.at).slice(0, 10) !== date) continue;
         automationRuns.push({

@@ -245,7 +245,7 @@ export async function handleProfileRoutes(
       // tab colors, drafts, UI prefs) is filed under the short name, so carry it across
       // or the rename hands the person a factory-fresh sidebar.
       const carried = shortNameChanged
-        ? renameUserState(previousShort, nextShort)
+        ? await renameUserState(previousShort, nextShort)
         : [];
 
       audit({

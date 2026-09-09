@@ -50,6 +50,8 @@ export interface Props {
    * the panel does, instead of flashing while the first list request is out.
    */
   showDraftRow?: boolean;
+  /** Rendered beside Settings in the desktop account footer (the Update nudge). */
+  footerAccessory?: React.ReactNode;
   /** True while the main panel is showing that input. */
   draftRowActive?: boolean;
   /** Rename a project folder. */

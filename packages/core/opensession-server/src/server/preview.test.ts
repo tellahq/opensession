@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -10,7 +16,56 @@ import {
   recipeStartOptions,
   repoLifecycle,
   sandboxPreviewIdentityContext,
+  seedHostEnvFiles,
 } from "./preview";
+import type { Repo } from "./config";
+
+describe("seedHostEnvFiles", () => {
+  const envRel = "packages/core/webapp/.env.local";
+  function repoAt(dir: string): Repo {
+    return {
+      id: "app",
+      label: "app",
+      repo: dir,
+      wtPrefix: "app",
+      defaultBranch: "main",
+      ghRepo: "org/app",
+    };
+  }
+
+  test("copies the main checkout's gitignored env files into a fresh worktree", () => {
+    const root = mkdtempSync(join(tmpdir(), "os-seed-env-"));
+    try {
+      const main = join(root, "main");
+      const worktree = join(root, "wt");
+      mkdirSync(dirname(join(main, envRel)), { recursive: true });
+      writeFileSync(join(main, envRel), "SECRET=1\n");
+      mkdirSync(worktree);
+      expect(seedHostEnvFiles(worktree, repoAt(main))).toEqual([envRel]);
+      expect(readFileSync(join(worktree, envRel), "utf8")).toBe("SECRET=1\n");
+      // A second start finds the file and leaves it alone.
+      writeFileSync(join(worktree, envRel), "SECRET=edited\n");
+      expect(seedHostEnvFiles(worktree, repoAt(main))).toEqual([]);
+      expect(readFileSync(join(worktree, envRel), "utf8")).toBe(
+        "SECRET=edited\n",
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("never seeds the main checkout into itself or without a repo", () => {
+    const root = mkdtempSync(join(tmpdir(), "os-seed-env-"));
+    try {
+      mkdirSync(dirname(join(root, envRel)), { recursive: true });
+      writeFileSync(join(root, envRel), "SECRET=1\n");
+      expect(seedHostEnvFiles(root, repoAt(root))).toEqual([]);
+      expect(seedHostEnvFiles(join(root, "missing"), undefined)).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("sandbox portal identity", () => {
   test("carries the sandbox trust profile into the Portal grant", () => {

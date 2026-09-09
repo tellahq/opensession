@@ -136,7 +136,7 @@ export async function runSimplify(
       };
       await runReview(
         ref,
-        resolveReviewConfig().config,
+        (await resolveReviewConfig()).config,
         onSessionCreated,
       ).catch((e) =>
         console.error(

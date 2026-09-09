@@ -29,7 +29,7 @@ import {
 } from "../shared/bounded-body";
 import { codeStorageConfig, configuredRepos } from "../config";
 import { prHostFor } from "../pr-host";
-import { invalidateSessionsCache } from "../session-cache";
+import { publishSessionRowsForBranch } from "../session-cache";
 import { scheduleSandboxEnvironmentInvalidation } from "../sandbox/environments";
 import { broadcastToAll } from "../ws-hub";
 
@@ -239,9 +239,16 @@ export async function handleCsWebhook(req: Request): Promise<Response> {
       scheduleSandboxEnvironmentInvalidation(repo.id);
     matched = true;
   }
-  // Session prState enrichment reads through the 2s sessions cache — drop it
-  // so sidebar rows catch up on their next poll (GitHub repos untouched:
-  // this only ran for a delivery matching a codestorage-hosted repo).
-  if (matched) invalidateSessionsCache();
+  // Session prState enrichment reads the PR cache the loop above refreshed.
+  // Publish the rows on this branch once the debounce window has absorbed the
+  // burst (GitHub repos untouched: this only ran for a delivery matching a
+  // codestorage-hosted repo).
+  if (matched) {
+    const timer = setTimeout(
+      () => publishSessionRowsForBranch(branch),
+      BROADCAST_DEBOUNCE_MS,
+    );
+    timer.unref?.();
+  }
   return Response.json({ ok: true });
 }

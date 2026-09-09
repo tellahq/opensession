@@ -17,7 +17,7 @@
  * you.
  */
 
-import { userStore } from "./shared/user-store";
+import { catalogUserStore } from "./shared/catalog-user-store";
 
 /** Row key → ISO timestamp of when the user hid it. */
 export type Hides = Record<string, string>;
@@ -41,13 +41,21 @@ function clean(input: unknown): Hides {
   return out;
 }
 
-const store = userStore<Hides>({ name: "hides", field: "hides", clean });
+const store = catalogUserStore<Hides>({ name: "hides", field: "hides", clean });
 
-export function getHides(user: string): Hides {
+export async function getHides(user: string): Promise<Hides> {
   return store.get(user);
 }
 
 /** Replace a user's hides (validated). Returns the stored map. */
-export function setHides(user: string, hides: unknown): Hides {
+export async function setHides(user: string, hides: unknown): Promise<Hides> {
   return store.set(user, hides);
+}
+
+/** Apply a delta under the catalog CAS; the result is validated like `setHides`. */
+export function updateHides(
+  user: string,
+  mutate: (value: Hides) => unknown,
+): Promise<Hides> {
+  return store.update(user, mutate);
 }

@@ -131,12 +131,18 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   moves to the Closed sessions submenu of the session's overflow menu, which
   reopens a row the same way. On macOS, where the sidebar is the live-session
   switcher, the same scoped history lives in the selected session's toolbar
-  instead. On iOS, the PWA-style Liquid Glass action bar floats above the
-  composer with Archive, session actions, New session, and Next chat. It stays
-  directly above the composer when the keyboard opens. The actions menu carries
+  instead. On iOS, Archive and the session actions menu sit in the navigation
+  bar beside the title as one two-button group, and a Liquid Glass action bar
+  floats above the composer with New session and Next chat. It stays directly
+  above the composer when the keyboard opens. The actions menu carries
   worktree details, the pull request panel, Add to sidebar when needed, rename,
   share, hide or restore, and archive, matching the sidebar row's long-press
-  menu. Completed native sessions can also fork from the current transcript tip
+  menu. The model settings menu (the toolbar's slider control on macOS, nested
+  in the actions menu on iOS) opens with a Weekly remaining row: what is left
+  on the account the current model will run on, over a breakdown of every
+  subscription account you can spend, yours first and then the shared pool,
+  each with its refill day. Choosing one for the current model's pool pins it
+  for the session through `/account`. Completed native sessions can also fork from the current transcript tip
   or a message menu; the composer names the source and opens the new session
   after creation. A bounded cache keeps
   recently visited conversations loaded while their
@@ -320,8 +326,11 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   no inbound frame arrives for 30s. The server never initiates pings. An
   announced server restart uses a 250ms retry cadence until the replacement
   handshake arrives; ordinary outages retain the calmer 2s backoff. The UI
-  shows a reconnect banner and keeps an optimistic local echo of prompts until
-  the server's copy arrives.
+  shows a reconnect banner only after a drop outlives 8s of foreground time
+  (`SessionViewModel.presentedConnectionState`; recovery, an announced
+  restart and a real load failure show at once, and background time does not
+  count), and keeps an optimistic local echo of prompts until the server's
+  copy arrives.
 - **Settings** — native SwiftUI Tools, Personal, and Workspace administration,
   plus multi-organization server/GitHub/token configuration and a connection
   test. The top-bar logo on iOS and the row above Feed on macOS switch servers

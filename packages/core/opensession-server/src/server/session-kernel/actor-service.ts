@@ -20,15 +20,22 @@ import {
 import { READ_METHODS } from "./store-routing";
 import { workerEntry } from "../../runner-host/exe";
 import { chooseSessionLane, type LaneLoad } from "./lane-placement";
+import { createLaneBudget, LANE_BUDGET_MAX_MS } from "./lane-budget";
 import type { SessionKernelStoreHostMetrics } from "./store-host";
 import { runtimeGeneration } from "../runtime-generation";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3849;
 const RUNTIME_GENERATION = runtimeGeneration();
-// Must remain below the gateway transport's 8s fail-stop budget, including
-// quarantine/restart bookkeeping after an ambiguous lane turn.
+// Base budget for one actor turn. Under host IO pressure it stretches up to
+// LANE_BUDGET_MAX_MS (lane-budget.ts), which stays below the gateway RPC
+// client's 15 s deadline with room for quarantine/restart bookkeeping after an
+// ambiguous lane turn.
 const ACTOR_RESPONSE_TIMEOUT_MS = 5_000;
+// Starting a fresh Worker includes module loading and SQLite initialization.
+// It has no in-flight actor mutation, so it can wait longer than an actor turn
+// without weakening the gateway's ambiguity fence.
+const ACTOR_HANDSHAKE_TIMEOUT_MS = 30_000;
 const DEFAULT_SESSION_WORKERS = Math.min(
   32,
   Math.max(4, availableParallelism()),
@@ -157,12 +164,28 @@ export type SessionKernelServiceOptions = {
   /** Bounded session execution lanes. A separate catalog lane is always kept. */
   workerCount?: number;
   responseTimeoutMs?: number;
+  /**
+   * Upper bound for the IO-pressure-scaled turn budget. Defaults to
+   * LANE_BUDGET_MAX_MS for the production budget; an explicit
+   * `responseTimeoutMs` disables scaling unless this is also set.
+   */
+  responseTimeoutMaxMs?: number;
+  /** Host IO pressure source (`/proc/pressure/io` some avg10) for tests. */
+  ioPressure?: () => number | null;
   /** Explicit isolated/dev database path inherited by Worker isolates. */
   databasePath?: string;
   mutationMailboxLimit?: number;
   readMailboxLimit?: number;
   priorityMailboxLimit?: number;
   laneQueueLimit?: number;
+  /**
+   * Called once when the service fail-stops (an ambiguous catalog mutation, a
+   * lane that could not be restarted). The listener is already withdrawn by
+   * then; the process keeps running only for the caller to decide how to end
+   * it. The systemd entry point exits so `Restart=always` brings a fresh
+   * service up instead of leaving a live process nothing can reach.
+   */
+  onFailed?: (error: Error) => void;
 };
 
 function mailboxLimit(
@@ -259,6 +282,15 @@ export async function startSessionKernelService(
     options.responseTimeoutMs ?? ACTOR_RESPONSE_TIMEOUT_MS;
   if (!Number.isFinite(responseTimeoutMs) || responseTimeoutMs < 100)
     throw new Error("Invalid session kernel worker timeout");
+  const laneBudgetMs = createLaneBudget({
+    baseMs: responseTimeoutMs,
+    maxMs:
+      options.responseTimeoutMaxMs ??
+      (options.responseTimeoutMs === undefined
+        ? LANE_BUDGET_MAX_MS
+        : responseTimeoutMs),
+    readIoPressure: options.ioPressure,
+  });
   const mutationMailboxLimit = mailboxLimit(
     options.mutationMailboxLimit,
     "OPENSESSION_SESSION_KERNEL_MUTATION_MAILBOX",
@@ -389,6 +421,7 @@ export async function startSessionKernelService(
     console.error("Session kernel actor service failed", error);
     for (const slot of slots) stopSlot(slot, error);
     server?.stop(true);
+    options.onFailed?.(error);
   }
 
   function sessionQuarantinedResponse(
@@ -528,13 +561,17 @@ export async function startSessionKernelService(
     const generation = slot.generation;
     const startedAt = Date.now();
     slot.metrics.queueWaitMsTotal += Math.max(0, startedAt - turn.enqueuedAt);
+    const timeoutMs =
+      turn.request.t === "hello"
+        ? Math.max(responseTimeoutMs, ACTOR_HANDSHAKE_TIMEOUT_MS)
+        : laneBudgetMs();
     const timer = setTimeout(() => {
       slot.metrics.timeouts += 1;
       const error = new Error(
         `Session actor lane ${slot.index} response timed out`,
       );
       restartSessionSlot(slot, error, generation);
-    }, responseTimeoutMs);
+    }, timeoutMs);
     slot.pending.set(rpcId, {
       ...turn,
       timer,
@@ -917,6 +954,11 @@ export async function startSessionKernelService(
         route.mutation,
       );
     if (route.scope === "catalog_read") return sendToSlot(slots[0], request);
+    // Central-only writes serialize on slot zero (one turn in flight) and
+    // never wait on session mailboxes: nothing a session lane commits can
+    // overlap the rows they touch, so the global barrier would only add the
+    // failure mode of an unrelated busy session.
+    if (route.scope === "central_write") return sendToSlot(slots[0], request);
 
     if (request.t === "hello") return sendToSlot(slots[0], request);
     if (queuedGlobalTurns >= MAX_GLOBAL_TURNS)
@@ -1008,6 +1050,8 @@ export async function startSessionKernelService(
               ready: sessionSlots.filter((slot) => slot.ready).length,
               capacity: sessionSlots.length,
             },
+            // Current per-turn budget after host IO pressure scaling.
+            laneBudgetMs: laneBudgetMs(),
             // Per-lane occupancy and cumulative counters. Index 0 is the
             // catalog lane; the rest are session execution lanes. Counters are
             // monotonic for the service lifetime so operators can compute

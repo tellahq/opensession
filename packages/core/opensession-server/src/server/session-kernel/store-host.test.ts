@@ -3,7 +3,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionKernelStoreHost } from "./store-host";
+import {
+  RUNTIME_WAKE_CANDIDATE_BATCH,
+  SessionKernelStoreHost,
+} from "./store-host";
 import { SessionKernelStore, sessionKernelSessionDbPath } from "./store";
 
 const roots: string[] = [];
@@ -127,6 +130,26 @@ describe("per-session session kernel storage", () => {
       transcriptStoreCacheMisses: 2,
       transcriptStoreCacheEvictions: 1,
       sqliteBusy: 2,
+    });
+    host.close();
+  });
+
+  test("bounds each lane's default SQLite caches", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    for (let index = 0; index < 17; index += 1) {
+      const sessionId = `bounded-cache-${index}`;
+      host.call("setRunState", [
+        { sessionId, state: "idle", event: "cache-bound" },
+      ]);
+      host.transcript({ op: "tail", sessionId, limit: 1 });
+    }
+
+    expect(host.metrics()).toMatchObject({
+      kernelStoreCacheMisses: 17,
+      kernelStoreCacheEvictions: 1,
+      transcriptStoreCacheMisses: 17,
+      transcriptStoreCacheEvictions: 1,
     });
     host.close();
   });
@@ -1165,10 +1188,11 @@ describe("per-session session kernel storage", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
     const dueAt = Date.now() - 1;
-    for (let index = 0; index < 24; index += 1) {
+    const sessions = RUNTIME_WAKE_CANDIDATE_BATCH * 3;
+    for (let index = 0; index < sessions; index += 1) {
       host.call("scheduleTimer", [
         {
-          sessionId: `bounded-runtime-${index.toString().padStart(2, "0")}`,
+          sessionId: `bounded-runtime-${index.toString().padStart(3, "0")}`,
           timerId: "wake",
           kind: "known_timer",
           dueAt,
@@ -1177,16 +1201,20 @@ describe("per-session session kernel storage", () => {
       ]);
     }
 
-    const passes = Array.from({ length: 12 }, () =>
+    const passes = Array.from({ length: 9 }, () =>
       runtimeWork(host, Date.now(), ["known_timer"], [], 100),
     );
 
-    expect(passes.every((pass) => pass.timers.length === 4)).toBe(true);
+    expect(
+      passes.every(
+        (pass) => pass.timers.length === RUNTIME_WAKE_CANDIDATE_BATCH,
+      ),
+    ).toBe(true);
     expect(
       new Set(
         passes.flatMap((pass) => pass.timers.map((timer) => timer.sessionId)),
       ).size,
-    ).toBe(24);
+    ).toBe(sessions);
     host.close();
   }, 30_000);
 

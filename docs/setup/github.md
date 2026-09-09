@@ -10,10 +10,15 @@ the only GitHub credentials Open Session accepts.
 For a team install, create one organization-owned GitHub App. A single-user
 simple-mode install may instead use a personal App. The same App provides:
 
-- short-lived installation tokens for reviews, comments, merges, clones,
-  pushes, previews, sandboxes, and trusted GitHub automations;
-- device-flow user tokens so interactive sessions act as the signed-in person;
-- the bot identity `<app-slug>[bot]` for self-trigger protection and attribution.
+- short-lived, repository-scoped installation tokens for every agent run
+  (branch pushes, comments, replies, resolved threads), for reviews, clones,
+  previews, sandboxes, and trusted GitHub automations;
+- device-flow user tokens so the buttons in the UI (merge, close, review) and
+  the gateway's `open_pull_request` tool act as the signed-in person. These
+  tokens never enter an agent run;
+- the bot identity `<app-slug>[bot]` for self-trigger protection and
+  attribution: agent commits are authored by it, with the person as
+  `Co-authored-by`.
 
 Configure it from Settings → Integrations, or under
 `integrations.github` in `~/.opensession/config.json`:
@@ -90,6 +95,63 @@ calls receive a short-lived App token in their process environment. HTTPS Git
 operations use a process-local credential helper, and SSH GitHub remotes are
 rewritten to HTTPS for that process so host keys cannot bypass the App.
 
+## Who holds which credential
+
+A code turn a connected person started acts as that person: their token is
+the run's `GH_TOKEN` / `GITHUB_TOKEN` and, through a process-local
+credential helper, its HTTPS git credential, so the branch push and any PR
+the shell opens carry their identity. "Started by a person" means the
+turn's sender is a human (or the auto-continue of their own prompt), the run
+kind is interactive, and the mode is code. When that person is unknown,
+unmapped, or disconnected, the run falls back to the App token below rather
+than running credential-free. In a sandbox the launcher resolves the same
+choice on the host and projects only the chosen token into a private,
+run-scoped file.
+
+Every other run holds a short-lived installation token scoped to its
+repository and never a person's: the code permission set for unattended
+code runs and for machine senders into an interactive session (a review
+handoff, a worker report, an automation), the read set for every ask run,
+whoever started it, because the review workflows process untrusted PR
+content and can print their environment. Ask runs also ignore any
+launcher-supplied token. The gateway still uses a person's token for the UI
+buttons (merge, close, review, comment) and the `open_pull_request` /
+`edit_pull_request` tools. The merge guard refuses `gh pr merge`, approving
+reviews, and default-branch pushes in every run whichever token it holds,
+and a run never inherits the host operator's `gh` login: its `GH_CONFIG_DIR`
+is run-scoped, so a missing token fails with "not logged in". The longer
+design, and the stricter target this is a rollback from, are in
+[github-authority.md](../github-authority.md).
+
+A push from a person-started code turn therefore reaches GitHub as that
+person; pushes from every other run reach it as the bot account, and the PR
+webhook sees the bot as the `synchronize` sender. The review automation
+treats those pushes like human pushes; it only skips a bot-sender push while
+one of its own code loops (auto-fix, simplify, adversarial, or an @mention
+reply) is in flight on that PR.
+
+Keep the App's **Contents** permission at **read and write**: that is what
+lets runs push their branches. What the bot may do to the default branch is
+decided by rulesets, not by the token. On every protected repository add a
+ruleset on the default branch with the single rule **restrict updates**, and
+list only the people who may merge as its bypass actors. A merge is an update
+of the branch, so with that rule in place no installation token, and no
+leaked one, can merge or push `main`, whatever permissions it holds. A
+ruleset that requires pull requests and status checks should already exist;
+leave it as it is.
+
+The command policy refuses `gh pr merge`, approving reviews, and pushes to
+the default branch in every run, whoever started it. That is a tripwire in
+front of the rulesets so a confused agent gets a clear message instead of a
+403, not the boundary itself.
+
+Threat model: agent bash shares the server's uid, so every credential present
+on an Open Session host should be scoped as if the agent will read and use it
+directly. No PAT, SSH key, or `gh` login belongs on the host: the App
+installation token is the only credential in any run's reach, and the
+rulesets bind it. `OPENSESSION_GITHUB_PUSH_TOKEN`, the earlier git-only
+credential, is no longer read; revoke it and remove the variable.
+
 ## Webhook intake
 
 The fail-closed public ingress gateway listens on `127.0.0.1:3860`. Choose
@@ -129,6 +191,16 @@ These are the subscribed events the code consumes
 | `pull_request` action `closed` + merged                             | notifies linked sessions; fires the docs-sync automation on `github:pr_merged`                                                                                                                                                                                       |
 | `pull_request_review`                                               | refreshes PR state; when the Slack agent is enabled, review → Slack notification                                                                                                                                                                                     |
 | `workflow_run`                                                      | notifies sessions waiting on a merged PR's deploy                                                                                                                                                                                                                    |
+
+An automatic review that ends unsatisfied (blocking findings, or open findings
+below quality 4/5) hands its findings straight into the live session that owns
+the PR branch as a fix round, at most `OPENSESSION_REVIEW_HANDOFF_ROUNDS`
+(default 6) per PR; the session's push re-triggers the review. When a later
+review passes, or the round cap hands the rest to humans, that same session
+gets one closing message asking for a short wrap-up: where the PR stands, what
+changed across the rounds, and where to look. The transcript folds the whole
+loop into one "Review loop" row with the wrap-up beneath it.
+`OPENSESSION_REVIEW_HANDOFF=0` disables the handoff.
 
 ### Public-repository actor gate
 

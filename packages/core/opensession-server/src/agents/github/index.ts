@@ -64,8 +64,10 @@ import { isExternalPullRequest } from "./public-review";
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 
 /** Seed the review automation (disabled) if it doesn't exist yet. Keyed on eventKey. */
-function ensureReviewAutomation(): void {
-  const existing = listAutomations().find((a) => a.eventKey === PR_EVENT_KEY);
+async function ensureReviewAutomation(): Promise<void> {
+  const existing = (await listAutomations()).find(
+    (a) => a.eventKey === PR_EVENT_KEY,
+  );
   if (existing) {
     // One-time backfill: this record predates PR flows reading `mcpServers`
     // (githubFlowMcpServers in run.ts). Leaving it unset changes no behavior —
@@ -73,7 +75,7 @@ function ensureReviewAutomation(): void {
     // renders unset as "all connectors", which would now be a lie. Write the
     // effective list so the settings screen matches what the runs actually get.
     if (existing.mcpServers === undefined) {
-      saveAutomation({
+      await saveAutomation({
         ...existing,
         mcpServers: [...DEFAULT_GITHUB_FLOW_MCP_SERVERS],
       });
@@ -83,7 +85,7 @@ function ensureReviewAutomation(): void {
     }
     return;
   }
-  const created = createAutomation({
+  const created = await createAutomation({
     name: REVIEW_AUTOMATION_NAME,
     prompt: DEFAULT_REVIEW_PROMPT,
     schedule: "",
@@ -97,7 +99,7 @@ function ensureReviewAutomation(): void {
     return;
   }
   // Seed it OFF — start label-only; flip on in the Automations UI to review every non-draft PR.
-  saveAutomation({ ...created, enabled: false });
+  await saveAutomation({ ...created, enabled: false });
   console.log(
     `[github] Seeded review automation "${REVIEW_AUTOMATION_NAME}" (disabled)`,
   );
@@ -110,14 +112,14 @@ function ensureReviewAutomation(): void {
  * replacement for the old Mintlify-hosted docs-sync workflow. Toggle it in the
  * Automations UI.
  */
-function ensureDocsSyncAutomation(): void {
+async function ensureDocsSyncAutomation(): Promise<void> {
   const prompt = configuredIntegration("github").docsSyncPrompt;
   if (typeof prompt !== "string" || !prompt.trim()) return;
-  const existing = listAutomations().find(
+  const existing = (await listAutomations()).find(
     (a) => a.eventKey === PR_MERGED_EVENT_KEY,
   );
   if (existing) return;
-  const created = createAutomation({
+  const created = await createAutomation({
     name: DOCS_SYNC_AUTOMATION_NAME,
     prompt: prompt.trim(),
     schedule: "",
@@ -472,7 +474,7 @@ export class GithubAgent implements AgentModule {
         const { runReview } = await import("./review");
         void runReview(
           ref,
-          resolveReviewConfig().config,
+          (await resolveReviewConfig()).config,
           this.onSessionInvalidate,
         );
       }
@@ -510,8 +512,8 @@ export class GithubAgent implements AgentModule {
     loadGithubDeliveries();
     if (this.onSessionInvalidate)
       setGithubSessionInvalidate(this.onSessionInvalidate);
-    ensureReviewAutomation();
-    ensureDocsSyncAutomation();
+    await ensureReviewAutomation();
+    await ensureDocsSyncAutomation();
     await recoverInterrupted();
     restoreDesiredReviews(listPrStates());
     startPendingMentionRetry();
@@ -524,7 +526,7 @@ export class GithubAgent implements AgentModule {
     // rules from the feedback store's outcome signals.
     const { armLearnedRulesDistiller } = await import("./learned-rules");
     armLearnedRulesDistiller();
-    const { autoEnabled } = resolveReviewConfig();
+    const { autoEnabled } = await resolveReviewConfig();
     console.log(
       `[github] Agent started — review automation ${autoEnabled ? "ENABLED (all non-draft PRs)" : "disabled (label-only)"}`,
     );
@@ -534,8 +536,8 @@ export class GithubAgent implements AgentModule {
     // Auto-fix loop state is persisted to disk after each iteration; nothing to flush.
   }
 
-  health(): Record<string, unknown> {
-    const { autoEnabled } = resolveReviewConfig();
+  async health(): Promise<Record<string, unknown>> {
+    const { autoEnabled } = await resolveReviewConfig();
     return {
       status: githubAppCredentialHealth(),
       githubCredentialMode: "app",

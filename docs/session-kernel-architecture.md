@@ -35,8 +35,20 @@ messages. The service owns one serial promise mailbox per canonical session ID
 and gives that actor stable lane affinity, so process-local reducer caches remain
 coherent and two turns for one session cannot overlap. Many actors share each
 lane, while the short isolated SQLite wait bound leaves unrelated lanes
-available. A failed lane is restarted without stopping healthy lanes;
-system-catalog ambiguity still fail-stops the service. After startup ownership
+available. Each actor turn has a 5 s response budget that stretches linearly
+with host IO pressure (`/proc/pressure/io` `some avg10`, capped at 12 s, below
+the gateway's 15 s RPC deadline) so a host thrashing on swap or a throttled
+volume finishes slow turns instead of restarting healthy lanes
+(`lane-budget.ts`; `/ready` reports the current `laneBudgetMs`). A failed lane
+is restarted without stopping healthy lanes; system-catalog ambiguity still
+fail-stops the service. A fail-stop withdraws
+the listener and, under systemd, exits the process so `Restart=always` brings a
+fresh service up: a live process with no listener is a wedge that every gateway
+boot fails against ("runtime peer generations are unavailable") until an
+operator restarts the unit. The gateway supervisor waits about 15 s for the
+peer generations, long enough to ride out one kernel restart, and an unhandled
+promise rejection in the gateway is logged rather than allowed to exit the
+process (`process-guards.ts`). After startup ownership
 checks, actor turns perform bounded SQLite
 reductions only. They do not bind sockets, perform filesystem or process work,
 invoke models, or execute outbox effects. Physical filesystem, network,
@@ -392,8 +404,16 @@ rebuilds page it, and `pending_exports` is a bounded work index. Nothing
 walks the placement catalog to find documents.
 
 `<sessions dir>/<id>.json` is a derived export written after the commit for
-out-of-process readers (agents, scripts, run hosts) and for this process's
-synchronous detail reads. The gateway confirms each export with `metadata
+out-of-process readers (scripts, run hosts) and for this process's
+synchronous detail reads. Async detail reads (`findSessionAsync`, so every
+WebSocket handler and detail route) come from the catalog instead:
+`readNativeSessionAsync` asks `metadata catalog_get`, one indexed lookup in
+the central database that never opens the session's actor and is never behind
+the file, and falls back to the file only for a session the catalog has not
+seen. Agents run inside the gateway and read the derived file directly; none
+of them may write it (the `spawn_task` depth stamp commits through
+`updateSessionFile`), and the ownership test scans `src/agents` for writers.
+The gateway confirms each export with `metadata
 exported`; a crash in between leaves `exported_rev < rev`, and boot repairs
 exactly those sessions (`reconcileSessionMetadataExports`) instead of
 scanning the directory. A session written before the actor owned metadata
@@ -413,6 +433,53 @@ starts (`primeSessionListIndex`), before any boot step or route reads the
 list, and only then builds the Slack thread index from that snapshot
 (`ensureSlackLinkIndex`). A seeded session's first real write commits the
 next revision from the file and supersedes the seeded row.
+
+### Central catalog documents
+
+Gateway state that belongs to no session (workspace and automation
+definitions, per-user overlays) is a namespaced document set in the central
+kernel database: `session_kernel_catalog_documents`, keyed by
+`(namespace, key)`, schema 34. `sessionCatalogDocument` in
+`session-kernel/kernel.ts` is the only entry point and speaks the
+`catalog_document` reducer (`catalog-document-protocol.ts`,
+`catalog-document-store.ts`). Reads (`get`, `get_many`, `page`,
+`import_complete`) ride the catalog lane; mutations (`put`, `seed`,
+`mark_import_complete`) take the `central_write` route: they serialize on
+the catalog slot, which runs one turn at a time, but skip the global barrier,
+because no session mailbox can overlap rows that belong to no session. A
+busy unrelated session therefore never fails a preference or automation
+write, while true global requests still wait for every mailbox. No request opens a per-session actor database, and the kernel
+never falls back to a file: with the actor attached the gateway has no
+synchronous path to these rows, and the in-process compatibility store is
+test-only, as for session metadata.
+
+`put` is a compare-and-set on `rev` with request-id replay. The kernel assigns
+the revision; the caller passes the revision it read (`null` for "no row") and
+gets `committed`, `duplicate` (the same request id already committed the
+current revision), or `conflict` with the stored truth to re-apply on top of.
+A delete writes a tombstone (`value: null`) that keeps its revision, so a
+writer that read the live row conflicts instead of resurrecting it; `get`
+returns tombstones and `page` includes them so importers and cache rebuilds
+see deletions. A page is bounded by rows and by bytes: SQLite takes at most
+`limit` rows first, then stops the page once the rows it carries reach 8 MiB
+of keys and values, but always returns the first row, so a page is never
+empty while rows remain and costs O(limit) however large the namespace. Callers therefore
+continue from the last key until they receive an empty page; a short page
+does not mean the end. `get_many` answers a bounded key set in one indexed
+`IN` lookup, omitting missing keys and keeping tombstones, so a list-shaped
+lookup (sidebar workspace audiences) is one actor request instead of one per
+key. Because a trimmed answer would read as missing keys, `get_many` refuses
+a set whose rows exceed 32 MiB instead of truncating it; callers narrow the
+batch (seven full-size documents always fit). `seed` is the one-time file import: it inserts revision-1 rows
+for keys with no row at all and never overwrites a live row or a tombstone.
+Seeded rows carry the reserved request id `seed`, which a `put` may not use,
+so a replay check never mistakes a seeded row for its own receipt.
+Each namespace has its own import-complete flag in
+`session_kernel_migrations`. Namespaces are printable ASCII up to 128 bytes,
+keys up to 512 bytes, documents up to 4 MiB, pages, key batches, and seed
+batches up to 1,000 rows, one key batch at most 256 KiB of keys, one
+`get_many` answer at most 32 MiB, one page at most 8 MiB, and one seed batch
+at most 32 MiB.
 
 The transcript database keeps its own `changeSeq`, which is the client replay
 cursor. SessionKernel also records lifecycle and metadata changes in its own
@@ -444,6 +511,18 @@ Slack `client_msg_id`. Durable timers use the same bounded backoff discipline.
 The runtime starts only after run-host recovery and queue restoration establish
 ownership. Any recovery-gate error fail-stops the gateway before timers or
 outbox effects can run. Shutdown stops the runtime before draining the server.
+A dev instance has no recovery gate and starts the runtime at once; its state
+dir is isolated.
+
+The runtime's one-second tick is the floor, not the cadence. `wakes.ts` holds
+two in-process, non-durable wake-ups: an accepted creation event that emits an
+effect, and a freed execution slot, request a drain pass within 50 ms (one
+pass per burst, so at most twenty passes a second), so a group's throughput is not its concurrency per tick. The
+creation waiters (`creation-intents.ts`) are woken by the creation event that
+changes their state in this process and re-read the actor once; their poll is
+only the fallback for a commit made elsewhere, starting at 25 ms and backing
+off to one second. Before this, every pending create and every running
+opening turn asked the actor for its state forty times a second.
 
 Background intake observes the same process-wide shutdown fence. New cron,
 automation webhook, GitHub review and queued boot-recovery work cannot start
@@ -468,10 +547,22 @@ gateway evaluates the changed session against each distinct subscribed scope
 (its workspace or worktree group and parent chain, from the list index) and
 sends `session_row` or `session_row_removed` only to the sockets whose lens
 shows it, coalesced per session (`session-row-events.ts`). The cost of a write
-is O(distinct scopes) and a few hundred bytes per socket. `sessions_invalidated`
-remains for mutations that have no row to send yet (overrides, PR state,
-auth); the client's slow fallback poll and reconnect refetch heal a lost frame
-either way.
+is O(distinct scopes) and a few hundred bytes per socket.
+
+Changes that bypass the metadata document publish rows the same way.
+`publishSessionChange(sessionId)` refreshes one index row from the current
+document and overlays (title, status and review overrides, the archive
+registry, a PR link, a generated title, a run starting or settling through
+`session-list-runtime-sync`) and publishes it. PR state lives in the PR cache,
+so a merge, close, review or webhook calls `publishSessionRowsForBranch`,
+which finds the live rows on that branch, its `-os-review` checkout and the
+members of a PR workspace whose head it is through the list index's `branch`
+column, and publishes exactly those. `sessions_invalidated` is now reserved
+for changes with no row to name: bulk archive, boot recovery, auth changes,
+integration reloads, and the fallback while the live index has no coverage.
+The client's slow fallback poll and reconnect refetch heal a lost frame either
+way. `scripts/load-control-plane.ts` measures this; see
+`docs/control-plane-load.md`.
 
 Transcript clients already reconnect by durable `changeSeq`. Current user
 entries also carry the stable source delivery ids that formed the turn, so
@@ -504,8 +595,13 @@ existing settlement protocols remain additive and mixed-version safe.
 Before every isolated mutation, the host durably marks that session's catalog
 wake record dirty. A crash can therefore leave an extra scan but cannot hide a
 committed timer or outbox item. Runtime reconciliation first asks the catalog
-for at most four dirty or due session ids. The service then enqueues one claim
-on each session's normal actor mailbox. That actor reads its authoritative
+for a bounded batch of dirty or due session ids (32 by default;
+`OPENSESSION_KERNEL_RUNTIME_WAKE_CANDIDATES` in the kernel service drop-in,
+never the gateway env file). The service then enqueues one claim on each
+session's normal actor mailbox, in parallel across lanes. That batch is also
+the runtime's discovery throughput: a pass admits at most that many sessions'
+due effects, which at the old bound of four made a create burst drain at four
+sessions per pass. That actor reads its authoritative
 database through its existing lane-local connection and repairs the catalog
 wake projection before ending the same turn. The catalog lane never opens an
 isolated actor database, and runtime discovery creates no fleet-wide mutation

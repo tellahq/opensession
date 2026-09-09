@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { SessionListStore } from "./session-list-store";
+import { Database } from "bun:sqlite";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { SessionListStore } from "./session-list-sqlite";
 import type { UnifiedSession } from "./types";
 
 const stores: SessionListStore[] = [];
@@ -36,6 +40,71 @@ function memoryStore(): SessionListStore {
 }
 
 describe("SessionListStore", () => {
+  test("finds live rows by branch through the branch index", () => {
+    const store = memoryStore();
+    store.upsertMany([
+      session("on-branch", "2026-09-01T00:00:00.000Z", { branch: "feat-x" }),
+      session("review-checkout", "2026-09-01T00:00:00.000Z", {
+        branch: "feat-x-os-review",
+      }),
+      session("archived-on-branch", "2026-09-01T00:00:00.000Z", {
+        branch: "feat-x",
+        archived: true,
+      }),
+      session("elsewhere", "2026-09-01T00:00:00.000Z", { branch: "main" }),
+    ]);
+    expect(
+      store
+        .listLiveByBranch(["feat-x", "feat-x-os-review"])
+        .map((row) => row.id)
+        .sort(),
+    ).toEqual(["on-branch", "review-checkout"]);
+    expect(store.listLiveByBranch([])).toEqual([]);
+    expect(
+      store
+        .queryPlan(
+          "SELECT payload FROM session_list WHERE archived = 0 AND branch IN (?, ?)",
+        )
+        .join("\n"),
+    ).toContain("idx_session_list_branch");
+  });
+
+  test("adds the branch column to an index built before it existed and drops coverage", () => {
+    const dir = mkdtempSync(join(tmpdir(), "session-list-store-"));
+    const path = join(dir, "list.db");
+    try {
+      const legacy = new Database(path);
+      legacy.exec(`
+        CREATE TABLE session_list_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE session_list (
+          id TEXT PRIMARY KEY, source TEXT NOT NULL, archived INTEGER NOT NULL,
+          last_activity_ms INTEGER NOT NULL, workspace_id TEXT, worktree_dir TEXT,
+          automation TEXT, repo TEXT, started_by TEXT, created_by TEXT,
+          desk INTEGER NOT NULL DEFAULT 0, is_running INTEGER NOT NULL DEFAULT 0,
+          waiting_for_input INTEGER NOT NULL DEFAULT 0, manual_status TEXT,
+          payload TEXT NOT NULL
+        );
+        INSERT INTO session_list_meta VALUES ('covered:include', '1'), ('covered:exclude', '1');
+      `);
+      legacy.close();
+
+      const store = new SessionListStore(path);
+      stores.push(store);
+      // Coverage is gone: old rows have no branch, so the next rebuild must
+      // refill every row rather than leave them unmatched by branch.
+      expect(store.hasCoverage("include")).toBe(false);
+      expect(store.hasCoverage("exclude")).toBe(false);
+      store.upsert(
+        session("later", "2026-09-01T00:00:00.000Z", { branch: "feat-y" }),
+      );
+      expect(store.listLiveByBranch(["feat-y"]).map((row) => row.id)).toEqual([
+        "later",
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("uses archive and activity index for a live list", () => {
     const store = memoryStore();
     const plan = store.queryPlan(

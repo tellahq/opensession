@@ -16,7 +16,18 @@ The agent has the same surface through `opensession-portals`:
 `list_portals`, `stop_portal`, `restart_portal`, and `set_portal_path` for the
 route a Portal should open on. Open Session allocates the port, runs the
 process under a session-scoped supervisor with `PORT` and `PORTAL_URL`, waits
-for it to listen, and returns the URL. Supervisor records live in the
+for it to listen, and returns the URL. A host Portal's environment is minimal:
+`PATH`, `HOME`, those two, and the same short-lived AWS credential pointer the
+agent's shell gets (`AWS_SHARED_CREDENTIALS_FILE`, when the mint is on), never
+the service environment. Before a host Portal starts, the gitignored env files
+a repository's dev server needs (`packages/core/webapp/.env.local`, `.envrc`)
+are copied from the main checkout when the worktree lacks them; an existing
+copy is never overwritten. Sandbox Portals get the workload identity instead
+and materialize their environment from the repository's configured source.
+The tools answer within 90 seconds: a Portal still booting past that (a
+declared dev server may allow 180) is reported as still starting, and
+`list_portals` shows the URL or the error once it settles. Supervisor records
+live in the
 workspace's `.ports.conf` next to the stable `*_PORT` entries repository
 tooling reads:
 
@@ -47,8 +58,26 @@ restarts every Portal that was awake, with the same command and port, after
 `.agents/resume` has run. A provider that stops and restarts a Sandbox on its
 own (an idle timeout) leaves the registry intact and the processes gone; the
 next request to such a Portal relaunches the dead ones while it rebuilds the
-relay (`src/server/sandbox-portal-recovery.ts`), so the first load waits for
-the service rather than answering 502. Stopping a Portal removes its route.
+relay (`src/server/sandbox-portal-recovery.ts`). Stopping a Portal removes its
+route.
+
+While that rebuild runs, a person opening the Portal in a browser sees a
+small "Starting the Portal" page served from the Portal port itself
+(`src/server/portal-waiting-page.ts`): a 503 that refreshes every few seconds
+until the route is live, instead of a blank tab that times out. Sleep keeps
+the Portal's public port and its Caddy route and withdraws only the relay, so
+the URL stays reachable; a signed-in navigation there wakes the Sandbox,
+since a person opening the URL is as explicit as pressing Wake. A fetch or an
+asset load never wakes anything and simply waits for the rebuild. The page
+also covers a Portal whose service is still booting after a start or a wake,
+and a wake-restore gets the full ten-minute ready window rather than the
+recipe's, since a cold resume pays for its volume before the dev server can
+bind. Before relaunching, the restore primes the Sandbox (the identity client
+and the issuer connection, which a recipe reaches for first and which a cold
+volume makes seconds slower than a recipe's own wait) and retries a launch
+once when the process exits before it listens. When the Portal cannot come back (its Sandbox is gone or the service
+was stopped) the navigation gets a 404 page with a link back to the session.
+Both pages say nothing about the Sandbox beyond that.
 
 Current boundary: Portals inherit the instance's authenticated team boundary;
 there is no per-session ACL narrower than that team boundary yet.

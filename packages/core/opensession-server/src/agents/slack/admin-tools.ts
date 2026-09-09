@@ -24,7 +24,9 @@ import {
   updateAutomation,
   deleteAutomation,
   runAutomation,
+  retriggerAutomationSession,
 } from "../../server/automations";
+import { publishSessionChange } from "../../server/session-cache";
 import {
   readMcpConfig,
   addMcpServer,
@@ -157,7 +159,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
         `List all of ${personaName()}'s automations (routines): scheduled, event- and webhook-triggered jobs.`,
         {},
         async () => {
-          const all = listAutomations();
+          const all = await listAutomations();
           if (!all.length) return text("No automations configured.");
           const fallbackRepo = defaultRepoId();
           const lines = all.map((a) => {
@@ -269,7 +271,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           owner?: string;
           workspaceId?: string;
         }) => {
-          const res = createAutomation({
+          const res = await createAutomation({
             name: args.name,
             prompt: args.prompt,
             schedule: args.schedule || "",
@@ -401,7 +403,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           workspaceId?: string;
         }) => {
           const { id, ...patch } = args;
-          const res = updateAutomation(id, patch);
+          const res = await updateAutomation(id, patch);
           if ("error" in res) return text(`Couldn't update it: ${res.error}`);
           const runsIn = res.repo || defaultRepoId();
           return text(
@@ -418,8 +420,8 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
         "Delete an automation by id. This is permanent.",
         { id: z.string() },
         async (args: { id: string }) => {
-          const a = getAutomation(args.id);
-          const ok = deleteAutomation(args.id);
+          const a = await getAutomation(args.id);
+          const ok = await deleteAutomation(args.id);
           return text(
             ok
               ? `Deleted automation ${a ? `*${a.name}* ` : ""}[\`${args.id}\`].`
@@ -432,13 +434,32 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
         "Trigger an automation to run now (manual trigger), without waiting for its schedule.",
         { id: z.string() },
         async (args: { id: string }) => {
-          const a = getAutomation(args.id);
+          const a = await getAutomation(args.id);
           if (!a) return text(`No automation with id \`${args.id}\`.`);
           // Fire-and-forget; the run reports into the Open Session session list.
           void runAutomation(a, undefined, { trigger: "manual" }).catch((e) =>
             console.error("[admin] run_automation failed:", e),
           );
           return text(`Triggered *${a.name}* [\`${a.id}\`] — running now.`);
+        },
+      ),
+      tool(
+        "retrigger_automation_run",
+        "Re-run an automation with the exact triggering payload of one of its past runs (the session id of that run). Event and webhook runs replay their original event as a fresh concurrent run; cron and manual runs simply start again. Use this to redo a run after fixing the automation's prompt.",
+        {
+          sessionId: z
+            .string()
+            .describe(
+              "Session id of the past automation run whose trigger to replay.",
+            ),
+        },
+        async (args: { sessionId: string }) => {
+          const res = await retriggerAutomationSession(args.sessionId);
+          if (!res.ok) return text(`Couldn't retrigger: ${res.reason}`);
+          publishSessionChange(args.sessionId);
+          return text(
+            `Retriggered *${res.name}* from \`${args.sessionId}\` — running now.`,
+          );
         },
       ),
       tool(
@@ -515,7 +536,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
               mcpServers = Array.from(new Set([...mcpServers, "slack"]));
           }
 
-          const res = createAutomation({
+          const res = await createAutomation({
             name:
               args.name?.trim() ||
               `Reminder: ${args.prompt.trim().slice(0, 48)}`,

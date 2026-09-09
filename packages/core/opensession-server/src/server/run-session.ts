@@ -152,7 +152,7 @@ import type { SessionUsage, TranscriptEntry, UnifiedSession } from "./types";
 import {
   findSession,
   getCachedSessions,
-  invalidateSessionsCache,
+  publishSessionChange,
   persistAutoModelSwitch,
   retryAutoFallbackModel,
   recordRunOutcome,
@@ -164,7 +164,7 @@ import {
 import { markRecapPendingIfUnwatched } from "./recap";
 import { scheduleSessionHistoryIndex } from "./session-index";
 import { broadcastToSession, sessionWatchers } from "./ws-hub";
-import { getWorkspace } from "./workspaces";
+import { peekWorkspace } from "./workspaces";
 import {
   broadcastQueue,
   beginNextPromptDispatch,
@@ -1122,7 +1122,7 @@ export async function recordRecoveredRunEvent(
         shouldPersistModelSwitch(event) &&
         syncAgentSessionEngine(session, { model: event.toModel })
       ) {
-        invalidateSessionsCache();
+        publishSessionChange(session.id);
       }
     } else if (
       (event.type === "init" || event.type === "done") &&
@@ -1138,7 +1138,7 @@ export async function recordRecoveredRunEvent(
             : { engineSessionId: event.sessionId },
         )
       )
-        invalidateSessionsCache();
+        publishSessionChange(session.id);
       if (session.worktreeDir)
         attachSessionWatchersToEngineTranscript(
           osSessionId,
@@ -1248,7 +1248,7 @@ export async function recordRecoveredRunEvent(
           ],
         });
         linkThreadInIndex(osSessionId, post.channel, post.threadTs);
-        invalidateSessionsCache();
+        publishSessionChange(osSessionId);
       }
     }
     if (event.type === "done" || event.type === "error")
@@ -1273,7 +1273,7 @@ export async function recordRecoveredRunEvent(
         at: new Date().toISOString(),
         by: reason,
       },
-    }).then(() => invalidateSessionsCache());
+    }).then(() => publishSessionChange(osSessionId));
     return;
   }
 
@@ -1322,7 +1322,7 @@ export async function recordRecoveredRunEvent(
       engineSessionId,
     );
   }
-  invalidateSessionsCache();
+  publishSessionChange(osSessionId);
 }
 
 /**
@@ -1876,6 +1876,9 @@ export async function maybeLaunchSandboxedRun(
     promptEntryId?: string;
     seedTranscriptEntries?: TranscriptEntry[];
     engineSessionId?: string;
+    /** The prompt already opens with an engine-switch handoff note, so a
+     *  replacement Sandbox must not add a second one. */
+    promptCarriesHandoff?: boolean;
     cwd: string;
     user?: string;
     images?: ImageInput[];
@@ -1915,7 +1918,7 @@ export async function maybeLaunchSandboxedRun(
     opts.isAutomationSession && !session.automationDescendantPolicy;
   const owningAutomation = disposableAutomationResume
     ? session.automationId
-      ? getAutomation(session.automationId)
+      ? await getAutomation(session.automationId)
       : null
     : null;
   if (disposableAutomationResume) {
@@ -2110,13 +2113,34 @@ export async function maybeLaunchSandboxedRun(
     const portablePreset = workspacePreset
       ? portableWorkspacePresetRun(workspacePreset)
       : undefined;
+    // A replacement Sandbox starts a fresh engine: the old one's database
+    // lived in the VM that is gone, or on this host for a session that just
+    // moved. Pi only bridges history when it was told to RESUME and the file
+    // is missing, so bridge it here the same way, from the entries the host
+    // already read, or the model forgets everything the person said and saw.
+    const replacedHandoff =
+      remoteSandboxReplaced &&
+      !opts.promptCarriesHandoff &&
+      opts.seedTranscriptEntries?.length
+        ? buildEngineSwitchHandoffNote({
+            fromModel: session.model,
+            fromProvider: "pi",
+            toProvider: "pi",
+            sameEngineRestart: true,
+            entries: opts.seedTranscriptEntries,
+            maxEntries: 200,
+            maxChars: 60_000,
+          })
+        : null;
     const spec: RunHostSpec = {
       // Bind the physical sandbox host to the admitted run token, exactly like
       // the Runner and local paths: exact-token Stop must reach the live host,
       // and restart adoption must reattach under the same durable identity.
       hostId: opts.startToken || `rh-${randomUUIDv7()}`,
       osSessionId: session.id,
-      prompt: opts.prompt,
+      prompt: replacedHandoff
+        ? `${wrapContext(replacedHandoff, "handoff")}\n\n${opts.prompt}`
+        : opts.prompt,
       promptEntryId: opts.promptEntryId,
       seedTranscriptEntries: opts.seedTranscriptEntries,
       engineSessionId: remoteSandboxReplaced
@@ -2946,7 +2970,7 @@ async function runSessionPromptInner(
       user || session.startedBy || undefined,
       session.model || undefined,
     ).then((t) => {
-      if (t) invalidateSessionsCache();
+      if (t) publishSessionChange(session.id);
     });
   }
 
@@ -3009,6 +3033,7 @@ async function runSessionPromptInner(
         promptEntryId: durablePromptEntryId,
         seedTranscriptEntries: piHostSeedEntries,
         engineSessionId: engineSessionId || undefined,
+        promptCarriesHandoff: !!switchHandoff,
         cwd,
         user,
         images,
@@ -3064,6 +3089,12 @@ async function runSessionPromptInner(
   // scoping intact: proxy names come from the same fail-closed automation
   // set the run-rpc fallback builder serves, while the repos note and MCP
   // grant identity are withheld.
+  // Resolved once: the automation-bar server set is a catalog read, and the
+  // proxy name list, the run-rpc fallback and the in-process mount below must
+  // all describe the same set.
+  const automationMcp = isAutomationSession
+    ? await automationSessionMcp(session, sessionId)
+    : {};
   const hostedRun =
     !runnerRun && !sandboxRun && routedEngine === "pi"
       ? runAgentHosted({
@@ -3087,7 +3118,7 @@ async function runSessionPromptInner(
           proxyMcpServers: session.automationDescendantPolicy
             ? []
             : isAutomationSession
-              ? Object.keys(automationSessionMcp(session, sessionId))
+              ? Object.keys(automationMcp)
               : [
                   ...Object.keys(interactiveMcpServers(user, sessionId)),
                   ...(session.goalId ? ["opensession-goal-self"] : []),
@@ -3117,7 +3148,7 @@ async function runSessionPromptInner(
           onSteerFailed: (text) => requeueFailedSteer(session.id, text, user),
           fallbackInProcessMcp: () =>
             isAutomationSession
-              ? automationSessionMcp(session, sessionId)
+              ? automationMcp
               : session.goalId
                 ? {
                     ...interactiveMcpServers(user, sessionId),
@@ -3194,7 +3225,7 @@ async function runSessionPromptInner(
       inProcessMcp: session.automationDescendantPolicy
         ? {}
         : isAutomationSession
-          ? automationSessionMcp(session, sessionId)
+          ? automationMcp
           : session.goalId
             ? {
                 ...interactiveMcpServers(user, sessionId),
@@ -3251,7 +3282,7 @@ async function runSessionPromptInner(
                   }
                 : {}),
             });
-            invalidateSessionsCache(); // new watchers must see the new transcriptPath
+            publishSessionChange(session.id); // new watchers must see the new transcriptPath
           } else if (
             // Slack/linear-source sessions need the same persistence, into
             // the owning agent's store — otherwise a fallback/rotation-minted
@@ -3268,7 +3299,7 @@ async function runSessionPromptInner(
                 : { engineSessionId: finalSessionId },
             )
           ) {
-            invalidateSessionsCache();
+            publishSessionChange(session.id);
           }
           attachSessionWatchersToEngineTranscript(
             sessionId,
@@ -3319,7 +3350,7 @@ async function runSessionPromptInner(
               at: new Date().toISOString(),
               by: reason,
             },
-          }).then(() => invalidateSessionsCache());
+          }).then(() => publishSessionChange(session.id));
           // Track it either way: a walk that hops twice must expect what
           // IT last wrote, and if the first write was refused (a human
           // chose meanwhile) every later hop is refused too, which is
@@ -3332,7 +3363,7 @@ async function runSessionPromptInner(
           // Keep the slack/linear store's model in step so the next turn
           // (from the loop or the UI) resumes on the fallback, not the
           // exhausted model. The new engine id follows via the init event.
-          invalidateSessionsCache();
+          publishSessionChange(session.id);
         }
         if (persistSwitch)
           broadcastToSession(sessionId, {
@@ -3454,7 +3485,7 @@ async function runSessionPromptInner(
             } catch {}
           }
         }
-        invalidateSessionsCache();
+        publishSessionChange(sessionId);
         break;
       case "error":
         // "Session is busy" = we lost the start race to a concurrent run (the
@@ -3708,7 +3739,8 @@ export function sessionMentionsNote(
   if (workspaceIds.length) {
     const sessions = getCachedSessions();
     const lines = workspaceIds.map((id) => {
-      const workspace = getWorkspace(id);
+      // Memory projection: the note is assembled synchronously per prompt.
+      const workspace = peekWorkspace(id);
       if (!workspace) return `- @workspace:${id} · no workspace with this id`;
       const members = sessions.filter(
         (session) => session.workspaceId === id && !session.archived,

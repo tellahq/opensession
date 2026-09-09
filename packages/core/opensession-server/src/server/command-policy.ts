@@ -182,6 +182,133 @@ export interface PublicationPolicy {
   headBranch: string;
 }
 
+/** `git [global options] <subcommand> <args>` out of one scanned command, or
+ * null when the command is not a git invocation. */
+function gitInvocation(
+  words: string[],
+): { subcommand: string | undefined; args: string[] } | null {
+  const gitIndex = words.indexOf("git");
+  if (gitIndex < 0) return null;
+  let index = gitIndex + 1;
+  while (index < words.length && words[index].startsWith("-")) {
+    const option = words[index++];
+    if (
+      ["-C", "-c", "--git-dir", "--work-tree", "--namespace"].includes(option)
+    )
+      index++;
+  }
+  return { subcommand: words[index], args: words.slice(index + 1) };
+}
+
+/** Branch names a `git push` argument list targets: `main`, `HEAD:main`,
+ * `refs/heads/main`, and `:main` (a delete) all normalize to `main`. */
+function pushDestinations(pushArgs: string[]): string[] {
+  return pushArgs
+    .filter((arg) => !arg.startsWith("-") && arg !== "origin")
+    .map((arg) =>
+      (arg.includes(":") ? arg.split(":").at(-1)! : arg).replace(
+        /^refs\/heads\//,
+        "",
+      ),
+    );
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export interface MergeGuard {
+  /** The protected base branch of the run's repository. Omitted for a shared
+   * self-development checkout, where pushing the base branch is the
+   * sanctioned workflow and GitHub's rulesets are the only guard. */
+  baseBranch?: string;
+  /** The tool a person-started turn should call instead of merging; named in
+   * the refusal so "merge this" ends in a card rather than an error. */
+  proposeTool?: string;
+}
+
+const MERGE_REFUSAL =
+  "agent runs cannot merge pull requests; a person merges from the PR panel";
+const APPROVE_REFUSAL =
+  "agent runs cannot submit an approving review; a person approves on GitHub";
+
+/**
+ * Server-side floor for EVERY agent run, whoever started the turn: no merge,
+ * no approving review, no update or deletion of the protected base branch.
+ * The boundary itself is the token and GitHub's rulesets
+ * (docs/github-authority.md); this tripwire exists so a confused agent gets
+ * a clear message instead of a 403, and so the attempt is logged.
+ */
+export function mergeGuardDenyReason(
+  command: string,
+  guard: MergeGuard,
+): string | undefined {
+  const mergeRefusal = guard.proposeTool
+    ? `${MERGE_REFUSAL}. Call ${guard.proposeTool} to hand it to them`
+    : MERGE_REFUSAL;
+  const baseRefusal = `agent runs cannot update the protected base branch ${guard.baseBranch}; push a feature branch and open a pull request`;
+  const scan = scannableCommand(command);
+  for (const words of scanShell(scan).commands) {
+    const git = gitInvocation(words);
+    if (
+      guard.baseBranch &&
+      (git?.subcommand === "push" || git?.subcommand === "send-pack") &&
+      pushDestinations(git.args).includes(guard.baseBranch)
+    )
+      return baseRefusal;
+    const ghIndex = words.indexOf("gh");
+    if (ghIndex < 0) continue;
+    const rest = words.slice(ghIndex + 1);
+    const has = (word: string) => rest.includes(word);
+    const some = (re: RegExp) => rest.some((word) => re.test(word));
+    if (has("pr") && has("merge")) return mergeRefusal;
+    if (has("pr") && has("review") && (has("--approve") || has("-a")))
+      return APPROVE_REFUSAL;
+    if (has("api")) {
+      if (
+        some(/\/pulls\/\d+\/merge$/) ||
+        some(/mergePullRequest|enablePullRequestAutoMerge|enqueuePullRequest/)
+      )
+        return mergeRefusal;
+      if (
+        (some(/\/pulls\/\d+\/reviews/) ||
+          some(/addPullRequestReview|submitPullRequestReview/)) &&
+        some(/\bAPPROVE\b/)
+      )
+        return APPROVE_REFUSAL;
+    }
+  }
+  // Raw-text fallbacks for shapes the scanner does not split (heredocs,
+  // eval strings): mirror the word checks above.
+  if (
+    guard.baseBranch &&
+    new RegExp(
+      `\\bgit\\s+push\\b[^\\n]*(?:\\s|:|refs/heads/)${escapeRegExp(guard.baseBranch)}(?:\\s|$)`,
+    ).test(scan)
+  )
+    return baseRefusal;
+  if (/\bgh\s+pr\s+merge\b/.test(scan)) return mergeRefusal;
+  if (/\bgh\s+pr\s+review\b[^\n]*\s(?:--approve|-a)(?:\s|$)/.test(scan))
+    return APPROVE_REFUSAL;
+  if (/\/pulls\/\d+\/merge\b/.test(scan)) return mergeRefusal;
+  // A GraphQL mutation travels as a quoted literal, which the scanner treats
+  // as inert data; read the raw command for the mutation names.
+  if (/\bgh\b[^\n]*\bapi\b/.test(scan)) {
+    if (
+      /mergePullRequest|enablePullRequestAutoMerge|enqueuePullRequest/.test(
+        command,
+      )
+    )
+      return mergeRefusal;
+    if (
+      /addPullRequestReview|submitPullRequestReview/.test(command) &&
+      /\bAPPROVE\b/.test(command)
+    )
+      return APPROVE_REFUSAL;
+  }
+  return undefined;
+}
+
 /** Server-side floor for automation descendants. It permits publishing the
  * owned feature branch and updating its PR, but never merging, pushing the
  * protected base, or selecting another repository for a write. */
@@ -192,34 +319,15 @@ export function publicationPolicyDenyReason(
   const scan = scannableCommand(command);
   const shellCommands = scanShell(scan).commands;
   for (const words of shellCommands) {
-    const gitIndex = words.indexOf("git");
-    if (gitIndex >= 0) {
-      let index = gitIndex + 1;
-      while (index < words.length && words[index].startsWith("-")) {
-        const option = words[index++];
-        if (
-          ["-C", "-c", "--git-dir", "--work-tree", "--namespace"].includes(
-            option,
-          )
-        )
-          index++;
-      }
-      const subcommand = words[index];
+    const git = gitInvocation(words);
+    if (git) {
+      const { subcommand, args: pushArgs } = git;
       if (subcommand === "send-pack")
         return "automation descendants cannot use git send-pack";
       if (subcommand === "push") {
-        const pushArgs = words.slice(index + 1);
         if (pushArgs.some((arg) => /^(?:https?:\/\/|git@|ssh:\/\/)/i.test(arg)))
           return "automation descendants cannot push to an external repository URL";
-        const destinations = pushArgs.filter(
-          (arg) => !arg.startsWith("-") && arg !== "origin",
-        );
-        const normalizedDestinations = destinations.map((arg) =>
-          (arg.includes(":") ? arg.split(":").at(-1)! : arg).replace(
-            /^refs\/heads\//,
-            "",
-          ),
-        );
+        const normalizedDestinations = pushDestinations(pushArgs);
         if (normalizedDestinations.includes(policy.branch))
           return `automation descendants cannot push the protected base branch ${policy.branch}`;
         if (
@@ -248,7 +356,7 @@ export function publicationPolicyDenyReason(
         return "automation descendants cannot merge pull requests";
     }
   }
-  const escapedBranch = policy.branch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedBranch = escapeRegExp(policy.branch);
   if (
     new RegExp(
       `\\bgit\\s+push\\b[^\\n]*(?:HEAD:|refs/heads/)?${escapedBranch}(?:\\s|$)`,
@@ -258,10 +366,7 @@ export function publicationPolicyDenyReason(
   if (/\bgit\s+push\s+(?:https?:\/\/|git@|ssh:\/\/)/i.test(scan))
     return "automation descendants cannot push to an external repository URL";
   if (/\bgit\s+push\b/i.test(scan)) {
-    const escapedHead = policy.headBranch.replace(
-      /[.*+?^${}()|[\]\\]/g,
-      "\\$&",
-    );
+    const escapedHead = escapeRegExp(policy.headBranch);
     const ownsDestination = new RegExp(
       `(?:HEAD:)?(?:refs/heads/)?${escapedHead}(?:\\s|$)`,
     ).test(scan);

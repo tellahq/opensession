@@ -71,6 +71,7 @@ import {
   getCachedSessionsAsync,
   getSessionListSnapshotAsync,
   invalidateSessionsCache,
+  publishSessionChange,
   maybePersistEffort,
   maybePersistFastMode,
   runErrors,
@@ -133,6 +134,7 @@ import {
   type Workspace,
   deleteWorkspace,
   getWorkspace,
+  peekWorkspace,
   workspaceNameSnapshot,
 } from "../workspaces";
 import { prHostFor } from "../pr-host";
@@ -262,7 +264,7 @@ export function archivedScope(
   if (variant !== "only" && variant !== "only-slim") return null;
   const workspaceId = params.get("workspace");
   if (!workspaceId) return null;
-  return { workspaceId, worktreeDir: getWorkspace(workspaceId)?.worktreeDir };
+  return { workspaceId, worktreeDir: peekWorkspace(workspaceId)?.worktreeDir };
 }
 
 // Parked on globalThis so invalidateSessionsCache() can clear it without this
@@ -461,14 +463,19 @@ function sessionEnrichmentContext(): SessionEnrichmentContext {
   };
 }
 
-function enrichSession(
-  s: UnifiedSession,
-  signals?: SessionListRuntimeSignals,
-  context = sessionEnrichmentContext(),
-) {
-  // The materialized row may still say a completed run is active. Reconcile
-  // both edges from live runtime state before serializing any list or detail.
-  enrichSessionRuntime([s], signals?.runtime);
+/**
+ * Where a row's registry overlays (generated title, rename, manual lane,
+ * review request) come from. Rows out of the list index and the assembled
+ * list already carry them, resolved with alias fallback when the row was
+ * projected (sessions.ts applySessionOverlays), and every registry writer
+ * republishes the rows it touched. Re-reading the registries per row would
+ * only put synchronous file stats back on the list path, so list readers
+ * take the stored values; the detail route still re-reads them for the one
+ * session it serves.
+ */
+type OverlaySource = "row" | "registries";
+
+function registryOverlays(s: UnifiedSession): Partial<UnifiedSession> {
   const generatedTitle =
     getGeneratedTitle(s.id) ??
     s.aliasIds?.map((id) => getGeneratedTitle(id)).find(Boolean);
@@ -481,6 +488,23 @@ function enrichSession(
   const reviewRequest =
     getReviewRequest(s.id) ??
     s.aliasIds?.map((id) => getReviewRequest(id)).find(Boolean);
+  return {
+    ...(generatedTitle ? { title: generatedTitle } : {}),
+    ...(titleOverride ? { title: titleOverride, titleOverridden: true } : {}),
+    ...(manualStatus ? { manualStatus } : {}),
+    ...(reviewRequest ? { reviewRequest } : {}),
+  };
+}
+
+function enrichSession(
+  s: UnifiedSession,
+  signals?: SessionListRuntimeSignals,
+  context = sessionEnrichmentContext(),
+  overlays: OverlaySource = "registries",
+) {
+  // The materialized row may still say a completed run is active. Reconcile
+  // both edges from live runtime state before serializing any list or detail.
+  enrichSessionRuntime([s], signals?.runtime);
   const prSession = enrichSessionPrRefs(s, {
     defaultRepoId: context.defaultRepoId,
     prsByRepo: context.prsByRepo,
@@ -500,10 +524,7 @@ function enrichSession(
           safety,
         }
       : {}),
-    ...(generatedTitle ? { title: generatedTitle } : {}),
-    ...(titleOverride ? { title: titleOverride, titleOverridden: true } : {}),
-    ...(manualStatus ? { manualStatus } : {}),
-    ...(reviewRequest ? { reviewRequest } : {}),
+    ...(overlays === "registries" ? registryOverlays(s) : {}),
     repo: s.repo || context.defaultRepoId,
     // The name of the workspace this session is filed under. A sidebar row
     // names a workspace, never one of its tabs, and the workspace list is
@@ -554,7 +575,7 @@ export async function sessionDetail(
   if (!enriched.workspaceId) return enriched;
   return projectWorkspacePrRefs(
     enriched,
-    indexedWorkspaceMemberSessions(enriched.workspaceId).map((member) =>
+    (await indexedWorkspaceMemberSessions(enriched.workspaceId)).map((member) =>
       enrichSessionPrRefs(member, {
         defaultRepoId: context.defaultRepoId,
         prsByRepo: context.prsByRepo,
@@ -579,12 +600,12 @@ export async function sidebarRowProjection(
   const signals = await sessionListRuntimeSignals();
   const context = sessionEnrichmentContext();
   const enrichedGroup = group.map((member) =>
-    enrichSession(member, signals, context),
+    enrichSession(member, signals, context, "row"),
   );
   shareWorkspacePrRefs(enrichedGroup);
   const enriched =
     enrichedGroup.find((member) => member.id === session.id) ??
-    enrichSession(session, signals, context);
+    enrichSession(session, signals, context, "row");
   return { row: sessionListRow(enriched), group: enrichedGroup };
 }
 
@@ -910,16 +931,16 @@ function refreshSidebarSessionsResponse(
   const refresh = buildAtCurrentSessionListRevision(async () => {
     const signals = await sessionListRuntimeSignals();
     const context = sessionEnrichmentContext();
-    const indexed = indexedSidebarSessions(scope.selectedSessionId);
+    const indexed = await indexedSidebarSessions(scope.selectedSessionId);
     const sliced = (indexed ?? (await getCachedSessionsAsync("exclude"))).map(
-      (session) => enrichSession(session, signals, context),
+      (session) => enrichSession(session, signals, context, "row"),
     );
     shareWorkspacePrRefs(sliced);
     const bounded = indexed ? sliced : sidebarLiveSessions(sliced);
     const scoped = scopeSessionsForSidebar(
       bounded,
       scope,
-      loadSidebarSessionScopeContext(scope, bounded),
+      await loadSidebarSessionScopeContext(scope, bounded),
     );
     const text = JSON.stringify(scoped.map(sessionListRow));
     return {
@@ -953,10 +974,11 @@ function refreshSessionsResponse(
         : variant === "include"
           ? "include"
           : "only";
-    const indexed =
-      variant === "exclude" ? indexedSidebarSessions() : indexedSessions(slice);
+    const indexed = await (variant === "exclude"
+      ? indexedSidebarSessions()
+      : indexedSessions(slice));
     const sliced = (indexed ?? (await getCachedSessionsAsync(slice))).map(
-      (session) => enrichSession(session, signals, context),
+      (session) => enrichSession(session, signals, context, "row"),
     );
     shareWorkspacePrRefs(sliced);
     const listed =
@@ -1068,7 +1090,7 @@ export async function handleSessionsRoutes(
     }
     let branch = typeof body?.branch === "string" ? body.branch.trim() : "";
     const joinsWorktree = !!(
-      workspaceId && getWorkspace(workspaceId)?.worktreeDir
+      workspaceId && (await getWorkspace(workspaceId))?.worktreeDir
     );
     if (!forkFrom && mode === "code" && !branch && !joinsWorktree) {
       const attachmentName =
@@ -1177,7 +1199,7 @@ export async function handleSessionsRoutes(
     const scope = archivedScope(url.searchParams, variant);
     if (scope) {
       const indexed = scope.workspaceId
-        ? indexedWorkspaceSessions(scope.workspaceId, scope.worktreeDir)
+        ? await indexedWorkspaceSessions(scope.workspaceId, scope.worktreeDir)
         : null;
       const selected =
         indexed ??
@@ -1187,7 +1209,7 @@ export async function handleSessionsRoutes(
       const signals = await sessionListRuntimeSignals();
       const context = sessionEnrichmentContext();
       const rows = selected.map((session) =>
-        enrichSession(session, signals, context),
+        enrichSession(session, signals, context, "row"),
       );
       shareWorkspacePrRefs(rows);
       const text = JSON.stringify(
@@ -1706,7 +1728,10 @@ export async function handleSessionsRoutes(
   if (path === "/api/sessions/archive-old" && req.method === "POST") {
     const body = await req.json().catch(() => ({}));
     const days = Math.max(1, parseInt(body.days) || 7);
-    const count = archiveOlderThan(await getSessionListSnapshotAsync(), days);
+    const count = await archiveOlderThan(
+      await getSessionListSnapshotAsync(),
+      days,
+    );
     invalidateSessionsCache();
     return Response.json({ archived: count });
   }
@@ -1772,12 +1797,15 @@ export async function handleSessionsRoutes(
     // unarchive, also clear the file flag so the session returns to "My
     // sessions".
     if (!archived) clearSessionFileArchive(sessionId);
-    invalidateSessionsCache();
+    publishSessionChange(sessionId);
     if (archived) {
       // setArchived drops the plain id pin; also drop legacy alias-id pins,
       // and the workspace pin once its last live session is archived (else the
       // row resurfaces in Pinned when a new session joins the workspace).
-      unpinArchivedSessions([session], await getSessionListSnapshotAsync());
+      await unpinArchivedSessions(
+        [session],
+        await getSessionListSnapshotAsync(),
+      );
     }
     return Response.json({ ok: true, stoppedRun });
   }
@@ -1796,7 +1824,7 @@ export async function handleSessionsRoutes(
     await executeSessionProjection(sessionId, "title_override", () =>
       setTitleOverride(sessionId, title || null),
     );
-    invalidateSessionsCache();
+    publishSessionChange(sessionId);
     return Response.json({ ok: true });
   }
 
@@ -1814,7 +1842,7 @@ export async function handleSessionsRoutes(
     await executeSessionProjection(sessionId, "status_override", () =>
       setStatusOverride(sessionId, status),
     );
-    invalidateSessionsCache();
+    publishSessionChange(sessionId);
     return Response.json({ ok: true });
   }
 
@@ -1857,7 +1885,7 @@ export async function handleSessionsRoutes(
           : null,
         reviewAliases,
       );
-      invalidateSessionsCache();
+      publishSessionChange(session.id);
       // Buzz whoever asked for the review that it landed (not on self-review).
       if (
         body.accept &&
@@ -1978,7 +2006,7 @@ export async function handleSessionsRoutes(
     // that did reach GitHub still leaves the reviewers on screen.
     if (!reviewer && mirroredToGithub && target)
       markCachedPrReviewRequestsCleared(target.ghRepo, target.branch);
-    invalidateSessionsCache();
+    publishSessionChange(session.id);
     if (reviewer) {
       // Only suppress the watcher's own push when the request really landed on
       // GitHub; marking a skipped mirror would swallow a later genuine one.
@@ -2073,7 +2101,7 @@ export async function handleSessionsRoutes(
         );
       }
       await purgeTranscriptRows(session.id);
-      invalidateSessionsCache();
+      publishSessionChange(session.id);
       // Tear down the session's sandbox (container + engine-state volumes,
       // and in volume-workspace mode the workspace volume itself; that data
       // loss is the mode's documented contract). Best-effort and detached:
@@ -2084,11 +2112,11 @@ export async function handleSessionsRoutes(
       // sidebar rows. PR-backed workspaces (`key`) stay because they regroup new
       // sessions for the same PR.
       if (session.workspaceId) {
-        const ws = getWorkspace(session.workspaceId);
+        const ws = await getWorkspace(session.workspaceId);
         const members = (await getSessionListSnapshotAsync()).filter(
           (s) => s.id !== session.id && s.workspaceId === session.workspaceId,
         );
-        if (ws && !ws.key && members.length === 0) deleteWorkspace(ws.id);
+        if (ws && !ws.key && members.length === 0) await deleteWorkspace(ws.id);
       }
       if (cleanWorktree && session.worktreeDir && session.branch) {
         await removeWorktree(
@@ -2110,7 +2138,7 @@ export async function handleSessionsRoutes(
     // to re-enter its permanently closed mailbox.
     const recoverTombstonedDeletion = async () => {
       try {
-        removeTombstonedSessionArtifacts(session);
+        await removeTombstonedSessionArtifacts(session);
         await finishDeletion();
         return Response.json({ ok: true });
       } catch (e: any) {

@@ -209,8 +209,8 @@ const automation = {
   workflowSessionRepos: ["renderer"],
   workflowSessionRunners: [registered.runner.id],
 };
-automations.saveAutomation(automation);
-const stored = automations.getAutomation(automation.id);
+await automations.saveAutomation(automation);
+const stored = await automations.getAutomation(automation.id);
 if (!stored) throw new Error("stored automation missing");
 const workflowPolicy = automations.automationWorkflowSessionPolicy(stored);
 if (!workflowPolicy) throw new Error("stored policy missing");

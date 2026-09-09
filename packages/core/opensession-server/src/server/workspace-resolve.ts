@@ -70,12 +70,12 @@ function prWorkspaceName(
 
 /** Upgrade only the exact placeholder minted when PR metadata was incomplete.
  * A person may rename any other PR workspace, and later resolves must preserve it. */
-function repairPrWorkspaceName(
+async function repairPrWorkspaceName(
   workspace: Workspace,
   number: number | undefined,
   branch: string | undefined,
   title: string | undefined,
-): Workspace {
+): Promise<Workspace> {
   if (!title?.trim()) return workspace;
   const placeholders = [
     number !== undefined ? `#${number}` : null,
@@ -83,9 +83,9 @@ function repairPrWorkspaceName(
   ];
   if (!placeholders.includes(workspace.name)) return workspace;
   return (
-    updateWorkspace(workspace.id, {
+    (await updateWorkspace(workspace.id, {
       name: prWorkspaceName(number, branch, title),
-    }) || workspace
+    })) || workspace
   );
 }
 
@@ -217,10 +217,16 @@ export async function resolvePrWorkspace(input: {
         !!branch && sessionMatchesPr(s, repoId, branch, number);
 
       // 1. Provenance key (workspaces minted from this PR before).
-      const byKey = key ? findWorkspaceByKey(key) : null;
+      const byKey = key ? await findWorkspaceByKey(key) : null;
       if (byKey) {
-        const stamped = stampWorkspaceIdentity(byKey.id, stamp) || byKey;
-        const named = repairPrWorkspaceName(stamped, number, branch, title);
+        const stamped =
+          (await stampWorkspaceIdentity(byKey.id, stamp)) || byKey;
+        const named = await repairPrWorkspaceName(
+          stamped,
+          number,
+          branch,
+          title,
+        );
         adoptSiblingSessions(named.id, matches);
         return { workspace: named, created: false, pr };
       }
@@ -231,9 +237,9 @@ export async function resolvePrWorkspace(input: {
           getCachedSessions().filter((x) => !x.archived),
         )) {
           if (!s.workspaceId || !matches(s)) continue;
-          const ws = getWorkspace(s.workspaceId);
+          const ws = await getWorkspace(s.workspaceId);
           if (!ws) continue;
-          const stamped = stampWorkspaceIdentity(ws.id, stamp) || ws;
+          const stamped = (await stampWorkspaceIdentity(ws.id, stamp)) || ws;
           adoptSiblingSessions(stamped.id, matches);
           return { workspace: stamped, created: false, pr };
         }
@@ -241,9 +247,10 @@ export async function resolvePrWorkspace(input: {
         const wt = (await listWorktrees(repoId)).find(
           (w) => w.branch === branch,
         );
-        const owner = wt ? workspaceOwningWorktree(wt.path) : null;
+        const owner = wt ? await workspaceOwningWorktree(wt.path) : null;
         if (owner) {
-          const stamped = stampWorkspaceIdentity(owner.id, stamp) || owner;
+          const stamped =
+            (await stampWorkspaceIdentity(owner.id, stamp)) || owner;
           adoptSiblingSessions(stamped.id, matches);
           return { workspace: stamped, created: false, pr };
         }
@@ -251,7 +258,7 @@ export async function resolvePrWorkspace(input: {
 
       // 4. Mint a session-less PR workspace (no worktreeDir — the first session
       // materializes it via the create_session fromPr path).
-      const workspace = createWorkspace({
+      const workspace = await createWorkspace({
         name: prWorkspaceName(number, branch, title),
         repo: repoId,
         createdBy: input.createdBy,
@@ -268,18 +275,19 @@ export async function resolvePrWorkspace(input: {
 /**
  * Resolve the one workspace for a Plain support thread. No Plain API
  * round-trip — the title comes from the clicked sidebar row / automation
- * event. Synchronous so automation filing can use it inline.
+ * event. Only the workspace catalog is awaited, so automation filing can
+ * still use it inline.
  */
-export function resolvePlainWorkspace(input: {
+export async function resolvePlainWorkspace(input: {
   threadId: string;
   title?: string;
   createdBy: string;
-}): ResolvedWorkspace {
+}): Promise<ResolvedWorkspace> {
   const { threadId } = input;
   const key = `plain-${threadId}`;
   const matches = (s: UnifiedSession) => s.plainThreadId === threadId;
 
-  const byKey = findWorkspaceByKey(key);
+  const byKey = await findWorkspaceByKey(key);
   if (byKey) {
     adoptSiblingSessions(byKey.id, matches);
     return { workspace: byKey, created: false };
@@ -293,15 +301,16 @@ export function resolvePlainWorkspace(input: {
     ...all.filter((x) => x.archived),
   ])) {
     if (!s.workspaceId) continue;
-    const ws = getWorkspace(s.workspaceId);
+    const ws = await getWorkspace(s.workspaceId);
     if (!ws) continue;
     const stamped =
-      stampWorkspaceIdentity(ws.id, { key, plainThreadId: threadId }) || ws;
+      (await stampWorkspaceIdentity(ws.id, { key, plainThreadId: threadId })) ||
+      ws;
     adoptSiblingSessions(stamped.id, matches);
     return { workspace: stamped, created: false };
   }
 
-  const workspace = createWorkspace({
+  const workspace = await createWorkspace({
     name: (input.title || "").trim().slice(0, 120) || "Support ticket",
     repo: getRepo().id,
     createdBy: input.createdBy,
@@ -318,16 +327,16 @@ export function resolvePlainWorkspace(input: {
  * `<kind>-<id>`, adopt a filed session already carrying the ref, else mint a
  * session-less workspace stamped with the ref (the feeds design).
  */
-export function resolveExternalWorkspace(input: {
+export async function resolveExternalWorkspace(input: {
   ref: ExternalRef;
   createdBy: string;
-}): ResolvedWorkspace {
+}): Promise<ResolvedWorkspace> {
   const { ref } = input;
   const key = `${ref.kind}-${ref.id}`;
   const matches = (s: UnifiedSession) =>
     (s.externalRefs || []).some((r) => r.kind === ref.kind && r.id === ref.id);
 
-  const byKey = findWorkspaceByKey(key);
+  const byKey = await findWorkspaceByKey(key);
   if (byKey) {
     adoptSiblingSessions(byKey.id, matches);
     return { workspace: byKey, created: false };
@@ -339,17 +348,17 @@ export function resolveExternalWorkspace(input: {
     ...all.filter((x) => x.archived),
   ])) {
     if (!s.workspaceId) continue;
-    const ws = getWorkspace(s.workspaceId);
+    const ws = await getWorkspace(s.workspaceId);
     if (!ws) continue;
     const stamped =
-      stampWorkspaceIdentity(ws.id, { key, externalRef: ref }) || ws;
+      (await stampWorkspaceIdentity(ws.id, { key, externalRef: ref })) || ws;
     adoptSiblingSessions(stamped.id, matches);
     return { workspace: stamped, created: false };
   }
 
   // Deliberately repo-less: feed-item workspaces start their sessions in
   // scratch mode (repo-less scratch dir), not in a repo checkout.
-  const workspace = createWorkspace({
+  const workspace = await createWorkspace({
     name: (ref.title || "").trim().slice(0, 120) || `${ref.kind} ${ref.id}`,
     createdBy: input.createdBy,
     key,

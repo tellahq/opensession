@@ -646,10 +646,21 @@ export function buildAuditDigestFromLines(
   };
 }
 
+/** A resolved `{ error }` is a failure the callee chose to return instead of
+ * throw (pr-info's gh wrappers do this). The audit line must say so: refused
+ * merges once logged as `ok: true` because only throws counted. */
+export function resolvedError(result: unknown): string | undefined {
+  if (!result || typeof result !== "object") return undefined;
+  const r = result as { ok?: unknown; error?: unknown };
+  if (r.ok === true) return undefined;
+  return typeof r.error === "string" && r.error ? r.error : undefined;
+}
+
 /**
  * Wraps a side-effecting call with start/end audit events: redacted args on
  * both, result fingerprint + duration on completion. Results are only
- * digested, never logged verbatim (data minimization).
+ * digested, never logged verbatim (data minimization). A result of the shape
+ * `{ error }` without `ok: true` is logged as a failure.
  */
 export async function audited<T>(
   ctx: { context: string; action: string; args?: unknown },
@@ -666,12 +677,14 @@ export async function audited<T>(
   audit({ ...base, msg: "action_start" });
   try {
     const result = await fn();
+    const error = resolvedError(result);
     audit({
       ...base,
       msg: "action_end",
-      ok: true,
+      ok: !error,
       result_digest: digest(result),
       duration_ms: Date.now() - start,
+      ...(error ? { error: error.slice(0, 300) } : {}),
     });
     return result;
   } catch (err) {

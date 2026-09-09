@@ -40,6 +40,7 @@ export function osReviewText(review: OsReview): string {
   return [
     review.confidence === undefined ? "" : `${review.confidence}/5`,
     verdict,
+    review.risk ? `${review.risk} risk` : "",
     review.blocking > 0 ? `${review.blocking} blocking` : "",
     review.stale ? "stale" : "",
   ]

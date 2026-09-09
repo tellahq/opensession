@@ -2,13 +2,15 @@
 
 import { getAllSessions } from "../packages/core/opensession-server/src/server/sessions";
 import {
+  closeSessionListIndex,
+  indexedCount,
   rebuildSessionListIndex,
-  sessionListStore,
 } from "../packages/core/opensession-server/src/server/session-list-store";
 
 const startedAt = Date.now();
 const sessions = getAllSessions("include");
-rebuildSessionListIndex(sessions);
-const store = sessionListStore();
-console.log(`Indexed ${store.count()} sessions in ${Date.now() - startedAt}ms`);
-store.close();
+await rebuildSessionListIndex(sessions);
+console.log(
+  `Indexed ${await indexedCount()} sessions in ${Date.now() - startedAt}ms`,
+);
+closeSessionListIndex();

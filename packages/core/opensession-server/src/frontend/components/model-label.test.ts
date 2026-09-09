@@ -52,6 +52,23 @@ describe("workspace preset labels", () => {
     );
   });
 
+  it("uses the current preset label rather than its persisted slug", () => {
+    const preset: ModelOption = {
+      id: "pi/orchestrator/fable-sol",
+      provider: "pi",
+      label: "Orchestrator · Fable + Astra",
+      aliases: [],
+      efforts: [],
+    };
+    expect(shortModelLabel(preset.id, [preset])).toBe(preset.label);
+  });
+
+  it("capitalizes named GPT variants", () => {
+    expect(shortModelLabel("pi/openai/gpt-6-astra", models)).toBe(
+      "GPT-6 Astra",
+    );
+  });
+
   it("names OpenRouter's nested GLM-5.3 slug", () => {
     expect(shortModelLabel("pi/openrouter/z-ai/glm-5.3", models)).toBe(
       "GLM-5.3",

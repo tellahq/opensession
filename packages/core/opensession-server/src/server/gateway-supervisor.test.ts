@@ -280,6 +280,83 @@ describe("gateway supervisor", () => {
     expect(supervisor.commitCoordinated().ok).toBe(true);
   });
 
+  test("keeps a coordinated candidate alive while activation outlasts the unattended deadline", async () => {
+    const old = controlledGateway(1, "/releases/old");
+    const candidate = controlledGateway(2, "/releases/new", true);
+    candidate.gateway.kill = (signal = 15) => {
+      candidate.events.push(`kill:${signal}`);
+      candidate.finish(137);
+    };
+    const exits: number[] = [];
+    const supervisor = new GatewaySupervisor(old.gateway, {
+      spawn: () => candidate.gateway,
+      async waitReady() {
+        // Recovery on a loaded host runs well past the unattended deadline
+        // while traffic already routes to the candidate.
+        await Bun.sleep(60);
+      },
+      validateRelease: (root) => root,
+      promoteCurrent() {},
+      onUnexpectedExit(_gateway, code) {
+        exits.push(code);
+      },
+      coordinatedUnattendedTimeoutMs: 20,
+    });
+    const preparing = supervisor.prepareCoordinated({
+      type: "prepare_coordinated",
+      releaseRoot: "/releases/new",
+      sha: "a".repeat(40),
+    });
+    candidate.preload();
+    await Bun.sleep(0);
+    old.finish(0);
+    expect((await preparing).ok).toBe(true);
+
+    const activation = await supervisor.activateCoordinated();
+    expect(activation.ok).toBe(true);
+    expect(candidate.events.filter((e) => e.startsWith("kill:"))).toEqual([]);
+    expect(exits).toEqual([]);
+
+    // Awaiting commit is unattended again: a controller that never returns
+    // still ends in a clean supervisor exit on the selected release.
+    await Bun.sleep(40);
+    expect(candidate.events).toContain("kill:9");
+    expect(exits).toEqual([75]);
+  });
+
+  test("ends an abandoned coordinated preparation at the unattended deadline", async () => {
+    const old = controlledGateway(1, "/releases/old");
+    const candidate = controlledGateway(2, "/releases/new", true);
+    candidate.gateway.kill = (signal = 15) => {
+      candidate.events.push(`kill:${signal}`);
+      candidate.finish(137);
+    };
+    const exits: number[] = [];
+    const supervisor = new GatewaySupervisor(old.gateway, {
+      spawn: () => candidate.gateway,
+      async waitReady() {},
+      validateRelease: (root) => root,
+      promoteCurrent() {},
+      onUnexpectedExit(_gateway, code) {
+        exits.push(code);
+      },
+      coordinatedUnattendedTimeoutMs: 20,
+    });
+    const preparing = supervisor.prepareCoordinated({
+      type: "prepare_coordinated",
+      releaseRoot: "/releases/new",
+      sha: "b".repeat(40),
+    });
+    candidate.preload();
+    await Bun.sleep(0);
+    old.finish(0);
+    expect((await preparing).ok).toBe(true);
+
+    await Bun.sleep(40);
+    expect(candidate.events).toEqual(["kill:9"]);
+    expect(exits).toEqual([75]);
+  });
+
   test("parks a failed coordinated candidate until previous peers are restored", async () => {
     const old = controlledGateway(1, "/releases/old");
     const candidate = controlledGateway(2, "/releases/new", true);

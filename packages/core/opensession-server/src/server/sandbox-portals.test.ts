@@ -8,6 +8,7 @@ const previous = process.env.HOME;
 process.env.HOME = HOME;
 const {
   cachedSandboxPortalOwner,
+  cachedSandboxPortalService,
   cacheSandboxPortals,
   dropCachedSandboxPortals,
   sleepingSandboxPortalStatus,
@@ -17,6 +18,32 @@ beforeEach(() => dropCachedSandboxPortals("sbx-test"));
 afterAll(() => {
   process.env.HOME = previous;
   rmSync(HOME, { recursive: true, force: true });
+});
+
+describe("cachedSandboxPortalService", () => {
+  test("maps a sandbox service port back to its Portal", () => {
+    cacheSandboxPortals("bks-test", "sbx-test", [
+      {
+        name: "web",
+        key: "WEB_PORT",
+        port: 4000,
+        running: true,
+        pids: [],
+        state: "awake",
+      },
+      {
+        name: "api",
+        key: "API_PORT",
+        port: 4001,
+        running: true,
+        pids: [],
+        state: "awake",
+      },
+    ]);
+    expect(cachedSandboxPortalService("sbx-test", 4001)?.name).toBe("api");
+    expect(cachedSandboxPortalService("sbx-test", 4002)).toBeNull();
+    expect(cachedSandboxPortalService("sbx-other", 4000)).toBeNull();
+  });
 });
 
 describe("sleeping Sandbox Portal cache", () => {

@@ -91,7 +91,7 @@ import {
 import { type Sandbox } from "./sandbox";
 import {
   findSessionAsync,
-  invalidateSessionsCache,
+  publishSessionChange,
   maybePersistEffort,
   maybePersistFastMode,
 } from "./session-cache";
@@ -1372,7 +1372,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
           );
           if (notice !== null) {
             ws.send(JSON.stringify({ type: "notice", message: notice }));
-            invalidateSessionsCache();
+            publishSessionChange(session.id);
             break;
           }
 

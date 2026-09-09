@@ -41,7 +41,7 @@ touches an in-process tool:
 | Server | Tools | Runs | Condition |
 | --- | --- | --- | --- |
 | [`opensession-sessions`](#opensession-sessions) | 15 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
-| [`opensession-admin`](#opensession-admin) | 13 | interactive, Slack loop | – |
+| [`opensession-admin`](#opensession-admin) | 14 | interactive, Slack loop | – |
 | [`opensession-runners`](#opensession-runners) | 5 | interactive | – |
 | [`opensession-goals`](#opensession-goals) | 8 | interactive | – |
 | [`opensession-search`](#opensession-search) | 2 | interactive | – |
@@ -49,7 +49,7 @@ touches an in-process tool:
 | [`opensession-humans`](#opensession-humans) | 3 | interactive, Slack loop, goal wake | Interactive runs need a session id (the answer routes back to it). |
 | [`opensession-keychain`](#opensession-keychain) | 3 | interactive | Needs a session id. |
 | [`opensession-publish`](#opensession-publish) | 4 | interactive | Needs a session id. |
-| [`opensession-repos`](#opensession-repos) | 4 | interactive | Needs a session id. |
+| [`opensession-repos`](#opensession-repos) | 5 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 9 | interactive | Needs a session id. |
 | [`opensession-web`](#opensession-web) | 3 | interactive, goal wake | Needs a session id. |
 | [`opensession-portals`](#opensession-portals) | 7 | interactive | Needs a session id. |
@@ -59,6 +59,7 @@ touches an in-process tool:
 | [`opensession-ask`](#opensession-ask) | 1 | interactive, Slack loop | Needs a session id. |
 | [`opensession-workflows`](#opensession-workflows) | 8 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
 | [`opensession-assets`](#opensession-assets) | 4 | interactive | Needs a session id. Works in read-only Ask mode — assets land outside the checkout. |
+| [`opensession-pull-requests`](#opensession-pull-requests) | 3 | interactive | Only on a turn a connected person started: never a review handoff, a worker report, or an automation. |
 | [`opensession-todos`](#opensession-todos) | 5 | interactive | Needs a session id. |
 | [`opensession-schedule`](#opensession-schedule) | 3 | interactive | Needs a session id. |
 | [`opensession-papercuts`](#opensession-papercuts) | 2 | interactive, automation | Dropped when the session's repo opted out (Settings → Papercuts). |
@@ -70,7 +71,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-29 servers, 129 tools.
+30 servers, 134 tools.
 
 ## opensession-sessions
 
@@ -232,6 +233,12 @@ Delete an automation by id. This is permanent.
 `mcp__opensession-admin__run_automation` · input: `id` (string, required)
 
 Trigger an automation to run now (manual trigger), without waiting for its schedule.
+
+### `retrigger_automation_run`
+
+`mcp__opensession-admin__retrigger_automation_run` · input: `sessionId` (string, required)
+
+Re-run an automation with the exact triggering payload of one of its past runs (the session id of that run). Event and webhook runs replay their original event as a fresh concurrent run; cron and manual runs simply start again. Use this to redo a run after fixing the automation's prompt.
 
 ### `schedule_once`
 
@@ -488,7 +495,7 @@ Stop a published app. It stays registered with its versions intact and can be st
 
 ## opensession-repos
 
-Attach or switch repos, and link a PR to this session.
+Attach or switch repos, link a PR to this session, and label PRs in any registered repo.
 
 - **Source** `packages/core/opensession-server/src/agents/slack/repos-tools.ts`
 - **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
@@ -518,6 +525,12 @@ Switch this session's PRIMARY repo when it was created against the wrong registe
 `mcp__opensession-repos__link_pr` · input: `url` (string), `repo` (string), `number` (number), `branch` (string)
 
 Link a pull request to this session so it shows in the session's Review tab beside the branch-derived PRs. Use when you open a follow-up PR on a different branch, or when a related PR (yours or someone else's) belongs with this session's work. PRs you open on this session's own branch (or an attached repo's branch) are shown automatically — don't link those.
+
+### `label_pull_request`
+
+`mcp__opensession-repos__label_pull_request` · input: `url` (string), `repo` (string), `number` (number), `add` (string[]), `remove` (string[])
+
+Add or remove labels on a pull request in any registered GitHub repo, including one this session does not have checked out. Labels are applied as the bot: the gateway mints a token for that repo, so this works where `gh` in your shell cannot see the repo. Pass the PR URL, or a repo id and number.
 
 ## opensession-memory
 
@@ -859,6 +872,34 @@ Read back a text asset from this session's asset storage (capped at 256 KB).
 `mcp__opensession-assets__delete_asset` · input: `path` (string, required)
 
 Delete a file or virtual folder from this session's asset storage.
+
+## opensession-pull-requests
+
+Open and edit this session's pull request as the person who asked; propose a merge for them to tap.
+
+- **Source** `packages/core/opensession-server/src/server/pull-request-mcp.ts`
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
+- **Runs** interactive
+- **Condition** Only on a turn a connected person started: never a review handoff, a worker report, or an automation.
+- **Note** The gateway makes the request with the person's token; the run never holds it (docs/github-authority.md). propose_merge holds no token: the person merges from the PR panel.
+
+### `open_pull_request`
+
+`mcp__opensession-pull-requests__open_pull_request` · input: `repo` (string), `title` (string, required), `body` (string, required), `base` (string), `draft` (boolean)
+
+Open a pull request for this session's pushed branch under @you's own GitHub account. The request is made by the gateway with their token; you never hold it. Prefer this over `gh pr create`, which opens the PR as the bot. Push the branch first. End the body with the attribution footer from the session context.
+
+### `edit_pull_request`
+
+`mcp__opensession-pull-requests__edit_pull_request` · input: `repo` (string), `number` (integer), `title` (string), `body` (string), `ready` (boolean)
+
+Change the title, body, or draft state of this session's pull request as @you. The gateway makes the request with their token.
+
+### `propose_merge`
+
+`mcp__opensession-pull-requests__propose_merge` · input: `repo` (string), `method` ("squash" | "merge" | "rebase"), `note` (string)
+
+Hand a merge to @you. You cannot merge: no token in your reach can update the default branch. This checks the PR is open and reports its checks and review state, then posts a notice in the session; the person merges with one tap in the PR panel. Call it when asked to merge, or when the work is ready and reviewed.
 
 ## opensession-todos
 

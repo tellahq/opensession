@@ -53,7 +53,7 @@ export async function reconcileOpenPrs(): Promise<void> {
   if (!reconcileEnabled() || ghRateLimited("rest")) return;
   const { resolveReviewConfig, fireReview, fireAutoFix } =
     await import("./webhook");
-  const { autoEnabled } = resolveReviewConfig();
+  const { autoEnabled } = await resolveReviewConfig();
   let fires = 0;
 
   for (const repo of Object.values(configuredRepos())) {

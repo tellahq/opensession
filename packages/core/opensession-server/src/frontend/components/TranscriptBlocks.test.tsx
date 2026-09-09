@@ -1602,4 +1602,94 @@ describe("TranscriptBlocks review loops", () => {
     expect(html).not.toContain("1 blocking");
     expect(html).not.toContain("1 check failed");
   });
+
+  test("keeps every fix round in one loop", () => {
+    const handoff =
+      "[GitHub] <!--os:review-handoff-->\n🔍 This session's PR #42 was just reviewed and is not merge-ready.";
+    const html = renderToStaticMarkup(
+      <TranscriptBlocks
+        entries={[
+          {
+            id: "review-1",
+            type: "user",
+            content: handoff,
+            timestamp: "2026-08-12T12:00:00Z",
+          },
+          {
+            id: "fix-1",
+            type: "assistant",
+            content: "Fix round 1 is addressed and pushed.",
+            timestamp: "2026-08-12T12:01:00Z",
+          },
+          {
+            id: "recap",
+            type: "system",
+            content: "Session recap",
+            timestamp: "2026-08-12T12:02:00Z",
+          },
+          {
+            id: "review-2",
+            type: "user",
+            content: handoff,
+            timestamp: "2026-08-12T12:03:00Z",
+          },
+          {
+            id: "fix-2",
+            type: "assistant",
+            content: "Fix round 2 is addressed and pushed.",
+            timestamp: "2026-08-12T12:04:00Z",
+          },
+        ]}
+      />,
+    );
+    expect(html.match(/aria-label="Review loop,/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="Review loop, 2 rounds, PR #42"');
+    expect(html).not.toContain("Fix round 1 is addressed");
+    expect(html).not.toContain("Session recap");
+    expect(html).toContain("Fix round 2 is addressed");
+  });
+
+  test("closes the loop on its settle notice and leaves the wrap-up outside", () => {
+    const entries: TranscriptEntry[] = [
+      {
+        id: "review",
+        type: "user",
+        content:
+          "[GitHub] <!--os:review-handoff-->\n🔍 This session's PR #42 was just reviewed and is not merge-ready.",
+        timestamp: "2026-08-12T12:00:00Z",
+      },
+      {
+        id: "fix",
+        type: "assistant",
+        content: "Fix round 1 is addressed and pushed.",
+        timestamp: "2026-08-12T12:01:00Z",
+      },
+      {
+        id: "settled",
+        type: "user",
+        content:
+          "[GitHub] <!--os:review-settled:passed-->\n✅ This session's PR #42 “t” passed review after 1 fix round.",
+        timestamp: "2026-08-12T12:02:00Z",
+      },
+      {
+        id: "wrap",
+        type: "assistant",
+        content: "Where things stand: the retry path now fails fast.",
+        timestamp: "2026-08-12T12:03:00Z",
+      },
+    ];
+    const closed = renderToStaticMarkup(<TranscriptBlocks entries={entries} />);
+    expect(closed.match(/aria-label="Review loop,/g)).toHaveLength(1);
+    expect(closed).toContain('aria-label="Review loop, Review passed, PR #42"');
+    expect(closed).not.toContain("Fix round 1 is addressed");
+    expect(closed).not.toContain("PR #42 review passed");
+    expect(closed).toContain("Where things stand: the retry path");
+
+    const open = renderToStaticMarkup(
+      <TranscriptBlocks entries={entries} reviewLoopsOpen />,
+    );
+    expect(open).toContain("Fix round 1 is addressed");
+    expect(open).toContain("PR #42 review passed");
+    expect(open).toContain("Where things stand: the retry path");
+  });
 });

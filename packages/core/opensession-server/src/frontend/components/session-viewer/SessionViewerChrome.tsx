@@ -34,6 +34,7 @@ import { PrStatusBar } from "../PrStatusBar";
 import { RepoBar } from "../RepoBar";
 import { RepoTile } from "../RepoTile";
 import { SandboxBadge } from "../SandboxBadge";
+import { canMoveToSandbox, MoveToSandboxMenu } from "../MoveToSandboxMenu";
 import { SessionReportsPanel } from "../SessionReportsPanel";
 import { SpinOffMenu } from "../SpinOffMenu";
 import { StagingLink } from "../StagingLink";
@@ -596,6 +597,17 @@ export function SessionViewerChrome({
               </Menu.Popup>
             </Menu.SubmenuRoot>
           );
+          // A code session on this machine can move into a Sandbox: a rare,
+          // one-way choice that reads as a session action, not as status,
+          // so it lives here rather than on a header badge.
+          const moveToSandboxAction = canMoveToSandbox(session) && (
+            <MoveToSandboxMenu
+              session={session}
+              running={isBusy}
+              confirm={confirm}
+              onClose={() => setOverflowOpen(false)}
+            />
+          );
           // Portals is a workspace tool, not the lead fact on the phone's
           // workspace overview. Keep it reachable from the shared ⋯ menu at
           // every width; desktop opens its panel page, phone opens the drill-in.
@@ -954,6 +966,7 @@ export function SessionViewerChrome({
                   {!workspaceScopedMenu && spinOffAction}
                   {!workspaceScopedMenu && transcriptActions}
                   {portalsAction}
+                  {moveToSandboxAction}
                   {branchAction && (
                     <>
                       <Menu.Separator className={VIEWER_MENU_SEP} />

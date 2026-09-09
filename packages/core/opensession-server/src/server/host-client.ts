@@ -255,7 +255,10 @@ export interface HostedRunOpts {
   /** A steer arrived too late at the host — queue it so it isn't dropped. */
   onSteerFailed?: (text: string) => void;
   /** Builds SDK MCP servers only on platforms without detached run hosts. */
-  fallbackInProcessMcp?: () => Record<string, unknown> | undefined;
+  fallbackInProcessMcp?: () =>
+    | Record<string, unknown>
+    | Promise<Record<string, unknown> | undefined>
+    | undefined;
 }
 
 /**
@@ -415,7 +418,7 @@ async function* runAgentInProcess(
     forkSession: opts.forkSession,
     resumeSessionAt: opts.resumeSessionAt,
     mcpServers: opts.mcpServers ?? "all",
-    inProcessMcp: opts.fallbackInProcessMcp?.(),
+    inProcessMcp: await opts.fallbackInProcessMcp?.(),
     reposNote: opts.reposNote,
     deniedTools: opts.deniedTools,
     publicationPolicy: opts.publicationPolicy,

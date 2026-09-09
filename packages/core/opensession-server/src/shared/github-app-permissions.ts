@@ -11,6 +11,13 @@
  * A mint is all-or-nothing: it succeeds only if every requested scope is a
  * subset of what the installation holds. So each mint set below is a strict
  * subset of the grant set, and the grant set is what the create URL requests.
+ *
+ * The installation is expected to hold contents:write: agent runs push their
+ * branches with a repository-scoped installation token, and what that token
+ * may push is a ruleset decision on GitHub (docs/github-authority.md), not a
+ * permission cap. An installation an operator has capped at contents:read is
+ * handled at mint time by falling back to the read set for contents, so
+ * reviews and comments keep working while pushes fail loudly.
  */
 
 /** The full set the App is granted at creation — the create-URL permission
@@ -19,7 +26,7 @@ export const GITHUB_APP_GRANT_PERMISSIONS: Record<string, string> = {
   actions: "read", // workflow runs/logs for trusted autofix diagnosis
   checks: "read", // CI check runs
   statuses: "read", // commit statuses, the other half of the status rollup
-  contents: "write", // push fixes, clone
+  contents: "write", // clone; pushes only while git transport rides App tokens
   pull_requests: "write", // reviews, comments, open/merge
   issues: "write", // issue and PR comments
   members: "read", // team roster / attribution
@@ -70,3 +77,13 @@ export const GITHUB_APP_CODE_PERMISSIONS: Record<string, string> = {
   checks: "read",
   statuses: "read",
 };
+
+/** The same set with `contents` narrowed to read: the fallback a mint
+ * retries with when the installation turns out not to hold contents:write.
+ * Unchanged (same object) when the set never asked for write. */
+export function withReadOnlyContents(
+  set: Record<string, string>,
+): Record<string, string> {
+  if (set.contents !== "write") return set;
+  return { ...set, contents: "read" };
+}

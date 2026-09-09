@@ -29,40 +29,16 @@
  * run preferences resolve the teammate first so they follow across surfaces.
  */
 
-import { createHash } from "crypto";
+import { canonicalName, legacyNames } from "./user-store-key";
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "./atomic-write";
 import { stateDir } from "../paths";
-
-/** Identity → the filename stem every store writes (mirrors drafts.ts). */
-function canonicalName(identity: string): string {
-  const normalized = identity.trim() || "Anonymous";
-  const cleaned = normalized.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 40);
-  const hash = createHash("sha256")
-    .update(normalized.toLocaleLowerCase())
-    .digest("hex")
-    .slice(0, 16);
-  return `${cleaned || "Anonymous"}-${hash}`;
-}
-
-/** A name safe to read back verbatim: no separators, no traversal. */
-const SAFE_VERBATIM = /^[A-Za-z0-9@._-]+$/;
-
-/** Filename stems these stores wrote before canonicalName; read-only. */
-function legacyNames(identity: string): string[] {
-  const normalized = identity.trim() || "Anonymous";
-  const slug =
-    normalized.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 64) || "Anonymous";
-  const names = [slug];
-  if (
-    normalized !== slug &&
-    SAFE_VERBATIM.test(normalized) &&
-    !normalized.includes("..")
-  ) {
-    names.push(normalized);
-  }
-  return names;
-}
+import { access, readFile, mkdir, writeFile } from "node:fs/promises";
+import {
+  APPLICATION_CATALOG_NAMESPACES,
+  catalogDocuments,
+  legacyCatalogDirectory,
+} from "../catalog-documents";
 
 export interface UserStore<T> {
   /** The store's directory, resolved per call. */
@@ -113,29 +89,76 @@ export const NAME_KEYED_STORES = [
  * rollback, and a destination that already has state (renaming onto a name you
  * used before) keeps what is already there. Returns the stores it carried.
  */
-export function renameUserState(from: string, to: string): string[] {
+export async function renameUserState(
+  from: string,
+  to: string,
+): Promise<string[]> {
   const a = from.trim();
   const b = to.trim();
-  // Only a rename that lands on the same FILE is a no-op. Case is not that
-  // rename: canonicalName hashes the lowercased identity but keeps the
-  // original case in the stem, so "Kent" and "kent" are two files that agree
-  // about the person. Fixing your own capitalization has to carry state too.
   if (!a || !b || canonicalName(a) === canonicalName(b)) return [];
   const carried: string[] = [];
   for (const name of NAME_KEYED_STORES) {
-    const root = stateDir(name);
+    if (
+      APPLICATION_CATALOG_NAMESPACES.some((namespace) => namespace === name)
+    ) {
+      const documents = catalogDocuments(name);
+      if ((await documents.get(canonicalName(b))) !== null) continue;
+      for (const key of [canonicalName(a), ...legacyNames(a)]) {
+        const source = await documents.get(key);
+        if (source === null) continue;
+        let copied = false;
+        await documents.update(canonicalName(b), (current) => {
+          copied = current === null;
+          return current ?? source;
+        });
+        if (copied) carried.push(name);
+        break;
+      }
+      continue;
+    }
+    // Stores not yet migrated retain their file format, but a rename never
+    // performs synchronous filesystem work on the gateway either.
+    const root = await legacyCatalogDirectory(name);
     const target = `${root}/${canonicalName(b)}.json`;
-    if (existsSync(target)) continue;
-    const source = [canonicalName(a), ...legacyNames(a)]
-      .map((stem) => `${root}/${stem}.json`)
-      .find((file) => existsSync(file));
-    if (!source) continue;
     try {
-      const raw = JSON.parse(readFileSync(source, "utf8"));
-      mkdirSync(root, { recursive: true });
-      writeJsonAtomic(target, raw);
-      carried.push(name);
-    } catch {}
+      await access(target);
+      continue;
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !("code" in error) ||
+        error.code !== "ENOENT"
+      )
+        throw error;
+    }
+    for (const stem of [canonicalName(a), ...legacyNames(a)]) {
+      let raw: string;
+      try {
+        raw = await readFile(`${root}/${stem}.json`, "utf8");
+        JSON.parse(raw);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        )
+          continue;
+        throw error;
+      }
+      await mkdir(root, { recursive: true });
+      try {
+        await writeFile(target, raw, { flag: "wx", mode: 0o600 });
+        carried.push(name);
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !("code" in error) ||
+          error.code !== "EEXIST"
+        )
+          throw error;
+      }
+      break;
+    }
   }
   return carried;
 }

@@ -19,7 +19,7 @@
  * before lanes went per-user; new writes land here.
  */
 
-import { userStore } from "./shared/user-store";
+import { catalogUserStore } from "./shared/catalog-user-store";
 
 /**
  * Allowed lane keys — the frontend's MineStatus, plus the "mine" sentinel: a
@@ -56,13 +56,21 @@ function clean(input: unknown): Lanes {
   return out;
 }
 
-const store = userStore<Lanes>({ name: "lanes", field: "lanes", clean });
+const store = catalogUserStore<Lanes>({ name: "lanes", field: "lanes", clean });
 
-export function getLanes(user: string): Lanes {
+export async function getLanes(user: string): Promise<Lanes> {
   return store.get(user);
 }
 
 /** Replace a user's lanes (validated). Returns the stored map. */
-export function setLanes(user: string, lanes: unknown): Lanes {
+export async function setLanes(user: string, lanes: unknown): Promise<Lanes> {
   return store.set(user, lanes);
+}
+
+/** Apply a delta under the catalog CAS; the result is validated like `setLanes`. */
+export function updateLanes(
+  user: string,
+  mutate: (value: Lanes) => unknown,
+): Promise<Lanes> {
+  return store.update(user, mutate);
 }

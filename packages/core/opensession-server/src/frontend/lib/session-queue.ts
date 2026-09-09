@@ -45,6 +45,8 @@ const NO_OPTIMISTIC_ENTRIES: OptimisticTranscriptEntry[] = [];
 export function queueDeleteLabel(classified: TranscriptEntry): string {
   if (classified.notice?.kind === "review-handoff")
     return "Dismiss review feedback";
+  if (classified.notice?.kind === "review-settled")
+    return "Dismiss review outcome";
   if (classified.notice?.kind === "worker-report")
     return "Dismiss worker report";
   if (classified.notice?.kind === "session-notice")

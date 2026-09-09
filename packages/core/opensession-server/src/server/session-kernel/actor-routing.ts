@@ -2,6 +2,7 @@ import type {
   KernelActorAsyncRequest,
   KernelActorServiceCall,
 } from "./actor-protocol";
+import { isCatalogDocumentRead } from "./catalog-document-protocol";
 import { isDeliveryReadRequest } from "./delivery-protocol";
 import type { SessionActorReducerCommand } from "./lifecycle-protocol";
 import { isMetadataCatalogRequest, isMetadataRead } from "./metadata-protocol";
@@ -11,6 +12,10 @@ import { isTranscriptRead } from "./transcript-protocol";
 export type SessionActorRoute =
   | { scope: "global" }
   | { scope: "catalog_read" }
+  /** A mutation of central-only rows that no session mailbox can touch. It
+   * serializes on the catalog slot but skips the global barrier, so a busy
+   * unrelated session never fails it. */
+  | { scope: "central_write" }
   | { scope: "session"; sessionId: string; mutation: boolean }
   | { scope: "outbox"; id: number; mutation: boolean };
 
@@ -23,6 +28,8 @@ export function isReadReducer(command: SessionActorReducerCommand): boolean {
     return isDeliveryReadRequest(command.request);
   if (command.kind === "transcript") return isTranscriptRead(command.request);
   if (command.kind === "metadata") return isMetadataRead(command.request);
+  if (command.kind === "catalog_document")
+    return isCatalogDocumentRead(command.request);
   return command.kind === "turn" && command.request.op === "snapshot";
 }
 
@@ -76,6 +83,14 @@ export function sessionActorReducerRoute(
             mutation: !isReadReducer(command),
           }
         : { scope: "global" };
+    case "catalog_document":
+      // Namespaced documents belong to no session and live only in the
+      // central database: reads share the catalog lane, mutations serialize
+      // on the same slot without the global barrier because no session
+      // mailbox can overlap them. Neither opens a session actor.
+      return isCatalogDocumentRead(command.request)
+        ? { scope: "catalog_read" }
+        : { scope: "central_write" };
     default: {
       const exhaustive: never = command;
       return exhaustive;

@@ -1,15 +1,11 @@
-import { os1Shell } from "../lib/os1-shell";
 import React, { useState } from "react";
-import { z } from "zod";
 import { useOrganizationName } from "../hooks/useOrganizationIcon";
 import { APP_LOGO_STATUS } from "../lib/app-header-classes";
 import { BASE_PATH } from "../lib/base";
 import { SIDEBAR_RAIL_GAP } from "../lib/sidebar-classes";
 import { Button } from "../ui/button";
-import { Field, Input } from "../ui/input";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { Modal } from "../ui/modal";
-import { InlineAlert } from "../ui/state";
 import { toast } from "../ui/toast";
 import { IconTile } from "./BrandTile";
 import { setupRequest } from "./setup-shared";
@@ -17,7 +13,7 @@ import { GithubMemberDialog } from "./SetupTeam";
 import { DownloadAppsDialog } from "./DownloadAppsDialog";
 import {
   IconArrowDown,
-  IconChevronDown,
+  IconChevronsUpDown,
   IconCopy,
   IconGear,
   IconPeople,
@@ -25,61 +21,13 @@ import {
   IconServer,
 } from "./icons";
 import { OrganizationAppIcon } from "./OrganizationAppIcon";
-
-type OrganizationAccount = {
-  id: string;
-  label: string;
-  unread: number;
-  shortcut: number | null;
-};
-
-type OrganizationList = {
-  activeId: string;
-  accounts: OrganizationAccount[];
-};
-
-type AddOrganizationResult = {
-  ok: boolean;
-  error?: string;
-  canAddAnyway?: boolean;
-  url?: string;
-};
-
-type OrganizationBridge = {
-  inlineAdd?: boolean;
-  list?: () => Promise<OrganizationList | null>;
-  switch?: (id: string) => void;
-  add?: (url: string, check?: boolean) => Promise<AddOrganizationResult>;
-  manage?: () => void;
-};
-
-const organizationBridgeSchema = z.object({
-  inlineAdd: z.boolean().optional(),
-  list: z
-    .custom<NonNullable<OrganizationBridge["list"]>>(
-      (value) => value instanceof Function,
-    )
-    .optional(),
-  switch: z
-    .custom<NonNullable<OrganizationBridge["switch"]>>(
-      (value) => value instanceof Function,
-    )
-    .optional(),
-  add: z
-    .custom<NonNullable<OrganizationBridge["add"]>>(
-      (value) => value instanceof Function,
-    )
-    .optional(),
-  manage: z
-    .custom<NonNullable<OrganizationBridge["manage"]>>(
-      (value) => value instanceof Function,
-    )
-    .optional(),
-});
-
-function organizationBridge(): OrganizationBridge | undefined {
-  return organizationBridgeSchema.safeParse(os1Shell()?.organizations).data;
-}
+import {
+  AddOrganizationDialog,
+  ManageOrganizationsDialog,
+  organizationBridge,
+  type OrganizationAccount,
+  type OrganizationList,
+} from "./OrganizationsDialog";
 
 /** Active organization identity and account switcher. */
 export function OrganizationSwitcher({
@@ -100,25 +48,29 @@ export function OrganizationSwitcher({
   const [activeId, setActiveId] = useState(fallbackId);
   const [memberCount, setMemberCount] = useState<number | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [serverAddress, setServerAddress] = useState("");
-  const [addError, setAddError] = useState<string | null>(null);
-  const [canAddAnyway, setCanAddAnyway] = useState(false);
-  const [adding, setAdding] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [invitedLogin, setInvitedLogin] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const status = connected ? "Connected" : "Reconnecting…";
 
-  function loadMenu() {
+  function applyList(result: OrganizationList) {
+    setAccounts(result.accounts);
+    setActiveId(result.activeId);
+  }
+
+  function loadAccounts() {
     void bridge
       ?.list?.()
       .then((result) => {
-        if (!result?.accounts.length) return;
-        setAccounts(result.accounts);
-        setActiveId(result.activeId);
+        if (result?.accounts.length) applyList(result);
       })
       .catch(() => {});
+  }
+
+  function loadMenu() {
+    loadAccounts();
     void setupRequest<{ members: unknown[] }>("/api/setup/team")
       .then((result) => setMemberCount(result.members.length))
       .catch(() => setMemberCount(null));
@@ -128,34 +80,19 @@ export function OrganizationSwitcher({
   const itemClass = "phone:min-h-11";
   const organizationUrl = `${window.location.origin}${BASE_PATH}/`;
 
-  function openAddOrganization() {
-    setServerAddress("");
-    setAddError(null);
-    setCanAddAnyway(false);
-    setAddOpen(true);
-  }
+  // A shell with `remove` gets the in-app dialog; older shells still open
+  // their own setup page, which only makes sense with something to manage.
+  const canManage = bridge?.remove
+    ? true
+    : !!bridge?.manage && accounts.length > 1;
 
-  async function addOrganization(check: boolean) {
-    const add = bridge?.add;
-    if (!add || !serverAddress.trim() || adding) return;
-    setAdding(true);
-    setAddError(null);
-    await (async () => {
-      const result = await add(serverAddress, check);
-      if (result.ok) {
-        setAddOpen(false);
-        return;
-      }
-      if (result.url) setServerAddress(result.url);
-      setCanAddAnyway(!!result.canAddAnyway);
-      setAddError(result.error || "Couldn’t add that organization.");
-    })()
-      .catch(async () => {
-        setAddError("Couldn’t add that organization.");
-      })
-      .finally(async () => {
-        setAdding(false);
-      });
+  function openManage() {
+    if (!bridge?.remove) {
+      bridge?.manage?.();
+      return;
+    }
+    loadAccounts();
+    setManageOpen(true);
   }
 
   async function copyOrganizationLink() {
@@ -202,10 +139,10 @@ export function OrganizationSwitcher({
                 title={status}
               />
             </span>
-            <span className="min-w-0 flex-1 truncate">{name}</span>
-            <IconChevronDown
-              size={16}
-              className="shrink-0 text-faint transition-[color,rotate] group-hover:text-dim group-data-[popup-open]:rotate-180"
+            <span className="min-w-0 truncate">{name}</span>
+            <IconChevronsUpDown
+              size={14}
+              className="-ml-1 shrink-0 text-faint transition-colors group-hover:text-dim"
               aria-hidden="true"
             />
           </Menu.Trigger>
@@ -310,7 +247,7 @@ export function OrganizationSwitcher({
             {bridge?.inlineAdd && bridge.add && (
               <Menu.Item
                 className={`${itemClass} text-accent`}
-                onClick={openAddOrganization}
+                onClick={() => setAddOpen(true)}
               >
                 <IconPlus size={19} className="text-accent" />
                 <span className="min-w-0 flex-1 truncate">
@@ -318,11 +255,8 @@ export function OrganizationSwitcher({
                 </span>
               </Menu.Item>
             )}
-            {bridge?.manage && accounts.length > 1 && (
-              <Menu.Item
-                className={itemClass}
-                onClick={() => bridge.manage?.()}
-              >
+            {canManage && (
+              <Menu.Item className={itemClass} onClick={openManage}>
                 <IconServer size={19} className={MENU_ICON} />
                 <span className="min-w-0 flex-1 truncate">
                   Manage organizations
@@ -333,71 +267,18 @@ export function OrganizationSwitcher({
         </Menu.Popup>
       </Menu.Root>
       <DownloadAppsDialog open={downloadOpen} onOpenChange={setDownloadOpen} />
-      <Modal.Root
+      <AddOrganizationDialog
         open={addOpen}
-        onOpenChange={(open) => {
-          if (!adding) setAddOpen(open);
-        }}
-      >
-        <Modal.Content>
-          <Modal.Header
-            title="Add organization"
-            description="Connect another Open Session server."
-          />
-          <form
-            className="flex flex-col gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void addOrganization(true);
-            }}
-          >
-            <Field label="Server address">
-              <Input
-                value={serverAddress}
-                onChange={(event) => {
-                  setServerAddress(event.target.value);
-                  setAddError(null);
-                  setCanAddAnyway(false);
-                }}
-                placeholder="os.example.com"
-                inputMode="url"
-                autoCapitalize="none"
-                autoComplete="off"
-                spellCheck={false}
-                autoFocus
-                disabled={adding}
-                required
-              />
-            </Field>
-            {addError && <InlineAlert>{addError}</InlineAlert>}
-            <Modal.Footer>
-              <Button
-                variant="ghost"
-                onClick={() => setAddOpen(false)}
-                disabled={adding}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                type={canAddAnyway ? "button" : "submit"}
-                onClick={
-                  canAddAnyway ? () => void addOrganization(false) : undefined
-                }
-                disabled={!serverAddress.trim() || adding}
-              >
-                {adding
-                  ? canAddAnyway
-                    ? "Adding…"
-                    : "Checking…"
-                  : canAddAnyway
-                    ? "Add anyway"
-                    : "Add organization"}
-              </Button>
-            </Modal.Footer>
-          </form>
-        </Modal.Content>
-      </Modal.Root>
+        onOpenChange={setAddOpen}
+        bridge={bridge}
+      />
+      <ManageOrganizationsDialog
+        open={manageOpen}
+        onOpenChange={setManageOpen}
+        bridge={bridge}
+        list={{ activeId, accounts }}
+        onListChange={applyList}
+      />
       <GithubMemberDialog
         open={inviteOpen}
         onOpenChange={setInviteOpen}

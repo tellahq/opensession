@@ -99,6 +99,8 @@ export function gitCredentialEnvForExec(
   if (!env) return undefined;
   if (exec?.remote) return undefined;
   if (!exec?.sandboxed) return env;
+  // `gh auth git-credential` answers from GH_TOKEN: the run's one token does
+  // API calls and transport alike.
   const token = env.GH_TOKEN || env.GITHUB_TOKEN;
   if (!token) return undefined;
   return {

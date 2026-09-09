@@ -1,6 +1,8 @@
 /**
  * Automations: cron-scheduled agent sessions, Devin-style.
- * Records live in ~/.opensession-automations/<id>.json; each run creates a
+ * Definitions live in the central application catalog (catalog-documents.ts,
+ * namespace `automations`, keyed by automation id); every read and write here
+ * is an awaited kernel RPC, never a synchronous file read. Each run creates a
  * normal opensession session so it shows up in the sessions list and UI.
  */
 import { randomUUIDv7 } from "bun";
@@ -13,8 +15,10 @@ import {
   unlinkSync,
   existsSync,
 } from "fs";
-import { join } from "path";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "path";
 import { writeJsonAtomic } from "./shared/atomic-write";
+import { catalogDocuments } from "./catalog-documents";
 import {
   RequestBodyTooLargeError,
   readRequestTextWithinLimit,
@@ -108,7 +112,6 @@ import {
 } from "./automation-outputs";
 import { automationIntentAlreadySettled } from "./automation-intent-recovery";
 
-const AUTOMATIONS_DIR = stateDir("automations");
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
 /**
@@ -334,46 +337,94 @@ export interface AutomationWithNext extends Automation {
   nextRunAt: string | null;
 }
 
-mkdirSync(AUTOMATIONS_DIR, { recursive: true });
-
 // ── Store ────────────────────────────────────────────────────
+// The catalog client is bound on first use rather than at import: binding it
+// is a live effect (a kernel RPC client), and this module sits on the import
+// chain of most of src/server.
 
-export function listAutomations(): AutomationWithNext[] {
+let automationDocuments: ReturnType<typeof catalogDocuments> | undefined;
+
+function automationStore(): ReturnType<typeof catalogDocuments> {
+  return (automationDocuments ??= catalogDocuments("automations"));
+}
+
+/**
+ * Ids the catalog accepts as keys. Anything else was never a stored
+ * automation; it used to be an `existsSync` miss and stays a plain
+ * "not found" here instead of a rejected key.
+ */
+function isAutomationId(id: unknown): id is string {
+  return (
+    typeof id === "string" &&
+    id.length > 0 &&
+    id.length <= 256 &&
+    id !== "." &&
+    id !== ".." &&
+    !/[\\/ -]/.test(id)
+  );
+}
+
+function isAutomationRecord(value: unknown): value is Automation {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    typeof (value as Automation).id === "string" &&
+    typeof (value as Automation).name === "string"
+  );
+}
+
+function withNextRun(a: Automation): AutomationWithNext {
+  return {
+    ...a,
+    nextRunAt: !a.enabled
+      ? null
+      : a.runOnceAt
+        ? a.runOnceAt
+        : a.schedule
+          ? nextRun(a.schedule)?.toISOString() || null
+          : null,
+  };
+}
+
+export async function listAutomations(): Promise<AutomationWithNext[]> {
   const out: AutomationWithNext[] = [];
-  for (const file of readdirSync(AUTOMATIONS_DIR)) {
-    if (!file.endsWith(".json")) continue;
-    try {
-      const a = JSON.parse(
-        readFileSync(`${AUTOMATIONS_DIR}/${file}`, "utf-8"),
-      ) as Automation;
-      out.push({
-        ...a,
-        nextRunAt: !a.enabled
-          ? null
-          : a.runOnceAt
-            ? a.runOnceAt
-            : a.schedule
-              ? nextRun(a.schedule)?.toISOString() || null
-              : null,
-      });
-    } catch {}
+  for (const { value } of await automationStore().list()) {
+    if (isAutomationRecord(value)) out.push(withNextRun(value));
   }
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 }
 
-export function getAutomation(id: string): Automation | null {
-  const path = `${AUTOMATIONS_DIR}/${id}.json`;
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, "utf-8"));
-  } catch {
-    return null;
-  }
+export async function getAutomation(id: string): Promise<Automation | null> {
+  if (!isAutomationId(id)) return null;
+  const value = await automationStore().get(id);
+  return isAutomationRecord(value) ? value : null;
 }
 
-export function saveAutomation(a: Automation): void {
-  writeJsonAtomic(`${AUTOMATIONS_DIR}/${a.id}.json`, a);
+/** Whole-record write. Prefer {@link mutateAutomation} for anything that
+ *  starts from a stored copy, so an overlapping writer is not clobbered. */
+export async function saveAutomation(a: Automation): Promise<void> {
+  await automationStore().set(a.id, a);
+}
+
+/**
+ * CAS read-modify-write of one stored record. `mutate` sees the freshest
+ * committed copy and runs again on a conflict, so overlapping writers (two
+ * event runs settling the ledger, a PUT from the UI mid-run) never overwrite
+ * each other from a stale read. Resolves null for a record that does not
+ * exist; nothing is created here.
+ */
+async function mutateAutomation(
+  id: string,
+  mutate: (current: Automation) => Automation,
+): Promise<Automation | null> {
+  if (!isAutomationId(id)) return null;
+  return automationStore().update<Automation>(id, (value) => {
+    if (value === null) return null;
+    if (!isAutomationRecord(value))
+      throw new Error(`Automation ${id} record is malformed`);
+    return mutate(value);
+  });
 }
 
 function sanitizeMcpList(list?: unknown): string[] | undefined {
@@ -622,18 +673,19 @@ function sanitizeOwner(v?: unknown): string | { error: string } | undefined {
 }
 
 /** Validate the workspace an automation files under; ""/nullish clears it. */
-function sanitizeAutomationWorkspace(
+async function sanitizeAutomationWorkspace(
   v?: unknown,
-): string | { error: string } | undefined {
+): Promise<string | { error: string } | undefined> {
   if (v === undefined || v === null || v === "") return undefined;
   if (typeof v !== "string") return { error: "workspaceId must be a string" };
   const id = v.trim();
-  if (!getWorkspace(id)) return { error: `Unknown workspace "${id}"` };
+  if (!(await getWorkspace(id))) return { error: `Unknown workspace "${id}"` };
   return id;
 }
 
-/** A validator either returns the value to store or the reason it can't. */
-type AutomationFieldValidator = (v: unknown) => unknown;
+/** A validator either returns the value to store or the reason it can't.
+ *  Validators that consult another store (workspaces) are async. */
+type AutomationFieldValidator = (v: unknown) => unknown | Promise<unknown>;
 
 function isFieldError(v: unknown): v is { error: string } {
   return (
@@ -730,28 +782,48 @@ function normalizeAutomation(
   return next;
 }
 
+/** Caller input after every per-field validator has accepted it. */
+type ValidatedAutomationInput = {
+  fields: Record<string, unknown>;
+  touched: ReadonlySet<string>;
+};
+
 /**
- * Apply caller input onto a base record: create passes a defaults record,
- * update passes the stored one. A field is only touched when the caller named
- * it, so an update leaves everything it didn't mention alone.
+ * Run every per-field validator over caller input. A field is only touched
+ * when the caller named it, so an update leaves everything it didn't mention
+ * alone. Split from {@link applyValidatedFields} because validation awaits
+ * other stores while the apply step has to run inside a synchronous CAS
+ * mutate against the freshest stored record.
  */
-function applyAutomationConfig(
-  base: Automation,
+async function validateAutomationInput(
   input: Record<string, unknown>,
-): Automation | { error: string } {
-  const next = { ...base };
+): Promise<ValidatedAutomationInput | { error: string }> {
+  const fields: Record<string, unknown> = {};
   const touched = new Set<string>();
   for (const [field, validate] of Object.entries(AUTOMATION_FIELDS)) {
     if (!(field in input)) continue;
-    const value = validate(input[field]);
+    const value = await validate(input[field]);
     if (isFieldError(value)) return value;
-    (next as Record<string, unknown>)[field] = value;
+    fields[field] = value;
     touched.add(field);
   }
-  return normalizeAutomation(next, touched);
+  return { fields, touched };
 }
 
-export function createAutomation(input: {
+/**
+ * Apply validated input onto a base record: create passes a defaults record,
+ * update passes the stored one (from inside the CAS mutate, so the cross-field
+ * rules see the copy that is actually being replaced).
+ */
+function applyValidatedFields(
+  base: Automation,
+  validated: ValidatedAutomationInput,
+): Automation | { error: string } {
+  const next = { ...base, ...validated.fields } as Automation;
+  return normalizeAutomation(next, validated.touched);
+}
+
+export async function createAutomation(input: {
   name: string;
   prompt: string;
   schedule: string;
@@ -786,7 +858,7 @@ export function createAutomation(input: {
   inputs?: AutomationInput[];
   outputs?: AutomationOutput[];
   webhookEnabled?: boolean;
-}): Automation | { error: string } {
+}): Promise<Automation | { error: string }> {
   const base: Automation = {
     id: `auto-${randomUUIDv7()}`,
     name: "",
@@ -798,15 +870,19 @@ export function createAutomation(input: {
     createdAt: new Date().toISOString(),
     webhookSecret: generateSecret(),
   };
-  const a = applyAutomationConfig(base, input as Record<string, unknown>);
+  const validated = await validateAutomationInput(
+    input as Record<string, unknown>,
+  );
+  if ("error" in validated) return validated;
+  const a = applyValidatedFields(base, validated);
   if ("error" in a) return a;
-  saveAutomation(a);
+  await saveAutomation(a);
   return a;
 }
 
 /** Create deployment-provided automations once. Source ships no company-
  * specific routines; instances opt in with `integrations.seeds.automations`. */
-export function ensureConfiguredAutomations(): void {
+export async function ensureConfiguredAutomations(): Promise<void> {
   const raw = configuredIntegration("seeds").automations;
   if (!Array.isArray(raw)) return;
   for (const candidate of raw) {
@@ -818,14 +894,14 @@ export function ensureConfiguredAutomations(): void {
       typeof value.eventKey === "string" ? value.eventKey.trim() : "";
     if (!name || !prompt) continue;
     if (
-      listAutomations().some(
+      (await listAutomations()).some(
         (automation) =>
           (eventKey && automation.eventKey === eventKey) ||
           (!eventKey && automation.name === name),
       )
     )
       continue;
-    const result = createAutomation({
+    const result = await createAutomation({
       ...(value as any),
       name,
       prompt,
@@ -848,7 +924,7 @@ export function ensureConfiguredAutomations(): void {
   }
 }
 
-export function updateAutomation(
+export async function updateAutomation(
   id: string,
   patch: Partial<
     Pick<
@@ -882,15 +958,48 @@ export function updateAutomation(
       | "webhookEnabled"
     >
   >,
-): Automation | { error: string } {
-  const a = getAutomation(id);
-  if (!a) return { error: "Automation not found" };
-  const next = applyAutomationConfig(a, patch as Record<string, unknown>);
-  if ("error" in next) return next;
-  // Backfill secrets for automations created before webhook support
-  if (!next.webhookSecret) next.webhookSecret = generateSecret();
-  saveAutomation(next);
+): Promise<Automation | { error: string }> {
+  const validated = await validateAutomationInput(
+    patch as Record<string, unknown>,
+  );
+  if ("error" in validated) return validated;
+  // The patch lands on the freshest stored copy (a run may have settled its
+  // ledger since the caller last read it). A cross-field rejection returns
+  // the record unchanged rather than aborting the CAS, so the error is
+  // reported without relying on a throw to unwind the mutate.
+  let rejected: { error: string } | undefined;
+  const next = await mutateAutomation(id, (current) => {
+    rejected = undefined;
+    const applied = applyValidatedFields(current, validated);
+    if ("error" in applied) {
+      rejected = applied;
+      return current;
+    }
+    // Backfill secrets for automations created before webhook support
+    if (!applied.webhookSecret) applied.webhookSecret = generateSecret();
+    return applied;
+  });
+  if (rejected) return rejected;
+  if (!next) return { error: "Automation not found" };
   return next;
+}
+
+/** Crash-safe backup next to the legacy export: temp file, then rename. */
+async function writeAutomationBackup(
+  path: string,
+  value: unknown,
+): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const temporary = `${path}.tmp.${randomUUIDv7()}`;
+  try {
+    await writeFile(temporary, JSON.stringify(value, null, 2), {
+      flag: "wx",
+      mode: 0o600,
+    });
+    await rename(temporary, path);
+  } finally {
+    await rm(temporary, { force: true });
+  }
 }
 
 /**
@@ -900,12 +1009,12 @@ export function updateAutomation(
  * undone. Length floor guards against self-lobotomy (a degenerate rewrite
  * that drops the prompt's structure and guardrails).
  */
-function updateAutomationPromptSelf(
+async function updateAutomationPromptSelf(
   id: string,
   newPrompt: string,
   reason: string,
-): { ok: true; backupPath: string } | { ok: false; error: string } {
-  const a = getAutomation(id);
+): Promise<{ ok: true; backupPath: string } | { ok: false; error: string }> {
+  const a = await getAutomation(id);
   if (!a) return { ok: false, error: "Automation not found." };
   const prompt = (newPrompt || "").trim();
   if (prompt.length < 500) {
@@ -917,9 +1026,12 @@ function updateAutomationPromptSelf(
   if (!reason?.trim())
     return { ok: false, error: "A one-line reason is required (audited)." };
   const stamp = new Date().toISOString().slice(0, 16).replace(/[-T:]/g, "");
-  const backupPath = `${AUTOMATIONS_DIR}/${id}.json.bak.self-${stamp}`;
-  writeJsonAtomic(backupPath, a);
-  const res = updateAutomation(id, { prompt });
+  const backupPath = join(
+    stateDir("automations"),
+    `${id}.json.bak.self-${stamp}`,
+  );
+  await writeAutomationBackup(backupPath, a);
+  const res = await updateAutomation(id, { prompt });
   if ("error" in res) return { ok: false, error: res.error };
   audit({
     msg: "automation_self_update",
@@ -953,8 +1065,8 @@ export function selfImproveMcpServers(
     }),
     "opensession-self": createSelfImproveMcpServer({
       automationName: a.name,
-      getOwn: () => {
-        const cur = getAutomation(a.id);
+      getOwn: async () => {
+        const cur = await getAutomation(a.id);
         if (!cur) return null;
         const { name, prompt, schedule, mode, repo, model, mcpServers } = cur;
         return { name, prompt, schedule, mode, repo, model, mcpServers };
@@ -967,12 +1079,14 @@ export function selfImproveMcpServers(
 
 /** selfImproveMcpServers for a session file (automation resolved by the name
  *  stamped on the session) — undefined unless that automation has the flag. */
-export function selfImproveMcpForSession(
+export async function selfImproveMcpForSession(
   session: { automation?: string },
   sessionId: string,
-): Record<string, unknown> | undefined {
+): Promise<Record<string, unknown> | undefined> {
   if (!session.automation) return undefined;
-  const a = listAutomations().find((x) => x.name === session.automation);
+  const a = (await listAutomations()).find(
+    (x) => x.name === session.automation,
+  );
   if (!a?.selfImprove) return undefined;
   return selfImproveMcpServers(a, sessionId);
 }
@@ -1027,12 +1141,14 @@ export function automationWorkflowSessionPolicy(
   };
 }
 
-export function automationRunMcpForSession(
+export async function automationRunMcpForSession(
   session: { automation?: string; worktreeDir?: string | null },
   sessionId: string,
-): Record<string, unknown> | undefined {
+): Promise<Record<string, unknown> | undefined> {
   if (!session.automation) return undefined;
-  const a = listAutomations().find((x) => x.name === session.automation);
+  const a = (await listAutomations()).find(
+    (x) => x.name === session.automation,
+  );
   if (!a) return undefined;
   const servers = automationBaselineMcpServers(a, sessionId);
   if (a.workflows) {
@@ -1117,12 +1233,14 @@ function automationRunInProcessMcp(
  * the session isn't automation-owned or the automation record is gone (the
  * resumed run then proceeds without in-process tools, as before).
  */
-export function automationResumeMcpForSession(
+export async function automationResumeMcpForSession(
   session: { automation?: string; worktreeDir?: string | null; model?: string },
   sessionId: string,
-): Record<string, unknown> | undefined {
+): Promise<Record<string, unknown> | undefined> {
   if (!session.automation) return undefined;
-  const a = listAutomations().find((x) => x.name === session.automation);
+  const a = (await listAutomations()).find(
+    (x) => x.name === session.automation,
+  );
   if (!a) return undefined;
   const repo = getRepo(a.repo);
   return automationRunInProcessMcp(a, sessionId, {
@@ -1132,10 +1250,9 @@ export function automationResumeMcpForSession(
   });
 }
 
-export function deleteAutomation(id: string): boolean {
-  const path = `${AUTOMATIONS_DIR}/${id}.json`;
-  if (!existsSync(path)) return false;
-  unlinkSync(path);
+export async function deleteAutomation(id: string): Promise<boolean> {
+  if (!isAutomationId(id)) return false;
+  if (!(await automationStore().delete(id))) return false;
   deleteAutomationInputState(id);
   deleteAutomationOutputState(id);
   return true;
@@ -1150,10 +1267,8 @@ const RUNS_CAP = 50;
 /** Prepend a run-ledger entry (plus the legacy lastRun* mirror fields) on a
  *  fresh read of the automation — event/webhook runs can overlap, so never
  *  write ledger updates from a stale copy. */
-function recordRunStart(id: string, run: AutomationRun): void {
-  const fresh = getAutomation(id);
-  if (!fresh) return;
-  saveAutomation({
+async function recordRunStart(id: string, run: AutomationRun): Promise<void> {
+  await mutateAutomation(id, (fresh) => ({
     ...fresh,
     lastRunAt: run.at,
     lastRunSessionId: run.sessionId,
@@ -1167,7 +1282,7 @@ function recordRunStart(id: string, run: AutomationRun): void {
             : entry,
         )
       : [run, ...(fresh.runs || [])].slice(0, RUNS_CAP),
-  });
+  }));
 }
 
 /**
@@ -1273,7 +1388,7 @@ export async function settleAutomationLaunchFailure(
   sessionId: string,
   runKey: string,
   errorMessage: string,
-  settleLedger: () => void,
+  settleLedger: () => void | Promise<void>,
   deps?: AutomationLaunchFailureDeps,
 ): Promise<void> {
   const hasJournalOwner = (deps?.hasActiveRun ?? hasActiveRunFor)(
@@ -1283,19 +1398,17 @@ export async function settleAutomationLaunchFailure(
   const isLiveOwner = deps?.isLiveEngineBusy ?? isAgentLiveEngineBusy;
   if (!hasJournalOwner && !isLiveOwner(sessionId, runKey))
     await settleAutomationRunState(sessionId, errorMessage, true, runKey, deps);
-  settleLedger();
+  await settleLedger();
 }
 
 /** Settle the ledger entry for `sessionId` (matched by id, not position, so
  *  overlapping runs settle independently). */
-function settleRun(
+async function settleRun(
   id: string,
   sessionId: string,
   patch: Pick<AutomationRun, "status" | "error" | "durationMs">,
-): void {
-  const fresh = getAutomation(id);
-  if (!fresh) return;
-  saveAutomation({
+): Promise<void> {
+  await mutateAutomation(id, (fresh) => ({
     ...fresh,
     ...(fresh.lastRunSessionId === sessionId
       ? { lastRunStatus: patch.status, lastRunError: patch.error }
@@ -1303,7 +1416,7 @@ function settleRun(
     runs: (fresh.runs || []).map((r) =>
       r.sessionId === sessionId ? { ...r, ...patch } : r,
     ),
-  });
+  }));
 }
 
 /**
@@ -1316,21 +1429,21 @@ function settleRun(
  * this hook stay as they are — this settles runs the sweep actually drove
  * to an end, it does not rewrite history.
  */
-export function settleResumedAutomationRun(
+export async function settleResumedAutomationRun(
   sessionId: string,
   error: string | null,
-): boolean {
-  for (const automation of listAutomations()) {
+): Promise<boolean> {
+  for (const automation of await listAutomations()) {
     const run = (automation.runs || []).find((r) => r.sessionId === sessionId);
     if (!run || run.status !== "running") continue;
-    settleRun(automation.id, sessionId, {
+    await settleRun(automation.id, sessionId, {
       status: error ? "error" : "ok",
       error: error || undefined,
       durationMs: Math.max(0, Date.now() - new Date(run.at).getTime()),
     });
     const completedIntent = clearAutomationIntent(sessionId);
     if (completedIntent?.deleteAutomationAfterRun)
-      deleteAutomation(automation.id);
+      await deleteAutomation(automation.id);
     console.log(
       `[automations] Settled resumed run ${sessionId} for "${automation.name}" (${error ? "error" : "ok"})`,
     );
@@ -1347,8 +1460,10 @@ export function automationDeniedTools(): Record<string, string> {
 
 /** MCP allowlist for an automation, resolved by its display name (as stored on
  *  a session's `automation` field). Returns undefined if not found. */
-export function automationMcpServersByName(name: string): string[] | undefined {
-  return listAutomations().find((a) => a.name === name)?.mcpServers;
+export async function automationMcpServersByName(
+  name: string,
+): Promise<string[] | undefined> {
+  return (await listAutomations()).find((a) => a.name === name)?.mcpServers;
 }
 
 /** Default engine+model for automations. Model-less routines use the same Sol
@@ -1458,9 +1573,9 @@ function hasAutomationIntent(sessionId: string): boolean {
   return existsSync(automationIntentPath(sessionId));
 }
 
-export function resumePendingAutomationRuns(
+export async function resumePendingAutomationRuns(
   onSessionCreated?: (sessionId: string) => void,
-): number {
+): Promise<number> {
   if (isShuttingDown() || !existsSync(automationIntentDir)) return 0;
   let resumed = 0;
   for (const entry of readdirSync(automationIntentDir)) {
@@ -1476,7 +1591,7 @@ export function resumePendingAutomationRuns(
         !["cron", "webhook", "manual", "event"].includes(intent.trigger)
       )
         throw new Error("invalid automation intent");
-      const automation = getAutomation(intent.automationId);
+      const automation = await getAutomation(intent.automationId);
       if (!automation)
         throw new Error(`automation ${intent.automationId} is unavailable`);
       if (
@@ -1484,12 +1599,12 @@ export function resumePendingAutomationRuns(
       ) {
         const completedIntent = clearAutomationIntent(intent.sessionId);
         if (completedIntent?.deleteAutomationAfterRun)
-          deleteAutomation(automation.id);
+          await deleteAutomation(automation.id);
         resumed++;
         continue;
       }
       if (intent.terminalAt) {
-        settleRun(automation.id, intent.sessionId, {
+        await settleRun(automation.id, intent.sessionId, {
           status: intent.terminalError ? "error" : "ok",
           error: intent.terminalError,
           durationMs: Math.max(
@@ -1499,7 +1614,7 @@ export function resumePendingAutomationRuns(
         });
         const completedIntent = clearAutomationIntent(intent.sessionId);
         if (completedIntent?.deleteAutomationAfterRun)
-          deleteAutomation(automation.id);
+          await deleteAutomation(automation.id);
         resumed++;
         continue;
       }
@@ -1510,8 +1625,9 @@ export function resumePendingAutomationRuns(
           (run) => run.osSessionId === intent.sessionId,
         ) ||
         // Boot may find several durable cron/manual intents for the same
-        // automation. The first starts synchronously before this loop reaches
-        // the next one. Starting that next intent would hit runAutomation's
+        // automation. The first claims its running count synchronously (before
+        // runAutomation's first await) and so before this loop reaches the
+        // next one. Starting that next intent would hit runAutomation's
         // overlap guard and resolve immediately; its `.finally` below would
         // then recurse into this recovery scan in the same microtask forever.
         // Leave it parked instead. Completion of the running recovered intent
@@ -1528,7 +1644,10 @@ export function resumePendingAutomationRuns(
         acceptedAt: intent.acceptedAt,
         deleteAutomationAfterRun: intent.deleteAutomationAfterRun,
       }).finally(() => {
-        if (!isShuttingDown()) resumePendingAutomationRuns(onSessionCreated);
+        if (!isShuttingDown())
+          void resumePendingAutomationRuns(onSessionCreated).catch((error) =>
+            console.error("[automations] Intent recovery scan failed:", error),
+          );
       });
       resumed++;
     } catch (error) {
@@ -1669,7 +1788,7 @@ export async function runAutomation(
       cwd = sandbox.cwd;
     }
 
-    recordRunStart(automation.id, {
+    await recordRunStart(automation.id, {
       at: startedAt.toISOString(),
       sessionId: bksId,
       trigger,
@@ -1787,11 +1906,13 @@ export async function runAutomation(
     let ticketWorkspaceId: string | undefined;
     if (plainThreadId) {
       try {
-        ticketWorkspaceId = resolvePlainWorkspace({
-          threadId: plainThreadId,
-          title: eventTitle,
-          createdBy: `${automation.name} (automation)`,
-        }).workspace.id;
+        ticketWorkspaceId = (
+          await resolvePlainWorkspace({
+            threadId: plainThreadId,
+            title: eventTitle,
+            createdBy: `${automation.name} (automation)`,
+          })
+        ).workspace.id;
       } catch {}
     }
 
@@ -2141,14 +2262,14 @@ export async function runAutomation(
     }
 
     recordAutomationIntentTerminal(bksId, errorMsg || undefined);
-    settleRun(automation.id, bksId, {
+    await settleRun(automation.id, bksId, {
       status: errorMsg ? "error" : "ok",
       error: errorMsg || undefined,
       durationMs: Date.now() - startedAt.getTime(),
     });
     const completedIntent = clearAutomationIntent(bksId);
     if (completedIntent?.deleteAutomationAfterRun)
-      deleteAutomation(automation.id);
+      await deleteAutomation(automation.id);
     console.log(
       `[automations] "${automation.name}" finished ${errorMsg ? `with error: ${errorMsg}` : "ok"}`,
     );
@@ -2218,9 +2339,9 @@ export function setEventSessionCallback(cb: (sessionId: string) => void): void {
  * starts a fresh run instead of steering the old session. Fire-and-forget —
  * the new run posts its own results.
  */
-export function retriggerAutomationSession(
+export async function retriggerAutomationSession(
   sessionId: string,
-): { ok: true; name: string } | { ok: false; reason: string } {
+): Promise<{ ok: true; name: string } | { ok: false; reason: string }> {
   let session: NativeSessionFile;
   try {
     session = JSON.parse(
@@ -2232,9 +2353,10 @@ export function retriggerAutomationSession(
   // automationId is stamped since 2026-07-16; older sessions only carry the
   // automation's name — fall back to matching on that.
   const automation = session.automationId
-    ? getAutomation(session.automationId)
+    ? await getAutomation(session.automationId)
     : session.automation
-      ? (listAutomations().find((a) => a.name === session.automation) ?? null)
+      ? ((await listAutomations()).find((a) => a.name === session.automation) ??
+        null)
       : null;
   if (!automation) {
     return {
@@ -2257,20 +2379,20 @@ export function retriggerAutomationSession(
 
 /** True when at least one enabled automation watches this Slack channel —
  *  cheap pre-check so the Slack intake doesn't build payloads for nothing. */
-export function isChannelWatched(channelId: string): boolean {
-  return listAutomations().some(
+export async function isChannelWatched(channelId: string): Promise<boolean> {
+  return (await listAutomations()).some(
     (a) => a.enabled && a.slackWatch?.channel === channelId,
   );
 }
 
 /** Fire every enabled automation watching `channelId` (one run per message —
  *  these may overlap, like event runs). Returns how many fired. */
-export function fireAutomationsForSlackChannel(
+export async function fireAutomationsForSlackChannel(
   channelId: string,
   payload: string,
-): number {
+): Promise<number> {
   let fired = 0;
-  for (const automation of listAutomations()) {
+  for (const automation of await listAutomations()) {
     if (!automation.enabled || automation.slackWatch?.channel !== channelId)
       continue;
     console.log(
@@ -2285,13 +2407,13 @@ export function fireAutomationsForSlackChannel(
   return fired;
 }
 
-export function fireAutomationsForEvent(
+export async function fireAutomationsForEvent(
   eventKey: string,
   payload: string,
   opts?: { modelOverride?: string },
-): number {
+): Promise<number> {
   let fired = 0;
-  for (const automation of listAutomations()) {
+  for (const automation of await listAutomations()) {
     if (!automation.enabled || automation.eventKey !== eventKey) continue;
     console.log(`[automations] Event ${eventKey} → "${automation.name}"`);
     void runAutomation(automation, eventSessionCallback, {
@@ -2308,6 +2430,63 @@ export function fireAutomationsForEvent(
 
 let schedulerInterval: ReturnType<typeof setInterval> | null = null;
 let lastFiredMinute = "";
+let schedulerTickInFlight = false;
+
+/**
+ * One scheduler minute: fire every due cron and one-off automation. Reads the
+ * catalog once per tick; a tick still in flight when the next interval
+ * arrives is skipped (its minute key is already claimed), so two ticks never
+ * fire from the same list.
+ */
+async function fireDueAutomations(
+  now: Date,
+  onSessionCreated?: (sessionId: string) => void,
+): Promise<void> {
+  for (const automation of await listAutomations()) {
+    if (!automation.enabled) continue;
+
+    // One-off runs (reminders / "do this again later"): fire once at/after the
+    // target instant, then delete. We persist a "consumed" copy (runOnceAt
+    // cleared, disabled) BEFORE firing so a long-running or crashed run can
+    // never double-fire on a later tick; the record is deleted once it
+    // settles. The consumption is a CAS on the stored record: whoever finds
+    // runOnceAt already cleared lost the race and must not fire.
+    if (automation.runOnceAt) {
+      if (Date.parse(automation.runOnceAt) <= now.getTime()) {
+        let alreadyConsumed = false;
+        const consumed = await mutateAutomation(automation.id, (current) => {
+          alreadyConsumed = !current.runOnceAt;
+          return alreadyConsumed
+            ? current
+            : { ...current, runOnceAt: undefined, enabled: false };
+        });
+        if (!consumed || alreadyConsumed) continue;
+        const osSessionId = newSessionId();
+        void runAutomation(consumed, onSessionCreated, {
+          trigger: "cron",
+          osSessionId,
+          deleteAutomationAfterRun: true,
+        }).finally(() => {
+          // Pre-launch failure stays durable and retains its disabled config.
+          if (!hasAutomationIntent(osSessionId))
+            void deleteAutomation(automation.id).catch((error) =>
+              console.error(
+                `[automations] Could not delete consumed one-off ${automation.id}:`,
+                error,
+              ),
+            );
+        });
+      }
+      continue;
+    }
+
+    if (!automation.schedule) continue;
+    if (cronMatches(automation.schedule, now)) {
+      // Fire and forget — runner guards against overlap per automation
+      void runAutomation(automation, onSessionCreated, { trigger: "cron" });
+    }
+  }
+}
 
 export function startScheduler(
   onSessionCreated?: (sessionId: string) => void,
@@ -2316,49 +2495,19 @@ export function startScheduler(
 
   schedulerInterval = setInterval(() => {
     if (isShuttingDown()) return;
+    if (schedulerTickInFlight) return;
     const now = new Date();
     const minuteKey = now.toISOString().slice(0, 16);
     if (minuteKey === lastFiredMinute) return;
     lastFiredMinute = minuteKey;
-
-    for (const automation of listAutomations()) {
-      if (!automation.enabled) continue;
-
-      // One-off runs (reminders / "do this again later"): fire once at/after the
-      // target instant, then delete. We persist a "consumed" copy (runOnceAt
-      // cleared, disabled) BEFORE firing so a long-running or crashed run can
-      // never double-fire on a later tick; the file is deleted once it settles.
-      if (automation.runOnceAt) {
-        if (Date.parse(automation.runOnceAt) <= now.getTime()) {
-          saveAutomation({
-            ...automation,
-            runOnceAt: undefined,
-            enabled: false,
-          });
-          const osSessionId = newSessionId();
-          void runAutomation(
-            { ...automation, runOnceAt: undefined, enabled: false },
-            onSessionCreated,
-            {
-              trigger: "cron",
-              osSessionId,
-              deleteAutomationAfterRun: true,
-            },
-          ).finally(() => {
-            // Pre-launch failure stays durable and retains its disabled config.
-            if (!hasAutomationIntent(osSessionId))
-              deleteAutomation(automation.id);
-          });
-        }
-        continue;
-      }
-
-      if (!automation.schedule) continue;
-      if (cronMatches(automation.schedule, now)) {
-        // Fire and forget — runner guards against overlap per automation
-        void runAutomation(automation, onSessionCreated, { trigger: "cron" });
-      }
-    }
+    schedulerTickInFlight = true;
+    void fireDueAutomations(now, onSessionCreated)
+      .catch((error) =>
+        console.error("[automations] Scheduler tick failed:", error),
+      )
+      .finally(() => {
+        schedulerTickInFlight = false;
+      });
   }, 20_000);
 
   console.log("[automations] Scheduler started (20s tick, UTC cron)");
@@ -2383,7 +2532,7 @@ export function getWebhookRoutes(
     const m = url.pathname.match(/^\/automations\/([^/]+)\/([^/]+)$/);
     if (!m) return Response.json({ error: "Bad path" }, { status: 400 });
 
-    const automation = getAutomation(m[1]);
+    const automation = await getAutomation(m[1]);
     // Same response for unknown id and bad secret — don't leak which ids exist
     if (
       !automation ||

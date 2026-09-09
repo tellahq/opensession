@@ -30,6 +30,7 @@ import {
   GITHUB_APP_CODE_PERMISSIONS as CODE_PERMISSIONS,
   GITHUB_APP_READ_PERMISSIONS as READ_PERMISSIONS,
   GITHUB_APP_WRITE_PERMISSIONS as WRITE_PERMISSIONS,
+  withReadOnlyContents,
 } from "../shared/github-app-permissions";
 
 let keyPathOverride: string | undefined;
@@ -61,6 +62,10 @@ const g = globalThis as {
   __ghAppTokenWarned?: Set<string>;
   __ghAppLastMintOk?: boolean;
   __ghAppLastMintIdentity?: string;
+  __ghBotIdentity?: {
+    login: string;
+    identity: { name: string; email: string };
+  };
   __ghAppInstallationsCache?: {
     clientId: string;
     at: number;
@@ -294,19 +299,9 @@ export async function githubAppInstallationToken(
       noteHealth(true);
       return cached.token;
     }
-    const res = await fetch(
-      `https://api.github.com/app/installations/${installation.id}/access_tokens`,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          permissions: opts.write ? WRITE_PERMISSIONS : READ_PERMISSIONS,
-        }),
-      },
-    );
-    const tok = (await res.json()) as { token?: string; expires_at?: string };
-    if (!tok.token)
-      throw new Error(`mint failed: ${JSON.stringify(tok).slice(0, 120)}`);
+    const tok = await mintInstallationToken(installation.id, headers, {
+      permissions: opts.write ? WRITE_PERMISSIONS : READ_PERMISSIONS,
+    });
     tokenCache().set(cacheKey, {
       token: tok.token,
       expiresAt: tok.expires_at
@@ -327,6 +322,53 @@ export async function githubAppInstallationToken(
     }
     return null;
   }
+}
+
+/**
+ * One installation-token mint. A set that asks for contents:write against an
+ * installation that only holds contents:read is refused as a whole (mints are
+ * all-or-nothing), which would take reviews and comments down with pushes.
+ * Retry once with contents narrowed to read and warn: the token still
+ * comments and reviews, and a push fails with a clear 403 instead of every
+ * App operation failing at once.
+ */
+async function mintInstallationToken(
+  installationId: number,
+  headers: Record<string, string>,
+  body: { repositories?: string[]; permissions: Record<string, string> },
+): Promise<{ token: string; expires_at?: string }> {
+  const mint = async (permissions: Record<string, string>) => {
+    const res = await fetch(
+      `https://api.github.com/app/installations/${installationId}/access_tokens`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ...body, permissions }),
+      },
+    );
+    const tok = (await res.json()) as { token?: string; expires_at?: string };
+    return { ok: res.ok && !!tok.token, status: res.status, tok };
+  };
+  const first = await mint(body.permissions);
+  if (first.ok) return first.tok as { token: string; expires_at?: string };
+  const narrowed = withReadOnlyContents(body.permissions);
+  if (narrowed !== body.permissions) {
+    const retry = await mint(narrowed);
+    if (retry.ok) {
+      const warned = (g.__ghAppTokenWarned ??= new Set());
+      const key = `contents-write:${installationId}`;
+      if (!warned.has(key)) {
+        warned.add(key);
+        console.warn(
+          `[github-app] installation ${installationId} refused contents:write (${first.status}); minted with contents:read. Branch pushes fail until the App's Contents permission is restored to read and write.`,
+        );
+      }
+      return retry.tok as { token: string; expires_at?: string };
+    }
+  }
+  throw new Error(
+    `mint failed (${first.status}): ${JSON.stringify(first.tok).slice(0, 120)}`,
+  );
 }
 
 /** The selected GitHub credential for REST/GraphQL calls. GitHub App
@@ -507,6 +549,7 @@ export function githubRepositoryMatchesInstallation(
 
 export async function githubAppRepositoryToken(
   ghRepo: string,
+  opts: { readOnly?: boolean } = {},
 ): Promise<string | null> {
   if (!githubConfiguredCredential()) return null;
   const owner = githubRepoOwner(ghRepo);
@@ -522,21 +565,14 @@ export async function githubAppRepositoryToken(
     if (!githubRepositoryMatchesInstallation(ghRepo, installation.owner)) {
       throw new Error(`installation belongs to ${installation.owner}`);
     }
-    const res = await fetch(
-      `https://api.github.com/app/installations/${installation.id}/access_tokens`,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          repositories: [repo],
-          // Trusted repository code runs can push/reply and inspect the
-          // failing checks and Actions logs they are expected to repair.
-          permissions: CODE_PERMISSIONS,
-        }),
-      },
-    );
-    const token = (await res.json()) as { token?: string; expires_at?: string };
-    if (!res.ok || !token.token) throw new Error(`mint failed (${res.status})`);
+    // Code runs can push their branch, reply, and inspect the failing checks
+    // and Actions logs they are expected to repair. Read-only callers
+    // (ask-mode runs) get the read set: the same visibility with no write
+    // capability behind it.
+    const token = await mintInstallationToken(installation.id, headers, {
+      repositories: [repo],
+      permissions: opts.readOnly ? READ_PERMISSIONS : CODE_PERMISSIONS,
+    });
     return token.token;
   } catch (error) {
     console.warn(
@@ -570,4 +606,58 @@ export async function githubServiceCredentialEnv(
   // turns an existing git@github.com origin into a non-interactive HTTPS
   // failure instead of escaping through a host SSH key.
   return githubGitCredentialEnv(token || "");
+}
+
+/** Read-only sibling of githubServiceCredentialEnv for runs that inspect
+ * GitHub state through `gh` while processing untrusted repository content:
+ * same fail-closed env shape (including the SSH-to-HTTPS rewrite), minting
+ * the repository-scoped read permission set so nothing behind the token can
+ * write. */
+export async function githubServiceReadOnlyEnv(
+  ghRepo?: string,
+): Promise<Record<string, string>> {
+  const token = ghRepo
+    ? await githubAppRepositoryToken(ghRepo, { readOnly: true })
+    : await githubToken();
+  return githubGitCredentialEnv(token || "");
+}
+
+/**
+ * The git author/committer identity for commits an agent run makes: the App's
+ * bot user, with GitHub's noreply address so the commits link to the bot
+ * account. Null when no App is configured. The human behind the run rides
+ * along as a `Co-authored-by` trailer (docs/github-authority.md,
+ * "Attribution"); no run carries a person's git identity.
+ */
+export async function githubBotGitIdentity(): Promise<{
+  name: string;
+  email: string;
+} | null> {
+  const slug = githubAppIdentity().slug;
+  if (!slug) return null;
+  const login = `${slug}[bot]`;
+  const cached = g.__ghBotIdentity;
+  if (cached?.login === login) return cached.identity;
+  let id: number | undefined;
+  try {
+    const token = await githubToken();
+    const res = await fetch(
+      `https://api.github.com/users/${encodeURIComponent(login)}`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      },
+    );
+    if (res.ok) id = ((await res.json()) as { id?: number }).id;
+  } catch {}
+  const identity = {
+    name: login,
+    email: `${id ? `${id}+` : ""}${login}@users.noreply.github.com`,
+  };
+  // Only a resolved id is worth remembering; a transient lookup failure
+  // should not pin the id-less address for the process lifetime.
+  if (id) g.__ghBotIdentity = { login, identity };
+  return identity;
 }

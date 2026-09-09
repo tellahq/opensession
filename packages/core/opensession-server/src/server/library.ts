@@ -169,9 +169,9 @@ const CORE_TOOLS: {
 ];
 
 /** Automations already present in the store, by name (what a seed creates). */
-function installedAutomationNames(): Set<string> {
+async function installedAutomationNames(): Promise<Set<string>> {
   try {
-    return new Set(listAutomations().map((a) => a.name));
+    return new Set((await listAutomations()).map((a) => a.name));
   } catch {
     // The library is a read-only gallery; a broken automation store should
     // degrade to "nothing looks installed", never to a failed request.
@@ -329,8 +329,8 @@ function packageEntries(): LibraryEntry[] {
 }
 
 /** The whole catalog, freshly derived. Cheap enough to skip caching. */
-export function listLibrary(): LibraryEntry[] {
-  const installedNames = installedAutomationNames();
+export async function listLibrary(): Promise<LibraryEntry[]> {
+  const installedNames = await installedAutomationNames();
   return [
     ...toolEntries(),
     ...automationEntries(installedNames),

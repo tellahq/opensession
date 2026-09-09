@@ -32,3 +32,11 @@ test("both conversation model-menu triggers persist and reflect the personal def
     "setPreferredDefaultModel: setDefaultModelPref",
   );
 });
+
+test("the new-session model menu can set the personal default", async () => {
+  const newSession = await source("./NewSession.tsx");
+
+  expect(newSession).toContain("useDefaultModelPreference()");
+  expect(newSession).toContain("preferredDefaultModel,");
+  expect(newSession).toContain("setAsDefault: setPreferredDefaultModel");
+});

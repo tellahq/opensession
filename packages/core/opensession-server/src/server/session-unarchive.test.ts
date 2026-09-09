@@ -14,14 +14,14 @@ function recorder(registryIds: string[] = []) {
     isArchivedId(id) {
       return registry.has(id);
     },
-    setArchived(id, value) {
+    async setArchived(id, value) {
       archived.push([id, value]);
     },
     async clearSessionFileArchive(id) {
       files.push(id);
       return true;
     },
-    invalidateSessionsCache() {
+    async publishSessionChange() {
       invalidations++;
     },
   };
@@ -75,12 +75,12 @@ describe("unarchiveForHumanTurn", () => {
     let invalidations = 0;
     const deps: HumanTurnUnarchiveDeps = {
       isArchivedId: () => true,
-      setArchived: () => {},
+      setArchived: async () => {},
       clearSessionFileArchive: async () => {
         await clearing;
         return true;
       },
-      invalidateSessionsCache: () => {
+      publishSessionChange: async () => {
         invalidations++;
       },
     };

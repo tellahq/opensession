@@ -29,4 +29,20 @@ describe("model picker groups", () => {
     expect(primary).toHaveLength(2);
     expect(legacy).toHaveLength(0);
   });
+
+  test("puts Astra first among OpenAI models", () => {
+    const { primary } = splitModelOptions([
+      model("pi/openai/gpt-5.6-luna", "pi"),
+      model("pi/openai/gpt-5.6-sol", "pi"),
+      model("pi/openai/gpt-6-astra", "pi"),
+      model("pi/openai/gpt-5.6-terra", "pi"),
+    ]);
+
+    expect(primary.map((entry) => entry.id)).toEqual([
+      "pi/openai/gpt-6-astra",
+      "pi/openai/gpt-5.6-sol",
+      "pi/openai/gpt-5.6-terra",
+      "pi/openai/gpt-5.6-luna",
+    ]);
+  });
 });

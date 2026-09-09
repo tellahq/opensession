@@ -1412,6 +1412,7 @@ app.whenReady().then(async () => {
       accounts: stored.accounts.map((account, index) => ({
         id: account.id,
         label: account.label,
+        url: account.url,
         unread: badgeByOrigin.get(new URL(account.url).origin) || 0,
         shortcut: index < 9 ? index + 1 : null,
       })),
@@ -1422,38 +1423,81 @@ app.whenReady().then(async () => {
       switchAccount(id, null, eventWindow(e));
     }
   });
-  ipcMain.handle("os1:organizations-add", async (e, raw, check = true) => {
-    if (!fromActiveOrganizationPicker(e)) return { ok: false };
-    const normalized = normalizeServerUrl(raw);
-    const resolved = check
-      ? await resolveServer(raw)
-      : { ok: !!normalized, url: normalized };
-    if (!resolved.ok || !resolved.url) {
-      return {
-        ok: false,
-        error: resolved.error || "Couldn't reach that Open Session server.",
-        canAddAnyway: !!resolved.url,
+  ipcMain.handle(
+    "os1:organizations-add",
+    async (e, raw, check = true, activate = true) => {
+      if (!fromActiveOrganizationPicker(e)) return { ok: false };
+      const normalized = normalizeServerUrl(raw);
+      const resolved = check
+        ? await resolveServer(raw)
+        : { ok: !!normalized, url: normalized };
+      if (!resolved.ok || !resolved.url) {
+        return {
+          ok: false,
+          error: resolved.error || "Couldn't reach that Open Session server.",
+          canAddAnyway: !!resolved.url,
+          url: resolved.url,
+        };
+      }
+      const stored = readStoredAccounts();
+      if (stored.accounts.some((account) => account.url === resolved.url)) {
+        return { ok: false, error: "That organization is already added." };
+      }
+      const account = {
+        id: crypto.randomUUID(),
+        label: new URL(resolved.url).host,
         url: resolved.url,
       };
-    }
+      stored.accounts.push(account);
+      if (!writeStoredAccounts(stored)) {
+        return { ok: false, error: "Couldn't save that organization." };
+      }
+      refreshAccountOrigins();
+      if (!activate) {
+        // The organizations dialog adds in place: the person stays where they
+        // are and the new account only gets its background window and menu row.
+        syncBackgroundAccountWindows();
+        buildAppMenu();
+        return { ok: true };
+      }
+      // Let invoke resolve before navigation destroys its renderer, then activate
+      // the new account through the normal switch path.
+      const target = eventWindow(e);
+      setImmediate(() => switchAccount(account.id, null, target));
+      return { ok: true };
+    },
+  );
+  ipcMain.handle("os1:organizations-remove", (e, id) => {
+    if (!fromActiveOrganizationPicker(e) || typeof id !== "string")
+      return { ok: false };
     const stored = readStoredAccounts();
-    if (stored.accounts.some((account) => account.url === resolved.url)) {
-      return { ok: false, error: "That organization is already added." };
+    const account = stored.accounts.find((candidate) => candidate.id === id);
+    if (!account) return { ok: false, error: "That organization is gone." };
+    const requester = eventWindow(e);
+    // The window asking is showing one of these accounts; removing that one
+    // would navigate the dialog away mid-request. Switch first, then remove.
+    if (accountForWindow(requester, stored)?.id === id) {
+      return {
+        ok: false,
+        error: "Switch to another organization before removing this one.",
+      };
     }
-    const account = {
-      id: crypto.randomUUID(),
-      label: new URL(resolved.url).host,
-      url: resolved.url,
-    };
-    stored.accounts.push(account);
-    if (!writeStoredAccounts(stored)) {
-      return { ok: false, error: "Couldn't save that organization." };
+    stored.accounts = stored.accounts.filter(
+      (candidate) => candidate.id !== id,
+    );
+    if (stored.activeId === id)
+      stored.activeId = accountForWindow(requester, stored)?.id || null;
+    if (!writeStoredAccounts(stored))
+      return { ok: false, error: "Couldn't remove that organization." };
+    // Another visible window may still be on the removed account. Its origin
+    // is no longer trusted, so it closes rather than staying as a dead page.
+    for (const appWindow of [...appWindows]) {
+      if (appWindow.isDestroyed() || appWindow === requester) continue;
+      if (windowData.get(appWindow)?.accountId === id) appWindow.destroy();
     }
     refreshAccountOrigins();
-    // Let invoke resolve before navigation destroys its renderer, then activate
-    // the new account through the normal switch path.
-    const target = eventWindow(e);
-    setImmediate(() => switchAccount(account.id, null, target));
+    syncBackgroundAccountWindows();
+    buildAppMenu();
     return { ok: true };
   });
   ipcMain.on("os1:organizations-manage", (e) => {

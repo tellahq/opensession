@@ -41,13 +41,32 @@ function legacyStateName(base: string): string {
  * also retain their literal layout.
  */
 export function statePath(rel: string): string {
-  const stateRoot = process.env.OPENSESSION_STATE_DIR;
+  return statePathIn(rel, stateContext());
+}
+
+/** The inputs statePath resolves against, as plain strings. A worker that
+ * must open the same store as the gateway receives this instead of reading
+ * its own environment. */
+export type StateContext = {
+  stateRoot: string | undefined;
+  home: string;
+};
+
+export function stateContext(): StateContext {
+  return {
+    stateRoot: process.env.OPENSESSION_STATE_DIR || undefined,
+    home: homeDir(),
+  };
+}
+
+/** statePath for an explicit context. Same rules, no environment reads. */
+export function statePathIn(rel: string, context: StateContext): string {
   const standardBase = rel.startsWith(".opensession-")
     ? rel.slice(".opensession-".length)
     : null;
-  if (stateRoot) return join(stateRoot, rel);
+  if (context.stateRoot) return join(context.stateRoot, rel);
 
-  const home = homeDir();
+  const home = context.home;
   if (!standardBase) return join(home, rel);
 
   const current = join(home, ".opensession", standardBase);

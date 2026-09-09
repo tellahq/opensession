@@ -4,6 +4,7 @@ import {
   evaluateCommand,
   EXEC_WRAPPER_NAMES,
   orgFloorPolicy,
+  mergeGuardDenyReason,
   publicationPolicyDenyReason,
   scannableCommand,
   type CommandPolicy,
@@ -434,6 +435,103 @@ describe("evasion corpus", () => {
     };
     expect(evaluateCommand("git status", policy).decision).toBe("allow");
     expect(evaluateCommand("git push", policy).decision).toBe("deny");
+  });
+});
+
+describe("merge guard for every agent run", () => {
+  const guard = { baseBranch: "main", proposeTool: "propose_merge" };
+
+  test("lets ordinary branch work and PR conversation through", () => {
+    for (const command of [
+      "git push -u origin HEAD:refs/heads/feat/x",
+      "git push origin feat/x --force-with-lease",
+      "git push origin :feat/x",
+      "gh pr create --title t --body b",
+      "gh pr comment 12 --body 'done'",
+      "gh pr review 12 --comment --body 'looks fine'",
+      "gh pr review 12 --request-changes --body 'no'",
+      "gh api repos/o/r/pulls/12/comments",
+      "gh api graphql -f query='mutation { resolveReviewThread(input: {threadId: \"x\"}) { thread { id } } }'",
+      "git log main..HEAD",
+      "git fetch origin main && git rebase origin/main",
+    ])
+      expect(mergeGuardDenyReason(command, guard)).toBeUndefined();
+  });
+
+  test("refuses merges, whatever the spelling", () => {
+    expect(mergeGuardDenyReason("gh pr merge 12 --squash", guard)).toContain(
+      "propose_merge",
+    );
+    expect(
+      mergeGuardDenyReason("gh pr merge --auto --squash 12", guard),
+    ).toContain("cannot merge");
+    expect(
+      mergeGuardDenyReason("gh api -X PUT repos/o/r/pulls/12/merge", guard),
+    ).toContain("cannot merge");
+    expect(
+      mergeGuardDenyReason(
+        "gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: \"x\"}) { clientMutationId } }'",
+        guard,
+      ),
+    ).toContain("cannot merge");
+    expect(
+      mergeGuardDenyReason("cd /tmp && gh pr merge 12 --squash", guard),
+    ).toContain("cannot merge");
+  });
+
+  test("refuses approving reviews but not comments", () => {
+    expect(mergeGuardDenyReason("gh pr review 12 --approve", guard)).toContain(
+      "approving review",
+    );
+    expect(mergeGuardDenyReason("gh pr review 12 -a", guard)).toContain(
+      "approving review",
+    );
+    expect(
+      mergeGuardDenyReason(
+        "gh api -X POST repos/o/r/pulls/12/reviews -f event=APPROVE",
+        guard,
+      ),
+    ).toContain("approving review");
+    expect(
+      mergeGuardDenyReason(
+        "gh api -X POST repos/o/r/pulls/12/reviews -f event=COMMENT -f body=ok",
+        guard,
+      ),
+    ).toBeUndefined();
+  });
+
+  test("refuses updating or deleting the protected base branch", () => {
+    for (const command of [
+      "git push origin main",
+      "git push origin HEAD:main",
+      "git push origin HEAD:refs/heads/main",
+      "git push -f origin main",
+      "git push origin :main",
+      "git push origin --delete main",
+      "git -C /repo push origin main",
+    ])
+      expect(mergeGuardDenyReason(command, guard)).toContain(
+        "protected base branch main",
+      );
+    // Not the base: a branch that merely contains the name.
+    expect(
+      mergeGuardDenyReason("git push origin HEAD:maintenance", guard),
+    ).toBeUndefined();
+  });
+
+  test("names the PR panel when no propose tool is mounted", () => {
+    expect(
+      mergeGuardDenyReason("gh pr merge 12", { baseBranch: "main" }),
+    ).toMatch(/PR panel/);
+  });
+
+  test("a shared self-development checkout keeps its push-to-main workflow", () => {
+    // No base branch: pushing main is sanctioned there and GitHub's rulesets
+    // are the guard. Merge and approve are still refused.
+    expect(mergeGuardDenyReason("git push origin main", {})).toBeUndefined();
+    expect(mergeGuardDenyReason("gh pr merge 12", {})).toContain(
+      "cannot merge",
+    );
   });
 });
 

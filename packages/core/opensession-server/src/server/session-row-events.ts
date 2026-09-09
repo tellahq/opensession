@@ -13,12 +13,13 @@
  * fallback poll and refetches on reconnect, so a lost frame heals the same
  * way a lost invalidation did.
  */
-import { indexedSession, indexedVisibilityGroup } from "./session-list-store";
+import { indexedSessionWithVisibilityGroup } from "./session-list-store";
 import {
   loadSidebarSessionScopeContext,
   scopeSessionsForSidebar,
   sidebarSessionScopeKey,
   type SidebarSessionScope,
+  type SidebarSessionScopeContext,
 } from "./sidebar-session-scope";
 import type { UnifiedSession } from "./types";
 import { allClients } from "./ws-hub";
@@ -73,15 +74,17 @@ export function sidebarSubscribers(
 /** Whether `sessionId` renders in `scope`. `group` holds the enriched rows
  * the scope rules consult (the session itself, its workspace or worktree
  * siblings, and its parent chain). */
-export function sessionRowVisible(
+export async function sessionRowVisible(
   sessionId: string,
   group: UnifiedSession[],
   scope: SidebarSessionScope | null,
-): boolean {
+  providedContext?: SidebarSessionScopeContext,
+): Promise<boolean> {
   const row = group.find((session) => session.id === sessionId);
   if (!row || row.archived) return false;
   if (!scope) return true;
-  const context = loadSidebarSessionScopeContext(scope, group);
+  const context =
+    providedContext ?? (await loadSidebarSessionScopeContext(scope, group));
   return scopeSessionsForSidebar(group, scope, context).some(
     (session) => session.id === sessionId,
   );
@@ -90,7 +93,8 @@ export function sessionRowVisible(
 async function flushSessionRow(sessionId: string): Promise<void> {
   const subscribers = sidebarSubscribers();
   if (subscribers.size === 0) return;
-  const stored = indexedSession(sessionId);
+  // One worker round trip: the row and the rows its visibility depends on.
+  const stored = await indexedSessionWithVisibilityGroup(sessionId);
   if (!stored) {
     const payload = JSON.stringify({
       type: "session_row_removed",
@@ -104,16 +108,24 @@ async function flushSessionRow(sessionId: string): Promise<void> {
   // row projection is shared with the list route without an import cycle.
   const { sidebarRowProjection } = await import("./routes/sessions");
   const { row, group } = await sidebarRowProjection(
-    stored,
-    indexedVisibilityGroup(stored),
+    stored.session,
+    stored.group,
   );
   const shown = JSON.stringify({ type: "session_row", row });
   const removed = JSON.stringify({
     type: "session_row_removed",
     id: sessionId,
   });
+  const contexts = new Map<string, SidebarSessionScopeContext>();
   for (const { scope, sockets } of subscribers.values()) {
-    const payload = sessionRowVisible(row.id, group, scope) ? shown : removed;
+    let context = scope ? contexts.get(scope.user) : undefined;
+    if (scope && !context) {
+      context = await loadSidebarSessionScopeContext(scope, group);
+      contexts.set(scope.user, context);
+    }
+    const payload = (await sessionRowVisible(row.id, group, scope, context))
+      ? shown
+      : removed;
     for (const ws of sockets) send(ws, payload);
   }
 }
@@ -122,6 +134,11 @@ function send(ws: RowSocket, payload: string): void {
   try {
     ws.send(payload);
   } catch {}
+}
+
+/** Session ids with a publish pending, in scheduling order. */
+export function __scheduledSessionRowsForTest(): string[] {
+  return [...scheduled.keys()];
 }
 
 export function __resetSessionRowPublishesForTest(): void {

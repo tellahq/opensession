@@ -125,6 +125,9 @@ export type NoticeKind =
   | "compaction"
   | "worker-report"
   | "review-handoff"
+  /** The review loop closed: the PR passed review after handed-off fix
+   *  rounds, or the round cap sent the rest to humans. */
+  | "review-settled"
   | "workflow"
   | "session-notice"
   | "recovery"
@@ -327,6 +330,32 @@ export function parseReviewHandoff(
   }
   const pr = text.match(/PR #(\d+)/);
   return { prNumber: pr ? parseInt(pr[1], 10) : null, body: text };
+}
+
+export type ReviewSettledOutcome = "passed" | "capped";
+
+/**
+ * The review loop's closing message (agents/github/handoff.ts): the PR passed
+ * review after handed-off fix rounds, or the round cap handed the remainder to
+ * humans. Kept in sync with reviewSettledSentinel in agents/github/prompts.ts.
+ */
+const REVIEW_SETTLED_RE = /^<!--os:review-settled:(passed|capped)-->\n*/;
+
+export function parseReviewSettled(body?: string): {
+  prNumber: number | null;
+  outcome: ReviewSettledOutcome;
+  body: string;
+} | null {
+  if (!body) return null;
+  const match = body.match(REVIEW_SETTLED_RE);
+  if (!match) return null;
+  const text = body.slice(match[0].length);
+  const pr = text.match(/PR #(\d+)/);
+  return {
+    prNumber: pr ? parseInt(pr[1], 10) : null,
+    outcome: match[1] as ReviewSettledOutcome,
+    body: text,
+  };
 }
 
 /**
@@ -769,6 +798,29 @@ function classifyDelivery(entry: TranscriptEntry): TranscriptEntry {
   if (!attribution) return entry;
 
   if (isGitHubAttribution(attribution.name)) {
+    const settled = parseReviewSettled(attribution.body);
+    if (settled) {
+      const pr = settled.prNumber ? `PR #${settled.prNumber}` : "PR";
+      return {
+        ...entry,
+        content: settled.body,
+        notice:
+          settled.outcome === "passed"
+            ? {
+                kind: "review-settled",
+                title: `${pr} review passed`,
+                tone: "info",
+                icon: "done",
+                body: "collapsed",
+              }
+            : {
+                kind: "review-settled",
+                title: `${pr} review handed to humans`,
+                tone: "warn",
+                body: "collapsed",
+              },
+      };
+    }
     const handoff = parseReviewHandoff(attribution.body);
     if (handoff)
       return {

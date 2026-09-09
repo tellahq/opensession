@@ -227,6 +227,20 @@ export function markSessionMetadataExported(
   );
 }
 
+/** One session's committed document from the central projection. */
+export function sessionMetadataCatalogGet(
+  db: Database,
+  sessionId: string,
+): SessionMetadataCatalogRow | null {
+  const row = db
+    .query(
+      `SELECT session_id, doc, rev, exported_rev, archived, last_activity_ms, updated_at
+       FROM session_kernel_metadata_catalog WHERE session_id = ?`,
+    )
+    .get(sessionId) as MetadataRow | null;
+  return row ? { ...record(row), exportedRev: Number(row.exported_rev) } : null;
+}
+
 export function sessionMetadataCatalogPage(
   db: Database,
   afterSessionId: string,

@@ -4,7 +4,7 @@ import {
   resolveModel,
   toPiModel,
 } from "./models";
-import { getWorkspace, workspaceModelSettings } from "./workspaces";
+import { peekWorkspace, workspaceModelSettings } from "./workspaces";
 
 export interface ResolvedWorkspaceModelPreset {
   /** The picker id retained on the session, so the UI and history keep the preset name. */
@@ -69,8 +69,10 @@ export function resolveWorkspaceModelPreset(
   if (!match || (typeof workspaceId === "string" && match[1] !== workspaceId))
     return undefined;
   // Resolve through workspaceModelSettings so the default presets stay
-  // selectable in workspaces that never saved their own copy.
-  const workspace = getWorkspace(match[1]);
+  // selectable in workspaces that never saved their own copy. Preset
+  // resolution is sync all the way up (runner dispatch, slash commands, the
+  // effective-config view), so it reads the memory projection.
+  const workspace = peekWorkspace(match[1]);
   const preset = workspace
     ? workspaceModelSettings(workspace).presets?.find(
         (item) => item.id === match[2],

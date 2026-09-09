@@ -220,6 +220,9 @@ struct SessionView: View {
 
     /// Model/effort catalog for the toolbar picker; fetched on first open.
     @State private var catalog: ModelCatalog?
+    /// The subscription pools, for the model menu's weekly overview. Seeded
+    /// from the last answer this device saw so the menu opens with numbers.
+    @State private var accounts: [PooledAccount] = SettingsAPI.cachedProviderAccountPools()
     @State private var forkState = SessionForkState()
 
     /// PR details sheet — the macOS toolbar PR chip, the iOS overflow menu.
@@ -786,6 +789,25 @@ struct SessionView: View {
                     PresenceFacepile(viewers: viewModel.otherViewers, size: 24)
                 }
             }
+            #if os(iOS)
+            // The session's two actions, beside the title: archive and the ⋯
+            // menu. One group, so the system draws them in a single glass
+            // capsule like the Back button's. No glass of our own here: a
+            // toolbar item already sits in the bar's glass grouping, and
+            // nesting more joins its morph animations.
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if let onArchiveWorkspace {
+                    Button(action: onArchiveWorkspace) {
+                        Image(systemName: "archivebox")
+                            .foregroundStyle(OS1VisualStyle.text)
+                    }
+                    .accessibilityLabel("Archive")
+                }
+                if let actionsMenu {
+                    actionsMenu
+                }
+            }
+            #endif
             #if os(macOS)
             // macOS retains the PR chip in its roomier toolbar; on iOS the
             // same series lives in the title-opened workspace sheet.
@@ -924,6 +946,11 @@ struct SessionView: View {
             // watchdog window. The zero-sized leaf owns only the side effects.
             .background { SessionSceneLifecycle(viewModel: viewModel) }
             .task {
+                #if DEBUG
+                if let drop = ProcessInfo.processInfo.environment["OS1_SHOW_CONNECTION_DROP"] {
+                    viewModel.dropConnectionForScreenshot(sustained: drop == "sustained")
+                }
+                #endif
                 #if DEBUG && os(iOS)
                 // Install screenshot fixtures before network requests so a
                 // slow catalog cannot leave the capture in the ordinary state.
@@ -967,6 +994,7 @@ struct SessionView: View {
                 }
                 #endif
                 catalog = try? await OS1API.models(workspaceId: viewModel.session.workspaceId)
+                accounts = await SettingsAPI.providerAccountPools()
                 #if DEBUG && os(iOS)
                 if ProcessInfo.processInfo.environment["OS1_OPEN_WORKTREE_INFO"] == "1" {
                     showWorktreeInfo = true
@@ -1035,12 +1063,10 @@ struct SessionView: View {
                 onNextChat: onNextChat,
                 forkState: $forkState,
                 onForkCreated: onForkCreated,
-                // The session's actions ride above the composer on iOS (see
-                // `SessionActionBar`), which is why the navigation bar has no
-                // ⋯ of its own there.
-                onArchiveWorkspace: onArchiveWorkspace,
-                onNewSession: onNewSession,
-                actionMenu: actionsMenu
+                // New session and Next chat ride above the composer on iOS
+                // (see `SessionActionBar`); archive and the ⋯ menu sit in the
+                // navigation bar beside the title.
+                onNewSession: onNewSession
             )
         }
         // The system treats a bottom `safeAreaBar` as adaptive chrome: when
@@ -1054,9 +1080,10 @@ struct SessionView: View {
         .environment(\.colorScheme, appColorScheme)
     }
 
-    /// The ⋯ menu, erased so the input bar can carry it without becoming
-    /// generic. Built here because every binding it writes to is this view's
-    /// state. nil on the Mac, whose roomier toolbar keeps its own controls.
+    /// The ⋯ menu, erased so the toolbar can carry it beside the archive
+    /// button without becoming generic. Built here because every binding it
+    /// writes to is this view's state. nil on the Mac, whose roomier toolbar
+    /// keeps its own controls.
     private var actionsMenu: AnyView? {
         #if os(iOS)
         AnyView(
@@ -1066,6 +1093,7 @@ struct SessionView: View {
                 workerSessions: workerSessions,
                 workspaceNames: workspaceNames,
                 catalog: catalog,
+                accounts: accounts,
                 onNewSession: onNewSession,
                 onFork: canForkSession ? { forkState.enter() } : nil,
                 onRenameWorkspace: onRenameWorkspace,
@@ -1161,7 +1189,7 @@ struct SessionView: View {
             if let safety = viewModel.safety {
                 safetyNotice(safety)
             }
-            switch viewModel.connectionState {
+            switch viewModel.presentedConnectionState {
             case .connected:
                 EmptyView()
             case .connecting:
@@ -1229,7 +1257,7 @@ struct SessionView: View {
     /// `ModelSettingsMenu`, which the iOS overflow menu mounts as well.
     private var modelMenu: some View {
         Menu {
-            ModelSettingsMenu(viewModel: viewModel, catalog: catalog)
+            ModelSettingsMenu(viewModel: viewModel, catalog: catalog, accounts: accounts)
         } label: {
             Image(systemName: "slider.horizontal.3")
         }
@@ -1310,9 +1338,11 @@ struct SessionView: View {
             .frame(width: sessionHeaderLaneWidth, alignment: .leading)
     }
 
+    /// Room for Back on the left and the two-button action group on the
+    /// right, each about 44pt per control plus the bar's margins.
     private var sessionHeaderLaneWidth: CGFloat {
         let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
-        return min(560, max(200, surfaceWidth - 160))
+        return min(560, max(160, surfaceWidth - 200))
     }
 
     /// Mobile web opens workspace details when its title is tapped. Keep the
@@ -1367,7 +1397,7 @@ struct SessionView: View {
 
     private var sessionIdentityWidth: CGFloat {
         let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
-        return min(360, max(128, surfaceWidth - 128))
+        return min(360, max(128, surfaceWidth - 200))
     }
     #endif
 
@@ -1827,6 +1857,8 @@ private struct SessionActionsMenu: View {
     /// Model/effort catalog for the nested settings rows; nil until the first
     /// `/api/models` fetch lands, which only costs the Model row.
     let catalog: ModelCatalog?
+    /// The subscription pools behind the nested Weekly remaining row.
+    let accounts: [PooledAccount]
     let onNewSession: (() -> Void)?
     let onFork: (() -> Void)?
     let onRenameWorkspace: ((String) -> Void)?
@@ -1938,7 +1970,9 @@ private struct SessionActionsMenu: View {
             // worktree details sheet, which is a long way to go for a setting
             // the web changes from the composer.
             Menu {
-                ModelSettingsMenu(viewModel: viewModel, catalog: catalog, showsUsage: false)
+                ModelSettingsMenu(
+                    viewModel: viewModel, catalog: catalog, accounts: accounts, showsUsage: false
+                )
             } label: {
                 Label("Model settings", systemImage: "slider.horizontal.3")
             }
@@ -2082,7 +2116,7 @@ private struct SessionActionsMenu: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .foregroundStyle(OS1VisualStyle.textDim)
+                .foregroundStyle(OS1VisualStyle.text)
         }
         .accessibilityLabel("Session actions")
         .confirmationDialog(
@@ -2522,7 +2556,9 @@ struct SessionTabsView: View {
                     onClose: close,
                     archived: historyPlacement == .tabStrip ? archivedTabs : [],
                     restoringIds: restoringTabIds,
-                    onRestore: restore
+                    onRestore: restore,
+                    onNew: openNewTab,
+                    opening: openingTab
                 )
                 // Same reason the composer bar is pinned (see
                 // SessionView.inputBar): a `safeAreaBar` is adaptive chrome,
@@ -2737,6 +2773,11 @@ private struct SessionTabBar: View {
     let archived: [Session]
     let restoringIds: Set<String>
     let onRestore: (String) -> Void
+    /// Open a new session in this workspace as the next tab. Nil on the
+    /// read-only strip, which owns no session creation. The pill dims while a
+    /// create is in flight so a second tap can't open a second one.
+    var onNew: (() -> Void)? = nil
+    var opening = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Namespace private var activeTabIndicator
@@ -2752,6 +2793,19 @@ private struct SessionTabBar: View {
                     ForEach(tabs) { pill in
                         tab(pill)
                     }
+                    // The + rides after the last tab, where the new tab will
+                    // land, and scrolls with the strip so the pills keep the
+                    // full width (the web phone strip does the same).
+                    if let onNew {
+                        Button(action: onNew) {
+                            Image(systemName: "plus")
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .disabled(opening)
+                        .accessibilityLabel("New session in this workspace")
+                        .modifier(ControlPill(shape: pillShape))
+                    }
                     if !archived.isEmpty {
                         SessionHistoryMenu(
                             sessions: archived,
@@ -2759,12 +2813,7 @@ private struct SessionTabBar: View {
                             onRestore: { onRestore($0.id) }
                         )
                         .frame(width: 44, height: 44)
-                        .background(
-                            OS1VisualStyle.background.opacity(0.3),
-                            in: pillShape
-                        )
-                        .background(.thickMaterial, in: pillShape)
-                        .glassSurface(in: pillShape, interactive: true)
+                        .modifier(ControlPill(shape: pillShape))
                     }
                 }
                 // The rail lives on the CONTENT, not the scroll view: pills
@@ -2787,6 +2836,22 @@ private struct SessionTabBar: View {
                     withAnimation(.snappy) { proxy.scrollTo(id, anchor: .center) }
                 }
             }
+        }
+    }
+
+    /// The glass capsule behind the strip's two round controls, + and history,
+    /// so they are built the same way and read as one set.
+    private struct ControlPill: ViewModifier {
+        let shape: Capsule
+
+        func body(content: Content) -> some View {
+            content
+                .background(
+                    OS1VisualStyle.background.opacity(0.3),
+                    in: shape
+                )
+                .background(.thickMaterial, in: shape)
+                .glassSurface(in: shape, interactive: true)
         }
     }
 
@@ -2999,7 +3064,7 @@ private struct SessionInputBar: View {
     /// Read for the Mac send menu's key hints only. See `BusySendHints`.
     @AppStorage("os1.composer.busySendMod") private var busySendMod = "steer"
     @AppStorage("os1.composer.replySuggestions") private var showReplySuggestions = true
-    @AppStorage("os1.composer.nextChatButton") private var showNextChatButton = true
+    @AppStorage("os1.composer.nextChatButton") private var showNextChatButton = false
     /// Matches the transcript column cap so the bar centers with it.
     let contentMaxWidth: CGFloat
     let horizontalInset: CGFloat
@@ -3011,12 +3076,10 @@ private struct SessionInputBar: View {
     var onNextChat: (() -> Void)?
     @Binding var forkState: SessionForkState
     var onForkCreated: ((String) async -> Void)?
-    /// The rest of the iOS action bar above the composer. Each is optional
-    /// for the same reason: a conversation with no workspace behind it (the
-    /// Desk) simply draws fewer buttons.
-    var onArchiveWorkspace: (() -> Void)?
+    /// The rest of the iOS action bar above the composer. Optional for the
+    /// same reason: a conversation with no workspace behind it (the Desk)
+    /// simply draws fewer buttons.
     var onNewSession: (() -> Void)?
-    var actionMenu: AnyView?
     @FocusState private var inputFocused: Bool
     /// What the "+" menu opened, if anything. One `@State` and one `.sheet`
     /// on purpose: stacking sheet modifiers on a single view leaves only the
@@ -3178,10 +3241,8 @@ private struct SessionInputBar: View {
             // safe-area bar, so they remain directly above an open keyboard.
             if hasActionBar {
                 SessionActionBar(
-                    onArchive: onArchiveWorkspace,
                     onNewSession: onNewSession,
-                    onNextChat: showNextChatButton ? onNextChat : nil,
-                    menu: actionMenu
+                    onNextChat: showNextChatButton ? onNextChat : nil
                 )
             }
             #endif
@@ -3338,10 +3399,7 @@ private struct SessionInputBar: View {
     /// Whether the action bar has anything to hold. A conversation with no
     /// workspace behind it draws no bar at all rather than an empty capsule.
     private var hasActionBar: Bool {
-        onArchiveWorkspace != nil
-            || onNewSession != nil
-            || actionMenu != nil
-            || (showNextChatButton && onNextChat != nil)
+        onNewSession != nil || (showNextChatButton && onNextChat != nil)
     }
     #endif
 
@@ -3565,7 +3623,7 @@ private struct SessionInputBar: View {
 
     private var visibleNotice: String? {
         guard let notice = viewModel.notice else { return nil }
-        if case .connected = viewModel.connectionState { return notice }
+        if case .connected = viewModel.presentedConnectionState { return notice }
         let normalized = notice.lowercased()
         return normalized.contains("connect") || normalized.contains("socket")
             ? nil

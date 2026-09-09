@@ -36,8 +36,9 @@ export interface AgentModule {
   /** Called on graceful shutdown — clean up processes, save state */
   shutdown(): Promise<void>;
 
-  /** Return health info for the combined /health endpoint */
-  health(): Record<string, unknown>;
+  /** Return health info for the combined /health endpoint. May await a
+   *  catalog read (automation-backed agents); consumers await it. */
+  health(): Record<string, unknown> | Promise<Record<string, unknown>>;
 
   /**
    * Optional sidebar feed (the feeds design). Called once at feed

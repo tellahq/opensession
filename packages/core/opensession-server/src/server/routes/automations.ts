@@ -21,7 +21,7 @@ import {
 } from "../automations";
 import { draftAutomation } from "../draft-automation";
 import { listReportGroups } from "../reports";
-import { invalidateSessionsCache } from "../session-cache";
+import { publishSessionChange } from "../session-cache";
 import { getWorkspace } from "../workspaces";
 import { conditionalJsonResponse } from "../http-json";
 
@@ -54,7 +54,7 @@ export async function handleAutomationsRoutes(
   }
 
   if (path === "/api/automations" && req.method === "GET") {
-    const list = listAutomations().map((a) => ({
+    const list = (await listAutomations()).map((a) => ({
       ...a,
       isRunning: isAutomationRunning(a.id),
     }));
@@ -70,10 +70,16 @@ export async function handleAutomationsRoutes(
     const latestByAutomation = new Map(
       listReportGroups().map((g) => [g.automationId, g.latest]),
     );
+    const automations = await listAutomations();
+    const workspaces = await Promise.all(
+      automations.map((a) =>
+        a.workspaceId ? getWorkspace(a.workspaceId) : null,
+      ),
+    );
     return conditionalJsonResponse(req, {
-      automations: listAutomations().map((a) => {
+      automations: automations.map((a, index) => {
         const report = latestByAutomation.get(a.id);
-        const workspace = a.workspaceId ? getWorkspace(a.workspaceId) : null;
+        const workspace = workspaces[index];
         return {
           id: a.id,
           name: a.name,
@@ -105,22 +111,22 @@ export async function handleAutomationsRoutes(
   if (path === "/api/automations" && req.method === "POST") {
     const body = await req.json().catch(() => null);
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
-    const result = createAutomation(body);
+    const result = await createAutomation(body);
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
   }
 
   const autoRunMatch = path.match(/^\/api\/automations\/([^/]+)\/run$/);
   if (autoRunMatch && req.method === "POST") {
-    const automation = getAutomation(autoRunMatch[1]);
+    const automation = await getAutomation(autoRunMatch[1]);
     if (!automation)
       return Response.json({ error: "Not found" }, { status: 404 });
     if (isAutomationRunning(automation.id)) {
       return Response.json({ error: "Already running" }, { status: 409 });
     }
     // Fire and forget; session shows up in the list once it boots
-    void runAutomation(automation, () => {
-      invalidateSessionsCache();
+    void runAutomation(automation, (sessionId) => {
+      publishSessionChange(sessionId);
     });
     return Response.json({ ok: true });
   }
@@ -132,10 +138,10 @@ export async function handleAutomationsRoutes(
     const body = await req.json().catch(() => null);
     if (!body || typeof body.sessionId !== "string")
       return Response.json({ error: "sessionId required" }, { status: 400 });
-    const result = retriggerAutomationSession(body.sessionId);
+    const result = await retriggerAutomationSession(body.sessionId);
     if (!result.ok)
       return Response.json({ error: result.reason }, { status: 400 });
-    invalidateSessionsCache();
+    publishSessionChange(body.sessionId);
     return Response.json(result);
   }
 
@@ -143,13 +149,13 @@ export async function handleAutomationsRoutes(
   if (autoMatch && req.method === "PUT") {
     const body = await req.json().catch(() => null);
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
-    const result = updateAutomation(autoMatch[1], body);
+    const result = await updateAutomation(autoMatch[1], body);
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
   }
 
   if (autoMatch && req.method === "DELETE") {
-    return deleteAutomation(autoMatch[1])
+    return (await deleteAutomation(autoMatch[1]))
       ? Response.json({ ok: true })
       : Response.json({ error: "Not found" }, { status: 404 });
   }

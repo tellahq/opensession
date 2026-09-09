@@ -126,14 +126,28 @@ export function sleepingSandboxPortalStatus(
  * still verifies the live session and sandbox before restoring authority. */
 export function cachedSandboxPortalOwner(
   sandboxId: string,
-  port: number,
+  port?: number,
 ): string | null {
   const entry = load().portals.find(
     (item) =>
       item.sandboxId === sandboxId &&
-      item.services.some((service) => service.port === port),
+      (port === undefined ||
+        item.services.some((service) => service.port === port)),
   );
   return entry?.sessionId ?? null;
+}
+
+/** The cached Portal behind a sandbox service port, by name. */
+export function cachedSandboxPortalService(
+  sandboxId: string,
+  port: number,
+): CachedPortal | null {
+  for (const entry of load().portals) {
+    if (entry.sandboxId !== sandboxId) continue;
+    const service = entry.services.find((item) => item.port === port);
+    if (service) return service;
+  }
+  return null;
 }
 
 export function dropCachedSandboxPortals(sandboxId: string): void {

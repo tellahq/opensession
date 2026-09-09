@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { IconChevronDown, IconCheckCircle, IconX } from "./icons";
 import { cn } from "../ui/cn";
 import type { ReviewLoopResult } from "../lib/review-loop";
+import type { ReviewSettledOutcome } from "@tellahq/opensession-protocol/notices";
 
 /**
  * A review handoff and the work it triggered, folded like a normal turn. Once
@@ -13,6 +14,7 @@ export function ReviewLoopBlock({
   rounds,
   live,
   result,
+  settled,
   children,
   defaultOpen = false,
   onOpenChange,
@@ -21,6 +23,10 @@ export function ReviewLoopBlock({
   rounds: number;
   live: boolean;
   result?: ReviewLoopResult;
+  /** How the transcript says the loop closed. Outranked by a live `result`,
+   *  which only the final loop of an open PR carries; every earlier or
+   *  merged loop keeps this durable verdict instead of a bare round count. */
+  settled?: ReviewSettledOutcome | null;
   children: React.ReactNode;
   /** Preview/test hook; the transcript never passes it, so sessions stay folded. */
   defaultOpen?: boolean;
@@ -28,7 +34,7 @@ export function ReviewLoopBlock({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const status = live ? "pending" : result?.status;
-  const resultDetail = reviewLoopDetail(status, rounds);
+  const resultDetail = reviewLoopDetail(status, rounds, settled);
   const visibleDetail =
     open && status !== "pending"
       ? `${rounds} ${rounds === 1 ? "round" : "rounds"}`
@@ -98,10 +104,13 @@ export function ReviewLoopBlock({
 function reviewLoopDetail(
   status: ReviewLoopResult["status"] | undefined,
   rounds: number,
+  settled?: ReviewSettledOutcome | null,
 ): string {
   if (status === "passed") return "Ready to merge";
   if (status === "failed") return "Needs changes";
   if (status === "pending") return "Working";
+  if (settled === "passed") return "Review passed";
+  if (settled === "capped") return "Over to humans";
   return `${rounds} ${rounds === 1 ? "round" : "rounds"}`;
 }
 

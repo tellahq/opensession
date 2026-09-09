@@ -467,7 +467,7 @@ async function sweepOrphanScratchDirs(): Promise<void> {
   if (!existsSync(root)) return;
   for (const entry of readdirSync(root)) {
     try {
-      if (getWorkspace(entry)) continue;
+      if (await getWorkspace(entry)) continue;
       const full = `${root}/${entry}`;
       if (Date.now() - statSync(full).mtimeMs < SCRATCH_ORPHAN_GRACE_MS)
         continue;

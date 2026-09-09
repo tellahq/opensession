@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createMcpRuntime, type McpRuntime } from "./mcp-runtime";
-import { createPortalsMcpServer, type PortalsMcpContext } from "./portals-mcp";
+import {
+  createPortalsMcpServer,
+  type PortalsMcpContext,
+  settleWithin,
+} from "./portals-mcp";
 
 const open: McpRuntime[] = [];
 
@@ -59,6 +63,31 @@ async function harness(
   open.push(runtime);
   return { calls, runtime, verificationCalls };
 }
+
+describe("settleWithin", () => {
+  test("returns the value of a start that finishes in time", async () => {
+    expect(await settleWithin(Promise.resolve("ready"), 1_000)).toEqual({
+      settled: true,
+      value: "ready",
+    });
+  });
+
+  test("answers pending for a start still booting, without dropping it", async () => {
+    let finish = () => {};
+    const slow = new Promise<string>((resolve) => {
+      finish = () => resolve("late");
+    });
+    expect(await settleWithin(slow, 10)).toEqual({ settled: false });
+    finish();
+    expect(await slow).toBe("late");
+  });
+
+  test("a start that fails in time rejects like the start itself", async () => {
+    await expect(
+      settleWithin(Promise.reject(new Error("port taken")), 1_000),
+    ).rejects.toThrow("port taken");
+  });
+});
 
 describe("Portals MCP staging routes", () => {
   test("uses Tella's authoritative fixture fields", async () => {

@@ -840,11 +840,13 @@ export function githubUserLoginForRun(user?: string | null): string | null {
 }
 
 /**
- * Env for a run that should act as its owner on GitHub: GH_TOKEN (gh CLI's
- * highest-precedence credential) + GITHUB_TOKEN (octokit-style tooling).
- * Empty when the feature is off, the user is unknown/unmapped, or they never
- * connected — callers can spread it unconditionally. Callers are responsible
- * for the trust gate (interactive, non-least-privilege runs only).
+ * API variables for a run that acts as its person on GitHub: GH_TOKEN (gh
+ * CLI's highest-precedence credential) + GITHUB_TOKEN (octokit-style
+ * tooling). Empty when the feature is off, the user is unknown/unmapped, or
+ * they never connected, so callers can spread it unconditionally and fall
+ * back to an App token. Callers own the trust gate: only a code turn a
+ * connected person started may receive this (docs/setup/github.md, "Who
+ * holds which credential").
  */
 export function githubAuthEnv(user?: string | null): Record<string, string> {
   const credential = githubCredentialForRun(user);
@@ -881,24 +883,28 @@ function githubProcessEnv(
   auth: Record<string, string>,
 ): Record<string, string> {
   // Empty authority still rewrites GitHub SSH remotes to non-interactive HTTPS.
-  // A missing projected user token must fail closed, never inherit a host key.
+  // A missing projected token must fail closed, never inherit a host key.
   return githubGitCredentialEnv(auth.GH_TOKEN || "");
 }
 
 /** Consume only the private run-scoped file projected by a remote launcher.
- * Unlike githubRunEnv(), this can never consult a connected human account. */
+ * This never consults a connected human account: on a remote host the
+ * launcher already decided whose credential the run holds. */
 export function projectedGithubRunEnv(): Record<string, string> {
   return githubProcessEnv(projectedGithubAuthEnv());
 }
 
-/** GitHub environment for one interactive run. Besides the API variables, set
- * a process-local Git credential helper so HTTPS remotes can push without
- * persisting the short-lived user token in .git/config or ~/.config/gh. */
-export function githubRunEnv(user?: string | null): Record<string, string> {
+/** Shell environment for a code turn a connected person started: their
+ * token for gh and, through the process-local credential helper, for HTTPS
+ * git, so the branch push and any PR carry their identity. Empty when nobody
+ * resolves (feature off with zero or several connected accounts, an unmapped
+ * or disconnected user) so the caller falls back to the App token, and empty
+ * on a remote host, whose launcher projected the run's credential already.
+ * The person's token is never persisted in .git/config or ~/.config/gh. */
+export function githubUserRunEnv(user?: string | null): Record<string, string> {
+  if (process.env[GITHUB_RUN_AUTH_FILE_ENV]) return {};
   const auth = githubAuthEnv(user);
-  return githubProcessEnv(
-    Object.keys(auth).length ? auth : projectedGithubAuthEnv(),
-  );
+  return auth.GH_TOKEN ? githubProcessEnv(auth) : {};
 }
 
 export interface GithubCredential {

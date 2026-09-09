@@ -56,7 +56,7 @@ export async function handleModelsRoutes(
     // open, not the next restart/settings-save.
     refreshPickerModels();
     const workspace = url.searchParams.get("workspace")
-      ? getWorkspace(url.searchParams.get("workspace")!)
+      ? await getWorkspace(url.searchParams.get("workspace")!)
       : null;
     const settings = workspaceModelSettings(workspace);
     const configuredProviders = configuredModelProviders();

@@ -652,7 +652,7 @@ export async function recoverWorkflow(
   if (recovery.automationSessionPolicy) {
     const { getAutomation, automationWorkflowSessionPolicy } =
       await import("./automations");
-    const current = getAutomation(
+    const current = await getAutomation(
       recovery.automationSessionPolicy.automationId,
     );
     const currentPolicy = current

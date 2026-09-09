@@ -83,10 +83,10 @@ export function isArchivedId(id: string): boolean {
  * idle-sweep, and Plain-ticket archive paths all need; `setArchived` still handles the
  * lone plain-id case for callers that don't have the full list.
  */
-export function unpinArchivedSessions(
+export async function unpinArchivedSessions(
   justArchived: UnifiedSession[],
   allSessions: UnifiedSession[],
-): void {
+): Promise<void> {
   if (!justArchived.length) return;
   const dead = (s: UnifiedSession) => s.archived || isArchivedId(s.id);
   const keys: string[] = [];
@@ -101,7 +101,7 @@ export function unpinArchivedSessions(
     if (!allSessions.some((s) => s.workspaceId === pid && !dead(s)))
       keys.push(`workspace:${pid}`);
   }
-  unpinEverywhere(keys);
+  await unpinEverywhere(keys);
 }
 
 export function getArchiveReason(id: string): ArchiveReason | null {
@@ -109,31 +109,31 @@ export function getArchiveReason(id: string): ArchiveReason | null {
   return raw ? toEntry(raw).reason : null;
 }
 
-export function setArchived(
+export async function setArchived(
   id: string,
   archived: boolean,
   reason: ArchiveReason = "manual",
-): void {
+): Promise<void> {
   const registry = { ...load() };
   if (archived) registry[id] = { at: new Date().toISOString(), reason };
   else delete registry[id];
   save(registry);
-  setIndexedSessionArchived(id, archived, archived ? reason : undefined);
+  await setIndexedSessionArchived(id, archived, archived ? reason : undefined);
   publishSessionRow(id);
   // Archived work shouldn't stay pinned (for anyone) — it would resurface in
   // the Pinned band on unarchive. Callers that know more keys (alias ids, the
   // workspace pin) drop those on top of this.
   if (archived) {
     releasePreviewLease(id);
-    unpinEverywhere([id]);
+    await unpinEverywhere([id]);
   }
 }
 
 /** Archive everything idle for more than `days` days. Returns count. */
-export function archiveOlderThan(
+export async function archiveOlderThan(
   sessions: UnifiedSession[],
   days: number,
-): number {
+): Promise<number> {
   const cutoff = Date.now() - days * 86_400_000;
   const registry = { ...load() };
   let archived = 0;
@@ -153,12 +153,12 @@ export function archiveOlderThan(
     save(registry);
     for (const session of justArchived) {
       releasePreviewLease(session.id);
-      setIndexedSessionArchived(session.id, true, "idle");
+      await setIndexedSessionArchived(session.id, true, "idle");
       publishSessionRow(session.id);
     }
     // Registry is written, so isArchivedId now reflects this batch — drop the
     // stale session/alias pins and any workspace pin whose last session just went.
-    unpinArchivedSessions(justArchived, sessions);
+    await unpinArchivedSessions(justArchived, sessions);
   }
   return archived;
 }

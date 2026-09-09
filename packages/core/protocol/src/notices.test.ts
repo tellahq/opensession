@@ -5,6 +5,7 @@ import {
   parseAttribution,
   parseRecoveryNotice,
   parseReviewHandoff,
+  parseReviewSettled,
   parseSessionNotice,
   parseWorkerReport,
   parseWorkflowNotice,
@@ -47,6 +48,53 @@ describe("review handoff detection", () => {
   it("ignores other GitHub FYIs", () => {
     expect(parseReviewHandoff("🔀 PR #42 was merged")).toBeNull();
     expect(parseReviewHandoff("plain message")).toBeNull();
+  });
+});
+
+describe("review settled detection", () => {
+  it("reads the outcome and PR from the sentinel and strips it", () => {
+    const parsed = parseReviewSettled(
+      "<!--os:review-settled:passed-->\n✅ This session's PR #42 “t” passed review after 2 fix rounds.",
+    );
+    expect(parsed?.prNumber).toBe(42);
+    expect(parsed?.outcome).toBe("passed");
+    expect(parsed?.body.startsWith("✅ This session's")).toBe(true);
+  });
+
+  it("ignores handoffs and other GitHub FYIs", () => {
+    expect(
+      parseReviewSettled("<!--os:review-handoff-->\n🔍 This session's PR #42"),
+    ).toBeNull();
+    expect(parseReviewSettled("🔀 PR #42 was merged")).toBeNull();
+  });
+
+  it("classifies a passed loop as a done notice and a capped one as a warning", () => {
+    const passed = classifyEntry({
+      id: "1",
+      type: "user",
+      content:
+        "[GitHub] <!--os:review-settled:passed-->\n✅ This session's PR #42 “t” passed review after 1 fix round.",
+      timestamp: "2026-09-08T12:00:00Z",
+    });
+    expect(passed.notice).toEqual({
+      kind: "review-settled",
+      title: "PR #42 review passed",
+      tone: "info",
+      icon: "done",
+      body: "collapsed",
+    });
+    expect(passed.content.startsWith("✅ This session's")).toBe(true);
+
+    const capped = classifyEntry({
+      id: "2",
+      type: "user",
+      content:
+        "[GitHub] <!--os:review-settled:capped-->\n⏹️ This session's PR #42 “t” is still not merge-ready after 6 fix rounds.",
+      timestamp: "2026-09-08T12:00:00Z",
+    });
+    expect(capped.notice?.kind).toBe("review-settled");
+    expect(capped.notice?.title).toBe("PR #42 review handed to humans");
+    expect(capped.notice?.tone).toBe("warn");
   });
 });
 

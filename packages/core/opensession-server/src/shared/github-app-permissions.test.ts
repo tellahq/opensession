@@ -10,6 +10,7 @@ import {
   GITHUB_APP_GRANT_PERMISSIONS,
   GITHUB_APP_READ_PERMISSIONS,
   GITHUB_APP_WRITE_PERMISSIONS,
+  withReadOnlyContents,
 } from "./github-app-permissions";
 
 /** A mint scope is covered when the grant holds the same key at an access level
@@ -65,5 +66,28 @@ describe("github app permission sets", () => {
     // App without them granted would otherwise reject the whole write token.
     expect(GITHUB_APP_WRITE_PERMISSIONS.checks).toBeUndefined();
     expect(GITHUB_APP_WRITE_PERMISSIONS.statuses).toBeUndefined();
+  });
+
+  test("the contents fallback narrows only that scope", () => {
+    // An installation capped at contents:read would 422 the whole write
+    // token; the retry keeps every other write scope.
+    expect(withReadOnlyContents(GITHUB_APP_WRITE_PERMISSIONS)).toEqual({
+      pull_requests: "write",
+      issues: "write",
+      contents: "read",
+      metadata: "read",
+    });
+    expect(withReadOnlyContents(GITHUB_APP_CODE_PERMISSIONS)).toEqual({
+      pull_requests: "write",
+      issues: "write",
+      contents: "read",
+      metadata: "read",
+      actions: "read",
+      checks: "read",
+      statuses: "read",
+    });
+    expect(withReadOnlyContents(GITHUB_APP_READ_PERMISSIONS)).toBe(
+      GITHUB_APP_READ_PERMISSIONS,
+    );
   });
 });

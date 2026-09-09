@@ -62,6 +62,12 @@ import {
   type SecretScanResult,
 } from "./secret-scan";
 import {
+  mergeRiskBadge,
+  mergeRiskSection,
+  runMergeRiskCheck,
+  type MergeRiskResult,
+} from "./merge-risk";
+import {
   loadReviewOptions,
   pathIgnored,
   severityRank,
@@ -171,7 +177,12 @@ function deriveMergeSafetyScore(
 /** What a review concluded, so callers (e.g. auto-fix) can gate on it. */
 export interface ReviewResult {
   verdict?: string;
+  /** 1-5 quality of the change as written. Drives the verdict and fix gates. */
   confidence?: number;
+  /** Merge risk from the separate scorer. Advisory: never gates anything. */
+  risk?: MergeRiskResult["risk"];
+  recovery?: MergeRiskResult["recovery"];
+  riskFactors?: MergeRiskResult["factors"];
   findings: number;
   /** Findings that should block merge: P0/P1 severity, or a request_changes verdict. */
   blocking: number;
@@ -551,6 +562,43 @@ export async function runReview(
     console.log(
       `[github] Reviewing PR #${pr.number} @ ${pr.headSha.slice(0, 7)} (${isUpdate ? "update" : "initial"})`,
     );
+    // Merge-risk scorer: a second, tool-less, diff-only model call with its
+    // own clean context, run alongside the quality review so neither score
+    // anchors the other. Best-effort like test-on-base: a failure omits the
+    // score and never blocks the review. Cheap enough to simply re-run on
+    // restart recovery. Public PRs score the same immutable patch the
+    // isolated review reads (started inside that branch below).
+    const scoreMergeRisk = (
+      patch: string | undefined,
+    ): Promise<MergeRiskResult | null> =>
+      patch
+        ? runMergeRiskCheck({
+            pr: details,
+            patch,
+            model: reviewModel,
+            prNumber: pr.number,
+            ghRepo: pr.ghRepo,
+          }).catch((e) => {
+            console.warn(
+              `[github] merge-risk score failed for PR #${pr.number}:`,
+              e,
+            );
+            return null;
+          })
+        : Promise.resolve(null);
+    let mergeRisk: Promise<MergeRiskResult | null> = Promise.resolve(null);
+    if (!publicReview && reviewOpts.mergeRisk) {
+      mergeRisk = getPrDiff(String(pr.number), pr.ghRepo || undefined)
+        .catch(() => null)
+        // A patch for a different head would score code we are not reviewing.
+        .then((diff) =>
+          scoreMergeRisk(
+            pr.headSha && diff?.headRefOid !== pr.headSha
+              ? undefined
+              : diff?.patch,
+          ),
+        );
+    }
     let finalResult: GithubRunResult;
     if (recoveredReviewResult) {
       finalResult = { bksId, ...recoveredReviewResult };
@@ -670,6 +718,7 @@ export async function runReview(
             error: message,
           };
         }
+        if (reviewOpts.mergeRisk) mergeRisk = scoreMergeRisk(diff.patch);
         const isolated = await runToollessPublicReview(isolatedInput);
         finalResult = {
           bksId,
@@ -764,6 +813,7 @@ export async function runReview(
           : "The review did not produce the required structured verdict after one continuation.");
     const tob = await testOnBase;
     const secrets = await secretScan;
+    const risk = await mergeRisk;
     if (cancellationRequested())
       return finishCancelled(placeholderId || undefined);
 
@@ -822,11 +872,15 @@ export async function runReview(
       summaryOnly,
       testOnBaseSection(tob) + secretScanSection(secrets),
       publicReview,
+      risk,
     );
 
     const outcome: ReviewResult = {
       verdict: parsed?.verdict,
       confidence: parsed?.confidence,
+      risk: risk?.risk,
+      recovery: risk?.recovery,
+      riskFactors: risk?.factors,
       findings: parsed?.findings?.length || 0,
       blocking: reviewBlockingCount(parsed),
       ...(publicReview ? { publicReview: true as const } : {}),
@@ -841,6 +895,9 @@ export async function runReview(
         repo: pr.ghRepo || defaultRepo().ghRepo,
         verdict: outcome.verdict,
         confidence: outcome.confidence,
+        risk: outcome.risk,
+        recovery: outcome.recovery,
+        risk_factors: outcome.riskFactors,
         findings: outcome.findings,
         blocking: outcome.blocking,
         is_update: isUpdate,
@@ -864,6 +921,9 @@ export async function runReview(
         {
           verdict: outcome.verdict,
           confidence: outcome.confidence,
+          risk: outcome.risk,
+          recovery: outcome.recovery,
+          riskFactors: outcome.riskFactors,
           findings: outcome.findings,
           blocking: outcome.blocking,
           sha: pr.headSha,
@@ -926,6 +986,7 @@ async function postReview(
   summaryOnly = false,
   extraSummary = "",
   publicReview = false,
+  mergeRisk: MergeRiskResult | null = null,
 ): Promise<void> {
   const knownCommentId = getOrInitPrState(
     pr.number,
@@ -942,8 +1003,9 @@ async function postReview(
   if (mermaid && mermaid.length <= 4000) {
     summaryBody += `\n\n<details><summary>📈 Change diagram</summary>\n\n\`\`\`mermaid\n${mermaid}\n\`\`\`\n\n</details>`;
   }
-  // Deterministic checks (test-on-base) append below the model's assessment.
-  summaryBody += extraSummary;
+  // The merge-risk pass, then deterministic checks (test-on-base, secret
+  // scan), append below the model's assessment.
+  summaryBody += mergeRiskSection(mergeRisk) + extraSummary;
   // Before anything posts, findings pass the repo/config/feedback filter chain:
   // ignored paths, the per-repo severity floor, giant-PR P0/P1-only mode, and
   // the learned feedback filter (recurring-nit suppression — never P0/P1).
@@ -982,35 +1044,32 @@ async function postReview(
     : "";
   const confidence =
     typeof parsed?.confidence === "number"
-      ? ` · confidence ${parsed.confidence}/5`
+      ? ` · quality ${parsed.confidence}/5`
       : "";
+  const risk = mergeRiskBadge(mergeRisk);
   const findingCount = findings.length;
-  // Next-steps footer pointing at the action labels.
-  const tip = publicReview
-    ? "> 🔒 Reviewed from an immutable patch after the fork commits were verified in a disposable MicroVM. No contributor code ran on Open Session's host."
-    : findingCount
-      ? "> 💡 Labels: **`os-auto-fix`** — I fix these and push until CI passes · **`os-adversarial`** — deeper two-pass review · **`os-simplify`** — quality cleanup pass."
-      : "> 💡 Labels: **`os-adversarial`** — deeper two-pass review · **`os-simplify`** — quality cleanup pass · **`os-auto-fix`** — fix anything outstanding and push until CI passes.";
+  // One footer line: provenance, then the action labels. Earlier comments
+  // already announce themselves as outdated, so that is not repeated here.
+  const reviewed = `Reviewed \`${shortSha}\`${modelUsed ? ` · ${modelLabel(modelUsed)}` : ""}`;
   const footer = publicReview
-    ? `<sub>Reviewed \`${shortSha}\`${modelUsed ? ` · ${modelLabel(modelUsed)}` : ""} · isolated public review</sub>`
-    : `<sub>Reviewed \`${shortSha}\`${modelUsed ? ` · ${modelLabel(modelUsed)}` : ""} · earlier reviews collapse above · [open session](${sessionUrl(pr.number, "review", pr.ghRepo)})</sub>`;
+    ? `<sub>${reviewed} · 🔒 isolated public review: immutable patch, fork commits verified in a disposable MicroVM, no contributor code ran on the host.</sub>`
+    : `<sub>${reviewed} · [open session](${sessionUrl(pr.number, "review", pr.ghRepo)}) · labels: \`os-auto-fix\` fix and push · \`os-adversarial\` deeper pass · \`os-simplify\` cleanup</sub>`;
+  // Blocks are separated by blank lines: the summary can end in an HTML
+  // `</details>` block, and GitHub keeps treating following lines as raw HTML
+  // (no markdown parsing) until it hits a blank line.
   const composed = [
-    REVIEW_MARKER,
-    `### 🤖 ${personaName()} review${verdict}${confidence}`,
-    "",
+    `${REVIEW_MARKER}\n### 🤖 ${personaName()} review${verdict}${confidence}${risk}`,
     summaryBody,
-    "",
     findingCount
       ? `_${findingCount} inline comment${findingCount === 1 ? "" : "s"} below._`
       : "",
     withheld
       ? `<sub>${withheld} low-signal finding${withheld === 1 ? "" : "s"} withheld by repo config / feedback history.</sub>`
       : "",
-    tip,
     footer,
   ]
     .filter((l) => l !== "")
-    .join("\n");
+    .join("\n\n");
 
   // Edit the placeholder posted at the start; fall back to a new comment if it's gone.
   let id: number | null = knownCommentId ?? null;

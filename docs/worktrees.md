@@ -43,8 +43,11 @@ agent open its own change in a browser. See [repo-lifecycle.md](repo-lifecycle.m
 normally follows its repository setting, while each person can override each
 repository under **Preferences** with **Local checkout** or **Separate worktree**.
 Additional sessions in an existing workspace keep its worktree, and
-a deliberately selected branch or pull request stays isolated. Worktree sessions
-can commit and use the repository's configured pull-request flow.
+a deliberately selected branch or pull request stays isolated. A new branch
+starts from the freshly fetched `origin/<defaultBranch>`; the repository
+checkout's own local default branch is used only when it holds commits origin
+lacks. Worktree sessions can commit and use the repository's configured
+pull-request flow.
 
 **`ask` sessions** are read-only. For an isolated repository they share one
 per-repo detached checkout (`<wtPrefix>-ask-checkout`) pinned to

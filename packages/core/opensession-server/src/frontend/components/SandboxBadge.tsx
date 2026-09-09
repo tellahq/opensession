@@ -15,6 +15,7 @@ type SandboxRef = {
   provider: string;
   sandboxId?: string;
   workspace?: "bind" | "volume";
+  lifecycle?: NonNullable<SessionSandboxStatus["lifecycle"]>;
 };
 
 type RunnerRef = {
@@ -83,7 +84,7 @@ export function SandboxBadge({
     return (
       <Popover.Root open={open} onOpenChange={setOpen}>
         <Popover.Trigger
-          className="flex min-h-10 flex-none items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-meta font-medium text-dim outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg focus-visible:border-line-strong active:scale-[0.96]"
+          className="flex h-8 flex-none items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-meta font-medium text-dim outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg focus-visible:border-line-strong active:scale-[0.96]"
           aria-label={`Runner · ${runner.name} · ${label}`}
         >
           <span className={cn("size-2 rounded-full", dot)} aria-hidden="true" />
@@ -122,10 +123,15 @@ export function SandboxBadge({
     );
   }
 
+  // On this machine there is nothing to show; the move into a Sandbox
+  // lives in the session's ⋯ menu.
   if (!sandbox?.provider || sandbox.provider === "local") return null;
   const state = status?.status || (sandbox.sandboxId ? "running" : "gone");
+  // Before the popover has fetched anything, the session row's recorded
+  // lifecycle is the truth: a Sandbox with no id yet is Preparing, not gone.
   const lifecycle =
     status?.lifecycle ||
+    sandbox.lifecycle ||
     (state === "running"
       ? "awake"
       : state === "stopped"
@@ -200,7 +206,7 @@ export function SandboxBadge({
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger
-        className="flex min-h-10 flex-none items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-meta font-medium text-dim outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg focus-visible:border-line-strong active:scale-[0.96]"
+        className="flex h-8 flex-none items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-meta font-medium text-dim outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg focus-visible:border-line-strong active:scale-[0.96]"
         data-testid="sandbox-badge"
         aria-label={`Sandbox · ${lifecycleLabel[lifecycle]}`}
       >

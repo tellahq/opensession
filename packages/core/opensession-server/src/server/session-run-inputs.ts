@@ -120,7 +120,7 @@ export async function resolveSessionRunInputs(
   const mcpServers = session.automationDescendantPolicy
     ? [...session.automationDescendantPolicy.mcpServers]
     : isAutomationSession
-      ? automationMcpServersByName(session.automation!)
+      ? await automationMcpServersByName(session.automation!)
       : source === "session"
         ? session.mcpServers
         : source === "feed"

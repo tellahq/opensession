@@ -11,7 +11,7 @@ import { listAutomations, runAutomation } from "../automations";
 import {
   findSessionAsync,
   getCachedSessionsAsync,
-  invalidateSessionsCache,
+  publishSessionChange,
 } from "../session-cache";
 import { type Workspace } from "../workspaces";
 
@@ -43,7 +43,7 @@ async function resolvePlainTriageSession(
   const existing = await existingPlainTriageSession(threadId);
   if (existing) return existing;
 
-  const automation = listAutomations().find(
+  const automation = (await listAutomations()).find(
     (a) => a.eventKey === "plain:thread_created",
   );
   if (!automation) return null;
@@ -72,7 +72,7 @@ async function resolvePlainTriageSession(
     void runAutomation(
       automation,
       (id) => {
-        invalidateSessionsCache();
+        publishSessionChange(id);
         clearTimeout(timer);
         resolve(id);
       },

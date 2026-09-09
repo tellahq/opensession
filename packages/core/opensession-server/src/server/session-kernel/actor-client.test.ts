@@ -344,6 +344,43 @@ describe("actor-owned session metadata", () => {
     expect(page.some((row) => row.sessionId === sessionId)).toBe(false);
   });
 
+  test("catalog_get serves the committed document from the central projection", async () => {
+    const host = await actor();
+    const sessionId = `metadata-catalog-get-${crypto.randomUUID()}`;
+    expect(
+      await host.decideMetadataAsync({ op: "catalog_get", sessionId }),
+    ).toBeNull();
+    await put(host, sessionId, 1, null);
+    await put(host, sessionId, 2, 1);
+    const row = await host.decideMetadataAsync({
+      op: "catalog_get",
+      sessionId,
+    });
+    expect(row).toMatchObject({ sessionId, rev: 2, exportedRev: 0 });
+    expect(JSON.parse(row!.doc)).toMatchObject({ id: sessionId, rev: 2 });
+    // A seeded-only session answers too: the read never needs an actor
+    // document to exist.
+    const seeded = `metadata-catalog-get-seeded-${crypto.randomUUID()}`;
+    await host.decideMetadataAsync({
+      op: "seed_catalog",
+      rows: [
+        {
+          sessionId: seeded,
+          doc: doc(seeded, 3),
+          rev: 3,
+          archived: false,
+          lastActivityMs: 0,
+        },
+      ],
+    });
+    expect(
+      await host.decideMetadataAsync({ op: "catalog_get", sessionId: seeded }),
+    ).toMatchObject({ sessionId: seeded, rev: 3, exportedRev: 3 });
+    expect(
+      await host.decideMetadataAsync({ op: "get", sessionId: seeded }),
+    ).toBeNull();
+  });
+
   test("seeds historical files into the catalog without touching the actor", async () => {
     const host = await actor();
     const legacy = `metadata-seed-${crypto.randomUUID()}`;
@@ -437,5 +474,235 @@ describe("actor-owned session metadata", () => {
         }),
       ),
     ).toMatch(/page size/);
+  });
+});
+
+describe("central catalog documents", () => {
+  async function rejection(work: Promise<unknown>): Promise<string> {
+    try {
+      await work;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+    throw new Error("expected the actor to reject");
+  }
+  const put = (
+    host: SessionKernelActorClient,
+    namespace: string,
+    key: string,
+    expectedRev: number | null,
+    value: string | null,
+    requestId = crypto.randomUUID(),
+  ) =>
+    host.decideCatalogDocumentAsync({
+      op: "put",
+      namespace,
+      key,
+      expectedRev,
+      value,
+      requestId,
+    });
+
+  test("reads its own writes with compare-and-set and request replay", async () => {
+    const host = await actor();
+    const namespace = `docs-${crypto.randomUUID()}`;
+    expect(
+      await host.decideCatalogDocumentAsync({ op: "get", namespace, key: "a" }),
+    ).toBeNull();
+    expect(await put(host, namespace, "a", null, "v1")).toEqual({
+      status: "committed",
+      rev: 1,
+    });
+    expect(
+      await host.decideCatalogDocumentAsync({ op: "get", namespace, key: "a" }),
+    ).toEqual({ key: "a", value: "v1", rev: 1 });
+
+    // A stale writer is told the truth instead of clobbering it.
+    expect(await put(host, namespace, "a", null, "v1-again")).toEqual({
+      status: "conflict",
+      current: { key: "a", value: "v1", rev: 1 },
+    });
+    // A retried request returns its receipt.
+    const requestId = crypto.randomUUID();
+    expect(await put(host, namespace, "a", 1, "v2", requestId)).toEqual({
+      status: "committed",
+      rev: 2,
+    });
+    expect(await put(host, namespace, "a", 1, "v2", requestId)).toEqual({
+      status: "duplicate",
+      rev: 2,
+    });
+    expect(
+      await host.decideCatalogDocumentAsync({ op: "get", namespace, key: "a" }),
+    ).toEqual({ key: "a", value: "v2", rev: 2 });
+  });
+
+  test("tombstones page alongside live rows and namespaces stay isolated", async () => {
+    const host = await actor();
+    const namespace = `docs-${crypto.randomUUID()}`;
+    const other = `docs-${crypto.randomUUID()}`;
+    await put(host, namespace, "b", null, "b1");
+    await put(host, namespace, "a", null, "a1");
+    await put(host, other, "a", null, "other");
+    expect(await put(host, namespace, "b", 1, null)).toEqual({
+      status: "committed",
+      rev: 2,
+    });
+    expect(
+      await host.decideCatalogDocumentAsync({ op: "get", namespace, key: "b" }),
+    ).toEqual({ key: "b", value: null, rev: 2 });
+    expect(
+      await host.decideCatalogDocumentAsync({
+        op: "page",
+        namespace,
+        afterKey: "",
+        limit: 1000,
+      }),
+    ).toEqual([
+      { key: "a", value: "a1", rev: 1 },
+      { key: "b", value: null, rev: 2 },
+    ]);
+    expect(
+      await host.decideCatalogDocumentAsync({
+        op: "page",
+        namespace,
+        afterKey: "a",
+        limit: 1,
+      }),
+    ).toEqual([{ key: "b", value: null, rev: 2 }]);
+    expect(
+      await host.decideCatalogDocumentAsync({
+        op: "page",
+        namespace: other,
+        afterKey: "",
+        limit: 1000,
+      }),
+    ).toEqual([{ key: "a", value: "other", rev: 1 }]);
+    // One lookup for a key set: missing omitted, tombstones kept, key order.
+    expect(
+      await host.decideCatalogDocumentAsync({
+        op: "get_many",
+        namespace,
+        keys: ["b", "missing", "a"],
+      }),
+    ).toEqual([
+      { key: "a", value: "a1", rev: 1 },
+      { key: "b", value: null, rev: 2 },
+    ]);
+    expect(
+      await host.decideCatalogDocumentAsync({
+        op: "get_many",
+        namespace: other,
+        keys: ["b"],
+      }),
+    ).toEqual([]);
+    // Resurrecting the key needs the tombstone revision.
+    expect(await put(host, namespace, "b", null, "b2")).toMatchObject({
+      status: "conflict",
+      current: { value: null, rev: 2 },
+    });
+    expect(await put(host, namespace, "b", 2, "b2")).toEqual({
+      status: "committed",
+      rev: 3,
+    });
+  });
+
+  test("seeds a namespace once without overwriting live rows", async () => {
+    const host = await actor();
+    const namespace = `docs-${crypto.randomUUID()}`;
+    await put(host, namespace, "owned", null, "committed");
+    expect(
+      await host.decideCatalogDocumentAsync({
+        op: "import_complete",
+        namespace,
+      }),
+    ).toBe(false);
+    await host.decideCatalogDocumentAsync({
+      op: "seed",
+      namespace,
+      rows: [
+        { key: "owned", value: "from file" },
+        { key: "legacy", value: "from file" },
+      ],
+    });
+    await host.decideCatalogDocumentAsync({
+      op: "seed",
+      namespace,
+      rows: [{ key: "legacy", value: "from file again" }],
+    });
+    expect(
+      await host.decideCatalogDocumentAsync({
+        op: "page",
+        namespace,
+        afterKey: "",
+        limit: 1000,
+      }),
+    ).toEqual([
+      { key: "legacy", value: "from file", rev: 1 },
+      { key: "owned", value: "committed", rev: 1 },
+    ]);
+    await host.decideCatalogDocumentAsync({
+      op: "mark_import_complete",
+      namespace,
+    });
+    expect(
+      await host.decideCatalogDocumentAsync({
+        op: "import_complete",
+        namespace,
+      }),
+    ).toBe(true);
+    expect(
+      await host.decideCatalogDocumentAsync({
+        op: "import_complete",
+        namespace: `${namespace}-other`,
+      }),
+    ).toBe(false);
+  });
+
+  test("rejects malformed catalog document commands before touching storage", async () => {
+    const host = await actor();
+    const namespace = `docs-${crypto.randomUUID()}`;
+    expect(await rejection(put(host, "bad namespace", "a", null, "v"))).toMatch(
+      /namespace/,
+    );
+    expect(await rejection(put(host, namespace, "", null, "v"))).toMatch(/key/);
+    expect(await rejection(put(host, namespace, "a", 0, "v"))).toMatch(
+      /expected revision/,
+    );
+    expect(
+      await rejection(
+        host.decideCatalogDocumentAsync({
+          op: "page",
+          namespace,
+          afterKey: "",
+          limit: 0,
+        }),
+      ),
+    ).toMatch(/page size/);
+    expect(
+      await rejection(
+        host.decideCatalogDocumentAsync({ op: "seed", namespace, rows: [] }),
+      ),
+    ).toMatch(/seed batch/);
+    expect(
+      await rejection(
+        host.decideCatalogDocumentAsync({
+          op: "get_many",
+          namespace,
+          keys: [],
+        }),
+      ),
+    ).toMatch(/key batch/);
+    expect(
+      await rejection(
+        host.decideCatalogDocumentAsync({
+          op: "bogus",
+          namespace,
+        } as unknown as { op: "get"; namespace: string; key: string }),
+      ),
+    ).toMatch(/Unknown catalog document op/);
+    expect(
+      await host.decideCatalogDocumentAsync({ op: "get", namespace, key: "a" }),
+    ).toBeNull();
   });
 });

@@ -21,7 +21,7 @@ export async function handleMentionsRoutes(
   if (path === "/api/mentions" && req.method === "GET") {
     const user = requestUser(ctx, url.searchParams.get("user"));
     if (!user) return conditionalJsonResponse(req, { mentions: [] });
-    return conditionalJsonResponse(req, { mentions: listMentions(user) });
+    return conditionalJsonResponse(req, { mentions: await listMentions(user) });
   }
 
   if (path === "/api/mentions/clear" && req.method === "POST") {
@@ -32,12 +32,12 @@ export async function handleMentionsRoutes(
     const sessionId =
       typeof body?.sessionId === "string" ? body.sessionId : null;
     if (!sessionId) {
-      clearAllMentions(user);
+      await clearAllMentions(user);
       // Every device the person is signed in on drops the badge together.
       broadcastToAll({ type: "mentions_cleared", user });
       return Response.json({ ok: true });
     }
-    const cleared = clearMention(user, sessionId);
+    const cleared = await clearMention(user, sessionId);
     if (cleared) broadcastToAll({ type: "mentions_cleared", user, sessionId });
     return Response.json({ ok: true, cleared });
   }

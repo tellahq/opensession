@@ -143,7 +143,9 @@ async function fetchThreadStatus(threadId: string): Promise<string | null> {
 
 let sweepInterval: ReturnType<typeof setInterval> | null = null;
 
-export function startPlainArchiveSweep(onChange?: () => void): void {
+/** Every archive here commits through the metadata facade, which publishes
+ * the changed row itself, so the sweep has nothing further to announce. */
+export function startPlainArchiveSweep(): void {
   if (sweepInterval) return;
 
   const sweep = async () => {
@@ -157,12 +159,10 @@ export function startPlainArchiveSweep(onChange?: () => void): void {
       if (status === "DONE")
         archived += await archiveSessionsForThread(threadId);
     }
-    if (archived > 0) {
+    if (archived > 0)
       console.log(
         `[plain-archive] Archived ${archived} session(s) for done tickets`,
       );
-      onChange?.();
-    }
   };
 
   const runSweep = () => {

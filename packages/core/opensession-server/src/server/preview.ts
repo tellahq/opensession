@@ -20,8 +20,10 @@
  * outbound Portal relay (sandbox-portal-relay.ts).
  */
 import { $ } from "bun";
-import { existsSync, readFileSync } from "fs";
-import { join } from "path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { basename, dirname, join, resolve } from "path";
+import type { Repo } from "./config";
+import { repoForPathOrNull } from "./worktree";
 import {
   ensureRemoteSandboxPortalAgent,
   forgetRemoteSandboxPortalAgents,
@@ -36,6 +38,7 @@ import {
 import {
   lookupSandboxHttpsPort,
   releaseSandboxPreviewPorts,
+  sandboxAllocationForHttpsPort,
   sandboxHttpsPortFor,
 } from "./sandbox/preview-ports";
 import type { Sandbox } from "./sandbox/provider";
@@ -43,6 +46,43 @@ import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
 import { usesOutboundSandboxPortalRelay } from "./sandbox/config";
 import { configuredServer } from "./config";
 import type { WorkloadIdentityContext } from "./workload-identity";
+
+/** Gitignored files a repository's dev server needs to boot, carried from the
+ *  operator-owned main checkout because git cannot. */
+export const SEED_ENV_FILES = ["packages/core/webapp/.env.local", ".envrc"];
+
+/**
+ * Restore the gitignored env files a repository's boot script requires before
+ * a host Portal starts. A warm-template refresh deliberately excludes `.env*`
+ * from what it seeds into a worktree and nothing else puts them back, so a
+ * repository whose `.agents/start.sh` exits on a missing `.env.local` failed
+ * for every fresh worktree. Only fills gaps: a worktree copy may carry
+ * deliberate per-session edits, so an existing file is never overwritten.
+ */
+export function seedHostEnvFiles(
+  worktreeDir: string,
+  repo: Repo | undefined = repoForPathOrNull(worktreeDir),
+): string[] {
+  if (!repo?.repo || resolve(repo.repo) === resolve(worktreeDir)) return [];
+  const seeded: string[] = [];
+  for (const rel of SEED_ENV_FILES) {
+    const dest = join(worktreeDir, rel);
+    const src = join(repo.repo, rel);
+    if (existsSync(dest) || !existsSync(src)) continue;
+    try {
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, readFileSync(src), { mode: 0o600 });
+      seeded.push(rel);
+      console.log(`[portals] seeded ${rel} into ${basename(worktreeDir)}`);
+    } catch (error) {
+      console.warn(
+        `[portals] seeding ${rel} into ${worktreeDir} failed:`,
+        error,
+      );
+    }
+  }
+  return seeded;
+}
 
 export interface PreviewService {
   /** Friendly label, e.g. "Webapp". */
@@ -477,9 +517,19 @@ async function ensurePreviewRoute(
       body: JSON.stringify(server),
     });
   try {
-    // PUT creates the key; if it already exists (e.g. Caddy kept the server
-    // across an opensession restart, so our cache is cold) it 409s — drop it
-    // and recreate so the route always points at the current upstream.
+    // Caddy may already hold this exact route: it outlived a gateway handoff,
+    // or an earlier PUT was still queued behind a reload when its response
+    // timed out. Adopt it instead of writing again. Every write is a Caddy
+    // config reload that waits for the previous servers to drain, so a
+    // needless DELETE + PUT costs two reloads and briefly drops the listener.
+    const existing = await caddyFetch(path);
+    if (existing.ok && Bun.deepEquals(await existing.json(), server)) {
+      previewRoutes.set(httpsPort, signature);
+      return true;
+    }
+    // PUT creates the key; if it already exists with another upstream (the
+    // host port moved) it 409s — drop it and recreate so the route always
+    // points at the current upstream.
     let res = await put();
     if (res.status === 409) {
       await caddyFetch(path, { method: "DELETE" }).catch(() => {});
@@ -708,11 +758,10 @@ export async function getSandboxPreviewStatus(
  */
 export async function dropSandboxPreviewRoutes(
   sandboxId: string,
-  options: { preservePortalCache?: boolean } = {},
 ): Promise<void> {
   revokeSandboxPortalGrants(sandboxId);
   forgetRemoteSandboxPortalAgents(sandboxId);
-  if (!options.preservePortalCache) dropCachedSandboxPortals(sandboxId);
+  dropCachedSandboxPortals(sandboxId);
   for (const httpsPort of releaseSandboxPreviewPorts(sandboxId)) {
     // removePreviewRoute only touches routes this process cached — a destroy
     // right after a restart may miss the cache, so delete unconditionally.
@@ -725,5 +774,23 @@ export async function dropSandboxPreviewRoutes(
         },
       );
     } catch {}
+  }
+}
+
+/**
+ * Sleep hook for a Sandbox that keeps its disk: withdraw the relay and this
+ * process's authority for its routes, but keep the durable https
+ * allocations, the Caddy servers, and the Portal cache. The URLs a person
+ * already has stay reachable; the forward-auth probe finds no authority,
+ * runs route recovery, and a navigation there wakes the Sandbox
+ * (src/server/sandbox-portal-recovery.ts). Dropping the servers instead
+ * would turn every sleeping Portal into a refused connection.
+ */
+export function suspendSandboxPreviewRoutes(sandboxId: string): void {
+  revokeSandboxPortalGrants(sandboxId);
+  forgetRemoteSandboxPortalAgents(sandboxId);
+  for (const [httpsPort] of previewRoutes) {
+    const allocation = sandboxAllocationForHttpsPort(httpsPort);
+    if (allocation?.sandboxId === sandboxId) previewRoutes.delete(httpsPort);
   }
 }

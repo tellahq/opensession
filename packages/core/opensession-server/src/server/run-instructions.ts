@@ -150,8 +150,9 @@ export function buildRunInstructions(input: {
     );
   } else if (!input.isAsk && !input.isScratch && input.hasSession) {
     parts.push(
-      "## PR attribution\nEnd each PR body with the attribution footer from the session " +
-        "context and follow its assignee rule.",
+      "## Pull requests\nEnd each PR body with the attribution footer from the session " +
+        "context and follow its assignee rule. Add the `Co-authored-by` trailer from the " +
+        "session context to every commit. Never merge, approve, or push the default branch.",
     );
     if (input.prReviewer) {
       parts.push(
@@ -222,13 +223,18 @@ export function buildSessionContext(input: {
   isScratch?: boolean;
   repoHost?: "github" | "codestorage";
   /** Requester attribution for PRs: the turn's raw user label and the resolved
-   *  git identity (same table as commit attribution). PRs open under the bot
-   *  GitHub account, so the body line + assignee are how the human shows up. */
+   *  git identity (same table as commit attribution). PRs opened from the
+   *  shell are the bot's, so the body line + assignee are how the human
+   *  shows up. */
   user?: string;
   author?: GitIdentity | null;
-  /** Set when this run carries the owner's own GitHub token (github-auth.ts):
-   *  PRs are authored by them directly, so skip the bot-attribution assignee. */
+  /** Set when this turn was started by a connected person: the gateway's
+   *  `open_pull_request` tool opens PRs as them, so skip the bot-attribution
+   *  assignee. In code mode the shell holds their token too
+   *  (pi-runner runGithubEnv). */
   githubUserLogin?: string | null;
+  /** `Name <email>` for the commit trailer (pi-runner GIT_COAUTHOR_ENV). */
+  coAuthor?: string;
 }): string {
   const lines: string[] = [];
   const link = input.osSessionId
@@ -249,11 +255,13 @@ export function buildSessionContext(input: {
       : `Created by [this ${personaName()} session](${link})`;
     lines.push(`PR attribution footer: ${footer}`);
     const rule = input.githubUserLogin
-      ? `PRs use @${input.githubUserLogin}'s account; do not add an assignee.`
+      ? `PRs open under @${input.githubUserLogin}'s account through open_pull_request; do not add an assignee.`
       : requester && login
         ? `When possible, assign @${login}.`
         : "";
     if (rule) lines.push(rule);
+    if (input.coAuthor)
+      lines.push(`Commit trailer: Co-authored-by: ${input.coAuthor}`);
   }
   return lines.join("\n");
 }

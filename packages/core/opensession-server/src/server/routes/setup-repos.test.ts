@@ -291,7 +291,10 @@ describe("GET /api/setup/github/repos with several App installations", () => {
       { login: "solo-dev", type: "User", selected: true },
       { login: "acme-org", type: "Organization", selected: false },
     ]);
-    expect(listCalls).toEqual(["Bearer ghs_install_1", "Bearer ghs_install_2"]);
+    expect([...listCalls].sort()).toEqual([
+      "Bearer ghs_install_1",
+      "Bearer ghs_install_2",
+    ]);
 
     // Switching the default owner changes the marker only: the list is the
     // same union, served from the cache.

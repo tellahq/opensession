@@ -3437,3 +3437,92 @@ describe("SessionKernel durable runtime", () => {
     }
   });
 });
+
+describe("SessionKernel runtime wakes", () => {
+  test("drains an emitted creation effect without waiting for the tick", async () => {
+    const { startSessionKernelRuntime, stopSessionKernelRuntime } =
+      await import("./runtime");
+    const { replaceSessionEffectExecutorForTest } =
+      await import("./effect-executors");
+    const { requestCreationWorkspace } = await import("./creation-intents");
+    const sessionId = "runtime-wake-session";
+    let executed = 0;
+    const unregister = replaceSessionEffectExecutorForTest(
+      "creation_workspace_prepare",
+      async (item) => {
+        executed += 1;
+        await sessionKernel(item.sessionId).applyCreationEvent({
+          identity: item.payload.creationIdentity,
+          event: "preparation_started",
+          effectId: item.effectKey,
+        });
+      },
+    );
+    // A one-minute tick: only a wake can run the drain in time.
+    startSessionKernelRuntime(60_000);
+    try {
+      const started = Date.now();
+      const state = await requestCreationWorkspace(
+        {
+          sessionId,
+          identity: "runtime-wake-identity",
+          workspaceId: "ws-runtime-wake",
+          dedupeKey: "session-create:runtime-wake",
+          name: "Runtime wake",
+          createdBy: "Alice",
+        },
+        { timeoutMs: 5_000, pollMs: 10_000 },
+      );
+      expect(Date.now() - started).toBeLessThan(2_000);
+      expect(executed).toBe(1);
+      expect(state.completedEffectIds).toEqual(["workspace:ws-runtime-wake"]);
+    } finally {
+      stopSessionKernelRuntime();
+      unregister();
+    }
+  });
+});
+
+test("catalog documents serve the in-process store when no actor is attached", async () => {
+  const { sessionCatalogDocument } = await import(".");
+  const namespace = `facade-${crypto.randomUUID()}`;
+  expect(
+    await sessionCatalogDocument({ op: "get", namespace, key: "a" }),
+  ).toBeNull();
+  expect(
+    await sessionCatalogDocument({
+      op: "put",
+      namespace,
+      key: "a",
+      expectedRev: null,
+      value: "v1",
+      requestId: "r1",
+    }),
+  ).toEqual({ status: "committed", rev: 1 });
+  expect(
+    await sessionCatalogDocument({ op: "get", namespace, key: "a" }),
+  ).toEqual({ key: "a", value: "v1", rev: 1 });
+  await sessionCatalogDocument({
+    op: "seed",
+    namespace,
+    rows: [{ key: "b", value: "seeded" }],
+  });
+  expect(
+    await sessionCatalogDocument({
+      op: "page",
+      namespace,
+      afterKey: "",
+      limit: 10,
+    }),
+  ).toEqual([
+    { key: "a", value: "v1", rev: 1 },
+    { key: "b", value: "seeded", rev: 1 },
+  ]);
+  expect(
+    await sessionCatalogDocument({ op: "import_complete", namespace }),
+  ).toBe(false);
+  await sessionCatalogDocument({ op: "mark_import_complete", namespace });
+  expect(
+    await sessionCatalogDocument({ op: "import_complete", namespace }),
+  ).toBe(true);
+});

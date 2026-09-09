@@ -12,6 +12,7 @@ import {
   settleCreationFailed,
 } from "./creation-intents";
 import { SessionKernelStore, type CreationEventDecision } from "./store";
+import { notifyCreationStateChanged } from "./wakes";
 
 function harness(sessionId: string) {
   const store = new SessionKernelStore(":memory:");
@@ -746,6 +747,67 @@ describe("creation sandbox intents", () => {
           },
         },
       ]);
+    } finally {
+      store.close();
+    }
+  });
+});
+
+describe("creation waiters", () => {
+  test("wake on the creation event instead of waiting for the poll", async () => {
+    const { store, kernel } = harness(input.sessionId);
+    try {
+      setTimeout(() => {
+        store.applyCreationEvent({
+          sessionId: input.sessionId,
+          identity: input.identity,
+          event: "preparation_started",
+          effectId: `workspace:${input.workspaceId}`,
+        });
+        notifyCreationStateChanged(input.sessionId);
+      }, 5);
+      const started = Date.now();
+      const state = await requestCreationWorkspace(input, {
+        kernel,
+        timeoutMs: 30_000,
+        pollMs: 10_000,
+      });
+      expect(Date.now() - started).toBeLessThan(2_000);
+      expect(state.completedEffectIds).toEqual([
+        `workspace:${input.workspaceId}`,
+      ]);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("back off the fallback poll while nothing wakes them", async () => {
+    const { store, kernel } = harness(input.sessionId);
+    let reads = 0;
+    const counting = {
+      ...kernel,
+      creationState: () => {
+        reads += 1;
+        return kernel.creationState();
+      },
+    };
+    try {
+      setTimeout(() => {
+        store.applyCreationEvent({
+          sessionId: input.sessionId,
+          identity: input.identity,
+          event: "preparation_started",
+          effectId: `workspace:${input.workspaceId}`,
+        });
+      }, 80);
+      await requestCreationWorkspace(input, {
+        kernel: counting,
+        timeoutMs: 5_000,
+        pollMs: 1,
+      });
+      // ensureCreationPlanned reads once; the waiter's 1, 2, 4, ... ms polls
+      // add a handful, not eighty.
+      expect(reads).toBeLessThan(12);
     } finally {
       store.close();
     }

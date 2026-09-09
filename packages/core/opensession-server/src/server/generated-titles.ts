@@ -202,7 +202,9 @@ function sweepCandidates(): Array<{ id: string; title: string }> {
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Periodically re-try titles that were lost mid-flight. */
-export function startGeneratedTitleSweep(onChange?: () => void): void {
+export function startGeneratedTitleSweep(
+  onChange?: (sessionId: string) => void,
+): void {
   if (sweepTimer) return;
 
   const sweep = async () => {
@@ -214,13 +216,14 @@ export function startGeneratedTitleSweep(onChange?: () => void): void {
       // retry — never a later message, which would rename the session after
       // the fact.
       try {
-        if (await ensureGeneratedTitle(id, title)) filled++;
+        if (await ensureGeneratedTitle(id, title)) {
+          filled++;
+          onChange?.(id);
+        }
       } catch {}
     }
-    if (filled > 0) {
+    if (filled > 0)
       console.log(`[generated-titles] back-filled ${filled} title(s)`);
-      onChange?.();
-    }
   };
 
   sweepTimer = setInterval(() => void sweep(), SWEEP_INTERVAL_MS);

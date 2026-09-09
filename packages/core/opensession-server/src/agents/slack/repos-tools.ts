@@ -56,6 +56,17 @@ export interface ReposToolContext {
     number?: number;
     branch?: string;
   }) => Promise<{ linked: LinkedPr; all: LinkedPr[] }>;
+  /**
+   * Add or remove labels on a PR in any registered GitHub repo, as the bot.
+   * The gateway mints the token for that repo; throws with a human message.
+   */
+  labelPr: (input: {
+    url?: string;
+    repo?: string;
+    number?: number;
+    add?: string[];
+    remove?: string[];
+  }) => Promise<{ repo: string; number: number; labels: string[] }>;
 }
 
 function text(s: string) {
@@ -192,6 +203,39 @@ export function createReposMcpServer(ctx: ReposToolContext) {
           );
         } catch (e: any) {
           return text(`Couldn't link that PR: ${e?.message || String(e)}`);
+        }
+      },
+    ),
+    tool(
+      "label_pull_request",
+      "Add or remove labels on a pull request in any registered GitHub repo, including one this session does not have checked out. Labels are applied as the bot: the gateway mints a token for that repo, so this works where `gh` in your shell cannot see the repo. Pass the PR URL, or a repo id and number.",
+      {
+        url: z
+          .string()
+          .optional()
+          .describe("GitHub PR URL (https://github.com/owner/repo/pull/123)."),
+        repo: z
+          .string()
+          .optional()
+          .describe("Registered repo id when not passing a URL."),
+        number: z.number().optional().describe("PR number in that repo."),
+        add: z.array(z.string()).optional().describe("Labels to add."),
+        remove: z.array(z.string()).optional().describe("Labels to remove."),
+      },
+      async (args: {
+        url?: string;
+        repo?: string;
+        number?: number;
+        add?: string[];
+        remove?: string[];
+      }) => {
+        try {
+          const res = await ctx.labelPr(args);
+          return text(
+            `${res.repo}#${res.number} labels: ${res.labels.length ? res.labels.join(", ") : "none"}.`,
+          );
+        } catch (e: any) {
+          return text(`Couldn't label that PR: ${e?.message || String(e)}`);
         }
       },
     ),

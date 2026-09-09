@@ -19,12 +19,18 @@ import {
   listAllMemory,
   updateMemoryEntry,
 } from "../session-memory";
-import { getLanes as getUserLanes, setLanes as setUserLanes } from "../lanes";
+import {
+  getLanes as getUserLanes,
+  updateLanes as updateUserLanes,
+} from "../lanes";
 import {
   getSnoozes as getUserSnoozes,
-  setSnoozes as setUserSnoozes,
+  updateSnoozes as updateUserSnoozes,
 } from "../snoozes";
-import { getHides as getUserHides, setHides as setUserHides } from "../hides";
+import {
+  getHides as getUserHides,
+  updateHides as updateUserHides,
+} from "../hides";
 import { mergeMapDelta, requestedMapDelta } from "../shared/map-delta";
 import {
   getSettlements as getUserSettlements,
@@ -178,7 +184,7 @@ export async function handlePrefsRoutes(
   // the full list on every toggle and on first-load localStorage migration).
   if (path === "/api/pins" && req.method === "GET") {
     const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
-    return conditionalJsonResponse(req, { pins: getUserPins(user) });
+    return conditionalJsonResponse(req, { pins: await getUserPins(user) });
   }
 
   if (path === "/api/pins" && req.method === "PUT") {
@@ -190,7 +196,7 @@ export async function handlePrefsRoutes(
       );
     }
     const user = requestUser(ctx, body.user) || "Anonymous";
-    return Response.json({ pins: setUserPins(user, body.pins) });
+    return Response.json({ pins: await setUserPins(user, body.pins) });
   }
 
   // ── Per-user output style ──
@@ -362,7 +368,7 @@ export async function handlePrefsRoutes(
   // shared/map-delta.ts. Older whole-map clients are accepted merge-only.
   if (path === "/api/lanes" && req.method === "GET") {
     const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
-    return conditionalJsonResponse(req, { lanes: getUserLanes(user) });
+    return conditionalJsonResponse(req, { lanes: await getUserLanes(user) });
   }
 
   if (path === "/api/lanes" && req.method === "PUT") {
@@ -375,8 +381,10 @@ export async function handlePrefsRoutes(
       );
     }
     const user = requestUser(ctx, body.user) || "Anonymous";
-    const next = mergeMapDelta(getUserLanes(user), delta);
-    return Response.json({ lanes: setUserLanes(user, next) });
+    const next = await updateUserLanes(user, (current) =>
+      mergeMapDelta(current, delta),
+    );
+    return Response.json({ lanes: next });
   }
 
   // ── Per-user workspace snoozes ──
@@ -386,7 +394,9 @@ export async function handlePrefsRoutes(
   // up on its own.
   if (path === "/api/snoozes" && req.method === "GET") {
     const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
-    return conditionalJsonResponse(req, { snoozes: getUserSnoozes(user) });
+    return conditionalJsonResponse(req, {
+      snoozes: await getUserSnoozes(user),
+    });
   }
 
   if (path === "/api/snoozes" && req.method === "PUT") {
@@ -399,9 +409,11 @@ export async function handlePrefsRoutes(
       );
     }
     const user = requestUser(ctx, body.user) || "Anonymous";
-    const next = mergeMapDelta(getUserSnoozes(user), delta);
+    const next = await updateUserSnoozes(user, (current) =>
+      mergeMapDelta(current, delta),
+    );
     return Response.json({
-      snoozes: setUserSnoozes(user, next),
+      snoozes: next,
     });
   }
 
@@ -411,7 +423,7 @@ export async function handlePrefsRoutes(
   // running for everyone else. Same per-user model as pins, same delta write.
   if (path === "/api/hides" && req.method === "GET") {
     const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
-    return conditionalJsonResponse(req, { hides: getUserHides(user) });
+    return conditionalJsonResponse(req, { hides: await getUserHides(user) });
   }
 
   if (path === "/api/hides" && req.method === "PUT") {
@@ -424,8 +436,10 @@ export async function handlePrefsRoutes(
       );
     }
     const user = requestUser(ctx, body.user) || "Anonymous";
-    const next = mergeMapDelta(getUserHides(user), delta);
-    return Response.json({ hides: setUserHides(user, next) });
+    const next = await updateUserHides(user, (current) =>
+      mergeMapDelta(current, delta),
+    );
+    return Response.json({ hides: next });
   }
 
   // ── Per-user workspace settlements ──
@@ -434,7 +448,7 @@ export async function handlePrefsRoutes(
   if (path === "/api/settlements" && req.method === "GET") {
     const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
     return conditionalJsonResponse(req, {
-      settlements: getUserSettlements(user),
+      settlements: await getUserSettlements(user),
     });
   }
 
@@ -453,7 +467,7 @@ export async function handlePrefsRoutes(
     }
     const user = requestUser(ctx, body.user) || "Anonymous";
     return Response.json({
-      settlements: setUserSettlements(user, body.settlements),
+      settlements: await setUserSettlements(user, body.settlements),
     });
   }
 

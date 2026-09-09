@@ -10,6 +10,13 @@ import type {
   SessionMetadataSeedRow,
 } from "./metadata-protocol";
 import * as metadataStore from "./metadata-store";
+import * as catalogDocumentStore from "./catalog-document-store";
+import type {
+  CatalogDocumentPutResult,
+  CatalogDocumentRecord,
+  CatalogDocumentRequest,
+  CatalogDocumentSeedRow,
+} from "./catalog-document-protocol";
 import { decodeExecutorId } from "@tellahq/opensession-protocol/executor";
 /**
  * Durable state for the session actor boundary.
@@ -251,7 +258,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
     bootId: linuxBootId(),
     start: linuxProcessStart(process.pid),
   } satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 33;
+export const SESSION_KERNEL_SCHEMA_VERSION = 34;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -1573,6 +1580,7 @@ export class SessionKernelStore {
     migrateTranscriptAuthoritySchema31(this.db, schemaVersion);
     migrateAgentOperationCancellationSchema32(this.db, schemaVersion);
     metadataStore.migrateSessionMetadataSchema33(this.db, schemaVersion);
+    catalogDocumentStore.migrateCatalogDocumentSchema34(this.db, schemaVersion);
     assertAgentOperationSchema28(this.db);
     assertAgentOperationCancellationSchema32(this.db);
     if (path !== ":memory:") {
@@ -6215,6 +6223,12 @@ export class SessionKernelStore {
     return metadataStore.seedSessionMetadataCatalog(this.db, rows);
   }
 
+  sessionMetadataCatalogGet(
+    sessionId: string,
+  ): SessionMetadataCatalogRow | null {
+    return metadataStore.sessionMetadataCatalogGet(this.db, sessionId);
+  }
+
   sessionMetadataCatalogPage(
     afterSessionId: string,
     limit: number,
@@ -6242,6 +6256,66 @@ export class SessionKernelStore {
 
   markSessionMetadataCatalogComplete(): void {
     metadataStore.markSessionMetadataCatalogComplete(this.db);
+  }
+
+  // ── Catalog documents ──────────────────────────────────────────────────
+  // Namespaced, session-less documents in the central database only; see
+  // catalog-document-store.ts for the SQL and catalog-document-protocol.ts
+  // for the contract.
+
+  catalogDocumentGet(
+    namespace: string,
+    key: string,
+  ): CatalogDocumentRecord | null {
+    return catalogDocumentStore.catalogDocumentGet(this.db, namespace, key);
+  }
+
+  catalogDocumentGetMany(
+    namespace: string,
+    keys: string[],
+  ): CatalogDocumentRecord[] {
+    return catalogDocumentStore.catalogDocumentGetMany(
+      this.db,
+      namespace,
+      keys,
+    );
+  }
+
+  catalogDocumentPage(
+    namespace: string,
+    afterKey: string,
+    limit: number,
+  ): CatalogDocumentRecord[] {
+    return catalogDocumentStore.catalogDocumentPage(
+      this.db,
+      namespace,
+      afterKey,
+      limit,
+    );
+  }
+
+  putCatalogDocument(
+    input: Extract<CatalogDocumentRequest, { op: "put" }>,
+  ): CatalogDocumentPutResult {
+    return catalogDocumentStore.putCatalogDocument(this.db, input);
+  }
+
+  seedCatalogDocuments(
+    namespace: string,
+    rows: CatalogDocumentSeedRow[],
+  ): void {
+    catalogDocumentStore.seedCatalogDocuments(this.db, namespace, rows);
+  }
+
+  catalogDocumentImportComplete(namespace: string): boolean {
+    return catalogDocumentStore.catalogDocumentImportComplete(
+      this.db,
+      namespace,
+    );
+  }
+
+  markCatalogDocumentImportComplete(namespace: string): void {
+    catalogDocumentStore.markCatalogDocumentImportComplete(this.db, namespace);
   }
 
   isolatedQuarantineProjectionEntries(): DurableSessionQuarantine[] {

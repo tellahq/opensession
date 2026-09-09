@@ -58,6 +58,11 @@ export type MetadataActorRequest =
       lastActivityMs: number;
     }
   | { op: "exported"; sessionId: string; rev: number }
+  /** The committed document as the central catalog projects it. Serves a
+   * detail read for one session without opening that session's actor
+   * database; the catalog is written in the same lane pass as the commit, so
+   * it is never behind the derived file. */
+  | { op: "catalog_get"; sessionId: string }
   /** Operator seeding of sessions written before the actor owned metadata.
    * Central only; a session that already has a row is left alone, and the
    * actor document still materializes from the file on its first write. */
@@ -78,15 +83,17 @@ export type MetadataActorResult<T extends MetadataActorRequest> = T extends {
   ? SessionMetadataRecord | null
   : T extends { op: "put" }
     ? SessionMetadataPutResult
-    : T extends { op: "seed_catalog" }
-      ? number
-      : T extends { op: "catalog_page" }
-        ? SessionMetadataCatalogRow[]
-        : T extends { op: "pending_exports" }
-          ? Array<{ sessionId: string; rev: number; exportedRev: number }>
-          : T extends { op: "catalog_complete" }
-            ? boolean
-            : void;
+    : T extends { op: "catalog_get" }
+      ? SessionMetadataCatalogRow | null
+      : T extends { op: "seed_catalog" }
+        ? number
+        : T extends { op: "catalog_page" }
+          ? SessionMetadataCatalogRow[]
+          : T extends { op: "pending_exports" }
+            ? Array<{ sessionId: string; rev: number; exportedRev: number }>
+            : T extends { op: "catalog_complete" }
+              ? boolean
+              : void;
 
 export const SESSION_METADATA_MAX_DOC_BYTES = 4 * 1024 * 1024;
 export const SESSION_METADATA_CATALOG_PAGE_LIMIT = 1_000;
@@ -94,18 +101,19 @@ export const SESSION_METADATA_CATALOG_PAGE_LIMIT = 1_000;
 export function isMetadataRead(request: MetadataActorRequest): boolean {
   return (
     request.op === "get" ||
+    request.op === "catalog_get" ||
     request.op === "catalog_page" ||
     request.op === "pending_exports" ||
     request.op === "catalog_complete"
   );
 }
 
-/** Catalog-scoped requests never name a session; they read or mark the
- * central projection only. */
+/** Catalog-scoped requests read or mark the central projection only and
+ * never touch a session actor, whether or not they name a session. */
 export function isMetadataCatalogRequest(
   request: MetadataActorRequest,
 ): boolean {
-  return !("sessionId" in request);
+  return request.op === "catalog_get" || !("sessionId" in request);
 }
 
 export function assertMetadataActorRequest(

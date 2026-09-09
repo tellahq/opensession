@@ -14,12 +14,11 @@
  * whole-map PUT in reads.ts carries).
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { stateDir } from "./paths";
+import { catalogDocuments } from "./catalog-documents";
+import { documentField } from "./shared/catalog-user-store";
 import { mentionedUsers } from "./people";
 
-const MENTIONS_DIR = stateDir("mentions");
+const documents = catalogDocuments("mentions");
 
 /** Plenty for a badge list, and a hard bound on an unattended file. */
 const MAX_STORED = 200;
@@ -42,47 +41,37 @@ function isValidPerson(name: string): boolean {
   return /^[A-Za-z0-9._-]{1,64}$/.test(name);
 }
 
-function fileFor(person: string): string {
-  return `${MENTIONS_DIR}/${person.toLowerCase()}.json`;
-}
-
-function readAll(person: string): Mention[] {
-  if (!isValidPerson(person)) return [];
-  try {
-    const f = fileFor(person);
-    if (!existsSync(f)) return [];
-    const raw = JSON.parse(readFileSync(f, "utf8"));
-    if (!Array.isArray(raw?.mentions)) return [];
-    return raw.mentions.filter(
-      (m: unknown): m is Mention =>
-        !!m &&
-        typeof (m as any).sessionId === "string" &&
-        typeof (m as any).by === "string" &&
-        typeof (m as any).ts === "number",
-    );
-  } catch {
-    return [];
-  }
-}
-
-function write(person: string, mentions: Mention[]): void {
-  if (!existsSync(MENTIONS_DIR)) mkdirSync(MENTIONS_DIR, { recursive: true });
-  writeJsonAtomic(fileFor(person), { mentions: mentions.slice(-MAX_STORED) });
+function cleanMentions(value: unknown): Mention[] {
+  const raw = documentField(value, "mentions");
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (value: unknown): value is Mention =>
+      value !== null &&
+      typeof value === "object" &&
+      "sessionId" in value &&
+      typeof value.sessionId === "string" &&
+      "by" in value &&
+      typeof value.by === "string" &&
+      "ts" in value &&
+      typeof value.ts === "number" &&
+      "preview" in value &&
+      typeof value.preview === "string" &&
+      "source" in value &&
+      (value.source === "prompt" || value.source === "note"),
+  );
 }
 
 /** This person's outstanding mentions, oldest first. */
-export function listMentions(person: string): Mention[] {
-  return readAll(person);
+export async function listMentions(person: string): Promise<Mention[]> {
+  if (!isValidPerson(person)) return [];
+  return cleanMentions(await documents.get(person.toLowerCase()));
 }
 
-/**
- * Record that `by` mentioned `person` in `sessionId`. Returns the stored
- * record so the caller can broadcast exactly what it wrote.
- */
-export function addMention(
+/** One catalog CAS owns the append, so concurrent mentions cannot overwrite. */
+export async function addMention(
   person: string,
   mention: Omit<Mention, "ts"> & { ts?: number },
-): Mention | null {
+): Promise<Mention | null> {
   if (!isValidPerson(person)) return null;
   const record: Mention = {
     sessionId: mention.sessionId,
@@ -91,46 +80,47 @@ export function addMention(
     preview: mention.preview.trim().slice(0, PREVIEW_LEN),
     ts: mention.ts ?? Date.now(),
   };
-  // The newest mention in a session replaces the older one: one row, one badge.
-  const rest = readAll(person).filter((m) => m.sessionId !== record.sessionId);
-  write(person, [...rest, record]);
+  await documents.update(person.toLowerCase(), (value) => ({
+    mentions: [
+      ...cleanMentions(value).filter((m) => m.sessionId !== record.sessionId),
+      record,
+    ].slice(-MAX_STORED),
+  }));
   return record;
 }
 
-/** Clear this person's mention for one session — what opening it does. */
-export function clearMention(person: string, sessionId: string): boolean {
-  const all = readAll(person);
-  const rest = all.filter((m) => m.sessionId !== sessionId);
-  if (rest.length === all.length) return false;
-  write(person, rest);
-  return true;
+/** Clear this person's mention for one session. */
+export async function clearMention(
+  person: string,
+  sessionId: string,
+): Promise<boolean> {
+  if (!isValidPerson(person)) return false;
+  let cleared = false;
+  await documents.update(person.toLowerCase(), (value) => {
+    const all = cleanMentions(value);
+    const mentions = all.filter((m) => m.sessionId !== sessionId);
+    cleared = mentions.length !== all.length;
+    return { mentions };
+  });
+  return cleared;
 }
 
-/** Clear every mention for a person. */
-export function clearAllMentions(person: string): void {
+export async function clearAllMentions(person: string): Promise<void> {
   if (!isValidPerson(person)) return;
-  write(person, []);
+  await documents.set(person.toLowerCase(), { mentions: [] });
 }
 
-/**
- * Scan `text` for teammates and record a mention for each. The one place that
- * knows what a mention means, called from all three surfaces that can carry
- * one (a prompt over HTTP, a prompt over the WebSocket, a team note), so the
- * badge and the push can never disagree about who was tagged.
- *
- * Returns the people recorded, for the caller's push loop.
- */
-export function recordMentions(
+export async function recordMentions(
   text: string,
   sender: string,
   sessionId: string,
   source: Mention["source"],
   onRecorded?: (person: string, mention: Mention) => void,
-): string[] {
+): Promise<string[]> {
   if (!text.includes("@")) return [];
   const people = mentionedUsers(text, sender);
   for (const person of people) {
-    const mention = addMention(person, {
+    const mention = await addMention(person, {
       sessionId,
       by: sender || "Someone",
       source,
@@ -159,7 +149,7 @@ export async function notifyMentions(
   where: string,
 ): Promise<string[]> {
   const { broadcastToAll } = await import("./ws-hub");
-  const mentioned = recordMentions(
+  const mentioned = await recordMentions(
     text,
     sender,
     sessionId,

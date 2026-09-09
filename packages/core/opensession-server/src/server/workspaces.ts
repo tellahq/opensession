@@ -17,28 +17,35 @@
  * runner cwd); the workspace's worktree fields are the template a new share-mode
  * session copies, and the flag for "does this workspace own a worktree yet".
  *
- * One JSON file per workspace at `~/.opensession-workspaces/<id>.json`, ids
- * `ws-<uuid>`. Mirrors the flat-file pattern in pins.ts / models.ts.
+ * Storage: one document per workspace in the session kernel's central
+ * application catalog (catalog-documents.ts, namespace `workspaces`, key =
+ * workspace id, ids `ws-<uuid>`). Every authoritative read and every write is
+ * an awaited kernel RPC; nothing here touches the filesystem on the gateway
+ * thread. The legacy `~/.opensession-workspaces/<id>.json` files are imported
+ * once at boot (importApplicationCatalog) and kept as an async export for
+ * operator tools; this module never reads them.
+ *
+ * Alongside the catalog this module keeps a memory projection of every
+ * workspace, warmed by warmWorkspacesAsync and maintained by the writers
+ * below (the gateway is the catalog's only runtime writer for this
+ * namespace). The projection serves the sync readers that cannot await, the
+ * list route, and the find* helpers; peekWorkspace/workspaceName say so in
+ * their names. getWorkspace is the authoritative read.
  * Team-internal, no auth.
  */
 
-import { homeDir } from "./paths";
-import { canonicalRepoId, defaultRepo } from "./config";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "fs";
-import { readdir, readFile } from "fs/promises";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { rm } from "fs/promises";
 import { randomUUID } from "crypto";
+import { catalogDocuments } from "./catalog-documents";
+import { canonicalRepoId, defaultRepo } from "./config";
+import { stateDir } from "./paths";
 import type { AttachedRepo, ExternalRef } from "./types";
 import type { SessionEffort } from "./models";
-import { stateDir } from "./paths";
 
-/** Resolved per call, not pinned at module load: statePath reads
- *  OPENSESSION_STATE_DIR at call time so tests can repoint it, and bun runs
- *  every test file in one process, so a module-load pin here would belong to
- *  whichever file imported workspaces first; test fixtures then leak into
- *  the live store (they did, 2026-08-15). */
-function workspacesDir(): string {
-  return stateDir("workspaces");
+/** Resolved per call so a test that swaps the kernel store (or the state
+ *  root the facade routes by) is honored by the next operation. */
+function store() {
+  return catalogDocuments("workspaces");
 }
 
 /** A workspace-owned model combination. The lead owns the conversation; the
@@ -180,18 +187,18 @@ export const DEFAULT_WORKSPACE_MODEL_SETTINGS: WorkspaceModelSettings = {
     },
     {
       id: "orchestrator-fable-sol",
-      label: "Orchestrator · Fable + Sol",
+      label: "Orchestrator · Fable + Astra",
       group: "orchestrator",
       lead: { model: "pi/anthropic/claude-fable-5-1", effort: "high" },
       supporting: [
         {
-          model: "pi/openai/gpt-5.6-sol",
+          model: "pi/openai/gpt-6-astra",
           effort: "high",
           role: "Implementation worker",
         },
       ],
       instructions:
-        "Use Fable to plan, review, and integrate. Delegate focused implementation work to Sol with self-contained briefs, then verify its results.",
+        "Use Fable to plan, review, and integrate. Delegate focused implementation work to Astra with self-contained briefs, then verify its results.",
     },
     {
       id: "orchestrator-sol",
@@ -276,31 +283,23 @@ export interface Workspace {
   draft?: WorkspaceDraft;
 }
 
-function ensureDir(): void {
-  if (!existsSync(workspacesDir()))
-    mkdirSync(workspacesDir(), { recursive: true });
-}
-
-function fileFor(id: string): string {
-  return `${workspacesDir()}/${id}.json`;
-}
-
-/** Reject ids that could escape the directory; workspace ids are server-minted. */
+/** Reject ids that could name a foreign catalog key or escape the scratch
+ *  directory; workspace ids are server-minted. */
 function safeId(id: string): boolean {
   return /^[A-Za-z0-9_-]{1,64}$/.test(id);
 }
 
 /**
- * A workspace as read from disk, with its repo ids resolved through any rename
- * (canonicalRepoId). A workspace file keeps whatever id was registered when it
- * was written, and every client groups by that id: 633 of the workspaces on
+ * A workspace as read from the catalog, with its repo ids resolved through any
+ * rename (canonicalRepoId). A document keeps whatever id was registered when
+ * it was written, and every client groups by that id: 633 of the workspaces on
  * this instance say `backstage`, which drew the repo a second sidebar band of
- * its own. Reading through this is what keeps one repo one band, and the file
- * itself is rewritten with the current id the next time it is saved.
+ * its own. Reading through this is what keeps one repo one band, and the
+ * document itself is rewritten with the current id the next time it is saved.
  *
- * Both callers hand it a freshly parsed object, so it normalizes in place.
+ * Every caller hands it a freshly parsed object, so it normalizes in place.
  */
-function fromDisk(p: Workspace): Workspace {
+function fromStore(p: Workspace): Workspace {
   // "auto" was briefly persisted by the retired repository picker. Treat it
   // as the registered default until the next save rewrites the repaired id.
   if (p.repo === "auto") p.repo = defaultRepo().id;
@@ -309,162 +308,216 @@ function fromDisk(p: Workspace): Workspace {
   return p;
 }
 
-let workspaceNameGeneration = 0;
-let workspaceListCache: {
-  dir: string;
-  generation: number;
-  workspaces: Workspace[];
-} | null = null;
+/** A catalog value that is a workspace record, normalized; else null. */
+function parseWorkspace(value: unknown): Workspace | null {
+  if (!value || typeof value !== "object") return null;
+  const p = value as Workspace;
+  if (typeof p.id !== "string" || typeof p.name !== "string") return null;
+  return fromStore(p);
+}
 
-export function listWorkspaces(): Workspace[] {
-  const dir = workspacesDir();
-  if (
-    workspaceListCache?.dir === dir &&
-    workspaceListCache.generation === workspaceNameGeneration
-  )
-    return workspaceListCache.workspaces.slice();
-  if (!existsSync(dir)) {
-    workspaceListCache = {
-      dir,
-      generation: workspaceNameGeneration,
-      workspaces: [],
-    };
-    return [];
-  }
-  const out: Workspace[] = [];
-  for (const file of readdirSync(dir)) {
-    if (!file.endsWith(".json")) continue;
-    try {
-      const p = JSON.parse(readFileSync(`${dir}/${file}`, "utf8"));
-      // No defaults backfill here: stamping the ~3KB default modelSettings on
-      // every row multiplied the list payload by the workspace count (13 MB on
-      // this instance). Absent modelSettings means "inherit the defaults":
-      // resolve through workspaceModelSettings() at the point of use.
-      if (p && typeof p.id === "string" && typeof p.name === "string")
-        out.push(fromDisk(p));
-    } catch {}
-  }
-  out.sort(
-    (a, b) =>
-      (a.order ?? (Date.parse(a.createdAt) || 0)) -
-        (b.order ?? (Date.parse(b.createdAt) || 0)) ||
-      a.name.localeCompare(b.name),
+function byOrder(a: Workspace, b: Workspace): number {
+  return (
+    (a.order ?? (Date.parse(a.createdAt) || 0)) -
+      (b.order ?? (Date.parse(b.createdAt) || 0)) ||
+    a.name.localeCompare(b.name)
   );
-  workspaceListCache = {
-    dir,
-    generation: workspaceNameGeneration,
-    workspaces: out,
-  };
-  return out.slice();
+}
+
+// ── Memory projection ──────────────────────────────────────────────────────
+//
+// `docs` is null until the first warm finishes. Writers land in `docs` once
+// it is warm; while it is cold they land in `overlay` (null = deleted), which
+// the sync readers consult and which the warm applies on top of its page
+// read, so a write racing the warm cannot be resurrected by a stale page.
+// `generation` bumps on every change and keys the derived sorted list, the
+// name map, and the list route's conditional-response version.
+
+let docs: Map<string, Workspace> | null = null;
+let overlay = new Map<string, Workspace | null>();
+let warming: Promise<void> | null = null;
+let generation = 0;
+let sortedCache: { generation: number; list: Workspace[] } | null = null;
+let namesCache: { generation: number; names: Map<string, string> } | null =
+  null;
+
+function project(id: string, workspace: Workspace | null): void {
+  generation++;
+  if (!docs) {
+    overlay.set(id, workspace);
+    return;
+  }
+  if (workspace) docs.set(id, workspace);
+  else docs.delete(id);
+}
+
+/** What the projection currently holds for `id`: the warm map, else the
+ *  writes made while cold. */
+function projected(id: string): Workspace | null {
+  return (docs ? docs.get(id) : overlay.get(id)) ?? null;
+}
+
+/**
+ * Build the projection from the catalog without holding the event loop.
+ * Idempotent and coalescing: concurrent callers share one page walk. The
+ * session list stamps each row with its workspace's name from this
+ * projection, and the boot sequence warms it before the list is first built.
+ */
+export async function warmWorkspacesAsync(): Promise<void> {
+  if (docs) return;
+  if (!warming) {
+    warming = (async () => {
+      const rows = await store().list();
+      const next = new Map<string, Workspace>();
+      for (const row of rows) {
+        const workspace = parseWorkspace(row.value);
+        if (workspace) next.set(workspace.id, workspace);
+      }
+      for (const [id, workspace] of overlay) {
+        if (workspace) next.set(id, workspace);
+        else next.delete(id);
+      }
+      docs = next;
+      overlay = new Map();
+      generation++;
+    })().finally(() => {
+      warming = null;
+    });
+  }
+  await warming;
+}
+
+/** Drop the projection so the next read rebuilds it from the catalog. Tests
+ *  swap the kernel store per case; the projection would otherwise answer for
+ *  the previous one. */
+export function __resetWorkspaceProjectionForTest(): void {
+  docs = null;
+  overlay = new Map();
+  warming = null;
+  sortedCache = null;
+  namesCache = null;
+  generation++;
+}
+
+async function projection(): Promise<Map<string, Workspace>> {
+  if (!docs) await warmWorkspacesAsync();
+  return docs!;
+}
+
+function sorted(all: Map<string, Workspace>): Workspace[] {
+  if (sortedCache?.generation !== generation)
+    sortedCache = { generation, list: [...all.values()].sort(byOrder) };
+  return sortedCache.list;
+}
+
+/**
+ * Every workspace, sorted for the sidebar. No defaults backfill here: stamping
+ * the ~3KB default modelSettings on every row multiplied the list payload by
+ * the workspace count (13 MB on this instance). Absent modelSettings means
+ * "inherit the defaults": resolve through workspaceModelSettings() at the
+ * point of use.
+ */
+export async function listWorkspaces(): Promise<Workspace[]> {
+  return sorted(await projection()).slice();
 }
 
 /** Stable version for conditional workspace-list responses. */
 export function workspaceListVersion(): string {
-  return `${workspacesDir()}:${workspaceNameGeneration}`;
+  return `workspaces:${generation}`;
 }
 
 /**
- * id → name for every workspace in the active workspace directory, held in
- * memory. The directory is part of the cache key because state roots can
- * change within one process in tests and dev tooling.
- *
- * The session list stamps each row with its workspace's name so a client can
- * title a workspace row before (or without) loading the workspace list. Doing
- * that from disk would mean re-reading every workspace file on each list
- * rebuild: 4,378 files and ~0.4s on this instance. The map is built once and
- * then maintained by the writers below, which are the only code that ever
- * writes a workspace file for a given state root.
+ * Read-only name projection for bulk consumers, memory only. Until
+ * warmWorkspacesAsync has run once it holds only this process's own writes;
+ * the list path warms it first.
  */
-let workspaceNameCache: {
-  dir: string;
-  names: Map<string, string>;
-} | null = null;
-let workspaceNameRefresh: Promise<void> | null = null;
-
-function workspaceNameMap(): Map<string, string> {
-  const dir = workspacesDir();
-  if (workspaceNameCache?.dir === dir) return workspaceNameCache.names;
-  workspaceNameGeneration++;
-  const names = new Map<string, string>();
-  if (existsSync(dir))
-    for (const file of readdirSync(dir)) {
-      if (!file.endsWith(".json")) continue;
-      try {
-        const p = JSON.parse(readFileSync(`${dir}/${file}`, "utf8"));
-        if (typeof p?.id === "string" && typeof p?.name === "string")
-          names.set(p.id, p.name);
-      } catch {}
-    }
-  workspaceNameCache = { dir, names };
-  return names;
-}
-
-/** Build the cold workspace-name index without holding the event loop. */
-export async function warmWorkspaceNamesAsync(): Promise<void> {
-  const dir = workspacesDir();
-  while (workspaceNameCache?.dir !== dir) {
-    if (!workspaceNameRefresh) {
-      const generation = ++workspaceNameGeneration;
-      workspaceNameRefresh = (async () => {
-        const names = new Map<string, string>();
-        if (existsSync(dir)) {
-          let read = 0;
-          for (const file of await readdir(dir)) {
-            if (!file.endsWith(".json")) continue;
-            try {
-              const p = JSON.parse(await readFile(`${dir}/${file}`, "utf8"));
-              if (typeof p?.id === "string" && typeof p?.name === "string")
-                names.set(p.id, p.name);
-            } catch {}
-            if (++read % 32 === 0) await Bun.sleep(0);
-          }
-        }
-        if (workspaceNameGeneration === generation)
-          workspaceNameCache = { dir, names };
-      })().finally(() => {
-        workspaceNameRefresh = null;
-      });
-    }
-    await workspaceNameRefresh;
-  }
-}
-
-/** Read-only name projection for bulk consumers. Resolve it once per list
- * response: workspaceName() intentionally re-resolves the active state root on
- * every call for test/dev root changes, which is wasteful across thousands of
- * rows in production. */
 export function workspaceNameSnapshot(): ReadonlyMap<string, string> {
-  return workspaceNameMap();
+  if (namesCache?.generation !== generation) {
+    const names = new Map<string, string>();
+    for (const [id, workspace] of docs ?? overlay)
+      if (workspace) names.set(id, workspace.name);
+    namesCache = { generation, names };
+  }
+  return namesCache.names;
 }
 
-/** The workspace's display name, or null when there is no such workspace. */
+/** The workspace's display name from the memory projection, or null when
+ *  there is no such workspace (or the projection has not seen it yet). */
 export function workspaceName(id: string): string | null {
   if (!safeId(id)) return null;
-  return workspaceNameMap().get(id) ?? null;
+  return projected(id)?.name ?? null;
 }
 
-/** The one write path for a workspace file, so the name map stays current. */
-function saveWorkspace(workspace: Workspace): Workspace {
-  const dir = workspacesDir();
-  writeJsonAtomic(`${dir}/${workspace.id}.json`, workspace);
-  workspaceNameGeneration++;
-  if (workspaceNameCache?.dir === dir)
-    workspaceNameCache.names.set(workspace.id, workspace.name);
+/**
+ * A workspace from the memory projection, or null. For the sync readers that
+ * cannot await (the session-list assembly, model preset resolution, the
+ * mention note): no I/O, and only this process's own writes until the
+ * projection is warm. Everything that can await reads getWorkspace instead.
+ */
+export function peekWorkspace(id: string): Workspace | null {
+  if (!safeId(id)) return null;
+  return projected(id);
+}
+
+/** The authoritative read: one catalog lookup, never the projection. */
+export async function getWorkspace(id: string): Promise<Workspace | null> {
+  if (!safeId(id)) return null;
+  const workspace = parseWorkspace(await store().get(id));
+  // Keep the projection honest for a document that changed under it (an
+  // operator import or repair). Compared by content: the gateway's own
+  // writes already landed, and a read must not churn the list version.
+  const seen = projected(id);
+  if (
+    (seen !== null || workspace !== null) &&
+    JSON.stringify(seen) !== JSON.stringify(workspace)
+  )
+    project(id, workspace);
   return workspace;
 }
 
-export function getWorkspace(id: string): Workspace | null {
+/** The one write path for a whole record, so the projection stays current. */
+async function saveWorkspace(workspace: Workspace): Promise<Workspace> {
+  await store().set(workspace.id, workspace);
+  project(workspace.id, workspace);
+  return workspace;
+}
+
+const missing = Symbol("workspace missing");
+/** Thrown out of a mutate that chose not to write, carrying the record. */
+class Unchanged {
+  constructor(readonly current: Workspace) {}
+}
+
+/**
+ * Read-modify-write through the catalog's compare-and-set, so two gateway
+ * generations (or two racing callers here) never clobber each other's patch.
+ * `mutate` returns the next record, or the current one to leave the document
+ * alone. Resolves null when the workspace does not exist.
+ */
+async function mutateWorkspace(
+  id: string,
+  mutate: (current: Workspace) => Workspace,
+): Promise<Workspace | null> {
   if (!safeId(id)) return null;
-  const f = fileFor(id);
-  if (!existsSync(f)) return null;
   try {
-    return fromDisk(JSON.parse(readFileSync(f, "utf8")) as Workspace);
-  } catch {
-    return null;
+    const next = await store().update<Workspace>(id, (value) => {
+      const current = parseWorkspace(value);
+      if (!current) throw missing;
+      const result = mutate(current);
+      if (result === current) throw new Unchanged(current);
+      return result;
+    });
+    if (!next) return null;
+    project(id, next);
+    return next;
+  } catch (error) {
+    if (error === missing) return null;
+    if (error instanceof Unchanged) return error.current;
+    throw error;
   }
 }
 
-export function createWorkspace(input: {
+export async function createWorkspace(input: {
   name: string;
   repo?: string;
   color?: string;
@@ -480,8 +533,7 @@ export function createWorkspace(input: {
   /** Reuse a caller-supplied id (e.g. migration wrapping an orphan session). */
   id?: string;
   createdAt?: string;
-}): Workspace {
-  ensureDir();
+}): Promise<Workspace> {
   const workspace: Workspace = {
     id: input.id || `ws-${randomUUID()}`,
     name:
@@ -511,6 +563,8 @@ export function createWorkspace(input: {
         }
       : {}),
   };
+  if (!safeId(workspace.id))
+    throw new Error(`Invalid workspace id: ${workspace.id}`);
   return saveWorkspace(workspace);
 }
 
@@ -522,9 +576,13 @@ export function createWorkspace(input: {
  * workspaces (every opensession session, every ask session), so "ownership" is
  * meaningless there.
  */
-export function findWorkspaceByWorktree(worktreeDir: string): Workspace | null {
+export async function findWorkspaceByWorktree(
+  worktreeDir: string,
+): Promise<Workspace | null> {
   if (!worktreeDir) return null;
-  const owners = listWorkspaces().filter((w) => w.worktreeDir === worktreeDir);
+  const owners = (await listWorkspaces()).filter(
+    (w) => w.worktreeDir === worktreeDir,
+  );
   if (owners.length < 2) return owners[0] || null;
   return owners.sort(
     (a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0),
@@ -532,9 +590,11 @@ export function findWorkspaceByWorktree(worktreeDir: string): Workspace | null {
 }
 
 /** Find a workspace by its stable dedupe key, or null. */
-export function findWorkspaceByKey(key: string): Workspace | null {
+export async function findWorkspaceByKey(
+  key: string,
+): Promise<Workspace | null> {
   if (!key) return null;
-  return listWorkspaces().find((p) => p.key === key) || null;
+  return (await listWorkspaces()).find((p) => p.key === key) || null;
 }
 
 /**
@@ -548,15 +608,15 @@ export function findWorkspaceByKey(key: string): Workspace | null {
  * Preference among duplicates: a key-stamped workspace (PR/ticket provenance,
  * the one resolution converges on) over unkeyed, then oldest.
  */
-export function findWorkspaceByBranch(
+export async function findWorkspaceByBranch(
   repo: string,
   branch: string,
-): Workspace | null {
+): Promise<Workspace | null> {
   if (!repo || !branch) return null;
   // Workspaces minted before repo stamping (and sweep-minted ones around
   // repo-less slack sessions) carry no repo field; they mean the default repo.
   const fallback = defaultRepo().id;
-  const owners = listWorkspaces().filter(
+  const owners = (await listWorkspaces()).filter(
     (w) => w.branch === branch && (w.repo || fallback) === repo,
   );
   if (owners.length < 2) return owners[0] || null;
@@ -572,7 +632,7 @@ export function findWorkspaceByBranch(
  * Used to auto-group related sessions (e.g. every autofix/review/simplify session for
  * one PR) under a single workspace.
  */
-export function findOrCreateWorkspaceByKey(
+export async function findOrCreateWorkspaceByKey(
   key: string,
   input: {
     name: string;
@@ -583,8 +643,11 @@ export function findOrCreateWorkspaceByKey(
     plainThreadId?: string;
     branch?: string;
   },
-): Workspace {
-  return findWorkspaceByKey(key) || createWorkspace({ ...input, key });
+): Promise<Workspace> {
+  return (
+    (await findWorkspaceByKey(key)) ||
+    (await createWorkspace({ ...input, key }))
+  );
 }
 
 /**
@@ -605,45 +668,50 @@ export function stampWorkspaceIdentity(
     plainThreadId?: string;
     externalRef?: ExternalRef;
   },
-): Workspace | null {
-  const cur = getWorkspace(id);
-  if (!cur) return null;
-  if (cur.key && patch.key && cur.key !== patch.key) return cur;
-  // The adopted workspace may have been minted by a session in ANOTHER repo:
-  // a session working in repo A can open a PR in repo B through an attached
-  // repo, and that is how a workspace ended up filed under `opensession` while
-  // its branch and PR belonged to another repo. A repo that disagrees with
-  // the branch beside it is worse than none: sessionPrBranch refuses to
-  // inherit a branch across repos, the sidebar cannot match the PR row to the
-  // workspace, and a new session here resolves the branch in the wrong repo.
-  // Only when the workspace has not materialized a worktree of its own, which
-  // is the point where its repo stops being a guess.
-  const adoptRepo =
-    patch.repo && !cur.branch && !cur.worktreeDir && cur.repo !== patch.repo;
-  // externalRefs accrue (a workspace can carry several linked objects, like
-  // PRs) — only the dedupe key is refused once present.
-  const addRef =
-    patch.externalRef &&
-    !(cur.externalRefs || []).some(
-      (r) =>
-        r.kind === patch.externalRef!.kind && r.id === patch.externalRef!.id,
-    )
-      ? [...(cur.externalRefs || []), patch.externalRef]
-      : null;
-  const next: Workspace = {
-    ...cur,
-    ...(patch.key && !cur.key ? { key: patch.key } : {}),
-    ...(patch.prNumber !== undefined && cur.prNumber === undefined
-      ? { prNumber: patch.prNumber }
-      : {}),
-    ...(patch.branch && !cur.branch ? { branch: patch.branch } : {}),
-    ...(adoptRepo ? { repo: patch.repo } : {}),
-    ...(patch.plainThreadId && !cur.plainThreadId
-      ? { plainThreadId: patch.plainThreadId }
-      : {}),
-    ...(addRef ? { externalRefs: addRef } : {}),
-  };
-  return saveWorkspace(next);
+): Promise<Workspace | null> {
+  return mutateWorkspace(id, (cur) => {
+    if (cur.key && patch.key && cur.key !== patch.key) return cur;
+    // The adopted workspace may have been minted by a session in ANOTHER repo:
+    // a session working in repo A can open a PR in repo B through an attached
+    // repo, and that is how a workspace ended up filed under `opensession` while
+    // its branch and PR belonged to another repo. A repo that disagrees with
+    // the branch beside it is worse than none: sessionPrBranch refuses to
+    // inherit a branch across repos, the sidebar cannot match the PR row to the
+    // workspace, and a new session here resolves the branch in the wrong repo.
+    // Only when the workspace has not materialized a worktree of its own, which
+    // is the point where its repo stops being a guess.
+    const adoptRepo =
+      patch.repo && !cur.branch && !cur.worktreeDir && cur.repo !== patch.repo;
+    // A PR workspace materialized by its review checkout carries the derived
+    // `<head>-os-review` branch; the PR resolve names the real head, so take it.
+    const repairBranch =
+      !!patch.branch && cur.branch === `${patch.branch}-os-review`;
+    // externalRefs accrue (a workspace can carry several linked objects, like
+    // PRs) — only the dedupe key is refused once present.
+    const addRef =
+      patch.externalRef &&
+      !(cur.externalRefs || []).some(
+        (r) =>
+          r.kind === patch.externalRef!.kind && r.id === patch.externalRef!.id,
+      )
+        ? [...(cur.externalRefs || []), patch.externalRef]
+        : null;
+    return {
+      ...cur,
+      ...(patch.key && !cur.key ? { key: patch.key } : {}),
+      ...(patch.prNumber !== undefined && cur.prNumber === undefined
+        ? { prNumber: patch.prNumber }
+        : {}),
+      ...(patch.branch && (!cur.branch || repairBranch)
+        ? { branch: patch.branch }
+        : {}),
+      ...(adoptRepo ? { repo: patch.repo } : {}),
+      ...(patch.plainThreadId && !cur.plainThreadId
+        ? { plainThreadId: patch.plainThreadId }
+        : {}),
+      ...(addRef ? { externalRefs: addRef } : {}),
+    };
+  });
 }
 
 /**
@@ -677,73 +745,73 @@ export function updateWorkspace(
       | "modelSettings"
     >
   > & { draft?: WorkspaceDraft | null },
-): Workspace | null {
-  const cur = getWorkspace(id);
-  if (!cur) return null;
-  const manualRename = patch.name !== undefined;
+): Promise<Workspace | null> {
+  return mutateWorkspace(id, (cur) => {
+    const manualRename = patch.name !== undefined;
 
-  let nextDraft: WorkspaceDraft | undefined = cur.draft;
-  let draftApplied: WorkspaceDraft | undefined;
-  if (patch.draft === null) {
-    nextDraft = undefined;
-  } else if (patch.draft !== undefined) {
-    if (!cur.draft || patch.draft.updatedAt >= cur.draft.updatedAt) {
-      nextDraft = {
-        ...patch.draft,
-        text: patch.draft.text.slice(0, MAX_DRAFT_LENGTH),
-      };
-      draftApplied = nextDraft;
+    let nextDraft: WorkspaceDraft | undefined = cur.draft;
+    let draftApplied: WorkspaceDraft | undefined;
+    if (patch.draft === null) {
+      nextDraft = undefined;
+    } else if (patch.draft !== undefined) {
+      if (!cur.draft || patch.draft.updatedAt >= cur.draft.updatedAt) {
+        nextDraft = {
+          ...patch.draft,
+          text: patch.draft.text.slice(0, MAX_DRAFT_LENGTH),
+        };
+        draftApplied = nextDraft;
+      }
     }
-  }
 
-  // A manual rename stops the auto-name follow permanently, whatever draft
-  // this patch ends up carrying.
-  if (manualRename && nextDraft) nextDraft = { ...nextDraft, autoName: false };
+    // A manual rename stops the auto-name follow permanently, whatever draft
+    // this patch ends up carrying.
+    if (manualRename && nextDraft)
+      nextDraft = { ...nextDraft, autoName: false };
 
-  // Name-follow: a freshly-applied draft update renames the workspace to its
-  // first non-empty line, but only while autoName is truthy and hasn't
-  // already been demoted, and never alongside an explicit rename, which
-  // always wins and just demoted the follow above.
-  let followedName: string | undefined;
-  if (
-    !manualRename &&
-    draftApplied &&
-    patch.draft &&
-    patch.draft.autoName &&
-    (!cur.draft || cur.draft.autoName !== false)
-  ) {
-    const firstLine =
-      draftApplied.text
-        .split("\n")
-        .find((l) => l.trim())
-        ?.trim() ?? "";
-    if (firstLine) followedName = firstLine.slice(0, 80);
-  }
+    // Name-follow: a freshly-applied draft update renames the workspace to its
+    // first non-empty line, but only while autoName is truthy and hasn't
+    // already been demoted, and never alongside an explicit rename, which
+    // always wins and just demoted the follow above.
+    let followedName: string | undefined;
+    if (
+      !manualRename &&
+      draftApplied &&
+      patch.draft &&
+      patch.draft.autoName &&
+      (!cur.draft || cur.draft.autoName !== false)
+    ) {
+      const firstLine =
+        draftApplied.text
+          .split("\n")
+          .find((l) => l.trim())
+          ?.trim() ?? "";
+      if (firstLine) followedName = firstLine.slice(0, 80);
+    }
 
-  const next: Workspace = {
-    ...cur,
-    ...(patch.name !== undefined
-      ? { name: patch.name.trim().slice(0, 120) || cur.name }
-      : {}),
-    ...(followedName ? { name: followedName } : {}),
-    ...(patch.repo !== undefined
-      ? { repo: patch.repo === "auto" ? defaultRepo().id : patch.repo }
-      : {}),
-    ...(patch.color !== undefined ? { color: patch.color } : {}),
-    ...(patch.order !== undefined ? { order: patch.order } : {}),
-    ...(patch.branch !== undefined ? { branch: patch.branch } : {}),
-    ...(patch.worktreeDir !== undefined
-      ? { worktreeDir: patch.worktreeDir }
-      : {}),
-    ...(patch.attachedRepos !== undefined
-      ? { attachedRepos: patch.attachedRepos }
-      : {}),
-    ...(patch.modelSettings !== undefined
-      ? { modelSettings: patch.modelSettings }
-      : {}),
-    draft: nextDraft,
-  };
-  return saveWorkspace(next);
+    return {
+      ...cur,
+      ...(patch.name !== undefined
+        ? { name: patch.name.trim().slice(0, 120) || cur.name }
+        : {}),
+      ...(followedName ? { name: followedName } : {}),
+      ...(patch.repo !== undefined
+        ? { repo: patch.repo === "auto" ? defaultRepo().id : patch.repo }
+        : {}),
+      ...(patch.color !== undefined ? { color: patch.color } : {}),
+      ...(patch.order !== undefined ? { order: patch.order } : {}),
+      ...(patch.branch !== undefined ? { branch: patch.branch } : {}),
+      ...(patch.worktreeDir !== undefined
+        ? { worktreeDir: patch.worktreeDir }
+        : {}),
+      ...(patch.attachedRepos !== undefined
+        ? { attachedRepos: patch.attachedRepos }
+        : {}),
+      ...(patch.modelSettings !== undefined
+        ? { modelSettings: patch.modelSettings }
+        : {}),
+      draft: nextDraft,
+    };
+  });
 }
 
 /**
@@ -757,40 +825,32 @@ export function updateWorkspace(
 export function restampWorkspaceWorktree(
   id: string,
   next: { repo: string; branch?: string; worktreeDir?: string },
-): Workspace | null {
-  const cur = getWorkspace(id);
-  if (!cur) return null;
-  const { branch: _b, worktreeDir: _w, ...rest } = cur;
-  const updated: Workspace = {
-    ...rest,
-    repo: next.repo,
-    ...(next.branch ? { branch: next.branch } : {}),
-    ...(next.worktreeDir ? { worktreeDir: next.worktreeDir } : {}),
-  };
-  return saveWorkspace(updated);
+): Promise<Workspace | null> {
+  return mutateWorkspace(id, (cur) => {
+    const { branch: _b, worktreeDir: _w, ...rest } = cur;
+    return {
+      ...rest,
+      repo: next.repo,
+      ...(next.branch ? { branch: next.branch } : {}),
+      ...(next.worktreeDir ? { worktreeDir: next.worktreeDir } : {}),
+    };
+  });
 }
 
 /**
- * Remove a workspace's metadata file. The caller must handle member sessions first
+ * Remove a workspace's record. The caller must handle member sessions first
  * so none retain a reference to a workspace that no longer exists.
  */
-export function deleteWorkspace(id: string): boolean {
+export async function deleteWorkspace(id: string): Promise<boolean> {
   if (!safeId(id)) return false;
-  const dir = workspacesDir();
-  const f = `${dir}/${id}.json`;
-  if (!existsSync(f)) return false;
+  const existed = await store().delete(id);
+  if (!existed) return false;
+  project(id, null);
+  // A deleted workspace's scratch dir (scratch-mode sessions — see
+  // worktree.ts ensureScratchDir) goes with it; safeId() already rules
+  // out anything path-escaping.
   try {
-    rmSync(f);
-    workspaceNameGeneration++;
-    if (workspaceNameCache?.dir === dir) workspaceNameCache.names.delete(id);
-    // A deleted workspace's scratch dir (scratch-mode sessions — see
-    // worktree.ts ensureScratchDir) goes with it; safeId() already rules
-    // out anything path-escaping.
-    try {
-      rmSync(`${stateDir("scratch")}/${id}`, { recursive: true, force: true });
-    } catch {}
-    return true;
-  } catch {
-    return false;
-  }
+    await rm(`${stateDir("scratch")}/${id}`, { recursive: true, force: true });
+  } catch {}
+  return true;
 }

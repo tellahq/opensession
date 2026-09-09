@@ -13,7 +13,7 @@ export async function handleLibraryRoutes(
   const { req, path } = ctx;
 
   if (path === "/api/library" && req.method === "GET") {
-    return Response.json({ entries: listLibrary() });
+    return Response.json({ entries: await listLibrary() });
   }
 
   return undefined;

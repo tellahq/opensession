@@ -1,16 +1,25 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import type { PrInfo } from "./pr-cache";
 import {
   enrichSessionPrRefs,
+  prRequesterLogin,
   projectWorkspacePrRefs,
   sessionPrBranch,
   shareWorkspacePrRefs,
 } from "./session-pr-target";
 import type { UnifiedSession } from "./types";
-import type { Workspace } from "./workspaces";
+import {
+  SessionKernelStore,
+  __setSessionKernelStoreForTest,
+} from "./session-kernel";
+import {
+  __resetWorkspaceProjectionForTest,
+  createWorkspace,
+  type Workspace,
+} from "./workspaces";
 
 const session = {
   id: "bks-ghpr-5286-review",
@@ -255,6 +264,34 @@ describe("sessionPrBranch", () => {
     ).toBe("add-lottie-primitive");
   });
 
+  // A PR workspace materialized by its review checkout carried that derived
+  // branch instead of the head, so every tab in it showed "No PR open".
+  test("a PR workspace on its own review checkout resolves to the head", () => {
+    const reviewBranchWorkspace = {
+      ...workspace,
+      branch: "add-lottie-primitive-os-review",
+    };
+    expect(sessionPrBranch(session, reviewBranchWorkspace)).toBe(
+      "add-lottie-primitive",
+    );
+    expect(
+      sessionPrBranch(
+        { id: "bks-ask" } as UnifiedSession,
+        reviewBranchWorkspace,
+      ),
+    ).toBe("add-lottie-primitive");
+  });
+
+  test("only strips the review suffix from a PR-backed workspace", () => {
+    expect(
+      sessionPrBranch({ id: "bks-ask" } as UnifiedSession, {
+        ...workspace,
+        prNumber: undefined,
+        branch: "add-lottie-primitive-os-review",
+      }),
+    ).toBe("add-lottie-primitive-os-review");
+  });
+
   test("does not rewrite ordinary session branches", () => {
     expect(
       sessionPrBranch(
@@ -337,17 +374,33 @@ describe("sessionPrBranch", () => {
 });
 
 describe("flat PR fields on a review checkout", () => {
-  // The workspace has to come from disk here: shareWorkspacePrRefs reads it
-  // through the default reader, the same way the list and detail routes do.
+  // The workspace has to come from the store here: shareWorkspacePrRefs reads
+  // it through the default reader (the memory projection), the same way the
+  // list assembly does. A fresh in-memory kernel store holds it, and the
+  // legacy export lands under a scratch state root.
   const stateDir = mkdtempSync(join(tmpdir(), "pr-target-"));
   const previous = process.env.OPENSESSION_STATE_DIR;
-  process.env.OPENSESSION_STATE_DIR = stateDir;
-  mkdirSync(join(stateDir, ".opensession-workspaces"), { recursive: true });
-  writeFileSync(
-    join(stateDir, ".opensession-workspaces", `${workspace.id}.json`),
-    JSON.stringify({ ...workspace, repo: "tella-fusion" }),
-  );
+  let store: SessionKernelStore;
+  let previousStore: SessionKernelStore | undefined;
+  beforeEach(async () => {
+    process.env.OPENSESSION_STATE_DIR = stateDir;
+    store = new SessionKernelStore(":memory:");
+    previousStore = __setSessionKernelStoreForTest(store);
+    __resetWorkspaceProjectionForTest();
+    await createWorkspace({
+      id: workspace.id,
+      name: workspace.name,
+      createdBy: workspace.createdBy,
+      createdAt: workspace.createdAt,
+      prNumber: workspace.prNumber,
+      branch: workspace.branch,
+      repo: "tella-fusion",
+    });
+  });
   afterEach(() => {
+    __setSessionKernelStoreForTest(previousStore);
+    store.close();
+    __resetWorkspaceProjectionForTest();
     process.env.OPENSESSION_STATE_DIR = previous;
     rmSync(stateDir, { recursive: true, force: true });
   });
@@ -379,6 +432,29 @@ describe("flat PR fields on a review checkout", () => {
     // after a PR that never existed.
     expect(tab.prs?.map((ref) => [ref.branch, ref.source, ref.number])).toEqual(
       [["add-lottie-primitive", "primary", 5286]],
+    );
+  });
+});
+
+describe("prRequesterLogin", () => {
+  test("names a human author as-is", () => {
+    expect(
+      prRequesterLogin({ author: "jfrolich", assignees: ["johnnylinsf"] }),
+    ).toBe("jfrolich");
+  });
+
+  test("names the human assignee behind a bot-authored pull request", () => {
+    expect(
+      prRequesterLogin({
+        author: "acme-butler[bot]",
+        assignees: ["release-bot", "johnnylinsf"],
+      }),
+    ).toBe("johnnylinsf");
+  });
+
+  test("keeps the bot when nobody is assigned", () => {
+    expect(prRequesterLogin({ author: "acme-bot", assignees: [] })).toBe(
+      "acme-bot",
     );
   });
 });

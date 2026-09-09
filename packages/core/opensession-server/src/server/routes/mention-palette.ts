@@ -45,7 +45,7 @@ export async function handleMentionPaletteRoutes(
     items: mentionPaletteItems({
       query,
       toolNames,
-      workspaces: listWorkspaces(),
+      workspaces: await listWorkspaces(),
       sessions: cachedSessions.length
         ? cachedSessions
         : await getSessionListSnapshotAsync(),

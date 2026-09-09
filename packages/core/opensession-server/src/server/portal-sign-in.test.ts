@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { isPortalAuthPath, portalSignInRedirect } from "./portal-sign-in";
+import {
+  isPortalAuthPath,
+  portalNavigationRequest,
+  portalSignInRedirect,
+} from "./portal-sign-in";
 
 const APP = "https://os.example.dev";
 
@@ -26,6 +30,39 @@ describe("isPortalAuthPath", () => {
     expect(isPortalAuthPath("/api/portal-auth/27286")).toBe(true);
     expect(isPortalAuthPath("/api/portal-auth/")).toBe(false);
     expect(isPortalAuthPath("/api/portals")).toBe(false);
+  });
+});
+
+describe("portalNavigationRequest", () => {
+  it("is true for a GET or HEAD top-level navigation", () => {
+    expect(
+      portalNavigationRequest(probe({ "sec-fetch-mode": "navigate" })),
+    ).toBe(true);
+    expect(
+      portalNavigationRequest(
+        probe({ "sec-fetch-mode": "navigate", "x-forwarded-method": "HEAD" }),
+      ),
+    ).toBe(true);
+    expect(
+      portalNavigationRequest(probe({ accept: "text/html,application/xhtml" })),
+    ).toBe(true);
+  });
+
+  it("is false for a fetch, an asset load, or a mutation", () => {
+    expect(portalNavigationRequest(probe({ "sec-fetch-mode": "cors" }))).toBe(
+      false,
+    );
+    expect(portalNavigationRequest(probe({ "sec-fetch-dest": "script" }))).toBe(
+      false,
+    );
+    expect(portalNavigationRequest(probe({ accept: "application/json" }))).toBe(
+      false,
+    );
+    expect(
+      portalNavigationRequest(
+        probe({ "sec-fetch-mode": "navigate", "x-forwarded-method": "POST" }),
+      ),
+    ).toBe(false);
   });
 });
 

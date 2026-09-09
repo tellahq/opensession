@@ -50,6 +50,7 @@ const PRIMARY_MODEL_IDS = [
   "claude-opus-5",
   "claude-sonnet-5",
   "claude-haiku-4-5",
+  "gpt-6-astra",
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",
@@ -116,7 +117,7 @@ export function friendlyModelSlug(slug: string): string {
       const suffix = m[2]
         ?.replace(/-/g, " ")
         .replace(
-          /^(sol|terra|luna)$/i,
+          /^(astra|sol|terra|luna)$/i,
           (name) => name.charAt(0).toUpperCase() + name.slice(1).toLowerCase(),
         );
       return `GPT-${m[1].replace(/-/g, ".")}${suffix ? ` ${suffix}` : ""}`;
@@ -173,6 +174,10 @@ export function shortModelLabel(id: string, models: ModelOption[]): string {
   const preset = workspacePresetLabel(baseModelId(id), models);
   if (preset) return preset;
   const oc = routedModelParts(id);
+  if (oc?.provider === "dial" || oc?.provider === "orchestrator") {
+    const label = models.find((m) => m.id === id)?.label;
+    if (label) return label;
+  }
   if (oc) return friendlyModelSlug(oc.model);
   // Last resort is the id itself, minus its routing prefix — an id with no
   // catalog entry is still a name, and the engine is not part of it.
@@ -237,6 +242,7 @@ const MODEL_TAIL_ORDER = [
   "claude-sonnet-5",
   "claude-sonnet-4-6",
   "claude-haiku-4-5",
+  "gpt-6-astra",
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",
@@ -372,6 +378,11 @@ export function ModelEffortSelect({
   } = actions;
   const effectiveModel = model || defaultModel;
   const isPreferredDefault = preferredDefaultModel === effectiveModel;
+  const [open, setOpen] = React.useState(false);
+  const setMenuOpen = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
   const [recentModelIds, setRecentModelIds] = React.useState(getRecentModels);
   React.useEffect(
     () => onRecentModelsChanged(() => setRecentModelIds(getRecentModels())),
@@ -782,9 +793,16 @@ export function ModelEffortSelect({
   const heroTrigger = triggerVariant === "hero";
 
   return (
-    <Menu.Root onOpenChange={onOpenChange}>
+    <Menu.Root open={open} onOpenChange={setMenuOpen}>
       <Menu.Trigger
         type="button"
+        onTouchEnd={(event) => {
+          // iOS synthesizes mousedown after touchend. That blur collapses an
+          // empty phone composer and unmounts this trigger before Base UI can
+          // open its menu, so finish the touch here and keep the trigger alive.
+          event.preventDefault();
+          setMenuOpen(!open);
+        }}
         className={cn(
           menuRowTrigger
             ? "flex w-full cursor-pointer items-center gap-[7px] whitespace-nowrap rounded-control border border-line-strong bg-transparent px-3 py-[7px] text-control-label font-medium text-faint hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"

@@ -98,11 +98,13 @@ function prRef(pr: PrPayload, ghRepo?: string): PrRef | null {
 }
 
 /** Resolve review config from the seeded automation (its enabled flag + prompt/model). */
-export function resolveReviewConfig(): {
+export async function resolveReviewConfig(): Promise<{
   autoEnabled: boolean;
   config: ReviewConfig;
-} {
-  const automation = listAutomations().find((a) => a.eventKey === PR_EVENT_KEY);
+}> {
+  const automation = (await listAutomations()).find(
+    (a) => a.eventKey === PR_EVENT_KEY,
+  );
   return {
     autoEnabled: !!automation?.enabled,
     config: {
@@ -127,10 +129,15 @@ export async function handleGithubPrEvent(
     const isDefaultRepo =
       !ghRepo || ghRepo.toLowerCase() === defaultRepo().ghRepo.toLowerCase();
 
-    // Our bot account shows up as `sender` both when we comment/review AND when we
-    // push (auto-fix/simplify/mention commits land as a `synchronize`). We must not
-    // react to those self-triggers — but we DO want to review PRs the bot *opens*
-    // (e.g. automated security fixes). So apply the guard per-event below, not blanket.
+    // Our bot account shows up as `sender` when we comment/review, when a code
+    // loop (auto-fix/simplify/adversarial/mention) pushes, AND on EVERY session
+    // `git push`, since every agent run pushes with the App installation token
+    // regardless of who runs the session (docs/github-authority.md). So a bot
+    // `sender` on `synchronize` does not mean "our own work";
+    // it usually means a human-driven session pushed. We must not react to real
+    // self-triggers (our comments, a loop's own push) — but we DO want to review
+    // PRs the bot *opens* (e.g. automated security fixes) and session pushes. So
+    // apply the guard per-event below, not blanket.
     const senderLogin: string = payload?.sender?.login || "";
     const senderIsBot = !!senderLogin && isGithubBotLogin(senderLogin);
     const senderIsTrusted = isTrustedGithubLogin(senderLogin);
@@ -299,7 +306,10 @@ export async function handleGithubPrEvent(
           headRef,
           author: pr.user?.login || "",
         });
-        const fired = fireAutomationsForEvent(PR_MERGED_EVENT_KEY, payload);
+        const fired = await fireAutomationsForEvent(
+          PR_MERGED_EVENT_KEY,
+          payload,
+        );
         if (fired)
           console.log(
             `[github] PR #${pr.number} merged → fired ${fired} docs-sync automation(s)`,
@@ -335,22 +345,35 @@ export async function handleGithubPrEvent(
         );
         return;
       }
-      // A `synchronize` from the bot is our own push (auto-fix/simplify/mention) —
-      // skip it so we don't review our own work mid-loop. But reviewing a PR the bot
-      // *opened* (opened/reopened/ready_for_review) is fine: read-only, no push, no loop.
+      // A `synchronize` from the bot while a code loop (auto-fix/simplify/
+      // adversarial/mention) holds this PR is that loop's own push — skip it so
+      // we don't review our own work mid-loop (auto-fix reviews its final push
+      // through its own gate). Any other bot-sender push is a session's push
+      // arriving under the split push token, or a loop's push whose review is
+      // deduped by reviewedShas anyway — treat it like a human push. Reviewing a
+      // PR the bot *opened* (opened/reopened/ready_for_review) is fine too:
+      // read-only, no push, no loop.
       // Carve-out: while a handoff fix round is active, a bot-credentialed push IS
-      // the owning session's fix (sessions without per-user GitHub auth push as the
-      // bot) — it must be re-reviewed or the handoff loop never closes.
+      // the owning session's fix — it must be re-reviewed or the handoff loop
+      // never closes.
       if (
-        senderIsBot &&
-        action === "synchronize" &&
-        !isHandoffActive(pr.number, ghRepo)
-      )
+        skipBotSynchronize({
+          senderIsBot,
+          action,
+          codeLockHeld: isLockHeld("code", pr.number, ghRepo),
+          autoFixActive: !!readPrState(pr.number, ghRepo)?.autoFix?.active,
+          handoffActive: isHandoffActive(pr.number, ghRepo),
+        })
+      ) {
+        console.log(
+          `[github] PR #${pr.number} synchronize ${ref.headSha.slice(0, 7)} from bot code loop skipped`,
+        );
         return;
+      }
       const labeled = (pr.labels || []).some((l) =>
         labelMatches(l.name, LABEL_REVIEW),
       );
-      const { autoEnabled } = resolveReviewConfig();
+      const { autoEnabled } = await resolveReviewConfig();
       if (labeled || autoEnabled) {
         // Pushes debounce (hot PRs got one review per push — #4913: 20 pushes
         // ≈ $131/day of review spend on 2026-07-17); first reviews of a PR
@@ -368,12 +391,32 @@ export async function handleGithubPrEvent(
   }
 }
 
+/**
+ * Is a bot-sender `synchronize` the push of an in-flight bot code loop? Only
+ * those are skipped; every other bot-sender push (sessions pushing under the
+ * split push token) is admitted like a human push. A handoff round always wins.
+ */
+export function skipBotSynchronize(input: {
+  senderIsBot: boolean;
+  action: string;
+  codeLockHeld: boolean;
+  autoFixActive: boolean;
+  handoffActive: boolean;
+}): boolean {
+  return (
+    input.senderIsBot &&
+    input.action === "synchronize" &&
+    !input.handoffActive &&
+    (input.codeLockHeld || input.autoFixActive)
+  );
+}
+
 export async function fireReview(
   ref: PrRef,
   _byLabel: boolean,
   preflightDetails?: PrAutomationDetails,
 ): Promise<ReviewResult | null> {
-  const { config } = resolveReviewConfig();
+  const { config } = await resolveReviewConfig();
   const result = await runReview(
     ref,
     config,

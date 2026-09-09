@@ -135,6 +135,7 @@ import { PeopleBand } from "./sidebar/PeopleBand";
 import { PersonalBand } from "./sidebar/PersonalBand";
 import { ProjectBands } from "./sidebar/ProjectBands";
 import { SetupWidget } from "./sidebar/SetupWidget";
+import { SidebarAccountFooter } from "./sidebar/SidebarAccountFooter";
 import { SidebarChrome } from "./sidebar/SidebarChrome";
 import { SidebarCustomizeDialog } from "./sidebar/SidebarCustomizeDialog";
 import { SidebarItem } from "./sidebar/SidebarItem";
@@ -169,6 +170,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     reportsActive,
     analyticsActive,
     showDraftRow,
+    footerAccessory,
     draftRowActive,
     onRenameWorkspace,
     onDeleteWorkspace,
@@ -1774,6 +1776,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
           hasCreatedSession={sessions.length > 0}
           onOpenSettings={navigation.openSettings}
           onNewSession={navigation.openNewWorkspace}
+        />
+      )}
+      {!isPhone && (
+        <SidebarAccountFooter
+          onOpenSettings={navigation.openSettings}
+          accessory={footerAccessory}
         />
       )}
       <SidebarCustomizeDialog

@@ -246,4 +246,29 @@ describe("scoped Git credentials", () => {
       expect(JSON.stringify(env)).not.toContain("/home/user");
     }
   });
+
+  test("local Docker git transport uses the run's own token", async () => {
+    const envs: Array<Record<string, string> | undefined> = [];
+    const exec = Object.assign(
+      async (_cmd: string[], opts?: { env?: Record<string, string> }) => {
+        envs.push(opts?.env);
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+      { sandboxed: true, remote: false },
+    ) as WorkspaceExec;
+    const hostEnv = {
+      GH_TOKEN: "session-token",
+      GITHUB_TOKEN: "session-token",
+    };
+
+    expect(await gitPush("/repo", "feature", exec, hostEnv)).toEqual({
+      ok: true,
+    });
+    // `gh auth git-credential` answers from GH_TOKEN.
+    expect(envs[0]).toMatchObject({
+      GH_TOKEN: "session-token",
+      GITHUB_TOKEN: "session-token",
+      GIT_CONFIG_VALUE_1: "!gh auth git-credential",
+    });
+  });
 });

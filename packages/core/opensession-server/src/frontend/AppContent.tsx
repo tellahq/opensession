@@ -1335,6 +1335,9 @@ export function AppContent({
                     showToast,
                     panelIcon,
                     sidebarToggleKeys,
+                    footerAccessory: (
+                      <UpdatePill addHandler={addHandler} variant="footer" />
+                    ),
                   }}
                   shell={{
                     sidebarCollapsed,
@@ -1802,11 +1805,11 @@ export function AppContent({
 
             {/* Durable prompts use a separate shelf from transient feedback. The
 				    desktop shelf stays clear of the composer; phones put the compact
-				    equivalent in the app header instead. */}
+				    equivalent in the app header instead. The update nudge is not here:
+				    desktop shows it beside Settings in the sidebar's account footer. */}
             {!isPhone && (
               <div className={PERSISTENT_NOTICE_SHELF}>
                 {launchComplete && <DesktopLinkToast />}
-                <UpdatePill addHandler={addHandler} />
               </div>
             )}
 

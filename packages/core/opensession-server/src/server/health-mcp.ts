@@ -28,11 +28,11 @@ import { systemStats } from "./system-stats";
 /** Each registered agent's own health report, keyed by agent name — the same
  *  map /api/health returns. An agent that throws is reported as such rather
  *  than taking the whole read down with it. */
-function agentHealth(): Record<string, unknown> {
+async function agentHealth(): Promise<Record<string, unknown>> {
   const health: Record<string, unknown> = {};
   for (const a of getAgents()) {
     try {
-      health[a.name] = a.health();
+      health[a.name] = await a.health();
     } catch (e) {
       health[a.name] = {
         status: "error",
@@ -58,7 +58,7 @@ export function createHealthMcpServer() {
                 ok: true,
                 uptimeSeconds: Math.round(process.uptime()),
                 activeRuns: activeAgentRunCount(),
-                agents: agentHealth(),
+                agents: await agentHealth(),
                 system: systemStats(),
               },
               null,

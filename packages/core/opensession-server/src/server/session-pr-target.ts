@@ -1,7 +1,7 @@
 import type { SessionPrRef, UnifiedSession } from "./types";
-import { defaultRepo } from "./config";
+import { defaultRepo, githubBotLogins } from "./config";
 import type { PrInfo } from "./pr-cache";
-import { getWorkspace, type Workspace } from "./workspaces";
+import { peekWorkspace, type Workspace } from "./workspaces";
 
 /** The PR branch `session` can take from `workspace`, or null. Never across
  *  repos: a session in another repo would resolve to a branch absent there. */
@@ -12,7 +12,18 @@ function inheritedBranch(
   if (!workspace?.branch) return null;
   if (session.repo && workspace.repo && session.repo !== workspace.repo)
     return null;
-  return workspace.branch;
+  return workspacePrHead(workspace) ?? workspace.branch;
+}
+
+/**
+ * The PR head a PR-backed workspace names, or null when it has no PR. A PR
+ * workspace materialized by its review checkout can carry the derived
+ * `<head>-os-review` branch instead of the head (the PR cache never has a PR
+ * on that branch), so resolve on the head it was derived from.
+ */
+export function workspacePrHead(workspace: Workspace): string | null {
+  if (workspace.prNumber == null || !workspace.branch) return null;
+  return workspace.branch.replace(/-os-review$/, "");
 }
 
 /**
@@ -40,24 +51,23 @@ export function sessionPrBranch(
 ): string | null {
   const parent =
     workspace === undefined && session.workspaceId
-      ? getWorkspace(session.workspaceId)
+      ? peekWorkspace(session.workspaceId)
       : workspace;
+  const prHead = parent ? workspacePrHead(parent) : null;
   const reviewCheckout =
     session.automation === "github-pr-review" ||
-    (!!parent?.branch && session.branch === `${parent.branch}-os-review`);
-  if (reviewCheckout)
-    return parent?.prNumber != null && parent.branch
-      ? parent.branch
-      : session.branch;
+    (!!prHead && session.branch === `${prHead}-os-review`);
+  if (reviewCheckout) return prHead ?? session.branch;
   return session.branch || inheritedBranch(session, parent);
 }
 
 /**
  * A memoized workspace reader for callers that resolve many sessions at once
- * (the `getAllSessions` PR enrichment). `getWorkspace` reads a file per call
- * and one workspace holds many sessions, so the memo turns thousands of reads into
- * one per workspace. Sessions that can't inherit a branch skip the read entirely —
- * {@link sessionPrBranch} never consults the workspace for those.
+ * (the `getAllSessions` PR enrichment). Reads the memory projection, which the
+ * list path warms before assembling; one workspace holds many sessions, so the
+ * memo keeps the lookups to one per workspace. Sessions that can't inherit a
+ * branch skip the read entirely — {@link sessionPrBranch} never consults the
+ * workspace for those.
  */
 export function prWorkspaceReader(): (s: UnifiedSession) => Workspace | null {
   const cache = new Map<string, Workspace | null>();
@@ -73,7 +83,7 @@ export function prWorkspaceReader(): (s: UnifiedSession) => Workspace | null {
     if (workspace === undefined)
       cache.set(
         session.workspaceId,
-        (workspace = getWorkspace(session.workspaceId)),
+        (workspace = peekWorkspace(session.workspaceId)),
       );
     return workspace;
   };
@@ -142,6 +152,32 @@ export function mergeFooterPrRefs(
   return refs;
 }
 
+function isBotLogin(login: string, bots: readonly string[]): boolean {
+  const lower = login.toLowerCase();
+  return (
+    bots.includes(lower) || lower.endsWith("[bot]") || lower.endsWith("-bot")
+  );
+}
+
+/**
+ * The teammate a PR is for. A bot-authored PR (the instance's own GitHub
+ * identity opening it from a session) carries the person who asked for it as
+ * its assignee, and that is who is waiting on a review of it, not the bot.
+ * Computed here once so every client shows the same face.
+ */
+export function prRequesterLogin(
+  pr: Pick<PrInfo, "author" | "assignees">,
+): string | undefined {
+  const bots = githubBotLogins().map((login) => login.toLowerCase());
+  const author = pr.author?.trim();
+  if (author && !isBotLogin(author, bots)) return author;
+  return (
+    (pr.assignees || []).find((login) => !isBotLogin(login, bots)) ||
+    author ||
+    undefined
+  );
+}
+
 /** Refresh the PR fields omitted by targeted native-session reads. */
 export function enrichSessionPrRefs(
   session: UnifiedSession,
@@ -173,6 +209,7 @@ export function enrichSessionPrRefs(
           prReviewRequested: currentPr.reviewRequested,
           prReviewedBy: currentPr.reviewedBy,
           prAuthor: currentPr.author,
+          prRequester: prRequesterLogin(currentPr),
           prUpdatedAt: currentPr.updatedAt,
           prChecks: currentPr.checks,
         }

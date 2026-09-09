@@ -37,8 +37,13 @@ export interface AutoFixState {
 export interface LastReviewState {
   /** approve | comment | request_changes (absent when the model omitted it). */
   verdict?: string;
-  /** 1-5: how safe this is to merge, per the review contract. */
+  /** 1-5 quality of the change as written, per the review contract. */
   confidence?: number;
+  /** Merge risk from the separate diff-only scorer (merge-risk.ts). */
+  risk?: "low" | "medium" | "high";
+  /** Time to recover every user if the change is wrong. */
+  recovery?: "minutes" | "hours" | "days" | "irreversible";
+  riskFactors?: string[];
   findings: number;
   /** P0/P1 findings (request_changes counts as a floor of 1). */
   blocking: number;

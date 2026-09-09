@@ -9,9 +9,11 @@ import { Tooltip } from "../ui/tooltip";
 
 interface Props {
   addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
-  // "card" lives in the persistent desktop shelf. "pill" is the compact
-  // topbar variant that sits next to the brand logo on phones.
-  variant?: "card" | "pill";
+  // "card" is the standalone notice card. "pill" is the compact topbar
+  // variant that sits next to the brand logo on phones. "footer" is the
+  // desktop one: a small accent button beside Settings at the bottom of the
+  // sidebar, so the nudge lives in the chrome rather than floating over it.
+  variant?: "card" | "pill" | "footer";
 }
 
 /** Grace before a forced update reloads a VISIBLE tab (hidden tabs reload
@@ -77,8 +79,8 @@ function os1Updates(): ShellUpdates | undefined {
  *
  * Acting is normally optional — new page loads already get the new build; this
  * just nudges already-open tabs — so it's non-blocking (it never covers the
- * composer). Desktop shows a toast over the sidebar bottom; phones show a
- * compact pill in the top bar, right after the brand logo.
+ * composer). Desktop shows a button in the sidebar's account footer; phones
+ * show a compact pill in the top bar, right after the brand logo.
  *
  * `force: true` broadcasts (POST /api/admin/frontend-reload — sent before a
  * server-side protocol change that old bundles can't follow) auto-reload
@@ -174,6 +176,35 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
         ? "Restart"
         : "Refresh";
   const detail = restart ? shellVersion : by;
+
+  if (variant === "footer") {
+    const label = refreshing
+      ? restart
+        ? "Restarting…"
+        : "Refreshing…"
+      : forced
+        ? `Update ${secondsLeft}s`
+        : "Update";
+    const hint = forced
+      ? `Updating in ${secondsLeft}s. Click to refresh now.`
+      : restart
+        ? `${PRODUCT_NAME} ${shellVersion ?? "update"} is ready. Restart to install it.`
+        : `New update available${by ? ` (${by})` : ""}. Click to refresh.`;
+    return (
+      <Tooltip label={hint} side="top" multiline>
+        <button
+          className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-control border-none bg-accent px-2.5 text-supporting font-semibold leading-none text-on-accent transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-accent-hover disabled:cursor-wait disabled:opacity-75 animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none"
+          onClick={refresh}
+          disabled={refreshing}
+          role="status"
+          aria-live="polite"
+          aria-label={hint}
+        >
+          <span className="[text-box:trim-both_cap_alphabetic]">{label}</span>
+        </button>
+      </Tooltip>
+    );
+  }
 
   if (variant === "pill") {
     return (

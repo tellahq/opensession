@@ -2,8 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { createWorkspace, getWorkspace } from "../workspaces";
+import {
+  __resetWorkspaceProjectionForTest,
+  createWorkspace,
+  getWorkspace,
+} from "../workspaces";
 import { createWorktree, listWorktrees } from "../worktree";
+import { __setSessionKernelStoreForTest } from "./kernel";
+import { SessionKernelStore } from "./store";
 import {
   CreationEffectIndeterminateError,
   executeCreationAttachmentStage,
@@ -22,10 +28,18 @@ import {
 
 const roots: string[] = [];
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
+let store: SessionKernelStore | undefined;
+let previousStore: SessionKernelStore | undefined;
 
 afterEach(() => {
   if (previousStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
   else process.env.OPENSESSION_STATE_DIR = previousStateDir;
+  if (store) {
+    __setSessionKernelStoreForTest(previousStore);
+    store.close();
+    store = undefined;
+    __resetWorkspaceProjectionForTest();
+  }
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
 });
@@ -168,10 +182,15 @@ function openingItem(): CreationOpeningEffectItem {
   };
 }
 
+/** A scratch state root plus a fresh in-memory kernel store: workspaces
+ *  live in the kernel catalog, and only their legacy export follows the root. */
 function useTempState(): void {
   const root = mkdtempSync(join(tmpdir(), "creation-workspace-effect-"));
   roots.push(root);
   process.env.OPENSESSION_STATE_DIR = root;
+  store = new SessionKernelStore(":memory:");
+  previousStore = __setSessionKernelStoreForTest(store);
+  __resetWorkspaceProjectionForTest();
 }
 
 describe("creation workspace effect executor", () => {
@@ -196,7 +215,7 @@ describe("creation workspace effect executor", () => {
         },
       }),
     ).rejects.toThrow("injected crash after destination acceptance");
-    expect(getWorkspace("ws-create-one")).toMatchObject({
+    expect(await getWorkspace("ws-create-one")).toMatchObject({
       key: "session-create:create-one",
       branch: "feature/create-one",
     });
@@ -243,7 +262,7 @@ describe("creation workspace effect executor", () => {
 
   test("fails closed when the fixed destination belongs to another identity", async () => {
     useTempState();
-    createWorkspace({
+    await createWorkspace({
       id: "ws-create-one",
       key: "another-create",
       name: "Existing",

@@ -37,6 +37,75 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(SessionViewModel.handoffReconnectDelay, .milliseconds(250))
     }
 
+    /// Pinning an account rides the `/account` slash command, the same
+    /// contract the web composer uses; the server validates the pool and
+    /// broadcasts the result back.
+    func testPinningAnAccountSendsTheAccountCommand() {
+        let socket = MockSocket()
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"),
+            socketFactory: { socket }
+        )
+        viewModel.start(owner: UUID())
+        viewModel.fastMode = true
+
+        var apiKey = ProviderAccount()
+        apiKey.id = "acc-1"
+        apiKey.kind = "api_key"
+        viewModel.pinAccount(apiKey)
+        XCTAssertEqual(viewModel.accountId, "acc-1")
+        XCTAssertFalse(viewModel.fastMode, "an API key cannot carry fast mode")
+        XCTAssertEqual(socket.prompts.map(\.content), ["/account acc-1"])
+
+        viewModel.pinAccount(apiKey)
+        XCTAssertEqual(socket.prompts.count, 1, "re-pinning the same account is a no-op")
+
+        viewModel.pinAccount(nil)
+        XCTAssertEqual(viewModel.accountId, "")
+        XCTAssertEqual(socket.prompts.map(\.content), ["/account acc-1", "/account auto"])
+    }
+
+    /// The server's broadcast is the source of truth: another viewer's pin,
+    /// or the clear that comes with a provider switch, lands here.
+    func testSubscriptionChangedFollowsTheServer() {
+        var session = Session(id: "bks-1")
+        session.accountId = "acc-1"
+        let viewModel = SessionViewModel(session: session)
+        XCTAssertEqual(viewModel.accountId, "acc-1")
+
+        viewModel.handle(.subscriptionChanged(sessionId: "bks-1", accountId: "acc-2"))
+        XCTAssertEqual(viewModel.accountId, "acc-2")
+        XCTAssertEqual(viewModel.session.accountId, "acc-2")
+
+        viewModel.handle(.subscriptionChanged(sessionId: "bks-other", accountId: nil))
+        XCTAssertEqual(viewModel.accountId, "acc-2", "another session's frame is ignored")
+
+        viewModel.handle(.subscriptionChanged(sessionId: "bks-1", accountId: nil))
+        XCTAssertEqual(viewModel.accountId, "")
+        XCTAssertNil(viewModel.session.accountId)
+    }
+
+    /// A teammate's `/model` across providers arrives as `model_changed` and
+    /// then `subscription_changed`. The menu decides which accounts can be
+    /// pinned from `model`, so it has to move with the first frame, not wait
+    /// for the next sessions poll.
+    func testModelChangedMovesTheLiveModelWithTheSnapshot() {
+        var session = Session(id: "bks-1")
+        session.model = "claude-fable-5-1"
+        session.accountId = "claude-acc"
+        let viewModel = SessionViewModel(session: session)
+        XCTAssertEqual(viewModel.model, "claude-fable-5-1")
+
+        viewModel.handle(.modelChanged(sessionId: "bks-other", model: "gpt-5", by: nil))
+        XCTAssertEqual(viewModel.model, "claude-fable-5-1", "another session's frame is ignored")
+
+        viewModel.handle(.modelChanged(sessionId: "bks-1", model: "gpt-5", by: "teammate"))
+        viewModel.handle(.subscriptionChanged(sessionId: "bks-1", accountId: nil))
+        XCTAssertEqual(viewModel.model, "gpt-5")
+        XCTAssertEqual(viewModel.session.model, "gpt-5")
+        XCTAssertEqual(viewModel.accountId, "")
+    }
+
     private func entry(
         _ id: String, _ type: String, text: String? = nil, toolUseId: String? = nil
     ) -> TranscriptEntry {

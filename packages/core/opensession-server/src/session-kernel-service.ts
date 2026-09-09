@@ -1,7 +1,19 @@
 import { startSessionKernelService } from "./server/session-kernel/actor-service";
 
 export async function runSessionKernelService(): Promise<void> {
-  const service = await startSessionKernelService();
+  const service = await startSessionKernelService({
+    // A fail-stopped service has already withdrawn its listener. Staying
+    // alive leaves systemd a "running" unit nothing can reach, and every
+    // gateway boot dies on "runtime peer generations are unavailable" until
+    // an operator restarts the unit by hand. Exit instead: Restart=always
+    // brings a fresh service up in seconds.
+    onFailed(error) {
+      console.error(
+        `[session-kernel] fail-stopped; exiting so systemd restarts it: ${error.message}`,
+      );
+      process.exit(1);
+    },
+  });
   console.log(`[session-kernel] ready at ${service.url}`);
 
   let stopping = false;

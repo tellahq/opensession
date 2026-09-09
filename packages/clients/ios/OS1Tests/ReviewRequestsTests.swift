@@ -10,11 +10,13 @@ struct ReviewRequestsTests {
     private func session(
         id: String,
         requested: [String]? = nil,
-        author: String? = nil
+        author: String? = nil,
+        requester: String? = nil
     ) -> Session {
         var session = Session(id: id)
         session.prReviewRequested = requested
         session.prAuthor = author
+        session.prRequester = requester
         return session
     }
 
@@ -83,6 +85,23 @@ struct ReviewRequestsTests {
                 viewerName: "Kent de Bruin",
                 viewerLogin: "kentdebruin"
             ) == "happylinks"
+        )
+    }
+
+    @Test func namesTheRequesterBehindABotAuthoredPullRequest() {
+        #expect(
+            ReviewRequests.askerLogin(
+                [
+                    session(
+                        id: "a",
+                        requested: ["kent"],
+                        author: "tella-butler",
+                        requester: "johnnylinsf"
+                    )
+                ],
+                viewerName: "Kent de Bruin",
+                viewerLogin: "kentdebruin"
+            ) == "johnnylinsf"
         )
     }
 

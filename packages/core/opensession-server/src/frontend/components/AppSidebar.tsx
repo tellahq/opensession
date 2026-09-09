@@ -36,6 +36,8 @@ interface AppSidebarProps {
     showToast: (message: string) => void;
     panelIcon: ReactNode;
     sidebarToggleKeys: string[] | null;
+    /** The Update nudge, shown beside Settings in the account footer. */
+    footerAccessory?: ReactNode;
   };
   shell: Pick<
     ReturnType<typeof useAppShell>["sidebar"],
@@ -93,7 +95,13 @@ export function AppSidebar({
     productEmpty,
     githubConnectionState,
   },
-  appearance: { mobileDetail, showToast, panelIcon, sidebarToggleKeys },
+  appearance: {
+    mobileDetail,
+    showToast,
+    panelIcon,
+    sidebarToggleKeys,
+    footerAccessory,
+  },
   shell: {
     sidebarCollapsed,
     toggleSidebarCollapsed,
@@ -228,6 +236,7 @@ export function AppSidebar({
           reportsActive={route.view === "reports"}
           analyticsActive={route.view === "analytics"}
           showDraftRow={productEmpty && githubConnectionState !== "loading"}
+          footerAccessory={footerAccessory}
           draftRowActive={productEmpty && route.view === "prs"}
           onRenameWorkspace={renameWorkspaceFromSidebar}
           onDeleteWorkspace={deleteWorkspaceFromSidebar}

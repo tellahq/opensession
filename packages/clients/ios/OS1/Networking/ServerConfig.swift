@@ -87,7 +87,11 @@ final class ServerConfig {
                 id: id,
                 label: URL(string: server)?.host ?? "Development",
                 url: server,
-                userName: defaults.string(forKey: Self.legacyUserNameDefaultsKey)
+                // `OS1_USER` names the viewer for a dev launch, so a screenshot
+                // can read as a particular teammate (their personal accounts,
+                // their sidebar lens) without touching the device's defaults.
+                userName: env["OS1_USER"]
+                    ?? defaults.string(forKey: Self.legacyUserNameDefaultsKey)
                     ?? Self.placeholderUserName,
                 githubLogin: ""
             )]

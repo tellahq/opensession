@@ -15,7 +15,7 @@
  */
 
 import { getSettlements, setSettlements } from "./settlements";
-import { userStore } from "./shared/user-store";
+import { catalogUserStore } from "./shared/catalog-user-store";
 
 export const SNOOZE_SOMEDAY = "someday";
 export type Snoozes = Record<string, string>;
@@ -41,11 +41,15 @@ function clean(input: unknown): Snoozes {
   return out;
 }
 
-const store = userStore<Snoozes>({ name: "snoozes", field: "snoozes", clean });
+const store = catalogUserStore<Snoozes>({
+  name: "snoozes",
+  field: "snoozes",
+  clean,
+});
 
-export function getSnoozes(user: string): Snoozes {
-  const current = store.get(user);
-  const settlements = getSettlements(user);
+export async function getSnoozes(user: string): Promise<Snoozes> {
+  const current = await store.get(user);
+  const settlements = await getSettlements(user);
   if (Object.keys(settlements).length === 0) return current;
 
   // Settled was retired in favour of an indefinite snooze. Migrate each
@@ -55,11 +59,26 @@ export function getSnoozes(user: string): Snoozes {
   for (const [key, record] of Object.entries(settlements))
     if (record.state === "settled" && !(key in migrated))
       migrated[key] = SNOOZE_SOMEDAY;
-  setSettlements(user, {});
-  return store.set(user, migrated);
+  const stored = await store.update(user, (latest) => ({
+    ...migrated,
+    ...latest,
+  }));
+  await setSettlements(user, {});
+  return stored;
 }
 
 /** Replace a user's snoozes (validated). Returns the stored map. */
-export function setSnoozes(user: string, snoozes: unknown): Snoozes {
+export async function setSnoozes(
+  user: string,
+  snoozes: unknown,
+): Promise<Snoozes> {
   return store.set(user, snoozes);
+}
+
+/** Apply a delta under the catalog CAS; the result is validated like `setSnoozes`. */
+export function updateSnoozes(
+  user: string,
+  mutate: (value: Snoozes) => unknown,
+): Promise<Snoozes> {
+  return store.update(user, mutate);
 }

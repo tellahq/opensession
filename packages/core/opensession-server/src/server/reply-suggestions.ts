@@ -396,11 +396,14 @@ async function generate(sessionId: string, user?: string): Promise<void> {
   // Idle with an empty queue is the only state where a reply is the next
   // thing that happens. A queued prompt already answers the turn.
   if (ACTIVE_STATES.has(getRunState(sessionId))) return;
-  if ((await sessionDelivery({ op: "snapshot", sessionId })).queued.length)
-    return;
 
   inFlight.add(sessionId);
   try {
+    // Inside the guard: callers fire this without awaiting, so a kernel
+    // timeout on the snapshot must log here instead of surfacing as an
+    // unhandled rejection and taking the gateway down (2026-09-08).
+    if ((await sessionDelivery({ op: "snapshot", sessionId })).queued.length)
+      return;
     const excerpt = await transcriptExcerpt(sessionId, {
       limit: 14,
       windows: 1,

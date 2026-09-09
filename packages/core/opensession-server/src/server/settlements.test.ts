@@ -1,13 +1,37 @@
-import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  SessionKernelStore,
+  __setSessionKernelStoreForTest,
+} from "./session-kernel";
 import { getSettlements, setSettlements } from "./settlements";
 
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
-const root = `/tmp/opensession-settlements-test-${process.pid}`;
+const root = mkdtempSync(join(tmpdir(), "opensession-settlements-test-"));
 process.env.OPENSESSION_STATE_DIR = root;
 
+let store: SessionKernelStore;
+let previousStore: SessionKernelStore | undefined;
 beforeEach(() => {
-  rmSync(`${root}/.opensession-settlements`, { recursive: true, force: true });
+  rmSync(join(root, ".opensession-settlements"), {
+    recursive: true,
+    force: true,
+  });
+  store = new SessionKernelStore(":memory:");
+  previousStore = __setSessionKernelStoreForTest(store);
+});
+afterEach(() => {
+  __setSessionKernelStoreForTest(previousStore);
+  store.close();
 });
 
 afterAll(() => {
@@ -17,10 +41,10 @@ afterAll(() => {
 });
 
 describe("per-user settlements", () => {
-  test("stores explicit settle and unsettle actions independently per person", () => {
+  test("stores explicit settle and unsettle actions independently per person", async () => {
     const at = "2026-08-20T10:00:00.000Z";
     expect(
-      setSettlements("Michiel", {
+      await setSettlements("Michiel", {
         "workspace:one": { state: "settled", at },
         "workspace:two": { state: "active", at },
       }),
@@ -28,12 +52,16 @@ describe("per-user settlements", () => {
       "workspace:one": { state: "settled", at },
       "workspace:two": { state: "active", at },
     });
-    expect(getSettlements("Kent")).toEqual({});
+    expect(await getSettlements("Michiel")).toEqual({
+      "workspace:one": { state: "settled", at },
+      "workspace:two": { state: "active", at },
+    });
+    expect(await getSettlements("Kent")).toEqual({});
   });
 
-  test("drops malformed row keys and records", () => {
+  test("drops malformed row keys and records", async () => {
     expect(
-      setSettlements("Michiel", {
+      await setSettlements("Michiel", {
         "workspace:valid": {
           state: "settled",
           at: "2026-08-20T10:00:00.000Z",
@@ -51,5 +79,19 @@ describe("per-user settlements", () => {
         at: "2026-08-20T10:00:00.000Z",
       },
     });
+  });
+
+  test("keeps the terminal signature, capped", async () => {
+    const at = "2026-08-20T10:00:00.000Z";
+    const stored = await setSettlements("Michiel", {
+      "workspace:one": {
+        state: "settled",
+        at,
+        terminalSignature: "x".repeat(3_000),
+      },
+      "workspace:two": { state: "active", at, terminalSignature: 42 },
+    });
+    expect(stored["workspace:one"]!.terminalSignature).toHaveLength(2_000);
+    expect(stored["workspace:two"]).toEqual({ state: "active", at });
   });
 });

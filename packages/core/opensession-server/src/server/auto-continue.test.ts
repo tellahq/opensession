@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { announcesNextAction } from "./auto-continue";
+import {
+  announcesNextAction,
+  AUTO_CONTINUE_USER,
+  githubCredentialUser,
+} from "./auto-continue";
 
 describe("announcesNextAction", () => {
   test("matches the observed bks-019f533e announce-then-stop tail", () => {
@@ -132,5 +136,23 @@ describe("announcesNextAction", () => {
   test("ignores empty and trivial tails", () => {
     expect(announcesNextAction("")).toBe(false);
     expect(announcesNextAction("Done.")).toBe(false);
+  });
+});
+
+describe("githubCredentialUser", () => {
+  test("a human sender resolves as themselves", () => {
+    expect(githubCredentialUser("Michiel", "Johnny")).toBe("Michiel");
+  });
+
+  test("the synthetic auto-continue sender must not shadow the session owner", () => {
+    // commitAuthorFor already falls back to the session owner for senderless
+    // and synthetic turns; the credential must follow the same identity.
+    expect(githubCredentialUser(AUTO_CONTINUE_USER, "Johnny")).toBe("Johnny");
+  });
+
+  test("a senderless turn falls back to the owner; no owner resolves nothing", () => {
+    expect(githubCredentialUser(undefined, "Johnny")).toBe("Johnny");
+    expect(githubCredentialUser(AUTO_CONTINUE_USER, undefined)).toBeUndefined();
+    expect(githubCredentialUser(undefined, undefined)).toBeUndefined();
   });
 });

@@ -103,7 +103,7 @@ export async function triggerPrAction(
       // unsatisfied recovered review reached nobody (PR #5055, 2026-07-19).
       done = runReview(
         ref,
-        resolveReviewConfig().config,
+        (await resolveReviewConfig()).config,
         resolveSessionCreated,
         true,
         steer,

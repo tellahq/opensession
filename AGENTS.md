@@ -120,6 +120,14 @@ sequence and rollback behavior.
 
 ## Server invariants
 
+Do not perform synchronous filesystem, database, or subprocess I/O on the
+HTTP/WebSocket gateway thread, including in background callbacks. Use async
+filesystem APIs for migrations and exports, and async RPC to worker-owned
+catalogs for application state. An `async` function that calls `readFileSync`,
+`Bun.spawnSync`, or synchronous SQLite still violates this rule. Never add a
+synchronous fallback when a worker is unavailable. Cross-session views belong
+in the central catalog, not in directory scans or per-session database reads.
+
 `packages/core/opensession-server/opensession.ts` is composition and boot code.
 Put HTTP handlers in `src/server/routes/`, WebSocket handling in
 `src/server/ws-handlers.ts`, and run orchestration in `src/server/run-session.ts`.

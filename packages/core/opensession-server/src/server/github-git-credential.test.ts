@@ -25,6 +25,21 @@ describe("GitHub Git credential environment", () => {
     expect(env.GIT_CONFIG_VALUE_2).toBe("git@github.com:");
     expect(env.GIT_TERMINAL_PROMPT).toBe("0");
   });
+
+  test("never carries a second, git-only credential", () => {
+    // One token for API and transport. An operator variable that used to
+    // name a separate push credential must stay inert.
+    const saved = process.env.OPENSESSION_GITHUB_PUSH_TOKEN;
+    process.env.OPENSESSION_GITHUB_PUSH_TOKEN = "github_pat_push_only";
+    try {
+      const env = githubGitCredentialEnv("projected-token", "!helper");
+      expect(Object.values(env)).not.toContain("github_pat_push_only");
+      expect(Object.keys(env).some((k) => /PUSH_TOKEN/.test(k))).toBe(false);
+    } finally {
+      if (saved === undefined) delete process.env.OPENSESSION_GITHUB_PUSH_TOKEN;
+      else process.env.OPENSESSION_GITHUB_PUSH_TOKEN = saved;
+    }
+  });
 });
 
 describe("GitHub Git credential helper command", () => {

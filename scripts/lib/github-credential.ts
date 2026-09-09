@@ -2,9 +2,11 @@
  * Git credential helper for github.com remotes.
  *
  * Registered per checkout by setup-repos.ts and reached through the stable
- * `opensession github-credential` command. It answers only from GH_TOKEN in
- * this process. Trusted interactive runs and explicit server-side Git calls
- * inject that value; unattended runs receive neither the token nor a way to
+ * `opensession github-credential` command. It answers only from this
+ * process's environment: GH_TOKEN, the one credential a run or a server-owned
+ * Git call was explicitly handed. Agent runs carry a repository-scoped App
+ * installation token there; server-side calls on a person's behalf carry that
+ * person's token. A process with no GH_TOKEN gets no answer and no way to
  * resolve one from the server-side account store.
  */
 

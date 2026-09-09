@@ -391,6 +391,18 @@ async function* runOnModel(
     yield* engineForTest(opts, mapped);
     return;
   }
+  // Dev-only load harness seam (OPENSESSION_DEV=1 + OPENSESSION_SYNTHETIC_ENGINE=1):
+  // a paced synthetic engine instead of Pi, so an isolated instance can be
+  // driven at scale with zero model spend. Never active in production, where
+  // OPENSESSION_DEV is unset. Loaded lazily so ordinary boots never import it.
+  if (
+    process.env.OPENSESSION_SYNTHETIC_ENGINE === "1" &&
+    process.env.OPENSESSION_DEV === "1"
+  ) {
+    const { syntheticEngine } = await import("./testing/synthetic-engine");
+    yield* syntheticEngine(opts, mapped);
+    return;
+  }
   const route = routeModel(requested, { interactive: isInteractiveRun(opts) });
   yield* runPi(opts, route.model);
 }
@@ -1452,7 +1464,10 @@ export async function resumeInterruptedRuns(
   inProcessMcpFor?: (
     osSessionId: string,
     user?: string,
-  ) => Record<string, unknown> | undefined,
+  ) =>
+    | Record<string, unknown>
+    | Promise<Record<string, unknown> | undefined>
+    | undefined,
   reposNoteFor?: (osSessionId: string) => string | undefined,
   onEvent?: (osSessionId: string, event: StreamEvent) => void | Promise<void>,
   snapshotLocalHostRuns: ActiveRunRecord[] = [],
@@ -2031,7 +2046,7 @@ export async function resumeInterruptedRuns(
                 fastMode: run.fastMode,
                 mcpServers: run.mcpServers ?? "all",
                 inProcessMcp: run.osSessionId
-                  ? inProcessMcpFor?.(run.osSessionId, run.user)
+                  ? await inProcessMcpFor?.(run.osSessionId, run.user)
                   : undefined,
                 reposNote: run.osSessionId
                   ? reposNoteFor?.(run.osSessionId)
@@ -2139,7 +2154,7 @@ export async function resumeInterruptedRuns(
               fastMode: run.fastMode,
               mcpServers: run.mcpServers ?? "all",
               inProcessMcp: run.osSessionId
-                ? inProcessMcpFor?.(run.osSessionId, run.user)
+                ? await inProcessMcpFor?.(run.osSessionId, run.user)
                 : undefined,
               reposNote: run.osSessionId
                 ? reposNoteFor?.(run.osSessionId)
@@ -2237,7 +2252,7 @@ export async function resumeInterruptedRuns(
             fastMode: run.fastMode,
             mcpServers: run.mcpServers ?? "all",
             inProcessMcp: run.osSessionId
-              ? inProcessMcpFor?.(run.osSessionId, run.user)
+              ? await inProcessMcpFor?.(run.osSessionId, run.user)
               : undefined,
             reposNote: run.osSessionId
               ? reposNoteFor?.(run.osSessionId)
