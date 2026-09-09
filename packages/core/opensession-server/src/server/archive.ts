@@ -66,6 +66,16 @@ function releasePreviewLease(sessionId: string): void {
   }
 }
 
+async function stopArchivedPortals(sessionId: string): Promise<void> {
+  try {
+    const { stopArchivedSessionPortals } = await import("./portal-supervisor");
+    await stopArchivedSessionPortals(sessionId);
+  } catch (error) {
+    // Archiving remains committed. The periodic lifecycle reaper retries.
+    console.error(`[portals] archive cleanup failed for ${sessionId}:`, error);
+  }
+}
+
 function toEntry(raw: RawEntry): Entry {
   return typeof raw === "string" ? { at: raw, reason: "manual" } : raw;
 }
@@ -126,6 +136,7 @@ export async function setArchived(
   if (archived) {
     releasePreviewLease(id);
     await unpinEverywhere([id]);
+    await stopArchivedPortals(id);
   }
 }
 
@@ -155,6 +166,7 @@ export async function archiveOlderThan(
       releasePreviewLease(session.id);
       await setIndexedSessionArchived(session.id, true, "idle");
       publishSessionRow(session.id);
+      await stopArchivedPortals(session.id);
     }
     // Registry is written, so isArchivedId now reflects this batch — drop the
     // stale session/alias pins and any workspace pin whose last session just went.

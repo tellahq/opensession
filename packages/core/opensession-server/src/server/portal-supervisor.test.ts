@@ -26,6 +26,11 @@ import {
   stopPortalService,
   stopSandboxPortalService,
 } from "./portal-supervisor";
+import {
+  _setHostPortalCapacityProbeForTests,
+  HostPortalActivity,
+  PORTAL_IDLE_MS,
+} from "./portal-lifecycle";
 import { sleepingSandboxPortalStatus } from "./sandbox-portals";
 import type { Sandbox } from "./sandbox/provider";
 
@@ -54,14 +59,153 @@ if (!testSetsid) {
 beforeEach(() => {
   worktree = mkdtempSync(join(tmpdir(), "os-portals-test-"));
   process.env.OPENSESSION_STATE_DIR = worktree;
+  // Real Portals start below; the host running this suite may itself be
+  // under memory pressure, which must not decide the outcome.
+  _setHostPortalCapacityProbeForTests(async () => {});
 });
 afterAll(() => {
+  _setHostPortalCapacityProbeForTests(null);
   if (worktree) rmSync(worktree, { recursive: true, force: true });
   if (previousStateDir == null) delete process.env.OPENSESSION_STATE_DIR;
   else process.env.OPENSESSION_STATE_DIR = previousStateDir;
   if (previousPath == null) delete process.env.PATH;
   else process.env.PATH = previousPath;
   rmSync(processTools, { recursive: true, force: true });
+});
+
+describe("host Portal lifecycle cleanup", () => {
+  function registry(owner: string | undefined = "owner") {
+    const records: PortalRecord[] = [
+      {
+        name: "web",
+        key: "WEB_PORT",
+        command: "serve",
+        port: 18091,
+        state: "awake",
+        sessionId: owner,
+        startedAt: "2020-01-01T00:00:00Z",
+      },
+    ];
+    writeFileSync(
+      join(worktree, ".ports.conf"),
+      records
+        .map((record) => `# opensession-portal ${JSON.stringify(record)}`)
+        .join("\n"),
+    );
+  }
+
+  const owner = (archived = false) => ({
+    id: "owner",
+    worktreeDir: worktree,
+    attachedRepos: [],
+    archived,
+  });
+
+  test("archived owners no longer protect their preview, even with connections", async () => {
+    registry();
+    const result = await reapOrphanedPortalServices([owner(true)], {
+      activePorts: new Set([18091]),
+    });
+    expect(result.stopped).toHaveLength(1);
+    expect(readPortalRegistry(worktree)[0]?.state).toBe("stopped");
+  });
+
+  test("preserves a sibling owner's Portal in a shared worktree", async () => {
+    registry();
+    const result = await reapOrphanedPortalServices(
+      [owner(), { ...owner(true), id: "sibling" }],
+      { activePorts: new Set() },
+    );
+    expect(result.stopped).toEqual([]);
+  });
+
+  test("legacy ownerless Portals survive until every worktree owner archives", async () => {
+    registry("");
+    expect(
+      (
+        await reapOrphanedPortalServices([
+          owner(),
+          { ...owner(true), id: "sibling" },
+        ])
+      ).stopped,
+    ).toEqual([]);
+    expect(
+      (await reapOrphanedPortalServices([owner(true)])).stopped,
+    ).toHaveLength(1);
+  });
+
+  test("expires unused Portals but preserves HTTP activity and established connections", async () => {
+    registry();
+    const activity = new HostPortalActivity();
+    const sweep = (
+      now: number,
+      ports: ReadonlySet<number> | null = new Set(),
+    ) =>
+      reapOrphanedPortalServices([owner()], {
+        now,
+        activity,
+        activePorts: ports,
+      });
+    expect((await sweep(0)).stopped).toEqual([]);
+    activity.touch(18091, PORTAL_IDLE_MS - 1);
+    expect((await sweep(PORTAL_IDLE_MS)).stopped).toEqual([]);
+    expect((await sweep(2 * PORTAL_IDLE_MS, new Set([18091]))).stopped).toEqual(
+      [],
+    );
+    expect((await sweep(3 * PORTAL_IDLE_MS, null)).stopped).toEqual([]);
+    expect((await sweep(3 * PORTAL_IDLE_MS)).stopped).toHaveLength(1);
+  });
+
+  test("a starved host refuses a fresh Portal and records why", async () => {
+    _setHostPortalCapacityProbeForTests(async () => {
+      throw new Error("Cannot start Portal: host memory is nearly full.");
+    });
+    await expect(
+      startPortalService({
+        sessionId: "owner",
+        worktreeDir: worktree,
+        name: "web",
+        port: 18093,
+        command: "sleep 60",
+      }),
+    ).rejects.toThrow("host memory is nearly full");
+    expect(readPortalRegistry(worktree)[0]).toMatchObject({
+      name: "web",
+      state: "failed",
+      lastError: expect.stringContaining("host memory is nearly full"),
+    });
+  });
+
+  test("an expired generation cannot stop a replacement", async () => {
+    registry();
+    await expect(
+      stopPortalService({
+        sessionId: "owner",
+        worktreeDir: worktree,
+        name: "web",
+        expectedGeneration: "obsolete",
+      }),
+    ).rejects.toThrow("Portal changed");
+    expect(readPortalRegistry(worktree)[0]?.state).toBe("awake");
+  });
+
+  test("concurrent registry updates preserve unrelated services", async () => {
+    registry();
+    const web = readPortalRegistry(worktree)[0];
+    writeFileSync(
+      join(worktree, ".ports.conf"),
+      [web, { ...web, name: "api", key: "API_PORT", port: 18092 }]
+        .map((record) => `# opensession-portal ${JSON.stringify(record)}`)
+        .join("\n"),
+    );
+    await Promise.all([
+      setPortalPath(worktree, "/web", "web"),
+      setPortalPath(worktree, "/api", "api"),
+    ]);
+    expect(
+      readPortalRegistry(worktree).map((record) => record.defaultPath),
+    ).toEqual(["/web", "/api"]);
+  });
 });
 
 describe("portalsToRestore", () => {
@@ -162,7 +306,7 @@ describe("session Portal supervisor", () => {
     expect(existsSync(SANDBOX_PORTAL_AGENT_ENTRY)).toBe(true);
   });
 
-  test("keeps generated portal metadata and ports together in .ports.conf", () => {
+  test("keeps generated portal metadata and ports together in .ports.conf", async () => {
     writeFileSync(join(worktree, ".ports.conf"), "WEBAPP_PORT=3300\n");
     const record = {
       name: "api",
@@ -175,7 +319,7 @@ describe("session Portal supervisor", () => {
       join(worktree, ".ports.conf"),
       `${PREFIX(record)}\nPORTAL_API_PORT=4200\nWEBAPP_PORT=3300\n`,
     );
-    setPortalPath(worktree, "/health", "api");
+    await setPortalPath(worktree, "/health", "api");
     const [portal] = readPortalRegistry(worktree);
     expect(portal).toMatchObject({
       name: "api",
@@ -201,7 +345,7 @@ describe("session Portal supervisor", () => {
       `\x1b]0;@modal: cat .ports.conf\x07${PREFIX(record)}\nWEBAPP_PORT=4000\n`,
     );
 
-    setPortalPath(worktree, "/videos", "web");
+    await setPortalPath(worktree, "/videos", "web");
 
     const text = await Bun.file(join(worktree, ".ports.conf")).text();
     expect(text).not.toContain("\x1b");

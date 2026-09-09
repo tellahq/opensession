@@ -99,6 +99,7 @@ import {
   findSession,
   findSessionAsync,
   getCachedSessions,
+  getSessionListSnapshotAsync,
   invalidateSessionsCache,
   reconcileRecoverableSafetyFences,
   recordRunOutcome,
@@ -861,7 +862,7 @@ if (!g.__opensessionBooted) {
 
     // Portal processes survive a coordinator restart by design. Reconcile their
     // durable owner records immediately and keep reaping deleted-session husks.
-    startPortalReaper(getAllSessions);
+    startPortalReaper(getSessionListSnapshotAsync);
     startRunnerPortalReaper();
 
     // Desk todo reminders: push + Slack DM when a remindAt passes (todos.ts)

@@ -34,6 +34,7 @@ import {
 import { getRepo } from "../worktree";
 import { configuredServer } from "../config";
 import { portalNavigationRequest } from "../portal-sign-in";
+import { hostPortalActivity } from "../portal-lifecycle";
 import { portalWaitingResponse } from "../portal-waiting-page";
 import { sleepingSandboxPortalStatus } from "../sandbox-portals";
 import type { UnifiedSession } from "../types";
@@ -154,6 +155,9 @@ export async function handlePreviewRoutes(
         },
       });
     }
+    // Only authenticated, authorized Portal traffic counts. Session-list and
+    // readiness polling never extend a host preview's idle lifetime.
+    hostPortalActivity.touch(httpsPort - 6_000);
     return new Response(null, {
       status: 204,
       headers: { "Cache-Control": "no-store" },

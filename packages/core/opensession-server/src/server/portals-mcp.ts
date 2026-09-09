@@ -546,7 +546,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
                   "Could not set Portal route: this session's Sandbox is sleeping or unavailable.",
                 );
               if (sandbox) await setSandboxPortalPath(sandbox, path, name);
-              else setPortalPath(dir, path, name);
+              else await setPortalPath(dir, path, name);
             } else {
               const normalized = normalizePortalPath(path) ?? null;
               await ctx.setDefaultPath(normalized);
