@@ -85,6 +85,27 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.session.accountId)
     }
 
+    /// A teammate's `/model` across providers arrives as `model_changed` and
+    /// then `subscription_changed`. The menu decides which accounts can be
+    /// pinned from `model`, so it has to move with the first frame, not wait
+    /// for the next sessions poll.
+    func testModelChangedMovesTheLiveModelWithTheSnapshot() {
+        var session = Session(id: "bks-1")
+        session.model = "claude-fable-5-1"
+        session.accountId = "claude-acc"
+        let viewModel = SessionViewModel(session: session)
+        XCTAssertEqual(viewModel.model, "claude-fable-5-1")
+
+        viewModel.handle(.modelChanged(sessionId: "bks-other", model: "gpt-5", by: nil))
+        XCTAssertEqual(viewModel.model, "claude-fable-5-1", "another session's frame is ignored")
+
+        viewModel.handle(.modelChanged(sessionId: "bks-1", model: "gpt-5", by: "teammate"))
+        viewModel.handle(.subscriptionChanged(sessionId: "bks-1", accountId: nil))
+        XCTAssertEqual(viewModel.model, "gpt-5")
+        XCTAssertEqual(viewModel.session.model, "gpt-5")
+        XCTAssertEqual(viewModel.accountId, "")
+    }
+
     private func entry(
         _ id: String, _ type: String, text: String? = nil, toolUseId: String? = nil
     ) -> TranscriptEntry {

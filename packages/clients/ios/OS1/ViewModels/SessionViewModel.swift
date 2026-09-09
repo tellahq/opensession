@@ -1930,8 +1930,13 @@ final class SessionViewModel {
         case .workspaceStatus(let id, let ready) where id == session.id:
             workspaceReadyOverride = ready
 
-        case .modelChanged(let id, let model, _) where id == session.id:
-            session.model = model
+        case .modelChanged(let id, let switched, _) where id == session.id:
+            session.model = switched
+            // The model menu reads `model`, not the snapshot: a teammate's
+            // provider switch must change which accounts it can pin in the
+            // same beat as the `subscription_changed` that follows it, or a
+            // Claude id gets sent to the Codex account command.
+            model = switched
 
         case .subscriptionChanged(let id, let pinned) where id == session.id:
             accountId = pinned ?? ""
