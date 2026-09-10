@@ -134,6 +134,7 @@ import {
 import { ensureAgentAwsCredsFile } from "./aws-creds";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { piAnthropicTransport, piEngineEnabled } from "./pi-config";
+import { assistantProseFields } from "./transcript-media";
 import { buildPiAnthropicProvider } from "./pi-anthropic-provider";
 import {
   createPiRuntimeBinding,
@@ -324,10 +325,10 @@ export function piAssistantTranscriptEntries(
       entries.push({
         id: proseIndex === 0 ? messageId : `${messageId}-b${proseIndex}`,
         type: "assistant",
-        content: prose,
         timestamp,
         model,
         ...(isReasoning ? { isReasoning: true } : {}),
+        ...assistantProseFields(prose),
       });
       proseIndex++;
     } else if (block.type === "toolCall" && block.id) {

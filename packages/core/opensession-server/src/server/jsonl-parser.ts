@@ -10,7 +10,11 @@ import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presen
 import { SLACK_ID_TO_NAME } from "./shared/user-mappings";
 import { stripContext } from "./prompt-context";
 import { configuredIntegration } from "./config";
-import { extractAssistantVideos, toolResultMedia } from "./transcript-media";
+import {
+  assistantProseFields,
+  extractAssistantVideos,
+  toolResultMedia,
+} from "./transcript-media";
 import { transcriptEntryMatchSnippet } from "./transcript-search";
 export {
   extractAssistantVideos,
@@ -549,25 +553,15 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
       let textBlockCount = 0;
       for (const block of content) {
         if (block.type === "text" && block.text) {
-          const assistant = extractAssistantVideos(block.text);
           const baseId = raw.uuid || crypto.randomUUID();
           entries.push({
             id: textBlockCount === 0 ? baseId : `${baseId}-t${textBlockCount}`,
             type: "assistant",
-            content: assistant.content,
             timestamp: ts,
             requestId: raw.requestId,
             ...(model ? { model } : {}),
             ...(raw.isReasoning ? { isReasoning: true } : {}),
-            ...(assistant.videos.length > 0
-              ? { videos: assistant.videos }
-              : {}),
-            ...(assistant.images.length > 0
-              ? { images: assistant.images }
-              : {}),
-            ...(assistant.featuredMedia.length > 0
-              ? { featuredMedia: assistant.featuredMedia }
-              : {}),
+            ...assistantProseFields(block.text),
           });
           textBlockCount++;
         }
@@ -587,20 +581,14 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
     } else {
       const text = extractText(content);
       if (text) {
-        const assistant = extractAssistantVideos(text);
         entries.push({
           id: raw.uuid || crypto.randomUUID(),
           type: "assistant",
-          content: assistant.content,
           timestamp: ts,
           requestId: raw.requestId,
           ...(model ? { model } : {}),
           ...(raw.isReasoning ? { isReasoning: true } : {}),
-          ...(assistant.videos.length > 0 ? { videos: assistant.videos } : {}),
-          ...(assistant.images.length > 0 ? { images: assistant.images } : {}),
-          ...(assistant.featuredMedia.length > 0
-            ? { featuredMedia: assistant.featuredMedia }
-            : {}),
+          ...assistantProseFields(text),
         });
       }
     }
@@ -708,18 +696,12 @@ function parseCodexEntry(raw: any): TranscriptEntry[] {
       typeof p.message === "string" &&
       p.message.trim()
     ) {
-      const assistant = extractAssistantVideos(p.message);
       return [
         {
           id: p.id || stableCodexId("codex-assistant", raw, p, p.message),
           type: "assistant",
-          content: assistant.content,
           timestamp: ts,
-          ...(assistant.videos.length > 0 ? { videos: assistant.videos } : {}),
-          ...(assistant.images.length > 0 ? { images: assistant.images } : {}),
-          ...(assistant.featuredMedia.length > 0
-            ? { featuredMedia: assistant.featuredMedia }
-            : {}),
+          ...assistantProseFields(p.message),
         },
       ];
     }

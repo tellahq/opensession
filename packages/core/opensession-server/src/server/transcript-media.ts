@@ -382,6 +382,31 @@ export function extractAssistantVideos(text: string): {
 }
 
 /**
+ * The assistant entry fields a piece of model prose yields: the placed
+ * `content` plus only the media keys that were found, so every constructor
+ * spreads it straight into the entry it builds. The claude, codex and pi
+ * parsers and the live pi stream all go through here; while the JSONL parser
+ * alone called extractAssistantVideos, a pi answer ending in
+ * `OPENSESSION_IMAGE:` showed the raw marker and carried no media.
+ */
+export function assistantProseFields(text: string): {
+  content: string;
+  videos?: string[];
+  images?: string[];
+  featuredMedia?: string[];
+} {
+  const assistant = extractAssistantVideos(text);
+  return {
+    content: assistant.content,
+    ...(assistant.videos.length > 0 ? { videos: assistant.videos } : {}),
+    ...(assistant.images.length > 0 ? { images: assistant.images } : {}),
+    ...(assistant.featuredMedia.length > 0
+      ? { featuredMedia: assistant.featuredMedia }
+      : {}),
+  };
+}
+
+/**
  * A tool result's media, derived once for every engine. The claude, pi
  * and codex parsers and the live pi stream all render the same result
  * text, so they all call this: while each kept its own copy the codex branches

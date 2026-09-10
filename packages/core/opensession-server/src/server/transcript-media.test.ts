@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  assistantProseFields,
   extractAssistantVideos,
   extractMediaMarkers,
   isCaptionLine,
@@ -207,6 +208,17 @@ describe("extractAssistantVideos", () => {
     const out = extractAssistantVideos("Nothing to see.\n");
     expect(out.content).toBe("Nothing to see.\n");
     expect(out.featuredMedia).toEqual([]);
+  });
+});
+
+describe("assistantProseFields", () => {
+  it("spreads only the media keys it found", () => {
+    expect(assistantProseFields("Plain.\n")).toEqual({ content: "Plain.\n" });
+    expect(assistantProseFields("OPENSESSION_IMAGE: /tmp/shot.png\n")).toEqual({
+      content: `![](${shot})`,
+      images: [shot],
+      featuredMedia: [shot],
+    });
   });
 });
 
