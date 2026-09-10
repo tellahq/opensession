@@ -13,6 +13,7 @@ regexTarget = "secret"
 regexes = [
   '''^ED25519_PKCS8_BYTES$''',
   '''^C0BE8KVFBEX\-1786887720\.562319$''',
+  '''^C0C1T4W5M6U\-1789056158\.043869$''',
   '''^os1\.liveActivities\.enabled$''',
   '''^OS1API\.DeskVoiceSecret$''',
   '''^os1\.notifications\.completionSound$''',
