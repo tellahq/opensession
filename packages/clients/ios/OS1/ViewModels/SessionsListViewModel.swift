@@ -1124,6 +1124,28 @@ final class SessionsListViewModel {
         }
     }
 
+    /// The side effects of a poll pass, applied only once the pass has been
+    /// accepted: the list is still at the revision it snapshotted and no
+    /// later poll has published.
+    private func accept(
+        _ polled: (active: [Session], archived: [Session], resurfacedHideKeys: [String])
+    ) {
+        // A hidden row comes back while one of its sessions is blocked on a
+        // question, and the entry is consumed when it does — so a hide can
+        // never swallow work that needs you. Consuming it here (not in the
+        // row filter) keeps the mutation out of view body evaluation.
+        HideStore.shared.clear(polled.resurfacedHideKeys)
+        // Archived rows arrive on their own request, so `polled.archived`
+        // is normally empty here. It isn't against a server that predates
+        // the `archived=exclude` parameter and answers with the whole list
+        // — those rows ARE the index in that case, which is what makes an
+        // older server degrade to the old behaviour instead of to an
+        // Archived screen that is permanently empty.
+        if !polled.archived.isEmpty {
+            setServerArchived(polled.archived)
+        }
+    }
+
     /// One pass of row frames over the live list, pure so it can run off the
     /// main actor and be tested.
     ///
@@ -1333,27 +1355,34 @@ final class SessionsListViewModel {
                         hidden: hideKeys
                     )
                 }.value
-                // A hidden row comes back while one of its sessions is blocked on a
-                // question, and the entry is consumed when it does — so a hide can
-                // never swallow work that needs you. Consuming it here (not in the
-                // row filter) keeps the mutation out of view body evaluation.
-                HideStore.shared.clear(polled.resurfacedHideKeys)
-                next = mergeOptimistic(into: polled.active)
-                // Archived rows arrive on their own request, so `polled.archived`
-                // is normally empty here. It isn't against a server that predates
-                // the `archived=exclude` parameter and answers with the whole list
-                // — those rows ARE the index in that case, which is what makes an
-                // older server degrade to the old behaviour instead of to an
-                // Archived screen that is permanently empty.
-                if !polled.archived.isEmpty {
-                    setServerArchived(polled.archived)
+                // Nothing this pass produced is applied until the list is
+                // known to still be the one it snapshotted: a hide it would
+                // consume, or an archive index it would install, may already
+                // be wrong after a frame that landed while it ran, and a
+                // cleared hide is persisted to the server and cannot be
+                // taken back. The checks are repeated after grouping below.
+                guard requestConnection == OS1API.LiveActivityConnection.current() else { return }
+                guard sequence > publishedRefreshSequence else { break }
+                if snapshotRevision != sessionsRevision {
+                    if !hasLoaded || reruns < 2 {
+                        reruns += 1
+                        continue
+                    }
+                    break
                 }
+                next = mergeOptimistic(into: polled.active)
                 // Most 5s polls change nothing — skip the assignment so the whole
                 // list doesn't re-diff (grouping, sorting, row rebuilds) for a
                 // byte-identical result.
                 let shouldPublish =
                     next != sessions || refreshedWorkspaces != nil || connectionChanged || claimsChanged
-                guard shouldPublish else { break }
+                guard shouldPublish else {
+                    // The list already says what the response says; the pass
+                    // was accepted at the current revision, so what it found
+                    // to consume still holds.
+                    accept(polled)
+                    break
+                }
                 // Group before publishing, not after: the assignment wakes
                 // every observing view, so a grouping that starts afterwards
                 // always loses the race to the body that needs it.
@@ -1375,6 +1404,7 @@ final class SessionsListViewModel {
                     }
                     break
                 }
+                accept(polled)
                 SessionLinks.register(titles: grouped.titles)
                 PrLinks.register(index: grouped.prs)
                 if let renamed { workspaceNames = renamed }

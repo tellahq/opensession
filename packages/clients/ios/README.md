@@ -561,6 +561,8 @@ OS1/
   predates any frame applied while its request was out, so the poll replays
   those frames over the response and publishes only if the list did not
   move again meanwhile (a later poll's publish, or a mid-pass flush, wins).
+  The poll's side effects (a consumed hide, an older server's archive
+  index) wait for the same acceptance, since a cleared hide is persisted.
   Before the first list has loaded, frames are kept for that replay rather
   than merged, and the first response reruns its passes until it lands
   instead of giving up on a list that keeps moving.
