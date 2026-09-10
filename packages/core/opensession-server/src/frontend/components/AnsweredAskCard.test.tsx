@@ -139,3 +139,23 @@ test("shows typed and multi-question answers exactly as sent", () => {
   expect(html).toContain("Custom answer");
   expect(html).toContain("Kent");
 });
+
+test("pasted text cards stay borderless and keyboard focusable", () => {
+  const html = renderToStaticMarkup(
+    <MessageBubble
+      entry={{
+        id: "pasted-text",
+        type: "user",
+        content: "fix this error",
+        timestamp: "",
+        pastedTexts: ["first line\nsecond line"],
+      }}
+    />,
+  );
+  const trigger = html.match(/<button[^>]*>/)?.[0];
+  expect(trigger).toContain("border-0");
+  expect(trigger).toContain("focus-ring");
+  expect(trigger).not.toContain("hover:border-accent");
+  expect(html).toContain("Pasted text");
+  expect(html).toContain("Show");
+});

@@ -670,7 +670,7 @@ function PastedTextCard({
         className={cn(
           fileChipCard,
           fileChipCardPadding,
-          "focus-ring cursor-pointer text-left hover:border-accent",
+          "focus-ring cursor-pointer border-0 text-left",
         )}
       >
         <span className={fileChipThumb}>
