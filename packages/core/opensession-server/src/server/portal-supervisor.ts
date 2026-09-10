@@ -788,8 +788,9 @@ export async function stopAllPortalServices(input: {
 
 export type PortalOwnerSession = Pick<
   UnifiedSession,
-  "id" | "worktreeDir" | "attachedRepos" | "isRunning"
->;
+  "id" | "worktreeDir" | "attachedRepos"
+> &
+  Partial<Pick<UnifiedSession, "isRunning">>;
 export type PortalReapResult = {
   stopped: Array<{ sessionId: string; worktreeDir: string; name: string }>;
 };
@@ -812,7 +813,7 @@ export async function sleepIdlePortalServices(
       session.worktreeDir,
       ...(session.attachedRepos ?? []).map((repo) => repo.dir),
     ])
-    .filter((dir): dir is string => dir !== null);
+    .filter((dir): dir is string => typeof dir === "string");
   const slept: PortalSleepResult["slept"] = [];
   for (const { ref, record } of managedHostPortals(ownerDirs)) {
     const owner = owners.get(ref.sessionId);

@@ -179,10 +179,11 @@ export function buildRunInstructions(input: {
   }
   if (!input.isAsk && inproc["opensession-portals"]) {
     parts.push(
-      "## Portals\nShow running software through `opensession-portals`: `start_declared_portal` " +
-        "for a Portal the repository declares, else `start_portal` with the command. Open the " +
-        "Portal URL, exercise the changed feature, and report the URL. For user-facing web " +
-        "changes, set the exact root-relative route with `set_portal_path`, query included. " +
+      "## Portals\nStart a Portal (`start_declared_portal` for one the repository declares, else " +
+        "`start_portal`) only when the person asks to see the change or a running app is the only " +
+        "way to verify it, never as a closing step. Reuse this session's Portal; while it starts, " +
+        "wait with `list_portals`, do not start it again. For user-facing web changes, set the " +
+        "exact root-relative route with `set_portal_path`, query included. " +
         "For Tella editor routes, call `tella-stage` `lease_editor_fixture` (fixture " +
         "`multi_clip_transcript_v1`, this Open Session id as `leaseKey`) and pass only its " +
         "`leaseId` to `set_editor_preview_path`; never construct a video id yourself.",
