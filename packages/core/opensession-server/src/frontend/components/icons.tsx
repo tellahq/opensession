@@ -71,11 +71,15 @@ const stroke = {
   strokeLinejoin: "round" as const,
 };
 
+const ARROW_UP_PATHS = ["M17.25 10.25L12 4.75L6.75 10.25", "M12 19.25V5.75"];
+const ARROW_DOWN_PATHS = ["M17.25 13.75L12 19.25L6.75 13.75", "M12 4.75v13.5"];
+
 export function IconArrowUp(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M17.25 10.25L12 4.75L6.75 10.25" />
-      <path {...stroke} d="M12 19.25V5.75" />
+      {ARROW_UP_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
     </Svg>
   );
 }
@@ -94,8 +98,9 @@ export function IconArrowUpToLine(p: IconProps) {
 export function IconArrowDown(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M17.25 13.75L12 19.25L6.75 13.75" />
-      <path {...stroke} d="M12 4.75v13.5" />
+      {ARROW_DOWN_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
     </Svg>
   );
 }
@@ -1041,6 +1046,16 @@ export function slidersIconMarkup(size = MIN_ICON_SIZE): string {
 /** <IconCheck> as markup. */
 export function checkIconMarkup(size = MIN_ICON_SIZE): string {
   return iconMarkup(pathsMarkup([CHECK_PATH]), size);
+}
+
+/** <IconArrowUp> as markup. */
+export function arrowUpIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(pathsMarkup(ARROW_UP_PATHS), size);
+}
+
+/** <IconArrowDown> as markup. */
+export function arrowDownIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(pathsMarkup(ARROW_DOWN_PATHS), size);
 }
 
 export function IconTrash(p: IconProps) {

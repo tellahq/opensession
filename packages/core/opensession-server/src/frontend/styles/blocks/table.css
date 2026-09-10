@@ -1,0 +1,236 @@
+/* ```csv / ```tsv / ```table rendered as a data grid (lib/table-block.ts).
+   A well like the chart's, with a bar on top (row count, filter, copy) and
+   the grid in a scroller under it: tall tables cap and scroll with the
+   header pinned, wide ones scroll sideways. The markup is built by the
+   upgrader, not JSX, so it is styled here like the rest of `.markdown`. */
+
+.md-table-wrap {
+  margin: 2px 0 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+  overflow: hidden;
+}
+
+.md-table-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 6px 6px 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.md-table-count {
+  margin-right: auto;
+  font-size: var(--type-meta);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.md-table-filter {
+  flex: 1 1 120px;
+  min-width: 0;
+  max-width: 220px;
+  height: 28px;
+  padding: 0 8px;
+  font-size: var(--type-label);
+  color: var(--text);
+  background: var(--control-surface);
+  border: 1px solid var(--border);
+  border-radius: calc(7px * var(--rf));
+  corner-shape: var(--cs);
+  outline: none;
+}
+.md-table-filter::placeholder {
+  color: var(--text-faint);
+}
+.md-table-filter:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.md-table-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px 0 6px;
+  border: 0;
+  border-radius: calc(7px * var(--rf));
+  corner-shape: var(--cs);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: var(--type-meta);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--dur-micro) var(--ease),
+    color var(--dur-micro) var(--ease);
+}
+.md-table-copy:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.md-table-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Both glyphs share one cell, so the swap to the check carries no layout. */
+.md-table-copy-icon {
+  display: grid;
+}
+.md-table-copy-glyph {
+  grid-area: 1 / 1;
+  display: grid;
+  place-items: center;
+}
+.md-table-copy-glyph[data-state="done"] {
+  opacity: 0;
+  color: var(--green);
+}
+.md-table-copy[data-copied] .md-table-copy-glyph[data-state="idle"] {
+  opacity: 0;
+}
+.md-table-copy[data-copied] .md-table-copy-glyph[data-state="done"] {
+  opacity: 1;
+}
+
+.md-table-scroll {
+  max-height: min(420px, 70vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* `.markdown table` is a block scroller for prose tables; this one lives in
+   its own scroller and needs to be a real table so the header can stick.
+   Separate borders, not collapsed: a collapsed border belongs to the row and
+   stays behind when the sticky header moves. The prose rule's max-width
+   would squeeze the columns until words broke instead of letting the grid
+   run past the edge and scroll. */
+.markdown .md-table {
+  display: table;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--type-label);
+}
+.markdown .md-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0;
+  text-align: left;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-strong);
+}
+.md-table-sort {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: var(--type-meta);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-align: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--dur-micro) var(--ease),
+    color var(--dur-micro) var(--ease);
+}
+.md-table-sort:hover {
+  background: var(--hover);
+  color: var(--text-dim);
+}
+.md-table-sort:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.markdown .md-table th:not([aria-sort="none"]) .md-table-sort {
+  color: var(--text);
+}
+/* The arrow shows only on the sorted column: up for ascending, down for
+   descending. The reserved width keeps the label still when it appears. */
+.md-table-sort-glyph {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.md-table-sort-glyph svg {
+  grid-area: 1 / 1;
+  display: none;
+}
+.markdown
+  .md-table
+  th[aria-sort="ascending"]
+  .md-table-sort-glyph
+  svg:first-child,
+.markdown
+  .md-table
+  th[aria-sort="descending"]
+  .md-table-sort-glyph
+  svg:last-child {
+  display: block;
+}
+
+.markdown .md-table td {
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  /* Cells wrap at a bounded width and keep an embedded line break; nothing
+	   written is hidden behind an ellipsis. */
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  min-width: 4em;
+  max-width: 24em;
+}
+.markdown .md-table tr:last-child td {
+  border-bottom: 0;
+}
+@media (hover: hover) {
+  .markdown .md-table tbody tr:hover td {
+    background: var(--hover);
+  }
+}
+/* A column of numbers reads down its decimal point. */
+.markdown .md-table .md-table-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.markdown .md-table th.md-table-num .md-table-sort {
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  /* Under 16px iOS zooms the page when the field takes focus. */
+  .md-table-filter {
+    font-size: var(--type-input-phone);
+  }
+}
+
+/* A finger gets a 44px target for every control in the block. */
+@media (hover: none) and (pointer: coarse) {
+  .md-table-bar {
+    padding: 4px 4px 4px 12px;
+  }
+  .md-table-filter,
+  .md-table-copy {
+    height: 44px;
+  }
+  .md-table-sort {
+    min-height: 44px;
+  }
+}

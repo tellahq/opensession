@@ -89,8 +89,14 @@ too.
 ### Tables
 
 ` ```csv `, ` ```tsv ` and ` ```table ` fences (first row
-is the header) render as a data grid: click a header to sort, type to filter,
-copy the whole thing as CSV. Numeric columns sort numerically.
+is the header; `table` auto-detects comma, tab, semicolon or pipe, and reads
+a GitHub pipe table) render as a data grid: click a header to sort, type to
+filter once there are more than eight rows, copy the rows on screen as CSV.
+Fields follow RFC 4180, so a quoted field may hold the delimiter, a doubled
+quote or a line break. A column whose every value is a number (thousands
+separators, a currency sign and a trailing `%` allowed) sorts numerically
+and right-aligns. Fewer than two rows, a one-column header, or more than one
+ragged row in ten keeps the plain code fence.
 
 ### Quick replies
 
