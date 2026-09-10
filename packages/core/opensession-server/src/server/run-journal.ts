@@ -75,6 +75,11 @@ export interface ActiveRunRecord {
   // records journaled before McpScope omitted it to mean "all".
   mcpServers?: McpScope;
   user?: string; // per-run user, preserved across resume (gates per-user MCP servers)
+  /** Person whose personal provider subscription may serve the run when it
+   *  differs from `user` (a human turn in an automation-owned session).
+   *  Preserved across resume so recovery does not fall back to pool-only;
+   *  read by provider account selection only, never by MCP or GitHub policy. */
+  accountUser?: string;
   deniedTools?: Record<string, string>; // per-run tool denials, preserved across resume
   publicationPolicy?: { repo: string; branch: string; headBranch: string };
   confirmTools?: Record<string, string>; // per-run human-confirmed tools, preserved across resume
@@ -176,6 +181,7 @@ export function buildRunJournalRecord(
     selectedModel?: string;
     transientFallback?: boolean;
     fallbackModel?: string;
+    accountUser?: string;
     accountId?: string;
     accountStrict?: boolean;
     usageCredits?: boolean;
@@ -206,6 +212,7 @@ export function buildRunJournalRecord(
   const startedAt = new Date().toISOString();
   return {
     ...site,
+    accountUser: site.accountUser ?? opts.accountUser,
     accountId: site.accountId ?? opts.accountId,
     accountStrict: site.accountStrict ?? opts.accountStrict,
     usageCredits: site.usageCredits ?? opts.usageCredits,

@@ -555,6 +555,7 @@ function hostedRunRecord(spec: RunHostSpec): ActiveRunRecord {
     mode: spec.mode,
     mcpServers: spec.mcpServers,
     user: spec.user,
+    accountUser: spec.accountUser,
     deniedTools: spec.deniedTools,
     publicationPolicy: spec.publicationPolicy,
     confirmTools: spec.confirmTools,

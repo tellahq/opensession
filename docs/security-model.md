@@ -150,7 +150,11 @@ addresses, GitHub logins, and Slack ids resolve to the configured person.
   before the shared pool when they take over an automation's session. A
   machine sender (the automation's own tick, a review handoff, auto-continue)
   resolves to no account user and stays pool-only. `accountUser` never feeds
-  the MCP gate, GitHub credentials, or the trust profile.
+  the MCP gate, GitHub credentials, or the trust profile. It is journaled
+  with the run so restart recovery keeps the same routing. In a remote
+  sandbox the same identity scopes which subscriptions are uploaded, and a
+  person's takeover turn carries no automation pin (`sandboxRunAccountSpec`,
+  `remoteRunAccountPolicy`); the automation's own turns keep their hard pin.
 - Manage it from the Connections UI (the Add-MCP form has an "Allowed users"
   field; each server card has a Restrict/Edit-access button →
   `PUT /api/connections/mcp/:name` with `{allowedUsers}`), or via

@@ -110,6 +110,7 @@ import {
 } from "./sandbox/automation-egress";
 import { ensureSandboxWithTransientRetry } from "./sandbox/reliability";
 import {
+  type Automation,
   automationModel,
   getAutomation,
   validateSandboxAutomation,
@@ -1876,6 +1877,43 @@ export function sandboxRunSecuritySpec(
   };
 }
 
+/**
+ * Provider account routing for one sandbox turn. A disposable automation
+ * resume keeps the automation's hard pin and credit policy for the
+ * automation's own turns: that pin is its cost ceiling. A person who takes
+ * the session over pays with their own subscription, personal accounts first
+ * and the shared pool as backup, so their turn carries no pin at all; the
+ * pinned account would otherwise be the only one uploaded to the sandbox
+ * (accountsForRemoteUpload) and a strict pin never rotates. The automation's
+ * MCP and GitHub restrictions are unaffected: they read `user`, which
+ * sandboxRunSecuritySpec still drops. Every other session keeps its soft pin.
+ */
+export function sandboxRunAccountSpec(
+  session: Pick<UnifiedSession, "accountId">,
+  opts: { accountUser?: string },
+  owningAutomation: Pick<Automation, "accountId" | "usageCredits"> | null,
+): Pick<RunHostSpec, "accountId" | "accountStrict" | "usageCredits"> {
+  if (!owningAutomation) {
+    return {
+      accountId: session.accountId,
+      accountStrict: undefined,
+      usageCredits: undefined,
+    };
+  }
+  if (opts.accountUser) {
+    return {
+      accountId: undefined,
+      accountStrict: undefined,
+      usageCredits: undefined,
+    };
+  }
+  return {
+    accountId: owningAutomation.accountId,
+    accountStrict: true,
+    usageCredits: owningAutomation.usageCredits,
+  };
+}
+
 export async function maybeLaunchSandboxedRun(
   session: UnifiedSession,
   opts: {
@@ -2182,13 +2220,7 @@ export async function maybeLaunchSandboxedRun(
         : interactiveFallbackModel(session.model),
       effort: portablePreset?.effort ?? session.effort,
       fastMode: session.fastMode,
-      accountId: disposableAutomationResume
-        ? owningAutomation?.accountId
-        : session.accountId,
-      accountStrict: disposableAutomationResume ? true : undefined,
-      usageCredits: disposableAutomationResume
-        ? owningAutomation?.usageCredits
-        : undefined,
+      ...sandboxRunAccountSpec(session, opts, owningAutomation),
     };
     if (isAgentSessionCancelled(session.id, opts.startToken)) {
       unregisterRunToken(rpcToken);

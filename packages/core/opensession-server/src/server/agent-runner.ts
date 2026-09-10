@@ -2060,6 +2060,7 @@ export async function resumeInterruptedRuns(
                   ? reposNoteFor?.(run.osSessionId)
                   : undefined,
                 user: run.user,
+                accountUser: run.accountUser,
                 deniedTools: run.deniedTools,
                 publicationPolicy: run.publicationPolicy,
                 confirmTools: run.confirmTools,
@@ -2168,6 +2169,7 @@ export async function resumeInterruptedRuns(
                 ? reposNoteFor?.(run.osSessionId)
                 : undefined,
               user: run.user,
+              accountUser: run.accountUser,
               deniedTools: run.deniedTools,
               publicationPolicy: run.publicationPolicy,
               confirmTools: run.confirmTools,
@@ -2266,6 +2268,7 @@ export async function resumeInterruptedRuns(
               ? reposNoteFor?.(run.osSessionId)
               : undefined,
             user: run.user,
+            accountUser: run.accountUser,
             deniedTools: run.deniedTools,
             publicationPolicy: run.publicationPolicy,
             confirmTools: run.confirmTools,

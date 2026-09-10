@@ -3,7 +3,7 @@ import {
   assertAutomationDescendantOpeningIsolation,
   openingCreateTrustPolicy,
 } from "./session-create";
-import { sandboxRunSecuritySpec } from "./run-session";
+import { sandboxRunAccountSpec, sandboxRunSecuritySpec } from "./run-session";
 import type { UnifiedSession } from "./types";
 import {
   restoreResolvedCreate,
@@ -123,6 +123,43 @@ describe("automation descendant opening policy", () => {
       accountUser: "human@example.com",
       journalKind: "automation",
       trustProfile: "automation",
+    });
+  });
+
+  test("sandbox account routing keeps the automation pin for machine turns only", () => {
+    const automation = { accountId: "shared-triage", usageCredits: true };
+    expect(
+      sandboxRunAccountSpec({ accountId: "shared-triage" }, {}, automation),
+    ).toEqual({
+      accountId: "shared-triage",
+      accountStrict: true,
+      usageCredits: true,
+    });
+    // The person who took the session over spends their own subscription
+    // first with the pool as backup: no pin, no strict cap, their own credit
+    // policy.
+    expect(
+      sandboxRunAccountSpec(
+        { accountId: "shared-triage" },
+        { accountUser: "human@example.com" },
+        automation,
+      ),
+    ).toEqual({
+      accountId: undefined,
+      accountStrict: undefined,
+      usageCredits: undefined,
+    });
+    // Interactive sessions keep their own soft pin.
+    expect(
+      sandboxRunAccountSpec(
+        { accountId: "mine" },
+        { accountUser: "human@example.com" },
+        null,
+      ),
+    ).toEqual({
+      accountId: "mine",
+      accountStrict: undefined,
+      usageCredits: undefined,
     });
   });
 
