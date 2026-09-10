@@ -15,6 +15,7 @@ const ticket = (
   trigger: "event",
   eventContext: JSON.stringify({ threadId, title: "t" }),
   acceptedAt,
+  coalescePlainThread: true,
 });
 
 describe("superseded Plain thread intents", () => {
@@ -56,6 +57,22 @@ describe("superseded Plain thread intents", () => {
     );
     expect([...superseded.keys()].sort()).toEqual(["s1", "s3"]);
     expect(superseded.get("s1")).toContain("s2");
+  });
+
+  test("an explicit retrigger replays even when its thread has a live session", () => {
+    const retrigger = {
+      ...ticket("r1", "th_a", "2026-09-09T21:03:00Z"),
+      coalescePlainThread: undefined,
+    };
+    const superseded = supersededPlainThreadIntents(
+      [
+        ticket("s1", "th_a", "2026-09-09T20:42:00Z"),
+        retrigger,
+        ticket("s2", "th_a", "2026-09-09T21:05:00Z"),
+      ],
+      new Map([["th_a", "os-live"]]),
+    );
+    expect([...superseded.keys()].sort()).toEqual(["s1", "s2"]);
   });
 
   test("different automations for the same thread each keep one intent", () => {

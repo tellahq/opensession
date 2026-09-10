@@ -1506,6 +1506,8 @@ type PendingAutomationIntent = {
   modelOverride?: string;
   acceptedAt: string;
   deleteAutomationAfterRun?: boolean;
+  /** Boot may collapse this into another intent for the same Plain thread. */
+  coalescePlainThread?: boolean;
   terminalAt?: string;
   terminalError?: string;
 };
@@ -1608,7 +1610,9 @@ export async function resumePendingAutomationRuns(
   );
   // A Plain ticket needs at most one triage session, however many intents a
   // failing launch or a repeatedly clicked support-card link left behind for
-  // it (automation-intent-recovery.ts). Decide that over the whole set first.
+  // it (automation-intent-recovery.ts). Only launches that opted in with
+  // `coalescePlainThread` take part; an explicit retrigger always replays.
+  // Decide that over the whole set first.
   const pending: PendingAutomationIntent[] = [];
   for (const entry of entries) {
     try {
@@ -1697,6 +1701,7 @@ export async function resumePendingAutomationRuns(
         osSessionId: intent.sessionId,
         acceptedAt: intent.acceptedAt,
         deleteAutomationAfterRun: intent.deleteAutomationAfterRun,
+        coalescePlainThread: intent.coalescePlainThread,
       }).finally(() => {
         if (!isShuttingDown())
           void resumePendingAutomationRuns(onSessionCreated).catch((error) =>
@@ -1731,6 +1736,13 @@ export async function runAutomation(
     /** Delete a consumed one-off only after intent/run settlement. */
     deleteAutomationAfterRun?: boolean;
     /**
+     * An automatic Plain launch (webhook or support-card click) whose durable
+     * intent boot may drop when the same thread already has a live session or
+     * an earlier pending intent. Explicit retriggers must not set this: the
+     * user asked for a fresh run despite the existing session.
+     */
+    coalescePlainThread?: boolean;
+    /**
      * Model for THIS run only, beating the automation's configured model —
      * e.g. the Plain ticket router downgrading a basic ticket to a cheaper
      * model. Callers pass an already-resolved model id.
@@ -1756,6 +1768,7 @@ export async function runAutomation(
     modelOverride: options?.modelOverride,
     acceptedAt,
     deleteAutomationAfterRun: options?.deleteAutomationAfterRun,
+    coalescePlainThread: options?.coalescePlainThread,
   });
   if (isShuttingDown()) {
     console.log(
@@ -2464,7 +2477,7 @@ export async function fireAutomationsForSlackChannel(
 export async function fireAutomationsForEvent(
   eventKey: string,
   payload: string,
-  opts?: { modelOverride?: string },
+  opts?: { modelOverride?: string; coalescePlainThread?: boolean },
 ): Promise<number> {
   let fired = 0;
   for (const automation of await listAutomations()) {
@@ -2474,6 +2487,7 @@ export async function fireAutomationsForEvent(
       trigger: "event",
       eventContext: payload,
       modelOverride: opts?.modelOverride,
+      coalescePlainThread: opts?.coalescePlainThread,
     });
     fired++;
   }

@@ -79,6 +79,7 @@ async function resolvePlainTriageSession(
       {
         trigger: "event",
         eventContext: JSON.stringify(payload, null, 2),
+        coalescePlainThread: true,
       },
     );
   });
