@@ -29,5 +29,9 @@
 @import "./base-global.css";
 @import "./base-platform.css";
 @import "./base-markdown.css";
+@import "./blocks/callout.css";
+@import "./blocks/metrics.css";
+@import "./blocks/math.css";
 @import "./base-keyframes.css";
+@import "./blocks/palette.css";
 @import "./blocks/table.css";

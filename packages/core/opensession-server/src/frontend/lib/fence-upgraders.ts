@@ -16,8 +16,11 @@
  */
 
 import { chartUpgrader } from "./chart-fence";
+import { mathUpgrader } from "./math-block";
 import { mermaidUpgrader } from "./mermaid-fence";
+import { paletteUpgrader } from "./palette-block";
 import { tableUpgrader } from "./table-block";
+import { metricsUpgrader } from "./metrics-block";
 import type { EffectiveTheme } from "./theme";
 
 export interface FenceUpgradeContext {
@@ -75,7 +78,10 @@ export interface FenceUpgrader {
 export const FENCE_UPGRADERS: readonly FenceUpgrader[] = [
   mermaidUpgrader,
   chartUpgrader,
+  paletteUpgrader,
   tableUpgrader,
+  metricsUpgrader,
+  mathUpgrader,
 ];
 
 /** The upgrader that claims a fence, if any. */

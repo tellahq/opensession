@@ -1058,6 +1058,114 @@ export function arrowDownIconMarkup(size = MIN_ICON_SIZE): string {
   return iconMarkup(pathsMarkup(ARROW_DOWN_PATHS), size);
 }
 
+// ── Callout glyphs ─────────────────────────────────────────────────────────
+// One per GitHub admonition kind (`> [!NOTE]` … `> [!CAUTION]`), drawn by
+// lib/markdown.ts into the callout's title. Same paths as the JSX icons below.
+
+const INFO_CIRCLE_PATHS = ["M12 11.25V16.25", "M12 8.25H12.01"];
+const LIGHTBULB_PATHS = [
+  "M9.75 17.25V16.4C9.75 15.5 9.2 14.8 8.6 14.2C7.45 13.2 6.75 11.8 6.75 10.25C6.75 7.35 9.1 5 12 5C14.9 5 17.25 7.35 17.25 10.25C17.25 11.8 16.55 13.2 15.4 14.2C14.8 14.8 14.25 15.5 14.25 16.4V17.25",
+  "M9.75 17.25H14.25",
+  "M10.25 19.25H13.75",
+];
+const REPORT_PATHS = [
+  "M4.75 6.75C4.75 5.645 5.645 4.75 6.75 4.75H17.25C18.355 4.75 19.25 5.645 19.25 6.75V14.25C19.25 15.355 18.355 16.25 17.25 16.25H13L8.75 19.25V16.25H6.75C5.645 16.25 4.75 15.355 4.75 14.25V6.75Z",
+  "M12 8.25V11",
+  "M12 13.75H12.01",
+];
+const WARNING_TRIANGLE_PATHS = [
+  "M4.9 17.25L10.7 6.1C11.25 5.05 12.75 5.05 13.3 6.1L19.1 17.25C19.6 18.25 18.9 19.25 17.8 19.25H6.2C5.1 19.25 4.4 18.25 4.9 17.25Z",
+  "M12 10V13.25",
+  "M12 16H12.01",
+];
+const OCTAGON_ALERT_PATHS = [
+  "M8.65 4.75H15.35L19.25 8.65V15.35L15.35 19.25H8.65L4.75 15.35V8.65L8.65 4.75Z",
+  "M12 8.5V12.5",
+  "M12 15.5H12.01",
+];
+
+export type CalloutIconKind =
+  | "note"
+  | "tip"
+  | "important"
+  | "warning"
+  | "caution";
+
+/** The callout title glyph for one admonition kind, as markup. */
+export function calloutIconMarkup(
+  kind: CalloutIconKind,
+  size = MIN_ICON_SIZE,
+): string {
+  switch (kind) {
+    case "note":
+      return iconMarkup(
+        `<circle cx="12" cy="12" r="7.25" ${STROKE_MARKUP}/>` +
+          pathsMarkup(INFO_CIRCLE_PATHS),
+        size,
+      );
+    case "tip":
+      return iconMarkup(pathsMarkup(LIGHTBULB_PATHS), size);
+    case "important":
+      return iconMarkup(pathsMarkup(REPORT_PATHS), size);
+    case "warning":
+      return iconMarkup(pathsMarkup(WARNING_TRIANGLE_PATHS), size);
+    case "caution":
+      return iconMarkup(pathsMarkup(OCTAGON_ALERT_PATHS), size);
+  }
+}
+
+export function IconInfoCircle(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="12" cy="12" r="7.25" />
+      {INFO_CIRCLE_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
+    </Svg>
+  );
+}
+
+export function IconLightbulb(p: IconProps) {
+  return (
+    <Svg {...p}>
+      {LIGHTBULB_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
+    </Svg>
+  );
+}
+
+/** A speech bubble with an exclamation mark: "this needs your attention". */
+export function IconReport(p: IconProps) {
+  return (
+    <Svg {...p}>
+      {REPORT_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
+    </Svg>
+  );
+}
+
+export function IconWarningTriangle(p: IconProps) {
+  return (
+    <Svg {...p}>
+      {WARNING_TRIANGLE_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
+    </Svg>
+  );
+}
+
+export function IconOctagonAlert(p: IconProps) {
+  return (
+    <Svg {...p}>
+      {OCTAGON_ALERT_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
+    </Svg>
+  );
+}
+
 export function IconTrash(p: IconProps) {
   return (
     <Svg {...p}>

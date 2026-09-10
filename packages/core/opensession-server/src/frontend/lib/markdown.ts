@@ -1,6 +1,15 @@
 import { Marked, type Token, type TokenizerThis, type Tokens } from "marked";
+import { type CalloutIconKind, calloutIconMarkup } from "../components/icons";
 import { BASE_PATH } from "./base";
 import { sanitizeHtmlFragment } from "./html-sanitize";
+import { hexSwatchColor } from "./palette-block";
+import {
+  displayMathBlockStart,
+  inlineMathStart,
+  matchDisplayMathBlock,
+  matchInlineMath,
+  mathPlaceholder,
+} from "./math-block";
 import { prStatusDisplay, type PrStatusInput } from "./pr-status";
 import { repoLabel } from "./repo-label";
 import { cleanSessionTitle } from "./session-title";
@@ -1193,6 +1202,75 @@ function flattenChips(tokens: Token[] | undefined): void {
   }
 }
 
+/**
+ * GitHub's admonition syntax: a blockquote whose first line is exactly
+ * `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]`, the rest
+ * of the quote being the body (docs/blocks.md, "Callouts"). Models write
+ * these constantly, and PR bodies carry them too. The marker has to be the
+ * whole first line: `> [!NOTE] inline text` is an ordinary quote on GitHub
+ * and stays one here.
+ */
+const CALLOUT_TITLES: Record<CalloutIconKind, string> = {
+  note: "Note",
+  tip: "Tip",
+  important: "Important",
+  warning: "Warning",
+  caution: "Caution",
+};
+const CALLOUT_MARKER = /^\[!(note|tip|important|warning|caution)\](\n|$)/i;
+/** The marker's name, lowercased, to its kind. */
+const CALLOUT_KINDS = new Map<string, CalloutIconKind>([
+  ["note", "note"],
+  ["tip", "tip"],
+  ["important", "important"],
+  ["warning", "warning"],
+  ["caution", "caution"],
+]);
+
+interface Callout {
+  kind: CalloutIconKind;
+  /** The quote's block tokens with the marker line taken out. */
+  body: Token[];
+}
+
+/** The callout a blockquote is, if its first line is a marker. Never mutates
+ *  the tokens marked handed over: the rewritten paragraph is a copy. */
+function calloutOf(quote: Tokens.Blockquote): Callout | null {
+  const [first, ...rest] = quote.tokens;
+  if (first?.type !== "paragraph") return null;
+  const [lead, ...inline] = first.tokens ?? [];
+  if (lead?.type !== "text") return null;
+  const m = CALLOUT_MARKER.exec(lead.text);
+  if (!m) return null;
+  const kind = CALLOUT_KINDS.get(m[1]!.toLowerCase());
+  if (!kind) return null;
+  let after = inline;
+  if (m[2] === "") {
+    // With `breaks` on, the line end after the marker is a <br> token of its
+    // own rather than a newline in the text; it goes with the marker. A
+    // marker that ends the text token but not the line (`[!NOTE]**bold**`)
+    // is prose, not a title.
+    if (after[0]?.type === "br") after = after.slice(1);
+    else if (after.length > 0) return null;
+  }
+  const remainder = lead.text.slice(m[0].length);
+  const bodyInline: Token[] = remainder
+    ? [{ ...lead, raw: remainder, text: remainder }, ...after]
+    : after;
+  const body: Token[] = bodyInline.length
+    ? [
+        {
+          ...first,
+          raw: first.raw.replace(CALLOUT_MARKER, ""),
+          text: first.text.replace(CALLOUT_MARKER, ""),
+          tokens: bodyInline,
+        },
+        ...rest,
+      ]
+    : rest;
+  return { kind, body };
+}
+
 // An auto-linked (or <bracketed>) bare URL: marked hands the raw URL over as
 // the link text. Trailing-slash tolerant so `…/session/bks-x/` still counts.
 function isBareUrlLink(token: Tokens.Link): boolean {
@@ -1236,6 +1314,20 @@ md.use({
       return renderRawHtml === "sanitize"
         ? sanitizeHtmlFragment(raw)
         : attr(raw);
+    },
+    // A GitHub callout renders as a titled block in its kind's colour
+    // (styles/blocks/callout.css); every other blockquote falls through to
+    // marked's own renderer, untouched.
+    blockquote(token: Tokens.Blockquote) {
+      const callout = calloutOf(token);
+      if (!callout) return false;
+      const { kind, body } = callout;
+      return (
+        `<div class="md-callout md-callout-${kind}">` +
+        `<div class="md-callout-title">${calloutIconMarkup(kind, 16)}${CALLOUT_TITLES[kind]}</div>` +
+        this.parser.parse(body) +
+        `</div>\n`
+      );
     },
     link(token: Tokens.Link) {
       // `[PR #5528](https://github.com/…)` is everyday agent output, and the
@@ -1325,6 +1417,11 @@ md.use({
       if (!renderInLink && SESSION_ID_EXACT.test(t)) return sessionLink(t);
       if (!renderInLink && AUTOMATION_ID_EXACT.test(t))
         return automationChip(t);
+      // A hex colour gets a swatch chip. The style is built from the
+      // validated, lowercased hex only, never from the span's raw text.
+      const swatch = hexSwatchColor(t);
+      if (swatch)
+        return `<code><span class="md-color-chip" style="background:${swatch}"></span>${attr(t)}</code>`;
       return `<code>${attr(t)}</code>`;
     },
     image(token: Tokens.Image) {
@@ -1350,6 +1447,34 @@ md.use({
   // Bare session ids in prose (not wrapped in backticks) also link. Strict
   // uuidv7 shape so it only fires on real ids.
   extensions: [
+    // Math (lib/math-block.ts). A `$$` block on its own lines becomes the
+    // same code token a ```math fence is, so the fence upgrader typesets
+    // both and a body that is never upgraded still shows readable source.
+    {
+      name: "mathBlock",
+      level: "block",
+      start: displayMathBlockStart,
+      tokenizer(src: string) {
+        const m = matchDisplayMathBlock(src);
+        if (!m) return undefined;
+        return { type: "code", raw: m.raw, lang: "math", text: m.source };
+      },
+    },
+    // `$x^2$` in prose: a placeholder carrying the escaped source, upgraded
+    // after mount. The grammar is strict about prices; see math-block.ts.
+    {
+      name: "mathInline",
+      level: "inline",
+      start: inlineMathStart,
+      tokenizer(src: string) {
+        const m = matchInlineMath(src);
+        if (!m) return undefined;
+        return { type: "mathInline", raw: m.raw, math: m };
+      },
+      renderer(token: Tokens.Generic) {
+        return mathPlaceholder(token.math);
+      },
+    },
     {
       name: "assetPath",
       level: "inline",

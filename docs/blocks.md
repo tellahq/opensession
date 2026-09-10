@@ -58,21 +58,40 @@ as one slider. Both paths obey the same media rules as `OPENSESSION_IMAGE:`.
 ### Callouts
 
 GitHub's admonition syntax: a blockquote whose first line is `[!NOTE]`,
-`[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]`. The rest of the quote
-is the body.
+`[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` (any case) and
+nothing else. The rest of the quote is the body, ordinary markdown. A marker
+with text after it on the same line, or anywhere but the first line, is a
+plain quote, as on GitHub.
 
 ### Math
 
 `$$` on its own lines opens and closes a display block; `$x^2$` is inline.
 Inline math needs the opening `$` to touch the expression and the closing `$`
-to touch it too, so `$1.84` and `$5 to $10` stay prose. A ` ```math `
-fence is a display block as well.
+to touch it too, with no digit after the close, so `$1.84`, `$5 to $10` and
+`$5-$10` stay prose. It never spans a line or reaches into a code span; write
+`\$` for a literal dollar next to an expression. A one-line `$$E=mc^2$$`
+typesets in display mode where it sits. A ` ```math ` fence is a display
+block as well, and a `$$` block renders as that fence until it is typeset,
+so a block that does not parse stays readable source.
+
+KaTeX writes MathML only (no katex.css, no fonts to serve); the browser
+lays it out in its math font and the current text colour.
 
 ### Colour
 
-A ` ```palette ` fence lists one colour per line, `#hex` or any CSS
-colour, optionally followed by a name. A hex colour in a codespan
-(`` `#ff0080` ``) gets a swatch chip beside it.
+A ` ```palette ` fence lists one colour per line, with an optional
+name on either side: `#ff0080 Brand pink` or `Brand pink: #ff0080`. A
+colour is `#hex` (3, 4, 6 or 8 digits), a colour function with a flat
+argument list (`rgb()`, `hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`,
+`oklch()`, `color()`; no `color-mix()` or `calc()`), or a CSS colour
+name. A trailing `;` or `,` on the value is ignored, so lines lifted from
+a stylesheet parse. Blank lines are skipped; any other line that is not a
+colour keeps the whole fence as code. Each swatch copies its value on
+click.
+
+A codespan that is exactly a six or eight digit hex (`` `#ff0080` ``)
+gets a swatch chip before the text. Three and four digit forms do not,
+since `#123` in a codespan is usually an issue number or an anchor.
 
 ### JSON tree
 
@@ -128,8 +147,12 @@ markdown, including the other block kinds.
 ### Metrics
 
 A ` ```metrics ` fence lists one metric per line as
-`Label: value (delta)`, or is a JSON array of `{label, value, delta, unit}`.
-Renders as a row of cards.
+`Label: value (delta)`, the parenthesised delta optional, or is a JSON array
+of `{label, value, delta?, unit?}` (a numeric `value` or `delta` is formatted
+for reading, `1204` as `1,204`). Renders as a row of cards: the value big and
+tabular, the label under it, the delta beside the value and coloured by its
+lead character: `+`, `▲` or `↑` is up, `-`, `▼` or `↓` is down, anything else
+is neutral. A fence that does not parse stays a code block.
 
 ## Adding a block kind
 

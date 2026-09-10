@@ -12,6 +12,7 @@ describe("fence upgrader registry", () => {
     expect(fenceUpgraderFor("mermaid")?.langs).toContain("mermaid");
     expect(fenceUpgraderFor("Vega-Lite")?.langs).toContain("vega-lite");
     expect(fenceUpgraderFor("chart")?.langs).toContain("chart");
+    expect(fenceUpgraderFor("palette")?.langs).toContain("palette");
     expect(fenceUpgraderFor("ts")).toBeUndefined();
     expect(fenceUpgraderFor(undefined)).toBeUndefined();
   });

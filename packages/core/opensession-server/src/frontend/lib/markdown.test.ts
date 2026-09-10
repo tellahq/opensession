@@ -1212,6 +1212,90 @@ describe("renderPrCommentMarkdown bot markup", () => {
   });
 });
 
+describe("renderMarkdown callouts", () => {
+  it("renders a GitHub admonition as a titled callout", () => {
+    const html = renderMarkdown("> [!NOTE]\n> Body with **bold**.");
+    expect(html).toContain('<div class="md-callout md-callout-note">');
+    expect(html).toContain('<div class="md-callout-title"><svg');
+    expect(html).toContain("</svg>Note</div>");
+    expect(html).toContain("<p>Body with <strong>bold</strong>.</p>");
+    expect(html).not.toContain("[!NOTE]");
+    expect(html).not.toContain("<blockquote>");
+  });
+
+  it("knows every kind, in any case", () => {
+    for (const [marker, kind, title] of [
+      ["[!TIP]", "tip", "Tip"],
+      ["[!IMPORTANT]", "important", "Important"],
+      ["[!Warning]", "warning", "Warning"],
+      ["[!caution]", "caution", "Caution"],
+    ]) {
+      const html = renderMarkdown(`> ${marker}\n> Text`);
+      expect(html).toContain(`md-callout-${kind}"`);
+      expect(html).toContain(`</svg>${title}</div>`);
+      expect(html).toContain("<p>Text</p>");
+    }
+  });
+
+  it("keeps the body as ordinary markdown, lists included", () => {
+    const html = renderMarkdown(
+      "> [!WARNING]\n> First line.\n>\n> - one\n> - two\n>\n> ```ts\n> x\n> ```",
+    );
+    expect(html).toContain("<p>First line.</p>");
+    expect(html).toContain("<li>one</li>");
+    expect(html).toContain('<code class="language-ts">x');
+  });
+
+  it("renders a marker with no body as just the title", () => {
+    const html = renderMarkdown("> [!TIP]");
+    expect(html).toBe(
+      '<div class="md-callout md-callout-tip"><div class="md-callout-title">' +
+        html.slice(
+          html.indexOf("<svg"),
+          html.indexOf("</svg>") + "</svg>".length,
+        ) +
+        "Tip</div></div>\n",
+    );
+  });
+
+  it("renders a body that starts on the marker line with a list", () => {
+    const html = renderMarkdown("> [!NOTE]\n> - a\n> - b");
+    expect(html).toContain("<li>a</li>");
+    expect(html).not.toContain("<p></p>");
+  });
+
+  it("leaves ordinary blockquotes alone", () => {
+    expect(renderMarkdown("> Just a quote")).toBe(
+      "<blockquote>\n<p>Just a quote</p>\n</blockquote>\n",
+    );
+    // The marker has to be the whole first line, as on GitHub.
+    const inline = renderMarkdown("> [!NOTE] inline text\n> more");
+    expect(inline).toContain("<blockquote>");
+    expect(inline).toContain("[!NOTE] inline text");
+    expect(inline).not.toContain("md-callout");
+    // Nor is a marker anywhere but first.
+    const late = renderMarkdown("> Intro\n>\n> [!NOTE]\n> more");
+    expect(late).toContain("<blockquote>");
+    expect(late).not.toContain("md-callout");
+    // An unknown kind is prose.
+    expect(renderMarkdown("> [!DANGER]\n> x")).not.toContain("md-callout");
+  });
+
+  it("renders inside PR prose, with the sanitizer still on the body", () => {
+    const html = renderPrCommentMarkdown(
+      "> [!IMPORTANT]\n> Press <kbd>K</kbd> <script>alert(1)</script>",
+    );
+    expect(html).toContain("md-callout-important");
+    expect(html).toContain("<kbd>K</kbd>");
+    expect(html).not.toContain("<script>");
+  });
+
+  it("escapes raw HTML in a transcript callout", () => {
+    const html = renderMarkdown("> [!CAUTION]\n> <b>x</b>");
+    expect(html).toContain("&lt;b&gt;x&lt;/b&gt;");
+  });
+});
+
 describe("renderMarkdown @-mentions", () => {
   // The roster is module state, so publish it once for this block. The
   // renderer's cache is keyed on the source text, and setKnownPeople clears
@@ -1317,5 +1401,98 @@ describe("GitHub user-attachment media", () => {
     const html = renderMarkdown(url, { repo: "opensession" });
     expect(html).not.toContain("<video");
     expect(html).toContain(`<a href="${proxied}"`);
+  });
+});
+
+describe("renderMarkdown hex colour codespans", () => {
+  it("puts a swatch chip before a six or eight digit hex codespan", () => {
+    expect(renderMarkdown("Use `#FF0080` here.")).toContain(
+      '<code><span class="md-color-chip" style="background:#ff0080"></span>#FF0080</code>',
+    );
+    expect(renderMarkdown("`#ff0080cc`")).toContain(
+      'style="background:#ff0080cc"></span>#ff0080cc</code>',
+    );
+  });
+
+  it("leaves short hashes and anything that is not exactly a hex alone", () => {
+    for (const span of [
+      "#123",
+      "#abcd",
+      "#5528",
+      "#ff0080 brand",
+      "#ff0080;",
+      "gg0080",
+      "#ff008",
+    ]) {
+      const html = renderMarkdown(`See \`${span}\`.`);
+      expect(html).not.toContain("md-color-chip");
+      expect(html).toContain(`<code>${span}</code>`);
+    }
+  });
+
+  it("never lets raw span text reach the style attribute", () => {
+    const html = renderMarkdown('`#ff0080" onmouseover="x`');
+    expect(html).not.toContain("md-color-chip");
+    expect(html).not.toContain("style=");
+    expect(html).toContain("<code>#ff0080&quot; onmouseover=&quot;x</code>");
+  });
+});
+
+describe("renderMarkdown math", () => {
+  it("emits an inline placeholder carrying the escaped source", () => {
+    const html = renderMarkdown("The area is $\\pi r^2$ here.");
+    expect(html).toContain(
+      '<span class="md-math" data-math="\\pi r^2">$\\pi r^2$</span>',
+    );
+  });
+
+  it("typesets a one-line $$...$$ as display math", () => {
+    const html = renderMarkdown("Then $$E = mc^2$$ follows.");
+    expect(html).toContain('data-display="" data-math="E = mc^2"');
+  });
+
+  it("turns a $$ block on its own lines into a math fence", () => {
+    const html = renderMarkdown("Before\n$$\n\\sum_{i=1}^n i\n$$\nAfter");
+    expect(html).toContain(
+      '<pre><code class="language-math">\\sum_{i=1}^n i\n</code></pre>',
+    );
+    expect(html).toContain("<p>Before</p>");
+    expect(html).toContain("<p>After</p>");
+    expect(html).not.toContain("md-math");
+  });
+
+  it("leaves a ```math fence as the fence the upgrader claims", () => {
+    const html = renderMarkdown("```math\nx^2\n```");
+    expect(html).toContain('<code class="language-math">x^2\n</code>');
+  });
+
+  it("keeps prices as prose", () => {
+    for (const prose of [
+      "It costs $1.84 today.",
+      "Between $5 to $10 each.",
+      "Pay $5, $10 or $20.",
+      "A range of $5-$10.",
+      "It costs $3",
+      "Roughly $5 and up to $10 more",
+    ]) {
+      const html = renderMarkdown(prose);
+      expect(html).not.toContain("md-math");
+      expect(html).toContain("$");
+    }
+  });
+
+  it("never matches across lines or inside code", () => {
+    expect(renderMarkdown("costs $5\nand $10")).not.toContain("md-math");
+    expect(renderMarkdown("run `echo $x$`")).toContain("<code>echo $x$</code>");
+    expect(renderMarkdown("```sh\necho $x$\n```")).not.toContain("md-math");
+    const fenced = renderMarkdown("```txt\n$$\nx\n$$\n```");
+    expect(fenced).toContain('class="language-txt"');
+    expect(fenced).not.toContain("language-math");
+  });
+
+  it("escapes a dollar written as \\$", () => {
+    const html = renderMarkdown("costs \\$x\\$ now");
+    expect(html).not.toContain("md-math");
+    expect(html).toContain("$x$");
   });
 });
