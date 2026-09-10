@@ -1512,3 +1512,45 @@ describe("renderMarkdown fence info strings", () => {
     );
   });
 });
+
+describe("session media placed in the body", () => {
+  const shot = "/media?path=%2Ftmp%2Fshot.png";
+  const clip = "/media?path=%2Ftmp%2Fclip.mp4";
+
+  it("renders a paragraph that is one /media image as a captioned figure", () => {
+    const html = renderMarkdown(
+      `## Proof\n\n![The login page](${shot})\n\nDone.`,
+    );
+    expect(html).toContain(
+      `<figure class="md-figure"><a href="${shot}" target="_blank" rel="noopener noreferrer" class="md-image-link">` +
+        `<img class="md-image" src="${shot}" alt="The login page" loading="lazy" /></a>` +
+        `<figcaption class="md-figcaption">The login page</figcaption></figure>`,
+    );
+    expect(html).toContain("<p>Done.</p>");
+    expect(html).not.toContain(`<p><a href="${shot}"`);
+  });
+
+  it("leaves the caption off when the alt is empty", () => {
+    const html = renderMarkdown(`![](${shot})`);
+    expect(html).toContain('<figure class="md-figure">');
+    expect(html).not.toContain("figcaption");
+  });
+
+  it("plays a /media video in the figure with an expand button", () => {
+    const html = renderMarkdown(`![The whole flow](${clip})`);
+    expect(html).toContain(
+      `<figure class="md-figure"><div class="md-video-wrap"><video class="md-video" src="${clip}" controls playsinline preload="metadata"></video>` +
+        `<button type="button" class="md-video-expand" data-md-expand="video"`,
+    );
+    expect(html).toContain(
+      '<figcaption class="md-figcaption">The whole flow</figcaption>',
+    );
+  });
+
+  it("keeps any other image, and an image beside text, inline", () => {
+    expect(renderMarkdown("![shot](https://example.com/a.png)")).toContain(
+      '<p><a href="https://example.com/a.png"',
+    );
+    expect(renderMarkdown(`See ![x](${shot})`)).toContain("<p>See <a href");
+  });
+});

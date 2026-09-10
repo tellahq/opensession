@@ -15,6 +15,7 @@ import { repoLabel } from "./repo-label";
 import { cleanSessionTitle } from "./session-title";
 import { INTERNAL_ORIGINS, UUIDV7, internalUrlTarget } from "./session-url";
 import { sessionAssetRawUrl } from "./api/sessions";
+import { expandIconMarkup } from "../components/icons";
 
 // Dedicated marked instance for session messages so this config doesn't leak
 // into other markdown (wiki, etc.). Two customisations:
@@ -31,6 +32,43 @@ function attr(v: string | null | undefined): string {
     .replace(/"/g, "&quot;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+const VIDEO_HREF_RE = /\.(mp4|webm|mov|m4v)([?#]|$)/i;
+/** Media streamed by this server (routes/media.ts): the form the server
+ *  writes an OPENSESSION_IMAGE/_VIDEO line into (transcript-media.ts). */
+const SESSION_MEDIA_HREF_RE = /^\/media\?path=/;
+
+function videoMarkup(href: string, title = ""): string {
+  return `<video class="md-video" src="${attr(href)}"${title} controls playsinline preload="metadata"></video>`;
+}
+
+/**
+ * A paragraph that is nothing but one image of session media is the agent
+ * showing something where it wrote it: render it as a figure, its alt text
+ * as the caption, at the width the figure styles give it (base-markdown.css).
+ * A video gets the expand button a trailing-row player has (MessageBubble
+ * EntryVideos), opened by the delegated lightbox handler; the player's own
+ * controls take every other click. Any other image, PR prose included,
+ * keeps the plain inline rendering.
+ */
+function sessionMediaFigure(token: Tokens.Paragraph): string | null {
+  if (token.tokens.length !== 1) return null;
+  const image = token.tokens[0];
+  if (image.type !== "image" || !SESSION_MEDIA_HREF_RE.test(image.href))
+    return null;
+  const caption = String(image.text ?? "").trim();
+  const media = VIDEO_HREF_RE.test(image.href)
+    ? `<div class="md-video-wrap">${videoMarkup(image.href)}` +
+      `<button type="button" class="md-video-expand" data-md-expand="video" aria-label="Expand" title="Expand">${expandIconMarkup()}</button>` +
+      `</div>`
+    : `<a href="${attr(image.href)}" target="_blank" rel="noopener noreferrer" class="md-image-link">` +
+      `<img class="md-image" src="${attr(image.href)}" alt="${attr(caption)}" loading="lazy" />` +
+      `</a>`;
+  const figcaption = caption
+    ? `<figcaption class="md-figcaption">${attr(caption)}</figcaption>`
+    : "";
+  return `<figure class="md-figure">${media}${figcaption}</figure>\n`;
 }
 
 type AssetReferenceRegistry = {
@@ -1438,14 +1476,20 @@ md.use({
         return `<code><span class="md-color-chip" style="background:${swatch}"></span>${attr(t)}</code>`;
       return `<code>${attr(t)}</code>`;
     },
+    paragraph(token: Tokens.Paragraph) {
+      return (
+        sessionMediaFigure(token) ??
+        `<p>${this.parser.parseInline(token.tokens)}</p>\n`
+      );
+    },
     image(token: Tokens.Image) {
       const title = token.title ? ` title="${attr(token.title)}"` : "";
       // Video files pasted with image syntax would render as a broken <img>
       // linking to a new tab — play them inline instead. Clicks on .md-image
       // open the media lightbox (delegated handler in MediaLightbox.tsx); the
       // wrapping <a> stays for cmd/middle-click open-in-tab.
-      if (/\.(mp4|webm|mov|m4v)([?#]|$)/i.test(token.href ?? "")) {
-        return `<video class="md-video" src="${attr(token.href)}"${title} controls playsinline preload="metadata"></video>`;
+      if (VIDEO_HREF_RE.test(token.href ?? "")) {
+        return videoMarkup(token.href, title);
       }
       // Image syntax around a GitHub user attachment is an image (a video
       // attachment is always embedded as a bare URL) — swap in the proxy

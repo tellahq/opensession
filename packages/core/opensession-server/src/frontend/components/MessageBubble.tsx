@@ -16,6 +16,7 @@ import { assetPathForMediaSrc } from "../lib/asset-preview";
 import { fullTime, shortTime } from "../lib/time";
 import { UserAvatar } from "./UserAvatar";
 import { openGalleryFrom } from "../lib/media-lightbox-gallery";
+import { unplacedMedia } from "../lib/placed-media";
 import { IconExpand, IconFileText2, IconPencil } from "./icons";
 import { Collapsible, collapsiblePanelClasses } from "../ui/collapsible";
 import { pastedTextLineLabel } from "@tellahq/opensession-protocol/pasted-text";
@@ -880,7 +881,8 @@ export const MessageBubble = function MessageBubble({
   }
 
   // assistant — no speaker label: every left-aligned bubble is the agent, so
-  // the name row was pure noise above each answer.
+  // the name row was pure noise above each answer. The trailing row is for
+  // media the body did not already place (lib/placed-media.ts).
   return (
     <div className={cn(msgRow, enterClass)} data-eid={e.id}>
       <ClampedBody
@@ -889,8 +891,11 @@ export const MessageBubble = function MessageBubble({
         entry={e}
         sessionId={sessionId}
       />
-      <EntryImages images={e.images} sessionId={sessionId} />
-      <EntryVideos videos={e.videos} />
+      <EntryImages
+        images={unplacedMedia(e.images, e.content)}
+        sessionId={sessionId}
+      />
+      <EntryVideos videos={unplacedMedia(e.videos, e.content)} />
     </div>
   );
 };

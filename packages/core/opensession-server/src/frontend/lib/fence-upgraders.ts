@@ -18,6 +18,7 @@
 import { ansiUpgrader } from "./ansi-block";
 import { artifactUpgrader } from "./artifact-block";
 import { chartUpgrader } from "./chart-fence";
+import { compareUpgrader } from "./compare-block";
 import { jsonTreeUpgrader } from "./json-tree-block";
 import { mathUpgrader } from "./math-block";
 import { mermaidUpgrader } from "./mermaid-fence";
@@ -95,6 +96,7 @@ export const FENCE_UPGRADERS: readonly FenceUpgrader[] = [
   ansiUpgrader,
   artifactUpgrader,
   slidesUpgrader,
+  compareUpgrader,
 ];
 
 /** The upgrader that claims a fence, if any. */

@@ -565,6 +565,9 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
             ...(assistant.images.length > 0
               ? { images: assistant.images }
               : {}),
+            ...(assistant.featuredMedia.length > 0
+              ? { featuredMedia: assistant.featuredMedia }
+              : {}),
           });
           textBlockCount++;
         }
@@ -595,6 +598,9 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
           ...(raw.isReasoning ? { isReasoning: true } : {}),
           ...(assistant.videos.length > 0 ? { videos: assistant.videos } : {}),
           ...(assistant.images.length > 0 ? { images: assistant.images } : {}),
+          ...(assistant.featuredMedia.length > 0
+            ? { featuredMedia: assistant.featuredMedia }
+            : {}),
         });
       }
     }
@@ -710,6 +716,10 @@ function parseCodexEntry(raw: any): TranscriptEntry[] {
           content: assistant.content,
           timestamp: ts,
           ...(assistant.videos.length > 0 ? { videos: assistant.videos } : {}),
+          ...(assistant.images.length > 0 ? { images: assistant.images } : {}),
+          ...(assistant.featuredMedia.length > 0
+            ? { featuredMedia: assistant.featuredMedia }
+            : {}),
         },
       ];
     }

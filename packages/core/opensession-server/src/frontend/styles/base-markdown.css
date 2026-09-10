@@ -526,6 +526,38 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .md-image {
   cursor: zoom-in;
 }
+/* Session media placed where the agent wrote it (markdown.ts renders a
+   paragraph that is one `/media` image as a figure; the server wrote that
+   for an OPENSESSION_IMAGE/_VIDEO line, see transcript-media.ts). It is the
+   thing the reader was asked to look at, so it gets more room than a
+   thumbnail in the trailing row, still capped so a tall phone capture does
+   not take the whole viewport. The caption is the line the agent wrote
+   under the marker. */
+.md-figure {
+  margin: 2px 0 8px;
+}
+.md-figure .md-image-link {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+.md-figure .md-image,
+.md-figure .md-video {
+  max-height: 480px;
+  margin: 0;
+}
+.md-figcaption {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-dim);
+}
+@media (max-width: 720px) {
+  .md-figure .md-image,
+  .md-figure .md-video {
+    max-height: 400px;
+  }
+}
 /* An <img> written as raw HTML in PR prose (html-sanitize.ts tags them). The
    block treatment above is right for a pasted screenshot and wrong here: bots
    use raw images for 16px avatars and status badges inside a table cell, where

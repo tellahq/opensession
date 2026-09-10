@@ -15,6 +15,7 @@ import {
   type LightboxState,
 } from "../lib/media-lightbox";
 import {
+  lightboxBlockMediaFor,
   lightboxDiagramFor,
   openGalleryFrom,
 } from "../lib/media-lightbox-gallery";
@@ -123,6 +124,7 @@ export function MediaLightboxHost() {
       const media =
         target.closest?.("img.md-image") ||
         target.closest?.("a.md-image-link")?.querySelector("img.md-image") ||
+        lightboxBlockMediaFor(target) ||
         lightboxDiagramFor(target);
       if (!media) return;
       e.preventDefault();

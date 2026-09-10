@@ -18,8 +18,8 @@ only carrier of information the reader needs.
 | ` ```vega-lite ` (`chart`)           | Interactive chart with tooltips, themed, expandable    | `lib/chart-fence.ts`, `lib/vega-chart.ts`, `server/charts-mcp.ts` |
 | ` ```diff `                          | Patch with whole added and removed rows washed         | `lib/shiki-engine.ts`                                             |
 | `OPENSESSION_IMAGE: /abs/path.png`   | Image in place, full column width, optional caption    | `server/transcript-media.ts`, `lib/markdown.ts`                   |
-| `OPENSESSION_VIDEO: /abs/path.mp4`   | Video player in place                                  | same                                                              |
-| `OPENSESSION_COMPARE: /a.png /b.png` | Before/after slider                                    | `lib/compare-block.ts`                                            |
+| `OPENSESSION_VIDEO: /abs/path.mp4`   | Video player in place, optional caption                | same                                                              |
+| `OPENSESSION_COMPARE: /a.png /b.png` | Before/after slider, optional caption                  | same, `lib/compare-block.ts`                                      |
 | `> [!NOTE]` … `> [!CAUTION]`         | GitHub-style callout                                   | `lib/markdown.ts`                                                 |
 | `$$ … $$`, `$ … $`, ` ```math `      | Typeset math (KaTeX)                                   | `lib/math-block.ts`                                               |
 | ` ```palette `, `` `#ff0080` ``      | Colour swatches; a hex codespan gets a swatch chip     | `lib/palette-block.ts`                                            |
@@ -44,16 +44,48 @@ validates a Vega-Lite spec and offloads large data into a session asset.
 
 ### Media in place
 
-`OPENSESSION_IMAGE:` and `OPENSESSION_VIDEO:` lines render where they are
-written, at the column's width. A line of plain text directly under a marker
-is its caption. The entry's `images[]` / `videos[]` still carry the media for
-the turn fold's strip and the lightbox gallery; the trailing thumbnail row
-under a message only shows media the body did not already place.
+`OPENSESSION_IMAGE: /abs/path.png` and `OPENSESSION_VIDEO: /abs/path.mp4`
+lines render where they are written, at the column's width (capped at 480px
+tall, 400px on a phone), and open the lightbox gallery. The path must be
+absolute and under `/tmp` or the service user's home, which is what the
+`/media` route serves. A marker may be bolded, backticked or bulleted; the
+wrapper is dropped.
+
+A caption is one line of plain text directly under the marker: no blank line
+between, at most 160 characters, not a heading, list item, quote, table row,
+fence or another marker, and followed by a blank line, another marker or the
+end of the message. Two lines of prose after a marker are prose, not a
+caption.
+
+The server rewrites the marker in the stored message (`placeMediaMarkers` in
+`server/transcript-media.ts`) into standard image syntax,
+`![caption](/media?path=...)`, with a blank line on each side. The web
+renders a paragraph that is one such image as a figure with the alt as its
+caption, and plays it when the file is a video; every other markdown client
+shows an image or a link. The entry's `images[]` / `videos[]` still list the
+media for the turn fold's strip, the lightbox gallery and the native clients,
+and `featuredMedia` names what a marker showed. The trailing thumbnail row
+under a web message only shows media the body did not already place
+(`lib/placed-media.ts`). Messages stored before the rewrite have no image in
+their body and render exactly as before.
 
 ### Before/after
 
-`OPENSESSION_COMPARE: /abs/before.png /abs/after.png` renders the two images
-as one slider. Both paths obey the same media rules as `OPENSESSION_IMAGE:`.
+`OPENSESSION_COMPARE: /abs/before.png /abs/after.png` renders the two stills
+as one slider: drag the divider, tap anywhere, or use the arrow keys with the
+slider focused. Both paths obey the media rules above, both land in
+`images[]` and `featuredMedia`, and the caption rule is the same. The server
+rewrites the line into a ` ```compare ` fence:
+
+```
+before: /media?path=...
+after: /media?path=...
+caption: Retry timeline
+```
+
+`lib/compare-block.ts` upgrades the fence into the slider; a client without
+it shows the two URLs and the caption as a code block. The fence can also be
+written by hand with any http(s) or root-relative still.
 
 ### Callouts
 
