@@ -1303,6 +1303,21 @@ final class SessionViewModel {
     /// before another notice replaces it.
     func dismissNotice() { notice = nil }
 
+    /// The session just moved into a Sandbox (`POST .../sandbox/attach`).
+    /// The record the server answered with is carried onto the row now, so
+    /// the move leaves the ⋯ menu and the workspace sheet says Preparing
+    /// before the next sessions poll agrees.
+    func noteSandboxMove(_ status: SessionSandboxStatus, provider: String) {
+        session.sandbox = SessionSandbox(
+            provider: status.provider ?? provider,
+            sandboxId: status.sandboxId,
+            workspace: status.workspace,
+            lifecycle: status.lifecycle ?? "preparing",
+            lastLifecycleError: status.lastLifecycleError
+        )
+        notice = "Moving to \(SandboxMove.label(provider)). The next message runs there."
+    }
+
     /// Record something this app just did as a transcript line of its own.
     /// A client-side action gets no entry from the server, so this is a local
     /// row — and the transcript is where it belongs: it reads in place, in the

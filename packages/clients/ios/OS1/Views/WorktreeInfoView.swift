@@ -34,6 +34,15 @@ struct WorktreeInfoView: View {
     @State private var sandboxAction: SessionSandboxAction?
     @State private var sandboxError: String?
     @State private var confirmingSandboxRecreate = false
+    /// The minted desktop link while its Safari sheet is up. Nowhere else:
+    /// the URL is a bearer secret (see `SandboxDesktopLink`).
+    @State private var desktopLink: SafariLink?
+    @State private var openingDesktop = false
+    #if DEBUG
+    /// Lets the native capture tool land on one section of this long sheet
+    /// (`OS1_SCROLL_TO=sandbox`) on a simulator that takes no taps.
+    @State private var scrolledSection: String?
+    #endif
     @State private var loading = true
     @State private var loadFailed = false
     @State private var repos: [OS1API.RepoInfo] = []
@@ -66,13 +75,20 @@ struct WorktreeInfoView: View {
                     assetsSection
                     worktreeSection
                     sandboxSection
+                        .id("sandbox")
                     runnerSection
                     runSettingsSection
                     effectiveConfigSection
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 28)
+                #if DEBUG
+                .scrollTargetLayout()
+                #endif
             }
+            #if DEBUG
+            .scrollPosition(id: $scrolledSection, anchor: .top)
+            #endif
             .background(OS1VisualStyle.background)
             .navigationTitle("Workspace")
             .navigationBarTitleDisplayMode(.inline)
@@ -81,7 +97,15 @@ struct WorktreeInfoView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .task(id: loadIdentity) { await load() }
+            .task(id: loadIdentity) {
+                await load()
+                #if DEBUG
+                if let target = ProcessInfo.processInfo.environment["OS1_SCROLL_TO"], !target.isEmpty {
+                    try? await Task.sleep(for: .milliseconds(400))
+                    withAnimation(nil) { scrolledSection = target }
+                }
+                #endif
+            }
             .task(id: effectiveConfigIdentity) {
                 // Model controls update the session optimistically, then send
                 // over the socket. Let that write land before forecasting it.
@@ -124,6 +148,11 @@ struct WorktreeInfoView: View {
             } message: {
                 Text("Unpushed files that exist only inside this sandbox will be deleted.")
             }
+            // The Sandbox's screen, in Safari's own view: the providers hand
+            // out a streaming page (Box) or a noVNC page (Daytona), and
+            // SFSafariViewController carries both without the app hosting
+            // web content or ever holding the link past this sheet.
+            .sheet(item: $desktopLink) { link in SafariSheet(url: link.url) }
             .alert(
                 "Couldn't update sandbox",
                 isPresented: Binding(
@@ -374,6 +403,29 @@ struct WorktreeInfoView: View {
                     if let cwd = sandboxStatus?.cwd, !cwd.isEmpty {
                         Divider()
                         InfoRow(label: "Path", value: cwd, icon: "folder", monospaced: true)
+                    }
+                    if sandboxState == "awake", sandboxStatus?.canDesktop == true {
+                        Divider()
+                        Button {
+                            Task { await openDesktop() }
+                        } label: {
+                            HStack(spacing: 10) {
+                                if openingDesktop {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Image(systemName: "desktopcomputer")
+                                }
+                                Text(openingDesktop ? "Opening desktop…" : "Open desktop")
+                                Spacer()
+                            }
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(OS1VisualStyle.link)
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 48)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(openingDesktop || sandboxAction != nil)
                     }
                     if sandboxState == "awake", sandboxStatus?.canPause == true {
                         Divider()
@@ -1284,6 +1336,26 @@ struct WorktreeInfoView: View {
         sandboxLoading = true
         defer { sandboxLoading = false }
         applySandboxResult(await loadSandboxResult())
+    }
+
+    /// Mints one viewer's desktop link and opens it. Minted on the tap, never
+    /// ahead of it, because the server hands each link out once and audits
+    /// the request without it; the app keeps it only as the sheet's state
+    /// and never writes it to a log or a store.
+    private func openDesktop() async {
+        guard !openingDesktop else { return }
+        openingDesktop = true
+        defer { openingDesktop = false }
+        do {
+            let link = try await OS1API.sandboxDesktop(sessionId: currentSession.id)
+            guard let url = link.webURL else {
+                sandboxError = "The Sandbox desktop link is not a web address."
+                return
+            }
+            desktopLink = SafariLink(url: url)
+        } catch {
+            sandboxError = error.localizedDescription
+        }
     }
 
     private func performSandboxAction(_ action: SessionSandboxAction) async {

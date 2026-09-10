@@ -35,6 +35,9 @@ enum OS1API {
         case badURL
         case http(Int)
         case server(String)
+        /// 428: the server wants a person to accept a consequence it spelled
+        /// out before it acts. Repeat the request with `confirm` to proceed.
+        case confirmRequired(String)
 
         var errorDescription: String? {
             switch self {
@@ -44,7 +47,7 @@ enum OS1API {
                 code == 401
                     ? "Not signed in (401) — check your token in Settings."
                     : "Server returned HTTP \(code)."
-            case .server(let message): message
+            case .server(let message), .confirmRequired(let message): message
             }
         }
     }
@@ -1021,6 +1024,32 @@ enum OS1API {
         return try await post("/api/sessions/\(encoded)/sandbox/\(action.rawValue)", body: body)
     }
 
+    /// Move a session that runs on this machine into a Sandbox, provisioned
+    /// on its next turn. A 428 (`APIError.confirmRequired`) means work exists
+    /// only on this machine; repeat with `confirm` to move anyway.
+    static func sandboxAttach(
+        sessionId: String,
+        provider: String,
+        confirm: Bool = false
+    ) async throws -> SessionSandboxStatus {
+        let encoded = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        var body: [String: Any] = ["provider": provider]
+        if confirm { body["confirm"] = true }
+        return try await post("/api/sessions/\(encoded)/sandbox/attach", body: body)
+    }
+
+    /// Mint one viewer's link to the Sandbox desktop. Open it, then drop it:
+    /// the URL is a bearer secret the server never repeats (see
+    /// `SandboxDesktopLink`).
+    static func sandboxDesktop(sessionId: String) async throws -> SandboxDesktopLink {
+        let encoded = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        return try await post("/api/sessions/\(encoded)/sandbox/desktop", body: [:])
+    }
+
     /// Archive (or unarchive) a session. Archiving an in-flight session also
     /// stops its run server-side.
     static func setArchived(sessionId: String, archived: Bool) async throws {
@@ -1238,6 +1267,18 @@ enum OS1API {
     // MARK: - Session creation
 
     private struct ServerErrorBody: Decodable { let error: String? }
+
+    /// The error a mutation's non-2xx answer becomes. A server sentence wins
+    /// over the bare status, and 428 keeps its meaning so a caller can ask
+    /// the person the question the server asked.
+    nonisolated static func responseError(status: Int, body: Data) -> APIError {
+        let message = (try? JSONDecoder().decode(ServerErrorBody.self, from: body))?.error
+        if status == 428 {
+            return .confirmRequired(message ?? APIError.http(status).localizedDescription)
+        }
+        if let message { return .server(message) }
+        return .http(status)
+    }
 
     /// Every request's non-2xx tail reports its status here, so the one that
     /// means "this token is finished" is noticed in a single place rather than
@@ -2163,11 +2204,7 @@ enum OS1API {
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             noteStatus(http.statusCode)
-            if let serverError = try? JSONDecoder().decode(ServerErrorBody.self, from: data),
-               let message = serverError.error {
-                throw APIError.server(message)
-            }
-            throw APIError.http(http.statusCode)
+            throw responseError(status: http.statusCode, body: data)
         }
         return try await decodeDetached(T.self, from: data)
     }
