@@ -29,6 +29,7 @@ import {
   forgetRemoteSandboxPortalAgents,
   listPortalServices,
   listSandboxPortalServices,
+  MAX_PORTAL_READY_MS,
 } from "./portal-supervisor";
 import { revokeSandboxPortalGrants } from "./sandbox-portal-relay";
 import {
@@ -223,11 +224,16 @@ export function parsePreviewPortalRecipes(
           Number(item.port) <= 19_000
             ? Number(item.port)
             : undefined;
+        // Clamp to the supervisor's ceiling rather than dropping the value: a
+        // dropped declaration silently falls back to the 15-second default,
+        // which killed tella-fusion's declared 600-second cold start.
         const readyTimeoutSeconds =
           Number.isInteger(item.readyTimeoutSeconds) &&
-          Number(item.readyTimeoutSeconds) >= 5 &&
-          Number(item.readyTimeoutSeconds) <= 300
-            ? Number(item.readyTimeoutSeconds)
+          Number(item.readyTimeoutSeconds) >= 5
+            ? Math.min(
+                Number(item.readyTimeoutSeconds),
+                MAX_PORTAL_READY_MS / 1_000,
+              )
             : undefined;
         return [
           {

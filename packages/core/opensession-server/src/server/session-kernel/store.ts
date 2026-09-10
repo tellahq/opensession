@@ -177,6 +177,10 @@ export interface DurableOutboxItem {
 const json = (value: unknown): string => JSON.stringify(value ?? null);
 const CHANGE_HISTORY_PER_SESSION = 5_000;
 const MAINTENANCE_CHANGE_DELETE_BATCH = 250;
+const READ_ONLY_QUARANTINE_COMMANDS: ReadonlySet<string> = new Set([
+  "storage:quarantine-read",
+  "runtime:scan",
+]);
 const digest = (text: string): string =>
   new Bun.CryptoHasher("sha256").update(text).digest("hex");
 const resultRecord = (value: unknown) => {
@@ -1797,14 +1801,10 @@ export class SessionKernelStore {
     // as already acknowledged. It never makes run/command/outbox state
     // ambiguous, so unrelated live state must not strand the whole session.
     if (commandKind === "transcript:ack_wake") return true;
-    // Reading the quarantine row cannot mutate session state. The central
-    // quarantine only records that the isolated read failed, so release it as
-    // soon as the isolated store is readable again, even during a live run.
-    if (commandKind === "storage:quarantine-read") return true;
-    // Runtime work discovery only reads due timers and outbox rows. A failed
-    // scan cannot leave an operation half-applied, so existing work must not
-    // prevent the session from being scanned again.
-    if (commandKind === "runtime:scan") return true;
+    // These operations only read quarantine, timer, or outbox rows. A failed
+    // read cannot leave an operation half-applied, so existing work must not
+    // prevent the session from being read again.
+    if (READ_ONLY_QUARANTINE_COMMANDS.has(commandKind)) return true;
     // Older workers evaluated critical-settlement handling before recognizing
     // SessionQuarantinedError. The rejected operation never executed, but the
     // handler could persist its rejection as a second quarantine in the other

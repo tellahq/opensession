@@ -198,6 +198,27 @@ describe("portal recipes", () => {
     ]);
   });
 
+  test("keeps a long declared ready timeout up to the supervisor ceiling", () => {
+    const recipes = (readyTimeoutSeconds: number) =>
+      parsePreviewPortalRecipes(
+        JSON.stringify({
+          portals: [
+            {
+              id: "web",
+              name: "Web",
+              command: "exec app",
+              readyTimeoutSeconds,
+            },
+          ],
+        }),
+      );
+    // A cold Next.js worktree needs the full 10 minutes; before this, anything
+    // over 300 was dropped and the Portal died on the 15-second default.
+    expect(recipes(600)[0]?.readyTimeoutSeconds).toBe(600);
+    expect(recipes(3_600)[0]?.readyTimeoutSeconds).toBe(600);
+    expect(recipes(1)[0]?.readyTimeoutSeconds).toBeUndefined();
+  });
+
   test("turns a declared service into trusted supervisor options", () => {
     expect(
       recipeStartOptions({

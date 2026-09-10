@@ -33,6 +33,8 @@ import type { Sandbox } from "./sandbox/provider";
 
 let worktree = "";
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
+const previousMinAvailableMemoryMb =
+  process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB;
 const previousPath = process.env.PATH;
 const processTools = mkdtempSync(join(tmpdir(), "os-process-tools-"));
 let testSetsid = Bun.which("setsid");
@@ -56,11 +58,18 @@ if (!testSetsid) {
 beforeEach(() => {
   worktree = mkdtempSync(join(tmpdir(), "os-portals-test-"));
   process.env.OPENSESSION_STATE_DIR = worktree;
+  // Lifecycle fixtures must run on small CI hosts; admission boundaries are tested separately.
+  process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB = "1";
 });
 afterAll(() => {
   if (worktree) rmSync(worktree, { recursive: true, force: true });
   if (previousStateDir == null) delete process.env.OPENSESSION_STATE_DIR;
   else process.env.OPENSESSION_STATE_DIR = previousStateDir;
+  if (previousMinAvailableMemoryMb == null)
+    delete process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB;
+  else
+    process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB =
+      previousMinAvailableMemoryMb;
   if (previousPath == null) delete process.env.PATH;
   else process.env.PATH = previousPath;
   rmSync(processTools, { recursive: true, force: true });
