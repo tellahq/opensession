@@ -127,7 +127,9 @@ of `{label, value, delta?, unit?}` (a numeric `value` or `delta` is formatted
 for reading, `1204` as `1,204`). Renders as a row of cards: the value big and
 tabular, the label under it, the delta beside the value and coloured by its
 lead character: `+`, `▲` or `↑` is up, `-`, `▼` or `↓` is down, anything else
-is neutral. A fence that does not parse stays a code block.
+is neutral. A fence that does not parse stays a code block, as does one past
+64 metrics or 16,000 characters: a row of cards is for a handful of headline
+numbers, not a table.
 
 ## Adding a block kind
 

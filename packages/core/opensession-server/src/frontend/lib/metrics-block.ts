@@ -63,7 +63,15 @@ const metricEntry = z.object({
   unit: text.optional(),
 });
 
-const metricsJson = z.array(metricEntry).nonempty();
+/**
+ * A metrics row is a handful of headline numbers, and every metric costs
+ * four DOM nodes built synchronously, so a fence past these bounds keeps its
+ * code block rather than expanding a large asset into a frozen page.
+ */
+export const MAX_SOURCE_CHARS = 16_000;
+export const MAX_METRICS = 64;
+
+const metricsJson = z.array(metricEntry).nonempty().max(MAX_METRICS);
 
 function metricFromLine(line: string): Metric | null {
   const m = METRIC_LINE.exec(line);
@@ -78,9 +86,11 @@ function metricFromLine(line: string): Metric | null {
 /**
  * The metrics a fence lists, or null when it is not a metrics fence after
  * all: an empty body, a JSON body that is not an array of `{label, value}`
- * objects, or a line that is not `Label: value (delta)`.
+ * objects, a line that is not `Label: value (delta)`, or a body past
+ * MAX_SOURCE_CHARS or MAX_METRICS.
  */
 export function parseMetrics(source: string): Metric[] | null {
+  if (source.length > MAX_SOURCE_CHARS) return null;
   const body = source.trim();
   if (!body) return null;
   // Anything JSON-shaped is read as JSON: a bare object is not the array the
@@ -106,7 +116,7 @@ export function parseMetrics(source: string): Metric[] | null {
   for (const line of body.split("\n")) {
     if (!line.trim()) continue;
     const metric = metricFromLine(line);
-    if (!metric) return null;
+    if (!metric || metrics.length === MAX_METRICS) return null;
     metrics.push(metric);
   }
   return metrics.length ? metrics : null;

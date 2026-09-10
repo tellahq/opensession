@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { parseMetrics } from "./metrics-block";
+import { MAX_METRICS, MAX_SOURCE_CHARS, parseMetrics } from "./metrics-block";
 
 describe("parseMetrics line form", () => {
   it("reads one metric per line with an optional delta", () => {
@@ -44,6 +44,19 @@ describe("parseMetrics line form", () => {
     expect(parseMetrics(": 12")).toBeNull();
     expect(parseMetrics("")).toBeNull();
     expect(parseMetrics("   \n\n")).toBeNull();
+  });
+
+  it("declines a fence with more metrics than a row can show", () => {
+    const line = (i: number) => `M${i}: ${i}`;
+    const lines = (n: number) =>
+      Array.from({ length: n }, (_, i) => line(i)).join("\n");
+    expect(parseMetrics(lines(MAX_METRICS))).toHaveLength(MAX_METRICS);
+    expect(parseMetrics(lines(MAX_METRICS + 1))).toBeNull();
+  });
+
+  it("declines a fence larger than a metrics list has reason to be", () => {
+    const padded = `A: 1 ${" ".repeat(MAX_SOURCE_CHARS)}`;
+    expect(parseMetrics(padded)).toBeNull();
   });
 });
 
@@ -92,5 +105,14 @@ describe("parseMetrics JSON form", () => {
     expect(parseMetrics("[1, 2]")).toBeNull();
     expect(parseMetrics("[{")).toBeNull();
     expect(parseMetrics('{"label":"a","value":1}')).toBeNull();
+  });
+
+  it("declines an array with more metrics than a row can show", () => {
+    const entries = (n: number) =>
+      JSON.stringify(
+        Array.from({ length: n }, (_, i) => ({ label: `M${i}`, value: i })),
+      );
+    expect(parseMetrics(entries(MAX_METRICS))).toHaveLength(MAX_METRICS);
+    expect(parseMetrics(entries(MAX_METRICS + 1))).toBeNull();
   });
 });
