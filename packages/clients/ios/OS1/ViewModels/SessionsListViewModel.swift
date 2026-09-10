@@ -1377,9 +1377,9 @@ final class SessionsListViewModel {
                 let shouldPublish =
                     next != sessions || refreshedWorkspaces != nil || connectionChanged || claimsChanged
                 guard shouldPublish else {
-                    // The list already says what the response says; the pass
-                    // was accepted at the current revision, so what it found
-                    // to consume still holds.
+                    // The list already says what the response says, but this
+                    // accepted response must still supersede older polls.
+                    publishedRefreshSequence = sequence
                     accept(polled)
                     break
                 }
