@@ -47,6 +47,20 @@ describe("GitHub clone credential boundary", () => {
 });
 
 describe("remote engine credential projection", () => {
+  test("takeover identity reaches provider projection without granting MCP or GitHub access", () => {
+    const source = readFileSync(join(import.meta.dir, "bootstrap.ts"), "utf-8");
+    expect(source).toContain("spec.accountUser ?? spec.user");
+    expect(source).toContain(
+      "accountsForRemoteUpload(accountUser, spec.accountId)",
+    );
+    expect(source).toMatch(/buildOpenaiRemoteSeedUpload\([\s\S]*?accountUser,/);
+    expect(source).toContain("user: accountUser,");
+    expect(source).toMatch(/filterMcpServers\([\s\S]*?spec.user,/);
+    expect(source).toContain(
+      "githubCredentialUser(spec.user, spec.author?.name)",
+    );
+  });
+
   test("remote GitHub authority comes from server-owned sandbox state", () => {
     const source = readFileSync(join(import.meta.dir, "bootstrap.ts"), "utf-8");
     const projection = source.slice(

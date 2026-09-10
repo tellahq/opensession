@@ -103,7 +103,7 @@ import {
 import { filterMcpServers } from "../../runner-shared";
 import { githubCredentialUser } from "../../auto-continue";
 import { GITHUB_RUN_AUTH_FILE_ENV, githubAuthEnv } from "../../github-auth";
-import { isMachineActor } from "../../session-actors";
+import { isMachineActor, providerAccountUser } from "../../session-actors";
 import {
   appendTranscriptEntries,
   recordEngineSessionOwner,
@@ -2110,6 +2110,10 @@ function makeRemoteLauncher(
       const secureFiles: string[] = [];
       const secureDirectories: string[] = [];
       const automationProfile = spec.trustProfile === "automation";
+      const accountUser = providerAccountUser(
+        spec.accountUser ?? spec.user,
+        spec.mcpGrantUser,
+      );
       if (automationProfile && !spec.accountId) {
         throw new Error(
           "automation sandbox runs require a pinned model account",
@@ -2125,7 +2129,7 @@ function makeRemoteLauncher(
       );
       const accounts = usesAnthropic
         ? projectRemoteClaudeAccounts(
-            accountsForRemoteUpload(spec.user, spec.accountId),
+            accountsForRemoteUpload(accountUser, spec.accountId),
           )
         : [];
       if (
@@ -2280,7 +2284,7 @@ function makeRemoteLauncher(
               spec.accountId
                 ? [spec.accountId]
                 : readModelProviderConfig()?.openaiAccounts,
-              spec.user,
+              accountUser,
             )
           : { accounts: [], seeds: [], skipped: [] };
       if (
@@ -2352,7 +2356,7 @@ function makeRemoteLauncher(
       const usesXai = remoteRunNeedsXai(spec.model, spec.fallbackModel);
       const xaiUpload = usesXai
         ? await buildXaiRemoteUpload({
-            user: spec.user,
+            user: accountUser,
             accountId: spec.accountId,
             restrictIds: readModelProviderConfig()?.xaiAccounts,
           })
