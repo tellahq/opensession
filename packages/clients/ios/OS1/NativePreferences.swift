@@ -25,24 +25,47 @@ enum NativePreferences {
         _ user: String, _ prefs: [String: String?]
     ) async throws -> [String: String]
 
+    /// Writes a ui-pref patch containing `default-model`. Every native writer
+    /// of that key goes through this queue, including the Preferences screen,
+    /// so the server receives model choices in the order they were made.
+    ///
+    /// The local value changes immediately. A response for an older choice can
+    /// still update the other confirmed preferences, but cannot repaint a newer
+    /// model choice or cross into another account.
+    @discardableResult
+    static func writeDefaultModel(
+        _ model: String,
+        prefs: [String: String?],
+        write: @escaping UiPrefsWrite = { user, prefs in
+            try await SettingsAPI.updateUiPrefs(user: user, prefs: prefs)
+        }
+    ) -> Task<[String: String]?, Never> {
+        let requestContext = context()
+        let defaults = UserDefaults.standard
+        beginLocalWrite()
+        defaults.set(model, forKey: defaultModelStorageKey)
+        let previous = lastDefaultModelWrite
+        let task: Task<[String: String]?, Never> = Task { @MainActor in
+            defer { endLocalWrite() }
+            _ = await previous?.value
+            guard context() == requestContext,
+                  let response = try? await write(requestContext.user, prefs)
+            else { return nil }
+            var confirmed = response
+            let local = defaults.string(forKey: defaultModelStorageKey) ?? ""
+            confirmed["default-model"] = local == model
+                ? (confirmed["default-model"] ?? model)
+                : local
+            guard apply(confirmed, for: requestContext) else { return nil }
+            return confirmed
+        }
+        lastDefaultModelWrite = task
+        return task
+    }
+
     /// Make `model` the personal default for new sessions, the way the web
-    /// menus do: this device immediately, then the same per-user `default-model`
-    /// ui-pref every client reads. Both model menus (the conversation's and the
-    /// New session composer's) go through here so they cannot drift.
-    ///
-    /// Writes reach the server in the order they were made: each waits for
-    /// the one before it, and a choice already replaced by a newer one when
-    /// its turn comes is not sent at all. Otherwise two quick picks could
-    /// land out of order and leave the server, and so every other device, on
-    /// the older one.
-    ///
-    /// The confirmed map is applied only if it is still this account's: a
-    /// switch mid-flight leaves the new account's own hydrate in charge. And
-    /// it never repaints a newer choice made on this device while the write
-    /// was out; that choice's own write, queued behind this one, reconciles it.
-    ///
-    /// Returns the write so a caller can wait for the confirmation; its value
-    /// is whether the server's map was applied.
+    /// menus do: this device immediately, then the same per-user ui-pref every
+    /// client reads.
     @discardableResult
     static func setDefaultModel(
         _ model: String,
@@ -50,37 +73,16 @@ enum NativePreferences {
             try await SettingsAPI.updateUiPrefs(user: user, prefs: prefs)
         }
     ) -> Task<Bool, Never> {
-        let requestContext = context()
-        let defaults = UserDefaults.standard
-        beginLocalWrite()
-        defaults.set(model, forKey: defaultModelStorageKey)
-        let previous = lastDefaultModelWrite
-        let task = Task { @MainActor in
-            defer { endLocalWrite() }
-            _ = await previous?.value
-            // Superseded while queued, or the account changed: the newer
-            // choice's own write (or the new account's hydrate) speaks instead.
-            guard defaults.string(forKey: defaultModelStorageKey) == model,
-                  context() == requestContext
-            else { return false }
-            guard let response = try? await write(
-                requestContext.user, ["default-model": model]
-            ) else { return false }
-            var confirmed = response
-            let local = defaults.string(forKey: defaultModelStorageKey) ?? ""
-            if local != model {
-                confirmed["default-model"] = local
-            } else if confirmed["default-model"] == nil {
-                confirmed["default-model"] = model
-            }
-            return apply(confirmed, for: requestContext)
-        }
-        lastDefaultModelWrite = task
-        return task
+        let writeTask = writeDefaultModel(
+            model,
+            prefs: ["default-model": model],
+            write: write
+        )
+        return Task { await writeTask.value != nil }
     }
 
     /// Tail of the default-model write chain; the next write waits on it.
-    private static var lastDefaultModelWrite: Task<Bool, Never>?
+    private static var lastDefaultModelWrite: Task<[String: String]?, Never>?
 
     static func context() -> Context {
         let config = ServerConfig.shared

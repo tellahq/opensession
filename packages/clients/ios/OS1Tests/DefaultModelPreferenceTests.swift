@@ -124,7 +124,7 @@ final class DefaultModelPreferenceTests: XCTestCase {
         XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "claude-sonnet-5")
     }
 
-    func testAChoiceReplacedWhileQueuedIsNeverSent() async {
+    func testThreeChoicesReachTheServerInSelectionOrder() async {
         let (slow, slowWrite) = gated()
         let first = NativePreferences.setDefaultModel("claude-opus-5", write: slowWrite)
         await Task.yield()
@@ -136,18 +136,47 @@ final class DefaultModelPreferenceTests: XCTestCase {
 
         slow.release(["default-model": "claude-opus-5"])
         _ = await first.value
-        // Sonnet was already replaced by Haiku when its turn came, so the
-        // server never sees it and cannot end up on it.
-        let secondApplied = await second.value
-        XCTAssertFalse(secondApplied)
-        XCTAssertTrue(middle.sent.isEmpty)
+        await settle { !middle.sent.isEmpty }
+        XCTAssertEqual(middle.sent["default-model"], "claude-sonnet-5")
+        XCTAssertTrue(last.sent.isEmpty)
 
+        middle.release(["default-model": "claude-sonnet-5"])
+        let secondApplied = await second.value
+        XCTAssertTrue(secondApplied)
         await settle { !last.sent.isEmpty }
         XCTAssertEqual(last.sent["default-model"], "claude-haiku-5")
+
         last.release(["default-model": "claude-haiku-5"])
         let thirdApplied = await third.value
         XCTAssertTrue(thirdApplied)
         XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "claude-haiku-5")
+    }
+
+    func testPreferencesPatchAndMenuChoiceShareTheWriteQueue() async {
+        let (preferences, preferencesWrite) = gated()
+        let first = NativePreferences.writeDefaultModel(
+            "claude-sonnet-5",
+            prefs: ["default-model": "claude-sonnet-5", "send-key": "mod-enter"],
+            write: preferencesWrite
+        )
+        await Task.yield()
+        XCTAssertEqual(preferences.sent["default-model"], "claude-sonnet-5")
+
+        let (menu, menuWrite) = gated()
+        let second = NativePreferences.setDefaultModel("claude-opus-5", write: menuWrite)
+        await Task.yield()
+        XCTAssertTrue(menu.sent.isEmpty)
+
+        preferences.release(["default-model": "claude-sonnet-5", "send-key": "mod-enter"])
+        let preferencesResponse = await first.value
+        XCTAssertNotNil(preferencesResponse)
+        await settle { !menu.sent.isEmpty }
+        XCTAssertEqual(menu.sent["default-model"], "claude-opus-5")
+
+        menu.release(["default-model": "claude-opus-5", "send-key": "mod-enter"])
+        let menuApplied = await second.value
+        XCTAssertTrue(menuApplied)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "claude-opus-5")
     }
 
     func testConfirmationForAnotherAccountIsDropped() async {
