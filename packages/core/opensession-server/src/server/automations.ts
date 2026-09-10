@@ -1610,9 +1610,11 @@ export async function resumePendingAutomationRuns(
   );
   // A Plain ticket needs at most one triage session, however many intents a
   // failing launch or a repeatedly clicked support-card link left behind for
-  // it (automation-intent-recovery.ts). Only launches that opted in with
-  // `coalescePlainThread` take part; an explicit retrigger always replays.
-  // Decide that over the whole set first.
+  // it (automation-intent-recovery.ts). Pending intents collapse to one per
+  // thread whether or not they carry `coalescePlainThread` (pre-flag intents
+  // do not); only flagged ones are dropped for a thread that already has a
+  // live session, so an explicit retrigger always replays. Decide that over
+  // the whole set first.
   const pending: PendingAutomationIntent[] = [];
   for (const entry of entries) {
     try {
@@ -1785,8 +1787,7 @@ export async function runAutomation(
   let sandboxRpcToken: string | undefined;
   // The disposable Executor this run owns, destroyed once the run settles.
   let disposableSandbox:
-    | { provider: ReturnType<typeof getSandboxProvider>; id: string }
-    | undefined;
+    { provider: ReturnType<typeof getSandboxProvider>; id: string } | undefined;
   // One physical run id for whichever backend runs this turn. Every backend
   // journals `run_registered` under it, so it becomes the session's
   // `currentRunId` and lets the terminal settlement be fenced to this exact

@@ -18,6 +18,12 @@ const ticket = (
   coalescePlainThread: true,
 });
 
+/** An intent written before `coalescePlainThread` existed, or a retrigger. */
+const legacy = (sessionId: string, threadId: string, acceptedAt: string) => ({
+  ...ticket(sessionId, threadId, acceptedAt),
+  coalescePlainThread: undefined,
+});
+
 describe("superseded Plain thread intents", () => {
   test("keeps the earliest intent per thread and supersedes the rest", () => {
     const superseded = supersededPlainThreadIntents(
@@ -60,10 +66,7 @@ describe("superseded Plain thread intents", () => {
   });
 
   test("an explicit retrigger replays even when its thread has a live session", () => {
-    const retrigger = {
-      ...ticket("r1", "th_a", "2026-09-09T21:03:00Z"),
-      coalescePlainThread: undefined,
-    };
+    const retrigger = legacy("r1", "th_a", "2026-09-09T21:03:00Z");
     const superseded = supersededPlainThreadIntents(
       [
         ticket("s1", "th_a", "2026-09-09T20:42:00Z"),
@@ -73,6 +76,47 @@ describe("superseded Plain thread intents", () => {
       new Map([["th_a", "os-live"]]),
     );
     expect([...superseded.keys()].sort()).toEqual(["s1", "s2"]);
+  });
+
+  test("intents written before the flag existed still collapse per thread", () => {
+    const superseded = supersededPlainThreadIntents(
+      [
+        legacy("l2", "th_a", "2026-09-09T21:01:00Z"),
+        legacy("l1", "th_a", "2026-09-09T20:42:00Z"),
+        legacy("l3", "th_a", "2026-09-09T21:05:00Z"),
+        ticket("s4", "th_a", "2026-09-09T21:06:00Z"),
+        legacy("l5", "th_b", "2026-09-09T19:07:00Z"),
+      ],
+      new Map(),
+    );
+    expect([...superseded.keys()].sort()).toEqual(["l2", "l3", "s4"]);
+    expect(superseded.get("l2")).toContain("l1");
+  });
+
+  test("unflagged intents collapse among themselves but survive a live session", () => {
+    const superseded = supersededPlainThreadIntents(
+      [
+        legacy("l1", "th_a", "2026-09-09T20:42:00Z"),
+        legacy("l2", "th_a", "2026-09-09T21:01:00Z"),
+        ticket("s3", "th_a", "2026-09-09T21:05:00Z"),
+      ],
+      new Map([["th_a", "os-live"]]),
+    );
+    expect([...superseded.keys()].sort()).toEqual(["l2", "s3"]);
+    expect(superseded.get("l2")).toContain("l1");
+    expect(superseded.get("s3")).toContain("os-live");
+  });
+
+  test("an interrupted run's own unflagged intent is the replay for its thread", () => {
+    const superseded = supersededPlainThreadIntents(
+      [
+        legacy("l1", "th_a", "2026-09-09T20:42:00Z"),
+        legacy("l2", "th_a", "2026-09-09T21:01:00Z"),
+      ],
+      new Map([["th_a", "l2"]]),
+    );
+    expect([...superseded.keys()]).toEqual(["l1"]);
+    expect(superseded.get("l1")).toContain("l2");
   });
 
   test("different automations for the same thread each keep one intent", () => {

@@ -8,12 +8,7 @@ type ReplayableIntent = {
 };
 
 function plainThreadIdOf(intent: ReplayableIntent): string | null {
-  if (
-    !intent.coalescePlainThread ||
-    intent.trigger !== "event" ||
-    !intent.eventContext
-  )
-    return null;
+  if (intent.trigger !== "event" || !intent.eventContext) return null;
   try {
     const parsed = JSON.parse(intent.eventContext);
     return typeof parsed?.threadId === "string" ? parsed.threadId : null;
@@ -24,19 +19,24 @@ function plainThreadIdOf(intent: ReplayableIntent): string | null {
 
 /**
  * Which durable intents boot must NOT replay because the Plain ticket they
- * carry is already covered. Only intents flagged `coalescePlainThread` (the
- * automatic webhook and support-card launches) take part; an explicit
- * retrigger of a Plain session never sets it, so it always replays, even
- * though the session it was retriggered from is still live. Flagged event
- * intents with a `threadId` are per-ticket work, and a ticket whose launch
- * kept failing (or whose support-card link was clicked again and again while
- * it failed) leaves one intent per attempt: 2026-09-09 a broken repository
- * ref left 20 pending intents for 9 tickets, 7 of them for one ticket.
- * Replaying each would open one triage session per attempt. Keep the earliest-accepted intent per (automation,
- * thread). A thread that already has a live session (`liveThreadSessions`:
- * thread id -> session id) needs no replay at all, except the intent of that
- * very session, which an interrupted run still owns. Returns intent session
- * id -> reason.
+ * carry is already covered. Event intents with a `threadId` are per-ticket
+ * work, and a ticket whose launch kept failing (or whose support-card link
+ * was clicked again and again while it failed) leaves one intent per attempt:
+ * 2026-09-09 a broken repository ref left 20 pending intents for 9 tickets,
+ * 7 of them for one ticket. Replaying each would open one triage session per
+ * attempt. Two rules, keyed by (automation, thread):
+ *
+ * - Pending against pending: every Plain intent takes part, flagged or not,
+ *   so intents written before `coalescePlainThread` existed (the outage's
+ *   own) still collapse. The earliest-accepted intent replays.
+ * - Pending against a live session (`liveThreadSessions`: thread id ->
+ *   session id): only intents flagged `coalescePlainThread` (the automatic
+ *   webhook and support-card launches) are dropped. An explicit retrigger of
+ *   a Plain session never sets the flag, so it replays even though the
+ *   session it was retriggered from is still live. The live session's own
+ *   intent, which an interrupted run still owns, is the replay for its key.
+ *
+ * Returns intent session id -> reason.
  */
 export function supersededPlainThreadIntents(
   intents: readonly ReplayableIntent[],
@@ -57,14 +57,19 @@ export function supersededPlainThreadIntents(
     );
   const keyOf = (automationId: string, threadId: string) =>
     `${automationId}\n${threadId}`;
+  const coveredByLive = (intent: ReplayableIntent, live: string | undefined) =>
+    live !== undefined &&
+    live !== intent.sessionId &&
+    intent.coalescePlainThread === true;
   const kept = new Map<string, string>();
   for (const { intent, threadId } of ordered) {
     const key = keyOf(intent.automationId, threadId);
     const live = liveThreadSessions.get(threadId);
-    if (live) {
-      if (live === intent.sessionId) kept.set(key, intent.sessionId);
+    if (live === intent.sessionId) {
+      kept.set(key, intent.sessionId);
       continue;
     }
+    if (coveredByLive(intent, live)) continue;
     if (!kept.has(key)) kept.set(key, intent.sessionId);
   }
   const superseded = new Map<string, string>();
@@ -74,7 +79,7 @@ export function supersededPlainThreadIntents(
     const live = liveThreadSessions.get(threadId);
     superseded.set(
       intent.sessionId,
-      live
+      coveredByLive(intent, live)
         ? `superseded: ${threadId} already has live session ${live}`
         : `superseded: ${threadId} replays as intent ${winner}`,
     );
