@@ -1,6 +1,13 @@
 import { Marked, type Token, type TokenizerThis, type Tokens } from "marked";
 import { BASE_PATH } from "./base";
 import { sanitizeHtmlFragment } from "./html-sanitize";
+import {
+  displayMathBlockStart,
+  inlineMathStart,
+  matchDisplayMathBlock,
+  matchInlineMath,
+  mathPlaceholder,
+} from "./math-block";
 import { prStatusDisplay, type PrStatusInput } from "./pr-status";
 import { repoLabel } from "./repo-label";
 import { cleanSessionTitle } from "./session-title";
@@ -1350,6 +1357,34 @@ md.use({
   // Bare session ids in prose (not wrapped in backticks) also link. Strict
   // uuidv7 shape so it only fires on real ids.
   extensions: [
+    // Math (lib/math-block.ts). A `$$` block on its own lines becomes the
+    // same code token a ```math fence is, so the fence upgrader typesets
+    // both and a body that is never upgraded still shows readable source.
+    {
+      name: "mathBlock",
+      level: "block",
+      start: displayMathBlockStart,
+      tokenizer(src: string) {
+        const m = matchDisplayMathBlock(src);
+        if (!m) return undefined;
+        return { type: "code", raw: m.raw, lang: "math", text: m.source };
+      },
+    },
+    // `$x^2$` in prose: a placeholder carrying the escaped source, upgraded
+    // after mount. The grammar is strict about prices; see math-block.ts.
+    {
+      name: "mathInline",
+      level: "inline",
+      start: inlineMathStart,
+      tokenizer(src: string) {
+        const m = matchInlineMath(src);
+        if (!m) return undefined;
+        return { type: "mathInline", raw: m.raw, math: m };
+      },
+      renderer(token: Tokens.Generic) {
+        return mathPlaceholder(token.math);
+      },
+    },
     {
       name: "assetPath",
       level: "inline",

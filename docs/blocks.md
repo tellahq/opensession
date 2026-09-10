@@ -65,8 +65,15 @@ is the body.
 
 `$$` on its own lines opens and closes a display block; `$x^2$` is inline.
 Inline math needs the opening `$` to touch the expression and the closing `$`
-to touch it too, so `$1.84` and `$5 to $10` stay prose. A ` ```math `
-fence is a display block as well.
+to touch it too, with no digit after the close, so `$1.84`, `$5 to $10` and
+`$5-$10` stay prose. It never spans a line or reaches into a code span; write
+`\$` for a literal dollar next to an expression. A one-line `$$E=mc^2$$`
+typesets in display mode where it sits. A ` ```math ` fence is a display
+block as well, and a `$$` block renders as that fence until it is typeset,
+so a block that does not parse stays readable source.
+
+KaTeX writes MathML only (no katex.css, no fonts to serve); the browser
+lays it out in its math font and the current text colour.
 
 ### Colour
 

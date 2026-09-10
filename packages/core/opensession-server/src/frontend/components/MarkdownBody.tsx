@@ -6,6 +6,10 @@ import {
   type FenceUpgrader,
   finalizeFenceUpgrades,
 } from "../lib/fence-upgraders";
+import {
+  MATH_PLACEHOLDER_MARK,
+  upgradeMathPlaceholders,
+} from "../lib/math-block";
 
 // Lazy loaders live at module scope: the compiler cannot lower dynamic
 // imports inside components.
@@ -106,8 +110,16 @@ export function MarkdownBody({
   }, [enhance]);
 
   useEffect(() => {
-    // marked emits <code class="language-x"> only for tagged fences.
-    if (!enhance || !visible || !html.includes('<code class="language-'))
+    // marked emits <code class="language-x"> only for tagged fences, and the
+    // .md-math placeholder only for inline math (lib/math-block.ts).
+    if (
+      !enhance ||
+      !visible ||
+      !(
+        html.includes('<code class="language-') ||
+        html.includes(MATH_PLACEHOLDER_MARK)
+      )
+    )
       return;
     const el = ref.current;
     if (!el) return;
@@ -162,6 +174,11 @@ export function MarkdownBody({
             .catch(() => false);
         }
       }
+
+      // Inline math is not a fence, so the registry never sees it; its
+      // placeholders are typeset here, in the same pass and under the same
+      // reset and cancellation as the fences.
+      await upgradeMathPlaceholders(el, isAlive);
 
       if (!fences.some((f) => f.lang && !f.done)) return;
       const m = await loadCodeHighlight().catch(() => null);
