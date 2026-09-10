@@ -1266,7 +1266,7 @@ final class SessionsListViewModel {
         return (
             applied.sessions,
             prepared.archived,
-            Array(Set(prepared.resurfacedHideKeys).union(applied.resurfacedHideKeys))
+            resurfacedHideKeys(in: applied.sessions, hidden: hideKeys)
         )
     }
 
@@ -1564,15 +1564,22 @@ final class SessionsListViewModel {
             .map { (session: $0, key: $0.lastActivityDate ?? .distantPast) }
             .sorted { $0.key > $1.key }
             .map(\.session)
+        return (active, archived, resurfacedHideKeys(in: active, hidden: hideKeys))
+    }
+
+    /// Hides are consumed by the final rows, never by a superseded poll row.
+    nonisolated private static func resurfacedHideKeys(
+        in sessions: [Session], hidden hideKeys: Set<String>
+    ) -> [String] {
         var resurfaced = Set<String>()
         if !hideKeys.isEmpty {
-            for session in active where session.lane == .needsInput && !session.isAutomation {
+            for session in sessions where session.lane == .needsInput && !session.isAutomation {
                 for key in SidebarRowKeys.candidateKeys(for: session) where hideKeys.contains(key) {
                     resurfaced.insert(key)
                 }
             }
         }
-        return (active, archived, Array(resurfaced))
+        return Array(resurfaced)
     }
 }
 

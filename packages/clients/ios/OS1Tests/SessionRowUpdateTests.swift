@@ -276,6 +276,56 @@ final class SessionRowUpdateTests: XCTestCase {
         XCTAssertEqual(polled.archived.map(\.id), ["os-gone"])
     }
 
+    func testAPollReplayDoesNotResurfaceASupersededBlockedRow() throws {
+        let blocked = try session(
+            #"{"id":"os-mid","workspaceId":"ws-1","waitingForInput":true}"#
+        )
+        let unblocked = try session(
+            #"{"id":"os-mid","workspaceId":"ws-1","waitingForInput":false}"#
+        )
+        let keys = Set(SidebarRowKeys.candidateKeys(for: blocked))
+        XCTAssertFalse(keys.isEmpty)
+        XCTAssertEqual(
+            Set(SessionsListViewModel.prepared(
+                [blocked], hiding: [], restoring: [], hidden: keys
+            ).resurfacedHideKeys), keys
+        )
+
+        for update in [SessionRowUpdate.row(unblocked), .removed(blocked.id)] {
+            let polled = SessionsListViewModel.polled(
+                [blocked], replaying: [update], optimisticIds: [],
+                hiding: [], restoring: [], hidden: keys
+            )
+
+            XCTAssertFalse(polled.active.contains { $0.lane == .needsInput })
+            XCTAssertTrue(polled.resurfacedHideKeys.isEmpty)
+        }
+    }
+
+    func testAPollReplayStillResurfacesOtherBlockedRows() throws {
+        let blocked = try session(
+            #"{"id":"os-mid","workspaceId":"ws-1","waitingForInput":true}"#
+        )
+        let other = try session(
+            #"{"id":"os-other","workspaceId":"ws-1","waitingForInput":true}"#
+        )
+        let unblocked = try session(
+            #"{"id":"os-mid","workspaceId":"ws-1","waitingForInput":false}"#
+        )
+        let keys: Set<String> = ["workspace:ws-1"]
+        for (response, updates) in [
+            ([blocked, other], [SessionRowUpdate.row(unblocked)]),
+            ([unblocked], [SessionRowUpdate.row(other)]),
+        ] {
+            let polled = SessionsListViewModel.polled(
+                response, replaying: updates, optimisticIds: [],
+                hiding: [], restoring: [], hidden: keys
+            )
+
+            XCTAssertEqual(Set(polled.resurfacedHideKeys), keys)
+        }
+    }
+
     /// Nothing to replay is exactly the plain poll pass.
     func testAPollWithNothingToReplayIsThePreparedList() throws {
         let polled = try SessionsListViewModel.polled(
