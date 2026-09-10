@@ -1787,7 +1787,8 @@ export async function runAutomation(
   let sandboxRpcToken: string | undefined;
   // The disposable Executor this run owns, destroyed once the run settles.
   let disposableSandbox:
-    { provider: ReturnType<typeof getSandboxProvider>; id: string } | undefined;
+    | { provider: ReturnType<typeof getSandboxProvider>; id: string }
+    | undefined;
   // One physical run id for whichever backend runs this turn. Every backend
   // journals `run_registered` under it, so it becomes the session's
   // `currentRunId` and lets the terminal settlement be fenced to this exact
