@@ -43,6 +43,13 @@ enum SessionRowUpdate: Sendable {
     }
 }
 
+/// A row frame the list has applied, and the `sessionsRevision` that carries
+/// it. See `SessionsListViewModel.replay(_:after:)`.
+struct AppliedRowUpdate: Sendable {
+    var revision: Int
+    var update: SessionRowUpdate
+}
+
 /// What one batch of row frames did to the live list. See
 /// `SessionsListViewModel.applyingRowUpdates`.
 struct SessionRowUpdateResult: Equatable, Sendable {
@@ -105,6 +112,19 @@ final class SessionsListViewModel {
     /// archive, a branch's PR webhook) costs one regroup instead of one each.
     @ObservationIgnored private var pendingRowUpdates: [String: SessionRowUpdate] = [:]
     @ObservationIgnored private var rowFlushTask: Task<Void, Never>?
+    /// Row frames applied while a poll was in flight, newest per session,
+    /// tagged with the list revision that carries them. A poll's response was
+    /// built before those frames, so the poll replays them over it instead
+    /// of publishing a row the frame already moved past. Kept only while a
+    /// poll is in flight; `refresh` prunes what no in-flight poll predates.
+    @ObservationIgnored private var appliedRowUpdates: [String: AppliedRowUpdate] = [:]
+    /// `sessionsRevision` at the start of each `refresh` still in flight.
+    @ObservationIgnored private var inFlightRefreshRevisions: [Int] = []
+    /// Polls are ordered by when their request went out. One that finishes
+    /// after a later-started poll already published is discarded: its rows
+    /// are older than the list.
+    @ObservationIgnored private var refreshSequence = 0
+    @ObservationIgnored private var publishedRefreshSequence = 0
 
     /// The server's archived index, kept apart from `archivedSessions` so the
     /// local overlay (a row archived on this device, one restored a moment
@@ -1072,6 +1092,13 @@ final class SessionsListViewModel {
         SessionLinks.register(titles: grouped.titles)
         PrLinks.register(index: grouped.prs)
         setSessions(applied.sessions, rows: grouped.rows)
+        if !inFlightRefreshRevisions.isEmpty {
+            for update in updates {
+                appliedRowUpdates[update.id] = AppliedRowUpdate(
+                    revision: sessionsRevision, update: update
+                )
+            }
+        }
         // A row that left the live list usually went to the archive. Let the
         // next archived turn refetch instead of trusting a fresh-looking
         // index for another half minute.
@@ -1162,6 +1189,46 @@ final class SessionsListViewModel {
         )
     }
 
+    /// The frames applied after a list revision, oldest first, so a poll
+    /// whose request went out at that revision can replay them over its
+    /// response.
+    nonisolated static func replay(
+        _ applied: [String: AppliedRowUpdate], after revision: Int
+    ) -> [SessionRowUpdate] {
+        applied.values
+            .filter { $0.revision > revision }
+            .sorted { $0.revision < $1.revision }
+            .map(\.update)
+    }
+
+    /// A poll response the way the list will hold it: `prepared`, then the
+    /// row frames that landed while the request was out replayed on top.
+    /// Pure, so it can run off the main actor and be tested.
+    nonisolated static func polled(
+        _ all: [Session],
+        replaying updates: [SessionRowUpdate],
+        optimisticIds: Set<String>,
+        hiding hiddenIds: Set<String>,
+        restoring restoredIds: Set<String>,
+        hidden hideKeys: Set<String> = []
+    ) -> (active: [Session], archived: [Session], resurfacedHideKeys: [String]) {
+        let prepared = prepared(all, hiding: hiddenIds, restoring: restoredIds, hidden: hideKeys)
+        guard !updates.isEmpty else { return prepared }
+        let applied = applyingRowUpdates(
+            updates,
+            to: prepared.active,
+            optimisticIds: optimisticIds,
+            hiding: hiddenIds,
+            restoring: restoredIds,
+            hidden: hideKeys
+        )
+        return (
+            applied.sessions,
+            prepared.archived,
+            Array(Set(prepared.resurfacedHideKeys).union(applied.resurfacedHideKeys))
+        )
+    }
+
     func refresh() async {
         // A tailnet server with the tunnel down answers nothing at all, and
         // URLSession takes a full minute to admit it. Ask why alongside the
@@ -1169,6 +1236,20 @@ final class SessionsListViewModel {
         // milliseconds, and a request that lands clears it.
         if !hasLoaded { diagnoseUnreachableServer() }
         let requestConnection = OS1API.LiveActivityConnection.current()
+        // Everything the list holds at this revision predates the response;
+        // everything published after it (a row frame, a later poll) does not,
+        // and the response must not be published over it.
+        let startRevision = sessionsRevision
+        refreshSequence += 1
+        let sequence = refreshSequence
+        inFlightRefreshRevisions.append(startRevision)
+        defer {
+            if let index = inFlightRefreshRevisions.firstIndex(of: startRevision) {
+                inFlightRefreshRevisions.remove(at: index)
+            }
+            let floor = inFlightRefreshRevisions.min() ?? sessionsRevision
+            appliedRowUpdates = appliedRowUpdates.filter { $0.value.revision > floor }
+        }
         do {
             async let workspaceRequest = try? OS1API.workspaces()
             let all = try await OS1API.sessions()
@@ -1193,47 +1274,62 @@ final class SessionsListViewModel {
                 refreshedWorkspaces = []
                 renamed = [:]
             }
-            // Snapshot the main-actor state the filter needs, then do the
-            // heavy pass (thousands of rows) off the main thread — inline it
-            // ran on the main actor every 5s poll and hitched typing.
-            let hiddenIds = Set(Array(locallyArchived.keys).filter { isLocallyArchived($0) })
-            let restoredIds = Set(Array(locallyUnarchived.keys).filter { isLocallyUnarchived($0) })
-            let hideKeys = Set(HideStore.shared.hides.keys)
-            // Claims decide which spawned workers earn a row, and they land on
-            // their own clock (`LaneStore.hydrate`) — so a set that moved has
-            // to republish the grouping even when the list itself didn't.
-            let claimed = LaneStore.shared.claims
-            let claimsChanged = claimed != claimedSessionIds
-            claimedSessionIds = claimed
-            let prepared = await Task.detached(priority: .userInitiated) {
-                Self.prepared(
-                    all,
-                    hiding: hiddenIds,
-                    restoring: restoredIds,
-                    hidden: hideKeys
-                )
-            }.value
-            // A hidden row comes back while one of its sessions is blocked on a
-            // question, and the entry is consumed when it does — so a hide can
-            // never swallow work that needs you. Consuming it here (not in the
-            // row filter) keeps the mutation out of view body evaluation.
-            HideStore.shared.clear(prepared.resurfacedHideKeys)
-            let next = mergeOptimistic(into: prepared.active)
-            // Archived rows arrive on their own request, so `prepared.archived`
-            // is normally empty here. It isn't against a server that predates
-            // the `archived=exclude` parameter and answers with the whole list
-            // — those rows ARE the index in that case, which is what makes an
-            // older server degrade to the old behaviour instead of to an
-            // Archived screen that is permanently empty.
-            if !prepared.archived.isEmpty {
-                setServerArchived(prepared.archived)
-            }
-            // Most 5s polls change nothing — skip the assignment so the whole
-            // list doesn't re-diff (grouping, sorting, row rebuilds) for a
-            // byte-identical result.
-            let shouldPublish =
-                next != sessions || refreshedWorkspaces != nil || connectionChanged || claimsChanged
-            if shouldPublish {
+            // The detached passes below run against a snapshot of the list.
+            // A row flush that publishes while they run makes the snapshot
+            // stale, so they rerun over the moved list, with that flush's
+            // frames in the replay. Two reruns cover any realistic burst; a
+            // list that will not hold still is left to the next poll.
+            var next: [Session] = []
+            var claimsChanged = false
+            for attempt in 0 ... 2 {
+                let snapshotRevision = sessionsRevision
+                let replay = Self.replay(appliedRowUpdates, after: startRevision)
+                // Snapshot the main-actor state the filter needs, then do the
+                // heavy pass (thousands of rows) off the main thread — inline it
+                // ran on the main actor every 5s poll and hitched typing.
+                let optimisticIds = Set(optimistic.keys)
+                let hiddenIds = Set(Array(locallyArchived.keys).filter { isLocallyArchived($0) })
+                let restoredIds = Set(Array(locallyUnarchived.keys).filter { isLocallyUnarchived($0) })
+                let hideKeys = Set(HideStore.shared.hides.keys)
+                // Claims decide which spawned workers earn a row, and they land on
+                // their own clock (`LaneStore.hydrate`) — so a set that moved has
+                // to republish the grouping even when the list itself didn't.
+                let claimed = LaneStore.shared.claims
+                if claimed != claimedSessionIds {
+                    claimsChanged = true
+                    claimedSessionIds = claimed
+                }
+                let polled = await Task.detached(priority: .userInitiated) {
+                    Self.polled(
+                        all,
+                        replaying: replay,
+                        optimisticIds: optimisticIds,
+                        hiding: hiddenIds,
+                        restoring: restoredIds,
+                        hidden: hideKeys
+                    )
+                }.value
+                // A hidden row comes back while one of its sessions is blocked on a
+                // question, and the entry is consumed when it does — so a hide can
+                // never swallow work that needs you. Consuming it here (not in the
+                // row filter) keeps the mutation out of view body evaluation.
+                HideStore.shared.clear(polled.resurfacedHideKeys)
+                next = mergeOptimistic(into: polled.active)
+                // Archived rows arrive on their own request, so `polled.archived`
+                // is normally empty here. It isn't against a server that predates
+                // the `archived=exclude` parameter and answers with the whole list
+                // — those rows ARE the index in that case, which is what makes an
+                // older server degrade to the old behaviour instead of to an
+                // Archived screen that is permanently empty.
+                if !polled.archived.isEmpty {
+                    setServerArchived(polled.archived)
+                }
+                // Most 5s polls change nothing — skip the assignment so the whole
+                // list doesn't re-diff (grouping, sorting, row rebuilds) for a
+                // byte-identical result.
+                let shouldPublish =
+                    next != sessions || refreshedWorkspaces != nil || connectionChanged || claimsChanged
+                guard shouldPublish else { break }
                 // Group before publishing, not after: the assignment wakes
                 // every observing view, so a grouping that starts afterwards
                 // always loses the race to the body that needs it.
@@ -1246,12 +1342,20 @@ final class SessionsListViewModel {
                     claimed: claimed
                 )
                 guard requestConnection == OS1API.LiveActivityConnection.current() else { return }
+                // A later poll already published rows newer than these.
+                guard sequence > publishedRefreshSequence else { break }
+                if snapshotRevision != sessionsRevision {
+                    if attempt < 2 { continue }
+                    break
+                }
                 SessionLinks.register(titles: grouped.titles)
                 PrLinks.register(index: grouped.prs)
                 if let renamed { workspaceNames = renamed }
                 if let refreshedWorkspaces { workspaces = refreshedWorkspaces }
                 liveActivityConnection = requestConnection
+                publishedRefreshSequence = sequence
                 setSessions(next, rows: grouped.rows)
+                break
             }
             #if os(iOS)
             // An authoritative empty first response still matters: without it

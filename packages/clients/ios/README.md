@@ -557,7 +557,10 @@ OS1/
   pushes `session_row` (one row, the list projection) or `session_row_removed`
   (`id`) for most metadata changes, and `sessions_invalidated` only for bulk
   ones. `SessionsListViewModel` coalesces frames for ~120ms and merges them
-  off the main actor; the poll stays as the fallback.
+  off the main actor; the poll stays as the fallback. A poll's response
+  predates any frame applied while its request was out, so the poll replays
+  those frames over the response and publishes only if the list did not
+  move again meanwhile (a later poll's publish, or a mid-pass flush, wins).
   `OS1_SESSIONS_POLL_SECONDS` lengthens the poll for a build under test.
 - `presence` lists everyone watching the session, one name per socket. The
   header facepile drops our own name and dedupes devices; names resolve to
