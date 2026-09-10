@@ -561,6 +561,8 @@ OS1/
   predates any frame applied while its request was out, so the poll replays
   those frames over the response and publishes only if the list did not
   move again meanwhile (a later poll's publish, or a mid-pass flush, wins).
+  Before the first list has loaded, frames are kept for that replay rather
+  than merged.
   `OS1_SESSIONS_POLL_SECONDS` lengthens the poll for a build under test.
 - `presence` lists everyone watching the session, one name per socket. The
   header facepile drops our own name and dedupes devices; names resolve to

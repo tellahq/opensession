@@ -1039,12 +1039,24 @@ final class SessionsListViewModel {
     }
 
     private func flushRowUpdates() async {
-        // A row that arrives before the first list would publish a one-row
-        // list; the poll's first answer carries it anyway.
-        guard hasLoaded else { return pendingRowUpdates.removeAll() }
         let updates = Array(pendingRowUpdates.values)
         guard !updates.isEmpty else { return }
         pendingRowUpdates.removeAll()
+        // No list to merge into yet: a flush would publish a one-row list.
+        // Frames that arrived while the first request was out are newer
+        // than its response, though, so they go to that request's replay
+        // rather than being dropped, or the response would publish a row
+        // (an archive made elsewhere, a rename) they already moved past.
+        // With no request out, the first poll's answer carries them anyway.
+        guard hasLoaded else {
+            guard !inFlightRefreshRevisions.isEmpty else { return }
+            // Nothing published, but the list's truth moved: the bump is
+            // what puts these frames after the request's start revision,
+            // and reruns a pass that snapshotted before them.
+            sessionsRevision += 1
+            recordAppliedRowUpdates(updates)
+            return
+        }
         // Snapshot the main-actor state, then merge and regroup off it: the
         // list can be thousands of rows and a frame lands mid-typing.
         let connection = OS1API.LiveActivityConnection.current()
@@ -1092,17 +1104,24 @@ final class SessionsListViewModel {
         SessionLinks.register(titles: grouped.titles)
         PrLinks.register(index: grouped.prs)
         setSessions(applied.sessions, rows: grouped.rows)
-        if !inFlightRefreshRevisions.isEmpty {
-            for update in updates {
-                appliedRowUpdates[update.id] = AppliedRowUpdate(
-                    revision: sessionsRevision, update: update
-                )
-            }
-        }
+        recordAppliedRowUpdates(updates)
         // A row that left the live list usually went to the archive. Let the
         // next archived turn refetch instead of trusting a fresh-looking
         // index for another half minute.
         if !applied.removedIds.isEmpty { archivedFetchedAt = nil }
+    }
+
+    /// Keep what a flush applied, at the current revision, for the polls
+    /// still in flight to replay over their responses. Nothing is kept when
+    /// no poll is out: `refresh` prunes on completion, and there would be
+    /// nothing to prune this for.
+    private func recordAppliedRowUpdates(_ updates: [SessionRowUpdate]) {
+        guard !inFlightRefreshRevisions.isEmpty else { return }
+        for update in updates {
+            appliedRowUpdates[update.id] = AppliedRowUpdate(
+                revision: sessionsRevision, update: update
+            )
+        }
     }
 
     /// One pass of row frames over the live list, pure so it can run off the
