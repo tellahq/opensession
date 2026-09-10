@@ -24,13 +24,38 @@ export interface PaletteEntry {
 const HEX_COLOR = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 /**
- * A colour function with a flat argument list: numbers, percentages, angles,
- * `none`, a colour space name, separators. No nested parentheses, so
+ * Colour functions, typed per channel. A channel is a number, a percentage,
+ * `none`, or, where the channel is a hue, an angle. `rgb()` and `hsl()` also
+ * take the legacy comma form. Nothing else fits, so `rgb(bogus)`, `hsl(red)`
+ * and `rgb(0,,0)` are rejected here rather than painting nothing later, and
  * `color-mix()` and `calc()` stay out: the value is copied verbatim, and a
  * swatch should show one colour, not a computation.
  */
-const COLOR_FUNCTION =
-  /^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(([0-9a-z.%,/+\s-]*[0-9a-z%][0-9a-z.%,/+\s-]*)\)$/i;
+const NUM = "[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?";
+const SCALAR = `(?:${NUM}%?|none)`;
+const HUE = `(?:${NUM}(?:deg|grad|rad|turn)?|none)`;
+const COLOR_SPACE =
+  "(?:srgb|srgb-linear|display-p3|a98-rgb|prophoto-rgb|rec2020|xyz|xyz-d50|xyz-d65)";
+
+function colorFunction(
+  name: string,
+  channels: readonly string[],
+  legacyCommas = false,
+): RegExp {
+  const modern = `${channels.join("\\s+")}(?:\\s*/\\s*${SCALAR})?`;
+  const legacy = `${channels.join("\\s*,\\s*")}(?:\\s*,\\s*${SCALAR})?`;
+  const args = legacyCommas ? `(?:${modern}|${legacy})` : modern;
+  return new RegExp(`^${name}\\(\\s*${args}\\s*\\)$`, "i");
+}
+
+const COLOR_FUNCTIONS = [
+  colorFunction("rgba?", [SCALAR, SCALAR, SCALAR], true),
+  colorFunction("hsla?", [HUE, SCALAR, SCALAR], true),
+  colorFunction("hwb", [HUE, SCALAR, SCALAR]),
+  colorFunction("(?:ok)?lab", [SCALAR, SCALAR, SCALAR]),
+  colorFunction("(?:ok)?lch", [SCALAR, SCALAR, HUE]),
+  colorFunction("color", [COLOR_SPACE, SCALAR, SCALAR, SCALAR]),
+];
 
 /** CSS Color Level 4 named colours, plus `transparent`. */
 const NAMED_COLORS = new Set(
@@ -64,7 +89,7 @@ const NAMED_COLORS = new Set(
 export function isCssColor(value: string): boolean {
   return (
     HEX_COLOR.test(value) ||
-    COLOR_FUNCTION.test(value) ||
+    COLOR_FUNCTIONS.some((fn) => fn.test(value)) ||
     NAMED_COLORS.has(value.toLowerCase())
   );
 }
@@ -85,7 +110,11 @@ export function hexSwatchColor(text: string): string | null {
  *  or the end. What the prefix form (`#hex Name`) reads its colour from. */
 const LEADING_TOKEN = /^(#[0-9a-f]+|[a-z]+\([^()]*\)|[a-z]+)(?=\s|$)/i;
 
-function parseLine(line: string): PaletteEntry | null {
+function parseLine(raw: string): PaletteEntry | null {
+  // A trailing `;` or `,` is how a colour arrives when the line was lifted
+  // from a stylesheet or an object literal. Drop it before either form so
+  // `#ff0080;` and `Ink: #1c1c1c,` both read the same as the bare value.
+  const line = raw.replace(/[;,]$/, "").trim();
   const lead = LEADING_TOKEN.exec(line);
   if (lead && isCssColor(lead[1]!)) {
     return { value: lead[1]!, name: line.slice(lead[0].length).trim() };
@@ -93,13 +122,7 @@ function parseLine(line: string): PaletteEntry | null {
   const colon = line.indexOf(":");
   if (colon <= 0) return null;
   const name = line.slice(0, colon).trim();
-  // A trailing `;` or `,` is how a colour arrives when the line was lifted
-  // from a stylesheet or an object literal.
-  const value = line
-    .slice(colon + 1)
-    .trim()
-    .replace(/[;,]$/, "")
-    .trim();
+  const value = line.slice(colon + 1).trim();
   return name && isCssColor(value) ? { value, name } : null;
 }
 

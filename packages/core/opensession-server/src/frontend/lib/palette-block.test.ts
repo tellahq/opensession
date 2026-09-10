@@ -12,16 +12,48 @@ describe("isCssColor", () => {
   it("accepts colour functions with a flat argument list", () => {
     for (const value of [
       "rgb(255, 0, 128)",
+      "rgba(255, 0, 128, 0.5)",
       "rgba(255 0 128 / 0.5)",
+      "rgb(100% 0% 50%)",
+      "hsl(330, 100%, 50%)",
+      "hsl(none 100% 50%)",
+      "hsl(0.5turn 100% 50%)",
+      "hsl(-30 100% 50%)",
       "hsl(330deg 100% 50%)",
       "hwb(330 0% 0%)",
       "oklch(0.7 0.2 340)",
       "oklch(70% 0.2 340 / 40%)",
       "lab(60 40 -20)",
       "color(display-p3 1 0 0.5)",
+      "color(xyz-d50 .2 .3 .4 / 50%)",
+      "oklch( 0.7 0.2 340 )",
       "OKLCH(0.7 0.2 340)",
+      "lab(60 40 -20 / 1e-1)",
     ])
       expect(isCssColor(value)).toBe(true);
+  });
+
+  it("rejects malformed arguments to a known colour function", () => {
+    for (const value of [
+      "rgb(bogus)",
+      "hsl(red)",
+      "rgb(0,,0)",
+      "rgb(0 0)",
+      "rgb(0 0 0 0)",
+      "rgb(0, 0 0)",
+      "rgb(0 0 0 / )",
+      "rgb(0 0 0 / 1 2)",
+      "rgb(10deg 0 0)",
+      "hsl(330 100 50%)deg",
+      "hwb(330, 0%, 0%)",
+      "lab(60, 40, -20)",
+      "oklch(0.7 0.2 340 0.5)",
+      "color(1 0 0)",
+      "color(cmyk 1 0 0)",
+      "color(display-p3 1 0)",
+      "rgb(1. .5 .)",
+    ])
+      expect(isCssColor(value)).toBe(false);
   });
 
   it("rejects computed colours, unknown functions and stray syntax", () => {
@@ -72,6 +104,21 @@ describe("parsePalette", () => {
     ]);
   });
 
+  it("drops a trailing `;` or `,` in either form", () => {
+    expect(
+      parsePalette("#ff0080;\nred,\nrgb(255 0 0);\n#1c1c1c Ink;\nMist: #eee,"),
+    ).toEqual([
+      { value: "#ff0080", name: "" },
+      { value: "red", name: "" },
+      { value: "rgb(255 0 0)", name: "" },
+      { value: "#1c1c1c", name: "Ink" },
+      { value: "#eee", name: "Mist" },
+    ]);
+    // Only one, and only at the end: `;;` and `#fff; Ink` are not colours.
+    expect(parsePalette("#ff0080;;")).toBeNull();
+    expect(parsePalette("#fff; Ink")).toBeNull();
+  });
+
   it("keeps a colon inside a trailing name", () => {
     expect(parsePalette("#ff0080 Brand: pink")).toEqual([
       { value: "#ff0080", name: "Brand: pink" },
@@ -90,6 +137,8 @@ describe("parsePalette", () => {
   it("declines when any line is not a colour", () => {
     expect(parsePalette("#ff0080\nthis is prose")).toBeNull();
     expect(parsePalette("Brand: not a colour")).toBeNull();
+    expect(parsePalette("Brand: rgb(bogus)")).toBeNull();
+    expect(parsePalette("hsl(red) Brand")).toBeNull();
     expect(parsePalette("#ff008 Brand")).toBeNull();
     expect(parsePalette(": #fff")).toBeNull();
     expect(parsePalette("")).toBeNull();

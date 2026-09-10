@@ -72,11 +72,11 @@ fence is a display block as well.
 
 A ` ```palette ` fence lists one colour per line, with an optional
 name on either side: `#ff0080 Brand pink` or `Brand pink: #ff0080`. A
-colour is `#hex` (3, 4, 6 or 8 digits), a colour function with a flat
-argument list (`rgb()`, `hsl()`, `hwb()`, `lab()`, `lch()`, `oklab()`,
-`oklch()`, `color()`; no `color-mix()` or `calc()`), or a CSS colour
-name. A trailing `;` or `,` on the value is ignored, so lines lifted from
-a stylesheet parse. Blank lines are skipped; any other line that is not a
+colour is `#hex` (3, 4, 6 or 8 digits), a colour function whose channels
+are plain numbers, percentages, angles or `none` (`rgb()`, `hsl()`,
+`hwb()`, `lab()`, `lch()`, `oklab()`, `oklch()`, `color()`; no
+`color-mix()`, `calc()` or `var()`), or a CSS colour name. A trailing `;`
+or `,` on the line is ignored, so lines lifted from a stylesheet parse. Blank lines are skipped; any other line that is not a
 colour keeps the whole fence as code. Each swatch copies its value on
 click.
 
