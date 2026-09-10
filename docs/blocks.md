@@ -90,8 +90,10 @@ too.
 
 ` ```csv `, ` ```tsv ` and ` ```table ` fences (first row
 is the header; `table` auto-detects comma, tab, semicolon or pipe, and reads
-a GitHub pipe table) render as a data grid: click a header to sort, type to
-filter once there are more than eight rows, copy the rows on screen as CSV.
+a GitHub pipe table, where `\|` is a literal pipe) render as a data grid:
+click a header to sort, type to filter once there are more than eight rows,
+copy the rows on screen as CSV. The grid puts at most 500 rows in the DOM
+and says so in its count; sort, filter and copy still cover the whole table.
 Fields follow RFC 4180, so a quoted field may hold the delimiter, a doubled
 quote or a line break. A column whose every value is a number (thousands
 separators, a currency sign and a trailing `%` allowed) sorts numerically

@@ -55,6 +55,12 @@ describe("parseDelimited", () => {
     ]);
   });
 
+  test("a backslash escapes a pipe, and only a pipe", () => {
+    expect(parseDelimited("a \\| b|c", "|")).toEqual([["a | b", "c"]]);
+    expect(parseDelimited("a \\| b,c", ",")).toEqual([["a \\| b", "c"]]);
+    expect(parseDelimited("a\\b|c", "|")).toEqual([["a\\b", "c"]]);
+  });
+
   test("tabs delimit a tsv", () => {
     expect(parseDelimited("a\tb\n1\t2", "\t")).toEqual([
       ["a", "b"],
@@ -73,6 +79,10 @@ describe("detectDelimiter", () => {
 
   test("a tab beats a comma in prose-like cells", () => {
     expect(detectDelimiter("name\tcity, state\n")).toBe("\t");
+  });
+
+  test("an escaped pipe does not count as one", () => {
+    expect(detectDelimiter("a \\| b, c \\| d, e")).toBe(",");
   });
 
   test("null when nothing delimits", () => {
@@ -101,6 +111,29 @@ describe("parseTable", () => {
     const t = parseTable("| a | b |\n|---|:-:|\n| 1 | 2 |\n", "table");
     expect(t!.header).toEqual(["a", "b"]);
     expect(t!.rows).toEqual([["1", "2"]]);
+  });
+
+  test("table: only the rule under the header is dropped; dashes below are data", () => {
+    const t = parseTable(
+      "|key|value|\n|---|---|\n|first|ok|\n|---|---|\n|last|ok|\n",
+      "table",
+    );
+    expect(t!.rows).toEqual([
+      ["first", "ok"],
+      ["---", "---"],
+      ["last", "ok"],
+    ]);
+  });
+
+  test("table: escaped pipes are literal cell content, not columns", () => {
+    const lines = ["| name | expr |", "|---|---|"];
+    for (let i = 0; i < 10; i++) lines.push(`| r${i} | A \\| B |`);
+    lines.push("| tail | ends \\|");
+    const t = parseTable(lines.join("\n"), "table");
+    expect(t!.header).toEqual(["name", "expr"]);
+    expect(t!.rows).toHaveLength(11);
+    expect(t!.rows[0]).toEqual(["r0", "A | B"]);
+    expect(t!.rows[10]).toEqual(["tail", "ends |"]);
   });
 
   test("blank lines are skipped", () => {
@@ -284,6 +317,12 @@ describe("rowCountLabel", () => {
     expect(rowCountLabel(20, 20)).toBe("20 rows");
     expect(rowCountLabel(3, 20)).toBe("3 of 20 rows");
     expect(rowCountLabel(0, 20)).toBe("0 of 20 rows");
+  });
+
+  test("says when the grid shows fewer rows than match", () => {
+    expect(rowCountLabel(3000, 3000, 500)).toBe("first 500 of 3,000 rows");
+    expect(rowCountLabel(1200, 3000, 500)).toBe("first 500 of 1,200 matches");
+    expect(rowCountLabel(400, 3000, 400)).toBe("400 of 3,000 rows");
   });
 });
 

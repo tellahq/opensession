@@ -34,6 +34,15 @@ export type Delimiter = "," | "\t" | ";" | "|";
 /** A fence with more data rows than this gets a filter input. */
 export const FILTER_THRESHOLD = 8;
 
+/**
+ * How many rows the grid puts in the DOM at once. An asset preview hands
+ * markdown up to 256 KiB to the renderer, which as a narrow CSV is tens of
+ * thousands of rows; building every cell would freeze the page, and each
+ * keystroke in the filter rebuilds the body. Sorting, filtering and Copy CSV
+ * still work over the whole table; the count says what was cut.
+ */
+export const RENDER_CAP = 500;
+
 export interface TableData {
   header: string[];
   /** Every row is exactly `header.length` wide. */
@@ -50,8 +59,12 @@ export type SortDir = "asc" | "desc";
  * is one quote. An unquoted field is trimmed (`a, b` is two words, not a
  * word and a space-word); a quoted one keeps its whitespace. A trailing line
  * break closes the last record without opening an empty one.
+ *
+ * With a pipe delimiter, `\|` is a literal pipe: that is how a GitHub table
+ * carries one, and a pipe table has no quoting of its own.
  */
 export function parseDelimited(source: string, delimiter: string): string[][] {
+  const escaped = delimiter === "|";
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
@@ -84,6 +97,9 @@ export function parseDelimited(source: string, delimiter: string): string[][] {
       inQuotes = true;
       wasQuoted = true;
       cell = "";
+    } else if (escaped && c === "\\" && source[i + 1] === delimiter) {
+      cell += delimiter;
+      i++;
     } else if (c === delimiter) {
       endCell();
     } else if (c === "\n" || c === "\r") {
@@ -108,7 +124,10 @@ export function detectDelimiter(source: string): Delimiter | null {
   let best: Delimiter | null = null;
   let bestCount = 0;
   for (const candidate of ["\t", "|", ";", ","] as const) {
-    const count = line.split(candidate).length - 1;
+    const count =
+      candidate === "|"
+        ? line.replace(/\\\|/g, "").split("|").length - 1
+        : line.split(candidate).length - 1;
     if (count > bestCount) {
       best = candidate;
       bestCount = count;
@@ -117,8 +136,15 @@ export function detectDelimiter(source: string): Delimiter | null {
   return best;
 }
 
-const PIPE_EDGE = /^[ \t]*\||\|[ \t]*$/gm;
+// The trailing edge must not be an escaped pipe: `| a \| |` ends in `|`,
+// but `| a \|` ends in a literal one.
+const PIPE_EDGE = /^[ \t]*\||(?<!\\)\|[ \t]*$/gm;
 const PIPE_RULE = /^:?-+:?$/;
+
+/** A GitHub pipe-table rule: every cell is dashes, with optional colons. */
+function isPipeRule(row: readonly string[] | undefined): boolean {
+  return row !== undefined && row.every((c) => PIPE_RULE.test(c));
+}
 
 /**
  * The fence as a grid, or null when it should stay code. `lang` is the
@@ -135,14 +161,13 @@ export function parseTable(source: string, lang: string): TableData | null {
     lang === "csv" ? "," : lang === "tsv" ? "\t" : detectDelimiter(source);
   if (!delimiter) return null;
   // A pipe table usually wears GitHub's dress: an edge pipe on both sides
-  // and a `|---|---|` rule under the header. Neither is data.
+  // and a `|---|---|` rule right under the header. Neither is data. A row of
+  // dashes anywhere else is data and stays.
   const text = delimiter === "|" ? source.replace(PIPE_EDGE, "") : source;
-  let records = parseDelimited(text, delimiter).filter(
+  const records = parseDelimited(text, delimiter).filter(
     (row) => row.length > 1 || row[0] !== "",
   );
-  if (delimiter === "|") {
-    records = records.filter((row) => !row.every((c) => PIPE_RULE.test(c)));
-  }
+  if (delimiter === "|" && isPipeRule(records[1])) records.splice(1, 1);
   const [header, ...body] = records;
   if (!header || header.length < 2 || body.length < 1) return null;
   const width = header.length;
@@ -242,10 +267,27 @@ export function toCsv(
   return [header, ...rows].map((row) => row.map(field).join(",")).join("\n");
 }
 
-/** `20 rows`, `1 row`, or `3 of 20 rows` while a filter is narrowing. */
-export function rowCountLabel(shown: number, total: number): string {
+/**
+ * `20 rows`, `1 row`, or `3 of 20 rows` while a filter is narrowing. When
+ * the grid shows fewer than match (`rendered` below `shown`), the label says
+ * so: `first 500 of 3,000 rows`, or `first 500 of 1,200 matches` under a
+ * filter, so the reader knows to narrow rather than scroll.
+ */
+export function rowCountLabel(
+  shown: number,
+  total: number,
+  rendered = shown,
+): string {
+  const n = (v: number) => v.toLocaleString("en-US");
   const rows = total === 1 ? "row" : "rows";
-  return shown === total ? `${total} ${rows}` : `${shown} of ${total} ${rows}`;
+  if (rendered < shown) {
+    return shown === total
+      ? `first ${n(rendered)} of ${n(shown)} ${rows}`
+      : `first ${n(rendered)} of ${n(shown)} matches`;
+  }
+  return shown === total
+    ? `${n(total)} ${rows}`
+    : `${n(shown)} of ${n(total)} ${rows}`;
 }
 
 // ── DOM ──────────────────────────────────────────────────────
@@ -375,7 +417,9 @@ function buildTableBlock(data: TableData): HTMLElement {
   function renderBody() {
     const shown = view();
     const fragment = document.createDocumentFragment();
-    for (const row of shown) {
+    const rendered = Math.min(shown.length, RENDER_CAP);
+    for (let i = 0; i < rendered; i++) {
+      const row = shown[i]!;
       const tr = document.createElement("tr");
       row.forEach((cell, col) => {
         const td = document.createElement("td");
@@ -386,7 +430,11 @@ function buildTableBlock(data: TableData): HTMLElement {
       fragment.append(tr);
     }
     tbody.replaceChildren(fragment);
-    count.textContent = rowCountLabel(shown.length, rows.length);
+    count.textContent = rowCountLabel(shown.length, rows.length, rendered);
+    count.title =
+      rendered < shown.length
+        ? `The grid shows the first ${RENDER_CAP.toLocaleString("en-US")} rows; filter to narrow, or copy for all of them`
+        : "";
   }
 
   renderHeader();
