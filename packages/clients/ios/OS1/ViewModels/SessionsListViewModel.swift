@@ -1296,11 +1296,16 @@ final class SessionsListViewModel {
             // The detached passes below run against a snapshot of the list.
             // A row flush that publishes while they run makes the snapshot
             // stale, so they rerun over the moved list, with that flush's
-            // frames in the replay. Two reruns cover any realistic burst; a
-            // list that will not hold still is left to the next poll.
+            // frames in the replay. Once a list is on screen, two reruns
+            // cover any realistic burst and one that will not hold still is
+            // left to the next poll. Before the first list there is nothing
+            // to leave it to: giving up would mark the load done with an
+            // empty screen and prune the frames it needed, so the first
+            // response reruns until it lands.
             var next: [Session] = []
             var claimsChanged = false
-            for attempt in 0 ... 2 {
+            var reruns = 0
+            while true {
                 let snapshotRevision = sessionsRevision
                 let replay = Self.replay(appliedRowUpdates, after: startRevision)
                 // Snapshot the main-actor state the filter needs, then do the
@@ -1364,7 +1369,10 @@ final class SessionsListViewModel {
                 // A later poll already published rows newer than these.
                 guard sequence > publishedRefreshSequence else { break }
                 if snapshotRevision != sessionsRevision {
-                    if attempt < 2 { continue }
+                    if !hasLoaded || reruns < 2 {
+                        reruns += 1
+                        continue
+                    }
                     break
                 }
                 SessionLinks.register(titles: grouped.titles)
