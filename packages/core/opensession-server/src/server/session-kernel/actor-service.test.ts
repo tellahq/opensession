@@ -314,7 +314,7 @@ describe("session kernel actor service", () => {
     );
 
     const after = await ready();
-    expect(after.lanes[0]?.turnsCompleted === beforeByLane.get(0)).toBe(true);
+    expect(after.lanes[0]?.turnsCompleted).toBe(beforeByLane.get(0) ?? 0);
     const sessionLaneDeltas = after.lanes
       .slice(1)
       .map((lane) => lane.turnsCompleted - (beforeByLane.get(lane.index) ?? 0));

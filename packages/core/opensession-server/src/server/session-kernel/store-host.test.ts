@@ -623,6 +623,36 @@ describe("per-session session kernel storage", () => {
     host.close();
   });
 
+  test("releases a quarantine caused by a read-only quarantine check", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "quarantine-read-repair-session";
+    host.call("setRunState", [
+      {
+        sessionId,
+        state: "running",
+        event: "prompt",
+        currentRunId: "live-run",
+      },
+    ]);
+    host.central.quarantineSession(
+      sessionId,
+      "database is locked",
+      "storage:quarantine-read",
+    );
+
+    expect(host.quarantinedSession(sessionId)).toMatchObject({
+      repairable: true,
+    });
+    expect(host.call("releaseQuarantine", [sessionId])).toBe(true);
+    expect(host.quarantinedSession(sessionId)).toBeUndefined();
+    expect(host.storeForSession(sessionId).runState(sessionId)).toMatchObject({
+      state: "running",
+      currentRunId: "live-run",
+    });
+    host.close();
+  });
+
   test("releases a derived quarantine rejection after its original quarantine", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
