@@ -108,6 +108,12 @@ export function quietChoicesBlock(block: Element): void {
   applyQuiet(block, true);
 }
 
+/** Put one block back to what the published entries say, e.g. after a send
+ *  that was quieted early failed. */
+export function refreshChoicesBlock(block: Element): void {
+  applyQuiet(block, isQuiet(block));
+}
+
 export const choicesUpgrader: FenceUpgrader = {
   langs: ["choices"],
   async upgrade({ pre, source, root, alive }) {

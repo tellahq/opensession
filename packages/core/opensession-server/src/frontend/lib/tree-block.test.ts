@@ -99,16 +99,34 @@ describe("treeFilePaths", () => {
 });
 
 describe("matchTreePath", () => {
-  const changed = ["src/upload.ts", "src/lib/retry.ts", "docs/upload.ts"];
+  const api = (path: string) => ({ repo: "api", path });
+  const web = (path: string) => ({ repo: "web", path });
+  const changed = [
+    api("src/upload.ts"),
+    api("src/lib/retry.ts"),
+    api("docs/upload.ts"),
+    web("src/App.tsx"),
+  ];
 
   it("prefers the exact path", () => {
-    expect(matchTreePath("src/upload.ts", changed)).toBe("src/upload.ts");
-    expect(matchTreePath("./src/upload.ts", changed)).toBe("src/upload.ts");
+    expect(matchTreePath("src/upload.ts", changed)).toEqual(
+      api("src/upload.ts"),
+    );
+    expect(matchTreePath("./src/upload.ts", changed)).toEqual(
+      api("src/upload.ts"),
+    );
   });
 
   it("matches a tree drawn from a subdirectory by its one tail", () => {
-    expect(matchTreePath("lib/retry.ts", changed)).toBe("src/lib/retry.ts");
+    expect(matchTreePath("lib/retry.ts", changed)).toEqual(
+      api("src/lib/retry.ts"),
+    );
     expect(matchTreePath("upload.ts", changed)).toBeUndefined();
     expect(matchTreePath("missing.ts", changed)).toBeUndefined();
+  });
+
+  it("keeps the file's repo", () => {
+    expect(matchTreePath("App.tsx", changed)).toEqual(web("src/App.tsx"));
+    expect(matchTreePath("packages/web/src/App.tsx", changed)).toBeUndefined();
   });
 });

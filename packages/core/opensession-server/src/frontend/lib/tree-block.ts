@@ -26,6 +26,13 @@ const SCOPE_SELECTOR = ".viewer-messages";
 const OPEN_DEPTH = 1;
 const MAX_LINES = 400;
 
+/** One of the session's changed files: the Changes pane shows one repo at a
+ *  time, so the repo travels with the path. */
+export interface ChangedFile {
+  repo: string;
+  path: string;
+}
+
 export interface TreeNode {
   name: string;
   dir: boolean;
@@ -181,24 +188,27 @@ export function treeFilePaths(nodes: TreeNode[]): string[] {
  */
 export function matchTreePath(
   path: string,
-  candidates: readonly string[],
-): string | undefined {
+  candidates: readonly ChangedFile[],
+): ChangedFile | undefined {
   const clean = path.replace(/^\.?\//, "");
-  if (candidates.includes(clean)) return clean;
+  const exact = candidates.find((candidate) => candidate.path === clean);
+  if (exact) return exact;
   const suffix = `/${clean}`;
-  const tails = candidates.filter((candidate) => candidate.endsWith(suffix));
+  const tails = candidates.filter((candidate) =>
+    candidate.path.endsWith(suffix),
+  );
   return tails.length === 1 ? tails[0] : undefined;
 }
 
-/** Per messages container: the paths a tree row can open. */
-const openablePaths = new WeakMap<Element, readonly string[]>();
+/** Per messages container: the files a tree row can open. */
+const openableFiles = new WeakMap<Element, readonly ChangedFile[]>();
 
 function markOpenable(block: Element): void {
   const scope = block.closest(SCOPE_SELECTOR);
-  const paths = (scope && openablePaths.get(scope)) || [];
+  const files = (scope && openableFiles.get(scope)) || [];
   for (const row of block.querySelectorAll("[data-tree-path]")) {
     const path = row.getAttribute("data-tree-path") ?? "";
-    if (matchTreePath(path, paths)) row.setAttribute("data-openable", "");
+    if (matchTreePath(path, files)) row.setAttribute("data-openable", "");
     else row.removeAttribute("data-openable");
   }
 }
@@ -209,9 +219,9 @@ function markOpenable(block: Element): void {
  */
 export function setOpenableTreePaths(
   container: Element,
-  paths: readonly string[],
+  files: readonly ChangedFile[],
 ): void {
-  openablePaths.set(container, paths);
+  openableFiles.set(container, files);
   for (const block of container.querySelectorAll(`.${TREE_BLOCK_CLASS}`))
     markOpenable(block);
 }

@@ -1265,12 +1265,15 @@ export function SessionViewer({
     sessionId: session.id,
     messagesRef,
     entries,
+    isRunning: isBusy,
+    canReply: !noEngine,
     diffRepos: diffState.repos,
     // The isolated send: chip text only, the composer's draft left alone.
-    sendQuickReply: (text) => void handleSend(text, undefined, []),
-    openChangedFile: (path) => {
+    sendQuickReply: (text) => handleSend(text, undefined, []),
+    openChangedFile: (file) => {
       // The same route the workspace summary's "files changed" row takes,
-      // then the diff is scrolled to the file once the pane has mounted.
+      // then the pane is switched to the file's repo and scrolled to the
+      // file once that diff has mounted.
       if (isPhone) {
         setInfoPageOpen(true);
         setPanelPage("changes");
@@ -1280,7 +1283,7 @@ export function SessionViewer({
       }
       revealDiffFileWhenMounted(
         () => (isPhone ? document.body : desktopChangesRef.current),
-        path,
+        file,
       );
     },
   });

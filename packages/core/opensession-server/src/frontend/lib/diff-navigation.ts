@@ -33,23 +33,33 @@ export function revealDiffFile(
 /**
  * Reveal a file once the diff that holds it has mounted: the Changes pane
  * may still be opening (a side panel sliding in, a phone page appearing,
- * the diff itself still loading) when the request is made. Polls a frame at
- * a time for a few seconds, then gives up quietly; `root` is read each time
+ * the diff itself still loading, another repo's diff still showing) when
+ * the request is made. The pane mounts one repo's diff at a time under
+ * `[data-diff-repo]`, so the file is looked for inside its own repo's
+ * element only; while another repo is showing, the file's repo tab is
+ * pressed, the way a folded group is opened above. Polls a frame at a time
+ * for a few seconds, then gives up quietly; `root` is read each time
  * because the pane's element may not exist yet either.
  */
 export function revealDiffFileWhenMounted(
   root: () => HTMLElement | null,
-  path: string,
+  file: { repo: string; path: string },
   attempt = 0,
 ): void {
   const el = root();
-  const mounted = el?.querySelector(`[data-diff-file="${CSS.escape(path)}"]`);
-  if (mounted) {
-    revealDiffFile(el, path);
+  const repo = CSS.escape(file.repo);
+  const diff = el?.querySelector<HTMLElement>(`[data-diff-repo="${repo}"]`);
+  const mounted = diff?.querySelector(
+    `[data-diff-file="${CSS.escape(file.path)}"]`,
+  );
+  if (diff && mounted) {
+    revealDiffFile(diff, file.path);
     return;
   }
+  if (!diff)
+    el?.querySelector<HTMLElement>(`[data-diff-repo-tab="${repo}"]`)?.click();
   if (attempt >= 300) return;
   requestAnimationFrame(() =>
-    revealDiffFileWhenMounted(root, path, attempt + 1),
+    revealDiffFileWhenMounted(root, file, attempt + 1),
   );
 }

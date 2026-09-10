@@ -99,9 +99,14 @@ function sameRepoDiffs(a: RepoDiff[] | null, b: RepoDiff[]): boolean {
  */
 export function useSessionDiff(
   sessionId: string,
-  opts: { enabled?: boolean; isRunning: boolean },
+  opts: {
+    enabled?: boolean;
+    isRunning: boolean;
+    /** Revalidate at once when this changes, on top of the poll. */
+    revision?: string | number;
+  },
 ): SessionDiffState {
-  const { enabled = true, isRunning } = opts;
+  const { enabled = true, isRunning, revision } = opts;
   const {
     data,
     error: requestError,
@@ -110,6 +115,7 @@ export function useSessionDiff(
   } = useSessionDiffResource(sessionId, {
     enabled,
     refreshInterval: enabled ? (isRunning ? 8000 : 30000) : 0,
+    revision,
     // The same patch comes back on most polls. Suppress that update before it
     // reaches React, because rendering a large diff parses every file again.
     compare: (previous, next) => {
@@ -554,6 +560,9 @@ export function DiffPanel({
                 }`}
                 onClick={() => setActive(i)}
                 title={r.primary ? "Primary repo" : "Attached repo"}
+                // lib/diff-navigation.ts presses this to reach a file in
+                // another repo.
+                data-diff-repo-tab={r.repo}
               >
                 {repoLabel(r.repo)}
                 <span className="rounded-full bg-faint/20 px-[5px] text-meta text-faint">
@@ -594,6 +603,7 @@ export function DiffPanel({
          keeps this panel's own inset. */
             <div
               className={`${toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"} min-w-0 max-w-full overflow-clip pb-7 [&_[class*=pierre]]:max-w-full`}
+              data-diff-repo={cur.repo}
             >
               <CommentableDiff
                 key={cur.repo}

@@ -136,7 +136,8 @@ A ` ```choices ` fence lists one reply per line (a leading `- ` is
 tolerated), up to twelve. Each renders as a chip; picking one sends that
 text as the next message on the composer's own path, so it queues while a
 run is busy. Chips go quiet once any later user message exists, and
-wherever there is no session to send into.
+wherever there is no session to send into; a send that fails leaves them
+live.
 
 ### File trees
 
@@ -144,9 +145,10 @@ A ` ```tree ` fence holds an indented tree (two spaces or a tab per level,
 a trailing `/` marks a directory) or `tree` CLI box-drawing output
 (`├──`, `│`, `└──`, the ASCII charset too). A trailing `# note` on a line
 shows dim beside the name. Directories fold, the top two levels open. A
-file row opens that file in the Changes pane when it is one of the
-session's changed files; the app has no viewer for an arbitrary repo file,
-so any other row is a label.
+file row opens that file in the Changes pane, on its own repo, when it is
+one of the session's changed files; the diff is polled while the run is
+busy, so a file edited after the tree was written becomes openable too. The
+app has no viewer for an arbitrary repo file, so any other row is a label.
 
 ### Artifacts
 
