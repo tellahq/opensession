@@ -30,7 +30,7 @@ import { syncAgentSessionEngine } from "./agent-session-sync";
 import { cancelAgentWait } from "./agent-waits";
 import { runAgentHosted } from "./host-client";
 import { getRunState, transitionRunState } from "./run-state";
-import { resolveSessionRunInputs } from "./session-run-inputs";
+import { resolveSessionRunInputs, runAccountSpec } from "./session-run-inputs";
 import { defaultRepo } from "./config";
 import { isDevInstance } from "./dev-mode";
 import {
@@ -110,7 +110,6 @@ import {
 } from "./sandbox/automation-egress";
 import { ensureSandboxWithTransientRetry } from "./sandbox/reliability";
 import {
-  type Automation,
   automationModel,
   getAutomation,
   validateSandboxAutomation,
@@ -1877,43 +1876,6 @@ export function sandboxRunSecuritySpec(
   };
 }
 
-/**
- * Provider account routing for one sandbox turn. A disposable automation
- * resume keeps the automation's hard pin and credit policy for the
- * automation's own turns: that pin is its cost ceiling. A person who takes
- * the session over pays with their own subscription, personal accounts first
- * and the shared pool as backup, so their turn carries no pin at all; the
- * pinned account would otherwise be the only one uploaded to the sandbox
- * (accountsForRemoteUpload) and a strict pin never rotates. The automation's
- * MCP and GitHub restrictions are unaffected: they read `user`, which
- * sandboxRunSecuritySpec still drops. Every other session keeps its soft pin.
- */
-export function sandboxRunAccountSpec(
-  session: Pick<UnifiedSession, "accountId">,
-  opts: { accountUser?: string },
-  owningAutomation: Pick<Automation, "accountId" | "usageCredits"> | null,
-): Pick<RunHostSpec, "accountId" | "accountStrict" | "usageCredits"> {
-  if (!owningAutomation) {
-    return {
-      accountId: session.accountId,
-      accountStrict: undefined,
-      usageCredits: undefined,
-    };
-  }
-  if (opts.accountUser) {
-    return {
-      accountId: undefined,
-      accountStrict: undefined,
-      usageCredits: undefined,
-    };
-  }
-  return {
-    accountId: owningAutomation.accountId,
-    accountStrict: true,
-    usageCredits: owningAutomation.usageCredits,
-  };
-}
-
 export async function maybeLaunchSandboxedRun(
   session: UnifiedSession,
   opts: {
@@ -2220,7 +2182,9 @@ export async function maybeLaunchSandboxedRun(
         : interactiveFallbackModel(session.model),
       effort: portablePreset?.effort ?? session.effort,
       fastMode: session.fastMode,
-      ...sandboxRunAccountSpec(session, opts, owningAutomation),
+      // A disposable automation resume carries the automation's hard pin for
+      // its own turns; a person's takeover turn carries none (runAccountSpec).
+      ...runAccountSpec(session, opts, owningAutomation),
     };
     if (isAgentSessionCancelled(session.id, opts.startToken)) {
       unregisterRunToken(rpcToken);
@@ -3210,7 +3174,9 @@ async function runSessionPromptInner(
           fallbackModel: interactiveFallbackModel(session.model),
           effort: session.effort,
           fastMode: session.fastMode,
-          accountId: session.accountId,
+          // Session pin, except for a person's turn in an automation-owned
+          // session: they pay personal-first with the pool as backup.
+          ...runAccountSpec(session, runInputs),
           trustProfile: isAutomationSession ? "automation" : "interactive",
           journalKind: "prompt",
           onAskUser: makeAskHandler(sessionId),
@@ -3263,8 +3229,10 @@ async function runSessionPromptInner(
       effort: session.effort,
       fastMode: session.fastMode,
       // Pinned subscription for this session (claude-runner prefers it, pool
-      // fallback on exhaustion). Ignored by Codex models.
-      accountId: session.accountId,
+      // fallback on exhaustion). Ignored by Codex models. A person's turn in
+      // an automation-owned session carries no pin, so their own subscription
+      // is tried before the automation's account and the pool.
+      ...runAccountSpec(session, runInputs),
       // Only switch models when a fallback is explicitly configured. By default,
       // usage exhaustion stops the run so the human can choose what to do.
       fallbackModel: interactiveFallbackModel(session.model),

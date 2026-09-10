@@ -18,6 +18,7 @@
 
 import type { UnifiedSession } from "./types";
 import {
+  type Automation,
   automationDeniedTools,
   automationMcpServersByName,
 } from "./automations";
@@ -153,5 +154,54 @@ export async function resolveSessionRunInputs(
     accountUser: humanPrompter(opts.user) ?? undefined,
     inProcessMcpBranch: sessionInProcessMcpBranch(session),
     sessionNote: !isAutomationSession,
+  };
+}
+
+/**
+ * Provider account routing for one turn, shared by every launch path: the
+ * in-process runAgent, the detached pi host, a Runner and a sandbox. Account
+ * selection tries a pin before personal accounts (resolveAccount), and a
+ * remote sandbox uploads only the pinned account (accountsForRemoteUpload), so
+ * a person who takes over an automation-owned session pays with their own
+ * subscription only if their turn carries no pin at all: personal accounts
+ * first, the shared pool as backup. The automation's own turns keep their
+ * pin. A disposable sandbox resume passes the owning automation for its hard
+ * pin and credit policy (its cost ceiling); every other machine turn keeps the
+ * session's soft pin. The automation's MCP and GitHub restrictions are
+ * unaffected: they read `user`, which stays dropped. Interactive sessions
+ * always keep their own soft pin.
+ */
+export function runAccountSpec(
+  session: Pick<UnifiedSession, "accountId">,
+  turn: Pick<SessionRunInputs, "isAutomationSession"> & {
+    accountUser?: string | undefined;
+  },
+  pinnedAutomation: Pick<
+    Automation,
+    "accountId" | "usageCredits"
+  > | null = null,
+): {
+  accountId: string | undefined;
+  accountStrict: boolean | undefined;
+  usageCredits: boolean | undefined;
+} {
+  if (turn.isAutomationSession && turn.accountUser) {
+    return {
+      accountId: undefined,
+      accountStrict: undefined,
+      usageCredits: undefined,
+    };
+  }
+  if (pinnedAutomation) {
+    return {
+      accountId: pinnedAutomation.accountId,
+      accountStrict: true,
+      usageCredits: pinnedAutomation.usageCredits,
+    };
+  }
+  return {
+    accountId: session.accountId,
+    accountStrict: undefined,
+    usageCredits: undefined,
   };
 }
