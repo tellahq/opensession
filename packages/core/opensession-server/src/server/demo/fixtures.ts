@@ -287,7 +287,34 @@ export function demoSessions(opts: {
           t0 + 140_000,
         ),
         transcriptLineAssistantText(
-          "Fixed and verified — 100/100 green. The loop now honors the configured retry budget. I committed the change on `demo/fix-flaky-upload` and opened a PR with the regression note in the description.",
+          "Fixed and verified — 100/100 green. The loop now honors the configured retry budget. I committed the change on `demo/fix-flaky-upload` and opened a PR with the regression note in the description.\n\n" +
+            "Where the flakes were coming from, per attempt across the 50 reruns:\n\n" +
+            "```vega-lite\n" +
+            JSON.stringify({
+              title: "Upload retries per attempt, 50 reruns",
+              mark: "bar",
+              data: {
+                values: [
+                  { attempt: "1st", build: "before", succeeded: 31 },
+                  { attempt: "2nd", build: "before", succeeded: 18 },
+                  { attempt: "3rd", build: "before", succeeded: 0 },
+                  { attempt: "1st", build: "after", succeeded: 30 },
+                  { attempt: "2nd", build: "after", succeeded: 17 },
+                  { attempt: "3rd", build: "after", succeeded: 3 },
+                ],
+              },
+              encoding: {
+                x: { field: "attempt", type: "nominal", title: "Attempt" },
+                xOffset: { field: "build", title: "Build" },
+                y: {
+                  field: "succeeded",
+                  type: "quantitative",
+                  title: "Runs that succeeded",
+                },
+                color: { field: "build", title: "Build" },
+              },
+            }) +
+            "\n```",
           "demo-pr-a3",
           iso(t0 + 170_000),
           MODEL_FABLE,

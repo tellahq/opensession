@@ -55,6 +55,20 @@ sequenceDiagram
     Daemon-->>UI: stream result
 ```
 
+- Show numbers (a trend, a distribution, a comparison, a breakdown) as an interactive chart: a ```vega-lite fence holding a Vega-Lite spec with inline `data.values`. Omit `width` so it fills the column; keep the data aggregated. When `opensession-charts` is available, pass the spec to `make_chart` first: it reports compile errors instead of leaving a silent code block and offloads large data into a session asset.
+
+```vega-lite
+{
+  "title": "Runs per day",
+  "mark": "bar",
+  "data": {"values": [{"day": "Mon", "runs": 12}, {"day": "Tue", "runs": 9}]},
+  "encoding": {
+    "x": {"field": "day", "type": "nominal", "sort": null},
+    "y": {"field": "runs", "type": "quantitative"}
+  }
+}
+```
+
 - Use `diff` when the point is what changes and the surrounding shape already exists. Match the diff shape to the topic.
 
 For a component change:

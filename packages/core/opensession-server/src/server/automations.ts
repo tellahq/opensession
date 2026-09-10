@@ -72,6 +72,7 @@ import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import type { WorkflowAutomationSessionPolicy } from "../shared/workflow-types";
 import { createTurnMcpServer } from "../agents/slack/turn-tools";
 import { createAuditMcpServer } from "./audit-mcp";
+import { createChartsMcpServer } from "./charts-mcp";
 import { createHealthMcpServer } from "./health-mcp";
 import { papercutsEnabledForRepo } from "./papercuts";
 import {
@@ -1107,6 +1108,9 @@ export function automationBaselineMcpServers(
     "opensession-turn": createTurnMcpServer({ turnKey: sessionId }),
     "opensession-health": createHealthMcpServer(),
     "opensession-audit": createAuditMcpServer(),
+    // Compiles a ```vega-lite fence for a report and offloads big data into
+    // this run's own assets; no reads, no paths, no URLs (charts-mcp.ts).
+    "opensession-charts": createChartsMcpServer({ sessionId }),
   };
 }
 

@@ -13,6 +13,7 @@ import {
   copyIconMarkup,
   slidersIconMarkup,
 } from "../components/icons";
+import { CHART_FENCE_SELECTOR } from "./chart-fence";
 import { copyToClipboard } from "./share-link";
 
 const WRAP_CLASS = "md-code-wrap";
@@ -87,11 +88,12 @@ function closeSettings(except?: HTMLElement): void {
 export function decorateCodeBlocks(root: HTMLElement): void {
   for (const pre of Array.from(root.querySelectorAll("pre"))) {
     if (pre.parentElement?.classList.contains(WRAP_CLASS)) continue;
-    // A ```mermaid fence is on its way to becoming a diagram (MarkdownBody
-    // upgrades it asynchronously, after this has run). Its source is not
-    // what anyone wants on the clipboard, and the diagram that replaces it
-    // carries its own control.
+    // A ```mermaid or ```vega-lite fence is on its way to becoming a diagram
+    // or a chart (MarkdownBody upgrades it asynchronously, after this has
+    // run). Its source is not what anyone wants on the clipboard, and what
+    // replaces it carries its own control.
     if (pre.querySelector('code[class*="language-mermaid"]')) continue;
+    if (pre.querySelector(CHART_FENCE_SELECTOR)) continue;
     const wrap = document.createElement("div");
     wrap.className = WRAP_CLASS;
     wrap.dataset.wrapped = "true";

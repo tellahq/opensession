@@ -571,6 +571,84 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   max-width: 100%;
   height: auto;
 }
+/* Rendered ```vega-lite chart (MarkdownBody swaps the fence for a live vega
+   view, lib/vega-chart.ts). Same well as a diagram, with one difference: the
+   chart is interactive in place, so the well is not a zoom target and only
+   the sibling expand control opens the viewer. The canvas inside carries no
+   padding because vega measures it for container-width charts. */
+.md-chart-wrap {
+  position: relative;
+  margin: 2px 0 8px;
+}
+.md-chart {
+  padding: 12px;
+  background: var(--diagram-canvas);
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+  overflow-x: auto;
+}
+.md-chart-canvas {
+  display: block;
+  min-height: 24px;
+}
+.md-chart-canvas > svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.md-chart-canvas .vega-bindings {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+/* vega-tooltip's shared element: its stock stylesheet is disabled so the
+   tooltip wears the app's own tooltip tokens. */
+#vg-tooltip-element {
+  visibility: hidden;
+  position: fixed;
+  z-index: 1000;
+  max-width: 320px;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--tooltip-fg);
+  background: var(--tooltip-bg);
+  border-radius: calc(6px * var(--rf));
+  corner-shape: var(--cs);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  white-space: pre-line;
+  pointer-events: none;
+}
+#vg-tooltip-element.visible {
+  visibility: visible;
+}
+#vg-tooltip-element h2 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+#vg-tooltip-element table {
+  border-spacing: 0;
+}
+#vg-tooltip-element td {
+  padding: 1px 0;
+  vertical-align: text-top;
+}
+#vg-tooltip-element td.key {
+  max-width: 140px;
+  padding-right: 8px;
+  text-align: right;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#vg-tooltip-element td.value {
+  max-width: 200px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .md-video {
   max-width: 100%;
   max-height: 480px;

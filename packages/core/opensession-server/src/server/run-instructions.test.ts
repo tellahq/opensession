@@ -80,7 +80,7 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain("pass only its `leaseId`");
     expect(prompt).not.toContain("## Sandbox");
     expect(prompt).toContain(
-      "Follow the repository instructions for branching and publication.",
+      "Follow repository branching and publication rules.",
     );
     expect(prompt).not.toContain(
       "Never merge, approve, or push the default branch",

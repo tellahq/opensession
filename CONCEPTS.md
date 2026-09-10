@@ -133,6 +133,13 @@ session. A goal owns one session, and each wake resumes it for another turn. Tha
 is deliberate: whatever started it, you can open it, read the whole transcript,
 steer it mid-flight, and fork it into a normal conversation.
 
+A transcript is markdown, and the web client upgrades what an agent writes into
+it: a ` ```mermaid ` fence renders as a diagram, a ` ```vega-lite `
+fence (a Vega-Lite spec with inline data) renders as an interactive chart with
+tooltips and zoom, and `OPENSESSION_IMAGE:` / `OPENSESSION_VIDEO:` lines embed
+media. The `opensession-charts` tool compiles a chart spec for the agent and
+moves large data into the session's assets.
+
 ### Modes
 
 A session's mode decides what it can touch:

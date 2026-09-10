@@ -13,6 +13,7 @@ import {
   pushRecentModel,
 } from "../lib/model-recents";
 import { Menu } from "../ui/menu";
+import { Badge } from "../ui/badge";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import {
@@ -889,7 +890,11 @@ export function ModelEffortSelect({
             <Menu.SubmenuRoot>
               <Menu.SubmenuTrigger className="justify-between gap-3">
                 <span className="min-w-0 truncate">Weekly remaining</span>
-                <span className="flex flex-none items-center gap-1 text-dim">
+                <span className="flex flex-none items-center gap-1.5 text-dim">
+                  {/* A model with its own weekly bucket (Fable) is capped by
+                      that bucket, not the plan's 7-day window; name it so a
+                      full general week is not read as Fable headroom. */}
+                  {weeklyReadout?.scope && <Badge>{weeklyReadout.scope}</Badge>}
                   {weeklyReadout && (
                     <span
                       className={cn(
@@ -903,7 +908,7 @@ export function ModelEffortSelect({
                   <IconChevronRight className="shrink-0" size={17} />
                 </span>
               </Menu.SubmenuTrigger>
-              <Menu.Popup className="w-72 max-w-[min(360px,calc(100vw-1rem))]">
+              <Menu.Popup className="w-80 max-w-[min(360px,calc(100vw-1rem))]">
                 {weeklyRows.map((row, i) => {
                   const pinnable =
                     hasAccount && row.provider === accountProvider;
@@ -934,7 +939,8 @@ export function ModelEffortSelect({
                             size={15}
                           />
                         </span>
-                        <span className="min-w-0 truncate">{row.label}</span>
+                        <span className="min-w-0 truncate">{row.name}</span>
+                        {row.scope && <Badge>{row.scope}</Badge>}
                       </span>
                       <span className="flex flex-none items-center gap-2 tabular-nums">
                         {row.owner ? (

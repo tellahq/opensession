@@ -152,7 +152,7 @@ export function buildRunInstructions(input: {
     parts.push(
       "## Pull requests\nEnd each PR body with the attribution footer from the session " +
         "context and follow its assignee rule. Add the `Co-authored-by` trailer from the " +
-        "session context to every commit. Follow the repository instructions for branching and publication.",
+        "session context to every commit. Follow repository branching and publication rules.",
     );
     if (input.prReviewer) {
       parts.push(
@@ -202,7 +202,11 @@ export function buildRunInstructions(input: {
 
   parts.push(
     "## Media\nShow selected results with `OPENSESSION_IMAGE: /abs/path.png` or " +
-      "`OPENSESSION_VIDEO: /abs/path.mp4`.",
+      "`OPENSESSION_VIDEO: /abs/path.mp4`. Charts: a ```vega-lite fence with inline " +
+      "`data.values`." +
+      (inproc["opensession-charts"]
+        ? " `make_chart` validates one and offloads large data."
+        : ""),
   );
   // Instance-local operator instructions last: they're the deployment's own
   // additions and may refine anything above.

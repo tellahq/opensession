@@ -25,11 +25,12 @@ function item(index: number): VirtualTranscriptItem {
   };
 }
 
-// The adapter's scrolling contract (native keyed prepend anchoring, the
-// reader anchor captured before the DOM mutates and settled as a delta, one
+// The adapter's scrolling contract (the reader anchor captured before the DOM
+// mutates and settled as a delta, prepends and external growth included, one
 // writer per commit, touch deferral, rows that never glide) is asserted in a
 // real browser by tools/transcript-scroll-regression.ts and its in-page
-// probe. These tests cover the pure decision helpers only.
+// probe, on desktop, phone, and phone with an iOS WebKit user agent. These
+// tests cover the pure decision helpers only.
 describe("VirtualTranscriptList", () => {
   test("loads history when the opening content cannot scroll", () => {
     expect(transcriptViewportNeedsHistory(700, 700)).toBe(true);

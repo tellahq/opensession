@@ -553,7 +553,11 @@ Changes that bypass the metadata document publish rows the same way.
 `publishSessionChange(sessionId)` refreshes one index row from the current
 document and overlays (title, status and review overrides, the archive
 registry, a PR link, a generated title, a run starting or settling through
-`session-list-runtime-sync`) and publishes it. PR state lives in the PR cache,
+`session-list-runtime-sync`) and publishes it. A Slack or Linear id that no
+native session absorbed reads its own agent session file for the row
+(`readAgentSessionListRow`); the Slack loop publishes after every session save,
+since nothing else carries a thread created after boot into the index until the
+next full rebuild. PR state lives in the PR cache,
 so a merge, close, review or webhook calls `publishSessionRowsForBranch`,
 which finds the live rows on that branch, its `-os-review` checkout and the
 members of a PR workspace whose head it is through the list index's `branch`

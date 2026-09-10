@@ -136,6 +136,9 @@ export interface WeeklyRemainingRow {
   provider: "claude" | "codex" | "xai";
   /** Model the cap is scoped to ("Fable"), or undefined for the account. */
   scope?: string;
+  /** Account name alone; the menu draws `scope` beside it as a chip so a
+   *  long name truncates without hiding which budget the row is. */
+  name: string;
   /** Account name, with the model a scoped cap applies to. */
   label: string;
   /** Weekday the window refills, or "" when unknown. */
@@ -212,6 +215,7 @@ export function weeklyRemainingRows(
       const row: WeeklyRemainingRow = {
         accountId: account.id,
         provider: account.provider,
+        name: account.name,
         label: limit.scope ? `${account.name} · ${limit.scope}` : account.name,
         day: weekday(limit.resetsAt, now),
         resetTitle: resetTitle(limit.resetsAt),

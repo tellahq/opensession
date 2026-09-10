@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +15,7 @@ import {
   activeSessionBranches,
   activeSessionWorktrees,
   bankWorkingState,
+  checkoutAgeMs,
   idleSessionWorktrees,
   type WorktreeActivitySession,
 } from "./worktree-reaper";
@@ -227,6 +234,24 @@ describe("activeSessionBranches", () => {
   });
 });
 
+describe("checkoutAgeMs", () => {
+  it("dates a checkout by its .git pointer, independent of the session snapshot", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "wt-age-"));
+    try {
+      const pointer = join(tmp, ".git");
+      writeFileSync(pointer, "gitdir: /repo/.git/worktrees/x\n");
+      const created = new Date(NOW - 20 * 60_000);
+      utimesSync(pointer, created, created);
+      const age = checkoutAgeMs(tmp, NOW);
+      expect(age).not.toBeNull();
+      expect(Math.round((age ?? 0) / 60_000)).toBe(20);
+      expect(checkoutAgeMs(join(tmp, "missing"), NOW)).toBeNull();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("worktree reaper wiring", () => {
   it("refreshes live run state before an irreversible sweep", () => {
     const boot = readFileSync(
@@ -245,6 +270,19 @@ describe("worktree reaper wiring", () => {
     );
     expect(source).toContain("await lstat(join(dir, file))");
     expect(source).not.toContain("lstatSync");
+  });
+
+  it("spares a checkout younger than the activity window on its own age", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "worktree-reaper.ts"),
+      "utf8",
+    );
+    expect(source).toContain(
+      "const youngCheckout = age !== null && age < ACTIVE_HOURS * HOUR;",
+    );
+    expect(source).toContain(
+      "activeBranches.get(repo.id)?.has(branch) ||\n      youngCheckout",
+    );
   });
 });
 

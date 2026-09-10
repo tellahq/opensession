@@ -330,6 +330,12 @@ export function parseMergeRiskOutput(text: string): MergeRiskOutput | null {
 
 // ── Runner ──────────────────────────────────────────────────
 
+/** Cross-provider fallbacks when the review model's pool is dry. The main
+ *  review survives exhaustion through the agent runner's own fallback; this
+ *  scorer is a bare one-shot and needs its own chain, strongest first. Models
+ *  on the primary's provider are skipped by the one-shot helper. */
+export const MERGE_RISK_FALLBACK_MODELS = ["gpt-6-astra", "gpt-5.6-sol"];
+
 export async function runMergeRiskCheck(opts: {
   pr: PrDetails;
   /** Immutable patch for the head being reviewed. */
@@ -347,8 +353,10 @@ export async function runMergeRiskCheck(opts: {
       model: opts.model,
       label: "github-merge-risk",
       timeoutMs: 5 * 60_000,
+      fallbackModels: MERGE_RISK_FALLBACK_MODELS,
     },
   );
+  const model = result.model ?? opts.model;
   const parsed = result.text ? parseMergeRiskOutput(result.text) : null;
   if (!parsed) {
     console.warn(
@@ -370,7 +378,7 @@ export async function runMergeRiskCheck(opts: {
     reasoning: parsed.reasoning,
     guidance: parsed.guidance,
     hints,
-    model: opts.model,
+    model,
   };
   audit({
     msg: "review_merge_risk",
@@ -380,7 +388,7 @@ export async function runMergeRiskCheck(opts: {
     recovery: scored.recovery,
     factors: scored.factors,
     hints,
-    model: opts.model,
+    model,
   });
   return scored;
 }

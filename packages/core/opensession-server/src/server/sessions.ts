@@ -819,6 +819,35 @@ export function readSlackSession(sessionId: string): UnifiedSession | null {
   return session;
 }
 
+/** The list row for one Slack- or Linear-owned session with the sidebar
+ * overlays applied and no transcript resolution: the Slack/Linear counterpart
+ * of readNativeSessionListRow, for the targeted index write a publish makes.
+ * Their files are written by the agent loops, not the metadata facade, so this
+ * targeted read is the only way a fresh Slack thread reaches the list index
+ * between full rebuilds. Undefined for a native id, an unknown key, or a key
+ * that escapes the source directory. */
+export function readAgentSessionListRow(
+  sessionId: string,
+  aliasIds?: readonly string[],
+): UnifiedSession | undefined {
+  const prefix = sessionId.startsWith("slack-")
+    ? "slack-"
+    : sessionId.startsWith("linear-")
+      ? "linear-"
+      : null;
+  if (!prefix) return undefined;
+  const key = sessionId.slice(prefix.length);
+  if (!key || key.includes("/") || key.includes("\\")) return undefined;
+  const session =
+    prefix === "slack-"
+      ? slackSessionRow(`${key}.json`)
+      : linearSessionRow(`${key}.json`);
+  if (!session || session.id !== sessionId) return undefined;
+  if (aliasIds?.length) session.aliasIds = [...aliasIds];
+  applySessionOverlays(session);
+  return session;
+}
+
 function* slackSessionRows(): Generator<UnifiedSession> {
   if (!existsSync(SLACK_SESSIONS_DIR)) return [];
 
@@ -832,58 +861,61 @@ function scanSlackSessions(): UnifiedSession[] {
   return [...slackSessionRows()];
 }
 
+function linearSessionRow(file: string): UnifiedSession | null {
+  if (!file.endsWith(".json")) return null;
+  const path = `${LINEAR_SESSIONS_DIR}/${file}`;
+  const data = readJsonSafe<LinearSessionFile>(path);
+  if (!data) return null;
+
+  const rawName =
+    data.participants?.[0]?.name || data.lastActiveUser?.name || null;
+  // Clean up email-style names (e.g. "john@example.com" → "John")
+  const startedBy = rawName?.includes("@")
+    ? rawName.split("@")[0].charAt(0).toUpperCase() +
+      rawName.split("@")[0].slice(1)
+    : rawName;
+
+  const title = data.issueIdentifier
+    ? `${data.issueIdentifier}: ${data.issueTitle || data.branch}`
+    : data.branch;
+
+  const id = `linear-${data.branch}`;
+  const archived = isArchivedId(id);
+
+  return overlaySidecarExtras({
+    id,
+    claudeSessionId: data.claudeSessionId,
+    source: "linear",
+    branch: data.branch,
+    worktreeDir: data.worktreeDir || null,
+    createdBy: startedBy,
+    startedBy,
+    title,
+    lastActivity: data.updatedAt || getFileMtime(path),
+    createdAt: getFileMtime(path),
+    isRunning: false,
+    transcriptPath: null,
+    linearIssue: data.issueIdentifier
+      ? {
+          identifier: data.issueIdentifier,
+          title: data.issueTitle || data.branch,
+          url: data.issueUrl,
+        }
+      : undefined,
+    model: data.model,
+    // Same pi-slot mapping as the slack scan (agent-session-sync writes it).
+    piSessionId: data.piSessionId || undefined,
+    archived: archived || undefined,
+    archivedReason: archived ? getArchiveReason(id) || "manual" : undefined,
+  });
+}
+
 function* linearSessionRows(): Generator<UnifiedSession> {
   if (!existsSync(LINEAR_SESSIONS_DIR)) return [];
 
   for (const file of readdirSync(LINEAR_SESSIONS_DIR)) {
-    if (!file.endsWith(".json")) continue;
-    const data = readJsonSafe<LinearSessionFile>(
-      `${LINEAR_SESSIONS_DIR}/${file}`,
-    );
-    if (!data) continue;
-
-    const rawName =
-      data.participants?.[0]?.name || data.lastActiveUser?.name || null;
-    // Clean up email-style names (e.g. "john@example.com" → "John")
-    const startedBy = rawName?.includes("@")
-      ? rawName.split("@")[0].charAt(0).toUpperCase() +
-        rawName.split("@")[0].slice(1)
-      : rawName;
-
-    const title = data.issueIdentifier
-      ? `${data.issueIdentifier}: ${data.issueTitle || data.branch}`
-      : data.branch;
-
-    const id = `linear-${data.branch}`;
-    const archived = isArchivedId(id);
-
-    yield overlaySidecarExtras({
-      id,
-      claudeSessionId: data.claudeSessionId,
-      source: "linear",
-      branch: data.branch,
-      worktreeDir: data.worktreeDir || null,
-      createdBy: startedBy,
-      startedBy,
-      title,
-      lastActivity:
-        data.updatedAt || getFileMtime(`${LINEAR_SESSIONS_DIR}/${file}`),
-      createdAt: getFileMtime(`${LINEAR_SESSIONS_DIR}/${file}`),
-      isRunning: false,
-      transcriptPath: null,
-      linearIssue: data.issueIdentifier
-        ? {
-            identifier: data.issueIdentifier,
-            title: data.issueTitle || data.branch,
-            url: data.issueUrl,
-          }
-        : undefined,
-      model: data.model,
-      // Same pi-slot mapping as the slack scan (agent-session-sync writes it).
-      piSessionId: data.piSessionId || undefined,
-      archived: archived || undefined,
-      archivedReason: archived ? getArchiveReason(id) || "manual" : undefined,
-    });
+    const session = linearSessionRow(file);
+    if (session) yield session;
   }
 }
 
