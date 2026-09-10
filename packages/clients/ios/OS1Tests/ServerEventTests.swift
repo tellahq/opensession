@@ -367,6 +367,56 @@ final class ServerEventTests: XCTestCase {
         }
     }
 
+    // MARK: - Sessions list row frames
+
+    /// A `session_row` is the list projection of one session, decoded with the
+    /// same tolerant model as the poll: unknown fields pass, and the row is
+    /// applied from the fields it does carry.
+    func testSessionRowDecodesTheListProjection() {
+        let json = #"""
+        {"type":"session_row","row":{"id":"bks-1","title":"Row frames",
+          "isRunning":true,"workspaceId":"ws-1","lastActivity":"2026-09-05T10:00:00.000Z",
+          "prState":"OPEN","somethingNewer":{"nested":[1,2]}}}
+        """#
+        guard case .sessionRow(let row) = parse(json) else {
+            return XCTFail("expected .sessionRow")
+        }
+        XCTAssertEqual(row.id, "bks-1")
+        XCTAssertEqual(row.title, "Row frames")
+        XCTAssertEqual(row.isRunning, true)
+        XCTAssertEqual(row.workspaceId, "ws-1")
+        XCTAssertEqual(row.prState, "OPEN")
+        XCTAssertNotNil(row.lastActivityDate)
+    }
+
+    /// The removal names its session `id`, unlike every per-session frame.
+    func testSessionRowRemovedAndInvalidated() {
+        guard case .sessionRowRemoved(let id) =
+            parse(#"{"type":"session_row_removed","id":"bks-1"}"#)
+        else {
+            return XCTFail("expected .sessionRowRemoved")
+        }
+        XCTAssertEqual(id, "bks-1")
+        guard case .sessionsInvalidated = parse(#"{"type":"sessions_invalidated"}"#) else {
+            return XCTFail("expected .sessionsInvalidated")
+        }
+    }
+
+    func testMalformedSessionRowFramesAreIgnored() {
+        for json in [
+            #"{"type":"session_row"}"#,
+            #"{"type":"session_row","row":null}"#,
+            #"{"type":"session_row","row":{"title":"no id"}}"#,
+            #"{"type":"session_row","row":{"id":""}}"#,
+            #"{"type":"session_row_removed"}"#,
+            #"{"type":"session_row_removed","id":""}"#,
+        ] {
+            guard case .ignored = parse(json) else {
+                return XCTFail("expected .ignored for \(json)")
+            }
+        }
+    }
+
     func testUnknownAndMalformedFramesAreIgnored() {
         guard case .ignored = parse(#"{"type":"future_frame","payload":123}"#) else {
             return XCTFail("unknown frame types must decode to .ignored")

@@ -71,6 +71,15 @@ enum ServerEvent: Sendable {
     /// A git-host webhook changed PR, review, or check state for this branch.
     /// This frame is app-wide and therefore has no session id.
     case prUpdated(repo: String, branch: String)
+    /// One row of the sessions list changed on the server and this socket's
+    /// subscription (`sessions_subscribe`) shows it. A server snapshot of that
+    /// one session, applied in place instead of waiting for the poll.
+    case sessionRow(Session)
+    /// The same change for a row the subscription no longer shows (archived,
+    /// deleted, or filtered out by the lens).
+    case sessionRowRemoved(sessionId: String)
+    /// A bulk change with no row to send: re-read the whole list.
+    case sessionsInvalidated
     case notice(String)
     case serverError(String)
     // Shell output, for the session's terminal panel. Each frame carries the
@@ -231,6 +240,14 @@ enum ServerEvent: Sendable {
         case "pr_updated":
             guard let repo = frame.repo, let branch = frame.branch else { return .ignored }
             return .prUpdated(repo: repo, branch: branch)
+        case "session_row":
+            guard let row = frame.row, !row.id.isEmpty else { return .ignored }
+            return .sessionRow(row)
+        case "session_row_removed":
+            guard let id = frame.id ?? frame.sessionId, !id.isEmpty else { return .ignored }
+            return .sessionRowRemoved(sessionId: id)
+        case "sessions_invalidated":
+            return .sessionsInvalidated
         case "notice":
             return .notice(frame.message ?? "")
         case "error":
@@ -464,6 +481,11 @@ private struct RawFrame: Decodable {
 
     let type: String
     let sessionId: String?
+    /// `session_row_removed` names its session `id`, not `sessionId`.
+    let id: String?
+    /// `session_row` carries the list projection of one session; the same
+    /// tolerant model the list poll decodes.
+    let row: Session?
     let bootId: String?
     let entries: [TranscriptEntry]?
     let entry: TranscriptEntry?
