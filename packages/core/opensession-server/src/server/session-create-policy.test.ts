@@ -100,6 +100,7 @@ describe("automation descendant opening policy", () => {
         {
           isAutomationSession: true,
           user: "human@example.com",
+          accountUser: "human@example.com",
           mcpServers: [],
           deniedTools: { mcp__stripe__refund: "automation policy" },
         },
@@ -117,6 +118,9 @@ describe("automation descendant opening policy", () => {
       aws: false,
       user: undefined,
       mcpGrantUser: undefined,
+      // Only the person's provider subscription follows them across the
+      // boundary; MCP, GitHub and trust identities stay dropped.
+      accountUser: "human@example.com",
       journalKind: "automation",
       trustProfile: "automation",
     });

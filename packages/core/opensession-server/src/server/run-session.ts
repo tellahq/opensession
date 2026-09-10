@@ -1827,6 +1827,7 @@ export function sandboxRunSecuritySpec(
   opts: {
     isAutomationSession: boolean;
     user?: string;
+    accountUser?: string;
     mcpServers?: McpScope;
     deniedTools?: Record<string, string>;
   },
@@ -1840,6 +1841,7 @@ export function sandboxRunSecuritySpec(
   | "aws"
   | "user"
   | "mcpGrantUser"
+  | "accountUser"
   | "journalKind"
   | "trustProfile"
 > {
@@ -1866,6 +1868,9 @@ export function sandboxRunSecuritySpec(
     mcpGrantUser: opts.isAutomationSession
       ? undefined
       : session.createdByLogin || undefined,
+    // The person pressing send may spend their own subscription even in an
+    // automation-owned session; the identity stops at account selection.
+    accountUser: opts.accountUser,
     journalKind: opts.isAutomationSession ? "automation" : "prompt",
     trustProfile: opts.isAutomationSession ? "automation" : "interactive",
   };
@@ -1885,6 +1890,7 @@ export async function maybeLaunchSandboxedRun(
     promptCarriesHandoff?: boolean;
     cwd: string;
     user?: string;
+    accountUser?: string;
     images?: ImageInput[];
     mcpServers?: McpScope;
     deniedTools?: Record<string, string>;
@@ -3065,6 +3071,7 @@ async function runSessionPromptInner(
         promptCarriesHandoff: !!switchHandoff,
         cwd,
         user,
+        accountUser: runInputs.accountUser,
         images,
         mcpServers: mcpServers ?? "all",
         deniedTools,
@@ -3167,6 +3174,7 @@ async function runSessionPromptInner(
           aws: !isAutomationSession,
           author: commitAuthorFor(user, sessionPrincipal(session)),
           user: runInputs.user,
+          accountUser: runInputs.accountUser,
           fallbackModel: interactiveFallbackModel(session.model),
           effort: session.effort,
           fastMode: session.fastMode,
@@ -3284,6 +3292,9 @@ async function runSessionPromptInner(
       // Gate per-user MCP servers (allowedUsers) to the prompt's author. Automation
       // sessions pass no user, so they never see a user-restricted server.
       user: runInputs.user,
+      // The person who sent the prompt may spend their own subscription even
+      // when the session is automation-owned (the pool stays the backup).
+      accountUser: runInputs.accountUser,
       // The creator grant also gives provider routing a safe human identity for
       // synthetic continuations such as worker reports and restart recovery.
       mcpGrantUser: runInputs.mcpGrantUser,

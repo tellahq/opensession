@@ -228,6 +228,7 @@ export interface HostedRunOpts {
   codexCliEnv?: boolean;
   author?: GitIdentity | null;
   user?: string;
+  accountUser?: string;
   fallbackModel?: string;
   /** Stable provider-account affinity for internal fan-out workers. */
   accountAffinityKey?: string;
@@ -428,6 +429,7 @@ async function* runAgentInProcess(
     codexCliEnv: opts.codexCliEnv,
     author: opts.author,
     user: opts.user,
+    accountUser: opts.accountUser,
     fallbackModel: opts.fallbackModel,
     accountAffinityKey: opts.accountAffinityKey,
     effort: opts.effort,
@@ -619,6 +621,7 @@ async function spawnHostRun(
     codexCliEnv: opts.codexCliEnv,
     author: opts.author,
     user: opts.user,
+    accountUser: opts.accountUser,
     fallbackModel: opts.fallbackModel,
     accountAffinityKey: opts.accountAffinityKey,
     effort: opts.effort,

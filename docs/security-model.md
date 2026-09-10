@@ -144,6 +144,13 @@ addresses, GitHub logins, and Slack ids resolve to the configured person.
   resumes explicitly drop both identities, so an `allowedUsers`-restricted
   server remains invisible even if the automation's `mcpServers` allowlist
   names it.
+- Provider account selection is the one place a person's identity survives an
+  automation-owned session: `accountUser` (session-run-inputs.ts) names the
+  human who sent the prompt, so their personal Claude subscription is tried
+  before the shared pool when they take over an automation's session. A
+  machine sender (the automation's own tick, a review handoff, auto-continue)
+  resolves to no account user and stays pool-only. `accountUser` never feeds
+  the MCP gate, GitHub credentials, or the trust profile.
 - Manage it from the Connections UI (the Add-MCP form has an "Allowed users"
   field; each server card has a Restrict/Edit-access button →
   `PUT /api/connections/mcp/:name` with `{allowedUsers}`), or via

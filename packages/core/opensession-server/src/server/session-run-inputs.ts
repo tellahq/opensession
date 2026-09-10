@@ -21,6 +21,7 @@ import {
   automationDeniedTools,
   automationMcpServersByName,
 } from "./automations";
+import { humanPrompter } from "./session-actors";
 
 /** Which config decided the run's MCP allowlist. */
 export type McpScopeSource =
@@ -60,6 +61,14 @@ export interface SessionRunInputs {
   user: string | undefined;
   /** Session creator, whose OAuth grants take precedence for MCP calls. */
   mcpGrantUser: string | undefined;
+  /** The person whose personal provider subscription may serve this turn:
+   *  the human who sent the prompt, or undefined when a machine did (an
+   *  automation tick, a review handoff, auto-continue). Unlike `user` it
+   *  survives an automation-owned session, because a person who takes one
+   *  over and presses send is spending their own subscription; the shared
+   *  pool stays the backup. It reaches provider account selection only,
+   *  never MCP, GitHub or trust policy. */
+  accountUser: string | undefined;
   inProcessMcpBranch: InProcessMcpBranch;
   /** Whether the run gets the repos/memory/personal-prompt note. Automation
    *  runs get none: their prompts are untrusted text. */
@@ -103,7 +112,8 @@ export function sessionMcpScopeSource(
 
 /**
  * The per-turn run inputs for a session. `user` is the prompter (the WS/HTTP
- * caller); it is dropped for automation-owned sessions.
+ * caller); it is dropped for automation-owned sessions. `accountUser` keeps
+ * the prompter for provider account selection when they are a person.
  *
  * Async because a feed-workspace session's allowlist comes from its feed
  * providers' descriptors (`feedMcpServersForRefs`), which registers feeds on
@@ -140,6 +150,7 @@ export async function resolveSessionRunInputs(
     deniedTools: isAutomationSession ? automationDeniedTools() : undefined,
     user: isAutomationSession ? undefined : opts.user,
     mcpGrantUser: session.createdByLogin || undefined,
+    accountUser: humanPrompter(opts.user) ?? undefined,
     inProcessMcpBranch: sessionInProcessMcpBranch(session),
     sessionNote: !isAutomationSession,
   };

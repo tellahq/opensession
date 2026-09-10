@@ -23,6 +23,7 @@ describe("machine actors", () => {
       "system (restart)",
       "Automation",
       "GitHub",
+      "Plain ticket triage (automation)",
       workerActor(SESSION),
       agentActor(SESSION),
     ]) {
@@ -70,6 +71,9 @@ describe("machine actors", () => {
       providerAccountUser(workerActor(SESSION), agentActor(SESSION)),
     ).toBeUndefined();
     expect(providerAccountUser(undefined, "Automation")).toBeUndefined();
+    expect(
+      providerAccountUser("Plain ticket triage (automation)", undefined),
+    ).toBeUndefined();
   });
 
   test("only a person becomes a session's recorded prompter", () => {

@@ -1859,8 +1859,13 @@ async function* runPiAttempt(
     opts;
   // `user` remains the exact prompt sender for MCP/GitHub policy and audit.
   // Provider accounts are different: synthetic continuation senders inherit
-  // the interactive session owner's personal subscription.
-  const accountUser = providerAccountUser(user, opts.mcpGrantUser);
+  // the interactive session owner's personal subscription, and a person who
+  // prompts an automation-owned session (which passes no `user`) still
+  // spends their own subscription through `accountUser`.
+  const accountUser = providerAccountUser(
+    opts.accountUser ?? user,
+    opts.mcpGrantUser,
+  );
   const isAsk = mode === "ask";
   const isScratch = mode === "scratch";
 
