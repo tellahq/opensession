@@ -116,8 +116,8 @@ and says so in its count; sort, filter and copy still cover the whole table.
 Fields follow RFC 4180, so a quoted field may hold the delimiter, a doubled
 quote or a line break. A column whose every value is a number (thousands
 separators, a currency sign and a trailing `%` allowed) sorts numerically
-and right-aligns. Fewer than two rows, a one-column header, or more than one
-ragged row in ten keeps the plain code fence.
+and right-aligns. Fewer than two rows, a header of one column or more than
+a hundred, or more than one ragged row in ten keeps the plain code fence.
 
 ### Quick replies
 

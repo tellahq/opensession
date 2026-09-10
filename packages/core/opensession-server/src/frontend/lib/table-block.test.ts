@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { REPLACED_FENCE_SELECTOR, fenceUpgraderFor } from "./fence-upgraders";
 import {
+  MAX_COLUMNS,
   detectDelimiter,
   filterRows,
   isNumericColumn,
@@ -148,6 +149,24 @@ describe("parseTable", () => {
   test("a one-column header declines", () => {
     expect(parseTable("a\n1\n2\n", "csv")).toBeNull();
     expect(parseTable("prose\nmore prose\n", "table")).toBeNull();
+  });
+
+  test("a header wider than MAX_COLUMNS declines; one at the limit renders", () => {
+    const wide = (cols: number) => {
+      const row = Array.from({ length: cols }, (_, i) => String(i)).join(",");
+      return `${row}\n${row}\n`;
+    };
+    expect(parseTable(wide(MAX_COLUMNS), "csv")!.header).toHaveLength(
+      MAX_COLUMNS,
+    );
+    expect(parseTable(wide(MAX_COLUMNS + 1), "csv")).toBeNull();
+    // A line of 120,000 commas fits an asset preview and is not a table.
+    const commas = ",".repeat(120_000);
+    expect(parseTable(`${commas}\n${commas}\n`, "csv")).toBeNull();
+    // Long rows past the header still fold into the last cell within the
+    // tolerance, so the cap is on the header alone.
+    const long = `a,b\n1,2\n${",".repeat(MAX_COLUMNS + 5)}\n`;
+    expect(parseTable(long, "csv")!.rows[1]).toHaveLength(2);
   });
 
   test("one short row in ten is padded (the row still streaming)", () => {

@@ -6,8 +6,8 @@
  * `table` picks the delimiter from the header line (comma, tab, semicolon or
  * pipe). Fields follow RFC 4180: a quoted field may hold the delimiter, a
  * doubled quote and line breaks. A fence with fewer than two rows, a
- * one-column header, or more ragged rows than the tolerance allows keeps
- * the plain code fence, so a half-written table still reads while it streams
+ * one-column header, more columns than MAX_COLUMNS, or more ragged rows
+ * than the tolerance allows keeps the plain code fence, so a half-written table still reads while it streams
  * and a file that is not really a table never renders as one.
  *
  * Everything from the fence is untrusted text: every cell, header and count
@@ -42,6 +42,16 @@ export const FILTER_THRESHOLD = 8;
  * still work over the whole table; the count says what was cut.
  */
 export const RENDER_CAP = 500;
+
+/**
+ * The widest table the grid takes. The row cap bounds one dimension; this
+ * bounds the other, since a line of 120,000 commas fits the same 256 KiB
+ * and would otherwise build a header cell, button and two icons per column
+ * before the row cap ever applied. Wider than this is not a table anyone
+ * reads as a grid, so the fence stays code. With RENDER_CAP that puts the
+ * DOM at no more than about 50,000 cells.
+ */
+export const MAX_COLUMNS = 100;
 
 export interface TableData {
   header: string[];
@@ -169,7 +179,8 @@ export function parseTable(source: string, lang: string): TableData | null {
   );
   if (delimiter === "|" && isPipeRule(records[1])) records.splice(1, 1);
   const [header, ...body] = records;
-  if (!header || header.length < 2 || body.length < 1) return null;
+  if (!header || header.length < 2 || header.length > MAX_COLUMNS) return null;
+  if (body.length < 1) return null;
   const width = header.length;
   let ragged = 0;
   const rows = body.map((row) => {
