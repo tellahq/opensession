@@ -102,7 +102,10 @@ import {
 } from "../../models";
 import { filterMcpServers } from "../../runner-shared";
 import { githubCredentialUser } from "../../auto-continue";
-import { GITHUB_RUN_AUTH_FILE_ENV, githubAuthEnv } from "../../github-auth";
+import {
+  GITHUB_RUN_AUTH_FILE_ENV,
+  githubUserAuthProjection,
+} from "../../github-auth";
 import { isMachineActor } from "../../session-actors";
 import {
   appendTranscriptEntries,
@@ -2171,13 +2174,15 @@ function makeRemoteLauncher(
       // a freshly minted repository-scoped App token: the code set for code
       // mode, the read set for ask mode (the review workflows chew on
       // untrusted PR content and can print their environment). Automations
-      // and machine senders never receive a person's token.
+      // and machine senders never receive a person's token. A person's
+      // projection also names their login (non-secret) so the guest applies
+      // the merge guard the way a host run would; App tokens carry no login.
       const githubPerson = githubCredentialUser(spec.user, spec.author?.name);
       let githubAuth: Record<string, string> =
         !automationProfile &&
         spec.mode === "code" &&
         !isMachineActor(githubPerson)
-          ? githubAuthEnv(githubPerson)
+          ? githubUserAuthProjection(githubPerson)
           : {};
       if (!githubAuth.GH_TOKEN) {
         // The sandbox origin is mutable by repository setup code. Bind service

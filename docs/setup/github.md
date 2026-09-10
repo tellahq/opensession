@@ -104,7 +104,9 @@ kind is interactive, and the mode is code. When that person is unknown,
 unmapped, or disconnected, the run falls back to the App token below rather
 than running credential-free. In a sandbox the launcher resolves the same
 choice on the host and projects only the chosen token into a private,
-run-scoped file.
+run-scoped file, together with the person's login as a non-secret marker so
+the guest lifts the merge guard exactly when a host run would. An App-token
+projection carries no login and stays guarded.
 
 Every other run holds a short-lived installation token scoped to its
 repository and never a person's: the code permission set for unattended

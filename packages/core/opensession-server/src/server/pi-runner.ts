@@ -127,7 +127,7 @@ import { gitIdentityEnv, type GitIdentity } from "./shared/user-mappings";
 import { isMachineActor, providerAccountUser } from "./session-actors";
 import {
   GITHUB_RUN_AUTH_FILE_ENV,
-  githubUserLoginForRun,
+  githubRunOwnerLogin,
   githubUserRunEnv,
   projectedGithubRunEnv,
 } from "./github-auth";
@@ -2124,9 +2124,10 @@ async function* runPiAttempt(
       !policy.unattended &&
       INTERACTIVE_KINDS.has(baseJournalKind(journal?.kind)) &&
       !isMachineActor(githubUser);
-    const githubUserLogin = ownerTurn
-      ? githubUserLoginForRun(githubUser)
-      : null;
+    // On a remote host this reads the launcher's projected marker, not the
+    // person store, so a sandboxed owner turn drops the guard exactly when
+    // a host run would.
+    const githubUserLogin = ownerTurn ? githubRunOwnerLogin(githubUser) : null;
     // GitHub permissions and repository rulesets bound the chosen credential.
     // Ask, unattended, and publication-policy command gates still apply.
     const githubKindRun = baseJournalKind(journal?.kind).startsWith("github-");
