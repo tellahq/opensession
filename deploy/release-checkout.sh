@@ -12,6 +12,7 @@ STATE_DIR="${OPENSESSION_DEPLOY_STATE:?OPENSESSION_DEPLOY_STATE is required}"
 BUN_BIN="${OPENSESSION_BUN_BIN:-$(command -v bun || true)}"
 RELEASES_DIR="$STATE_DIR/releases"
 CURRENT_LINK="$STATE_DIR/current"
+RELEASE_RETENTION="${OPENSESSION_DEPLOY_RELEASE_RETENTION:-8}"
 
 log() { printf '[release] %s\n' "$*" >&2; }
 git_source() { git -C "$SOURCE_DIR" "$@"; }
@@ -119,6 +120,55 @@ PY
   log "current -> ${sha:0:10}"
 }
 
+gc_releases() {
+  local limit="${1:-4}" protected_file path sha cwd removed=0
+  case "$RELEASE_RETENTION" in (''|*[!0-9]*) RELEASE_RETENTION=8 ;; esac
+  case "$limit" in (''|*[!0-9]*) limit=4 ;; esac
+  [ "$RELEASE_RETENTION" -ge 2 ] || RELEASE_RETENTION=2
+  [ "$limit" -ge 1 ] || return 0
+  [ -d "$RELEASES_DIR" ] || return 0
+
+  protected_file="$STATE_DIR/.release-gc-protected.$$"
+  : > "$protected_file"
+  # The active target and rollback pin are never eligible, even when old.
+  if path="$(current_path 2>/dev/null)"; then basename "$path" >> "$protected_file"; fi
+  if [ -s "$STATE_DIR/last-known-good" ]; then
+    head -n 1 "$STATE_DIR/last-known-good" >> "$protected_file"
+  fi
+  # Keep a small recent window for operator-selected rollback/debugging.
+  for path in $(ls -1dt "$RELEASES_DIR"/* 2>/dev/null | head -n "$RELEASE_RETENTION"); do
+    [ -d "$path" ] && basename "$path" >> "$protected_file"
+  done
+  # Detached run hosts can intentionally outlive the gateway generation that
+  # spawned them. Preserve every release that is still a process cwd.
+  if [ -d /proc ]; then
+    for path in /proc/[0-9]*/cwd; do
+      cwd="$(readlink -f "$path" 2>/dev/null || true)"
+      case "$cwd" in
+        "$RELEASES_DIR"/*)
+          sha="${cwd#"$RELEASES_DIR"/}"
+          printf '%s\n' "${sha%%/*}" >> "$protected_file"
+          ;;
+      esac
+    done
+  fi
+  sort -u "$protected_file" -o "$protected_file"
+
+  while IFS= read -r path; do
+    sha="${path##*/}"
+    grep -Fqx "$sha" "$protected_file" && continue
+    if git_source worktree remove --force "$path" >&2; then
+      removed=$((removed + 1))
+    else
+      log "WARNING: could not remove old release ${sha:0:10}"
+    fi
+    [ "$removed" -lt "$limit" ] || break
+  done < <(ls -1trd "$RELEASES_DIR"/* 2>/dev/null || true)
+  git_source worktree prune --expire now
+  rm -f "$protected_file"
+  log "garbage-collected $removed old release(s); retention=$RELEASE_RETENTION limit=$limit"
+}
+
 case "${1:-}" in
   prepare)
     [ "$#" -eq 2 ] || exit 2
@@ -144,8 +194,12 @@ case "${1:-}" in
     [ "$#" -eq 2 ] || exit 2
     switch_release "$2"
     ;;
+  gc)
+    [ "$#" -le 2 ] || exit 2
+    gc_releases "${2:-4}"
+    ;;
   *)
-    echo "usage: release-checkout.sh prepare <ref> | prepare-frontend <ref> | path <ref> | current-path | current-sha | switch <ref>" >&2
+    echo "usage: release-checkout.sh prepare <ref> | prepare-frontend <ref> | path <ref> | current-path | current-sha | switch <ref> | gc [limit]" >&2
     exit 2
     ;;
 esac

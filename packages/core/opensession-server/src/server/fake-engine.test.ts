@@ -118,7 +118,7 @@ describe("fake engine through runAgent", () => {
     // turn. The switch is a timeline event, never assistant text. The walk
     // prefers the strongest AUTO candidate over the
     // configured preference when that preference ranks lower in the tier
-    // graph — sonnet's best auto hop today is gpt-5.6-sol (cross-family).
+    // graph — sonnet's best auto hop today is gpt-6-astra (cross-family).
     expect(types(events)).toEqual([
       "init",
       "model_switch",
@@ -130,10 +130,10 @@ describe("fake engine through runAgent", () => {
     // fromModel is the picker-form id (resolveConcreteModel keeps native ids
     // native); toModel is the pi-mapped hop target.
     expect(sw.fromModel).toBe("claude-sonnet-5");
-    expect(sw.toModel).toBe("pi/openai/gpt-5.6-sol");
+    expect(sw.toModel).toBe("pi/openai/gpt-6-astra");
     expect(sw.switchReason).toBe("out of credits");
     expect(fake.calls).toHaveLength(2);
-    expect(fake.calls[1].model).toBe("pi/openai/gpt-5.6-sol");
+    expect(fake.calls[1].model).toBe("pi/openai/gpt-6-astra");
     // A direct runAgent caller may have no early transcript row to name.
     // runAgent assigns one stable id to the logical turn so both model attempts
     // upsert the same user entry instead of rendering the prompt twice.
@@ -196,11 +196,11 @@ describe("fake engine through runAgent", () => {
     expect(events[1]).toMatchObject({
       type: "model_switch",
       fromModel: "pi/anthropic/claude-fable-5-1",
-      toModel: "pi/openai/gpt-5.6-sol",
+      toModel: "pi/openai/gpt-6-astra",
     });
     expect(fake.calls).toHaveLength(2);
     expect(fake.calls[0].model).toBe("pi/anthropic/claude-fable-5-1");
-    expect(fake.calls[1].model).toBe("pi/openai/gpt-5.6-sol");
+    expect(fake.calls[1].model).toBe("pi/openai/gpt-6-astra");
     expect(fake.calls[1].sessionId).toBeUndefined();
   });
 
@@ -229,14 +229,14 @@ describe("fake engine through runAgent", () => {
       "done",
     ]);
     expect(fake.calls).toHaveLength(1);
-    expect(fake.calls[0].model).toBe("pi/openai/gpt-5.6-sol");
+    expect(fake.calls[0].model).toBe("pi/openai/gpt-6-astra");
     // No source engine started, so there is no interrupted work to explain and
     // the fallback receives exactly the person's original prompt.
     expect(fake.calls[0].prompt).toBe("keep going");
     expect(events[0]).toMatchObject({
       type: "model_switch",
       fromModel: "claude-sonnet-5",
-      toModel: "pi/openai/gpt-5.6-sol",
+      toModel: "pi/openai/gpt-6-astra",
     });
   });
 
@@ -320,7 +320,7 @@ describe("fake engine through runAgent", () => {
     expect(events.find((event) => event.type === "model_switch")).toMatchObject(
       {
         fromModel: "claude-sonnet-5",
-        toModel: "pi/openai/gpt-5.6-sol",
+        toModel: "pi/openai/gpt-6-astra",
         temporaryFallback: true,
       },
     );
@@ -384,7 +384,7 @@ describe("fake engine through runAgent", () => {
     release();
     const events = await collecting;
 
-    expect(run?.model).toBe("pi/anthropic/claude-opus-5");
+    expect(run?.model).toBe("pi/openai/gpt-6-astra");
     expect(run?.selectedModel).toBe("dial/medium");
     expect(run?.transientFallback).toBe(true);
     const switchEvent = events.find((event) => event.type === "model_switch");

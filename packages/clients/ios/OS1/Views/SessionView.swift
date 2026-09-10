@@ -1327,18 +1327,33 @@ struct SessionView: View {
     #endif
 
     #if os(iOS)
-    /// Use the principal lane for its flexible width, but anchor the title at
-    /// its leading edge so it follows Back and can consume the open right side.
+    /// A principal item stays centred in the whole bar rather than in the gap
+    /// between Back and the trailing items. Size and shift the pill into that
+    /// gap so its glass never paints over either group.
     private var sessionHeaderLane: some View {
         sessionIdentityButton
-            .frame(width: sessionHeaderLaneWidth, alignment: .leading)
+            .frame(width: sessionIdentityWidth, alignment: .leading)
+            .offset(x: sessionIdentityOffset)
     }
 
-    /// Room for Back on the left and the two-button action group on the
-    /// right, each about 44pt per control plus the bar's margins.
-    private var sessionHeaderLaneWidth: CGFloat {
-        let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
-        return min(560, max(160, surfaceWidth - 200))
+    private var sessionHeaderLeadingInset: CGFloat {
+        // Bar margin, Back, then breathing room before the title.
+        16 + 44 + 8 + 16
+    }
+
+    private var sessionHeaderTrailingInset: CGFloat {
+        // Bar margin, the menu, optional archive, and the glass overhang.
+        let archive: CGFloat = if onArchiveWorkspace == nil { 0 } else { 44 + 8 }
+        let actions: CGFloat = 16 + 44 + archive + 13
+        let viewerCount = viewModel.otherViewers.count
+        let shownViewerCount = min(viewerCount, 3) + (viewerCount > 3 ? 1 : 0)
+        let facepile: CGFloat = if shownViewerCount > 0 {
+            // 24pt faces overlap by 8pt. Keep 8pt between the pile and actions.
+            CGFloat(shownViewerCount * 16 + 8) + 8
+        } else {
+            0
+        }
+        return actions + facepile + 16
     }
 
     /// Mobile web opens workspace details when its title is tapped. Keep the
@@ -1391,9 +1406,20 @@ struct SessionView: View {
         .accessibilityLabel("Workspace details")
     }
 
+    /// Fill the measured bar width between its leading and trailing groups.
+    /// Keep the 44pt minimum tap target on compact split-view widths.
     private var sessionIdentityWidth: CGFloat {
         let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
-        return min(360, max(128, surfaceWidth - 200))
+        return min(
+            360,
+            max(44, surfaceWidth - sessionHeaderLeadingInset - sessionHeaderTrailingInset)
+        )
+    }
+
+    /// Move the principal item from the bar's centre to the centre of the
+    /// uneven space left by Back and the trailing controls.
+    private var sessionIdentityOffset: CGFloat {
+        (sessionHeaderLeadingInset - sessionHeaderTrailingInset) / 2
     }
     #endif
 

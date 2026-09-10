@@ -78,9 +78,11 @@ WATCHDOG_FAIL_THRESHOLD=3
 DEPLOY_LOCK_WAIT_SECS="${OPENSESSION_DEPLOY_LOCK_WAIT_SECS:-900}"
 DEPLOY_COALESCE_SECS="${OPENSESSION_DEPLOY_COALESCE_SECS:-15}"
 DEPLOY_COALESCE_MAX_SECS="${OPENSESSION_DEPLOY_COALESCE_MAX_SECS:-60}"
+DEPLOY_RELEASE_GC_LIMIT="${OPENSESSION_DEPLOY_RELEASE_GC_LIMIT:-4}"
 case "$DEPLOY_LOCK_WAIT_SECS" in (''|*[!0-9]*) DEPLOY_LOCK_WAIT_SECS=900 ;; esac
 case "$DEPLOY_COALESCE_SECS" in (''|*[!0-9]*) DEPLOY_COALESCE_SECS=15 ;; esac
 case "$DEPLOY_COALESCE_MAX_SECS" in (''|*[!0-9]*) DEPLOY_COALESCE_MAX_SECS=60 ;; esac
+case "$DEPLOY_RELEASE_GC_LIMIT" in (''|*[!0-9]*) DEPLOY_RELEASE_GC_LIMIT=4 ;; esac
 
 PIN_FILE="$STATE_DIR/last-known-good"
 MARKER_FILE="$STATE_DIR/last-deploy-marker"
@@ -185,6 +187,11 @@ release_cmd() {
     OPENSESSION_DEPLOY_STATE="$STATE_DIR" \
     OPENSESSION_BUN_BIN="$BUN_BIN" \
     /bin/bash "$RELEASE_TOOL" "$@"
+}
+
+prune_old_releases() {
+  release_cmd gc "$DEPLOY_RELEASE_GC_LIMIT" ||
+    log "WARNING: old release garbage collection failed; deploy remains healthy"
 }
 
 # Once this script stops the gateway, every exit path owns bringing it back.
@@ -722,6 +729,7 @@ do_deploy() {
         log "healthy after gateway handoff — deployed ${target_sha:0:10}"
         "$BUN_BIN" "$release_dir/packages/core/opensession-server/src/server/gateway-supervisor.ts" \
           status || true
+        prune_old_releases
         write_result true deploy "$target_sha" "$current" "deployed with a single-active gateway handoff"
         echo 0 > "$FAIL_COUNT_FILE"
         exit 0
@@ -789,6 +797,7 @@ do_deploy() {
         fi
         log "healthy after coordinated zero-downtime handoff — deployed ${target_sha:0:10}"
         "$BUN_BIN" "$supervisor_controller" status || true
+        prune_old_releases
         write_result true deploy "$target_sha" "$current" \
           "deployed with a generation-checked coordinated handoff"
         echo 0 > "$FAIL_COUNT_FILE"
@@ -847,6 +856,7 @@ do_deploy() {
 
   if poll_health; then
     log "healthy after restart — deployed ${target_sha:0:10}"
+    prune_old_releases
     write_result true deploy "$target_sha" "$current" "deployed and healthy"
     echo 0 > "$FAIL_COUNT_FILE"
     exit 0

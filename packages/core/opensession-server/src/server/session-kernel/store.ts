@@ -1791,6 +1791,17 @@ export class SessionKernelStore {
     reason?: string,
     verifiedCommittedOutboxSettlement = false,
   ): boolean {
+    // A transcript wake acknowledgement only advances a monotonic cursor in
+    // the transcript database. Its UPDATE is transactional and idempotent: an
+    // interrupted write either did not land, or a replay observes the cursor
+    // as already acknowledged. It never makes run/command/outbox state
+    // ambiguous, so unrelated live state must not strand the whole session.
+    if (commandKind === "transcript:ack_wake") return true;
+    // Older workers evaluated critical-settlement handling before recognizing
+    // SessionQuarantinedError. The rejected operation never executed, but the
+    // handler could persist its rejection as a second quarantine in the other
+    // store. This exact derived record carries no additional uncertainty.
+    if (reason?.startsWith(`Session ${sessionId} is quarantined:`)) return true;
     const recoverableSettlement =
       this.recoverableGatewaySettlementCommands(sessionId, commandKind) ??
       this.recoverableDeliverySettlementCommands(

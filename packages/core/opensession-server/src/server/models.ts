@@ -822,7 +822,7 @@ const CODEX_MODEL_ORDER = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
  * ranking — it encodes the configured rotation policy: keep a run going on
  * an equal-or-smarter model automatically, but ASK a human before dropping to a
  * dumber one. "smart→smart / medium→smart = fine (auto); smart→dumb /
- * medium→dumb = ask." Concrete edges that policy yields: Fable→Sol auto,
+ * medium→dumb = ask." Concrete edges that policy yields: Fable→Astra auto,
  * Fable→Opus auto, Opus→Sol auto, and Opus→Sonnet ask.
  *
  * Unlisted models default to tier 1 (treated as a downgrade from any premium
@@ -855,6 +855,7 @@ const FALLBACK_TIER: Record<string, number> = {
  * of, so routing another exhausted model back into it would just re-hit the cap.
  */
 const FALLBACK_DESTINATIONS = [
+  "gpt-6-astra",
   "gpt-5.6-sol",
   // Prefer Opus before the cheaper 5.6 siblings once Sol is unavailable.
   "claude-opus-5",
@@ -1270,8 +1271,8 @@ export interface FallbackHop {
  * we keep the strongest usable model. Returns null when nothing is left.
  *
  * `mode` is the tier comparison against the model we're LEAVING: equal-or-higher
- * tier ⇒ "auto" (Fable→Sol, Opus→Sol), lower ⇒ "ask" (Fable→Opus, Opus→Sonnet,
- * Sol→Opus). Fallbacks preserve an explicit Pi engine choice; legacy and
+ * tier ⇒ "auto" (Fable→Astra, Astra→Sol), lower ⇒ "ask" (Opus→Sonnet).
+ * Fallbacks preserve an explicit Pi engine choice; legacy and
  * unrouted primaries keep mapping onto Pi.
  */
 export function nextFallbackModel(
@@ -1307,7 +1308,7 @@ export function nextFallbackModel(
 
   // Auto-eligible models stay ahead of downgrades. Within a tier, use the
   // explicit destination order rather than candidate insertion order: the
-  // configured Opus fallback is added first above, but Sol must remain the
+  // configured Opus fallback is added first above, but Astra must remain the
   // first hop off Fable.
   candidates.sort((a, b) => {
     const aDown = fallbackTier(a) >= currentTier ? 0 : 1;
