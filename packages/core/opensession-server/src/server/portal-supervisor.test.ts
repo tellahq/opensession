@@ -34,6 +34,13 @@ import type { Sandbox } from "./sandbox/provider";
 let worktree = "";
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
 const previousPath = process.env.PATH;
+// Host Portal admission samples real host memory against a 24 GB floor, and
+// hosted CI runners have less than that. The floor itself is covered by the
+// pure hostPortalAdmissionReason test; the process tests below must not
+// depend on the machine they run on.
+const previousMemoryFloor =
+  process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB;
+process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB = "1";
 const processTools = mkdtempSync(join(tmpdir(), "os-process-tools-"));
 let testSetsid = Bun.which("setsid");
 if (!testSetsid) {
@@ -63,6 +70,11 @@ afterAll(() => {
   else process.env.OPENSESSION_STATE_DIR = previousStateDir;
   if (previousPath == null) delete process.env.PATH;
   else process.env.PATH = previousPath;
+  if (previousMemoryFloor == null)
+    delete process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB;
+  else
+    process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB =
+      previousMemoryFloor;
   rmSync(processTools, { recursive: true, force: true });
 });
 
