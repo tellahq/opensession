@@ -53,9 +53,9 @@ function DeskBody({
     {},
   );
 
-  // Voice mode (Settings → Desk voice): a live GPT Realtime call layered on
-  // this same Desk session. The call mirrors its transcript into the session,
-  // so the conversation below updates live while you talk.
+  // Voice mode (Settings → Desk voice): a GPT-Live call layered on this same
+  // Desk session. The server mirrors the call's transcript into the session,
+  // so the conversation below updates while you talk.
   const [voiceEnabled, setVoiceEnabled] = useState(getDeskVoicePref);
   const [voiceState, setVoiceState] = useState<DeskVoiceState>("idle");
   const [voiceError, setVoiceError] = useState<string | null>(null);

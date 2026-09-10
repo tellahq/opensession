@@ -1,12 +1,12 @@
-// WebRTC client for Desk voice mode, driving a live call against OpenAI's
-// Realtime API. The server hands out a short-lived client secret (never the
-// real API key) plus a model id; this module opens the peer connection
-// directly to OpenAI, mirrors the call's transcript back to the server, and
-// routes function calls through the server's tool endpoint.
+// WebRTC client for Desk voice mode on GPT-Live. The browser only carries
+// audio: it posts its SDP offer to the server, which creates the Live session
+// with the instance key and hands back the answer. Tool calls, transcript
+// mirroring, and typed text all happen server-side over the session's
+// sideband (src/server/desk-voice-live.ts); the data channel here is limited
+// to lifecycle and transcript events plus `session.close`.
 
 import { z } from "zod";
 import { BASE_PATH } from "./base";
-import { randomUUID } from "./random-uuid";
 
 export type DeskVoiceState =
   | "idle"
@@ -19,79 +19,50 @@ export type DeskVoiceState =
 
 const API = `${BASE_PATH}/api/desk/voice`;
 const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
+const ICE_GATHER_TIMEOUT_MS = 10_000;
+const SESSION_START_TIMEOUT_MS = 15_000;
+/** Time to keep the call alive after asking to hang up, waiting for
+ * `session.closed` so pending work drains and usage finalizes. */
+const CLOSE_GRACE_MS = 5_000;
+/** Assistant transcript deltas have no "done" event: after this quiet spell
+ * the call is shown as listening again. */
+const SPEAKING_SETTLE_MS = 1_500;
 
-const secretResponseSchema = z.object({
-  clientSecret: z.string(),
-  expiresAt: z.number(),
-  model: z.string(),
+const liveResponseSchema = z.object({
+  liveSessionId: z.string(),
+  sdp: z.string(),
   sessionId: z.string(),
 });
 
-type SecretResponse = z.infer<typeof secretResponseSchema>;
-
-interface TranscriptEntry {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-}
-
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
-
-const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.null(),
-    z.array(jsonValueSchema),
-    z.record(z.string(), jsonValueSchema),
-  ]),
-);
-
-const realtimeEventSchema = z.object({
+const liveEventSchema = z.object({
   type: z.string(),
-  call_id: z.coerce.string().optional(),
-  name: z.coerce.string().optional(),
-  arguments: z.coerce.string().optional(),
-  transcript: z.coerce.string().optional(),
-  item_id: z.coerce.string().optional(),
+  reason: z.string().optional(),
   error: z
     .object({ message: z.string().optional() })
     .optional()
     .catch(undefined),
+  message: z.string().optional(),
 });
 
-type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
-
 type VoiceRequest =
-  | { user: string }
-  | { user: string; entries: TranscriptEntry[] }
-  | {
-      user: string;
-      callId: string;
-      name: string;
-      args: JsonValue;
-    };
+  | { user: string; sdp: string }
+  | { user: string; liveSessionId: string; text: string }
+  | { user: string; liveSessionId: string };
 
 const errorResponseSchema = z.object({ error: z.string().optional() });
-const transcriptResponseSchema = z.object({ ok: z.boolean() });
-const toolResponseSchema = z.object({ result: jsonValueSchema });
+const okResponseSchema = z.object({ ok: z.boolean() });
 
 async function postJson<T>(
   path: string,
   body: VoiceRequest,
   responseSchema: z.ZodType<T>,
+  init?: { keepalive?: boolean },
 ): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    keepalive: init?.keepalive,
   });
   const data = await res.json().catch(() => null);
   if (!res.ok) {
@@ -103,6 +74,23 @@ async function postJson<T>(
   return responseSchema.parse(data);
 }
 
+function waitForIceGathering(pc: RTCPeerConnection): Promise<void> {
+  if (pc.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      pc.removeEventListener("icegatheringstatechange", onState);
+      reject(new Error("Timed out gathering network candidates"));
+    }, ICE_GATHER_TIMEOUT_MS);
+    function onState() {
+      if (pc.iceGatheringState !== "complete") return;
+      window.clearTimeout(timer);
+      pc.removeEventListener("icegatheringstatechange", onState);
+      resolve();
+    }
+    pc.addEventListener("icegatheringstatechange", onState);
+  });
+}
+
 export class DeskVoiceClient {
   private user: string;
   private onState: (s: DeskVoiceState, detail?: string) => void;
@@ -111,13 +99,14 @@ export class DeskVoiceClient {
   private dc: RTCDataChannel | null = null;
   private micStream: MediaStream | null = null;
   private audioEl: HTMLAudioElement | null = null;
+  private liveSessionId: string | null = null;
 
   private idleTimer: number | null = null;
+  private speakingTimer: number | null = null;
+  private closeTimer: number | null = null;
   private connected = false;
-
-  // Transcript mirror POSTs are serialized so rapid finals (barge-in,
-  // fast turn-taking) can't race each other out of order at the server.
-  private transcriptQueue: Promise<void> = Promise.resolve();
+  private closing = false;
+  private started: (() => void) | null = null;
 
   private onVisibilityChange = () => {
     if (document.hidden) this.stop();
@@ -132,7 +121,7 @@ export class DeskVoiceClient {
   }
 
   get active(): boolean {
-    return this.connected;
+    return this.connected && !this.closing;
   }
 
   async start(): Promise<void> {
@@ -154,26 +143,10 @@ export class DeskVoiceClient {
       throw new Error("Microphone permission denied");
     }
 
-    let secret: SecretResponse;
-    try {
-      secret = await postJson(
-        "/secret",
-        { user: this.user },
-        secretResponseSchema,
-      );
-    } catch (e) {
-      this.teardownMedia();
-      const message = e instanceof Error ? e.message : "Failed to start call";
-      this.onState("error", message);
-      throw new Error(message);
-    }
-
     const pc = new RTCPeerConnection();
     this.pc = pc;
-
-    for (const track of this.micStream.getTracks()) {
+    for (const track of this.micStream.getTracks())
       pc.addTrack(track, this.micStream);
-    }
 
     pc.ontrack = (event) => {
       const [stream] = event.streams;
@@ -183,92 +156,101 @@ export class DeskVoiceClient {
       audio.srcObject = stream;
       this.audioEl = audio;
     };
-
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
-      if (
-        state === "failed" ||
-        state === "disconnected" ||
-        state === "closed"
-      ) {
+      if (state === "failed" || state === "disconnected") {
         this.onState("error", "connection lost");
-        this.stop();
+        this.teardown();
       }
     };
 
+    // The data channel and its listeners exist before the offer so no
+    // early event is missed.
     const dc = pc.createDataChannel("oai-events");
     this.dc = dc;
-    dc.onopen = () => {
-      this.connected = true;
-      this.resetIdleTimer();
-      this.onState("listening");
-    };
     dc.onmessage = (event) => this.handleEvent(event.data);
+    dc.onclose = () => {
+      if (this.connected && !this.closing) this.onState("error", "call ended");
+      this.teardown();
+    };
 
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-
-      const answerRes = await fetch(
-        `https://api.openai.com/v1/realtime/calls?model=${encodeURIComponent(secret.model)}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${secret.clientSecret}`,
-            "Content-Type": "application/sdp",
-          },
-          body: offer.sdp,
-        },
+      await waitForIceGathering(pc);
+      const sdp = pc.localDescription?.sdp;
+      if (!sdp) throw new Error("No local offer");
+      const live = await postJson(
+        "/live",
+        { user: this.user, sdp },
+        liveResponseSchema,
       );
-      if (!answerRes.ok) {
-        throw new Error(`Realtime call failed: HTTP ${answerRes.status}`);
-      }
-      const answerSdp = await answerRes.text();
-      await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+      this.liveSessionId = live.liveSessionId;
+      await pc.setRemoteDescription({ type: "answer", sdp: live.sdp });
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Failed to connect call";
+      const message = e instanceof Error ? e.message : "Failed to start call";
       this.onState("error", message);
-      this.stop();
+      this.teardown();
       throw new Error(message);
     }
 
     document.addEventListener("visibilitychange", this.onVisibilityChange);
 
-    // Wait for the data channel to actually open before resolving.
+    // The HTTP exchange started the session; it is live once the data
+    // channel delivers session.started.
     await new Promise<void>((resolve, reject) => {
-      if (dc.readyState === "open") return resolve();
-      const onOpen = () => {
-        cleanup();
+      const timer = window.setTimeout(() => {
+        this.started = null;
+        reject(new Error("Call did not start"));
+      }, SESSION_START_TIMEOUT_MS);
+      this.started = () => {
+        window.clearTimeout(timer);
+        this.started = null;
         resolve();
       };
-      const onClose = () => {
-        cleanup();
-        reject(new Error("Call closed before it opened"));
-      };
-      const cleanup = () => {
-        dc.removeEventListener("open", onOpen);
-        dc.removeEventListener("close", onClose);
-      };
-      dc.addEventListener("open", onOpen);
-      dc.addEventListener("close", onClose);
+    }).catch((e: Error) => {
+      this.onState("error", e.message);
+      this.teardown();
+      throw e;
     });
   }
 
+  /** Hang up. Asks the session to close and waits briefly for the final
+   * `session.closed` so pending backend work drains; tears down regardless. */
   stop(): void {
-    if (this.idleTimer !== null) {
-      window.clearTimeout(this.idleTimer);
-      this.idleTimer = null;
+    if (this.closing) return;
+    if (this.dc && this.dc.readyState === "open" && this.connected) {
+      this.closing = true;
+      this.onState("idle");
+      this.dc.send(JSON.stringify({ type: "session.close" }));
+      this.closeTimer = window.setTimeout(
+        () => this.teardown(),
+        CLOSE_GRACE_MS,
+      );
+      return;
     }
-    document.removeEventListener("visibilitychange", this.onVisibilityChange);
-    this.teardownMedia();
-    this.connected = false;
-    this.onState("idle");
+    // No usable data channel: ask the server to close it from its side.
+    if (this.liveSessionId && this.connected) {
+      void postJson(
+        "/live/close",
+        { user: this.user, liveSessionId: this.liveSessionId },
+        okResponseSchema,
+        { keepalive: true },
+      ).catch(() => {});
+    }
+    this.teardown();
   }
 
-  private teardownMedia() {
+  private teardown() {
+    for (const key of ["idleTimer", "speakingTimer", "closeTimer"] as const) {
+      const t = this[key];
+      if (t !== null) window.clearTimeout(t);
+      this[key] = null;
+    }
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
     if (this.dc) {
       this.dc.onmessage = null;
-      this.dc.onopen = null;
+      this.dc.onclose = null;
       this.dc.close();
       this.dc = null;
     }
@@ -287,26 +269,25 @@ export class DeskVoiceClient {
       this.audioEl.srcObject = null;
       this.audioEl = null;
     }
+    const wasConnected = this.connected;
+    this.connected = false;
+    this.closing = false;
+    this.liveSessionId = null;
+    this.started = null;
+    if (wasConnected) this.onState("idle");
   }
 
+  /** Typed text during a call: queued on the backend server-side, mirrored
+   * there as a user turn. False when there is no live call to take it. */
   sendText(text: string): boolean {
-    if (!this.dc || this.dc.readyState !== "open") return false;
+    if (!this.active || !this.liveSessionId) return false;
     this.resetIdleTimer();
-    this.dc.send(
-      JSON.stringify({
-        type: "conversation.item.create",
-        item: {
-          type: "message",
-          role: "user",
-          content: [{ type: "input_text", text }],
-        },
-      }),
-    );
-    this.dc.send(JSON.stringify({ type: "response.create" }));
-    this.mirrorTranscript({
-      id: "voice-typed-" + randomUUID(),
-      role: "user",
-      text,
+    void postJson(
+      "/live/text",
+      { user: this.user, liveSessionId: this.liveSessionId, text },
+      okResponseSchema,
+    ).catch((e) => {
+      console.warn("desk voice typed message failed:", e);
     });
     return true;
   }
@@ -316,111 +297,54 @@ export class DeskVoiceClient {
     this.idleTimer = window.setTimeout(() => this.stop(), IDLE_TIMEOUT_MS);
   }
 
-  private mirrorTranscript(entry: TranscriptEntry) {
-    if (!entry.text.trim()) return;
-    this.transcriptQueue = this.transcriptQueue.then(async () => {
-      try {
-        await postJson(
-          "/transcript",
-          { user: this.user, entries: [entry] },
-          transcriptResponseSchema,
-        );
-      } catch (e) {
-        console.warn("desk voice transcript mirror failed:", e);
-      }
-    });
-  }
-
-  private async handleFunctionCall(event: RealtimeEvent) {
-    const callId = String(event.call_id ?? "");
-    const name = String(event.name ?? "");
-    this.onState("action", name);
-
-    let args: JsonValue = {};
-    try {
-      args = jsonValueSchema.parse(JSON.parse(event.arguments ?? "{}"));
-    } catch {
-      args = {};
-    }
-
-    let output: JsonValue;
-    try {
-      const res = await postJson(
-        "/tool",
-        {
-          user: this.user,
-          callId,
-          name,
-          args,
-        },
-        toolResponseSchema,
-      );
-      output = res.result;
-    } catch (e) {
-      output = { error: e instanceof Error ? e.message : "Tool call failed" };
-    }
-
-    if (!this.dc || this.dc.readyState !== "open") return;
-    this.dc.send(
-      JSON.stringify({
-        type: "conversation.item.create",
-        item: {
-          type: "function_call_output",
-          call_id: callId,
-          output: JSON.stringify(output),
-        },
-      }),
-    );
-    this.dc.send(JSON.stringify({ type: "response.create" }));
-  }
-
   private handleEvent(raw: string) {
-    this.resetIdleTimer();
-    let event: RealtimeEvent;
+    let event: z.infer<typeof liveEventSchema>;
     try {
-      event = realtimeEventSchema.parse(JSON.parse(raw));
+      event = liveEventSchema.parse(JSON.parse(raw));
     } catch {
       return;
     }
+    if (this.closing && event.type !== "session.closed") return;
 
     switch (event.type) {
-      case "input_audio_buffer.speech_started":
+      case "session.started":
+        this.connected = true;
+        this.resetIdleTimer();
+        this.onState("listening");
+        this.started?.();
+        break;
+      case "session.input_transcript.delta":
+        this.resetIdleTimer();
         this.onState("listening");
         break;
-      case "response.created":
+      case "session.output_transcript.delta":
+        this.resetIdleTimer();
+        this.onState("speaking");
+        if (this.speakingTimer !== null)
+          window.clearTimeout(this.speakingTimer);
+        this.speakingTimer = window.setTimeout(() => {
+          this.speakingTimer = null;
+          if (this.active) this.onState("listening");
+        }, SPEAKING_SETTLE_MS);
+        break;
+      case "session.delegation.created":
+        this.resetIdleTimer();
         this.onState("thinking");
         break;
-      case "response.output_audio_transcript.delta":
-        this.onState("speaking");
-        break;
-      case "response.done":
-        this.onState("listening");
-        break;
-      case "conversation.item.input_audio_transcription.completed": {
-        const text = String(event.transcript ?? "");
-        this.mirrorTranscript({
-          id: "voice-" + String(event.item_id ?? randomUUID()),
-          role: "user",
-          text,
-        });
+      case "session.closed": {
+        const reason = event.reason ?? "";
+        const requested =
+          this.closing ||
+          reason === "close_requested" ||
+          reason === "remote_hangup";
+        if (!requested)
+          this.onState("error", `Call ended (${reason || "unknown"})`);
+        this.teardown();
         break;
       }
-      case "response.output_audio_transcript.done": {
-        const text = String(event.transcript ?? "");
-        this.mirrorTranscript({
-          id: "voice-" + String(event.item_id ?? randomUUID()),
-          role: "assistant",
-          text,
-        });
+      case "error":
+        this.onState("error", event.error?.message ?? event.message);
         break;
-      }
-      case "response.function_call_arguments.done":
-        void this.handleFunctionCall(event);
-        break;
-      case "error": {
-        this.onState("error", event.error?.message);
-        break;
-      }
       default:
         break; // unknown event types are ignored
     }

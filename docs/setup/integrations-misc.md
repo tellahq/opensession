@@ -160,6 +160,26 @@ The endpoint accepts at most 25 MiB per clip. Providers are optional: if no
 hosted key works and the local binary or model is unavailable, dictation
 returns an error and the rest of the app is unaffected.
 
+### Desk voice calls
+
+The Desk overlay's voice mode (Settings → Desk voice) uses its own OpenAI
+key, stored instance-wide from that settings panel rather than from the
+environment. Two engines share it:
+
+- **Web: GPT-Live** (`src/server/desk-voice-live.ts`). The browser posts its
+  WebRTC offer to `/api/desk/voice/live`; the server creates the
+  `gpt-live-1` session, attaches a sideband WebSocket, and returns the SDP
+  answer. Reasoning and tools run through Responses delegation on
+  `gpt-5.6-terra`; every function call executes on this server as the
+  verified user and transcripts are mirrored from the sideband. The browser
+  data channel is restricted to `session.close`. Billing is per second of
+  call time plus backend tokens; the server closes a call after 3 minutes of
+  silence or 30 minutes total.
+- **iOS: GPT Realtime** (`src/server/desk-voice.ts`). The device connects to
+  OpenAI with an ephemeral secret from `/api/desk/voice/secret` and relays
+  tool calls and transcripts through `/api/desk/voice/tool` and
+  `/transcript`.
+
 ## AWS creds for runs (`AGENT_AWS_REGION`)
 
 `packages/core/opensession-server/src/server/aws-creds.ts` mints short-lived

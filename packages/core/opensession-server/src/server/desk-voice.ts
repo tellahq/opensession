@@ -1,17 +1,27 @@
 /**
- * Desk voice mode — GPT Realtime as a temporary conversational engine for the
- * standing Desk session (src/server/desk.ts). The browser talks WebRTC directly
- * to OpenAI with an ephemeral secret minted here; tool calls and transcripts
- * relay back over authenticated HTTP routes (routes/desk-voice.ts). The Desk
- * session stays the durable identity: voice turns are mirrored into its
- * transcript as they finalize, and a handoff note (consumed by run-session.ts
- * on the next text turn) bridges them into the text engine's context — the
- * transcript file and the engine's own conversation state are separate stores,
- * so without the handoff the next text turn would be amnesiac about the call.
+ * Desk voice mode — shared pieces for the standing Desk session's voice
+ * engines (src/server/desk.ts): the instance API key, the tool facade, and
+ * the transcript mirror + handoff buffer.
+ *
+ * Two engines share them:
+ * - GPT-Live (desk-voice-live.ts): the web Desk. The server creates the Live
+ *   session, holds a sideband WebSocket, executes tool calls itself, and
+ *   mirrors transcripts from the sideband. The browser only carries audio.
+ * - GPT Realtime (mintVoiceSecret below): the native iOS app. The device
+ *   talks to OpenAI directly with an ephemeral secret and relays tool calls
+ *   and transcripts back over routes/desk-voice.ts.
+ *
+ * The Desk session stays the durable identity either way: voice turns are
+ * mirrored into its transcript as they finalize, and a handoff note (consumed
+ * by run-session.ts on the next text turn) bridges them into the text engine's
+ * context — the transcript file and the engine's own conversation state are
+ * separate stores, so without the handoff the next text turn would be
+ * amnesiac about the call.
  *
  * The tool surface is a deliberately narrow facade over SessionControl and
- * todos — never the MCP inventory. The server-side session config (not the
- * client) fixes the tool list, so a client can't expand what OpenAI may call.
+ * todos plus the Desk's interactive MCP inventory. The server-side session
+ * config (not the client) fixes the tool list, so a client can't expand what
+ * OpenAI may call.
  */
 
 import {
@@ -38,7 +48,8 @@ const DIR = stateDir("desk");
 const KEY_PATH = `${DIR}/voice.json`;
 const HANDOFF_DIR = `${DIR}/voice-handoff`;
 
-/** Realtime model for Desk voice calls. */
+/** Realtime model for native (iOS) Desk voice calls. The web Desk runs on
+ * GPT-Live instead; see desk-voice-live.ts. */
 const DESK_VOICE_MODEL = "gpt-realtime";
 
 /** Semantic endpointing avoids treating a short mid-sentence pause as the end
@@ -72,6 +83,16 @@ export function voiceKeyConfigured(): boolean {
   return !!readKeyFile().openaiApiKey;
 }
 
+/** The configured key, or a thrown error pointing at Settings. */
+export function requireVoiceApiKey(): string {
+  const key = readKeyFile().openaiApiKey;
+  if (!key)
+    throw new Error(
+      "No OpenAI API key configured for Desk voice — set one in Settings → Desk voice.",
+    );
+  return key;
+}
+
 export function voiceKeyMasked(): string | undefined {
   const key = readKeyFile().openaiApiKey;
   if (!key) return undefined;
@@ -100,7 +121,7 @@ Voice discipline:
 - Capture todos the moment the user mentions wanting or needing to do something. Never drop a todo unprompted.
 - Before steering or starting sessions, a one-line confirmation of what you're about to do is enough; don't over-confirm reads.`;
 
-const VOICE_TOOLS = [
+export const VOICE_TOOLS = [
   {
     type: "function",
     name: "list_current_work",
@@ -180,7 +201,7 @@ function voiceToolName(server: string, tool: string): string {
     : `${server}_${tool}`;
 }
 
-async function listVoiceMcpTools(user: string, sessionId: string) {
+export async function listVoiceMcpTools(user: string, sessionId: string) {
   const tools: Array<Record<string, unknown>> = [];
   for (const { name: serverName, server } of await voiceMcpServers(
     user,
@@ -245,26 +266,35 @@ export async function callVoiceMcpTool(
   return { found: false };
 }
 
-function truncate(s: string, n: number): string {
+export function truncate(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n)}…` : s;
 }
 
-/** Recent Desk text-mode conversation, inlined so the voice engine picks the
- *  conversation up mid-thread instead of starting blank. */
-async function recentDeskContext(sessionId: string): Promise<string> {
+/** Recent Desk text-mode turns, compacted for a voice engine's context so the
+ *  call picks the conversation up mid-thread instead of starting blank. */
+export async function recentDeskTurns(
+  sessionId: string,
+): Promise<Array<{ role: "user" | "assistant"; text: string }>> {
   try {
     const tail = await getSessionControl().transcriptTail(sessionId, 12);
-    const lines = tail
+    return tail
       .filter((e) => (e.type === "user" || e.type === "assistant") && e.content)
-      .map(
-        (e) =>
-          `${e.type === "user" ? "User" : "Desk"}: ${truncate(e.content.replace(/\s+/g, " "), 300)}`,
-      );
-    if (!lines.length) return "";
-    return `\n\nRecent Desk conversation (text mode, continue from it):\n${lines.join("\n")}`;
+      .map((e) => ({
+        role: e.type === "user" ? ("user" as const) : ("assistant" as const),
+        text: truncate(e.content.replace(/\s+/g, " "), 300),
+      }));
   } catch {
-    return "";
+    return [];
   }
+}
+
+async function recentDeskContext(sessionId: string): Promise<string> {
+  const turns = await recentDeskTurns(sessionId);
+  if (!turns.length) return "";
+  const lines = turns.map(
+    (t) => `${t.role === "user" ? "User" : "Desk"}: ${t.text}`,
+  );
+  return `\n\nRecent Desk conversation (text mode, continue from it):\n${lines.join("\n")}`;
 }
 
 /** Server-owned Realtime session policy. Exported for contract tests so a
@@ -299,11 +329,7 @@ export async function mintVoiceSecret(user: string): Promise<{
   model: string;
   sessionId: string;
 }> {
-  const key = readKeyFile().openaiApiKey;
-  if (!key)
-    throw new Error(
-      "No OpenAI API key configured for Desk voice — set one in Settings → Desk voice.",
-    );
+  const key = requireVoiceApiKey();
   const { sessionId } = ensureDeskSession(user);
   const session = await buildVoiceSessionConfig(sessionId, user);
   const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
@@ -502,7 +528,7 @@ export function takeVoiceHandoff(sessionId: string): string | undefined {
       ? `Action: ${e.text}`
       : `${e.role === "user" ? "User" : "Desk"} (voice): ${e.text}`,
   );
-  return `## Voice conversation handoff\nWhile in voice mode, you (the Desk) had this spoken conversation via GPT Realtime. It is already in the visible transcript — don't repeat or re-answer it; continue with full awareness of what was said and done:\n\n${lines.join("\n")}`;
+  return `## Voice conversation handoff\nWhile in voice mode, you (the Desk) had this spoken conversation through a voice model. It is already in the visible transcript — don't repeat or re-answer it; continue with full awareness of what was said and done:\n\n${lines.join("\n")}`;
 }
 
 export function mirrorVoiceEntries(
