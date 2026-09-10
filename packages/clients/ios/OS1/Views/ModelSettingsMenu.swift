@@ -13,7 +13,7 @@ import SwiftUI
 /// `SessionView.body` re-evaluates the whole body, transcript included, every
 /// time one of them moves.
 struct ModelSettingsMenu: View {
-    @AppStorage("os1.composer.defaultModel") private var preferredModel = ""
+    @AppStorage(NativePreferences.defaultModelStorageKey) private var preferredModel = ""
 
     let viewModel: SessionViewModel
     let catalog: ModelCatalog?
@@ -292,22 +292,7 @@ struct ModelSettingsMenu: View {
     private func setAsDefault() {
         let model = currentModel
         guard !model.isEmpty, model != preferredModel else { return }
-
-        // Match the web preference: update this device immediately, then sync
-        // the same per-user key so new sessions on every client start here.
-        let requestContext = NativePreferences.context()
-        NativePreferences.beginLocalWrite()
-        preferredModel = model
-        Task {
-            defer { NativePreferences.endLocalWrite() }
-            guard let response = try? await SettingsAPI.updateUiPrefs(
-                user: requestContext.user,
-                prefs: ["default-model": model]
-            ) else { return }
-            var confirmed = response
-            if confirmed["default-model"] == nil { confirmed["default-model"] = model }
-            _ = NativePreferences.apply(confirmed, for: requestContext)
-        }
+        NativePreferences.setDefaultModel(model)
     }
 
     private func reset() {

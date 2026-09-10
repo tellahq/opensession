@@ -16,6 +16,53 @@ enum NativePreferences {
     private static let identityKey = "os1.preferences.identity"
     private static let bucketKey = "os1.preferences.bucket"
     static let sessionCheckoutsStorageKey = "os1.composer.sessionCheckouts"
+    static let defaultModelStorageKey = "os1.composer.defaultModel"
+
+    /// The server call behind a ui-pref write, as the menus see it. Injectable
+    /// so a test can answer late, fail, or answer for an account that is no
+    /// longer active.
+    typealias UiPrefsWrite = @MainActor (
+        _ user: String, _ prefs: [String: String?]
+    ) async throws -> [String: String]
+
+    /// Make `model` the personal default for new sessions, the way the web
+    /// menus do: this device immediately, then the same per-user `default-model`
+    /// ui-pref every client reads. Both model menus (the conversation's and the
+    /// New session composer's) go through here so they cannot drift.
+    ///
+    /// The confirmed map is applied only if it is still this account's: a
+    /// switch mid-flight leaves the new account's own hydrate in charge. And
+    /// it never repaints a newer choice made on this device while the write
+    /// was out; that choice's own confirmation reconciles it.
+    ///
+    /// Returns the write so a caller can wait for the confirmation; its value
+    /// is whether the server's map was applied.
+    @discardableResult
+    static func setDefaultModel(
+        _ model: String,
+        write: @escaping UiPrefsWrite = { user, prefs in
+            try await SettingsAPI.updateUiPrefs(user: user, prefs: prefs)
+        }
+    ) -> Task<Bool, Never> {
+        let requestContext = context()
+        let defaults = UserDefaults.standard
+        beginLocalWrite()
+        defaults.set(model, forKey: defaultModelStorageKey)
+        return Task { @MainActor in
+            defer { endLocalWrite() }
+            guard let response = try? await write(
+                requestContext.user, ["default-model": model]
+            ) else { return false }
+            var confirmed = response
+            let local = defaults.string(forKey: defaultModelStorageKey) ?? ""
+            if local != model {
+                confirmed["default-model"] = local
+            } else if confirmed["default-model"] == nil {
+                confirmed["default-model"] = model
+            }
+            return apply(confirmed, for: requestContext)
+        }
+    }
 
     static func context() -> Context {
         let config = ServerConfig.shared
@@ -109,7 +156,7 @@ enum NativePreferences {
         set(
             prefs["default-model"],
             default: "",
-            key: "os1.composer.defaultModel",
+            key: defaultModelStorageKey,
             resetMissing: changedIdentity,
             in: defaults
         )
