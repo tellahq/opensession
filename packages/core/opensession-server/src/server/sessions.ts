@@ -906,6 +906,7 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
     createdBy: data.createdBy || null,
     createdByLogin: data.createdByLogin,
     startedBy: data.createdBy,
+    lastPromptedBy: data.lastPromptedBy,
     title: data.title || data.branch || "Ask session",
     mode: data.mode,
     // Back-compat: older session files stored the repo under `project`.

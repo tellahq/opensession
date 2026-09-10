@@ -33,6 +33,7 @@ import type { UnifiedSession } from "./types";
 import { interactiveMcpServers } from "./interactive-mcp";
 import { interactiveFallbackModel } from "./models";
 import { STRIPE_CONFIRM_TOOLS } from "./runner-shared";
+import { sessionPrincipal } from "./session-actors";
 import { commitAuthorFor } from "./shared/user-mappings";
 import { makeAskHandler } from "./asks";
 import type { McpScope } from "./runner-shared";
@@ -180,7 +181,7 @@ export async function maybeLaunchRunnerRun(
     publicationPolicy,
     confirmTools: STRIPE_CONFIRM_TOOLS,
     aws: !runInputs.isAutomationSession,
-    author: commitAuthorFor(opts.user, session.startedBy),
+    author: commitAuthorFor(opts.user, sessionPrincipal(session)),
     user: runUser,
     mcpGrantUser: runInputs.mcpGrantUser,
     fallbackModel: interactiveFallbackModel(session.model),

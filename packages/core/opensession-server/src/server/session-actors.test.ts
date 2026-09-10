@@ -3,10 +3,12 @@ import { productMark } from "./config";
 import {
   agentActor,
   delegatedActorParent,
+  humanPrompter,
   isMachineActor,
   isWorkerActor,
   machineActorLabel,
   providerAccountUser,
+  sessionPrincipal,
   workerActor,
 } from "./session-actors";
 
@@ -68,6 +70,40 @@ describe("machine actors", () => {
       providerAccountUser(workerActor(SESSION), agentActor(SESSION)),
     ).toBeUndefined();
     expect(providerAccountUser(undefined, "Automation")).toBeUndefined();
+  });
+
+  test("only a person becomes a session's recorded prompter", () => {
+    expect(humanPrompter("Michiel")).toBe("Michiel");
+    expect(humanPrompter("  Kent ")).toBe("Kent");
+    for (const sender of [
+      undefined,
+      null,
+      "",
+      "Anonymous",
+      "GitHub",
+      "auto-continue",
+      "system (restart)",
+      workerActor(SESSION),
+    ]) {
+      expect(humanPrompter(sender)).toBeNull();
+    }
+  });
+
+  test("a senderless turn acts for the last person who prompted, else the creator", () => {
+    // tella-fusion#6348: Grant started the session, Michiel took it over,
+    // and the review handoff that followed must commit for Michiel.
+    expect(
+      sessionPrincipal({ startedBy: "Grant", lastPromptedBy: "Michiel" }),
+    ).toBe("Michiel");
+    expect(sessionPrincipal({ startedBy: "Grant" })).toBe("Grant");
+    expect(sessionPrincipal({ startedBy: "Grant", lastPromptedBy: null })).toBe(
+      "Grant",
+    );
+    // A sentinel that somehow got stored is not a person to act for.
+    expect(
+      sessionPrincipal({ startedBy: "Grant", lastPromptedBy: "GitHub" }),
+    ).toBe("Grant");
+    expect(sessionPrincipal({ startedBy: null })).toBeNull();
   });
 
   test("delegated senders collapse to one label, not one row per session", () => {

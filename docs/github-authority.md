@@ -301,8 +301,12 @@ Adding one is a security review, not a convenience.
 ### Attribution
 
 - Commits are authored by the bot in every turn kind, with the human as
-  `Co-authored-by`: the session owner for Delegate, the human the automation
-  names for Automation. `gitIdentityEnv` sets the bot identity and the
+  `Co-authored-by`: for Delegate, whoever sent the prompt, and for a turn
+  nobody sent (a review handoff, an auto-continue, a queue drain) the person
+  the session acts for, which is the last person who prompted it and the
+  creator until someone else does (`sessionPrincipal`, recorded on the
+  session as `lastPromptedBy`); for Automation, the human the automation
+  names. `gitIdentityEnv` sets the bot identity and the
   trailer; no run carries a human `GIT_AUTHOR_*` or `GIT_COMMITTER_*`
   identity, so nothing an agent commits can be mistaken for something the
   human typed. Where a repository requires signed commits, the bot's signing

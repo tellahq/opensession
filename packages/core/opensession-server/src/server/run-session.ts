@@ -534,7 +534,11 @@ import {
   ORPHANED_STEER_PROMPT,
   WEDGE_RETRY_PROMPT,
 } from "./auto-continue";
-import { SYSTEM_RESTART_USER } from "./session-actors";
+import {
+  humanPrompter,
+  sessionPrincipal,
+  SYSTEM_RESTART_USER,
+} from "./session-actors";
 
 const g = globalThis as any;
 
@@ -2165,7 +2169,7 @@ export async function maybeLaunchSandboxedRun(
       confirmTools: STRIPE_CONFIRM_TOOLS,
       author: commitAuthorFor(
         opts.isAutomationSession ? undefined : opts.user,
-        opts.isAutomationSession ? undefined : session.startedBy,
+        opts.isAutomationSession ? undefined : sessionPrincipal(session),
       ),
       fallbackModel: opts.isAutomationSession
         ? undefined
@@ -2616,6 +2620,31 @@ async function runSessionPromptInner(
   // A fresh human prompt re-arms the announce-then-stop guard (the nudge's
   // own delivery keeps the flag, capping it at one consecutive auto-continue).
   if (user !== AUTO_CONTINUE_USER) autoContinueNudged.delete(sessionId);
+
+  // A person's prompt makes them the one this session acts for: the next
+  // turn nobody sends (a review handoff, an auto-continue, a queue drain)
+  // commits on their behalf, not the creator's (sessionPrincipal). Recorded
+  // before the turn so a run that dies mid-way still leaves it behind, and
+  // never allowed to block the turn: attribution is not worth a lost prompt.
+  const prompter = humanPrompter(user);
+  if (
+    prompter &&
+    session.source === "opensession" &&
+    session.lastPromptedBy !== prompter
+  ) {
+    try {
+      await updateSessionFile(sessionId, (data) => ({
+        ...data,
+        lastPromptedBy: prompter,
+      }));
+      session.lastPromptedBy = prompter;
+    } catch (error) {
+      console.warn(
+        `[run] could not record ${sessionId}'s prompter:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
 
   // The engine session id depends on the session's model: codex models resume
   // the codex thread, claude models the claude session. A missing engine id
@@ -3136,7 +3165,7 @@ async function runSessionPromptInner(
             : undefined,
           confirmTools: STRIPE_CONFIRM_TOOLS,
           aws: !isAutomationSession,
-          author: commitAuthorFor(user, session.startedBy),
+          author: commitAuthorFor(user, sessionPrincipal(session)),
           user: runInputs.user,
           fallbackModel: interactiveFallbackModel(session.model),
           effort: session.effort,
@@ -3248,9 +3277,10 @@ async function runSessionPromptInner(
       confirmTools: STRIPE_CONFIRM_TOOLS,
       aws: !isAutomationSession, // automation descendants never receive AWS credentials
       // Attribute any commits this turn makes to whoever sent the prompt, or
-      // to whoever the session belongs to when nobody did (an auto-continue,
-      // a restart resume, a queue drain).
-      author: commitAuthorFor(user, session.startedBy),
+      // to the person the session acts for when nobody did (an auto-continue,
+      // a restart resume, a queue drain): the last person who prompted it,
+      // else its creator.
+      author: commitAuthorFor(user, sessionPrincipal(session)),
       // Gate per-user MCP servers (allowedUsers) to the prompt's author. Automation
       // sessions pass no user, so they never see a user-restricted server.
       user: runInputs.user,
