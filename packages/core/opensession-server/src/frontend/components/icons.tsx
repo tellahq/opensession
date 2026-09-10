@@ -231,10 +231,12 @@ export function IconChevronsUpDown(p: IconProps) {
   );
 }
 
+const CHEVRON_LEFT_PATH = "M13.75 6.75L8.75 12L13.75 17.25";
+
 export function IconChevronLeft(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M13.75 6.75L8.75 12L13.75 17.25" />
+      <path {...stroke} d={CHEVRON_LEFT_PATH} />
     </Svg>
   );
 }
@@ -1166,6 +1168,11 @@ export function IconOctagonAlert(p: IconProps) {
       ))}
     </Svg>
   );
+}
+
+/** <IconChevronLeft> as markup. */
+export function chevronLeftIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(pathsMarkup([CHEVRON_LEFT_PATH]), size);
 }
 
 /** <IconChevronRight> as markup: the fold caret on a JSON tree row. */

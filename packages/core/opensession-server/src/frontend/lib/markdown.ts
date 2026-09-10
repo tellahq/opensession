@@ -1299,6 +1299,20 @@ md.use({
     },
   },
   renderer: {
+    // marked keeps only the first word of a fence's info string, as the
+    // language class. A block kind that reads the rest (`artifact scripts`,
+    // lib/artifact-block.ts) finds it in data-info; a fence with nothing
+    // after its language takes marked's own output, byte for byte.
+    code(token: Tokens.Code) {
+      const info = (token.lang ?? "").trim();
+      const lang = /^\S*/.exec(info)?.[0] ?? "";
+      if (info.length === lang.length) return false;
+      const code = token.text.replace(/\n$/, "") + "\n";
+      return (
+        `<pre><code class="language-${attr(lang)}" data-info="${attr(info)}">` +
+        `${token.escaped ? code : attr(code).replace(/'/g, "&#39;")}</code></pre>\n`
+      );
+    },
     // Session content is untrusted (assistant output, tool results, pasted
     // text). marked passes raw HTML through verbatim by default, and we inject
     // the result with dangerouslySetInnerHTML — so an embedded <script> or

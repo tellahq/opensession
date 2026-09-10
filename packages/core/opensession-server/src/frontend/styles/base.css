@@ -34,6 +34,8 @@
 @import "./blocks/math.css";
 @import "./blocks/json-tree.css";
 @import "./blocks/ansi.css";
+@import "./blocks/artifact.css";
+@import "./blocks/slides.css";
 @import "./base-keyframes.css";
 @import "./blocks/palette.css";
 @import "./blocks/table.css";

@@ -1,0 +1,159 @@
+/* ── ```artifact / ```svg block (lib/artifact-frame.ts) ─────────────
+   A sandboxed frame in the same well a diagram takes, with a header row
+   above it: the label, a Source toggle and expand. The fence's own <pre>
+   stays inside the block, hidden, for the Source view and the copy
+   control. That control (lib/code-copy.ts) sits in the wrapper AROUND this
+   block, top right, so the header keeps its right end clear for it.
+   Renderer-emitted markup, hence a stylesheet rather than utilities. */
+.md-artifact-wrap {
+  position: relative;
+  margin: 2px 0 8px;
+  overflow: hidden;
+  background: var(--diagram-canvas);
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+}
+.md-artifact-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 80px 4px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--text-dim);
+}
+.md-artifact-label {
+  font-weight: 600;
+  color: var(--text);
+}
+.md-artifact-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--hover);
+  font-size: 11px;
+}
+.md-artifact-spacer {
+  flex: 1;
+}
+.md-artifact-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(6px * var(--rf));
+  corner-shape: var(--cs);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.md-artifact-expand {
+  width: 26px;
+  padding: 0;
+  justify-content: center;
+}
+.md-artifact-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.md-artifact-btn[aria-pressed="true"] {
+  background: var(--hover-strong);
+  color: var(--text);
+}
+.md-artifact-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.md-artifact-body {
+  position: relative;
+}
+.md-artifact-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  /* Only ever seen before the document paints; it takes the page colour. */
+  background: var(--bg);
+}
+/* A frame swallows pointer events, which would end a drag the moment the
+   pointer crossed into it. */
+.md-artifact-wrap[data-resizing] .md-artifact-frame {
+  pointer-events: none;
+}
+.md-artifact-grip {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ns-resize;
+}
+.md-artifact-grip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 36px;
+  height: 4px;
+  margin: -2px 0 0 -18px;
+  border-radius: 999px;
+  background: var(--text-dim);
+  opacity: 0.4;
+}
+.md-artifact-grip:hover::after,
+.md-artifact-grip:focus-visible::after {
+  opacity: 0.9;
+}
+.md-artifact-grip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* The Source view: the fence, with the well's own edge and corner. */
+.md-artifact-wrap > pre {
+  display: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.md-artifact-wrap[data-view="source"] > pre {
+  display: block;
+}
+.md-artifact-wrap[data-view="source"] > .md-artifact-body {
+  display: none;
+}
+/* The wrapper's unwrap toggle reaches a fence that is a direct child; this
+   one sits a level down. */
+.md-code-wrap[data-wrapped="false"] .md-artifact-wrap > pre {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+/* Expanded (components/BlockExpandDialog.tsx): the frame fills the body. */
+.md-artifact-frame[data-fill] {
+  height: 100%;
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+  border: 1px solid var(--border);
+}
+@media (hover: none) and (pointer: coarse) {
+  .md-artifact-head {
+    min-height: 48px;
+    padding-right: 104px;
+  }
+  .md-artifact-btn {
+    height: 36px;
+    padding: 0 10px;
+  }
+  .md-artifact-expand {
+    width: 36px;
+  }
+  .md-artifact-grip {
+    height: 24px;
+  }
+}

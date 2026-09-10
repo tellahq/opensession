@@ -144,16 +144,34 @@ in the workspace pane when the session has one.
 
 ### Artifacts
 
-An ` ```artifact ` fence holds a complete HTML document or fragment;
-an ` ```svg ` fence holds an SVG. Both render in a sandboxed iframe
-(no same-origin access, no navigation, scripts only when the fence asks)
-with a toggle to the source, and expand to the lightbox.
+An ` ```artifact ` fence holds a complete HTML document or a fragment; a
+fragment is wrapped in a document that takes the app's background, text
+colour and font, so it reads as native in both themes. An ` ```svg ` fence
+holds an SVG, shown as an `<img>` inside the same frame. Both render in an
+`<iframe sandbox>` by `srcdoc`: no same-origin access, no navigation, no
+forms, no popups, and a `Content-Security-Policy` meta in the head with
+`default-src 'none'` (inline styles and `data:` images allowed), so an
+artifact cannot phone home. Scripts are off unless the info string is
+` ```artifact scripts `, which adds `allow-scripts` and inline `script-src`
+and labels the block "Scripts on". A scripted artifact reports its height
+to the page (clamped to 120 to 900px); a static one starts at 320px with a
+drag handle. The header row has a Source toggle (the original fence, whose
+copy control copies the source) and an expand button that opens the same
+sandboxed document in a full-width dialog. A fence still streaming renders
+as it arrives.
 
 ### Slides
 
-A ` ```slides ` fence is markdown split into slides on `---` lines.
-Renders as a deck with arrows, dots and swipe; each slide is ordinary
-markdown, including the other block kinds.
+A ` ```slides ` fence is markdown split into slides on lines that are
+exactly `---`. Renders as a deck in a 16:9 well: one slide at a time,
+previous/next arrows, dots, a counter, arrow keys when the deck has focus,
+and swipe on a phone. Each slide is ordinary markdown through the app's
+renderer, with two limits: a nested fence inside a slide stays a plain code
+block (neither upgraded into another block kind nor syntax highlighted,
+since the body's upgrade pass has already run), and a `---` inside such a
+fence belongs to the fence, not the deck. Nest fences by giving the deck a
+longer fence (` ````slides `). The expand button opens the deck at the
+dialog's width, on the current slide.
 
 ### Metrics
 
