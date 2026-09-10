@@ -13,7 +13,8 @@ export function portalTargetFor(
   sessionId: string,
   service: PreviewService,
 ): PortalTarget | null {
-  if (!service.running || !service.previewUrl) return null;
+  const openable = service.running || service.state === "sleeping";
+  if (!openable || !service.previewUrl) return null;
   const url = service.defaultPath
     ? new URL(
         service.defaultPath.startsWith("/")

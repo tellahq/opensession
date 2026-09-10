@@ -627,7 +627,11 @@ export async function getPreviewStatus(
   for (const service of observedServices) {
     const httpsPort = hostServiceHttpsPort(service.port);
     let previewUrl: string | null = null;
-    if (service.state === "awake" && httpsPort != null) {
+    if (
+      (service.state === "awake" ||
+        (service.managed && service.state === "sleeping")) &&
+      httpsPort != null
+    ) {
       if (
         await ensurePreviewRoute(httpsPort, `127.0.0.1:${service.port}`, host)
       ) {

@@ -90,25 +90,64 @@ final class DefaultModelPreferenceTests: XCTestCase {
         XCTAssertEqual(UserDefaults.standard.string(forKey: markerKey), "enter")
     }
 
-    func testLateConfirmationDoesNotRepaintANewerChoice() async {
+    /// Give a queued write a few turns of the main actor to reach the server.
+    private func settle(until done: () -> Bool) async {
+        for _ in 0..<20 where !done() { await Task.yield() }
+    }
+
+    func testASecondChoiceWaitsForTheFirstWriteAndTheServerEndsOnIt() async {
         let (slow, slowWrite) = gated()
         let first = NativePreferences.setDefaultModel("claude-opus-5", write: slowWrite)
         await Task.yield()
+        XCTAssertEqual(slow.sent["default-model"], "claude-opus-5")
 
-        let second = NativePreferences.setDefaultModel("claude-sonnet-5") { _, prefs in
-            let sent = prefs["default-model"].flatMap { $0 } ?? ""
-            return ["default-model": sent]
-        }
-        let secondApplied = await second.value
-        XCTAssertTrue(secondApplied)
+        let (next, nextWrite) = gated()
+        let second = NativePreferences.setDefaultModel("claude-sonnet-5", write: nextWrite)
         XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "claude-sonnet-5")
+        await Task.yield()
+        // Queued behind the first: nothing sent until that one answers, so the
+        // two cannot reach the server out of order.
+        XCTAssertTrue(next.sent.isEmpty)
 
-        // The first write's answer arrives after the second already landed.
+        // The first write's late answer does not repaint the newer choice.
         slow.release(["default-model": "claude-opus-5", "send-key": "mod-enter"])
         let firstApplied = await first.value
         XCTAssertTrue(firstApplied)
         XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "claude-sonnet-5")
         XCTAssertEqual(UserDefaults.standard.string(forKey: markerKey), "mod-enter")
+
+        await settle { !next.sent.isEmpty }
+        XCTAssertEqual(next.sent["default-model"], "claude-sonnet-5")
+        next.release(["default-model": "claude-sonnet-5", "send-key": "mod-enter"])
+        let secondApplied = await second.value
+        XCTAssertTrue(secondApplied)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "claude-sonnet-5")
+    }
+
+    func testAChoiceReplacedWhileQueuedIsNeverSent() async {
+        let (slow, slowWrite) = gated()
+        let first = NativePreferences.setDefaultModel("claude-opus-5", write: slowWrite)
+        await Task.yield()
+
+        let (middle, middleWrite) = gated()
+        let second = NativePreferences.setDefaultModel("claude-sonnet-5", write: middleWrite)
+        let (last, lastWrite) = gated()
+        let third = NativePreferences.setDefaultModel("claude-haiku-5", write: lastWrite)
+
+        slow.release(["default-model": "claude-opus-5"])
+        _ = await first.value
+        // Sonnet was already replaced by Haiku when its turn came, so the
+        // server never sees it and cannot end up on it.
+        let secondApplied = await second.value
+        XCTAssertFalse(secondApplied)
+        XCTAssertTrue(middle.sent.isEmpty)
+
+        await settle { !last.sent.isEmpty }
+        XCTAssertEqual(last.sent["default-model"], "claude-haiku-5")
+        last.release(["default-model": "claude-haiku-5"])
+        let thirdApplied = await third.value
+        XCTAssertTrue(thirdApplied)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "claude-haiku-5")
     }
 
     func testConfirmationForAnotherAccountIsDropped() async {

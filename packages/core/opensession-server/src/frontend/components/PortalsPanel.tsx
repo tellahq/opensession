@@ -23,11 +23,11 @@ function statusLabel(
   target: PortalTarget | null,
   active: boolean,
 ): string {
+  if (service.state === "sleeping") return "Sleeping · opens on demand";
+  if (service.state === "waking") return "Waking";
   if (target) return active ? "Open" : "Running";
   if (service.running) {
     if (service.state === "starting") return "Starting";
-    if (service.state === "sleeping") return "Sleeping";
-    if (service.state === "waking") return "Waking";
     return "Unavailable";
   }
   return service.state === "failed" ? "Failed" : `Port ${service.port}`;

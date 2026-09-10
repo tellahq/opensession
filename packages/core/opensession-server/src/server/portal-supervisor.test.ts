@@ -13,7 +13,9 @@ import { createServer } from "node:net";
 import {
   listPortalServices,
   listSandboxPortalServices,
+  hostPortalAdmissionReason,
   normalizePortalPath,
+  portalShouldSleep,
   portalsNeedingContainment,
   type PortalRecord,
   portalsToRestore,
@@ -140,6 +142,52 @@ describe("Portal containment migration", () => {
       ["awake-legacy", "starting-legacy"],
     );
     expect(portalsNeedingContainment(records, false)).toEqual([]);
+  });
+});
+
+describe("host Portal capacity", () => {
+  test("rejects starts at either the process or memory boundary", () => {
+    expect(
+      hostPortalAdmissionReason({
+        active: 4,
+        maxActive: 4,
+        availableMemoryMb: 80_000,
+        minAvailableMemoryMb: 24_576,
+      }),
+    ).toContain("capacity is full");
+    expect(
+      hostPortalAdmissionReason({
+        active: 1,
+        reserved: 1,
+        maxActive: 4,
+        availableMemoryMb: 20_000,
+        minAvailableMemoryMb: 24_576,
+      }),
+    ).toContain("memory is below");
+    expect(
+      hostPortalAdmissionReason({
+        active: 1,
+        maxActive: 4,
+        availableMemoryMb: 80_000,
+        minAvailableMemoryMb: 24_576,
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe("host Portal idle sleep", () => {
+  test("sleeps only an idle, awake Portal whose owner is not running", () => {
+    const base = {
+      state: "awake" as const,
+      ownerRunning: false,
+      now: 1_000_000,
+      lastAccessedAt: 100_000,
+      idleMs: 600_000,
+    };
+    expect(portalShouldSleep(base)).toBe(true);
+    expect(portalShouldSleep({ ...base, ownerRunning: true })).toBe(false);
+    expect(portalShouldSleep({ ...base, state: "sleeping" })).toBe(false);
+    expect(portalShouldSleep({ ...base, lastAccessedAt: 900_000 })).toBe(false);
   });
 });
 
@@ -361,14 +409,24 @@ describe("session Portal supervisor", () => {
     expect(
       (
         await reapOrphanedPortalServices([
-          { id: "deleted-session", worktreeDir: worktree, attachedRepos: [] },
+          {
+            id: "deleted-session",
+            worktreeDir: worktree,
+            attachedRepos: [],
+            isRunning: false,
+          },
         ])
       ).stopped,
     ).toEqual([]);
     expect((await listPortalServices(worktree))[0]?.state).toBe("awake");
 
     const result = await reapOrphanedPortalServices([
-      { id: "replacement-session", worktreeDir: worktree, attachedRepos: [] },
+      {
+        id: "replacement-session",
+        worktreeDir: worktree,
+        attachedRepos: [],
+        isRunning: false,
+      },
     ]);
     expect(result.stopped).toEqual([
       expect.objectContaining({
@@ -398,8 +456,18 @@ describe("session Portal supervisor", () => {
     // by spelling, the registry read under the alias saw only that session
     // as owner and reaped the Portal.
     const result = await reapOrphanedPortalServices([
-      { id: "owner", worktreeDir: worktree, attachedRepos: [] },
-      { id: "other", worktreeDir: alias, attachedRepos: [] },
+      {
+        id: "owner",
+        worktreeDir: worktree,
+        attachedRepos: [],
+        isRunning: false,
+      },
+      {
+        id: "other",
+        worktreeDir: alias,
+        attachedRepos: [],
+        isRunning: false,
+      },
     ]);
     expect(result.stopped).toEqual([]);
     expect((await listPortalServices(worktree))[0]?.state).toBe("awake");

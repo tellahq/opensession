@@ -30,10 +30,16 @@ enum NativePreferences {
     /// ui-pref every client reads. Both model menus (the conversation's and the
     /// New session composer's) go through here so they cannot drift.
     ///
+    /// Writes reach the server in the order they were made: each waits for
+    /// the one before it, and a choice already replaced by a newer one when
+    /// its turn comes is not sent at all. Otherwise two quick picks could
+    /// land out of order and leave the server, and so every other device, on
+    /// the older one.
+    ///
     /// The confirmed map is applied only if it is still this account's: a
     /// switch mid-flight leaves the new account's own hydrate in charge. And
     /// it never repaints a newer choice made on this device while the write
-    /// was out; that choice's own confirmation reconciles it.
+    /// was out; that choice's own write, queued behind this one, reconciles it.
     ///
     /// Returns the write so a caller can wait for the confirmation; its value
     /// is whether the server's map was applied.
@@ -48,8 +54,15 @@ enum NativePreferences {
         let defaults = UserDefaults.standard
         beginLocalWrite()
         defaults.set(model, forKey: defaultModelStorageKey)
-        return Task { @MainActor in
+        let previous = lastDefaultModelWrite
+        let task = Task { @MainActor in
             defer { endLocalWrite() }
+            _ = await previous?.value
+            // Superseded while queued, or the account changed: the newer
+            // choice's own write (or the new account's hydrate) speaks instead.
+            guard defaults.string(forKey: defaultModelStorageKey) == model,
+                  context() == requestContext
+            else { return false }
             guard let response = try? await write(
                 requestContext.user, ["default-model": model]
             ) else { return false }
@@ -62,7 +75,12 @@ enum NativePreferences {
             }
             return apply(confirmed, for: requestContext)
         }
+        lastDefaultModelWrite = task
+        return task
     }
+
+    /// Tail of the default-model write chain; the next write waits on it.
+    private static var lastDefaultModelWrite: Task<Bool, Never>?
 
     static func context() -> Context {
         let config = ServerConfig.shared
