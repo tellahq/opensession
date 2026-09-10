@@ -95,15 +95,26 @@ since `#123` in a codespan is usually an issue number or an anchor.
 
 ### JSON tree
 
-A ` ```json ` fence that parses and is large enough to be worth
-folding renders as a collapsible tree with a toggle back to the raw text.
-Small JSON stays highlighted code.
+A ` ```json ` fence that parses to an object or array and is large enough
+to be worth folding (more than 30 lines, or more than 1500 characters)
+renders as a collapsible tree: keys and typed values in shiki's inks, the
+root and its children open, anything deeper folded behind its count, and a
+Tree / Raw toggle in the header that swaps to the highlighted text. Copy
+still copies the JSON text. Small JSON, a bare scalar, and JSON that does
+not parse (still streaming, comments, trailing commas) stay highlighted
+code; `jsonc` and `json5` are not trees.
 
 ### Terminal output
 
-` ```ansi ` and ` ```terminal ` fences render ANSI SGR colours and
-styles. A `bash` or `console` fence that carries escape codes renders them
-too.
+` ```ansi ` and ` ```terminal ` fences render ANSI SGR sequences
+(`ESC[...m`: bold, dim, italic, underline, strikethrough, inverse, the 16
+colours and their bright forms, 256-colour and 24-bit) as styled text; every
+other escape (cursor movement, erase, OSC) is stripped. Write the real escape
+byte, or in an `ansi`/`terminal` fence its usual spellings (`\x1b[`, `\e[`,
+`\033[`, `\u001b[`), which are decoded when the fence holds no real one. A
+`bash`, `sh`, `zsh`, `shell`, `console`, `text` or `log` fence that carries
+a real escape byte renders the same way. Copy copies the text without its
+escape codes.
 
 ### Tables
 

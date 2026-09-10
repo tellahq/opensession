@@ -77,7 +77,11 @@
   color: var(--text);
 }
 
-.markdown pre {
+/* `.md-code-well` is the same well on a block that replaces its fence but is
+   still code (the JSON tree, styles/blocks/json-tree.css): one surface for
+   everything that reads as pasted code. */
+.markdown pre,
+.markdown .md-code-well {
   background: #0c0c10;
   border: 1px solid var(--border);
   border-radius: calc(18px * var(--rf));

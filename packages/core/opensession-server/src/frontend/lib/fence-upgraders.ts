@@ -15,7 +15,9 @@
  * declares the upgrader. See docs/blocks.md for the catalog and the contract.
  */
 
+import { ansiUpgrader } from "./ansi-block";
 import { chartUpgrader } from "./chart-fence";
+import { jsonTreeUpgrader } from "./json-tree-block";
 import { mathUpgrader } from "./math-block";
 import { mermaidUpgrader } from "./mermaid-fence";
 import { paletteUpgrader } from "./palette-block";
@@ -64,6 +66,11 @@ export interface FenceUpgrader {
    * (or throw) to keep the plain fence: source that does not parse, is still
    * streaming, or has the wrong shape. When returning false `ctx.pre` must
    * still be in the DOM, untouched, so shiki can highlight it.
+   *
+   * A `keepsCodeControls` block must `await` before it touches the DOM: the
+   * body attaches the copy control's wrapper in the effect that follows the
+   * one starting this pass, so a fence replaced synchronously is replaced
+   * before its wrapper exists.
    */
   upgrade(ctx: FenceUpgradeContext): Promise<boolean>;
   /**
@@ -82,6 +89,8 @@ export const FENCE_UPGRADERS: readonly FenceUpgrader[] = [
   tableUpgrader,
   metricsUpgrader,
   mathUpgrader,
+  jsonTreeUpgrader,
+  ansiUpgrader,
 ];
 
 /** The upgrader that claims a fence, if any. */
