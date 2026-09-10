@@ -854,20 +854,34 @@ export function githubAuthEnv(user?: string | null): Record<string, string> {
   return token ? { GH_TOKEN: token, GITHUB_TOKEN: token } : {};
 }
 
+/** The connected person a credential belongs to, read from its durable
+ * principal, so the answer follows the token the run actually holds: the
+ * mapped person in operator mode, the sole account in simple mode. Null for
+ * the service credential and for no credential. */
+export function githubCredentialLogin(
+  credential: GithubCredential | null | undefined,
+): string | null {
+  return credential?.kind === "user"
+    ? credential.principal.slice("user:".length) || null
+    : null;
+}
+
 /** What a trusted launcher projects for a code turn a connected person
- * started: githubAuthEnv plus, as a non-secret marker, the login the host
- * resolved for the run, so the guest can answer "does this run act as a
- * connected person?" without the person store (githubRunOwnerLogin). Empty
- * when nobody resolves. A simple-mode sole account carries the token but no
- * login, matching githubUserLoginForRun on a host run, and an App-token
- * projection never carries one, so both stay guarded in the guest. */
+ * started: githubAuthEnv plus, as a non-secret marker, the login of the
+ * credential the host selected for the run, so the guest can answer "does
+ * this run act as a connected person?" without the person store
+ * (githubRunOwnerLogin). Empty when nobody resolves. An App-token projection
+ * is written elsewhere and never carries a login, so it stays guarded. */
 export function githubUserAuthProjection(
   user?: string | null,
 ): Record<string, string> {
-  const auth = githubAuthEnv(user);
-  if (!auth.GH_TOKEN) return {};
-  const login = githubUserLoginForRun(user);
-  return login ? { ...auth, login } : auth;
+  const credential = githubCredentialForRun(user);
+  const token = credential?.env.GH_TOKEN;
+  if (!token) return {};
+  const login = githubCredentialLogin(credential);
+  return login
+    ? { GH_TOKEN: token, GITHUB_TOKEN: token, login }
+    : { GH_TOKEN: token, GITHUB_TOKEN: token };
 }
 
 /** A remote sandbox cannot read the server's per-user grant store. Its trusted
@@ -947,11 +961,12 @@ export function githubUserRunEnv(user?: string | null): Record<string, string> {
 
 /** The connected person a run acts as, wherever it runs: on a remote host the
  * launcher's projected marker (the person store is not there, and a readable
- * one must not be consulted), on the host the same lookup githubUserRunEnv
- * makes. Null keeps the run's publication guard. */
+ * one must not be consulted), on the host the login of the credential
+ * githubUserRunEnv selects, which in simple mode is the sole connected
+ * account. Null keeps the run's publication guard. */
 export function githubRunOwnerLogin(user?: string | null): string | null {
   if (process.env[GITHUB_RUN_AUTH_FILE_ENV]) return projectedGithubRunLogin();
-  return githubUserLoginForRun(user);
+  return githubCredentialLogin(githubCredentialForRun(user));
 }
 
 export interface GithubCredential {

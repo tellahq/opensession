@@ -291,15 +291,32 @@ describe("token lookups + runner env", () => {
     expect(projectedGithubRunLogin()).toBeNull();
   });
 
-  test("a person's projection names their login; a sole account or App token does not", () => {
+  test("a person's projection names the login of the credential the run holds", () => {
     seedToken();
-    // Simple mode: the sole account's token goes into the file, but a host
-    // run resolves no login for it (githubUserLoginForRun is null), so the
-    // projection carries none either and the guest stays guarded too.
-    expect(githubUserAuthProjection("Alice")).toEqual({
-      GH_TOKEN: "gho_test123",
-      GITHUB_TOKEN: "gho_test123",
-    });
+    // Simple mode: the sole account is the acting identity for any human
+    // sender, so the projection names it and the guest lifts the guard the
+    // way a host run does (githubRunOwnerLogin below).
+    for (const user of ["Alice", "Some Randomer", null]) {
+      expect(githubUserAuthProjection(user)).toEqual({
+        GH_TOKEN: "gho_test123",
+        GITHUB_TOKEN: "gho_test123",
+        login: "alice",
+      });
+      expect(githubRunOwnerLogin(user)).toBe("alice");
+    }
+    // Two connected accounts in simple mode: nobody, so no token and no login.
+    writeFileSync(
+      process.env.OPENSESSION_GITHUB_AUTH_STORE!,
+      JSON.stringify({
+        users: {
+          alice: { login: "alice", token: "gho_a", source: "device" },
+          bob: { login: "bob", token: "gho_b", source: "device" },
+        },
+      }),
+    );
+    expect(githubUserAuthProjection("Alice")).toEqual({});
+    expect(githubRunOwnerLogin("Alice")).toBeNull();
+    seedToken();
     enableFeature();
     expect(githubUserAuthProjection("Alice")).toEqual({
       GH_TOKEN: "gho_test123",
@@ -307,6 +324,9 @@ describe("token lookups + runner env", () => {
       login: "alice",
     });
     expect(githubUserAuthProjection("Bob")).toEqual({});
+    // Operator mode: the login follows the mapped person, nobody else.
+    expect(githubRunOwnerLogin("Bob")).toBeNull();
+    expect(githubRunOwnerLogin("Some Randomer")).toBeNull();
   });
 
   test("the guest reads the run's owner from the projected marker, never the store", () => {
