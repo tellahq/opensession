@@ -145,6 +145,16 @@ final class OS1Socket: SessionSocket {
         send(frame)
     }
 
+    /// Tell the server which sessions list this socket renders. From then on
+    /// a metadata write reaches it as `session_row` / `session_row_removed`
+    /// for that projection instead of a whole-list invalidation. The
+    /// subscription belongs to one connection, so the owner re-sends it after
+    /// every hello. `query` is the list request's query string, the same
+    /// one the poll asks for.
+    func subscribeSessions(query: String) {
+        send(["type": "sessions_subscribe", "query": query])
+    }
+
     /// Presence, not subscription: backgrounding the app keeps the watch (the
     /// transcript must keep streaming so unread counts and notifications still
     /// land) but takes our face off the session for everyone else. A client
@@ -352,7 +362,7 @@ final class OS1Socket: SessionSocket {
                 // inline to skip two executor hops per frame. Awaiting the
                 // decode before the next receive() keeps frames ordered.
                 let event: ServerEvent
-                if data.count >= 16 * 1024 {
+                if data.count >= 16 * 1024 || Self.isSessionRowFrame(data) {
                     event = await Task.detached(priority: .userInitiated) {
                         ServerEvent.parse(data)
                     }.value
@@ -369,6 +379,18 @@ final class OS1Socket: SessionSocket {
                 return
             }
         }
+    }
+
+    /// A `session_row` frame is small, but each one decodes a whole `Session`
+    /// (dozens of optional fields) and a burst of them lands while the list
+    /// is on screen, so they take the detached path like the poll's rows do.
+    /// The server serializes `type` first, which makes a prefix check enough;
+    /// a frame that misses it decodes inline, which is still correct. The
+    /// same prefix also matches `session_row_removed`, which is fine.
+    private static let sessionRowPrefix = Data(#"{"type":"session_row""#.utf8)
+
+    nonisolated private static func isSessionRowFrame(_ data: Data) -> Bool {
+        data.starts(with: sessionRowPrefix)
     }
 
     private func pingLoop() async {
