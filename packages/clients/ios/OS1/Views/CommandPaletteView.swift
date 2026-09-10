@@ -144,7 +144,16 @@ struct CommandPaletteView: View {
         .frame(width: 620, height: 460)
         .background(OS1VisualStyle.background)
         .onChange(of: items.map(\.id), initial: true) { model.items = items }
-        .onAppear { installKeyMonitor() }
+        .onAppear {
+            installKeyMonitor()
+            #if DEBUG
+            // Screenshot hook, paired with the host's OS1_COMMAND_PALETTE_QUERY
+            // that opens the sheet.
+            if let query = ProcessInfo.processInfo.environment["OS1_COMMAND_PALETTE_QUERY"] {
+                model.query = query
+            }
+            #endif
+        }
         .onDisappear { removeKeyMonitor() }
         .task(id: model.query) { await model.updateTranscriptSearch() }
         .task {

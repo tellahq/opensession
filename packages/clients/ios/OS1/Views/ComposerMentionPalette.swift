@@ -173,28 +173,21 @@ struct ComposerMentionPalette: View {
     }
 
     private func people(matching query: String) -> [FileMention] {
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let current = ServerConfig.shared.userName.lowercased()
-        return TeamDirectory.shared.names
-            .filter { name in
-                normalized.isEmpty
-                    || name.lowercased().contains(normalized)
-                    || TeamDirectory.shared.fullName(for: name).lowercased().contains(normalized)
-            }
-            .sorted { left, right in
-                let leftIsCurrent = left.lowercased() == current
-                let rightIsCurrent = right.lowercased() == current
-                if leftIsCurrent != rightIsCurrent { return leftIsCurrent }
-                return false
-            }
-            .map { name in
-                FileMention(
-                    display: name,
-                    insert: name,
-                    kind: "person",
-                    sub: TeamDirectory.shared.fullName(for: name)
-                )
-            }
+        let directory = TeamDirectory.shared
+        return PeopleMentionRanking.names(
+            directory.names,
+            query: query,
+            fullName: directory.fullName(for:),
+            current: ServerConfig.shared.userName
+        )
+        .map { name in
+            FileMention(
+                display: name,
+                insert: name,
+                kind: "person",
+                sub: directory.fullName(for: name)
+            )
+        }
     }
 
     private func merged(
@@ -251,5 +244,31 @@ struct ComposerMentionPalette: View {
             .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
+    }
+}
+
+/// Which teammates an "@" query offers, and in what order: you first, then
+/// the closest match, then the directory's own order. A typo in a name or
+/// full name is forgiven the way the web palette forgives it (`FuzzyMatch`).
+enum PeopleMentionRanking {
+    static func names(
+        _ names: [String],
+        query: String,
+        fullName: (String) -> String,
+        current: String
+    ) -> [String] {
+        let current = current.lowercased()
+        return names
+            .compactMap { name -> (name: String, score: Int)? in
+                let score = FuzzyMatch.best(query, in: [name, fullName(name)])
+                return score > 0 ? (name, score) : nil
+            }
+            .sorted { left, right in
+                let leftIsCurrent = left.name.lowercased() == current
+                let rightIsCurrent = right.name.lowercased() == current
+                if leftIsCurrent != rightIsCurrent { return leftIsCurrent }
+                return left.score > right.score
+            }
+            .map(\.name)
     }
 }

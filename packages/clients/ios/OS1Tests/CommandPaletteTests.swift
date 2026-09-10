@@ -133,4 +133,42 @@ final class CommandPaletteTests: XCTestCase {
         let entries = [command("new", "New session"), session("a", "A conversation")]
         XCTAssertEqual(ids(entries, "zzzz"), [])
     }
+
+    func testATypoStillFindsTheRow() {
+        let entries = [
+            command("archived", "Archived sessions"),
+            session("release", "Release checklist", keywords: ["cut-release"])
+        ]
+        XCTAssertEqual(ids(entries, "relase"), ["release"])
+        XCTAssertEqual(ids(entries, "archvied"), ["archived"])
+        XCTAssertEqual(ids(entries, "chekclist"), ["release"])
+    }
+
+    func testAnAbbreviationFindsTheRowAShortTypoDoesNot() {
+        let entries = [command("desk", "Open the Desk"), session("cut", "Cut the timeline")]
+        XCTAssertEqual(ids(entries, "tmln"), ["cut"])
+        XCTAssertEqual(ids(entries, "cat"), [])
+    }
+
+    func testAnExactPlacementOutranksANearMiss() {
+        let entries = [
+            session("near", "Relase notes", minutesAgo: 1),
+            session("keyword", "Ship it", keywords: ["release"], minutesAgo: 2),
+            session("exact", "Release checklist", minutesAgo: 3)
+        ]
+        XCTAssertEqual(ids(entries, "release"), ["exact", "keyword", "near"])
+    }
+
+    func testANearMissStillOutranksATranscriptOnlyHit() {
+        let entries = [
+            session("content", "Unrelated recent session", minutesAgo: 1),
+            session("near", "Relase notes", minutesAgo: 20)
+        ]
+        let results = CommandPaletteRanking.results(
+            entries,
+            query: "release",
+            contentMatches: ["content"]
+        )
+        XCTAssertEqual(results.map(\.id), ["near", "content"])
+    }
 }

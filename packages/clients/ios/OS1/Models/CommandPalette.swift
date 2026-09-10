@@ -36,11 +36,13 @@ struct CommandPaletteEntry: Identifiable, Equatable, Sendable {
 
 /// Which rows a query keeps, and in what order.
 ///
-/// Deliberately not a fuzzy subsequence matcher: on a list where most rows are
-/// sessions with long, similar titles, subsequence matching turns every query
-/// into a wall of near-misses. Every whitespace-separated token has to appear
-/// somewhere in the row, and where it appears is the score — the title's start
-/// beats a word inside it, which beats the subtitle or a keyword.
+/// Every whitespace-separated token has to land somewhere in the row, and
+/// where it lands is the score — the title's start beats a word inside it,
+/// which beats the subtitle or a keyword. A token that lands nowhere exactly
+/// may still land as a near miss (`FuzzyMatch`: a bounded edit distance or an
+/// in-word abbreviation), which ranks under every exact placement. It is not a
+/// free subsequence matcher: on a list where most rows are sessions with long,
+/// similar titles, that turns every query into a wall of near-misses.
 enum CommandPaletteRanking {
     /// A row with its searchable text folded once per call. Folding inside the
     /// comparator would redo it for every comparison.
@@ -49,7 +51,20 @@ enum CommandPaletteRanking {
         let order: Int
         let title: String
         let rest: String
+        let titleWords: [String]
+        let restWords: [String]
         var score = 0
+
+        init(entry: CommandPaletteEntry, order: Int) {
+            self.entry = entry
+            self.order = order
+            title = FuzzyMatch.fold(entry.title)
+            rest = FuzzyMatch.fold(
+                ([entry.subtitle].compactMap { $0 } + entry.keywords).joined(separator: " ")
+            )
+            titleWords = FuzzyMatch.words(of: title)
+            restWords = FuzzyMatch.words(of: rest)
+        }
     }
 
     static func results(
@@ -58,18 +73,10 @@ enum CommandPaletteRanking {
         sessionLimit: Int = 40,
         contentMatches: Set<String> = []
     ) -> [CommandPaletteEntry] {
-        let tokens = fold(query).split(separator: " ").map(String.init)
+        let tokens = FuzzyMatch.fold(query).split(separator: " ").map(String.init)
         var matched: [Candidate] = []
         for (order, entry) in entries.enumerated() {
-            var candidate = Candidate(
-                entry: entry,
-                order: order,
-                title: fold(entry.title),
-                rest: fold(
-                    ([entry.subtitle].compactMap { $0 } + entry.keywords)
-                        .joined(separator: " ")
-                )
-            )
+            var candidate = Candidate(entry: entry, order: order)
             var total = 0
             var matchedEveryToken = true
             for token in tokens {
@@ -112,12 +119,20 @@ enum CommandPaletteRanking {
         }
     }
 
+    /// Exact placements score in hundreds; a near miss scores its
+    /// `FuzzyMatch.nearMiss` (20 to 50), lifted by 25 when it is in the title.
+    /// Everything stays at least one, so a transcript-only hit's zero still
+    /// sorts last.
     private static func score(_ token: String, in candidate: Candidate) -> Int? {
-        if candidate.title.hasPrefix(token) { return 4 }
+        if candidate.title.hasPrefix(token) { return 400 }
         if let range = candidate.title.range(of: token) {
-            return startsWord(candidate.title, at: range.lowerBound) ? 3 : 2
+            return startsWord(candidate.title, at: range.lowerBound) ? 300 : 200
         }
-        if candidate.rest.contains(token) { return 1 }
+        if candidate.rest.contains(token) { return 100 }
+        let inTitle = FuzzyMatch.nearMiss(token, in: candidate.titleWords)
+        if inTitle > 0 { return inTitle + 25 }
+        let inRest = FuzzyMatch.nearMiss(token, in: candidate.restWords)
+        if inRest > 0 { return inRest }
         return nil
     }
 
@@ -125,15 +140,6 @@ enum CommandPaletteRanking {
         guard index > text.startIndex else { return true }
         let before = text[text.index(before: index)]
         return !before.isLetter && !before.isNumber
-    }
-
-    /// Lowercased, accent-insensitive, and with runs of whitespace collapsed,
-    /// so "Café  Deploy" and "cafe deploy" are the same haystack.
-    private static func fold(_ text: String) -> String {
-        text
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
-            .split(whereSeparator: \.isWhitespace)
-            .joined(separator: " ")
     }
 }
 

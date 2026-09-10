@@ -502,6 +502,13 @@ struct SessionsListView: View {
                     peopleFilterRaw = SidebarPersonLens.everyone
                     searchText = query
                 }
+                #if os(macOS)
+                // Screenshot hook: open the palette on a query. The rows fill
+                // in as sessions load; `CommandPaletteView` reads the query.
+                if ProcessInfo.processInfo.environment["OS1_COMMAND_PALETTE_QUERY"] != nil {
+                    showPalette = true
+                }
+                #endif
                 #endif
             }
             .onChange(of: quickCapture.request?.id) { openQuickCapture() }
@@ -1666,18 +1673,21 @@ struct SessionsListView: View {
         }
     }
 
+    /// Typo-tolerant, and a session answers to its workspace's name too, so
+    /// "relase" still finds the Release row. `SidebarSearch` holds the rule.
     private func sessionMatchesMetadata(_ session: Session, query: String) -> Bool {
-        [session.title, session.effectiveRepo, session.branch, session.id]
-            .compactMap { $0 }
-            .contains { $0.lowercased().contains(query) }
+        SidebarSearch.matches(
+            session,
+            workspaceName: SidebarSearch.name(of: session, in: viewModel.workspaceNames),
+            query: query
+        )
     }
 
     private func workspaceMatchesMetadata(
         _ workspace: SidebarWorkspace,
         query: String
     ) -> Bool {
-        workspace.title.lowercased().contains(query)
-            || workspace.sessions.contains { sessionMatchesMetadata($0, query: query) }
+        SidebarSearch.matches(workspace, workspaceNames: viewModel.workspaceNames, query: query)
     }
 
     /// Snippets explain only transcript-only hits. A metadata match already
