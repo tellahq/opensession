@@ -27,6 +27,9 @@
 //   - The tab re-hydrates when it becomes visible again, so a window left open
 //     for a day converges with what you did on your phone instead of showing
 //     yesterday's map until a reload.
+//   - A server push (`user_map_changed`) re-hydrates the named map, because a
+//     desktop window that stays visible never gets that visibility change: a
+//     workspace claimed on the phone stayed out of its sidebar until reload.
 //
 // lib/user-pref.ts is the scalar counterpart (one value, localStorage-backed);
 // lib/pins.ts stays hand-rolled because it is an ordered array with a legacy
@@ -74,11 +77,23 @@ export interface UserMap<V> {
   ready: () => boolean;
   /** Pull the server map in. Runs on load and user switch; exported for tests. */
   hydrate: (user?: string) => Promise<void>;
+  /** Re-read the map after another client wrote it, when it is this user's. */
+  resync: (user: string) => Promise<void>;
+}
+
+// Maps that answer a server push, by the name the frame carries.
+const registry = new Map<string, UserMap<never>["resync"]>();
+
+/** A `user_map_changed` frame: re-read that map if it belongs to this user. */
+export function resyncUserMap(name: string, user: string): Promise<void> {
+  return registry.get(name)?.(user) ?? Promise.resolve();
 }
 
 export function makeUserMap<V>(opts: {
   /** Window event dispatched whenever the map changes. */
   changeEvent: string;
+  /** The name a `user_map_changed` push refers to this map by. */
+  name?: string;
   fetchMap: (user: string) => Promise<UserMapEntries<V>>;
   /** Persist only what changed. Must reject on failure so the intent is kept. */
   saveDelta: (user: string, delta: MapDelta<V>) => Promise<object | void>;
@@ -267,6 +282,15 @@ export function makeUserMap<V>(opts: {
     return () => window.removeEventListener(opts.changeEvent, handler);
   }
 
+  // The push names the person the way the server resolved them; the picker
+  // name may differ in case. Another person's write is not ours to fetch.
+  function resync(user: string): Promise<void> {
+    const me = currentUser();
+    if (user.trim().toLowerCase() !== me.trim().toLowerCase())
+      return Promise.resolve();
+    return hydrate(me);
+  }
+
   if (hasDom()) {
     whenCurrentUserReady((user) => void hydrate(user));
     window.addEventListener(USER_CHANGE_EVENT, () => void hydrate());
@@ -278,5 +302,6 @@ export function makeUserMap<V>(opts: {
       });
   }
 
-  return { get, update, onChanged, ready, hydrate };
+  if (opts.name) registry.set(opts.name, resync);
+  return { get, update, onChanged, ready, hydrate, resync };
 }

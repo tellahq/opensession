@@ -366,6 +366,9 @@ export function useSessions({
       if (message.type === "sessions_invalidated") onInvalidated();
       else if (message.type === "session_row") onRow(message.row);
       else if (message.type === "session_row_removed") onRowRemoved(message.id);
+      // Lanes, snoozes and hides shape the server-side sidebar projection, so
+      // a write from another device changes which rows this list carries.
+      else if (message.type === "user_map_changed") onInvalidated();
     });
   }, [addHandler]);
 

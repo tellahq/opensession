@@ -14,6 +14,7 @@ export const SNOOZE_SOMEDAY = "someday";
 
 const store = userMap.makeUserMap<string>({
   changeEvent: CHANGE_EVENT,
+  name: "snoozes",
   fetchMap: fetchSnoozes,
   saveDelta: saveSnoozesApi,
 });

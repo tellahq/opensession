@@ -47,6 +47,7 @@ async function fetchLaneMap(user: string): Promise<Record<string, Lane>> {
 
 const store = UserMap.makeUserMap<Lane>({
   changeEvent: CHANGE_EVENT,
+  name: "lanes",
   fetchMap: fetchLaneMap,
   saveDelta: (user, delta) => saveLanesApi(user, delta),
 });

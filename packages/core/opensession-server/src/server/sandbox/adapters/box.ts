@@ -1442,9 +1442,33 @@ async function recoverBoxRepoTemplate(cfg: BoxClientConfig, repoId: string) {
     snapshot = await getNamedSnapshot(cfg, name);
   }
   if (snapshot?.status !== "ready") return null;
-  writeRemoteRepoTemplate("box", repoId, name);
+  await recordBoxRepoTemplate(cfg, repoId, name);
   console.log(`[sandbox:box] recovered completed repo template ${name}`);
   return readRemoteRepoTemplate("box", repoId);
+}
+
+/** Point the local mapping at `name` and drop the snapshot it replaced. Box
+ * caps named snapshots per account (10 at the time of writing), so every
+ * superseded template must go, best-effort, or publication starts failing
+ * with `named_snapshot_limit` after a handful of toolchain changes. */
+async function recordBoxRepoTemplate(
+  cfg: BoxClientConfig,
+  repoId: string,
+  name: string,
+): Promise<void> {
+  const { previous } = writeRemoteRepoTemplate("box", repoId, name);
+  if (!previous?.artifactId || previous.artifactId === name) return;
+  try {
+    await deleteNamedSnapshot(cfg, previous.artifactId);
+    console.log(
+      `[sandbox:box] deleted superseded repo template ${previous.artifactId}`,
+    );
+  } catch (error) {
+    console.warn(
+      `[sandbox:box] could not delete superseded repo template ${previous.artifactId}:`,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }
 
 async function deleteNamedSnapshot(
@@ -1473,12 +1497,21 @@ async function waitForNamedSnapshotGone(
   );
 }
 
-async function stopBox(cfg: BoxClientConfig, boxId: string): Promise<void> {
+async function stopBox(
+  cfg: BoxClientConfig,
+  boxId: string,
+  timeoutMs = 10 * 60_000,
+): Promise<void> {
   const box = await getBox(cfg, boxId);
   if (!box || String(box.state || "") === "archived") return;
   await boxApi(cfg, "POST", `/boxes/${boxId}/stop`, { force: false }, 60_000);
-  await waitForState(cfg, boxId, new Set(["archived"]), 10 * 60_000);
+  await waitForState(cfg, boxId, new Set(["archived"]), timeoutMs);
 }
+
+/** Archiving a prepared tella-fusion workspace (~14 GB) has taken Box longer
+ * than the 10-minute stop wait; the template publish is the one caller that
+ * must outlast it. */
+const TEMPLATE_ARCHIVE_WAIT_MS = 30 * 60_000;
 
 async function archiveAndForgetBox(
   cfg: BoxClientConfig,
@@ -1565,7 +1598,7 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
       // stuck longer than 20 minutes is deleted and rebuilt below instead of
       // blocking every rebuild on the same dead operation forever.
       await waitForNamedSnapshot(cfg, name);
-      writeRemoteRepoTemplate("box", repo.id, name);
+      await recordBoxRepoTemplate(cfg, repo.id, name);
       console.log(
         `[sandbox:box] recovered in-flight post-setup repo template ${name}`,
       );
@@ -1575,7 +1608,7 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
     // a named template from that archived state reuses the completed capture;
     // saving from a running multi-gigabyte tella-fusion Box stayed in `saving`
     // for hours and was repeatedly interrupted by coordinator restarts.
-    await stopBox(cfg, sandboxId);
+    await stopBox(cfg, sandboxId, TEMPLATE_ARCHIVE_WAIT_MS);
     if (existing) {
       await deleteNamedSnapshot(cfg, name);
       await waitForNamedSnapshotGone(cfg, name);
@@ -1588,7 +1621,7 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
       60_000,
     );
     await waitForNamedSnapshot(cfg, name);
-    writeRemoteRepoTemplate("box", repo.id, name);
+    await recordBoxRepoTemplate(cfg, repo.id, name);
     console.log(`[sandbox:box] published post-setup repo template ${name}`);
   },
 

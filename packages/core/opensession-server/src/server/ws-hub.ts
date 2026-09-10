@@ -29,6 +29,25 @@ export function broadcastToAll(msg: object) {
   }
 }
 
+/**
+ * Every socket that belongs to `user`: the verified sign-in first name when
+ * web auth stamped one, else the client-claimed UserPicker name. Both spell
+ * the person the way `requestUser` does, so a per-user store write can tell
+ * exactly that person's other windows and devices.
+ */
+export function broadcastToUser(user: string, msg: object) {
+  const wanted = user.trim().toLowerCase();
+  if (!wanted) return;
+  const payload = JSON.stringify(msg);
+  for (const ws of allClients) {
+    const identity = ws.data.authUser || ws.data.user;
+    if (identity?.trim().toLowerCase() !== wanted) continue;
+    try {
+      ws.send(payload);
+    } catch {}
+  }
+}
+
 // WebSocket client state
 export interface WSClientData {
   watchingSessionId: string | null;

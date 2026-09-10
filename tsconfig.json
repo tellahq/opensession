@@ -17,5 +17,5 @@
     "types": ["bun"]
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules", "dist", "tools/oxlint/anti-slop"]
+  "exclude": ["node_modules", "dist", "artifacts", "tools/oxlint/anti-slop"]
 }

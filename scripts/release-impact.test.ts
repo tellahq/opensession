@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
 import {
   classifyRuntimeComponents,
   classifyRuntimeImpact,
   releaseRuntimePaths,
+  runtimeComponentClosure,
 } from "./release-impact";
 
 const gatewayPath =
@@ -85,5 +87,18 @@ describe("generated release impact", () => {
       kernel: false,
       executor: true,
     });
+  });
+
+  test("includes the session actor worker in the kernel runtime", async () => {
+    const closure = await runtimeComponentClosure(
+      resolve(import.meta.dir, ".."),
+      "kernel",
+    );
+
+    expect(
+      closure.has(
+        "packages/core/opensession-server/src/server/session-kernel/store.ts",
+      ),
+    ).toBe(true);
   });
 });

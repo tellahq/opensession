@@ -107,6 +107,7 @@ import {
   receivePins,
   unpin,
 } from "./lib/pins";
+import { resyncUserMap } from "./lib/user-map";
 import { ARCHIVED_PAGE_COLUMN } from "./lib/archived-classes";
 import { PR_PAGE_COLUMN } from "./lib/pr-list-classes";
 import { repoLabel } from "./lib/repo-label";
@@ -555,6 +556,10 @@ export function AppContent({
       }
       if (msg.type === "pins_changed") {
         receivePins(msg.user, msg.pins);
+        return;
+      }
+      if (msg.type === "user_map_changed") {
+        void resyncUserMap(msg.map, msg.user);
         return;
       }
       if (msg.type === "mention") {

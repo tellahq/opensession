@@ -31,6 +31,7 @@ const CHANGE_EVENT = "opensession-hides-changed";
 // through.
 const store = userMap.makeUserMap<string>({
   changeEvent: CHANGE_EVENT,
+  name: "hides",
   fetchMap: fetchHides,
   saveDelta: saveHidesApi,
 });

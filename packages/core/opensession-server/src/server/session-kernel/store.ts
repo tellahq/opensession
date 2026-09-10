@@ -1797,6 +1797,14 @@ export class SessionKernelStore {
     // as already acknowledged. It never makes run/command/outbox state
     // ambiguous, so unrelated live state must not strand the whole session.
     if (commandKind === "transcript:ack_wake") return true;
+    // Reading the quarantine row cannot mutate session state. The central
+    // quarantine only records that the isolated read failed, so release it as
+    // soon as the isolated store is readable again, even during a live run.
+    if (commandKind === "storage:quarantine-read") return true;
+    // Runtime work discovery only reads due timers and outbox rows. A failed
+    // scan cannot leave an operation half-applied, so existing work must not
+    // prevent the session from being scanned again.
+    if (commandKind === "runtime:scan") return true;
     // Older workers evaluated critical-settlement handling before recognizing
     // SessionQuarantinedError. The rejected operation never executed, but the
     // handler could persist its rejection as a second quarantine in the other

@@ -100,6 +100,24 @@ describe("remote repo template index", () => {
     mod.writeRemoteRepoTemplate("daytona", "app", "im-1");
     updateSandboxConnection("daytona", { settings: { snapshot: "base-v2" } });
     expect(mod.readRemoteRepoTemplate("daytona", "app")).toBeNull();
+    // The stale artifact is still reported so the provider copy gets deleted.
+    expect(mod.readRemoteRepoTemplate("daytona", "app")).toBeNull();
+    const { previous } = mod.writeRemoteRepoTemplate("daytona", "app", "im-2");
+    expect(previous?.artifactId).toBe("im-1");
+    expect(mod.readRemoteRepoTemplate("daytona", "app")?.artifactId).toBe(
+      "im-2",
+    );
+  });
+
+  test("invalidation still reports a stale artifact for cleanup", async () => {
+    const mod = await import(`./remote-repo-template?stale=${Math.random()}`);
+    mod.writeRemoteRepoTemplate("daytona", "app", "im-1");
+    updateSandboxConnection("daytona", { settings: { snapshot: "base-v3" } });
+    expect(mod.readRemoteRepoTemplate("daytona", "app")).toBeNull();
+    expect(mod.invalidateRemoteRepoTemplate("daytona", "app")?.artifactId).toBe(
+      "im-1",
+    );
+    expect(mod.invalidateRemoteRepoTemplate("daytona", "app")).toBeNull();
   });
 
   test("replacements report the old artifact for provider cleanup", async () => {

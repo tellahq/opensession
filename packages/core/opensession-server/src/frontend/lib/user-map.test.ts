@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type MapDelta, makeUserMap } from "./user-map";
+import { type MapDelta, makeUserMap, resyncUserMap } from "./user-map";
 
 // A store with the server side driven by hand. There is no DOM under the test
 // runner, so nothing auto-hydrates and no retry timer is armed: every
@@ -257,5 +257,59 @@ describe("makeUserMap", () => {
     await h.store.hydrate();
     expect(h.store.update(() => null)).toEqual({ a: "1" });
     expect(h.saves).toEqual([]);
+  });
+
+  // A desktop window that stays visible never gets the visibilitychange that
+  // would otherwise pull in what the phone wrote. The server's push does.
+  test("a push for this user re-reads the map", async () => {
+    const h = harness();
+    h.serves({});
+    await h.store.hydrate();
+
+    h.serves({ "os-1": "mine" });
+    await h.store.resync("ANN");
+    expect(h.store.get()).toEqual({ "os-1": "mine" });
+  });
+
+  test("a push for another person is not fetched", async () => {
+    const h = harness();
+    h.serves({});
+    await h.store.hydrate();
+
+    h.serves({ "os-1": "mine" });
+    await h.store.resync("bob");
+    expect(h.store.get()).toEqual({});
+  });
+
+  test("a push keeps an unconfirmed write on top of the re-read map", async () => {
+    const h = harness();
+    h.serves({});
+    await h.store.hydrate();
+    h.defersSave();
+    h.store.update((map) => ({ ...map, "os-2": "mine" }));
+
+    h.serves({ "os-1": "mine" });
+    await h.store.resync("ann");
+    expect(h.store.get()).toEqual({ "os-1": "mine", "os-2": "mine" });
+    h.resolveSave();
+  });
+
+  test("a named map answers the frame by name", async () => {
+    const fetched: string[] = [];
+    const store = makeUserMap<string>({
+      changeEvent: "test-named-map-changed",
+      name: "test-named",
+      fetchMap: async (user) => {
+        fetched.push(user);
+        return { "os-1": "mine" };
+      },
+      saveDelta: async () => {},
+      currentUser: () => "ann",
+    });
+    await resyncUserMap("test-named", "Ann");
+    expect(fetched).toEqual(["ann"]);
+    expect(store.get()).toEqual({ "os-1": "mine" });
+    await resyncUserMap("no-such-map", "Ann");
+    expect(fetched).toEqual(["ann"]);
   });
 });
