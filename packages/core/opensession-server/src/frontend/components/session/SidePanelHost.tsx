@@ -29,6 +29,7 @@ interface SidePanelHostProps {
   terminalMounted: boolean;
   onTerminalMount: () => void;
   sessionId: string;
+  pinned?: ReactNode;
   changes: ReactNode;
   portals: ReactNode;
   agents: ReactNode;
@@ -51,6 +52,7 @@ export function SidePanelHost({
   terminalMounted,
   onTerminalMount,
   sessionId,
+  pinned,
   changes,
   portals,
   agents,
@@ -65,7 +67,7 @@ export function SidePanelHost({
       {!isPhone && available && open ? (
         <div className={PANEL_SHELL} style={style}>
           {resizeHandle}
-          {hasWorkspace && (
+          {hasWorkspace && !pinned && (
             <div className={PANEL_TABS}>
               <button
                 type="button"
@@ -131,19 +133,20 @@ export function SidePanelHost({
             </div>
           )}
           <div className={PANEL_BODY}>
-            {page === "changes"
-              ? changes
-              : page === "portals"
-                ? portals
-                : page === "agents"
-                  ? agents
-                  : null}
+            {pinned ??
+              (page === "changes"
+                ? changes
+                : page === "portals"
+                  ? portals
+                  : page === "agents"
+                    ? agents
+                    : null)}
             {/* Keep terminals mounted while switching panel tabs so their PTYs
                 survive. Closing the panel still closes its terminals. */}
             {hasWorkspace && terminalMounted && (
               <div
                 className={
-                  page === "terminal"
+                  !pinned && page === "terminal"
                     ? "flex h-full min-h-0 flex-col"
                     : "hidden"
                 }

@@ -732,6 +732,7 @@ export function SessionViewer({
   const { activePanelOpen, setActivePanelOpen } = viewState.panel;
   const { panelPage, setPanelPage } = viewState.panel;
   const { panelTerminalMounted, setPanelTerminalMounted } = viewState.panel;
+  const { pinnedPortal, setPinnedPortal } = viewState.panel;
   const { assetFiles, refreshAssets, assetPaths } = viewState.assets;
   const { selectedAssetPath, setSelectedAssetPath } = viewState.assets;
   const { overlayAssetPath, setOverlayAssetPath } = viewState.assets;
@@ -1862,6 +1863,22 @@ export function SessionViewer({
             activePortal: portalTarget,
             onBack: () => setActivePanelOpen(false),
             onOpenPortal: openPortal,
+            onPinPortal: (target) => {
+              setPinnedPortal(target);
+              setActivePanelOpen(true);
+              openSession?.(session.id);
+            },
+            pinnedPortal,
+            onClosePinnedPortal: () => {
+              setPinnedPortal(null);
+              setActivePanelOpen(false);
+            },
+            onExpandPinnedPortal: () => {
+              if (!pinnedPortal) return;
+              setPinnedPortal(null);
+              setActivePanelOpen(false);
+              openPortal?.(pinnedPortal);
+            },
             onStartPortal: startDeclaredPortal,
             onPortalAction: async (name, action) => {
               setPreviewStatus(await portalActionApi(session.id, name, action));

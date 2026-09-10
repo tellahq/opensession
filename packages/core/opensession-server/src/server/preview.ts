@@ -348,10 +348,15 @@ async function listenerSnapshotRaw(): Promise<string> {
     return listenerSnapshot.raw;
   }
   if (!listenerSnapshotRefresh) {
-    listenerSnapshotRefresh = $`ss -tlnpH`
-      .quiet()
-      .nothrow()
-      .text()
+    const snapshot =
+      process.platform === "darwin"
+        ? $`/usr/sbin/lsof -nP -iTCP -sTCP:LISTEN -F pn`
+            .quiet()
+            .nothrow()
+            .text()
+            .then(macListenerRows)
+        : $`ss -tlnpH`.quiet().nothrow().text();
+    listenerSnapshotRefresh = snapshot
       .then((raw) => {
         listenerSnapshot = { raw, at: Date.now() };
         return raw;
@@ -361,6 +366,20 @@ async function listenerSnapshotRaw(): Promise<string> {
       });
   }
   return await listenerSnapshotRefresh;
+}
+
+/** Normalize lsof's machine-readable fields to the same local-address and
+ * pid columns consumed by the Linux listener parser. macOS does not ship ss. */
+export function macListenerRows(raw: string): string {
+  let pid = "";
+  const rows: string[] = [];
+  for (const line of raw.split("\n")) {
+    if (/^p\d+$/.test(line)) pid = line.slice(1);
+    else if (line.startsWith("n") && /:\d+$/.test(line)) {
+      rows.push(`LISTEN 0 0 ${line.slice(1)} *:* ${pid ? `pid=${pid}` : ""}`);
+    }
+  }
+  return rows.join("\n");
 }
 
 /** Select socket rows by the local-address column, not by a loose substring

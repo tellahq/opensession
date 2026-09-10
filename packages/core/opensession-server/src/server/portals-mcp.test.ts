@@ -31,6 +31,7 @@ function fixture(overrides: Partial<VerifiedFixture> = {}): VerifiedFixture {
 async function harness(
   verifyEditorFixture: PortalsMcpContext["verifyEditorFixture"] = async () =>
     fixture(),
+  overrides: Partial<PortalsMcpContext> = {},
 ) {
   const calls: Array<{
     path: string | null;
@@ -55,6 +56,7 @@ async function harness(
     sandbox: async () => null,
     hasSandbox: () => false,
     runner: () => undefined,
+    ...overrides,
   });
   const runtime = await createMcpRuntime({
     mcpServers: [],
@@ -280,6 +282,44 @@ describe("Portals MCP staging routes", () => {
     expect(response.content[0]).toMatchObject({
       type: "text",
       text: expect.stringContaining("/settings/tags"),
+    });
+  });
+});
+
+describe("Simulator Portal MCP", () => {
+  test("the tool is discoverable and refuses Sandbox workspaces without waking them", async () => {
+    let woke = false;
+    const { runtime } = await harness(undefined, {
+      hasSandbox: () => true,
+      sandbox: async () => {
+        woke = true;
+        return null;
+      },
+    });
+    const response = await runtime.callExact(
+      "opensession-portals_start_simulator_portal",
+      { appPath: "Build/App.app" },
+      { toolCallId: "simulator" },
+    );
+    expect(response.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("local Mac workspace"),
+    });
+    expect(woke).toBe(false);
+  });
+
+  test("no workspace cannot create a simulator on the host", async () => {
+    const { runtime } = await harness(undefined, {
+      worktreeDir: () => undefined,
+    });
+    const response = await runtime.callExact(
+      "opensession-portals_start_simulator_portal",
+      { appPath: "App.app" },
+      { toolCallId: "simulator-no-workspace" },
+    );
+    expect(response.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("no workspace"),
     });
   });
 });

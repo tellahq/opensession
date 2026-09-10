@@ -1,5 +1,6 @@
 import type { ComponentProps } from "react";
 import { DiffPanel } from "../DiffPanel";
+import { PortalPane } from "../PortalPane";
 import { PortalsPage } from "../PortalsPanel";
 import { SidePanelHost } from "../session/SidePanelHost";
 import { WorkflowPanel } from "../WorkflowPanel";
@@ -74,6 +75,10 @@ interface PortalContent {
   onOpenPortal: PortalsProps["onOpenPortal"];
   onStartPortal: PortalsProps["onStartPortal"];
   onPortalAction: PortalsProps["onPortalAction"];
+  pinnedPortal: PortalsProps["activePortal"];
+  onPinPortal: PortalsProps["onPinPortal"];
+  onClosePinnedPortal: () => void;
+  onExpandPinnedPortal: () => void;
 }
 
 interface AgentContent {
@@ -127,6 +132,15 @@ export function SessionViewerSidePanel({
         terminalMounted={shell.terminalMounted}
         onTerminalMount={shell.onTerminalMount}
         sessionId={changes.sessionId}
+        pinned={
+          portals.pinnedPortal ? (
+            <PortalPane
+              target={portals.pinnedPortal}
+              onClose={portals.onClosePinnedPortal}
+              onExpand={portals.onExpandPinnedPortal}
+            />
+          ) : undefined
+        }
         changes={
           <>
             <section
@@ -181,6 +195,7 @@ export function SessionViewerSidePanel({
             onBack={portals.onBack}
             hideHeader
             onOpenPortal={portals.onOpenPortal}
+            onPinPortal={portals.onPinPortal}
             onStartPortal={portals.onStartPortal}
             onPortalAction={portals.onPortalAction}
           />

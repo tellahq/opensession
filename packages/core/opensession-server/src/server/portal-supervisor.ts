@@ -18,6 +18,7 @@ import {
 } from "fs";
 import { join, resolve } from "path";
 import { audit } from "./audit";
+import { portalHostCommand, spawnPortalHost } from "./portal-host-process";
 import { ensureAgentAwsCredsFile } from "./aws-creds";
 import { configuredPaths, configuredServer } from "./config";
 import {
@@ -74,6 +75,8 @@ export type PortalRecord = {
   lastAccessedAt?: string;
   sleptAt?: string;
   readyTimeoutMs?: number;
+  /** Time to release external resources, such as a private simulator device. */
+  shutdownGraceMs?: number;
   lastError?: string;
 };
 
@@ -294,7 +297,10 @@ function hostPortalOps(worktreeDir: string): PortalOps {
   };
 }
 
-type PortalProcess = Pick<PortalRecord, "pid" | "scopeUnit">;
+type PortalProcess = Pick<
+  PortalRecord,
+  "pid" | "scopeUnit" | "shutdownGraceMs"
+>;
 
 async function portalProcessAlive(
   ops: PortalOps,
@@ -455,6 +461,7 @@ async function startPortal(
     description?: string;
     defaultPath?: string;
     readyTimeoutMs?: number;
+    shutdownGraceMs?: number;
     /** Host Portals record their owner so a restarted server can reap them; Sandbox Portals die with the Sandbox. */
     ownsProcess: boolean;
     allocatePort: (records: PortalRecord[]) => Promise<number>;
@@ -522,6 +529,9 @@ async function startPortal(
       ? { defaultPath: normalizePortalPath(input.defaultPath) }
       : {}),
     ...(input.readyTimeoutMs ? { readyTimeoutMs: input.readyTimeoutMs } : {}),
+    ...(input.shutdownGraceMs
+      ? { shutdownGraceMs: Math.min(30_000, input.shutdownGraceMs) }
+      : {}),
     state: "starting",
     startedAt: new Date().toISOString(),
   };
@@ -586,8 +596,16 @@ async function terminatePortalProcess(
   const pid = processRef.pid;
   if (!pid || pid < 2 || !(await ops.pidAlive(pid))) return;
   await ops.signalGroup(pid, "SIGTERM");
-  await Bun.sleep(1_500);
-  if (await ops.pidAlive(pid)) await ops.signalGroup(pid, "SIGKILL");
+  const grace = Math.min(
+    30_000,
+    Math.max(1_500, processRef.shutdownGraceMs ?? 1_500),
+  );
+  const deadline = Date.now() + grace;
+  do {
+    await Bun.sleep(Math.min(250, Math.max(0, deadline - Date.now())));
+    if (!(await ops.pidAlive(pid))) return;
+  } while (Date.now() < deadline);
+  await ops.signalGroup(pid, "SIGKILL");
 }
 
 async function stopPortal(ops: PortalOps, name: string): Promise<PortalRecord> {
@@ -639,6 +657,7 @@ export async function startPortalService(input: {
   description?: string;
   defaultPath?: string;
   readyTimeoutMs?: number;
+  shutdownGraceMs?: number;
   /** Narrow, caller-owned additions for a trusted declared recipe. */
   env?: Record<string, string>;
 }): Promise<PortalRecord & { url: string }> {
@@ -668,7 +687,7 @@ export async function startPortalService(input: {
       launch: async ({ name, command, port, url }) => {
         mkdirSync(logDir, { recursive: true });
         const log = openSync(logPath, "w");
-        const directCommand = ["setsid", "bash", "-lc", `exec ${command}`];
+        const directCommand = portalHostCommand(command);
         const portalEnv = {
           PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
           HOME: process.env.HOME || "/tmp",
@@ -687,21 +706,18 @@ export async function startPortalService(input: {
           name,
           { env: portalEnv },
         );
-        const proc = Bun.spawn(scoped.command, {
-          cwd: input.worktreeDir,
-          // Portal commands are user-authored code. Do not hand them the Open
-          // Session service environment, which can include operator credentials.
-          env: scoped.env,
-          stdin: "ignore",
-          stdout: log,
-          stderr: log,
-        });
-        closeSync(log);
-        proc.unref();
-        return {
-          pid: proc.pid,
-          ...(scoped.unit ? { scopeUnit: scoped.unit } : {}),
-        };
+        try {
+          const pid = await spawnPortalHost({
+            command: scoped.command,
+            cwd: input.worktreeDir,
+            // Portal commands never inherit the gateway's credentials.
+            env: scoped.env,
+            log,
+          });
+          return { pid, ...(scoped.unit ? { scopeUnit: scoped.unit } : {}) };
+        } finally {
+          closeSync(log);
+        }
       },
     });
     registerHostPortal(input.worktreeDir, started, true);
@@ -1034,6 +1050,7 @@ export function wakeHostPortalRoute(
     description: found.record.description,
     defaultPath: found.record.defaultPath,
     readyTimeoutMs: found.record.readyTimeoutMs ?? 180_000,
+    shutdownGraceMs: found.record.shutdownGraceMs,
   }).finally(() => hostPortalWakes.delete(key));
   hostPortalWakes.set(key, wake);
   return wake;
@@ -1301,6 +1318,7 @@ export async function restartPortalService(input: {
     description: current.description,
     defaultPath: current.defaultPath,
     readyTimeoutMs: input.readyTimeoutMs ?? current.readyTimeoutMs,
+    shutdownGraceMs: current.shutdownGraceMs,
   });
 }
 

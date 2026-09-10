@@ -52,7 +52,7 @@ touches an in-process tool:
 | [`opensession-repos`](#opensession-repos) | 5 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 9 | interactive | Needs a session id. |
 | [`opensession-web`](#opensession-web) | 3 | interactive, goal wake | Needs a session id. |
-| [`opensession-portals`](#opensession-portals) | 7 | interactive | Needs a session id. |
+| [`opensession-portals`](#opensession-portals) | 8 | interactive | Needs a session id. |
 | [`opensession-desktop`](#opensession-desktop) | 8 | interactive | Needs a sandboxed session. |
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | Needs a session id. |
 | [`opensession-slack`](#opensession-slack) | 1 | interactive | Needs a session id. |
@@ -72,7 +72,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-31 servers, 135 tools.
+31 servers, 136 tools.
 
 ## opensession-sessions
 
@@ -632,6 +632,12 @@ Supervised HTTP/WebSocket services for this session's workspace.
 - **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
 - **Runs** interactive
 - **Condition** Needs a session id.
+
+### `start_simulator_portal`
+
+`mcp__opensession-portals__start_simulator_portal` · input: `appPath` (string, required), `deviceType` (string), `runtime` (string)
+
+Start this session's interactive iOS Simulator Portal on the local Mac. Requires full Xcode, an iOS Simulator runtime, idb and idb_companion on PATH, and an already-built simulator .app inside the workspace. Creates a private simulator, streams its screen and forwards taps, swipes and typing. Returns the authenticated viewer URL; the viewer reports boot or dependency errors. Repeated calls reuse the Portal. Use stop_portal/restart_portal with the returned name. Not available in Sandboxes or remote Runner workspaces. Does not build, sign, release, or enable hot reload.
 
 ### `start_portal`
 

@@ -82,6 +82,15 @@ Both pages say nothing about the Sandbox beyond that.
 Current boundary: Portals inherit the instance's authenticated team boundary;
 there is no per-session ACL narrower than that team boundary yet.
 
+### iOS simulators
+
+On a local Mac, agents can use `start_simulator_portal` to open an already-built
+simulator `.app` through an idb-backed viewer. It uses the same authenticated
+Portal routing, with a private simulator and companion per viewer process.
+Desktop users can pin any running Portal beside the conversation; phones retain
+the full-width view. See [iOS simulator Portals](simulator-portals.md) for setup,
+agent arguments and limits.
+
 ## Agent-to-agent communication
 
 Interactive agents receive the `opensession-sessions` tools. Together they
