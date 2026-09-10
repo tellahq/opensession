@@ -25,6 +25,18 @@ contextBridge.exposeInMainWorld("os1", {
     remove: (id) => ipcRenderer.invoke("os1:organizations-remove", id),
     manage: () => ipcRenderer.send("os1:organizations-manage"),
   },
+  // Main accepts these only from its dedicated local network settings windows.
+  network: {
+    state: () => ipcRenderer.invoke("os1:network-state"),
+    save: (id, binding) => ipcRenderer.invoke("os1:network-save", id, binding),
+    close: () => ipcRenderer.send("os1:network-close"),
+    openTailscale: () => ipcRenderer.send("os1:network-open-tailscale"),
+    onState: (cb) => {
+      const listener = (_event, state) => cb(state);
+      ipcRenderer.on("os1:network-state", listener);
+      return () => ipcRenderer.removeListener("os1:network-state", listener);
+    },
+  },
   // Electron does not connect Chromium's Web Speech API to a recognition
   // service. Stream the renderer's microphone PCM to the shell's signed native
   // helper instead, which uses Apple's on-device recognizer when available.
