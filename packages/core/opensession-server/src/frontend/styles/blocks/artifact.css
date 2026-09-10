@@ -29,12 +29,6 @@
   font-weight: 600;
   color: var(--text);
 }
-.md-artifact-tag {
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: var(--hover);
-  font-size: 11px;
-}
 .md-artifact-spacer {
   flex: 1;
 }

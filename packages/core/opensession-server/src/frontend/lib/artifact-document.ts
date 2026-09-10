@@ -1,39 +1,45 @@
 /**
  * The pure half of an ```artifact / ```svg block: what goes into the
- * sandboxed frame's `srcdoc`, and the sandbox and CSP that keep it there.
+ * sandboxed frame's `srcdoc`, and the sandbox and policy that keep it there.
  *
  * An artifact is untrusted by definition: it is whatever the agent wrote,
  * and the frame exists so it can be anything without touching the page.
  * Three layers hold that line, and every one of them is decided here so a
  * test can read the strings:
  *
- * - The `sandbox` attribute (artifactSandbox): never `allow-same-origin`,
- *   so the document has an opaque origin and no reach into the app's DOM,
- *   storage or cookies; never `allow-top-navigation`, `allow-forms` or
- *   `allow-popups`. `allow-scripts` only when the fence asked.
- * - A `<meta http-equiv="Content-Security-Policy">` in the document head
- *   (artifactCsp): `default-src 'none'`, so nothing inside the frame can
- *   fetch, load or phone home; inline styles allowed; `data:` images, so a
- *   diagram can carry its own pictures; inline scripts only with scripts on.
- * - The document is written by `srcdoc` and the app never reads back into
- *   it. With scripts on, the only channel out is a `postMessage` carrying
- *   the document's height (ARTIFACT_HEIGHT_MESSAGE), which the block clamps.
+ * - `sandbox=""` (ARTIFACT_SANDBOX): every restriction the browser has. No
+ *   scripts, so nothing in the frame acts on its own; an opaque origin, so
+ *   there is no reach into the app's DOM, storage or cookies; no forms, no
+ *   popups, no navigating the page; and, since scripts are off, no
+ *   automatic features either, which is what keeps a `<meta refresh>` from
+ *   steering the frame elsewhere. Scripts are never on: a frame that may
+ *   run script may also navigate itself, `location.href = …` is an
+ *   outbound request no policy the browser enforces today can stop, and a
+ *   frame that can do that is not the frame this block promises.
+ * - A `<meta http-equiv="Content-Security-Policy">` (artifactCsp) with
+ *   `default-src 'none'`, so nothing inside the frame fetches or loads from
+ *   anywhere; inline styles and `data:` images and fonts are the whole
+ *   allowance.
+ * - The policy is written into a head the block itself opens, ahead of the
+ *   first byte of the artifact (artifactHtmlDocument). Nothing in the
+ *   source can get in front of it, and a policy in force is only ever
+ *   tightened by what follows, so a document with its own `<head>`, a
+ *   comment that looks like one, or no head at all is held the same way.
+ *   The same head aims every link at a new window (`<base target>`), which
+ *   the sandbox refuses: a click inside the frame goes nowhere, rather than
+ *   loading a foreign page into it.
  *
  * A fragment is wrapped in a minimal document that takes the app's own
- * background and text colour, so a snippet reads as native in both themes;
- * a complete document keeps its own head and gets the CSP and the base
- * style prepended, where the author's later rules win. An SVG becomes an
- * `<img src="data:image/svg+xml,…">` inside the same frame: an image never
- * runs script, never loads anything external, and sizes itself.
+ * background and text colour, so a snippet reads as native in both themes.
+ * A complete document simply follows the block's head: the parser folds a
+ * second `<html>` into the first (its attributes kept) and drops a second
+ * `<head>` open tag, so the author's own head content lands after the base
+ * style and wins. An SVG becomes an `<img src="data:image/svg+xml,…">`
+ * inside the same frame: an image never runs script, never loads anything
+ * external, and sizes itself.
  */
 
-import { z } from "zod";
 import { readDiagramSvg } from "./diagram-media";
-
-export interface ArtifactOptions {
-  /** `artifact scripts` in the fence info string. */
-  scripts: boolean;
-}
 
 export interface ArtifactTheme {
   /** The page's --bg, resolved. */
@@ -47,52 +53,28 @@ export interface ArtifactTheme {
   scheme: "light" | "dark";
 }
 
-/** The frame's default height before anything reports one, and the range a
- *  report or a drag is clamped to. In CSS pixels. */
+/** The frame's default height, and the range a drag is clamped to. In CSS
+ *  pixels. */
 export const ARTIFACT_DEFAULT_HEIGHT = 320;
 export const ARTIFACT_MIN_HEIGHT = 120;
 export const ARTIFACT_MAX_HEIGHT = 900;
 
-/** The `type` of the height message a scripted artifact posts to its parent.
- *  Kept obscure enough that a stray postMessage from elsewhere is not read
- *  as one; the height itself is clamped regardless. */
-export const ARTIFACT_HEIGHT_MESSAGE = "opensession-artifact-height";
-
-/** `artifact scripts` turns scripts on. Any other word is ignored. */
-export function artifactOptionsFromInfo(
-  info: string | undefined,
-): ArtifactOptions {
-  const words = (info ?? "").trim().toLowerCase().split(/\s+/).slice(1);
-  return { scripts: words.includes("scripts") };
-}
-
-/** The frame's `sandbox` attribute. An empty string is the fully locked
- *  sandbox, which is what a static artifact gets. */
-export function artifactSandbox(options: ArtifactOptions): string {
-  return options.scripts ? "allow-scripts" : "";
-}
+/** The frame's `sandbox` attribute. Empty is the fully locked sandbox: no
+ *  token is ever added, see the header. */
+export const ARTIFACT_SANDBOX = "";
 
 /** The policy written into the document head. `default-src 'none'` is the
  *  whole point; the rest re-opens exactly what an inline document needs. */
-export function artifactCsp(options: ArtifactOptions): string {
-  const directives = [
+export function artifactCsp(): string {
+  return [
     "default-src 'none'",
     "img-src data:",
     "style-src 'unsafe-inline'",
     "font-src data:",
     "form-action 'none'",
     "base-uri 'none'",
-  ];
-  if (options.scripts) directives.push("script-src 'unsafe-inline'");
-  return directives.join("; ");
+  ].join("; ");
 }
-
-/** The one message the app reads from inside a frame. Parse `event.data`
- *  with this at the window listener, then clamp what it carries. */
-export const artifactHeightMessageSchema = z.object({
-  type: z.literal(ARTIFACT_HEIGHT_MESSAGE),
-  height: z.number(),
-});
 
 export function clampArtifactHeight(height: number): number {
   if (!Number.isFinite(height)) return ARTIFACT_DEFAULT_HEIGHT;
@@ -116,10 +98,6 @@ function cssValue(s: string): string {
   return s.replace(/[<>"{};]/g, "").trim();
 }
 
-function metaCsp(options: ArtifactOptions): string {
-  return `<meta http-equiv="Content-Security-Policy" content="${artifactCsp(options)}">`;
-}
-
 /**
  * The app's own colours as the document's base style. First in the head, so
  * anything the author wrote after it wins; a document that never mentions
@@ -138,21 +116,16 @@ function baseStyle(theme: ArtifactTheme): string {
 }
 
 /**
- * With scripts on the frame can measure itself. The root element's box is
- * the content height (the root's margins never collapse with body's, so
- * body's margin sits inside it), which lets the frame shrink as well as
- * grow, unlike scrollHeight, which never drops below the viewport.
+ * The opening of every artifact document, before any of the source: the
+ * charset, the policy, the link target and the base style. A complete
+ * document's own head content follows it inside the same `<head>`.
  */
-function heightReporter(): string {
+export function artifactDocumentHead(theme: ArtifactTheme): string {
   return (
-    "<script>(function(){" +
-    "var last=-1;" +
-    "function post(){var h=Math.ceil(document.documentElement.getBoundingClientRect().height);" +
-    `if(h!==last){last=h;parent.postMessage({type:${JSON.stringify(ARTIFACT_HEIGHT_MESSAGE)},height:h},"*")}}` +
-    'if(typeof ResizeObserver!=="undefined"){new ResizeObserver(post).observe(document.documentElement);' +
-    'document.addEventListener("DOMContentLoaded",function(){if(document.body)new ResizeObserver(post).observe(document.body)})}' +
-    'window.addEventListener("load",post);post();' +
-    "})()</script>"
+    '<!doctype html><html><head><meta charset="utf-8">' +
+    `<meta http-equiv="Content-Security-Policy" content="${artifactCsp()}">` +
+    '<base target="_blank">' +
+    baseStyle(theme)
   );
 }
 
@@ -161,32 +134,20 @@ export function isCompleteHtmlDocument(source: string): boolean {
   return /^\s*(<!doctype\b|<html\b)/i.test(source);
 }
 
-const HEAD_OPEN = /<head\b[^>]*>/i;
-const HTML_OPEN = /<html\b[^>]*>/i;
-
 /**
  * The `srcdoc` for an HTML artifact. A fragment gets a whole document
- * around it; a complete one gets the policy and base style spliced into
- * its head. Both work while the fence is still streaming: HTML tolerates a
- * document that stops mid-tag.
+ * around it; a complete one follows the block's head as written, where the
+ * parser ignores its doctype and second `<head>` and folds its `<html>`
+ * into the one already open. Both work while the fence is still streaming:
+ * HTML tolerates a document that stops mid-tag.
  */
 export function artifactHtmlDocument(
   source: string,
-  options: ArtifactOptions,
   theme: ArtifactTheme,
 ): string {
-  const head =
-    metaCsp(options) +
-    baseStyle(theme) +
-    (options.scripts ? heightReporter() : "");
-  if (isCompleteHtmlDocument(source)) {
-    if (HEAD_OPEN.test(source))
-      return source.replace(HEAD_OPEN, (open) => `${open}${head}`);
-    if (HTML_OPEN.test(source))
-      return source.replace(HTML_OPEN, (open) => `${open}<head>${head}</head>`);
-    return `<!doctype html><html><head>${head}</head>${source.replace(/^\s*<!doctype\b[^>]*>/i, "")}`;
-  }
-  return `<!doctype html><html><head><meta charset="utf-8">${head}</head><body>${source}</body></html>`;
+  const head = artifactDocumentHead(theme);
+  if (isCompleteHtmlDocument(source)) return head + source;
+  return `${head}</head><body>${source}</body></html>`;
 }
 
 /** Strip an XML prolog, doctype and leading comments so the root <svg> is
@@ -199,7 +160,7 @@ function svgRoot(source: string): string {
 }
 
 /** The SVG's own size, when it declares one, so the frame can be sized to
- *  its aspect ratio before anything loads: a static frame cannot report. */
+ *  its aspect ratio before anything loads: a frame cannot report. */
 export function svgArtifactSize(
   source: string,
 ): { w: number; h: number } | null {
@@ -208,17 +169,15 @@ export function svgArtifactSize(
 
 /**
  * The `srcdoc` for an SVG artifact: the drawing as an image on the app's
- * background, at the frame's width. Scripts are never on for an SVG; an
- * `<img>` would not run them anyway.
+ * background, at the frame's width.
  */
 export function artifactSvgDocument(
   source: string,
   theme: ArtifactTheme,
 ): string {
-  const options: ArtifactOptions = { scripts: false };
   const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgRoot(source))}`;
   return (
-    `<!doctype html><html><head><meta charset="utf-8">${metaCsp(options)}${baseStyle(theme)}` +
+    artifactDocumentHead(theme) +
     "<style>body{margin:0;display:grid;place-items:center;min-height:100vh}img{display:block;width:100%;height:auto}</style>" +
     `</head><body><img src="${escapeHtml(dataUrl)}" alt=""></body></html>`
   );

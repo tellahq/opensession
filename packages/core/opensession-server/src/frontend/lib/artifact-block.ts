@@ -26,8 +26,7 @@ export const artifactUpgrader: FenceUpgrader = {
     const m = await loadFrame().catch(() => null);
     if (!m || !alive() || !root.contains(pre)) return false;
     if (!source.trim()) return false;
-    const info = pre.querySelector("code")?.dataset.info ?? lang;
-    m.mountArtifactBlock(pre, source, lang, info);
+    m.mountArtifactBlock(pre, source, lang);
     return true;
   },
 };

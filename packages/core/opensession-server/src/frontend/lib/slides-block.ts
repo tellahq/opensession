@@ -55,12 +55,14 @@ function loadDeck() {
 /** A fence with nothing in it keeps the plain code block. */
 export const slidesUpgrader: FenceUpgrader = {
   langs: ["slides"],
-  async upgrade({ pre, source, root, alive }) {
+  async upgrade({ pre, source, root, alive, markdown }) {
     const slides = splitSlides(source);
     if (slides.length === 0) return false;
     const m = await loadDeck().catch(() => null);
     if (!m || !alive() || !root.contains(pre)) return false;
-    pre.replaceWith(m.buildSlidesDeck(slides, { expandable: true }).el);
+    pre.replaceWith(
+      m.buildSlidesDeck(slides, { expandable: true, markdown }).el,
+    );
     return true;
   },
 };

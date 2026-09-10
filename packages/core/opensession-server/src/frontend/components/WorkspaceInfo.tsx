@@ -411,7 +411,11 @@ function CommentCard({
               )}
             </div>
             <div className="mb-[5px] min-h-0 flex-1 overflow-y-auto">
-              <MarkdownBody html={html} className="markdown" />
+              <MarkdownBody
+                html={html}
+                className="markdown"
+                markdown={{ repo }}
+              />
             </div>
           </div>
         </div>
@@ -891,6 +895,7 @@ function AgentReviewCard({
                   <div className="min-h-0 overflow-auto px-4 py-3">
                     <MarkdownBody
                       html={reviewHtml}
+                      markdown={{ repo }}
                       className="markdown review-preview-markdown"
                     />
                   </div>

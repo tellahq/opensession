@@ -109,9 +109,8 @@ export function ClampedBody({
   const asMarkdown = shown.length <= FULL_MD_CHARS;
   const repo = useMarkdownRepo();
   const assetPaths = useOpenAssetPaths();
-  const html = asMarkdown
-    ? renderMarkdown(shown, { repo, sessionId, assetPaths })
-    : "";
+  const markdown = { repo, sessionId, assetPaths };
+  const html = asMarkdown ? renderMarkdown(shown, markdown) : "";
 
   const expand = async () => {
     if (wireClamped && !fetched && entry && sessionId) {
@@ -139,7 +138,11 @@ export function ClampedBody({
   return (
     <>
       {asMarkdown ? (
-        <MarkdownBody className={className} html={html || ""} />
+        <MarkdownBody
+          className={className}
+          html={html || ""}
+          markdown={markdown}
+        />
       ) : (
         // A <pre> only for the preserved whitespace: this branch renders a
         // message too long for the markdown pass, which is prose, not code.

@@ -6,6 +6,7 @@ import {
   type FenceUpgrader,
   finalizeFenceUpgrades,
 } from "../lib/fence-upgraders";
+import type { MarkdownContext } from "../lib/markdown";
 import {
   MATH_PLACEHOLDER_MARK,
   upgradeMathPlaceholders,
@@ -66,6 +67,7 @@ export function MarkdownBody({
   html,
   className,
   enhance = true,
+  markdown,
 }: {
   html: string;
   className?: string;
@@ -73,8 +75,17 @@ export function MarkdownBody({
    * stream keeps the cheap, readable marked output and upgrades once its
    * durable message replaces it. */
   enhance?: boolean;
+  /** The context `html` was rendered with, handed to a block that renders
+   * markdown of its own (a slide deck) so its links resolve the same way. */
+  markdown?: MarkdownContext;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Read through a ref by the upgrade effect: callers build the context
+  // object per render, and a new identity must not restart a pass.
+  const markdownRef = useRef(markdown);
+  useEffect(() => {
+    markdownRef.current = markdown;
+  }, [markdown]);
   const [theme, setTheme] = useState<EffectiveTheme>(effectiveTheme);
   const [visible, setVisible] = useState(false);
   // React 19 re-writes innerHTML whenever the dangerouslySetInnerHTML OBJECT
@@ -169,6 +180,7 @@ export function MarkdownBody({
               lang: fence.lang ?? "",
               root: el,
               theme,
+              markdown: markdownRef.current,
               alive: isAlive,
             })
             .catch(() => false);

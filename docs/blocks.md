@@ -147,15 +147,18 @@ in the workspace pane when the session has one.
 An ` ```artifact ` fence holds a complete HTML document or a fragment; a
 fragment is wrapped in a document that takes the app's background, text
 colour and font, so it reads as native in both themes. An ` ```svg ` fence
-holds an SVG, shown as an `<img>` inside the same frame. Both render in an
-`<iframe sandbox>` by `srcdoc`: no same-origin access, no navigation, no
-forms, no popups, and a `Content-Security-Policy` meta in the head with
-`default-src 'none'` (inline styles and `data:` images allowed), so an
-artifact cannot phone home. Scripts are off unless the info string is
-` ```artifact scripts `, which adds `allow-scripts` and inline `script-src`
-and labels the block "Scripts on". A scripted artifact reports its height
-to the page (clamped to 120 to 900px); a static one starts at 320px with a
-drag handle. The header row has a Source toggle (the original fence, whose
+holds an SVG, shown as an `<img>` inside the same frame. Both render in a
+fully locked `<iframe sandbox>` by `srcdoc`: no scripts, no same-origin
+access, no navigation, no forms, no popups. The block opens the document
+itself, with a `Content-Security-Policy` meta (`default-src 'none'`; inline
+styles and `data:` images allowed) and a `<base target="_blank">` ahead of
+the artifact's first byte, so an artifact cannot phone home and a link
+inside it goes nowhere rather than loading a foreign page into the frame; a
+complete document's own head content follows the block's inside the same
+`<head>`. Scripts are never on: a frame that may run script may also
+navigate itself, and nothing the browser enforces stops that. The frame
+starts at 320px with a drag handle (120 to 900px); an SVG takes its own
+aspect ratio. The header row has a Source toggle (the original fence, whose
 copy control copies the source) and an expand button that opens the same
 sandboxed document in a full-width dialog. A fence still streaming renders
 as it arrives.
@@ -166,7 +169,9 @@ A ` ```slides ` fence is markdown split into slides on lines that are
 exactly `---`. Renders as a deck in a 16:9 well: one slide at a time,
 previous/next arrows, dots, a counter, arrow keys when the deck has focus,
 and swipe on a phone. Each slide is ordinary markdown through the app's
-renderer, with two limits: a nested fence inside a slide stays a plain code
+renderer, in the context the surrounding body was rendered with (repo,
+session, assets), so a PR number or a session file links inside the deck
+the way it does outside. Two limits: a nested fence inside a slide stays a plain code
 block (neither upgraded into another block kind nor syntax highlighted,
 since the body's upgrade pass has already run), and a `---` inside such a
 fence belongs to the fence, not the deck. Nest fences by giving the deck a

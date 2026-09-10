@@ -1,9 +1,11 @@
 /**
  * The DOM half of a slides block: one slide at a time in a 16:9 well, with
  * arrows, dots, a counter, the keyboard and a swipe. Each slide is the
- * app's own markdown (renderMarkdown), rendered once up front; a nested
- * fence inside a slide stays a plain code block, since the body's upgrade
- * pass has already run by the time the deck exists.
+ * app's own markdown (renderMarkdown) in the context the surrounding body
+ * was rendered with, so a PR number or a session asset links the same way
+ * inside the deck as outside it; rendered once up front. A nested fence
+ * inside a slide stays a plain code block, since the body's upgrade pass
+ * has already run by the time the deck exists.
  *
  * Built as DOM rather than JSX for the reason every block is: the body it
  * sits in is an innerHTML string. Listeners live on the deck's own nodes
@@ -16,7 +18,7 @@ import {
   expandIconMarkup,
 } from "../components/icons";
 import { openBlockExpand } from "./block-expand";
-import { renderMarkdown } from "./markdown";
+import { type MarkdownContext, renderMarkdown } from "./markdown";
 
 /** How far a finger travels before it turns a page. */
 const SWIPE_DISTANCE = 40;
@@ -41,7 +43,12 @@ function button(className: string, label: string, html: string) {
 
 export function buildSlidesDeck(
   slides: readonly string[],
-  options: { index?: number; expandable: boolean },
+  options: {
+    index?: number;
+    expandable: boolean;
+    /** The context the deck's body was rendered with. */
+    markdown?: MarkdownContext;
+  },
 ): SlidesDeck {
   const count = slides.length;
   let index = Math.min(Math.max(options.index ?? 0, 0), count - 1);
@@ -63,7 +70,7 @@ export function buildSlidesDeck(
     pane.setAttribute("role", "group");
     pane.setAttribute("aria-roledescription", "slide");
     pane.setAttribute("aria-label", `Slide ${i + 1} of ${count}`);
-    pane.innerHTML = renderMarkdown(slide);
+    pane.innerHTML = renderMarkdown(slide, options.markdown);
     stage.append(pane);
     return pane;
   });
@@ -161,7 +168,11 @@ export function buildSlidesDeck(
       openBlockExpand({
         title: "Slides",
         mount(host) {
-          const large = buildSlidesDeck(slides, { index, expandable: false });
+          const large = buildSlidesDeck(slides, {
+            index,
+            expandable: false,
+            markdown: options.markdown,
+          });
           large.el.dataset.expanded = "";
           host.append(large.el);
           large.el.querySelector<HTMLElement>(".md-slides")?.focus();

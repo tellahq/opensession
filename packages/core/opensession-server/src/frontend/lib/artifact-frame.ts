@@ -1,26 +1,21 @@
 /**
  * The DOM half of an artifact block: the sandboxed frame, its header row
- * (label, Source toggle, expand) and the height control under it. The
+ * (label, Source toggle, expand) and the height grip under it. The
  * document inside the frame and the policy on it come from
  * artifact-document.ts, which is where the security lives; this file only
- * puts that document into an <iframe sandbox> and never reads back out of
- * it.
+ * puts that document into an <iframe sandbox> and never reads out of it.
  *
- * Height: a scripted artifact posts its document height (the reporter in
- * artifact-document.ts) and the frame follows it, within limits. A static
- * one cannot report, so it starts at the default and has a grip to drag; an
- * SVG is sized to its own aspect ratio up front. A frame the person has
- * dragged stops following reports.
+ * Height: a frame cannot report its content's height (scripts are off), so
+ * it starts at the default and has a grip to drag; an SVG is sized to its
+ * own aspect ratio up front.
  */
 
 import { expandIconMarkup } from "../components/icons";
 import {
   ARTIFACT_DEFAULT_HEIGHT,
+  ARTIFACT_SANDBOX,
   artifactHtmlDocument,
-  artifactOptionsFromInfo,
-  artifactSandbox,
   artifactSvgDocument,
-  artifactHeightMessageSchema,
   clampArtifactHeight,
   svgArtifactSize,
   type ArtifactTheme,
@@ -29,11 +24,10 @@ import { openBlockExpand } from "./block-expand";
 
 const WRAP_CLASS = "md-artifact-wrap";
 const FRAME_CLASS = "md-artifact-frame";
+const FRAME_SELECTOR = `iframe.${FRAME_CLASS}`;
 
 interface FrameSpec {
   srcdoc: string;
-  sandbox: string;
-  scripts: boolean;
   label: string;
 }
 
@@ -54,62 +48,42 @@ function readTheme(): ArtifactTheme {
   };
 }
 
-function frameSpec(source: string, lang: string, info: string): FrameSpec {
+function frameSpec(source: string, lang: string): FrameSpec {
   const theme = readTheme();
-  if (lang === "svg") {
-    return {
-      srcdoc: artifactSvgDocument(source, theme),
-      sandbox: artifactSandbox({ scripts: false }),
-      scripts: false,
-      label: "SVG",
-    };
-  }
-  const options = artifactOptionsFromInfo(info);
-  return {
-    srcdoc: artifactHtmlDocument(source, options, theme),
-    sandbox: artifactSandbox(options),
-    scripts: options.scripts,
-    label: "Artifact",
-  };
+  return lang === "svg"
+    ? { srcdoc: artifactSvgDocument(source, theme), label: "SVG" }
+    : { srcdoc: artifactHtmlDocument(source, theme), label: "Artifact" };
 }
 
+/**
+ * A frame loads exactly once, with the artifact. A later load means the
+ * document navigated itself, which with scripts off and every link aimed
+ * at a window the sandbox refuses takes a click on a link the author
+ * marked `_self`; the frame goes back to the artifact, same size, same
+ * place. The grip and the dialog find the frame through its container, so
+ * the swap is invisible to them.
+ */
 function createFrame(spec: FrameSpec): HTMLIFrameElement {
   const frame = document.createElement("iframe");
   frame.className = FRAME_CLASS;
   frame.title = `${spec.label} preview`;
   // The attribute is set before srcdoc so the document never loads outside
-  // the sandbox. An empty value is the fully locked sandbox.
-  frame.setAttribute("sandbox", spec.sandbox);
+  // the sandbox.
+  frame.setAttribute("sandbox", ARTIFACT_SANDBOX);
   frame.referrerPolicy = "no-referrer";
   frame.srcdoc = spec.srcdoc;
-  return frame;
-}
-
-let listening = false;
-/** One window listener for every artifact frame on the page. A message is
- *  matched to its frame by source window; the height it carries is clamped
- *  before it touches layout, so a hostile artifact can at most be tall. */
-function ensureHeightListener(): void {
-  if (listening) return;
-  listening = true;
-  window.addEventListener("message", (event: MessageEvent) => {
-    const message = artifactHeightMessageSchema.safeParse(event.data);
-    if (!message.success) return;
-    const height = clampArtifactHeight(message.data.height);
-    for (const frame of document.querySelectorAll<HTMLIFrameElement>(
-      `iframe.${FRAME_CLASS}`,
-    )) {
-      if (frame.contentWindow !== event.source) continue;
-      const wrap = frame.closest<HTMLElement>(`.${WRAP_CLASS}`);
-      if (
-        !wrap ||
-        wrap.dataset.sized === "manual" ||
-        frame.dataset.fill !== undefined
-      )
-        continue;
-      frame.style.height = `${height}px`;
+  let loaded = false;
+  frame.addEventListener("load", () => {
+    if (!loaded) {
+      loaded = true;
+      return;
     }
+    const fresh = createFrame(spec);
+    fresh.style.cssText = frame.style.cssText;
+    if (frame.dataset.fill !== undefined) fresh.dataset.fill = "";
+    frame.replaceWith(fresh);
   });
+  return frame;
 }
 
 function button(
@@ -130,17 +104,21 @@ function button(
  *  the tab order; pointer capture keeps a drag alive over the frame. */
 function attachGrip(
   grip: HTMLButtonElement,
-  frame: HTMLIFrameElement,
+  body: HTMLElement,
   wrap: HTMLElement,
 ): void {
-  const setHeight = (height: number) => {
-    frame.style.height = `${clampArtifactHeight(height)}px`;
+  const frame = () => body.querySelector<HTMLIFrameElement>(FRAME_SELECTOR);
+  const height = () => frame()?.getBoundingClientRect().height ?? 0;
+  const setHeight = (next: number) => {
+    const el = frame();
+    if (!el) return;
+    el.style.height = `${clampArtifactHeight(next)}px`;
     wrap.dataset.sized = "manual";
   };
   let start: { y: number; height: number } | null = null;
   grip.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
-    start = { y: e.clientY, height: frame.getBoundingClientRect().height };
+    start = { y: e.clientY, height: height() };
     grip.setPointerCapture(e.pointerId);
     wrap.dataset.resizing = "";
     e.preventDefault();
@@ -157,9 +135,8 @@ function attachGrip(
   grip.addEventListener("pointercancel", end);
   grip.addEventListener("keydown", (e) => {
     const step = e.shiftKey ? 120 : 40;
-    const current = frame.getBoundingClientRect().height;
-    if (e.key === "ArrowDown") setHeight(current + step);
-    else if (e.key === "ArrowUp") setHeight(current - step);
+    if (e.key === "ArrowDown") setHeight(height() + step);
+    else if (e.key === "ArrowUp") setHeight(height() - step);
     else return;
     e.preventDefault();
   });
@@ -167,16 +144,14 @@ function attachGrip(
 
 /**
  * Replace `pre` with the block, keeping `pre` inside it (hidden) for the
- * Source view and the copy control. `info` is the fence's whole info string
- * when the renderer kept it (`artifact scripts`), else just the language.
+ * Source view and the copy control.
  */
 export function mountArtifactBlock(
   pre: HTMLElement,
   source: string,
   lang: string,
-  info: string,
 ): void {
-  const spec = frameSpec(source, lang, info);
+  const spec = frameSpec(source, lang);
   const wrap = document.createElement("div");
   wrap.className = WRAP_CLASS;
   wrap.dataset.view = "preview";
@@ -186,13 +161,6 @@ export function mountArtifactBlock(
   const label = document.createElement("span");
   label.className = "md-artifact-label";
   label.textContent = spec.label;
-  head.append(label);
-  if (spec.scripts) {
-    const tag = document.createElement("span");
-    tag.className = "md-artifact-tag";
-    tag.textContent = "Scripts on";
-    head.append(tag);
-  }
   const spacer = document.createElement("span");
   spacer.className = "md-artifact-spacer";
   const sourceToggle = document.createElement("button");
@@ -218,11 +186,11 @@ export function mountArtifactBlock(
         const large = createFrame(spec);
         large.dataset.fill = "";
         host.append(large);
-        return () => large.remove();
+        return () => host.replaceChildren();
       },
     });
   });
-  head.append(spacer, sourceToggle, expand);
+  head.append(label, spacer, sourceToggle, expand);
 
   const body = document.createElement("div");
   body.className = "md-artifact-body";
@@ -230,8 +198,7 @@ export function mountArtifactBlock(
   frame.style.height = `${ARTIFACT_DEFAULT_HEIGHT}px`;
   const grip = button("md-artifact-grip", "Resize preview", "");
   body.append(frame, grip);
-  attachGrip(grip, frame, wrap);
-  if (spec.scripts) ensureHeightListener();
+  attachGrip(grip, body, wrap);
 
   // The block takes the fence's place first, then takes the fence in: the
   // other way round, `pre` has already left the document by the time it

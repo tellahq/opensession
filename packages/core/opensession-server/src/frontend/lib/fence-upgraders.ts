@@ -25,6 +25,7 @@ import { paletteUpgrader } from "./palette-block";
 import { tableUpgrader } from "./table-block";
 import { metricsUpgrader } from "./metrics-block";
 import { slidesUpgrader } from "./slides-block";
+import type { MarkdownContext } from "./markdown";
 import type { EffectiveTheme } from "./theme";
 
 export interface FenceUpgradeContext {
@@ -38,6 +39,10 @@ export interface FenceUpgradeContext {
   /** The markdown body this fence sits in. */
   root: HTMLElement;
   theme: EffectiveTheme;
+  /** The context the body's markdown was rendered with (repo, session,
+   *  assets), for a block that renders markdown of its own: a slide's
+   *  `#356` and `report.html` link the way the prose around the deck does. */
+  markdown?: MarkdownContext;
   /** False once this pass was superseded: new html, a theme flip, or an
    *  unmount. Check it after every await and stop touching the DOM. */
   alive: () => boolean;
