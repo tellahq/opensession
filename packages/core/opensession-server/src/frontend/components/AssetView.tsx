@@ -13,7 +13,6 @@
  */
 
 import React, { useEffect, useState } from "react";
-import { marked } from "marked";
 import {
   deleteSessionAssetApi,
   sessionAssetDownloadUrl,
@@ -47,6 +46,7 @@ import { ResponsiveDialog } from "../ui/sheet";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { MarkdownBody } from "./MarkdownBody";
+import { renderMarkdown } from "../lib/markdown";
 import { openLightbox } from "../lib/media-lightbox";
 import {
   IconArrowDown,
@@ -770,7 +770,7 @@ export function AssetPreview({
         ) : (
           <MarkdownBody
             className="markdown px-4 py-3 text-label"
-            html={marked.parse(text, { async: false })}
+            html={renderMarkdown(text)}
           />
         )
       ) : kind === "text" ? (

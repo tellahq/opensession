@@ -1212,6 +1212,90 @@ describe("renderPrCommentMarkdown bot markup", () => {
   });
 });
 
+describe("renderMarkdown callouts", () => {
+  it("renders a GitHub admonition as a titled callout", () => {
+    const html = renderMarkdown("> [!NOTE]\n> Body with **bold**.");
+    expect(html).toContain('<div class="md-callout md-callout-note">');
+    expect(html).toContain('<div class="md-callout-title"><svg');
+    expect(html).toContain("</svg>Note</div>");
+    expect(html).toContain("<p>Body with <strong>bold</strong>.</p>");
+    expect(html).not.toContain("[!NOTE]");
+    expect(html).not.toContain("<blockquote>");
+  });
+
+  it("knows every kind, in any case", () => {
+    for (const [marker, kind, title] of [
+      ["[!TIP]", "tip", "Tip"],
+      ["[!IMPORTANT]", "important", "Important"],
+      ["[!Warning]", "warning", "Warning"],
+      ["[!caution]", "caution", "Caution"],
+    ]) {
+      const html = renderMarkdown(`> ${marker}\n> Text`);
+      expect(html).toContain(`md-callout-${kind}"`);
+      expect(html).toContain(`</svg>${title}</div>`);
+      expect(html).toContain("<p>Text</p>");
+    }
+  });
+
+  it("keeps the body as ordinary markdown, lists included", () => {
+    const html = renderMarkdown(
+      "> [!WARNING]\n> First line.\n>\n> - one\n> - two\n>\n> ```ts\n> x\n> ```",
+    );
+    expect(html).toContain("<p>First line.</p>");
+    expect(html).toContain("<li>one</li>");
+    expect(html).toContain('<code class="language-ts">x');
+  });
+
+  it("renders a marker with no body as just the title", () => {
+    const html = renderMarkdown("> [!TIP]");
+    expect(html).toBe(
+      '<div class="md-callout md-callout-tip"><div class="md-callout-title">' +
+        html.slice(
+          html.indexOf("<svg"),
+          html.indexOf("</svg>") + "</svg>".length,
+        ) +
+        "Tip</div></div>\n",
+    );
+  });
+
+  it("renders a body that starts on the marker line with a list", () => {
+    const html = renderMarkdown("> [!NOTE]\n> - a\n> - b");
+    expect(html).toContain("<li>a</li>");
+    expect(html).not.toContain("<p></p>");
+  });
+
+  it("leaves ordinary blockquotes alone", () => {
+    expect(renderMarkdown("> Just a quote")).toBe(
+      "<blockquote>\n<p>Just a quote</p>\n</blockquote>\n",
+    );
+    // The marker has to be the whole first line, as on GitHub.
+    const inline = renderMarkdown("> [!NOTE] inline text\n> more");
+    expect(inline).toContain("<blockquote>");
+    expect(inline).toContain("[!NOTE] inline text");
+    expect(inline).not.toContain("md-callout");
+    // Nor is a marker anywhere but first.
+    const late = renderMarkdown("> Intro\n>\n> [!NOTE]\n> more");
+    expect(late).toContain("<blockquote>");
+    expect(late).not.toContain("md-callout");
+    // An unknown kind is prose.
+    expect(renderMarkdown("> [!DANGER]\n> x")).not.toContain("md-callout");
+  });
+
+  it("renders inside PR prose, with the sanitizer still on the body", () => {
+    const html = renderPrCommentMarkdown(
+      "> [!IMPORTANT]\n> Press <kbd>K</kbd> <script>alert(1)</script>",
+    );
+    expect(html).toContain("md-callout-important");
+    expect(html).toContain("<kbd>K</kbd>");
+    expect(html).not.toContain("<script>");
+  });
+
+  it("escapes raw HTML in a transcript callout", () => {
+    const html = renderMarkdown("> [!CAUTION]\n> <b>x</b>");
+    expect(html).toContain("&lt;b&gt;x&lt;/b&gt;");
+  });
+});
+
 describe("renderMarkdown @-mentions", () => {
   // The roster is module state, so publish it once for this block. The
   // renderer's cache is keyed on the source text, and setKnownPeople clears

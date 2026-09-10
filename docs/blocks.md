@@ -58,8 +58,10 @@ as one slider. Both paths obey the same media rules as `OPENSESSION_IMAGE:`.
 ### Callouts
 
 GitHub's admonition syntax: a blockquote whose first line is `[!NOTE]`,
-`[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]`. The rest of the quote
-is the body.
+`[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` (any case) and
+nothing else. The rest of the quote is the body, ordinary markdown. A marker
+with text after it on the same line, or anywhere but the first line, is a
+plain quote, as on GitHub.
 
 ### Math
 
@@ -120,8 +122,12 @@ markdown, including the other block kinds.
 ### Metrics
 
 A ` ```metrics ` fence lists one metric per line as
-`Label: value (delta)`, or is a JSON array of `{label, value, delta, unit}`.
-Renders as a row of cards.
+`Label: value (delta)`, the parenthesised delta optional, or is a JSON array
+of `{label, value, delta?, unit?}` (a numeric `value` or `delta` is formatted
+for reading, `1204` as `1,204`). Renders as a row of cards: the value big and
+tabular, the label under it, the delta beside the value and coloured by its
+lead character: `+`, `▲` or `↑` is up, `-`, `▼` or `↓` is down, anything else
+is neutral. A fence that does not parse stays a code block.
 
 ## Adding a block kind
 
