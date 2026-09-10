@@ -85,9 +85,10 @@ export function sessionActorReducerRoute(
         : { scope: "global" };
     case "catalog_document":
       // Namespaced documents belong to no session and live only in the
-      // central database: reads share the catalog lane, mutations serialize
-      // on the same slot without the global barrier because no session
-      // mailbox can overlap them. Neither opens a session actor.
+      // central database: reads use the load-aware catalog read pool, while
+      // mutations serialize on the catalog slot without the global barrier
+      // because no session mailbox can overlap them. Neither opens a session
+      // actor.
       return isCatalogDocumentRead(command.request)
         ? { scope: "catalog_read" }
         : { scope: "central_write" };
