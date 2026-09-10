@@ -76,6 +76,7 @@ import {
   repoForPathOrNull,
   repoFromGitPointer,
 } from "./worktree";
+import { remoteRef } from "./git-remote-ref";
 
 const worktreesDir = () => configuredPaths().worktreesDir;
 
@@ -639,7 +640,7 @@ export async function sweepWorktreeReaper(
 
     let reason: string | null = null;
     const ancestor =
-      await $`git -C ${dir} merge-base --is-ancestor HEAD origin/${repo.defaultBranch}`
+      await $`git -C ${dir} merge-base --is-ancestor HEAD ${remoteRef(repo.defaultBranch)}`
         .quiet()
         .nothrow();
     if (ancestor.exitCode === 0) reason = `tip in origin/${repo.defaultBranch}`;

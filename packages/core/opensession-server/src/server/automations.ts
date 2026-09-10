@@ -59,7 +59,11 @@ import {
   worktreeHeadBranch,
 } from "./worktree";
 import { engineSessionPatch } from "./sessions";
-import { recordRunOutcome, updateSessionFile } from "./session-cache";
+import {
+  getCachedSessionsAsync,
+  recordRunOutcome,
+  updateSessionFile,
+} from "./session-cache";
 import { sessionKernel } from "./session-kernel";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { getWorkspace } from "./workspaces";
@@ -110,7 +114,10 @@ import {
   sanitizeAutomationOutputs,
   type AutomationOutput,
 } from "./automation-outputs";
-import { automationIntentAlreadySettled } from "./automation-intent-recovery";
+import {
+  automationIntentAlreadySettled,
+  supersededPlainThreadIntents,
+} from "./automation-intent-recovery";
 
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
@@ -1573,13 +1580,50 @@ function hasAutomationIntent(sessionId: string): boolean {
   return existsSync(automationIntentPath(sessionId));
 }
 
+/** Plain thread id -> the most recent live session already triaging it. */
+async function livePlainThreadSessions(): Promise<Map<string, string>> {
+  const live = new Map<string, string>();
+  try {
+    const sessions = (await getCachedSessionsAsync())
+      .filter((s) => s.plainThreadId && !s.archived)
+      .sort(
+        (a, b) =>
+          new Date(b.lastActivity).getTime() -
+          new Date(a.lastActivity).getTime(),
+      );
+    for (const s of sessions)
+      if (!live.has(s.plainThreadId!)) live.set(s.plainThreadId!, s.id);
+  } catch (error) {
+    console.error("[automations] Live Plain session lookup failed:", error);
+  }
+  return live;
+}
+
 export async function resumePendingAutomationRuns(
   onSessionCreated?: (sessionId: string) => void,
 ): Promise<number> {
   if (isShuttingDown() || !existsSync(automationIntentDir)) return 0;
+  const entries = readdirSync(automationIntentDir).filter((entry) =>
+    entry.endsWith(".json"),
+  );
+  // A Plain ticket needs at most one triage session, however many intents a
+  // failing launch or a repeatedly clicked support-card link left behind for
+  // it (automation-intent-recovery.ts). Decide that over the whole set first.
+  const pending: PendingAutomationIntent[] = [];
+  for (const entry of entries) {
+    try {
+      const intent = JSON.parse(
+        readFileSync(join(automationIntentDir, entry), "utf8"),
+      ) as PendingAutomationIntent;
+      if (!intent.terminalAt) pending.push(intent);
+    } catch {}
+  }
+  const superseded = supersededPlainThreadIntents(
+    pending,
+    await livePlainThreadSessions(),
+  );
   let resumed = 0;
-  for (const entry of readdirSync(automationIntentDir)) {
-    if (!entry.endsWith(".json")) continue;
+  for (const entry of entries) {
     try {
       const intent = JSON.parse(
         readFileSync(join(automationIntentDir, entry), "utf8"),
@@ -1636,6 +1680,16 @@ export async function resumePendingAutomationRuns(
           isAutomationRunning(automation.id))
       )
         continue;
+      const supersededReason = superseded.get(intent.sessionId);
+      if (supersededReason) {
+        // Never launched (a launch failure settles no ledger entry) and its
+        // ticket is covered, so there is nothing to settle: just retire it.
+        console.log(
+          `[automations] Intent ${intent.sessionId} not replayed: ${supersededReason}`,
+        );
+        clearAutomationIntent(intent.sessionId);
+        continue;
+      }
       void runAutomation(automation, onSessionCreated, {
         trigger: intent.trigger,
         eventContext: intent.eventContext,
