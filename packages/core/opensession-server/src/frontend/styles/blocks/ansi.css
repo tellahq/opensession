@@ -47,9 +47,6 @@
 .ansi-underline.ansi-strike {
   text-decoration: underline line-through;
 }
-.ansi-hidden {
-  color: transparent;
-}
 /* Inverse video with no colour of its own: ink on the text colour. A run
    that carries a colour lands it on the other side through the classes
    below, which sit later and win. */
@@ -155,11 +152,15 @@
 .ansi-bg-bright-white {
   background: var(--ansi-bright-white);
 }
-/* A coloured background needs ink that reads on it whichever theme the
-   well is in; the page colour is the one guaranteed to contrast with a
-   status colour drawn at ink strength. Only when the run set no ink. */
-.markdown
-  .md-ansi
-  [class*="ansi-bg-"]:not([class*="ansi-fg-"]):not([style*="color"]) {
+/* A coloured background, token or inline rgb() (the block marks both
+   sides with a role class), needs ink that reads on it whichever theme
+   the well is in; the page colour is the one guaranteed to contrast with
+   a status colour drawn at ink strength. Only when the run set no ink. */
+.markdown .md-ansi .ansi-bg:not(.ansi-fg):not(.ansi-hidden) {
   color: var(--bg);
+}
+/* Concealed (SGR 8): the block emits no foreground for a hidden run, so
+   this only has to outrank the inverse and contrast inks above. */
+.markdown .md-ansi .ansi-hidden {
+  color: transparent;
 }

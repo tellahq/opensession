@@ -192,8 +192,11 @@ export function applySgr(params: string, style: AnsiStyle): AnsiStyle {
         inline ? sub.slice(1) : parts.slice(i + 1),
       );
       if (!inline) i += used;
-      if (code === 38) next.fg = color;
-      else next.bg = color;
+      // A malformed colour is ignored; it must not act as a reset.
+      if (color !== null) {
+        if (code === 38) next.fg = color;
+        else next.bg = color;
+      }
     }
   }
   return next;
@@ -270,6 +273,9 @@ function colorAttrs(
   styles: string[],
 ): void {
   if (!color) return;
+  // The role class marks that this side carries a colour, whichever kind,
+  // so the stylesheet's contrast rule can see inline rgb() too.
+  classes.push(`ansi-${role}`);
   if (color.kind === "base") {
     classes.push(`ansi-${role}-${baseColorName(color.index)}`);
     return;
@@ -288,16 +294,15 @@ export function spanAttributes(style: AnsiStyle): string | null {
   if (style.underline) classes.push("ansi-underline");
   if (style.strike) classes.push("ansi-strike");
   if (style.hidden) classes.push("ansi-hidden");
-  if (style.inverse) {
-    // Swap the two. The class supplies the defaults for whichever side had
-    // none; an explicit colour lands on the other side.
-    classes.push("ansi-inverse");
-    colorAttrs(style.bg, "fg", classes, styles);
-    colorAttrs(style.fg, "bg", classes, styles);
-  } else {
-    colorAttrs(style.fg, "fg", classes, styles);
-    colorAttrs(style.bg, "bg", classes, styles);
-  }
+  // Concealed text gets no ink at all, so no colour, class or inline, can
+  // bring it back; the class paints it transparent.
+  const ink = style.hidden ? null : style.inverse ? style.bg : style.fg;
+  const wash = style.inverse ? style.fg : style.bg;
+  // Inverse swaps the two. The class supplies the defaults for whichever
+  // side had none; an explicit colour lands on the other side.
+  if (style.inverse) classes.push("ansi-inverse");
+  colorAttrs(ink, "fg", classes, styles);
+  colorAttrs(wash, "bg", classes, styles);
   if (classes.length === 0 && styles.length === 0) return null;
   let attrs = "";
   if (classes.length) attrs += ` class="${classes.join(" ")}"`;

@@ -135,6 +135,22 @@ describe("parseAnsi", () => {
     expect(spans[1]!.style.fg).toBeNull();
     expect(text(`${ESC}[38;9mafter`)).toBe("after");
   });
+
+  it("keeps the active colour when an extended colour is malformed", () => {
+    const spans = parseAnsi(
+      `${ESC}[31;44mred ${ESC}[38;5;999mstill red ${ESC}[48;2;1;2mstill blue`,
+    );
+    expect(spans.map((s) => s.style.fg)).toEqual([
+      { kind: "base", index: 1 },
+      { kind: "base", index: 1 },
+      { kind: "base", index: 1 },
+    ]);
+    expect(spans.map((s) => s.style.bg)).toEqual([
+      { kind: "base", index: 4 },
+      { kind: "base", index: 4 },
+      { kind: "base", index: 4 },
+    ]);
+  });
 });
 
 describe("applySgr and color256", () => {
@@ -186,17 +202,35 @@ describe("renderAnsiHtml", () => {
     expect(
       renderAnsiHtml(parseAnsi(`${ESC}[1;4;91mhi${ESC}[0m${ESC}[38;5;208mx`)),
     ).toBe(
-      '<span class="ansi-bold ansi-underline ansi-fg-bright-red">hi</span>' +
-        '<span style="color:rgb(255,135,0)">x</span>',
+      '<span class="ansi-bold ansi-underline ansi-fg ansi-fg-bright-red">hi</span>' +
+        '<span class="ansi-fg" style="color:rgb(255,135,0)">x</span>',
+    );
+  });
+
+  it("marks an inline background so the contrast rule can see it", () => {
+    expect(renderAnsiHtml(parseAnsi(`${ESC}[48;2;255;255;0mwarning`))).toBe(
+      '<span class="ansi-bg" style="background-color:rgb(255,255,0)">warning</span>',
+    );
+  });
+
+  it("emits no ink for concealed text, whatever colour it carries", () => {
+    expect(renderAnsiHtml(parseAnsi(`${ESC}[8;31msecret`))).toBe(
+      '<span class="ansi-hidden">secret</span>',
+    );
+    expect(renderAnsiHtml(parseAnsi(`${ESC}[8;38;2;9;9;9;44msecret`))).toBe(
+      '<span class="ansi-hidden ansi-bg ansi-bg-blue">secret</span>',
+    );
+    expect(renderAnsiHtml(parseAnsi(`${ESC}[8;7;31msecret`))).toBe(
+      '<span class="ansi-hidden ansi-inverse ansi-bg ansi-bg-red">secret</span>',
     );
   });
 
   it("swaps the sides of an inverse run", () => {
     expect(renderAnsiHtml(parseAnsi(`${ESC}[7;32mok`))).toBe(
-      '<span class="ansi-inverse ansi-bg-green">ok</span>',
+      '<span class="ansi-inverse ansi-bg ansi-bg-green">ok</span>',
     );
     expect(renderAnsiHtml(parseAnsi(`${ESC}[7;32;44mok`))).toBe(
-      '<span class="ansi-inverse ansi-fg-blue ansi-bg-green">ok</span>',
+      '<span class="ansi-inverse ansi-fg ansi-fg-blue ansi-bg ansi-bg-green">ok</span>',
     );
   });
 
@@ -205,7 +239,7 @@ describe("renderAnsiHtml", () => {
       parseAnsi(`${ESC}[31m"><script>alert(1)</script>`),
     );
     expect(html).toBe(
-      '<span class="ansi-fg-red">&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;</span>',
+      '<span class="ansi-fg ansi-fg-red">&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;</span>',
     );
   });
 });
