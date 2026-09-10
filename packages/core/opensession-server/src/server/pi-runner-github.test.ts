@@ -4,7 +4,12 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { GITHUB_RUN_AUTH_FILE_ENV } from "./github-auth";
 import { AUTO_CONTINUE_USER, githubCredentialUser } from "./auto-continue";
-import { githubCodeRunEnv, githubReadRunEnv, runGithubEnv } from "./pi-runner";
+import {
+  githubCodeRunEnv,
+  githubReadRunEnv,
+  runGithubEnv,
+  runGithubMergeGuard,
+} from "./pi-runner";
 
 const keys = [
   "OPENSESSION_CONFIG",
@@ -19,6 +24,30 @@ afterEach(() => {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+});
+
+describe("GitHub publication authority", () => {
+  test("a connected person's code turn follows repository policy", () => {
+    expect(
+      runGithubMergeGuard({
+        isCode: true,
+        ownerLogin: "alex",
+        baseBranch: "main",
+      }),
+    ).toBeUndefined();
+  });
+
+  test("ask and non-person code turns keep their protected branch guard", () => {
+    for (const input of [
+      { isCode: false, ownerLogin: "alex" },
+      { isCode: false, ownerLogin: null },
+      { isCode: true, ownerLogin: null },
+    ]) {
+      expect(
+        runGithubMergeGuard({ ...input, baseBranch: "production" }),
+      ).toEqual({ baseBranch: "production" });
+    }
+  });
 });
 
 describe("recovered GitHub code-run credentials", () => {

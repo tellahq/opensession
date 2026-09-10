@@ -231,6 +231,18 @@ export async function runGithubEnv(input: {
   return githubCodeRunEnv(input.cwd);
 }
 
+/** Only a connected person's code turn may use their GitHub authority directly.
+ * Ask, unattended, and machine-authored runs retain the publication guard. */
+export function runGithubMergeGuard(input: {
+  isCode: boolean;
+  ownerLogin: string | null;
+  baseBranch: string;
+}): MergeGuard | undefined {
+  return input.isCode && input.ownerLogin
+    ? undefined
+    : { baseBranch: input.baseBranch };
+}
+
 /** Child-env name carrying the `Co-authored-by` trailer an agent run must put
  * on every commit. The value is `Name <email>`, the person behind the run. */
 export const GIT_COAUTHOR_ENV = "OPENSESSION_GIT_COAUTHOR";
@@ -1508,8 +1520,7 @@ export function makePiBashTool(input: {
   sessionId?: string;
   runKind?: string;
   publicationPolicy?: PublicationPolicy;
-  /** Every run: no merge, no approve, no base-branch update
-   *  (mergeGuardDenyReason). */
+  /** Runs without a connected person's code authority cannot merge or approve. */
   mergeGuard?: MergeGuard;
   /** Immutable Open Session run cancellation. Kept separate from Pi's tool
    * signal because AgentSession.abort() can leave an active tool signal live. */
@@ -2105,10 +2116,9 @@ async function* runPiAttempt(
     // The person this turn acts for, if any: the sender, unless it is the
     // synthetic auto-continue driver, in which case the author fallback
     // names the session owner (#322). A machine sender (a review handoff, a
-    // worker report, an automation) is nobody. An owner turn mounts the
-    // gateway's owner-identity tools, describes PR authorship as theirs in
-    // the session context, and in code mode puts their connected token in
-    // the shell (runGithubEnv); every other run holds an App token.
+    // worker report, an automation) is nobody. In code mode an owner turn
+    // puts their connected token in the shell (runGithubEnv) and describes
+    // PR authorship as theirs; every other run holds an App token.
     const githubUser = githubCredentialUser(user, author?.name);
     const ownerTurn =
       !policy.unattended &&
@@ -2117,9 +2127,8 @@ async function* runPiAttempt(
     const githubUserLogin = ownerTurn
       ? githubUserLoginForRun(githubUser)
       : null;
-    // What the shell credential may do to the default branch is GitHub's
-    // ruleset decision; the merge guard below is the tripwire in front of
-    // it and applies whichever token the run holds.
+    // GitHub permissions and repository rulesets bound the chosen credential.
+    // Ask, unattended, and publication-policy command gates still apply.
     const githubKindRun = baseJournalKind(journal?.kind).startsWith("github-");
     const githubEnv = await runGithubEnv({
       isCode: mode === "code",
@@ -2130,23 +2139,11 @@ async function* runPiAttempt(
       cwd,
     });
     const agentGitEnv = await agentGitIdentityEnv(author);
-    // A run INSIDE a shared self-development checkout pushes its base branch
-    // by design (AGENTS.md); there the rulesets alone decide, and only merge
-    // and approve are refused. Everywhere else, a worktree of that same
-    // repository included, the base branch is off limits.
-    const inSharedCheckout =
-      !!cwdRepo?.sharedCheckout && resolve(cwd) === resolve(cwdRepo.repo);
-    const mergeGuard: MergeGuard = {
-      ...(inSharedCheckout
-        ? {}
-        : { baseBranch: cwdRepo?.defaultBranch || "main" }),
-      ...(ownerTurn &&
-      opts.inProcessMcp &&
-      "opensession-pull-requests" in opts.inProcessMcp
-        ? { proposeTool: "propose_merge" }
-        : {}),
-    };
-
+    const mergeGuard = runGithubMergeGuard({
+      isCode: mode === "code",
+      ownerLogin: githubUserLogin,
+      baseBranch: cwdRepo?.defaultBranch || "main",
+    });
     const binding = await createPiRuntimeBinding({
       providerID: parsed.providerID,
       modelID: parsed.modelID,

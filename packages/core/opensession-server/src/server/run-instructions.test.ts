@@ -79,6 +79,13 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain("this Open Session id as `leaseKey`");
     expect(prompt).toContain("pass only its `leaseId`");
     expect(prompt).not.toContain("## Sandbox");
+    expect(prompt).toContain(
+      "Follow the repository instructions for branching and publication.",
+    );
+    expect(prompt).not.toContain(
+      "Never merge, approve, or push the default branch",
+    );
+    expect(prompt).not.toContain("open_pull_request");
     expect(prompt.length).toBeLessThan(1_600);
   });
 
@@ -138,7 +145,7 @@ describe("buildSessionContext", () => {
       /PR attribution footer: Started by Jaap Frolich in \[this .* session\]\(.*\/session\/os-test\)/,
     );
     expect(ctx).toContain(
-      "PRs open under @jfrolich's account through open_pull_request; do not add an assignee.",
+      "PRs use @jfrolich's account through gh; do not add an assignee.",
     );
     expect(ctx).toContain(
       "Commit trailer: Co-authored-by: Jaap Frolich <jaap@example.com>",

@@ -59,7 +59,6 @@ touches an in-process tool:
 | [`opensession-ask`](#opensession-ask) | 1 | interactive, Slack loop | Needs a session id. |
 | [`opensession-workflows`](#opensession-workflows) | 8 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
 | [`opensession-assets`](#opensession-assets) | 4 | interactive | Needs a session id. Works in read-only Ask mode — assets land outside the checkout. |
-| [`opensession-pull-requests`](#opensession-pull-requests) | 3 | interactive | Only on a turn a connected person started: never a review handoff, a worker report, or an automation. |
 | [`opensession-todos`](#opensession-todos) | 5 | interactive | Needs a session id. |
 | [`opensession-schedule`](#opensession-schedule) | 3 | interactive | Needs a session id. |
 | [`opensession-papercuts`](#opensession-papercuts) | 2 | interactive, automation | Dropped when the session's repo opted out (Settings → Papercuts). |
@@ -71,7 +70,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-30 servers, 134 tools.
+29 servers, 131 tools.
 
 ## opensession-sessions
 
@@ -872,34 +871,6 @@ Read back a text asset from this session's asset storage (capped at 256 KB).
 `mcp__opensession-assets__delete_asset` · input: `path` (string, required)
 
 Delete a file or virtual folder from this session's asset storage.
-
-## opensession-pull-requests
-
-Open and edit this session's pull request as the person who asked; propose a merge for them to tap.
-
-- **Source** `packages/core/opensession-server/src/server/pull-request-mcp.ts`
-- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
-- **Runs** interactive
-- **Condition** Only on a turn a connected person started: never a review handoff, a worker report, or an automation.
-- **Note** The gateway makes the request with the person's token; the run never holds it (docs/github-authority.md). propose_merge holds no token: the person merges from the PR panel.
-
-### `open_pull_request`
-
-`mcp__opensession-pull-requests__open_pull_request` · input: `repo` (string), `title` (string, required), `body` (string, required), `base` (string), `draft` (boolean)
-
-Open a pull request for this session's pushed branch under @you's own GitHub account. The request is made by the gateway with their token; you never hold it. Prefer this over `gh pr create`, which opens the PR as the bot. Push the branch first. End the body with the attribution footer from the session context.
-
-### `edit_pull_request`
-
-`mcp__opensession-pull-requests__edit_pull_request` · input: `repo` (string), `number` (integer), `title` (string), `body` (string), `ready` (boolean)
-
-Change the title, body, or draft state of this session's pull request as @you. The gateway makes the request with their token.
-
-### `propose_merge`
-
-`mcp__opensession-pull-requests__propose_merge` · input: `repo` (string), `method` ("squash" | "merge" | "rebase"), `note` (string)
-
-Hand a merge to @you. You cannot merge: no token in your reach can update the default branch. This checks the PR is open and reports its checks and review state, then posts a notice in the session; the person merges with one tap in the PR panel. Call it when asked to merge, or when the work is ready and reviewed.
 
 ## opensession-todos
 

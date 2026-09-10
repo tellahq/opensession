@@ -44,11 +44,14 @@ export interface GatewayTcpProxyOptions {
   connectDeadlineMs?: number;
   maxPendingConnections?: number;
   metrics?: GatewayTcpProxyMetrics;
-  /** Optional stable HTTP response before a replaceable backend is connected. */
+  /** Optional stable HTTP response. Wait for complete headers (up to 64 KiB
+   * and connectDeadlineMs) before routing a request to the backend. */
   fallbackHttp?(request: Buffer): Buffer | null;
   /** systemd socket-activation descriptor. PID 1 retains the listening socket. */
   listenFd?: number;
 }
+
+const MAX_CLASSIFICATION_BYTES = 64 * 1024;
 
 function validBackendPort(port: number): boolean {
   return Number.isInteger(port) && port > 0 && port <= 65_535;
@@ -74,10 +77,11 @@ type ParkedConnection = {
 };
 
 /**
- * Stable byte-for-byte TCP front door for gateway children. It deliberately
- * knows nothing about HTTP or WebSockets, so upgrades, streaming bodies and
- * long-lived sockets retain their native semantics. Connections accepted
- * during the child cut-over stay paused until the activated child binds.
+ * Stable byte-for-byte TCP front door for gateway children. When a stable
+ * HTTP fallback is configured, classify the initial headers before dialing.
+ * Otherwise relay immediately. Upgrades, streaming bodies and long-lived
+ * sockets retain their native semantics. Connections accepted during the
+ * child cut-over stay buffered until the activated child binds.
  *
  * One implementation serves every install: with `listenFd` it adopts the
  * systemd-owned socket (dedicated ingress), and without it it binds
@@ -123,12 +127,15 @@ export function startGatewayTcpProxy(
       metrics.closed++;
       client.destroy();
     };
+    const expire = () => {
+      if (client.destroyed || state.served) return;
+      metrics.timedOut++;
+      client.destroy();
+    };
     const schedule = (backendUnavailable: boolean) => {
       if (client.destroyed || state.served) return;
       if (Date.now() >= deadline) {
-        if (pending.delete(state)) metrics.pending--;
-        metrics.timedOut++;
-        client.destroy();
+        expire();
         return;
       }
       metrics.retries++;
@@ -153,7 +160,7 @@ export function startGatewayTcpProxy(
       upstream.once("error", retry);
       upstream.once("connect", () => {
         upstream.removeListener("error", retry);
-        if (state.served) {
+        if (client.destroyed || state.served) {
           upstream.destroy();
           return;
         }
@@ -205,14 +212,26 @@ export function startGatewayTcpProxy(
         client.end(fallback);
         return;
       }
-      // The first bytes are backend-bound: dial immediately instead of
-      // waiting out the classification grace timer. Only the first attempt
-      // short-circuits, so retry backoff is never reset by later chunks.
-      if (state.admitted && state.retryAttempt === 0 && state.timer) {
+      // A null fallback can mean incomplete headers, not a backend route.
+      // Do not let packet fragmentation or a fast local dial decide routing.
+      if (
+        options.fallbackHttp &&
+        state.bytes < MAX_CLASSIFICATION_BYTES &&
+        !request.includes("\r\n\r\n")
+      )
+        return;
+      if (!state.admitted) {
+        if (state.timer) clearTimeout(state.timer);
+        rejectOverload();
+        return;
+      }
+      // The request is backend-bound. Only the first attempt short-circuits,
+      // so subsequent chunks never reset retry backoff.
+      if (state.retryAttempt === 0 && state.timer) {
         clearTimeout(state.timer);
         connect();
       }
-      if (state.bytes >= 64 * 1024) client.pause();
+      if (state.bytes >= MAX_CLASSIFICATION_BYTES) client.pause();
     };
     client.on("data", onData);
     client.resume();
@@ -224,10 +243,15 @@ export function startGatewayTcpProxy(
       }
       if (state.timer) clearTimeout(state.timer);
     });
-    state.timer = setTimeout(
-      admitted ? connect : rejectOverload,
-      options.fallbackHttp ? (admitted ? 2 : 10) : 0,
-    );
+    if (admitted && options.fallbackHttp) {
+      state.timer = setTimeout(expire, connectDeadlineMs);
+    } else {
+      // Over-capacity clients retain only a short chance at a local fallback.
+      state.timer = setTimeout(
+        admitted ? connect : rejectOverload,
+        options.fallbackHttp ? 10 : 0,
+      );
+    }
     state.timer.unref?.();
   });
   if (options.listenFd !== undefined) server.listen({ fd: options.listenFd });

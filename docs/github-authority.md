@@ -1,18 +1,26 @@
 # GitHub authority: who may do what, and with which credential
 
-Status of the shell credential, 2026-09-08 (later the same day): the
-"no agent run holds a person's token" part of Phase 1 is rolled back for
-now. A code turn a connected person started once again holds that person's
-token in its shell (`githubUserRunEnv` on the host, the launcher's projected
-auth file in a sandbox), falling back to the App code set when nobody is
-connected. Unattended runs, machine senders (review handoffs, worker
-reports, automations), and every ask run stay on the repository-scoped App
-token exactly as this design describes. Everything else in Phase 1 stands:
-the owner-identity gateway tools, the merge guard in every run, the retired
-git-transport credential, the run-scoped `GH_CONFIG_DIR`, and the bot git
-identity with the person as `Co-authored-by`. `docs/setup/github.md` ("Who
-holds which credential") is the current statement; the Delegate row below
-describes the target the rollback moved away from.
+## Current policy
+
+A connected person's code turn holds their GitHub user token and uses `gh`
+and HTTPS git directly. Repository instructions determine the publication
+workflow, including shared-main pushes; GitHub permissions and rulesets bound
+the credential. The dedicated PR MCP tools and the interactive blanket
+merge/default-branch prohibition have been removed.
+
+Ask runs, unattended runs, and machine-authored turns keep their App-token
+limits and publication guards. Run-scoped `GH_CONFIG_DIR`, bot commit authorship,
+`Co-authored-by` attribution, and audit error handling remain unchanged.
+
+The credential rollback shipped in `773380904`; this change completes the
+interactive tooling/policy rollback of `a8ee01aeee`. See
+[GitHub setup](setup/github.md) and [the security model](security-model.md)
+for current behavior.
+
+## Historical design
+
+The remaining sections record the superseded design and its rationale, not
+current instructions for agents.
 
 Status: Phase 1 (credentials, tools, policy) implemented 2026-09-08; Phase 0
 (rulesets, App permission, credential revocation) is operator work per

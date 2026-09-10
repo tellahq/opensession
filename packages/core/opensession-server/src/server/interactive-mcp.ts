@@ -45,15 +45,6 @@ import { defaultRepo, productName } from "./config";
 import { githubCredentialForRun } from "./github-auth";
 import { REPOS, getRepo, sessionRepoId } from "./worktree";
 import { labelPr } from "./pr-labels";
-import {
-  createPullRequestMcpServer,
-  ownerGithubUser,
-} from "./pull-request-mcp";
-import { getPrDetailsFresh, prMetaForBranch } from "./pr-info";
-import {
-  appendTranscriptEntries,
-  transcriptLineRunnerNotice,
-} from "./transcript-persistence";
 import { registerInteractiveMcpBuilder } from "./run-rpc";
 import {
   automationRunMcpForSession,
@@ -208,11 +199,6 @@ export function interactiveMcpServers(
             user: createdBy,
             worktreeDir: () => findSession(sessionId)?.worktreeDir || undefined,
           }),
-          // The owner-identity GitHub tools: open/edit the PR as the person
-          // who started this turn, and hand them a merge. Mounted only when
-          // the sender resolves to a connected person; the run's shell holds
-          // the bot token either way (docs/github-authority.md).
-          ...pullRequestServerFor(sessionId, user),
           // Cross-repo: attach secondary repos as isolated worktrees.
           "opensession-repos": createReposMcpServer({
             sessionId,
@@ -435,56 +421,6 @@ export function interactiveMcpServers(
  * path) can compute proxy names that resolve to this same fail-closed set,
  * never the interactive siblings.
  */
-/**
- * opensession-pull-requests for a turn a connected person started, else
- * nothing. The person is the turn's sender (the session owner for an
- * auto-continue nudge); a machine sender is nobody. The credential is
- * re-resolved on every tool call, so a disconnect mid-turn fails closed.
- */
-function pullRequestServerFor(
-  sessionId: string,
-  user?: string,
-): Record<string, unknown> {
-  const session = findSession(sessionId);
-  const who = ownerGithubUser(user, session?.startedBy);
-  const credential = who ? githubCredentialForRun(who) : null;
-  if (!session || !credential || credential.kind !== "user") return {};
-  const login = credential.principal.replace(/^user:/, "");
-  return {
-    "opensession-pull-requests": createPullRequestMcpServer({
-      sessionId,
-      login,
-      credential: () => {
-        const current = githubCredentialForRun(who);
-        return current?.kind === "user" ? current : null;
-      },
-      workspace: (repo) => {
-        const current = findSession(sessionId);
-        if (!current) return null;
-        const context = resolveSessionRepoContext(current, repo);
-        if (!context) return null;
-        const registered = getRepo(context.repo);
-        if (!registered?.ghRepo || registered.host === "codestorage")
-          return null;
-        return {
-          ghRepo: registered.ghRepo,
-          ...(context.branch ? { branch: context.branch } : {}),
-          baseBranch: registered.defaultBranch,
-        };
-      },
-      prMeta: (branch, ghRepo, cred) => prMetaForBranch(branch, ghRepo, cred),
-      prDetails: (branch, ghRepo) => getPrDetailsFresh(branch, ghRepo),
-      notice: async (text, id) => {
-        const current = findSession(sessionId);
-        if (!current?.claudeSessionId) return;
-        await appendTranscriptEntries(current.claudeSessionId, [
-          transcriptLineRunnerNotice(text, id),
-        ]);
-      },
-    }),
-  };
-}
-
 export async function automationSessionMcp(
   session: { automation?: string; worktreeDir?: string | null },
   sessionId: string,

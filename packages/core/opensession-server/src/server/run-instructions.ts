@@ -152,7 +152,7 @@ export function buildRunInstructions(input: {
     parts.push(
       "## Pull requests\nEnd each PR body with the attribution footer from the session " +
         "context and follow its assignee rule. Add the `Co-authored-by` trailer from the " +
-        "session context to every commit. Never merge, approve, or push the default branch.",
+        "session context to every commit. Follow the repository instructions for branching and publication.",
     );
     if (input.prReviewer) {
       parts.push(
@@ -224,15 +224,11 @@ export function buildSessionContext(input: {
   isScratch?: boolean;
   repoHost?: "github" | "codestorage";
   /** Requester attribution for PRs: the turn's raw user label and the resolved
-   *  git identity (same table as commit attribution). PRs opened from the
-   *  shell are the bot's, so the body line + assignee are how the human
-   *  shows up. */
+   * git identity. App-authored PRs use the body line and assignee for attribution. */
   user?: string;
   author?: GitIdentity | null;
-  /** Set when this turn was started by a connected person: the gateway's
-   *  `open_pull_request` tool opens PRs as them, so skip the bot-attribution
-   *  assignee. In code mode the shell holds their token too
-   *  (pi-runner runGithubEnv). */
+  /** A connected person's code turn holds their token in the shell
+   * (pi-runner runGithubEnv), so PRs need no bot-attribution assignee. */
   githubUserLogin?: string | null;
   /** `Name <email>` for the commit trailer (pi-runner GIT_COAUTHOR_ENV). */
   coAuthor?: string;
@@ -256,7 +252,7 @@ export function buildSessionContext(input: {
       : `Created by [this ${personaName()} session](${link})`;
     lines.push(`PR attribution footer: ${footer}`);
     const rule = input.githubUserLogin
-      ? `PRs open under @${input.githubUserLogin}'s account through open_pull_request; do not add an assignee.`
+      ? `PRs use @${input.githubUserLogin}'s account through gh; do not add an assignee.`
       : requester && login
         ? `When possible, assign @${login}.`
         : "";
