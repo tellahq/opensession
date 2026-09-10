@@ -210,4 +210,79 @@ final class SessionRowUpdateTests: XCTestCase {
 
         XCTAssertEqual(Set(result.resurfacedHideKeys), keys)
     }
+
+    // MARK: - Poll replay
+
+    /// A poll's response was built before any frame applied while its
+    /// request was out, so only those frames replay, oldest first.
+    func testReplayPicksTheFramesAppliedAfterThePollStarted() throws {
+        let mid = try session(#"{"id":"os-mid","title":"Mid, later"}"#)
+        let old = try session(#"{"id":"os-old","title":"Old, later"}"#)
+        let applied: [String: AppliedRowUpdate] = [
+            "os-new": AppliedRowUpdate(revision: 3, update: .removed("os-new")),
+            "os-old": AppliedRowUpdate(revision: 7, update: .row(old)),
+            "os-mid": AppliedRowUpdate(revision: 5, update: .row(mid)),
+        ]
+
+        let replay = SessionsListViewModel.replay(applied, after: 3)
+
+        XCTAssertEqual(replay.map(\.id), ["os-mid", "os-old"])
+        XCTAssertTrue(SessionsListViewModel.replay(applied, after: 7).isEmpty)
+    }
+
+    /// The frames are newer than the response: a rename they carried must
+    /// not be undone by the poll, and a removal they carried stays removed.
+    func testAPollReplaysNewerFramesOverItsResponse() throws {
+        let renamed = try session(
+            #"{"id":"os-old","title":"Old, renamed","lastActivity":"2026-09-05T13:00:00.000Z"}"#
+        )
+
+        let polled = try SessionsListViewModel.polled(
+            baseline,
+            replaying: [.row(renamed), .removed("os-mid")],
+            optimisticIds: [],
+            hiding: [],
+            restoring: []
+        )
+
+        XCTAssertEqual(polled.active.map(\.id), ["os-old", "os-new"])
+        XCTAssertEqual(polled.active[0].title, "Old, renamed")
+        XCTAssertTrue(polled.archived.isEmpty)
+    }
+
+    /// The replay reconciles the way the poll does: a row archived on this
+    /// device stays hidden, and an archived row in the response still feeds
+    /// the archived index untouched.
+    func testAPollReplayKeepsTheLocalOverlays() throws {
+        let hidden = try session(
+            #"{"id":"os-new","title":"New, renamed","lastActivity":"2026-09-05T14:00:00.000Z"}"#
+        )
+        let response = try sessions(
+            """
+            [{"id":"os-new","title":"New","lastActivity":"2026-09-05T12:00:00.000Z"},
+             {"id":"os-gone","title":"Gone","archived":true,"lastActivity":"2026-09-05T11:00:00.000Z"}]
+            """
+        )
+
+        let polled = SessionsListViewModel.polled(
+            response,
+            replaying: [.row(hidden)],
+            optimisticIds: [],
+            hiding: ["os-new"],
+            restoring: []
+        )
+
+        XCTAssertTrue(polled.active.isEmpty)
+        XCTAssertEqual(polled.archived.map(\.id), ["os-gone"])
+    }
+
+    /// Nothing to replay is exactly the plain poll pass.
+    func testAPollWithNothingToReplayIsThePreparedList() throws {
+        let polled = try SessionsListViewModel.polled(
+            baseline, replaying: [], optimisticIds: [], hiding: [], restoring: []
+        )
+        let prepared = try SessionsListViewModel.prepared(baseline, hiding: [], restoring: [])
+
+        XCTAssertEqual(polled.active, prepared.active)
+    }
 }
