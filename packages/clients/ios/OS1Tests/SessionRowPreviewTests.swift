@@ -151,6 +151,57 @@ final class SessionRowPreviewTests: XCTestCase {
         XCTAssertNil(PrPreviewFacts.osReviewFact(OsReviewSummary(confidence: 3)))
     }
 
+    // MARK: - Merge risk, the review's other axis
+
+    func testRiskIsItsOwnFactInItsOwnInk() {
+        XCTAssertEqual(
+            PrPreviewFacts.riskFact(OsReviewSummary(verdict: "approve", risk: .high)),
+            PrPreviewFact(text: "high risk", tone: .red)
+        )
+        XCTAssertEqual(
+            PrPreviewFacts.riskFact(OsReviewSummary(verdict: "approve", risk: .medium)),
+            PrPreviewFact(text: "medium risk", tone: .yellow)
+        )
+        XCTAssertEqual(
+            PrPreviewFacts.riskFact(OsReviewSummary(verdict: "approve", risk: .low)),
+            PrPreviewFact(text: "low risk", tone: .dim)
+        )
+    }
+
+    func testRiskDoesNotEnterTheVerdictPhrase() {
+        // Quality and risk are scored apart, so a correct migration keeps its
+        // green verdict and says its risk beside it, not inside it.
+        let review = OsReviewSummary(verdict: "approve", confidence: 5, risk: .high)
+        XCTAssertEqual(
+            PrPreviewFacts.osReviewFact(review),
+            PrPreviewFact(text: "5/5 · approved", tone: .green)
+        )
+        XCTAssertEqual(
+            texts(session(osReview: review)),
+            ["Ready to merge", "5/5 · approved", "high risk"]
+        )
+    }
+
+    func testAbsentRiskAddsNothing() {
+        XCTAssertNil(PrPreviewFacts.riskFact(OsReviewSummary(verdict: "approve", confidence: 4)))
+        XCTAssertEqual(
+            texts(session(osReview: OsReviewSummary(verdict: "approve", confidence: 4))),
+            ["Ready to merge", "4/5 · approved"]
+        )
+    }
+
+    func testStaleRiskGoesFaintWithItsVerdict() {
+        let review = OsReviewSummary(verdict: "approve", confidence: 4, risk: .high, stale: true)
+        XCTAssertEqual(
+            PrPreviewFacts.riskFact(review),
+            PrPreviewFact(text: "high risk", tone: .faint)
+        )
+        XCTAssertEqual(
+            PrPreviewFacts.all(for: session(osReview: review)).map(\.tone),
+            [.green, .faint, .faint]
+        )
+    }
+
     // MARK: - Reviewers
 
     func testWaitingOnUpToTwoPeopleNamesThem() {

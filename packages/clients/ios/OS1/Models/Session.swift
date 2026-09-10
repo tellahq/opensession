@@ -356,17 +356,64 @@ struct PrChecksSummary: Decodable, Equatable, Hashable {
 /// The automated review the PR last got (`OsReviewSummary` on the server).
 /// Every field is optional here: an older server sends none of it, and a
 /// missing verdict has to read as "no verdict" rather than as a passing one.
-struct OsReviewSummary: Decodable, Equatable, Hashable {
+///
+/// The review answers two questions and they are two fields: `confidence` is
+/// whether the change is right as written, `risk` is how careful landing it
+/// has to be. A correct migration and a sloppy CSS tweak can share a score
+/// and sit at opposite ends of risk, so neither is derived from the other.
+struct OsReviewSummary: Equatable, Hashable {
+    /// How hard a mistake would be to undo. Advisory: it never moves the
+    /// verdict, only how the row reads it.
+    enum Risk: String, Decodable, CaseIterable, Sendable {
+        case low, medium, high
+    }
+
+    /// Time to get every user back to a good state if the change is wrong.
+    enum Recovery: String, Decodable, CaseIterable, Sendable {
+        case minutes, hours, days, irreversible
+    }
+
     /// approve | comment | request_changes.
     var verdict: String?
-    /// 1-5: how safe the reviewer thought this was to merge.
+    /// 1-5: quality of the change as written.
     var confidence: Int?
+    /// Merge risk, scored apart from quality by its own diff-only pass.
+    var risk: Risk?
+    var recovery: Recovery?
+    /// Fixed-taxonomy reasons behind the risk ("migration", "no tests").
+    var riskFactors: [String]?
     var findings: Int?
     /// P0/P1 findings — what would block a merge.
     var blocking: Int?
     /// The branch has moved on since this verdict — it describes older code.
     var stale: Bool?
     var at: String?
+}
+
+extension OsReviewSummary: Decodable {
+    private enum CodingKeys: String, CodingKey {
+        case verdict, confidence, risk, recovery, riskFactors, findings, blocking, stale, at
+    }
+
+    /// Hand-written so a risk word this build does not know (a newer server
+    /// adding a level) drops to nil instead of failing the whole sessions
+    /// list: one unrecognised enum case must never take the sidebar down.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        verdict = try container.decodeIfPresent(String.self, forKey: .verdict)
+        confidence = try container.decodeIfPresent(Int.self, forKey: .confidence)
+        risk = (try? container.decodeIfPresent(String.self, forKey: .risk))
+            .flatMap { $0 }
+            .flatMap(Risk.init(rawValue:))
+        recovery = (try? container.decodeIfPresent(String.self, forKey: .recovery))
+            .flatMap { $0 }
+            .flatMap(Recovery.init(rawValue:))
+        riskFactors = try container.decodeIfPresent([String].self, forKey: .riskFactors)
+        findings = try container.decodeIfPresent(Int.self, forKey: .findings)
+        blocking = try container.decodeIfPresent(Int.self, forKey: .blocking)
+        stale = try container.decodeIfPresent(Bool.self, forKey: .stale)
+        at = try container.decodeIfPresent(String.self, forKey: .at)
+    }
 }
 
 extension Session {

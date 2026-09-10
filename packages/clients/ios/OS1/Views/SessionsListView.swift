@@ -357,6 +357,9 @@ struct SessionsListView: View {
                 if ProcessInfo.processInfo.environment["OS1_PR_REVIEW_CARDS_FIXTURE"] == "1" {
                     PrReviewCardsScreenshot()
                 }
+                if ProcessInfo.processInfo.environment["OS1_WORKSPACE_REVIEW_FIXTURE"] == "1" {
+                    WorkspaceReviewRowsScreenshot()
+                }
             }
             #endif
             // Session-id links in agent output (SessionLinks) are ordinary

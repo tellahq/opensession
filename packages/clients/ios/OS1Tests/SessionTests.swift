@@ -45,6 +45,62 @@ final class SessionTests: XCTestCase {
         XCTAssertNil(partial.safety?.explanation)
     }
 
+    // MARK: - Automated review: quality and merge risk are two fields
+
+    func testReviewRiskDecodesAtEveryLevel() throws {
+        for (word, level) in [
+            ("low", OsReviewSummary.Risk.low),
+            ("medium", .medium),
+            ("high", .high),
+        ] {
+            let session = try session(
+                #"{"id":"os-1","prOsReview":{"verdict":"approve","confidence":4,"risk":"\#(word)","findings":0,"blocking":0,"stale":false}}"#
+            )
+            XCTAssertEqual(session.prOsReview?.risk, level, word)
+            XCTAssertEqual(session.prOsReview?.confidence, 4, "quality stays its own score")
+        }
+    }
+
+    func testReviewRecoveryAndFactorsDecode() throws {
+        let session = try session(
+            #"{"id":"os-1","prOsReview":{"verdict":"approve","confidence":5,"risk":"high","recovery":"irreversible","riskFactors":["migration","auth"],"findings":0,"blocking":0}}"#
+        )
+        XCTAssertEqual(session.prOsReview?.recovery, .irreversible)
+        XCTAssertEqual(session.prOsReview?.riskFactors, ["migration", "auth"])
+        XCTAssertEqual(session.prOsReview?.stale, nil)
+    }
+
+    func testOlderServerWithoutRiskStillDecodes() throws {
+        let session = try session(
+            #"{"id":"os-1","prOsReview":{"verdict":"comment","confidence":3,"findings":1,"blocking":0,"stale":true}}"#
+        )
+        XCTAssertNil(session.prOsReview?.risk)
+        XCTAssertNil(session.prOsReview?.recovery)
+        XCTAssertNil(session.prOsReview?.riskFactors)
+        XCTAssertEqual(session.prOsReview?.confidence, 3)
+        XCTAssertEqual(session.prOsReview?.stale, true)
+    }
+
+    func testUnknownRiskWordDropsToNilRatherThanFailingTheSession() throws {
+        // A newer server adding a level must not take the sessions list down.
+        let session = try session(
+            #"{"id":"os-1","prOsReview":{"verdict":"approve","confidence":4,"risk":"critical","recovery":"weeks","findings":0,"blocking":0}}"#
+        )
+        XCTAssertEqual(session.id, "os-1")
+        XCTAssertNil(session.prOsReview?.risk)
+        XCTAssertNil(session.prOsReview?.recovery)
+        XCTAssertEqual(session.prOsReview?.verdict, "approve")
+        XCTAssertEqual(session.prOsReview?.confidence, 4)
+    }
+
+    func testStaleReviewKeepsItsRisk() throws {
+        let session = try session(
+            #"{"id":"os-1","prOsReview":{"verdict":"approve","confidence":4,"risk":"high","findings":0,"blocking":0,"stale":true}}"#
+        )
+        XCTAssertEqual(session.prOsReview?.risk, .high)
+        XCTAssertEqual(session.prOsReview?.stale, true)
+    }
+
     func testSessionAliasesAreDecodedForTranscriptLinks() throws {
         let session = try self.session(
             #"{"id":"os-current","aliasIds":["bks-original"]}"#
