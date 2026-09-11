@@ -1016,6 +1016,7 @@ struct PrPanelView: View {
                     } label: {
                         Label("Close pull request", systemImage: "xmark.circle")
                     }
+                    .disabled(deferredMerge.phase != .idle)
                 }
             }
         } label: {
