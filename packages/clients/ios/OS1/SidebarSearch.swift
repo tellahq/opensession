@@ -7,8 +7,9 @@ import Foundation
 /// predicate, because the match is typo-tolerant (`FuzzyMatch`) and the list
 /// can be thousands of rows with the person lens on everyone: scoring every
 /// field of every row per body evaluation would pin the main actor on each
-/// keystroke. `SessionsListView` runs `matches` in a detached task and keeps
-/// the previous answer on screen until the next one lands.
+/// keystroke. `SessionsListView` runs `matches` in a detached task, cancels
+/// it when the next keystroke supersedes it, and keeps the previous answer on
+/// screen until the next one lands.
 enum SidebarSearch {
     struct Matches: Equatable, Sendable {
         /// The query these ids answer. Empty means "not filtering", and then
@@ -27,16 +28,21 @@ enum SidebarSearch {
         }
     }
 
+    /// `nil` when the surrounding task is cancelled part way: a superseded
+    /// keystroke's scan stops at the next row instead of finishing a list of
+    /// thousands and competing with the scan that replaced it. Checked once
+    /// per row, so the cost is one flag read against a row's worth of scoring.
     static func matches(
         query: String,
         rows: [SidebarWorkspace],
         archived: [Session],
         workspaceNames: [String: String]
-    ) -> Matches {
+    ) -> Matches? {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         var out = Matches(query: query)
         guard !query.isEmpty else { return out }
         for row in rows {
+            if Task.isCancelled { return nil }
             var hit = FuzzyMatch.score(query, row.title) > 0
             for session in row.sessions
             where sessionMatches(session, query: query, workspaceNames: workspaceNames) {
@@ -45,9 +51,11 @@ enum SidebarSearch {
             }
             if hit { out.workspaceIds.insert(row.id) }
         }
-        for session in archived
-        where sessionMatches(session, query: query, workspaceNames: workspaceNames) {
-            out.sessionIds.insert(session.id)
+        for session in archived {
+            if Task.isCancelled { return nil }
+            if sessionMatches(session, query: query, workspaceNames: workspaceNames) {
+                out.sessionIds.insert(session.id)
+            }
         }
         return out
     }

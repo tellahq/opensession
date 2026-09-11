@@ -1695,7 +1695,10 @@ struct SessionsListView: View {
 
     /// Typo-tolerant scoring of every row's fields is real work on a list of
     /// thousands, so it runs detached and publishes one set of ids; the row
-    /// predicate then costs a set lookup on the main actor.
+    /// predicate then costs a set lookup on the main actor. A detached task
+    /// does not inherit the `.task(id:)` cancellation that the next keystroke
+    /// triggers, so the handle is cancelled by hand: otherwise every
+    /// superseded scan would run to the end and compete with the live one.
     private func updateMetadataSearch() async {
         guard let key = metadataSearchKey else {
             metadataMatches = SidebarSearch.Matches()
@@ -1704,15 +1707,20 @@ struct SessionsListView: View {
         // The name map only backs sessions an older server sent without a
         // stamped workspace name, so it is read here rather than keyed on.
         let workspaceNames = viewModel.workspaceNames
-        let matches = await Task.detached(priority: .userInitiated) {
+        let scan = Task.detached(priority: .userInitiated) {
             SidebarSearch.matches(
                 query: key.query,
                 rows: key.rows,
                 archived: key.archived,
                 workspaceNames: workspaceNames
             )
-        }.value
-        guard !Task.isCancelled else { return }
+        }
+        let matches = await withTaskCancellationHandler {
+            await scan.value
+        } onCancel: {
+            scan.cancel()
+        }
+        guard let matches, !Task.isCancelled else { return }
         metadataMatches = matches
     }
 
