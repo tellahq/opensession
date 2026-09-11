@@ -40,6 +40,11 @@ final class LaneStore {
         hydrations.begin()
     }
 
+    /// The clock as a write would see it when it starts. Internal for tests.
+    func hydrationMark() -> HydrationClock.Ticket {
+        hydrations.mark()
+    }
+
     private func resetForNewContext(_ context: NativePreferences.Context) {
         guard let hydratedContext else {
             self.hydratedContext = context
@@ -88,12 +93,27 @@ final class LaneStore {
 
     /// Reconcile one successful delta response without dropping a newer local
     /// mutation that landed while that request was in flight.
-    func applySaved(_ saved: [String: String], acknowledging captured: [String: String]) {
+    ///
+    /// The response is a whole-map snapshot taken when the server applied
+    /// the delta, and the server broadcasts `user_map_changed` before it
+    /// answers, so a re-read begun after the write started (`begunAt`) can
+    /// hold a newer map. Then the snapshot is not installed: the intents are
+    /// acknowledged, the newer map stays, and the caller re-reads; a GET
+    /// begun after the response is post-write. Returns false in that case.
+    @discardableResult
+    func applySaved(
+        _ saved: [String: String],
+        acknowledging captured: [String: String],
+        begunAt mark: HydrationClock.Ticket? = nil
+    ) -> Bool {
         for (key, value) in captured where pendingChanges[key] == value {
             pendingChanges.removeValue(forKey: key)
         }
+        let needsHydration = mark.map { hydrations.hasHydrationBegun(since: $0) } ?? false
         hydrations.confirmWrite()
+        if needsHydration { return false }
         applyHydrated(saved, persist: false)
+        return true
     }
 
     private func apply(_ next: [String: String]) {
@@ -109,6 +129,7 @@ final class LaneStore {
               let requestContext = hydratedContext,
               NativePreferences.context() == requestContext else { return }
         let captured = pendingChanges
+        let mark = hydrations.mark()
         isSaving = true
         Task { [weak self] in
             let saved = try? await SettingsAPI.saveLanes(
@@ -120,8 +141,9 @@ final class LaneStore {
                   NativePreferences.context() == requestContext else { return }
             self.isSaving = false
             guard let saved else { return }
-            self.applySaved(saved, acknowledging: captured)
+            let applied = self.applySaved(saved, acknowledging: captured, begunAt: mark)
             self.save()
+            if !applied { await self.hydrate() }
         }
     }
 }

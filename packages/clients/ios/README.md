@@ -38,7 +38,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   matching store re-reads it (`UserMapSync`), and the list refetches its rows.
   Each store orders its re-reads (`HydrationClock`): a slower, older GET, or
   one begun before a write this client confirmed, is dropped rather than
-  applied over the newer map.
+  applied over the newer map, and a write's own response is installed only
+  when no re-read began after the write started (the server broadcasts the
+  frame before it answers the PUT); otherwise the store re-reads.
   Unread rows
   read like the web sidebar's, off the same shared store (`/api/reads`): a row
   whose sessions carry activity past your last read goes semibold at full label

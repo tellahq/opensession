@@ -3,14 +3,10 @@ import Foundation
 /// Orders one user-map store's GETs against each other and against its
 /// confirmed writes, so a slow response cannot overwrite a newer map.
 ///
-/// The stores release the main actor while a GET is in flight, and two GETs
-/// overlap whenever a `user_map_changed` frame lands during the 30-second
-/// tick. Without ordering, the tick's response (read before the other
-/// client's write) could publish after the frame's response and drop that
-/// write until the next tick. A write this client confirmed meanwhile has the
-/// same effect: the GET may have been served the pre-write map, and the
-/// write's own response is already the fresher one. Same rule as the web
-/// `user-map`'s `hydrationVersion` and `confirmedVersions`.
+/// Only the latest GET may apply. A confirmed write invalidates outstanding
+/// GETs because they may predate it. Conversely, a GET begun during a PUT
+/// may carry a newer map than the PUT response: the server broadcasts before
+/// answering the PUT. In that case the store keeps its map and re-reads.
 struct HydrationClock {
     /// Handed out when a GET begins; presented again with its response.
     struct Ticket: Equatable {
@@ -27,7 +23,13 @@ struct HydrationClock {
         return Ticket(version: version, confirmed: confirmed)
     }
 
-    /// A write's response was applied; GETs begun before it are stale.
+    /// The clock as it stands, without starting a GET. A write takes one so
+    /// its response can tell whether a re-read began meanwhile.
+    func mark() -> Ticket {
+        Ticket(version: version, confirmed: confirmed)
+    }
+
+    /// A write was acknowledged; earlier GETs must not restore pre-write state.
     mutating func confirmWrite() {
         confirmed += 1
     }
@@ -36,5 +38,11 @@ struct HydrationClock {
     /// since the ticket was issued.
     func isCurrent(_ ticket: Ticket) -> Bool {
         ticket.version == version && ticket.confirmed == confirmed
+    }
+
+    /// True once any GET has begun after `ticket` was taken, whether or not
+    /// its response has landed.
+    func hasHydrationBegun(since ticket: Ticket) -> Bool {
+        ticket.version != version
     }
 }

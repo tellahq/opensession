@@ -90,6 +90,11 @@ final class WorkspaceSnoozeStore {
         hydrations.begin()
     }
 
+    /// The clock as a write would see it when it starts. Internal for tests.
+    func hydrationMark() -> HydrationClock.Ticket {
+        hydrations.mark()
+    }
+
     /// Replay local intent over the server's map. Internal so the merge is
     /// unit-testable; `persist` is off for the write path's own response.
     /// With a `ticket`, the map is applied only while that GET is still the
@@ -151,14 +156,28 @@ final class WorkspaceSnoozeStore {
     }
 
     /// Reconcile one successful delta response without dropping a newer local
-    /// mutation that landed while that request was in flight. A GET still in
-    /// flight may carry the pre-write map, so it is stale from here on.
-    func applySaved(_ saved: [String: String], acknowledging captured: [String: Change]) {
+    /// mutation that landed while that request was in flight.
+    ///
+    /// The response is a whole-map snapshot taken when the server applied
+    /// the delta, and the server broadcasts `user_map_changed` before it
+    /// answers, so a re-read begun after the write started (`begunAt`) can
+    /// hold a newer map. Then the snapshot is not installed: the intents are
+    /// acknowledged, the newer map stays, and the caller re-reads; a GET
+    /// begun after the response is post-write. Returns false in that case.
+    @discardableResult
+    func applySaved(
+        _ saved: [String: String],
+        acknowledging captured: [String: Change],
+        begunAt mark: HydrationClock.Ticket? = nil
+    ) -> Bool {
         for (key, change) in captured where pending[key] == change {
             pending.removeValue(forKey: key)
         }
+        let needsHydration = mark.map { hydrations.hasHydrationBegun(since: $0) } ?? false
         hydrations.confirmWrite()
+        if needsHydration { return false }
         applyHydrated(saved, persist: false)
+        return true
     }
 
     private func save(context requestContext: NativePreferences.Context) {
@@ -172,6 +191,7 @@ final class WorkspaceSnoozeStore {
             if case .remove = change { return key }
             return nil
         }
+        let mark = hydrations.mark()
         isSaving = true
         Task { [weak self] in
             let saved = try? await SettingsAPI.saveSnoozes(
@@ -184,8 +204,9 @@ final class WorkspaceSnoozeStore {
                   NativePreferences.context() == requestContext else { return }
             self.isSaving = false
             guard let saved else { return }
-            self.applySaved(saved, acknowledging: captured)
+            let applied = self.applySaved(saved, acknowledging: captured, begunAt: mark)
             self.save(context: requestContext)
+            if !applied { await self.hydrate() }
         }
     }
 
