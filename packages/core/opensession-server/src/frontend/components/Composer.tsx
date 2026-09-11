@@ -403,10 +403,22 @@ export function Composer({
       sendOptions.pastedTexts = pastedTexts.map(
         (attachment) => attachment.text,
       );
-    const consumed = handler(overrideText ?? text, sendOptions);
+    const draftAtSend = text;
+    const sentText = overrideText ?? text;
+    const consumed = handler(sentText, sendOptions);
     if (consumed instanceof Promise) {
+      // The handler answers later; the draft may have moved on by then.
+      // Clear only what was sent: a field the user has since retyped keeps
+      // its new text. (The dictation override commits to state after this
+      // call, so the field may legitimately hold either snapshot.)
       void consumed.then((result) => {
-        if (result === true) consume();
+        if (result !== true) return;
+        const now = textRef.current;
+        if (isControlled || now === draftAtSend || now === sentText) consume();
+        else
+          setPastedTexts((current) =>
+            current.filter((attachment) => !sentPastedIds.has(attachment.id)),
+          );
       });
     } else if (consumed === true) {
       consume();

@@ -266,6 +266,10 @@ describe("LiveResponseLoop", () => {
       "response.item.create",
       "response.create",
     ]);
+    // The continue opened another response; the loop is busy until it ends.
+    expect(l.busy).toBe(true);
+    l.handle("del_1", { type: "response.created" });
+    l.handle("del_1", { type: "response.completed" });
     expect(l.busy).toBe(false);
   });
 
@@ -312,9 +316,42 @@ describe("LiveResponseLoop", () => {
       "response.item.create",
       "response.create",
     ]);
+    // The continued response streams and ends with no further calls.
+    l.handle("del_1", { type: "response.created" });
+    l.handle("del_1", { type: "response.completed" });
+    expect(sent.length).toBe(2);
     // Idle loop: a typed message runs the backend right away.
     l.requestContinue();
     expect(sent.at(-1)?.type).toBe("response.create");
     expect(sent.length).toBe(3);
+  });
+
+  test("defers a typed-text continue while a response is still streaming", async () => {
+    const { l, sent } = loop(async () => ({}));
+    l.handle("del_1", { type: "response.created", response: { id: "resp_1" } });
+    // No function call yet, but the response has not finished: a second
+    // response.create now would collide with it.
+    expect(l.busy).toBe(true);
+    l.requestContinue();
+    expect(sent).toEqual([]);
+    l.handle("del_1", { type: "response.completed" });
+    await tick();
+    expect(sent.map((e) => e.type)).toEqual(["response.create"]);
+    // That continue opened a new response; it is busy again until it ends.
+    l.handle("del_1", { type: "response.created", response: { id: "resp_2" } });
+    expect(l.busy).toBe(true);
+    l.handle("del_1", { type: "response.completed" });
+    expect(l.busy).toBe(false);
+    expect(sent.length).toBe(1);
+  });
+
+  test("a failed response frees the loop and runs the deferred typed text", () => {
+    const { l, sent } = loop(async () => ({}));
+    l.handle("del_1", { type: "response.created" });
+    l.requestContinue();
+    expect(sent).toEqual([]);
+    l.handle("del_1", { type: "response.failed" });
+    expect(l.busy).toBe(false);
+    expect(sent.map((e) => e.type)).toEqual(["response.create"]);
   });
 });

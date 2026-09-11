@@ -324,8 +324,13 @@ export class LiveResponseLoop {
     },
   ) {}
 
+  /** A response is streaming or still owes tool outputs. Only one response
+   * runs per delegation, and this loop keeps one state per delegation, so a
+   * `response.create` issued now would reset the counters of the one in
+   * flight; typed text waits for its terminal event instead. */
   get busy(): boolean {
-    for (const d of this.delegations.values()) if (d.open.size) return true;
+    for (const d of this.delegations.values())
+      if (!d.finished || d.open.size) return true;
     return false;
   }
 
@@ -371,6 +376,8 @@ export class LiveResponseLoop {
         state.finished = true;
         state.open.clear();
         this.delegations.delete(delegationId);
+        // Typed text that waited on this response is still unanswered.
+        if (this.continueWanted) this.requestContinue();
         break;
       default:
         break;
