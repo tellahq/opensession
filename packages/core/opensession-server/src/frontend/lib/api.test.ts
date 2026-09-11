@@ -255,3 +255,13 @@ test("new workspace tabs create an idle sibling session", async () => {
     duplicate: true,
   });
 });
+
+test("workspace projection explicitly includes the selected workspace", async () => {
+  let url = "";
+  globalThis.fetch = stubFetch(async (input) => {
+    url = String(input);
+    return Response.json({ workspaces: [] });
+  });
+  await fetchWorkspaces({ includeWorkspaceId: "ws-archived" });
+  expect(url).toBe("/api/workspaces?active=1&includeWorkspaceId=ws-archived");
+});

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fetchWorkspaces } from "../lib/api";
 import { setWorkspaceTitles } from "../lib/markdown";
 import type { Workspace } from "../lib/types";
@@ -41,17 +41,31 @@ interface WorkspacesState {
   refresh: () => Promise<void>;
 }
 
-export function useWorkspaces(): WorkspacesState {
+export function useWorkspaces(selectedWorkspaceId?: string): WorkspacesState {
+  const selectedIdRef = useRef(selectedWorkspaceId);
+  useLayoutEffect(() => {
+    selectedIdRef.current = selectedWorkspaceId;
+  }, [selectedWorkspaceId]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loaded, setLoaded] = useState(false);
   // This identity is observable: the hook subscriptions and App's global
   // socket handler depend on it. Keep it stable in uncompiled development.
-  const [refresh] = useState(
-    () => () =>
-      loadWorkspaces(fetchWorkspaces, setWorkspaces, () => setLoaded(true)),
-  );
+  const [refresh] = useState(() => () => {
+    const includeWorkspaceId = selectedIdRef.current;
+    return loadWorkspaces(
+      () => fetchWorkspaces({ includeWorkspaceId }),
+      (rows) => {
+        // A prior route's slower refresh must not hide the selected workspace.
+        if (selectedIdRef.current === includeWorkspaceId) setWorkspaces(rows);
+      },
+      () => setLoaded(true),
+    );
+  });
 
-  useEffect(() => subscribeToWorkspaceRefreshes(window, refresh), [refresh]);
+  useEffect(
+    () => subscribeToWorkspaceRefreshes(window, refresh),
+    [refresh, selectedWorkspaceId],
+  );
   useEffect(() => {
     setWorkspaceTitles(
       workspaces.map((workspace) => [workspace.id, workspace.name] as const),

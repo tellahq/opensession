@@ -6,6 +6,7 @@
 // to lifecycle and transcript events plus `session.close`.
 
 import { z } from "zod";
+import { DeskNavigationClient } from "./desk-navigation-client";
 import { BASE_PATH } from "./base";
 
 export type DeskVoiceState =
@@ -32,6 +33,7 @@ const liveResponseSchema = z.object({
   liveSessionId: z.string(),
   sdp: z.string(),
   sessionId: z.string(),
+  navigationToken: z.string().uuid().optional(),
   backendModel: z.string().optional(),
 });
 
@@ -72,7 +74,7 @@ export interface DeskVoiceDiagReport {
 }
 
 type VoiceRequest =
-  | { user: string; sdp: string }
+  | { user: string; sdp: string; navigation: true }
   | { user: string; liveSessionId: string; text: string }
   | { user: string; liveSessionId: string }
   | DeskVoiceDiagReport;
@@ -128,6 +130,7 @@ export class DeskVoiceClient {
   private micStream: MediaStream | null = null;
   private audioEl: HTMLAudioElement | null = null;
   private liveSessionId: string | null = null;
+  private navigation: DeskNavigationClient | null = null;
 
   private idleTimer: number | null = null;
   private speakingTimer: number | null = null;
@@ -272,7 +275,7 @@ export class DeskVoiceClient {
       if (!sdp) throw new Error("No local offer");
       const live = await postJson(
         "/live",
-        { user: this.user, sdp },
+        { user: this.user, sdp, navigation: true },
         liveResponseSchema,
       );
       if (this.aborted) {
@@ -282,6 +285,11 @@ export class DeskVoiceClient {
         return;
       }
       this.liveSessionId = live.liveSessionId;
+      if (live.navigationToken)
+        this.navigation = new DeskNavigationClient(
+          live.liveSessionId,
+          live.navigationToken,
+        );
       this.backendModel = live.backendModel ?? null;
       await pc.setRemoteDescription({ type: "answer", sdp: live.sdp });
     } catch (e) {
@@ -327,6 +335,7 @@ export class DeskVoiceClient {
    * `session.closed` so pending backend work drains; tears down regardless.
    * `reason` is for the diag line only: who decided the call was over. */
   stop(reason = "hangup"): void {
+    this.navigation?.stop();
     if (this.closing || this.aborted) return;
     if (this.starting) {
       // Cancel the start in progress. Whatever step is awaiting sees
@@ -367,6 +376,8 @@ export class DeskVoiceClient {
   }
 
   private teardown() {
+    this.navigation?.stop();
+    this.navigation = null;
     this.postDiag("teardown");
     for (const key of ["idleTimer", "speakingTimer", "closeTimer"] as const) {
       const t = this[key];
@@ -473,6 +484,7 @@ export class DeskVoiceClient {
 
     switch (event.type) {
       case "session.started":
+        void this.navigation?.start();
         this.connected = true;
         this.startedAt ??= Date.now();
         this.resetIdleTimer();

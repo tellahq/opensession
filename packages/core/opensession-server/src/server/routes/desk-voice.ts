@@ -30,9 +30,12 @@ import {
 } from "../desk-voice";
 import {
   closeLiveVoiceCall,
+  handleLiveNavigation,
   createLiveVoiceCall,
   sendLiveVoiceText,
 } from "../desk-voice-live";
+
+import { deskNavigationRequestSchema } from "../../shared/desk-navigation";
 
 /** An SDP offer is a few KB; anything bigger is not a browser offer. */
 const MAX_SDP_BYTES = 64 * 1024;
@@ -86,6 +89,29 @@ export async function handleDeskVoiceRoutes(
     return voiceStatus();
   }
 
+  if (path === "/api/desk/voice/live/navigation" && req.method === "POST") {
+    // Unlike legacy voice attribution, navigation never trusts body.user or a
+    // first name. The unguessable capability is returned only to the call's tab.
+    if (!ctx.authUser?.login)
+      return Response.json(
+        { error: "Sign in to navigate by voice." },
+        { status: 401 },
+      );
+    const parsed = deskNavigationRequestSchema.safeParse(
+      await req.json().catch(() => null),
+    );
+    if (!parsed.success)
+      return Response.json(
+        { error: "Invalid navigation request" },
+        { status: 400 },
+      );
+    const result = handleLiveNavigation(ctx.authUser.login, parsed.data);
+    return Response.json(result ?? { error: "No navigation-capable call" }, {
+      status: result ? 200 : 404,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
   if (path === "/api/desk/voice/live" && req.method === "POST") {
     const body = await req.json().catch(() => null);
     if (
@@ -101,9 +127,16 @@ export async function handleDeskVoiceRoutes(
     const user = requestUser(ctx, body.user);
     if (!user) return Response.json({ error: "missing user" }, { status: 400 });
     try {
-      return Response.json(await createLiveVoiceCall(user, body.sdp), {
-        status: 201,
-      });
+      return Response.json(
+        await createLiveVoiceCall(
+          user,
+          body.sdp,
+          body.navigation === true ? ctx.authUser?.login : undefined,
+        ),
+        {
+          status: 201,
+        },
+      );
     } catch (e: any) {
       return Response.json({ error: e?.message || String(e) }, { status: 502 });
     }
