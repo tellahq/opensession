@@ -36,6 +36,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   A claim, snooze or hide made on another client lands here without a
   foreground: the server's `user_map_changed` frame names the map, the
   matching store re-reads it (`UserMapSync`), and the list refetches its rows.
+  Each store orders its re-reads (`HydrationClock`): a slower, older GET, or
+  one begun before a write this client confirmed, is dropped rather than
+  applied over the newer map.
   Unread rows
   read like the web sidebar's, off the same shared store (`/api/reads`): a row
   whose sessions carry activity past your last read goes semibold at full label

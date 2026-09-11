@@ -19,18 +19,25 @@ final class LaneStore {
     private var hydratedContext: NativePreferences.Context?
     private(set) var hasHydrated = false
     private var isSaving = false
+    private var hydrations = HydrationClock()
 
     init() {}
 
     /// Load this user's map from the server. A response for a server/user that
-    /// has since changed is dropped, while mutations made before it landed are
-    /// replayed over it.
+    /// has since changed is dropped, as is one overtaken by a newer GET or by
+    /// a confirmed write; mutations made before it landed are replayed over it.
     func hydrate() async {
         let requestContext = NativePreferences.context()
         resetForNewContext(requestContext)
+        let ticket = beginHydration()
         guard let loaded = try? await SettingsAPI.lanes(user: requestContext.user) else { return }
         guard NativePreferences.context() == requestContext else { return }
-        applyHydrated(loaded)
+        applyHydrated(loaded, ticket: ticket)
+    }
+
+    /// Marks the start of one GET. Internal so the ordering is unit-testable.
+    func beginHydration() -> HydrationClock.Ticket {
+        hydrations.begin()
     }
 
     private func resetForNewContext(_ context: NativePreferences.Context) {
@@ -64,7 +71,14 @@ final class LaneStore {
     }
 
     /// Internal so pre-hydration mutation reconciliation is unit-testable.
-    func applyHydrated(_ loaded: [String: String], persist: Bool = true) {
+    /// With a `ticket`, the map is applied only while that GET is still the
+    /// newest and no write was confirmed since it began.
+    func applyHydrated(
+        _ loaded: [String: String],
+        ticket: HydrationClock.Ticket? = nil,
+        persist: Bool = true
+    ) {
+        if let ticket, !hydrations.isCurrent(ticket) { return }
         var merged = loaded
         for (key, value) in pendingChanges { merged[key] = value }
         hasHydrated = true
@@ -78,6 +92,7 @@ final class LaneStore {
         for (key, value) in captured where pendingChanges[key] == value {
             pendingChanges.removeValue(forKey: key)
         }
+        hydrations.confirmWrite()
         applyHydrated(saved, persist: false)
     }
 

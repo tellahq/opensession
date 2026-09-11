@@ -2,9 +2,11 @@ import XCTest
 @testable import OS1
 
 /// A `user_map_changed` frame makes a store re-read its map while local
-/// writes may still be pending or in flight. These pin two things: the frame
-/// is scoped to the account's own user, and a re-read never drops a local
-/// mutation the server has not acknowledged yet.
+/// writes may still be pending or in flight, and while the 30-second tick's
+/// own re-read may still be out. These pin three things: the frame is scoped
+/// to the account's own user, a re-read never drops a local mutation the
+/// server has not acknowledged yet, and a slower, older re-read cannot
+/// overwrite the newer one or a write confirmed since it began.
 @MainActor
 final class UserMapSyncTests: XCTestCase {
     private func workspaces(_ json: String) throws -> [SidebarWorkspace] {
@@ -99,6 +101,105 @@ final class UserMapSyncTests: XCTestCase {
         store.applyHydrated([:], persist: false)
 
         store.applyHydrated(["workspace:ws-1": WorkspaceSnooze.someDay], persist: false)
+
+        XCTAssertTrue(store.isSnoozed(rows[0]))
+    }
+
+    // MARK: Ordering
+
+    func testClockRetiresOlderTicketsAndTicketsFromBeforeAConfirmedWrite() {
+        var clock = HydrationClock()
+        let first = clock.begin()
+        XCTAssertTrue(clock.isCurrent(first))
+
+        let second = clock.begin()
+        XCTAssertFalse(clock.isCurrent(first))
+        XCTAssertTrue(clock.isCurrent(second))
+
+        clock.confirmWrite()
+        XCTAssertFalse(clock.isCurrent(second))
+        let third = clock.begin()
+        XCTAssertTrue(clock.isCurrent(third))
+    }
+
+    /// The tick's GET read the map before the other client claimed bks-9;
+    /// the frame's GET read it after. The tick's response lands last.
+    func testLaneResyncIsNotOverwrittenByAnOlderGet() {
+        let store = LaneStore()
+        let tick = store.beginHydration()
+        let frame = store.beginHydration()
+
+        store.applyHydrated(["bks-9": "mine"], ticket: frame, persist: false)
+        store.applyHydrated([:], ticket: tick, persist: false)
+
+        XCTAssertEqual(store.claims, ["bks-9"])
+    }
+
+    /// A GET begun before this client's own write was confirmed may carry the
+    /// pre-write map; the write's response is the fresher one.
+    func testLaneGetFromBeforeAConfirmedWriteIsDropped() throws {
+        let store = LaneStore()
+        store.applyHydrated([:], persist: false)
+        let tick = store.beginHydration()
+        let rows = try workspaces(#"[{"id":"bks-1"}]"#)
+        store.claim(rows.flatMap(\.sessions))
+        store.applySaved(["bks-1": "mine"], acknowledging: ["bks-1": "mine"])
+
+        store.applyHydrated([:], ticket: tick, persist: false)
+
+        XCTAssertEqual(store.claims, ["bks-1"])
+    }
+
+    func testHideResyncIsNotOverwrittenByAnOlderGet() throws {
+        let store = HideStore()
+        let rows = try workspaces(#"[{"id":"bks-1","workspaceId":"ws-1"}]"#)
+        let tick = store.beginHydration()
+        let frame = store.beginHydration()
+
+        store.applyHydrated(["workspace:ws-1": "2026-09-01T00:00:00Z"], ticket: frame, persist: false)
+        store.applyHydrated([:], ticket: tick, persist: false)
+
+        XCTAssertTrue(store.isHidden(rows[0]))
+    }
+
+    func testHideGetFromBeforeAConfirmedWriteIsDropped() throws {
+        let store = HideStore()
+        let rows = try workspaces(#"[{"id":"bks-1","workspaceId":"ws-1"}]"#)
+        store.applyHydrated(["workspace:ws-1": "2026-09-01T00:00:00Z"], persist: false)
+        let tick = store.beginHydration()
+        store.clear(["workspace:ws-1"])
+        store.applySaved([:], acknowledging: ["workspace:ws-1": .remove])
+
+        // The stale GET still carries the hide this client just lifted.
+        store.applyHydrated(["workspace:ws-1": "2026-09-01T00:00:00Z"], ticket: tick, persist: false)
+
+        XCTAssertFalse(store.isHidden(rows[0]))
+    }
+
+    func testSnoozeResyncIsNotOverwrittenByAnOlderGet() throws {
+        let store = WorkspaceSnoozeStore()
+        let rows = try workspaces(#"[{"id":"bks-1","workspaceId":"ws-1"}]"#)
+        let tick = store.beginHydration()
+        let frame = store.beginHydration()
+
+        store.applyHydrated(["workspace:ws-1": WorkspaceSnooze.someDay], ticket: frame, persist: false)
+        store.applyHydrated([:], ticket: tick, persist: false)
+
+        XCTAssertTrue(store.isSnoozed(rows[0]))
+    }
+
+    func testSnoozeGetFromBeforeAConfirmedWriteIsDropped() throws {
+        let store = WorkspaceSnoozeStore()
+        let rows = try workspaces(#"[{"id":"bks-1","workspaceId":"ws-1"}]"#)
+        store.applyHydrated([:], persist: false)
+        let tick = store.beginHydration()
+        store.set(rows[0], until: WorkspaceSnooze.someDay)
+        store.applySaved(
+            ["workspace:ws-1": WorkspaceSnooze.someDay],
+            acknowledging: ["workspace:ws-1": .set(WorkspaceSnooze.someDay)]
+        )
+
+        store.applyHydrated([:], ticket: tick, persist: false)
 
         XCTAssertTrue(store.isSnoozed(rows[0]))
     }
