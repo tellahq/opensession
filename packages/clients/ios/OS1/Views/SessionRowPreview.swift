@@ -116,6 +116,7 @@ struct SessionRowPreview: View {
                 Text(fact.text)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(fact.tone.color)
+                    .accessibilityLabel(fact.accessibilityText)
                     // One line is right while a fact is a few words wide. At
                     // an accessibility size a single fact can be wider than
                     // the whole card, and one line then means the end of the
@@ -309,6 +310,14 @@ struct PrPreviewFact: Equatable {
 
     let text: String
     let tone: Tone
+    /// What VoiceOver says when the visible phrase leans on layout to be
+    /// understood. "5/5" and "high risk" sit apart on the strip and are
+    /// coloured apart, but read aloud they are one number and one word with
+    /// nothing naming the axis, so those facts spell it out: "quality 5 of
+    /// 5, approved", "merge risk high". Nil when the text already says it all.
+    var spoken: String? = nil
+
+    var accessibilityText: String { spoken ?? text }
 }
 
 extension MergeRisk {
@@ -423,15 +432,22 @@ enum PrPreviewFacts {
         default: "reviewed"
         }
         var parts = [String]()
+        var spoken = [String]()
         if let confidence = review.confidence {
             parts.append("\(confidence)/5")
+            spoken.append("quality \(confidence) of 5")
         }
         parts.append(word)
+        spoken.append(word)
         if let blocking = review.blocking, blocking > 0 {
             parts.append("\(blocking) blocking")
+            spoken.append("\(blocking) blocking")
         }
         let stale = review.stale == true
-        if stale { parts.append("stale") }
+        if stale {
+            parts.append("stale")
+            spoken.append("stale")
+        }
         let tone: PrPreviewFact.Tone = if stale {
             .faint
         } else {
@@ -441,7 +457,11 @@ enum PrPreviewFacts {
             default: .dim
             }
         }
-        return PrPreviewFact(text: parts.joined(separator: " · "), tone: tone)
+        return PrPreviewFact(
+            text: parts.joined(separator: " · "),
+            tone: tone,
+            spoken: spoken.joined(separator: ", ")
+        )
     }
 
     /// Merge risk, as its own phrase after the reading. The web folds it into
@@ -451,7 +471,11 @@ enum PrPreviewFacts {
     /// Nothing without a level: a repo can opt out of the risk pass.
     static func mergeRiskFact(_ review: OsReviewSummary) -> PrPreviewFact? {
         guard let risk = review.risk else { return nil }
-        return PrPreviewFact(text: risk.label, tone: risk.tone(stale: review.stale == true))
+        return PrPreviewFact(
+            text: risk.label,
+            tone: risk.tone(stale: review.stale == true),
+            spoken: risk.accessibilityLabel
+        )
     }
 
     /// Who the PR is waiting on. Two names is the most that fits before the
