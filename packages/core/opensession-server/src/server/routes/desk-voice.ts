@@ -15,12 +15,16 @@
 import type { RouteContext } from "./context";
 import { requestUser } from "./context";
 import {
+  DESK_LIVE_BACKEND_MODELS,
   executeVoiceTool,
   mintVoiceSecret,
   mirrorVoiceEntries,
   mirrorVoiceToolCall,
   recordVoiceDiag,
+  isLiveBackendModel,
+  setVoiceBackendModel,
   setVoiceKey,
+  voiceBackendModel,
   voiceKeyConfigured,
   voiceKeyMasked,
 } from "../desk-voice";
@@ -33,10 +37,13 @@ import {
 /** An SDP offer is a few KB; anything bigger is not a browser offer. */
 const MAX_SDP_BYTES = 64 * 1024;
 
-function keyStatus(): Response {
+/** The instance-wide voice settings: key state and the web call's backend. */
+async function voiceStatus(): Promise<Response> {
   return Response.json({
-    configured: voiceKeyConfigured(),
-    keyMasked: voiceKeyMasked(),
+    configured: await voiceKeyConfigured(),
+    keyMasked: await voiceKeyMasked(),
+    backendModel: await voiceBackendModel(),
+    backendModels: DESK_LIVE_BACKEND_MODELS,
   });
 }
 
@@ -47,7 +54,7 @@ export async function handleDeskVoiceRoutes(
   if (!path.startsWith("/api/desk/voice/")) return undefined;
 
   if (path === "/api/desk/voice/status" && req.method === "GET")
-    return keyStatus();
+    return voiceStatus();
 
   if (path === "/api/desk/voice/key" && req.method === "PUT") {
     const body = await req.json().catch(() => null);
@@ -56,8 +63,27 @@ export async function handleDeskVoiceRoutes(
         { error: "expected { apiKey: string }" },
         { status: 400 },
       );
-    setVoiceKey(body.apiKey);
-    return keyStatus();
+    await setVoiceKey(body.apiKey);
+    return voiceStatus();
+  }
+
+  // Fails closed: only the two allowed ids are stored, anything else is a
+  // 400 and the setting is left as it was.
+  if (path === "/api/desk/voice/backend" && req.method === "PUT") {
+    const body = await req.json().catch(() => null);
+    const model: unknown = body?.model;
+    if (typeof model !== "string")
+      return Response.json(
+        { error: "expected { model: string }" },
+        { status: 400 },
+      );
+    if (!isLiveBackendModel(model))
+      return Response.json(
+        { error: "Voice backend must be gpt-5.6-terra or gpt-5.6-luna" },
+        { status: 400 },
+      );
+    await setVoiceBackendModel(model);
+    return voiceStatus();
   }
 
   if (path === "/api/desk/voice/live" && req.method === "POST") {
@@ -189,7 +215,7 @@ export async function handleDeskVoiceRoutes(
       return Response.json({ error: "expected an object" }, { status: 400 });
     const user = requestUser(ctx, (body as { user?: string }).user);
     if (!user) return Response.json({ error: "missing user" }, { status: 400 });
-    recordVoiceDiag(user, body as Record<string, unknown>);
+    await recordVoiceDiag(user, body as Record<string, unknown>);
     return Response.json({ ok: true });
   }
 

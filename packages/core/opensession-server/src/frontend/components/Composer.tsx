@@ -182,6 +182,7 @@ export function Composer({
     defaultModel,
     model,
     modelDisabled,
+    modelPillDisabled,
     modelTitle,
     effort,
     fastMode,
@@ -1730,7 +1731,7 @@ export function Composer({
             accountId={accountId}
             onAccountChange={onAccountChange}
             usage={usage}
-            disabled={disabled}
+            disabled={disabled || modelPillDisabled}
             effortDownLabel={effortDownLabel}
             effortUpLabel={effortUpLabel}
             onOpenChange={setModelMenuOpen}

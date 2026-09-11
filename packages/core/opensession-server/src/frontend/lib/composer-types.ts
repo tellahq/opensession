@@ -37,7 +37,12 @@ export interface ComposerConfig {
   defaultModel: string;
   /** Current model id; an empty string selects the default. */
   model: string;
+  /** The model is set elsewhere; effort stays switchable from the pill. */
   modelDisabled?: boolean;
+  /** The whole pill is inert, with `modelTitle` as its tooltip, while the
+   * rest of the composer keeps working: the Desk during a voice call, where
+   * typed text goes into the call and neither model nor effort applies. */
+  modelPillDisabled?: boolean;
   modelTitle?: string;
   /**
    * Reasoning-effort control (stowed as a compact pill, mirroring the

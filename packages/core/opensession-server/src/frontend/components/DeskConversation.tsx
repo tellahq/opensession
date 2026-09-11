@@ -652,7 +652,13 @@ export function DeskConversation({
               models,
               defaultModel,
               model,
-              modelTitle: "Model and reasoning effort for your Desk",
+              // The pill sets the text Desk's model. During a call typed
+              // text goes into the call, whose backend is an instance
+              // setting, so the pill has nothing to apply to until it ends.
+              modelPillDisabled: voiceCall?.active,
+              modelTitle: voiceCall?.active
+                ? "Applies to typed turns. The voice call uses its own backend (Settings → Desk voice)."
+                : "Model and reasoning effort for your Desk",
               effort,
               autoFocus,
               textareaRef,

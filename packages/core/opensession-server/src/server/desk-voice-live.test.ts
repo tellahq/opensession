@@ -1,12 +1,41 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+  DESK_LIVE_BACKEND_MODEL,
   LIVE_CLIENT_ALLOWED_EVENTS,
   LIVE_ROW_GAP_MS,
   LiveResponseLoop,
+  LiveUsageMeter,
   VoiceTranscriptRows,
   buildLiveSessionConfig,
+  formatLiveUsage,
 } from "./desk-voice-live";
+import {
+  setVoiceBackendModel,
+  setVoiceKey,
+  voiceBackendModel,
+  voiceKeyMasked,
+} from "./desk-voice";
+import { stateDir } from "./paths";
 import { registerSessionControl, type SessionControl } from "./session-control";
+
+// The voice store resolves its path per call, so pointing OPENSESSION_STATE_DIR
+// at a scratch dir here keeps every test below off the machine's real
+// desk/voice.json (which may hold a key and a backend choice of its own).
+let scratch = "";
+let previousStateDir: string | undefined;
+beforeAll(() => {
+  scratch = mkdtempSync(join(tmpdir(), "desk-voice-live-test-"));
+  previousStateDir = process.env.OPENSESSION_STATE_DIR;
+  process.env.OPENSESSION_STATE_DIR = scratch;
+});
+afterAll(() => {
+  if (previousStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
+  else process.env.OPENSESSION_STATE_DIR = previousStateDir;
+  rmSync(scratch, { recursive: true, force: true });
+});
 
 function registerStubControl(
   tail: Array<{ type: "user" | "assistant"; content: string }> = [],
@@ -76,6 +105,66 @@ describe("Desk voice GPT-Live session config", () => {
     expect(visible).not.toContain("response.event");
   });
 
+  test("delegates to Terra unless the instance chose Luna, read per call", async () => {
+    registerStubControl();
+    expect(DESK_LIVE_BACKEND_MODEL).toBe("gpt-5.6-terra");
+    expect(await voiceBackendModel()).toBe("gpt-5.6-terra");
+    let config = await buildLiveSessionConfig("missing-test-session");
+    expect(config.delegation.responses.model).toBe("gpt-5.6-terra");
+
+    await setVoiceBackendModel("gpt-5.6-luna");
+    config = await buildLiveSessionConfig("missing-test-session");
+    expect(config.delegation.responses.model).toBe("gpt-5.6-luna");
+    // The voice model itself does not change with the backend.
+    expect(config.model).toBe("gpt-live-1");
+
+    await setVoiceBackendModel("gpt-5.6-terra");
+    config = await buildLiveSessionConfig("missing-test-session");
+    expect(config.delegation.responses.model).toBe("gpt-5.6-terra");
+  });
+
+  test("refuses any backend but the two allowed ids and leaves the setting alone", async () => {
+    await setVoiceBackendModel("gpt-5.6-luna");
+    for (const bad of ["gpt-5.6", "gpt-live-1", "", 42, null, undefined])
+      await expect(setVoiceBackendModel(bad)).rejects.toThrow(
+        /Voice backend must be/,
+      );
+    expect(await voiceBackendModel()).toBe("gpt-5.6-luna");
+    await setVoiceBackendModel("gpt-5.6-terra");
+  });
+
+  test("stores the backend beside the key, 0600, and neither write drops the other", async () => {
+    await setVoiceKey("sk-test-1234");
+    await setVoiceBackendModel("gpt-5.6-luna");
+    expect(await voiceKeyMasked()).toBe("sk-…1234");
+    expect(await voiceBackendModel()).toBe("gpt-5.6-luna");
+    await setVoiceKey("sk-test-5678");
+    expect(await voiceBackendModel()).toBe("gpt-5.6-luna");
+    const path = join(stateDir("desk"), "voice.json");
+    expect(path.startsWith(scratch)).toBe(true);
+    expect(JSON.parse(readFileSync(path, "utf-8"))).toEqual({
+      openaiApiKey: "sk-test-5678",
+      liveBackendModel: "gpt-5.6-luna",
+    });
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    // Clearing the key keeps the choice; only the key goes.
+    await setVoiceKey("");
+    expect(await voiceKeyMasked()).toBeUndefined();
+    expect(await voiceBackendModel()).toBe("gpt-5.6-luna");
+    await setVoiceBackendModel("gpt-5.6-terra");
+  });
+
+  test("concurrent key and backend saves preserve both values", async () => {
+    await Promise.all([
+      setVoiceKey("sk-test-concurrent"),
+      setVoiceBackendModel("gpt-5.6-luna"),
+    ]);
+    expect(await voiceKeyMasked()).toBe("sk-…rent");
+    expect(await voiceBackendModel()).toBe("gpt-5.6-luna");
+    await setVoiceKey("");
+    await setVoiceBackendModel("gpt-5.6-terra");
+  });
+
   test("seeds the live model with the recent Desk text conversation", async () => {
     registerStubControl([
       { type: "user", content: "what's   running?" },
@@ -94,6 +183,72 @@ describe("Desk voice GPT-Live session config", () => {
         content: [{ type: "text", text: "Two sessions." }],
       },
     ]);
+  });
+});
+
+describe("LiveUsageMeter", () => {
+  test("sums backend usage across delegations from terminal events only", () => {
+    const meter = new LiveUsageMeter();
+    // Streaming events carry no usage; only the terminal one counts.
+    expect(
+      meter.handle({ type: "response.created", response: { id: "resp_1" } }),
+    ).toBe(false);
+    expect(
+      meter.handle({
+        type: "response.output_item.done",
+        item: { type: "function_call", call_id: "c1", name: "x" },
+      }),
+    ).toBe(false);
+    expect(
+      meter.handle({
+        type: "response.completed",
+        response: {
+          id: "resp_1",
+          usage: {
+            input_tokens: 1200,
+            output_tokens: 300,
+            input_tokens_details: { cached_tokens: 800 },
+            output_tokens_details: { reasoning_tokens: 120 },
+          },
+        },
+      }),
+    ).toBe(true);
+    // `response.done` naming the same response is not counted twice.
+    expect(
+      meter.handle({
+        type: "response.done",
+        response: { id: "resp_1", usage: { input_tokens: 1200 } },
+      }),
+    ).toBe(false);
+    // A second delegation's response, with partial detail.
+    expect(
+      meter.handle({
+        type: "response.done",
+        response: {
+          id: "resp_2",
+          usage: { input_tokens: 50, output_tokens: 7 },
+        },
+      }),
+    ).toBe(true);
+    // A terminal event without usage adds nothing.
+    expect(
+      meter.handle({ type: "response.completed", response: { id: "resp_3" } }),
+    ).toBe(false);
+    expect(meter.totals).toEqual({
+      inputTokens: 1250,
+      outputTokens: 307,
+      cachedInputTokens: 800,
+      reasoningTokens: 120,
+      responses: 2,
+    });
+    expect(formatLiveUsage(meter.totals)).toBe(
+      "tokens in=1250 (cached 800) out=307 (reasoning 120)",
+    );
+  });
+
+  test("an idle call reports zero without detail", () => {
+    const meter = new LiveUsageMeter();
+    expect(formatLiveUsage(meter.totals)).toBe("tokens in=0 out=0");
   });
 });
 
