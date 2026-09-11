@@ -6,6 +6,20 @@ import {
 } from "./run-instructions";
 
 describe("buildRunInstructions", () => {
+  test("preserves attribution without imposing a blanket Git publishing restriction", () => {
+    const prompt = buildRunInstructions({ isAsk: false, hasSession: true });
+
+    expect(prompt).toContain(
+      "End each PR body with the attribution footer from the session context and follow its assignee rule.",
+    );
+    expect(prompt).toContain(
+      "Add the `Co-authored-by` trailer from the session context to every commit.",
+    );
+    expect(prompt).not.toContain(
+      "Never merge, approve, or push the default branch.",
+    );
+  });
+
   test("limits automatic reviewers to unattended automation pull requests", async () => {
     const prompt = buildRunInstructions({
       isAsk: false,

@@ -152,7 +152,7 @@ export function buildRunInstructions(input: {
     parts.push(
       "## Pull requests\nEnd each PR body with the attribution footer from the session " +
         "context and follow its assignee rule. Add the `Co-authored-by` trailer from the " +
-        "session context to every commit. Never merge, approve, or push the default branch.",
+        "session context to every commit.",
     );
     if (input.prReviewer) {
       parts.push(
