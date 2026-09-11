@@ -248,7 +248,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   comment with a summary, plus the "squash and merge after approving"
   shortcut, `POST …/pr-review`), **Merge** (squash, merge commit or rebase,
   behind a confirmation that names what it would land on top of — conflicts,
-  failing checks, a draft, requested changes — `POST …/pr-merge`), and
+  failing checks, a draft, requested changes — then held for a five-second
+  undo window with a countdown before `POST …/pr-merge` goes out; closing the
+  panel inside the window takes it back too, see `DeferredMerge`), and
   **Close pull request** (`POST …/pr-close`). The session overflow menu also
   exposes squash, merge-commit and rebase merge actions directly, with the same
   warnings and confirmation. PR surfaces can copy the GitHub link or open an

@@ -1010,6 +1010,15 @@ struct SessionView: View {
                    openPanel.isAvailable {
                     openPanel(.changes(sessionId: viewModel.session.id))
                 }
+                #endif
+                #if DEBUG && os(macOS)
+                // The Mac has no panel stack; the PR panel is the sheet the
+                // toolbar chip opens.
+                if ProcessInfo.processInfo.environment["OS1_OPEN_PR"] == "1" {
+                    showPrPanel = true
+                }
+                #endif
+                #if DEBUG && os(iOS)
                 if ProcessInfo.processInfo.environment["OS1_SHOW_SLACK_RECEIPT"] == "1" {
                     viewModel.resolveSlackComposer(SlackComposeReceipt(
                         requestId: "screenshot-slack-receipt",

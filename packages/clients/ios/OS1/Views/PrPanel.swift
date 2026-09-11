@@ -235,6 +235,10 @@ struct PrPanelView: View {
     /// Merge method awaiting confirmation — merging is the one action here
     /// that can't be taken back, so it always passes through a dialog.
     @State private var pendingMerge: String?
+    /// The confirmed merge, held for its five-second undo window before the
+    /// request goes out. Owned by the panel: closing it takes the merge back,
+    /// so a request the person can no longer see never goes out.
+    @State private var deferredMerge = DeferredMerge()
     @State private var confirmingClose = false
     @State private var slackShare: PrSlackShareRequest?
     /// Which of the canvas's two pages is showing. Two, not the six tabs this
@@ -293,7 +297,17 @@ struct PrPanelView: View {
                 page = .info
             }
             #endif
+            #if DEBUG
+            // Screenshot hook: the countdown with no request behind it.
+            if ProcessInfo.processInfo.environment["OS1_SHOW_MERGE_UNDO"] == "1" {
+                deferredMerge.presentFixture(secondsLeft: 4)
+            }
+            #endif
         }
+        // Out of sight is out of reach: a merge still inside its window is
+        // taken back rather than sent from a panel nobody is looking at. One
+        // already on the wire runs to its end.
+        .onDisappear { deferredMerge.cancel() }
         .sheet(item: $slackShare) { request in
             PrSlackShareSheet(request: request)
         }
@@ -363,6 +377,11 @@ struct PrPanelView: View {
                             .labelStyle(.iconOnly)
                     }
                 }
+                // The undo control lands in front of the actions menu for the
+                // window, so nothing the person just pressed moves.
+                if deferredMerge.phase == .scheduled {
+                    ToolbarItem(placement: .topTrailingCompat) { mergeUndoControl }
+                }
                 ToolbarItem(placement: .topTrailingCompat) { actionsMenu(pr) }
             }
             .sheet(isPresented: $reviewing) {
@@ -382,7 +401,7 @@ struct PrPanelView: View {
                 Button(mergeButtonLabel(pendingMerge ?? "squash")) {
                     let method = pendingMerge ?? "squash"
                     pendingMerge = nil
-                    run(.merge) { try await viewModel.mergePr(method: method) }
+                    holdMerge(method: method)
                 }
                 Button("Cancel", role: .cancel) { pendingMerge = nil }
             } message: {
@@ -935,12 +954,21 @@ struct PrPanelView: View {
                 } label: {
                     Label("Review", systemImage: "checkmark.bubble")
                 }
-                Menu {
-                    Button("Squash and merge") { pendingMerge = "squash" }
-                    Button("Create a merge commit") { pendingMerge = "merge" }
-                    Button("Rebase and merge") { pendingMerge = "rebase" }
-                } label: {
-                    Label("Merge", systemImage: "arrow.triangle.merge")
+                if deferredMerge.phase == .idle {
+                    Menu {
+                        Button("Squash and merge") { pendingMerge = "squash" }
+                        Button("Create a merge commit") { pendingMerge = "merge" }
+                        Button("Rebase and merge") { pendingMerge = "rebase" }
+                    } label: {
+                        Label("Merge", systemImage: "arrow.triangle.merge")
+                    }
+                } else {
+                    // The row keeps its place and reads as merging for the
+                    // whole window, the way the web's button does.
+                    Button {} label: {
+                        Label("Merging…", systemImage: "arrow.triangle.merge")
+                    }
+                    .disabled(true)
                 }
             }
             Section {
@@ -995,6 +1023,45 @@ struct PrPanelView: View {
             }
         }
         .disabled(busy != nil)
+    }
+
+    /// The undo affordance for the window: the undo glyph plus the seconds
+    /// left, rolling down a digit at a time. Pressing it means the request is
+    /// never sent.
+    private var mergeUndoControl: some View {
+        let seconds = deferredMerge.secondsLeft ?? 1
+        return Button {
+            if deferredMerge.cancel() { Haptics.play(.selection) }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.uturn.backward")
+                Text(verbatim: "\(seconds)")
+                    .font(.subheadline.weight(.medium))
+                    .monospacedDigit()
+                    .contentTransition(.numericText(countsDown: true))
+                    .animation(.snappy(duration: 0.3), value: seconds)
+            }
+        }
+        .accessibilityLabel(Text(verbatim: "Undo merge, \(seconds)s left"))
+        .help("Undo merge")
+    }
+
+    /// Hold the confirmed merge for its window before anything is sent. The
+    /// spinner and the panel's busy state wait for the request itself: the
+    /// window is not a merge in progress, and must not read as one.
+    private func holdMerge(method: String) {
+        guard busy == nil else { return }
+        actionError = nil
+        deferredMerge.schedule {
+            busy = .merge
+            try await viewModel.mergePr(method: method)
+        } completion: { result in
+            if case .failure(let error) = result {
+                actionError = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+            busy = nil
+        }
     }
 
     /// Run one action, keeping its failure in the panel: the server answers a
