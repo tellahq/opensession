@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TikTok Hooks</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f8fafc;
+        --surface: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --text-2: #475569;
+        --muted: #94a3b8;
+        --accent: #8278fa;
+        --accent-soft: rgba(130, 120, 250, 0.14);
+        --shadow:
+          0 1px 2px rgba(15, 23, 42, 0.05), 0 4px 16px rgba(15, 23, 42, 0.05);
+        font-family:
+          Inter,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #17181d;
+          --surface: #1f2027;
+          --border: #2d2f38;
+          --text: #f1f2f6;
+          --text-2: #b4b7c3;
+          --muted: #6f7380;
+          --accent-soft: rgba(130, 120, 250, 0.22);
+          --shadow: none;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-weight: 500;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 24px 12px;
+      }
+      .bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        margin: 0;
+      }
+      .count {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+      }
+      input[type="search"] {
+        flex: 1 1 260px;
+        min-width: 200px;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--text);
+        font: inherit;
+      }
+      input[type="search"]:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        max-width: 1400px;
+        margin: 10px auto 0;
+      }
+      .chip {
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text-2);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+        transition:
+          background 120ms,
+          border-color 120ms;
+      }
+      .chip:hover {
+        border-color: var(--muted);
+      }
+      .chip[aria-pressed="true"] {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+        color: var(--text);
+      }
+      .chip small {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        margin-left: 4px;
+      }
+      main {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px 24px 60px;
+      }
+      section {
+        margin-bottom: 32px;
+      }
+      section h2 {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 0 0 4px;
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      section h2 .count {
+        font-size: 13px;
+      }
+      section p.desc {
+        margin: 0 0 12px;
+        color: var(--text-2);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 14px;
+      }
+      .card {
+        display: grid;
+        grid-template-columns: 84px 1fr;
+        gap: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        box-shadow: var(--shadow);
+      }
+      .card img {
+        width: 84px;
+        aspect-ratio: 9 / 16;
+        object-fit: cover;
+        border-radius: 8px;
+        background: var(--border);
+      }
+      .card .frame-missing {
+        width: 84px;
+        aspect-ratio: 9 / 16;
+        border-radius: 8px;
+        background: var(--border);
+      }
+      .hook {
+        margin: 0 0 8px;
+        font-size: 14.5px;
+        line-height: 1.4;
+      }
+      .hook mark {
+        background: var(--accent-soft);
+        color: inherit;
+        border-radius: 3px;
+        padding: 0 1px;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 10px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+      .meta a {
+        color: var(--text-2);
+        text-decoration: none;
+      }
+      .meta a:hover {
+        color: var(--accent);
+      }
+      .meta select {
+        font: inherit;
+        font-size: 12.5px;
+        color: var(--text-2);
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 2px 6px;
+      }
+      .meta button {
+        font: inherit;
+        font-size: 12.5px;
+        color: var(--text-2);
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 2px 8px;
+        cursor: pointer;
+      }
+      .meta button:hover {
+        border-color: var(--muted);
+        color: var(--text);
+      }
+      .badge {
+        display: inline-block;
+        padding: 1px 8px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--text);
+        font-size: 12px;
+      }
+      .empty {
+        color: var(--muted);
+        padding: 40px 0;
+        text-align: center;
+      }
+      details.failures {
+        margin-top: 40px;
+        color: var(--muted);
+        font-size: 12.5px;
+      }
+      details.failures code {
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar">
+        <h1>TikTok Hooks</h1>
+        <span class="count" id="count"></span>
+        <input
+          id="q"
+          type="search"
+          placeholder="Search hooks, transcripts, creators…"
+          autofocus
+        />
+      </div>
+      <div class="chips" id="chips"></div>
+    </header>
+    <main id="main"><p class="empty">Loading…</p></main>
+
+    <script>
+      const state = {
+        kinds: {},
+        hooks: [],
+        failures: [],
+        query: "",
+        kind: "all",
+      };
+      const $ = (id) => document.getElementById(id);
+
+      async function load() {
+        const response = await fetch("api/hooks");
+        Object.assign(state, await response.json());
+        render();
+      }
+
+      function escape(text) {
+        return String(text ?? "").replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        );
+      }
+
+      function highlight(text) {
+        const safe = escape(text);
+        if (!state.query) return safe;
+        const pattern = state.query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return safe.replace(
+          new RegExp(pattern, "gi"),
+          (m) => `<mark>${m}</mark>`,
+        );
+      }
+
+      function matchesQuery(hook) {
+        if (!state.query) return true;
+        const haystack = [hook.hook, hook.transcript, hook.creator, hook.title]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(state.query.toLowerCase());
+      }
+
+      function matchesKind(hook) {
+        return (
+          state.kind === "all" || (hook.kind ?? "unclassified") === state.kind
+        );
+      }
+
+      function renderChips(visible) {
+        const counts = {};
+        for (const hook of visible) {
+          const key = hook.kind ?? "unclassified";
+          counts[key] = (counts[key] || 0) + 1;
+        }
+        const entries = [
+          ["all", "All", visible.length],
+          ...Object.keys(state.kinds).map((k) => [
+            k,
+            state.kinds[k].label,
+            counts[k] || 0,
+          ]),
+        ];
+        if (counts.unclassified)
+          entries.push(["unclassified", "Unclassified", counts.unclassified]);
+        $("chips").innerHTML = entries
+          .filter(([key, , n]) => key === "all" || n > 0 || key === state.kind)
+          .map(
+            ([key, label, n]) =>
+              `<button class="chip" data-kind="${key}" aria-pressed="${state.kind === key}">${escape(label)}<small>${n}</small></button>`,
+          )
+          .join("");
+      }
+
+      function kindOptions(current) {
+        const options = Object.entries(state.kinds).map(
+          ([k, v]) =>
+            `<option value="${k}" ${k === current ? "selected" : ""}>${escape(v.label)}</option>`,
+        );
+        return `<option value="" ${current ? "" : "selected"} disabled>Kind…</option>${options.join("")}`;
+      }
+
+      function card(hook) {
+        const date = hook.saved_at.slice(0, 10);
+        return `<article class="card" data-id="${hook.id}">
+      <img src="frames/${hook.id}.jpg" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'frame-missing'}))" />
+      <div>
+        <p class="hook">${highlight(hook.hook)}</p>
+        <div class="meta">
+          <a href="${escape(hook.url)}" target="_blank" rel="noopener">@${escape(hook.creator)}</a>
+          <span>${date}</span>
+          ${hook.language ? `<span>${escape(hook.language)}</span>` : ""}
+          <select data-kind-for="${hook.id}" title="${escape(hook.kind_reason || "")}">${kindOptions(hook.kind)}</select>
+          <button data-copy="${escape(hook.hook)}">Copy</button>
+        </div>
+      </div>
+    </article>`;
+      }
+
+      function render() {
+        const searched = state.hooks.filter(matchesQuery);
+        renderChips(searched);
+        const visible = searched.filter(matchesKind);
+        $("count").textContent = `${visible.length} of ${state.hooks.length}`;
+
+        if (!visible.length) {
+          $("main").innerHTML =
+            `<p class="empty">${state.hooks.length ? "Nothing matches." : "No hooks yet — the daily sync fills this in."}</p>`;
+          return;
+        }
+
+        const groups =
+          state.kind === "all" ? groupByKind(visible) : [[state.kind, visible]];
+        $("main").innerHTML =
+          groups
+            .map(([kind, hooks]) => {
+              const meta = state.kinds[kind];
+              const title = meta ? meta.label : "Unclassified";
+              const desc = meta
+                ? meta.description
+                : "Waiting for the daily run to classify these.";
+              return `<section>
+        <h2>${escape(title)} <span class="count">${hooks.length}</span></h2>
+        <p class="desc">${escape(desc)}</p>
+        <div class="grid">${hooks.map(card).join("")}</div>
+      </section>`;
+            })
+            .join("") + failures();
+      }
+
+      function groupByKind(hooks) {
+        const order = [...Object.keys(state.kinds), "unclassified"];
+        const groups = new Map();
+        for (const hook of hooks) {
+          const key = hook.kind ?? "unclassified";
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(hook);
+        }
+        return order
+          .filter((k) => groups.has(k))
+          .map((k) => [k, groups.get(k)]);
+      }
+
+      function failures() {
+        if (!state.failures.length) return "";
+        const rows = state.failures.map(
+          (f) =>
+            `<li><a href="${escape(f.url)}" target="_blank" rel="noopener">${f.id}</a> · ${f.attempts} attempt(s) · <code>${escape(f.error.split("\n").pop())}</code></li>`,
+        );
+        return `<details class="failures"><summary>${state.failures.length} video(s) failing to import</summary><ul>${rows.join("")}</ul></details>`;
+      }
+
+      $("q").addEventListener("input", (event) => {
+        state.query = event.target.value.trim();
+        render();
+      });
+      $("chips").addEventListener("click", (event) => {
+        const chip = event.target.closest(".chip");
+        if (!chip) return;
+        state.kind = chip.dataset.kind;
+        render();
+      });
+      $("main").addEventListener("change", async (event) => {
+        const id = event.target.dataset.kindFor;
+        if (!id) return;
+        const kind = event.target.value;
+        const response = await fetch(`api/hooks/${id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind }),
+        });
+        if (!response.ok) return alert("Could not save the kind.");
+        const hook = state.hooks.find((h) => h.id === id);
+        hook.kind = kind;
+        hook.kind_reason = "Set by hand in the dashboard";
+        render();
+      });
+      $("main").addEventListener("click", async (event) => {
+        const button = event.target.closest("[data-copy]");
+        if (!button) return;
+        await navigator.clipboard.writeText(button.dataset.copy);
+        button.textContent = "Copied";
+        setTimeout(() => (button.textContent = "Copy"), 1200);
+      });
+
+      load();
+    </script>
+  </body>
+</html>

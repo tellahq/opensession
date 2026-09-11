@@ -1,0 +1,72 @@
+{
+  "question": {
+    "label": "Question",
+    "description": "Opens by asking the viewer something directly.",
+    "example": "Why is everyone in tech obsessed with taste?"
+  },
+  "bold-claim": {
+    "label": "Bold claim",
+    "description": "A definitive, confident statement or promise stated as fact.",
+    "example": "This is the only productivity system that has ever worked for me."
+  },
+  "contrarian": {
+    "label": "Contrarian",
+    "description": "Pushes against a belief the viewer probably holds.",
+    "example": "No, you weren't born with great taste."
+  },
+  "story": {
+    "label": "Story",
+    "description": "Drops straight into a narrative with a time, place or character.",
+    "example": "It's 1615 in a small village in Spain and you've just been handed a cup of wine."
+  },
+  "curiosity-gap": {
+    "label": "Curiosity gap",
+    "description": "Teases something specific and withholds it.",
+    "example": "There's one thing nobody tells you before you quit your job."
+  },
+  "how-to": {
+    "label": "How-to",
+    "description": "Promises a method, steps, or a list of ways to do something.",
+    "example": "Here's how I plan a week of content in 20 minutes."
+  },
+  "problem": {
+    "label": "Problem",
+    "description": "Names a pain the viewer recognises before offering anything.",
+    "example": "If your videos get views but no followers, this is why."
+  },
+  "result": {
+    "label": "Result",
+    "description": "Leads with an outcome, number or proof.",
+    "example": "This video got two million views with zero editing."
+  },
+  "callout": {
+    "label": "Callout",
+    "description": "Addresses a specific audience or situation, including POV framing.",
+    "example": "If you're a founder who hates being on camera, watch this."
+  },
+  "warning": {
+    "label": "Warning",
+    "description": "Tells the viewer to stop doing something or flags a mistake.",
+    "example": "Stop starting your videos with 'hey guys'."
+  },
+  "secret": {
+    "label": "Secret",
+    "description": "Frames the content as insider or hidden knowledge.",
+    "example": "Nobody talks about what actually happens after you raise a seed round."
+  },
+  "comparison": {
+    "label": "Comparison",
+    "description": "Sets up X versus Y, or a before and after.",
+    "example": "Same script, two edits. Watch which one you finish."
+  },
+  "reaction": {
+    "label": "Reaction",
+    "description": "Responds to a comment, trend, news item or someone else's take.",
+    "example": "Everyone is talking about this launch, so I tried it."
+  },
+  "other": {
+    "label": "Other",
+    "description": "No speech in the opening, or a hook that fits none of the above.",
+    "example": ""
+  }
+}

@@ -1,0 +1,9 @@
+# Runtime data and credentials must never be committed.
+__pycache__/
+*.pyc
+*.sqlite*
+*.db*
+cookies*.txt
+frames/
+sync.lock
+.venv/
