@@ -24,6 +24,15 @@ Use `apple_mobile_doctor` and `apple_mobile_inspect_project` before any build.
 3. Run `apple_mobile_test` where the package has host-portable tests.
 4. Use `apple_mobile_build_unsigned` for a non-signing build.
 5. Inspect generated IPAs with `apple_mobile_inspect_ipa`.
+6. To show an app from a local Mac workspace, build an `iphonesimulator` `.app`
+   inside the workspace and call `opensession-portals` `start_simulator_portal`
+   with its workspace-relative `appPath`. This needs full Xcode and idb. Open
+   the returned Portal at `/`, exercise the app, and report the URL. The person
+   can pin it beside the conversation. A listening viewer may still be booting
+   its simulator; verify the screen before claiming the app works. Use the
+   returned name with `restart_portal` after rebuilding or `stop_portal` to
+   release it. Restart creates a fresh device. This does not enable hot reload.
+   See `docs/simulator-portals.md` in the Open Session repository.
 
 ## Ad-hoc or TestFlight
 

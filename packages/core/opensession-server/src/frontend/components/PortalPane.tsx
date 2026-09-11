@@ -2,10 +2,24 @@ import { useState } from "react";
 import type { PortalTarget } from "../lib/portals";
 import { Button } from "../ui/button";
 import { PageLoader } from "../ui/page-loader";
-import { IconArrowUpRight, IconGlobe, IconRestore } from "./icons";
+import {
+  IconArrowUpRight,
+  IconExpand,
+  IconGlobe,
+  IconRestore,
+  IconX,
+} from "./icons";
 
-/** Browser-like center pane for one service exposed by a session portal. */
-export function PortalPane({ target }: { target: PortalTarget }) {
+/** Browser-like pane for one service exposed by a session portal. */
+export function PortalPane({
+  target,
+  onExpand,
+  onClose,
+}: {
+  target: PortalTarget;
+  onExpand?: () => void;
+  onClose?: () => void;
+}) {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -34,6 +48,16 @@ export function PortalPane({ target }: { target: PortalTarget }) {
           aria-label={`Reload ${target.name}`}
           title="Reload portal"
         />
+        {onExpand ? (
+          <Button
+            variant="ghost"
+            size="md"
+            icon={<IconExpand size={16} />}
+            onClick={onExpand}
+            aria-label={`Expand ${target.name} to full width`}
+            title="Expand to full width"
+          />
+        ) : null}
         <Button
           variant="ghost"
           size="md"
@@ -48,6 +72,16 @@ export function PortalPane({ target }: { target: PortalTarget }) {
           aria-label={`Open ${target.name} in a separate browser window`}
           title="Open in browser"
         />
+        {onClose ? (
+          <Button
+            variant="ghost"
+            size="md"
+            icon={<IconX size={16} />}
+            onClick={onClose}
+            aria-label={`Close ${target.name} side panel`}
+            title="Close side panel"
+          />
+        ) : null}
       </div>
       <div className="relative min-h-0 flex-1 bg-white">
         {loading ? (

@@ -34,6 +34,10 @@ import type { UnifiedSession } from "./types";
 import type { Sandbox } from "./sandbox/provider";
 import { createWorkloadIdentityEnv } from "./workload-identity";
 import { getRepo } from "./worktree";
+import {
+  simulatorPortalCommand,
+  simulatorPortalInput,
+} from "./simulator-portal-command";
 
 const verifiedEditorFixtureSchema = z.object({
   leaseId: z.string().regex(/^epfl_[A-Za-z0-9]+$/),
@@ -170,7 +174,9 @@ type PortalStartInput = {
   port?: number;
   key?: string;
   description?: string;
+  defaultPath?: string;
   readyTimeoutMs?: number;
+  shutdownGraceMs?: number;
 };
 
 async function startPortalForContext(
@@ -212,7 +218,9 @@ async function startPortalForContext(
   const service = status.services.find(
     (candidate) => candidate.key === portal.key,
   );
-  return `${portal.name} is ready at ${service?.previewUrl ?? "its authenticated Portal URL"}.`;
+  return service?.previewUrl
+    ? `${portal.name} is ready at ${service.previewUrl}.`
+    : `${portal.name} is listening on port ${portal.port}, but its authenticated Portal URL is unavailable. Configure this instance's Caddy HTTPS Portal routing, then check list_portals. Do not share the raw local port.`;
 }
 
 function isTellaEditorPath(path: string): boolean {
@@ -227,6 +235,38 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
     name: "opensession-portals",
     version: "1.0.0",
     tools: [
+      tool(
+        "start_simulator_portal",
+        "Start this session's interactive iOS Simulator Portal on the local Mac. Requires full Xcode, an iOS Simulator runtime, idb and idb_companion on PATH, and an already-built simulator .app inside the workspace. Creates a private simulator, streams its screen and forwards taps, swipes and typing. Returns the authenticated viewer URL; the viewer reports boot or dependency errors. Repeated calls reuse the Portal. Use stop_portal/restart_portal with the returned name. Not available in Sandboxes or remote Runner workspaces. Does not build, sign, release, or enable hot reload.",
+        simulatorPortalInput,
+        async (args) => {
+          const deadline = portalToolDeadline();
+          const dir = workspace(ctx);
+          if (dir instanceof Error) return result(dir.message);
+          if (ctx.hasSandbox() || ctx.runner()?.runner)
+            return result(
+              "Simulator Portals require a local Mac workspace, not a Sandbox or remote Runner.",
+            );
+          if (process.platform !== "darwin")
+            return result(
+              "Simulator Portals require Open Session running on macOS with full Xcode and idb installed.",
+            );
+          try {
+            const input = await simulatorPortalCommand({
+              ...args,
+              sessionId: ctx.sessionId,
+              workspaceDir: dir,
+            });
+            return result(
+              await startPortalForContext(ctx, dir, null, input, deadline),
+            );
+          } catch (error) {
+            return result(
+              `Could not start simulator Portal: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        },
+      ),
       tool(
         "start_portal",
         "Start a supervised HTTP or WebSocket service in this session workspace. Open Session allocates a port when omitted, sets PORT and PORTAL_URL, waits for it to listen, and returns its authenticated Portal URL. Never use an upstream URL: Portals expose only this session's process.",
