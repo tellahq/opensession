@@ -22,3 +22,22 @@ test("the Desk modal keeps its full conversation until Clear chat", async () => 
     "entries.filter((e) => !e.timestamp || e.timestamp > hideBefore)",
   );
 });
+
+test("the Desk transcript opens session pills the way the session viewer does", async () => {
+  const conversation = await Bun.file(
+    new URL("./DeskConversation.tsx", import.meta.url),
+  ).text();
+  const viewerActions = await Bun.file(
+    new URL("../hooks/useSessionConversationState.ts", import.meta.url),
+  ).text();
+
+  // Markdown session chips and the tool row's spawned-session pill carry a
+  // bare data-session-id and rely on the scrolling pane to delegate the
+  // click. Both panes must read that click through the one shared helper,
+  // and the Desk must route it to the same place a spawned worker opens.
+  expect(conversation).toContain("sessionIdFromTranscriptClick(e)");
+  expect(viewerActions).toContain("sessionIdFromTranscriptClick(e)");
+  expect(conversation).toMatch(
+    /onClick=\{\s*onOpenSubagent\s*\?[\s\S]*?sessionIdFromTranscriptClick\(e\);\s*if \(!id\) return;\s*e\.preventDefault\(\);\s*onOpenSubagent\(id\);/,
+  );
+});

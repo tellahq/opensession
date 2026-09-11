@@ -19,6 +19,7 @@ import {
 import { splitAttachments, type FileAttachment } from "../lib/images";
 import { Composer } from "./Composer";
 import { mergeTranscriptEntries } from "../lib/transcript-state";
+import { sessionIdFromTranscriptClick } from "../lib/transcript-session-click";
 import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import { getLiveTypingPref } from "../lib/live-typing-pref";
@@ -581,6 +582,21 @@ export function DeskConversation({
         )}
         ref={bodyRef}
         onScroll={onScroll}
+        // Session chips and the tool row's spawned-session pill carry only a
+        // data-session-id; the pane they scroll in opens them, as the session
+        // viewer's does (handleMessagesClick). The Desk is mostly delegated
+        // work, so without this its transcript was full of pills that did
+        // nothing. Same destination as a spawned worker: the full viewer.
+        onClick={
+          onOpenSubagent
+            ? (e) => {
+                const id = sessionIdFromTranscriptClick(e);
+                if (!id) return;
+                e.preventDefault();
+                onOpenSubagent(id);
+              }
+            : undefined
+        }
       >
         {!hasContent ? (
           <>
