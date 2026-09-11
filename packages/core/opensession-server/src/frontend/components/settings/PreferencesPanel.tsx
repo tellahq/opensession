@@ -101,6 +101,12 @@ import {
   onVimModeChanged,
   setVimModePref,
 } from "../../lib/vim-pref";
+import {
+  getAgentationPref,
+  onAgentationChanged,
+  setAgentationPref,
+} from "../../lib/agentation-pref";
+import { AGENTATION_ENABLED } from "../../lib/brand";
 import { Input, Textarea } from "../../ui/input";
 import { Button } from "../../ui/button";
 import {
@@ -234,6 +240,34 @@ function DeskVoicePanel() {
         Adds a microphone to Desk, opened with ⌘J. The API key is shared across
         this instance.
       </SettingsHint>
+    </>
+  );
+}
+
+function DebugSection() {
+  const [agentation, setAgentation] = useState(getAgentationPref);
+  useEffect(
+    () => onAgentationChanged(() => setAgentation(getAgentationPref())),
+    [],
+  );
+  if (!AGENTATION_ENABLED) return null;
+
+  return (
+    <>
+      <SettingsGroupLabel>Debug</SettingsGroupLabel>
+      <SettingCard>
+        <SettingRow
+          title="Agentation"
+          desc="Show the page annotation toolbar on desktop. Only affects you."
+          control={
+            <Switch
+              aria-label="Agentation"
+              checked={agentation}
+              onCheckedChange={setAgentationPref}
+            />
+          }
+        />
+      </SettingCard>
     </>
   );
 }
@@ -955,6 +989,7 @@ export function PreferencesPanel() {
       <DeskVoicePanel />
       <PersonalPromptPanel />
       <PendingSendsSection />
+      <DebugSection />
     </SettingsPanel>
   );
 }
