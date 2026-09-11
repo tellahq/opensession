@@ -274,6 +274,7 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
         ],
         linkPr: () => unused("linkPr"),
         labelPr: () => unused("labelPr"),
+        checkPrReady: () => unused("checkPrReady"),
       }),
   },
   {

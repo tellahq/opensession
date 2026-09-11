@@ -49,7 +49,7 @@ touches an in-process tool:
 | [`opensession-humans`](#opensession-humans) | 3 | interactive, Slack loop, goal wake | Interactive runs need a session id (the answer routes back to it). |
 | [`opensession-keychain`](#opensession-keychain) | 3 | interactive | Needs a session id. |
 | [`opensession-publish`](#opensession-publish) | 4 | interactive | Needs a session id. |
-| [`opensession-repos`](#opensession-repos) | 5 | interactive | Needs a session id. |
+| [`opensession-repos`](#opensession-repos) | 6 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 9 | interactive | Needs a session id. |
 | [`opensession-web`](#opensession-web) | 3 | interactive, goal wake | Needs a session id. |
 | [`opensession-portals`](#opensession-portals) | 7 | interactive | Needs a session id. |
@@ -72,7 +72,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-31 servers, 135 tools.
+31 servers, 136 tools.
 
 ## opensession-sessions
 
@@ -496,7 +496,7 @@ Stop a published app. It stays registered with its versions intact and can be st
 
 ## opensession-repos
 
-Attach or switch repos, link a PR to this session, and label PRs in any registered repo.
+Attach or switch repos, link a PR to this session, label PRs, and check whether a PR is ready to merge.
 
 - **Source** `packages/core/opensession-server/src/agents/slack/repos-tools.ts`
 - **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
@@ -532,6 +532,12 @@ Link a pull request to this session so it shows in the session's Review tab besi
 `mcp__opensession-repos__label_pull_request` · input: `url` (string), `repo` (string), `number` (number), `add` (string[]), `remove` (string[])
 
 Add or remove labels on a pull request in any registered GitHub repo, including one this session does not have checked out. Labels are applied as the bot: the gateway mints a token for that repo, so this works where `gh` in your shell cannot see the repo. Pass the PR URL, or a repo id and number.
+
+### `check_pr_ready`
+
+`mcp__opensession-repos__check_pr_ready` · input: `url` (string), `repo` (string), `number` (number), `session` (string)
+
+Is a pull request ready to merge? One deterministic verdict from live GitHub state: ready or not, and every blocker: open/merged/closed, draft, merge conflicts, each check's latest run by name (failing, pending, passing), the review decision and who gave it, and the base branch's rules. The first line is a sentence to say as-is; the JSON block at the end is the same verdict for branching on. Pass a PR URL, a repo id and number, or a session id to check that session's PR (defaults to this session's own PR). Read-only, runs as the bot, works for any registered repo. Use this instead of piecing readiness together from transcripts or gh output.
 
 ## opensession-memory
 

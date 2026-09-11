@@ -72,6 +72,7 @@ import {
 } from "./preview-path-leases";
 import {
   attachRepo,
+  checkPrMergeReadiness,
   linkPr,
   resolveSessionRepoContext,
   sessionRepoIds,
@@ -252,6 +253,7 @@ export function interactiveMcpServers(
               })),
             linkPr: (input) => linkPr(sessionId, input),
             labelPr: (input) => labelPr(sessionId, input),
+            checkPrReady: (input) => checkPrMergeReadiness(sessionId, input),
           }),
           // Durable repo/user/team memory, shared both ways with Slack's
           // channel memory. Write tools are
