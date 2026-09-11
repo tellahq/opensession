@@ -36,20 +36,18 @@ struct CommandPaletteEntry: Identifiable, Equatable, Sendable {
 
 /// Which rows a query keeps, and in what order.
 ///
-/// Deliberately not a fuzzy subsequence matcher: on a list where most rows are
-/// sessions with long, similar titles, subsequence matching turns every query
-/// into a wall of near-misses. Every whitespace-separated token has to appear
-/// somewhere in the row, and where it appears is the score — the title's start
-/// beats a word inside it, which beats the subtitle or a keyword.
+/// Matching is the shared `FuzzyMatch`, the same rules as the web palette:
+/// every whitespace-separated term has to land somewhere in the row, exactly,
+/// within a small edit distance, or as an abbreviation of one word, so
+/// "relase" still finds Release. Where it lands is the rank: a match in the
+/// title beats one that needed the subtitle or a keyword, and within each the
+/// scorer's own order holds (the title's start over a word inside it, over a
+/// typo).
 enum CommandPaletteRanking {
-    /// A row with its searchable text folded once per call. Folding inside the
-    /// comparator would redo it for every comparison.
     private struct Candidate {
         let entry: CommandPaletteEntry
         let order: Int
-        let title: String
-        let rest: String
-        var score = 0
+        let score: Int
     }
 
     static func results(
@@ -58,37 +56,16 @@ enum CommandPaletteRanking {
         sessionLimit: Int = 40,
         contentMatches: Set<String> = []
     ) -> [CommandPaletteEntry] {
-        let tokens = fold(query).split(separator: " ").map(String.init)
         var matched: [Candidate] = []
         for (order, entry) in entries.enumerated() {
-            var candidate = Candidate(
-                entry: entry,
-                order: order,
-                title: fold(entry.title),
-                rest: fold(
-                    ([entry.subtitle].compactMap { $0 } + entry.keywords)
-                        .joined(separator: " ")
-                )
-            )
-            var total = 0
-            var matchedEveryToken = true
-            for token in tokens {
-                guard let score = score(token, in: candidate) else {
-                    matchedEveryToken = false
-                    break
-                }
-                total += score
-            }
-            if matchedEveryToken {
-                candidate.score = total
+            let score = score(entry, query: query)
+            if score > 0 {
+                matched.append(Candidate(entry: entry, order: order, score: score))
             } else if entry.kind == .session, contentMatches.contains(entry.id) {
                 // A backend transcript hit ranks after every metadata match,
                 // whose weakest score is still at least one.
-                candidate.score = 0
-            } else {
-                continue
+                matched.append(Candidate(entry: entry, order: order, score: 0))
             }
-            matched.append(candidate)
         }
 
         matched.sort { left, right in
@@ -112,28 +89,15 @@ enum CommandPaletteRanking {
         }
     }
 
-    private static func score(_ token: String, in candidate: Candidate) -> Int? {
-        if candidate.title.hasPrefix(token) { return 4 }
-        if let range = candidate.title.range(of: token) {
-            return startsWord(candidate.title, at: range.lowerBound) ? 3 : 2
-        }
-        if candidate.rest.contains(token) { return 1 }
-        return nil
-    }
-
-    private static func startsWord(_ text: String, at index: String.Index) -> Bool {
-        guard index > text.startIndex else { return true }
-        let before = text[text.index(before: index)]
-        return !before.isLetter && !before.isNumber
-    }
-
-    /// Lowercased, accent-insensitive, and with runs of whitespace collapsed,
-    /// so "Café  Deploy" and "cafe deploy" are the same haystack.
-    private static func fold(_ text: String) -> String {
-        text
-            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
-            .split(whereSeparator: \.isWhitespace)
+    /// 0 when the row does not match. A title match sits a full band above a
+    /// match that needed the subtitle or keywords, and a query whose terms are
+    /// spread across both still counts, since the row as a whole is searched.
+    private static func score(_ entry: CommandPaletteEntry, query: String) -> Int {
+        let title = FuzzyMatch.score(query, entry.title)
+        if title > 0 { return 100 + title }
+        let rest = ([entry.title, entry.subtitle].compactMap { $0 } + entry.keywords)
             .joined(separator: " ")
+        return FuzzyMatch.score(query, rest)
     }
 }
 

@@ -18,8 +18,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   sharing `/api/snoozes` with the web sidebar. Activity restores Needs action,
   Recent, Yesterday, and Earlier; Status remains the dynamic lane view. Group
   by project is an independent switch for all three modes. The
-  compact toolbar search/filter finds session metadata
-  and conversation text through `/api/sessions/search`. iOS long-press actions
+  compact toolbar search/filter finds session metadata (title, repository,
+  branch, workspace name) with the web's typo-tolerant matcher
+  (`Models/FuzzyMatch.swift`, a port of `shared/fuzzy-match.ts`, scored off
+  the main actor by `SidebarSearch`) and conversation text through
+  `/api/sessions/search`. The Mac command palette and the `@` palette's people
+  rows rank by the same scorer. iOS long-press actions
   include details, rename, sharing, pull request, pin, hide, Snooze/Unsnooze,
   and Archive. Swipe right pins; swipe left offers Snooze and Archive.
   Pinned rows are lifted into a Pinned band at the top in the user's own order,

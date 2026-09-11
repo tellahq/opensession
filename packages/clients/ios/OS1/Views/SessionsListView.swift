@@ -91,6 +91,10 @@ struct SessionsListView: View {
     /// session id so workspace rows can match any conversation behind them.
     @State private var transcriptSnippets: [String: String] = [:]
     @State private var transcriptSearchRevision = 0
+    /// Which rows the typed query finds by their metadata, scored off the
+    /// main actor (`SidebarSearch`). Holds the previous answer until the next
+    /// one lands, so a keystroke narrows the list rather than blanking it.
+    @State private var metadataMatches = SidebarSearch.Matches()
     /// Non-nil opens the new-session sheet; carries the per-repo "+" preset.
     @State private var newSessionRequest: NewSessionRequest?
     /// Parked "Start an Agent" requests (`StartAgentIntent`, widgets, Siri).
@@ -419,6 +423,9 @@ struct SessionsListView: View {
             #endif
             .task(id: searchText) {
                 await updateTranscriptSearch()
+            }
+            .task(id: metadataSearchKey) {
+                await updateMetadataSearch()
             }
             .task(id: knownRepoCount) {
                 // Not for the sheet's repo picker — for the tiles in this
@@ -1666,47 +1673,74 @@ struct SessionsListView: View {
         }
     }
 
-    private func sessionMatchesMetadata(_ session: Session, query: String) -> Bool {
-        [session.title, session.effectiveRepo, session.branch, session.id]
-            .compactMap { $0 }
-            .contains { $0.lowercased().contains(query) }
+    /// What the metadata search answers: the query, and the rows it is asked
+    /// over. Nil while not searching. Arrays compare by buffer identity first,
+    /// so a body evaluation that changed nothing costs no walk; a poll that
+    /// replaced the list re-runs the search.
+    private struct MetadataSearchKey: Equatable, Sendable {
+        let query: String
+        let rows: [SidebarWorkspace]
+        let archived: [Session]
     }
 
-    private func workspaceMatchesMetadata(
-        _ workspace: SidebarWorkspace,
-        query: String
-    ) -> Bool {
-        workspace.title.lowercased().contains(query)
-            || workspace.sessions.contains { sessionMatchesMetadata($0, query: query) }
+    private var metadataSearchKey: MetadataSearchKey? {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return nil }
+        return MetadataSearchKey(
+            query: query,
+            rows: allSidebarWorkspaces,
+            archived: viewModel.archivedSessions
+        )
+    }
+
+    /// Typo-tolerant scoring of every row's fields is real work on a list of
+    /// thousands, so it runs detached and publishes one set of ids; the row
+    /// predicate then costs a set lookup on the main actor.
+    private func updateMetadataSearch() async {
+        guard let key = metadataSearchKey else {
+            metadataMatches = SidebarSearch.Matches()
+            return
+        }
+        // The name map only backs sessions an older server sent without a
+        // stamped workspace name, so it is read here rather than keyed on.
+        let workspaceNames = viewModel.workspaceNames
+        let matches = await Task.detached(priority: .userInitiated) {
+            SidebarSearch.matches(
+                query: key.query,
+                rows: key.rows,
+                archived: key.archived,
+                workspaceNames: workspaceNames
+            )
+        }.value
+        guard !Task.isCancelled else { return }
+        metadataMatches = matches
     }
 
     /// Snippets explain only transcript-only hits. A metadata match already
-    /// explains itself through the row's title, repository, or branch.
+    /// explains itself through the row's title, repository, branch, or
+    /// workspace.
     private func workspaceSearchSnippet(_ workspace: SidebarWorkspace) -> String? {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty, !workspaceMatchesMetadata(workspace, query: query) else {
-            return nil
-        }
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty, !metadataMatches.matches(workspace) else { return nil }
         return workspace.sessions.compactMap { transcriptSnippets[$0.id] }.first
     }
 
     private var archivedSearchResults: [Session] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return [] }
         let lens = peopleLens
         let person = person
         let agentKey = agentKey
+        let matches = metadataMatches
         return viewModel.archivedSessions.filter { session in
             lens.matches(session, person: person, agentKey: agentKey)
                 && (repoFilter == "all" || session.effectiveRepo == repoFilter)
-                && (sessionMatchesMetadata(session, query: query)
-                    || transcriptSnippets[session.id] != nil)
+                && (matches.matches(session) || transcriptSnippets[session.id] != nil)
         }
     }
 
     private func archivedSearchSnippet(_ session: Session) -> String? {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !sessionMatchesMetadata(session, query: query) else { return nil }
+        guard !metadataMatches.matches(session) else { return nil }
         return transcriptSnippets[session.id]
     }
 
@@ -1730,7 +1764,8 @@ struct SessionsListView: View {
         let agentKey = agentKey
         let lens = peopleLens
         let repo = repoFilter
-        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        let matches = metadataMatches
         // Rows this person has hidden drop out of the sidebar — except while
         // a session of theirs is blocked on a question (the poll consumes the
         // hide when that happens), and except while searching, which is how a
@@ -1750,7 +1785,7 @@ struct SessionsListView: View {
             }
             if repo != "all", workspace.effectiveRepo != repo { return false }
             guard !query.isEmpty else { return true }
-            if workspaceMatchesMetadata(workspace, query: query) { return true }
+            if matches.matches(workspace) { return true }
             return workspace.sessions.contains { transcriptSnippets[$0.id] != nil }
         }
     }
