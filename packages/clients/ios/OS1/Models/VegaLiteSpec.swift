@@ -9,7 +9,7 @@ import Foundation
 struct VegaLiteChart: Equatable {
     enum Mark: String, Equatable { case bar, line, area, point, circle, square, tick }
 
-    enum Value: Equatable {
+    enum Value: Hashable {
         case category(String)
         case number(Double)
         case date(Date)
@@ -144,11 +144,11 @@ struct VegaLiteChart: Equatable {
     /// `count`, `sum`, `mean`/`average`, `min`, `max` over rows sharing an x
     /// and a series, in first-seen order.
     private static func aggregated(_ points: [Point], by aggregate: String) -> [Point] {
-        struct Key: Hashable { let x: String; let series: String? }
+        struct Key: Hashable { let x: Value; let series: String? }
         var order: [Key] = []
         var groups: [Key: [Point]] = [:]
         for point in points {
-            let key = Key(x: point.x.label, series: point.series)
+            let key = Key(x: point.x, series: point.series)
             if groups[key] == nil { order.append(key) }
             groups[key, default: []].append(point)
         }

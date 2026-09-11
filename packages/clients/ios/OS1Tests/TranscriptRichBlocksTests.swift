@@ -188,6 +188,24 @@ final class TranscriptRichBlocksTests: XCTestCase {
         }
     }
 
+    func testJsonTreeBoundsNestingAndFallsBackToCode() {
+        for (open, close) in [("[", "]"), ("{\"child\":", "}"), ("[{\"child\":", "}]")] {
+            let levelsPerWrapper = open == "[{\"child\":" ? 2 : 1
+            let atLimit = JsonTreeBlock.maxDepth / levelsPerWrapper
+            let accepted = String(repeating: open, count: atLimit) + "0" + String(repeating: close, count: atLimit)
+            XCTAssertNotNil(JsonTreeBlock.parse(accepted))
+            XCTAssertNil(JsonTreeBlock.parse(open + accepted + close))
+            let deep = String(repeating: open, count: 15_000) + "0" + String(repeating: close, count: 15_000)
+            XCTAssertTrue(JsonTreeBlock.worthFolding(deep))
+            XCTAssertNil(JsonTreeBlock.parse(deep))
+            let fence = "```json\n\(deep)\n```"
+            let blocks = TranscriptRichBlocks.blocks(of: fence)
+            XCTAssertEqual(blocks.count, 1)
+            guard case .markdown(let source) = blocks[0] else { return XCTFail("deep JSON must stay code") }
+            XCTAssertEqual(source, fence)
+        }
+    }
+
     func testAnsiClaimsAndSpelledEscapes() {
         XCTAssertTrue(AnsiBlock.claims(lang: "ansi", source: "plain"))
         XCTAssertFalse(AnsiBlock.claims(lang: "bash", source: "ls"))
@@ -249,6 +267,45 @@ final class TranscriptRichBlocksTests: XCTestCase {
         XCTAssertNil(VegaLiteChart.parse("{\"mark\": \"bar\", \"data\": {\"url\": \"x.csv\"}, \"encoding\": {}}"))
         let counted = VegaLiteChart.parse("{\"mark\":\"bar\",\"data\":{\"values\":[{\"k\":\"a\"},{\"k\":\"a\"},{\"k\":\"b\"}]},\"encoding\":{\"x\":{\"field\":\"k\"},\"y\":{\"aggregate\":\"count\"}}}")
         XCTAssertEqual(counted?.points.map(\.y), [2, 1])
+    }
+
+    func testVegaLiteAggregationUsesExactValuesAndSeries() throws {
+        for (type, first, second) in [
+            ("quantitative", "1.001", "1.002"),
+            ("temporal", "\"2026-01-01T09:00:00Z\"", "\"2026-01-01T10:00:00Z\""),
+        ] {
+            let chart = try XCTUnwrap(VegaLiteChart.parse("""
+            {"mark":"bar","data":{"values":[
+              {"x":\(first),"y":2,"s":"a"}, {"x":\(second),"y":3,"s":"a"},
+              {"x":\(first),"y":4,"s":"a"}, {"x":\(first),"y":5,"s":"b"}
+            ]},"encoding":{"x":{"field":"x","type":"\(type)"},
+              "y":{"field":"y","aggregate":"sum"},"color":{"field":"s"}}}
+            """))
+            XCTAssertEqual(chart.points.count, 3)
+            guard chart.points.count == 3 else { continue }
+            XCTAssertEqual(chart.points[0].x.label, chart.points[1].x.label)
+            XCTAssertNotEqual(chart.points[0].x, chart.points[1].x)
+            XCTAssertEqual(chart.points[0].x, chart.points[2].x)
+            XCTAssertEqual(chart.points.map(\.y), [6, 3, 5])
+            XCTAssertEqual(chart.points.map(\.series), ["a", "a", "b"])
+        }
+    }
+
+    @MainActor
+    func testSortableTableLayoutReservesHeaderIndicators() {
+        let table = MeasuredTable(MarkdownTable(
+            headers: ["name", "description", "amount"], alignments: [.leading, .leading, .trailing],
+            rows: [["Ada", "A long description that should wrap while the other columns stay narrow", "25"]]
+        ))
+        let fitted = TableLayoutPlan(table: table, available: 330, gutter: 12, headerAccessoryWidth: 15)
+        XCTAssertTrue(fitted.fits)
+        XCTAssertGreaterThan(fitted.widths[1], fitted.widths[0])
+        XCTAssertLessThanOrEqual(fitted.widths.reduce(0, +) + 24, 330)
+        let scrolling = TableLayoutPlan(table: table, available: 80, gutter: 12, headerAccessoryWidth: 15)
+        XCTAssertFalse(scrolling.fits)
+        for index in table.headers.indices {
+            XCTAssertGreaterThanOrEqual(scrolling.widths[index], table.headers[index].minimum + 15)
+        }
     }
 
     func testArtifactDocumentLocksTheHead() {

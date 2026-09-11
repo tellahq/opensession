@@ -32,10 +32,12 @@ struct MarkdownTableView: View {
     /// Narration inside a work fold renders dimmer than a final answer, the
     /// same split `MarkdownBody` makes for prose.
     var dimmed = false
-    /// Off when the caller draws its own header row (`DataGridView`, whose
-    /// headers are sort buttons). The scrolling fallback keeps the header:
-    /// a table wider than the column would be unreadable without one.
-    var showsHeader = true
+    /// Data fences sort through the same cells and scroll container as the body.
+    struct SortControls {
+        var selection: (column: Int, direction: DataTableBlock.SortDirection)?
+        var select: (Int) -> Void
+    }
+    var sortControls: SortControls?
     @Environment(\.transcriptQuoteSelection) private var quoteSelection
 
     @State private var available: CGFloat = 0
@@ -52,10 +54,16 @@ struct MarkdownTableView: View {
                 let layout = TableLayoutPlan(
                     table: measured,
                     available: available,
-                    gutter: Self.gutter
+                    gutter: Self.gutter,
+                    headerAccessoryWidth: sortControls == nil ? 0 : Self.sortAccessoryWidth
                 )
                 if layout.fits {
                     grid(layout)
+                } else if sortControls != nil {
+                    ScrollView(.horizontal) {
+                        grid(layout)
+                    }
+                    .contentShape(Rectangle())
                 } else {
                     let base = dimmed ? MarkdownRenderConfig.os1Dim : .os1Static
                     let config = quoteSelection == nil
@@ -77,9 +85,7 @@ struct MarkdownTableView: View {
     @ViewBuilder
     private func grid(_ layout: TableLayoutPlan) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            if showsHeader {
-                row(measured.headers, widths: layout.widths, isHeader: true)
-            }
+            row(measured.headers, widths: layout.widths, isHeader: true)
             ForEach(Array(measured.rows.enumerated()), id: \.offset) { index, cells in
                 row(
                     cells,
@@ -101,15 +107,21 @@ struct MarkdownTableView: View {
     ) -> some View {
         HStack(alignment: .top, spacing: Self.gutter) {
             ForEach(Array(cells.enumerated()), id: \.offset) { index, cell in
-                Text(cell.display)
-                    .font(isHeader ? Self.headerFont : Self.bodyFont)
-                    .foregroundStyle(isHeader ? OS1VisualStyle.textFaint : bodyColor)
-                    .multilineTextAlignment(textAlignment(index))
-                    .frame(
-                        width: widths.indices.contains(index) ? widths[index] : nil,
-                        alignment: frameAlignment(index)
-                    )
-                    .fixedSize(horizontal: false, vertical: true)
+                Group {
+                    if isHeader, let sortControls {
+                        sortableHeader(cell, index: index, controls: sortControls)
+                    } else {
+                        Text(cell.display)
+                            .font(isHeader ? Self.headerFont : Self.bodyFont)
+                            .foregroundStyle(isHeader ? OS1VisualStyle.textFaint : bodyColor)
+                    }
+                }
+                .multilineTextAlignment(textAlignment(index))
+                .frame(
+                    width: widths.indices.contains(index) ? widths[index] : nil,
+                    alignment: frameAlignment(index)
+                )
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.vertical, isHeader ? Self.headerPadding : Self.cellPadding)
@@ -121,6 +133,32 @@ struct MarkdownTableView: View {
             }
         }
     }
+
+    private func sortableHeader(_ cell: MeasuredCell, index: Int, controls: SortControls) -> some View {
+        let direction = controls.selection.flatMap { $0.column == index ? $0.direction : nil }
+        return Button {
+            controls.select(index)
+        } label: {
+            HStack(alignment: .top, spacing: 3) {
+                Text(cell.display)
+                    .font(Self.headerFont)
+                    .foregroundStyle(direction == nil ? OS1VisualStyle.textFaint : OS1VisualStyle.text)
+                Image(systemName: direction == .descending ? "arrow.down" : "arrow.up")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(OS1VisualStyle.accentInk)
+                    .frame(width: Self.sortAccessoryWidth - 3)
+                    .opacity(direction == nil ? 0 : 1)
+                    .accessibilityHidden(true)
+            }
+            .frame(maxWidth: .infinity, alignment: frameAlignment(index))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Sort by \(String(cell.display.characters))")
+        .accessibilityValue(direction.map { $0 == .ascending ? "Ascending" : "Descending" } ?? "Not sorted")
+    }
+
+    private static let sortAccessoryWidth: CGFloat = 15
 
     private var bodyColor: Color {
         dimmed ? OS1VisualStyle.textNarration : OS1VisualStyle.text
@@ -364,25 +402,30 @@ struct TableLayoutPlan {
     let widths: [CGFloat]
     let fits: Bool
 
-    init(table: MeasuredTable, available: CGFloat, gutter: CGFloat) {
+    init(table: MeasuredTable, available: CGFloat, gutter: CGFloat, headerAccessoryWidth: CGFloat = 0) {
         let columns = table.ideals.count
         guard columns > 0 else {
             widths = []
             fits = true
             return
         }
+        let ideals = table.ideals.enumerated().map { index, width in
+            max(width, table.headers[index].ideal + headerAccessoryWidth)
+        }
+        let minimums = table.minimums.enumerated().map { index, width in
+            max(width, table.headers[index].minimum + headerAccessoryWidth)
+        }
         // Before the first layout pass nothing has been measured yet: render
         // at natural widths for one frame rather than collapsing every column
         // to nothing.
         guard available > 0 else {
-            widths = table.ideals
+            widths = ideals
             fits = true
             return
         }
         let budget = available - gutter * CGFloat(columns - 1)
-        let ideals = table.ideals
         // What a column can shrink to before its longest word has to break.
-        let soft = zip(ideals, table.minimums).map { min($0, $1) }
+        let soft = zip(ideals, minimums).map { min($0, $1) }
         // And the floor below that, where words do break — still better than
         // hiding a column off the edge of the screen.
         let hard = ideals.map { min($0, Self.hardMinimum) }

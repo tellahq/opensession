@@ -50,6 +50,8 @@ enum JsonTreeBlock {
     static let maxCharacters = 200_000
     /// Containers at this depth and deeper start folded (root is depth 0).
     static let collapseDepth = 2
+    /// Bound recursive parsing of untrusted fences. Root is depth 0.
+    static let maxDepth = 64
     /// Rows rendered per container; the rest are counted in one closing row.
     static let maxChildren = 500
 
@@ -86,7 +88,7 @@ enum JsonTreeBlock {
 
         mutating func parseDocument() -> JsonNode? {
             skipWhitespace()
-            guard let value = parseValue() else { return nil }
+            guard let value = parseValue(depth: 0) else { return nil }
             skipWhitespace()
             return index == text.count ? value : nil
         }
@@ -95,11 +97,11 @@ enum JsonTreeBlock {
             while index < text.count, [0x20, 0x0A, 0x0D, 0x09].contains(text[index]) { index += 1 }
         }
 
-        private mutating func parseValue() -> JsonNode? {
-            guard index < text.count else { return nil }
+        private mutating func parseValue(depth: Int) -> JsonNode? {
+            guard depth <= JsonTreeBlock.maxDepth, index < text.count else { return nil }
             switch text[index] {
-            case UInt8(ascii: "{"): return parseObject()
-            case UInt8(ascii: "["): return parseArray()
+            case UInt8(ascii: "{"): return parseObject(depth: depth)
+            case UInt8(ascii: "["): return parseArray(depth: depth)
             case UInt8(ascii: "\""): return parseString().map(JsonNode.string)
             case UInt8(ascii: "t"): return literal("true", .bool(true))
             case UInt8(ascii: "f"): return literal("false", .bool(false))
@@ -190,7 +192,7 @@ enum JsonTreeBlock {
             return value
         }
 
-        private mutating func parseArray() -> JsonNode? {
+        private mutating func parseArray(depth: Int) -> JsonNode? {
             index += 1
             var items: [JsonNode] = []
             skipWhitespace()
@@ -200,7 +202,7 @@ enum JsonTreeBlock {
             }
             while true {
                 skipWhitespace()
-                guard let value = parseValue() else { return nil }
+                guard let value = parseValue(depth: depth + 1) else { return nil }
                 items.append(value)
                 skipWhitespace()
                 guard index < text.count else { return nil }
@@ -210,7 +212,7 @@ enum JsonTreeBlock {
             }
         }
 
-        private mutating func parseObject() -> JsonNode? {
+        private mutating func parseObject(depth: Int) -> JsonNode? {
             index += 1
             var entries: [(key: String, value: JsonNode)] = []
             skipWhitespace()
@@ -225,7 +227,7 @@ enum JsonTreeBlock {
                 guard index < text.count, text[index] == UInt8(ascii: ":") else { return nil }
                 index += 1
                 skipWhitespace()
-                guard let value = parseValue() else { return nil }
+                guard let value = parseValue(depth: depth + 1) else { return nil }
                 entries.append((key, value))
                 skipWhitespace()
                 guard index < text.count else { return nil }

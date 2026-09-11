@@ -45,57 +45,20 @@ struct DataGridView: View {
                         }
                         .accessibilityLabel("Filter rows")
                 }
-                headers
+                MarkdownTableView(
+                    table: markdownTable(rendered),
+                    dimmed: dimmed,
+                    sortControls: .init(selection: sort, select: cycleSort)
+                )
+                .padding(.horizontal, 10)
                 if rendered.isEmpty {
                     Text("No matching rows")
                         .font(.footnote)
                         .foregroundStyle(OS1VisualStyle.textFaint)
                         .padding(10)
-                } else {
-                    MarkdownTableView(table: markdownTable(rendered), dimmed: dimmed, showsHeader: false)
-                        .padding(.horizontal, 10)
                 }
             }
         }
-    }
-
-    /// The sortable header, drawn here rather than by the table so a tap
-    /// lands on a real button with a sort indicator.
-    private var headers: some View {
-        HStack(alignment: .top, spacing: 8) {
-            ForEach(Array(table.header.enumerated()), id: \.offset) { index, name in
-                Button {
-                    cycleSort(index)
-                } label: {
-                    HStack(spacing: 3) {
-                        Text(name)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(sort?.column == index ? OS1VisualStyle.text : OS1VisualStyle.textFaint)
-                            .multilineTextAlignment(table.numeric[index] ? .trailing : .leading)
-                        if let sort, sort.column == index {
-                            Image(systemName: sort.direction == .ascending ? "arrow.up" : "arrow.down")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(OS1VisualStyle.accentInk)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: table.numeric[index] ? .trailing : .leading)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Sort by \(name)")
-                .accessibilityValue(sortValue(index))
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(OS1VisualStyle.border).frame(height: 1)
-        }
-    }
-
-    private func sortValue(_ column: Int) -> String {
-        guard let sort, sort.column == column else { return "Not sorted" }
-        return sort.direction == .ascending ? "Ascending" : "Descending"
     }
 
     private func cycleSort(_ column: Int) {

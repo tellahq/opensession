@@ -172,6 +172,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   grids, JSON trees, ANSI output, washed diffs, display math, callouts and
   metric cards. Every parser lives in `Models/` and falls back to the plain
   fence when it refuses the source, so a streaming block stays readable.
+  JSON trees reject values deeper than 64 levels. Sortable table headers share
+  the body column widths and scroll with the rows when the table overflows.
 
   ```
 - **Workspace details** — tapping the session title opens a native worktree sheet
