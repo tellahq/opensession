@@ -171,12 +171,6 @@ export const INTERNAL_MCP_CAPABILITIES = {
     guidance:
       "Read or improve this automation's own prompt. It cannot modify another automation.",
   },
-  "opensession-pull-requests": {
-    summary:
-      "Open and edit this session's pull request as the person who asked; propose a merge for them to tap.",
-    guidance:
-      "Use open_pull_request instead of `gh pr create` so the PR carries the person's name. When asked to merge, call propose_merge: you cannot merge, approve, or push the default branch yourself.",
-  },
   "opensession-github": {
     summary:
       "Trigger the PR behaviours (review / auto-fix / simplify / adversarial).",

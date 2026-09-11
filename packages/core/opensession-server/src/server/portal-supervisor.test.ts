@@ -11,6 +11,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { createServer } from "node:net";
 import {
+  applyPortalRegistryWrites,
   listPortalServices,
   listSandboxPortalServices,
   hostPortalAdmissionReason,
@@ -43,6 +44,8 @@ import type { Sandbox } from "./sandbox/provider";
 
 let worktree = "";
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
+const previousMinAvailableMemoryMb =
+  process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB;
 const previousPath = process.env.PATH;
 // Host Portal admission samples real host memory against a 24 GB floor, and
 // hosted CI runners have less than that. The floor itself is covered by the
@@ -76,12 +79,19 @@ beforeEach(() => {
   // Real Portals start below; the host running this suite may itself be
   // under memory pressure, which must not decide the outcome.
   _setHostPortalCapacityProbeForTests(async () => {});
+  // Lifecycle fixtures must run on small CI hosts; admission boundaries are tested separately.
+  process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB = "1";
 });
 afterAll(() => {
   _setHostPortalCapacityProbeForTests(null);
   if (worktree) rmSync(worktree, { recursive: true, force: true });
   if (previousStateDir == null) delete process.env.OPENSESSION_STATE_DIR;
   else process.env.OPENSESSION_STATE_DIR = previousStateDir;
+  if (previousMinAvailableMemoryMb == null)
+    delete process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB;
+  else
+    process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB =
+      previousMinAvailableMemoryMb;
   if (previousPath == null) delete process.env.PATH;
   else process.env.PATH = previousPath;
   if (previousMemoryFloor == null)
@@ -249,16 +259,80 @@ describe("host Portal lifecycle cleanup", () => {
     });
   });
 
-  test("archiving through an alias stops the canonical owner's Portal", async () => {
+  test("archiving through an alias stops Portals under every id of the owner", async () => {
     registry("canonical");
+    const web = readPortalRegistry(worktree)[0]!;
+    writeFileSync(
+      join(worktree, ".ports.conf"),
+      [
+        web,
+        {
+          ...web,
+          name: "api",
+          key: "API_PORT",
+          port: 18092,
+          sessionId: "slack-C998-1719860000.000000",
+        },
+        {
+          ...web,
+          name: "other",
+          key: "OTHER_PORT",
+          port: 18093,
+          sessionId: "sibling",
+        },
+      ]
+        .map((record) => `# opensession-portal ${JSON.stringify(record)}`)
+        .join("\n"),
+    );
     await stopArchivedSessionPortals("slack-C998-1719860000.000000", {
       findSession: async () => ({
         id: "canonical",
+        aliasIds: ["slack-C998-1719860000.000000"],
         worktreeDir: worktree,
         attachedRepos: [],
       }),
     });
-    expect(readPortalRegistry(worktree)[0]?.state).toBe("stopped");
+    expect(
+      readPortalRegistry(worktree).map((record) => [record.name, record.state]),
+    ).toEqual([
+      ["web", "stopped"],
+      ["api", "stopped"],
+      ["other", "awake"],
+    ]);
+  });
+
+  test("a status probe of a replaced generation cannot mark the replacement failed", () => {
+    registry();
+    const first = readPortalRegistry(worktree)[0]!;
+    const replacement = {
+      ...first,
+      pid: 4242,
+      startedAt: "2021-01-01T00:00:00Z",
+    };
+    const probed = {
+      ...first,
+      state: "failed" as const,
+      lastError: "The service is no longer listening.",
+    };
+    // The poll read the first incarnation; a restart installed the replacement
+    // before the poll's write landed.
+    expect(applyPortalRegistryWrites([replacement], [first], [probed])).toEqual(
+      [replacement],
+    );
+    // The same write against the incarnation it probed still lands, and a
+    // locked start over a probe-failed record keeps its own generation.
+    expect(applyPortalRegistryWrites([first], [first], [probed])).toEqual([
+      probed,
+    ]);
+    const starting = { ...first, state: "starting" as const, pid: undefined };
+    const launched = { ...starting, pid: 4243 };
+    expect(
+      applyPortalRegistryWrites(
+        [{ ...starting, state: "failed" }],
+        [starting],
+        [launched],
+      ),
+    ).toEqual([launched]);
   });
 
   test("a stale stop queued behind a restart cannot kill the replacement", async () => {

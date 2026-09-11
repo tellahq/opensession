@@ -313,6 +313,36 @@ async function updateHostPortalRegistry(
   }
 }
 
+/**
+ * Merge one operation's registry writes into the registry as it is now.
+ * Only records this operation changed are applied: another Portal in a shared
+ * checkout may have started while this one waited for readiness. A change
+ * decided against one incarnation is dropped when the record has since been
+ * replaced. Start, stop, sleep, and restart change generation fields only
+ * under the Portal's operation lock, so their writes always land; the unlocked
+ * status poll only changes state, so a probe of generation A that finishes
+ * after a restart installed B cannot mark B failed and strand its process.
+ */
+export function applyPortalRegistryWrites(
+  latest: PortalRecord[],
+  snapshot: readonly PortalRecord[],
+  records: readonly PortalRecord[],
+): PortalRecord[] {
+  for (const record of records) {
+    const before = snapshot.find((entry) => entry.name === record.name);
+    if (JSON.stringify(record) === JSON.stringify(before)) continue;
+    const current = latest.find((entry) => entry.name === record.name);
+    if (
+      before &&
+      current &&
+      portalGeneration(current) !== portalGeneration(before)
+    )
+      continue;
+    latest = upsert(latest, record);
+  }
+  return latest;
+}
+
 async function portListening(port: number): Promise<boolean> {
   const proc = Bun.spawn(
     ["bash", "-lc", `exec 3<>/dev/tcp/127.0.0.1/${port}`],
@@ -359,19 +389,10 @@ function hostPortalOps(worktreeDir: string): PortalOps {
       return readSnapshot;
     },
     writeRegistry: async (records) => {
-      // Apply only this operation's changed records. Another Portal in a shared
-      // checkout may have started while this process was waiting for readiness.
-      const changed = records.filter(
-        (record) =>
-          JSON.stringify(record) !==
-          JSON.stringify(
-            readSnapshot.find((before) => before.name === record.name),
-          ),
+      const snapshot = readSnapshot;
+      await updateHostPortalRegistry(worktreeDir, (latest) =>
+        applyPortalRegistryWrites(latest, snapshot, records),
       );
-      await updateHostPortalRegistry(worktreeDir, (latest) => {
-        for (const record of changed) latest = upsert(latest, record);
-        return latest;
-      });
       readSnapshot = records;
     },
     probePort: portListening,
@@ -1397,24 +1418,15 @@ export async function reapOrphanedPortalServices(
 export async function stopArchivedSessionPortals(
   sessionId: string,
   options: {
-    findSession?: (
-      id: string,
-    ) => Promise<
-      | Pick<
-          UnifiedSession,
-          "id" | "worktreeDir" | "attachedRepos" | "runner" | "sandbox"
-        >
-      | undefined
-    >;
+    findSession?: (id: string) => Promise<ArchivedPortalOwner | undefined>;
   } = {},
 ): Promise<void> {
-  const findSession =
-    options.findSession ?? (await import("./session-cache")).findSessionAsync;
+  const findSession = options.findSession ?? findMergedSession;
   const session = await findSession(sessionId);
   if (!session || session.runner || session.sandbox?.sandboxId) return;
-  // The lookup resolves historical aliases to the canonical session, and the
-  // Portal record is owned by that canonical id, not the alias archived.
-  const ownerId = session.id;
+  // A Portal record carries the id its session ran under, which may be the
+  // canonical id or an alias merged into it. Every spelling owns the Portal.
+  const ownerIds = new Set([session.id, ...(session.aliasIds ?? [])]);
   const dirs = new Set([
     session.worktreeDir,
     ...(session.attachedRepos ?? []).map((repo) => repo.dir),
@@ -1422,15 +1434,44 @@ export async function stopArchivedSessionPortals(
   for (const dir of dirs) {
     if (!dir) continue;
     for (const portal of await readHostPortalRegistry(dir)) {
-      if (portal.sessionId !== ownerId || portal.state === "stopped") continue;
+      if (
+        !portal.sessionId ||
+        !ownerIds.has(portal.sessionId) ||
+        portal.state === "stopped"
+      )
+        continue;
       await stopPortalService({
-        sessionId: ownerId,
+        sessionId: session.id,
         worktreeDir: dir,
         name: portal.name,
         expectedGeneration: portalGeneration(portal),
       });
     }
   }
+}
+
+type ArchivedPortalOwner = Pick<
+  UnifiedSession,
+  "id" | "worktreeDir" | "attachedRepos" | "aliasIds" | "runner" | "sandbox"
+>;
+
+/**
+ * The direct detail lookup answers a Slack or Linear id with that file's own
+ * row, alias and all, so archiving through an alias saw an owner id no Portal
+ * record carried. The merged list projection is the one place a historical
+ * alias resolves to the canonical session that absorbed it.
+ */
+async function findMergedSession(
+  sessionId: string,
+): Promise<ArchivedPortalOwner | undefined> {
+  const { findSessionAsync, getCachedSessionsAsync } =
+    await import("./session-cache");
+  const merged = (await getCachedSessionsAsync()).find(
+    (session) =>
+      session.id === sessionId || session.aliasIds?.includes(sessionId),
+  );
+  // A session the list has not observed yet has no aliases to merge.
+  return merged ?? findSessionAsync(sessionId);
 }
 
 /**

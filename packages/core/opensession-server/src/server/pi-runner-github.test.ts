@@ -2,9 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { GITHUB_RUN_AUTH_FILE_ENV } from "./github-auth";
+import { GITHUB_RUN_AUTH_FILE_ENV, githubRunOwnerLogin } from "./github-auth";
 import { AUTO_CONTINUE_USER, githubCredentialUser } from "./auto-continue";
-import { githubCodeRunEnv, githubReadRunEnv, runGithubEnv } from "./pi-runner";
+import {
+  githubCodeRunEnv,
+  githubReadRunEnv,
+  runGithubEnv,
+  runGithubMergeGuard,
+} from "./pi-runner";
 
 const keys = [
   "OPENSESSION_CONFIG",
@@ -19,6 +24,30 @@ afterEach(() => {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+});
+
+describe("GitHub publication authority", () => {
+  test("a connected person's code turn follows repository policy", () => {
+    expect(
+      runGithubMergeGuard({
+        isCode: true,
+        ownerLogin: "alex",
+        baseBranch: "main",
+      }),
+    ).toBeUndefined();
+  });
+
+  test("ask and non-person code turns keep their protected branch guard", () => {
+    for (const input of [
+      { isCode: false, ownerLogin: "alex" },
+      { isCode: false, ownerLogin: null },
+      { isCode: true, ownerLogin: null },
+    ]) {
+      expect(
+        runGithubMergeGuard({ ...input, baseBranch: "production" }),
+      ).toEqual({ baseBranch: "production" });
+    }
+  });
 });
 
 describe("recovered GitHub code-run credentials", () => {
@@ -280,6 +309,36 @@ describe("which credential a run's shell holds", () => {
       });
       expect(env.GH_TOKEN).toBe("projected-token");
       expect(Object.values(env)).not.toContain("human-token");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a sandboxed owner turn drops the merge guard only for a projected person token", () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-run-github-"));
+    try {
+      seed(dir);
+      const guard = (ownerTurn: boolean) =>
+        runGithubMergeGuard({
+          isCode: true,
+          ownerLogin: ownerTurn ? githubRunOwnerLogin("Alice") : null,
+          baseBranch: "main",
+        });
+      const auth = join(dir, "github-auth.json");
+      process.env[GITHUB_RUN_AUTH_FILE_ENV] = auth;
+      // The launcher projected Alice's token and named her: the same
+      // repository-policy outcome as her turn on the host.
+      writeFileSync(
+        auth,
+        JSON.stringify({ GH_TOKEN: "projected-token", login: "alice" }),
+      );
+      expect(guard(true)).toBeUndefined();
+      // A machine sender's turn in that sandbox keeps the guard regardless.
+      expect(guard(false)).toEqual({ baseBranch: "main" });
+      // An App projection has no login: guarded, even with a readable store
+      // that says Alice is connected.
+      writeFileSync(auth, JSON.stringify({ GH_TOKEN: "projected-token" }));
+      expect(guard(true)).toEqual({ baseBranch: "main" });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -438,8 +438,8 @@ describe("evasion corpus", () => {
   });
 });
 
-describe("merge guard for every agent run", () => {
-  const guard = { baseBranch: "main", proposeTool: "propose_merge" };
+describe("merge guard for runs without personal code authority", () => {
+  const guard = { baseBranch: "main" };
 
   test("lets ordinary branch work and PR conversation through", () => {
     for (const command of [
@@ -460,7 +460,7 @@ describe("merge guard for every agent run", () => {
 
   test("refuses merges, whatever the spelling", () => {
     expect(mergeGuardDenyReason("gh pr merge 12 --squash", guard)).toContain(
-      "propose_merge",
+      "cannot merge",
     );
     expect(
       mergeGuardDenyReason("gh pr merge --auto --squash 12", guard),
@@ -519,15 +519,14 @@ describe("merge guard for every agent run", () => {
     ).toBeUndefined();
   });
 
-  test("names the PR panel when no propose tool is mounted", () => {
+  test("points guarded runs to the PR panel", () => {
     expect(
       mergeGuardDenyReason("gh pr merge 12", { baseBranch: "main" }),
     ).toMatch(/PR panel/);
   });
 
-  test("a shared self-development checkout keeps its push-to-main workflow", () => {
-    // No base branch: pushing main is sanctioned there and GitHub's rulesets
-    // are the guard. Merge and approve are still refused.
+  test("omitting the base does not permit a guarded run to merge", () => {
+    // The caller may omit branch protection without granting merge authority.
     expect(mergeGuardDenyReason("git push origin main", {})).toBeUndefined();
     expect(mergeGuardDenyReason("gh pr merge 12", {})).toContain(
       "cannot merge",

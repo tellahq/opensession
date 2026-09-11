@@ -218,13 +218,8 @@ function escapeRegExp(value: string): string {
 }
 
 export interface MergeGuard {
-  /** The protected base branch of the run's repository. Omitted for a shared
-   * self-development checkout, where pushing the base branch is the
-   * sanctioned workflow and GitHub's rulesets are the only guard. */
+  /** The protected base branch for a run without personal code authority. */
   baseBranch?: string;
-  /** The tool a person-started turn should call instead of merging; named in
-   * the refusal so "merge this" ends in a card rather than an error. */
-  proposeTool?: string;
 }
 
 const MERGE_REFUSAL =
@@ -233,8 +228,8 @@ const APPROVE_REFUSAL =
   "agent runs cannot submit an approving review; a person approves on GitHub";
 
 /**
- * Server-side floor for EVERY agent run, whoever started the turn: no merge,
- * no approving review, no update or deletion of the protected base branch.
+ * Server-side floor for runs without a connected person's code authority:
+ * no merge, approving review, or update/deletion of the protected base branch.
  * The boundary itself is the token and GitHub's rulesets
  * (docs/github-authority.md); this tripwire exists so a confused agent gets
  * a clear message instead of a 403, and so the attempt is logged.
@@ -243,9 +238,7 @@ export function mergeGuardDenyReason(
   command: string,
   guard: MergeGuard,
 ): string | undefined {
-  const mergeRefusal = guard.proposeTool
-    ? `${MERGE_REFUSAL}. Call ${guard.proposeTool} to hand it to them`
-    : MERGE_REFUSAL;
+  const mergeRefusal = MERGE_REFUSAL;
   const baseRefusal = `agent runs cannot update the protected base branch ${guard.baseBranch}; push a feature branch and open a pull request`;
   const scan = scannableCommand(command);
   for (const words of scanShell(scan).commands) {

@@ -10,12 +10,10 @@ the only GitHub credentials Open Session accepts.
 For a team install, create one organization-owned GitHub App. A single-user
 simple-mode install may instead use a personal App. The same App provides:
 
-- short-lived, repository-scoped installation tokens for every agent run
-  (branch pushes, comments, replies, resolved threads), for reviews, clones,
-  previews, sandboxes, and trusted GitHub automations;
-- device-flow user tokens so the buttons in the UI (merge, close, review) and
-  the gateway's `open_pull_request` tool act as the signed-in person. These
-  tokens never enter an agent run;
+- short-lived, repository-scoped installation tokens for reviews, clones,
+  previews, trusted GitHub automations, and runs without a connected person;
+- device-flow user tokens so the UI buttons and a connected person's code
+  turns act as that person. Agents use `gh` and HTTPS git directly;
 - the bot identity `<app-slug>[bot]` for self-trigger protection and
   attribution: agent commits are authored by it, with the person as
   `Co-authored-by`.
@@ -106,7 +104,10 @@ kind is interactive, and the mode is code. When that person is unknown,
 unmapped, or disconnected, the run falls back to the App token below rather
 than running credential-free. In a sandbox the launcher resolves the same
 choice on the host and projects only the chosen token into a private,
-run-scoped file.
+run-scoped file, together with the login of the credential it selected as a
+non-secret marker (the mapped person in operator mode, the sole connected
+account in simple mode) so the guest lifts the merge guard exactly when a
+host run would. An App-token projection carries no login and stays guarded.
 
 Every other run holds a short-lived installation token scoped to its
 repository and never a person's: the code permission set for unattended
@@ -115,13 +116,11 @@ handoff, a worker report, an automation), the read set for every ask run,
 whoever started it, because the review workflows process untrusted PR
 content and can print their environment. Ask runs also ignore any
 launcher-supplied token. The gateway still uses a person's token for the UI
-buttons (merge, close, review, comment) and the `open_pull_request` /
-`edit_pull_request` tools. The merge guard refuses `gh pr merge`, approving
-reviews, and default-branch pushes in every run whichever token it holds,
-and a run never inherits the host operator's `gh` login: its `GH_CONFIG_DIR`
-is run-scoped, so a missing token fails with "not logged in". The longer
-design, and the stricter target this is a rollback from, are in
-[github-authority.md](../github-authority.md).
+buttons (merge, close, review, comment). Agents use `gh` directly, without
+dedicated PR MCP tools. A run never inherits the host operator's `gh` login:
+its `GH_CONFIG_DIR` is run-scoped, so a missing token fails with "not logged in".
+See [github-authority.md](../github-authority.md) for the credential and
+publication boundaries.
 
 A push from a person-started code turn therefore reaches GitHub as that
 person; pushes from every other run reach it as the bot account, and the PR
@@ -140,16 +139,17 @@ leaked one, can merge or push `main`, whatever permissions it holds. A
 ruleset that requires pull requests and status checks should already exist;
 leave it as it is.
 
-The command policy refuses `gh pr merge`, approving reviews, and pushes to
-the default branch in every run, whoever started it. That is a tripwire in
-front of the rulesets so a confused agent gets a clear message instead of a
-403, not the boundary itself.
+Interactive code runs follow the repository's publication instructions,
+including direct pushes where a shared-main workflow permits them. GitHub
+permissions and rulesets remain the credential boundary. Ask-mode read-only
+checks, unattended command policy, and automation-descendant publication
+restrictions still apply; this does not grant automations human authority.
 
 Threat model: agent bash shares the server's uid, so every credential present
 on an Open Session host should be scoped as if the agent will read and use it
-directly. No PAT, SSH key, or `gh` login belongs on the host: the App
-installation token is the only credential in any run's reach, and the
-rulesets bind it. `OPENSESSION_GITHUB_PUSH_TOKEN`, the earlier git-only
+directly. Do not give runs ambient PATs, SSH keys, or host `gh` logins. The
+selected App or user token is the run's GitHub authority, and GitHub permissions
+and rulesets bound it. `OPENSESSION_GITHUB_PUSH_TOKEN`, the earlier git-only
 credential, is no longer read; revoke it and remove the variable.
 
 ## Webhook intake
