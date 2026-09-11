@@ -237,11 +237,17 @@ struct AskQuestionCard: View {
     }
 
     /// The "Answer the question" command: take the keyboard back from the
-    /// composer and ring the card so a letter answers it.
+    /// composer. Focus the answer field for free-text questions, otherwise
+    /// ring the card so a letter answers it.
     private func focusCard() {
         guard chosen == nil else { return }
-        inputFocused = false
-        cardFocused = true
+        if options.isEmpty {
+            cardFocused = false
+            inputFocused = true
+        } else {
+            inputFocused = false
+            cardFocused = true
+        }
     }
 
     private func sendFreeText() {

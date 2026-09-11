@@ -345,7 +345,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   the key window that is not a text field answers with that row; **Answer the
   Question** (⌘I, rebindable as the web's `ask-focus`) moves focus from the
   composer onto the card, where the arrows and Return pick (`AskKeyBridge`,
-  `AskLetterShortcuts`).
+  `AskLetterShortcuts`). For questions without options, the command focuses
+  the free-text answer field instead.
   Infrastructure → **Runners** lists the machines this instance trusts, read
   only: each one's status, hardware, workspace roots, toolchains and what it is
   working on. Connecting, revoking and permissions stay in the web settings —
