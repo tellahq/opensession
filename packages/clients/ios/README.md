@@ -161,7 +161,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   native preview frames for visual session assets while documents and data keep
   their file rows, model/reasoning controls, and live remote
   sandbox status. Sandboxed workspaces expose explicit pause, wake, and
-  confirmed recreate controls without embedding the web client. Its Effective
+  confirmed recreate controls without embedding the web client, and an awake
+  Sandbox whose provider reports `canDesktop` offers Open desktop: the
+  one-viewer link is minted on the tap, shown in Safari's in-app view, and
+  never stored or logged. A code session on this machine has Move to Sandbox
+  in the session ⋯ menu, listing the ready providers; the server's 428 for
+  unpushed work is asked about once before the confirmed retry. Its Effective
   config section resolves the next turn's model, engine, account, MCP access,
   instructions, and permissions, with the source under every displayed value.
 - **Session panels** — on iOS, Assets, individual assets, PR, Changes, Portals,

@@ -1902,7 +1902,22 @@ private struct SessionActionsMenu: View {
     @State private var pendingMerge: String?
     @State private var merging = false
     @State private var mergeError: String?
+    /// The Sandboxes a move may target; nil until `/api/sandbox/status`
+    /// answers, which the submenu shows as checking.
+    @State private var moveProviders: [String]?
+    /// The provider picked from the submenu, awaiting the first confirm.
+    @State private var pendingMove: String?
+    /// The server's 428: work that exists only on this machine would stay
+    /// behind. Asked once; the retry carries `confirm`.
+    @State private var moveWarning: SandboxMoveWarning?
+    @State private var moving = false
+    @State private var moveError: String?
     @Environment(\.openURL) private var openURL
+
+    private struct SandboxMoveWarning: Equatable {
+        let provider: String
+        let message: String
+    }
 
     var body: some View {
         Menu {
@@ -1994,6 +2009,36 @@ private struct SessionActionsMenu: View {
                 )
             } label: {
                 Label("Model settings", systemImage: "slider.horizontal.3")
+            }
+            // A code session on this machine can move into a Sandbox: a rare,
+            // one-way choice that reads as a session action, not as status,
+            // so it sits here as on the web rather than on a header badge.
+            // The move waits for the agent; the server refuses it mid-turn.
+            if SandboxMove.canMove(viewModel.session) {
+                Menu {
+                    if let moveProviders {
+                        if moveProviders.isEmpty {
+                            Text("No Sandbox is ready. Connect Daytona or Box in Workspace > Sandboxes.")
+                        } else {
+                            ForEach(moveProviders, id: \.self) { provider in
+                                Button {
+                                    pendingMove = provider
+                                } label: {
+                                    Text(SandboxMove.label(provider))
+                                }
+                            }
+                        }
+                    } else {
+                        Text("Checking Sandboxes…")
+                            .task { await loadMoveProviders() }
+                    }
+                } label: {
+                    Label(
+                        moving ? "Moving to Sandbox…" : "Move to Sandbox",
+                        systemImage: "shippingbox"
+                    )
+                }
+                .disabled(viewModel.isRunning || moving)
             }
             // Everything the worktree has changed, for the edits no visible
             // tool row names — the ones made before the transcript you're
@@ -2138,6 +2183,65 @@ private struct SessionActionsMenu: View {
                 .foregroundStyle(OS1VisualStyle.text)
         }
         .accessibilityLabel("Session actions")
+        // Resolved when the menu comes on screen rather than when the
+        // submenu opens: a SwiftUI Menu builds its rows up front and has no
+        // open callback, and the status read is one small GET. Skipped for
+        // every session that cannot move.
+        .task(id: viewModel.session.id) {
+            moveProviders = nil
+            await loadMoveProviders()
+            #if DEBUG
+            // Lets the native capture tool reach the move's confirm step on a
+            // simulator that takes no taps: the same state a submenu row sets.
+            if let provider = ProcessInfo.processInfo.environment["OS1_MOVE_TO_SANDBOX"],
+               !provider.isEmpty, SandboxMove.canMove(viewModel.session) {
+                pendingMove = provider
+            }
+            #endif
+        }
+        .confirmationDialog(
+            moveConfirmationTitle(pendingMove),
+            isPresented: Binding(
+                get: { pendingMove != nil },
+                set: { if !$0 { pendingMove = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Move") {
+                if let provider = pendingMove { move(to: provider, confirmed: false) }
+            }
+            Button("Cancel", role: .cancel) { pendingMove = nil }
+        } message: {
+            Text(
+                "The Sandbox starts now, clones this branch from origin, and takes over on the next message. Portals on this machine stop."
+            )
+        }
+        .confirmationDialog(
+            moveConfirmationTitle(moveWarning?.provider, anyway: true),
+            isPresented: Binding(
+                get: { moveWarning != nil },
+                set: { if !$0 { moveWarning = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Move", role: .destructive) {
+                if let warning = moveWarning { move(to: warning.provider, confirmed: true) }
+            }
+            Button("Cancel", role: .cancel) { moveWarning = nil }
+        } message: {
+            Text(moveWarning?.message ?? "")
+        }
+        .alert(
+            "Couldn’t move to a Sandbox",
+            isPresented: Binding(
+                get: { moveError != nil },
+                set: { if !$0 { moveError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(moveError ?? "Please try again.")
+        }
         .confirmationDialog(
             mergeConfirmationTitle,
             isPresented: Binding(
@@ -2169,6 +2273,48 @@ private struct SessionActionsMenu: View {
     private func openWorker(_ worker: Session) {
         guard let url = SessionLinks.url(for: worker.id) else { return }
         openURL(url)
+    }
+
+    private func loadMoveProviders() async {
+        guard SandboxMove.canMove(viewModel.session), moveProviders == nil else { return }
+        // A failed read offers nothing, as on the web: the row then says no
+        // Sandbox is ready rather than pretending one is.
+        let status = try? await OS1API.sandboxStatus()
+        guard !Task.isCancelled else { return }
+        moveProviders = SandboxMove.providers(status)
+    }
+
+    private func moveConfirmationTitle(_ provider: String?, anyway: Bool = false) -> String {
+        let target = provider.map(SandboxMove.label) ?? "a Sandbox"
+        return anyway ? "Move to \(target) anyway?" : "Move to \(target)?"
+    }
+
+    /// One attach request. The 428 is asked about exactly once: an
+    /// unconfirmed attempt raises the warning dialog, and the confirmed retry
+    /// either moves or reports why not.
+    private func move(to provider: String, confirmed: Bool) {
+        pendingMove = nil
+        moveWarning = nil
+        guard !moving else { return }
+        moving = true
+        let sessionId = viewModel.session.id
+        Task {
+            let outcome = await SandboxMove.attempt(confirmed: confirmed) { confirm in
+                try await OS1API.sandboxAttach(
+                    sessionId: sessionId, provider: provider, confirm: confirm
+                )
+            }
+            moving = false
+            switch outcome {
+            case .moved(let status):
+                viewModel.noteSandboxMove(status, provider: provider)
+                Haptics.play(.commit)
+            case .needsConfirmation(let message):
+                moveWarning = SandboxMoveWarning(provider: provider, message: message)
+            case .failed(let message):
+                moveError = message
+            }
+        }
     }
 
     private var addIntent: SidebarAddition.Intent? {
