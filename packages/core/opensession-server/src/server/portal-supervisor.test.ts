@@ -147,6 +147,46 @@ describe("host Portal lifecycle cleanup", () => {
     expect(result.stopped).toEqual([]);
   });
 
+  for (const attached of [false, true]) {
+    test(`alias-owned Portals follow canonical archive state in ${attached ? "attached" : "primary"} worktrees`, async () => {
+      const aliasId = "slack-C998-1719860000.000000";
+      registry(aliasId);
+      const canonical = {
+        ...owner(),
+        aliasIds: [aliasId],
+        worktreeDir: attached ? "" : worktree,
+        attachedRepos: attached
+          ? [{ repo: "attached", branch: "main", dir: worktree }]
+          : [],
+      };
+      expect((await reapOrphanedPortalServices([canonical])).stopped).toEqual(
+        [],
+      );
+      expect(readPortalRegistry(worktree)[0]?.state).toBe("awake");
+      expect(
+        (await reapOrphanedPortalServices([{ ...canonical, archived: true }]))
+          .stopped,
+      ).toHaveLength(1);
+      expect(readPortalRegistry(worktree)[0]?.state).toBe("stopped");
+    });
+  }
+
+  test("alias-owned Portals retain idle expiry without sleeping a running owner", async () => {
+    registry("slack-alias");
+    const canonical = { ...owner(), aliasIds: ["slack-alias"] };
+    const activity = new HostPortalActivity();
+    const sweep = (now: number, isRunning = false) =>
+      sleepIdlePortalServices([{ ...canonical, isRunning }], {
+        now,
+        activity,
+        activePorts: new Set(),
+      });
+    expect((await sweep(0)).slept).toEqual([]);
+    expect((await sweep(PORTAL_IDLE_MS, true)).slept).toEqual([]);
+    expect((await sweep(PORTAL_IDLE_MS)).slept).toHaveLength(1);
+    expect(readPortalRegistry(worktree)[0]?.state).toBe("sleeping");
+  });
+
   test("legacy ownerless Portals survive until every worktree owner archives", async () => {
     registry("");
     expect(

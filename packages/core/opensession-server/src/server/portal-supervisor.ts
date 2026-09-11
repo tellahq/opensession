@@ -964,9 +964,15 @@ export async function stopAllPortalServices(input: {
 
 export type PortalOwnerSession = Pick<
   UnifiedSession,
-  "id" | "worktreeDir" | "attachedRepos"
+  "id" | "worktreeDir" | "attachedRepos" | "aliasIds"
 > &
   Partial<Pick<UnifiedSession, "archived" | "isRunning">>;
+function portalOwnerIds(
+  session: Pick<UnifiedSession, "id" | "aliasIds">,
+): string[] {
+  return [session.id, ...(session.aliasIds ?? [])];
+}
+
 export type PortalReapResult = {
   stopped: Array<{ sessionId: string; worktreeDir: string; name: string }>;
 };
@@ -997,7 +1003,10 @@ export async function sleepIdlePortalServices(
   // The catalog deliberately omits live runner overlays. Probe only Portal
   // owners in the in-memory engine registry, never every historical actor.
   const { isAgentEngineBusy } = await import("./agent-runner");
-  const owners = new Map(sessions.map((session) => [session.id, session]));
+  const owners = new Map<string, PortalOwnerSession>();
+  for (const session of sessions) {
+    for (const id of portalOwnerIds(session)) owners.set(id, session);
+  }
   const ownerDirs = sessions
     .flatMap((session) => [
       session.worktreeDir,
@@ -1350,7 +1359,8 @@ export async function reapOrphanedPortalServices(
     if (!dir) return;
     const key = await canonicalDir(dir);
     const set = owners.get(key) ?? new Map<string, boolean>();
-    set.set(session.id, session.archived === true);
+    for (const id of portalOwnerIds(session))
+      set.set(id, session.archived === true);
     owners.set(key, set);
   };
   for (const session of sessions) {
@@ -1426,7 +1436,7 @@ export async function stopArchivedSessionPortals(
   if (!session || session.runner || session.sandbox?.sandboxId) return;
   // A Portal record carries the id its session ran under, which may be the
   // canonical id or an alias merged into it. Every spelling owns the Portal.
-  const ownerIds = new Set([session.id, ...(session.aliasIds ?? [])]);
+  const ownerIds = new Set(portalOwnerIds(session));
   const dirs = new Set([
     session.worktreeDir,
     ...(session.attachedRepos ?? []).map((repo) => repo.dir),
@@ -1487,18 +1497,18 @@ export async function migrateUnscopedPortalServices(
   const owners = new Map<string, Set<string>>();
   const addOwner = async (
     dir: string | null | undefined,
-    sessionId: string,
+    session: PortalOwnerSession,
   ) => {
     if (!dir) return;
     const key = await canonicalDir(dir);
     const set = owners.get(key) ?? new Set<string>();
-    set.add(sessionId);
+    for (const id of portalOwnerIds(session)) set.add(id);
     owners.set(key, set);
   };
   for (const session of sessions) {
-    await addOwner(session.worktreeDir, session.id);
+    await addOwner(session.worktreeDir, session);
     for (const repo of session.attachedRepos ?? [])
-      await addOwner(repo.dir, session.id);
+      await addOwner(repo.dir, session);
   }
 
   const migrated: PortalContainmentMigrationResult["migrated"] = [];
