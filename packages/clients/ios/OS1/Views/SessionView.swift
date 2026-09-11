@@ -1654,6 +1654,10 @@ struct SessionView: View {
         }
         .softScrollEdges()
         .environment(\.transcriptQuoteSelection, viewModel.quoteSelection)
+        // What a ```choices block sends or fills through, and whose chips
+        // are still current. Same object for the life of the view model, so
+        // installing it here costs the rows nothing.
+        .environment(\.quickReplyRelay, viewModel.quickReplies)
         .transcriptQuoteInteractions(viewModel.quoteSelection)
         .onKeyPress(.escape) {
             guard viewModel.quoteSelection.text != nil else { return .ignored }

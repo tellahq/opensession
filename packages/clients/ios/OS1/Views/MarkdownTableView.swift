@@ -32,6 +32,10 @@ struct MarkdownTableView: View {
     /// Narration inside a work fold renders dimmer than a final answer, the
     /// same split `MarkdownBody` makes for prose.
     var dimmed = false
+    /// Off when the caller draws its own header row (`DataGridView`, whose
+    /// headers are sort buttons). The scrolling fallback keeps the header:
+    /// a table wider than the column would be unreadable without one.
+    var showsHeader = true
     @Environment(\.transcriptQuoteSelection) private var quoteSelection
 
     @State private var available: CGFloat = 0
@@ -73,7 +77,9 @@ struct MarkdownTableView: View {
     @ViewBuilder
     private func grid(_ layout: TableLayoutPlan) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            row(measured.headers, widths: layout.widths, isHeader: true)
+            if showsHeader {
+                row(measured.headers, widths: layout.widths, isHeader: true)
+            }
             ForEach(Array(measured.rows.enumerated()), id: \.offset) { index, cells in
                 row(
                     cells,

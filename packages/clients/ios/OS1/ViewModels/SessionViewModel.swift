@@ -146,6 +146,10 @@ final class SessionViewModel {
     private(set) var conversationLoadError: String?
     private(set) var notice: String?
     var draft = ""
+    /// What a ```choices block in the transcript sends or fills through.
+    /// Its closures are bound once the view model exists (`init` cannot
+    /// capture `self` before every property is set).
+    let quickReplies = QuickReplyRelay()
     /// Images staged in the composer, sent (as data URLs) with the next prompt.
     var attachedImages: [AttachedImage] = []
     /// Transcript text attached to the next message. The controller also owns
@@ -613,6 +617,8 @@ final class SessionViewModel {
         self.effort = session.effort ?? ""
         self.fastMode = session.fastMode ?? false
         self.accountId = session.accountId ?? ""
+        quickReplies.send = { [weak self] text in self?.sendQuickReply(text) }
+        quickReplies.fill = { [weak self] text in self?.fillComposer(with: text) }
         if let composerDraft {
             self.draft = composerDraft.text
             self.attachedImages = composerDraft.images
@@ -1180,6 +1186,41 @@ final class SessionViewModel {
         attachedImages = []
         quoteSelection.clear()
         sendSeq += 1
+    }
+
+    /// A quick-reply chip's text as the next message, on the composer's own
+    /// path but isolated from it: the draft and its attachments stay where
+    /// they are, and a busy run queues the reply the way it queues a send.
+    func sendQuickReply(_ text: String) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let busyMode = UserDefaults.standard.string(forKey: "os1.composer.busySend") ?? "queue"
+        guard let item = outbox.enqueue(
+            sessionId: session.id,
+            content: text,
+            effort: effort.isEmpty ? nil : effort,
+            fastMode: fastMode ? true : nil,
+            busyMode: busyMode,
+            user: ServerConfig.shared.userName
+        ) else {
+            notice = "Too many unsent messages — send or delete some first."
+            return
+        }
+        appendOutboxEcho(item)
+        rebuildDisplayItems()
+        HideStore.shared.unhide(for: session)
+        replySuggestions = []
+        sendSeq += 1
+    }
+
+    /// A quick reply into the composer instead of straight to the session,
+    /// for the person who wants to edit it first. Appended on its own line
+    /// when a draft is already there.
+    func fillComposer(with text: String) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let current = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft = current.isEmpty ? text : current + "\n" + text
     }
 
     private func appendOutboxEcho(_ item: Outbox.Item, images: [String]? = nil) {
@@ -2402,6 +2443,10 @@ final class SessionViewModel {
         // costs nothing and keeps a link and its target in step, since a
         // touched file is a file the diff has.
         FileLinks.register(paths: linkableFilePaths(), for: session.id)
+        // Which quick-reply blocks are still current: those after the last
+        // user message, the outbox's local echo included, so chips go quiet
+        // the moment one of them is sent.
+        quickReplies.update(entries: entries)
         // And the scratch files it wrote — the same set the footer chips
         // offer, so naming one in prose opens exactly what the chip does.
         AssetLinks.register(paths: linkableAssetPaths(), for: session.id)

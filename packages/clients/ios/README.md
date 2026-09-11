@@ -163,7 +163,15 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   a loading screen. Fenced Markdown, expanded tool inputs and code assets use
   the PWA's GitHub light/dark syntax palette. Native-owned code surfaces show
   plain text immediately while highlighting finishes and keep large files plain.
-  ```mermaid fences render as diagrams (see "Mermaid diagrams" below).
+  ```mermaid fences render as diagrams (see "Mermaid diagrams" below), and
+  the rest of the web's block catalog (`docs/blocks.md`) renders natively:
+  quick-reply chips that send or fill the composer, collapsible file trees
+  whose rows open the Changes panel, placed images and videos under their
+  heading with captions, a before/after compare control, Swift Charts for a
+  Vega-Lite subset, locked artifact/SVG frames, slide decks, palettes, data
+  grids, JSON trees, ANSI output, washed diffs, display math, callouts and
+  metric cards. Every parser lives in `Models/` and falls back to the plain
+  fence when it refuses the source, so a streaming block stays readable.
 
   ```
 - **Workspace details** — tapping the session title opens a native worktree sheet
@@ -543,7 +551,8 @@ OS1/
     PortalsView.swift        Exposed services and controls
     TerminalView.swift       Session-scoped shell
     WalkthroughCard.swift    Published walkthrough: demo video, writeup, stills
-    MarkdownBody.swift       Streaming/durable markdown rendering
+    MarkdownBody.swift       Streaming/durable markdown rendering, block switch
+    Blocks/                  One view per block kind (choices, tree, compare, …)
     AskQuestionCard.swift    Options + free text answer
     PrPanel.swift            Pull-request overview, actions, and review entry
     PrReviewCanvas.swift     Committed diff, inline pending comments, viewed files

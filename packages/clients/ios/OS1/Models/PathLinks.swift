@@ -95,6 +95,12 @@ final class PathLinks {
         registries[sessionId]?.paths.contains(path) == true ? path : nil
     }
 
+    /// Every path registered for a session. A ```tree block reads it to
+    /// decide which of its rows can open the Changes panel.
+    func paths(for sessionId: String?) -> Set<String> {
+        sessionId.flatMap { registries[$0]?.paths } ?? []
+    }
+
     /// Markdown with every registered path rewritten as a link. Returns the
     /// input unchanged when there is nothing to do, which is most text.
     func linkify(_ markdown: String, sessionId: String?) -> String {

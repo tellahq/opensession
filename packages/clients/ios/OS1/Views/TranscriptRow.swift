@@ -637,10 +637,21 @@ struct AssistantMessage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ConversationImageStrip(sources: entry.images ?? [], sessionId: sessionId)
-            ConversationVideoStrip(sources: entry.videos ?? [], sessionId: sessionId)
+            // The strip shows what the body did not already place: a marker
+            // the server rewrote into the message renders where it was
+            // written (MediaFigureView), and drawing it twice would put the
+            // same still above the prose that introduces it.
+            ConversationImageStrip(
+                sources: PlacedMedia.unplaced(entry.images, in: entry.text),
+                sessionId: sessionId
+            )
+            ConversationVideoStrip(
+                sources: PlacedMedia.unplaced(entry.videos, in: entry.text),
+                sessionId: sessionId
+            )
             if !entry.text.isEmpty || state.expanded {
                 bodyContent
+                    .environment(\.transcriptEntryId, entry.id)
             }
             if let label = expanderLabel {
                 Button {

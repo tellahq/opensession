@@ -37,61 +37,96 @@ struct MarkdownBody: View {
     @Environment(\.transcriptSessionId) private var transcriptSessionId
     @Environment(\.transcriptQuoteSelection) private var quoteSelection
 
-    init(_ text: String, dimmed: Bool = false) {
+    /// Whether fences, placed media, callouts and math become native blocks.
+    /// Off inside a block that renders markdown of its own (a slide, a
+    /// callout body), where the web keeps nested fences plain too.
+    var richBlocks = true
+
+    init(_ text: String, dimmed: Bool = false, richBlocks: Bool = true) {
         self.text = text
         self.dimmed = dimmed
-    }
-
-    /// One rendered piece of a message: prose for the library, a diagram, or a
-    /// table this app lays out itself.
-    private enum Block {
-        case markdown(String)
-        case mermaid(String)
-        case table(MarkdownTable)
+        self.richBlocks = richBlocks
     }
 
     var body: some View {
-        // ```mermaid fences are lifted out before anything else touches the
-        // text: they render as drawn diagrams, and the link rewrites below
-        // would corrupt a URL or file path inside a diagram label into
-        // markdown link syntax that mermaid can no longer parse. Tables come
-        // out of what's left, for the width reasons in MarkdownTableSegmenter.
-        let blocks = Self.blocks(of: text)
+        // Blocks are lifted out before anything else touches the text: a
+        // diagram, a chart or a data fence renders itself, and the link
+        // rewrites below would corrupt a URL or file path inside one into
+        // markdown link syntax its parser can no longer read. Tables come out
+        // of what's left, for the width reasons in MarkdownTableSegmenter.
+        let blocks = richBlocks ? Self.blocks(of: text) : [.markdown(text)]
         if blocks.count == 1, case .markdown(let only) = blocks[0] {
             // The overwhelmingly common shape — no extra stack around it.
             markdown(only)
         } else {
             VStack(alignment: .leading, spacing: Self.segmentSpacing) {
                 ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                    switch block {
-                    case .markdown(let value):
-                        markdown(value)
-                    case .mermaid(let source):
-                        MermaidDiagramView(source: source)
-                    case .table(let table):
-                        MarkdownTableView(table: linkified(table), dimmed: dimmed)
-                    }
+                    view(for: block)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private static func blocks(of text: String) -> [Block] {
-        MermaidSegmenter.split(text).flatMap { segment -> [Block] in
-            switch segment {
-            case .mermaid(let source):
-                return [.mermaid(source)]
-            case .markdown(let value):
-                return MarkdownTableSegmenter.split(value).map { piece in
-                    switch piece {
-                    case .markdown(let prose): .markdown(prose)
-                    case .table(let table): .table(table)
-                    }
-                }
-            }
+    @ViewBuilder
+    private func view(for block: TranscriptRichBlock) -> some View {
+        switch block {
+        case .markdown(let value):
+            markdown(value)
+        case .mermaid(let source):
+            MermaidDiagramView(source: source)
+        case .table(let table):
+            MarkdownTableView(table: linkified(table), dimmed: dimmed)
+        case .chart(let chart, let source):
+            VegaLiteChartView(chart: chart, source: source)
+        case .compare(let spec):
+            CompareSliderView(spec: spec)
+        case .choices(let choices):
+            ChoicesBlockView(choices: choices)
+        case .tree(let nodes):
+            TreeBlockView(nodes: nodes)
+        case .palette(let entries):
+            PaletteBlockView(entries: entries)
+        case .dataGrid(let table):
+            DataGridView(table: table, dimmed: dimmed)
+        case .jsonTree(let node, let raw):
+            JsonTreeView(root: node, raw: raw)
+        case .ansi(let lines, let plain):
+            AnsiBlockView(lines: lines, plain: plain)
+        case .diff(let patch):
+            DiffFenceView(patch: patch)
+        case .math(let lines, let source):
+            MathBlockView(lines: lines, source: source, dimmed: dimmed)
+        case .metrics(let metrics):
+            MetricsBlockView(metrics: metrics)
+        case .artifact(let document):
+            ArtifactBlockView(document: document)
+        case .slides(let slides):
+            SlidesDeckView(slides: slides, dimmed: dimmed)
+        case .figure(let figure):
+            MediaFigureView(figure: figure)
+        case .callout(let callout):
+            CalloutView(callout: callout, dimmed: dimmed)
         }
     }
+
+    /// Parsed once per distinct text: a lazy transcript re-evaluates a row's
+    /// body on every scroll past it, and a data fence or a JSON tree is not
+    /// free to parse. Bounded, and keyed on the raw text, so a message that
+    /// gains a chip from a link registry (`TranscriptLinks`) still reuses
+    /// its blocks and only the prose is rewritten.
+    @MainActor
+    private static func blocks(of text: String) -> [TranscriptRichBlock] {
+        if let cached = blockCache[text] { return cached }
+        let blocks = TranscriptRichBlocks.blocks(of: text)
+        if blockCache.count >= 200 {
+            blockCache.removeAll(keepingCapacity: true)
+        }
+        blockCache[text] = blocks
+        return blocks
+    }
+
+    @MainActor private static var blockCache: [String: [TranscriptRichBlock]] = [:]
 
     private func markdown(_ value: String) -> some View {
         let base = dimmed ? MarkdownRenderConfig.os1Dim : .os1Static

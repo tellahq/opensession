@@ -5,10 +5,16 @@ can write a handful of block forms that the web UI renders as something live
 or visual in place. This is the catalog, the grammar each one reads, and the
 contract for adding a new kind.
 
-Blocks are web-only progressive enhancements. Everywhere else (Slack, the
-native app, an export, a client that predates the block) the fence stays a
-readable code block and a marker stays a readable line. Never make a block the
-only carrier of information the reader needs.
+Blocks are progressive enhancements. The web renders every row of the catalog;
+the native app (`packages/clients/ios`, `Models/TranscriptRichBlocks.swift`)
+renders the same catalog natively, with two narrower readings: a chart is drawn
+by Swift Charts from a unit-view subset of Vega-Lite with inline data, and math
+is set from a TeX vocabulary rather than typeset by KaTeX; inline `$x$` and hex
+codespan chips stay prose there. Everywhere else (Slack, an export, a client
+that predates the block) the fence stays a readable code block and a marker
+stays a readable line, and both clients keep the fence as code whenever its
+parser refuses the source. Never make a block the only carrier of information
+the reader needs.
 
 ## Catalog
 

@@ -32,6 +32,11 @@ enum FileLinks {
         links.path(from: url)
     }
 
+    /// The files this session touched: what a ```tree row may open.
+    static func paths(for sessionId: String?) -> Set<String> {
+        links.paths(for: sessionId)
+    }
+
     /// Markdown with every registered path rewritten as a link.
     static func linkify(_ markdown: String, sessionId: String?) -> String {
         links.linkify(markdown, sessionId: sessionId)
