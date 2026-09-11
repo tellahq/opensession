@@ -2207,9 +2207,10 @@ private struct SessionActionsMenu: View {
         SandboxMove.canMove(viewModel.session)
     }
 
-    /// The row now says Preparing; take it before the next poll does.
+    /// The row says Preparing from this call on, so the submenu is gone
+    /// before the refresh that confirms it starts.
     private func adoptSandboxMove(_ status: SessionSandboxStatus) {
-        Task { await SandboxMoveViewModel.refresh(viewModel) }
+        SandboxMoveViewModel.adopt(status, into: viewModel)
     }
 
     private var addIntent: SidebarAddition.Intent? {

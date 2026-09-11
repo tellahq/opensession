@@ -25,19 +25,33 @@ final class SandboxMoveTests: XCTestCase {
         XCTAssertEqual(SandboxMove.refusal(moved), .inSandbox)
     }
 
-    /// A recorded provider without an id is a move still preparing (or one
-    /// that failed). The server would take a second move and provision twice,
-    /// so the offer ends as soon as any provider is recorded, as on the web;
-    /// a failed Sandbox is retried from the Sandbox section.
-    func testPreparingOrFailedSandboxRefuses() throws {
+    /// A recorded provider without an id is a move still preparing. The
+    /// server would take a second move and provision twice, so the offer
+    /// ends as soon as the provider is recorded; a record with no lifecycle
+    /// counts as preparing.
+    func testPreparingSandboxRefuses() throws {
         let preparing = try session(
             #"{"id":"bks-1","mode":"code","repo":"opensession","sandbox":{"provider":"daytona","lifecycle":"preparing"}}"#
         )
         XCTAssertEqual(SandboxMove.refusal(preparing), .inSandbox)
-        let failed = try session(
-            #"{"id":"bks-1","mode":"code","repo":"opensession","sandbox":{"provider":"box","lifecycle":"needs_attention"}}"#
+        let unknown = try session(
+            #"{"id":"bks-1","mode":"code","repo":"opensession","sandbox":{"provider":"daytona"}}"#
         )
-        XCTAssertEqual(SandboxMove.refusal(failed), .inSandbox)
+        XCTAssertEqual(SandboxMove.refusal(unknown), .inSandbox)
+    }
+
+    /// A provision that failed before making anything (`needs_attention`, no
+    /// id) has no Sandbox to recreate, and the server permits the retry; a
+    /// materialized Sandbox that needs attention is handled from its section.
+    func testFailedUnmaterializedMoveMayBeRetried() throws {
+        let failed = try session(
+            #"{"id":"bks-1","mode":"code","repo":"opensession","sandbox":{"provider":"box","lifecycle":"needs_attention","lastLifecycleError":"boom"}}"#
+        )
+        XCTAssertNil(SandboxMove.refusal(failed))
+        let materializedFailure = try session(
+            #"{"id":"bks-1","mode":"code","repo":"opensession","sandbox":{"provider":"box","sandboxId":"sb-2","lifecycle":"needs_attention"}}"#
+        )
+        XCTAssertEqual(SandboxMove.refusal(materializedFailure), .inSandbox)
         let local = try session(
             #"{"id":"bks-1","mode":"code","repo":"opensession","sandbox":{"provider":"local","sandboxId":"x"}}"#
         )
@@ -123,6 +137,13 @@ final class SandboxMoveTests: XCTestCase {
         }
         XCTAssertEqual(status.provider, "daytona")
         XCTAssertEqual(status.lifecycle, "preparing")
+        // The row built from it ends the offer at once, before any refresh.
+        var row = try session(#"{"id":"bks-1","mode":"code","repo":"opensession"}"#)
+        XCTAssertNil(SandboxMove.refusal(row))
+        row.sandbox = SandboxMove.recorded(from: status)
+        XCTAssertEqual(row.sandbox?.provider, "daytona")
+        XCTAssertEqual(row.sandbox?.lifecycle, "preparing")
+        XCTAssertEqual(SandboxMove.refusal(row), .inSandbox)
         XCTAssertNil(status.sandboxId)
     }
 

@@ -20,6 +20,10 @@ final class SandboxMoveViewModel {
     private(set) var providers: [String]?
     /// The provider a move is in flight to.
     private(set) var working: String?
+    /// The session a move has landed for. The row records the provider too,
+    /// but a sessions poll that has not caught up yet can hand back the host
+    /// snapshot, and this keeps the rows from offering a second move then.
+    private(set) var movedSessionId: String?
     var confirmation: Confirmation?
     var error: String?
 
@@ -47,6 +51,7 @@ final class SandboxMoveViewModel {
                 confirm: confirm
             ) {
             case .moved(let status):
+                movedSessionId = sessionId
                 return status
             case .confirmRequired(let message):
                 confirmation = Confirmation(
@@ -60,6 +65,20 @@ final class SandboxMoveViewModel {
             self.error = error.localizedDescription
             return nil
         }
+    }
+
+    func hasMoved(_ sessionId: String) -> Bool {
+        movedSessionId == sessionId
+    }
+
+    /// Record the server's answer on the open session now, then take the row
+    /// the server has. The refresh is a round trip that can fail or arrive
+    /// late; the offer must be gone before it starts, not after it lands.
+    static func adopt(_ status: SessionSandboxStatus, into viewModel: SessionViewModel) {
+        var session = viewModel.session
+        session.sandbox = SandboxMove.recorded(from: status)
+        viewModel.updateSessionSnapshot(session)
+        Task { await refresh(viewModel) }
     }
 
     /// The row the server has after a move, so the open session shows the

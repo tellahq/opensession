@@ -9,11 +9,13 @@ import Foundation
 enum SandboxMove {
     /// Why a session cannot move, in the server's order.
     enum Refusal: Equatable {
-        /// A Sandbox is recorded for it, materialized or not. The server would
-        /// accept a second move while the first is still preparing, and then
+        /// A Sandbox exists for it, or is on its way. The server would accept
+        /// a second move while the first is still preparing, and then
         /// provision twice; the Sandbox that lands second is never recorded
-        /// or destroyed. A move that failed is retried from the Sandbox
-        /// section (Recreate), not by moving again.
+        /// or destroyed. The one recorded state that may move again is a
+        /// failed provision (`needs_attention` without an id): nothing was
+        /// made, Recreate has no id to work from, and the server permits the
+        /// retry.
         case inSandbox
         case runner
         case automation
@@ -22,8 +24,10 @@ enum SandboxMove {
     }
 
     static func refusal(_ session: Session) -> Refusal? {
-        if let provider = session.sandbox?.provider, !provider.isEmpty, provider != "local" {
-            return .inSandbox
+        if let sandbox = session.sandbox,
+           let provider = sandbox.provider, !provider.isEmpty, provider != "local" {
+            let materialized = !(sandbox.sandboxId ?? "").isEmpty
+            if materialized || sandbox.lifecycle != "needs_attention" { return .inSandbox }
         }
         if let runner = session.runner, !runner.id.isEmpty { return .runner }
         if session.automation?.isAutomation == true
@@ -37,6 +41,19 @@ enum SandboxMove {
 
     static func canMove(_ session: Session) -> Bool {
         refusal(session) == nil
+    }
+
+    /// The row's record of the Sandbox the attach route answered with, so the
+    /// open session carries the provider from the moment the server does and
+    /// `refusal` says `.inSandbox` before any refresh lands.
+    static func recorded(from status: SessionSandboxStatus) -> SessionSandbox {
+        SessionSandbox(
+            provider: status.provider,
+            sandboxId: status.sandboxId,
+            workspace: status.workspace,
+            lifecycle: status.lifecycle ?? "preparing",
+            lastLifecycleError: status.lastLifecycleError
+        )
     }
 
     /// Where a session may move to: the composer's own list, which is the

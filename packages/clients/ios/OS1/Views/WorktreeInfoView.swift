@@ -1188,7 +1188,9 @@ struct WorktreeInfoView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(sandboxMove.working != nil || viewModel.isRunning)
+        .disabled(
+            sandboxMove.working != nil || sandboxMove.hasMoved(currentSession.id) || viewModel.isRunning
+        )
     }
 
     /// Show the Sandbox section as Preparing now: the live status is what the
@@ -1197,14 +1199,8 @@ struct WorktreeInfoView: View {
     private func adoptSandboxMove(_ status: SessionSandboxStatus) {
         sandboxStatus = status
         sandboxError = nil
-        attachedSandbox = SessionSandbox(
-            provider: status.provider,
-            sandboxId: status.sandboxId,
-            workspace: status.workspace,
-            lifecycle: status.lifecycle ?? "preparing",
-            lastLifecycleError: status.lastLifecycleError
-        )
-        Task { await SandboxMoveViewModel.refresh(viewModel) }
+        attachedSandbox = SandboxMove.recorded(from: status)
+        SandboxMoveViewModel.adopt(status, into: viewModel)
     }
 
     private var remoteSandbox: (provider: String, sandboxId: String?, workspace: String?)? {

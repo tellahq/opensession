@@ -33,7 +33,7 @@ struct SandboxMoveMenuItems: View {
                             systemImage: "cube"
                         )
                     }
-                    .disabled(model.working != nil || isRunning)
+                    .disabled(model.working != nil || model.hasMoved(sessionId) || isRunning)
                 }
                 if isRunning {
                     Text(SandboxMoveCopy.waitForAgent)
@@ -159,7 +159,7 @@ struct SandboxMoveToolbarMenu: View {
     }
 
     private func adopt(_ status: SessionSandboxStatus) {
-        Task { await SandboxMoveViewModel.refresh(viewModel) }
+        SandboxMoveViewModel.adopt(status, into: viewModel)
     }
 }
 #endif
