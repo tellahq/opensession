@@ -24,13 +24,20 @@ struct ModelSettingsMenu: View {
     /// is the whole menu; suppressed where it is nested inside one, since
     /// spend is not a model setting and the row would read as one.
     var showsUsage = true
+    var onShowWeeklyRemaining: (() -> Void)?
 
     var body: some View {
         if showsUsage {
             UsageMenuSection(usage: viewModel.usage)
         }
         if !weeklyRows.isEmpty {
-            weeklyRemainingMenu
+            if let onShowWeeklyRemaining {
+                Button(action: onShowWeeklyRemaining) {
+                    Label(Self.headerTitle(weeklyReadout), systemImage: Self.gaugeSymbol(weeklyReadout?.tone))
+                }
+            } else {
+                weeklyRemainingMenu
+            }
         }
         if let catalog {
             Menu {
@@ -151,18 +158,16 @@ struct ModelSettingsMenu: View {
                     let pinnable = row.kind == currentProvider
                     let pinned = pinnable && row.accountId == viewModel.accountId
                     Button {
-                        if let account = accounts.first(where: {
-                            $0.kind == row.kind && $0.account.id == row.accountId
-                        }) {
-                            viewModel.pinAccount(account.account)
-                        }
+                        pinAccount(for: row)
                     } label: {
-                        Text(row.label)
+                        Text(row.name)
                         Text(Self.rowDetail(row))
                         // Not hidden from accessibility: hiding the mark
                         // drops the whole row from the menu's tree on iOS 26.
                         Image(systemName: pinned ? "checkmark" : (row.isPersonal ? "person" : "person.2"))
                     }
+                    // Native menu badges reserve space independently of the name.
+                    .badge(row.scope.map { Text($0).foregroundStyle(OS1VisualStyle.textDim) })
                     .disabled(!pinnable)
                     .accessibilityLabel(Self.rowSpokenLabel(row, pinned: pinned, pinnable: pinnable))
                 }
@@ -172,11 +177,83 @@ struct ModelSettingsMenu: View {
                 }
             }
         } label: {
-            Label(
-                weeklyReadout.map { "Weekly remaining · \($0.remaining)%" } ?? "Weekly remaining",
-                systemImage: Self.gaugeSymbol(weeklyReadout?.tone)
-            )
+            Label(Self.headerTitle(weeklyReadout), systemImage: Self.gaugeSymbol(weeklyReadout?.tone))
         }
+    }
+
+    /// iOS menus ignore `.badge`, so the phone presents the same accounts in
+    /// a native sheet. Only the name yields width to the scope and pin mark.
+    var weeklyRemainingOverview: some View {
+        List {
+            Section {
+                Button {
+                    viewModel.pinAccount(nil)
+                } label: {
+                    HStack {
+                        Text("Auto")
+                        Spacer()
+                        if viewModel.accountId.isEmpty { Image(systemName: "checkmark") }
+                    }
+                }
+                .disabled(currentProvider == nil)
+                ForEach(weeklyRows) { row in
+                    let pinnable = row.kind == currentProvider
+                    let pinned = pinnable && row.accountId == viewModel.accountId
+                    Button {
+                        pinAccount(for: row)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: pinned ? "checkmark" : (row.isPersonal ? "person" : "person.2"))
+                                .frame(width: 24)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 8) {
+                                    Text(row.name)
+                                        .lineLimit(1)
+                                        .foregroundStyle(OS1VisualStyle.text)
+                                    if let scope = row.scope {
+                                        Text(scope)
+                                            .font(.caption.weight(.medium))
+                                            .foregroundStyle(OS1VisualStyle.textDim)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 3)
+                                            .background(OS1VisualStyle.hover, in: Capsule())
+                                            .fixedSize()
+                                    }
+                                }
+                                Text(Self.rowDetail(row))
+                                    .font(.subheadline)
+                                    .foregroundStyle(OS1VisualStyle.textDim)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+                    .disabled(!pinnable)
+                    .accessibilityLabel(Self.rowSpokenLabel(row, pinned: pinned, pinnable: pinnable))
+                }
+            } header: {
+                Text(Self.headerTitle(weeklyReadout))
+            } footer: {
+                if currentProvider != nil {
+                    Text("Choose one to use it for this session")
+                }
+            }
+        }
+    }
+
+    private func pinAccount(for row: WeeklyRemainingRow) {
+        guard let account = accounts.first(where: {
+            $0.kind == row.kind && $0.account.id == row.accountId
+        }) else { return }
+        viewModel.pinAccount(account.account)
+    }
+
+    /// The menu row's own line. A scoped readout names its bucket beside the
+    /// number, so a full general week is not read as Fable headroom.
+    static func headerTitle(_ readout: WeeklyRemainingRow?) -> String {
+        guard let readout else { return "Weekly remaining" }
+        let scope = readout.scope.map { "\($0) " } ?? ""
+        return "Weekly remaining · \(scope)\(readout.remaining)%"
     }
 
     private var viewer: String { ServerConfig.shared.userName }
@@ -235,6 +312,34 @@ struct ModelSettingsMenu: View {
         }
         return parts.joined(separator: ", ")
     }
+
+    #if DEBUG
+    /// Accounts for a screenshot of the overview: a name long enough to
+    /// truncate, whose Fable bucket is empty while its week is nearly full.
+    /// `OS1_WEEKLY_REMAINING_FIXTURE=1` swaps these in for the live pools.
+    static func fixtureAccounts(viewer: String, now: Date = Date()) -> [PooledAccount] {
+        let iso = ISO8601DateFormatter()
+        let week = UsageWindow(utilization: 12, resetsAt: iso.string(from: now.addingTimeInterval(86400 * 3)))
+        var pool = ProviderAccount(id: "fixture-pool", name: "Michael-Tella-Engineering-Shared")
+        pool.usage = AccountUsage(
+            sevenDay: week,
+            scopedLimits: [
+                ScopedUsageLimit(label: "Fable", utilization: 100, resetsAt: week.resetsAt)
+            ]
+        )
+        var personal = ProviderAccount(id: "fixture-personal", name: "Main", owner: viewer)
+        personal.usage = AccountUsage(
+            sevenDay: UsageWindow(utilization: 45, resetsAt: week.resetsAt),
+            scopedLimits: [
+                ScopedUsageLimit(label: "Fable", utilization: 55, resetsAt: week.resetsAt)
+            ]
+        )
+        return [
+            PooledAccount(account: personal, kind: .claude),
+            PooledAccount(account: pool, kind: .claude),
+        ]
+    }
+    #endif
 
     // MARK: Model settings
 

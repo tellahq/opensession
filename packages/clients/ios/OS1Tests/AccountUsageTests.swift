@@ -338,4 +338,56 @@ final class AccountUsageTests: XCTestCase {
             "Main · Fable, yours, 8 percent left, not for this model"
         )
     }
+
+    /// The scope is the row's own badge, not a suffix on the name, so a long
+    /// account name truncates without hiding which budget the number is.
+    func testMenuRowKeepsScopeOutOfTheName() {
+        let scoped = WeeklyRemainingRow(
+            accountId: "a", kind: .claude, scope: "Fable", name: "Michael-Tella-Engineering-Shared",
+            owner: nil, remaining: 0, resetsAt: nil
+        )
+        XCTAssertEqual(scoped.name, "Michael-Tella-Engineering-Shared")
+        XCTAssertEqual(scoped.scope, "Fable")
+        XCTAssertEqual(scoped.label, "Michael-Tella-Engineering-Shared · Fable")
+        XCTAssertEqual(ModelSettingsMenu.rowDetail(scoped, now: now), "Shared · 0% left · running out")
+        // VoiceOver still hears the name and the bucket together.
+        XCTAssertEqual(
+            ModelSettingsMenu.rowSpokenLabel(scoped, pinned: true, pinnable: true, now: now),
+            "Michael-Tella-Engineering-Shared · Fable, shared, 0 percent left, used for this session"
+        )
+        let general = WeeklyRemainingRow(
+            accountId: "a", kind: .claude, scope: nil, name: "Main", owner: "Kent", remaining: 88, resetsAt: nil
+        )
+        XCTAssertNil(general.scope)
+        XCTAssertEqual(general.label, "Main")
+    }
+
+    func testMenuHeaderNamesTheScopedBucket() {
+        XCTAssertEqual(ModelSettingsMenu.headerTitle(nil), "Weekly remaining")
+        let general = WeeklyRemainingRow(
+            accountId: "a", kind: .claude, scope: nil, name: "Main", owner: "Kent", remaining: 88, resetsAt: nil
+        )
+        XCTAssertEqual(ModelSettingsMenu.headerTitle(general), "Weekly remaining · 88%")
+        let scoped = WeeklyRemainingRow(
+            accountId: "a", kind: .claude, scope: "Fable", name: "Main", owner: "Kent", remaining: 0, resetsAt: nil
+        )
+        XCTAssertEqual(ModelSettingsMenu.headerTitle(scoped), "Weekly remaining · Fable 0%")
+        let other = WeeklyRemainingRow(
+            accountId: "b", kind: .claude, scope: "Sonnet", name: "Shared", owner: nil,
+            remaining: 12, resetsAt: nil
+        )
+        XCTAssertEqual(ModelSettingsMenu.headerTitle(other), "Weekly remaining · Sonnet 12%")
+    }
+
+    #if DEBUG
+    func testWeeklyFixtureShowsAnEmptyScopedBucketBehindALongName() {
+        let rows = WeeklyRemaining.rows(ModelSettingsMenu.fixtureAccounts(viewer: "Kent", now: now), viewer: "Kent", now: now)
+        XCTAssertEqual(rows.map { [$0.name, $0.scope ?? "-", "\($0.remaining)"] }, [
+            ["Main", "-", "55"],
+            ["Main", "Fable", "45"],
+            ["Michael-Tella-Engineering-Shared", "-", "88"],
+            ["Michael-Tella-Engineering-Shared", "Fable", "0"],
+        ])
+    }
+    #endif
 }
