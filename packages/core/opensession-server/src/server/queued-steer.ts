@@ -1,3 +1,4 @@
+import { deskTextNavigation } from "./desk-text-navigation";
 import {
   currentAgentRunToken,
   interruptAndSteerAgentRunToken,
@@ -144,6 +145,7 @@ export async function prepareAndSteerQueuedPrompt(
       throw new Error("Pending steer changed before fenced rejection");
     return "rejected";
   }
+  deskTextNavigation.steer(input.sessionId, input.itemId);
   if (!deps.steer(before.token, input.text, input.images, input.itemId)) {
     if (!(await deps.reject(input.sessionId, input.itemId, before)))
       throw new Error("Pending steer changed before fenced rejection");

@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { ProtocolClientMessage, TranscriptEntry } from "../lib/types";
+import { DeskTextNavigationClient } from "../lib/desk-text-navigation-client";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { getCurrentUser } from "./UserPicker";
 import {
@@ -87,6 +88,12 @@ export function DeskConversation({
 }: DeskConversationProps) {
   const { connected, send, setTyping, addHandler } =
     useWebSocket(presenceActive);
+  const textNavigationRef = useRef<DeskTextNavigationClient | null>(null);
+  useEffect(() => {
+    const navigation = new DeskTextNavigationClient(sessionId);
+    textNavigationRef.current = navigation;
+    return () => navigation.dispose();
+  }, [sessionId]);
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -514,12 +521,18 @@ export function DeskConversation({
     if (images.length) message.images = images;
     if (files.length) message.files = filePayload;
     if (pastedTexts.length) message.pastedTexts = pastedTexts;
-    send(message);
-    setPending(content);
-    setImages([]);
-    setFiles([]);
-    followRef.current = true;
-    return true;
+    const requestId = randomUUID();
+    message.requestId = requestId;
+    const navigation = textNavigationRef.current;
+    return (navigation?.prepare(requestId) ?? Promise.resolve()).then(() => {
+      if (navigation?.disposed) return false;
+      send(message);
+      setPending(content);
+      setImages([]);
+      setFiles([]);
+      followRef.current = true;
+      return true;
+    });
   }
 
   // Model and effort are settings of the Desk session, so the switch routes

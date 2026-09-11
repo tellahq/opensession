@@ -8,6 +8,7 @@
  * cache in session-cache.ts.
  */
 
+import { deskTextNavigation } from "./desk-text-navigation";
 import type { McpScope } from "./runner-shared";
 import { randomUUIDv7 } from "bun";
 import { existsSync, mkdirSync, readFileSync } from "fs";
@@ -710,6 +711,7 @@ export async function steerQueuedPrompt(
       undefined,
       undefined,
       promptEntryId,
+      [item.id],
     ).catch(async (e) => {
       console.error(`[queue] Send-now delivery failed for ${sessionId}:`, e);
       await failPromptDispatch(sessionId, promptEntryId);
@@ -1826,6 +1828,7 @@ export function sandboxRunSecuritySpec(
   session: UnifiedSession,
   opts: {
     isAutomationSession: boolean;
+    promptEntryId?: string;
     user?: string;
     accountUser?: string;
     mcpServers?: McpScope;
@@ -1851,7 +1854,9 @@ export function sandboxRunSecuritySpec(
     proxyMcpServers: opts.isAutomationSession
       ? []
       : [
-          ...Object.keys(interactiveMcpServers(opts.user, session.id)),
+          ...Object.keys(
+            interactiveMcpServers(opts.user, session.id, opts.promptEntryId),
+          ),
           ...(session.goalId ? ["opensession-goal-self"] : []),
         ],
     reposNote: undefined,
@@ -2114,6 +2119,7 @@ export async function maybeLaunchSandboxedRun(
     registerRunToken(rpcToken, {
       sessionId: session.id,
       user: opts.isAutomationSession ? undefined : opts.user,
+      promptEntryId: opts.promptEntryId,
     });
     // Detached sandbox hosts cannot read the server's workspace store. Resolve
     // the picker-only workspace preset before crossing that boundary. A preset
@@ -2557,6 +2563,11 @@ export async function runSessionPrompt(
     watchExternalRunAndDrain(sessionId);
     throw new RunPreparationDeferredError(sessionId);
   }
+  const finishDeskNavigation = deskTextNavigation.begin(
+    sessionId,
+    durablePromptEntryId,
+    sourceMessageIds,
+  );
   try {
     await runSessionPromptInner(
       sessionId,
@@ -2590,6 +2601,7 @@ export async function runSessionPrompt(
       await acknowledgePromptDispatch(sessionId, durablePromptEntryId);
     throw e;
   } finally {
+    finishDeskNavigation();
     unmarkSessionStarting(sessionId, startToken);
   }
 }
@@ -3152,7 +3164,13 @@ async function runSessionPromptInner(
             : isAutomationSession
               ? Object.keys(automationMcp)
               : [
-                  ...Object.keys(interactiveMcpServers(user, sessionId)),
+                  ...Object.keys(
+                    interactiveMcpServers(
+                      user,
+                      sessionId,
+                      durablePromptEntryId,
+                    ),
+                  ),
                   ...(session.goalId ? ["opensession-goal-self"] : []),
                 ],
           reposNote: isAutomationSession
@@ -3186,12 +3204,16 @@ async function runSessionPromptInner(
               ? automationMcp
               : session.goalId
                 ? {
-                    ...interactiveMcpServers(user, sessionId),
+                    ...interactiveMcpServers(
+                      user,
+                      sessionId,
+                      durablePromptEntryId,
+                    ),
                     "opensession-goal-self": createGoalSelfMcpServer(
                       session.goalId,
                     ),
                   }
-                : interactiveMcpServers(user, sessionId),
+                : interactiveMcpServers(user, sessionId, durablePromptEntryId),
         })
       : null;
 
@@ -3265,12 +3287,12 @@ async function runSessionPromptInner(
           ? automationMcp
           : session.goalId
             ? {
-                ...interactiveMcpServers(user, sessionId),
+                ...interactiveMcpServers(user, sessionId, durablePromptEntryId),
                 "opensession-goal-self": createGoalSelfMcpServer(
                   session.goalId,
                 ),
               }
-            : interactiveMcpServers(user, sessionId),
+            : interactiveMcpServers(user, sessionId, durablePromptEntryId),
       reposNote: isAutomationSession
         ? undefined
         : await buildSessionNote(session, user),

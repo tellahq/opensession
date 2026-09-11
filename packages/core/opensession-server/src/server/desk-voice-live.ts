@@ -48,6 +48,10 @@ import {
   type LiveBackendModel,
 } from "./desk-voice";
 
+import { SHOW_IN_APP_TOOL, showInApp } from "./desk-voice-show";
+import { DeskVoiceNavigation } from "./desk-voice-navigation";
+import type { DeskNavigationRequest } from "../shared/desk-navigation";
+
 export const DESK_LIVE_MODEL = "gpt-live-1";
 /** The default backend (Terra). The instance-wide choice between it and Luna
  * is stored beside the API key; see voiceBackendModel() in desk-voice.ts. */
@@ -123,6 +127,7 @@ export interface LiveFunctionTool {
 export async function buildLiveSessionConfig(
   sessionId: string,
   user = "Open Session",
+  navigationEnabled = false,
 ) {
   // Read per call: the setting can change between calls, and a running call
   // keeps whatever backend it started on.
@@ -130,6 +135,7 @@ export async function buildLiveSessionConfig(
   const turns = await recentDeskTurns(sessionId);
   const tools: LiveFunctionTool[] = [
     ...VOICE_TOOLS,
+    ...(navigationEnabled ? [SHOW_IN_APP_TOOL] : []),
     ...((await listVoiceMcpTools(
       user,
       sessionId,
@@ -159,7 +165,11 @@ export async function buildLiveSessionConfig(
       type: "responses",
       responses: {
         model: backendModel,
-        instructions: LIVE_BACKEND_INSTRUCTIONS,
+        instructions:
+          LIVE_BACKEND_INSTRUCTIONS +
+          (navigationEnabled
+            ? "\nWhen the user asks to see, open, or go to a session or workspace, call show_in_app with its title or name. It opens that page beside the Desk. If it reports several matches, ask which one."
+            : ""),
         tools,
         tool_choice: "auto",
         parallel_tool_calls: true,
@@ -567,6 +577,7 @@ export function formatLiveUsage(t: LiveUsageTotals): string {
 // Call registry.
 
 interface LiveCall {
+  navigation?: DeskVoiceNavigation;
   id: string;
   user: string;
   deskSessionId: string;
@@ -618,6 +629,7 @@ function sendEvent(call: LiveCall, event: Record<string, unknown>): boolean {
 
 function requestClose(call: LiveCall): void {
   if (call.finalized) return;
+  call.navigation?.close();
   sendEvent(call, { type: "session.close" });
   if (!call.closeTimer)
     call.closeTimer = setTimeout(
@@ -637,6 +649,7 @@ function touch(call: LiveCall): void {
 function finalize(call: LiveCall, reason: string, seconds?: number): void {
   if (call.finalized) return;
   call.finalized = true;
+  call.navigation?.close();
   calls.delete(call.id);
   for (const t of [call.idleTimer, call.maxTimer, call.closeTimer])
     if (t) clearTimeout(t);
@@ -786,6 +799,7 @@ function attachSideband(apiKey: string, liveId: string): Promise<WebSocket> {
 const starting = new Map<string, Promise<unknown>>();
 
 export interface LiveCallStarted {
+  navigationToken?: string;
   liveSessionId: string;
   sdp: string;
   sessionId: string;
@@ -796,11 +810,12 @@ export interface LiveCallStarted {
 export function createLiveVoiceCall(
   user: string,
   offerSdp: string,
+  navigationLogin?: string,
 ): Promise<LiveCallStarted> {
   const previous = starting.get(user) ?? Promise.resolve();
   const run = previous
     .catch(() => {})
-    .then(() => createLiveVoiceCallNow(user, offerSdp));
+    .then(() => createLiveVoiceCallNow(user, offerSdp, navigationLogin));
   starting.set(user, run);
   void run
     .catch(() => {})
@@ -813,6 +828,7 @@ export function createLiveVoiceCall(
 async function createLiveVoiceCallNow(
   user: string,
   offerSdp: string,
+  navigationLogin?: string,
 ): Promise<LiveCallStarted> {
   const key = await requireVoiceApiKey();
   const { sessionId } = ensureDeskSession(user);
@@ -822,7 +838,14 @@ async function createLiveVoiceCallNow(
   for (const existing of calls.values())
     if (existing.user === user) requestClose(existing);
 
-  const session = await buildLiveSessionConfig(sessionId, user);
+  const navigation = navigationLogin
+    ? new DeskVoiceNavigation(navigationLogin)
+    : undefined;
+  const session = await buildLiveSessionConfig(
+    sessionId,
+    user,
+    Boolean(navigation),
+  );
   const backendModel = session.delegation.responses.model;
   const res = await fetch(LIVE_SESSIONS_URL, {
     method: "POST",
@@ -853,6 +876,7 @@ async function createLiveVoiceCallNow(
   const socket = await attachSideband(key, liveId);
   const ledger = new VoiceReferenceLedger();
   const call: LiveCall = {
+    navigation,
     id: liveId,
     user,
     deskSessionId: sessionId,
@@ -885,7 +909,10 @@ async function createLiveVoiceCallNow(
       runTool: async (callId, name, args) => {
         let result: unknown;
         try {
-          result = await executeVoiceTool(user, name, args);
+          result =
+            name === SHOW_IN_APP_TOOL.name
+              ? await showInApp(call.navigation, args)
+              : await executeVoiceTool(user, name, args);
         } catch (e) {
           result = { error: e instanceof Error ? e.message : String(e) };
         }
@@ -926,7 +953,13 @@ async function createLiveVoiceCallNow(
   console.log(
     `[desk-voice-live] ${liveId} started user=${user} backend=${backendModel}`,
   );
-  return { liveSessionId: liveId, sdp: answer, sessionId, backendModel };
+  return {
+    liveSessionId: liveId,
+    sdp: answer,
+    sessionId,
+    backendModel,
+    ...(navigation ? { navigationToken: navigation.token } : {}),
+  };
 }
 
 /** The instance's repos, as the ledger needs them to resolve a PR mention:
@@ -980,4 +1013,14 @@ export function closeLiveVoiceCall(
   if (!call) return false;
   requestClose(call);
   return true;
+}
+
+/** Authenticated HTTP only. Neither caller identity nor token comes from the model. */
+export function handleLiveNavigation(
+  login: string,
+  request: DeskNavigationRequest,
+) {
+  return (
+    calls.get(request.connectionId)?.navigation?.handle(login, request) ?? null
+  );
 }

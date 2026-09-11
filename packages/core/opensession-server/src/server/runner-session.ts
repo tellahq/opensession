@@ -238,7 +238,11 @@ export async function maybeLaunchRunnerRun(
     startedAt: priorRun?.startedAt ?? new Date().toISOString(),
   };
   await journalSet(run);
-  registerRunToken(rpcToken, { sessionId: session.id, user: runUser });
+  registerRunToken(rpcToken, {
+    sessionId: session.id,
+    user: runUser,
+    promptEntryId: opts.promptEntryId,
+  });
   registerRunWsHost(hostId, wsToken);
   const hostSpecs = new Map<string, RunHostSpec>([[hostId, spec]]);
 
@@ -445,7 +449,11 @@ export async function resumeRunnerRun(
       : candidates.at(-1);
   if (!candidate) return null;
   const spec = candidate.spec;
-  registerRunToken(spec.rpcToken!, { sessionId: session.id, user: spec.user });
+  registerRunToken(spec.rpcToken!, {
+    sessionId: session.id,
+    user: spec.user,
+    promptEntryId: spec.promptEntryId,
+  });
   registerRunWsHost(spec.hostId, spec.wsToken!);
   const alive = await runnerHostStatus(run.runnerId, {
     sessionId: session.id,

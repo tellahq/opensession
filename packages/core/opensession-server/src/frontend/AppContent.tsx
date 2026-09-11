@@ -75,7 +75,8 @@ import { useWorkspaces } from "./hooks/useWorkspaces";
 import { getActiveViewTab, saveActiveViewTab } from "./lib/active-view-tab";
 import { cachedRepos, resolveWorkspaceApi } from "./lib/api";
 import { buildAppCommandActions } from "./components/app-command-actions";
-import { isToolView, parseRoute, routePath } from "./lib/app-route";
+import { isToolView, parseRoute, routePath, type Route } from "./lib/app-route";
+import { onDeskShow } from "./lib/desk-show";
 import {
   APP_BODY,
   DETAIL_TOPBAR,
@@ -298,7 +299,7 @@ export function AppContent({
     workspaces,
     loaded: workspacesLoaded,
     refresh: refreshWorkspaces,
-  } = useWorkspaces();
+  } = useWorkspaces(route.view === "workspace" ? route.id : undefined);
   // Read by the PR-link opener, which runs from a document-level listener and
   // therefore can't close over the render's value.
   const workspacesRef = useRef(workspaces);
@@ -515,6 +516,13 @@ export function AppContent({
   const socketInject = useEffectEvent(inject);
   const socketNavigate = useEffectEvent(navigate);
   const socketGetCurrentRoute = useEffectEvent(getCurrentRoute);
+  const voiceShow = useEffectEvent((route: Route) => {
+    navigate(route);
+    // The phone sheet covers the page; minimise it so what was asked for is
+    // visible. The call keeps running in the mounted body.
+    if (isPhone) setDeskOverlay((desk) => ({ ...desk, open: false }));
+  });
+  useEffect(() => onDeskShow(voiceShow), []);
   useEffect(() => {
     return addHandler((msg) => {
       if (msg.type === "error") {
