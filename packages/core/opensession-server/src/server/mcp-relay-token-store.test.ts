@@ -1,21 +1,21 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
+  mkdir,
   mkdtemp,
   readFile,
   readdir,
   rm,
-  stat,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createMcpRelayTokenStore } from "./mcp-relay-token-store";
+import { createMcpRelayTokenReader } from "./mcp-relay-token-store";
 
 let directory: string;
 let legacyPath: string;
 beforeEach(async () => {
   directory = await mkdtemp(join(tmpdir(), "mcp-relay-tokens-"));
-  legacyPath = join(directory, "relay.json");
+  legacyPath = join(directory, ".opensession-mcp-relay.json");
 });
 afterEach(async () => {
   await rm(directory, { recursive: true, force: true });
@@ -26,14 +26,15 @@ async function mintElsewhere(server: string, users: string[]) {
     [
       process.execPath,
       "--eval",
-      `import { createMcpRelayTokenStore } from ${JSON.stringify(join(import.meta.dir, "mcp-relay-token-store.ts"))};
-     console.log(await createMcpRelayTokenStore(${JSON.stringify(legacyPath)}).mint(${JSON.stringify(server)}, ${JSON.stringify(users)}));`,
+      `import { mintMcpRelayToken } from ${JSON.stringify(join(import.meta.dir, "mcp-relay.ts"))};
+       console.log(await mintMcpRelayToken(${JSON.stringify(server)}, ${JSON.stringify(users)}));`,
     ],
     {
       env: {
         HOME: directory,
         OPENSESSION_STATE_DIR: directory,
         OPENSESSION_DEV: "1",
+        OPENSESSION_MCP_CONFIG: join(directory, "mcp-config.json"),
       },
       stdout: "pipe",
       stderr: "pipe",
@@ -56,7 +57,7 @@ const grant = {
 };
 
 test("a running relay sees tokens minted later in another process", async () => {
-  const relay = createMcpRelayTokenStore(legacyPath);
+  const relay = createMcpRelayTokenReader(legacyPath);
   expect(await relay.lookup("x".repeat(32))).toBeUndefined();
   const token = await mintElsewhere("observability", ["Example"]);
   expect(await relay.lookup(token)).toMatchObject({
@@ -65,67 +66,63 @@ test("a running relay sees tokens minted later in another process", async () => 
   });
   expect(await mintElsewhere("observability", ["Example"])).toBe(token);
   expect(
-    await createMcpRelayTokenStore(legacyPath).lookup(token),
-  ).toMatchObject({ server: grant.server, grantUsers: grant.grantUsers });
+    await createMcpRelayTokenReader(legacyPath).lookup(token),
+  ).toMatchObject({
+    server: grant.server,
+    grantUsers: grant.grantUsers,
+  });
 });
 
-test("concurrent hosts reuse one token per identity without losing other grants", async () => {
-  const requests = Array.from({ length: 12 }, (_, index) => ({
-    server: `server-${index % 3}`,
-    users: [`user-${index % 2}`],
-  }));
-  const tokens = await Promise.all(
-    requests.map(({ server, users }) => mintElsewhere(server, users)),
+test("newly issued tokens remain usable by the legacy gateway after rollback", async () => {
+  const first = await mintElsewhere("observability", ["Example"]);
+  const second = await mintElsewhere("other", ["Creator", "Prompter"]);
+  // A freshly started old gateway resolves a token by indexing this JSON map.
+  // New formats must not be issued until that rollback target supports them.
+  expect(first).toMatch(/^[A-Za-z0-9_-]{32}$/);
+  expect(second).toMatch(/^[A-Za-z0-9_-]{32}$/);
+  expect(JSON.parse(await readFile(legacyPath, "utf8"))).toMatchObject({
+    [first]: { server: "observability", grantUsers: ["Example"] },
+    [second]: { server: "other", grantUsers: ["Creator", "Prompter"] },
+  });
+  expect(await readdir(directory)).not.toContain(
+    ".opensession-mcp-relay.json.d",
   );
-  const relay = createMcpRelayTokenStore(legacyPath);
-  for (const [index, token] of tokens.entries()) {
-    const request = requests[index]!;
-    expect(await relay.lookup(token)).toMatchObject({
-      server: request.server,
-      grantUsers: request.users,
-    });
-    expect(await relay.mint(request.server, request.users)).toBe(token);
-  }
-  expect(new Set(tokens).size).toBe(6);
-  const files = await readdir(`${legacyPath}.d`);
-  expect(files.length).toBe(6);
-  expect(files.every((name) => name.endsWith(".json"))).toBe(true);
-  expect((await stat(`${legacyPath}.d`)).mode & 0o777).toBe(0o700);
-  for (const file of files)
-    expect((await stat(join(`${legacyPath}.d`, file))).mode & 0o777).toBe(
-      0o600,
-    );
-}, 15_000);
-
-test("server and ordered identities remain distinct", async () => {
-  const store = createMcpRelayTokenStore(legacyPath);
-  const tokens = await Promise.all([
-    store.mint("a", ["creator", "prompter"]),
-    store.mint("a", ["prompter", "creator"]),
-    store.mint("b", ["creator", "prompter"]),
-    store.mint("a", []),
-    store.mint("a", ["creator\u0000prompter"]),
-  ]);
-  expect(new Set(tokens).size).toBe(5);
 });
 
-test("unknown, tampered and path-traversal tokens fail closed", async () => {
-  const store = createMcpRelayTokenStore(legacyPath);
-  const token = await store.mint("a", ["Example"]);
+test("the compatibility reader accepts v2 records without issuing them", async () => {
+  const reader = createMcpRelayTokenReader(legacyPath);
+  const key = "1".repeat(64);
+  const token = `v2.${key}.${"a".repeat(32)}`;
+  expect(await reader.lookup(token)).toBeUndefined();
+  await mkdir(`${legacyPath}.d`);
+  const recordPath = join(`${legacyPath}.d`, `${key}.json`);
+  await writeFile(recordPath, JSON.stringify({ ...grant, token }));
+  expect(await reader.lookup(token)).toMatchObject(grant);
+  expect(await reader.lookup(`${token.slice(0, -1)}b`)).toBeUndefined();
+  await writeFile(recordPath, "{}");
+  expect(await reader.lookup(token)).toBeUndefined();
+});
+
+test("unknown, malformed and path-traversal tokens fail closed", async () => {
+  const reader = createMcpRelayTokenReader(legacyPath);
   for (const invalid of [
     "",
     "../relay.json",
     `v2.${"../".repeat(30)}`,
-    `${token.slice(0, -1)}!`,
-    `${token.slice(0, -1)}${token.endsWith("A") ? "B" : "A"}`,
+    "x".repeat(32),
     `v2.${"0".repeat(64)}.${"x".repeat(32)}`,
   ]) {
-    expect(await store.lookup(invalid)).toBeUndefined();
+    expect(await reader.lookup(invalid)).toBeUndefined();
   }
+  await writeFile(
+    legacyPath,
+    JSON.stringify({ ["a".repeat(32)]: { server: "a" } }),
+  );
+  expect(await reader.lookup("a".repeat(32))).toBeUndefined();
 });
 
-test("legacy tokens remain readable, including updates from older detached hosts", async () => {
-  const relay = createMcpRelayTokenStore(legacyPath);
+test("legacy token updates are read fresh without rewriting the map", async () => {
+  const relay = createMcpRelayTokenReader(legacyPath);
   const first = "a".repeat(32);
   const second = "b".repeat(32);
   await writeFile(legacyPath, JSON.stringify({ [first]: grant }));
@@ -135,20 +132,5 @@ test("legacy tokens remain readable, including updates from older detached hosts
   await writeFile(legacyPath, updated);
   expect(await relay.lookup(second)).toEqual(grant);
   expect(await relay.lookup(first)).toBeUndefined();
-  await relay.mint("other", []);
   expect(await readFile(legacyPath, "utf8")).toBe(updated);
-});
-
-test("invalid records do not grant access or get silently overwritten", async () => {
-  const store = createMcpRelayTokenStore(legacyPath);
-  await writeFile(
-    legacyPath,
-    JSON.stringify({ ["a".repeat(32)]: { server: "a" } }),
-  );
-  expect(await store.lookup("a".repeat(32))).toBeUndefined();
-  const token = await store.mint("a", []);
-  const [file] = await readdir(`${legacyPath}.d`);
-  await writeFile(join(`${legacyPath}.d`, file!), "{}");
-  expect(await store.lookup(token)).toBeUndefined();
-  await expect(store.mint("a", [])).rejects.toThrow();
 });

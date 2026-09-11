@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-test("relay awaits token minting, forwards authenticated requests and rejects other servers", async () => {
+test("relay forwards authenticated requests and rejects other servers", async () => {
   const directory = await mkdtemp(join(tmpdir(), "mcp-relay-"));
   const upstream = Bun.serve({
     hostname: "127.0.0.1",
@@ -42,7 +42,7 @@ test("relay awaits token minting, forwards authenticated requests and rejects ot
         process.execPath,
         "--eval",
         `import { mintMcpRelayToken, handleMcpRelay } from ${JSON.stringify(join(import.meta.dir, "mcp-relay.ts"))};
-       const token = await mintMcpRelayToken("observability", ["Example"]);
+       const token = mintMcpRelayToken("observability", ["Example"]);
        const req = new Request("http://127.0.0.1/relay/observability", {
          method: "POST", headers: { Authorization: "Bearer wrong", "Content-Type": "application/json" },
          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),

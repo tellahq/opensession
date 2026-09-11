@@ -1,5 +1,5 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { link, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { timingSafeEqual } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 
@@ -20,60 +20,11 @@ async function readJson(path: string): Promise<unknown> {
   }
 }
 
-/** One immutable record per server/identity order. Atomic publication avoids
- * both stale process caches and lost updates from concurrent run hosts. */
-export function createMcpRelayTokenStore(legacyPath: string) {
+/** Ship both readers before switching writers: a gateway rollback must still
+ * understand tokens held by detached hosts from the newer release. */
+export function createMcpRelayTokenReader(legacyPath: string) {
   const directory = `${legacyPath}.d`;
   return {
-    async mint(server: string, grantUsers: string[]): Promise<string> {
-      const key = createHash("sha256")
-        .update(JSON.stringify([server, grantUsers]))
-        .digest("hex");
-      const path = join(directory, `${key}.json`);
-      const existing = await readJson(path);
-      if (existing !== undefined) return recordSchema.parse(existing).token;
-
-      await mkdir(directory, { recursive: true, mode: 0o700 });
-      const token = `v2.${key}.${randomBytes(24).toString("base64url")}`;
-      const temporary = join(directory, `${token}.tmp`);
-      try {
-        await writeFile(
-          temporary,
-          JSON.stringify({
-            server,
-            grantUsers,
-            createdAt: new Date().toISOString(),
-            token,
-          }),
-          { mode: 0o600, flag: "wx" },
-        );
-        try {
-          // Unlike rename, link never replaces another process's winning token.
-          await link(temporary, path);
-        } catch (error) {
-          if (
-            !(
-              error instanceof Error &&
-              "code" in error &&
-              error.code === "EEXIST"
-            )
-          )
-            throw error;
-        }
-      } finally {
-        await unlink(temporary).catch((error: unknown) => {
-          if (
-            !(
-              error instanceof Error &&
-              "code" in error &&
-              error.code === "ENOENT"
-            )
-          )
-            throw error;
-        });
-      }
-      return recordSchema.parse(await readJson(path)).token;
-    },
     async lookup(
       token: string,
     ): Promise<z.infer<typeof grantSchema> | undefined> {
@@ -90,8 +41,8 @@ export function createMcpRelayTokenStore(legacyPath: string) {
           ? parsed.data
           : undefined;
       }
-      // Detached hosts pinned to an older release still mint the legacy format.
-      // Read it fresh, never from a process-local cache, and never rewrite it.
+      // Read fresh on every request, including after a different host mints a
+      // token. The writer's process-local snapshot is never a relay authority.
       if (!/^[A-Za-z0-9_-]{32}$/.test(token)) return undefined;
       const legacy = z
         .record(z.string(), z.unknown())
