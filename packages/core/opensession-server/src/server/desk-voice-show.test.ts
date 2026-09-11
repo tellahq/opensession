@@ -39,6 +39,28 @@ const sessions: Summary[] = [
   summary("s-lint", "Vendor lint rules"),
   summary("s-desk", "Desk", { desk: true }),
   summary("s-archived", "Archived captions work", { state: "archived" }),
+  // A primary session and the two derivatives the app opens from its PR: the
+  // headless review (same workspace, automation-owned) and the auto-fix worker
+  // (parented on it).
+  summary("s-subtitles", "Profile Subtitles sidebar opening", {
+    workspaceId: "ws-subtitles",
+    lastActivity: "2026-09-08T10:00:00.000Z",
+  }),
+  summary(
+    "s-subtitles-review",
+    "Review · PR #41 Profile Subtitles sidebar opening",
+    {
+      workspaceId: "ws-subtitles",
+      automation: "github-pr-review",
+      lastActivity: "2026-09-09T10:00:00.000Z",
+    },
+  ),
+  summary("s-subtitles-fix", "Fix PR 41 feedback and CI", {
+    workspaceId: "ws-subtitles",
+    parentSessionId: "s-subtitles",
+    agentStarted: true,
+    lastActivity: "2026-09-10T11:00:00.000Z",
+  }),
 ];
 
 const workspaces: Workspace[] = [
@@ -116,6 +138,59 @@ describe("show_in_app target resolution", () => {
         title: "Voice captions for the Desk",
       },
     });
+  });
+
+  test("tolerates a spoken near-miss of the title", async () => {
+    // Singular/plural and a different case: the real miss that motivated this.
+    expect(
+      await resolveShowTarget(
+        { session: "Profile subtitle sidebar opening" },
+        deps,
+      ),
+    ).toEqual({
+      target: {
+        kind: "session",
+        id: "s-subtitles",
+        title: "Profile Subtitles sidebar opening",
+      },
+    });
+    // Filler a voice request carries and a typo in a longer word.
+    expect(
+      await resolveShowTarget(
+        { session: "the profile subtitels sidebar session" },
+        deps,
+      ),
+    ).toMatchObject({ target: { id: "s-subtitles" } });
+    // Terms that land nowhere are still a miss, not a guess.
+    expect(
+      await resolveShowTarget({ session: "profile billing export" }, deps),
+    ).toMatchObject({ error: expect.stringContaining("No session") });
+  });
+
+  test("prefers a primary session over its own review and fix sessions", async () => {
+    // Both the primary and its review carry these words; without the
+    // derivative rule this is a flat two-item list and another round trip.
+    expect(
+      await resolveShowTarget({ session: "subtitles sidebar" }, deps),
+    ).toEqual({
+      target: {
+        kind: "session",
+        id: "s-subtitles",
+        title: "Profile Subtitles sidebar opening",
+      },
+    });
+    // Phrasing that singles the derivative out still reaches it.
+    expect(
+      await resolveShowTarget(
+        { session: "the review of profile subtitles" },
+        deps,
+      ),
+    ).toMatchObject({
+      target: { id: "s-subtitles-review" },
+    });
+    expect(
+      await resolveShowTarget({ session: "pr 41 feedback" }, deps),
+    ).toMatchObject({ target: { id: "s-subtitles-fix" } });
   });
 
   test("resolves a workspace by id or name", async () => {

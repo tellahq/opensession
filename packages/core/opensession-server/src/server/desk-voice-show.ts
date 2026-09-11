@@ -1,6 +1,7 @@
 import { getSessionControl, type SessionControl } from "./session-control";
 import { getWorkspace, listWorkspaces, type Workspace } from "./workspaces";
 import { deskShowTargetSchema } from "../shared/desk-navigation";
+import { fuzzyScore } from "../shared/fuzzy-match";
 import type { DeskVoiceNavigation } from "./desk-voice-navigation";
 
 export const SHOW_IN_APP_TOOL = {
@@ -35,13 +36,106 @@ export type ShowResolution =
 
 /** How many near-matches the backend gets to disambiguate with. */
 const MAX_CANDIDATES = 5;
+/** Below this fuzzy score a title is not a candidate at all (fuzzy-match.ts:
+ * 60 per term found whole, 40/30 per term one or two edits away, 20 for an
+ * abbreviation). */
+const MIN_FUZZY_SCORE = 30;
+/** A whole-query hit (exact, prefix, or substring of the title) outranks any
+ * term-by-term match, so it is never disambiguated against one. */
+const WHOLE_QUERY_SCORE = 70;
+/** Two fuzzy candidates this close are a real toss-up; ask rather than guess. */
+const CLEAR_LEAD = 15;
+
+/** Words a spoken request carries that a title rarely does ("the profile
+ * subtitles one", "my deploy session"). Dropped only when other terms remain. */
+const FILLER_WORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "my",
+  "our",
+  "this",
+  "that",
+  "one",
+  "please",
+  "session",
+  "sessions",
+  "workspace",
+  "workspaces",
+  "of",
+  "for",
+  "to",
+  "in",
+  "on",
+  "with",
+  "about",
+]);
 
 function normalize(text: string): string {
   return text.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-/** Exact names take precedence, but duplicate names always need clarification. */
-function pick<T extends { id: string; title: string; recency?: string }>(
+function stripFiller(query: string): string {
+  const kept = query.split(" ").filter((term) => !FILLER_WORDS.has(term));
+  return kept.length ? kept.join(" ") : query;
+}
+
+interface Pickable {
+  id: string;
+  title: string;
+  recency?: string;
+  parentSessionId?: string;
+  spawnedBy?: string;
+  agentStarted?: boolean;
+  automation?: string;
+  workspaceId?: string | null;
+}
+
+/** A session the app started on behalf of another: a spawned worker, the
+ * auto-fix opened from a PR panel, or the headless review of a PR the primary
+ * session owns. Their titles are near-copies of the primary's, so on a tie
+ * the person almost always means the primary. Phrasing that singles the
+ * derivative out ("the review of …") already outscores the primary above. */
+function derivedFrom(child: Pickable, parent: Pickable): boolean {
+  if (child.id === parent.id) return false;
+  if (child.parentSessionId === parent.id || child.spawnedBy === parent.id)
+    return true;
+  const sharesWorkspace =
+    !!child.workspaceId && child.workspaceId === parent.workspaceId;
+  return (
+    sharesWorkspace &&
+    !parent.agentStarted &&
+    !parent.automation &&
+    (child.agentStarted === true || !!child.automation)
+  );
+}
+
+function withoutDerivatives<T extends Pickable>(
+  scored: Array<{ item: T; score: number }>,
+): Array<{ item: T; score: number }> {
+  return scored.filter(
+    ({ item, score }) =>
+      !scored.some(
+        (other) => other.score >= score && derivedFrom(item, other.item),
+      ),
+  );
+}
+
+function byScoreThenRecency<T extends Pickable>(
+  a: { item: T; score: number },
+  b: { item: T; score: number },
+): number {
+  return (
+    b.score - a.score ||
+    (b.item.recency ?? "").localeCompare(a.item.recency ?? "")
+  );
+}
+
+/** Exact names take precedence, but duplicate names always need clarification.
+ * Otherwise titles are matched term by term with a small typo budget, so a
+ * spoken "profile subtitle sidebar" still finds "Profile Subtitles sidebar
+ * opening", and a derivative session never ties with its own primary. */
+export function pick<T extends Pickable>(
   query: string,
   items: T[],
   what: string,
@@ -50,18 +144,42 @@ function pick<T extends { id: string; title: string; recency?: string }>(
   | { error: string; candidates?: Array<{ id: string; title: string }> } {
   const q = normalize(query);
   if (!q) return { error: `Name the ${what} to show.` };
-  const exact = items.filter((i) => normalize(i.title) === q);
-  const partial = exact.length
-    ? exact
-    : items.filter((i) => normalize(i.title).includes(q));
-  if (partial.length === 1) return { item: partial[0]! };
-  if (!partial.length) return { error: `No ${what} matches "${query}".` };
-  partial.sort((a, b) => (b.recency ?? "").localeCompare(a.recency ?? ""));
+  const exact = withoutDerivatives(
+    items
+      .filter((item) => normalize(item.title) === q)
+      .map((item) => ({ item, score: 100 })),
+  );
+  let ranked = exact;
+  if (!exact.length) {
+    const stripped = stripFiller(q);
+    const scored = items
+      .map((item) => ({
+        item,
+        score: Math.max(
+          fuzzyScore(q, item.title),
+          stripped === q ? 0 : fuzzyScore(stripped, item.title),
+        ),
+      }))
+      .filter(({ score }) => score >= MIN_FUZZY_SCORE)
+      .sort(byScoreThenRecency);
+    if (!scored.length) return { error: `No ${what} matches "${query}".` };
+    // A title that contains the whole query beats any term-wise match.
+    const whole = scored.filter(({ score }) => score >= WHOLE_QUERY_SCORE);
+    ranked = withoutDerivatives(whole.length ? whole : scored);
+    if (
+      ranked.length > 1 &&
+      !whole.length &&
+      ranked[0]!.score - ranked[1]!.score >= CLEAR_LEAD
+    )
+      ranked = [ranked[0]!];
+  }
+  if (ranked.length === 1) return { item: ranked[0]!.item };
+  ranked.sort(byScoreThenRecency);
   return {
     error: `Several ${what}s match "${query}"; ask which one.`,
-    candidates: partial
+    candidates: ranked
       .slice(0, MAX_CANDIDATES)
-      .map(({ id, title }) => ({ id, title })),
+      .map(({ item: { id, title } }) => ({ id, title })),
   };
 }
 
@@ -102,6 +220,11 @@ export async function resolveShowTarget(
         id: s.id,
         title: s.title || "",
         recency: s.lastActivity ?? s.createdAt,
+        parentSessionId: s.parentSessionId,
+        spawnedBy: s.spawnedBy,
+        agentStarted: s.agentStarted,
+        automation: s.automation,
+        workspaceId: s.workspaceId,
       }));
     const found = pick(session, visible, "session");
     if ("error" in found) return found;
