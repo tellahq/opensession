@@ -3,10 +3,13 @@
 // with the instance key and hands back the answer. Tool calls, transcript
 // mirroring, and typed text all happen server-side over the session's
 // sideband (src/server/desk-voice-live.ts); the data channel here is limited
-// to lifecycle and transcript events plus `session.close`.
+// to lifecycle and transcript events plus `session.close`. The transcript
+// events double as live captions (`onTranscript`): the server mirrors a row
+// only once the utterance settles, and these arrive word by word.
 
 import { z } from "zod";
 import { BASE_PATH } from "./base";
+import type { VoiceCaptionFragment, VoiceCaptionRole } from "./voice-captions";
 
 export type DeskVoiceState =
   | "idle"
@@ -43,7 +46,14 @@ const liveEventSchema = z.object({
     .optional()
     .catch(undefined),
   message: z.string().optional(),
+  // Transcript deltas: the text plus its place on the session timeline. A
+  // malformed timestamp must not cost the state change the event carries.
+  delta: z.string().optional().catch(undefined),
+  start_ms: z.number().optional().catch(undefined),
+  end_ms: z.number().optional().catch(undefined),
 });
+
+type LiveEvent = z.infer<typeof liveEventSchema>;
 
 /** One audio-free, transcript-free line about how a call went, posted at
  * teardown to `/api/desk/voice/diag` (the server appends its own line with
@@ -122,6 +132,8 @@ function waitForIceGathering(pc: RTCPeerConnection): Promise<void> {
 export class DeskVoiceClient {
   private user: string;
   private onState: (s: DeskVoiceState, detail?: string) => void;
+  private onCallStarted?: (callId: string) => void;
+  private onTranscript?: (fragment: VoiceCaptionFragment) => void;
 
   private pc: RTCPeerConnection | null = null;
   private dc: RTCDataChannel | null = null;
@@ -174,12 +186,17 @@ export class DeskVoiceClient {
   constructor(opts: {
     user: string;
     onState: (s: DeskVoiceState, detail?: string) => void;
+    /** Every transcript fragment as the call delivers it, both speakers. */
+    onTranscript?: (fragment: VoiceCaptionFragment) => void;
+    onCallStarted?: (callId: string) => void;
   }) {
     this.user = opts.user;
     this.onState = (s, detail) => {
       if (s === "error") this.lastError = detail ?? "error";
       opts.onState(s, detail);
     };
+    this.onTranscript = opts.onTranscript;
+    this.onCallStarted = opts.onCallStarted;
   }
 
   /** Connecting or connected, and not hanging up: the handset shows this
@@ -283,6 +300,7 @@ export class DeskVoiceClient {
       }
       this.liveSessionId = live.liveSessionId;
       this.backendModel = live.backendModel ?? null;
+      this.onCallStarted?.(live.liveSessionId);
       await pc.setRemoteDescription({ type: "answer", sdp: live.sdp });
     } catch (e) {
       if (this.aborted) return;
@@ -462,8 +480,20 @@ export class DeskVoiceClient {
     );
   }
 
+  private transcript(role: VoiceCaptionRole, event: LiveEvent) {
+    if (!event.delta || !this.onTranscript) return;
+    // The same fallbacks the server's row grouping applies to these fields.
+    const startMs = event.start_ms ?? 0;
+    this.onTranscript({
+      role,
+      delta: event.delta,
+      startMs,
+      endMs: event.end_ms ?? startMs,
+    });
+  }
+
   private handleEvent(raw: string) {
-    let event: z.infer<typeof liveEventSchema>;
+    let event: LiveEvent;
     try {
       event = liveEventSchema.parse(JSON.parse(raw));
     } catch {
@@ -483,11 +513,13 @@ export class DeskVoiceClient {
         this.inputDeltas += 1;
         this.resetIdleTimer();
         this.onState("listening");
+        this.transcript("user", event);
         break;
       case "session.output_transcript.delta":
         this.outputDeltas += 1;
         this.resetIdleTimer();
         this.onState("speaking");
+        this.transcript("assistant", event);
         if (this.speakingTimer !== null)
           window.clearTimeout(this.speakingTimer);
         this.speakingTimer = window.setTimeout(() => {

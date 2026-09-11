@@ -223,7 +223,14 @@ export class VoiceTranscriptRows {
       gapMs: number;
       idleMs: number;
       rowId: (role: VoiceRole, startMs: number) => string;
-      onRow: (row: { id: string; role: VoiceRole; text: string }) => void;
+      onRow: (row: {
+        id: string;
+        role: VoiceRole;
+        text: string;
+        /** Timeline span of the fragments joined into this row. */
+        startMs: number;
+        endMs: number;
+      }) => void;
     },
   ) {}
 
@@ -286,7 +293,13 @@ export class VoiceTranscriptRows {
     const row = this.open[role];
     this.open[role] = null;
     if (row && row.text.trim())
-      this.opts.onRow({ id: row.id, role, text: row.text.trim() });
+      this.opts.onRow({
+        id: row.id,
+        role,
+        text: row.text.trim(),
+        startMs: row.startMs,
+        endMs: row.endMs,
+      });
   }
 
   private clearIdle(role: VoiceRole) {
@@ -838,10 +851,13 @@ async function createLiveVoiceCallNow(
       // Only what the Desk said is rewritten: a spoken PR number becomes
       // `repo#N` and a session it started gets named, so the mirrored row
       // renders chips. The user's words stay exactly as transcribed.
+      // The mirrored id carries the row's end too (`-end-<endMs>`), so the
+      // browser's captions (frontend/lib/voice-captions.ts) can take down
+      // exactly the fragments this row covers without matching its text.
       onRow: (row) =>
         mirrorVoiceEntries(user, [
           {
-            id: row.id,
+            id: `${row.id}-end-${row.endMs}`,
             role: row.role,
             text:
               row.role === "assistant"

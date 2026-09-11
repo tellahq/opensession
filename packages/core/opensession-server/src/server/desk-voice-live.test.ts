@@ -20,6 +20,8 @@ import {
 } from "./desk-voice";
 import { stateDir } from "./paths";
 import { registerSessionControl, type SessionControl } from "./session-control";
+import { VoiceCaptionStore } from "../frontend/lib/voice-captions";
+import { VoiceReferenceLedger, linkSpokenReferences } from "./desk-voice-refs";
 
 // The voice store resolves its path per call, so pointing OPENSESSION_STATE_DIR
 // at a scratch dir here keeps every test below off the machine's real
@@ -259,10 +261,24 @@ describe("VoiceTranscriptRows", () => {
       gapMs: LIVE_ROW_GAP_MS,
       idleMs: 60_000,
       rowId: (role, startMs) => `${role}-${startMs}`,
-      onRow: (row) => out.push(row),
+      onRow: ({ id, role, text }) => out.push({ id, role, text }),
     });
     return { r, out };
   }
+
+  test("hands each row over with the span of its fragments", () => {
+    const out: Array<{ id: string; startMs: number; endMs: number }> = [];
+    const r = new VoiceTranscriptRows({
+      gapMs: LIVE_ROW_GAP_MS,
+      idleMs: 60_000,
+      rowId: (role, startMs) => `${role}-${startMs}`,
+      onRow: ({ id, startMs, endMs }) => out.push({ id, startMs, endMs }),
+    });
+    r.push({ role: "user", delta: "What is", startMs: 1000, endMs: 1200 });
+    r.push({ role: "user", delta: " running?", startMs: 1200, endMs: 1800 });
+    r.flushAll();
+    expect(out).toEqual([{ id: "user-1000", startMs: 1000, endMs: 1800 }]);
+  });
 
   test("joins fragments of one utterance and splits on a timeline gap", () => {
     const { r, out } = rows();
@@ -361,6 +377,74 @@ describe("VoiceTranscriptRows", () => {
     r.push({ role: "user", delta: "  ", startMs: 0, endMs: 100 });
     r.flushAll();
     expect(out).toEqual([]);
+  });
+
+  test("the browser's captions drain exactly as the mirrored rows land", () => {
+    // The browser sees the same fragments on its data channel and shows them
+    // as captions (frontend/lib/voice-captions.ts) until this class's row
+    // for them reaches the transcript. The mirrored id carries the row's
+    // span the way startLiveCall builds it, so the captions come down even
+    // when the Desk's words were rewritten into references on the way.
+    const captions = new VoiceCaptionStore();
+    captions.start("live_abc");
+    const ledger = new VoiceReferenceLedger();
+    ledger.collect(
+      "list_current_work",
+      {},
+      {
+        sessions: [
+          {
+            id: "bks-01900000-0000-7000-8000-000000000000",
+            title: "Work 0",
+            repo: "opensession",
+            prNumber: 42,
+          },
+        ],
+      },
+      [{ id: "opensession", ghRepo: "tellahq/opensession" }],
+    );
+    const mirrored: string[] = [];
+    const r = new VoiceTranscriptRows({
+      gapMs: LIVE_ROW_GAP_MS,
+      idleMs: 60_000,
+      rowId: (role, startMs) => `voice-live_abc-${role}-${startMs}`,
+      onRow: (row) => {
+        const content =
+          row.role === "assistant"
+            ? linkSpokenReferences(row.text, ledger)
+            : row.text;
+        mirrored.push(content);
+        captions.land({
+          id: `${row.id}-end-${row.endMs}`,
+          type: row.role,
+          content,
+        });
+      },
+    });
+    const shown = () =>
+      captions.getSnapshot().captions.map((c) => [c.role, c.text]);
+    const push = (
+      role: "user" | "assistant",
+      delta: string,
+      startMs: number,
+      endMs: number,
+    ) => {
+      captions.push({ role, delta, startMs, endMs });
+      r.push({ role, delta, startMs, endMs });
+    };
+    push("user", "What's", 0, 300);
+    push("user", " running?", 300, 800);
+    expect(shown()).toEqual([["user", "What's running?"]]);
+    // The reply starting closes the question's row; its caption goes with it.
+    push("assistant", "Two, and ", 900, 1100);
+    expect(shown()).toEqual([["assistant", "Two, and"]]);
+    push("assistant", "PR forty two is open.", 1100, 1800);
+    expect(shown()).toEqual([["assistant", "Two, and PR forty two is open."]]);
+    push("user", "Stop one.", 1900, 2400);
+    expect(shown()).toEqual([["user", "Stop one."]]);
+    expect(mirrored[1]).toBe("Two, and PR opensession#42 is open.");
+    r.flushAll();
+    expect(shown()).toEqual([]);
   });
 });
 
