@@ -407,6 +407,16 @@ struct SessionsListView: View {
                 await TeamDirectory.shared.ensureLoaded()
                 await loadAutomationOwners()
             }
+            // A claim, snooze or hide made on another device changes which
+            // rows the scoped list carries. The store has already re-read its
+            // map by the time this posts, so the refetch sees the new claims.
+            .task {
+                for await _ in NotificationCenter.default.notifications(
+                    named: UserMapSync.didResyncNotification
+                ) {
+                    await viewModel.refresh()
+                }
+            }
             #if DEBUG && os(iOS)
             .fullScreenCover(isPresented: .constant(presentsScreenshotSession)) {
                 NavigationStack {

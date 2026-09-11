@@ -69,13 +69,26 @@ final class WorkspaceSnoozeStore {
     private var hasHydrated = false
     private var isSaving = false
 
-    private init() {}
+    init() {}
 
+    /// Load this user's map from the server, at launch, on foreground, and
+    /// when another client wrote it (`UserMapSync`). A response for a
+    /// server/user that has since changed is dropped.
     func hydrate() async {
         let requestContext = NativePreferences.context()
         resetIfNeeded(requestContext)
         guard let loaded = try? await SettingsAPI.snoozes(user: requestContext.user),
               NativePreferences.context() == requestContext else { return }
+        applyHydrated(loaded, context: requestContext)
+    }
+
+    /// Replay local intent over the server's map. Internal so the merge is
+    /// unit-testable; `persist` is off for the write path's own response.
+    func applyHydrated(
+        _ loaded: [String: String],
+        context requestContext: NativePreferences.Context? = nil,
+        persist: Bool = true
+    ) {
         var merged = loaded
         for (key, change) in pending {
             switch change {
@@ -83,9 +96,9 @@ final class WorkspaceSnoozeStore {
             case .remove: merged.removeValue(forKey: key)
             }
         }
-        snoozes = merged
+        if merged != snoozes { snoozes = merged }
         hasHydrated = true
-        if !pending.isEmpty { save(context: requestContext) }
+        if persist, !pending.isEmpty, let requestContext { save(context: requestContext) }
     }
 
     func value(for workspace: SidebarWorkspace, now: Date = Date()) -> String? {
@@ -151,14 +164,7 @@ final class WorkspaceSnoozeStore {
             for (key, change) in captured where self.pending[key] == change {
                 self.pending.removeValue(forKey: key)
             }
-            var merged = saved
-            for (key, change) in self.pending {
-                switch change {
-                case .set(let value): merged[key] = value
-                case .remove: merged.removeValue(forKey: key)
-                }
-            }
-            self.snoozes = merged
+            self.applyHydrated(saved, persist: false)
             self.save(context: requestContext)
         }
     }

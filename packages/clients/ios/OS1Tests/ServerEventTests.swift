@@ -29,6 +29,37 @@ final class ServerEventTests: XCTestCase {
         }
     }
 
+    func testUserMapChangedDecodesEachMap() {
+        for (wire, expected) in [
+            ("lanes", UserMapName.lanes),
+            ("snoozes", .snoozes),
+            ("hides", .hides),
+        ] {
+            let json = #"{"type":"user_map_changed","map":"\#(wire)","user":"Kent"}"#
+            guard case .userMapChanged(let map, let user) = parse(json) else {
+                return XCTFail("expected .userMapChanged for \(wire)")
+            }
+            XCTAssertEqual(map, expected)
+            XCTAssertEqual(user, "Kent")
+        }
+    }
+
+    func testUserMapChangedIgnoresMapsThisBuildDoesNotKeep() {
+        // A newer server naming a fourth map is not an error.
+        guard case .ignored = parse(
+            #"{"type":"user_map_changed","map":"pins","user":"Kent"}"#
+        ) else {
+            return XCTFail("expected .ignored for an unknown map")
+        }
+    }
+
+    func testUserMapChangedNeedsAUser() {
+        // Without a user there is nothing to scope the re-read to.
+        guard case .ignored = parse(#"{"type":"user_map_changed","map":"lanes"}"#) else {
+            return XCTFail("expected .ignored without a user")
+        }
+    }
+
     func testPresenceDecodesViewers() {
         let json = #"{"type":"presence","sessionId":"bks-1","viewers":["Kent","Michiel"]}"#
         guard case .presence(let id, let viewers) = parse(json) else {

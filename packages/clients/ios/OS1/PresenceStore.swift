@@ -141,6 +141,12 @@ final class PresenceStore {
             if account.id == config.activeId {
                 MentionStore.shared.receiveCleared(user: user, sessionId: sessionId)
             }
+        case .userMapChanged(let map, let user):
+            // A passive account's maps are re-read when it becomes active;
+            // only the account on screen has stores to refresh.
+            if account.id == config.activeId {
+                Task { await UserMapSync.receive(map: map, user: user) }
+            }
         default:
             break
         }

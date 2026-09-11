@@ -60,6 +60,10 @@ enum ServerEvent: Sendable {
     case askResolved(sessionId: String, questionId: String)
     case mention(user: String, mention: MentionRecord)
     case mentionsCleared(user: String, sessionId: String?)
+    /// One of this person's sidebar maps was written from any client, theirs
+    /// or another device. Sent only to that person's sockets and carries no
+    /// entries: the receiver re-reads the named map (see `UserMapSync`).
+    case userMapChanged(map: UserMapName, user: String)
     case replySuggestions(sessionId: String, suggestions: [ReplySuggestion])
     case slackComposer(sessionId: String, request: SlackComposeRequest?)
     case slackComposerResolved(sessionId: String, receipt: SlackComposeReceipt)
@@ -193,6 +197,13 @@ enum ServerEvent: Sendable {
         case "mentions_cleared":
             guard let user = frame.user else { return .ignored }
             return .mentionsCleared(user: user, sessionId: frame.sessionId)
+        case "user_map_changed":
+            // A map this build does not keep is not an error, it is a newer
+            // server: ignore the frame like any other unknown one.
+            guard let user = frame.user,
+                  let map = frame.map.flatMap(UserMapName.init(rawValue:))
+            else { return .ignored }
+            return .userMapChanged(map: map, user: user)
         case "reply_suggestions":
             guard let id = frame.sessionId else { return .ignored }
             // The server sends null to retire the row. Treat it as an empty
@@ -255,6 +266,15 @@ enum ServerEvent: Sendable {
             return .ignored
         }
     }
+}
+
+/// The per-user sidebar maps the server pushes change notices for, by the
+/// name a `user_map_changed` frame carries. Each has a native store that
+/// re-reads the same `/api/<name>` the web client does.
+enum UserMapName: String, Equatable, Sendable {
+    case lanes
+    case snoozes
+    case hides
 }
 
 /// One person and the session they are looking at, from `global_presence`.
@@ -493,6 +513,7 @@ private struct RawFrame: Decodable {
     let questionId: String?
     let questions: [AskQuestion.Question]?
     let user: String?
+    let map: String?
     let mention: MentionRecord?
     let suggestions: [ReplySuggestion]?
     let request: SlackComposeRequest?
