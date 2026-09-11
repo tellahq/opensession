@@ -161,7 +161,14 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   native preview frames for visual session assets while documents and data keep
   their file rows, model/reasoning controls, and live remote
   sandbox status. Sandboxed workspaces expose explicit pause, wake, and
-  confirmed recreate controls without embedding the web client. Its Effective
+  confirmed recreate controls without embedding the web client. A code session
+  on this machine gets a Runtime section instead, with "Move to Daytona/Box"
+  for the Ready Sandboxes (`POST /api/sessions/:id/sandbox/attach`); the same
+  rows sit under Move to Sandbox in the session overflow menu and in a Mac
+  toolbar menu. The server's 428 (uncommitted files or unpushed commits that a
+  fresh clone would not have) becomes a confirmation with its own sentence and
+  a Move anyway. Runner, automation, Ask, repo-less and already-sandboxed
+  sessions never see the rows, matching the server's refusals. Its Effective
   config section resolves the next turn's model, engine, account, MCP access,
   instructions, and permissions, with the source under every displayed value.
 - **Session panels** — on iOS, Assets, individual assets, PR, Changes, Portals,
@@ -476,6 +483,8 @@ OS1/
     SettingsModels.swift     Settings payloads (tools/personal/workspace)
     WorkspaceRunner.swift    Instance Runner list + the shared status words
     SandboxOffering.swift    What run environments a new session may choose
+    SandboxMove.swift        Which sessions may move into a Sandbox later, and
+                             the attach route's 428 as an answer
     AccentTheme.swift        The app's primary colour: one table of light/dark
                              fills, a derived glyph colour, and the store the
                              Appearance picker writes

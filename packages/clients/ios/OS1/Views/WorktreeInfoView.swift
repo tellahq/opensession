@@ -34,6 +34,11 @@ struct WorktreeInfoView: View {
     @State private var sandboxAction: SessionSandboxAction?
     @State private var sandboxError: String?
     @State private var confirmingSandboxRecreate = false
+    @State private var sandboxMove = SandboxMoveViewModel()
+    /// A move lands before the sessions poll carries it back; held here and
+    /// read through `currentSession` until the polled row agrees, so the
+    /// Sandbox section says Preparing the moment the server does.
+    @State private var attachedSandbox: SessionSandbox?
     @State private var loading = true
     @State private var loadFailed = false
     @State private var repos: [OS1API.RepoInfo] = []
@@ -50,6 +55,7 @@ struct WorktreeInfoView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 // Ordered by what the sheet is opened to find out: what this
                 // workspace is doing and what came out of it. The worktree's
@@ -66,12 +72,24 @@ struct WorktreeInfoView: View {
                     assetsSection
                     worktreeSection
                     sandboxSection
+                        .id("sandbox")
+                    runtimeSection
+                        .id("runtime")
                     runnerSection
                     runSettingsSection
                     effectiveConfigSection
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 28)
+            }
+            #if DEBUG
+            // `OS1_SCROLL_TO=sandbox|runtime` brings a section below the fold
+            // into the capture tool's screenshot once the sheet has loaded.
+            .onChange(of: scrollToForCapture) { _, target in
+                guard let target else { return }
+                withAnimation(nil) { proxy.scrollTo(target, anchor: .top) }
+            }
+            #endif
             }
             .background(OS1VisualStyle.background)
             .navigationTitle("Workspace")
@@ -135,6 +153,7 @@ struct WorktreeInfoView: View {
             } message: {
                 Text(sandboxError ?? "Please try again.")
             }
+            .sandboxMovePrompts(sandboxMove, onMoved: adoptSandboxMove)
             .confirmationDialog(
                 "Switch repository?",
                 isPresented: Binding(
@@ -1097,6 +1116,97 @@ struct WorktreeInfoView: View {
             ?? currentEngine.capitalized
     }
 
+    /// The host counterpart of the Sandbox section: a code session that runs
+    /// on this machine, and the Ready Sandboxes it can move into. Once the
+    /// move lands the session carries a `sandbox` record and the Sandbox
+    /// section above takes over with Preparing.
+    @ViewBuilder
+    private var runtimeSection: some View {
+        if remoteSandbox == nil, SandboxMove.canMove(currentSession) {
+            InfoSection(title: "Runtime") {
+                InfoRow(label: "Runs on", value: "This machine", icon: "desktopcomputer")
+                Divider()
+                if let providers = sandboxMove.providers {
+                    if providers.isEmpty {
+                        Text(SandboxMoveCopy.noneReady)
+                            .font(.footnote)
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .padding(12)
+                    } else {
+                        Text(SandboxMoveCopy.explanation)
+                            .font(.footnote)
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .padding(12)
+                        ForEach(providers, id: \.self) { provider in
+                            Divider()
+                            sandboxMoveButton(provider)
+                        }
+                        if viewModel.isRunning {
+                            Divider()
+                            Text(SandboxMoveCopy.waitForAgent)
+                                .font(.footnote)
+                                .foregroundStyle(OS1VisualStyle.textDim)
+                                .padding(12)
+                        }
+                    }
+                } else {
+                    HStack(spacing: 9) {
+                        ProgressView().controlSize(.small)
+                        Text(SandboxMoveCopy.checking)
+                            .font(.subheadline)
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                }
+            }
+        }
+    }
+
+    private func sandboxMoveButton(_ provider: String) -> some View {
+        let working = sandboxMove.working == provider
+        return Button {
+            Task {
+                if let status = await sandboxMove.move(sessionId: currentSession.id, to: provider) {
+                    adoptSandboxMove(status)
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                if working {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "cube")
+                }
+                Text(SandboxMoveCopy.action(provider, working: working))
+                Spacer()
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(OS1VisualStyle.link)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 48)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(sandboxMove.working != nil || viewModel.isRunning)
+    }
+
+    /// Show the Sandbox section as Preparing now: the live status is what the
+    /// server answered, and the row overlay keeps `remoteSandbox` non-nil
+    /// until the sessions poll agrees.
+    private func adoptSandboxMove(_ status: SessionSandboxStatus) {
+        sandboxStatus = status
+        sandboxError = nil
+        attachedSandbox = SessionSandbox(
+            provider: status.provider,
+            sandboxId: status.sandboxId,
+            workspace: status.workspace,
+            lifecycle: status.lifecycle ?? "preparing",
+            lastLifecycleError: status.lastLifecycleError
+        )
+        Task { await SandboxMoveViewModel.refresh(viewModel) }
+    }
+
     private var remoteSandbox: (provider: String, sandboxId: String?, workspace: String?)? {
         guard let sandbox = currentSession.sandbox,
               let provider = sandbox.provider,
@@ -1209,6 +1319,11 @@ struct WorktreeInfoView: View {
         async let sandboxResult = loadSandboxResult()
         async let reposResult = try? OS1API.repos()
         async let switchableResult = try? OS1API.repoSwitchable(sessionId: currentSession.id)
+        // Which Sandboxes a host session could move into. Not asked for a
+        // session that cannot move, or one that already has a Sandbox.
+        async let movesResult: Void = remoteSandbox == nil && SandboxMove.canMove(currentSession)
+            ? sandboxMove.loadProviders()
+            : ()
         let (nextGit, nextDiffResponse, nextAssets, nextOverview, nextSandbox) = await (
             gitResult,
             diffResult,
@@ -1216,7 +1331,7 @@ struct WorktreeInfoView: View {
             overviewResult,
             sandboxResult
         )
-        let (nextRepos, nextSwitchable) = await (reposResult, switchableResult)
+        let (nextRepos, nextSwitchable, _) = await (reposResult, switchableResult, movesResult)
         guard !Task.isCancelled else { return }
         if let nextRepos {
             repos = nextRepos
@@ -1239,8 +1354,41 @@ struct WorktreeInfoView: View {
         loading = false
         #if DEBUG
         openImageForCaptureIfRequested()
+        await moveForCaptureIfRequested()
+        if let target = ProcessInfo.processInfo.environment["OS1_SCROLL_TO"], !target.isEmpty {
+            // The rows above settle first; a lazy stack scrolled at once
+            // lands short of the section.
+            try? await Task.sleep(for: .milliseconds(400))
+            scrollToForCapture = target
+        }
         #endif
     }
+
+    #if DEBUG
+    @State private var scrollToForCapture: String?
+
+    /// Lets the native capture tool drive the real move on a simulator that
+    /// takes no taps: `OS1_SANDBOX_MOVE=<provider>` presses the row, so a
+    /// worktree with unpushed work shows the server's confirmation, and
+    /// `OS1_SANDBOX_MOVE_CONFIRM=1` with it presses Move anyway.
+    @State private var didMoveForCapture = false
+
+    private func moveForCaptureIfRequested() async {
+        let env = ProcessInfo.processInfo.environment
+        guard !didMoveForCapture,
+              let provider = env["OS1_SANDBOX_MOVE"], !provider.isEmpty,
+              remoteSandbox == nil, SandboxMove.canMove(currentSession)
+        else { return }
+        didMoveForCapture = true
+        if let status = await sandboxMove.move(
+            sessionId: currentSession.id,
+            to: provider,
+            confirm: env["OS1_SANDBOX_MOVE_CONFIRM"] == "1"
+        ) {
+            adoptSandboxMove(status)
+        }
+    }
+    #endif
 
     #if DEBUG
     private func openImageForCaptureIfRequested() {
@@ -1373,6 +1521,11 @@ struct WorktreeInfoView: View {
             session.repo = switchedRepo.repo
             session.branch = switchedRepo.branch
             session.worktreeDir = switchedRepo.worktreeDir
+        }
+        // Same for a move into a Sandbox: the row keeps saying "this machine"
+        // until the poll returns the provider the server already recorded.
+        if let attachedSandbox, session.sandbox?.provider != attachedSandbox.provider {
+            session.sandbox = attachedSandbox
         }
         return session
     }

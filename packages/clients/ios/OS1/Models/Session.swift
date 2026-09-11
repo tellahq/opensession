@@ -120,6 +120,9 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     /// (server: session-control-wiring). See `belongsInList`.
     var spawnedBy: String?
     var automation: AutomationFlag?
+    /// The automation's stable id. Older rows carry only `automation`; either
+    /// one marks a session whose Sandbox the automation decides.
+    var automationId: String?
     var attachedRepos: [AttachedRepo]?
     /// Every pull-request branch associated with this session, including
     /// attached, linked, and discovered branches. The native workspace and PR
