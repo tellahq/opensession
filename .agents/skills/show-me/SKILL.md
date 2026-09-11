@@ -69,6 +69,19 @@ sequenceDiagram
 }
 ```
 
+- Show a screenshot, recording or rendered file where the reader needs it, not at the end: an `OPENSESSION_IMAGE: /abs/path.png` or `OPENSESSION_VIDEO: /abs/path.mp4` line renders in place at the column's width. A short plain line directly under it is its caption. For a before/after, `OPENSESSION_COMPARE: /abs/before.png /abs/after.png` renders one slider.
+
+- Other blocks the transcript renders live (each stays readable as plain text elsewhere):
+  - `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` on a quote's first line: a callout.
+  - `$$` on its own lines or a ```math fence: typeset math; `$x^2$` inline with the delimiters touching the expression.
+  - ```csv, ```tsv or ```table (header row first): a sortable, filterable grid with copy as CSV. Use it for more than a handful of rows; a markdown table is fine for a few.
+  - ```json (large): a collapsible tree with a raw toggle. ```ansi or ```terminal: terminal output with its colours.
+  - ```palette (one colour per line, optional name): swatches that copy on click; a hex in a codespan gets a chip.
+  - ```metrics (`Label: value (delta)` per line): a row of metric cards.
+  - ```choices (one reply per line): chips the reader clicks to send that reply. Use it when you end a turn with a small set of options.
+  - ```tree (indented, trailing `/` for directories, or `tree` CLI output): a collapsible file tree.
+  - ```artifact (a complete HTML document or fragment) or ```svg: a sandboxed preview with a source toggle, scripts never run. ```slides (markdown split on `---`): a swipeable deck.
+
 - Use `diff` when the point is what changes and the surrounding shape already exists. Match the diff shape to the topic.
 
 For a component change:

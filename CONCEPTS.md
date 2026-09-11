@@ -134,10 +134,13 @@ is deliberate: whatever started it, you can open it, read the whole transcript,
 steer it mid-flight, and fork it into a normal conversation.
 
 A transcript is markdown, and the web client upgrades what an agent writes into
-it: a ` ```mermaid ` fence renders as a diagram, a ` ```vega-lite `
+it into blocks: a ` ```mermaid ` fence renders as a diagram, a ` ```vega-lite `
 fence (a Vega-Lite spec with inline data) renders as an interactive chart with
 tooltips and zoom, and `OPENSESSION_IMAGE:` / `OPENSESSION_VIDEO:` lines embed
-media. The `opensession-charts` tool compiles a chart spec for the agent and
+media where they are written. The same goes for callouts, math, data tables,
+JSON trees, terminal colours, palettes, metric cards, quick-reply chips, file
+trees, sandboxed HTML artifacts and slide decks; `docs/blocks.md` is the
+catalog. The `opensession-charts` tool compiles a chart spec for the agent and
 moves large data into the session's assets.
 
 ### Modes

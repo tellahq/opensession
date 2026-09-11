@@ -79,7 +79,9 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain("this Open Session id as `leaseKey`");
     expect(prompt).toContain("pass only its `leaseId`");
     expect(prompt).not.toContain("## Sandbox");
-    expect(prompt.length).toBeLessThan(1_600);
+    // The Media section names every block form the transcript renders live;
+    // that is the one list the model cannot learn from a skill.
+    expect(prompt.length).toBeLessThan(1_950);
   });
 
   test("tells a sandboxed run where it is, in one shared paragraph", () => {

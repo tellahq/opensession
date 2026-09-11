@@ -191,8 +191,11 @@ export function demoSessions(opts: {
   worktreeDir: string;
   /** The generated base repo (clean checkout on main). */
   repoDir: string;
+  /** Where the generator wrote the stills the hero session shows
+   *  (generate.ts retryStill); served by the /media route. */
+  mediaDir: string;
 }): DemoSessionFixture[] {
-  const { now, worktreeDir, repoDir } = opts;
+  const { now, worktreeDir, repoDir, mediaDir } = opts;
   const min = 60_000;
   const sessions: DemoSessionFixture[] = [];
 
@@ -317,6 +320,41 @@ export function demoSessions(opts: {
             "\n```",
           "demo-pr-a3",
           iso(t0 + 170_000),
+          MODEL_FABLE,
+        ),
+        // Media in place: an image marker with a caption and a before/after
+        // compare marker, rendered where they are written (docs/blocks.md).
+        transcriptLineAssistantText(
+          "Proof that the third attempt now runs. The retry timeline from the reruns, before and after the fix:\n\n" +
+            `OPENSESSION_COMPARE: ${mediaDir}/retry-before.png ${mediaDir}/retry-after.png\n` +
+            "Attempts per run: before on the left, after on the right\n\n" +
+            `OPENSESSION_IMAGE: ${mediaDir}/retry-after.png\n` +
+            "All three attempts run and the third one succeeds\n\n" +
+            "Both stills come from the 100-run rerun above.",
+          "demo-pr-a4",
+          iso(t0 + 180_000),
+          MODEL_FABLE,
+        ),
+        // Blocks that talk back to the session: a file tree whose rows open
+        // the changed file, and quick replies that send as the next turn.
+        transcriptLineAssistantText(
+          "The fix touches these files:\n\n" +
+            "```tree\n" +
+            "acme-todo/\n" +
+            "├── src/\n" +
+            "│   ├── upload.ts  # retry loop\n" +
+            "│   └── upload.test.ts\n" +
+            "├── NOTES.md\n" +
+            "└── package.json\n" +
+            "```\n\n" +
+            "How do you want to proceed?\n\n" +
+            "```choices\n" +
+            "- Merge the PR\n" +
+            "- Add a test for the terminal error\n" +
+            "- Explain the fix again\n" +
+            "```",
+          "demo-pr-a5",
+          iso(t0 + 190_000),
           MODEL_FABLE,
         ),
       ],

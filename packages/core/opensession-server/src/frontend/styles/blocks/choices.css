@@ -1,0 +1,77 @@
+/* ─────────────────────────────────────────────────────────────
+   Quick replies: a ```choices fence rendered by lib/choices-block.ts.
+
+   A wrapping row of chips. Each chip wears the surface an ask card's
+   option row wears (lib/ask-card-classes.ts: bg-control, the 12px
+   control corner, the hover wash, the accent focus ring), so a reply
+   offered by the agent reads as the same kind of thing as an answer it
+   asked for. Built as DOM inside injected markdown, which is why these
+   live here rather than as utilities on JSX.
+   ───────────────────────────────────────────────────────────── */
+.md-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+.md-choice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: calc(12px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--control-surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--type-label);
+  font-weight: 600;
+  line-height: 20px;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+/* The hover wash is translucent ink laid over the control surface, not in
+   place of it: a chip sits on the page's own fill, where swapping the
+   surface for the wash would step it the wrong way in one theme. */
+.md-choice::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  corner-shape: inherit;
+  background: transparent;
+  pointer-events: none;
+  transition: background-color 120ms ease;
+}
+.md-choice:hover::before {
+  background: var(--hover);
+}
+.md-choice:active::before {
+  background: var(--hover-strong);
+}
+.md-choice:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+/* Answered, or nowhere to send: the chips stay as a record of what was
+   offered, at the weight of a note rather than a control. */
+.md-choices[data-quiet] .md-choice {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--divider);
+  color: var(--text-faint);
+  cursor: default;
+}
+.md-choices[data-quiet] .md-choice::before {
+  display: none;
+}
+@media (max-width: 720px) {
+  .md-choice {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
+}

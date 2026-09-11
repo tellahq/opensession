@@ -6,6 +6,11 @@ import {
   type FenceUpgrader,
   finalizeFenceUpgrades,
 } from "../lib/fence-upgraders";
+import type { MarkdownContext } from "../lib/markdown";
+import {
+  MATH_PLACEHOLDER_MARK,
+  upgradeMathPlaceholders,
+} from "../lib/math-block";
 
 // Lazy loaders live at module scope: the compiler cannot lower dynamic
 // imports inside components.
@@ -62,6 +67,7 @@ export function MarkdownBody({
   html,
   className,
   enhance = true,
+  markdown,
 }: {
   html: string;
   className?: string;
@@ -69,8 +75,17 @@ export function MarkdownBody({
    * stream keeps the cheap, readable marked output and upgrades once its
    * durable message replaces it. */
   enhance?: boolean;
+  /** The context `html` was rendered with, handed to a block that renders
+   * markdown of its own (a slide deck) so its links resolve the same way. */
+  markdown?: MarkdownContext;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Read through a ref by the upgrade effect: callers build the context
+  // object per render, and a new identity must not restart a pass.
+  const markdownRef = useRef(markdown);
+  useEffect(() => {
+    markdownRef.current = markdown;
+  }, [markdown]);
   const [theme, setTheme] = useState<EffectiveTheme>(effectiveTheme);
   const [visible, setVisible] = useState(false);
   // React 19 re-writes innerHTML whenever the dangerouslySetInnerHTML OBJECT
@@ -106,8 +121,16 @@ export function MarkdownBody({
   }, [enhance]);
 
   useEffect(() => {
-    // marked emits <code class="language-x"> only for tagged fences.
-    if (!enhance || !visible || !html.includes('<code class="language-'))
+    // marked emits <code class="language-x"> only for tagged fences, and the
+    // .md-math placeholder only for inline math (lib/math-block.ts).
+    if (
+      !enhance ||
+      !visible ||
+      !(
+        html.includes('<code class="language-') ||
+        html.includes(MATH_PLACEHOLDER_MARK)
+      )
+    )
       return;
     const el = ref.current;
     if (!el) return;
@@ -157,11 +180,17 @@ export function MarkdownBody({
               lang: fence.lang ?? "",
               root: el,
               theme,
+              markdown: markdownRef.current,
               alive: isAlive,
             })
             .catch(() => false);
         }
       }
+
+      // Inline math is not a fence, so the registry never sees it; its
+      // placeholders are typeset here, in the same pass and under the same
+      // reset and cancellation as the fences.
+      await upgradeMathPlaceholders(el, isAlive);
 
       if (!fences.some((f) => f.lang && !f.done)) return;
       const m = await loadCodeHighlight().catch(() => null);

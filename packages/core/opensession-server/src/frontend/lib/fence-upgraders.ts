@@ -15,8 +15,20 @@
  * declares the upgrader. See docs/blocks.md for the catalog and the contract.
  */
 
+import { ansiUpgrader } from "./ansi-block";
+import { artifactUpgrader } from "./artifact-block";
 import { chartUpgrader } from "./chart-fence";
+import { choicesUpgrader } from "./choices-block";
+import { compareUpgrader } from "./compare-block";
+import { jsonTreeUpgrader } from "./json-tree-block";
+import { mathUpgrader } from "./math-block";
 import { mermaidUpgrader } from "./mermaid-fence";
+import { paletteUpgrader } from "./palette-block";
+import { tableUpgrader } from "./table-block";
+import { metricsUpgrader } from "./metrics-block";
+import { slidesUpgrader } from "./slides-block";
+import { treeUpgrader } from "./tree-block";
+import type { MarkdownContext } from "./markdown";
 import type { EffectiveTheme } from "./theme";
 
 export interface FenceUpgradeContext {
@@ -30,6 +42,10 @@ export interface FenceUpgradeContext {
   /** The markdown body this fence sits in. */
   root: HTMLElement;
   theme: EffectiveTheme;
+  /** The context the body's markdown was rendered with (repo, session,
+   *  assets), for a block that renders markdown of its own: a slide's
+   *  `#356` and `report.html` link the way the prose around the deck does. */
+  markdown?: MarkdownContext;
   /** False once this pass was superseded: new html, a theme flip, or an
    *  unmount. Check it after every await and stop touching the DOM. */
   alive: () => boolean;
@@ -60,6 +76,11 @@ export interface FenceUpgrader {
    * (or throw) to keep the plain fence: source that does not parse, is still
    * streaming, or has the wrong shape. When returning false `ctx.pre` must
    * still be in the DOM, untouched, so shiki can highlight it.
+   *
+   * A `keepsCodeControls` block must `await` before it touches the DOM: the
+   * body attaches the copy control's wrapper in the effect that follows the
+   * one starting this pass, so a fence replaced synchronously is replaced
+   * before its wrapper exists.
    */
   upgrade(ctx: FenceUpgradeContext): Promise<boolean>;
   /**
@@ -74,6 +95,17 @@ export interface FenceUpgrader {
 export const FENCE_UPGRADERS: readonly FenceUpgrader[] = [
   mermaidUpgrader,
   chartUpgrader,
+  paletteUpgrader,
+  tableUpgrader,
+  metricsUpgrader,
+  mathUpgrader,
+  jsonTreeUpgrader,
+  ansiUpgrader,
+  artifactUpgrader,
+  slidesUpgrader,
+  choicesUpgrader,
+  treeUpgrader,
+  compareUpgrader,
 ];
 
 /** The upgrader that claims a fence, if any. */

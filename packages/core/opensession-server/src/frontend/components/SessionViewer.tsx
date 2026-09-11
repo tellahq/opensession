@@ -8,6 +8,7 @@ import React, {
   useRef,
   useState,
   useSyncExternalStore,
+  type MouseEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
@@ -200,6 +201,8 @@ import {
 } from "../lib/pending-reconcile";
 import { promptOutbox, type PromptOutboxItem } from "../lib/prompt-outbox";
 import { DiffPanel, useSessionDiff } from "./DiffPanel";
+import { useTranscriptBlocks } from "../hooks/useTranscriptBlocks";
+import { revealDiffFileWhenMounted } from "../lib/diff-navigation";
 import { RepoBar } from "./RepoBar";
 import { RepoTile } from "./RepoTile";
 import { SandboxBadge } from "./SandboxBadge";
@@ -1256,6 +1259,34 @@ export function SessionViewer({
     headerController.layout;
   const { desktopChangesRef, headerW, compactHeader } = headerController.layout;
   const { summaryOpen, setSummaryOpen, isPhone } = headerController.layout;
+  // Blocks a markdown body builds as plain DOM (quick replies, file trees)
+  // reach the session through the messages click handler, like assets do.
+  const transcriptBlocks = useTranscriptBlocks({
+    sessionId: session.id,
+    messagesRef,
+    entries,
+    diffRepos: diffState.repos,
+    // The isolated send: chip text only, the composer's draft left alone.
+    sendQuickReply: (text) => void handleSend(text, undefined, []),
+    openChangedFile: (path) => {
+      // The same route the workspace summary's "files changed" row takes,
+      // then the diff is scrolled to the file once the pane has mounted.
+      if (isPhone) {
+        setInfoPageOpen(true);
+        setPanelPage("changes");
+      } else {
+        setDesktopPanelPage("changes");
+        setActivePanelOpen(true);
+      }
+      revealDiffFileWhenMounted(
+        () => (isPhone ? document.body : desktopChangesRef.current),
+        path,
+      );
+    },
+  });
+  const handleTranscriptClick = (e: MouseEvent<HTMLDivElement>) => {
+    if (!transcriptBlocks.handleClick(e)) handleMessagesClick(e);
+  };
   const { summaryHasRoom, summaryVisible } = headerController.summary;
   const { summaryStep, summaryStepStyle } = headerController.summary;
   const { focusComposerForQuote } = headerController.composer;
@@ -1675,7 +1706,7 @@ export function SessionViewer({
               repairSafetyPause,
               handleFork,
               handleMessagesScroll,
-              handleMessagesClick,
+              handleMessagesClick: handleTranscriptClick,
               cancelIndexAnchorHold,
               scrollToLatest,
               loadAllHistory,

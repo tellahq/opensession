@@ -1,0 +1,121 @@
+/* ```compare fence upgraded into a before/after slider (lib/compare-block.ts).
+   Renderer-emitted markup, which is why it is a stylesheet and not a utility
+   string. The before still is in flow and sizes the box, capped like a placed
+   image; the after still lies over it, clipped to the right of the divider.
+   `--p` is the divider's position in percent, set by the range input that
+   covers the whole box and is the only thing here that takes input. */
+.md-compare-wrap {
+  margin: 2px 0 8px;
+}
+.md-compare {
+  --p: 50;
+  --pos: calc(var(--p) * 1%);
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--bg-panel);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.md-compare-img {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  height: auto;
+  pointer-events: none;
+}
+.md-compare-after {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  clip-path: inset(0 0 0 var(--pos));
+}
+.md-compare-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--pos);
+  width: 2px;
+  margin-left: -1px;
+  background: var(--bg);
+  pointer-events: none;
+}
+.md-compare-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border);
+}
+/* The stills read through the input: it is invisible but it is the hit
+   target, so a press anywhere jumps the divider there and drags it on. The
+   thumb is a hairline so the divider sits where the finger is; a wide thumb
+   would drift from it toward the edges. */
+.md-compare-range {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: ew-resize;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  touch-action: pan-y;
+}
+.md-compare-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 2px;
+  height: 100%;
+}
+.md-compare-range::-moz-range-thumb {
+  width: 2px;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+.md-compare:has(.md-compare-range:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.md-compare-label {
+  position: absolute;
+  bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  pointer-events: none;
+}
+/* Each label fades as the divider reaches it, so it never sits on the other
+   still. Unitless maths on --p: fully shown 6 points away, gone at the edge. */
+.md-compare-label-before {
+  left: 8px;
+  opacity: clamp(0, calc((var(--p) - 10) / 6), 1);
+}
+.md-compare-label-after {
+  right: 8px;
+  opacity: clamp(0, calc((90 - var(--p)) / 6), 1);
+}
+@media (max-width: 720px) {
+  .md-compare-img {
+    max-height: 400px;
+  }
+}

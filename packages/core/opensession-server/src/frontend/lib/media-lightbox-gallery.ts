@@ -6,9 +6,10 @@ import {
 } from "./media-lightbox";
 
 /** Every piece of session media currently in the DOM, in document order.
- *  A chart's SVG is the one vega draws into its canvas (vega-chart.ts). */
+ *  A chart's SVG is the one vega draws into its canvas (vega-chart.ts); a
+ *  before/after slider's two stills are both here (compare-block.ts). */
 export const GALLERY_SELECTOR =
-  "img.md-image, video.md-video, .md-mermaid > svg, .md-chart-canvas > svg";
+  "img.md-image, video.md-video, .md-compare > img, .md-mermaid > svg, .md-chart-canvas > svg";
 
 /** Apple's page control keeps a small moving window for long galleries. */
 export const MAX_VISIBLE_LIGHTBOX_DOTS = 7;
@@ -57,6 +58,28 @@ export function openGalleryFrom(el: Element) {
     ),
     el,
   );
+}
+
+/**
+ * The media an expand button inside rendered markdown opens: a placed
+ * video's player (markdown.ts writes the button beside it, since the player's
+ * own controls take every click) or a before/after slider's after still
+ * (compare-block.ts, where the range input covers both stills). The button
+ * carries `data-md-expand` so the React-owned expand on a trailing-row video
+ * (MessageBubble.tsx), which has its own handler, is left alone.
+ */
+export function lightboxBlockMediaFor(target: Element): Element | null {
+  const button = target.closest?.("button[data-md-expand]");
+  if (!button) return null;
+  const kind = button.getAttribute("data-md-expand");
+  if (kind === "video")
+    return button.parentElement?.querySelector("video.md-video") ?? null;
+  if (kind === "compare")
+    return (
+      button.closest(".md-compare")?.querySelector("img.md-compare-after") ??
+      null
+    );
+  return null;
 }
 
 /**

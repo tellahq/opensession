@@ -448,6 +448,7 @@ export function WalkthroughCard({
                 </h3>
                 <MarkdownBody
                   html={summaryHtml}
+                  markdown={{ repo }}
                   className="markdown max-w-[68ch] text-label leading-5 text-dim [overflow-wrap:anywhere] [text-wrap:pretty]"
                 />
               </section>

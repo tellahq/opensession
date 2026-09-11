@@ -24,6 +24,7 @@ import { refWebPanel } from "./components/FeedWebPane";
 import { FirstMile } from "./components/FirstMile";
 import { Goals } from "./components/Goals";
 import { IconDesk, IconSidebarLeft } from "./components/icons";
+import { BlockExpandHost } from "./components/BlockExpandDialog";
 import { MediaLightboxHost } from "./components/MediaLightbox";
 import { NavigationProvider } from "./components/NavigationProvider";
 import { NewSession } from "./components/NewSession";
@@ -1219,6 +1220,7 @@ export function AppContent({
     <UserGate>
       <RestartOverlay connected={connected} addHandler={addHandler} />
       <MediaLightboxHost />
+      <BlockExpandHost />
       <ToastHost container={settingsActive ? null : detailPaneEl} />
       <RunningCloseDialog {...runningCloseDialog} />
       <div className="app">
