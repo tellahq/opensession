@@ -151,6 +151,48 @@ final class SessionRowPreviewTests: XCTestCase {
         XCTAssertNil(PrPreviewFacts.osReviewFact(OsReviewSummary(confidence: 3)))
     }
 
+    // MARK: - Merge risk
+
+    func testMergeRiskIsItsOwnPhraseAfterTheReading() {
+        // A correct change that is hard to undo: the reading stays green and
+        // the risk stands beside it in red, which one shared phrase could not do.
+        let facts = PrPreviewFacts.all(
+            for: session(
+                osReview: OsReviewSummary(verdict: "approve", confidence: 5, risk: .high)
+            )
+        )
+        XCTAssertEqual(facts.map(\.text), ["Ready to merge", "5/5 · approved", "high risk"])
+        XCTAssertEqual(facts.map(\.tone), [.green, .green, .red])
+    }
+
+    func testEachRiskLevelHasItsOwnTone() {
+        XCTAssertEqual(
+            PrPreviewFacts.mergeRiskFact(OsReviewSummary(risk: .medium)),
+            PrPreviewFact(text: "medium risk", tone: .yellow)
+        )
+        XCTAssertEqual(
+            PrPreviewFacts.mergeRiskFact(OsReviewSummary(risk: .low)),
+            PrPreviewFact(text: "low risk", tone: .dim)
+        )
+    }
+
+    func testAStaleRiskGoesFaintWithTheRestOfTheReview() {
+        XCTAssertEqual(
+            PrPreviewFacts.mergeRiskFact(OsReviewSummary(verdict: "approve", risk: .high, stale: true)),
+            PrPreviewFact(text: "high risk", tone: .faint)
+        )
+    }
+
+    func testAReviewWithoutARiskPassAddsNoRiskPhrase() {
+        // Repos can opt out of the risk pass; the strip says nothing rather
+        // than "no risk", which would be a claim nobody made.
+        XCTAssertNil(PrPreviewFacts.mergeRiskFact(OsReviewSummary(verdict: "approve", confidence: 4)))
+        XCTAssertEqual(
+            texts(session(osReview: OsReviewSummary(verdict: "approve", confidence: 4))),
+            ["Ready to merge", "4/5 · approved"]
+        )
+    }
+
     // MARK: - Reviewers
 
     func testWaitingOnUpToTwoPeopleNamesThem() {

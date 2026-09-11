@@ -350,11 +350,23 @@ struct SessionsListView: View {
     }
     #endif
 
+    /// The native screenshot harness's PR review fixture. On the phone it
+    /// floats over the list; on the Mac it takes the detail column, because an
+    /// overlay on a `NavigationSplitView` never reaches the AppKit split view
+    /// that draws it. Always false in a release build.
+    private var presentsPrReviewCardsFixture: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["OS1_PR_REVIEW_CARDS_FIXTURE"] == "1"
+        #else
+        false
+        #endif
+    }
+
     var body: some View {
         navigationContainer
-            #if DEBUG
+            #if DEBUG && os(iOS)
             .overlay {
-                if ProcessInfo.processInfo.environment["OS1_PR_REVIEW_CARDS_FIXTURE"] == "1" {
+                if presentsPrReviewCardsFixture {
                     PrReviewCardsScreenshot()
                 }
             }
@@ -599,7 +611,11 @@ struct SessionsListView: View {
         } detail: {
             // A ticket takes the detail column the way a session does — the
             // sidebar's deeper panel, not a window over it.
-            if let openTicket {
+            if presentsPrReviewCardsFixture {
+                #if DEBUG
+                PrReviewCardsScreenshot()
+                #endif
+            } else if let openTicket {
                 SupportThreadView(row: openTicket) {
                     supportQueue.forget(id: openTicket.id)
                 }

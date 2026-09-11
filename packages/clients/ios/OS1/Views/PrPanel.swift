@@ -596,6 +596,12 @@ struct PrPanelView: View {
 
     @ViewBuilder
     private func statusGroup(_ pr: PrDetails) -> some View {
+        // The agent's two readings close the card, so every row above them
+        // has to know whether it is last: the hairline is drawn by the row
+        // above the gap, not the one below it.
+        let decision = reviewBadge(pr.reviewDecision)
+        let quality = agentQualityRow(pr.osReview)
+        let risk = agentRiskRow(pr.osReview)
         infoGroup(
             "Status",
             answer: Text(stateLabel(pr)).foregroundColor(pr.summary.color)
@@ -607,18 +613,33 @@ struct PrPanelView: View {
                     "Merge",
                     value: "Conflicts with \(pr.baseRefName ?? "the base")",
                     tint: OS1VisualStyle.yellowInk,
-                    last: reviewBadge(pr.reviewDecision) == nil
+                    last: decision == nil && quality == nil && risk == nil
                 )
             } else if pr.isOpen {
                 infoRow(
                     "Merge",
                     value: "No conflicts",
                     tint: OS1VisualStyle.greenInk,
-                    last: reviewBadge(pr.reviewDecision) == nil
+                    last: decision == nil && quality == nil && risk == nil
                 )
             }
-            if let decision = reviewBadge(pr.reviewDecision) {
-                infoRow("Review", value: decision.label, tint: decision.color, last: true)
+            if let decision {
+                infoRow(
+                    "Review",
+                    value: decision.label,
+                    tint: decision.color,
+                    last: quality == nil && risk == nil
+                )
+            }
+            // Quality and merge risk are two rows, not one: the number says
+            // whether the change is right as written, the word says how
+            // carefully to land it, and a reader (or VoiceOver) should never
+            // have to work out which is which from their order.
+            if let quality {
+                infoRow("Quality", value: quality.value, tint: quality.tint, last: risk == nil)
+            }
+            if let risk {
+                infoRow("Merge risk", value: risk.value, tint: risk.tint, last: true)
             }
             if let error = actionError {
                 Text(error)
@@ -1112,6 +1133,32 @@ struct PrPanelView: View {
         Text(text)
             .font(.footnote)
             .foregroundStyle(.secondary)
+    }
+
+    /// "4/5", faint with a note once the branch has moved past the reading.
+    private func agentQualityRow(_ review: OsReviewSummary?) -> (value: String, tint: Color)? {
+        guard let score = review?.confidence else { return nil }
+        return PrPanelView.agentQualityValue(score: score, stale: review?.stale == true)
+    }
+
+    /// "High" in the level's own status ink; the same faint treatment when
+    /// stale, because a risk scored on older code is not this code's risk.
+    private func agentRiskRow(_ review: OsReviewSummary?) -> (value: String, tint: Color)? {
+        guard let risk = review?.risk else { return nil }
+        return PrPanelView.agentRiskValue(risk: risk, stale: review?.stale == true)
+    }
+
+    static func agentQualityValue(score: Int, stale: Bool) -> (value: String, tint: Color) {
+        stale
+            ? ("\(score)/5 · new commits since", OS1VisualStyle.textFaint)
+            : ("\(score)/5", OS1VisualStyle.text)
+    }
+
+    static func agentRiskValue(risk: MergeRisk, stale: Bool) -> (value: String, tint: Color) {
+        (
+            stale ? "\(risk.word) · new commits since" : risk.word,
+            risk.tone(stale: stale).color
+        )
     }
 
     private func reviewBadge(_ decision: String?) -> (label: String, color: Color)? {

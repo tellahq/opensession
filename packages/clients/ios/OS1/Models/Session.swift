@@ -359,14 +359,129 @@ struct PrChecksSummary: Decodable, Equatable, Hashable {
 struct OsReviewSummary: Decodable, Equatable, Hashable {
     /// approve | comment | request_changes.
     var verdict: String?
-    /// 1-5: how safe the reviewer thought this was to merge.
+    /// 1-5: quality of the change as written. Not how safe it is to land:
+    /// that is `risk`, scored on its own.
     var confidence: Int?
+    /// How hard a mistake would be to undo, scored separately from quality.
+    var risk: MergeRisk?
+    /// Time to recover every user if the change is wrong.
+    var recovery: RecoveryTime?
+    /// Why the risk is what it is: factor ids from the server's fixed list
+    /// (`schema_migration`, `no_tests`, …), heaviest first. See
+    /// `MergeRiskFactor.label` for the words they are shown as.
+    var riskFactors: [String]?
     var findings: Int?
     /// P0/P1 findings — what would block a merge.
     var blocking: Int?
     /// The branch has moved on since this verdict — it describes older code.
     var stale: Bool?
     var at: String?
+
+    init(
+        verdict: String? = nil,
+        confidence: Int? = nil,
+        risk: MergeRisk? = nil,
+        recovery: RecoveryTime? = nil,
+        riskFactors: [String]? = nil,
+        findings: Int? = nil,
+        blocking: Int? = nil,
+        stale: Bool? = nil,
+        at: String? = nil
+    ) {
+        self.verdict = verdict
+        self.confidence = confidence
+        self.risk = risk
+        self.recovery = recovery
+        self.riskFactors = riskFactors
+        self.findings = findings
+        self.blocking = blocking
+        self.stale = stale
+        self.at = at
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case verdict, confidence, risk, recovery, riskFactors, findings, blocking, stale, at
+    }
+
+    /// A review is nested in every session row, so a word this client does not
+    /// know (a fourth risk level, a new recovery time) must cost that one field
+    /// and never the row: the sessions list decodes as a whole.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        verdict = try container.decodeIfPresent(String.self, forKey: .verdict)
+        confidence = try container.decodeIfPresent(Int.self, forKey: .confidence)
+        risk = (try? container.decodeIfPresent(MergeRisk.self, forKey: .risk)) ?? nil
+        recovery = (try? container.decodeIfPresent(RecoveryTime.self, forKey: .recovery)) ?? nil
+        riskFactors = (try? container.decodeIfPresent([String].self, forKey: .riskFactors)) ?? nil
+        findings = try container.decodeIfPresent(Int.self, forKey: .findings)
+        blocking = try container.decodeIfPresent(Int.self, forKey: .blocking)
+        stale = try container.decodeIfPresent(Bool.self, forKey: .stale)
+        at = try container.decodeIfPresent(String.self, forKey: .at)
+    }
+}
+
+/// The review's second axis. Quality asks whether the change is right as
+/// written; this asks how long every user is wrong for if it is not.
+/// Advisory: it never changes the verdict, only how carefully to land it.
+enum MergeRisk: String, Decodable, Equatable, Hashable, CaseIterable {
+    case low, medium, high
+
+    /// "high risk": the phrase every compact reading uses, so the sidebar
+    /// preview, the review row and the loop's verdict all say it one way.
+    var label: String { "\(rawValue) risk" }
+
+    /// Title case for a labelled row, where "Merge risk" already says what
+    /// the word is.
+    var word: String { rawValue.capitalized }
+
+    /// What VoiceOver says. "4/5 · high risk" spoken as written is one
+    /// number and one word with nothing telling which is which, so each axis
+    /// is named: "quality 4 of 5, merge risk high".
+    var accessibilityLabel: String { "merge risk \(rawValue)" }
+}
+
+/// How long a wrong change takes to undo for everyone.
+enum RecoveryTime: String, Decodable, Equatable, Hashable, CaseIterable {
+    case minutes, hours, days, irreversible
+
+    var label: String {
+        switch self {
+        case .minutes: "minutes to recover"
+        case .hours: "hours to recover"
+        case .days: "days to recover"
+        case .irreversible: "not recoverable"
+        }
+    }
+}
+
+/// The words behind a risk factor id. The server's `RISK_FACTOR_LABELS`
+/// (agents/github/merge-risk.ts), kept in step by hand; an id this list does
+/// not know reads as its own words rather than as an underscore.
+enum MergeRiskFactor {
+    private static let labels: [String: String] = [
+        "schema_migration": "schema migration",
+        "data_backfill": "data backfill",
+        "irreversible_delete": "irreversible delete",
+        "data_to_third_party": "data to a third party",
+        "new_external_service": "new external service",
+        "dependency_change": "dependency change",
+        "dns_or_infra": "DNS or infra",
+        "secrets_or_config": "secrets or config",
+        "auth": "auth",
+        "billing": "billing",
+        "auth_or_billing": "auth or billing",
+        "public_api_contract": "public API contract",
+        "stored_data_semantics": "stored data semantics",
+        "delivered_output": "delivered output",
+        "ci_or_deploy": "CI or deploy",
+        "wide_blast_radius": "wide blast radius",
+        "no_tests": "no tests",
+        "large_diff": "large diff",
+    ]
+
+    static func label(_ id: String) -> String {
+        labels[id] ?? id.replacingOccurrences(of: "_", with: " ")
+    }
 }
 
 extension Session {
