@@ -20,7 +20,9 @@ import SwiftUI
 ///   card has 300px and a label column; a phone has neither, and a 74pt label
 ///   gutter would leave its values a dozen characters wide.
 /// - **The review is compact.** Its score leads the verdict (`4/5 · approved`),
-///   with blocking and stale context retained when present.
+///   with blocking and stale context retained when present. Merge risk is a
+///   fact of its own (`high risk`): it is scored apart from quality, so it is
+///   said apart from it, in its own ink.
 ///
 /// What deliberately did NOT come across is the web footer's centred Merge
 /// button. A context menu preview is not interactive: taps go to the menu, so
@@ -189,20 +191,29 @@ struct PrReviewCardsScreenshot: View {
                 card(
                     title: "Ready after review",
                     review: OsReviewSummary(
-                        verdict: "approve", confidence: 4, findings: 0, blocking: 0, stale: false
+                        verdict: "approve", confidence: 4, risk: .low,
+                        findings: 0, blocking: 0, stale: false
+                    )
+                )
+                card(
+                    title: "Correct, but a migration",
+                    review: OsReviewSummary(
+                        verdict: "approve", confidence: 5, risk: .high, recovery: .days,
+                        findings: 0, blocking: 0, stale: false
                     )
                 )
                 card(
                     title: "Address blocking feedback",
                     review: OsReviewSummary(
-                        verdict: "request_changes", confidence: 2,
+                        verdict: "request_changes", confidence: 2, risk: .medium,
                         findings: 2, blocking: 1, stale: false
                     )
                 )
                 card(
                     title: "Review is behind the branch",
                     review: OsReviewSummary(
-                        verdict: "comment", confidence: 3, findings: 1, blocking: 0, stale: true
+                        verdict: "comment", confidence: 3, risk: .high,
+                        findings: 1, blocking: 0, stale: true
                     )
                 )
             }
@@ -267,6 +278,9 @@ enum PrPreviewFacts {
         }
         if let osReview = session.prOsReview.flatMap(osReviewFact) {
             facts.append(osReview)
+        }
+        if let risk = session.prOsReview.flatMap(riskFact) {
+            facts.append(risk)
         }
         if let waiting = reviewersFact(session.prReviewRequested, state: state) {
             facts.append(waiting)
@@ -363,6 +377,26 @@ enum PrPreviewFacts {
             }
         }
         return PrPreviewFact(text: parts.joined(separator: " · "), tone: tone)
+    }
+
+    /// Merge risk, as its own phrase beside the verdict rather than inside
+    /// it: the verdict says whether the change is right, this says how hard
+    /// it is to undo, and one ink cannot say both. High and medium take the
+    /// warning inks; low is only a word and goes dim. A stale reading goes
+    /// faint with the verdict it came with, so old caution weighs no more
+    /// than old approval.
+    static func riskFact(_ review: OsReviewSummary) -> PrPreviewFact? {
+        guard let risk = review.risk else { return nil }
+        let tone: PrPreviewFact.Tone = if review.stale == true {
+            .faint
+        } else {
+            switch risk {
+            case .high: .red
+            case .medium: .yellow
+            case .low: .dim
+            }
+        }
+        return PrPreviewFact(text: "\(risk.rawValue) risk", tone: tone)
     }
 
     /// Who the PR is waiting on. Two names is the most that fits before the

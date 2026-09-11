@@ -151,7 +151,9 @@ struct ReviewLoopResult: Equatable {
     enum Status: Equatable { case pending, passed, failed }
 
     var status: Status
-    /// 1-5: how safe the reviewer thought this was to merge.
+    /// 1-5: quality of the change as written. Merge risk is the review's
+    /// other axis and stays on the workspace and card surfaces; the loop's
+    /// verdict is about whether the change is right.
     var confidence: Int?
     var checksPassed: Int?
     var checksFailed: Int?

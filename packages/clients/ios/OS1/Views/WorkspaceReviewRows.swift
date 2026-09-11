@@ -127,6 +127,7 @@ private struct AgentReviewRow: View {
 
     private var review: OsReviewSummary? { pr.osReview }
     private var score: Int? { review?.confidence }
+    private var risk: OsReviewSummary.Risk? { review?.risk }
     private var stale: Bool { review?.stale == true }
     private var actionable: Bool { pr.isOpen }
     private var active: Bool { pr.reviewActive == true || busy == .review || queued != nil }
@@ -223,11 +224,14 @@ private struct AgentReviewRow: View {
         .onChange(of: pr.osReview?.at) { _, _ in settle() }
         .sheet(isPresented: $readingReport) {
             if let report {
-                AgentReviewReport(report: report, score: score, at: review?.at)
+                AgentReviewReport(report: report, score: score, risk: risk, at: review?.at)
             }
         }
     }
 
+    /// The band is quality alone. Risk is advisory and has its own word on
+    /// the line below; a high-risk change the agent found correct still sits
+    /// on a green row, exactly as it does on the web.
     private var tone: ReviewTone {
         if active { return .blue }
         guard let score else { return .muted }
@@ -236,12 +240,27 @@ private struct AgentReviewRow: View {
         return score == 3 ? .yellow : .red
     }
 
-    /// How safe it thought the change was, then the one thing worth knowing
-    /// about that reading. The score leads because it is the answer; a run
-    /// that has no score yet simply starts at the words.
-    private var detail: String {
-        guard let score, !active else { return state }
-        return "\(score)/5 · \(state)"
+    /// How good it thought the change was, how careful landing it should be,
+    /// then the one thing worth knowing about that reading. The score leads
+    /// because it is the answer; a run that has no score yet simply starts at
+    /// the words.
+    private var detail: Text {
+        AgentReviewDetail
+            .compose(score: score, risk: risk, stale: stale, active: active, state: state)
+            .segments
+            .reduce(Text("")) { line, segment in
+                line + Text(segment.text).foregroundStyle(color(for: segment.ink))
+            }
+    }
+
+    private func color(for ink: AgentReviewDetail.Ink) -> Color {
+        switch ink {
+        case .row: tone.ink
+        case .red: OS1VisualStyle.redInk
+        case .yellow: OS1VisualStyle.yellowInk
+        case .dim: OS1VisualStyle.textDim
+        case .faint: OS1VisualStyle.textFaint
+        }
     }
 
     private var state: String {
@@ -296,6 +315,64 @@ private struct AgentReviewRow: View {
         guard let queued else { return }
         if pr.reviewActive == true || pr.osReview?.at != queued.previousAt {
             self.queued = nil
+        }
+    }
+}
+
+/// The agent row's second line, in pieces. Quality and merge risk are two
+/// axes, so the line cannot be one string in one colour: the score and the
+/// state take the row's ink, the risk word takes its own, and nothing else
+/// on the row moves with it. Pure, so the wording and the inks can be
+/// asserted without a screen.
+struct AgentReviewDetail: Equatable {
+    /// Which ink a piece is set in. `row` is whatever the band's tone gives
+    /// the line; the rest are the app's status inks, which hold contrast on
+    /// both platforms' canvases in both appearances (`StatusInkContrastTests`).
+    enum Ink: Equatable {
+        case row, red, yellow, dim, faint
+    }
+
+    struct Segment: Equatable {
+        let text: String
+        let ink: Ink
+    }
+
+    let segments: [Segment]
+
+    /// The whole line, as VoiceOver reads it: one label, the inks aside.
+    var text: String { segments.map(\.text).joined() }
+
+    static func compose(
+        score: Int?,
+        risk: OsReviewSummary.Risk?,
+        stale: Bool,
+        active: Bool,
+        state: String
+    ) -> AgentReviewDetail {
+        // A running pass is only "Reviewing…": the numbers it is about to
+        // replace would read as the answer.
+        guard !active else { return AgentReviewDetail(segments: [Segment(text: state, ink: .row)]) }
+        var segments = [Segment]()
+        if let score {
+            segments.append(Segment(text: "\(score)/5 · ", ink: .row))
+        }
+        if let risk {
+            segments.append(Segment(text: "\(risk.rawValue) risk", ink: ink(for: risk, stale: stale)))
+            segments.append(Segment(text: " · ", ink: .row))
+        }
+        segments.append(Segment(text: state, ink: .row))
+        return AgentReviewDetail(segments: segments)
+    }
+
+    /// High and medium take the warning inks; low is only a word, so it goes
+    /// dim rather than borrowing green and reading as a second verdict. A
+    /// stale reading goes faint with the rest of the verdict it belongs to.
+    static func ink(for risk: OsReviewSummary.Risk, stale: Bool) -> Ink {
+        if stale { return .faint }
+        return switch risk {
+        case .high: .red
+        case .medium: .yellow
+        case .low: .dim
         }
     }
 }
@@ -364,7 +441,7 @@ private struct ReviewerRow: View {
                 }
             },
             name: rowName,
-            detail: rowState,
+            detail: Text(rowState),
             tint: tone.ink,
             note: nil,
             error: error,
@@ -570,6 +647,7 @@ private struct ReviewerRow: View {
 private struct AgentReviewReport: View {
     let report: PrComment
     let score: Int?
+    let risk: OsReviewSummary.Risk?
     let at: String?
 
     @Environment(\.dismiss) private var dismiss
@@ -587,8 +665,12 @@ private struct AgentReviewReport: View {
             .inlineTitleBarCompat()
             .toolbar {
                 ToolbarItem(placement: .topLeadingCompat) {
-                    if let score {
-                        Text("\(score)/5")
+                    // The two numbers the row led with, so the reading opens
+                    // under the same header it was tapped from.
+                    let parts = [score.map { "\($0)/5" }, risk.map { "\($0.rawValue) risk" }]
+                        .compactMap { $0 }
+                    if !parts.isEmpty {
+                        Text(parts.joined(separator: " · "))
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(OS1VisualStyle.textDim)
                             .monospacedDigit()
@@ -617,7 +699,9 @@ private struct ReviewRow<Leading: View, Trailing: View>: View {
     @ViewBuilder let leading: Leading
     /// Nil when the state already says who it is about ("Needs your review").
     let name: String?
-    let detail: String
+    /// A `Text` rather than a string so a piece of it can carry its own ink
+    /// (the agent row's risk word) while the line stays one label.
+    let detail: Text
     let tint: Color
     let note: String?
     let error: String?
@@ -671,7 +755,7 @@ private struct ReviewRow<Leading: View, Trailing: View>: View {
                         .foregroundStyle(OS1VisualStyle.text)
                         .lineLimit(1)
                 }
-                Text(detail)
+                detail
                     .font(.caption)
                     .foregroundStyle(tint)
                     .lineLimit(2)
@@ -680,6 +764,66 @@ private struct ReviewRow<Leading: View, Trailing: View>: View {
         .contentShape(Rectangle())
     }
 }
+
+#if DEBUG
+/// Deterministic visual proof for the native screenshot harness: the agent
+/// row at each merge-risk level, plus one whose reading the branch has moved
+/// past. Same plate as the workspace sheet's Review section.
+struct WorkspaceReviewRowsScreenshot: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Agent review rows")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.text)
+                plate(
+                    "Low risk",
+                    OsReviewSummary(verdict: "approve", confidence: 4, risk: .low, recovery: .minutes)
+                )
+                plate(
+                    "Medium risk",
+                    OsReviewSummary(
+                        verdict: "comment", confidence: 4, risk: .medium, recovery: .hours,
+                        riskFactors: ["no tests"], findings: 1, blocking: 0
+                    )
+                )
+                plate(
+                    "High risk",
+                    OsReviewSummary(
+                        verdict: "request_changes", confidence: 2, risk: .high, recovery: .days,
+                        riskFactors: ["migration", "auth"], findings: 2, blocking: 1
+                    )
+                )
+                plate(
+                    "Stale",
+                    OsReviewSummary(verdict: "approve", confidence: 3, risk: .high, stale: true)
+                )
+                plate("No risk score", OsReviewSummary(verdict: "approve", confidence: 5))
+            }
+            .padding(20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(OS1VisualStyle.background)
+    }
+
+    private func plate(_ title: String, _ review: OsReviewSummary) -> some View {
+        var pr = PrDetails(number: 128)
+        pr.state = "OPEN"
+        pr.osReview = review
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(OS1VisualStyle.textDim)
+            AgentReviewRow(sessionId: "screenshot", pr: pr, repo: "opensession", agentName: "Agent")
+                .padding(6)
+                .background(
+                    OS1VisualStyle.raised,
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
+        }
+    }
+}
+#endif
 
 /// The trailing control on a review row: a small capsule that opens a menu.
 /// Title-less while a review is waiting on you, where the row's own action
