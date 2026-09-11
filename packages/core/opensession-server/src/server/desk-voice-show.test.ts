@@ -193,6 +193,32 @@ describe("show_in_app target resolution", () => {
     ).toMatchObject({ target: { id: "s-subtitles-fix" } });
   });
 
+  test("carries a requested tab through to the target", async () => {
+    expect(
+      await resolveShowTarget({ session: "lint", tab: "review" }, deps),
+    ).toEqual({
+      target: {
+        kind: "session",
+        id: "s-lint",
+        title: "Vendor lint rules",
+        tab: "review",
+      },
+    });
+    expect(
+      await resolveShowTarget({ workspace: "ws-2", tab: "conversation" }, deps),
+    ).toEqual({
+      target: {
+        kind: "workspace",
+        id: "ws-2",
+        name: "Desk voice",
+        tab: "conversation",
+      },
+    });
+    expect(
+      await resolveShowTarget({ session: "lint", tab: "terminal" }, deps),
+    ).toMatchObject({ error: expect.stringContaining("Unknown tab") });
+  });
+
   test("resolves a workspace by id or name", async () => {
     expect(await resolveShowTarget({ workspace: "ws-2" }, deps)).toEqual({
       target: { kind: "workspace", id: "ws-2", name: "Desk voice" },
@@ -243,7 +269,7 @@ describe("show_in_app authorization and delivery", () => {
   test("returns success only after the owning browser acknowledges", async () => {
     registerStubControl();
     const nav = new DeskVoiceNavigation("signed-in-login");
-    const pending = showInApp(nav, { session: "lint" });
+    const pending = showInApp(nav, { session: "lint", tab: "review" });
     await Promise.resolve();
     const polled = nav.handle("signed-in-login", {
       action: "poll",
@@ -252,6 +278,11 @@ describe("show_in_app authorization and delivery", () => {
     });
     if (!polled || !("command" in polled) || !polled.command)
       throw new Error("missing command");
+    expect(polled.command.target).toEqual({
+      kind: "session",
+      id: "s-lint",
+      tab: "review",
+    });
     nav.handle("signed-in-login", {
       action: "ack",
       connectionId: "call",
@@ -264,6 +295,7 @@ describe("show_in_app authorization and delivery", () => {
       kind: "session",
       id: "s-lint",
       title: "Vendor lint rules",
+      tab: "review",
     });
     nav.close();
   });

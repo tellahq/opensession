@@ -168,7 +168,7 @@ export async function buildLiveSessionConfig(
         instructions:
           LIVE_BACKEND_INSTRUCTIONS +
           (navigationEnabled
-            ? "\nWhen the user asks to see, open, or go to a session or workspace, call show_in_app with its title or name. It opens that page beside the Desk. If it reports several matches, ask which one."
+            ? "\nWhen the user asks to see, open, or go to a session or workspace, call show_in_app with its title or name. It opens that page beside the Desk. When they name a tab (the review tab, the PR status, the chat), pass it as tab. If it reports several matches, ask which one."
             : ""),
         tools,
         tool_choice: "auto",

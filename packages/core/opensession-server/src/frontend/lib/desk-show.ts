@@ -5,8 +5,14 @@ import {
 import type { Route } from "./app-route";
 export type { DeskShowTarget } from "../../shared/desk-navigation";
 
+/** The page a Desk target lands on. A workspace pane is part of the route; a
+ * session's tab is not, so the app applies that after navigating. */
 export function deskShowRoute(target: DeskShowTarget): Route {
-  return { view: target.kind, id: target.id };
+  if (target.kind === "workspace")
+    return target.tab && target.tab !== "chat"
+      ? { view: "workspace", id: target.id, tab: target.tab }
+      : { view: "workspace", id: target.id };
+  return { view: "session", id: target.id };
 }
 
 // Local to this browser's voice client, not a server WebSocket broadcast.
@@ -17,12 +23,14 @@ export function showDeskTarget(target: DeskShowTarget): boolean {
   );
 }
 
-export function onDeskShow(show: (route: Route) => void): () => void {
+export function onDeskShow(
+  show: (target: DeskShowTarget, route: Route) => void,
+): () => void {
   const listener = (event: Event) => {
     if (!(event instanceof CustomEvent)) return;
     const parsed = deskShowTargetSchema.safeParse(event.detail);
     if (!parsed.success) return;
-    show(deskShowRoute(parsed.data));
+    show(parsed.data, deskShowRoute(parsed.data));
     event.preventDefault();
   };
   window.addEventListener(SHOW_EVENT, listener);

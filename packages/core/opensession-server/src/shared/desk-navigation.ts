@@ -1,10 +1,23 @@
 import { z } from "zod";
 
-// Only catalog IDs, never URLs, paths, query strings, or fragments.
+/** The tabs Desk may foreground once it lands: the transcript (`chat`) or one
+ * of the workspace panes the app router already addresses. Panes that spawn
+ * something (terminal, desktop, preview) are deliberately not reachable. */
+export const DESK_SHOW_TABS = [
+  "chat",
+  "review",
+  "conversation",
+  "video",
+] as const;
+export type DeskShowTab = (typeof DESK_SHOW_TABS)[number];
+
+// Only catalog IDs and a fixed tab name, never URLs, paths, query strings, or
+// fragments.
 export const deskShowTargetSchema = z
   .object({
     kind: z.enum(["session", "workspace"]),
     id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+    tab: z.enum(DESK_SHOW_TABS).optional(),
   })
   .strict();
 export type DeskShowTarget = z.infer<typeof deskShowTargetSchema>;

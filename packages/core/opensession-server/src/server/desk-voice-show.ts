@@ -1,6 +1,10 @@
 import { getSessionControl, type SessionControl } from "./session-control";
 import { getWorkspace, listWorkspaces, type Workspace } from "./workspaces";
-import { deskShowTargetSchema } from "../shared/desk-navigation";
+import {
+  DESK_SHOW_TABS,
+  deskShowTargetSchema,
+  type DeskShowTab,
+} from "../shared/desk-navigation";
 import { fuzzyScore } from "../shared/fuzzy-match";
 import type { DeskVoiceNavigation } from "./desk-voice-navigation";
 
@@ -8,7 +12,7 @@ export const SHOW_IN_APP_TOOL = {
   type: "function",
   name: "show_in_app",
   description:
-    "Bring a session or a workspace up in the user's own Open Session window, next to the Desk. Use when they ask to see, open, show, or go to something. Give the session's id or its title (a distinctive part is enough), or the workspace's id or name. Only changes the page shown in this voice call's browser.",
+    "Bring a session or a workspace up in the user's own Open Session window, next to the Desk. Use when they ask to see, open, show, or go to something. Give the session's id or its title (a distinctive part is enough), or the workspace's id or name. Add tab to land on a specific tab, such as review for the PR and CI status. Only changes the page shown in this voice call's browser.",
   parameters: {
     type: "object",
     properties: {
@@ -20,15 +24,22 @@ export const SHOW_IN_APP_TOOL = {
         type: "string",
         description: "Workspace id or name",
       },
+      tab: {
+        type: "string",
+        enum: [...DESK_SHOW_TABS],
+        description:
+          "Tab to bring up: review (the PR, its checks and comments), chat (the session transcript), conversation (a support thread), or video. Omit to keep the current tab.",
+      },
     },
     required: [],
     additionalProperties: false,
   },
 } as const;
 
-export type ShowTarget =
+export type ShowTarget = (
   | { kind: "session"; id: string; title: string }
-  | { kind: "workspace"; id: string; name: string };
+  | { kind: "workspace"; id: string; name: string }
+) & { tab?: DeskShowTab };
 
 export type ShowResolution =
   | { target: ShowTarget }
@@ -183,6 +194,13 @@ export function pick<T extends Pickable>(
   };
 }
 
+function isShowTab(value: unknown): value is DeskShowTab {
+  return (
+    typeof value === "string" &&
+    (DESK_SHOW_TABS as readonly string[]).includes(value)
+  );
+}
+
 export async function resolveShowTarget(
   args: Record<string, unknown>,
   deps: {
@@ -196,7 +214,9 @@ export async function resolveShowTarget(
     typeof args.workspace === "string" ? args.workspace.trim() : "";
 
   if (
-    Object.keys(args).some((key) => key !== "session" && key !== "workspace") ||
+    Object.keys(args).some(
+      (key) => key !== "session" && key !== "workspace" && key !== "tab",
+    ) ||
     Boolean(session) === Boolean(workspace) ||
     (args.session !== undefined && typeof args.session !== "string") ||
     (args.workspace !== undefined && typeof args.workspace !== "string") ||
@@ -205,13 +225,24 @@ export async function resolveShowTarget(
   ) {
     return { error: "Name exactly one session or workspace to show." };
   }
+  if (args.tab !== undefined && args.tab !== "" && !isShowTab(args.tab)) {
+    return {
+      error: `Unknown tab; use one of ${DESK_SHOW_TABS.join(", ")}.`,
+    };
+  }
+  const tab = isShowTab(args.tab) ? { tab: args.tab } : {};
 
   if (session) {
     // The Desk itself is hidden from every list; a call never lands on it.
     const byId = deps.control.getSession(session);
     if (byId && !byId.desk)
       return {
-        target: { kind: "session", id: byId.id, title: byId.title || "" },
+        target: {
+          kind: "session",
+          id: byId.id,
+          title: byId.title || "",
+          ...tab,
+        },
       };
     const visible = deps.control
       .listSessions()
@@ -229,14 +260,21 @@ export async function resolveShowTarget(
     const found = pick(session, visible, "session");
     if ("error" in found) return found;
     return {
-      target: { kind: "session", id: found.item.id, title: found.item.title },
+      target: {
+        kind: "session",
+        id: found.item.id,
+        title: found.item.title,
+        ...tab,
+      },
     };
   }
 
   if (workspace) {
     const byId = await deps.getWorkspace(workspace);
     if (byId)
-      return { target: { kind: "workspace", id: byId.id, name: byId.name } };
+      return {
+        target: { kind: "workspace", id: byId.id, name: byId.name, ...tab },
+      };
     const all = (await deps.listWorkspaces()).map((w) => ({
       id: w.id,
       title: w.name,
@@ -245,7 +283,12 @@ export async function resolveShowTarget(
     const found = pick(workspace, all, "workspace");
     if ("error" in found) return found;
     return {
-      target: { kind: "workspace", id: found.item.id, name: found.item.title },
+      target: {
+        kind: "workspace",
+        id: found.item.id,
+        name: found.item.title,
+        ...tab,
+      },
     };
   }
 
@@ -275,6 +318,7 @@ export async function showInApp(
   const safe = deskShowTargetSchema.safeParse({
     kind: target.kind,
     id: target.id,
+    ...(target.tab ? { tab: target.tab } : {}),
   });
   if (!safe.success)
     return { shown: false, error: "That page cannot be opened by voice." };

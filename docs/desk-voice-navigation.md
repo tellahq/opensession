@@ -2,14 +2,44 @@
 
 The Desk overlay supports `show_in_app` in both text-only chat and web voice
 calls, including messages typed during a call. The action accepts exactly one
-`session` or `workspace`, as an ID or title/name. It resolves existing catalog
-records, prefers exact names, and asks for clarification when an exact or partial
-name has multiple matches. Name searches omit archived sessions and the Desk
-itself. An explicit ID can open an archived session. The action never accepts a
-URL, path, selector, script, or arbitrary UI operation.
+`session` or `workspace`, as an ID or title/name, plus an optional `tab`
+(`chat`, `review`, `conversation`, or `video`). It resolves existing catalog
+records and asks for clarification when a name has several equally good
+matches. Name searches omit archived sessions and the Desk itself. An explicit
+ID can open an archived session. The action never accepts a URL, path, selector,
+script, or arbitrary UI operation.
 
 For example, "Show me the deploy workspace" opens the matching workspace beside
-Desk. It does not start another session or end the conversation.
+Desk, and "show me the review tab for this" lands on that session's Review
+tab. It does not start another session or end the conversation.
+
+### Name matching
+
+Exact titles win. Otherwise titles are scored with the shared fuzzy matcher
+(`src/shared/fuzzy-match.ts`, the same one behind the @ palette): every spoken
+term must land in the title, whole or within a small typo budget, so "profile
+subtitle sidebar" finds "Profile Subtitles sidebar opening". Filler a spoken
+request carries ("the", "my", "session") is dropped when other terms remain. A
+title containing the whole phrase outranks term-by-term matches; among fuzzy
+matches a clear leader is taken, a near tie is asked back.
+
+A session's derivatives, the auto-fix worker parented on it (`parentSessionId`,
+`spawnedBy`) and the headless PR review sharing its workspace
+(`automation`, `agentStarted`), carry near-copies of its title. They are dropped
+from the candidates whenever the primary scores at least as well, so "subtitles
+sidebar" opens the primary instead of asking which of two identical-looking
+sessions was meant. Phrasing that names the derivative ("the review of…",
+"PR 41 feedback") outscores the primary and reaches it directly.
+
+### Tabs
+
+`tab` names a fixed pane, never a route. For a workspace it becomes the
+existing `/review`, `/conversation`, or `/video` route suffix. For a session,
+`review` uses the sidebar's pending-open pulse so the Review tab is foregrounded
+once the session lands; `chat` clears the workspace's remembered pane so the
+transcript shows; `conversation` and `video` open the session's workspace on
+that pane. Panes that spawn something (terminal, desktop, preview) are not
+reachable. A session the browser has not listed yet opens on its default tab.
 
 ## Authorization and delivery
 
@@ -62,8 +92,8 @@ Registration failures do not prevent ordinary text from being sent.
 
 ## UI behavior
 
-Commands carry only a validated session/workspace ID, random command ID, and
-expiry. Only one command can wait per connection, for at most ten seconds. The
+Commands carry only a validated session/workspace ID, an optional fixed tab
+name, random command ID, and expiry. Only one command can wait per connection, for at most ten seconds. The
 client rejects expired/malformed commands and suppresses duplicate navigation.
 Success means the owning browser's app router accepted the action. A missing app
 handler, disconnect, timeout, or revoked turn returns failure; this does not claim

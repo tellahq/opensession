@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createSdkMcpServer, tool } from "./inprocess-mcp";
 import { deskTextNavigation } from "./desk-text-navigation";
 import { SHOW_IN_APP_TOOL, showInApp } from "./desk-voice-show";
+import { DESK_SHOW_TABS } from "../shared/desk-navigation";
 
 export function deskNavigationMcp(
   sessionId: string,
@@ -17,10 +18,11 @@ export function deskNavigationMcp(
       tools: [
         tool(
           SHOW_IN_APP_TOOL.name,
-          "Show a session or workspace in the browser that sent this Desk message. Use when the user asks to see, open, or go to it. Accepts an ID, title or distinctive part of the name, never a URL. Ask which one when names are ambiguous.",
+          "Show a session or workspace in the browser that sent this Desk message. Use when the user asks to see, open, or go to it. Accepts an ID, title or distinctive part of the name, never a URL. Set tab to land on a specific tab: review (the PR, its checks and comments), chat (the transcript), conversation, or video. Ask which one when names are ambiguous.",
           {
             session: z.string().max(256).optional(),
             workspace: z.string().max(256).optional(),
+            tab: z.enum(DESK_SHOW_TABS).optional(),
           },
           async (args) => ({
             content: [
