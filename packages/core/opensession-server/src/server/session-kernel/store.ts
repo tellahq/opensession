@@ -177,6 +177,10 @@ export interface DurableOutboxItem {
 const json = (value: unknown): string => JSON.stringify(value ?? null);
 const CHANGE_HISTORY_PER_SESSION = 5_000;
 const MAINTENANCE_CHANGE_DELETE_BATCH = 250;
+const READ_ONLY_QUARANTINE_COMMANDS: ReadonlySet<string> = new Set([
+  "storage:quarantine-read",
+  "runtime:scan",
+]);
 const digest = (text: string): string =>
   new Bun.CryptoHasher("sha256").update(text).digest("hex");
 const resultRecord = (value: unknown) => {
@@ -1791,6 +1795,21 @@ export class SessionKernelStore {
     reason?: string,
     verifiedCommittedOutboxSettlement = false,
   ): boolean {
+    // A transcript wake acknowledgement only advances a monotonic cursor in
+    // the transcript database. Its UPDATE is transactional and idempotent: an
+    // interrupted write either did not land, or a replay observes the cursor
+    // as already acknowledged. It never makes run/command/outbox state
+    // ambiguous, so unrelated live state must not strand the whole session.
+    if (commandKind === "transcript:ack_wake") return true;
+    // These operations only read quarantine, timer, or outbox rows. A failed
+    // read cannot leave an operation half-applied, so existing work must not
+    // prevent the session from being read again.
+    if (READ_ONLY_QUARANTINE_COMMANDS.has(commandKind)) return true;
+    // Older workers evaluated critical-settlement handling before recognizing
+    // SessionQuarantinedError. The rejected operation never executed, but the
+    // handler could persist its rejection as a second quarantine in the other
+    // store. This exact derived record carries no additional uncertainty.
+    if (reason?.startsWith(`Session ${sessionId} is quarantined:`)) return true;
     const recoverableSettlement =
       this.recoverableGatewaySettlementCommands(sessionId, commandKind) ??
       this.recoverableDeliverySettlementCommands(

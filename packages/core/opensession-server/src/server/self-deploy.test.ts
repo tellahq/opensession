@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readlinkSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
@@ -555,5 +557,76 @@ describe("deploy/release-checkout.sh", () => {
       Bun.spawnSync(["bash", script, "switch", sha], { env }).exitCode,
     ).toBe(0);
     expect(readlinkSync(join(state, "current"))).toBe(release);
+  });
+
+  test("garbage-collects old releases while preserving current, rollback, and recent pins", () => {
+    const source = join(dir, "source");
+    const state = join(dir, "state");
+    const fakeBun = join(dir, "bun");
+    mkdirSync(source);
+    mkdirSync(state);
+    writeFileSync(fakeBun, "#!/bin/sh\nexit 0\n");
+    chmodSync(fakeBun, 0o755);
+    for (const args of [
+      ["init", "-q"],
+      ["config", "user.email", "release-test@example.invalid"],
+      ["config", "user.name", "Release Test"],
+    ]) {
+      expect(Bun.spawnSync(["git", "-C", source, ...args]).exitCode).toBe(0);
+    }
+    const shas: string[] = [];
+    for (let index = 0; index < 4; index++) {
+      writeFileSync(join(source, "app.txt"), `version ${index}\n`);
+      expect(
+        Bun.spawnSync(["git", "-C", source, "add", "app.txt"]).exitCode,
+      ).toBe(0);
+      expect(
+        Bun.spawnSync([
+          "git",
+          "-C",
+          source,
+          "commit",
+          "-qm",
+          `version ${index}`,
+        ]).exitCode,
+      ).toBe(0);
+      shas.push(
+        new TextDecoder()
+          .decode(
+            Bun.spawnSync(["git", "-C", source, "rev-parse", "HEAD"]).stdout,
+          )
+          .trim(),
+      );
+    }
+    const script = resolve(
+      import.meta.dir,
+      "../../../../../deploy/release-checkout.sh",
+    );
+    const env = {
+      ...process.env,
+      OPENSESSION_DEPLOY_CHECKOUT: source,
+      OPENSESSION_DEPLOY_STATE: state,
+      OPENSESSION_DEPLOY_RELEASE_RETENTION: "1",
+      OPENSESSION_BUN_BIN: fakeBun,
+    };
+    for (const [index, sha] of shas.entries()) {
+      expect(
+        Bun.spawnSync(["bash", script, "prepare", sha], { env }).exitCode,
+      ).toBe(0);
+      const timestamp = new Date(1_700_000_000_000 + index * 10_000);
+      utimesSync(join(state, "releases", sha), timestamp, timestamp);
+    }
+    expect(
+      Bun.spawnSync(["bash", script, "switch", shas[2]], { env }).exitCode,
+    ).toBe(0);
+    writeFileSync(join(state, "last-known-good"), `${shas[1]}\n`);
+
+    expect(Bun.spawnSync(["bash", script, "gc", "10"], { env }).exitCode).toBe(
+      0,
+    );
+    expect(existsSync(join(state, "releases", shas[0]))).toBe(false);
+    expect(existsSync(join(state, "releases", shas[1]))).toBe(true);
+    expect(existsSync(join(state, "releases", shas[2]))).toBe(true);
+    expect(existsSync(join(state, "releases", shas[3]))).toBe(true);
   });
 });

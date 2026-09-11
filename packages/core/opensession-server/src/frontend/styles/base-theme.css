@@ -168,6 +168,19 @@
 	   under a diagram it has opened: the chart's ink is themed to the page, so
 	   on the viewer's near-black scrim a light-theme one would be unreadable. */
   --diagram-canvas: #0c0c10;
+  /* Categorical chart palette (lib/vega-chart.ts reads --chart-1..8 for the
+	   category range). Eight OKLCH hues at one lightness so no series shouts,
+	   lifted here to hold contrast on --diagram-canvas; light mode darkens the
+	   same hues below. Hex rather than oklch() so a downloaded SVG opens
+	   anywhere. */
+  --chart-1: #73bdff;
+  --chart-2: #ffa659;
+  --chart-3: #6fd087;
+  --chart-4: #f786be;
+  --chart-5: #60dbd4;
+  --chart-6: #bd9ff2;
+  --chart-7: #eed059;
+  --chart-8: #f47a7d;
   /* The session's right-hand panel: the fill of the column itself, and the
 	   plate its sections sit on. The column takes a hair off the page rather
 	   than a whole tier, the argument --sidebar-bg already makes at column
@@ -560,6 +573,15 @@ html[data-theme="light"] {
   --bg-active: #e0e0e0;
   /* See :root. */
   --diagram-canvas: #fbfbfc;
+  /* See :root. Same hues, taken down to hold on white. */
+  --chart-1: #0074ca;
+  --chart-2: #cc6600;
+  --chart-3: #2a904b;
+  --chart-4: #c34189;
+  --chart-5: #008c8d;
+  --chart-6: #7a53b4;
+  --chart-7: #c99f00;
+  --chart-8: #cf4040;
   /* See :root. Four units off white for the column, eleven for its plates:
 	   the page's own #f0f0f0 plate is right for one card on white and too heavy
 	   repeated six times down a 480px column. */
@@ -952,7 +974,8 @@ html[data-theme="light"] .markdown code {
    LIGHTER than the bubble — so a pasted snippet read as raised in light and
    sunk in dark. Translucent ink instead, the same trick as --hover: one value
    that lands a fixed step below any surface it's dropped on. */
-html[data-theme="light"] .markdown pre {
+html[data-theme="light"] .markdown pre,
+html[data-theme="light"] .markdown .md-code-well {
   background: rgba(0, 0, 0, 0.055);
   border-color: rgba(0, 0, 0, 0.1);
   color: #1f2328;

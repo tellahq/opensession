@@ -40,7 +40,7 @@ import {
   demoReplayScript,
 } from "./fixtures";
 
-/** ~9s per step × 14 steps ≈ 2 minutes per loop, plus the idle beat below. */
+/** ~9s per step × 15 steps ≈ 2 minutes per loop, plus the idle beat below. */
 const STEP_MS = 9_000;
 /** Pause on the finished transcript before the next loop resets it. */
 const LOOP_REST_MS = 20_000;

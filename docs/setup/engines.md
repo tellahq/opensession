@@ -161,7 +161,9 @@ Interactive auto-fallback is on by default. Its preferred model comes from
 Haiku-backed runs and derived one-shots instead cross providers to
 `gpt-5.6-luna` when the Claude pool is exhausted or unavailable. Override that
 with `OPENSESSION_HAIKU_FALLBACK_MODEL`, or set it to `none` to disable the
-Haiku-specific fallback.
+Haiku-specific fallback. Other one-shots fall over only when their caller
+names a cross-provider chain: the PR merge-risk scorer tries `gpt-6-astra`,
+then `gpt-5.6-sol`, when the review model's pool is dry.
 When the current model's whole account pool is unavailable, the runner tries
 configured fallback providers. Equal or stronger hops proceed automatically;
 an interactive downgrade asks first. A cross-provider hop starts a fresh Pi

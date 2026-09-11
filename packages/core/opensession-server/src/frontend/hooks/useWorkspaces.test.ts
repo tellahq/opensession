@@ -133,7 +133,9 @@ test("has a server-safe unloaded initial snapshot", () => {
 });
 
 test("delegates list ownership while keeping refresh identity explicit", () => {
-  expect(appSource).toContain("} = useWorkspaces();");
+  expect(appSource).toContain(
+    '} = useWorkspaces(route.view === "workspace" ? route.id : undefined);',
+  );
   expect(appSource).not.toContain("setWorkspaces");
   expect(appSource).not.toContain('"opensession:workspaces-changed"');
   expect(hookSource).toMatch(

@@ -42,9 +42,10 @@
  * Credential trust note: a SCOPED slice of `~/.opensession-claude-accounts.json`
  * (Claude OAuth pool) is uploaded into the sandbox per LAUNCH (not at
  * bootstrap): only the run's pinned account when spec.accountId is set, else
- * the shared pool accounts plus the run user's own personal accounts — never
- * another user's personal subscription (accountsForRemoteUpload,
- * claude-accounts.ts). That's deliberately narrower than the docker
+ * the shared pool accounts plus the account user's own personal accounts
+ * (the person who pressed send, remoteRunAccountPolicy) — never another
+ * user's personal subscription (accountsForRemoteUpload, claude-accounts.ts).
+ * That's deliberately narrower than the docker
  * provider's ro mount of the full store, because this is third-party compute;
  * a self-hoster who doesn't accept even the scoped upload runs these adapters
  * against their OWN Daytona/E2B deployment (both are self-hostable).
@@ -103,7 +104,7 @@ import {
 import { filterMcpServers } from "../../runner-shared";
 import { githubCredentialUser } from "../../auto-continue";
 import { GITHUB_RUN_AUTH_FILE_ENV, githubAuthEnv } from "../../github-auth";
-import { isMachineActor } from "../../session-actors";
+import { isMachineActor, providerAccountUser } from "../../session-actors";
 import {
   appendTranscriptEntries,
   recordEngineSessionOwner,
@@ -332,6 +333,33 @@ function remoteSettingsProviderIds(
       .map(remoteModelProviderId)
       .filter((id): id is string => !!id),
   );
+}
+
+/**
+ * Account identity and pin policy for one remote run. `accountUser` is the
+ * person whose personal subscriptions may be uploaded: the takeover identity
+ * when the trusted host set one, else the run user, else the session creator
+ * (providerAccountUser drops machine actors). An automation's own turn names
+ * no person, so it must run on its pinned account and never rotates off it.
+ * A person who took the session over pays with their own subscription,
+ * personal accounts first and the shared pool as backup, so their turn
+ * carries no pin. MCP and GitHub policy keep reading spec.user, so the
+ * automation's restrictions still apply to that turn.
+ */
+export function remoteRunAccountPolicy(
+  spec: Pick<
+    RunHostSpec,
+    "trustProfile" | "user" | "accountUser" | "mcpGrantUser"
+  >,
+): { accountUser: string | undefined; pinnedAutomationTurn: boolean } {
+  const accountUser = providerAccountUser(
+    spec.accountUser ?? spec.user,
+    spec.mcpGrantUser,
+  );
+  return {
+    accountUser,
+    pinnedAutomationTurn: spec.trustProfile === "automation" && !accountUser,
+  };
 }
 
 /** Strip host-only and unknown account fields before writing Claude tokens to a guest. */
@@ -2110,7 +2138,9 @@ function makeRemoteLauncher(
       const secureFiles: string[] = [];
       const secureDirectories: string[] = [];
       const automationProfile = spec.trustProfile === "automation";
-      if (automationProfile && !spec.accountId) {
+      const { accountUser, pinnedAutomationTurn } =
+        remoteRunAccountPolicy(spec);
+      if (pinnedAutomationTurn && !spec.accountId) {
         throw new Error(
           "automation sandbox runs require a pinned model account",
         );
@@ -2125,11 +2155,11 @@ function makeRemoteLauncher(
       );
       const accounts = usesAnthropic
         ? projectRemoteClaudeAccounts(
-            accountsForRemoteUpload(spec.user, spec.accountId),
+            accountsForRemoteUpload(accountUser, spec.accountId),
           )
         : [];
       if (
-        automationProfile &&
+        pinnedAutomationTurn &&
         usesAnthropic &&
         !accounts.some((account) => account.id === spec.accountId)
       ) {
@@ -2280,11 +2310,11 @@ function makeRemoteLauncher(
               spec.accountId
                 ? [spec.accountId]
                 : readModelProviderConfig()?.openaiAccounts,
-              spec.user,
+              accountUser,
             )
           : { accounts: [], seeds: [], skipped: [] };
       if (
-        automationProfile &&
+        pinnedAutomationTurn &&
         usesOpenai &&
         !openaiUpload.accounts.some((account) => account.id === spec.accountId)
       ) {
@@ -2352,13 +2382,13 @@ function makeRemoteLauncher(
       const usesXai = remoteRunNeedsXai(spec.model, spec.fallbackModel);
       const xaiUpload = usesXai
         ? await buildXaiRemoteUpload({
-            user: spec.user,
+            user: accountUser,
             accountId: spec.accountId,
             restrictIds: readModelProviderConfig()?.xaiAccounts,
           })
         : { accounts: [], skipped: [] };
       if (
-        automationProfile &&
+        pinnedAutomationTurn &&
         usesXai &&
         !xaiUpload.accounts.some((account) => account.id === spec.accountId)
       ) {
@@ -2562,6 +2592,7 @@ function recordForSpec(
     mode: spec.mode,
     mcpServers: spec.mcpServers,
     user: spec.user,
+    accountUser: spec.accountUser,
     deniedTools: spec.deniedTools,
     confirmTools: spec.confirmTools,
     aws: spec.aws,
@@ -2976,6 +3007,7 @@ export async function resumeRemoteSandboxRun(
           aws: run.aws,
           author: oldSpec?.author,
           user: run.user,
+          accountUser: run.accountUser,
           fallbackModel: run.fallbackModel,
           effort: run.effort,
           fastMode: run.fastMode,

@@ -1,6 +1,11 @@
 import type { RefObject } from "react";
 import { useEffect, useEffectEvent, useRef } from "react";
 import type { CommandMenuHandle } from "../components/CommandMenuHost";
+import {
+  deskPanelOwnsFocus,
+  focusDeskPanel,
+  openDeskPanel,
+} from "../lib/desk-panel";
 import { absoluteLink, copyToClipboard } from "../lib/share-link";
 import { matchesShortcut } from "../lib/shortcuts";
 
@@ -51,14 +56,18 @@ export function useAppGlobalHotkeys({
         return;
       }
       if (matchesShortcut(e, "desk")) {
-        // Summon/dismiss the Desk overlay. A keyboard summon grows from
-        // the center because there is no spatial trigger to connect it to.
+        // Summon the Desk, jump back into it, or dismiss it. On desktop the
+        // Desk is a floating panel that stays open while you work elsewhere,
+        // so an open Desk you are not in gets the caret rather than closing
+        // under you; a second press from inside it is the dismiss. A
+        // keyboard summon grows from the center because there is no spatial
+        // trigger to connect it to.
         e.preventDefault();
-        setDeskOverlay((desk) =>
-          desk.open
-            ? { ...desk, open: false }
-            : { open: true, origin: "center" },
-        );
+        const panel = openDeskPanel();
+        if (!panel) setDeskOverlay({ open: true, origin: "center" });
+        else if (deskPanelOwnsFocus(panel))
+          setDeskOverlay((desk) => ({ ...desk, open: false }));
+        else focusDeskPanel(panel);
         return;
       }
       if (matchesShortcut(e, "shortcuts-help")) {

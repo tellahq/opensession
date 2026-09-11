@@ -425,7 +425,18 @@ export function startSessionKernelActorWorker(): void {
       const infrastructure = isSessionKernelInfrastructureFailure(error);
       const critical =
         request.t === "reduce" && isCriticalSettlementCommand(request.command);
-      if (infrastructure || critical) {
+      if (error instanceof SessionQuarantinedError) {
+        // A rejected mutation did not execute. Preserve and report the
+        // original quarantine instead of treating a critical settlement's
+        // rejection as a second ambiguous write in the other store.
+        responseCode = error.code;
+        responseSessionId = error.sessionId;
+      } else if (infrastructure || critical) {
+        const replaySafeWakeAck =
+          infrastructure &&
+          request.t === "reduce" &&
+          request.command.kind === "transcript" &&
+          request.command.request.op === "ack_wake";
         if (
           !sessionId ||
           isSessionKernelCentralStoreFailure(error) ||
@@ -433,6 +444,11 @@ export function startSessionKernelActorWorker(): void {
         ) {
           failStop = true;
           responseCode = "actor_fatal";
+        } else if (replaySafeWakeAck) {
+          // This monotonic acknowledgement is safe to retry after transient
+          // storage pressure. Quarantining would incorrectly fence an active
+          // run even though no lifecycle state became ambiguous.
+          responseCode = "retryable";
         } else {
           try {
             const commandKind =
@@ -452,9 +468,6 @@ export function startSessionKernelActorWorker(): void {
             responseCode = "actor_fatal";
           }
         }
-      } else if (error instanceof SessionQuarantinedError) {
-        responseCode = error.code;
-        responseSessionId = error.sessionId;
       } else if (
         error &&
         typeof error === "object" &&

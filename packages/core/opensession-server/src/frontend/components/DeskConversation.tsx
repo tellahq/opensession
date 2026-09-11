@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { ProtocolClientMessage, TranscriptEntry } from "../lib/types";
+import { DeskTextNavigationClient } from "../lib/desk-text-navigation-client";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { getCurrentUser } from "./UserPicker";
 import {
@@ -18,6 +19,7 @@ import {
 import { splitAttachments, type FileAttachment } from "../lib/images";
 import { Composer } from "./Composer";
 import { mergeTranscriptEntries } from "../lib/transcript-state";
+import { sessionIdFromTranscriptClick } from "../lib/transcript-session-click";
 import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import { getLiveTypingPref } from "../lib/live-typing-pref";
@@ -33,6 +35,8 @@ import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
 import { foregroundFileComposerOwns, hasDraggedFiles } from "../lib/file-drag";
 import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
 import { errorMessage } from "../lib/error-message";
+import type { VoiceCaptionStore } from "../lib/voice-captions";
+import { VoiceCaptions } from "./VoiceCaptions";
 
 interface DeskConversationProps {
   sessionId: string;
@@ -46,9 +50,15 @@ interface DeskConversationProps {
   model?: string;
   effort?: string;
   hideBefore?: string;
-  /** While a voice call is live, typed messages go into it instead of
-   *  starting a text run. Return false to fall through to the normal send. */
-  voiceSend?: (text: string) => boolean;
+  /** Present while a voice call is up: typed messages go into it instead of
+   * starting a text run. Resolves true once the call has taken the text;
+   * false means it did not, and the draft must survive. */
+  voiceSend?: (text: string) => Promise<boolean>;
+  /** The voice call control, rendered in the composer beside dictation. */
+  voiceCall?: { active: boolean; status?: string; onToggle: () => void };
+  /** Live captions of the voice call, shown under the transcript until the
+   * server's mirrored row for each utterance lands here and replaces them. */
+  voiceCaptions?: VoiceCaptionStore;
   /** Drill into a session a tool call spawned (the Desk delegates constantly).
    *  The overlay has no side pane, so this opens it in the full viewer. */
   onOpenSubagent?: (sessionId: string) => void;
@@ -72,16 +82,27 @@ export function DeskConversation({
   effort: sessionEffort,
   hideBefore,
   voiceSend,
+  voiceCall,
+  voiceCaptions,
   onOpenSubagent,
   suggestions,
 }: DeskConversationProps) {
   const { connected, send, setTyping, addHandler } =
     useWebSocket(presenceActive);
+  const textNavigationRef = useRef<DeskTextNavigationClient | null>(null);
+  useEffect(() => {
+    const navigation = new DeskTextNavigationClient(sessionId);
+    textNavigationRef.current = navigation;
+    return () => navigation.dispose();
+  }, [sessionId]);
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [hasLiveText, setHasLiveText] = useState(false);
+  const [hasVoiceCaptions, setHasVoiceCaptions] = useState(
+    () => voiceCaptions?.hasCaptions() ?? false,
+  );
   const [dictationHidesSuggestions, setDictationHidesSuggestions] =
     useState(false);
   // Attachments staged for the next send. The Composer stages files to disk
@@ -155,6 +176,13 @@ export function DeskConversation({
   }
   const addDroppedAttachments = useEffectEvent((picked: FileList | File[]) => {
     void addDeskAttachments(picked);
+  });
+  // A mirrored voice row landing takes its caption down in the same render,
+  // so the words never show twice. Not a dependency of the watch effect: the
+  // store is stable for the overlay's lifetime.
+  const landVoiceCaptions = useEffectEvent((landed: TranscriptEntry[]) => {
+    if (!voiceCaptions) return;
+    for (const entry of landed) voiceCaptions.land(entry);
   });
 
   function resetFileDrag() {
@@ -236,7 +264,11 @@ export function DeskConversation({
     ? entries.filter((e) => !e.timestamp || e.timestamp > hideBefore)
     : entries;
   const hasContent =
-    visibleEntries.length > 0 || hasLiveText || isRunning || !!pending;
+    visibleEntries.length > 0 ||
+    hasLiveText ||
+    hasVoiceCaptions ||
+    isRunning ||
+    !!pending;
 
   useEffect(() => {
     fetchModels()
@@ -276,8 +308,10 @@ export function DeskConversation({
       switch (msg.type) {
         case "transcript_init":
           setEntries(msg.entries);
+          landVoiceCaptions(msg.entries);
           break;
         case "transcript_history":
+          landVoiceCaptions(msg.entries);
           setEntries((prev) =>
             mergeTranscriptEntries(prev, msg.entries, msg.v2 === true),
           );
@@ -286,6 +320,7 @@ export function DeskConversation({
           setEntries((prev) =>
             mergeTranscriptEntries(prev, msg.entries, msg.v2 === true),
           );
+          landVoiceCaptions(msg.entries);
           if (msg.entries.some((e) => e.type === "user")) setPending(null);
           const landed = msg.entries.filter(
             (e) => e.type === "assistant" && e.content,
@@ -375,6 +410,13 @@ export function DeskConversation({
     });
     return unsubscribe;
   }, [liveTurnStore]);
+  useEffect(() => {
+    if (!voiceCaptions) return;
+    setHasVoiceCaptions(voiceCaptions.hasCaptions());
+    return voiceCaptions.subscribe(() => {
+      setHasVoiceCaptions(voiceCaptions.hasCaptions());
+    });
+  }, [voiceCaptions]);
   const shouldMaintainEnd = () => followRef.current;
   const relayoutLive = () => {
     const el = bodyRef.current;
@@ -398,11 +440,12 @@ export function DeskConversation({
 
   // Returns true when the message was consumed, so the (uncontrolled) Composer
   // clears its draft; false keeps it for a retry — same contract as the
-  // session view.
+  // session view. The voice path answers asynchronously: the draft clears
+  // only once the call has acknowledged the text.
   function handleSend(
     raw: string,
     opts?: { steer?: boolean; pastedTexts?: string[] },
-  ): boolean {
+  ): boolean | Promise<boolean> {
     const content = raw.trim();
     const pastedTexts = opts?.pastedTexts ?? [];
     if (!connected) return false;
@@ -432,11 +475,33 @@ export function DeskConversation({
       ]);
       return true;
     }
-    // Live voice call: inject the typed message into it (the call mirrors its
+    // Live voice call: a text-only message goes into it (the call mirrors its
     // transcript back, so no optimistic bubble — the entry lands via append).
-    if (content && voiceSend?.(content)) {
-      followRef.current = true;
-      return true;
+    // Attachments can't ride a call, so they take the ordinary path below.
+    if (
+      voiceSend &&
+      content &&
+      images.length === 0 &&
+      files.length === 0 &&
+      pastedTexts.length === 0
+    ) {
+      return voiceSend(content).then((taken) => {
+        if (taken) {
+          followRef.current = true;
+          return true;
+        }
+        setEntries((prev) => [
+          ...prev,
+          {
+            id: randomUUID(),
+            type: "system",
+            content:
+              "The voice call didn't take that message. Try again, or end the call to send it as text.",
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+        return false;
+      });
     }
     // Prefer the staged disk path (HTTP upload); fall back to inline dataUrl.
     const filePayload = files.map((f) =>
@@ -457,12 +522,18 @@ export function DeskConversation({
     if (images.length) message.images = images;
     if (files.length) message.files = filePayload;
     if (pastedTexts.length) message.pastedTexts = pastedTexts;
-    send(message);
-    setPending(content);
-    setImages([]);
-    setFiles([]);
-    followRef.current = true;
-    return true;
+    const requestId = randomUUID();
+    message.requestId = requestId;
+    const navigation = textNavigationRef.current;
+    return (navigation?.prepare(requestId) ?? Promise.resolve()).then(() => {
+      if (navigation?.disposed) return false;
+      send(message);
+      setPending(content);
+      setImages([]);
+      setFiles([]);
+      followRef.current = true;
+      return true;
+    });
   }
 
   // Model and effort are settings of the Desk session, so the switch routes
@@ -511,6 +582,21 @@ export function DeskConversation({
         )}
         ref={bodyRef}
         onScroll={onScroll}
+        // Session chips and the tool row's spawned-session pill carry only a
+        // data-session-id; the pane they scroll in opens them, as the session
+        // viewer's does (handleMessagesClick). The Desk is mostly delegated
+        // work, so without this its transcript was full of pills that did
+        // nothing. Same destination as a spawned worker: the full viewer.
+        onClick={
+          onOpenSubagent
+            ? (e) => {
+                const id = sessionIdFromTranscriptClick(e);
+                if (!id) return;
+                e.preventDefault();
+                onOpenSubagent(id);
+              }
+            : undefined
+        }
       >
         {!hasContent ? (
           <>
@@ -542,6 +628,10 @@ export function DeskConversation({
                 connected && !isRunning ? continueAfterFailure : undefined
               }
             />
+            {/* What the voice call is saying, ahead of the mirrored rows. */}
+            {voiceCaptions && (
+              <VoiceCaptions store={voiceCaptions} onLayout={relayoutLive} />
+            )}
             {/* Optimistic echo of the just-sent message — rendered as a normal
 						    sent bubble (not the dimmed "sending" look) so it reads as
 						    delivered the instant Enter lands; reconciles away when the
@@ -609,6 +699,7 @@ export function DeskConversation({
             onDictationActive={handleDictationActive}
             config={{
               draftKey: `desk:${sessionId}`,
+              call: voiceCall,
               attachmentShortcutActive: presenceActive,
               placeholder: connected
                 ? placeholder || "Ask your Desk…"
@@ -624,7 +715,13 @@ export function DeskConversation({
               models,
               defaultModel,
               model,
-              modelTitle: "Model and reasoning effort for your Desk",
+              // The pill sets the text Desk's model. During a call typed
+              // text goes into the call, whose backend is an instance
+              // setting, so the pill has nothing to apply to until it ends.
+              modelPillDisabled: voiceCall?.active,
+              modelTitle: voiceCall?.active
+                ? "Applies to typed turns. The voice call uses its own backend (Settings → Desk voice)."
+                : "Model and reasoning effort for your Desk",
               effort,
               autoFocus,
               textareaRef,
@@ -641,6 +738,7 @@ export function DeskConversation({
               mentionFetch: (query) => fetchFileMentions(query, sessionId),
               paletteFetch: (query) =>
                 fetchMentionSuggestions(query, sessionId, getCurrentUser()),
+              onToggleCall: voiceCall?.onToggle,
             }}
           />
           <FullPageFileDropOverlay active={fileDragActive} />

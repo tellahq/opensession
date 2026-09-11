@@ -194,6 +194,14 @@ describe("weeklyRemainingRows", () => {
       ["Work · Fable", 55, "ok"],
       ["Main", 0, "low"],
     ]);
+    // The menu draws the scope as its own chip beside the bare name, so a
+    // truncated "Michael-Tel…" cannot swallow the "Fable" that says which
+    // budget the row is.
+    expect(rows.map((r) => [r.name, r.scope])).toEqual([
+      ["Work", undefined],
+      ["Work", "Fable"],
+      ["Main", undefined],
+    ]);
     expect(rows[0].day).toBe(
       new Date(inHours(70)).toLocaleDateString([], { weekday: "short" }),
     );

@@ -1,0 +1,94 @@
+/* ─────────────────────────────────────────────────────────────
+   File trees: a ```tree fence rendered by lib/tree-block.ts.
+
+   The same well a diagram or chart sits in (base-markdown.css), with one
+   row per node: a caret for a directory, a glyph, the name, an optional
+   dim note. Rows are real buttons, so they take focus and the keyboard
+   for free. A file row that the session can open (data-openable, set by
+   the viewer) takes the hover wash and pointer; one it cannot stays a
+   focusable label. Built as DOM inside injected markdown, which is why
+   these live here rather than as utilities on JSX.
+   ───────────────────────────────────────────────────────────── */
+.md-tree {
+  margin: 2px 0 8px;
+  padding: 6px 4px;
+  background: var(--diagram-canvas);
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+  overflow-x: auto;
+}
+.md-tree-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.md-tree-list li {
+  margin: 0;
+  padding: 0;
+}
+.md-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 28px;
+  padding: 2px 8px 2px calc(6px + var(--md-tree-depth, 0) * 18px);
+  border: 0;
+  border-radius: calc(7px * var(--rf));
+  corner-shape: var(--cs);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--type-label);
+  line-height: 20px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: default;
+}
+.md-tree-row[data-tree-dir] {
+  color: var(--text);
+  font-weight: 500;
+  cursor: pointer;
+}
+.md-tree-row[data-openable] {
+  color: var(--text);
+  cursor: pointer;
+}
+.md-tree-row[data-tree-dir]:hover,
+.md-tree-row[data-openable]:hover {
+  background: var(--hover);
+}
+.md-tree-row:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: -2px;
+}
+.md-tree-caret,
+.md-tree-icon {
+  display: inline-flex;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+}
+.md-tree-caret > svg {
+  transition: transform 120ms ease;
+}
+.md-tree-row[aria-expanded="true"] .md-tree-caret > svg {
+  transform: rotate(90deg);
+}
+.md-tree-name {
+  min-width: 0;
+}
+.md-tree-note {
+  margin-left: 6px;
+  color: var(--text-faint);
+  font-weight: 400;
+}
+@media (max-width: 720px) {
+  .md-tree-row {
+    min-height: 44px;
+  }
+}

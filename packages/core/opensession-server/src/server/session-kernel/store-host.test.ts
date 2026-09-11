@@ -566,7 +566,7 @@ describe("per-session session kernel storage", () => {
     host.central.quarantineSession(
       "repair-session",
       "disk I/O error",
-      "runtime:scan",
+      "store:setRunState",
     );
 
     expect(host.quarantinedSession("repair-session")).toMatchObject({
@@ -596,6 +596,129 @@ describe("per-session session kernel storage", () => {
       true,
     );
     expect(host.quarantinedSession("settled-repair-session")).toBeUndefined();
+    host.close();
+  });
+
+  test("releases a replay-safe transcript wake acknowledgement during a live run", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "wake-ack-repair-session";
+    host.call("setRunState", [
+      { sessionId, state: "running", event: "prompt" },
+    ]);
+    host.quarantineSession(
+      sessionId,
+      "database or disk is full",
+      "transcript:ack_wake",
+    );
+
+    expect(host.quarantinedSession(sessionId)).toMatchObject({
+      repairable: true,
+    });
+    expect(host.call("releaseQuarantine", [sessionId])).toBe(true);
+    expect(host.quarantinedSession(sessionId)).toBeUndefined();
+    expect(host.storeForSession(sessionId).runState(sessionId).state).toBe(
+      "running",
+    );
+    host.close();
+  });
+
+  test("releases a quarantine caused by a read-only quarantine check", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "quarantine-read-repair-session";
+    host.call("setRunState", [
+      {
+        sessionId,
+        state: "running",
+        event: "prompt",
+        currentRunId: "live-run",
+      },
+    ]);
+    host.central.quarantineSession(
+      sessionId,
+      "database is locked",
+      "storage:quarantine-read",
+    );
+
+    expect(host.quarantinedSession(sessionId)).toMatchObject({
+      repairable: true,
+    });
+    expect(host.call("releaseQuarantine", [sessionId])).toBe(true);
+    expect(host.quarantinedSession(sessionId)).toBeUndefined();
+    expect(host.storeForSession(sessionId).runState(sessionId)).toMatchObject({
+      state: "running",
+      currentRunId: "live-run",
+    });
+    host.close();
+  });
+
+  test("releases a read-only runtime scan without discarding scheduled timers", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "runtime-scan-repair-session";
+    host.call("setRunState", [
+      {
+        sessionId,
+        state: "running",
+        event: "prompt",
+        currentRunId: "live-run",
+      },
+    ]);
+    host.call("scheduleTimer", [
+      {
+        sessionId,
+        timerId: "agent-wait",
+        kind: "agent_wait",
+        dueAt: Date.now() - 1,
+        payload: null,
+      },
+    ]);
+    host.central.quarantineSession(
+      sessionId,
+      "database is locked",
+      "runtime:scan",
+    );
+
+    expect(host.quarantinedSession(sessionId)).toMatchObject({
+      repairable: true,
+    });
+    expect(host.call("releaseQuarantine", [sessionId])).toBe(true);
+    expect(host.quarantinedSession(sessionId)).toBeUndefined();
+    expect(
+      host.storeForSession(sessionId).timer(sessionId, "agent-wait"),
+    ).toMatchObject({ kind: "agent_wait" });
+    expect(host.storeForSession(sessionId).runState(sessionId)).toMatchObject({
+      state: "running",
+      currentRunId: "live-run",
+    });
+    host.close();
+  });
+
+  test("releases a derived quarantine rejection after its original quarantine", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "layered-quarantine-session";
+    host.call("setRunState", [
+      { sessionId, state: "running", event: "prompt" },
+    ]);
+    host.central.quarantineSession(
+      sessionId,
+      "database or disk is full",
+      "transcript:ack_wake",
+    );
+    host.quarantineSession(
+      sessionId,
+      `Session ${sessionId} is quarantined: database or disk is full`,
+      "delivery:fail_dispatch",
+    );
+
+    expect(host.quarantinedSession(sessionId)).toMatchObject({
+      commandKind: "transcript:ack_wake",
+      repairable: true,
+    });
+    expect(host.call("releaseQuarantine", [sessionId])).toBe(true);
+    expect(host.quarantinedSession(sessionId)).toBeUndefined();
     host.close();
   });
 

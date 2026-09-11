@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   allClients,
   broadcastToSession,
+  broadcastToUser,
   computeGlobalPresence,
   computeTypingUsers,
   joinSession,
@@ -302,5 +303,43 @@ describe("typing presence", () => {
       sessionId,
       users: [],
     });
+  });
+});
+
+describe("broadcastToUser", () => {
+  const socket = (data: Partial<WSClientData>) => {
+    const received: unknown[] = [];
+    const ws = {
+      data: { watchingSessionId: null, user: null, ...data },
+      send(payload: string) {
+        received.push(JSON.parse(payload));
+      },
+    };
+    allClients.add(ws as never);
+    sockets.add(ws);
+    return received;
+  };
+
+  test("reaches every socket of that person and nobody else", () => {
+    const signedIn = socket({ user: "michiel", authUser: "Michiel" });
+    const picker = socket({ user: "Michiel" });
+    const claimsOtherwise = socket({ user: "Michiel", authUser: "Louise" });
+    const teammate = socket({ user: "Louise" });
+    const anonymous = socket({});
+
+    broadcastToUser("Michiel", { type: "user_map_changed", map: "lanes" });
+
+    const frame = { type: "user_map_changed", map: "lanes" };
+    expect(signedIn).toEqual([frame]);
+    expect(picker).toEqual([frame]);
+    expect(claimsOtherwise).toEqual([]);
+    expect(teammate).toEqual([]);
+    expect(anonymous).toEqual([]);
+  });
+
+  test("an empty name reaches nobody", () => {
+    const received = socket({ user: "" });
+    broadcastToUser("  ", { type: "user_map_changed", map: "hides" });
+    expect(received).toEqual([]);
   });
 });

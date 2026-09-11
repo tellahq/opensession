@@ -144,7 +144,12 @@ export function classifySidebarPlacement(
   if (context.snoozed) return "snoozed";
 
   const me = context.currentUser.toLowerCase();
+  // "Add to sidebar" says this is your work now. A GitHub ask is usually a
+  // team ask expanded to every member, so it does not outrank that claim;
+  // without this, keeping a teammate's PR left it under Needs review. A
+  // teammate's own handoff (reviewRequest) still takes its band below.
   const githubAsksMe =
+    !context.claimed &&
     wsPrRequestsReviewFrom(row, personKey(context.currentUser)) &&
     !rowIsOwnWork(row, context.currentUser);
   const inReviewScope = reviewRowMatchesPersonFilter(

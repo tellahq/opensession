@@ -57,6 +57,7 @@ import { createRunnersMcpServer } from "./runners-mcp";
 import { createScheduleMcpServer } from "./schedule-mcp";
 import { createPortalsMcpServer } from "./portals-mcp";
 import { createPullRequestMcpServer } from "./pull-request-mcp";
+import { createChartsMcpServer } from "./charts-mcp";
 import { createDesktopMcpServer } from "./desktop-mcp";
 import { createSelfDeployMcpServer } from "./self-deploy";
 import { createWebMcpServer } from "./web-mcp";
@@ -273,6 +274,7 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
         ],
         linkPr: () => unused("linkPr"),
         labelPr: () => unused("labelPr"),
+        checkPrReady: () => unused("checkPrReady"),
       }),
   },
   {
@@ -393,6 +395,19 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     condition:
       "Needs a session id. Works in read-only Ask mode — assets land outside the checkout.",
     build: () => createAssetsMcpServer({ sessionId: SESSION_ID }),
+  },
+  {
+    name: "opensession-charts",
+    summary: INTERNAL_MCP_CAPABILITIES["opensession-charts"].summary,
+    source: "packages/core/opensession-server/src/server/charts-mcp.ts",
+    wiring: [
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+      "packages/core/opensession-server/src/server/automations.ts",
+    ],
+    runClasses: ["interactive", "automation"],
+    condition:
+      "Needs a session id. Held to the automation bar: its only write is offloaded chart data into the calling session's own assets.",
+    build: () => createChartsMcpServer({ sessionId: SESSION_ID }),
   },
   {
     name: "opensession-pull-requests",

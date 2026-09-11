@@ -36,6 +36,7 @@
     "effect": "4.0.0-rc.112",
     "emoji-datasource": "^16.0.0",
     "ghostty-web": "^0.4.0",
+    "katex": "0.16.47",
     "marked": "^15.0.0",
     "mermaid": "^11.16.1",
     "modal": "0.9.0",
@@ -48,6 +49,10 @@
     "swr": "^2.3.6",
     "tailwind-merge": "^3.6.0",
     "typescript": "^5.7.0",
+    "vega": "^6.4.0",
+    "vega-interpreter": "^2.3.2",
+    "vega-lite": "^6.4.3",
+    "vega-tooltip": "^1.1.0",
     "web-push": "^3.6.7",
     "zod": "^4.3.6"
   },

@@ -49,7 +49,7 @@ touches an in-process tool:
 | [`opensession-humans`](#opensession-humans) | 3 | interactive, Slack loop, goal wake | Interactive runs need a session id (the answer routes back to it). |
 | [`opensession-keychain`](#opensession-keychain) | 3 | interactive | Needs a session id. |
 | [`opensession-publish`](#opensession-publish) | 4 | interactive | Needs a session id. |
-| [`opensession-repos`](#opensession-repos) | 5 | interactive | Needs a session id. |
+| [`opensession-repos`](#opensession-repos) | 6 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 9 | interactive | Needs a session id. |
 | [`opensession-web`](#opensession-web) | 3 | interactive, goal wake | Needs a session id. |
 | [`opensession-portals`](#opensession-portals) | 7 | interactive | Needs a session id. |
@@ -59,6 +59,7 @@ touches an in-process tool:
 | [`opensession-ask`](#opensession-ask) | 1 | interactive, Slack loop | Needs a session id. |
 | [`opensession-workflows`](#opensession-workflows) | 8 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
 | [`opensession-assets`](#opensession-assets) | 4 | interactive | Needs a session id. Works in read-only Ask mode — assets land outside the checkout. |
+| [`opensession-charts`](#opensession-charts) | 1 | interactive, automation | Needs a session id. Held to the automation bar: its only write is offloaded chart data into the calling session's own assets. |
 | [`opensession-pull-requests`](#opensession-pull-requests) | 3 | interactive | Only on a turn a connected person started: never a review handoff, a worker report, or an automation. |
 | [`opensession-todos`](#opensession-todos) | 5 | interactive | Needs a session id. |
 | [`opensession-schedule`](#opensession-schedule) | 3 | interactive | Needs a session id. |
@@ -71,7 +72,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-30 servers, 134 tools.
+31 servers, 136 tools.
 
 ## opensession-sessions
 
@@ -495,7 +496,7 @@ Stop a published app. It stays registered with its versions intact and can be st
 
 ## opensession-repos
 
-Attach or switch repos, link a PR to this session, and label PRs in any registered repo.
+Attach or switch repos, link a PR to this session, label PRs, and check whether a PR is ready to merge.
 
 - **Source** `packages/core/opensession-server/src/agents/slack/repos-tools.ts`
 - **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
@@ -531,6 +532,12 @@ Link a pull request to this session so it shows in the session's Review tab besi
 `mcp__opensession-repos__label_pull_request` · input: `url` (string), `repo` (string), `number` (number), `add` (string[]), `remove` (string[])
 
 Add or remove labels on a pull request in any registered GitHub repo, including one this session does not have checked out. Labels are applied as the bot: the gateway mints a token for that repo, so this works where `gh` in your shell cannot see the repo. Pass the PR URL, or a repo id and number.
+
+### `check_pr_ready`
+
+`mcp__opensession-repos__check_pr_ready` · input: `url` (string), `repo` (string), `number` (number), `session` (string)
+
+Is a pull request ready to merge? One deterministic verdict from live GitHub state: ready or not, and every blocker: open/merged/closed, draft, merge conflicts, each check's latest run by name (failing, pending, passing), the review decision and who gave it, and the base branch's rules. The first line is a sentence to say as-is; the JSON block at the end is the same verdict for branching on. Pass a PR URL, a repo id and number, or a session id to check that session's PR (defaults to this session's own PR). Read-only, runs as the bot, works for any registered repo. Use this instead of piecing readiness together from transcripts or gh output.
 
 ## opensession-memory
 
@@ -872,6 +879,21 @@ Read back a text asset from this session's asset storage (capped at 256 KB).
 `mcp__opensession-assets__delete_asset` · input: `path` (string, required)
 
 Delete a file or virtual folder from this session's asset storage.
+
+## opensession-charts
+
+Validate a Vega-Lite spec and get the ```vega-lite fence that renders as an interactive chart.
+
+- **Source** `packages/core/opensession-server/src/server/charts-mcp.ts`
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`, `packages/core/opensession-server/src/server/automations.ts`
+- **Runs** interactive, automation
+- **Condition** Needs a session id. Held to the automation bar: its only write is offloaded chart data into the calling session's own assets.
+
+### `make_chart`
+
+`mcp__opensession-charts__make_chart` · input: `spec` (object | string, required), `data` (any[]), `title` (string), `name` (string)
+
+Turn a Vega-Lite spec into the ```vega-lite fence that renders as an interactive chart (tooltips, zoom, brushing) in this session. Compiles the spec with the same library the client uses and returns errors with their paths instead of a silent code block; large inline data is moved to a session asset the chart loads from. Paste the returned fence verbatim into your reply, on its own lines. Keep specs small and readable: aggregate first, use `data.values` (or the data argument) rather than external URLs, and omit width so the chart fills the column.
 
 ## opensession-pull-requests
 

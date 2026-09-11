@@ -172,22 +172,17 @@ struct ComposerMentionPalette: View {
             .sorted { $0.items[0].categoryOrder < $1.items[0].categoryOrder }
     }
 
+    /// Teammates by how well they match, typos forgiven, the same way the
+    /// server ranks the tools, workspaces and sessions it sends back.
     private func people(matching query: String) -> [FileMention] {
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let current = ServerConfig.shared.userName.lowercased()
-        return TeamDirectory.shared.names
-            .filter { name in
-                normalized.isEmpty
-                    || name.lowercased().contains(normalized)
-                    || TeamDirectory.shared.fullName(for: name).lowercased().contains(normalized)
-            }
-            .sorted { left, right in
-                let leftIsCurrent = left.lowercased() == current
-                let rightIsCurrent = right.lowercased() == current
-                if leftIsCurrent != rightIsCurrent { return leftIsCurrent }
-                return false
-            }
-            .map { name in
+        let directory = TeamDirectory.shared
+        return MentionRanking.people(
+            directory.names,
+            query: query,
+            current: ServerConfig.shared.userName,
+            fullName: directory.fullName(for:)
+        )
+        .map { name in
                 FileMention(
                     display: name,
                     insert: name,

@@ -1,0 +1,232 @@
+/* ── JSON tree (```json, lib/json-tree-block.ts) ─────────────────
+   The block wears the code well (`.md-code-well`, base-markdown.css) and
+   stays inside the copy control's wrapper, so the controls sit over its
+   header at the same top-right they take on a fence.
+
+   The value inks are shiki's own for JSON, github-dark-default and
+   github-light-default (`support.type.property-name.json`, `string`,
+   `constant`), pinned by json-tree-block.test.ts: a folded tree and the raw
+   text under the Raw toggle have to be the same colours or the toggle reads
+   as a theme change. They are the one place these hexes are written. */
+:root {
+  --json-key: #7ee787;
+  --json-string: #a5d6ff;
+  --json-constant: #79c0ff;
+}
+html[data-theme="light"] {
+  --json-key: #116329;
+  --json-string: #0a3069;
+  --json-constant: #0550ae;
+}
+
+.markdown .md-json-tree {
+  padding: 0;
+  white-space: normal;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 0.9em;
+  line-height: 1.55;
+}
+/* The fence's own <pre> travels inside the block for the copy control and
+   the Raw view; while the tree shows it is out of layout entirely. Once
+   shown it is the block's content, not a second well inside the first. */
+.markdown .md-json-tree > .md-json-raw {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: inherit;
+}
+.md-json-tree[data-view="tree"] > .md-json-raw,
+.md-json-tree[data-view="raw"] > .md-json-body {
+  display: none;
+}
+/* The wrapper's wrap toggle reaches the nested <pre> and long string values. */
+.md-code-wrap[data-wrapped="false"] .md-json-raw,
+.md-code-wrap[data-wrapped="false"] .md-json-string {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+/* Header: the view toggle on the left, room for the wrapper's copy and
+   settings controls on the right (their width, base-markdown.css). */
+.md-json-head {
+  --code-pad-right: 80px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px;
+  padding-right: var(--code-pad-right);
+  border-bottom: 1px solid var(--code-well-line);
+  font-family: var(--sans);
+  font-size: var(--type-meta);
+  color: var(--text-faint);
+}
+.md-json-views {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: calc(9px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--hover);
+}
+.md-json-view {
+  min-height: 24px;
+  padding: 2px 9px;
+  border: 0;
+  border-radius: calc(7px * var(--rf));
+  corner-shape: var(--cs);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--dur-micro) var(--ease),
+    color var(--dur-micro) var(--ease);
+}
+.md-json-view:hover {
+  color: var(--text);
+}
+.md-json-view[aria-pressed="true"] {
+  background: var(--segmented-knob-surface);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--segmented-knob-edge);
+}
+.md-json-view:focus-visible,
+.md-json-caret:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.md-json-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The tree. Every row leaves a caret slot on the left so keys line up
+   whether or not the row folds; nesting indents by a fixed step. */
+.md-json-body {
+  padding: 8px 12px 10px;
+  overflow-x: auto;
+}
+.markdown .md-json-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.markdown .md-json-list .md-json-list {
+  padding-left: 16px;
+}
+.markdown .md-json-node {
+  margin: 0;
+}
+.md-json-row {
+  position: relative;
+  min-height: 22px;
+  padding-left: 22px;
+  overflow-wrap: anywhere;
+}
+.md-json-end {
+  padding-left: 22px;
+}
+.md-json-caret {
+  position: absolute;
+  top: 0;
+  left: -1px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: calc(6px * var(--rf));
+  corner-shape: var(--cs);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+/* Hover only where there is one: on touch a tapped row would keep the
+   wash after the finger lifts. */
+@media (hover: hover) {
+  .md-json-caret:hover {
+    background: var(--hover);
+    color: var(--text);
+  }
+}
+.md-json-caret svg {
+  transition: rotate var(--dur-micro) var(--ease);
+}
+.md-json-node[data-open="true"] > .md-json-row > .md-json-caret svg {
+  rotate: 90deg;
+}
+.md-json-node[data-open="false"] > .md-json-list,
+.md-json-node[data-open="false"] > .md-json-end,
+.md-json-node[data-open="true"] > .md-json-row > .md-json-count,
+.md-json-node[data-open="true"] > .md-json-row > .md-json-close {
+  display: none;
+}
+.md-json-count {
+  margin: 0 6px;
+  font-family: var(--sans);
+  font-size: var(--type-meta);
+  color: var(--text-faint);
+}
+.md-json-key {
+  color: var(--json-key);
+}
+.md-json-index {
+  color: var(--text-faint);
+}
+/* `pre` keeps the space after the colon when the row is a flex line on
+   touch, where each span is its own item and trailing space would drop. */
+.md-json-punct {
+  color: var(--text-dim);
+  white-space: pre;
+}
+.md-json-string {
+  color: var(--json-string);
+  white-space: pre-wrap;
+}
+.md-json-number,
+.md-json-keyword {
+  color: var(--json-constant);
+}
+
+/* Touch: the wrapper's controls grow to 44px (base-markdown.css), so the
+   header makes room for them; the view buttons take the same height; and
+   a folding row is a 44px target along its whole width, not only at the
+   caret. A leaf row is not a target, so it only opens up enough to read. */
+@media (hover: none) and (pointer: coarse) {
+  .md-json-head {
+    --code-pad-right: 104px;
+    min-height: 52px;
+  }
+  .md-json-view {
+    min-height: 40px;
+    padding: 2px 12px;
+  }
+  .md-json-row {
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .md-json-node[data-open] > .md-json-row {
+    min-height: 44px;
+  }
+  .md-json-end {
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+  }
+  .md-json-node[data-open] > .md-json-row > .md-json-caret {
+    inset: 0;
+    width: auto;
+    height: auto;
+    justify-items: start;
+    padding-left: 1px;
+  }
+}

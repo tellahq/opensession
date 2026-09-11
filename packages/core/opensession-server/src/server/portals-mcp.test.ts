@@ -3,6 +3,7 @@ import { createMcpRuntime, type McpRuntime } from "./mcp-runtime";
 import {
   createPortalsMcpServer,
   type PortalsMcpContext,
+  settleBefore,
   settleWithin,
 } from "./portals-mcp";
 
@@ -86,6 +87,25 @@ describe("settleWithin", () => {
     await expect(
       settleWithin(Promise.reject(new Error("port taken")), 1_000),
     ).rejects.toThrow("port taken");
+  });
+});
+
+describe("settleBefore", () => {
+  test("answers pending at once when earlier steps spent the whole budget", async () => {
+    const slow = new Promise<string>((resolve) =>
+      setTimeout(() => resolve("late"), 5_000),
+    );
+    const started = Date.now();
+    expect(await settleBefore(slow, Date.now() - 1)).toEqual({
+      settled: false,
+    });
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  test("still returns a value that is already there", async () => {
+    expect(
+      await settleBefore(Promise.resolve("ready"), Date.now() - 1),
+    ).toEqual({ settled: true, value: "ready" });
   });
 });
 

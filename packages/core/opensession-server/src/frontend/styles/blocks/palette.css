@@ -1,0 +1,119 @@
+/* ── Colour swatches ───────────────────────────────────────────
+   A ```palette fence (lib/palette-block.ts) becomes a row of swatches, and a
+   hex codespan gets a chip before its text (markdown.ts codespan). The
+   colours themselves are the reader's, set inline from the validated value;
+   everything around them is tokens. Renderer-emitted markup is why these
+   rules live here rather than in a component utility. */
+.md-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 2px 0 8px;
+}
+.md-palette-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  /* Fits `rebeccapurple` and `#ff0080cc` on one line at the meta size. */
+  width: 96px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: calc(12px * var(--rf));
+  corner-shape: var(--cs);
+}
+.md-palette-swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Checkerboard under the fill so a translucent colour reads as one; the
+   hairline keeps a white or near-white tile visible on a light page. */
+.md-palette-tile {
+  position: relative;
+  display: block;
+  height: 56px;
+  overflow: hidden;
+  border-radius: calc(12px * var(--rf));
+  corner-shape: var(--cs);
+  box-shadow: inset 0 0 0 1px var(--divider);
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(45deg, var(--bg-hover) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--bg-hover) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--bg-hover) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--bg-hover) 75%);
+  background-size: 12px 12px;
+  background-position:
+    0 0,
+    0 6px,
+    6px -6px,
+    -6px 0;
+  transition: transform 140ms ease;
+}
+.md-palette-fill {
+  position: absolute;
+  inset: 0;
+}
+/* The hairline sits above the fill, so it draws on the colour's own edge. */
+.md-palette-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  corner-shape: inherit;
+  box-shadow: inset 0 0 0 1px var(--divider);
+  pointer-events: none;
+}
+.md-palette-swatch:hover .md-palette-tile {
+  transform: translateY(-1px);
+}
+.md-palette-swatch:active .md-palette-tile {
+  transform: none;
+}
+/* Wrap rather than truncate: a phone has no hover for the full value, and
+   `oklch(0.7 0.16 200)` is the value someone wants to read off the swatch. */
+.md-palette-name,
+.md-palette-value {
+  display: block;
+  padding: 0 2px;
+  font-size: var(--type-meta);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.md-palette-name {
+  color: var(--text);
+}
+.md-palette-value {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+.md-palette-swatch[data-copied] .md-palette-value {
+  color: var(--green);
+}
+@media (max-width: 720px) {
+  .md-palette {
+    gap: 8px;
+  }
+  .md-palette-swatch {
+    width: calc((100% - 16px) / 3);
+  }
+}
+
+/* A hex codespan's chip: sits before the text, inside the code capsule. */
+.md-color-chip {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.4em;
+  vertical-align: -0.1em;
+  border-radius: calc(4px * var(--rf));
+  corner-shape: var(--cs);
+  box-shadow: inset 0 0 0 1px var(--divider);
+}

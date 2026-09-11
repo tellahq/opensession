@@ -15,6 +15,17 @@ export const isTouchPrimary =
   !!window.matchMedia?.("(hover: none) and (pointer: coarse)").matches;
 
 /**
+ * iOS WebKit: iPhone, iPod, iPad, including iPadOS presenting itself as a
+ * Mac with touch. Kept identical to TanStack Virtual's own detection because
+ * the transcript virtualizer has to predict when that library will hold a
+ * scrollTop write back on this platform instead of applying it.
+ */
+export const isIOSWebKit =
+  typeof navigator !== "undefined" &&
+  (/iP(hone|od|ad)/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 0));
+
+/**
  * Chromium-engine browser (Chrome, Chromium, iOS Chrome, Edge, Opera).
  * Chromium reserves some chords (e.g. ⌘E) before the page sees them, so a few
  * surfaces advertise a different working alias there.

@@ -1021,6 +1021,59 @@ enum OS1API {
         return try await post("/api/sessions/\(encoded)/sandbox/\(action.rawValue)", body: body)
     }
 
+    /// Move a session that runs on this machine into a Sandbox, which the
+    /// server starts provisioning right away; the next message runs there.
+    ///
+    /// Not on the shared `post` path because its 428 is an answer, not an
+    /// error: the worktree has uncommitted files or unpushed commits that a
+    /// Sandbox's fresh clone of origin would not have, and the server says so
+    /// in a sentence for the person to read before repeating with `confirm`.
+    static func attachSandbox(
+        sessionId: String,
+        provider: String,
+        confirm: Bool = false
+    ) async throws -> SandboxAttachOutcome {
+        let config = ServerConfig.shared
+        guard let base = config.baseURL, config.isConfigured else { throw APIError.notConfigured }
+        let encoded = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        guard let url = URL(string: base.absoluteString + "/api/sessions/\(encoded)/sandbox/attach")
+        else { throw APIError.badURL }
+
+        var request = config.authorizedRequest(url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var body: [String: Any] = ["provider": provider]
+        if confirm { body["confirm"] = true }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 200
+        return try await sandboxAttachOutcome(status: status, data: data)
+    }
+
+    /// The attach route's answer by status. Split out so the 428 contract can
+    /// be tested without a server.
+    static func sandboxAttachOutcome(status: Int, data: Data) async throws -> SandboxAttachOutcome {
+        struct Refusal: Decodable {
+            let error: String?
+            let confirmRequired: Bool?
+        }
+        let refusal = try? JSONDecoder().decode(Refusal.self, from: data)
+        if status == 428 || refusal?.confirmRequired == true {
+            return .confirmRequired(
+                refusal?.error
+                    ?? "This machine has work that was never pushed. The Sandbox clones the branch from origin."
+            )
+        }
+        guard (200..<300).contains(status) else {
+            noteStatus(status)
+            if let message = refusal?.error { throw APIError.server(message) }
+            throw APIError.http(status)
+        }
+        return .moved(try await decodeDetached(SessionSandboxStatus.self, from: data))
+    }
+
     /// Archive (or unarchive) a session. Archiving an in-flight session also
     /// stops its run server-side.
     static func setArchived(sessionId: String, archived: Bool) async throws {

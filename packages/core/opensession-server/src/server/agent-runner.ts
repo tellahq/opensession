@@ -215,6 +215,14 @@ export interface RunAgentOpts {
    */
   user?: string;
   /**
+   * The person whose personal provider subscription may serve this run, when
+   * it differs from `user`: an automation-owned session passes no `user`
+   * (so gated MCP servers stay invisible) but a person who takes it over and
+   * presses send still spends their own subscription, pool as backup. Read by
+   * provider account selection only; MCP, GitHub and trust policy ignore it.
+   */
+  accountUser?: string;
+  /**
    * Model to switch to when the primary model dies on usage limits with no
    * account left in its pool (claude-runner/codex-runner rotate their own
    * account pools first — this fires only once a whole pool is exhausted).
@@ -2052,6 +2060,7 @@ export async function resumeInterruptedRuns(
                   ? reposNoteFor?.(run.osSessionId)
                   : undefined,
                 user: run.user,
+                accountUser: run.accountUser,
                 deniedTools: run.deniedTools,
                 publicationPolicy: run.publicationPolicy,
                 confirmTools: run.confirmTools,
@@ -2160,6 +2169,7 @@ export async function resumeInterruptedRuns(
                 ? reposNoteFor?.(run.osSessionId)
                 : undefined,
               user: run.user,
+              accountUser: run.accountUser,
               deniedTools: run.deniedTools,
               publicationPolicy: run.publicationPolicy,
               confirmTools: run.confirmTools,
@@ -2258,6 +2268,7 @@ export async function resumeInterruptedRuns(
               ? reposNoteFor?.(run.osSessionId)
               : undefined,
             user: run.user,
+            accountUser: run.accountUser,
             deniedTools: run.deniedTools,
             publicationPolicy: run.publicationPolicy,
             confirmTools: run.confirmTools,

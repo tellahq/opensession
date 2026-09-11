@@ -134,8 +134,10 @@ overridden at startup with `OPENSESSION_DISK_GC_COLD_DAYS`,
 `packages/core/opensession-server/src/server/worktree-reaper.ts` starts after
 ten minutes and runs hourly. It removes a checkout when its branch tip is in
 the remote default branch or its pull request is merged or closed, but protects
-worktrees used by a live process and sessions active within the last 6 hours.
-It also parks session-owned checkouts after 7 days without session activity,
+worktrees used by a live process, sessions active within the last 6 hours, and
+checkouts created within the last 6 hours (dated by their `.git` pointer, so a
+fresh checkout survives even when the session list has not caught up with the
+session that made it). It also parks session-owned checkouts after 7 days without session activity,
 or after 24 hours when every owner is an automation. Branch and session records
 remain. A later prompt recreates a missing primary worktree; a parked attached
 repository may need to be attached again.

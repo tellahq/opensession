@@ -37,6 +37,12 @@
  *    reaped hourly for "tip in origin/main" because it had not committed yet,
  *    so it kept losing node_modules between turns). The /proc check does not
  *    cover this: a session sitting between turns holds no cwd.
+ *  - A checkout younger than ACTIVE_HOURS is spared on its own evidence, the
+ *    `.git` pointer's age, whatever the session snapshot says. The snapshot
+ *    is a list projection that can trail a freshly created session
+ *    (2026-09-10: a Slack thread's checkout was reaped twice in its first
+ *    hour because its row had not reached the list index), and a tree that
+ *    young is never done work worth reclaiming.
  *  - Husks are only swept when no nested repo inside has dirty/unpushed work.
  *  - Dirty/unpushed trees are never removed with their work: the work is
  *    BANKED first (diff + untracked files + a bundle of unpushed commits into
@@ -263,6 +269,17 @@ export function activeSessionBranches(
       add(attached.repo, attached.branch);
   }
   return active;
+}
+
+/** Age of the checkout itself, dated by its `.git` pointer file: written once
+ *  by `git worktree add` and never touched by the work inside. Null when the
+ *  dir is not a worktree. */
+export function checkoutAgeMs(dir: string, nowMs = Date.now()): number | null {
+  try {
+    return nowMs - statSync(join(dir, ".git")).mtimeMs;
+  } catch {
+    return null;
+  }
 }
 
 /** Worktree dirs that are the cwd of ANY live process. Null = /proc unreadable
@@ -652,13 +669,18 @@ export async function sweepWorktreeReaper(
     // The work is done; the session using the checkout may not be. Match the
     // exact path first, then repo + branch for revived checkouts whose stored
     // path still names the checkout that disappeared before branch revival.
+    // A checkout created inside the window is spared even when no session in
+    // the snapshot claims it: the snapshot can trail the session that made it.
+    const age = checkoutAgeMs(dir, nowMs);
+    const youngCheckout = age !== null && age < ACTIVE_HOURS * HOUR;
     if (
       activeWorktrees.has(canonicalPath(dir)) ||
-      activeBranches.get(repo.id)?.has(branch)
+      activeBranches.get(repo.id)?.has(branch) ||
+      youngCheckout
     ) {
       result.skipped.sessionActive++;
       console.log(
-        `[worktree-reaper] SKIP ${e.name} (${reason}): session active <${ACTIVE_HOURS}h ago`,
+        `[worktree-reaper] SKIP ${e.name} (${reason}): ${youngCheckout ? "checkout created" : "session active"} <${ACTIVE_HOURS}h ago`,
       );
       continue;
     }

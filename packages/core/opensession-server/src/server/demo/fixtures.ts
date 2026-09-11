@@ -191,8 +191,11 @@ export function demoSessions(opts: {
   worktreeDir: string;
   /** The generated base repo (clean checkout on main). */
   repoDir: string;
+  /** Where the generator wrote the stills the hero session shows
+   *  (generate.ts retryStill); served by the /media route. */
+  mediaDir: string;
 }): DemoSessionFixture[] {
-  const { now, worktreeDir, repoDir } = opts;
+  const { now, worktreeDir, repoDir, mediaDir } = opts;
   const min = 60_000;
   const sessions: DemoSessionFixture[] = [];
 
@@ -287,9 +290,71 @@ export function demoSessions(opts: {
           t0 + 140_000,
         ),
         transcriptLineAssistantText(
-          "Fixed and verified — 100/100 green. The loop now honors the configured retry budget. I committed the change on `demo/fix-flaky-upload` and opened a PR with the regression note in the description.",
+          "Fixed and verified — 100/100 green. The loop now honors the configured retry budget. I committed the change on `demo/fix-flaky-upload` and opened a PR with the regression note in the description.\n\n" +
+            "Where the flakes were coming from, per attempt across the 50 reruns:\n\n" +
+            "```vega-lite\n" +
+            JSON.stringify({
+              title: "Upload retries per attempt, 50 reruns",
+              mark: "bar",
+              data: {
+                values: [
+                  { attempt: "1st", build: "before", succeeded: 31 },
+                  { attempt: "2nd", build: "before", succeeded: 18 },
+                  { attempt: "3rd", build: "before", succeeded: 0 },
+                  { attempt: "1st", build: "after", succeeded: 30 },
+                  { attempt: "2nd", build: "after", succeeded: 17 },
+                  { attempt: "3rd", build: "after", succeeded: 3 },
+                ],
+              },
+              encoding: {
+                x: { field: "attempt", type: "nominal", title: "Attempt" },
+                xOffset: { field: "build", title: "Build" },
+                y: {
+                  field: "succeeded",
+                  type: "quantitative",
+                  title: "Runs that succeeded",
+                },
+                color: { field: "build", title: "Build" },
+              },
+            }) +
+            "\n```",
           "demo-pr-a3",
           iso(t0 + 170_000),
+          MODEL_FABLE,
+        ),
+        // Media in place: an image marker with a caption and a before/after
+        // compare marker, rendered where they are written (docs/blocks.md).
+        transcriptLineAssistantText(
+          "Proof that the third attempt now runs. The retry timeline from the reruns, before and after the fix:\n\n" +
+            `OPENSESSION_COMPARE: ${mediaDir}/retry-before.png ${mediaDir}/retry-after.png\n` +
+            "Attempts per run: before on the left, after on the right\n\n" +
+            `OPENSESSION_IMAGE: ${mediaDir}/retry-after.png\n` +
+            "All three attempts run and the third one succeeds\n\n" +
+            "Both stills come from the 100-run rerun above.",
+          "demo-pr-a4",
+          iso(t0 + 180_000),
+          MODEL_FABLE,
+        ),
+        // Blocks that talk back to the session: a file tree whose rows open
+        // the changed file, and quick replies that send as the next turn.
+        transcriptLineAssistantText(
+          "The fix touches these files:\n\n" +
+            "```tree\n" +
+            "acme-todo/\n" +
+            "├── src/\n" +
+            "│   ├── upload.ts  # retry loop\n" +
+            "│   └── upload.test.ts\n" +
+            "├── NOTES.md\n" +
+            "└── package.json\n" +
+            "```\n\n" +
+            "How do you want to proceed?\n\n" +
+            "```choices\n" +
+            "- Merge the PR\n" +
+            "- Add a test for the terminal error\n" +
+            "- Explain the fix again\n" +
+            "```",
+          "demo-pr-a5",
+          iso(t0 + 190_000),
           MODEL_FABLE,
         ),
       ],
@@ -971,6 +1036,13 @@ export function demoReplayScript(): Array<() => JsonlLine[]> {
       "Bash",
       { command: "bun run gateway:dev --smoke /health" },
       "span api-gateway:/health 3.1ms ok\nsmoke passed",
+    ),
+    // A sessions MCP call: the row links to the session it names.
+    step(
+      9,
+      "opensession-sessions_get_session",
+      { id: "bks-demo-pr", transcript_lines: 4 },
+      '🟢 *Fix flaky upload retry test*  `bks-demo-pr`\n   done · opensession · code · branch demo/fix-flaky-upload · createdBy="Alex" · 2h ago\n   PR open https://github.com/acme/acme-todo/pull/128\n\n*Recent transcript:*\n• tool:Bash: Using bash\n• tool_result: 100 pass 0 fail\n• assistant: Fixed and verified — 100/100 green.',
     ),
     say(
       "demo-live-a4",

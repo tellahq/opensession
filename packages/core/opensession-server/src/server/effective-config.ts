@@ -12,6 +12,7 @@ import {
 } from "./connections";
 import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
 import { userMatchesAny, commitAuthorFor } from "./shared/user-mappings";
+import { sessionPrincipal } from "./session-actors";
 import { configuredPaths } from "./config";
 import {
   baseJournalKind,
@@ -481,9 +482,13 @@ export async function buildSessionEffectiveConfig(
       "host-client.ts / sandbox provider",
     ),
   };
-  const git = commitAuthorFor(inputs.user, session.startedBy);
+  const git = commitAuthorFor(inputs.user, sessionPrincipal(session));
   const identity: Record<string, ConfigRow> = {
     user: row(inputs.user ?? null, "request identity"),
+    accountUser: row(
+      inputs.accountUser ?? null,
+      "session-run-inputs.ts provider account identity",
+    ),
     git: row(git ?? null, "shared/user-mappings.ts"),
     github: row(
       githubUserLoginForRun(inputs.user || git?.name) ?? null,

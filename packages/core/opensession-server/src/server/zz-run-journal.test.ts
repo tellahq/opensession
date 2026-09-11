@@ -897,6 +897,7 @@ describe("run journal", () => {
   it("copies account and reviewer policy into every journal shape", async () => {
     const record = mod.buildRunJournalRecord(
       {
+        accountUser: "johnny@tella.com",
         accountId: "account-1",
         accountStrict: true,
         usageCredits: false,
@@ -909,6 +910,7 @@ describe("run journal", () => {
       },
     );
     expect(record).toMatchObject({
+      accountUser: "johnny@tella.com",
       accountId: "account-1",
       accountStrict: true,
       usageCredits: false,
@@ -1854,6 +1856,49 @@ describe("restart recovery reattach", () => {
       });
       expect(fake.calls).toHaveLength(1);
       expect(fake.calls[0].opts.startToken).toBe(hostId);
+    } finally {
+      mod.journalClear(hostId);
+      await clearRunState(sessionId);
+    }
+  });
+
+  it("restores the takeover account identity when an automation-owned human turn falls back in-process", async () => {
+    const sessionId = `local-host-takeover-${crypto.randomUUID()}`;
+    const hostId = `rh-${crypto.randomUUID()}`;
+    const fake = makeFakeEngine([{ kind: "clean" }]);
+    agent.__setEngineForTest(fake.engine);
+    agent.__setLocalHostResumeForTest(async () => null);
+    // An automation-owned session drops the prompter for MCP and GitHub
+    // policy but keeps the person for provider account selection. A restart
+    // must not turn that turn back into a pool-only run.
+    const snapshotRun: mod.ActiveRunRecord = {
+      runKey: hostId,
+      hostId,
+      osSessionId: sessionId,
+      claudeSessionId: `pi-${crypto.randomUUID()}`,
+      prompt: "continue the triage",
+      cwd: "/tmp",
+      model: "pi/anthropic/claude-sonnet-5",
+      user: undefined,
+      accountUser: "johnny@tella.com",
+      trustProfile: "automation",
+      kind: "prompt",
+      startedAt: new Date().toISOString(),
+    };
+    const terminal = Promise.withResolvers<StreamEvent>();
+    try {
+      await agent.resumeInterruptedRuns(
+        (_id, event) => event && terminal.resolve(event),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        [snapshotRun],
+      );
+      await terminal.promise;
+      expect(fake.calls).toHaveLength(1);
+      expect(fake.calls[0].opts.accountUser).toBe("johnny@tella.com");
+      expect(fake.calls[0].opts.user).toBeUndefined();
     } finally {
       mod.journalClear(hostId);
       await clearRunState(sessionId);

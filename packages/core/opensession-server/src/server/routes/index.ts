@@ -48,6 +48,7 @@ import { handlePapercutsRoutes } from "./papercuts";
 import { handleLibraryRoutes } from "./library";
 import { handleTodosRoutes } from "./todos";
 import { handleDeskVoiceRoutes } from "./desk-voice";
+import { handleDeskNavigationRoutes } from "./desk-navigation";
 import { handleWorkflowsRoutes } from "./workflows";
 import { handleReportsRoutes } from "./reports";
 import { handleAnalyticsRoutes } from "./analytics";
@@ -110,6 +111,7 @@ export const routeHandlers: RouteHandler[] = [
   handleLibraryRoutes,
   handleTodosRoutes,
   handleDeskVoiceRoutes,
+  handleDeskNavigationRoutes,
   handleWorkflowsRoutes,
   handleReportsRoutes,
   handleAnalyticsRoutes,

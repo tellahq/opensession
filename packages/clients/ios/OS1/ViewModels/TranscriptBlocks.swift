@@ -151,8 +151,11 @@ struct ReviewLoopResult: Equatable {
     enum Status: Equatable { case pending, passed, failed }
 
     var status: Status
-    /// 1-5: how safe the reviewer thought this was to merge.
+    /// 1-5: quality of the change as written.
     var confidence: Int?
+    /// How hard a mistake would be to undo. Advisory: it colours one word of
+    /// the facts and never moves the verdict, the same as on the server.
+    var risk: MergeRisk?
     var checksPassed: Int?
     var checksFailed: Int?
     /// P0/P1 findings — what would block a merge.
@@ -167,6 +170,7 @@ struct ReviewLoopResult: Equatable {
         else { return nil }
         let checks = session.prChecks
         confidence = review.confidence
+        risk = review.risk
         checksPassed = checks?.passed
         checksFailed = checks?.failed
         blocking = review.blocking
@@ -183,12 +187,19 @@ struct ReviewLoopResult: Equatable {
         status = failed ? .failed : .passed
     }
 
-    /// "2 rounds · 4/5 · 1 blocking · 3 checks passed" — the numbers behind
-    /// the verdict, in the web's order, with empty pieces dropped rather than
-    /// leaving stray separators.
+    /// "2 rounds · 4/5 · high risk · 1 blocking · 3 checks passed" — the
+    /// numbers behind the verdict, in the web's order, with empty pieces
+    /// dropped rather than leaving stray separators.
     func facts(rounds: Int) -> String {
+        factList(rounds: rounds).joined(separator: " · ")
+    }
+
+    /// The same facts one phrase at a time, so the row can give the risk its
+    /// own colour without the view re-deriving what counts as a fact.
+    func factList(rounds: Int) -> [String] {
         var parts = ["\(rounds) round\(rounds == 1 ? "" : "s")"]
         if let confidence { parts.append("\(confidence)/5") }
+        if let risk { parts.append(risk.label) }
         if let blocking, blocking > 0 { parts.append("\(blocking) blocking") }
         if let checksFailed, checksFailed > 0 {
             parts.append("\(checksFailed) check\(checksFailed == 1 ? "" : "s") failed")
@@ -196,7 +207,19 @@ struct ReviewLoopResult: Equatable {
         if let checksPassed, checksPassed > 0 {
             parts.append("\(checksPassed) checks passed")
         }
-        return parts.joined(separator: " · ")
+        return parts
+    }
+
+    /// The facts as VoiceOver should say them. "4/5" and "high risk" read
+    /// aloud in a row are a number and a word with nothing saying which
+    /// question each answers, so both axes are named.
+    func accessibilityFacts(rounds: Int) -> String {
+        factList(rounds: rounds).map { part in
+            if let confidence, part == "\(confidence)/5" { return "quality \(confidence) of 5" }
+            if let risk, part == risk.label { return risk.accessibilityLabel }
+            return part
+        }
+        .joined(separator: ", ")
     }
 }
 

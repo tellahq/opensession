@@ -25,7 +25,7 @@ final class HideStore {
     /// Sidebar row key → ISO timestamp of when this user hid it.
     private(set) var hides: [String: String] = [:]
 
-    private enum Change: Equatable {
+    enum Change: Equatable {
         case set(String)
         case remove
     }
@@ -36,18 +36,30 @@ final class HideStore {
     private var hydratedContext: NativePreferences.Context?
     private(set) var hasHydrated = false
     private var isSaving = false
+    private var hydrations = HydrationClock()
 
     init() {}
 
     /// Load this user's map from the server. Guarded like
-    /// `NativePreferences.hydrate`: a stale response (server/user switched, or
-    /// a hide landed meanwhile) is dropped.
+    /// `NativePreferences.hydrate`: a stale response (server/user switched,
+    /// a newer GET begun, or a write confirmed meanwhile) is dropped.
     func hydrate() async {
         let requestContext = NativePreferences.context()
         resetForNewContext(requestContext)
+        let ticket = beginHydration()
         guard let loaded = try? await SettingsAPI.hides(user: requestContext.user) else { return }
         guard NativePreferences.context() == requestContext else { return }
-        applyHydrated(loaded)
+        applyHydrated(loaded, ticket: ticket)
+    }
+
+    /// Marks the start of one GET. Internal so the ordering is unit-testable.
+    func beginHydration() -> HydrationClock.Ticket {
+        hydrations.begin()
+    }
+
+    /// The clock as a write would see it when it starts. Internal for tests.
+    func hydrationMark() -> HydrationClock.Ticket {
+        hydrations.mark()
     }
 
     private func resetForNewContext(_ context: NativePreferences.Context) {
@@ -64,7 +76,14 @@ final class HideStore {
     }
 
     /// Kept internal so the local-before-remote merge can be covered in tests.
-    func applyHydrated(_ loaded: [String: String], persist: Bool = true) {
+    /// With a `ticket`, the map is applied only while that GET is still the
+    /// newest and no write was confirmed since it began.
+    func applyHydrated(
+        _ loaded: [String: String],
+        ticket: HydrationClock.Ticket? = nil,
+        persist: Bool = true
+    ) {
+        if let ticket, !hydrations.isCurrent(ticket) { return }
         var merged = loaded
         for (key, change) in pendingChanges {
             switch change {
@@ -114,6 +133,31 @@ final class HideStore {
         pendingChanges[key] = change
     }
 
+    /// Reconcile one successful delta response without dropping a newer local
+    /// mutation that landed while that request was in flight.
+    ///
+    /// The response is a whole-map snapshot taken when the server applied
+    /// the delta, and the server broadcasts `user_map_changed` before it
+    /// answers, so a re-read begun after the write started (`begunAt`) can
+    /// hold a newer map. Then the snapshot is not installed: the intents are
+    /// acknowledged, the newer map stays, and the caller re-reads; a GET
+    /// begun after the response is post-write. Returns false in that case.
+    @discardableResult
+    func applySaved(
+        _ saved: [String: String],
+        acknowledging captured: [String: Change],
+        begunAt mark: HydrationClock.Ticket? = nil
+    ) -> Bool {
+        for (key, change) in captured where pendingChanges[key] == change {
+            pendingChanges.removeValue(forKey: key)
+        }
+        let needsHydration = mark.map { hydrations.hasHydrationBegun(since: $0) } ?? false
+        hydrations.confirmWrite()
+        if needsHydration { return false }
+        applyHydrated(saved, persist: false)
+        return true
+    }
+
     private func save() {
         guard hasHydrated,
               !isSaving,
@@ -129,6 +173,7 @@ final class HideStore {
             if case .remove = change { return key }
             return nil
         }
+        let mark = hydrations.mark()
         isSaving = true
         Task { [weak self] in
             let saved = try? await SettingsAPI.saveHides(
@@ -141,11 +186,9 @@ final class HideStore {
                   NativePreferences.context() == requestContext else { return }
             self.isSaving = false
             guard let saved else { return }
-            for (key, change) in captured where self.pendingChanges[key] == change {
-                self.pendingChanges.removeValue(forKey: key)
-            }
-            self.applyHydrated(saved, persist: false)
+            let applied = self.applySaved(saved, acknowledging: captured, begunAt: mark)
             self.save()
+            if !applied { await self.hydrate() }
         }
     }
 

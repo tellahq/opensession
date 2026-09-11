@@ -543,6 +543,7 @@ function detachedWorkflowRunner(
       codexCliEnv: opts.codexCliEnv,
       author: opts.author,
       user: opts.user,
+      accountUser: opts.accountUser,
       fallbackModel: opts.fallbackModel,
       accountAffinityKey: opts.accountAffinityKey,
       effort: opts.effort,

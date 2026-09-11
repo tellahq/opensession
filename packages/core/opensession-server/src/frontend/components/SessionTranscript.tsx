@@ -82,7 +82,8 @@ function StreamingMessage({
   }
 
   const displayText = normalizeFragmentedReasoning(snapshot.text);
-  const html = renderMarkdown(displayText, { repo, sessionId, assetPaths });
+  const markdown = { repo, sessionId, assetPaths };
+  const html = renderMarkdown(displayText, markdown);
   // Always rendered, never raw source: the server cuts frames at block
   // boundaries, so what arrives here is markdown that stands on its own.
   return (
@@ -93,6 +94,7 @@ function StreamingMessage({
         className={cn(msgBodyStreaming, "markdown")}
         html={html}
         enhance={false}
+        markdown={markdown}
       />
     </div>
   );

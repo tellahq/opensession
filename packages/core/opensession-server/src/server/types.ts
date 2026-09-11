@@ -78,6 +78,10 @@ export interface UnifiedSession {
   createdByLogin?: string;
   /** Legacy UI-facing alias for createdBy. */
   startedBy: string | null;
+  /** The last person who prompted the session, when it was not the creator
+   * alone. With `startedBy`, this is who a senderless turn acts for
+   * (`sessionPrincipal` in session-actors.ts). */
+  lastPromptedBy?: string | null;
   title: string;
   lastActivity: string;
   createdAt: string;
@@ -561,6 +565,12 @@ export interface NativeSessionFile {
    *  one-time boot migration (resolved from createdBy via the identity
    *  table). Absent on automation sessions and unresolvable creators. */
   createdByLogin?: string;
+  /** The last person who sent a prompt into this session. Machine senders
+   *  never land here. A turn nobody sent (a review handoff, an auto-continue,
+   *  a queue drain) commits on this person's behalf, falling back to
+   *  `createdBy`, so a session one teammate started and another took over
+   *  credits the one now steering it. */
+  lastPromptedBy?: string;
   createdAt: string;
   lastActivity: string;
   title?: string;

@@ -64,6 +64,7 @@ import {
   IconStopSquare,
   IconPencil,
   IconTrash,
+  IconCall,
 } from "./icons";
 import {
   composerBox,
@@ -181,6 +182,7 @@ export function Composer({
     defaultModel,
     model,
     modelDisabled,
+    modelPillDisabled,
     modelTitle,
     effort,
     fastMode,
@@ -200,6 +202,7 @@ export function Composer({
     noteMode,
     askMode,
     askExitPending,
+    call,
   },
   actions: {
     onSend,
@@ -220,6 +223,7 @@ export function Composer({
     skillsFetch,
     onNoteModeChange,
     onAskModeExit,
+    onToggleCall,
   },
   menuExtra,
   attached,
@@ -400,10 +404,22 @@ export function Composer({
       sendOptions.pastedTexts = pastedTexts.map(
         (attachment) => attachment.text,
       );
-    const consumed = handler(overrideText ?? text, sendOptions);
+    const draftAtSend = text;
+    const sentText = overrideText ?? text;
+    const consumed = handler(sentText, sendOptions);
     if (consumed instanceof Promise) {
+      // The handler answers later; the draft may have moved on by then.
+      // Clear only what was sent: a field the user has since retyped keeps
+      // its new text. (The dictation override commits to state after this
+      // call, so the field may legitimately hold either snapshot.)
       void consumed.then((result) => {
-        if (result === true) consume();
+        if (result !== true) return;
+        const now = textRef.current;
+        if (isControlled || now === draftAtSend || now === sentText) consume();
+        else
+          setPastedTexts((current) =>
+            current.filter((attachment) => !sentPastedIds.has(attachment.id)),
+          );
       });
     } else if (consumed === true) {
       consume();
@@ -1715,7 +1731,7 @@ export function Composer({
             accountId={accountId}
             onAccountChange={onAccountChange}
             usage={usage}
-            disabled={disabled}
+            disabled={disabled || modelPillDisabled}
             effortDownLabel={effortDownLabel}
             effortUpLabel={effortUpLabel}
             onOpenChange={setModelMenuOpen}
@@ -1737,6 +1753,42 @@ export function Composer({
             onActiveChange={handleDictationActive}
             disabled={disabled}
           />
+
+          {onToggleCall && (
+            <motion.div
+              layout="position"
+              transition={composerMorph}
+              layoutDependency={minimized}
+              className={cn(
+                "inline-flex shrink-0 items-center",
+                // Sits right after the dictation mic in the resting pill.
+                minimized && "order-3",
+              )}
+            >
+              <Tooltip
+                label={
+                  call?.active
+                    ? `End call${call.status ? ` (${call.status})` : ""}`
+                    : "Start a voice call"
+                }
+              >
+                <button
+                  type="button"
+                  className={cn(
+                    composerIconButtonClass,
+                    // A live call reads as the universal red handset.
+                    call?.active && "text-red hover:text-red",
+                  )}
+                  onClick={onToggleCall}
+                  disabled={disabled}
+                  aria-pressed={!!call?.active}
+                  aria-label={call?.active ? "End call" : "Start a voice call"}
+                >
+                  <IconCall size={22} />
+                </button>
+              </Tooltip>
+            </motion.div>
+          )}
 
           {busy && onStop && (
             <Tooltip

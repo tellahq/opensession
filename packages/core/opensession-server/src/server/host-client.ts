@@ -228,6 +228,7 @@ export interface HostedRunOpts {
   codexCliEnv?: boolean;
   author?: GitIdentity | null;
   user?: string;
+  accountUser?: string;
   fallbackModel?: string;
   /** Stable provider-account affinity for internal fan-out workers. */
   accountAffinityKey?: string;
@@ -428,6 +429,7 @@ async function* runAgentInProcess(
     codexCliEnv: opts.codexCliEnv,
     author: opts.author,
     user: opts.user,
+    accountUser: opts.accountUser,
     fallbackModel: opts.fallbackModel,
     accountAffinityKey: opts.accountAffinityKey,
     effort: opts.effort,
@@ -553,6 +555,7 @@ function hostedRunRecord(spec: RunHostSpec): ActiveRunRecord {
     mode: spec.mode,
     mcpServers: spec.mcpServers,
     user: spec.user,
+    accountUser: spec.accountUser,
     deniedTools: spec.deniedTools,
     publicationPolicy: spec.publicationPolicy,
     confirmTools: spec.confirmTools,
@@ -619,6 +622,7 @@ async function spawnHostRun(
     codexCliEnv: opts.codexCliEnv,
     author: opts.author,
     user: opts.user,
+    accountUser: opts.accountUser,
     fallbackModel: opts.fallbackModel,
     accountAffinityKey: opts.accountAffinityKey,
     effort: opts.effort,
@@ -638,6 +642,7 @@ async function spawnHostRun(
     registerRunToken(rpcToken, {
       sessionId: opts.osSessionId,
       user: opts.user,
+      promptEntryId: opts.promptEntryId,
     });
 
   let handle: HostHandle | undefined;
@@ -1898,6 +1903,7 @@ export async function resumeLocalHostRun(
     registerRunToken(spec.rpcToken, {
       sessionId: spec.osSessionId,
       user: spec.user,
+      promptEntryId: spec.promptEntryId,
     });
   }
   const handle = new HostHandle(

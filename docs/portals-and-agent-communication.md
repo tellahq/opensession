@@ -43,15 +43,17 @@ Host Portals survive gateway restarts, but are not permanent services:
   repositories. A sibling session's Portal in a shared checkout is left alone.
   The five-minute reaper also catches archived and deleted owners missed by an
   interrupted cleanup.
-- On Linux, a host Portal expires after 30 minutes without authenticated Portal
+- On Linux, a host Portal sleeps after 30 minutes without authenticated Portal
   requests or an established connection to its service port. WebSockets count
   as use; session-list and readiness polling do not. A gateway restart grants a
   fresh idle window. If connection telemetry is unavailable, idle cleanup is
-  skipped rather than risking an active preview. Restart an expired Portal
-  from the session's Portals panel or `start_portal`.
+  skipped rather than risking an active preview. Running owners are protected.
+  A page navigation wakes a sleeping Portal; background requests do not.
+  Archive and orphan cleanup stop Portals permanently, without automatic wake.
 - New host processes are refused when available RAM falls below 5% or 2 GiB,
   memory full-stall pressure reaches 10% over ten seconds, or the shared user
-  workload slice reaches 90% of its memory soft limit. Existing, matching
+  workload slice reaches 90% of its memory soft limit. The existing configurable
+  host Portal count cap and free-memory floor also apply. Existing, matching
   Portals can still be reused. These are admission guards, not permission to
   kill another session's active work.
 

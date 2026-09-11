@@ -115,18 +115,18 @@ final class SessionRowPreviewTests: XCTestCase {
             PrPreviewFacts.osReviewFact(
                 OsReviewSummary(verdict: "approve", confidence: 4)
             ),
-            PrPreviewFact(text: "4/5 · approved", tone: .green)
+            PrPreviewFact(text: "4/5 · approved", tone: .green, spoken: "quality 4 of 5, approved")
         )
     }
 
     func testVerdictStillReadsWithoutAScore() {
         XCTAssertEqual(
             PrPreviewFacts.osReviewFact(OsReviewSummary(verdict: "comment")),
-            PrPreviewFact(text: "commented", tone: .dim)
+            PrPreviewFact(text: "commented", tone: .dim, spoken: "commented")
         )
         XCTAssertEqual(
             PrPreviewFacts.osReviewFact(OsReviewSummary(verdict: "request_changes")),
-            PrPreviewFact(text: "changes requested", tone: .red)
+            PrPreviewFact(text: "changes requested", tone: .red, spoken: "changes requested")
         )
     }
 
@@ -142,13 +142,75 @@ final class SessionRowPreviewTests: XCTestCase {
             ),
             PrPreviewFact(
                 text: "2/5 · changes requested · 1 blocking · stale",
-                tone: .faint
+                tone: .faint,
+                spoken: "quality 2 of 5, changes requested, 1 blocking, stale"
             )
         )
     }
 
     func testVerdictlessReviewAddsNothing() {
         XCTAssertNil(PrPreviewFacts.osReviewFact(OsReviewSummary(confidence: 3)))
+    }
+
+    // MARK: - Merge risk
+
+    func testMergeRiskIsItsOwnPhraseAfterTheReading() {
+        // A correct change that is hard to undo: the reading stays green and
+        // the risk stands beside it in red, which one shared phrase could not do.
+        let facts = PrPreviewFacts.all(
+            for: session(
+                osReview: OsReviewSummary(verdict: "approve", confidence: 5, risk: .high)
+            )
+        )
+        XCTAssertEqual(facts.map(\.text), ["Ready to merge", "5/5 · approved", "high risk"])
+        XCTAssertEqual(facts.map(\.tone), [.green, .green, .red])
+    }
+
+    func testTheStripNamesBothReviewAxesForVoiceOver() {
+        // Seen, the colours tell the score from the risk. Heard, "5/5" and
+        // "high risk" are a number and a word with no axis, so each fact
+        // carries a spoken form that names its own.
+        let facts = PrPreviewFacts.all(
+            for: session(
+                osReview: OsReviewSummary(verdict: "approve", confidence: 5, risk: .high)
+            )
+        )
+        XCTAssertEqual(
+            facts.map(\.accessibilityText),
+            ["Ready to merge", "quality 5 of 5, approved", "merge risk high"]
+        )
+    }
+
+    func testAFactWithoutASpokenFormReadsItsText() {
+        XCTAssertEqual(PrPreviewFact(text: "Ready to merge", tone: .green).accessibilityText, "Ready to merge")
+    }
+
+    func testEachRiskLevelHasItsOwnTone() {
+        XCTAssertEqual(
+            PrPreviewFacts.mergeRiskFact(OsReviewSummary(risk: .medium)),
+            PrPreviewFact(text: "medium risk", tone: .yellow, spoken: "merge risk medium")
+        )
+        XCTAssertEqual(
+            PrPreviewFacts.mergeRiskFact(OsReviewSummary(risk: .low)),
+            PrPreviewFact(text: "low risk", tone: .dim, spoken: "merge risk low")
+        )
+    }
+
+    func testAStaleRiskGoesFaintWithTheRestOfTheReview() {
+        XCTAssertEqual(
+            PrPreviewFacts.mergeRiskFact(OsReviewSummary(verdict: "approve", risk: .high, stale: true)),
+            PrPreviewFact(text: "high risk", tone: .faint, spoken: "merge risk high")
+        )
+    }
+
+    func testAReviewWithoutARiskPassAddsNoRiskPhrase() {
+        // Repos can opt out of the risk pass; the strip says nothing rather
+        // than "no risk", which would be a claim nobody made.
+        XCTAssertNil(PrPreviewFacts.mergeRiskFact(OsReviewSummary(verdict: "approve", confidence: 4)))
+        XCTAssertEqual(
+            texts(session(osReview: OsReviewSummary(verdict: "approve", confidence: 4))),
+            ["Ready to merge", "4/5 · approved"]
+        )
     }
 
     // MARK: - Reviewers

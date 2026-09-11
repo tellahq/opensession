@@ -195,4 +195,44 @@ describe("catalog-backed list rebuild", () => {
       __resetSessionRowPublishesForTest();
     }
   });
+
+  test("a Slack session publish writes its own row into the list index", async () => {
+    const { publishSessionChange } = await import("./session-cache");
+    const { __setSessionListStoreForTest, SessionListStore, indexedSession } =
+      await import("./session-list-store");
+    const { __resetSessionRowPublishesForTest } =
+      await import("./session-row-events");
+    const { statePath } = await import("./paths");
+
+    __setSessionListStoreForTest(new SessionListStore(":memory:"));
+    const key = "C0C1T4W5M6U-1789056158.043869";
+    const slackDir = statePath(".slack-sessions");
+    mkdirSync(slackDir, { recursive: true });
+    writeFileSync(
+      join(slackDir, `${key}.json`),
+      JSON.stringify({
+        channel: "C0C1T4W5M6U",
+        threadTs: "1789056158.043869",
+        branch: "investigate-function-timeouts",
+        worktreeDir: "/worktrees/tella-fusion-investigate-function-timeouts",
+        userId: "Ada",
+        createdAt: "2026-09-10T16:09:40.241Z",
+        lastActivity: "2026-09-10T16:47:08.952Z",
+      }),
+    );
+    try {
+      await publishSessionChange(`slack-${key}`);
+      expect(await indexedSession(`slack-${key}`)).toMatchObject({
+        id: `slack-${key}`,
+        source: "slack",
+        branch: "investigate-function-timeouts",
+        worktreeDir: "/worktrees/tella-fusion-investigate-function-timeouts",
+        lastActivity: "2026-09-10T16:47:08.952Z",
+      });
+      await publishSessionChange("slack-nobody");
+      expect(await indexedSession("slack-nobody")).toBeNull();
+    } finally {
+      __resetSessionRowPublishesForTest();
+    }
+  });
 });

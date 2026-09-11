@@ -70,11 +70,28 @@ function result(value: string) {
 
 /**
  * How long a Portal tool waits for readiness before answering. The MCP call
- * itself times out at 120s; a declared dev server may take 180s to boot, and
- * an answer that arrives after the client gave up reads as a failure, so the
- * agent starts the Portal again on top of the one still booting.
+ * itself times out at 120s; a declared dev server may take minutes to boot,
+ * and an answer that arrives after the client gave up reads as a failure, so
+ * the agent starts the Portal again on top of the one still booting.
  */
 export const PORTAL_TOOL_WAIT_MS = 90_000;
+
+/**
+ * The budget of one Portal tool call, taken when the handler starts. Waking
+ * the Sandbox, probing status, and stopping the previous process all spend
+ * it: a restart that bounded only its launch still answered after the MCP
+ * timeout once a loaded host made the stop slow.
+ */
+function portalToolDeadline(): number {
+  return Date.now() + PORTAL_TOOL_WAIT_MS;
+}
+
+export function settleBefore<T>(
+  promise: Promise<T>,
+  deadline: number,
+): Promise<{ settled: true; value: T } | { settled: false }> {
+  return settleWithin(promise, Math.max(0, deadline - Date.now()));
+}
 
 export async function settleWithin<T>(
   promise: Promise<T>,
@@ -161,6 +178,7 @@ async function startPortalForContext(
   dir: string,
   sandbox: Sandbox | null,
   input: PortalStartInput,
+  deadline: number,
 ): Promise<string> {
   const session = ctx.runner();
   if (session?.runner) {
@@ -186,7 +204,7 @@ async function startPortalForContext(
         worktreeDir: dir,
         ...input,
       });
-  const outcome = await settleWithin(starting, PORTAL_TOOL_WAIT_MS);
+  const outcome = await settleBefore(starting, deadline);
   if (!outcome.settled)
     return stillStarting(ctx, dir, sandbox, input.name, starting);
   const portal = outcome.value;
@@ -224,6 +242,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
           port?: number;
           description?: string;
         }) => {
+          const deadline = portalToolDeadline();
           const dir = workspace(ctx);
           if (dir instanceof Error) return result(dir.message);
           try {
@@ -245,6 +264,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
                 dir,
                 sandbox,
                 recipe ? recipeStartOptions(recipe) : args,
+                deadline,
               ),
             );
           } catch (error) {
@@ -261,6 +281,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
           id: z.string(),
         },
         async ({ id }: { id: string }) => {
+          const deadline = portalToolDeadline();
           const dir = workspace(ctx);
           if (dir instanceof Error) return result(dir.message);
           try {
@@ -286,6 +307,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
                 dir,
                 sandbox,
                 recipeStartOptions(recipe),
+                deadline,
               ),
             );
           } catch (error) {
@@ -386,6 +408,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
         "Restart one supervised Portal using its registered command and port. Repository-declared Portals are refreshed from their trusted recipe before restart.",
         { name: z.string() },
         async ({ name }: { name: string }) => {
+          const deadline = portalToolDeadline();
           const dir = workspace(ctx);
           if (dir instanceof Error) return result(dir.message);
           try {
@@ -410,10 +433,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
                   ...options,
                   env: sandboxPortalEnv(ctx, sandbox),
                 });
-                const outcome = await settleWithin(
-                  restarting,
-                  PORTAL_TOOL_WAIT_MS,
-                );
+                const outcome = await settleBefore(restarting, deadline);
                 if (!outcome.settled)
                   return result(
                     await stillStarting(ctx, dir, sandbox, name, restarting),
@@ -424,16 +444,31 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
                   `${portal.name} restarted at ${refreshed.services.find((candidate) => candidate.key === portal.key)?.previewUrl ?? "its authenticated Portal URL"}.`,
                 );
               }
-              if (runner?.runner)
-                await stopRunnerPortal({ session: runner, name });
-              else
-                await stopPortalService({
-                  sessionId: ctx.sessionId,
-                  worktreeDir: dir,
-                  name,
-                });
+              // Stopping a loaded dev server can take most of the budget on
+              // its own. The stop and the start keep running past the reply;
+              // the registry records where they end up.
+              const restarting = (async () => {
+                if (runner?.runner)
+                  await stopRunnerPortal({ session: runner, name });
+                else
+                  await stopPortalService({
+                    sessionId: ctx.sessionId,
+                    worktreeDir: dir,
+                    name,
+                  });
+                return startPortalForContext(
+                  ctx,
+                  dir,
+                  sandbox,
+                  options,
+                  deadline,
+                );
+              })();
+              const outcome = await settleBefore(restarting, deadline);
               return result(
-                await startPortalForContext(ctx, dir, sandbox, options),
+                outcome.settled
+                  ? outcome.value
+                  : await stillStarting(ctx, dir, sandbox, name, restarting),
               );
             }
             if (runner?.runner) {
@@ -457,7 +492,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
                   worktreeDir: dir,
                   name,
                 });
-            const outcome = await settleWithin(restarting, PORTAL_TOOL_WAIT_MS);
+            const outcome = await settleBefore(restarting, deadline);
             if (!outcome.settled)
               return result(
                 await stillStarting(ctx, dir, sandbox, name, restarting),

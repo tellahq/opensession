@@ -63,6 +63,11 @@ export interface OneShotOpts {
   label?: string;
   effort?: SessionEffort;
   timeoutMs?: number;
+  /** Models to try in order when the primary fails on provider exhaustion or
+   *  an infrastructure error. Haiku always has the configured OpenAI tier as
+   *  its fallback; any other model only falls over when the caller names one,
+   *  so ad-hoc classifiers keep their deterministic null answer. */
+  fallbackModels?: string[];
 }
 
 /** Resolve one-shot model configuration onto Pi, preserving provider + tier. */
@@ -92,13 +97,41 @@ export function haikuOneShotFallbackModel(
   return fallback;
 }
 
+/** Ordered fallback chain for a failed primary attempt: Haiku's configured
+ *  OpenAI tier, else the caller's own list routed onto Pi. Cross-provider
+ *  hops only; a fallback on the primary's provider would spend another
+ *  attempt in the same exhausted pool. */
+export function oneShotFallbackModels(
+  model: string | undefined,
+  error: string | null,
+  requested: string[] | undefined,
+): string[] {
+  const haiku = haikuOneShotFallbackModel(model, error);
+  if (haiku) return [haiku];
+  if (!requested?.length || !haikuOneShotShouldFallOver(error)) return [];
+  const provider = model?.match(/^pi\/([^/]+)\//)?.[1];
+  const chain: string[] = [];
+  for (const candidate of requested) {
+    const routed = toPiModel(candidate);
+    if (!routed || routed === model || chain.includes(routed)) continue;
+    if (provider && routed.startsWith(`pi/${provider}/`)) continue;
+    chain.push(routed);
+  }
+  return chain;
+}
+
 /** What a one-shot did: the answer, or the reason there is not one.
  *  `oneShot` collapses this to null by design, since every caller has a
  *  deterministic fallback and must not have to catch. But a caller that can
  *  ACT on the reason needs it to survive that collapse: the Dial oracle
  *  retries on another provider when the pool is dry, and says so instead of
  *  reporting a bare "unavailable" that sends the reader to journalctl. */
-export type OneShotResult = { text: string | null; error: string | null };
+export type OneShotResult = {
+  text: string | null;
+  error: string | null;
+  /** Pi model that produced the answer (a fallback when the primary failed). */
+  model?: string;
+};
 
 /** Run one tool-less Pi prompt and return its settled assistant text. */
 export async function oneShot(
@@ -118,28 +151,33 @@ export async function oneShotDetailed(
   if (primary.text) return primary;
   if (process.env.NODE_ENV === "test") return primary;
 
-  const fallbackModel = haikuOneShotFallbackModel(primaryModel, primary.error);
-  if (!fallbackModel) return primary;
+  const chain = oneShotFallbackModels(
+    primaryModel,
+    primary.error,
+    opts.fallbackModels,
+  );
+  if (!chain.length) return primary;
 
   const label = opts.label || "oneshot";
-  console.warn(
-    `[oneshot:${label}] Haiku unavailable (${primary.error || "empty answer"}); retrying on ${fallbackModel}`,
-  );
-  const fallback = await runOneShotAttempt(prompt, {
-    ...opts,
-    model: fallbackModel,
-    label: `${label}-openai-fallback`,
-  });
-  if (fallback.text) return fallback;
-  return {
-    text: null,
-    error: [
-      primary.error ? `Haiku: ${primary.error}` : "Haiku: empty answer",
-      fallback.error
-        ? `OpenAI fallback: ${fallback.error}`
-        : "OpenAI fallback: empty answer",
-    ].join("; "),
-  };
+  const errors = [`${primaryModel}: ${primary.error || "empty answer"}`];
+  let lastError = primary.error;
+  for (const fallbackModel of chain) {
+    console.warn(
+      `[oneshot:${label}] ${primaryModel} unavailable (${lastError || "empty answer"}); retrying on ${fallbackModel}`,
+    );
+    const fallback = await runOneShotAttempt(prompt, {
+      ...opts,
+      model: fallbackModel,
+      label: `${label}-fallback`,
+    });
+    if (fallback.text) return fallback;
+    lastError = fallback.error;
+    errors.push(`${fallbackModel}: ${fallback.error || "empty answer"}`);
+    // A caller-side failure (bad prompt, restart) will not improve on the
+    // next provider; only keep hopping while the shape is provider-bound.
+    if (!haikuOneShotShouldFallOver(fallback.error)) break;
+  }
+  return { text: null, error: errors.join("; ") };
 }
 
 async function runOneShotAttempt(
@@ -225,9 +263,13 @@ async function runOneShotAttempt(
     });
     if (error) {
       console.warn(`[oneshot:${label}] failed: ${error}`);
-      return { text: null, error };
+      return { text: null, error, model };
     }
-    return { text: answer || null, error: answer ? null : "empty answer" };
+    return {
+      text: answer || null,
+      error: answer ? null : "empty answer",
+      model,
+    };
   } catch (e) {
     const message = String((e as Error)?.message || e);
     console.warn(`[oneshot:${label}] failed: ${message}`);

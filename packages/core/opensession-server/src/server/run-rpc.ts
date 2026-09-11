@@ -42,6 +42,8 @@ const g = globalThis as any;
 const RPC_TOOL_CALL_TIMEOUT_MS = 30 * 60 * 1000;
 
 export interface RunTokenContext {
+  /** Server-owned dispatch identity, never accepted from an MCP request body. */
+  promptEntryId?: string;
   sessionId: string;
   user?: string;
 }
@@ -90,6 +92,7 @@ export function timingSafeEqStr(a: string, b: string): boolean {
 export type InteractiveMcpBuilder = (
   sessionId: string,
   user?: string,
+  promptEntryId?: string,
 ) => Record<string, any> | Promise<Record<string, any>>;
 
 export function registerInteractiveMcpBuilder(b: InteractiveMcpBuilder): void {
@@ -165,7 +168,7 @@ export async function dispatchRunRpc(
   const perSession = sessionServers.get(ctx.sessionId);
   const cfg =
     perSession?.[serverName] ??
-    (await builder(ctx.sessionId, ctx.user))[serverName];
+    (await builder(ctx.sessionId, ctx.user, ctx.promptEntryId))[serverName];
   if (!cfg?.instance) {
     // tools/list for a server this session doesn't carry (shared servers list
     // the union of in-process servers in their config) answers with an empty

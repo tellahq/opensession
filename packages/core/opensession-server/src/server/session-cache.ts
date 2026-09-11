@@ -12,6 +12,7 @@ import {
   getAllSessionsAsync,
   nativeSessionDetailFromData,
   nativeSessionRow,
+  readAgentSessionListRow,
   readNativeSession,
   readNativeSessionListRow,
   readSlackSession,
@@ -155,19 +156,29 @@ export function publishSessionChange(sessionId: string): Promise<void> {
 
 /**
  * The list row a targeted publish writes for `sessionId`, or undefined when
- * it names no native session. The id may be a historical Slack/Linear alias
+ * no session file owns it. The id may be a historical Slack/Linear alias
  * (a rename or review request can be stored under one): the row is then the
  * canonical session the last list assembly merged it into. The aliases come
  * from the memory snapshot because only the full assembly discovers them; a
  * single document read would otherwise drop them and the overlays keyed
  * under them from the index until the next rebuild.
+ *
+ * A Slack or Linear id that no native session absorbed reads its own file.
+ * The index learns rows only from these publishes and from full rebuilds, so
+ * without this a Slack thread created after boot never reached the list: it
+ * was missing from the sidebar and from the worktree reaper's session
+ * snapshot, which reaped its fresh checkout as done work (2026-09-10).
  */
 function targetedSessionListRow(sessionId: string): UnifiedSession | undefined {
   const known = peekCachedSessions().find(
     (session) =>
       session.id === sessionId || session.aliasIds?.includes(sessionId),
   );
-  return readNativeSessionListRow(known?.id ?? sessionId, known?.aliasIds);
+  const id = known?.id ?? sessionId;
+  return (
+    readNativeSessionListRow(id, known?.aliasIds) ??
+    readAgentSessionListRow(id, known?.aliasIds)
+  );
 }
 
 /**

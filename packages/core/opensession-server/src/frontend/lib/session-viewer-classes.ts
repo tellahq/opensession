@@ -252,12 +252,18 @@ export const VIEWER_MESSAGES =
   // --strip-clearance is 0 by default and the docked tab bar's height on a
   // multi-session workspace.
   "phone:px-3 " +
-  "phone:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)] " +
-  // Dissolve the transcript into the header as it scrolls up under the pills.
-  // A non-linear fade mirrored into mask alpha:
-  // hidden for the first fifth, 45% by three fifths, full at the bar height.
-  "phone:[-webkit-mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))] " +
-  "phone:[mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))]";
+  "phone:pt-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)]";
+// No mask-image on the scroll container. The header's own wash
+// (APP_HEADER_OVERLAY's ::before: page-colour gradient plus backdrop blur) is
+// what dissolves the transcript as it scrolls under the pills. A mask on the
+// scroller used to sharpen that fade, and on iOS Safari 27 it left the top of
+// the viewport unpainted: a hard-edged, full-width band of page colour from
+// under the status bar to about 200pt down, cutting through the middle of a
+// heading, after scrolling into history while a session streamed. WebKit keeps
+// a masked scroller's mask in a backing store of its own, sized to the
+// scrolled contents, and a tile of it that misses a paint is a region where
+// the mask reads as fully transparent. Nothing else on the page can produce a
+// flat band with a hard bottom edge.
 
 /**
  * The composer floats up over the transcript so the session scrolls UNDER it,

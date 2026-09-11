@@ -18,12 +18,14 @@ import { findSessionAsync } from "../session-cache";
 import { activeSandboxFor } from "../session-sandbox";
 import { existsSync } from "fs";
 import {
+  hostPortalRouteStatus,
   restartPortalService,
   restartSandboxPortalService,
   startPortalService,
   startSandboxPortalService,
   stopPortalService,
   stopSandboxPortalService,
+  wakeHostPortalRoute,
 } from "../portal-supervisor";
 import {
   restartRunnerPortal,
@@ -95,49 +97,86 @@ export async function handlePreviewRoutes(
           );
     let recoveredNow = false;
     try {
-      const {
-        recoverSandboxPortalRoute,
-        sandboxPortalRouteConnected,
-        sandboxPortalRouteSession,
-        sandboxPortalRouteStarting,
-      } = await import("../sandbox-portal-recovery");
-      // Caddy routes and their authorization can outlive the outbound relay.
-      // Verify both on every authenticated request; a disconnected sandbox
-      // gets a fresh sidecar before Caddy proxies to a dead loopback socket.
-      if (
-        !portalRouteAuthorized(httpsPort) ||
-        !sandboxPortalRouteConnected(httpsPort)
-      ) {
-        // Only a person's navigation may wake a sleeping Sandbox: it is an
-        // explicit action, where a fetch from an old tab is not.
-        const recovery = recoverSandboxPortalRoute(httpsPort, {
-          wake: navigation,
-        });
-        if (navigation) {
+      // Host Portals keep their authenticated Caddy route while sleeping. A
+      // real navigation wakes one; background fetches from stale tabs do not.
+      const hostPortal = await hostPortalRouteStatus(httpsPort - 6_000);
+      if (hostPortal) {
+        if (!portalRouteAuthorized(httpsPort))
+          return notActive(hostPortal.sessionId);
+        if (hostPortal.state === "sleeping") {
+          if (!navigation) return notActive(hostPortal.sessionId);
           const outcome = await Promise.race([
-            recovery,
+            wakeHostPortalRoute(httpsPort - 6_000),
             Bun.sleep(PORTAL_RECOVERY_GRACE_MS).then(() => "pending" as const),
           ]);
           if (outcome === "pending")
             return portalWaitingResponse({
               state: "waking",
               retrySeconds: PORTAL_WAITING_RETRY_SECONDS,
+              sessionUrl: portalSessionUrl(hostPortal.sessionId),
             });
-          recoveredNow = outcome;
-        } else {
-          recoveredNow = await recovery;
+          recoveredNow = true;
+        } else if (
+          hostPortal.state === "starting" ||
+          hostPortal.state === "waking"
+        ) {
+          return navigation
+            ? portalWaitingResponse({
+                state: "waking",
+                retrySeconds: PORTAL_WAITING_RETRY_SECONDS,
+                sessionUrl: portalSessionUrl(hostPortal.sessionId),
+              })
+            : notActive(hostPortal.sessionId);
+        } else if (hostPortal.state !== "awake") {
+          return notActive(hostPortal.sessionId);
         }
-        if (!recoveredNow)
-          return notActive(sandboxPortalRouteSession(httpsPort));
+      } else {
+        const {
+          recoverSandboxPortalRoute,
+          sandboxPortalRouteConnected,
+          sandboxPortalRouteSession,
+          sandboxPortalRouteStarting,
+        } = await import("../sandbox-portal-recovery");
+        // Caddy routes and their authorization can outlive the outbound relay.
+        // Verify both on every authenticated request; a disconnected sandbox
+        // gets a fresh sidecar before Caddy proxies to a dead loopback socket.
+        if (
+          !portalRouteAuthorized(httpsPort) ||
+          !sandboxPortalRouteConnected(httpsPort)
+        ) {
+          // Only a person's navigation may wake a sleeping Sandbox: it is an
+          // explicit action, where a fetch from an old tab is not.
+          const recovery = recoverSandboxPortalRoute(httpsPort, {
+            wake: navigation,
+          });
+          if (navigation) {
+            const outcome = await Promise.race([
+              recovery,
+              Bun.sleep(PORTAL_RECOVERY_GRACE_MS).then(
+                () => "pending" as const,
+              ),
+            ]);
+            if (outcome === "pending")
+              return portalWaitingResponse({
+                state: "waking",
+                retrySeconds: PORTAL_WAITING_RETRY_SECONDS,
+              });
+            recoveredNow = outcome;
+          } else {
+            recoveredNow = await recovery;
+          }
+          if (!recoveredNow)
+            return notActive(sandboxPortalRouteSession(httpsPort));
+        }
+        // The route is live but its service may still be booting (a start the
+        // agent or a wake kicked off). Proxying now would reach a port nobody
+        // listens on and show a bare 502; keep the person on the waiting page.
+        if (navigation && sandboxPortalRouteStarting(httpsPort))
+          return portalWaitingResponse({
+            state: "waking",
+            retrySeconds: PORTAL_WAITING_RETRY_SECONDS,
+          });
       }
-      // The route is live but its service may still be booting (a start the
-      // agent or a wake kicked off). Proxying now would reach a port nobody
-      // listens on and show a bare 502; keep the person on the waiting page.
-      if (navigation && sandboxPortalRouteStarting(httpsPort))
-        return portalWaitingResponse({
-          state: "waking",
-          retrySeconds: PORTAL_WAITING_RETRY_SECONDS,
-        });
     } catch (error) {
       console.warn(`[portals] Portal ${httpsPort} recovery failed:`, error);
       return notActive(null);

@@ -369,9 +369,11 @@ export function readRemoteRepoTemplate(
       (entry.projectSignature != null &&
         entry.projectSignature !== projectSignature)
     ) {
-      try {
-        unlinkSync(path);
-      } catch {}
+      // Keep the stale record on disk. It is never selected again, but the
+      // next publish or invalidation reads it back as `previous` so the
+      // provider artifact it names gets deleted. Unlinking it here leaked one
+      // multi-gigabyte Box snapshot per toolchain change until the account
+      // hit Box's named-snapshot cap.
       return null;
     }
     if (!entry.projectSignature) {

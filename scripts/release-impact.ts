@@ -14,11 +14,15 @@ export type ReleaseImpact =
   | "root";
 
 const ENTRIES = {
-  gateway: "packages/core/opensession-server/opensession.ts",
-  supervisor:
+  gateway: ["packages/core/opensession-server/opensession.ts"],
+  supervisor: [
     "packages/core/opensession-server/src/server/gateway-supervisor.ts",
-  kernel: "packages/core/opensession-server/src/session-kernel-service.ts",
-  executor: "packages/core/opensession-server/src/executor/main.ts",
+  ],
+  kernel: [
+    "packages/core/opensession-server/src/session-kernel-service.ts",
+    "packages/core/opensession-server/src/session-kernel-worker.ts",
+  ],
+  executor: ["packages/core/opensession-server/src/executor/main.ts"],
 } as const;
 
 export async function changedPaths(
@@ -52,18 +56,18 @@ export async function changedPaths(
 
 async function importClosure(
   root: string,
-  entry: string,
+  entries: readonly string[],
 ): Promise<Set<string>> {
   const result = await Bun.build({
     root,
-    entrypoints: [entry],
+    entrypoints: [...entries],
     target: "bun",
     packages: "external",
     metafile: true,
   });
   if (!result.success || !result.metafile) {
     throw new Error(
-      `dependency graph failed for ${entry}: ${result.logs.map((log) => log.message).join("; ")}`,
+      `dependency graph failed for ${entries.join(", ")}: ${result.logs.map((log) => log.message).join("; ")}`,
     );
   }
   return new Set(Object.keys(result.metafile.inputs));
@@ -72,13 +76,20 @@ async function importClosure(
 async function combinedClosure(
   fromRoot: string,
   toRoot: string,
-  entry: string,
+  entries: readonly string[],
 ): Promise<Set<string>> {
   const [before, after] = await Promise.all([
-    importClosure(fromRoot, entry),
-    importClosure(toRoot, entry),
+    importClosure(fromRoot, entries),
+    importClosure(toRoot, entries),
   ]);
   return new Set([...before, ...after]);
+}
+
+export function runtimeComponentClosure(
+  root: string,
+  component: keyof typeof ENTRIES,
+): Promise<Set<string>> {
+  return importClosure(root, ENTRIES[component]);
 }
 
 export type RuntimeComponents = {

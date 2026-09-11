@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { portalTargetFor } from "./portals";
 
 describe("portalTargetFor", () => {
-  test("opens only running services with an authenticated URL", () => {
+  test("opens running and auto-wake sleeping services with an authenticated URL", () => {
     expect(
       portalTargetFor("session-1", {
         name: "Webapp",
@@ -31,6 +31,15 @@ describe("portalTargetFor", () => {
     expect(
       portalTargetFor("session-1", { ...service, running: false }),
     ).toBeNull();
+    expect(
+      portalTargetFor("session-1", {
+        ...service,
+        running: false,
+        state: "sleeping",
+        previewUrl: "https://os.example.test:23000",
+        defaultPath: "/temporal",
+      }),
+    ).toMatchObject({ url: "https://os.example.test:23000/temporal" });
     expect(
       portalTargetFor("session-1", {
         ...service,

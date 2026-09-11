@@ -31,6 +31,10 @@ export const AUTOMATION_MACHINE_USER = "Automation";
 /** Sender for sessions the GitHub review agent starts. */
 export const GITHUB_ACTOR = "GitHub";
 
+/** Suffix an automation's own ticks carry as `createdBy`/sender:
+ *  `"<automation name> (automation)"` (automations.ts). */
+export const AUTOMATION_ACTOR_SUFFIX = " (automation)";
+
 /** Sender for a worker session reporting back to the session that spawned it. */
 export function workerActor(sessionId: string): string {
   return `worker ${sessionId}`;
@@ -86,12 +90,45 @@ export function isMachineActor(createdBy?: string | null): boolean {
     lower === SYSTEM_RESTART_USER ||
     lower === AUTOMATION_MACHINE_USER.toLowerCase() ||
     lower === GITHUB_ACTOR.toLowerCase() ||
+    lower.endsWith(AUTOMATION_ACTOR_SUFFIX) ||
     // The agent's own name: a session it started with no person to credit.
     sameBrand(name, personaName()) ||
     sameBrand(name, productMark()) ||
     sameBrand(name, productName()) ||
     delegatedActorParent(name) !== null
   );
+}
+
+/**
+ * The person behind a prompt, or null when nobody is: a machine sender, an
+ * empty sender, or the anonymous placeholder. This is what a session records
+ * as `lastPromptedBy`, so only people ever become a session's principal.
+ */
+export function humanPrompter(user?: string | null): string | null {
+  const name = (user || "").trim();
+  if (!name || name.toLowerCase() === "anonymous" || isMachineActor(name))
+    return null;
+  return name;
+}
+
+/**
+ * The person a session currently acts for: the last person who prompted it,
+ * else whoever started it.
+ *
+ * A turn with no human sender (a review handoff, an auto-continue nudge, a
+ * queue drain, a restart resume) commits and opens PRs on this person's
+ * behalf. Before `lastPromptedBy` existed the fallback was always the
+ * creator, so a session one teammate started and another took over kept
+ * crediting the one who left: Michiel rewrote a PR in Grant's session, the
+ * review handoff that followed committed the fix, and the trailer named
+ * Grant again (tella-fusion#6348). A stored sender that is somehow a sentinel
+ * is ignored rather than trusted.
+ */
+export function sessionPrincipal(session: {
+  startedBy?: string | null;
+  lastPromptedBy?: string | null;
+}): string | null {
+  return humanPrompter(session.lastPromptedBy) ?? session.startedBy ?? null;
 }
 
 /**

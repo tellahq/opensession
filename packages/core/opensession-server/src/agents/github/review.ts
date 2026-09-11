@@ -66,6 +66,7 @@ import {
   mergeRiskSection,
   runMergeRiskCheck,
   type MergeRiskResult,
+  type RiskFactor,
 } from "./merge-risk";
 import {
   loadReviewOptions,
@@ -182,7 +183,7 @@ export interface ReviewResult {
   /** Merge risk from the separate scorer. Advisory: never gates anything. */
   risk?: MergeRiskResult["risk"];
   recovery?: MergeRiskResult["recovery"];
-  riskFactors?: MergeRiskResult["factors"];
+  riskFactors?: RiskFactor[];
   findings: number;
   /** Findings that should block merge: P0/P1 severity, or a request_changes verdict. */
   blocking: number;
@@ -880,7 +881,7 @@ export async function runReview(
       confidence: parsed?.confidence,
       risk: risk?.risk,
       recovery: risk?.recovery,
-      riskFactors: risk?.factors,
+      riskFactors: risk?.factors.map((f) => f.factor),
       findings: parsed?.findings?.length || 0,
       blocking: reviewBlockingCount(parsed),
       ...(publicReview ? { publicReview: true as const } : {}),

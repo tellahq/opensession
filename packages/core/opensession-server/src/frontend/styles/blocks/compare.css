@@ -1,0 +1,285 @@
+/* ```compare fence upgraded into a before/after comparison (lib/compare-block.ts).
+   Renderer-emitted markup, which is why it is a stylesheet and not a utility
+   string. The figure carries `data-mode`, one of the three views on the
+   switch under the stills; the rules without a mode are Swipe, and 2-up and
+   Onion skin override them below.
+
+   Swipe: the before still is in flow and sizes the box, capped like a placed
+   image; the after still lies over it, clipped to the right of the divider.
+   `--p` is the divider's position in percent, set by the range input that
+   covers the whole box and is the only thing there that takes input. */
+.md-compare-wrap {
+  margin: 2px 0 8px;
+}
+.md-compare {
+  --p: 50;
+  --blend: 50;
+  --pos: calc(var(--p) * 1%);
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--bg-panel);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.md-compare-img {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  height: auto;
+  pointer-events: none;
+}
+.md-compare-after {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  clip-path: inset(0 0 0 var(--pos));
+}
+.md-compare-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--pos);
+  width: 2px;
+  margin-left: -1px;
+  background: var(--bg);
+  pointer-events: none;
+}
+.md-compare-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border);
+}
+/* The stills read through the input: it is invisible but it is the hit
+   target, so a press anywhere jumps the divider there and drags it on. The
+   thumb is a hairline so the divider sits where the finger is; a wide thumb
+   would drift from it toward the edges. */
+.md-compare-range {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: ew-resize;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  touch-action: pan-y;
+}
+.md-compare-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 2px;
+  height: 100%;
+}
+.md-compare-range::-moz-range-thumb {
+  width: 2px;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+.md-compare:has(.md-compare-range:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.md-compare-label {
+  position: absolute;
+  bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  pointer-events: none;
+}
+/* Each label fades as the divider reaches it, so it never sits on the other
+   still. Unitless maths on --p: fully shown 6 points away, gone at the edge. */
+.md-compare-label-before {
+  left: 8px;
+  opacity: clamp(0, calc((var(--p) - 10) / 6), 1);
+}
+.md-compare-label-after {
+  right: 8px;
+  opacity: clamp(0, calc((90 - var(--p)) / 6), 1);
+}
+
+/* ── 2-up ──────────────────────────────────────────────────────────
+   Both stills whole, side by side, each under its name. The box stops
+   being a well: the stills carry their own corners and each takes the
+   click into the gallery (MediaLightbox.tsx), so the divider, the range
+   and the expand button have nothing to do and go. */
+.md-compare-wrap[data-mode="two-up"] .md-compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "label-before label-after"
+    "before after";
+  gap: 4px 8px;
+  width: auto;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+}
+.md-compare-wrap[data-mode="two-up"] .md-compare-img {
+  justify-self: start;
+  width: auto;
+  max-width: 100%;
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--bg-panel);
+  pointer-events: auto;
+  cursor: zoom-in;
+}
+.md-compare-wrap[data-mode="two-up"] .md-compare-before {
+  grid-area: before;
+}
+.md-compare-wrap[data-mode="two-up"] .md-compare-after {
+  grid-area: after;
+  position: static;
+  height: auto;
+  object-fit: contain;
+  clip-path: none;
+}
+.md-compare-wrap[data-mode="two-up"] .md-compare-label {
+  position: static;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--text-dim);
+  font-weight: 500;
+  opacity: 1;
+}
+.md-compare-wrap[data-mode="two-up"] .md-compare-label-before {
+  grid-area: label-before;
+}
+.md-compare-wrap[data-mode="two-up"] .md-compare-label-after {
+  grid-area: label-after;
+}
+.md-compare-wrap[data-mode="two-up"] .md-compare-divider,
+.md-compare-wrap[data-mode="two-up"] .md-compare-range,
+.md-compare-wrap[data-mode="two-up"] .md-diagram-expand {
+  display: none;
+}
+
+/* ── Onion skin ────────────────────────────────────────────────────
+   The after still lies whole over the before at `--blend` percent
+   opacity, set by the range in the bar. Nothing covers the stills, so a
+   click on the box opens the after still in the gallery. The pills go:
+   the range's own Before and After say which end is which. */
+.md-compare-wrap[data-mode="onion"] .md-compare-after {
+  clip-path: none;
+  opacity: calc(var(--blend) / 100);
+}
+.md-compare-wrap[data-mode="onion"] .md-compare-img {
+  pointer-events: auto;
+  cursor: zoom-in;
+}
+.md-compare-wrap[data-mode="onion"] .md-compare-divider,
+.md-compare-wrap[data-mode="onion"] .md-compare-range,
+.md-compare-wrap[data-mode="onion"] .md-compare-label {
+  display: none;
+}
+
+/* ── The bar ───────────────────────────────────────────────────────
+   The view switch, drawn the way the JSON tree's Tree / Raw toggle is
+   (blocks/json-tree.css): a recessed track with the option in effect on
+   the segmented knob tokens. Beside it, in Onion skin only, the blend
+   range; on a narrow column it wraps under the switch. */
+.md-compare-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 6px;
+  font-family: var(--sans);
+  font-size: var(--type-meta);
+}
+.md-compare-modes {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: calc(9px * var(--rf));
+  corner-shape: var(--cs);
+  background: var(--hover);
+}
+.md-compare-mode {
+  min-height: 24px;
+  padding: 2px 9px;
+  border: 0;
+  border-radius: calc(7px * var(--rf));
+  corner-shape: var(--cs);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--dur-micro) var(--ease),
+    color var(--dur-micro) var(--ease);
+}
+.md-compare-mode:hover {
+  color: var(--text);
+}
+.md-compare-mode[aria-pressed="true"] {
+  background: var(--segmented-knob-surface);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--segmented-knob-edge);
+}
+.md-compare-mode:focus-visible,
+.md-compare-blend-range:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.md-compare-blend {
+  display: none;
+  flex: 1 1 200px;
+  align-items: center;
+  gap: 8px;
+  max-width: 360px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+}
+.md-compare-wrap[data-mode="onion"] .md-compare-blend {
+  display: flex;
+}
+.md-compare-blend-range {
+  flex: 1;
+  min-width: 80px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+@media (max-width: 720px) {
+  .md-compare-img {
+    max-height: 400px;
+  }
+  .md-compare-mode {
+    min-height: 40px;
+    padding: 2px 12px;
+  }
+  .md-compare-blend {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .md-compare-blend-range {
+    min-height: 40px;
+  }
+}

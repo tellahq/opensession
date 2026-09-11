@@ -5,6 +5,9 @@ import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 import { IconChevronLeft } from "./icons";
 
+const MAC_DOWNLOAD_URL =
+  "https://github.com/tellahq/opensession/releases/latest/download/OpenSession-arm64.dmg";
+
 /** Apple's mark, for the Mac download. A solid glyph, not part of the stroke set. */
 function IconApple({ size = 20 }: { size?: number }) {
   return (
@@ -122,11 +125,7 @@ export function DownloadAppsBody({
           size="lg"
           icon={<IconApple size={20} />}
           className="min-h-10 w-full"
-          render={
-            <a
-              href={`${BASE_PATH}/api/packages/clients/mac/download/latest.dmg`}
-            />
-          }
+          render={<a href={MAC_DOWNLOAD_URL} />}
         >
           Download
         </Button>

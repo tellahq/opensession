@@ -292,7 +292,39 @@ describe("session kernel actor service", () => {
     ).toBe(true);
   });
 
-  test("restarts the catalog lane instead of the service after a read timeout", async () => {
+  test("spreads catalog reads over session lanes and leaves lane zero free", async () => {
+    const ready = async () =>
+      (await (await fetch(`${service.url}/ready`)).json()) as {
+        lanes: Array<{ index: number; turnsCompleted: number }>;
+      };
+    const before = await ready();
+    const beforeByLane = new Map(
+      before.lanes.map((lane) => [lane.index, lane.turnsCompleted]),
+    );
+
+    await Promise.all(
+      Array.from({ length: 128 }, (_, index) =>
+        rpc({
+          t: "call",
+          rpcId: `catalog-read-pool-${index}`,
+          outputBytes: 256 * 1024,
+          request: { t: "store", method: "askEntries", args: [] },
+        }),
+      ),
+    );
+
+    const after = await ready();
+    expect(after.lanes[0]?.turnsCompleted).toBe(beforeByLane.get(0) ?? 0);
+    const sessionLaneDeltas = after.lanes
+      .slice(1)
+      .map((lane) => lane.turnsCompleted - (beforeByLane.get(lane.index) ?? 0));
+    expect(sessionLaneDeltas.reduce((sum, delta) => sum + delta, 0)).toBe(128);
+    expect(
+      sessionLaneDeltas.filter((delta) => delta > 0).length,
+    ).toBeGreaterThan(1);
+  });
+
+  test("restarts a catalog read lane instead of the service after a timeout", async () => {
     const isolatedService = await startSessionKernelService({
       port: 0,
       token,
@@ -340,7 +372,7 @@ describe("session kernel actor service", () => {
       });
       expect(timedOut.status).toBe(429);
       expect(await timedOut.json()).toMatchObject({
-        error: "Session actor lane 0 response timed out",
+        error: "Session actor lane 1 response timed out",
       });
 
       let ready: Response | undefined;

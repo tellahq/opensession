@@ -102,6 +102,7 @@ describe("resolveSessionRunInputs", () => {
     expect(inputs.deniedTools).toBeUndefined();
     expect(inputs.user).toBe("Kent");
     expect(inputs.mcpGrantUser).toBe("michiel");
+    expect(inputs.accountUser).toBe("Kent");
     expect(inputs.sessionNote).toBe(true);
   });
 
@@ -136,6 +137,35 @@ describe("resolveSessionRunInputs", () => {
     // No memory / repos / personal-prompt note for an automation run.
     expect(inputs.sessionNote).toBe(false);
     expect(inputs.inProcessMcpBranch).toBe("automation-self-improve");
+  });
+
+  test("a person taking over an automation-owned session keeps their provider account", async () => {
+    // Johnny switched a Plain triage session back to Fable and prompted it;
+    // every turn still ran pool-only and bounced to the fallback while his
+    // own subscription had headroom. The identity reaches account selection
+    // only: `user` (the MCP gate) stays dropped.
+    const inputs = await resolveSessionRunInputs(
+      { ...plain, automation: "Plain ticket triage" },
+      { user: "Johnny" },
+    );
+    expect(inputs.user).toBeUndefined();
+    expect(inputs.accountUser).toBe("Johnny");
+  });
+
+  test("machine senders never become an account user", async () => {
+    for (const user of [
+      "Plain ticket triage (automation)",
+      "GitHub",
+      "auto-continue",
+      "Anonymous",
+      undefined,
+    ]) {
+      const inputs = await resolveSessionRunInputs(
+        { ...plain, automation: "Plain ticket triage" },
+        { user },
+      );
+      expect(inputs.accountUser).toBeUndefined();
+    }
   });
 
   test("an automation descendant keeps immutable empty scope on resume", async () => {

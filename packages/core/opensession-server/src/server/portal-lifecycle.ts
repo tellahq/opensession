@@ -21,12 +21,19 @@ export class HostPortalActivity {
     if (entry) entry.lastUsedAt = now;
   }
 
-  idle(port: number, generation: string, now: number): boolean {
+  lastUsedAt(port: number, generation: string): number | undefined {
     const entry = this.ports.get(port);
-    return (
-      entry?.generation === generation &&
-      now - entry.lastUsedAt >= PORTAL_IDLE_MS
-    );
+    return entry?.generation === generation ? entry.lastUsedAt : undefined;
+  }
+
+  idle(
+    port: number,
+    generation: string,
+    now: number,
+    idleMs = PORTAL_IDLE_MS,
+  ): boolean {
+    const entry = this.ports.get(port);
+    return entry?.generation === generation && now - entry.lastUsedAt >= idleMs;
   }
 
   retain(ports: ReadonlySet<number>): void {

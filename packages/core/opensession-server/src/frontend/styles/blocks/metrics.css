@@ -1,0 +1,64 @@
+/* ── ```metrics cards (lib/metrics-block.ts) ────────────────────────────
+   A row of cards that fills the column and wraps; two across on a phone. A
+   card is a fill on the message surface with no border (frontend/AGENTS.md),
+   and the figure is tabular so a row of them lines up digit for digit. */
+.md-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 2px 0 8px;
+}
+.md-metric {
+  min-width: 0;
+  padding: 10px 12px 9px;
+  background: var(--bg-panel);
+  border-radius: calc(14px * var(--rf));
+  corner-shape: var(--cs);
+}
+.md-metric-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  color: var(--text);
+}
+.md-metric-figure {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.md-metric-unit {
+  font-size: var(--type-label);
+  font-weight: 500;
+  color: var(--text-dim);
+  /* Hugs its figure; the delta after it keeps the row's gap. */
+  margin-left: -4px;
+}
+.md-metric-delta {
+  font-size: var(--type-label);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+.md-metric-delta-up {
+  color: var(--green);
+}
+.md-metric-delta-down {
+  color: var(--red);
+}
+.md-metric-label {
+  margin-top: 2px;
+  font-size: var(--type-meta);
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .md-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

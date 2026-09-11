@@ -32,6 +32,7 @@ import {
   updateHides as updateUserHides,
 } from "../hides";
 import { mergeMapDelta, requestedMapDelta } from "../shared/map-delta";
+import { broadcastToUser } from "../ws-hub";
 import {
   getSettlements as getUserSettlements,
   setSettlements as setUserSettlements,
@@ -384,6 +385,12 @@ export async function handlePrefsRoutes(
     const next = await updateUserLanes(user, (current) =>
       mergeMapDelta(current, delta),
     );
+    // These maps decide what the sidebar shows, and a client only re-reads
+    // them on load or when its tab regains visibility. A claim made on the
+    // phone must reach a desktop window that never lost visibility, so the
+    // write tells that person's other sockets to re-read. No entries ride
+    // along: the frame is a nudge, and the GET stays the authority.
+    broadcastToUser(user, { type: "user_map_changed", map: "lanes", user });
     return Response.json({ lanes: next });
   }
 
@@ -412,6 +419,7 @@ export async function handlePrefsRoutes(
     const next = await updateUserSnoozes(user, (current) =>
       mergeMapDelta(current, delta),
     );
+    broadcastToUser(user, { type: "user_map_changed", map: "snoozes", user });
     return Response.json({
       snoozes: next,
     });
@@ -439,6 +447,7 @@ export async function handlePrefsRoutes(
     const next = await updateUserHides(user, (current) =>
       mergeMapDelta(current, delta),
     );
+    broadcastToUser(user, { type: "user_map_changed", map: "hides", user });
     return Response.json({ hides: next });
   }
 

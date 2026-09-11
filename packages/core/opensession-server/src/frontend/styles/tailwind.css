@@ -138,6 +138,16 @@
   --color-yellow-tint: var(--yellow-tint);
   --color-blue: var(--blue);
   --color-blue-soft: var(--blue-soft);
+  /* Categorical series colours (base-theme.css). Charts read them by name;
+	   a legend or a swatch beside one uses these. */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
   --color-red: var(--red);
   --color-red-soft: var(--red-soft);
   --color-purple: var(--purple);

@@ -67,7 +67,7 @@ describe("catalog document routing", () => {
       request,
     }) as const;
 
-  test("reads share the catalog lane and never name a session", () => {
+  test("reads use the catalog read pool and never name a session", () => {
     const reads: CatalogDocumentRequest[] = [
       { op: "get", namespace: "workspace", key: "a" },
       { op: "get_many", namespace: "workspace", keys: ["a", "b"] },

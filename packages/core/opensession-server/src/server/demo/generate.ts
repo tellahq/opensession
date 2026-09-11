@@ -37,6 +37,7 @@ import {
   demoPrInfo,
   demoSessions,
 } from "./fixtures";
+import { encodePng, type PngRect, type Rgb } from "./png";
 
 export interface DemoGenerateOpts {
   /**
@@ -104,6 +105,39 @@ function git(cwd: string, ...args: string[]): void {
 
 /** Real git repo (main) + worktree (DEMO_BRANCH) with a committed fix, a
  *  dirty edit and an untracked file — what the Diff panel needs to render. */
+/**
+ * A 960x540 "retry timeline" still: three attempt bars on a light card.
+ * Before the fix the third attempt never runs (an empty slot and a red
+ * failure bar); after it, all three run and the third succeeds. Fixture
+ * art, not product UI, so the colours are literal.
+ */
+function retryStill(build: "before" | "after"): Uint8Array {
+  const bg: Rgb = [244, 244, 246];
+  const card: Rgb = [255, 255, 255];
+  const ink: Rgb = [38, 38, 42];
+  const track: Rgb = [228, 228, 232];
+  const ran: Rgb = [58, 120, 240];
+  const ok: Rgb = [46, 160, 96];
+  const failed: Rgb = [220, 64, 64];
+  const rects: PngRect[] = [
+    { x: 60, y: 50, w: 840, h: 440, color: card },
+    { x: 100, y: 90, w: 260, h: 14, color: ink },
+  ];
+  const attempts = build === "before" ? [1, 1, 0] : [1, 1, 1];
+  attempts.forEach((ranIt, i) => {
+    const y = 160 + i * 100;
+    rects.push({ x: 100, y, w: 90, h: 12, color: ink });
+    rects.push({ x: 220, y: y - 12, w: 640, h: 36, color: track });
+    if (ranIt) rects.push({ x: 220, y: y - 12, w: 420, h: 36, color: ran });
+  });
+  const result =
+    build === "before"
+      ? { x: 220, y: 428, w: 640, h: 24, color: failed }
+      : { x: 640, y: 348, w: 220, h: 36, color: ok };
+  rects.push(result);
+  return encodePng(960, 540, bg, rects);
+}
+
 function buildDemoRepo(repoDir: string, worktreeDir: string): void {
   mkdirSync(repoDir, { recursive: true });
   mkdirSync(dirname(worktreeDir), { recursive: true });
@@ -212,9 +246,18 @@ export function generateDemoData(
 
   buildDemoRepo(repoDir, worktreeDir);
 
+  // The stills the hero session shows in place (OPENSESSION_IMAGE and
+  // OPENSESSION_COMPARE lines in its transcript). Real files, because the
+  // /media route streams from disk; under the sessions dir so the demo's
+  // state directory owns them.
+  const mediaDir = join(demoRoot, "media");
+  mkdirSync(mediaDir, { recursive: true });
+  writeFileSync(join(mediaDir, "retry-before.png"), retryStill("before"));
+  writeFileSync(join(mediaDir, "retry-after.png"), retryStill("after"));
+
   // Sessions + their engine transcripts (claude-shape jsonl; the server
   // lazily imports these into transcripts.db on first watch).
-  const sessions = demoSessions({ now, worktreeDir, repoDir });
+  const sessions = demoSessions({ now, worktreeDir, repoDir, mediaDir });
   for (const s of sessions) {
     writeJson(join(sessionsDir, `${s.id}.json`), s.file);
     if (s.engineSessionId && s.lines.length) {

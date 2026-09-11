@@ -88,7 +88,7 @@ import {
 import { createAskUserMcpServer, type AskUserHandler } from "./ask-tools";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { ensureGeneratedTitle } from "../../server/generated-titles";
-import { invalidateSessionsCache } from "../../server/session-cache";
+import { publishSessionChange } from "../../server/session-cache";
 import {
   getDefaultModel,
   toPiModel,
@@ -256,11 +256,23 @@ function mergeFileRefs(
   return merged.length ? merged : undefined;
 }
 
+// Save the session and refresh its list index row. The index learns rows
+// from targeted publishes and full rebuilds only, never from this file write:
+// without the publish a thread created after boot stayed invisible to the
+// sidebar and to the worktree reaper's session snapshot, which reaped its
+// fresh checkout hourly as "tip in origin/main" (2026-09-10).
+async function saveAndPublishSession(session: SlackSession): Promise<void> {
+  await saveSession(session);
+  void publishSessionChange(
+    `slack-${getSessionKey(session.channel, session.threadTs)}`,
+  );
+}
+
 // Save the session and mirror claudeSessionId/lastActivity into the
 // branch-named session file (written by `wt new-slack`), so opensession can
 // dedupe the two into one session as soon as the id exists.
 async function persistSession(session: SlackSession): Promise<void> {
-  await saveSession(session);
+  await saveAndPublishSession(session);
   if (!session.branch) return;
   const branchFile = `${SESSION_DIR}/${session.branch}.json`;
   try {
@@ -609,7 +621,7 @@ export async function handleModelCommand(
   const prevProvider = providerFor(session.model);
   session.model = resolved.id;
   session.lastActivity = new Date().toISOString();
-  await saveSession(session);
+  await saveAndPublishSession(session);
 
   let note = "";
   if (prevProvider !== resolved.provider) {
@@ -716,7 +728,7 @@ export async function processMessage(
     createdSession = true;
     // Persist immediately — the "Open in Open Session" link posted below points
     // at slack-<channel>-<ts>, which only resolves once this file exists.
-    await saveSession(session);
+    await saveAndPublishSession(session);
   }
 
   if (!session) {
@@ -754,7 +766,7 @@ export async function processMessage(
       msg.userId,
       session.model,
     ).then((t) => {
-      if (t) invalidateSessionsCache();
+      if (t) void publishSessionChange(`slack-${sessionKey}`);
     });
   }
 
@@ -887,7 +899,7 @@ export async function processMessage(
       console.log(`[slack] [revive] Worktree ${branch} recreated`);
       // Reset Claude session since old one is stale after cleanup
       session.claudeSessionId = null;
-      await saveSession(session);
+      await saveAndPublishSession(session);
     } catch (e) {
       console.error(
         `[slack] [revive] Failed to recreate worktree ${session.branch}:`,

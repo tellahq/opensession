@@ -38,6 +38,7 @@ import {
 } from "../lib/session-viewer-actions";
 import { safetyContinuationPrompt } from "../lib/session-safety";
 import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
+import { sessionIdFromTranscriptClick } from "../lib/transcript-session-click";
 import { getCurrentUser } from "../components/UserPicker";
 import { toast } from "../ui/toast";
 import { useConfirm } from "../ui/confirm";
@@ -373,16 +374,8 @@ export function useSessionConversationActions({
         openAsset(assetPath);
         return;
       }
-      const sessionCandidate = target.closest("[data-session-id]");
-      const sessionEl =
-        sessionCandidate instanceof HTMLElement ? sessionCandidate : null;
-      const id = sessionEl?.dataset.sessionId;
+      const id = sessionIdFromTranscriptClick(e);
       if (!id || !openSession) return;
-      if (
-        (e.metaKey || e.ctrlKey || e.shiftKey) &&
-        sessionEl?.getAttribute("href")
-      )
-        return;
       e.preventDefault();
       openSession(id);
     },

@@ -17,6 +17,10 @@
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 import { z } from "zod";
 import type { AttachedRepo, LinkedPr } from "../../server/types";
+import {
+  formatPrMergeVerdict,
+  type PrMergeVerdict,
+} from "../../server/pr-merge-readiness";
 
 export interface ReposToolContext {
   /** The session these tools act on. */
@@ -67,6 +71,17 @@ export interface ReposToolContext {
     add?: string[];
     remove?: string[];
   }) => Promise<{ repo: string; number: number; labels: string[] }>;
+  /**
+   * Is a PR ready to merge? Resolves a URL, repo id + number, or a session's
+   * own PR and answers with one deterministic verdict; throws with a human
+   * message when the PR cannot be found.
+   */
+  checkPrReady: (input: {
+    url?: string;
+    repo?: string;
+    number?: number;
+    session?: string;
+  }) => Promise<PrMergeVerdict>;
 }
 
 function text(s: string) {
@@ -236,6 +251,41 @@ export function createReposMcpServer(ctx: ReposToolContext) {
           );
         } catch (e: any) {
           return text(`Couldn't label that PR: ${e?.message || String(e)}`);
+        }
+      },
+    ),
+    tool(
+      "check_pr_ready",
+      "Is a pull request ready to merge? One deterministic verdict from live GitHub state: ready or not, and every blocker: open/merged/closed, draft, merge conflicts, each check's latest run by name (failing, pending, passing), the review decision and who gave it, and the base branch's rules. The first line is a sentence to say as-is; the JSON block at the end is the same verdict for branching on. Pass a PR URL, a repo id and number, or a session id to check that session's PR (defaults to this session's own PR). Read-only, runs as the bot, works for any registered repo. Use this instead of piecing readiness together from transcripts or gh output.",
+      {
+        url: z
+          .string()
+          .optional()
+          .describe("GitHub PR URL (https://github.com/owner/repo/pull/123)."),
+        repo: z
+          .string()
+          .optional()
+          .describe(
+            "Registered repo id. With number: names the PR. With session: narrows which of that session's PRs to check.",
+          ),
+        number: z.number().optional().describe("PR number in that repo."),
+        session: z
+          .string()
+          .optional()
+          .describe(
+            "Session id whose PR to check (its Review tab PR: primary branch, then attached repos, then linked PRs). Omit everything to check this session's own PR.",
+          ),
+      },
+      async (args: {
+        url?: string;
+        repo?: string;
+        number?: number;
+        session?: string;
+      }) => {
+        try {
+          return text(formatPrMergeVerdict(await ctx.checkPrReady(args)));
+        } catch (e: any) {
+          return text(`Couldn't check that PR: ${e?.message || String(e)}`);
         }
       },
     ),

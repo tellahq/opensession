@@ -13,6 +13,7 @@ import {
   copyIconMarkup,
   slidersIconMarkup,
 } from "../components/icons";
+import { REPLACED_FENCE_SELECTOR } from "./fence-upgraders";
 import { copyToClipboard } from "./share-link";
 
 const WRAP_CLASS = "md-code-wrap";
@@ -87,11 +88,12 @@ function closeSettings(except?: HTMLElement): void {
 export function decorateCodeBlocks(root: HTMLElement): void {
   for (const pre of Array.from(root.querySelectorAll("pre"))) {
     if (pre.parentElement?.classList.contains(WRAP_CLASS)) continue;
-    // A ```mermaid fence is on its way to becoming a diagram (MarkdownBody
-    // upgrades it asynchronously, after this has run). Its source is not
-    // what anyone wants on the clipboard, and the diagram that replaces it
-    // carries its own control.
-    if (pre.querySelector('code[class*="language-mermaid"]')) continue;
+    // A ```mermaid or ```vega-lite fence is on its way to becoming a diagram
+    // or a chart (MarkdownBody upgrades it asynchronously, after this has
+    // run). Its source is not what anyone wants on the clipboard, and what
+    // replaces it carries its own control. Every block kind that replaces
+    // its fence outright is in the registry (fence-upgraders.ts).
+    if (pre.querySelector(REPLACED_FENCE_SELECTOR)) continue;
     const wrap = document.createElement("div");
     wrap.className = WRAP_CLASS;
     wrap.dataset.wrapped = "true";

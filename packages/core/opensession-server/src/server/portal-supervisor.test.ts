@@ -13,13 +13,17 @@ import { createServer } from "node:net";
 import {
   listPortalServices,
   listSandboxPortalServices,
+  hostPortalAdmissionReason,
   normalizePortalPath,
+  portalShouldSleep,
   portalsNeedingContainment,
   portalGeneration,
   type PortalRecord,
   portalsToRestore,
   readPortalRegistry,
   reapOrphanedPortalServices,
+  sleepIdlePortalServices,
+  wakeHostPortalRoute,
   restartPortalService,
   SANDBOX_PORTAL_AGENT_ENTRY,
   setPortalPath,
@@ -40,6 +44,13 @@ import type { Sandbox } from "./sandbox/provider";
 let worktree = "";
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
 const previousPath = process.env.PATH;
+// Host Portal admission samples real host memory against a 24 GB floor, and
+// hosted CI runners have less than that. The floor itself is covered by the
+// pure hostPortalAdmissionReason test; the process tests below must not
+// depend on the machine they run on.
+const previousMemoryFloor =
+  process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB;
+process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB = "1";
 const processTools = mkdtempSync(join(tmpdir(), "os-process-tools-"));
 let testSetsid = Bun.which("setsid");
 if (!testSetsid) {
@@ -73,6 +84,11 @@ afterAll(() => {
   else process.env.OPENSESSION_STATE_DIR = previousStateDir;
   if (previousPath == null) delete process.env.PATH;
   else process.env.PATH = previousPath;
+  if (previousMemoryFloor == null)
+    delete process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB;
+  else
+    process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB =
+      previousMemoryFloor;
   rmSync(processTools, { recursive: true, force: true });
 });
 
@@ -85,6 +101,7 @@ describe("host Portal lifecycle cleanup", () => {
         command: "serve",
         port: 18091,
         state: "awake",
+        scopeUnit: "os-test-portal-never-running",
         sessionId: owner,
         startedAt: "2020-01-01T00:00:00Z",
       },
@@ -104,21 +121,19 @@ describe("host Portal lifecycle cleanup", () => {
     archived,
   });
 
-  test("archived owners no longer protect their preview, even with connections", async () => {
+  test("archived owners no longer protect their preview", async () => {
     registry();
-    const result = await reapOrphanedPortalServices([owner(true)], {
-      activePorts: new Set([18091]),
-    });
+    const result = await reapOrphanedPortalServices([owner(true)]);
     expect(result.stopped).toHaveLength(1);
     expect(readPortalRegistry(worktree)[0]?.state).toBe("stopped");
   });
 
   test("preserves a sibling owner's Portal in a shared worktree", async () => {
     registry();
-    const result = await reapOrphanedPortalServices(
-      [owner(), { ...owner(true), id: "sibling" }],
-      { activePorts: new Set() },
-    );
+    const result = await reapOrphanedPortalServices([
+      owner(),
+      { ...owner(true), id: "sibling" },
+    ]);
     expect(result.stopped).toEqual([]);
   });
 
@@ -137,26 +152,81 @@ describe("host Portal lifecycle cleanup", () => {
     ).toHaveLength(1);
   });
 
-  test("expires unused Portals but preserves HTTP activity and established connections", async () => {
+  test("sleeps unused Portals but preserves HTTP activity and established connections", async () => {
     registry();
     const activity = new HostPortalActivity();
     const sweep = (
       now: number,
       ports: ReadonlySet<number> | null = new Set(),
     ) =>
-      reapOrphanedPortalServices([owner()], {
+      sleepIdlePortalServices([owner()], {
         now,
         activity,
         activePorts: ports,
       });
-    expect((await sweep(0)).stopped).toEqual([]);
+    expect((await sweep(0)).slept).toEqual([]);
     activity.touch(18091, PORTAL_IDLE_MS - 1);
-    expect((await sweep(PORTAL_IDLE_MS)).stopped).toEqual([]);
-    expect((await sweep(2 * PORTAL_IDLE_MS, new Set([18091]))).stopped).toEqual(
+    expect((await sweep(PORTAL_IDLE_MS)).slept).toEqual([]);
+    expect((await sweep(2 * PORTAL_IDLE_MS, new Set([18091]))).slept).toEqual(
       [],
     );
-    expect((await sweep(3 * PORTAL_IDLE_MS, null)).stopped).toEqual([]);
-    expect((await sweep(3 * PORTAL_IDLE_MS)).stopped).toHaveLength(1);
+    expect((await sweep(3 * PORTAL_IDLE_MS, null)).slept).toEqual([]);
+    expect((await sweep(3 * PORTAL_IDLE_MS)).slept).toHaveLength(1);
+    expect(readPortalRegistry(worktree)[0]?.state).toBe("sleeping");
+    // The archive sweep must not turn an idle, wakeable Portal into stopped.
+    expect((await reapOrphanedPortalServices([owner()])).stopped).toEqual([]);
+  });
+
+  test("idle sleep stays wakeable and concurrent wakes reuse one replacement", async () => {
+    const started = await startPortalService({
+      sessionId: "owner",
+      worktreeDir: worktree,
+      name: "wakeable",
+      defaultPath: "/kept?mode=preview",
+      readyTimeoutMs: 15_000,
+      command:
+        "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"awake\")}})'",
+    });
+    const port = started.port;
+    const activity = new HostPortalActivity();
+    try {
+      expect(
+        (
+          await sleepIdlePortalServices([owner()], {
+            now: 0,
+            activity,
+            activePorts: new Set(),
+          })
+        ).slept,
+      ).toEqual([]);
+      expect(
+        (
+          await sleepIdlePortalServices([owner()], {
+            now: PORTAL_IDLE_MS,
+            activity,
+            activePorts: new Set(),
+          })
+        ).slept,
+      ).toHaveLength(1);
+      expect((await listPortalServices(worktree))[0]?.state).toBe("sleeping");
+      const [first, second] = await Promise.all([
+        wakeHostPortalRoute(port),
+        wakeHostPortalRoute(port),
+      ]);
+      expect(first.pid).toBe(second.pid);
+      expect(first.pid).not.toBe(started.pid);
+      expect(first.defaultPath).toBe("/kept?mode=preview");
+      expect(first.readyTimeoutMs).toBe(15_000);
+      expect(await (await fetch(`http://127.0.0.1:${port}`)).text()).toBe(
+        "awake",
+      );
+    } finally {
+      await stopPortalService({
+        sessionId: "owner",
+        worktreeDir: worktree,
+        name: "wakeable",
+      });
+    }
   });
 
   test("a starved host refuses a fresh Portal and records why", async () => {
@@ -338,6 +408,52 @@ describe("Portal containment migration", () => {
       ["awake-legacy", "starting-legacy"],
     );
     expect(portalsNeedingContainment(records, false)).toEqual([]);
+  });
+});
+
+describe("host Portal capacity", () => {
+  test("rejects starts at either the process or memory boundary", () => {
+    expect(
+      hostPortalAdmissionReason({
+        active: 4,
+        maxActive: 4,
+        availableMemoryMb: 80_000,
+        minAvailableMemoryMb: 24_576,
+      }),
+    ).toContain("capacity is full");
+    expect(
+      hostPortalAdmissionReason({
+        active: 1,
+        reserved: 1,
+        maxActive: 4,
+        availableMemoryMb: 20_000,
+        minAvailableMemoryMb: 24_576,
+      }),
+    ).toContain("memory is below");
+    expect(
+      hostPortalAdmissionReason({
+        active: 1,
+        maxActive: 4,
+        availableMemoryMb: 80_000,
+        minAvailableMemoryMb: 24_576,
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe("host Portal idle sleep", () => {
+  test("sleeps only an idle, awake Portal whose owner is not running", () => {
+    const base = {
+      state: "awake" as const,
+      ownerRunning: false,
+      now: 1_000_000,
+      lastAccessedAt: 100_000,
+      idleMs: 600_000,
+    };
+    expect(portalShouldSleep(base)).toBe(true);
+    expect(portalShouldSleep({ ...base, ownerRunning: true })).toBe(false);
+    expect(portalShouldSleep({ ...base, state: "sleeping" })).toBe(false);
+    expect(portalShouldSleep({ ...base, lastAccessedAt: 900_000 })).toBe(false);
   });
 });
 

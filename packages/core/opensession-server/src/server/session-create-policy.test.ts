@@ -4,6 +4,7 @@ import {
   openingCreateTrustPolicy,
 } from "./session-create";
 import { sandboxRunSecuritySpec } from "./run-session";
+import { runAccountSpec } from "./session-run-inputs";
 import type { UnifiedSession } from "./types";
 import {
   restoreResolvedCreate,
@@ -100,6 +101,7 @@ describe("automation descendant opening policy", () => {
         {
           isAutomationSession: true,
           user: "human@example.com",
+          accountUser: "human@example.com",
           mcpServers: [],
           deniedTools: { mcp__stripe__refund: "automation policy" },
         },
@@ -117,8 +119,56 @@ describe("automation descendant opening policy", () => {
       aws: false,
       user: undefined,
       mcpGrantUser: undefined,
+      // Only the person's provider subscription follows them across the
+      // boundary; MCP, GitHub and trust identities stay dropped.
+      accountUser: "human@example.com",
       journalKind: "automation",
       trustProfile: "automation",
+    });
+  });
+
+  test("account routing keeps the automation pin for machine turns only", () => {
+    const session = { accountId: "shared-triage" };
+    const automation = { accountId: "shared-triage", usageCredits: true };
+    const machineTurn = { isAutomationSession: true, accountUser: undefined };
+    const humanTurn = {
+      isAutomationSession: true,
+      accountUser: "human@example.com",
+    };
+    const noPin = {
+      accountId: undefined,
+      accountStrict: undefined,
+      usageCredits: undefined,
+    };
+    // A disposable sandbox resume hard-pins the automation's own turns.
+    expect(runAccountSpec(session, machineTurn, automation)).toEqual({
+      accountId: "shared-triage",
+      accountStrict: true,
+      usageCredits: true,
+    });
+    // Host, Runner and pi-host turns keep the session's soft pin for the
+    // automation's own turns.
+    expect(runAccountSpec(session, machineTurn)).toEqual({
+      accountId: "shared-triage",
+      accountStrict: undefined,
+      usageCredits: undefined,
+    });
+    // The person who took the session over spends their own subscription
+    // first with the pool as backup on every launch path: no pin (a pin is
+    // tried before personal accounts), no strict cap, their own credit
+    // policy.
+    expect(runAccountSpec(session, humanTurn, automation)).toEqual(noPin);
+    expect(runAccountSpec(session, humanTurn)).toEqual(noPin);
+    // Interactive sessions keep their own soft pin.
+    expect(
+      runAccountSpec(
+        { accountId: "mine" },
+        { isAutomationSession: false, accountUser: "human@example.com" },
+      ),
+    ).toEqual({
+      accountId: "mine",
+      accountStrict: undefined,
+      usageCredits: undefined,
     });
   });
 

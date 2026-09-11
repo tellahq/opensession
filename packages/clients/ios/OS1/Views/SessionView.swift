@@ -882,6 +882,14 @@ struct SessionView: View {
                 modelMenu
                     .help("Model and reasoning settings")
             }
+            // Where the next turn runs. Only for a session the server would
+            // let move: a Sandbox, Runner, automation or Ask session has no
+            // such choice, and the item would only ever refuse.
+            if SandboxMove.canMove(viewModel.session) {
+                ToolbarItem(placement: .topTrailingCompat) {
+                    SandboxMoveToolbarMenu(viewModel: viewModel)
+                }
+            }
             #endif
             }
 
@@ -950,6 +958,11 @@ struct SessionView: View {
                 if let drop = ProcessInfo.processInfo.environment["OS1_SHOW_CONNECTION_DROP"] {
                     viewModel.dropConnectionForScreenshot(sustained: drop == "sustained")
                 }
+                // Both platforms: the Mac capture is where the hardware keys
+                // get exercised.
+                if ProcessInfo.processInfo.environment["OS1_SHOW_ASK_FIXTURE"] == "1" {
+                    viewModel.showAskForScreenshot()
+                }
                 #endif
                 #if DEBUG && os(iOS)
                 // Install screenshot fixtures before network requests so a
@@ -1010,6 +1023,15 @@ struct SessionView: View {
                    openPanel.isAvailable {
                     openPanel(.changes(sessionId: viewModel.session.id))
                 }
+                #endif
+                #if DEBUG && os(macOS)
+                // The Mac has no panel stack; the PR panel is the sheet the
+                // toolbar chip opens.
+                if ProcessInfo.processInfo.environment["OS1_OPEN_PR"] == "1" {
+                    showPrPanel = true
+                }
+                #endif
+                #if DEBUG && os(iOS)
                 if ProcessInfo.processInfo.environment["OS1_SHOW_SLACK_RECEIPT"] == "1" {
                     viewModel.resolveSlackComposer(SlackComposeReceipt(
                         requestId: "screenshot-slack-receipt",
@@ -1327,18 +1349,33 @@ struct SessionView: View {
     #endif
 
     #if os(iOS)
-    /// Use the principal lane for its flexible width, but anchor the title at
-    /// its leading edge so it follows Back and can consume the open right side.
+    /// A principal item stays centred in the whole bar rather than in the gap
+    /// between Back and the trailing items. Size and shift the pill into that
+    /// gap so its glass never paints over either group.
     private var sessionHeaderLane: some View {
         sessionIdentityButton
-            .frame(width: sessionHeaderLaneWidth, alignment: .leading)
+            .frame(width: sessionIdentityWidth, alignment: .leading)
+            .offset(x: sessionIdentityOffset)
     }
 
-    /// Room for Back on the left and the two-button action group on the
-    /// right, each about 44pt per control plus the bar's margins.
-    private var sessionHeaderLaneWidth: CGFloat {
-        let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
-        return min(560, max(160, surfaceWidth - 200))
+    private var sessionHeaderLeadingInset: CGFloat {
+        // Bar margin, Back, then breathing room before the title.
+        16 + 44 + 8 + 16
+    }
+
+    private var sessionHeaderTrailingInset: CGFloat {
+        // Bar margin, the menu, optional archive, and the glass overhang.
+        let archive: CGFloat = if onArchiveWorkspace == nil { 0 } else { 44 + 8 }
+        let actions: CGFloat = 16 + 44 + archive + 13
+        let viewerCount = viewModel.otherViewers.count
+        let shownViewerCount = min(viewerCount, 3) + (viewerCount > 3 ? 1 : 0)
+        let facepile: CGFloat = if shownViewerCount > 0 {
+            // 24pt faces overlap by 8pt. Keep 8pt between the pile and actions.
+            CGFloat(shownViewerCount * 16 + 8) + 8
+        } else {
+            0
+        }
+        return actions + facepile + 16
     }
 
     /// Mobile web opens workspace details when its title is tapped. Keep the
@@ -1391,9 +1428,20 @@ struct SessionView: View {
         .accessibilityLabel("Workspace details")
     }
 
+    /// Fill the measured bar width between its leading and trailing groups.
+    /// Keep the 44pt minimum tap target on compact split-view widths.
     private var sessionIdentityWidth: CGFloat {
         let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
-        return min(360, max(128, surfaceWidth - 200))
+        return min(
+            360,
+            max(44, surfaceWidth - sessionHeaderLeadingInset - sessionHeaderTrailingInset)
+        )
+    }
+
+    /// Move the principal item from the bar's centre to the centre of the
+    /// uneven space left by Back and the trailing controls.
+    private var sessionIdentityOffset: CGFloat {
+        (sessionHeaderLeadingInset - sessionHeaderTrailingInset) / 2
     }
     #endif
 
@@ -1876,6 +1924,7 @@ private struct SessionActionsMenu: View {
     @State private var pendingMerge: String?
     @State private var merging = false
     @State private var mergeError: String?
+    @State private var sandboxMove = SandboxMoveViewModel()
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -1958,6 +2007,22 @@ private struct SessionActionsMenu: View {
                 showWorktreeInfo = true
             } label: {
                 Label("Worktree details", systemImage: "info.circle")
+            }
+            // Where the next turn runs. Offered only when the server would
+            // accept the move (a code session with a repository, on this
+            // machine, not an automation's and not on a Runner); a 428 from
+            // the server becomes the confirmation below.
+            if canMoveToSandbox {
+                Menu {
+                    SandboxMoveMenuItems(
+                        model: sandboxMove,
+                        session: viewModel.session,
+                        isRunning: viewModel.isRunning,
+                        onMoved: adoptSandboxMove
+                    )
+                } label: {
+                    Label("Move to Sandbox", systemImage: "cube")
+                }
             }
             // What the next turn runs on. It was only reachable through the
             // worktree details sheet, which is a long way to go for a setting
@@ -2112,6 +2177,13 @@ private struct SessionActionsMenu: View {
                 .foregroundStyle(OS1VisualStyle.text)
         }
         .accessibilityLabel("Session actions")
+        .sandboxMovePrompts(sandboxMove, onMoved: adoptSandboxMove)
+        .task(id: viewModel.session.id) {
+            // One read of the instance's Sandboxes per session, and none for
+            // a session that cannot move: the menu shows the rows before it
+            // is opened, so they must be known before then.
+            if canMoveToSandbox { await sandboxMove.loadProviders() }
+        }
         .confirmationDialog(
             mergeConfirmationTitle,
             isPresented: Binding(
@@ -2143,6 +2215,16 @@ private struct SessionActionsMenu: View {
     private func openWorker(_ worker: Session) {
         guard let url = SessionLinks.url(for: worker.id) else { return }
         openURL(url)
+    }
+
+    private var canMoveToSandbox: Bool {
+        SandboxMove.canMove(viewModel.session)
+    }
+
+    /// The row says Preparing from this call on, so the submenu is gone
+    /// before the refresh that confirms it starts.
+    private func adoptSandboxMove(_ status: SessionSandboxStatus) {
+        SandboxMoveViewModel.adopt(status, into: viewModel)
     }
 
     private var addIntent: SidebarAddition.Intent? {
@@ -3323,10 +3405,13 @@ private struct SessionInputBar: View {
         // Desk opens with a keyboard covering its own board.
         .onAppear {
             if viewModel.session.neverRan && autoFocusWhenNeverRan { inputFocused = true }
-            #if DEBUG && os(iOS)
+            #if DEBUG
             // Open with the keyboard up, for the same reason as the panel
             // hooks in `SessionView`: a headless capture host can tap
-            // nothing, so the focused state is only reachable this way.
+            // nothing, so the focused state is only reachable this way. On
+            // the Mac it is how the keyboard verification starts in the
+            // composer, the one place the question card's letters must not
+            // reach.
             if ProcessInfo.processInfo.environment["OS1_FOCUS_COMPOSER"] == "1" {
                 inputFocused = true
             }

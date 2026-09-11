@@ -186,13 +186,52 @@ describe("sidebar row placement", () => {
     expect(classifySidebarPlacement(candidate, context)).toBe("needs-review");
   });
 
-  test("moves personally kept work into its live review band", () => {
+  test("keeps personally kept work in Active despite a GitHub ask", () => {
     const requestedOfMe = row(
       "kept-review",
       [
         session("kept-review", {
           startedBy: "Johnny",
           prReviewRequested: ["michiel"],
+        }),
+      ],
+      { owner: "johnny" },
+    );
+
+    expect(classifySidebarPlacement(requestedOfMe, context)).toBe(
+      "needs-review",
+    );
+    expect(
+      classifySidebarPlacement(requestedOfMe, { ...context, claimed: true }),
+    ).toBe("status");
+    expect(
+      classifySidebarPlacement(requestedOfMe, {
+        ...context,
+        claimed: true,
+        inStatusScope: false,
+      }),
+    ).toBe("outside");
+    expect(
+      classifySidebarPlacement(requestedOfMe, {
+        ...context,
+        claimed: true,
+        snoozed: true,
+      }),
+    ).toBe("snoozed");
+  });
+
+  test("moves personally kept work into a teammate's handoff band", () => {
+    const handedToMe = row(
+      "handed-to-me",
+      [
+        session("handed-to-me", {
+          startedBy: "Johnny",
+          prReviewRequested: ["michiel"],
+          reviewRequest: {
+            to: "Michiel",
+            by: "Johnny",
+            at: "2026-08-16T00:00:00Z",
+          },
         }),
       ],
       { owner: "johnny" },
@@ -208,18 +247,11 @@ describe("sidebar row placement", () => {
     ]);
 
     expect(
-      classifySidebarPlacement(requestedOfMe, { ...context, claimed: true }),
+      classifySidebarPlacement(handedToMe, { ...context, claimed: true }),
     ).toBe("needs-review");
     expect(
       classifySidebarPlacement(requestedByMe, { ...context, claimed: true }),
     ).toBe("awaiting-review");
-    expect(
-      classifySidebarPlacement(requestedOfMe, {
-        ...context,
-        claimed: true,
-        snoozed: true,
-      }),
-    ).toBe("snoozed");
   });
 
   test("preserves source order within each placement", () => {

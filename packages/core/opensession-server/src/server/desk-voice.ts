@@ -1,29 +1,39 @@
 /**
- * Desk voice mode — GPT Realtime as a temporary conversational engine for the
- * standing Desk session (src/server/desk.ts). The browser talks WebRTC directly
- * to OpenAI with an ephemeral secret minted here; tool calls and transcripts
- * relay back over authenticated HTTP routes (routes/desk-voice.ts). The Desk
- * session stays the durable identity: voice turns are mirrored into its
- * transcript as they finalize, and a handoff note (consumed by run-session.ts
- * on the next text turn) bridges them into the text engine's context — the
- * transcript file and the engine's own conversation state are separate stores,
- * so without the handoff the next text turn would be amnesiac about the call.
+ * Desk voice mode — shared pieces for the standing Desk session's voice
+ * engines (src/server/desk.ts): the instance API key, the tool facade, and
+ * the transcript mirror + handoff buffer.
+ *
+ * Two engines share them:
+ * - GPT-Live (desk-voice-live.ts): the web Desk. The server creates the Live
+ *   session, holds a sideband WebSocket, executes tool calls itself, and
+ *   mirrors transcripts from the sideband. The browser only carries audio.
+ * - GPT Realtime (mintVoiceSecret below): the native iOS app. The device
+ *   talks to OpenAI directly with an ephemeral secret and relays tool calls
+ *   and transcripts back over routes/desk-voice.ts.
+ *
+ * The Desk session stays the durable identity either way: voice turns are
+ * mirrored into its transcript as they finalize, and a handoff note (consumed
+ * by run-session.ts on the next text turn) bridges them into the text engine's
+ * context — the transcript file and the engine's own conversation state are
+ * separate stores, so without the handoff the next text turn would be
+ * amnesiac about the call.
  *
  * The tool surface is a deliberately narrow facade over SessionControl and
- * todos — never the MCP inventory. The server-side session config (not the
- * client) fixes the tool list, so a client can't expand what OpenAI may call.
+ * todos plus the Desk's interactive MCP inventory. The server-side session
+ * config (not the client) fixes the tool list, so a client can't expand what
+ * OpenAI may call.
  */
 
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import {
-  appendFileSync,
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+  appendFile,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { stateDir } from "./paths";
@@ -34,11 +44,15 @@ import { appendTranscriptEvents } from "./actor-transcript";
 import type { InProcessMcpServer } from "./inprocess-mcp";
 import type { TranscriptEntry } from "./types";
 
-const DIR = stateDir("desk");
-const KEY_PATH = `${DIR}/voice.json`;
-const HANDOFF_DIR = `${DIR}/voice-handoff`;
+// Resolved per call rather than pinned at load, like sessionsDir() in
+// paths.ts: a test (or a repointed state root) sets OPENSESSION_STATE_DIR
+// after this module is imported and still gets its own store.
+const dir = () => stateDir("desk");
+const keyPath = () => `${dir()}/voice.json`;
+const handoffDir = () => `${dir()}/voice-handoff`;
 
-/** Realtime model for Desk voice calls. */
+/** Realtime model for native (iOS) Desk voice calls. The web Desk runs on
+ * GPT-Live instead; see desk-voice-live.ts. */
 const DESK_VOICE_MODEL = "gpt-realtime";
 
 /** Semantic endpointing avoids treating a short mid-sentence pause as the end
@@ -52,40 +66,124 @@ export const DESK_VOICE_TURN_DETECTION = {
 
 // ---------------------------------------------------------------------------
 // API key store — instance-wide, set from Settings → Desk voice. Same contract
-// as the model-provider key store: 0600 file, only ever returned masked.
+// as the model-provider key store: 0600 file, only ever returned masked. The
+// web call's backend model choice lives in the same file: it is the other
+// instance-wide voice setting, and one 0600 file is one thing to back up.
+
+/** Reasoning + tool selection models a GPT-Live call may delegate to. Terra
+ * is OpenAI's recommended default for Live backends; Luna is the
+ * cost-sensitive option. Anything else is refused, not passed through. */
+export const DESK_LIVE_BACKEND_MODELS = [
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+] as const;
+export type LiveBackendModel = (typeof DESK_LIVE_BACKEND_MODELS)[number];
+export const DESK_LIVE_BACKEND_MODEL: LiveBackendModel = "gpt-5.6-terra";
+
+export function isLiveBackendModel(value: unknown): value is LiveBackendModel {
+  return value === "gpt-5.6-terra" || value === "gpt-5.6-luna";
+}
 
 interface VoiceKeyFile {
   openaiApiKey?: string;
+  liveBackendModel?: string;
 }
 
-function readKeyFile(): VoiceKeyFile {
+async function readKeyFile(): Promise<VoiceKeyFile> {
   try {
-    if (existsSync(KEY_PATH))
-      return JSON.parse(readFileSync(KEY_PATH, "utf-8")) as VoiceKeyFile;
-  } catch (e) {
-    console.error("[desk-voice] failed to read key file:", e);
+    const value: unknown = JSON.parse(await readFile(keyPath(), "utf-8"));
+    if (!value || typeof value !== "object")
+      throw new Error("Invalid voice settings");
+    return {
+      openaiApiKey:
+        "openaiApiKey" in value && typeof value.openaiApiKey === "string"
+          ? value.openaiApiKey
+          : undefined,
+      liveBackendModel:
+        "liveBackendModel" in value &&
+        typeof value.liveBackendModel === "string"
+          ? value.liveBackendModel
+          : undefined,
+    };
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    )
+      return {};
+    throw error;
   }
-  return {};
 }
 
-export function voiceKeyConfigured(): boolean {
-  return !!readKeyFile().openaiApiKey;
+// Serialize read-modify-write operations so simultaneous key/backend saves
+// preserve each other. The temporary file is private before any key is written.
+let settingsWrite: Promise<void> = Promise.resolve();
+function updateKeyFile(
+  update: (current: VoiceKeyFile) => VoiceKeyFile,
+): Promise<void> {
+  const path = keyPath();
+  const operation = settingsWrite.then(async () => {
+    const next = update(await readKeyFile());
+    await mkdir(dir(), { recursive: true });
+    const temporary = `${path}.${crypto.randomUUID()}.tmp`;
+    try {
+      await writeFile(temporary, JSON.stringify(next), {
+        mode: 0o600,
+        flag: "wx",
+      });
+      await rename(temporary, path);
+    } finally {
+      await rm(temporary, { force: true });
+    }
+  });
+  settingsWrite = operation.catch(() => {});
+  return operation;
 }
 
-export function voiceKeyMasked(): string | undefined {
-  const key = readKeyFile().openaiApiKey;
-  if (!key) return undefined;
-  return `sk-…${key.slice(-4)}`;
+export async function voiceKeyConfigured(): Promise<boolean> {
+  return !!(await readKeyFile()).openaiApiKey;
 }
 
-/** Empty string clears the key. */
-export function setVoiceKey(apiKey: string): void {
-  mkdirSync(DIR, { recursive: true });
-  const trimmed = apiKey.trim();
-  writeJsonAtomic(KEY_PATH, trimmed ? { openaiApiKey: trimmed } : {});
-  try {
-    chmodSync(KEY_PATH, 0o600);
-  } catch {}
+/** The configured key, or a thrown error pointing at Settings. */
+export async function requireVoiceApiKey(): Promise<string> {
+  const key = (await readKeyFile()).openaiApiKey;
+  if (!key)
+    throw new Error(
+      "No OpenAI API key configured for Desk voice. Set one in Settings → Desk voice.",
+    );
+  return key;
+}
+
+export async function voiceKeyMasked(): Promise<string | undefined> {
+  const key = (await readKeyFile()).openaiApiKey;
+  return key ? `sk-…${key.slice(-4)}` : undefined;
+}
+
+/** Empty string clears the key without changing the backend. */
+export function setVoiceKey(apiKey: string): Promise<void> {
+  return updateKeyFile((current) => ({
+    ...current,
+    openaiApiKey: apiKey.trim() || undefined,
+  }));
+}
+
+export async function voiceBackendModel(): Promise<LiveBackendModel> {
+  const stored = (await readKeyFile()).liveBackendModel;
+  return isLiveBackendModel(stored) ? stored : DESK_LIVE_BACKEND_MODEL;
+}
+
+/** Refuse unsupported ids before writing anything. */
+export async function setVoiceBackendModel(
+  model: unknown,
+): Promise<LiveBackendModel> {
+  if (!isLiveBackendModel(model))
+    throw new Error(
+      `Voice backend must be one of ${DESK_LIVE_BACKEND_MODELS.join(", ")}`,
+    );
+  await updateKeyFile((current) => ({ ...current, liveBackendModel: model }));
+  return model;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +198,7 @@ Voice discipline:
 - Capture todos the moment the user mentions wanting or needing to do something. Never drop a todo unprompted.
 - Before steering or starting sessions, a one-line confirmation of what you're about to do is enough; don't over-confirm reads.`;
 
-const VOICE_TOOLS = [
+export const VOICE_TOOLS = [
   {
     type: "function",
     name: "list_current_work",
@@ -180,7 +278,7 @@ function voiceToolName(server: string, tool: string): string {
     : `${server}_${tool}`;
 }
 
-async function listVoiceMcpTools(user: string, sessionId: string) {
+export async function listVoiceMcpTools(user: string, sessionId: string) {
   const tools: Array<Record<string, unknown>> = [];
   for (const { name: serverName, server } of await voiceMcpServers(
     user,
@@ -245,26 +343,35 @@ export async function callVoiceMcpTool(
   return { found: false };
 }
 
-function truncate(s: string, n: number): string {
+export function truncate(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n)}…` : s;
 }
 
-/** Recent Desk text-mode conversation, inlined so the voice engine picks the
- *  conversation up mid-thread instead of starting blank. */
-async function recentDeskContext(sessionId: string): Promise<string> {
+/** Recent Desk text-mode turns, compacted for a voice engine's context so the
+ *  call picks the conversation up mid-thread instead of starting blank. */
+export async function recentDeskTurns(
+  sessionId: string,
+): Promise<Array<{ role: "user" | "assistant"; text: string }>> {
   try {
     const tail = await getSessionControl().transcriptTail(sessionId, 12);
-    const lines = tail
+    return tail
       .filter((e) => (e.type === "user" || e.type === "assistant") && e.content)
-      .map(
-        (e) =>
-          `${e.type === "user" ? "User" : "Desk"}: ${truncate(e.content.replace(/\s+/g, " "), 300)}`,
-      );
-    if (!lines.length) return "";
-    return `\n\nRecent Desk conversation (text mode, continue from it):\n${lines.join("\n")}`;
+      .map((e) => ({
+        role: e.type === "user" ? ("user" as const) : ("assistant" as const),
+        text: truncate(e.content.replace(/\s+/g, " "), 300),
+      }));
   } catch {
-    return "";
+    return [];
   }
+}
+
+async function recentDeskContext(sessionId: string): Promise<string> {
+  const turns = await recentDeskTurns(sessionId);
+  if (!turns.length) return "";
+  const lines = turns.map(
+    (t) => `${t.role === "user" ? "User" : "Desk"}: ${t.text}`,
+  );
+  return `\n\nRecent Desk conversation (text mode, continue from it):\n${lines.join("\n")}`;
 }
 
 /** Server-owned Realtime session policy. Exported for contract tests so a
@@ -299,11 +406,7 @@ export async function mintVoiceSecret(user: string): Promise<{
   model: string;
   sessionId: string;
 }> {
-  const key = readKeyFile().openaiApiKey;
-  if (!key)
-    throw new Error(
-      "No OpenAI API key configured for Desk voice — set one in Settings → Desk voice.",
-    );
+  const key = await requireVoiceApiKey();
   const { sessionId } = ensureDeskSession(user);
   const session = await buildVoiceSessionConfig(sessionId, user);
   const res = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
@@ -364,6 +467,9 @@ export async function executeVoiceTool(
           title: s.title || "(untitled)",
           state: s.state,
           repo: s.repo,
+          // The PR a session opened, so a spoken "six four seven four" can
+          // be linked back to it in the transcript (desk-voice-refs.ts).
+          ...(s.prNumber ? { prNumber: s.prNumber } : {}),
           lastActivity: s.lastActivity,
         }));
       return { sessions };
@@ -378,6 +484,7 @@ export async function executeVoiceTool(
         state: s.state,
         repo: s.repo,
         branch: s.branch,
+        ...(s.prNumber ? { prNumber: s.prNumber } : {}),
         pendingQuestion: s.pendingQuestion,
         recent: (await control.transcriptTail(id, 10)).map((e) => ({
           type: e.type,
@@ -420,31 +527,34 @@ export async function executeVoiceTool(
 // whether the socket ever came up, whether the microphone produced anything,
 // how often the capture path had to be rebuilt.
 
-const DIAG_PATH = `${DIR}/voice-diag.jsonl`;
+const diagPath = () => `${dir()}/voice-diag.jsonl`;
 /** Keep the tail bounded — this is a debugging aid, not a data store. */
 const DIAG_MAX_BYTES = 256 * 1024;
 
+// Serialize trimming and appending without blocking the gateway.
+let diagWrite: Promise<void> = Promise.resolve();
 export function recordVoiceDiag(
   user: string,
   report: Record<string, unknown>,
-): void {
+): Promise<void> {
   const { user: _user, ...rest } = report;
-  const line = JSON.stringify({
-    at: new Date().toISOString(),
-    user,
-    ...rest,
-  });
+  const line = JSON.stringify({ ...rest, at: new Date().toISOString(), user });
+  const path = diagPath();
   console.log(`[desk-voice] call diagnostics ${line}`);
-  try {
-    mkdirSync(DIR, { recursive: true });
-    if (existsSync(DIAG_PATH) && statSync(DIAG_PATH).size > DIAG_MAX_BYTES) {
-      const kept = readFileSync(DIAG_PATH, "utf-8").split("\n").slice(-200);
-      writeFileSync(DIAG_PATH, kept.join("\n"));
-    }
-    appendFileSync(DIAG_PATH, `${line}\n`);
-  } catch (e) {
-    console.error("[desk-voice] failed to record diagnostics:", e);
-  }
+  diagWrite = diagWrite
+    .then(async () => {
+      await mkdir(dir(), { recursive: true });
+      const info = await stat(path).catch(() => null);
+      if (info && info.size > DIAG_MAX_BYTES) {
+        const kept = (await readFile(path, "utf-8")).split("\n").slice(-200);
+        await writeFile(path, kept.join("\n"));
+      }
+      await appendFile(path, `${line}\n`);
+    })
+    .catch((error) =>
+      console.error("[desk-voice] failed to record diagnostics:", error),
+    );
+  return diagWrite;
 }
 
 // ---------------------------------------------------------------------------
@@ -461,12 +571,12 @@ interface HandoffEntry {
 }
 
 function handoffPath(sessionId: string): string {
-  return `${HANDOFF_DIR}/${sessionId.replace(/[^A-Za-z0-9_-]/g, "_")}.json`;
+  return `${handoffDir()}/${sessionId.replace(/[^A-Za-z0-9_-]/g, "_")}.json`;
 }
 
 function appendHandoff(sessionId: string, entries: HandoffEntry[]): void {
   try {
-    mkdirSync(HANDOFF_DIR, { recursive: true });
+    mkdirSync(handoffDir(), { recursive: true });
     const path = handoffPath(sessionId);
     let existing: HandoffEntry[] = [];
     try {
@@ -502,7 +612,7 @@ export function takeVoiceHandoff(sessionId: string): string | undefined {
       ? `Action: ${e.text}`
       : `${e.role === "user" ? "User" : "Desk"} (voice): ${e.text}`,
   );
-  return `## Voice conversation handoff\nWhile in voice mode, you (the Desk) had this spoken conversation via GPT Realtime. It is already in the visible transcript — don't repeat or re-answer it; continue with full awareness of what was said and done:\n\n${lines.join("\n")}`;
+  return `## Voice conversation handoff\nWhile in voice mode, you (the Desk) had this spoken conversation through a voice model. It is already in the visible transcript — don't repeat or re-answer it; continue with full awareness of what was said and done:\n\n${lines.join("\n")}`;
 }
 
 export function mirrorVoiceEntries(

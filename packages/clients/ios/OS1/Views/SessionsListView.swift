@@ -91,6 +91,10 @@ struct SessionsListView: View {
     /// session id so workspace rows can match any conversation behind them.
     @State private var transcriptSnippets: [String: String] = [:]
     @State private var transcriptSearchRevision = 0
+    /// Which rows the typed query finds by their metadata, scored off the
+    /// main actor (`SidebarSearch`). Holds the previous answer until the next
+    /// one lands, so a keystroke narrows the list rather than blanking it.
+    @State private var metadataMatches = SidebarSearch.Matches()
     /// Non-nil opens the new-session sheet; carries the per-repo "+" preset.
     @State private var newSessionRequest: NewSessionRequest?
     /// Parked "Start an Agent" requests (`StartAgentIntent`, widgets, Siri).
@@ -350,11 +354,23 @@ struct SessionsListView: View {
     }
     #endif
 
+    /// The native screenshot harness's PR review fixture. On the phone it
+    /// floats over the list; on the Mac it takes the detail column, because an
+    /// overlay on a `NavigationSplitView` never reaches the AppKit split view
+    /// that draws it. Always false in a release build.
+    private var presentsPrReviewCardsFixture: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["OS1_PR_REVIEW_CARDS_FIXTURE"] == "1"
+        #else
+        false
+        #endif
+    }
+
     var body: some View {
         navigationContainer
-            #if DEBUG
+            #if DEBUG && os(iOS)
             .overlay {
-                if ProcessInfo.processInfo.environment["OS1_PR_REVIEW_CARDS_FIXTURE"] == "1" {
+                if presentsPrReviewCardsFixture {
                     PrReviewCardsScreenshot()
                 }
             }
@@ -407,6 +423,16 @@ struct SessionsListView: View {
                 await TeamDirectory.shared.ensureLoaded()
                 await loadAutomationOwners()
             }
+            // A claim, snooze or hide made on another device changes which
+            // rows the scoped list carries. The store has already re-read its
+            // map by the time this posts, so the refetch sees the new claims.
+            .task {
+                for await _ in NotificationCenter.default.notifications(
+                    named: UserMapSync.didResyncNotification
+                ) {
+                    await viewModel.refresh()
+                }
+            }
             #if DEBUG && os(iOS)
             .fullScreenCover(isPresented: .constant(presentsScreenshotSession)) {
                 NavigationStack {
@@ -419,6 +445,9 @@ struct SessionsListView: View {
             #endif
             .task(id: searchText) {
                 await updateTranscriptSearch()
+            }
+            .task(id: metadataSearchKey) {
+                await updateMetadataSearch()
             }
             .task(id: knownRepoCount) {
                 // Not for the sheet's repo picker — for the tiles in this
@@ -599,7 +628,11 @@ struct SessionsListView: View {
         } detail: {
             // A ticket takes the detail column the way a session does — the
             // sidebar's deeper panel, not a window over it.
-            if let openTicket {
+            if presentsPrReviewCardsFixture {
+                #if DEBUG
+                PrReviewCardsScreenshot()
+                #endif
+            } else if let openTicket {
                 SupportThreadView(row: openTicket) {
                     supportQueue.forget(id: openTicket.id)
                 }
@@ -810,6 +843,30 @@ struct SessionsListView: View {
                         symbol: "plus.rectangle.on.rectangle"
                     ),
                     run: { newSessionInCurrentWorkspace() }
+                )
+            )
+        }
+
+        // Only while the open session is waiting on a question, so the row
+        // never runs to nothing. The palette is a sheet and its action runs
+        // on dismiss; posting on the next turn lets the window be key again
+        // before the card checks whether the command is aimed at it.
+        if selectedSession?.waitingForInput == true {
+            items.append(
+                CommandPaletteItem(
+                    entry: CommandPaletteEntry(
+                        id: "command:ask-focus",
+                        title: "Answer the question",
+                        subtitle: "Jump to the question the assistant is waiting on",
+                        keywords: ["ask", "question", "input", "reply"],
+                        shortcut: shortcuts.primaryBinding(for: .askFocus)?.glyphs ?? [],
+                        symbol: "questionmark.bubble"
+                    ),
+                    run: {
+                        DispatchQueue.main.async {
+                            NotificationCenter.default.post(name: .os1AskFocus, object: nil)
+                        }
+                    }
                 )
             )
         }
@@ -1666,47 +1723,82 @@ struct SessionsListView: View {
         }
     }
 
-    private func sessionMatchesMetadata(_ session: Session, query: String) -> Bool {
-        [session.title, session.effectiveRepo, session.branch, session.id]
-            .compactMap { $0 }
-            .contains { $0.lowercased().contains(query) }
+    /// What the metadata search answers: the query, and the rows it is asked
+    /// over. Nil while not searching. Arrays compare by buffer identity first,
+    /// so a body evaluation that changed nothing costs no walk; a poll that
+    /// replaced the list re-runs the search.
+    private struct MetadataSearchKey: Equatable, Sendable {
+        let query: String
+        let rows: [SidebarWorkspace]
+        let archived: [Session]
     }
 
-    private func workspaceMatchesMetadata(
-        _ workspace: SidebarWorkspace,
-        query: String
-    ) -> Bool {
-        workspace.title.lowercased().contains(query)
-            || workspace.sessions.contains { sessionMatchesMetadata($0, query: query) }
+    private var metadataSearchKey: MetadataSearchKey? {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return nil }
+        return MetadataSearchKey(
+            query: query,
+            rows: allSidebarWorkspaces,
+            archived: viewModel.archivedSessions
+        )
+    }
+
+    /// Typo-tolerant scoring of every row's fields is real work on a list of
+    /// thousands, so it runs detached and publishes one set of ids; the row
+    /// predicate then costs a set lookup on the main actor. A detached task
+    /// does not inherit the `.task(id:)` cancellation that the next keystroke
+    /// triggers, so the handle is cancelled by hand: otherwise every
+    /// superseded scan would run to the end and compete with the live one.
+    private func updateMetadataSearch() async {
+        guard let key = metadataSearchKey else {
+            metadataMatches = SidebarSearch.Matches()
+            return
+        }
+        // The name map only backs sessions an older server sent without a
+        // stamped workspace name, so it is read here rather than keyed on.
+        let workspaceNames = viewModel.workspaceNames
+        let scan = Task.detached(priority: .userInitiated) {
+            SidebarSearch.matches(
+                query: key.query,
+                rows: key.rows,
+                archived: key.archived,
+                workspaceNames: workspaceNames
+            )
+        }
+        let matches = await withTaskCancellationHandler {
+            await scan.value
+        } onCancel: {
+            scan.cancel()
+        }
+        guard let matches, !Task.isCancelled else { return }
+        metadataMatches = matches
     }
 
     /// Snippets explain only transcript-only hits. A metadata match already
-    /// explains itself through the row's title, repository, or branch.
+    /// explains itself through the row's title, repository, branch, or
+    /// workspace.
     private func workspaceSearchSnippet(_ workspace: SidebarWorkspace) -> String? {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty, !workspaceMatchesMetadata(workspace, query: query) else {
-            return nil
-        }
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty, !metadataMatches.matches(workspace) else { return nil }
         return workspace.sessions.compactMap { transcriptSnippets[$0.id] }.first
     }
 
     private var archivedSearchResults: [Session] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return [] }
         let lens = peopleLens
         let person = person
         let agentKey = agentKey
+        let matches = metadataMatches
         return viewModel.archivedSessions.filter { session in
             lens.matches(session, person: person, agentKey: agentKey)
                 && (repoFilter == "all" || session.effectiveRepo == repoFilter)
-                && (sessionMatchesMetadata(session, query: query)
-                    || transcriptSnippets[session.id] != nil)
+                && (matches.matches(session) || transcriptSnippets[session.id] != nil)
         }
     }
 
     private func archivedSearchSnippet(_ session: Session) -> String? {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !sessionMatchesMetadata(session, query: query) else { return nil }
+        guard !metadataMatches.matches(session) else { return nil }
         return transcriptSnippets[session.id]
     }
 
@@ -1730,7 +1822,8 @@ struct SessionsListView: View {
         let agentKey = agentKey
         let lens = peopleLens
         let repo = repoFilter
-        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let query = searchText.trimmingCharacters(in: .whitespaces)
+        let matches = metadataMatches
         // Rows this person has hidden drop out of the sidebar — except while
         // a session of theirs is blocked on a question (the poll consumes the
         // hide when that happens), and except while searching, which is how a
@@ -1750,7 +1843,7 @@ struct SessionsListView: View {
             }
             if repo != "all", workspace.effectiveRepo != repo { return false }
             guard !query.isEmpty else { return true }
-            if workspaceMatchesMetadata(workspace, query: query) { return true }
+            if matches.matches(workspace) { return true }
             return workspace.sessions.contains { transcriptSnippets[$0.id] != nil }
         }
     }

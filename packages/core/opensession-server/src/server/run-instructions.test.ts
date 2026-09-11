@@ -6,6 +6,20 @@ import {
 } from "./run-instructions";
 
 describe("buildRunInstructions", () => {
+  test("preserves attribution without imposing a blanket Git publishing restriction", () => {
+    const prompt = buildRunInstructions({ isAsk: false, hasSession: true });
+
+    expect(prompt).toContain(
+      "End each PR body with the attribution footer from the session context and follow its assignee rule.",
+    );
+    expect(prompt).toContain(
+      "Add the `Co-authored-by` trailer from the session context to every commit.",
+    );
+    expect(prompt).not.toContain(
+      "Never merge, approve, or push the default branch.",
+    );
+  });
+
   test("limits automatic reviewers to unattended automation pull requests", async () => {
     const prompt = buildRunInstructions({
       isAsk: false,
@@ -79,7 +93,9 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain("this Open Session id as `leaseKey`");
     expect(prompt).toContain("pass only its `leaseId`");
     expect(prompt).not.toContain("## Sandbox");
-    expect(prompt.length).toBeLessThan(1_500);
+    // The Media section names every block form the transcript renders live;
+    // that is the one list the model cannot learn from a skill.
+    expect(prompt.length).toBeLessThan(1_950);
   });
 
   test("tells a sandboxed run where it is, in one shared paragraph", () => {

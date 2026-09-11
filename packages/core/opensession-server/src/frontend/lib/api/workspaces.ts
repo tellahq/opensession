@@ -71,13 +71,16 @@ export function defaultWorkspaceModelSettings():
 }
 
 export async function fetchWorkspaces(options?: {
+  includeWorkspaceId?: string;
   onError?: (cause: unknown) => void;
 }): Promise<Workspace[]> {
   try {
     const data = await request<{
       workspaces?: Workspace[];
       defaultModelSettings?: Workspace["modelSettings"];
-    }>("/workspaces?active=1");
+    }>(
+      `/workspaces?active=1${options?.includeWorkspaceId ? `&includeWorkspaceId=${encodeURIComponent(options.includeWorkspaceId)}` : ""}`,
+    );
     if (data?.defaultModelSettings)
       defaultModelSettings = data.defaultModelSettings;
     const next = data?.workspaces ?? [];

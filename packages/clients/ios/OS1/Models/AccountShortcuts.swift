@@ -6,6 +6,9 @@ enum AccountShortcutCommand: String, CaseIterable, Identifiable {
     case commandMenu = "command-menu"
     case newSession = "session-new"
     case newSessionInWorkspace = "session-new-sibling"
+    /// The web registry's `ask-focus`: the letters answer a question from
+    /// anywhere but a text field, and this is the way over from the composer.
+    case askFocus = "ask-focus"
 
     var id: String { rawValue }
 
@@ -14,6 +17,7 @@ enum AccountShortcutCommand: String, CaseIterable, Identifiable {
         case .commandMenu: "Command menu"
         case .newSession: "New session"
         case .newSessionInWorkspace: "New session in this workspace"
+        case .askFocus: "Answer the question"
         }
     }
 
@@ -22,6 +26,7 @@ enum AccountShortcutCommand: String, CaseIterable, Identifiable {
         case .commandMenu: "Search sessions and commands"
         case .newSession: "Start a session in any repository"
         case .newSessionInWorkspace: "Start another session in the open workspace"
+        case .askFocus: "Jump to the question the assistant is waiting on"
         }
     }
 
@@ -32,6 +37,7 @@ enum AccountShortcutCommand: String, CaseIterable, Identifiable {
         case .commandMenu: AccountShortcutChord(rawValue: "mod+k")!
         case .newSession: AccountShortcutChord(rawValue: "mod+n")!
         case .newSessionInWorkspace: AccountShortcutChord(rawValue: "mod+alt+n")!
+        case .askFocus: AccountShortcutChord(rawValue: "mod+i")!
         }
     }
 }

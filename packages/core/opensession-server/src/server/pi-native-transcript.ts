@@ -27,7 +27,7 @@ import {
 import { basename, join } from "path";
 import type { TranscriptEntry } from "@tellahq/opensession-protocol/session";
 import { stateDir } from "./paths";
-import { toolResultMedia } from "./transcript-media";
+import { assistantProseFields, toolResultMedia } from "./transcript-media";
 
 function piSessionsRoot(): string {
   return `${stateDir("pi")}/sessions`;
@@ -240,9 +240,11 @@ export function readPiNativeTranscript(
         entries.push({
           id: proseIndex === 0 ? messageId : `${messageId}-b${proseIndex}`,
           type: role === "assistant" ? "assistant" : "user",
-          content: prose,
           timestamp: ts,
           ...(isReasoning ? { isReasoning: true } : {}),
+          ...(role === "assistant"
+            ? assistantProseFields(prose)
+            : { content: prose }),
         });
         proseIndex++;
       } else if (block.type === "toolCall" && block.name) {

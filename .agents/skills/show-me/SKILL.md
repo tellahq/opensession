@@ -55,6 +55,33 @@ sequenceDiagram
     Daemon-->>UI: stream result
 ```
 
+- Show numbers (a trend, a distribution, a comparison, a breakdown) as an interactive chart: a ```vega-lite fence holding a Vega-Lite spec with inline `data.values`. Omit `width` so it fills the column; keep the data aggregated. When `opensession-charts` is available, pass the spec to `make_chart` first: it reports compile errors instead of leaving a silent code block and offloads large data into a session asset.
+
+```vega-lite
+{
+  "title": "Runs per day",
+  "mark": "bar",
+  "data": {"values": [{"day": "Mon", "runs": 12}, {"day": "Tue", "runs": 9}]},
+  "encoding": {
+    "x": {"field": "day", "type": "nominal", "sort": null},
+    "y": {"field": "runs", "type": "quantitative"}
+  }
+}
+```
+
+- Show a screenshot, recording or rendered file where the reader needs it, not at the end: an `OPENSESSION_IMAGE: /abs/path.png` or `OPENSESSION_VIDEO: /abs/path.mp4` line renders in place at the column's width. A short plain line directly under it is its caption. For a before/after, `OPENSESSION_COMPARE: /abs/before.png /abs/after.png` renders one slider.
+
+- Other blocks the transcript renders live (each stays readable as plain text elsewhere):
+  - `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` on a quote's first line: a callout.
+  - `$$` on its own lines or a ```math fence: typeset math; `$x^2$` inline with the delimiters touching the expression.
+  - ```csv, ```tsv or ```table (header row first): a sortable, filterable grid with copy as CSV. Use it for more than a handful of rows; a markdown table is fine for a few.
+  - ```json (large): a collapsible tree with a raw toggle. ```ansi or ```terminal: terminal output with its colours.
+  - ```palette (one colour per line, optional name): swatches that copy on click; a hex in a codespan gets a chip.
+  - ```metrics (`Label: value (delta)` per line): a row of metric cards.
+  - ```choices (one reply per line): chips the reader clicks to send that reply. Use it when you end a turn with a small set of options.
+  - ```tree (indented, trailing `/` for directories, or `tree` CLI output): a collapsible file tree.
+  - ```artifact (a complete HTML document or fragment) or ```svg: a sandboxed preview with a source toggle, scripts never run. ```slides (markdown split on `---`): a swipeable deck.
+
 - Use `diff` when the point is what changes and the surrounding shape already exists. Match the diff shape to the topic.
 
 For a component change:

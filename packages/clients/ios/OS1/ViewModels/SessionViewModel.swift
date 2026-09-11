@@ -211,6 +211,40 @@ final class SessionViewModel {
     private var screenshotDropTask: Task<Void, Never>?
     #endif
 
+    /// A live question with three lettered options, for the card capture and
+    /// the keyboard verification. Its id matches nothing on the server, so an
+    /// answer sent for it is ignored there and only the local receipt shows.
+    func showAskForScreenshot() {
+        holdsScreenshotFixture = true
+        pendingQuestion = AskQuestion(
+            id: "screenshot-ask",
+            questions: [
+                AskQuestion.Question(
+                    question: "Which channel should the fix ship to?",
+                    header: "Deploy",
+                    options: [
+                        AskQuestion.Option(
+                            label: "Production",
+                            description: "Roll it out to every workspace now"
+                        ),
+                        AskQuestion.Option(
+                            label: "Staging",
+                            description: "Verify on the internal instance first"
+                        ),
+                        AskQuestion.Option(
+                            label: "Hold",
+                            description: "Keep it on main until the next release"
+                        ),
+                    ],
+                    multiSelect: false
+                )
+            ]
+        )
+        isRunning = false
+        runStartedAt = nil
+        isLoadingConversation = false
+    }
+
     func showSteeredMessageForScreenshot() {
         holdsScreenshotFixture = true
         let id = "screenshot-steered-message"

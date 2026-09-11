@@ -639,6 +639,32 @@ export async function startSessionKernelService(
     });
   }
 
+  /**
+   * Central catalog reads are safe on every worker: each worker already owns a
+   * connection to the same WAL-backed catalog. Keep slot zero for catalog
+   * mutations and compatibility barriers, and place reads on the least-loaded
+   * session lane. The old single-lane path turned harmless UI/webhook bursts
+   * into a hard 64-request cliff while the other workers sat idle.
+   */
+  function sendCatalogRead(
+    request: KernelActorTransportEnvelope["request"],
+    urgent = false,
+  ): Promise<KernelActorResponse> {
+    let selected: WorkerSlot | undefined;
+    let selectedLoad = Number.POSITIVE_INFINITY;
+    for (const slot of sessionSlots) {
+      if (!slot.ready || slot.restarting || !slot.worker) continue;
+      const load = slot.pending.size + slot.queue.length;
+      if (load < selectedLoad) {
+        selected = slot;
+        selectedLoad = load;
+      }
+    }
+    // Only reachable while the session lanes are booting or all restarting.
+    // Slot zero remains a safe compatibility fallback for read-only work.
+    return sendToSlot(selected ?? slots[0], request, false, urgent);
+  }
+
   function collectWorkerMetrics(
     slot: WorkerSlot,
     current: SessionKernelStoreHostMetrics,
@@ -847,15 +873,13 @@ export async function startSessionKernelService(
     id: number,
     urgent = false,
   ): Promise<string> {
-    const response = await sendToSlot(
-      slots[0],
+    const response = await sendCatalogRead(
       {
         t: "call",
         rpcId: crypto.randomUUID(),
         outputBytes: 256 * 1024,
         request: { t: "store", method: "outboxSessionId", args: [id] },
       },
-      false,
       urgent,
     );
     if (response.t !== "call_result" || response.status !== 1 || !response.body)
@@ -873,7 +897,7 @@ export async function startSessionKernelService(
   async function runtimeWorkRequest(
     request: RuntimeWorkRequest,
   ): Promise<KernelActorResponse> {
-    const catalog = await sendToSlot(slots[0], {
+    const catalog = await sendCatalogRead({
       ...request,
       t: "runtime_catalog_work",
       rpcId: crypto.randomUUID(),
@@ -953,7 +977,7 @@ export async function startSessionKernelService(
         request,
         route.mutation,
       );
-    if (route.scope === "catalog_read") return sendToSlot(slots[0], request);
+    if (route.scope === "catalog_read") return sendCatalogRead(request);
     // Central-only writes serialize on slot zero (one turn in flight) and
     // never wait on session mailboxes: nothing a session lane commits can
     // overlap the rows they touch, so the global barrier would only add the

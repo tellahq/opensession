@@ -77,7 +77,11 @@
   color: var(--text);
 }
 
-.markdown pre {
+/* `.md-code-well` is the same well on a block that replaces its fence but is
+   still code (the JSON tree, styles/blocks/json-tree.css): one surface for
+   everything that reads as pasted code. */
+.markdown pre,
+.markdown .md-code-well {
   background: #0c0c10;
   border: 1px solid var(--border);
   border-radius: calc(18px * var(--rf));
@@ -522,6 +526,38 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .md-image {
   cursor: zoom-in;
 }
+/* Session media placed where the agent wrote it (markdown.ts renders a
+   paragraph that is one `/media` image as a figure; the server wrote that
+   for an OPENSESSION_IMAGE/_VIDEO line, see transcript-media.ts). It is the
+   thing the reader was asked to look at, so it gets more room than a
+   thumbnail in the trailing row, still capped so a tall phone capture does
+   not take the whole viewport. The caption is the line the agent wrote
+   under the marker. */
+.md-figure {
+  margin: 2px 0 8px;
+}
+.md-figure .md-image-link {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+.md-figure .md-image,
+.md-figure .md-video {
+  max-height: 480px;
+  margin: 0;
+}
+.md-figcaption {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-dim);
+}
+@media (max-width: 720px) {
+  .md-figure .md-image,
+  .md-figure .md-video {
+    max-height: 400px;
+  }
+}
 /* An <img> written as raw HTML in PR prose (html-sanitize.ts tags them). The
    block treatment above is right for a pasted screenshot and wrong here: bots
    use raw images for 16px avatars and status badges inside a table cell, where
@@ -571,6 +607,84 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   max-width: 100%;
   height: auto;
 }
+/* Rendered ```vega-lite chart (MarkdownBody swaps the fence for a live vega
+   view, lib/vega-chart.ts). Same well as a diagram, with one difference: the
+   chart is interactive in place, so the well is not a zoom target and only
+   the sibling expand control opens the viewer. The canvas inside carries no
+   padding because vega measures it for container-width charts. */
+.md-chart-wrap {
+  position: relative;
+  margin: 2px 0 8px;
+}
+.md-chart {
+  padding: 12px;
+  background: var(--diagram-canvas);
+  border: 1px solid var(--border);
+  border-radius: calc(8px * var(--rf));
+  corner-shape: var(--cs);
+  overflow-x: auto;
+}
+.md-chart-canvas {
+  display: block;
+  min-height: 24px;
+}
+.md-chart-canvas > svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.md-chart-canvas .vega-bindings {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+/* vega-tooltip's shared element: its stock stylesheet is disabled so the
+   tooltip wears the app's own tooltip tokens. */
+#vg-tooltip-element {
+  visibility: hidden;
+  position: fixed;
+  z-index: 1000;
+  max-width: 320px;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--tooltip-fg);
+  background: var(--tooltip-bg);
+  border-radius: calc(6px * var(--rf));
+  corner-shape: var(--cs);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+  white-space: pre-line;
+  pointer-events: none;
+}
+#vg-tooltip-element.visible {
+  visibility: visible;
+}
+#vg-tooltip-element h2 {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+#vg-tooltip-element table {
+  border-spacing: 0;
+}
+#vg-tooltip-element td {
+  padding: 1px 0;
+  vertical-align: text-top;
+}
+#vg-tooltip-element td.key {
+  max-width: 140px;
+  padding-right: 8px;
+  text-align: right;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#vg-tooltip-element td.value {
+  max-width: 200px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .md-video {
   max-width: 100%;
   max-height: 480px;
@@ -580,6 +694,9 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   margin: 6px 0;
   display: block;
   background: #000;
+  /* Keep the letterbox black off the translucent border: painted under it,
+     the 25% grey reads as near-black, much heavier than an image's edge. */
+  background-clip: padding-box;
 }
 .md-video-wrap {
   position: relative;
@@ -626,9 +743,11 @@ html[data-theme="light"] .composer-hl .cmp-fence {
   white-space: pre;
   overflow-wrap: normal;
 }
-/* Keep the first line clear of both visible icon controls. */
+/* Keep the first line clear of both visible icon controls. The token lets
+   the diff wash below bleed exactly as far as the padding goes. */
 .md-code-wrap > pre {
-  padding-right: 80px;
+  --code-pad-right: 80px;
+  padding-right: var(--code-pad-right);
 }
 .md-code-controls {
   position: absolute;
@@ -810,7 +929,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
     top: 52px;
   }
   .md-code-wrap > pre {
-    padding-right: 104px;
+    --code-pad-right: 104px;
   }
 }
 
@@ -1282,6 +1401,35 @@ html[data-theme="light"] span.commit-ref:hover {
 .shiki-gutter {
   color: var(--text-faint);
   user-select: none;
+}
+
+/* ── Diff fences ────────────────────────────────────────────────
+   A ```diff fence washes its whole + and - rows (lib/shiki-engine.ts marks
+   them), so a patch written into a message reads like the tool-call diffs
+   beside it instead of tinting only the ink. Each row becomes a full-width
+   inline-block so it spans the well; the wash is a pseudo-element bled out
+   over the well's padding, because the row's own box stops at the content
+   edge. The row isolates so the wash can sit under its text and still above
+   the well. Scoped to `.markdown`: a tool result's <pre> has its own
+   padding, and its real diffs come from @pierre/diffs. */
+.markdown .md-code-diff .line {
+  display: inline-block;
+  width: 100%;
+  position: relative;
+  isolation: isolate;
+}
+.markdown .md-code-diff .diff-add::before,
+.markdown .md-code-diff .diff-del::before {
+  content: "";
+  position: absolute;
+  inset: 0 calc(-1 * var(--code-pad-right, 12px)) 0 -12px;
+  z-index: -1;
+}
+.markdown .md-code-diff .diff-add::before {
+  background: var(--green-soft);
+}
+.markdown .md-code-diff .diff-del::before {
+  background: var(--red-soft);
 }
 
 /* ── Docs (`.markdown wiki-doc`) ─────────────────────────────

@@ -936,6 +936,15 @@ export type WSServerMessage =
       viewing: Array<{ user: string; sessionId: string }>;
     }
   | { type: "pins_changed"; user: string; pins: string[] }
+  // One of this person's sidebar maps was written from any client. Sent only
+  // to that person's sockets and carries no entries: the receiver re-reads the
+  // map, so a claim made on the phone reaches a desktop window that never
+  // lost visibility. Native clients safely ignore this frame.
+  | {
+      type: "user_map_changed";
+      map: "lanes" | "snoozes" | "hides";
+      user: string;
+    }
   // The materialized session list changed. Web clients refetch their scoped
   // sidebar projection; older and native clients safely ignore this frame.
   | { type: "sessions_invalidated" }

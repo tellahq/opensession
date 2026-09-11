@@ -11,6 +11,7 @@ import {
   useToolPathRoots,
 } from "./ToolCallBlock";
 import { ClampedBody, EntryImages, EntryVideos } from "./MessageBubble";
+import { unplacedMedia } from "../lib/placed-media";
 import { IconChevronDown, IconStack } from "./icons";
 import { cn } from "../ui/cn";
 import { Fold } from "../ui/fold";
@@ -715,8 +716,11 @@ function NarrationMessage({
         entry={entry}
         sessionId={sessionId}
       />
-      <EntryImages images={entry.images} sessionId={sessionId} />
-      <EntryVideos videos={entry.videos} />
+      <EntryImages
+        images={unplacedMedia(entry.images, entry.content)}
+        sessionId={sessionId}
+      />
+      <EntryVideos videos={unplacedMedia(entry.videos, entry.content)} />
     </div>
   );
 }

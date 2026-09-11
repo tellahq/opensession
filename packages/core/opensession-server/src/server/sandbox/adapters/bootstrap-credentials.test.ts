@@ -7,6 +7,7 @@ import {
   projectRemoteModelProviderConfig,
   projectRemotePiConfig,
   remoteModelProviderId,
+  remoteRunAccountPolicy,
   remoteRunNeedsAnthropic,
   remoteRunNeedsOpenai,
   remoteRunNeedsXai,
@@ -47,6 +48,67 @@ describe("GitHub clone credential boundary", () => {
 });
 
 describe("remote engine credential projection", () => {
+  test("takeover identity reaches provider projection without granting MCP or GitHub access", () => {
+    const source = readFileSync(join(import.meta.dir, "bootstrap.ts"), "utf-8");
+    expect(source).toContain("spec.accountUser ?? spec.user");
+    expect(source).toContain(
+      "accountsForRemoteUpload(accountUser, spec.accountId)",
+    );
+    expect(source).toMatch(/buildOpenaiRemoteSeedUpload\([\s\S]*?accountUser,/);
+    expect(source).toContain("user: accountUser,");
+    expect(source).toMatch(/filterMcpServers\([\s\S]*?spec.user,/);
+    expect(source).toContain(
+      "githubCredentialUser(spec.user, spec.author?.name)",
+    );
+    // Only a machine turn is held to the automation pin; the takeover
+    // identity is journaled so a relaunch keeps the same routing.
+    expect(source).toContain("pinnedAutomationTurn && !spec.accountId");
+    expect(source).toContain("accountUser: spec.accountUser,");
+    expect(source).toContain("accountUser: run.accountUser,");
+  });
+
+  test("a person's takeover turn drops the automation pin while machine turns keep it", () => {
+    expect(remoteRunAccountPolicy({ trustProfile: "automation" })).toEqual({
+      accountUser: undefined,
+      pinnedAutomationTurn: true,
+    });
+    expect(
+      remoteRunAccountPolicy({
+        trustProfile: "automation",
+        accountUser: "Plain triage (automation)",
+      }),
+    ).toEqual({ accountUser: undefined, pinnedAutomationTurn: true });
+    expect(
+      remoteRunAccountPolicy({
+        trustProfile: "automation",
+        accountUser: "johnny@tella.com",
+      }),
+    ).toEqual({
+      accountUser: "johnny@tella.com",
+      pinnedAutomationTurn: false,
+    });
+    expect(
+      remoteRunAccountPolicy({
+        trustProfile: "interactive",
+        user: "alex@example.com",
+        mcpGrantUser: "owner@example.com",
+      }),
+    ).toEqual({
+      accountUser: "alex@example.com",
+      pinnedAutomationTurn: false,
+    });
+    expect(
+      remoteRunAccountPolicy({
+        trustProfile: "interactive",
+        user: "auto-continue",
+        mcpGrantUser: "owner@example.com",
+      }),
+    ).toEqual({
+      accountUser: "owner@example.com",
+      pinnedAutomationTurn: false,
+    });
+  });
+
   test("remote GitHub authority comes from server-owned sandbox state", () => {
     const source = readFileSync(join(import.meta.dir, "bootstrap.ts"), "utf-8");
     const projection = source.slice(
