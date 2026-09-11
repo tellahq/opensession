@@ -30,6 +30,8 @@
  */
 
 import { ensureDeskSession } from "./desk";
+import { VoiceReferenceLedger, linkSpokenReferences } from "./desk-voice-refs";
+import { REPOS } from "./worktree";
 import {
   VOICE_TOOLS,
   executeVoiceTool,
@@ -85,7 +87,7 @@ You are the backend for the user's Desk, their standing concierge for the Open S
 - Run independent lookups together. Do not repeat an action that already ran.
 
 ## Return the result
-Return two or three plain sentences the voice model can say aloud: the relevant facts, whether the task is done, and what comes next. Refer to sessions by title, never by id. No markdown, no lists, no raw tool output.`;
+Return two or three plain sentences the voice model can say aloud: the relevant facts, whether the task is done, and what comes next. Refer to sessions by title, never by id. State a pull request as its repo and number in digits (e.g. "tella-fusion PR 6474"). No markdown, no lists, no raw tool output.`;
 
 /** The browser's data channel may only ask to hang up. Tool results, session
  * updates, and typed text all travel through this server. */
@@ -481,6 +483,9 @@ interface LiveCall {
   socket: WebSocket;
   rows: VoiceTranscriptRows;
   loop: LiveResponseLoop;
+  /** PRs and sessions the call's tool calls surfaced, so a spoken "six four
+   * seven four" or a session named only by title gets its chip. */
+  ledger: VoiceReferenceLedger;
   startedAt: number;
   idleTimer: ReturnType<typeof setTimeout> | null;
   maxTimer: ReturnType<typeof setTimeout> | null;
@@ -703,6 +708,7 @@ async function createLiveVoiceCallNow(
     throw new Error("OpenAI returned no Live session id or SDP answer");
 
   const socket = await attachSideband(key, liveId);
+  const ledger = new VoiceReferenceLedger();
   const call: LiveCall = {
     id: liveId,
     user,
@@ -712,25 +718,36 @@ async function createLiveVoiceCallNow(
       gapMs: LIVE_ROW_GAP_MS,
       idleMs: LIVE_ROW_IDLE_MS,
       rowId: (role, startMs) => `voice-${liveId}-${role}-${startMs}`,
+      // Only what the Desk said is rewritten: a spoken PR number becomes
+      // `repo#N` and a session it started gets named, so the mirrored row
+      // renders chips. The user's words stay exactly as transcribed.
       onRow: (row) =>
         mirrorVoiceEntries(user, [
-          { id: row.id, role: row.role, text: row.text },
+          {
+            id: row.id,
+            role: row.role,
+            text:
+              row.role === "assistant"
+                ? linkSpokenReferences(row.text, ledger)
+                : row.text,
+          },
         ]),
     }),
     loop: new LiveResponseLoop({
       send: (event) => sendEvent(call, event),
       runTool: async (callId, name, args) => {
+        let result: unknown;
         try {
-          const result = await executeVoiceTool(user, name, args);
-          mirrorVoiceToolCall(user, callId, name, args, result);
-          return result;
+          result = await executeVoiceTool(user, name, args);
         } catch (e) {
-          const message = e instanceof Error ? e.message : String(e);
-          mirrorVoiceToolCall(user, callId, name, args, { error: message });
-          return { error: message };
+          result = { error: e instanceof Error ? e.message : String(e) };
         }
+        mirrorVoiceToolCall(user, callId, name, args, result);
+        ledger.collect(name, args, result, knownRepos());
+        return result;
       },
     }),
+    ledger,
     startedAt: Date.now(),
     idleTimer: null,
     maxTimer: null,
@@ -759,6 +776,12 @@ async function createLiveVoiceCallNow(
   }, LIVE_MAX_CALL_MS);
   console.log(`[desk-voice-live] ${liveId} started user=${user}`);
   return { liveSessionId: liveId, sdp: answer, sessionId };
+}
+
+/** The instance's repos, as the ledger needs them to resolve a PR mention:
+ * the id a chip links by and the GitHub name a URL in a result carries. */
+function knownRepos() {
+  return Object.values(REPOS).map((r) => ({ id: r.id, ghRepo: r.ghRepo }));
 }
 
 function ownedCall(user: string, liveSessionId: string): LiveCall | undefined {

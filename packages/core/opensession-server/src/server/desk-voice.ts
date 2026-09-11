@@ -390,6 +390,9 @@ export async function executeVoiceTool(
           title: s.title || "(untitled)",
           state: s.state,
           repo: s.repo,
+          // The PR a session opened, so a spoken "six four seven four" can
+          // be linked back to it in the transcript (desk-voice-refs.ts).
+          ...(s.prNumber ? { prNumber: s.prNumber } : {}),
           lastActivity: s.lastActivity,
         }));
       return { sessions };
@@ -404,6 +407,7 @@ export async function executeVoiceTool(
         state: s.state,
         repo: s.repo,
         branch: s.branch,
+        ...(s.prNumber ? { prNumber: s.prNumber } : {}),
         pendingQuestion: s.pendingQuestion,
         recent: (await control.transcriptTail(id, 10)).map((e) => ({
           type: e.type,
