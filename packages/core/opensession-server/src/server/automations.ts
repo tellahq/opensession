@@ -68,6 +68,7 @@ import { stateDir } from "./paths";
 import { linkThreadInIndex, createSlackPostScanner } from "./slack-links";
 import { createPapercutsMcpServer } from "../agents/slack/papercuts-tools";
 import { createReportMcpServer } from "../agents/slack/report-tools";
+import { createDatabasesMcpServer } from "../agents/slack/databases-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import type { WorkflowAutomationSessionPolicy } from "../shared/workflow-types";
 import { createTurnMcpServer } from "../agents/slack/turn-tools";
@@ -1106,6 +1107,12 @@ export function automationBaselineMcpServers(
       sessionId,
     }),
     "opensession-turn": createTurnMcpServer({ turnKey: sessionId }),
+    // Scoped like the report server: this automation's own databases and
+    // nothing else (databases-tools.ts).
+    "opensession-databases": createDatabasesMcpServer({
+      sessionId,
+      automation: { id: a.id, name: a.name },
+    }),
     "opensession-health": createHealthMcpServer(),
     "opensession-audit": createAuditMcpServer(),
     // Compiles a ```vega-lite fence for a report and offloads big data into

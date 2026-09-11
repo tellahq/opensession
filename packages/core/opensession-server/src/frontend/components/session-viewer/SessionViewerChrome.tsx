@@ -6,6 +6,7 @@ import type {
   ExternalRef,
   GitStatusInfo,
   ReportMeta,
+  DatabaseMeta,
   SessionPrRef,
   SessionUsage,
   TranscriptEntry,
@@ -36,6 +37,7 @@ import { RepoTile } from "../RepoTile";
 import { SandboxBadge } from "../SandboxBadge";
 import { canMoveToSandbox, MoveToSandboxMenu } from "../MoveToSandboxMenu";
 import { SessionReportsPanel } from "../SessionReportsPanel";
+import { SessionDatabasesPanel } from "../SessionDatabasesPanel";
 import { SpinOffMenu } from "../SpinOffMenu";
 import { StagingLink } from "../StagingLink";
 import { UsageMeter } from "../UsageMeter";
@@ -249,6 +251,13 @@ interface ChromeInfoState {
   changeWorktreeDiffSource: (next: "pull-request" | "worktree") => void;
   previewStatus: PreviewStatus | null;
 }
+/** What the session has produced that outlives it: its published reports
+ *  and the databases it created or wrote to. One prop on the chrome, so the
+ *  info-actions group stays within its bound as the kinds of artifact grow. */
+interface SessionArtifacts {
+  reports: ReportMeta[];
+  databases: DatabaseMeta[];
+}
 interface ChromeInfoActions {
   setPreviewStatus: Dispatch<SetStateAction<PreviewStatus | null>>;
   portalTarget: PortalTarget | null;
@@ -262,7 +271,7 @@ interface ChromeInfoActions {
   ) => void;
   subagents: SessionSubagentSnapshot[];
   openSubagent: (agentId: string, label: string) => void | undefined;
-  sessionReports: ReportMeta[];
+  sessionArtifacts: SessionArtifacts;
   navigation: NavigationActions;
   effectiveReview: ChromeEffectiveReview;
   onReviewChange:
@@ -430,7 +439,7 @@ export function SessionViewerChrome({
     workflowAction,
     subagents,
     openSubagent,
-    sessionReports,
+    sessionArtifacts,
     navigation,
     effectiveReview,
     onReviewChange,
@@ -1428,13 +1437,24 @@ export function SessionViewerChrome({
                               />
                             </div>
                           )}
-                          {sessionReports.length > 0 && (
+                          {sessionArtifacts.reports.length > 0 && (
                             <div className={INFO_SECTION}>
                               <SessionReportsPanel
-                                reports={sessionReports}
+                                reports={sessionArtifacts.reports}
                                 onOpenNewSession={
                                   navigation.openPrefilledSession
                                 }
+                              />
+                            </div>
+                          )}
+                          {sessionArtifacts.databases.length > 0 && (
+                            <div className={INFO_SECTION}>
+                              <SessionDatabasesPanel
+                                databases={sessionArtifacts.databases}
+                                onOpen={(id) => {
+                                  setInfoPageOpen(false);
+                                  navigation.openDatabases(id);
+                                }}
                               />
                             </div>
                           )}

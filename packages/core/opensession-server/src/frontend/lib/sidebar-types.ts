@@ -41,6 +41,7 @@ export interface Props {
   supportTinderActive: boolean;
   /** True while the recurring Reports surface is open. */
   reportsActive: boolean;
+  databasesActive: boolean;
   /** True while the Analytics surface is open. */
   analyticsActive: boolean;
   /**

@@ -32,6 +32,7 @@ interface WorkspaceToolsRuntime {
 interface WorkspaceToolsRelations {
   subagents: SessionSubagentSnapshot[];
   sessionReportCount: number;
+  sessionDatabaseCount: number;
 }
 
 export function useSessionWorkspaceToolsController({
@@ -66,7 +67,8 @@ export function useSessionWorkspaceToolsController({
       hasPlain ||
       workflowController.workflowRuns.length > 0 ||
       relations.subagents.length > 0 ||
-      relations.sessionReportCount > 0);
+      relations.sessionReportCount > 0 ||
+      relations.sessionDatabaseCount > 0);
   const liveSubagents = useMemo(() => {
     const map = new Map<string, LiveSubagent>();
     for (const subagent of relations.subagents)

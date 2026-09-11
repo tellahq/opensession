@@ -71,9 +71,9 @@ configuration for the run.
   launcher-supplied token, so nothing they can be injected into holds write
   capability. Only a code turn a connected person started holds that
   person's token instead. What that token may do to
-  the default branch is a ruleset decision on GitHub; the command policy
-  refuses merges, approving reviews, and default-branch pushes in every run
-  as a tripwire. Every other scope still applies: MCP allowlist, denied
+  the default branch is a ruleset decision on GitHub. Interactive code runs
+  follow the repository's publication workflow; automation descendants retain
+  their server-enforced publication policy. Every other scope still applies: MCP allowlist, denied
   writes, IMDS blocking, and the explicit environment.
 - A sandboxed automation runs in a fresh disposable Daytona Executor. Open
   Session admits it only after Daytona has passed qualification, including a
@@ -260,24 +260,20 @@ at `~/.opensession/github-app.pem` (or the path in
 `OPENSESSION_GITHUB_APP_KEY`). Environment App identity values win over config.
 Enabling `userPrAuth` activates both halves below:
 
-- **PRs as the session owner** (packages/core/opensession-server/src/server/github-auth.ts,
-  pull-request-mcp.ts): teammates connect their GitHub account via the OAuth
+- **PRs as the prompting person** (packages/core/opensession-server/src/server/github-auth.ts): teammates connect their GitHub account via the OAuth
   _device flow_ (Connections UI card, or implicitly by signing in). Tokens
   live per-login in `~/.opensession/github-auth.json` (0600, never returned
   by any API). A code turn a connected person started holds their token in
   its shell (pi-runner `runGithubEnv`, the sandbox launcher's projected auth
   file), so its pushes and any PR it opens are theirs; the gateway uses the
-  same token for the UI's PR routes (merge, close, review, comment) and the
-  `opensession-pull-requests` tools (`open_pull_request`,
-  `edit_pull_request`) mounted on such a turn. Ask runs, unattended runs,
-  and machine senders hold an App token and never a person's
-  (`docs/setup/github.md`). A review handoff, worker report, or automation
-  sender is nobody and gets no such tools. The run user resolves
-  to a login through the SAME identity table as commit attribution, so the
-  mapping is config (identity.team[].github), not code. The PR-attribution
-  instructions swap the `--assignee` bot wording for "opened under their
-  account" when the tools are mounted. Merge is never a tool: `propose_merge`
-  posts a notice and the person merges from the PR panel.
+  same token for the UI's PR routes (merge, close, review, comment). Agents
+  use `gh` directly rather than dedicated PR MCP tools. Ask runs, unattended
+  runs, and machine senders hold an App token and never a person's
+  (`docs/setup/github.md`). The run user resolves to a login through the same
+  identity table as commit attribution, so the mapping is config
+  (identity.team[].github), not code. Person-authored PRs need no bot-attribution
+  assignee. Repository instructions, GitHub permissions, and rulesets govern
+  interactive publication; automation and ask-mode restrictions remain enforced.
 - **GitHub web sign-in** (packages/core/opensession-server/src/server/web-auth.ts + routes/auth.ts): when
   active, the UI's name picker is replaced by a real sign-in (UserGate →
   device flow → HttpOnly `opensession_auth` cookie; sessions in
@@ -388,9 +384,16 @@ Automations never receive `opensession-admin` or the unrestricted interactive
 set:
 
 - Every automation receives `opensession-report`, `opensession-turn`,
-  `opensession-health`, and `opensession-audit`. The latter two expose aggregate
-  host metrics and a bounded daily audit digest, not arbitrary filesystem or
-  command access.
+  `opensession-databases`, `opensession-health`, and `opensession-audit`. The
+  latter two expose aggregate host metrics and a bounded daily audit digest,
+  not arbitrary filesystem or command access.
+- `opensession-databases` is scoped the way `opensession-report` is: a run only
+  sees databases tagged with its own automation id, and the ones it creates
+  carry that tag. Every statement is screened before it reaches SQLite
+  (`database-sql-guard.ts` refuses `ATTACH`, `DETACH`, `VACUUM INTO`,
+  `load_extension` and every non-schema `PRAGMA`), reads run on a read-only
+  connection, and all SQLite work runs on the databases worker, so untrusted
+  ticket text can fill or drop the automation's own tables and nothing else.
 - `opensession-papercuts` is mounted when the repository toggle is enabled
   (default on; Settings → Papercuts). It can append a papercut and list at most
   50 recent entries, using 14 days by default and at most 120 days. Reads include

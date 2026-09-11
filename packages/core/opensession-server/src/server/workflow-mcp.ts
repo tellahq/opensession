@@ -111,6 +111,10 @@ export const WORKFLOW_INPROCESS_ALLOWED = new Set([
   "opensession-todos",
   // Append-only friction log, read by a human later.
   "opensession-papercuts",
+  // The bulk-data case: a fan-out that computes rows per item and inserts
+  // them. A database is the run's own artifact the way an asset is, and
+  // every statement is screened and file-bound (database-sql-guard.ts).
+  "opensession-databases",
 ]);
 
 /**

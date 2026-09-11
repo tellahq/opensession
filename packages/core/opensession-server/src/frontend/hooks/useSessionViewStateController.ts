@@ -38,6 +38,7 @@ import { reviewLoopResult, type ReviewLoopResult } from "../lib/review-loop";
 import { useSidePanel } from "./useSidePanel";
 import { useSessionAssets } from "../components/AssetsPanel";
 import { useSessionReports } from "../components/SessionReportsPanel";
+import { useSessionDatabases } from "../components/SessionDatabasesPanel";
 import { fetchSessionNotesApi } from "../lib/api";
 import { markNotesRead } from "../lib/note-reads";
 import { clearMention, onMentionsChanged } from "../lib/mentions";
@@ -328,6 +329,7 @@ export function useSessionViewStateController({
     openAssetsRef.current?.();
   }, []);
   const sessionReports = useSessionReports(session.id, addHandler);
+  const sessionDatabases = useSessionDatabases(session.id, addHandler);
   const [notes, setNotes] = useState<SessionNote[]>([]);
   const [noteMode, setNoteMode] = useState(false);
   const attachmentDrop = useSessionAttachmentDrop({
@@ -452,6 +454,7 @@ export function useSessionViewStateController({
     },
     notes: {
       sessionReports,
+      sessionDatabases,
       notes,
       setNotes,
       noteMode,

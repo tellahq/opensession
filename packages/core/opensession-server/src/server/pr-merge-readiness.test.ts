@@ -274,6 +274,58 @@ describe("assessPrMergeReadiness", () => {
     expect(v.warnings).toContain("1 check skipped");
   });
 
+  test("the ready sentence counts skipped checks instead of calling them passing", () => {
+    const mixed = assessPrMergeReadiness(
+      source({
+        checks: [check("Build", "SUCCESS"), check("Lint", "SKIPPED")],
+      }),
+    );
+    expect(mixed.ready).toBe(true);
+    expect(mixed.summary).toBe(
+      'PR #374 "Port the dashboard" is ready to merge: 1 check passing and 1 skipped, no review required, no conflicts.',
+    );
+
+    const onlySkipped = assessPrMergeReadiness(
+      source({ checks: [check("Lint", "SKIPPED")] }),
+    );
+    expect(onlySkipped.ready).toBe(true);
+    expect(onlySkipped.summary).toBe(
+      'PR #374 "Port the dashboard" is ready to merge: 1 check skipped, none failing, no review required, no conflicts.',
+    );
+  });
+
+  test("a neutral check ran, so it is worded apart from a skipped one", () => {
+    const onlyNeutral = assessPrMergeReadiness(
+      source({ checks: [check("Lint", "NEUTRAL")] }),
+    );
+    expect(onlyNeutral.ready).toBe(true);
+    expect(onlyNeutral.summary).toBe(
+      'PR #374 "Port the dashboard" is ready to merge: 1 check neutral, none failing, no review required, no conflicts.',
+    );
+    expect(onlyNeutral.warnings).toContain("1 check neutral");
+    expect(onlyNeutral.checks.skipped[0].conclusion).toBe("NEUTRAL");
+
+    const mixed = assessPrMergeReadiness(
+      source({
+        checks: [
+          check("Build", "SUCCESS"),
+          check("Lint", "SKIPPED"),
+          check("Docs", "SKIPPED"),
+          check("Coverage", "NEUTRAL"),
+        ],
+      }),
+    );
+    expect(mixed.summary).toBe(
+      'PR #374 "Port the dashboard" is ready to merge: 1 check passing, 2 skipped, and 1 neutral, no review required, no conflicts.',
+    );
+    expect(mixed.warnings).toContain(
+      "3 checks without a pass or fail (2 skipped and 1 neutral)",
+    );
+    expect(formatPrMergeVerdict(mixed)).toContain(
+      "Checks: 1 passing, 0 failing, 0 pending, 2 skipped, 1 neutral",
+    );
+  });
+
   test("pending review requests are a note, not a blocker", () => {
     const v = assessPrMergeReadiness(source({ reviewRequests: ["michiel"] }));
     expect(v.ready).toBe(true);

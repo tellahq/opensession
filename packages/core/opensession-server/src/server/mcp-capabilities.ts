@@ -143,6 +143,12 @@ export const INTERNAL_MCP_CAPABILITIES = {
     guidance:
       "Publish the run's finished HTML report into the durable Reports view.",
   },
+  "opensession-databases": {
+    summary:
+      "Create, fill and query named SQLite databases kept by Open Session, browsed in the Databases view.",
+    guidance:
+      "Keep tabular data that a later turn, session or run will query again (collected metrics, scraped rows, triage state) in a named database: create_database with a schema, insert_rows for bulk data, query_database to read it back. Prefer it to a CSV asset when the data will be updated or joined later.",
+  },
   "opensession-turn": {
     summary: 'Say "looked, nothing to report" instead of ending on silence.',
     guidance:

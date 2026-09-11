@@ -17,6 +17,7 @@ import {
   IconCopy,
   IconDesk,
   IconFeed,
+  IconDatabase,
   IconFile,
   IconGear,
   IconInbox,
@@ -327,6 +328,15 @@ export function buildAppCommandActions({
       category: "Navigate",
       icon: <IconFile size={18} />,
       run: () => navigate({ view: "reports" }),
+    },
+    {
+      id: "databases",
+      label: "Databases",
+      description: "Browse the databases sessions keep",
+      category: "Navigate",
+      keywords: ["sqlite", "tables", "sql"],
+      icon: <IconDatabase size={18} />,
+      run: () => navigate({ view: "databases" }),
     },
     {
       id: "analytics",

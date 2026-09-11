@@ -38,6 +38,7 @@ import { createTodosMcpServer } from "../agents/slack/todos-tools";
 import { createSearchMcpServer } from "../agents/slack/search-tools";
 import { createAssetsMcpServer } from "../agents/slack/assets-tools";
 import { createChartsMcpServer } from "./charts-mcp";
+import { createDatabasesMcpServer } from "../agents/slack/databases-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createSelfDeployMcpServer } from "./self-deploy";
 import { createWebMcpServer } from "./web-mcp";
@@ -403,6 +404,15 @@ export function interactiveMcpServers(
           // ```vega-lite fences render on their own; this compiles a spec
           // for the agent and offloads big data into the session's assets.
           "opensession-charts": createChartsMcpServer({ sessionId }),
+          // Named SQLite databases kept outside every repo (databases.ts),
+          // browsed in the Databases view. Unscoped here: an interactive
+          // session reaches every database, the way it reaches every
+          // report. Automation runs get the same server scoped to their
+          // own databases (automations.ts).
+          "opensession-databases": createDatabasesMcpServer({
+            sessionId,
+            user: createdBy,
+          }),
           // The user's Desk todo list — add/list/complete/drop/update.
           // Interactive-only like the siblings (the automation branch below
           // fails closed): untrusted ticket text must not write to a

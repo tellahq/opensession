@@ -74,6 +74,8 @@ export type PrCheckOutcome = "passing" | "failing" | "pending" | "skipped";
 export interface PrReadinessCheck {
   name: string;
   outcome: PrCheckOutcome;
+  /** GitHub's conclusion or status-context state, upper-cased; empty while running. */
+  conclusion: string;
   required: boolean;
   url?: string;
 }
@@ -159,6 +161,25 @@ function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+/** "2 skipped", "1 neutral": the skipped bucket, worded by what happened. */
+function noResultParts(skipped: PrReadinessCheck[]): string[] {
+  const neutral = skipped.filter((c) => c.conclusion === "NEUTRAL").length;
+  const parts: string[] = [];
+  if (skipped.length - neutral)
+    parts.push(`${skipped.length - neutral} skipped`);
+  if (neutral) parts.push(`${neutral} neutral`);
+  return parts;
+}
+
+/** "1 check skipped", "3 checks without a pass or fail (2 skipped and 1 neutral)". */
+function noResultPhrase(skipped: PrReadinessCheck[]): string {
+  const parts = noResultParts(skipped);
+  const count = plural(skipped.length, "check");
+  return parts.length === 1
+    ? `${count} ${parts[0].replace(/^\d+ /, "")}`
+    : `${count} without a pass or fail (${joinList(parts)})`;
+}
+
 /** Match a ruleset's required context against a check's reported name. */
 function checkMatches(check: PrCheck, required: string): boolean {
   const name = check.name.trim().toLowerCase();
@@ -186,6 +207,7 @@ export function assessPrMergeReadiness(src: PrReadinessSource): PrMergeVerdict {
       ? `${check.workflowName} / ${check.name}`
       : check.name,
     outcome: checkOutcome(check),
+    conclusion: (check.conclusion || "").toUpperCase(),
     required: requiredNames.some((r) => checkMatches(check, r)),
     ...(check.url ? { url: check.url } : {}),
   }));
@@ -234,6 +256,8 @@ export function assessPrMergeReadiness(src: PrReadinessSource): PrMergeVerdict {
   const blockers: string[] = [];
   const warnings: string[] = [];
   const base = src.baseRefName;
+  // The skipped bucket holds every check without a pass/fail result. A
+  // NEUTRAL check did run, so the wording keeps it apart from a SKIPPED one.
 
   if (src.state === "OPEN") {
     if (src.isDraft) blockers.push("it is still a draft");
@@ -290,8 +314,7 @@ export function assessPrMergeReadiness(src: PrReadinessSource): PrMergeVerdict {
       warnings.push(
         `still awaiting a review from ${joinList(review.awaiting)}`,
       );
-    if (checks.skipped.length)
-      warnings.push(`${plural(checks.skipped.length, "check")} skipped`);
+    if (checks.skipped.length) warnings.push(noResultPhrase(checks.skipped));
   } else if (src.state === "MERGED") {
     blockers.push("it was already merged");
   } else {
@@ -304,10 +327,21 @@ export function assessPrMergeReadiness(src: PrReadinessSource): PrMergeVerdict {
     if (src.state === "MERGED") return `${label} was already merged.`;
     if (src.state === "CLOSED") return `${label} is closed and was not merged.`;
     if (!ready) return `${label} is not ready to merge: ${joinList(blockers)}.`;
-    const why = [
-      checks.total
+    // A ready PR has no failing or pending checks, so every check either
+    // passed, was skipped, or completed neutral; say which so the sentence
+    // matches the rollup.
+    const checksWhy = !checks.total
+      ? "no checks reported"
+      : !checks.skipped.length
         ? `all ${plural(checks.passing.length, "check")} passing`
-        : "no checks reported",
+        : !checks.passing.length
+          ? `${noResultPhrase(checks.skipped)}, none failing`
+          : joinList([
+              `${plural(checks.passing.length, "check")} passing`,
+              ...noResultParts(checks.skipped),
+            ]);
+    const why = [
+      checksWhy,
       approvedBy.length
         ? `approved by ${joinList(approvedBy)}`
         : "no review required",
@@ -372,7 +406,7 @@ export function formatPrMergeVerdict(v: PrMergeVerdict): string {
     ...v.checks.skipped,
   ];
   lines.push(
-    `Checks: ${v.checks.total ? `${v.checks.passing.length} passing, ${v.checks.failing.length} failing, ${v.checks.pending.length} pending${v.checks.skipped.length ? `, ${v.checks.skipped.length} skipped` : ""}` : "none reported"}`,
+    `Checks: ${v.checks.total ? [`${v.checks.passing.length} passing`, `${v.checks.failing.length} failing`, `${v.checks.pending.length} pending`, ...noResultParts(v.checks.skipped)].join(", ") : "none reported"}`,
   );
   for (const c of ordered)
     lines.push(`  ${mark(c)} ${c.name}${c.required ? " (required)" : ""}`);

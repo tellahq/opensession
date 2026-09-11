@@ -31,6 +31,7 @@ import { NewSession } from "./components/NewSession";
 import { PrQueuePreview } from "./components/PrQueuePreview";
 import { Prs } from "./components/Prs";
 import { Reports } from "./components/Reports";
+import { Databases } from "./components/Databases";
 import { RestartOverlay } from "./components/RestartOverlay";
 import { Reviews } from "./components/Reviews";
 import { RunningCloseDialog } from "./components/RunningCloseDialog";
@@ -1231,6 +1232,10 @@ export function AppContent({
     openPlain: () => navigate({ view: "plain" }),
     openSupportTinder: () => navigate({ view: "supporttinder" }),
     openReports: (target) => navigate({ view: "reports", ...target }),
+    openDatabases: (databaseId) =>
+      navigate(
+        databaseId ? { view: "databases", databaseId } : { view: "databases" },
+      ),
     openAnalytics: () => navigate({ view: "analytics" }),
     openArchived: () => navigate({ view: "archived" }),
     openCatchUp: () => navigate({ view: "catchup" }),
@@ -1602,6 +1607,22 @@ export function AppContent({
                         navigate({ view: "support", threadId })
                       }
                       onOpenNewSession={openPrefilledSession}
+                      addHandler={addHandler}
+                    />
+                  ) : route.view === "databases" ? (
+                    <Databases
+                      selectedDatabaseId={route.databaseId}
+                      selectedTable={route.table}
+                      onSelect={(databaseId, table) =>
+                        navigate(
+                          { view: "databases", databaseId, table },
+                          { replace: true },
+                        )
+                      }
+                      onBack={() =>
+                        navigate({ view: "databases" }, { replace: true })
+                      }
+                      onOpenSession={(id) => navigate({ view: "session", id })}
                       addHandler={addHandler}
                     />
                   ) : route.view === "analytics" ? (

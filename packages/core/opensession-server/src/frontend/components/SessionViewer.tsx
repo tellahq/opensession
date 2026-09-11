@@ -740,7 +740,7 @@ export function SessionViewer({
   const { overlayAssetPath, setOverlayAssetPath } = viewState.assets;
   const { closeAssetOverlay, promoteAssetToTab } = viewState.assets;
   const { openAssetFromTranscript } = viewState.assets;
-  const { sessionReports, notes, setNotes } = viewState.notes;
+  const { sessionReports, sessionDatabases, notes, setNotes } = viewState.notes;
   const { noteMode, setNoteMode } = viewState.notes;
   const { addSessionAttachments, fileDragActive } = viewState.notes;
   // Intent-aware scrolling: stick to the live edge only while the reader is there,
@@ -804,7 +804,11 @@ export function SessionViewer({
       activePanelOpen,
       infoPageOpen,
     },
-    relations: { subagents, sessionReportCount: sessionReports.length },
+    relations: {
+      subagents,
+      sessionReportCount: sessionReports.length,
+      sessionDatabaseCount: sessionDatabases.length,
+    },
   });
   const workspaceModel = workspaceTools.model;
   const { models, defaultModel, accounts } = workspaceModel;
@@ -1571,7 +1575,10 @@ export function SessionViewer({
           workflowAction,
           subagents,
           openSubagent,
-          sessionReports,
+          sessionArtifacts: {
+            reports: sessionReports,
+            databases: sessionDatabases,
+          },
           navigation,
           effectiveReview,
           onReviewChange,

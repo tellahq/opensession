@@ -270,6 +270,57 @@ export interface ReportMeta {
   tasks?: Array<{ title: string; prompt: string }>;
 }
 
+/** A named SQLite database Open Session keeps (server/databases-sqlite.ts). */
+export interface DatabaseMeta {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string;
+  createdBySessionId?: string;
+  automationId?: string;
+  automationName?: string;
+  sessionIds: string[];
+  lastSessionId?: string;
+  sizeBytes: number;
+  tableCount: number;
+}
+
+export interface DatabaseColumn {
+  name: string;
+  type: string;
+  notNull: boolean;
+  primaryKey: boolean;
+  defaultValue: string | null;
+}
+
+export interface DatabaseTable {
+  name: string;
+  kind: "table" | "view";
+  rowCount: number;
+  columns: DatabaseColumn[];
+}
+
+export interface DatabaseSchema {
+  tables: DatabaseTable[];
+}
+
+export type DatabaseCell = string | number | null;
+
+export interface DatabaseQueryResult {
+  columns: string[];
+  rows: DatabaseCell[][];
+  truncated: boolean;
+}
+
+export interface DatabaseRowsPage {
+  columns: string[];
+  rows: DatabaseCell[][];
+  total: number;
+  offset: number;
+}
+
 export interface ReportGroup {
   automationId: string;
   automationName: string;
@@ -990,6 +1041,9 @@ export type WSServerMessage =
   // An automation published a report. sessionId is present for reports tied to
   // a run and lets that run's Reports tab refresh immediately.
   | { type: "reports_changed"; automationId: string; sessionId?: string }
+  // A database was created, written, renamed or deleted (databases.ts).
+  // sessionId names the run that did it so that run's Databases tab refreshes.
+  | { type: "databases_changed"; databaseId: string; sessionId?: string }
   // The Desk todo list changed (any mutation, any surface — see todos.ts).
   | { type: "todos_changed"; user: string }
   // Dynamic workflow run snapshot changed (workflow-store broadcasts every
