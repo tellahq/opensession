@@ -64,6 +64,7 @@ import {
   IconStopSquare,
   IconPencil,
   IconTrash,
+  IconCall,
 } from "./icons";
 import {
   composerBox,
@@ -200,6 +201,7 @@ export function Composer({
     noteMode,
     askMode,
     askExitPending,
+    call,
   },
   actions: {
     onSend,
@@ -220,6 +222,7 @@ export function Composer({
     skillsFetch,
     onNoteModeChange,
     onAskModeExit,
+    onToggleCall,
   },
   menuExtra,
   attached,
@@ -1737,6 +1740,42 @@ export function Composer({
             onActiveChange={handleDictationActive}
             disabled={disabled}
           />
+
+          {onToggleCall && (
+            <motion.div
+              layout="position"
+              transition={composerMorph}
+              layoutDependency={minimized}
+              className={cn(
+                "inline-flex shrink-0 items-center",
+                // Sits right after the dictation mic in the resting pill.
+                minimized && "order-3",
+              )}
+            >
+              <Tooltip
+                label={
+                  call?.active
+                    ? `End call${call.status ? ` (${call.status})` : ""}`
+                    : "Start a voice call"
+                }
+              >
+                <button
+                  type="button"
+                  className={cn(
+                    composerIconButtonClass,
+                    // A live call reads as the universal red handset.
+                    call?.active && "text-red hover:text-red",
+                  )}
+                  onClick={onToggleCall}
+                  disabled={disabled}
+                  aria-pressed={!!call?.active}
+                  aria-label={call?.active ? "End call" : "Start a voice call"}
+                >
+                  <IconCall size={22} />
+                </button>
+              </Tooltip>
+            </motion.div>
+          )}
 
           {busy && onStop && (
             <Tooltip

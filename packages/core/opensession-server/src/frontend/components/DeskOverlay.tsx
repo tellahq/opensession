@@ -73,6 +73,15 @@ function DeskBody({
   );
 
   const voiceActive = voiceState !== "idle" && voiceState !== "error";
+  const voiceStatus: Record<DeskVoiceState, string | undefined> = {
+    idle: undefined,
+    error: undefined,
+    connecting: "Connecting…",
+    listening: "Listening",
+    thinking: "Thinking…",
+    speaking: "Speaking",
+    action: "Working…",
+  };
 
   function toggleVoice() {
     if (voiceRef.current?.active) {
@@ -164,13 +173,7 @@ function DeskBody({
           >
             {voiceState === "error"
               ? (voiceError ?? "Voice call failed")
-              : {
-                  connecting: "Connecting…",
-                  listening: "Listening",
-                  thinking: "Thinking…",
-                  speaking: "Speaking",
-                  action: "Working…",
-                }[voiceState]}
+              : voiceStatus[voiceState]}
           </span>
         )}
         <Button
@@ -223,6 +226,17 @@ function DeskBody({
             hideBefore={clearedAt}
             voiceSend={(text) =>
               voiceRef.current?.active ? voiceRef.current.sendText(text) : false
+            }
+            // The handset lives in the composer beside dictation; the header
+            // label above shows the call's state.
+            voiceCall={
+              voiceEnabled
+                ? {
+                    active: voiceActive,
+                    status: voiceStatus[voiceState],
+                    onToggle: toggleVoice,
+                  }
+                : undefined
             }
             // The Desk's job is delegating, so its transcript is full of
             // spawned workers. There's no side pane in a modal — open the

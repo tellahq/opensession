@@ -49,6 +49,8 @@ interface DeskConversationProps {
   /** While a voice call is live, typed messages go into it instead of
    *  starting a text run. Return false to fall through to the normal send. */
   voiceSend?: (text: string) => boolean;
+  /** The voice call control, rendered in the composer beside dictation. */
+  voiceCall?: { active: boolean; status?: string; onToggle: () => void };
   /** Drill into a session a tool call spawned (the Desk delegates constantly).
    *  The overlay has no side pane, so this opens it in the full viewer. */
   onOpenSubagent?: (sessionId: string) => void;
@@ -72,6 +74,7 @@ export function DeskConversation({
   effort: sessionEffort,
   hideBefore,
   voiceSend,
+  voiceCall,
   onOpenSubagent,
   suggestions,
 }: DeskConversationProps) {
@@ -609,6 +612,7 @@ export function DeskConversation({
             onDictationActive={handleDictationActive}
             config={{
               draftKey: `desk:${sessionId}`,
+              call: voiceCall,
               attachmentShortcutActive: presenceActive,
               placeholder: connected
                 ? placeholder || "Ask your Desk…"
@@ -641,6 +645,7 @@ export function DeskConversation({
               mentionFetch: (query) => fetchFileMentions(query, sessionId),
               paletteFetch: (query) =>
                 fetchMentionSuggestions(query, sessionId, getCurrentUser()),
+              onToggleCall: voiceCall?.onToggle,
             }}
           />
           <FullPageFileDropOverlay active={fileDragActive} />

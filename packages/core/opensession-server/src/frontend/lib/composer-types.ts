@@ -101,6 +101,10 @@ export interface ComposerConfig {
   /** The exit is in flight: the chip says so and its close button stops taking
    * clicks. */
   askExitPending?: boolean;
+  /** State of the host's live voice call, shown by the handset beside the
+   * dictation mic (rendered only with `onToggleCall`). `status` is the
+   * call's current phase for the tooltip, e.g. "Listening". */
+  call?: { active: boolean; status?: string };
 }
 
 /** A one-shot draft handed to the composer (see `ComposerConfig.prefill`). */
@@ -158,4 +162,6 @@ export interface ComposerActions {
    * the chip renders without an exit rather than offering one that fails.
    */
   onAskModeExit?: () => void;
+  /** Starts the host's voice call, or ends it while `config.call.active`. */
+  onToggleCall?: () => void;
 }
