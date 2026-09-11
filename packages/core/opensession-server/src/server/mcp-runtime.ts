@@ -329,7 +329,7 @@ export async function createMcpRuntime(opts: {
       let url = String(cfg.url);
       let headers = { ...((cfg.headers as Record<string, string>) || {}) };
       if (hasGrant) {
-        url = mcpRelayUrl(name, mintMcpRelayToken(name, candidates));
+        url = mcpRelayUrl(name, await mintMcpRelayToken(name, candidates));
         const { Authorization: _drop, ...rest } = headers;
         headers = rest;
       }
