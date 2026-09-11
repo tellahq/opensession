@@ -59,6 +59,7 @@ function harness(overrides: Partial<ReposToolContext> = {}) {
             {
               name: "CI / Type-check and tests",
               outcome: "passing",
+              conclusion: "SUCCESS",
               required: false,
             },
           ],
@@ -66,6 +67,7 @@ function harness(overrides: Partial<ReposToolContext> = {}) {
             {
               name: "Native client CI / build-and-test",
               outcome: "failing",
+              conclusion: "FAILURE",
               required: false,
             },
           ],
