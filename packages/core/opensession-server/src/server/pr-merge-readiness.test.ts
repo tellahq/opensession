@@ -274,6 +274,26 @@ describe("assessPrMergeReadiness", () => {
     expect(v.warnings).toContain("1 check skipped");
   });
 
+  test("the ready sentence counts skipped checks instead of calling them passing", () => {
+    const mixed = assessPrMergeReadiness(
+      source({
+        checks: [check("Build", "SUCCESS"), check("Lint", "SKIPPED")],
+      }),
+    );
+    expect(mixed.ready).toBe(true);
+    expect(mixed.summary).toBe(
+      'PR #374 "Port the dashboard" is ready to merge: 1 check passing and 1 skipped, no review required, no conflicts.',
+    );
+
+    const onlySkipped = assessPrMergeReadiness(
+      source({ checks: [check("Lint", "SKIPPED")] }),
+    );
+    expect(onlySkipped.ready).toBe(true);
+    expect(onlySkipped.summary).toBe(
+      'PR #374 "Port the dashboard" is ready to merge: 1 check skipped, none run, no review required, no conflicts.',
+    );
+  });
+
   test("pending review requests are a note, not a blocker", () => {
     const v = assessPrMergeReadiness(source({ reviewRequests: ["michiel"] }));
     expect(v.ready).toBe(true);

@@ -304,10 +304,17 @@ export function assessPrMergeReadiness(src: PrReadinessSource): PrMergeVerdict {
     if (src.state === "MERGED") return `${label} was already merged.`;
     if (src.state === "CLOSED") return `${label} is closed and was not merged.`;
     if (!ready) return `${label} is not ready to merge: ${joinList(blockers)}.`;
-    const why = [
-      checks.total
+    // A ready PR has no failing or pending checks, so every check is either
+    // passing or skipped; say which so the sentence matches the rollup.
+    const checksWhy = !checks.total
+      ? "no checks reported"
+      : !checks.skipped.length
         ? `all ${plural(checks.passing.length, "check")} passing`
-        : "no checks reported",
+        : !checks.passing.length
+          ? `${plural(checks.skipped.length, "check")} skipped, none run`
+          : `${plural(checks.passing.length, "check")} passing and ${checks.skipped.length} skipped`;
+    const why = [
+      checksWhy,
       approvedBy.length
         ? `approved by ${joinList(approvedBy)}`
         : "no review required",
