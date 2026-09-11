@@ -84,6 +84,8 @@ function DeskBody({
   };
 
   function toggleVoice() {
+    // `active` covers a start still connecting: pressing the handset again
+    // then cancels that start instead of layering a second call on it.
     if (voiceRef.current?.active) {
       voiceRef.current.stop();
       return;
@@ -224,8 +226,11 @@ function DeskBody({
             model={settings.model}
             effort={settings.effort}
             hideBefore={clearedAt}
-            voiceSend={(text) =>
-              voiceRef.current?.active ? voiceRef.current.sendText(text) : false
+            voiceSend={
+              voiceActive
+                ? (text) =>
+                    voiceRef.current?.sendText(text) ?? Promise.resolve(false)
+                : undefined
             }
             // The handset lives in the composer beside dictation; the header
             // label above shows the call's state.

@@ -106,7 +106,14 @@ export class DeskVoiceClient {
   private closeTimer: number | null = null;
   private connected = false;
   private closing = false;
-  private started: (() => void) | null = null;
+  /** `start()` is between its first await and `session.started`. */
+  private starting = false;
+  /** `stop()` came during `start()`; every later step bails out quietly. */
+  private aborted = false;
+  private startWaiter: {
+    resolve: () => void;
+    reject: (error: Error) => void;
+  } | null = null;
 
   private onVisibilityChange = () => {
     if (document.hidden) this.stop();
@@ -120,15 +127,29 @@ export class DeskVoiceClient {
     this.onState = opts.onState;
   }
 
+  /** Connecting or connected, and not hanging up: the handset shows this
+   * state and `stop()` is the way out of it. */
   get active(): boolean {
-    return this.connected && !this.closing;
+    return (this.connected || this.starting) && !this.closing;
   }
 
+  /** Resolves once the call is live, or returns early without an error when
+   * `stop()` cancelled it midway. Throws on a failed start. */
   async start(): Promise<void> {
-    if (this.connected) return;
-    this.onState("connecting");
+    if (this.connected || this.starting || this.aborted) return;
+    this.starting = true;
     try {
-      this.micStream = await navigator.mediaDevices.getUserMedia({
+      await this.connect();
+    } finally {
+      this.starting = false;
+    }
+  }
+
+  private async connect(): Promise<void> {
+    this.onState("connecting");
+    let mic: MediaStream;
+    try {
+      mic = await navigator.mediaDevices.getUserMedia({
         // Explicit processing constraints: mobile browsers don't reliably
         // default to echo cancellation, and without it the phone's own
         // speaker output comes back in as user speech.
@@ -139,14 +160,21 @@ export class DeskVoiceClient {
         },
       });
     } catch {
+      if (this.aborted) return;
       this.onState("error", "Microphone permission denied");
       throw new Error("Microphone permission denied");
     }
+    if (this.aborted) {
+      // Hung up while the permission prompt was open: teardown ran before
+      // the stream existed, so release it here.
+      for (const track of mic.getTracks()) track.stop();
+      return;
+    }
+    this.micStream = mic;
 
     const pc = new RTCPeerConnection();
     this.pc = pc;
-    for (const track of this.micStream.getTracks())
-      pc.addTrack(track, this.micStream);
+    for (const track of mic.getTracks()) pc.addTrack(track, mic);
 
     pc.ontrack = (event) => {
       const [stream] = event.streams;
@@ -185,9 +213,16 @@ export class DeskVoiceClient {
         { user: this.user, sdp },
         liveResponseSchema,
       );
+      if (this.aborted) {
+        // Hung up while the server was creating the session: it exists and
+        // bills now, so close it from the server side.
+        this.closeServerSide(live.liveSessionId);
+        return;
+      }
       this.liveSessionId = live.liveSessionId;
       await pc.setRemoteDescription({ type: "answer", sdp: live.sdp });
     } catch (e) {
+      if (this.aborted) return;
       const message = e instanceof Error ? e.message : "Failed to start call";
       this.onState("error", message);
       this.teardown();
@@ -200,15 +235,23 @@ export class DeskVoiceClient {
     // channel delivers session.started.
     await new Promise<void>((resolve, reject) => {
       const timer = window.setTimeout(() => {
-        this.started = null;
+        this.startWaiter = null;
         reject(new Error("Call did not start"));
       }, SESSION_START_TIMEOUT_MS);
-      this.started = () => {
-        window.clearTimeout(timer);
-        this.started = null;
-        resolve();
+      this.startWaiter = {
+        resolve: () => {
+          window.clearTimeout(timer);
+          this.startWaiter = null;
+          resolve();
+        },
+        reject: (error) => {
+          window.clearTimeout(timer);
+          this.startWaiter = null;
+          reject(error);
+        },
       };
     }).catch((e: Error) => {
+      if (this.aborted) return;
       this.onState("error", e.message);
       this.teardown();
       throw e;
@@ -218,7 +261,18 @@ export class DeskVoiceClient {
   /** Hang up. Asks the session to close and waits briefly for the final
    * `session.closed` so pending backend work drains; tears down regardless. */
   stop(): void {
-    if (this.closing) return;
+    if (this.closing || this.aborted) return;
+    if (this.starting) {
+      // Cancel the start in progress. Whatever step is awaiting sees
+      // `aborted` and returns; a session the server already created is
+      // closed here or by that step once its id is known.
+      this.aborted = true;
+      if (this.liveSessionId) this.closeServerSide(this.liveSessionId);
+      this.startWaiter?.reject(new Error("Call cancelled"));
+      this.teardown();
+      this.onState("idle");
+      return;
+    }
     if (this.dc && this.dc.readyState === "open" && this.connected) {
       this.closing = true;
       this.onState("idle");
@@ -230,15 +284,18 @@ export class DeskVoiceClient {
       return;
     }
     // No usable data channel: ask the server to close it from its side.
-    if (this.liveSessionId && this.connected) {
-      void postJson(
-        "/live/close",
-        { user: this.user, liveSessionId: this.liveSessionId },
-        okResponseSchema,
-        { keepalive: true },
-      ).catch(() => {});
-    }
+    if (this.liveSessionId && this.connected)
+      this.closeServerSide(this.liveSessionId);
     this.teardown();
+  }
+
+  private closeServerSide(liveSessionId: string) {
+    void postJson(
+      "/live/close",
+      { user: this.user, liveSessionId },
+      okResponseSchema,
+      { keepalive: true },
+    ).catch(() => {});
   }
 
   private teardown() {
@@ -273,23 +330,28 @@ export class DeskVoiceClient {
     this.connected = false;
     this.closing = false;
     this.liveSessionId = null;
-    this.started = null;
+    this.startWaiter = null;
     if (wasConnected) this.onState("idle");
   }
 
   /** Typed text during a call: queued on the backend server-side, mirrored
-   * there as a user turn. False when there is no live call to take it. */
-  sendText(text: string): boolean {
-    if (!this.active || !this.liveSessionId) return false;
+   * there as a user turn. Resolves true only once the server has taken it;
+   * false when there is no live call or the request failed, so the caller
+   * keeps the draft instead of losing the message. */
+  async sendText(text: string): Promise<boolean> {
+    if (!this.connected || this.closing || !this.liveSessionId) return false;
     this.resetIdleTimer();
-    void postJson(
-      "/live/text",
-      { user: this.user, liveSessionId: this.liveSessionId, text },
-      okResponseSchema,
-    ).catch((e) => {
+    try {
+      const res = await postJson(
+        "/live/text",
+        { user: this.user, liveSessionId: this.liveSessionId, text },
+        okResponseSchema,
+      );
+      return res.ok;
+    } catch (e) {
       console.warn("desk voice typed message failed:", e);
-    });
-    return true;
+      return false;
+    }
   }
 
   private resetIdleTimer() {
@@ -311,7 +373,7 @@ export class DeskVoiceClient {
         this.connected = true;
         this.resetIdleTimer();
         this.onState("listening");
-        this.started?.();
+        this.startWaiter?.resolve();
         break;
       case "session.input_transcript.delta":
         this.resetIdleTimer();

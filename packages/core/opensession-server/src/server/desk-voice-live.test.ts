@@ -122,7 +122,7 @@ describe("VoiceTranscriptRows", () => {
     expect(out[1]).toEqual({ id: "user-5000", role: "user", text: "Also," });
   });
 
-  test("keeps overlapping user and assistant rows independent", () => {
+  test("keeps overlapping user and assistant rows independent, in start order", () => {
     const { r, out } = rows();
     r.push({ role: "assistant", delta: "Sure, ", startMs: 100, endMs: 600 });
     r.push({ role: "user", delta: "wait", startMs: 400, endMs: 700 });
@@ -134,8 +134,50 @@ describe("VoiceTranscriptRows", () => {
     });
     r.flushAll();
     expect(out).toEqual([
-      { id: "user-400", role: "user", text: "wait" },
       { id: "assistant-100", role: "assistant", text: "Sure, one moment." },
+      { id: "user-400", role: "user", text: "wait" },
+    ]);
+  });
+
+  test("ends a turn when the other speaker starts after it, so user/assistant/user stays three rows in order", () => {
+    const { r, out } = rows();
+    r.push({ role: "user", delta: "What's running?", startMs: 0, endMs: 800 });
+    r.push({
+      role: "assistant",
+      delta: "Two sessions.",
+      startMs: 900,
+      endMs: 1800,
+    });
+    // Within the user's 2s gap of the first fragment, but a new turn: the
+    // assistant answered in between.
+    r.push({ role: "user", delta: "Stop one.", startMs: 1900, endMs: 2400 });
+    expect(out).toEqual([
+      { id: "user-0", role: "user", text: "What's running?" },
+      { id: "assistant-900", role: "assistant", text: "Two sessions." },
+    ]);
+    r.flushAll();
+    expect(out[2]).toEqual({
+      id: "user-1900",
+      role: "user",
+      text: "Stop one.",
+    });
+  });
+
+  test("puts a late-arriving user fragment ahead of the reply that followed it", () => {
+    const { r, out } = rows();
+    // Recognition lags playback: the reply's transcript shows up first.
+    r.push({
+      role: "assistant",
+      delta: "Two sessions.",
+      startMs: 900,
+      endMs: 1800,
+    });
+    r.push({ role: "user", delta: "What's running?", startMs: 0, endMs: 800 });
+    // The assistant's idle fires first; the question still goes out first.
+    r.flush("assistant");
+    expect(out).toEqual([
+      { id: "user-0", role: "user", text: "What's running?" },
+      { id: "assistant-900", role: "assistant", text: "Two sessions." },
     ]);
   });
 

@@ -172,6 +172,13 @@ export async function buildLiveSessionConfig(
 // Transcript rows. Live emits timed fragments per speaker with no turn
 // boundary, so rows are grouped by session-timeline gap and flushed on a
 // wall-clock idle. Each flushed row is one mirrored transcript entry.
+//
+// Both speakers may have a row open at once (full duplex), so ordering is
+// decided on the session timeline, not on arrival or idle order: a row is
+// flushed before any fragment or row that starts after it ended, and
+// `flushAll` goes by start time. User fragments arrive later than assistant
+// ones (speech recognition lags playback), which is why arrival order alone
+// would put the reply ahead of the question it answers.
 
 export type VoiceRole = "user" | "assistant";
 
@@ -187,6 +194,10 @@ interface OpenRow {
   text: string;
   startMs: number;
   endMs: number;
+}
+
+function otherRole(role: VoiceRole): VoiceRole {
+  return role === "user" ? "assistant" : "user";
 }
 
 export class VoiceTranscriptRows {
@@ -211,6 +222,10 @@ export class VoiceTranscriptRows {
     const current = this.open[role];
     if (current && fragment.startMs - current.endMs > this.opts.gapMs)
       this.flush(role);
+    // The other speaker's row ended before this fragment began: that turn is
+    // over and belongs ahead of this one.
+    const other = this.open[otherRole(role)];
+    if (other && other.endMs <= fragment.startMs) this.flush(otherRole(role));
     const row = this.open[role];
     if (row) {
       // Concatenate exactly as received: fragments carry their own spacing.
@@ -234,14 +249,25 @@ export class VoiceTranscriptRows {
       this.idleTimers[role] = null;
     }
     const row = this.open[role];
+    if (!row) return;
+    // A row of the other speaker that ended before this one started goes out
+    // first, whichever idle timer happened to fire.
+    const other = this.open[otherRole(role)];
+    if (other && other.endMs <= row.startMs) this.flush(otherRole(role));
     this.open[role] = null;
-    if (row && row.text.trim())
+    if (row.text.trim())
       this.opts.onRow({ id: row.id, role, text: row.text.trim() });
   }
 
+  /** Flushes every open row in start order. */
   flushAll(): void {
-    this.flush("user");
-    this.flush("assistant");
+    const { user, assistant } = this.open;
+    const first: VoiceRole =
+      user && assistant && assistant.startMs < user.startMs
+        ? "assistant"
+        : "user";
+    this.flush(first);
+    this.flush(otherRole(first));
   }
 
   private armIdle(role: VoiceRole) {
@@ -575,7 +601,29 @@ function attachSideband(apiKey: string, liveId: string): Promise<WebSocket> {
   });
 }
 
-export async function createLiveVoiceCall(
+/** Call creation in flight per user. Starts for one user run one at a time
+ * so the one-call-per-user rule holds across the awaits below: a second tab
+ * or a double press waits for the first start, then supersedes it. */
+const starting = new Map<string, Promise<unknown>>();
+
+export function createLiveVoiceCall(
+  user: string,
+  offerSdp: string,
+): Promise<{ liveSessionId: string; sdp: string; sessionId: string }> {
+  const previous = starting.get(user) ?? Promise.resolve();
+  const run = previous
+    .catch(() => {})
+    .then(() => createLiveVoiceCallNow(user, offerSdp));
+  starting.set(user, run);
+  void run
+    .catch(() => {})
+    .then(() => {
+      if (starting.get(user) === run) starting.delete(user);
+    });
+  return run;
+}
+
+async function createLiveVoiceCallNow(
   user: string,
   offerSdp: string,
 ): Promise<{ liveSessionId: string; sdp: string; sessionId: string }> {
