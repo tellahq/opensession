@@ -3,9 +3,10 @@
  *
  * GPT-Live splits a call in two: a full-duplex voice model that only talks,
  * and a backend it delegates to whenever the user needs real state read or
- * changed. Here the backend is OpenAI's Responses delegation (gpt-5.6-terra)
- * carrying the Desk's voice tool facade, and this server executes every tool
- * call it makes. The browser never sees a credential and its data channel is
+ * changed. Here the backend is OpenAI's Responses delegation (gpt-5.6-terra
+ * by default; Settings → Desk voice can pick gpt-5.6-luna instead) carrying
+ * the Desk's voice tool facade, and this server executes every tool call it
+ * makes. The browser never sees a credential and its data channel is
  * locked down to transcript/lifecycle events plus `session.close`.
  *
  * Call lifecycle:
@@ -33,20 +34,24 @@ import { ensureDeskSession } from "./desk";
 import { VoiceReferenceLedger, linkSpokenReferences } from "./desk-voice-refs";
 import { REPOS } from "./worktree";
 import {
+  DESK_LIVE_BACKEND_MODEL,
   VOICE_TOOLS,
   executeVoiceTool,
   listVoiceMcpTools,
   mirrorVoiceEntries,
   mirrorVoiceToolCall,
   recentDeskTurns,
+  recordVoiceDiag,
   requireVoiceApiKey,
   truncate,
+  voiceBackendModel,
+  type LiveBackendModel,
 } from "./desk-voice";
 
 export const DESK_LIVE_MODEL = "gpt-live-1";
-/** Reasoning + tool selection model behind the voice. Terra is OpenAI's
- * recommended default for Live backends; Luna is the cost-sensitive option. */
-export const DESK_LIVE_BACKEND_MODEL = "gpt-5.6-terra";
+/** The default backend (Terra). The instance-wide choice between it and Luna
+ * is stored beside the API key; see voiceBackendModel() in desk-voice.ts. */
+export { DESK_LIVE_BACKEND_MODEL };
 const LIVE_SESSIONS_URL = "https://api.openai.com/v1/live/sessions";
 
 /** Session timeline gap (ms) between two fragments of the same speaker that
@@ -119,6 +124,9 @@ export async function buildLiveSessionConfig(
   sessionId: string,
   user = "Open Session",
 ) {
+  // Read per call: the setting can change between calls, and a running call
+  // keeps whatever backend it started on.
+  const backendModel: LiveBackendModel = await voiceBackendModel();
   const turns = await recentDeskTurns(sessionId);
   const tools: LiveFunctionTool[] = [
     ...VOICE_TOOLS,
@@ -150,7 +158,7 @@ export async function buildLiveSessionConfig(
     delegation: {
       type: "responses",
       responses: {
-        model: DESK_LIVE_BACKEND_MODEL,
+        model: backendModel,
         instructions: LIVE_BACKEND_INSTRUCTIONS,
         tools,
         tool_choice: "auto",
@@ -215,7 +223,14 @@ export class VoiceTranscriptRows {
       gapMs: number;
       idleMs: number;
       rowId: (role: VoiceRole, startMs: number) => string;
-      onRow: (row: { id: string; role: VoiceRole; text: string }) => void;
+      onRow: (row: {
+        id: string;
+        role: VoiceRole;
+        text: string;
+        /** Timeline span of the fragments joined into this row. */
+        startMs: number;
+        endMs: number;
+      }) => void;
     },
   ) {}
 
@@ -278,7 +293,13 @@ export class VoiceTranscriptRows {
     const row = this.open[role];
     this.open[role] = null;
     if (row && row.text.trim())
-      this.opts.onRow({ id: row.id, role, text: row.text.trim() });
+      this.opts.onRow({
+        id: row.id,
+        role,
+        text: row.text.trim(),
+        startMs: row.startMs,
+        endMs: row.endMs,
+      });
   }
 
   private clearIdle(role: VoiceRole) {
@@ -307,9 +328,16 @@ export class VoiceTranscriptRows {
 // the response is continued with `response.create` once every call of that
 // response has an output and the response itself has finished streaming.
 
+export interface LiveResponseUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  input_tokens_details?: { cached_tokens?: number };
+  output_tokens_details?: { reasoning_tokens?: number };
+}
+
 export interface LiveResponseEvent {
   type: string;
-  response?: { id?: string };
+  response?: { id?: string; usage?: LiveResponseUsage };
   item?: {
     type?: string;
     id?: string;
@@ -474,18 +502,85 @@ export class LiveResponseLoop {
 }
 
 // ---------------------------------------------------------------------------
+// Backend token usage. The voice model bills per second (reported once in
+// `session.closed`); the backend bills per token, reported on each nested
+// response's terminal event. Summing those here is the only place a call's
+// whole cost is visible, so it goes in the end-of-call log and diag line.
+
+export interface LiveUsageTotals {
+  inputTokens: number;
+  outputTokens: number;
+  /** Part of inputTokens served from the prompt cache (cheaper). */
+  cachedInputTokens: number;
+  /** Part of outputTokens spent on reasoning. */
+  reasoningTokens: number;
+  /** Backend responses that reported usage. */
+  responses: number;
+}
+
+export class LiveUsageMeter {
+  readonly totals: LiveUsageTotals = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedInputTokens: 0,
+    reasoningTokens: 0,
+    responses: 0,
+  };
+  /** Both `response.completed` and `response.done` can name the same
+   * response; whichever arrives first is the one counted. */
+  private counted = new Set<string>();
+
+  /** Adds the usage of a nested Responses event, if it is a terminal event
+   * carrying one. Returns whether anything was added. */
+  handle(event: LiveResponseEvent): boolean {
+    if (event.type !== "response.completed" && event.type !== "response.done")
+      return false;
+    const usage = event.response?.usage;
+    if (!usage) return false;
+    const id = event.response?.id;
+    if (id) {
+      if (this.counted.has(id)) return false;
+      this.counted.add(id);
+    }
+    this.totals.inputTokens += usage.input_tokens ?? 0;
+    this.totals.outputTokens += usage.output_tokens ?? 0;
+    this.totals.cachedInputTokens +=
+      usage.input_tokens_details?.cached_tokens ?? 0;
+    this.totals.reasoningTokens +=
+      usage.output_tokens_details?.reasoning_tokens ?? 0;
+    this.totals.responses += 1;
+    return true;
+  }
+}
+
+/** `tokens in=1200 (cached 800) out=340 (reasoning 120)`; the parentheses
+ * only when there is something to say. */
+export function formatLiveUsage(t: LiveUsageTotals): string {
+  const cached = t.cachedInputTokens ? ` (cached ${t.cachedInputTokens})` : "";
+  const reasoning = t.reasoningTokens
+    ? ` (reasoning ${t.reasoningTokens})`
+    : "";
+  return `tokens in=${t.inputTokens}${cached} out=${t.outputTokens}${reasoning}`;
+}
+
+// ---------------------------------------------------------------------------
 // Call registry.
 
 interface LiveCall {
   id: string;
   user: string;
   deskSessionId: string;
+  backendModel: LiveBackendModel;
   socket: WebSocket;
   rows: VoiceTranscriptRows;
   loop: LiveResponseLoop;
   /** PRs and sessions the call's tool calls surfaced, so a spoken "six four
    * seven four" or a session named only by title gets its chip. */
   ledger: VoiceReferenceLedger;
+  usage: LiveUsageMeter;
+  /** `session.delegation.created` events seen: how often the voice model
+   * reached for the backend. */
+  delegations: number;
   startedAt: number;
   idleTimer: ReturnType<typeof setTimeout> | null;
   maxTimer: ReturnType<typeof setTimeout> | null;
@@ -553,18 +648,40 @@ function finalize(call: LiveCall, reason: string, seconds?: number): void {
     )
       call.socket.close();
   } catch {}
+  const usage = call.usage.totals;
   console.log(
     `[desk-voice-live] ${call.id} ended (${reason})${
       seconds !== undefined ? ` after ${Math.round(seconds)}s` : ""
-    } user=${call.user}`,
+    } user=${call.user} backend=${call.backendModel} ${formatLiveUsage(usage)}`,
   );
+  // The server's own diag line. The browser posts a separate one at teardown
+  // (lib/desk-voice-client.ts) rather than the two being merged: both are
+  // triggered by the same `session.closed`, so a merge would need a holding
+  // buffer with its own expiry for whichever half arrives first, while two
+  // lines sharing a liveSessionId join with a grep. Counters only; nothing
+  // spoken or transcribed goes in here.
+  void recordVoiceDiag(call.user, {
+    engine: "live",
+    origin: "server",
+    liveSessionId: call.id,
+    backendModel: call.backendModel,
+    reason,
+    seconds: seconds !== undefined ? Math.round(seconds) : undefined,
+    wallSeconds: Math.round((Date.now() - call.startedAt) / 1000),
+    delegations: call.delegations,
+    responses: usage.responses,
+    inputTokens: usage.inputTokens,
+    cachedInputTokens: usage.cachedInputTokens,
+    outputTokens: usage.outputTokens,
+    reasoningTokens: usage.reasoningTokens,
+  });
 }
 
 interface LiveServerEvent {
   type: string;
   delta?: string;
-  start_ms?: number;
-  end_ms?: number;
+  start_ms?: unknown;
+  end_ms?: unknown;
   delegation_id?: string | null;
   event?: LiveResponseEvent;
   reason?: string;
@@ -572,6 +689,21 @@ interface LiveServerEvent {
   error?: { message?: string; code?: string };
   message?: string;
   code?: string;
+}
+
+export function liveTranscriptSpan(event: {
+  start_ms?: unknown;
+  end_ms?: unknown;
+}): { startMs: number; endMs: number } {
+  const startMs =
+    typeof event.start_ms === "number" && Number.isFinite(event.start_ms)
+      ? event.start_ms
+      : 0;
+  const endMs =
+    typeof event.end_ms === "number" && Number.isFinite(event.end_ms)
+      ? event.end_ms
+      : startMs;
+  return { startMs, endMs };
 }
 
 function handleSidebandEvent(call: LiveCall, event: LiveServerEvent): void {
@@ -585,18 +717,20 @@ function handleSidebandEvent(call: LiveCall, event: LiveServerEvent): void {
               ? "user"
               : "assistant",
           delta: event.delta,
-          startMs: event.start_ms ?? 0,
-          endMs: event.end_ms ?? event.start_ms ?? 0,
+          ...liveTranscriptSpan(event),
         });
         touch(call);
       }
       break;
     case "session.delegation.created":
+      call.delegations += 1;
       touch(call);
       break;
     case "response.event":
-      if (event.event && typeof event.delegation_id === "string")
+      if (event.event && typeof event.delegation_id === "string") {
+        call.usage.handle(event.event);
         call.loop.handle(event.delegation_id, event.event);
+      }
       break;
     case "session.closed":
       finalize(call, event.reason ?? "closed", event.usage?.seconds);
@@ -651,10 +785,18 @@ function attachSideband(apiKey: string, liveId: string): Promise<WebSocket> {
  * or a double press waits for the first start, then supersedes it. */
 const starting = new Map<string, Promise<unknown>>();
 
+export interface LiveCallStarted {
+  liveSessionId: string;
+  sdp: string;
+  sessionId: string;
+  /** What this call delegates to, so the browser's diag line can name it. */
+  backendModel: LiveBackendModel;
+}
+
 export function createLiveVoiceCall(
   user: string,
   offerSdp: string,
-): Promise<{ liveSessionId: string; sdp: string; sessionId: string }> {
+): Promise<LiveCallStarted> {
   const previous = starting.get(user) ?? Promise.resolve();
   const run = previous
     .catch(() => {})
@@ -671,8 +813,8 @@ export function createLiveVoiceCall(
 async function createLiveVoiceCallNow(
   user: string,
   offerSdp: string,
-): Promise<{ liveSessionId: string; sdp: string; sessionId: string }> {
-  const key = requireVoiceApiKey();
+): Promise<LiveCallStarted> {
+  const key = await requireVoiceApiKey();
   const { sessionId } = ensureDeskSession(user);
 
   // One call per user: a reload or a second tab must not leave the old call
@@ -681,6 +823,7 @@ async function createLiveVoiceCallNow(
     if (existing.user === user) requestClose(existing);
 
   const session = await buildLiveSessionConfig(sessionId, user);
+  const backendModel = session.delegation.responses.model;
   const res = await fetch(LIVE_SESSIONS_URL, {
     method: "POST",
     headers: {
@@ -713,6 +856,7 @@ async function createLiveVoiceCallNow(
     id: liveId,
     user,
     deskSessionId: sessionId,
+    backendModel,
     socket,
     rows: new VoiceTranscriptRows({
       gapMs: LIVE_ROW_GAP_MS,
@@ -721,10 +865,13 @@ async function createLiveVoiceCallNow(
       // Only what the Desk said is rewritten: a spoken PR number becomes
       // `repo#N` and a session it started gets named, so the mirrored row
       // renders chips. The user's words stay exactly as transcribed.
+      // The mirrored id carries the row's end too (`-end-<endMs>`), so the
+      // browser's captions (frontend/lib/voice-captions.ts) can take down
+      // exactly the fragments this row covers without matching its text.
       onRow: (row) =>
         mirrorVoiceEntries(user, [
           {
-            id: row.id,
+            id: `${row.id}-end-${row.endMs}`,
             role: row.role,
             text:
               row.role === "assistant"
@@ -748,6 +895,8 @@ async function createLiveVoiceCallNow(
       },
     }),
     ledger,
+    usage: new LiveUsageMeter(),
+    delegations: 0,
     startedAt: Date.now(),
     idleTimer: null,
     maxTimer: null,
@@ -774,8 +923,10 @@ async function createLiveVoiceCallNow(
     console.log(`[desk-voice-live] ${liveId} hit the call length cap`);
     requestClose(call);
   }, LIVE_MAX_CALL_MS);
-  console.log(`[desk-voice-live] ${liveId} started user=${user}`);
-  return { liveSessionId: liveId, sdp: answer, sessionId };
+  console.log(
+    `[desk-voice-live] ${liveId} started user=${user} backend=${backendModel}`,
+  );
+  return { liveSessionId: liveId, sdp: answer, sessionId, backendModel };
 }
 
 /** The instance's repos, as the ledger needs them to resolve a PR mention:

@@ -3,10 +3,13 @@
 // with the instance key and hands back the answer. Tool calls, transcript
 // mirroring, and typed text all happen server-side over the session's
 // sideband (src/server/desk-voice-live.ts); the data channel here is limited
-// to lifecycle and transcript events plus `session.close`.
+// to lifecycle and transcript events plus `session.close`. The transcript
+// events double as live captions (`onTranscript`): the server mirrors a row
+// only once the utterance settles, and these arrive word by word.
 
 import { z } from "zod";
 import { BASE_PATH } from "./base";
+import type { VoiceCaptionFragment, VoiceCaptionRole } from "./voice-captions";
 
 export type DeskVoiceState =
   | "idle"
@@ -32,6 +35,7 @@ const liveResponseSchema = z.object({
   liveSessionId: z.string(),
   sdp: z.string(),
   sessionId: z.string(),
+  backendModel: z.string().optional(),
 });
 
 const liveEventSchema = z.object({
@@ -42,12 +46,46 @@ const liveEventSchema = z.object({
     .optional()
     .catch(undefined),
   message: z.string().optional(),
+  // Transcript deltas: the text plus its place on the session timeline. A
+  // malformed timestamp must not cost the state change the event carries.
+  delta: z.string().optional().catch(undefined),
+  start_ms: z.number().optional().catch(undefined),
+  end_ms: z.number().optional().catch(undefined),
 });
+
+type LiveEvent = z.infer<typeof liveEventSchema>;
+
+/** One audio-free, transcript-free line about how a call went, posted at
+ * teardown to `/api/desk/voice/diag` (the server appends its own line with
+ * the call's token totals under the same liveSessionId). Counters and
+ * reasons only: nothing spoken or transcribed is ever in here. */
+export interface DeskVoiceDiagReport {
+  user: string;
+  engine: "live";
+  origin: "client";
+  liveSessionId: string | null;
+  backendModel: string | null;
+  /** null when permission is still pending or was never requested. */
+  micGranted: boolean | null;
+  sawStarted: boolean;
+  /** Why the client ended: hangup, idle, hidden, cancelled, connection
+   * lost, data channel closed, start failed, session closed. */
+  closeReason: string;
+  /** OpenAI's reason from `session.closed`, when one was seen. */
+  sessionCloseReason: string | null;
+  /** From `session.started` to teardown. */
+  durationSeconds: number;
+  inputDeltas: number;
+  outputDeltas: number;
+  delegations: number;
+  lastError: string | null;
+}
 
 type VoiceRequest =
   | { user: string; sdp: string }
   | { user: string; liveSessionId: string; text: string }
-  | { user: string; liveSessionId: string };
+  | { user: string; liveSessionId: string }
+  | DeskVoiceDiagReport;
 
 const errorResponseSchema = z.object({ error: z.string().optional() });
 const okResponseSchema = z.object({ ok: z.boolean() });
@@ -94,6 +132,8 @@ function waitForIceGathering(pc: RTCPeerConnection): Promise<void> {
 export class DeskVoiceClient {
   private user: string;
   private onState: (s: DeskVoiceState, detail?: string) => void;
+  private onCallStarted?: (callId: string) => void;
+  private onTranscript?: (fragment: VoiceCaptionFragment) => void;
 
   private pc: RTCPeerConnection | null = null;
   private dc: RTCDataChannel | null = null;
@@ -115,16 +155,48 @@ export class DeskVoiceClient {
     reject: (error: Error) => void;
   } | null = null;
 
+  // Diagnostics, kept as plain counters so the teardown line has nothing
+  // to redact. See DeskVoiceDiagReport.
+  private diagPosted = false;
+  private backendModel: string | null = null;
+  private micGranted: boolean | null = null;
+  private startedAt: number | null = null;
+  private closeReason: string | null = null;
+  private sessionCloseReason: string | null = null;
+  private inputDeltas = 0;
+  private outputDeltas = 0;
+  private delegations = 0;
+  private lastError: string | null = null;
+
   private onVisibilityChange = () => {
-    if (document.hidden) this.stop();
+    if (document.hidden) this.onPageHide();
+  };
+
+  private onPageHide = () => {
+    this.closeReason ??= "hidden";
+    this.aborted = true;
+    if (this.liveSessionId) this.closeServerSide(this.liveSessionId);
+    this.startWaiter?.reject(new Error("Call cancelled"));
+    // A backgrounded/closing tab may never run the grace timer. Send the
+    // keepalive diagnostic now rather than waiting for session.closed.
+    this.teardown();
+    this.onState("idle");
   };
 
   constructor(opts: {
     user: string;
     onState: (s: DeskVoiceState, detail?: string) => void;
+    /** Every transcript fragment as the call delivers it, both speakers. */
+    onTranscript?: (fragment: VoiceCaptionFragment) => void;
+    onCallStarted?: (callId: string) => void;
   }) {
     this.user = opts.user;
-    this.onState = opts.onState;
+    this.onState = (s, detail) => {
+      if (s === "error") this.lastError = detail ?? "error";
+      opts.onState(s, detail);
+    };
+    this.onTranscript = opts.onTranscript;
+    this.onCallStarted = opts.onCallStarted;
   }
 
   /** Connecting or connected, and not hanging up: the handset shows this
@@ -138,6 +210,7 @@ export class DeskVoiceClient {
   async start(): Promise<void> {
     if (this.connected || this.starting || this.aborted) return;
     this.starting = true;
+    window.addEventListener("pagehide", this.onPageHide);
     try {
       await this.connect();
     } finally {
@@ -161,9 +234,13 @@ export class DeskVoiceClient {
       });
     } catch {
       if (this.aborted) return;
+      this.micGranted = false;
       this.onState("error", "Microphone permission denied");
+      this.closeReason = "microphone denied";
+      this.teardown();
       throw new Error("Microphone permission denied");
     }
+    this.micGranted = true;
     if (this.aborted) {
       // Hung up while the permission prompt was open: teardown ran before
       // the stream existed, so release it here.
@@ -188,6 +265,7 @@ export class DeskVoiceClient {
       const state = pc.connectionState;
       if (state === "failed" || state === "disconnected") {
         this.onState("error", "connection lost");
+        this.closeReason ??= "connection lost";
         this.teardown();
       }
     };
@@ -199,6 +277,7 @@ export class DeskVoiceClient {
     dc.onmessage = (event) => this.handleEvent(event.data);
     dc.onclose = () => {
       if (this.connected && !this.closing) this.onState("error", "call ended");
+      this.closeReason ??= "data channel closed";
       this.teardown();
     };
 
@@ -220,11 +299,14 @@ export class DeskVoiceClient {
         return;
       }
       this.liveSessionId = live.liveSessionId;
+      this.backendModel = live.backendModel ?? null;
+      this.onCallStarted?.(live.liveSessionId);
       await pc.setRemoteDescription({ type: "answer", sdp: live.sdp });
     } catch (e) {
       if (this.aborted) return;
       const message = e instanceof Error ? e.message : "Failed to start call";
       this.onState("error", message);
+      this.closeReason ??= "start failed";
       this.teardown();
       throw new Error(message);
     }
@@ -253,26 +335,30 @@ export class DeskVoiceClient {
     }).catch((e: Error) => {
       if (this.aborted) return;
       this.onState("error", e.message);
+      this.closeReason ??= "start failed";
       this.teardown();
       throw e;
     });
   }
 
   /** Hang up. Asks the session to close and waits briefly for the final
-   * `session.closed` so pending backend work drains; tears down regardless. */
-  stop(): void {
+   * `session.closed` so pending backend work drains; tears down regardless.
+   * `reason` is for the diag line only: who decided the call was over. */
+  stop(reason = "hangup"): void {
     if (this.closing || this.aborted) return;
     if (this.starting) {
       // Cancel the start in progress. Whatever step is awaiting sees
       // `aborted` and returns; a session the server already created is
       // closed here or by that step once its id is known.
       this.aborted = true;
+      this.closeReason ??= "cancelled";
       if (this.liveSessionId) this.closeServerSide(this.liveSessionId);
       this.startWaiter?.reject(new Error("Call cancelled"));
       this.teardown();
       this.onState("idle");
       return;
     }
+    this.closeReason ??= reason;
     if (this.dc && this.dc.readyState === "open" && this.connected) {
       this.closing = true;
       this.onState("idle");
@@ -299,12 +385,14 @@ export class DeskVoiceClient {
   }
 
   private teardown() {
+    this.postDiag("teardown");
     for (const key of ["idleTimer", "speakingTimer", "closeTimer"] as const) {
       const t = this[key];
       if (t !== null) window.clearTimeout(t);
       this[key] = null;
     }
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    window.removeEventListener("pagehide", this.onPageHide);
     if (this.dc) {
       this.dc.onmessage = null;
       this.dc.onclose = null;
@@ -334,6 +422,36 @@ export class DeskVoiceClient {
     if (wasConnected) this.onState("idle");
   }
 
+  /** Once per client, at the end of the call, whatever ended it. Keepalive
+   * so a closed tab (the most common way a call ends) still reports. Best
+   * effort: a failure here is not worth surfacing. */
+  private postDiag(fallbackReason: string) {
+    if (this.diagPosted) return;
+    this.diagPosted = true;
+    const report: DeskVoiceDiagReport = {
+      user: this.user,
+      engine: "live",
+      origin: "client",
+      liveSessionId: this.liveSessionId,
+      backendModel: this.backendModel,
+      micGranted: this.micGranted,
+      sawStarted: this.startedAt !== null,
+      closeReason: this.closeReason ?? fallbackReason,
+      sessionCloseReason: this.sessionCloseReason,
+      durationSeconds:
+        this.startedAt === null
+          ? 0
+          : Math.round((Date.now() - this.startedAt) / 1000),
+      inputDeltas: this.inputDeltas,
+      outputDeltas: this.outputDeltas,
+      delegations: this.delegations,
+      lastError: this.lastError?.slice(0, 500) ?? null,
+    };
+    void postJson("/diag", report, okResponseSchema, { keepalive: true }).catch(
+      () => {},
+    );
+  }
+
   /** Typed text during a call: queued on the backend server-side, mirrored
    * there as a user turn. Resolves true only once the server has taken it;
    * false when there is no live call or the request failed, so the caller
@@ -356,11 +474,26 @@ export class DeskVoiceClient {
 
   private resetIdleTimer() {
     if (this.idleTimer !== null) window.clearTimeout(this.idleTimer);
-    this.idleTimer = window.setTimeout(() => this.stop(), IDLE_TIMEOUT_MS);
+    this.idleTimer = window.setTimeout(
+      () => this.stop("idle"),
+      IDLE_TIMEOUT_MS,
+    );
+  }
+
+  private transcript(role: VoiceCaptionRole, event: LiveEvent) {
+    if (!event.delta || !this.onTranscript) return;
+    // The same fallbacks the server's row grouping applies to these fields.
+    const startMs = event.start_ms ?? 0;
+    this.onTranscript({
+      role,
+      delta: event.delta,
+      startMs,
+      endMs: event.end_ms ?? startMs,
+    });
   }
 
   private handleEvent(raw: string) {
-    let event: z.infer<typeof liveEventSchema>;
+    let event: LiveEvent;
     try {
       event = liveEventSchema.parse(JSON.parse(raw));
     } catch {
@@ -371,17 +504,22 @@ export class DeskVoiceClient {
     switch (event.type) {
       case "session.started":
         this.connected = true;
+        this.startedAt ??= Date.now();
         this.resetIdleTimer();
         this.onState("listening");
         this.startWaiter?.resolve();
         break;
       case "session.input_transcript.delta":
+        this.inputDeltas += 1;
         this.resetIdleTimer();
         this.onState("listening");
+        this.transcript("user", event);
         break;
       case "session.output_transcript.delta":
+        this.outputDeltas += 1;
         this.resetIdleTimer();
         this.onState("speaking");
+        this.transcript("assistant", event);
         if (this.speakingTimer !== null)
           window.clearTimeout(this.speakingTimer);
         this.speakingTimer = window.setTimeout(() => {
@@ -390,17 +528,20 @@ export class DeskVoiceClient {
         }, SPEAKING_SETTLE_MS);
         break;
       case "session.delegation.created":
+        this.delegations += 1;
         this.resetIdleTimer();
         this.onState("thinking");
         break;
       case "session.closed": {
         const reason = event.reason ?? "";
+        this.sessionCloseReason = reason || "unknown";
         const requested =
           this.closing ||
           reason === "close_requested" ||
           reason === "remote_hangup";
         if (!requested)
           this.onState("error", `Call ended (${reason || "unknown"})`);
+        this.closeReason ??= "session closed";
         this.teardown();
         break;
       }

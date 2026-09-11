@@ -119,6 +119,7 @@ import {
   SettingsSection,
 } from "../../ui/settings";
 import { InlineAlert, Skeleton, SkeletonBar } from "../../ui/state";
+import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
 import { getCurrentUser } from "../UserPicker";
@@ -139,6 +140,73 @@ import { IconPlus, IconRepo } from "../icons";
 interface DeskVoiceStatus {
   configured: boolean;
   keyMasked?: string;
+  /** The GPT-Live backend the web call delegates to (instance-wide). */
+  backendModel?: string;
+}
+
+/** The two backends the server accepts; anything else it refuses. */
+const DESK_VOICE_BACKENDS = [
+  { value: "gpt-5.6-terra", label: "Terra" },
+  { value: "gpt-5.6-luna", label: "Luna" },
+];
+
+function DeskVoiceBackendRow() {
+  const [saving, setSaving] = useState(false);
+  const [model, setModel] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    request<DeskVoiceStatus>("/desk/voice/status", {
+      label: "Failed to load voice settings",
+    })
+      .then((status) => setModel(status.backendModel ?? null))
+      .catch((error) =>
+        setError(errorMessage(error, "Failed to load voice settings")),
+      );
+  }, []);
+
+  async function pick(next: string) {
+    if (saving) return;
+    setSaving(true);
+    const previous = model;
+    setModel(next);
+    setError(null);
+    try {
+      const status = await request<DeskVoiceStatus>("/desk/voice/backend", {
+        method: "PUT",
+        body: { model: next },
+        label: "Failed to save the voice backend",
+      });
+      setModel(status.backendModel ?? next);
+    } catch (error: unknown) {
+      setModel(previous);
+      setError(errorMessage(error, "Failed to save the voice backend"));
+    }
+    setSaving(false);
+  }
+
+  return (
+    <SettingRow
+      title="Voice backend"
+      desc={
+        error || "Terra is OpenAI's recommended Live backend. Luna costs less."
+      }
+      control={
+        <Segmented label="Voice backend" value={model} onValueChange={pick}>
+          {DESK_VOICE_BACKENDS.map(({ value, label }) => (
+            <SegmentedOption
+              key={value}
+              value={value}
+              disabled={model === null || saving}
+              className="phone:min-h-11"
+            >
+              {label}
+            </SegmentedOption>
+          ))}
+        </Segmented>
+      }
+    />
+  );
 }
 
 function DeskVoiceApiKeyRow() {
@@ -234,11 +302,13 @@ function DeskVoicePanel() {
             }
           />
           <DeskVoiceApiKeyRow />
+          <DeskVoiceBackendRow />
         </SettingGroup>
       </SettingCard>
       <SettingsHint>
-        Adds a microphone to Desk, opened with ⌘J. The API key is shared across
-        this instance.
+        Adds a microphone to Desk, opened with ⌘J. The API key and the backend
+        are shared across this instance. The composer's model pill sets the
+        typed Desk only; it does not change a call.
       </SettingsHint>
     </>
   );

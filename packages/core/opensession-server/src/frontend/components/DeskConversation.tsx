@@ -33,6 +33,8 @@ import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
 import { foregroundFileComposerOwns, hasDraggedFiles } from "../lib/file-drag";
 import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
 import { errorMessage } from "../lib/error-message";
+import type { VoiceCaptionStore } from "../lib/voice-captions";
+import { VoiceCaptions } from "./VoiceCaptions";
 
 interface DeskConversationProps {
   sessionId: string;
@@ -52,6 +54,9 @@ interface DeskConversationProps {
   voiceSend?: (text: string) => Promise<boolean>;
   /** The voice call control, rendered in the composer beside dictation. */
   voiceCall?: { active: boolean; status?: string; onToggle: () => void };
+  /** Live captions of the voice call, shown under the transcript until the
+   * server's mirrored row for each utterance lands here and replaces them. */
+  voiceCaptions?: VoiceCaptionStore;
   /** Drill into a session a tool call spawned (the Desk delegates constantly).
    *  The overlay has no side pane, so this opens it in the full viewer. */
   onOpenSubagent?: (sessionId: string) => void;
@@ -76,6 +81,7 @@ export function DeskConversation({
   hideBefore,
   voiceSend,
   voiceCall,
+  voiceCaptions,
   onOpenSubagent,
   suggestions,
 }: DeskConversationProps) {
@@ -86,6 +92,9 @@ export function DeskConversation({
   const [isRunning, setIsRunning] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [hasLiveText, setHasLiveText] = useState(false);
+  const [hasVoiceCaptions, setHasVoiceCaptions] = useState(
+    () => voiceCaptions?.hasCaptions() ?? false,
+  );
   const [dictationHidesSuggestions, setDictationHidesSuggestions] =
     useState(false);
   // Attachments staged for the next send. The Composer stages files to disk
@@ -159,6 +168,13 @@ export function DeskConversation({
   }
   const addDroppedAttachments = useEffectEvent((picked: FileList | File[]) => {
     void addDeskAttachments(picked);
+  });
+  // A mirrored voice row landing takes its caption down in the same render,
+  // so the words never show twice. Not a dependency of the watch effect: the
+  // store is stable for the overlay's lifetime.
+  const landVoiceCaptions = useEffectEvent((landed: TranscriptEntry[]) => {
+    if (!voiceCaptions) return;
+    for (const entry of landed) voiceCaptions.land(entry);
   });
 
   function resetFileDrag() {
@@ -240,7 +256,11 @@ export function DeskConversation({
     ? entries.filter((e) => !e.timestamp || e.timestamp > hideBefore)
     : entries;
   const hasContent =
-    visibleEntries.length > 0 || hasLiveText || isRunning || !!pending;
+    visibleEntries.length > 0 ||
+    hasLiveText ||
+    hasVoiceCaptions ||
+    isRunning ||
+    !!pending;
 
   useEffect(() => {
     fetchModels()
@@ -280,8 +300,10 @@ export function DeskConversation({
       switch (msg.type) {
         case "transcript_init":
           setEntries(msg.entries);
+          landVoiceCaptions(msg.entries);
           break;
         case "transcript_history":
+          landVoiceCaptions(msg.entries);
           setEntries((prev) =>
             mergeTranscriptEntries(prev, msg.entries, msg.v2 === true),
           );
@@ -290,6 +312,7 @@ export function DeskConversation({
           setEntries((prev) =>
             mergeTranscriptEntries(prev, msg.entries, msg.v2 === true),
           );
+          landVoiceCaptions(msg.entries);
           if (msg.entries.some((e) => e.type === "user")) setPending(null);
           const landed = msg.entries.filter(
             (e) => e.type === "assistant" && e.content,
@@ -379,6 +402,13 @@ export function DeskConversation({
     });
     return unsubscribe;
   }, [liveTurnStore]);
+  useEffect(() => {
+    if (!voiceCaptions) return;
+    setHasVoiceCaptions(voiceCaptions.hasCaptions());
+    return voiceCaptions.subscribe(() => {
+      setHasVoiceCaptions(voiceCaptions.hasCaptions());
+    });
+  }, [voiceCaptions]);
   const shouldMaintainEnd = () => followRef.current;
   const relayoutLive = () => {
     const el = bodyRef.current;
@@ -569,6 +599,10 @@ export function DeskConversation({
                 connected && !isRunning ? continueAfterFailure : undefined
               }
             />
+            {/* What the voice call is saying, ahead of the mirrored rows. */}
+            {voiceCaptions && (
+              <VoiceCaptions store={voiceCaptions} onLayout={relayoutLive} />
+            )}
             {/* Optimistic echo of the just-sent message — rendered as a normal
 						    sent bubble (not the dimmed "sending" look) so it reads as
 						    delivered the instant Enter lands; reconciles away when the
@@ -652,7 +686,13 @@ export function DeskConversation({
               models,
               defaultModel,
               model,
-              modelTitle: "Model and reasoning effort for your Desk",
+              // The pill sets the text Desk's model. During a call typed
+              // text goes into the call, whose backend is an instance
+              // setting, so the pill has nothing to apply to until it ends.
+              modelPillDisabled: voiceCall?.active,
+              modelTitle: voiceCall?.active
+                ? "Applies to typed turns. The voice call uses its own backend (Settings → Desk voice)."
+                : "Model and reasoning effort for your Desk",
               effort,
               autoFocus,
               textareaRef,

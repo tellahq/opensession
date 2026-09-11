@@ -5,7 +5,7 @@ const pref = UserPref.makeUserPref<boolean>({
   localKey: "opensession-agentation",
   prefKey: "agentation",
   changeEvent: "opensession-agentation-changed",
-  defaultValue: true,
+  defaultValue: false,
   decode: (v) => (v === "on" ? true : v === "off" ? false : null),
   encode: (on) => (on ? "on" : "off"),
 });

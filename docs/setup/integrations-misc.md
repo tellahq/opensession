@@ -169,12 +169,37 @@ environment. Two engines share it:
 - **Web: GPT-Live** (`src/server/desk-voice-live.ts`). The browser posts its
   WebRTC offer to `/api/desk/voice/live`; the server creates the
   `gpt-live-1` session, attaches a sideband WebSocket, and returns the SDP
-  answer. Reasoning and tools run through Responses delegation on
-  `gpt-5.6-terra`; every function call executes on this server as the
-  verified user and transcripts are mirrored from the sideband. The browser
-  data channel is restricted to `session.close`. Billing is per second of
-  call time plus backend tokens; the server closes a call after 3 minutes of
-  silence or 30 minutes total.
+  answer. Reasoning and tools run through Responses delegation on the
+  instance's chosen backend; every function call executes on this server as
+  the verified user and transcripts are mirrored from the sideband. The
+  browser data channel is restricted to `session.close`. Billing is per
+  second of call time plus backend tokens; the server closes a call after 3
+  minutes of silence or 30 minutes total.
+
+  **Voice backend.** Settings → Desk voice picks between `gpt-5.6-terra`
+  (the default, OpenAI's recommended Live backend) and `gpt-5.6-luna` (the
+  cost-sensitive option). The choice is instance-wide, stored beside the
+  API key in `stateDir("desk")/voice.json` (0600), read at the start of each call, and
+  exposed as `backendModel` on `GET /api/desk/voice/status`;
+  `PUT /api/desk/voice/backend` accepts only those two ids. The Desk
+  composer's model pill sets the typed Desk's model and reasoning effort; it
+  has no effect on a call, so it is disabled while one is up.
+
+  **Diagnostics.** Established web calls produce two audio-free, transcript-free
+  lines in `stateDir("desk")/voice-diag.jsonl`, joined by `liveSessionId`.
+  On legacy installations this is `~/.opensession-desk/voice-diag.jsonl`. The browser
+  posts one at teardown (`origin: "client"`): backend model, whether
+  `session.started` was seen, why the client ended and OpenAI's
+  `session.closed` reason, duration, counts of input and output transcript
+  deltas and delegations, the last error string, and whether the microphone
+  permission was granted. The server writes the other when the call
+  finalizes (`origin: "server"`): its close reason and duration plus the
+  backend token totals (input, cached, output, reasoning) summed from the
+  delegation's `response.completed` or `response.done` events, deduplicated
+  by response id. A failed start may have only the client line, with no
+  session id or backend yet. Delivery is best effort. The totals also appear in the
+  `[desk-voice-live] ... ended` log line.
+
 - **iOS: GPT Realtime** (`src/server/desk-voice.ts`). The device connects to
   OpenAI with an ephemeral secret from `/api/desk/voice/secret` and relays
   tool calls and transcripts through `/api/desk/voice/tool` and

@@ -20,8 +20,8 @@ beforeAll(async () => {
 beforeEach(() => store.clear());
 
 describe("Agentation preference", () => {
-  test("defaults to enabled without changing the instance opt-in", () => {
-    expect(pref.getAgentationPref()).toBe(true);
+  test("defaults to disabled without a personal opt-in", () => {
+    expect(pref.getAgentationPref()).toBe(false);
   });
 
   test("reads stored choices and ignores invalid values", () => {
@@ -30,7 +30,7 @@ describe("Agentation preference", () => {
     store.set("opensession-agentation", "on");
     expect(pref.getAgentationPref()).toBe(true);
     store.set("opensession-agentation", "invalid");
-    expect(pref.getAgentationPref()).toBe(true);
+    expect(pref.getAgentationPref()).toBe(false);
   });
 
   test("disabling notifies the mounted toolbar and settings", () => {
@@ -40,16 +40,18 @@ describe("Agentation preference", () => {
     unsubscribe();
 
     expect(pref.getAgentationPref()).toBe(false);
-    expect(store.get("opensession-agentation")).toBe("off");
+    expect(store.has("opensession-agentation")).toBe(false);
     expect(changed).toBe(1);
     pref.setAgentationPref(true);
     expect(changed).toBe(1);
   });
 
-  test("re-enabling restores the default cached state", () => {
-    pref.setAgentationPref(false);
+  test("enabling stores an explicit opt-in", () => {
     pref.setAgentationPref(true);
     expect(pref.getAgentationPref()).toBe(true);
+    expect(store.get("opensession-agentation")).toBe("on");
+    pref.setAgentationPref(false);
+    expect(pref.getAgentationPref()).toBe(false);
     expect(store.has("opensession-agentation")).toBe(false);
   });
 });

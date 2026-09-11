@@ -9,6 +9,7 @@ import { IconDesk, IconExpand, IconMinus } from "./icons";
 import { Button } from "../ui/button";
 import { DeskVoiceClient, type DeskVoiceState } from "../lib/desk-voice-client";
 import { getDeskVoicePref, onDeskVoiceChanged } from "../lib/desk-voice-pref";
+import { VoiceCaptionStore } from "../lib/voice-captions";
 import { cn } from "../ui/cn";
 import { errorMessage } from "../lib/error-message";
 import { useDeskPanel } from "../hooks/useDeskPanel";
@@ -73,11 +74,14 @@ function DeskBody({
   );
 
   // Voice mode (Settings → Desk voice): a GPT-Live call layered on this same
-  // Desk session. The server mirrors the call's transcript into the session,
-  // so the conversation below updates while you talk.
+  // Desk session. The server mirrors the call's transcript into the session
+  // one settled utterance at a time; the call's own transcript deltas fill
+  // the wait as live captions (one store for the body's lifetime, cleared as
+  // each call starts), so the conversation below moves while you talk.
   const [voiceEnabled, setVoiceEnabled] = useState(getDeskVoicePref);
   const [voiceState, setVoiceState] = useState<DeskVoiceState>("idle");
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceCaptions] = useState(() => new VoiceCaptionStore());
   const voiceRef = useRef<DeskVoiceClient | null>(null);
   useEffect(
     () => onDeskVoiceChanged(() => setVoiceEnabled(getDeskVoicePref())),
@@ -87,8 +91,10 @@ function DeskBody({
   useEffect(
     () => () => {
       voiceRef.current?.stop();
+      voiceRef.current = null;
+      voiceCaptions.clear();
     },
-    [],
+    [voiceCaptions],
   );
 
   const voiceActive = voiceState !== "idle" && voiceState !== "error";
@@ -110,17 +116,30 @@ function DeskBody({
       return;
     }
     setVoiceError(null);
+    voiceCaptions.clear();
     const client = new DeskVoiceClient({
       user,
       onState: (s, detail) => {
+        if (voiceRef.current !== client) return;
         setVoiceState(s);
         if (s === "error") setVoiceError(detail || "Voice call failed");
+        // The call is over: its open rows are being mirrored, so the
+        // captions wait for them rather than vanishing and reappearing.
+        if (s === "idle" || s === "error") voiceCaptions.end();
+      },
+      onCallStarted: (callId) => {
+        if (voiceRef.current === client) voiceCaptions.start(callId);
+      },
+      onTranscript: (fragment) => {
+        if (voiceRef.current === client) voiceCaptions.push(fragment);
       },
     });
     voiceRef.current = client;
     void client.start().catch((error) => {
+      if (voiceRef.current !== client) return;
       setVoiceState("error");
       setVoiceError(errorMessage(error, "Voice call failed"));
+      voiceCaptions.end();
     });
   }
 
@@ -263,6 +282,7 @@ function DeskBody({
             model={settings.model}
             effort={settings.effort}
             hideBefore={clearedAt}
+            voiceCaptions={voiceCaptions}
             voiceSend={
               voiceActive
                 ? (text) =>
