@@ -79,7 +79,10 @@ export interface PrReadinessCheck {
 }
 
 export type PrReviewVerdict =
-  "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | "NONE";
+  | "APPROVED"
+  | "CHANGES_REQUESTED"
+  | "REVIEW_REQUIRED"
+  | "NONE";
 
 export interface PrMergeVerdict {
   ready: boolean;
