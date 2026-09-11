@@ -181,6 +181,26 @@ describe("VoiceTranscriptRows", () => {
     ]);
   });
 
+  test("an interrupted reply still leads the interruption when a later fragment closes both", () => {
+    const { r, out } = rows();
+    r.push({
+      role: "assistant",
+      delta: "Sure, one moment.",
+      startMs: 100,
+      endMs: 1200,
+    });
+    r.push({ role: "user", delta: "wait", startMs: 400, endMs: 700 });
+    // Past the user's gap and past the assistant's end: both rows close, and
+    // the one that started first goes out first.
+    r.push({ role: "user", delta: "go on.", startMs: 5000, endMs: 5400 });
+    expect(out).toEqual([
+      { id: "assistant-100", role: "assistant", text: "Sure, one moment." },
+      { id: "user-400", role: "user", text: "wait" },
+    ]);
+    r.flushAll();
+    expect(out[2]).toEqual({ id: "user-5000", role: "user", text: "go on." });
+  });
+
   test("drops whitespace-only rows", () => {
     const { r, out } = rows();
     r.push({ role: "user", delta: "  ", startMs: 0, endMs: 100 });
@@ -351,7 +371,33 @@ describe("LiveResponseLoop", () => {
     l.requestContinue();
     expect(sent).toEqual([]);
     l.handle("del_1", { type: "response.failed" });
-    expect(l.busy).toBe(false);
     expect(sent.map((e) => e.type)).toEqual(["response.create"]);
+    // Busy again: that create has not been answered with response.created.
+    expect(l.busy).toBe(true);
+    l.handle("del_1", { type: "response.created" });
+    l.handle("del_1", { type: "response.completed" });
+    expect(l.busy).toBe(false);
+  });
+
+  test("back-to-back typed messages open one response at a time", () => {
+    const { l, sent } = loop(async () => ({}));
+    // Two /live/text requests before the backend has acknowledged the first
+    // response.create: the second waits rather than colliding.
+    l.requestContinue();
+    l.requestContinue();
+    expect(sent.map((e) => e.type)).toEqual(["response.create"]);
+    expect(l.busy).toBe(true);
+    l.handle("del_1", { type: "response.created", response: { id: "resp_1" } });
+    expect(l.busy).toBe(true);
+    l.handle("del_1", { type: "response.completed" });
+    // The deferred second message runs once the first response ends.
+    expect(sent.map((e) => e.type)).toEqual([
+      "response.create",
+      "response.create",
+    ]);
+    l.handle("del_1", { type: "response.created", response: { id: "resp_2" } });
+    l.handle("del_1", { type: "response.completed" });
+    expect(l.busy).toBe(false);
+    expect(sent.length).toBe(2);
   });
 });

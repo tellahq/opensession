@@ -219,13 +219,17 @@ export class VoiceTranscriptRows {
 
   push(fragment: TranscriptFragment): void {
     const { role } = fragment;
+    // Every open row this fragment closes goes out first, in start order:
+    // the same speaker's row when the gap is too long, the other speaker's
+    // when it ended before this fragment began (that turn is over and belongs
+    // ahead of this one). Whichever closed, the earlier-started row leads.
+    const done: VoiceRole[] = [];
     const current = this.open[role];
     if (current && fragment.startMs - current.endMs > this.opts.gapMs)
-      this.flush(role);
-    // The other speaker's row ended before this fragment began: that turn is
-    // over and belongs ahead of this one.
+      done.push(role);
     const other = this.open[otherRole(role)];
-    if (other && other.endMs <= fragment.startMs) this.flush(otherRole(role));
+    if (other && other.endMs <= fragment.startMs) done.push(otherRole(role));
+    this.flushInStartOrder(done);
     const row = this.open[role];
     if (row) {
       // Concatenate exactly as received: fragments carry their own spacing.
@@ -242,32 +246,45 @@ export class VoiceTranscriptRows {
     this.armIdle(role);
   }
 
+  /** Flushes one speaker's row (its idle fired). A row of the other speaker
+   * that ended before this one started goes out first, whichever idle timer
+   * happened to fire. */
   flush(role: VoiceRole): void {
+    const row = this.open[role];
+    if (!row) {
+      this.clearIdle(role);
+      return;
+    }
+    const other = this.open[otherRole(role)];
+    if (other && other.endMs <= row.startMs) this.flushRow(otherRole(role));
+    this.flushRow(role);
+  }
+
+  /** Flushes every open row in start order. */
+  flushAll(): void {
+    this.flushInStartOrder(["user", "assistant"]);
+  }
+
+  private flushInStartOrder(roles: VoiceRole[]) {
+    const open = roles.filter((r) => this.open[r]);
+    open.sort((a, b) => this.open[a]!.startMs - this.open[b]!.startMs);
+    for (const role of open) this.flushRow(role);
+  }
+
+  private flushRow(role: VoiceRole) {
+    this.clearIdle(role);
+    const row = this.open[role];
+    this.open[role] = null;
+    if (row && row.text.trim())
+      this.opts.onRow({ id: row.id, role, text: row.text.trim() });
+  }
+
+  private clearIdle(role: VoiceRole) {
     const timer = this.idleTimers[role];
     if (timer) {
       clearTimeout(timer);
       this.idleTimers[role] = null;
     }
-    const row = this.open[role];
-    if (!row) return;
-    // A row of the other speaker that ended before this one started goes out
-    // first, whichever idle timer happened to fire.
-    const other = this.open[otherRole(role)];
-    if (other && other.endMs <= row.startMs) this.flush(otherRole(role));
-    this.open[role] = null;
-    if (row.text.trim())
-      this.opts.onRow({ id: row.id, role, text: row.text.trim() });
-  }
-
-  /** Flushes every open row in start order. */
-  flushAll(): void {
-    const { user, assistant } = this.open;
-    const first: VoiceRole =
-      user && assistant && assistant.startMs < user.startMs
-        ? "assistant"
-        : "user";
-    this.flush(first);
-    this.flush(otherRole(first));
   }
 
   private armIdle(role: VoiceRole) {
@@ -312,6 +329,10 @@ export class LiveResponseLoop {
   private delegations = new Map<string, DelegationState>();
   /** A continue requested (typed text) while calls were still open. */
   private continueWanted = false;
+  /** A `response.create` sent whose `response.created` has not arrived.
+   * Busy from the moment it is sent, so two typed messages in quick
+   * succession cannot both see an idle loop and open colliding responses. */
+  private createPending = false;
 
   constructor(
     private readonly io: {
@@ -329,6 +350,7 @@ export class LiveResponseLoop {
    * `response.create` issued now would reset the counters of the one in
    * flight; typed text waits for its terminal event instead. */
   get busy(): boolean {
+    if (this.createPending) return true;
     for (const d of this.delegations.values())
       if (!d.finished || d.open.size) return true;
     return false;
@@ -345,6 +367,7 @@ export class LiveResponseLoop {
       case "response.created":
         // A fresh response under this delegation (first, or the one our
         // response.create continued). Its own calls start from zero.
+        this.createPending = false;
         state.open.clear();
         state.calls = 0;
         state.finished = false;
@@ -373,6 +396,7 @@ export class LiveResponseLoop {
       case "response.failed":
       case "response.incomplete":
       case "response.cancelled":
+        this.createPending = false;
         state.finished = true;
         state.open.clear();
         this.delegations.delete(delegationId);
@@ -392,6 +416,11 @@ export class LiveResponseLoop {
       return;
     }
     this.continueWanted = false;
+    this.createResponse();
+  }
+
+  private createResponse() {
+    this.createPending = true;
     this.io.send({ type: "response.create" });
   }
 
@@ -438,7 +467,7 @@ export class LiveResponseLoop {
     this.continueWanted = false;
     state.finished = false;
     state.calls = 0;
-    this.io.send({ type: "response.create" });
+    this.createResponse();
   }
 }
 
@@ -474,12 +503,16 @@ export function activeLiveCalls(): Array<{
   }));
 }
 
-function sendEvent(call: LiveCall, event: Record<string, unknown>): void {
-  if (call.socket.readyState !== WebSocket.OPEN) return;
+/** True when the event went out on the sideband; false when the socket is
+ * not open (closing, before `onclose` finalizes the call) or send threw. */
+function sendEvent(call: LiveCall, event: Record<string, unknown>): boolean {
+  if (call.socket.readyState !== WebSocket.OPEN) return false;
   try {
     call.socket.send(JSON.stringify(event));
+    return true;
   } catch (e) {
     console.error(`[desk-voice-live] send failed for ${call.id}:`, e);
+    return false;
   }
 }
 
@@ -744,7 +777,9 @@ export function sendLiveVoiceText(
   if (!call || call.finalized) return false;
   const trimmed = text.trim();
   if (!trimmed) return false;
-  sendEvent(call, {
+  // Acknowledge only what the backend actually received: a false here keeps
+  // the browser's draft instead of mirroring a message nobody heard.
+  const sent = sendEvent(call, {
     type: "response.item.create",
     item: {
       type: "message",
@@ -752,6 +787,7 @@ export function sendLiveVoiceText(
       content: [{ type: "input_text", text: trimmed }],
     },
   });
+  if (!sent) return false;
   call.loop.requestContinue();
   mirrorVoiceEntries(user, [
     { id: `voice-typed-${crypto.randomUUID()}`, role: "user", text: trimmed },
