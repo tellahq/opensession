@@ -948,12 +948,15 @@ struct PrPanelView: View {
     private func actionsMenu(_ pr: PrDetails) -> some View {
         Menu {
             if pr.isOpen {
+                // Review can merge after approving, so it waits while a
+                // merge is held or on the wire: one request per PR.
                 Button {
                     actionError = nil
                     reviewing = true
                 } label: {
                     Label("Review", systemImage: "checkmark.bubble")
                 }
+                .disabled(deferredMerge.phase != .idle)
                 if deferredMerge.phase == .idle {
                     Menu {
                         Button("Squash and merge") { pendingMerge = "squash" }
