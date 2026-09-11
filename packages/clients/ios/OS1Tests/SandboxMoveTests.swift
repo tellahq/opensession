@@ -167,12 +167,16 @@ final class SandboxMoveTests: XCTestCase {
         var snapshot = host
         snapshot.sandbox = SandboxMove.recorded(from: preparing)
         XCTAssertTrue(model.hasMoved(snapshot))
-        snapshot.sandbox?.lifecycle = "needs_attention"
+        snapshot.sandbox = try session(
+            #"{"id":"bks-1","sandbox":{"provider":"daytona","lifecycle":"needs_attention"}}"#
+        ).sandbox
         XCTAssertTrue(SandboxMove.canMove(snapshot))
         XCTAssertFalse(model.hasMoved(snapshot), "The retained menu must allow retry after failure")
         XCTAssertTrue(model.hasMoved(host), "Bypassing a failure must not release stale host snapshots")
 
-        snapshot.sandbox?.sandboxId = "sb-1"
+        snapshot.sandbox = try session(
+            #"{"id":"bks-1","sandbox":{"provider":"daytona","lifecycle":"needs_attention","sandboxId":"sb-1"}}"#
+        ).sandbox
         XCTAssertTrue(model.hasMoved(snapshot), "A materialized failure uses Recreate instead")
         let retried = await model.move(sessionId: host.id, to: "daytona")
         XCTAssertNotNil(retried)
