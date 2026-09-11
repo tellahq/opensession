@@ -9,8 +9,11 @@ import Foundation
 enum SandboxMove {
     /// Why a session cannot move, in the server's order.
     enum Refusal: Equatable {
-        /// A Sandbox already exists for it. A recorded provider without an id
-        /// is a move that has not materialized, and moving again retries it.
+        /// A Sandbox is recorded for it, materialized or not. The server would
+        /// accept a second move while the first is still preparing, and then
+        /// provision twice; the Sandbox that lands second is never recorded
+        /// or destroyed. A move that failed is retried from the Sandbox
+        /// section (Recreate), not by moving again.
         case inSandbox
         case runner
         case automation
@@ -19,9 +22,7 @@ enum SandboxMove {
     }
 
     static func refusal(_ session: Session) -> Refusal? {
-        if let sandbox = session.sandbox,
-           let id = sandbox.sandboxId, !id.isEmpty,
-           sandbox.provider != "local" {
+        if let provider = session.sandbox?.provider, !provider.isEmpty, provider != "local" {
             return .inSandbox
         }
         if let runner = session.runner, !runner.id.isEmpty { return .runner }
