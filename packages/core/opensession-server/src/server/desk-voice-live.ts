@@ -680,8 +680,8 @@ function finalize(call: LiveCall, reason: string, seconds?: number): void {
 interface LiveServerEvent {
   type: string;
   delta?: string;
-  start_ms?: number;
-  end_ms?: number;
+  start_ms?: unknown;
+  end_ms?: unknown;
   delegation_id?: string | null;
   event?: LiveResponseEvent;
   reason?: string;
@@ -689,6 +689,21 @@ interface LiveServerEvent {
   error?: { message?: string; code?: string };
   message?: string;
   code?: string;
+}
+
+export function liveTranscriptSpan(event: {
+  start_ms?: unknown;
+  end_ms?: unknown;
+}): { startMs: number; endMs: number } {
+  const startMs =
+    typeof event.start_ms === "number" && Number.isFinite(event.start_ms)
+      ? event.start_ms
+      : 0;
+  const endMs =
+    typeof event.end_ms === "number" && Number.isFinite(event.end_ms)
+      ? event.end_ms
+      : startMs;
+  return { startMs, endMs };
 }
 
 function handleSidebandEvent(call: LiveCall, event: LiveServerEvent): void {
@@ -702,8 +717,7 @@ function handleSidebandEvent(call: LiveCall, event: LiveServerEvent): void {
               ? "user"
               : "assistant",
           delta: event.delta,
-          startMs: event.start_ms ?? 0,
-          endMs: event.end_ms ?? event.start_ms ?? 0,
+          ...liveTranscriptSpan(event),
         });
         touch(call);
       }

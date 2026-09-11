@@ -11,6 +11,7 @@ import {
   VoiceTranscriptRows,
   buildLiveSessionConfig,
   formatLiveUsage,
+  liveTranscriptSpan,
 } from "./desk-voice-live";
 import {
   setVoiceBackendModel,
@@ -377,6 +378,43 @@ describe("VoiceTranscriptRows", () => {
     r.push({ role: "user", delta: "  ", startMs: 0, endMs: 100 });
     r.flushAll();
     expect(out).toEqual([]);
+  });
+
+  test.each([
+    { start_ms: 1200, end_ms: "unknown", startMs: 1200, endMs: 1200 },
+    { start_ms: "unknown", end_ms: 1500, startMs: 0, endMs: 1500 },
+    { start_ms: null, end_ms: null, startMs: 0, endMs: 0 },
+    { start_ms: NaN, end_ms: Infinity, startMs: 0, endMs: 0 },
+    { start_ms: -Infinity, end_ms: {}, startMs: 0, endMs: 0 },
+    { start_ms: undefined, end_ms: undefined, startMs: 0, endMs: 0 },
+    { start_ms: 1200, end_ms: 1500, startMs: 1200, endMs: 1500 },
+  ])("normalizes sideband timestamps and drains captions: %j", (event) => {
+    const span = liveTranscriptSpan(event);
+    expect(span).toEqual({ startMs: event.startMs, endMs: event.endMs });
+    const captions = new VoiceCaptionStore();
+    captions.start("live_abc");
+    captions.push({
+      role: "assistant",
+      delta: "PR forty two.",
+      startMs: event.startMs,
+      endMs: event.endMs,
+    });
+    const r = new VoiceTranscriptRows({
+      gapMs: LIVE_ROW_GAP_MS,
+      idleMs: 60_000,
+      rowId: (role, startMs) => `voice-live_abc-${role}-${startMs}`,
+      onRow: (row) => {
+        captions.land({
+          id: `${row.id}-end-${row.endMs}`,
+          type: row.role,
+          content: "PR opensession#42.",
+        });
+      },
+    });
+    r.push({ role: "assistant", delta: "PR forty two.", ...span });
+    expect(captions.getSnapshot().captions).toHaveLength(1);
+    r.flushAll();
+    expect(captions.getSnapshot().captions).toEqual([]);
   });
 
   test("the browser's captions drain exactly as the mirrored rows land", () => {
