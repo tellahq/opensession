@@ -3,6 +3,7 @@
 // every export below lives in exactly one module.
 export * from "./api/request";
 export * from "./api/reports";
+export * from "./api/databases";
 export * from "./api/sessions";
 export * from "./api/prs";
 export * from "./api/previews";

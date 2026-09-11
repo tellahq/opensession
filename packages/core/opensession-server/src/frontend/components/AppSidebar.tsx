@@ -234,6 +234,7 @@ export function AppSidebar({
           plainActive={route.view === "plain"}
           supportTinderActive={route.view === "supporttinder"}
           reportsActive={route.view === "reports"}
+          databasesActive={route.view === "databases"}
           analyticsActive={route.view === "analytics"}
           showDraftRow={productEmpty && githubConnectionState !== "loading"}
           footerAccessory={footerAccessory}

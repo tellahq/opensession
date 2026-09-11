@@ -85,10 +85,11 @@ export function ModelRow({
               // The pill is where the effort chords are worth naming: they
               // step what it displays. Appended to the native title the
               // trigger already carries, so a reader who hovers the thing
-              // they would otherwise click finds them.
+              // they would otherwise click finds them. Not on a disabled
+              // pill, where the title explains why nothing steps.
               title:
                 (modelTitle || "Model and reasoning effort for this session") +
-                (effortDownLabel && effortUpLabel
+                (effortDownLabel && effortUpLabel && !disabled
                   ? `\n${effortDownLabel} / ${effortUpLabel} steps the effort`
                   : ""),
               showUsage: true,

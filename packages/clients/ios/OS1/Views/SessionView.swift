@@ -882,6 +882,14 @@ struct SessionView: View {
                 modelMenu
                     .help("Model and reasoning settings")
             }
+            // Where the next turn runs. Only for a session the server would
+            // let move: a Sandbox, Runner, automation or Ask session has no
+            // such choice, and the item would only ever refuse.
+            if SandboxMove.canMove(viewModel.session) {
+                ToolbarItem(placement: .topTrailingCompat) {
+                    SandboxMoveToolbarMenu(viewModel: viewModel)
+                }
+            }
             #endif
             }
 
@@ -950,6 +958,11 @@ struct SessionView: View {
                 if let drop = ProcessInfo.processInfo.environment["OS1_SHOW_CONNECTION_DROP"] {
                     viewModel.dropConnectionForScreenshot(sustained: drop == "sustained")
                 }
+                // Both platforms: the Mac capture is where the hardware keys
+                // get exercised.
+                if ProcessInfo.processInfo.environment["OS1_SHOW_ASK_FIXTURE"] == "1" {
+                    viewModel.showAskForScreenshot()
+                }
                 #endif
                 #if DEBUG && os(iOS)
                 // Install screenshot fixtures before network requests so a
@@ -1010,6 +1023,15 @@ struct SessionView: View {
                    openPanel.isAvailable {
                     openPanel(.changes(sessionId: viewModel.session.id))
                 }
+                #endif
+                #if DEBUG && os(macOS)
+                // The Mac has no panel stack; the PR panel is the sheet the
+                // toolbar chip opens.
+                if ProcessInfo.processInfo.environment["OS1_OPEN_PR"] == "1" {
+                    showPrPanel = true
+                }
+                #endif
+                #if DEBUG && os(iOS)
                 if ProcessInfo.processInfo.environment["OS1_SHOW_SLACK_RECEIPT"] == "1" {
                     viewModel.resolveSlackComposer(SlackComposeReceipt(
                         requestId: "screenshot-slack-receipt",
@@ -1902,6 +1924,7 @@ private struct SessionActionsMenu: View {
     @State private var pendingMerge: String?
     @State private var merging = false
     @State private var mergeError: String?
+    @State private var sandboxMove = SandboxMoveViewModel()
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -1984,6 +2007,22 @@ private struct SessionActionsMenu: View {
                 showWorktreeInfo = true
             } label: {
                 Label("Worktree details", systemImage: "info.circle")
+            }
+            // Where the next turn runs. Offered only when the server would
+            // accept the move (a code session with a repository, on this
+            // machine, not an automation's and not on a Runner); a 428 from
+            // the server becomes the confirmation below.
+            if canMoveToSandbox {
+                Menu {
+                    SandboxMoveMenuItems(
+                        model: sandboxMove,
+                        session: viewModel.session,
+                        isRunning: viewModel.isRunning,
+                        onMoved: adoptSandboxMove
+                    )
+                } label: {
+                    Label("Move to Sandbox", systemImage: "cube")
+                }
             }
             // What the next turn runs on. It was only reachable through the
             // worktree details sheet, which is a long way to go for a setting
@@ -2138,6 +2177,13 @@ private struct SessionActionsMenu: View {
                 .foregroundStyle(OS1VisualStyle.text)
         }
         .accessibilityLabel("Session actions")
+        .sandboxMovePrompts(sandboxMove, onMoved: adoptSandboxMove)
+        .task(id: viewModel.session.id) {
+            // One read of the instance's Sandboxes per session, and none for
+            // a session that cannot move: the menu shows the rows before it
+            // is opened, so they must be known before then.
+            if canMoveToSandbox { await sandboxMove.loadProviders() }
+        }
         .confirmationDialog(
             mergeConfirmationTitle,
             isPresented: Binding(
@@ -2169,6 +2215,16 @@ private struct SessionActionsMenu: View {
     private func openWorker(_ worker: Session) {
         guard let url = SessionLinks.url(for: worker.id) else { return }
         openURL(url)
+    }
+
+    private var canMoveToSandbox: Bool {
+        SandboxMove.canMove(viewModel.session)
+    }
+
+    /// The row says Preparing from this call on, so the submenu is gone
+    /// before the refresh that confirms it starts.
+    private func adoptSandboxMove(_ status: SessionSandboxStatus) {
+        SandboxMoveViewModel.adopt(status, into: viewModel)
     }
 
     private var addIntent: SidebarAddition.Intent? {
@@ -3349,10 +3405,13 @@ private struct SessionInputBar: View {
         // Desk opens with a keyboard covering its own board.
         .onAppear {
             if viewModel.session.neverRan && autoFocusWhenNeverRan { inputFocused = true }
-            #if DEBUG && os(iOS)
+            #if DEBUG
             // Open with the keyboard up, for the same reason as the panel
             // hooks in `SessionView`: a headless capture host can tap
-            // nothing, so the focused state is only reachable this way.
+            // nothing, so the focused state is only reachable this way. On
+            // the Mac it is how the keyboard verification starts in the
+            // composer, the one place the question card's letters must not
+            // reach.
             if ProcessInfo.processInfo.environment["OS1_FOCUS_COMPOSER"] == "1" {
                 inputFocused = true
             }

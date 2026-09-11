@@ -370,6 +370,10 @@ const WORKER_SIDECARS: Array<{ entry: string; name: string }> = [
     entry: "packages/core/opensession-server/src/server/session-list-worker.ts",
     name: "session-list-worker.js",
   },
+  {
+    entry: "packages/core/opensession-server/src/server/databases-worker.ts",
+    name: "databases-worker.js",
+  },
 ];
 
 async function buildWorkerSidecars(destDir: string): Promise<void> {

@@ -21,6 +21,7 @@ export const SIDEBAR_TOOL_IDS = [
   "catchup",
   "supporttinder",
   "reports",
+  "databases",
   "analytics",
 ] as const;
 
@@ -36,6 +37,7 @@ export const SIDEBAR_TOOL_LABELS: Record<SidebarToolId, string> = {
   catchup: "Catch up",
   supporttinder: "Support Tinder",
   reports: "Reports",
+  databases: "Databases",
   analytics: "Analytics",
 };
 

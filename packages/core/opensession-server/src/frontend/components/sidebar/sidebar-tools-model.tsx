@@ -3,6 +3,7 @@ import {
   IconArchive,
   IconChart,
   IconFeed,
+  IconDatabase,
   IconFile,
   IconInbox,
   IconListCircles,
@@ -43,6 +44,7 @@ interface SidebarToolsModelOptions {
   catchUpCount: number;
   supportTinderActive: boolean;
   reportsActive: boolean;
+  databasesActive: boolean;
   analyticsActive: boolean;
   isPhone: boolean;
   toolOrder: SidebarToolId[];
@@ -65,6 +67,7 @@ export function createSidebarToolsModel({
   catchUpCount,
   supportTinderActive,
   reportsActive,
+  databasesActive,
   analyticsActive,
   isPhone,
   toolOrder,
@@ -141,6 +144,14 @@ export function createSidebarToolsModel({
       // automation's own report row below passes the one it names.
       onClick: () => navigation.openReports(),
       title: "Recurring automation reports",
+    },
+    {
+      id: "databases",
+      label: SIDEBAR_TOOL_LABELS.databases,
+      icon: <IconDatabase />,
+      active: databasesActive,
+      onClick: () => navigation.openDatabases(),
+      title: "Databases sessions and automations keep",
     },
     {
       id: "analytics",

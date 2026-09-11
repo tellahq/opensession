@@ -56,6 +56,15 @@ import type {
 } from "./types";
 import { defaultRepo } from "./config";
 import { hostRepoId } from "./pr-host";
+import { resolveRegisteredPr } from "./pr-labels";
+import { prMetaForBranch } from "./pr-info";
+import { cachedPrNumberByBranch } from "./pr-cache";
+import {
+  assessPrMergeReadiness,
+  fetchPrReadinessSource,
+  type PrMergeVerdict,
+  type PrReadinessTarget,
+} from "./pr-merge-readiness";
 
 export interface SessionRepoContext {
   repo: string;
@@ -844,6 +853,70 @@ export async function linkPr(
   ];
   touchNativeSession(sessionId, { linkedPrs: all });
   return { linked, all };
+}
+
+/**
+ * The PR a merge-readiness question is about. A URL or repo id + number
+ * names it outright. Otherwise it is the PR of a session: the given one, or
+ * the caller's own. The session's PR targets are the ones its Review tab
+ * shows (primary branch, attached repos, linked PRs, in that order); the
+ * first target with an open PR wins, else the first with any PR. `repo`
+ * narrows a session lookup to that repo.
+ */
+export async function resolvePrReadinessTarget(
+  sessionId: string,
+  input: { url?: string; repo?: string; number?: number; session?: string },
+): Promise<PrReadinessTarget> {
+  if (input.url || input.number) {
+    const { repo, number } = resolveRegisteredPr(input);
+    return { repoId: repo.id, ghRepo: repo.ghRepo, number };
+  }
+  const targetSession = (input.session || sessionId).trim();
+  const session = findSession(targetSession);
+  if (!session) throw new Error(`Session ${targetSession} not found`);
+  const repoFilter = input.repo?.trim();
+  if (repoFilter && !REPOS[repoFilter])
+    throw new Error(`Unknown repo "${repoFilter}"`);
+  const targets = projectPrTargets(session).filter(
+    (t) =>
+      (!repoFilter || t.repoId === repoFilter) &&
+      REPOS[t.repoId] &&
+      REPOS[t.repoId].host !== "codestorage" &&
+      REPOS[t.repoId].ghRepo,
+  );
+  if (!targets.length)
+    throw new Error(
+      repoFilter
+        ? `Session ${targetSession} has no branch or linked PR in ${repoFilter}`
+        : `Session ${targetSession} has no branch or linked PR to check`,
+    );
+  let fallback: PrReadinessTarget | null = null;
+  for (const t of targets) {
+    const ghRepo = REPOS[t.repoId].ghRepo;
+    const cached = cachedPrNumberByBranch(ghRepo, t.branch);
+    if (cached !== undefined)
+      return { repoId: t.repoId, ghRepo, number: cached };
+    const meta = await prMetaForBranch(t.branch, ghRepo);
+    if (!meta) continue;
+    const found = { repoId: t.repoId, ghRepo, number: meta.number };
+    if (meta.state === "OPEN") return found;
+    fallback ??= found;
+  }
+  if (fallback) return fallback;
+  throw new Error(
+    `Session ${targetSession} has no pull request yet (${targets
+      .map((t) => `${t.repoId}:${t.branch}`)
+      .join(", ")})`,
+  );
+}
+
+/** The interactive entrypoint behind check_pr_ready: resolve, fetch, judge. */
+export async function checkPrMergeReadiness(
+  sessionId: string,
+  input: { url?: string; repo?: string; number?: number; session?: string },
+): Promise<PrMergeVerdict> {
+  const target = await resolvePrReadinessTarget(sessionId, input);
+  return assessPrMergeReadiness(await fetchPrReadinessSource(target));
 }
 
 /** Remove a linked PR from a session (the link only — the PR is untouched). */

@@ -29,4 +29,16 @@
 @import "./base-global.css";
 @import "./base-platform.css";
 @import "./base-markdown.css";
+@import "./blocks/callout.css";
+@import "./blocks/metrics.css";
+@import "./blocks/math.css";
+@import "./blocks/json-tree.css";
+@import "./blocks/ansi.css";
+@import "./blocks/artifact.css";
+@import "./blocks/slides.css";
+@import "./blocks/compare.css";
 @import "./base-keyframes.css";
+@import "./blocks/palette.css";
+@import "./blocks/table.css";
+@import "./blocks/choices.css";
+@import "./blocks/tree.css";

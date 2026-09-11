@@ -10,6 +10,8 @@ import {
   parseMcpTool,
   PathSummary,
   pathSummaryParts,
+  sessionToolId,
+  ToolCallBlock,
   toolDurationMs,
   toolDisplayName,
   toolFamily,
@@ -316,6 +318,62 @@ test("an assets call reads as the file it names, not its contents", () => {
   expect(assetToolPath("opensession-todos_add_todo", { path: "a.md" })).toBe(
     "",
   );
+});
+
+test("a sessions call names the session it is about", () => {
+  expect(
+    sessionToolId("opensession-sessions_get_session", {
+      id: "os-1",
+      transcript_lines: 12,
+    }),
+  ).toBe("os-1");
+  expect(
+    sessionToolId("mcp__opensession-sessions__task_status", {
+      taskId: "os-2",
+    }),
+  ).toBe("os-2");
+  expect(
+    sessionToolId("opensession-sessions_migrate_session_engine", {
+      sessionId: "os-3",
+    }),
+  ).toBe("os-3");
+  // Through pi's dispatcher too, since the row reads the entry's own name.
+  expect(
+    sessionToolId("mcp_call", {
+      name: "opensession-sessions_send_to_session",
+      arguments: { id: "os-4", message: "hi" },
+    }),
+  ).toBe("os-4");
+  // Only this server: another server's `id` is not a session, and a listing
+  // names nothing.
+  expect(sessionToolId("opensession-sessions_list_sessions", {})).toBe("");
+  expect(sessionToolId("opensession-todos_complete_todo", { id: "7" })).toBe(
+    "",
+  );
+});
+
+test("a sessions row links to the session it names", () => {
+  const entry = {
+    id: "e1",
+    type: "tool_use" as const,
+    timestamp: "2026-09-11T11:56:01.870Z",
+    toolName: "opensession-sessions_get_session",
+    toolInput: { id: "os-target", transcript_lines: 12 },
+    content: "",
+  };
+  const markup = renderToStaticMarkup(
+    createElement(ToolCallBlock, { entry, sessionId: "os-viewer" }),
+  );
+  expect(markup).toContain('data-session-id="os-target"');
+  expect(markup).toContain("Open this session");
+  // A control the row's own button can carry: an anchor nested in a button
+  // is dropped from the accessibility tree.
+  expect(markup).not.toContain("<a ");
+  // A call about the session being read offers nothing: it is already open.
+  const self = renderToStaticMarkup(
+    createElement(ToolCallBlock, { entry, sessionId: "os-target" }),
+  );
+  expect(self).not.toContain("data-session-id");
 });
 
 test("the run-rpc session key stays out of MCP summaries", () => {

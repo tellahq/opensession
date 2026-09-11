@@ -13,6 +13,7 @@
  * papercutsServerFor and the automation guard in the run-rpc builder below.
  */
 
+import { deskNavigationMcp } from "./desk-navigation-mcp";
 import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
 import { isDevInstance } from "./dev-mode";
 import { createRunnersMcpServer } from "./runners-mcp";
@@ -37,6 +38,7 @@ import { createTodosMcpServer } from "../agents/slack/todos-tools";
 import { createSearchMcpServer } from "../agents/slack/search-tools";
 import { createAssetsMcpServer } from "../agents/slack/assets-tools";
 import { createChartsMcpServer } from "./charts-mcp";
+import { createDatabasesMcpServer } from "../agents/slack/databases-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createSelfDeployMcpServer } from "./self-deploy";
 import { createWebMcpServer } from "./web-mcp";
@@ -62,6 +64,7 @@ import {
 } from "./preview-path-leases";
 import {
   attachRepo,
+  checkPrMergeReadiness,
   linkPr,
   resolveSessionRepoContext,
   sessionRepoIds,
@@ -129,6 +132,7 @@ function desktopServerFor(sessionId: string): Record<string, unknown> {
 export function interactiveMcpServers(
   user?: string,
   sessionId?: string,
+  promptEntryId?: string,
 ): Record<string, unknown> {
   const createdBy = user || productName();
   return {
@@ -177,6 +181,7 @@ export function interactiveMcpServers(
     // the others) from automation runs — see the runSessionPrompt call site.
     ...(sessionId
       ? {
+          ...deskNavigationMcp(sessionId, promptEntryId),
           "opensession-humans": createHumansMcpServer({
             sessionId,
             createdBy,
@@ -235,6 +240,7 @@ export function interactiveMcpServers(
               })),
             linkPr: (input) => linkPr(sessionId, input),
             labelPr: (input) => labelPr(sessionId, input),
+            checkPrReady: (input) => checkPrMergeReadiness(sessionId, input),
           }),
           // Durable repo/user/team memory, shared both ways with Slack's
           // channel memory. Write tools are
@@ -384,6 +390,15 @@ export function interactiveMcpServers(
           // ```vega-lite fences render on their own; this compiles a spec
           // for the agent and offloads big data into the session's assets.
           "opensession-charts": createChartsMcpServer({ sessionId }),
+          // Named SQLite databases kept outside every repo (databases.ts),
+          // browsed in the Databases view. Unscoped here: an interactive
+          // session reaches every database, the way it reaches every
+          // report. Automation runs get the same server scoped to their
+          // own databases (automations.ts).
+          "opensession-databases": createDatabasesMcpServer({
+            sessionId,
+            user: createdBy,
+          }),
           // The user's Desk todo list — add/list/complete/drop/update.
           // Interactive-only like the siblings (the automation branch below
           // fails closed): untrusted ticket text must not write to a
@@ -440,7 +455,7 @@ export async function automationSessionMcp(
   };
 }
 
-registerInteractiveMcpBuilder(async (sessionId, user) => {
+registerInteractiveMcpBuilder(async (sessionId, user, promptEntryId) => {
   // Automation-owned sessions run on untrusted event/ticket text. Their runs
   // only ever carry the automation-bar set (automationSessionMcp above), but
   // this builder is also run-rpc's FALLBACK resolver for any registered run
@@ -450,7 +465,7 @@ registerInteractiveMcpBuilder(async (sessionId, user) => {
   if (sessionId && session?.automation) {
     return automationSessionMcp(session, sessionId);
   }
-  const servers = interactiveMcpServers(user, sessionId);
+  const servers = interactiveMcpServers(user, sessionId, promptEntryId);
   const goalId = session?.goalId;
   if (goalId)
     (servers as Record<string, unknown>)["opensession-goal-self"] =

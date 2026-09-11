@@ -18,8 +18,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   sharing `/api/snoozes` with the web sidebar. Activity restores Needs action,
   Recent, Yesterday, and Earlier; Status remains the dynamic lane view. Group
   by project is an independent switch for all three modes. The
-  compact toolbar search/filter finds session metadata
-  and conversation text through `/api/sessions/search`. iOS long-press actions
+  compact toolbar search/filter finds session metadata (title, repository,
+  branch, workspace name) with the web's typo-tolerant matcher
+  (`Models/FuzzyMatch.swift`, a port of `shared/fuzzy-match.ts`, scored off
+  the main actor by `SidebarSearch`) and conversation text through
+  `/api/sessions/search`. The Mac command palette and the `@` palette's people
+  rows rank by the same scorer. iOS long-press actions
   include details, rename, sharing, pull request, pin, hide, Snooze/Unsnooze,
   and Archive. Swipe right pins; swipe left offers Snooze and Archive.
   Pinned rows are lifted into a Pinned band at the top in the user's own order,
@@ -33,6 +37,14 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   row stays findable and its menu offers "Restore to my sidebar". An open
   teammate, automation, or spawned session can also be claimed from its native
   action surface with "Add to sidebar", sharing `/api/lanes` with the web.
+  A claim, snooze or hide made on another client lands here without a
+  foreground: the server's `user_map_changed` frame names the map, the
+  matching store re-reads it (`UserMapSync`), and the list refetches its rows.
+  Each store orders its re-reads (`HydrationClock`): a slower, older GET, or
+  one begun before a write this client confirmed, is dropped rather than
+  applied over the newer map, and a write's own response is installed only
+  when no re-read began after the write started (the server broadcasts the
+  frame before it answers the PUT); otherwise the store re-reads.
   Unread rows
   read like the web sidebar's, off the same shared store (`/api/reads`): a row
   whose sessions carry activity past your last read goes semibold at full label
@@ -161,7 +173,16 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   native preview frames for visual session assets while documents and data keep
   their file rows, model/reasoning controls, and live remote
   sandbox status. Sandboxed workspaces expose explicit pause, wake, and
-  confirmed recreate controls without embedding the web client. Its Effective
+  confirmed recreate controls without embedding the web client. A code session
+  on this machine gets a Runtime section instead, with "Move to Daytona/Box"
+  for the Ready Sandboxes (`POST /api/sessions/:id/sandbox/attach`); the same
+  rows sit under Move to Sandbox in the session overflow menu and in a Mac
+  toolbar menu. The server's 428 (uncommitted files or unpushed commits that a
+  fresh clone would not have) becomes a confirmation with its own sentence and
+  a Move anyway. Runner, automation, Ask, repo-less, preparing and materialized
+  Sandbox sessions never see the rows. If provisioning fails before creating a
+  Sandbox ID, the overflow menu allows another move without reopening the
+  session; stale host snapshots still cannot enable a second move. Its Effective
   config section resolves the next turn's model, engine, account, MCP access,
   instructions, and permissions, with the source under every displayed value.
 - **Session panels** — on iOS, Assets, individual assets, PR, Changes, Portals,
@@ -248,7 +269,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   comment with a summary, plus the "squash and merge after approving"
   shortcut, `POST …/pr-review`), **Merge** (squash, merge commit or rebase,
   behind a confirmation that names what it would land on top of — conflicts,
-  failing checks, a draft, requested changes — `POST …/pr-merge`), and
+  failing checks, a draft, requested changes — then held for a five-second
+  undo window with a countdown before `POST …/pr-merge` goes out; closing the
+  panel inside the window takes it back too, see `DeferredMerge`), and
   **Close pull request** (`POST …/pr-close`). The session overflow menu also
   exposes squash, merge-commit and rebase merge actions directly, with the same
   warnings and confirmation. PR surfaces can copy the GitHub link or open an
@@ -341,6 +364,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   composer and session preferences refresh at launch and when the app foregrounds.
   On macOS, custom account keyboard bindings drive the supported app commands and
   their command-menu hints; iOS keeps its system shortcut and widget guide.
+  A live question's options wear A, B, C, and a bare letter typed anywhere in
+  the key window that is not a text field answers with that row; **Answer the
+  Question** (⌘I, rebindable as the web's `ask-focus`) moves focus from the
+  composer onto the card, where the arrows and Return pick (`AskKeyBridge`,
+  `AskLetterShortcuts`). For questions without options, the command focuses
+  the free-text answer field instead.
   Infrastructure → **Runners** lists the machines this instance trusts, read
   only: each one's status, hardware, workspace roots, toolchains and what it is
   working on. Connecting, revoking and permissions stay in the web settings —
@@ -476,6 +505,8 @@ OS1/
     SettingsModels.swift     Settings payloads (tools/personal/workspace)
     WorkspaceRunner.swift    Instance Runner list + the shared status words
     SandboxOffering.swift    What run environments a new session may choose
+    SandboxMove.swift        Which sessions may move into a Sandbox later, and
+                             the attach route's 428 as an answer
     AccentTheme.swift        The app's primary colour: one table of light/dark
                              fills, a derived glyph colour, and the store the
                              Appearance picker writes

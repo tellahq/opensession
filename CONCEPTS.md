@@ -134,10 +134,13 @@ is deliberate: whatever started it, you can open it, read the whole transcript,
 steer it mid-flight, and fork it into a normal conversation.
 
 A transcript is markdown, and the web client upgrades what an agent writes into
-it: a ` ```mermaid ` fence renders as a diagram, a ` ```vega-lite `
+it into blocks: a ` ```mermaid ` fence renders as a diagram, a ` ```vega-lite `
 fence (a Vega-Lite spec with inline data) renders as an interactive chart with
 tooltips and zoom, and `OPENSESSION_IMAGE:` / `OPENSESSION_VIDEO:` lines embed
-media. The `opensession-charts` tool compiles a chart spec for the agent and
+media where they are written. The same goes for callouts, math, data tables,
+JSON trees, terminal colours, palettes, metric cards, quick-reply chips, file
+trees, sandboxed HTML artifacts and slide decks; `docs/blocks.md` is the
+catalog. The `opensession-charts` tool compiles a chart spec for the agent and
 moves large data into the session's assets.
 
 ### Modes
@@ -257,6 +260,24 @@ branch.
 Successful agent and MCP calls are journaled and replayed when a workflow is
 resumed. The runner enforces concurrency, call-count and timeout limits. The
 Worker provides containment, not a hard security sandbox.
+
+## Reports and databases
+
+Both are things a run produces that outlive it, kept by Open Session outside
+every repository and browsed in their own views.
+
+A **report** is a document: an automation publishes one HTML report per run
+with `opensession-report`, and the Reports view shows the latest per
+automation with its history. Reports are append-only.
+
+A **database** is a named SQLite file a session or automation keeps coming
+back to: collected metrics, scraped rows, triage state. Through
+`opensession-databases` an agent creates one with a schema, inserts rows,
+queries it in a later turn or a later session, and people browse its tables,
+run read-only SQL, and download it (as `.sqlite`, or one table as CSV) in the
+Databases view. An automation only sees the databases tagged with its own id.
+Every statement is screened before it reaches SQLite, so a database is one
+file and can never reach another.
 
 ## Integrations
 

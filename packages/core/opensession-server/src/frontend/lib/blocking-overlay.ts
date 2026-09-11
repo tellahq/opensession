@@ -5,9 +5,11 @@
 // Every window-level handler used to inline
 //   document.querySelector(".palette-backdrop, …")
 // which asks whether the ELEMENT EXISTS, not whether anything is open. The Desk
-// renders its palette with Base UI's `keepMounted` (components/DeskOverlay.tsx)
+// renders its phone sheet with Base UI's `keepMounted` (components/DeskOverlay.tsx)
 // so that summoning it a second time is instant, and a kept-mounted portal is
 // in the DOM from the first render onward, carrying `hidden` and `data-closed`.
+// (Its desktop panel is non-modal and draws no backdrop at all, so the chords
+// deliberately keep working while it floats over the page.)
 // querySelector matches a hidden element perfectly happily, so the guard read
 // true forever and every chord behind it was dead app-wide: archive, pin, team
 // note, tab switching, open pull request. Nothing threw, no test failed, and

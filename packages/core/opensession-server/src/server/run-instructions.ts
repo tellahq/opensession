@@ -201,12 +201,16 @@ export function buildRunInstructions(input: {
   }
 
   parts.push(
-    "## Media\nShow selected results with `OPENSESSION_IMAGE: /abs/path.png` or " +
-      "`OPENSESSION_VIDEO: /abs/path.mp4`. Charts: a ```vega-lite fence with inline " +
-      "`data.values`." +
+    "## Media\nShow results where they belong: `OPENSESSION_IMAGE: /abs/path.png`, " +
+      "`OPENSESSION_VIDEO: /abs/path.mp4` (a plain line under one is its caption), " +
+      "`OPENSESSION_COMPARE: /a.png /b.png` (slider). Charts: a ```vega-lite fence " +
+      "with inline `data.values`." +
       (inproc["opensession-charts"]
         ? " `make_chart` validates one and offloads large data."
-        : ""),
+        : "") +
+      " Live fences: mermaid, math, csv, json, ansi, palette, metrics (`Label: value " +
+      "(delta)`), choices (a reply per line, click sends), tree, artifact (sandboxed " +
+      "HTML), svg, slides (`---`); `> [!NOTE]` is a callout.",
   );
   // Instance-local operator instructions last: they're the deployment's own
   // additions and may refine anything above.

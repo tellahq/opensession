@@ -127,6 +127,7 @@ private struct AgentReviewRow: View {
 
     private var review: OsReviewSummary? { pr.osReview }
     private var score: Int? { review?.confidence }
+    private var risk: MergeRisk? { review?.risk }
     private var stale: Bool { review?.stale == true }
     private var actionable: Bool { pr.isOpen }
     private var active: Bool { pr.reviewActive == true || busy == .review || queued != nil }
@@ -169,6 +170,7 @@ private struct AgentReviewRow: View {
             },
             name: agentName,
             detail: detail,
+            detailSpoken: detailSpoken,
             tint: tone.ink,
             note: note,
             error: error,
@@ -222,8 +224,8 @@ private struct AgentReviewRow: View {
         .onChange(of: pr.reviewActive) { _, _ in settle() }
         .onChange(of: pr.osReview?.at) { _, _ in settle() }
         .sheet(isPresented: $readingReport) {
-            if let report {
-                AgentReviewReport(report: report, score: score, at: review?.at)
+            if let report, let review {
+                AgentReviewReport(report: report, review: review)
             }
         }
     }
@@ -236,12 +238,32 @@ private struct AgentReviewRow: View {
         return score == 3 ? .yellow : .red
     }
 
-    /// How safe it thought the change was, then the one thing worth knowing
+    /// The quality score, the merge risk, then the one thing worth knowing
     /// about that reading. The score leads because it is the answer; a run
-    /// that has no score yet simply starts at the words.
-    private var detail: String {
-        guard let score, !active else { return state }
-        return "\(score)/5 · \(state)"
+    /// that has no score yet simply starts at the words. The risk is the
+    /// only piece in its own colour: the row's tint is the verdict's, and a
+    /// green row can still carry a red "high risk" without becoming a red row.
+    private var detail: Text {
+        guard !active else { return Text(state) }
+        var pieces: [Text] = []
+        if let score { pieces.append(Text("\(score)/5")) }
+        if let risk {
+            pieces.append(Text(risk.label).foregroundStyle(risk.tone(stale: stale).color))
+        }
+        pieces.append(Text(state))
+        return pieces.dropFirst().reduce(pieces[0]) { $0 + Text(" · ") + $1 }
+    }
+
+    /// The same reading for VoiceOver, with each axis named: "4/5 · high
+    /// risk" spoken as written is a number and a word with nothing saying
+    /// which question each answers.
+    private var detailSpoken: String {
+        guard !active else { return state }
+        var pieces: [String] = []
+        if let score { pieces.append("quality \(score) of 5") }
+        if let risk { pieces.append(risk.accessibilityLabel) }
+        pieces.append(state)
+        return pieces.joined(separator: ", ")
     }
 
     private var state: String {
@@ -364,7 +386,8 @@ private struct ReviewerRow: View {
                 }
             },
             name: rowName,
-            detail: rowState,
+            detail: Text(rowState),
+            detailSpoken: rowState,
             tint: tone.ink,
             note: nil,
             error: error,
@@ -569,18 +592,24 @@ private struct ReviewerRow: View {
 /// rendered as what it is — the comment, in the app's markdown.
 private struct AgentReviewReport: View {
     let report: PrComment
-    let score: Int?
-    let at: String?
+    let review: OsReviewSummary
 
     @Environment(\.dismiss) private var dismiss
+
+    private var score: Int? { review.confidence }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                MarkdownBody(text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                VStack(alignment: .leading, spacing: 12) {
+                    if let risk = review.risk {
+                        MergeRiskLine(risk: risk, review: review)
+                    }
+                    MarkdownBody(text)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
             .background(OS1VisualStyle.chatCanvas)
             .navigationTitle("Review")
@@ -592,6 +621,7 @@ private struct AgentReviewReport: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(OS1VisualStyle.textDim)
                             .monospacedDigit()
+                            .accessibilityLabel("Quality \(score) of 5")
                     }
                 }
                 ToolbarItem(placement: .topTrailingCompat) {
@@ -609,6 +639,43 @@ private struct AgentReviewReport: View {
     }
 }
 
+/// Merge risk above the write-up: the level in its ink, then how long a
+/// wrong change takes to undo and what earned the level. The comment below
+/// says the same at length; this is the one line to read before it.
+private struct MergeRiskLine: View {
+    let risk: MergeRisk
+    let review: OsReviewSummary
+
+    private var stale: Bool { review.stale == true }
+
+    /// "days to recover · schema migration, no tests", or nothing when the
+    /// server sent only the level.
+    private var evidence: String? {
+        var parts: [String] = []
+        if let recovery = review.recovery { parts.append(recovery.label) }
+        if let factors = review.riskFactors, !factors.isEmpty {
+            parts.append(factors.map(MergeRiskFactor.label).joined(separator: ", "))
+        }
+        if stale { parts.append("new commits since") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(risk.word) merge risk")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(risk.tone(stale: stale).color)
+            if let evidence {
+                Text(evidence)
+                    .font(.caption)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(risk.accessibilityLabel + (evidence.map { ", \($0)" } ?? ""))
+    }
+}
+
 // MARK: - Shared row chrome
 
 /// One review row: who, how it stands, and what you can do about it.
@@ -617,7 +684,10 @@ private struct ReviewRow<Leading: View, Trailing: View>: View {
     @ViewBuilder let leading: Leading
     /// Nil when the state already says who it is about ("Needs your review").
     let name: String?
-    let detail: String
+    let detail: Text
+    /// The detail as VoiceOver reads it, where the printed one leans on
+    /// colour or on a number's position to say what it is.
+    let detailSpoken: String
     let tint: Color
     let note: String?
     let error: String?
@@ -632,9 +702,12 @@ private struct ReviewRow<Leading: View, Trailing: View>: View {
                 if let onTap {
                     Button(action: onTap) { identity }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(spoken)
                         .accessibilityHint("Opens the review")
                 } else {
                     identity
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(spoken)
                 }
                 Spacer(minLength: 8)
                 trailing
@@ -659,6 +732,10 @@ private struct ReviewRow<Leading: View, Trailing: View>: View {
         )
     }
 
+    private var spoken: String {
+        [name, detailSpoken].compactMap { $0 }.joined(separator: ", ")
+    }
+
     /// Who the row is about and where that review stands. One block, because
     /// it is one tap target when the row leads to the reading behind it.
     private var identity: some View {
@@ -671,7 +748,7 @@ private struct ReviewRow<Leading: View, Trailing: View>: View {
                         .foregroundStyle(OS1VisualStyle.text)
                         .lineLimit(1)
                 }
-                Text(detail)
+                detail
                     .font(.caption)
                     .foregroundStyle(tint)
                     .lineLimit(2)

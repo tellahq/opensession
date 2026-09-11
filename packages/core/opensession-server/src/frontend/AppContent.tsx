@@ -24,12 +24,14 @@ import { refWebPanel } from "./components/FeedWebPane";
 import { FirstMile } from "./components/FirstMile";
 import { Goals } from "./components/Goals";
 import { IconDesk, IconSidebarLeft } from "./components/icons";
+import { BlockExpandHost } from "./components/BlockExpandDialog";
 import { MediaLightboxHost } from "./components/MediaLightbox";
 import { NavigationProvider } from "./components/NavigationProvider";
 import { NewSession } from "./components/NewSession";
 import { PrQueuePreview } from "./components/PrQueuePreview";
 import { Prs } from "./components/Prs";
 import { Reports } from "./components/Reports";
+import { Databases } from "./components/Databases";
 import { RestartOverlay } from "./components/RestartOverlay";
 import { Reviews } from "./components/Reviews";
 import { RunningCloseDialog } from "./components/RunningCloseDialog";
@@ -74,7 +76,8 @@ import { useWorkspaces } from "./hooks/useWorkspaces";
 import { getActiveViewTab, saveActiveViewTab } from "./lib/active-view-tab";
 import { cachedRepos, resolveWorkspaceApi } from "./lib/api";
 import { buildAppCommandActions } from "./components/app-command-actions";
-import { isToolView, parseRoute, routePath } from "./lib/app-route";
+import { isToolView, parseRoute, routePath, type Route } from "./lib/app-route";
+import { useDeskShowNavigation } from "./hooks/useDeskShowNavigation";
 import {
   APP_BODY,
   DETAIL_TOPBAR,
@@ -134,6 +137,7 @@ import { Button } from "./ui/button";
 import { cn } from "./ui/cn";
 import { EmptyState, LoadingState } from "./ui/state";
 import { ToastHost, toast } from "./ui/toast";
+import { PulseDot } from "./ui/status";
 import { Tooltip } from "./ui/tooltip";
 import { TopBar, TopBarActions, TopBarTitle } from "./ui/top-bar";
 
@@ -297,7 +301,7 @@ export function AppContent({
     workspaces,
     loaded: workspacesLoaded,
     refresh: refreshWorkspaces,
-  } = useWorkspaces();
+  } = useWorkspaces(route.view === "workspace" ? route.id : undefined);
   // Read by the PR-link opener, which runs from a document-level listener and
   // therefore can't close over the render's value.
   const workspacesRef = useRef(workspaces);
@@ -470,6 +474,9 @@ export function AppContent({
     setShortcutsOpen,
     taskCount,
   } = appViewState;
+  // A Desk voice call outlives a minimised Desk; the trigger shows it is live.
+  const [deskCallActive, setDeskCallActive] = useState(false);
+  const deskCallShown = deskCallActive && !deskOverlay.open;
   const { closePalette, startNewSessionCreate } = useNewSessionCreateStart({
     getCurrentRoute,
     navigate,
@@ -795,6 +802,16 @@ export function AppContent({
     openTicketWorkspace,
     openReviewForSession,
   } = workspacePanes;
+
+  useDeskShowNavigation({
+    sessions,
+    wsKeyFor,
+    openReviewForSession,
+    setActiveViewTabState,
+    navigate,
+    isPhone,
+    setDeskOverlay,
+  });
 
   const sessionTabs = useSessionTabs({
     routing: {
@@ -1188,6 +1205,10 @@ export function AppContent({
     openPlain: () => navigate({ view: "plain" }),
     openSupportTinder: () => navigate({ view: "supporttinder" }),
     openReports: (target) => navigate({ view: "reports", ...target }),
+    openDatabases: (databaseId) =>
+      navigate(
+        databaseId ? { view: "databases", databaseId } : { view: "databases" },
+      ),
     openAnalytics: () => navigate({ view: "analytics" }),
     openArchived: () => navigate({ view: "archived" }),
     openCatchUp: () => navigate({ view: "catchup" }),
@@ -1219,6 +1240,7 @@ export function AppContent({
     <UserGate>
       <RestartOverlay connected={connected} addHandler={addHandler} />
       <MediaLightboxHost />
+      <BlockExpandHost />
       <ToastHost container={settingsActive ? null : detailPaneEl} />
       <RunningCloseDialog {...runningCloseDialog} />
       <div className="app">
@@ -1248,6 +1270,10 @@ export function AppContent({
               topbarTitle={topbarTitle}
               phoneTitleHandedOver={phoneTitleHandedOver}
               commandMenuRef={commandMenuRef}
+              deskCallActive={deskCallShown}
+              onOpenDesk={() =>
+                setDeskOverlay({ open: true, origin: "bottom-right" })
+              }
               setAppHeaderEl={setAppHeaderEl}
               setHeaderRepoEl={setHeaderRepoEl}
               setHeaderModelEl={setHeaderModelEl}
@@ -1556,6 +1582,22 @@ export function AppContent({
                       onOpenNewSession={openPrefilledSession}
                       addHandler={addHandler}
                     />
+                  ) : route.view === "databases" ? (
+                    <Databases
+                      selectedDatabaseId={route.databaseId}
+                      selectedTable={route.table}
+                      onSelect={(databaseId, table) =>
+                        navigate(
+                          { view: "databases", databaseId, table },
+                          { replace: true },
+                        )
+                      }
+                      onBack={() =>
+                        navigate({ view: "databases" }, { replace: true })
+                      }
+                      onOpenSession={(id) => navigate({ view: "session", id })}
+                      addHandler={addHandler}
+                    />
                   ) : route.view === "analytics" ? (
                     <Analytics />
                   ) : route.view === "feed" ? (
@@ -1844,7 +1886,11 @@ export function AppContent({
 				    on the root page (see .desk-fab). ⌘J and the command palette still
 				    summon it too. */}
             {(!isPhone || !mobileDetail) && (
-              <Tooltip label="Desk" side="left" shortcut={["⌘", "J"]}>
+              <Tooltip
+                label={deskCallShown ? "Desk call in progress" : "Desk"}
+                side="left"
+                shortcut={["⌘", "J"]}
+              >
                 <button
                   className={DESK_FAB}
                   style={
@@ -1859,9 +1905,18 @@ export function AppContent({
                   onClick={() =>
                     setDeskOverlay({ open: true, origin: "bottom-right" })
                   }
-                  aria-label="Open the Desk"
+                  aria-label={
+                    deskCallShown
+                      ? "Desk call in progress. Open the Desk"
+                      : "Open the Desk"
+                  }
                 >
                   <IconDesk size={24} />
+                  {/* The call keeps running behind a minimised Desk; the dot
+                      says so until the call ends or Desk is back up. */}
+                  {deskCallShown && (
+                    <PulseDot className="absolute top-0 right-0 ring-2 ring-[var(--composer-surface)]" />
+                  )}
                 </button>
               </Tooltip>
             )}
@@ -1875,6 +1930,7 @@ export function AppContent({
               }
               phone={isPhone}
               onOpenSession={(id) => navigate({ view: "session", id })}
+              onCallActiveChange={setDeskCallActive}
             />
 
             {/* ⌘K command palette — actions, PRs, and sessions across every view. */}

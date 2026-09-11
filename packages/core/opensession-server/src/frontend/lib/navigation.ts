@@ -36,6 +36,7 @@ export interface NavigationActions {
   openPlain(): void;
   openSupportTinder(): void;
   openReports(target?: NavigationReportTarget): void;
+  openDatabases(databaseId?: string): void;
   openAnalytics(): void;
   openArchived(): void;
   openCatchUp(): void;

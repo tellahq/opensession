@@ -494,6 +494,8 @@ export async function handleWorkspaceRoutes(
     // defaults on every row multiplied the payload by the workspace count.
     let workspaces = await listWorkspaces();
     const activeOnly = url.searchParams.get("active") === "1";
+    // Keep a directly opened empty/archived workspace in the sidebar projection.
+    const includeWorkspaceId = url.searchParams.get("includeWorkspaceId");
     if (activeOnly) {
       const indexedIds = await indexedActiveWorkspaceIds();
       const activeWorkspaceIds = new Set(
@@ -505,6 +507,7 @@ export async function handleWorkspaceRoutes(
       const openPrs = getOpenPrs();
       workspaces = workspaces.filter(
         (workspace) =>
+          workspace.id === includeWorkspaceId ||
           activeWorkspaceIds.has(workspace.id) ||
           !!workspace.draft ||
           workspaceBacksOpenPr(workspace, openPrs, defaultRepo().id),

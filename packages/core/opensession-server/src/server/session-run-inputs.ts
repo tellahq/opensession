@@ -18,9 +18,11 @@
 
 import type { UnifiedSession } from "./types";
 import {
+  type Automation,
   automationDeniedTools,
   automationMcpServersByName,
 } from "./automations";
+import { humanPrompter } from "./session-actors";
 
 /** Which config decided the run's MCP allowlist. */
 export type McpScopeSource =
@@ -60,6 +62,14 @@ export interface SessionRunInputs {
   user: string | undefined;
   /** Session creator, whose OAuth grants take precedence for MCP calls. */
   mcpGrantUser: string | undefined;
+  /** The person whose personal provider subscription may serve this turn:
+   *  the human who sent the prompt, or undefined when a machine did (an
+   *  automation tick, a review handoff, auto-continue). Unlike `user` it
+   *  survives an automation-owned session, because a person who takes one
+   *  over and presses send is spending their own subscription; the shared
+   *  pool stays the backup. It reaches provider account selection only,
+   *  never MCP, GitHub or trust policy. */
+  accountUser: string | undefined;
   inProcessMcpBranch: InProcessMcpBranch;
   /** Whether the run gets the repos/memory/personal-prompt note. Automation
    *  runs get none: their prompts are untrusted text. */
@@ -103,7 +113,8 @@ export function sessionMcpScopeSource(
 
 /**
  * The per-turn run inputs for a session. `user` is the prompter (the WS/HTTP
- * caller); it is dropped for automation-owned sessions.
+ * caller); it is dropped for automation-owned sessions. `accountUser` keeps
+ * the prompter for provider account selection when they are a person.
  *
  * Async because a feed-workspace session's allowlist comes from its feed
  * providers' descriptors (`feedMcpServersForRefs`), which registers feeds on
@@ -140,7 +151,57 @@ export async function resolveSessionRunInputs(
     deniedTools: isAutomationSession ? automationDeniedTools() : undefined,
     user: isAutomationSession ? undefined : opts.user,
     mcpGrantUser: session.createdByLogin || undefined,
+    accountUser: humanPrompter(opts.user) ?? undefined,
     inProcessMcpBranch: sessionInProcessMcpBranch(session),
     sessionNote: !isAutomationSession,
+  };
+}
+
+/**
+ * Provider account routing for one turn, shared by every launch path: the
+ * in-process runAgent, the detached pi host, a Runner and a sandbox. Account
+ * selection tries a pin before personal accounts (resolveAccount), and a
+ * remote sandbox uploads only the pinned account (accountsForRemoteUpload), so
+ * a person who takes over an automation-owned session pays with their own
+ * subscription only if their turn carries no pin at all: personal accounts
+ * first, the shared pool as backup. The automation's own turns keep their
+ * pin. A disposable sandbox resume passes the owning automation for its hard
+ * pin and credit policy (its cost ceiling); every other machine turn keeps the
+ * session's soft pin. The automation's MCP and GitHub restrictions are
+ * unaffected: they read `user`, which stays dropped. Interactive sessions
+ * always keep their own soft pin.
+ */
+export function runAccountSpec(
+  session: Pick<UnifiedSession, "accountId">,
+  turn: Pick<SessionRunInputs, "isAutomationSession"> & {
+    accountUser?: string | undefined;
+  },
+  pinnedAutomation: Pick<
+    Automation,
+    "accountId" | "usageCredits"
+  > | null = null,
+): {
+  accountId: string | undefined;
+  accountStrict: boolean | undefined;
+  usageCredits: boolean | undefined;
+} {
+  if (turn.isAutomationSession && turn.accountUser) {
+    return {
+      accountId: undefined,
+      accountStrict: undefined,
+      usageCredits: undefined,
+    };
+  }
+  if (pinnedAutomation) {
+    return {
+      accountId: pinnedAutomation.accountId,
+      accountStrict: true,
+      usageCredits: pinnedAutomation.usageCredits,
+    };
+  }
+  return {
+    accountId: session.accountId,
+    accountStrict: undefined,
+    usageCredits: undefined,
   };
 }

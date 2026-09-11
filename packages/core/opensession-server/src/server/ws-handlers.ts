@@ -5,6 +5,7 @@
  * run-ws.ts before any of this runs.
  */
 
+import { deskTextNavigation } from "./desk-text-navigation";
 import { parseSidebarSessionScope } from "./sidebar-session-scope";
 import type { WebSocketHandler } from "bun";
 import type { WSClientData } from "./ws-hub";
@@ -1413,6 +1414,20 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
           // stop latch here rather than inside the run the latch prevents. Without
           // this the message below queues durably and the drain parks it forever.
           await liftUserStop(sessionId);
+
+          if (
+            session.desk &&
+            !session.automation &&
+            !session.automationDescendantPolicy
+          ) {
+            deskTextNavigation.accept(
+              sessionId,
+              msg.requestId,
+              ws.data.authAutomation
+                ? undefined
+                : ws.data.authLogin || undefined,
+            );
+          }
 
           // Busy sends queue by default, so the user can still delete/edit or
           // manually steer the message. Settings can opt the composer into

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { z } from "zod";
 import { BASE_PATH } from "../lib/base";
 import { getCurrentUser } from "./UserPicker";
@@ -9,8 +9,17 @@ import { IconDesk, IconExpand, IconMinus } from "./icons";
 import { Button } from "../ui/button";
 import { DeskVoiceClient, type DeskVoiceState } from "../lib/desk-voice-client";
 import { getDeskVoicePref, onDeskVoiceChanged } from "../lib/desk-voice-pref";
+import { VoiceCaptionStore } from "../lib/voice-captions";
 import { cn } from "../ui/cn";
 import { errorMessage } from "../lib/error-message";
+import { useDeskPanel } from "../hooks/useDeskPanel";
+import { deskPanelOwnsFocus } from "../lib/desk-panel";
+import {
+  DESK_PANEL_GRAB,
+  DESK_PANEL_HANDLE,
+  DESK_PANEL_HANDLES,
+  DESK_PANEL_ORIGIN,
+} from "../lib/desk-panel-classes";
 
 /**
  * The Desk — a summonable overlay (⌘J / the floating desk button) on top of
@@ -19,8 +28,14 @@ import { errorMessage } from "../lib/error-message";
  *
  * Persistence is the point: after the first summon the body STAYS MOUNTED
  * (hidden, not unmounted) — the session's scoped socket keeps watching, so every
- * later ⌘J is instant with the transcript already in place. It uses the same
- * palette modal as the command menu.
+ * later ⌘J is instant with the transcript already in place.
+ *
+ * On desktop it is a floating panel, not a modal: no backdrop, no focus trap,
+ * and the page underneath stays live, so it can sit open in a corner while
+ * you work in other sessions. Its header drags it and its edges resize it
+ * (hooks/useDeskPanel), and the place it was left is kept per browser. On a
+ * phone it stays the sheet it was, over a backdrop, because there is no room
+ * beside it for anything else.
  *
  * The Desk is a normal durable session (desk: true, hidden from the session
  * lists) pinned to a fast model+effort server-side; "Clear" sets a display
@@ -35,6 +50,9 @@ interface DeskOverlayProps {
   phone: boolean;
   /** Open the Desk session in the full viewer. */
   onOpenSession: (sessionId: string) => void;
+  /** A voice call started or ended. The call outlives a minimised Desk, so
+   * the app shows it is still live on the trigger that reopens Desk. */
+  onCallActiveChange?: (active: boolean) => void;
 }
 
 function DeskBody({
@@ -42,7 +60,13 @@ function DeskBody({
   phone,
   onClose,
   onOpenSession,
-}: Omit<DeskOverlayProps, "open" | "openOrigin"> & { active: boolean }) {
+  onCallActiveChange,
+  onGrab,
+}: Omit<DeskOverlayProps, "open" | "openOrigin"> & {
+  active: boolean;
+  /** Desktop: a pointer down on the header starts moving the panel. */
+  onGrab?: (event: React.PointerEvent<HTMLElement>) => void;
+}) {
   const user = getCurrentUser();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [clearedAt, setClearedAt] = useState<string | undefined>(undefined);
@@ -53,12 +77,15 @@ function DeskBody({
     {},
   );
 
-  // Voice mode (Settings → Desk voice): a live GPT Realtime call layered on
-  // this same Desk session. The call mirrors its transcript into the session,
-  // so the conversation below updates live while you talk.
+  // Voice mode (Settings → Desk voice): a GPT-Live call layered on this same
+  // Desk session. The server mirrors the call's transcript into the session
+  // one settled utterance at a time; the call's own transcript deltas fill
+  // the wait as live captions (one store for the body's lifetime, cleared as
+  // each call starts), so the conversation below moves while you talk.
   const [voiceEnabled, setVoiceEnabled] = useState(getDeskVoicePref);
   const [voiceState, setVoiceState] = useState<DeskVoiceState>("idle");
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceCaptions] = useState(() => new VoiceCaptionStore());
   const voiceRef = useRef<DeskVoiceClient | null>(null);
   useEffect(
     () => onDeskVoiceChanged(() => setVoiceEnabled(getDeskVoicePref())),
@@ -68,29 +95,66 @@ function DeskBody({
   useEffect(
     () => () => {
       voiceRef.current?.stop();
+      voiceRef.current = null;
+      voiceCaptions.clear();
     },
-    [],
+    [voiceCaptions],
   );
 
   const voiceActive = voiceState !== "idle" && voiceState !== "error";
+  // Report through an effect event so a new callback identity does not
+  // re-announce an unchanged call; unmounting the body ends the call above.
+  const announceCall = useEffectEvent((active: boolean) =>
+    onCallActiveChange?.(active),
+  );
+  useEffect(() => {
+    announceCall(voiceActive);
+    return () => {
+      if (voiceActive) announceCall(false);
+    };
+  }, [voiceActive]);
+  const voiceStatus: Record<DeskVoiceState, string | undefined> = {
+    idle: undefined,
+    error: undefined,
+    connecting: "Connecting…",
+    listening: "Listening",
+    thinking: "Thinking…",
+    speaking: "Speaking",
+    action: "Working…",
+  };
 
   function toggleVoice() {
+    // `active` covers a start still connecting: pressing the handset again
+    // then cancels that start instead of layering a second call on it.
     if (voiceRef.current?.active) {
       voiceRef.current.stop();
       return;
     }
     setVoiceError(null);
+    voiceCaptions.clear();
     const client = new DeskVoiceClient({
       user,
       onState: (s, detail) => {
+        if (voiceRef.current !== client) return;
         setVoiceState(s);
         if (s === "error") setVoiceError(detail || "Voice call failed");
+        // The call is over: its open rows are being mirrored, so the
+        // captions wait for them rather than vanishing and reappearing.
+        if (s === "idle" || s === "error") voiceCaptions.end();
+      },
+      onCallStarted: (callId) => {
+        if (voiceRef.current === client) voiceCaptions.start(callId);
+      },
+      onTranscript: (fragment) => {
+        if (voiceRef.current === client) voiceCaptions.push(fragment);
       },
     });
     voiceRef.current = client;
     void client.start().catch((error) => {
+      if (voiceRef.current !== client) return;
       setVoiceState("error");
       setVoiceError(errorMessage(error, "Voice call failed"));
+      voiceCaptions.end();
     });
   }
 
@@ -151,8 +215,26 @@ function DeskBody({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Header */}
-      <div className="flex shrink-0 items-center gap-2.5 border-b border-divider px-4 py-2.5">
+      {/* Header. On desktop it is also the grab bar: a press anywhere on it
+			    but its buttons starts a move. */}
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-2.5 border-b border-divider px-4 py-2.5",
+          onGrab && DESK_PANEL_GRAB,
+        )}
+        onPointerDown={
+          onGrab
+            ? (event) => {
+                if (
+                  event.target instanceof Element &&
+                  event.target.closest("button")
+                )
+                  return;
+                onGrab(event);
+              }
+            : undefined
+        }
+      >
         <IconDesk size={22} className="text-dim" />
         <span className="min-w-0 flex-1 truncate text-item-title font-semibold text-fg">
           Desk
@@ -164,13 +246,7 @@ function DeskBody({
           >
             {voiceState === "error"
               ? (voiceError ?? "Voice call failed")
-              : {
-                  connecting: "Connecting…",
-                  listening: "Listening",
-                  thinking: "Thinking…",
-                  speaking: "Speaking",
-                  action: "Working…",
-                }[voiceState]}
+              : voiceStatus[voiceState]}
           </span>
         )}
         <Button
@@ -221,8 +297,23 @@ function DeskBody({
             model={settings.model}
             effort={settings.effort}
             hideBefore={clearedAt}
-            voiceSend={(text) =>
-              voiceRef.current?.active ? voiceRef.current.sendText(text) : false
+            voiceCaptions={voiceCaptions}
+            voiceSend={
+              voiceActive
+                ? (text) =>
+                    voiceRef.current?.sendText(text) ?? Promise.resolve(false)
+                : undefined
+            }
+            // The handset lives in the composer beside dictation; the header
+            // label above shows the call's state.
+            voiceCall={
+              voiceEnabled
+                ? {
+                    active: voiceActive,
+                    status: voiceStatus[voiceState],
+                    onToggle: toggleVoice,
+                  }
+                : undefined
             }
             // The Desk's job is delegating, so its transcript is full of
             // spawned workers. There's no side pane in a modal — open the
@@ -250,6 +341,7 @@ export function DeskOverlay({
   onClose,
   phone,
   onOpenSession,
+  onCallActiveChange,
 }: DeskOverlayProps) {
   // Base UI's keepMounted preserves the Desk after its first summon, but it
   // also mounts hidden content on a cold app load. Gate the body until then so
@@ -260,24 +352,70 @@ export function DeskOverlay({
     if (open) setOpened(true);
   }, [open]);
 
+  // Desktop only: the phone sheet is laid out by the palette viewport.
+  const floating = !phone;
+  const panelRef = useRef<HTMLDivElement>(null);
+  const panel = useDeskPanel(floating && open, panelRef);
+
   return (
     <Modal.Root
       open={open}
-      onOpenChange={(next) => {
-        if (!next) onClose();
+      onOpenChange={(next, details) => {
+        if (next) return;
+        // Base UI hears Escape on the document, so a floating Desk would
+        // close under an Escape meant for the session you are working in.
+        // It only takes the key from its own focus.
+        if (
+          floating &&
+          details.reason === "escape-key" &&
+          !deskPanelOwnsFocus(panelRef.current)
+        ) {
+          details.cancel();
+          return;
+        }
+        onClose();
       }}
-      modal="trap-focus"
+      // A floating panel shares the page: no focus trap, and neither an
+      // outside press nor focus leaving it counts as a dismissal. The phone
+      // sheet keeps the trap so a touch screen reader can find its way out.
+      modal={floating ? false : "trap-focus"}
+      disablePointerDismissal={floating}
     >
       <Modal.Content
-        variant="palette"
+        ref={panelRef}
+        variant={floating ? "floating" : "palette"}
         keepMounted
-        widthClassName="w-[min(650px,100%)]"
+        widthClassName={floating ? undefined : "w-[min(650px,100%)]"}
+        style={
+          floating
+            ? {
+                left: panel.rect.left,
+                top: panel.rect.top,
+                width: panel.rect.width,
+                height: panel.rect.height,
+              }
+            : undefined
+        }
         className={cn(
-          phone ? "h-[min(600px,85dvh)]" : "h-[600px] max-h-[80dvh]",
-          openOrigin === "center" ? "origin-center" : "origin-bottom-right",
-          "rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! duration-[100ms]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!",
+          floating
+            ? [
+                openOrigin === "center"
+                  ? "origin-center"
+                  : DESK_PANEL_ORIGIN[panel.corner],
+                "rounded-b-[var(--composer-radius)]",
+              ]
+            : [
+                "h-[min(600px,85dvh)]",
+                openOrigin === "center"
+                  ? "origin-center"
+                  : "origin-bottom-right",
+                "rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! duration-[100ms]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!",
+              ],
         )}
         aria-label="Desk"
+        // The marker ⌘J and the Escape guard find the open panel by
+        // (lib/desk-panel).
+        data-desk-panel=""
       >
         {(open || opened) && (
           <DeskBody
@@ -285,8 +423,24 @@ export function DeskOverlay({
             phone={phone}
             onClose={onClose}
             onOpenSession={onOpenSession}
+            onCallActiveChange={onCallActiveChange}
+            onGrab={floating ? panel.startMove : undefined}
           />
         )}
+        {/* Resize handles: pointer-only affordances along the shell's edges.
+				    The panel is complete without them, so they stay out of the
+				    accessibility tree rather than adding eight nameless separators. */}
+        {floating &&
+          DESK_PANEL_HANDLES.map((handle) => (
+            <div
+              key={handle.id}
+              aria-hidden="true"
+              className={cn(DESK_PANEL_HANDLE, handle.className)}
+              onPointerDown={(event) =>
+                panel.startResize(handle.id, handle.cursor, event)
+              }
+            />
+          ))}
       </Modal.Content>
     </Modal.Root>
   );

@@ -1,0 +1,37 @@
+/* ── Math (lib/math-block.ts) ──────────────────────────────────
+   KaTeX writes MathML only, so there is no katex.css and the browser
+   lays the math out in the current text colour with its own math font.
+   A ```math fence or a `$$` block becomes .md-math-block: centred, and
+   scrolling sideways when an expression is wider than the column. Inline
+   math is the .md-math span markdown.ts emits, which keeps the written
+   source as its text until it is typeset. */
+.md-math-block {
+  margin: 2px 0 8px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+  color: var(--text);
+  font-size: 1.1em;
+}
+.md-math-block .katex-display {
+  display: block;
+  margin: 0;
+}
+.md-math-block math {
+  display: block math;
+  margin: 0 auto;
+}
+.md-math {
+  color: inherit;
+}
+.md-math[data-rendered] {
+  white-space: nowrap;
+}
+/* A one-line `$$x$$` typesets in display mode inside its paragraph. */
+.md-math[data-display][data-rendered] {
+  display: block;
+  overflow-x: auto;
+  text-align: center;
+  margin: 4px 0;
+}

@@ -31,6 +31,10 @@ export const AUTOMATION_MACHINE_USER = "Automation";
 /** Sender for sessions the GitHub review agent starts. */
 export const GITHUB_ACTOR = "GitHub";
 
+/** Suffix an automation's own ticks carry as `createdBy`/sender:
+ *  `"<automation name> (automation)"` (automations.ts). */
+export const AUTOMATION_ACTOR_SUFFIX = " (automation)";
+
 /** Sender for a worker session reporting back to the session that spawned it. */
 export function workerActor(sessionId: string): string {
   return `worker ${sessionId}`;
@@ -86,6 +90,7 @@ export function isMachineActor(createdBy?: string | null): boolean {
     lower === SYSTEM_RESTART_USER ||
     lower === AUTOMATION_MACHINE_USER.toLowerCase() ||
     lower === GITHUB_ACTOR.toLowerCase() ||
+    lower.endsWith(AUTOMATION_ACTOR_SUFFIX) ||
     // The agent's own name: a session it started with no person to credit.
     sameBrand(name, personaName()) ||
     sameBrand(name, productMark()) ||

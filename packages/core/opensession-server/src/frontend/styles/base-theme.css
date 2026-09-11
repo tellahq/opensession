@@ -974,7 +974,8 @@ html[data-theme="light"] .markdown code {
    LIGHTER than the bubble — so a pasted snippet read as raised in light and
    sunk in dark. Translucent ink instead, the same trick as --hover: one value
    that lands a fixed step below any surface it's dropped on. */
-html[data-theme="light"] .markdown pre {
+html[data-theme="light"] .markdown pre,
+html[data-theme="light"] .markdown .md-code-well {
   background: rgba(0, 0, 0, 0.055);
   border-color: rgba(0, 0, 0, 0.1);
   color: #1f2328;

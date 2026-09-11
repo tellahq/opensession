@@ -745,7 +745,7 @@ describe("Codex rollout parsing", () => {
     ]);
   });
 
-  it("extracts and hides video markers from Codex assistant messages", () => {
+  it("places video markers in Codex assistant messages", () => {
     const path = writeCodexFixture([
       JSON.stringify({
         timestamp: TS,
@@ -761,13 +761,18 @@ describe("Codex rollout parsing", () => {
     const entries = parseTranscript(path);
     expect(entries).toHaveLength(1);
     expect(entries[0].type).toBe("assistant");
-    expect(entries[0].content).toBe("Captured the production flow.");
+    expect(entries[0].content).toBe(
+      "Captured the production flow.\n\n![](/media?path=%2Ftmp%2Fcodex-demo.mov)",
+    );
     expect(entries[0].videos).toEqual(["/media?path=%2Ftmp%2Fcodex-demo.mov"]);
+    expect(entries[0].featuredMedia).toEqual([
+      "/media?path=%2Ftmp%2Fcodex-demo.mov",
+    ]);
   });
 });
 
 describe("assistant video markers", () => {
-  it("extracts a session asset and hides the marker from assistant content", () => {
+  it("extracts a session asset and places the marker in assistant content", () => {
     const assetPath =
       "/home/ubuntu/.opensession-assets/bks-019f861d-ffe5-7000-8638-5f69fc798fac/capture/tella-production-login-recording.mov";
     const path = writeFixture([
@@ -780,7 +785,9 @@ describe("assistant video markers", () => {
     const entries = parseTranscript(path);
     expect(entries).toHaveLength(1);
     expect(entries[0].type).toBe("assistant");
-    expect(entries[0].content).toBe("Captured the production flow.");
+    expect(entries[0].content).toBe(
+      `Captured the production flow.\n\n![](/media?path=${encodeURIComponent(assetPath)})`,
+    );
     expect(entries[0].videos).toEqual([
       `/media?path=${encodeURIComponent(assetPath)}`,
     ]);
@@ -827,7 +834,7 @@ describe("markers wrapped in markdown", () => {
     ).toEqual(["/media?path=%2Ftmp%2Fmy_final_shot.png"]);
   });
 
-  it("strips the whole wrapped line from an assistant bubble", () => {
+  it("places the whole wrapped line in an assistant bubble as an image", () => {
     const path = writeFixture([
       assistantLine(
         "a-wrapped",
@@ -836,9 +843,10 @@ describe("markers wrapped in markdown", () => {
     ]);
     const [entry] = parseTranscript(path);
     expect(entry.images).toEqual(["/media?path=%2Ftmp%2Fshot.png"]);
-    expect(entry.content).not.toContain("OPENSESSION_IMAGE");
-    expect(entry.content).not.toContain("**");
-    expect(entry.content).toContain("Top is now.");
+    expect(entry.featuredMedia).toEqual(["/media?path=%2Ftmp%2Fshot.png"]);
+    expect(entry.content).toBe(
+      "Done.\n\n![](/media?path=%2Ftmp%2Fshot.png)\n\nTop is now.",
+    );
   });
 
   it("renders an emphasised bare path mention", () => {

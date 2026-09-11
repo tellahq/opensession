@@ -1,26 +1,19 @@
 import type React from "react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import {
-  CHART_CANVAS_CLASS,
-  CHART_WELL_CLASS,
-  CHART_WRAP_CLASS,
-  finalizeChartViews,
-  isChartLang,
-} from "../lib/chart-fence";
 import { attachCodeCopy, decorateCodeBlocks } from "../lib/code-copy";
+import {
+  FENCE_UPGRADERS,
+  type FenceUpgrader,
+  finalizeFenceUpgrades,
+} from "../lib/fence-upgraders";
+import type { MarkdownContext } from "../lib/markdown";
+import {
+  MATH_PLACEHOLDER_MARK,
+  upgradeMathPlaceholders,
+} from "../lib/math-block";
 
 // Lazy loaders live at module scope: the compiler cannot lower dynamic
 // imports inside components.
-let mermaidPromise: Promise<typeof import("../lib/mermaid")> | null = null;
-function loadMermaid() {
-  mermaidPromise ??= import("../lib/mermaid");
-  return mermaidPromise;
-}
-let chartPromise: Promise<typeof import("../lib/vega-chart")> | null = null;
-function loadChart() {
-  chartPromise ??= import("../lib/vega-chart");
-  return chartPromise;
-}
 let codeHighlightPromise: Promise<typeof import("./CodeHighlight")> | null =
   null;
 function loadCodeHighlight() {
@@ -32,7 +25,6 @@ import {
   effectiveTheme,
   onThemeChanged,
 } from "../lib/theme";
-import { expandIconMarkup } from "./icons";
 
 /**
  * The repo the markdown on this surface is about — what a bare `#5528` in it
@@ -64,17 +56,18 @@ export function useMarkdownRepo(): string | undefined {
 
 /**
  * Rendered-markdown container that upgrades ```lang fences after mount:
- * ```mermaid fences render as inline diagrams, ```vega-lite fences as live
- * charts, every other tagged fence gets shiki highlighting. All three
- * libraries are multi-MB, so each is only dynamically imported when a message
- * actually carries a matching fence — plain messages render the marked output
- * untouched. Fences with no (or an unshipped) language keep the stock
- * .markdown <pre> styling.
+ * every block kind in the registry (lib/fence-upgraders.ts: mermaid
+ * diagrams, vega-lite charts, ...) replaces its fence, every other tagged
+ * fence gets shiki highlighting. The renderers are multi-MB, so each is only
+ * dynamically imported when a message actually carries a matching fence —
+ * plain messages render the marked output untouched. Fences with no (or an
+ * unshipped) language keep the stock .markdown <pre> styling.
  */
 export function MarkdownBody({
   html,
   className,
   enhance = true,
+  markdown,
 }: {
   html: string;
   className?: string;
@@ -82,8 +75,17 @@ export function MarkdownBody({
    * stream keeps the cheap, readable marked output and upgrades once its
    * durable message replaces it. */
   enhance?: boolean;
+  /** The context `html` was rendered with, handed to a block that renders
+   * markdown of its own (a slide deck) so its links resolve the same way. */
+  markdown?: MarkdownContext;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Read through a ref by the upgrade effect: callers build the context
+  // object per render, and a new identity must not restart a pass.
+  const markdownRef = useRef(markdown);
+  useEffect(() => {
+    markdownRef.current = markdown;
+  }, [markdown]);
   const [theme, setTheme] = useState<EffectiveTheme>(effectiveTheme);
   const [visible, setVisible] = useState(false);
   // React 19 re-writes innerHTML whenever the dangerouslySetInnerHTML OBJECT
@@ -119,8 +121,16 @@ export function MarkdownBody({
   }, [enhance]);
 
   useEffect(() => {
-    // marked emits <code class="language-x"> only for tagged fences.
-    if (!enhance || !visible || !html.includes('<code class="language-'))
+    // marked emits <code class="language-x"> only for tagged fences, and the
+    // .md-math placeholder only for inline math (lib/math-block.ts).
+    if (
+      !enhance ||
+      !visible ||
+      !(
+        html.includes('<code class="language-') ||
+        html.includes(MATH_PLACEHOLDER_MARK)
+      )
+    )
       return;
     const el = ref.current;
     if (!el) return;
@@ -134,103 +144,59 @@ export function MarkdownBody({
     (async () => {
       // Restore the pristine marked output first: a theme flip re-runs this
       // effect, and every upgrade must start from the original fences, not
-      // from the previous pass's shiki/mermaid/chart markup. A chart is a
+      // from the previous pass's shiki/diagram/chart markup. A chart is a
       // live view, so it is stopped before the DOM under it disappears.
-      finalizeChartViews(el);
+      finalizeFenceUpgrades(el);
       el.innerHTML = html;
+      const isAlive = () => alive;
       const fences = Array.from(
         el.querySelectorAll('pre > code[class*="language-"]'),
-      ).map((code) => ({
-        code,
-        lang: /language-([^\s"]+)/.exec(code.className)?.[1],
-      }));
+      ).map((code) => {
+        const lang = /language-([^\s"]+)/
+          .exec(code.className)?.[1]
+          ?.toLowerCase();
+        const source = code.textContent ?? "";
+        const upgrader: FenceUpgrader | undefined = lang
+          ? FENCE_UPGRADERS.find(
+              (u) =>
+                u.langs.includes(lang) || u.claims?.(lang, source) === true,
+            )
+          : undefined;
+        return { code, lang, source, upgrader, done: false };
+      });
 
-      // ```mermaid fences become inline diagrams; source that doesn't parse
-      // (still streaming, or just wrong) keeps the plain code fence.
-      if (fences.some((f) => f.lang === "mermaid")) {
-        const m = await loadMermaid().catch(() => null);
-        for (const { code, lang } of fences) {
-          if (!m || lang !== "mermaid") continue;
-          const svg = await m
-            .renderMermaidSvg(code.textContent ?? "")
-            .catch(() => null);
-          const pre = code.parentElement;
-          if (!alive || !svg || !pre || !el.contains(pre)) continue;
-          // The diagram itself sits in a scroller, with the expand
-          // control as its SIBLING rather than a child: a wide diagram
-          // scrolls sideways, and a button inside that box would ride
-          // off the edge with it.
-          const wrap = document.createElement("div");
-          wrap.className = "md-mermaid-wrap";
-          const well = document.createElement("div");
-          well.className = "md-mermaid";
-          well.innerHTML = svg;
-          // A real button, activated by the same delegated listener that
-          // opens session images (MediaLightbox.tsx). Clicking the diagram
-          // opens it too; this is what puts it in the tab order, and what
-          // makes it discoverable on a touch screen with no hover.
-          const expand = document.createElement("button");
-          expand.type = "button";
-          expand.className = "md-diagram-expand";
-          expand.title = "Expand diagram";
-          expand.setAttribute("aria-label", "Expand diagram");
-          expand.innerHTML = expandIconMarkup();
-          wrap.append(well, expand);
-          pre.replaceWith(wrap);
-        }
-      }
-
-      // ```vega-lite fences become live charts. Same contract as mermaid:
-      // source that does not parse or compile keeps the plain code fence.
-      // The well is mounted BEFORE rendering, since container sizing reads
-      // the canvas width, and swapped back for the fence if that fails.
-      if (fences.some((f) => isChartLang(f.lang))) {
-        const m = await loadChart().catch(() => null);
-        for (const { code, lang } of fences) {
-          if (!m || !isChartLang(lang)) continue;
-          const pre = code.parentElement;
+      // Each block kind replaces the fences it claims; one that declines
+      // (source that does not parse, still streaming) leaves the plain
+      // fence for shiki below. Registry order, one renderer at a time.
+      for (const upgrader of FENCE_UPGRADERS) {
+        for (const fence of fences) {
+          if (fence.upgrader !== upgrader) continue;
+          const pre = fence.code.parentElement;
           if (!alive || !pre || !el.contains(pre)) continue;
-          const wrap = document.createElement("div");
-          wrap.className = CHART_WRAP_CLASS;
-          const well = document.createElement("div");
-          well.className = CHART_WELL_CLASS;
-          const canvas = document.createElement("div");
-          canvas.className = CHART_CANVAS_CLASS;
-          well.append(canvas);
-          const expand = document.createElement("button");
-          expand.type = "button";
-          expand.className = "md-diagram-expand";
-          expand.title = "Expand chart";
-          expand.setAttribute("aria-label", "Expand chart");
-          expand.innerHTML = expandIconMarkup();
-          wrap.append(well, expand);
-          pre.replaceWith(wrap);
-          const handle = await m
-            .renderChart(canvas, code.textContent ?? "")
-            .catch(() => null);
-          if (!handle || !alive) {
-            handle?.finalize();
-            if (el.contains(wrap)) wrap.replaceWith(pre);
-          }
+          fence.done = await upgrader
+            .upgrade({
+              pre,
+              source: fence.source,
+              lang: fence.lang ?? "",
+              root: el,
+              theme,
+              markdown: markdownRef.current,
+              alive: isAlive,
+            })
+            .catch(() => false);
         }
       }
 
-      if (
-        !fences.some(
-          (f) => f.lang && f.lang !== "mermaid" && !isChartLang(f.lang),
-        )
-      )
-        return;
+      // Inline math is not a fence, so the registry never sees it; its
+      // placeholders are typeset here, in the same pass and under the same
+      // reset and cancellation as the fences.
+      await upgradeMathPlaceholders(el, isAlive);
+
+      if (!fences.some((f) => f.lang && !f.done)) return;
       const m = await loadCodeHighlight().catch(() => null);
       if (!m || !alive) return;
-      for (const { code, lang } of fences) {
-        if (
-          !lang ||
-          lang === "mermaid" ||
-          isChartLang(lang) ||
-          !el.contains(code)
-        )
-          continue;
+      for (const { code, lang, done } of fences) {
+        if (!lang || done || !el.contains(code)) continue;
         const raw = code.textContent ?? "";
         // Giant generated files stay a permanent plain <pre>; highlighting
         // them is expensive and adds little reading value.
@@ -270,7 +236,7 @@ export function MarkdownBody({
   useEffect(() => {
     const el = ref.current;
     return () => {
-      if (el) finalizeChartViews(el);
+      if (el) finalizeFenceUpgrades(el);
     };
   }, []);
 

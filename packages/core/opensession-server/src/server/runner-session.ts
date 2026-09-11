@@ -39,7 +39,7 @@ import { makeAskHandler } from "./asks";
 import type { McpScope } from "./runner-shared";
 import type { StreamEvent } from "./agent-runner";
 import type { ImageInput } from "./run-events";
-import { resolveSessionRunInputs } from "./session-run-inputs";
+import { resolveSessionRunInputs, runAccountSpec } from "./session-run-inputs";
 import {
   activeRunRecords,
   journalClear,
@@ -166,7 +166,9 @@ export async function maybeLaunchRunnerRun(
     model: session.model,
     effort: session.effort,
     fastMode: session.fastMode,
-    accountId: session.accountId,
+    // A person's turn in an automation-owned session carries no pin, so the
+    // Runner tries their own subscription before the automation's account.
+    ...runAccountSpec(session, runInputs),
     images: opts.images,
     mcpServers: runInputs.isAutomationSession
       ? (runInputs.mcpServers ?? [])
@@ -183,6 +185,7 @@ export async function maybeLaunchRunnerRun(
     aws: !runInputs.isAutomationSession,
     author: commitAuthorFor(opts.user, sessionPrincipal(session)),
     user: runUser,
+    accountUser: runInputs.accountUser,
     mcpGrantUser: runInputs.mcpGrantUser,
     fallbackModel: interactiveFallbackModel(session.model),
     journalKind: runInputs.isAutomationSession ? "automation" : "prompt",
@@ -235,7 +238,11 @@ export async function maybeLaunchRunnerRun(
     startedAt: priorRun?.startedAt ?? new Date().toISOString(),
   };
   await journalSet(run);
-  registerRunToken(rpcToken, { sessionId: session.id, user: runUser });
+  registerRunToken(rpcToken, {
+    sessionId: session.id,
+    user: runUser,
+    promptEntryId: opts.promptEntryId,
+  });
   registerRunWsHost(hostId, wsToken);
   const hostSpecs = new Map<string, RunHostSpec>([[hostId, spec]]);
 
@@ -442,7 +449,11 @@ export async function resumeRunnerRun(
       : candidates.at(-1);
   if (!candidate) return null;
   const spec = candidate.spec;
-  registerRunToken(spec.rpcToken!, { sessionId: session.id, user: spec.user });
+  registerRunToken(spec.rpcToken!, {
+    sessionId: session.id,
+    user: spec.user,
+    promptEntryId: spec.promptEntryId,
+  });
   registerRunWsHost(spec.hostId, spec.wsToken!);
   const alive = await runnerHostStatus(run.runnerId, {
     sessionId: session.id,

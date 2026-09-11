@@ -42,6 +42,7 @@ import { createMemoryMcpServer } from "../agents/slack/memory-tools";
 import { createPapercutsMcpServer } from "../agents/slack/papercuts-tools";
 import { createPublishMcpServer } from "../agents/slack/publish-tools";
 import { createReportMcpServer } from "../agents/slack/report-tools";
+import { createDatabasesMcpServer } from "../agents/slack/databases-tools";
 import { createReposMcpServer } from "../agents/slack/repos-tools";
 import { createSearchMcpServer } from "../agents/slack/search-tools";
 import { createSelfImproveMcpServer } from "../agents/slack/self-improve-tools";
@@ -273,6 +274,7 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
         ],
         linkPr: () => unused("linkPr"),
         labelPr: () => unused("labelPr"),
+        checkPrReady: () => unused("checkPrReady"),
       }),
   },
   {
@@ -459,6 +461,24 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
         automationId: "example",
         automationName: AUTOMATION,
         sessionId: SESSION_ID,
+      }),
+  },
+  {
+    name: "opensession-databases",
+    summary: INTERNAL_MCP_CAPABILITIES["opensession-databases"].summary,
+    source:
+      "packages/core/opensession-server/src/agents/slack/databases-tools.ts",
+    wiring: [
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+      "packages/core/opensession-server/src/server/automations.ts",
+    ],
+    runClasses: ["interactive", "automation"],
+    condition: "Needs a session id.",
+    note: "Automation runs get it scoped to the automation's own databases, the way opensession-report only publishes into its own group. Every statement is screened (database-sql-guard.ts) and runs on the databases worker, never on the gateway thread.",
+    build: () =>
+      createDatabasesMcpServer({
+        sessionId: SESSION_ID,
+        user: USER,
       }),
   },
   {

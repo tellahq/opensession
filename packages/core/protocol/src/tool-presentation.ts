@@ -370,6 +370,28 @@ export function assetToolPath(rawName: string, rawInput: unknown): string {
   return toolInputString(input as Record<string, unknown>, "path");
 }
 
+/**
+ * The session an `opensession-sessions` call is about, if it names one.
+ *
+ * A get, send, answer, cancel or status call carries the target id in its
+ * arguments under one of three names; the row that names a session is the one
+ * place a reader can be offered a way into it, so the id comes out here rather
+ * than being re-parsed from the summary line. Creation calls name their
+ * session only in the result, and are not covered.
+ */
+export function sessionToolId(rawName: string, rawInput: unknown): string {
+  const { toolName, input } = unwrapMcpDispatcher(rawName, rawInput);
+  if (!input || typeof input !== "object") return "";
+  const mcp = parseMcpTool(toolName);
+  if (mcp?.server !== "opensession-sessions") return "";
+  return toolInputString(
+    input as Record<string, unknown>,
+    "id",
+    "sessionId",
+    "taskId",
+  );
+}
+
 /** Internal plumbing that shouldn't show up in a summary or the input JSON. */
 const HIDDEN_INPUT_KEYS = new Set(["__bks_oc_session"]);
 

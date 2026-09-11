@@ -29,3 +29,27 @@ export function revealDiffFile(
   if (header?.getAttribute("aria-expanded") === "false") header.click();
   header?.focus({ preventScroll: true });
 }
+
+/**
+ * Reveal a file once the diff that holds it has mounted: the Changes pane
+ * may still be opening (a side panel sliding in, a phone page appearing,
+ * the diff itself still loading) when the request is made. Polls a frame at
+ * a time for a few seconds, then gives up quietly; `root` is read each time
+ * because the pane's element may not exist yet either.
+ */
+export function revealDiffFileWhenMounted(
+  root: () => HTMLElement | null,
+  path: string,
+  attempt = 0,
+): void {
+  const el = root();
+  const mounted = el?.querySelector(`[data-diff-file="${CSS.escape(path)}"]`);
+  if (mounted) {
+    revealDiffFile(el, path);
+    return;
+  }
+  if (attempt >= 300) return;
+  requestAnimationFrame(() =>
+    revealDiffFileWhenMounted(root, path, attempt + 1),
+  );
+}

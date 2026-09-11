@@ -1,0 +1,42 @@
+/* ── GitHub callout (`> [!NOTE]` … `> [!CAUTION]`) ──────────────────────
+   Emitted by lib/markdown.ts in place of the blockquote: a title row in the
+   kind's colour over the quote's body as ordinary markdown. Same box as
+   `.markdown blockquote`, so a callout and a quote line up; the rule down
+   the side takes the kind's colour, which is what tells them apart. */
+.md-callout {
+  --callout: var(--text-dim);
+  margin: 2px 0 8px;
+  padding: 4px 12px 5px;
+  border-left: 2px solid var(--callout);
+}
+.md-callout-note {
+  --callout: var(--blue);
+}
+.md-callout-tip {
+  --callout: var(--green);
+}
+.md-callout-important {
+  --callout: var(--purple);
+}
+.md-callout-warning {
+  --callout: var(--yellow);
+}
+.md-callout-caution {
+  --callout: var(--red);
+}
+.md-callout-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: var(--type-label);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--callout);
+}
+.md-callout-title > svg {
+  flex: none;
+}
+.md-callout > :last-child {
+  margin-bottom: 0;
+}

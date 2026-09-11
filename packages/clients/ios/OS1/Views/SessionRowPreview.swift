@@ -20,7 +20,9 @@ import SwiftUI
 ///   card has 300px and a label column; a phone has neither, and a 74pt label
 ///   gutter would leave its values a dozen characters wide.
 /// - **The review is compact.** Its score leads the verdict (`4/5 · approved`),
-///   with blocking and stale context retained when present.
+///   with blocking and stale context retained when present. Merge risk is
+///   its own phrase beside it, in its own colour: a correct migration and a
+///   sloppy CSS tweak can share a score and still land very differently.
 ///
 /// What deliberately did NOT come across is the web footer's centred Merge
 /// button. A context menu preview is not interactive: taps go to the menu, so
@@ -114,6 +116,7 @@ struct SessionRowPreview: View {
                 Text(fact.text)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(fact.tone.color)
+                    .accessibilityLabel(fact.accessibilityText)
                     // One line is right while a fact is a few words wide. At
                     // an accessibility size a single fact can be wider than
                     // the whole card, and one line then means the end of the
@@ -189,20 +192,59 @@ struct PrReviewCardsScreenshot: View {
                 card(
                     title: "Ready after review",
                     review: OsReviewSummary(
-                        verdict: "approve", confidence: 4, findings: 0, blocking: 0, stale: false
+                        verdict: "approve", confidence: 4, risk: .low, recovery: .minutes,
+                        findings: 0, blocking: 0, stale: false
+                    )
+                )
+                card(
+                    title: "Right as written, hard to undo",
+                    review: OsReviewSummary(
+                        verdict: "approve", confidence: 5, risk: .high, recovery: .days,
+                        riskFactors: ["schema_migration", "no_tests"],
+                        findings: 0, blocking: 0, stale: false
                     )
                 )
                 card(
                     title: "Address blocking feedback",
                     review: OsReviewSummary(
-                        verdict: "request_changes", confidence: 2,
-                        findings: 2, blocking: 1, stale: false
+                        verdict: "request_changes", confidence: 2, risk: .medium,
+                        recovery: .hours, findings: 2, blocking: 1, stale: false
                     )
                 )
                 card(
                     title: "Review is behind the branch",
                     review: OsReviewSummary(
-                        verdict: "comment", confidence: 3, findings: 1, blocking: 0, stale: true
+                        verdict: "comment", confidence: 3, risk: .high, recovery: .days,
+                        findings: 1, blocking: 0, stale: true
+                    )
+                )
+
+                Text("Review loop verdict")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .padding(.top, 8)
+                ReviewLoopResultFixture(
+                    review: OsReviewSummary(
+                        verdict: "approve", confidence: 5, risk: .high,
+                        findings: 0, blocking: 0, stale: false
+                    )
+                )
+
+                Text("Workspace review rows")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .padding(.top, 8)
+                reviewRows(
+                    OsReviewSummary(
+                        verdict: "approve", confidence: 5, risk: .high, recovery: .days,
+                        riskFactors: ["schema_migration", "no_tests"],
+                        findings: 0, blocking: 0, stale: false
+                    )
+                )
+                reviewRows(
+                    OsReviewSummary(
+                        verdict: "approve", confidence: 4, risk: .high, recovery: .days,
+                        findings: 0, blocking: 0, stale: true
                     )
                 )
             }
@@ -210,6 +252,24 @@ struct PrReviewCardsScreenshot: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OS1VisualStyle.background)
+    }
+
+    /// The workspace sheet's Review section over a fixture pull request.
+    private func reviewRows(_ review: OsReviewSummary) -> some View {
+        var pr = PrDetails(number: 128)
+        pr.title = "Drop users.legacy_id"
+        pr.state = "OPEN"
+        pr.osReview = review
+        return WorkspaceReviewRows(
+            sessionId: "screenshot-session",
+            sessions: [Session(id: "screenshot-session")],
+            pr: pr,
+            repo: "opensession"
+        )
+        .background(
+            OS1VisualStyle.raised,
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
     }
 
     private func card(title: String, review: OsReviewSummary) -> some View {
@@ -250,6 +310,31 @@ struct PrPreviewFact: Equatable {
 
     let text: String
     let tone: Tone
+    /// What VoiceOver says when the visible phrase leans on layout to be
+    /// understood. "5/5" and "high risk" sit apart on the strip and are
+    /// coloured apart, but read aloud they are one number and one word with
+    /// nothing naming the axis, so those facts spell it out: "quality 5 of
+    /// 5, approved", "merge risk high". Nil when the text already says it all.
+    var spoken: String? = nil
+
+    var accessibilityText: String { spoken ?? text }
+}
+
+extension MergeRisk {
+    /// The one colour a risk level takes, everywhere it is shown. The app's
+    /// own status inks rather than the web's `text-red`/`text-yellow`: high
+    /// is the red the strip uses for a failed check, medium the yellow of a
+    /// running one, and low is said in the dim ink because a low risk is not
+    /// news. A stale reading goes faint with the rest of the review: the
+    /// branch has moved on, so the level describes older code.
+    func tone(stale: Bool) -> PrPreviewFact.Tone {
+        if stale { return .faint }
+        switch self {
+        case .high: return .red
+        case .medium: return .yellow
+        case .low: return .dim
+        }
+    }
 }
 
 /// Builds the preview's fact strip. Pure, and separated from the view so the
@@ -267,6 +352,9 @@ enum PrPreviewFacts {
         }
         if let osReview = session.prOsReview.flatMap(osReviewFact) {
             facts.append(osReview)
+        }
+        if let risk = session.prOsReview.flatMap(mergeRiskFact) {
+            facts.append(risk)
         }
         if let waiting = reviewersFact(session.prReviewRequested, state: state) {
             facts.append(waiting)
@@ -344,15 +432,22 @@ enum PrPreviewFacts {
         default: "reviewed"
         }
         var parts = [String]()
+        var spoken = [String]()
         if let confidence = review.confidence {
             parts.append("\(confidence)/5")
+            spoken.append("quality \(confidence) of 5")
         }
         parts.append(word)
+        spoken.append(word)
         if let blocking = review.blocking, blocking > 0 {
             parts.append("\(blocking) blocking")
+            spoken.append("\(blocking) blocking")
         }
         let stale = review.stale == true
-        if stale { parts.append("stale") }
+        if stale {
+            parts.append("stale")
+            spoken.append("stale")
+        }
         let tone: PrPreviewFact.Tone = if stale {
             .faint
         } else {
@@ -362,7 +457,25 @@ enum PrPreviewFacts {
             default: .dim
             }
         }
-        return PrPreviewFact(text: parts.joined(separator: " · "), tone: tone)
+        return PrPreviewFact(
+            text: parts.joined(separator: " · "),
+            tone: tone,
+            spoken: spoken.joined(separator: ", ")
+        )
+    }
+
+    /// Merge risk, as its own phrase after the reading. The web folds it into
+    /// the review text (`4/5 · approved · high risk`); here it stands apart
+    /// because the strip colours per phrase, and a red "high risk" beside a
+    /// green "5/5 · approved" is the whole point of scoring the two apart.
+    /// Nothing without a level: a repo can opt out of the risk pass.
+    static func mergeRiskFact(_ review: OsReviewSummary) -> PrPreviewFact? {
+        guard let risk = review.risk else { return nil }
+        return PrPreviewFact(
+            text: risk.label,
+            tone: risk.tone(stale: review.stale == true),
+            spoken: risk.accessibilityLabel
+        )
     }
 
     /// Who the PR is waiting on. Two names is the most that fits before the

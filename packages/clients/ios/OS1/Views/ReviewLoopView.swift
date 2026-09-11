@@ -223,6 +223,26 @@ struct ReviewLoopView: View {
     }
 }
 
+#if DEBUG
+/// The verdict row over a fixture review, for the native screenshot harness.
+struct ReviewLoopResultFixture: View {
+    let review: OsReviewSummary
+
+    var body: some View {
+        var session = Session(id: "screenshot-session")
+        session.prNumber = 128
+        session.prState = "OPEN"
+        session.prChecks = PrChecksSummary(total: 3, passed: 3, failed: 0, pending: 0)
+        session.prOsReview = review
+        return Group {
+            if let result = ReviewLoopResult(session: session) {
+                ReviewLoopResultRow(result: result, rounds: 2)
+            }
+        }
+    }
+}
+#endif
+
 /// What the loop concluded, once GitHub has settled: the result first, the
 /// numbers behind it as meta.
 private struct ReviewLoopResultRow: View {
@@ -263,6 +283,7 @@ private struct ReviewLoopResultRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(passed ? "Review passed" : "Review failed")
+        .accessibilityValue(result.accessibilityFacts(rounds: rounds))
     }
 
     private var verdictMark: some View {
@@ -278,8 +299,20 @@ private struct ReviewLoopResultRow: View {
             .foregroundStyle(OS1VisualStyle.textDim)
     }
 
+    /// The facts are one faint run, except the risk word, which takes its
+    /// level's own ink: it is the one fact here that is advice about landing
+    /// rather than a count, and a verdict that reads "Ready to merge" still
+    /// deserves a red "high risk" beside it.
     private var facts: some View {
-        Text(result.facts(rounds: rounds))
+        result.factList(rounds: rounds)
+            .enumerated()
+            .map { index, part in
+                let text = Text(index == 0 ? part : " · \(part)")
+                guard let risk = result.risk, part == risk.label else { return text }
+                return Text(index == 0 ? "" : " · ")
+                    + Text(part).foregroundStyle(risk.tone(stale: false).color)
+            }
+            .reduce(Text(""), +)
             .font(.caption2)
             .foregroundStyle(OS1VisualStyle.textFaint)
     }

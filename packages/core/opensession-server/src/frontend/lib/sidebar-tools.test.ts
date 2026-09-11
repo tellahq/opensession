@@ -122,6 +122,7 @@ describe("sidebar tool order", () => {
           "reports",
           "plain",
           "analytics",
+          "databases",
         ],
         ["reports", "feed", "prs", "tasks", "plain", "analytics"],
       ),
@@ -134,6 +135,7 @@ describe("sidebar tool order", () => {
       "tasks",
       "plain",
       "analytics",
+      "databases",
     ]);
   });
 });

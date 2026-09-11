@@ -138,6 +138,46 @@ function gutterTransformer(nums: string[]): ShikiTransformer {
   };
 }
 
+export type DiffLineKind = "add" | "del";
+
+/**
+ * Which rows of a diff are additions and deletions, by line. `---`/`+++`
+ * file headers before the first hunk are neither; after a `@@` every leading
+ * sign counts, so a removed SQL comment (`--- x` in the patch) still reads
+ * as a deletion.
+ */
+export function diffLineKinds(lines: string[]): (DiffLineKind | null)[] {
+  let inHunk = false;
+  return lines.map((line) => {
+    if (line.startsWith("@@")) {
+      inHunk = true;
+      return null;
+    }
+    if (!inHunk && (line.startsWith("+++") || line.startsWith("---")))
+      return null;
+    if (line.startsWith("+")) return "add";
+    if (line.startsWith("-")) return "del";
+    return null;
+  });
+}
+
+/**
+ * Marks the pre as a diff and each added or removed row with `diff-add` /
+ * `diff-del`, so the well can wash whole lines (base-markdown.css) the way a
+ * tool-call diff does, instead of only tinting the ink.
+ */
+function diffLineTransformer(kinds: (DiffLineKind | null)[]): ShikiTransformer {
+  return {
+    pre(node) {
+      this.addClassToHast(node, "md-code-diff");
+    },
+    line(node, line) {
+      const kind = kinds[line - 1];
+      if (kind) this.addClassToHast(node, `diff-${kind}`);
+    },
+  };
+}
+
 export interface ShikiRequest {
   code: string;
   lang: string;
@@ -155,12 +195,22 @@ export async function renderShiki(
   if (!highlighter.getLoadedLanguages().includes(resolved)) return null;
   const split = request.gutter ? splitGutter(request.code) : null;
   if (request.requireGutter && !split) return null;
-  return highlighter.codeToHtml(split ? split.code : request.code, {
+  let code = split ? split.code : request.code;
+  const transformers: ShikiTransformer[] = [];
+  if (split) transformers.push(gutterTransformer(split.nums));
+  if (resolved === "diff") {
+    // A fence's trailing newline becomes an empty last line. Inline it is
+    // invisible; as the full-width row the diff well uses it is a blank
+    // line under the patch.
+    code = code.replace(/\n$/, "");
+    transformers.push(diffLineTransformer(diffLineKinds(code.split("\n"))));
+  }
+  return highlighter.codeToHtml(code, {
     lang: resolved,
     theme:
       request.theme === "light"
         ? "github-light-default"
         : "github-dark-default",
-    transformers: split ? [gutterTransformer(split.nums)] : [],
+    transformers,
   });
 }

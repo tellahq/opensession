@@ -65,6 +65,15 @@ struct OS1App: App {
                     )
                 }
                 .keyboardShortcut(shortcuts.keyboardShortcut(for: .commandMenu))
+                // The letters answer a question from anywhere but a text
+                // field. This is the way in from the one place they cannot
+                // reach, the composer, which is where the keyboard usually
+                // is when a question lands. The card in the key window takes
+                // focus; with no question waiting it does nothing.
+                Button("Answer the Question") {
+                    NotificationCenter.default.post(name: .os1AskFocus, object: nil)
+                }
+                .keyboardShortcut(shortcuts.keyboardShortcut(for: .askFocus))
             }
         }
         #endif

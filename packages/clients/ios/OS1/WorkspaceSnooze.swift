@@ -60,7 +60,7 @@ final class WorkspaceSnoozeStore {
     private(set) var snoozes: [String: String] = [:]
     private var context: NativePreferences.Context?
 
-    private enum Change: Equatable {
+    enum Change: Equatable {
         case set(String)
         case remove
     }
@@ -68,14 +68,44 @@ final class WorkspaceSnoozeStore {
     private var pending: [String: Change] = [:]
     private var hasHydrated = false
     private var isSaving = false
+    private var hydrations = HydrationClock()
 
-    private init() {}
+    init() {}
 
+    /// Load this user's map from the server, at launch, on foreground, and
+    /// when another client wrote it (`UserMapSync`). A response for a
+    /// server/user that has since changed is dropped, as is one overtaken by
+    /// a newer GET or by a confirmed write.
     func hydrate() async {
         let requestContext = NativePreferences.context()
         resetIfNeeded(requestContext)
+        let ticket = beginHydration()
         guard let loaded = try? await SettingsAPI.snoozes(user: requestContext.user),
               NativePreferences.context() == requestContext else { return }
+        applyHydrated(loaded, ticket: ticket, context: requestContext)
+    }
+
+    /// Marks the start of one GET. Internal so the ordering is unit-testable.
+    func beginHydration() -> HydrationClock.Ticket {
+        hydrations.begin()
+    }
+
+    /// The clock as a write would see it when it starts. Internal for tests.
+    func hydrationMark() -> HydrationClock.Ticket {
+        hydrations.mark()
+    }
+
+    /// Replay local intent over the server's map. Internal so the merge is
+    /// unit-testable; `persist` is off for the write path's own response.
+    /// With a `ticket`, the map is applied only while that GET is still the
+    /// newest and no write was confirmed since it began.
+    func applyHydrated(
+        _ loaded: [String: String],
+        ticket: HydrationClock.Ticket? = nil,
+        context requestContext: NativePreferences.Context? = nil,
+        persist: Bool = true
+    ) {
+        if let ticket, !hydrations.isCurrent(ticket) { return }
         var merged = loaded
         for (key, change) in pending {
             switch change {
@@ -83,9 +113,9 @@ final class WorkspaceSnoozeStore {
             case .remove: merged.removeValue(forKey: key)
             }
         }
-        snoozes = merged
+        if merged != snoozes { snoozes = merged }
         hasHydrated = true
-        if !pending.isEmpty { save(context: requestContext) }
+        if persist, !pending.isEmpty, let requestContext { save(context: requestContext) }
     }
 
     func value(for workspace: SidebarWorkspace, now: Date = Date()) -> String? {
@@ -125,6 +155,31 @@ final class WorkspaceSnoozeStore {
         [SidebarRowKeys.rowKey(for: workspace)] + workspace.sessions.map(\.id)
     }
 
+    /// Reconcile one successful delta response without dropping a newer local
+    /// mutation that landed while that request was in flight.
+    ///
+    /// The response is a whole-map snapshot taken when the server applied
+    /// the delta, and the server broadcasts `user_map_changed` before it
+    /// answers, so a re-read begun after the write started (`begunAt`) can
+    /// hold a newer map. Then the snapshot is not installed: the intents are
+    /// acknowledged, the newer map stays, and the caller re-reads; a GET
+    /// begun after the response is post-write. Returns false in that case.
+    @discardableResult
+    func applySaved(
+        _ saved: [String: String],
+        acknowledging captured: [String: Change],
+        begunAt mark: HydrationClock.Ticket? = nil
+    ) -> Bool {
+        for (key, change) in captured where pending[key] == change {
+            pending.removeValue(forKey: key)
+        }
+        let needsHydration = mark.map { hydrations.hasHydrationBegun(since: $0) } ?? false
+        hydrations.confirmWrite()
+        if needsHydration { return false }
+        applyHydrated(saved, persist: false)
+        return true
+    }
+
     private func save(context requestContext: NativePreferences.Context) {
         guard hasHydrated, !isSaving, !pending.isEmpty else { return }
         let captured = pending
@@ -136,6 +191,7 @@ final class WorkspaceSnoozeStore {
             if case .remove = change { return key }
             return nil
         }
+        let mark = hydrations.mark()
         isSaving = true
         Task { [weak self] in
             let saved = try? await SettingsAPI.saveSnoozes(
@@ -148,18 +204,9 @@ final class WorkspaceSnoozeStore {
                   NativePreferences.context() == requestContext else { return }
             self.isSaving = false
             guard let saved else { return }
-            for (key, change) in captured where self.pending[key] == change {
-                self.pending.removeValue(forKey: key)
-            }
-            var merged = saved
-            for (key, change) in self.pending {
-                switch change {
-                case .set(let value): merged[key] = value
-                case .remove: merged.removeValue(forKey: key)
-                }
-            }
-            self.snoozes = merged
+            let applied = self.applySaved(saved, acknowledging: captured, begunAt: mark)
             self.save(context: requestContext)
+            if !applied { await self.hydrate() }
         }
     }
 

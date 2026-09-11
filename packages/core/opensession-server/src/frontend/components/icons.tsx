@@ -71,11 +71,15 @@ const stroke = {
   strokeLinejoin: "round" as const,
 };
 
+const ARROW_UP_PATHS = ["M17.25 10.25L12 4.75L6.75 10.25", "M12 19.25V5.75"];
+const ARROW_DOWN_PATHS = ["M17.25 13.75L12 19.25L6.75 13.75", "M12 4.75v13.5"];
+
 export function IconArrowUp(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M17.25 10.25L12 4.75L6.75 10.25" />
-      <path {...stroke} d="M12 19.25V5.75" />
+      {ARROW_UP_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
     </Svg>
   );
 }
@@ -94,8 +98,9 @@ export function IconArrowUpToLine(p: IconProps) {
 export function IconArrowDown(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M17.25 13.75L12 19.25L6.75 13.75" />
-      <path {...stroke} d="M12 4.75v13.5" />
+      {ARROW_DOWN_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
     </Svg>
   );
 }
@@ -226,18 +231,22 @@ export function IconChevronsUpDown(p: IconProps) {
   );
 }
 
+const CHEVRON_LEFT_PATH = "M13.75 6.75L8.75 12L13.75 17.25";
+
 export function IconChevronLeft(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M13.75 6.75L8.75 12L13.75 17.25" />
+      <path {...stroke} d={CHEVRON_LEFT_PATH} />
     </Svg>
   );
 }
 
+const CHEVRON_RIGHT_PATH = "M10.25 6.75L15.25 12L10.25 17.25";
+
 export function IconChevronRight(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M10.25 6.75L15.25 12L10.25 17.25" />
+      <path {...stroke} d={CHEVRON_RIGHT_PATH} />
     </Svg>
   );
 }
@@ -582,14 +591,17 @@ export function IconTerminal(p: IconProps) {
   );
 }
 
+const FILE_PATHS = [
+  "M7.75 19.25H16.25C17.3546 19.25 18.25 18.3546 18.25 17.25V9L14 4.75H7.75C6.64543 4.75 5.75 5.64543 5.75 6.75V17.25C5.75 18.3546 6.64543 19.25 7.75 19.25Z",
+  "M18 9.25H13.75V5",
+];
+
 export function IconFile(p: IconProps) {
   return (
     <Svg {...p}>
-      <path
-        {...stroke}
-        d="M7.75 19.25H16.25C17.3546 19.25 18.25 18.3546 18.25 17.25V9L14 4.75H7.75C6.64543 4.75 5.75 5.64543 5.75 6.75V17.25C5.75 18.3546 6.64543 19.25 7.75 19.25Z"
-      />
-      <path {...stroke} d="M18 9.25H13.75V5" />
+      {FILE_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
     </Svg>
   );
 }
@@ -786,13 +798,13 @@ export function IconPin(p: IconProps) {
   );
 }
 
+const FOLDER_PATH =
+  "M4.75 16.25V7.75C4.75 6.64543 5.64543 5.75 6.75 5.75H9.68934C9.88823 5.75 10.079 5.82902 10.2197 5.96967L12 7.75H17.25C18.3546 7.75 19.25 8.64543 19.25 9.75V16.25C19.25 17.3546 18.3546 18.25 17.25 18.25H6.75C5.64543 18.25 4.75 17.3546 4.75 16.25Z";
+
 export function IconFolder(p: IconProps) {
   return (
     <Svg {...p}>
-      <path
-        {...stroke}
-        d="M4.75 16.25V7.75C4.75 6.64543 5.64543 5.75 6.75 5.75H9.68934C9.88823 5.75 10.079 5.82902 10.2197 5.96967L12 7.75H17.25C18.3546 7.75 19.25 8.64543 19.25 9.75V16.25C19.25 17.3546 18.3546 18.25 17.25 18.25H6.75C5.64543 18.25 4.75 17.3546 4.75 16.25Z"
-      />
+      <path {...stroke} d={FOLDER_PATH} />
     </Svg>
   );
 }
@@ -1041,6 +1053,156 @@ export function slidersIconMarkup(size = MIN_ICON_SIZE): string {
 /** <IconCheck> as markup. */
 export function checkIconMarkup(size = MIN_ICON_SIZE): string {
   return iconMarkup(pathsMarkup([CHECK_PATH]), size);
+}
+
+/** <IconArrowUp> as markup. */
+export function arrowUpIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(pathsMarkup(ARROW_UP_PATHS), size);
+}
+
+/** <IconArrowDown> as markup. */
+export function arrowDownIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(pathsMarkup(ARROW_DOWN_PATHS), size);
+}
+
+// ── Callout glyphs ─────────────────────────────────────────────────────────
+// One per GitHub admonition kind (`> [!NOTE]` … `> [!CAUTION]`), drawn by
+// lib/markdown.ts into the callout's title. Same paths as the JSX icons below.
+
+const INFO_CIRCLE_PATHS = ["M12 11.25V16.25", "M12 8.25H12.01"];
+const LIGHTBULB_PATHS = [
+  "M9.75 17.25V16.4C9.75 15.5 9.2 14.8 8.6 14.2C7.45 13.2 6.75 11.8 6.75 10.25C6.75 7.35 9.1 5 12 5C14.9 5 17.25 7.35 17.25 10.25C17.25 11.8 16.55 13.2 15.4 14.2C14.8 14.8 14.25 15.5 14.25 16.4V17.25",
+  "M9.75 17.25H14.25",
+  "M10.25 19.25H13.75",
+];
+const REPORT_PATHS = [
+  "M4.75 6.75C4.75 5.645 5.645 4.75 6.75 4.75H17.25C18.355 4.75 19.25 5.645 19.25 6.75V14.25C19.25 15.355 18.355 16.25 17.25 16.25H13L8.75 19.25V16.25H6.75C5.645 16.25 4.75 15.355 4.75 14.25V6.75Z",
+  "M12 8.25V11",
+  "M12 13.75H12.01",
+];
+const WARNING_TRIANGLE_PATHS = [
+  "M4.9 17.25L10.7 6.1C11.25 5.05 12.75 5.05 13.3 6.1L19.1 17.25C19.6 18.25 18.9 19.25 17.8 19.25H6.2C5.1 19.25 4.4 18.25 4.9 17.25Z",
+  "M12 10V13.25",
+  "M12 16H12.01",
+];
+const OCTAGON_ALERT_PATHS = [
+  "M8.65 4.75H15.35L19.25 8.65V15.35L15.35 19.25H8.65L4.75 15.35V8.65L8.65 4.75Z",
+  "M12 8.5V12.5",
+  "M12 15.5H12.01",
+];
+
+export type CalloutIconKind =
+  | "note"
+  | "tip"
+  | "important"
+  | "warning"
+  | "caution";
+
+/** The callout title glyph for one admonition kind, as markup. */
+export function calloutIconMarkup(
+  kind: CalloutIconKind,
+  size = MIN_ICON_SIZE,
+): string {
+  switch (kind) {
+    case "note":
+      return iconMarkup(
+        `<circle cx="12" cy="12" r="7.25" ${STROKE_MARKUP}/>` +
+          pathsMarkup(INFO_CIRCLE_PATHS),
+        size,
+      );
+    case "tip":
+      return iconMarkup(pathsMarkup(LIGHTBULB_PATHS), size);
+    case "important":
+      return iconMarkup(pathsMarkup(REPORT_PATHS), size);
+    case "warning":
+      return iconMarkup(pathsMarkup(WARNING_TRIANGLE_PATHS), size);
+    case "caution":
+      return iconMarkup(pathsMarkup(OCTAGON_ALERT_PATHS), size);
+  }
+}
+
+export function IconInfoCircle(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="12" cy="12" r="7.25" />
+      {INFO_CIRCLE_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
+    </Svg>
+  );
+}
+
+export function IconLightbulb(p: IconProps) {
+  return (
+    <Svg {...p}>
+      {LIGHTBULB_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
+    </Svg>
+  );
+}
+
+/** A speech bubble with an exclamation mark: "this needs your attention". */
+export function IconReport(p: IconProps) {
+  return (
+    <Svg {...p}>
+      {REPORT_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
+    </Svg>
+  );
+}
+
+export function IconWarningTriangle(p: IconProps) {
+  return (
+    <Svg {...p}>
+      {WARNING_TRIANGLE_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
+    </Svg>
+  );
+}
+
+export function IconOctagonAlert(p: IconProps) {
+  return (
+    <Svg {...p}>
+      {OCTAGON_ALERT_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
+    </Svg>
+  );
+}
+
+/** <IconChevronLeft> as markup. */
+export function chevronLeftIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(pathsMarkup([CHEVRON_LEFT_PATH]), size);
+}
+
+/** <IconChevronRight> as markup: the fold caret on a JSON tree row. */
+export function chevronRightIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(pathsMarkup([CHEVRON_RIGHT_PATH]), size);
+}
+
+/** <IconFile> as markup. */
+export function fileIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(pathsMarkup(FILE_PATHS), size);
+}
+
+/** <IconFolder> as markup. */
+export function folderIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(pathsMarkup([FOLDER_PATH]), size);
+}
+
+/** The two chevrons of IconChevronLeft and IconChevronRight pulled in to
+ *  one glyph: the grip of a before/after slider (lib/compare-block.ts). */
+export function chevronsLeftRightIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(
+    pathsMarkup([
+      "M9.25 7.75L5 12L9.25 16.25",
+      "M14.75 7.75L19 12L14.75 16.25",
+    ]),
+    size,
+  );
 }
 
 export function IconTrash(p: IconProps) {
@@ -1297,6 +1459,19 @@ export function IconPhone(p: IconProps) {
     <Svg {...p}>
       <rect {...stroke} x="8.25" y="4.75" width="7.5" height="14.5" rx="2" />
       <path {...stroke} d="M10.75 16.75H13.25" />
+    </Svg>
+  );
+}
+
+// A handset for a live call, as distinct from IconPhone's device and
+// IconMic's dictation. One continuous stroke so it stays legible at 20px.
+export function IconCall(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M7.4 4.75c.5 0 .95.3 1.14.76l1.12 2.7c.17.41.1.88-.19 1.22l-1.3 1.53a11.3 11.3 0 0 0 4.87 4.87l1.53-1.3c.34-.29.81-.36 1.22-.19l2.7 1.12c.46.19.76.64.76 1.14v1.9c0 .93-.8 1.68-1.73 1.6C10.53 19.36 4.64 13.47 3.9 6.48A1.6 1.6 0 0 1 5.5 4.75h1.9Z"
+      />
     </Svg>
   );
 }

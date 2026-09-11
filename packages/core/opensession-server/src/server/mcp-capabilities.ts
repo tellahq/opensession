@@ -64,9 +64,9 @@ export const INTERNAL_MCP_CAPABILITIES = {
   },
   "opensession-repos": {
     summary:
-      "Attach or switch repos, link a PR to this session, and label PRs in any registered repo.",
+      "Attach or switch repos, link a PR to this session, label PRs, and check whether a PR is ready to merge.",
     guidance:
-      "Attach or switch repositories and link pull requests while preserving this session's multi-repo context. Use label_pull_request to label a PR in any registered repo, including one your shell cannot reach.",
+      "Attach or switch repositories and link pull requests while preserving this session's multi-repo context. Use label_pull_request to label a PR in any registered repo, including one your shell cannot reach. Use check_pr_ready for one deterministic merge-readiness verdict (checks, reviews, conflicts, draft, branch rules) instead of reading transcripts or raw gh output.",
   },
   "opensession-memory": {
     summary:
@@ -142,6 +142,12 @@ export const INTERNAL_MCP_CAPABILITIES = {
     summary: "Publish this run's durable HTML report into the Reports view.",
     guidance:
       "Publish the run's finished HTML report into the durable Reports view.",
+  },
+  "opensession-databases": {
+    summary:
+      "Create, fill and query named SQLite databases kept by Open Session, browsed in the Databases view.",
+    guidance:
+      "Keep tabular data that a later turn, session or run will query again (collected metrics, scraped rows, triage state) in a named database: create_database with a schema, insert_rows for bulk data, query_database to read it back. Prefer it to a CSV asset when the data will be updated or joined later.",
   },
   "opensession-turn": {
     summary: 'Say "looked, nothing to report" instead of ending on silence.',

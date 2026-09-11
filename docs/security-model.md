@@ -144,6 +144,19 @@ addresses, GitHub logins, and Slack ids resolve to the configured person.
   resumes explicitly drop both identities, so an `allowedUsers`-restricted
   server remains invisible even if the automation's `mcpServers` allowlist
   names it.
+- Provider account selection is the one place a person's identity survives an
+  automation-owned session: `accountUser` (session-run-inputs.ts) names the
+  human who sent the prompt, so their personal Claude subscription is tried
+  before the shared pool when they take over an automation's session. A
+  machine sender (the automation's own tick, a review handoff, auto-continue)
+  resolves to no account user and stays pool-only. `accountUser` never feeds
+  the MCP gate, GitHub credentials, or the trust profile. It is journaled
+  with the run so restart recovery keeps the same routing. In a remote
+  sandbox the same identity scopes which subscriptions are uploaded. On every
+  launch path (host, detached pi host, Runner, sandbox) a person's takeover
+  turn carries no automation pin (`runAccountSpec`, `remoteRunAccountPolicy`),
+  because account selection tries a pin before personal accounts; the
+  automation's own turns keep their pin.
 - Manage it from the Connections UI (the Add-MCP form has an "Allowed users"
   field; each server card has a Restrict/Edit-access button →
   `PUT /api/connections/mcp/:name` with `{allowedUsers}`), or via
@@ -371,9 +384,16 @@ Automations never receive `opensession-admin` or the unrestricted interactive
 set:
 
 - Every automation receives `opensession-report`, `opensession-turn`,
-  `opensession-health`, and `opensession-audit`. The latter two expose aggregate
-  host metrics and a bounded daily audit digest, not arbitrary filesystem or
-  command access.
+  `opensession-databases`, `opensession-health`, and `opensession-audit`. The
+  latter two expose aggregate host metrics and a bounded daily audit digest,
+  not arbitrary filesystem or command access.
+- `opensession-databases` is scoped the way `opensession-report` is: a run only
+  sees databases tagged with its own automation id, and the ones it creates
+  carry that tag. Every statement is screened before it reaches SQLite
+  (`database-sql-guard.ts` refuses `ATTACH`, `DETACH`, `VACUUM INTO`,
+  `load_extension` and every non-schema `PRAGMA`), reads run on a read-only
+  connection, and all SQLite work runs on the databases worker, so untrusted
+  ticket text can fill or drop the automation's own tables and nothing else.
 - `opensession-papercuts` is mounted when the repository toggle is enabled
   (default on; Settings → Papercuts). It can append a papercut and list at most
   50 recent entries, using 14 days by default and at most 120 days. Reads include

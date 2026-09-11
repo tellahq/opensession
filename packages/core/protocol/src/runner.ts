@@ -107,6 +107,9 @@ export interface RunHostSpec {
   codexCliEnv?: boolean;
   author?: GitIdentity | null;
   user?: string;
+  /** Person whose personal provider subscription may serve the run when it
+   *  differs from `user` (see agent-runner RunAgentOpts). */
+  accountUser?: string;
   fallbackModel?: string;
   /** Stable provider-account affinity for internal fan-out workers. */
   accountAffinityKey?: string;

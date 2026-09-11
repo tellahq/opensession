@@ -8,6 +8,7 @@
  * cache in session-cache.ts.
  */
 
+import { deskTextNavigation } from "./desk-text-navigation";
 import type { McpScope } from "./runner-shared";
 import { randomUUIDv7 } from "bun";
 import { existsSync, mkdirSync, readFileSync } from "fs";
@@ -30,7 +31,7 @@ import { syncAgentSessionEngine } from "./agent-session-sync";
 import { cancelAgentWait } from "./agent-waits";
 import { runAgentHosted } from "./host-client";
 import { getRunState, transitionRunState } from "./run-state";
-import { resolveSessionRunInputs } from "./session-run-inputs";
+import { resolveSessionRunInputs, runAccountSpec } from "./session-run-inputs";
 import { defaultRepo } from "./config";
 import { isDevInstance } from "./dev-mode";
 import {
@@ -710,6 +711,7 @@ export async function steerQueuedPrompt(
       undefined,
       undefined,
       promptEntryId,
+      [item.id],
     ).catch(async (e) => {
       console.error(`[queue] Send-now delivery failed for ${sessionId}:`, e);
       await failPromptDispatch(sessionId, promptEntryId);
@@ -1826,7 +1828,9 @@ export function sandboxRunSecuritySpec(
   session: UnifiedSession,
   opts: {
     isAutomationSession: boolean;
+    promptEntryId?: string;
     user?: string;
+    accountUser?: string;
     mcpServers?: McpScope;
     deniedTools?: Record<string, string>;
   },
@@ -1840,6 +1844,7 @@ export function sandboxRunSecuritySpec(
   | "aws"
   | "user"
   | "mcpGrantUser"
+  | "accountUser"
   | "journalKind"
   | "trustProfile"
 > {
@@ -1849,7 +1854,9 @@ export function sandboxRunSecuritySpec(
     proxyMcpServers: opts.isAutomationSession
       ? []
       : [
-          ...Object.keys(interactiveMcpServers(opts.user, session.id)),
+          ...Object.keys(
+            interactiveMcpServers(opts.user, session.id, opts.promptEntryId),
+          ),
           ...(session.goalId ? ["opensession-goal-self"] : []),
         ],
     reposNote: undefined,
@@ -1866,6 +1873,9 @@ export function sandboxRunSecuritySpec(
     mcpGrantUser: opts.isAutomationSession
       ? undefined
       : session.createdByLogin || undefined,
+    // The person pressing send may spend their own subscription even in an
+    // automation-owned session; the identity stops at account selection.
+    accountUser: opts.accountUser,
     journalKind: opts.isAutomationSession ? "automation" : "prompt",
     trustProfile: opts.isAutomationSession ? "automation" : "interactive",
   };
@@ -1885,6 +1895,7 @@ export async function maybeLaunchSandboxedRun(
     promptCarriesHandoff?: boolean;
     cwd: string;
     user?: string;
+    accountUser?: string;
     images?: ImageInput[];
     mcpServers?: McpScope;
     deniedTools?: Record<string, string>;
@@ -2108,6 +2119,7 @@ export async function maybeLaunchSandboxedRun(
     registerRunToken(rpcToken, {
       sessionId: session.id,
       user: opts.isAutomationSession ? undefined : opts.user,
+      promptEntryId: opts.promptEntryId,
     });
     // Detached sandbox hosts cannot read the server's workspace store. Resolve
     // the picker-only workspace preset before crossing that boundary. A preset
@@ -2176,13 +2188,9 @@ export async function maybeLaunchSandboxedRun(
         : interactiveFallbackModel(session.model),
       effort: portablePreset?.effort ?? session.effort,
       fastMode: session.fastMode,
-      accountId: disposableAutomationResume
-        ? owningAutomation?.accountId
-        : session.accountId,
-      accountStrict: disposableAutomationResume ? true : undefined,
-      usageCredits: disposableAutomationResume
-        ? owningAutomation?.usageCredits
-        : undefined,
+      // A disposable automation resume carries the automation's hard pin for
+      // its own turns; a person's takeover turn carries none (runAccountSpec).
+      ...runAccountSpec(session, opts, owningAutomation),
     };
     if (isAgentSessionCancelled(session.id, opts.startToken)) {
       unregisterRunToken(rpcToken);
@@ -2555,6 +2563,11 @@ export async function runSessionPrompt(
     watchExternalRunAndDrain(sessionId);
     throw new RunPreparationDeferredError(sessionId);
   }
+  const finishDeskNavigation = deskTextNavigation.begin(
+    sessionId,
+    durablePromptEntryId,
+    sourceMessageIds,
+  );
   try {
     await runSessionPromptInner(
       sessionId,
@@ -2588,6 +2601,7 @@ export async function runSessionPrompt(
       await acknowledgePromptDispatch(sessionId, durablePromptEntryId);
     throw e;
   } finally {
+    finishDeskNavigation();
     unmarkSessionStarting(sessionId, startToken);
   }
 }
@@ -3065,6 +3079,7 @@ async function runSessionPromptInner(
         promptCarriesHandoff: !!switchHandoff,
         cwd,
         user,
+        accountUser: runInputs.accountUser,
         images,
         mcpServers: mcpServers ?? "all",
         deniedTools,
@@ -3149,7 +3164,13 @@ async function runSessionPromptInner(
             : isAutomationSession
               ? Object.keys(automationMcp)
               : [
-                  ...Object.keys(interactiveMcpServers(user, sessionId)),
+                  ...Object.keys(
+                    interactiveMcpServers(
+                      user,
+                      sessionId,
+                      durablePromptEntryId,
+                    ),
+                  ),
                   ...(session.goalId ? ["opensession-goal-self"] : []),
                 ],
           reposNote: isAutomationSession
@@ -3167,10 +3188,13 @@ async function runSessionPromptInner(
           aws: !isAutomationSession,
           author: commitAuthorFor(user, sessionPrincipal(session)),
           user: runInputs.user,
+          accountUser: runInputs.accountUser,
           fallbackModel: interactiveFallbackModel(session.model),
           effort: session.effort,
           fastMode: session.fastMode,
-          accountId: session.accountId,
+          // Session pin, except for a person's turn in an automation-owned
+          // session: they pay personal-first with the pool as backup.
+          ...runAccountSpec(session, runInputs),
           trustProfile: isAutomationSession ? "automation" : "interactive",
           journalKind: "prompt",
           onAskUser: makeAskHandler(sessionId),
@@ -3180,12 +3204,16 @@ async function runSessionPromptInner(
               ? automationMcp
               : session.goalId
                 ? {
-                    ...interactiveMcpServers(user, sessionId),
+                    ...interactiveMcpServers(
+                      user,
+                      sessionId,
+                      durablePromptEntryId,
+                    ),
                     "opensession-goal-self": createGoalSelfMcpServer(
                       session.goalId,
                     ),
                   }
-                : interactiveMcpServers(user, sessionId),
+                : interactiveMcpServers(user, sessionId, durablePromptEntryId),
         })
       : null;
 
@@ -3223,8 +3251,10 @@ async function runSessionPromptInner(
       effort: session.effort,
       fastMode: session.fastMode,
       // Pinned subscription for this session (claude-runner prefers it, pool
-      // fallback on exhaustion). Ignored by Codex models.
-      accountId: session.accountId,
+      // fallback on exhaustion). Ignored by Codex models. A person's turn in
+      // an automation-owned session carries no pin, so their own subscription
+      // is tried before the automation's account and the pool.
+      ...runAccountSpec(session, runInputs),
       // Only switch models when a fallback is explicitly configured. By default,
       // usage exhaustion stops the run so the human can choose what to do.
       fallbackModel: interactiveFallbackModel(session.model),
@@ -3257,12 +3287,12 @@ async function runSessionPromptInner(
           ? automationMcp
           : session.goalId
             ? {
-                ...interactiveMcpServers(user, sessionId),
+                ...interactiveMcpServers(user, sessionId, durablePromptEntryId),
                 "opensession-goal-self": createGoalSelfMcpServer(
                   session.goalId,
                 ),
               }
-            : interactiveMcpServers(user, sessionId),
+            : interactiveMcpServers(user, sessionId, durablePromptEntryId),
       reposNote: isAutomationSession
         ? undefined
         : await buildSessionNote(session, user),
@@ -3284,6 +3314,9 @@ async function runSessionPromptInner(
       // Gate per-user MCP servers (allowedUsers) to the prompt's author. Automation
       // sessions pass no user, so they never see a user-restricted server.
       user: runInputs.user,
+      // The person who sent the prompt may spend their own subscription even
+      // when the session is automation-owned (the pool stays the backup).
+      accountUser: runInputs.accountUser,
       // The creator grant also gives provider routing a safe human identity for
       // synthetic continuations such as worker reports and restart recovery.
       mcpGrantUser: runInputs.mcpGrantUser,

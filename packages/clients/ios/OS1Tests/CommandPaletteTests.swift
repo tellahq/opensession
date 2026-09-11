@@ -129,6 +129,28 @@ final class CommandPaletteTests: XCTestCase {
         ).isEmpty)
     }
 
+    func testATypoStillFindsTheRow() {
+        let entries = [
+            session("release", "Release notes"),
+            command("workspace", "New session in this workspace")
+        ]
+        XCTAssertEqual(ids(entries, "relase"), ["release"])
+        XCTAssertEqual(ids(entries, "wrokspace"), ["workspace"])
+    }
+
+    func testAnExactTitleOutranksATypoOutranksAKeyword() {
+        let entries = [
+            session("keyword", "Something else", keywords: ["release"]),
+            session("typo", "Relase notes"),
+            session("exact", "Release notes")
+        ]
+        XCTAssertEqual(ids(entries, "release"), ["exact", "typo", "keyword"])
+    }
+
+    func testShortTermsStayStrict() {
+        XCTAssertEqual(ids([session("a", "Cut the rows")], "cat"), [])
+    }
+
     func testNoMatchesReturnsNothingRatherThanEverything() {
         let entries = [command("new", "New session"), session("a", "A conversation")]
         XCTAssertEqual(ids(entries, "zzzz"), [])

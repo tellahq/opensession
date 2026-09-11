@@ -11,6 +11,9 @@
  * running against nodes nobody can see.
  */
 
+import { expandIconMarkup } from "../components/icons";
+import type { FenceUpgrader } from "./fence-upgraders";
+
 /** Fence info strings that render as a chart. `chart` is the short alias. */
 const CHART_LANGS = new Set(["vega-lite", "vegalite", "chart"]);
 
@@ -67,3 +70,44 @@ export function finalizeChartViews(root: ChartNode): void {
     }
   }
 }
+
+let chartPromise: Promise<typeof import("./vega-chart")> | null = null;
+function loadChart() {
+  chartPromise ??= import("./vega-chart");
+  return chartPromise;
+}
+
+/**
+ * Same contract as a diagram: source that does not parse or compile keeps
+ * the plain code fence. The well is mounted BEFORE rendering, since container
+ * sizing reads the canvas width, and swapped back for the fence if that
+ * fails.
+ */
+export const chartUpgrader: FenceUpgrader = {
+  langs: [...CHART_LANGS],
+  async upgrade({ pre, source, root, alive }) {
+    const m = await loadChart().catch(() => null);
+    if (!m || !alive() || !root.contains(pre)) return false;
+    const wrap = document.createElement("div");
+    wrap.className = CHART_WRAP_CLASS;
+    const well = document.createElement("div");
+    well.className = CHART_WELL_CLASS;
+    const canvas = document.createElement("div");
+    canvas.className = CHART_CANVAS_CLASS;
+    well.append(canvas);
+    const expand = document.createElement("button");
+    expand.type = "button";
+    expand.className = "md-diagram-expand";
+    expand.title = "Expand chart";
+    expand.setAttribute("aria-label", "Expand chart");
+    expand.innerHTML = expandIconMarkup();
+    wrap.append(well, expand);
+    pre.replaceWith(wrap);
+    const handle = await m.renderChart(canvas, source).catch(() => null);
+    if (handle && alive()) return true;
+    handle?.finalize();
+    if (root.contains(wrap)) wrap.replaceWith(pre);
+    return false;
+  },
+  finalize: finalizeChartViews,
+};

@@ -34,6 +34,11 @@ import { IconX } from "../components/icons";
  * top-anchored, wider, full-bleed shell whose own rows
  * carry the padding and dividers. Pair it with `useEnterOnMount()` when the
  * parent mounts the dialog conditionally.
+ *
+ * The Desk uses `variant="floating"`: a full-bleed shell like the palette,
+ * but with no backdrop and no viewport. The caller positions it with `style`
+ * and pairs it with `modal={false}` on the root, so the page underneath stays
+ * usable while it is open.
  */
 
 /** Geometry of the dialog shell.
@@ -42,11 +47,14 @@ import { IconX } from "../components/icons";
  *  - `palette` — the command-palette shape: anchored near the top of the
  *    viewport (via Base UI's Viewport), wider, and full-bleed. No padding and no
  *    gap, because a palette's rows (search field, scrolling results, hint
- *    footer) run edge to edge and own their own spacing and dividers. */
-export type ModalVariant = "centered" | "palette";
+ *    footer) run edge to edge and own their own spacing and dividers.
+ *  - `floating` — a panel that shares the page: no backdrop, no viewport, an
+ *    opaque shell the caller places with inline `left/top/width/height`. Full
+ *    bleed like the palette. Pair with `modal={false}` on Modal.Root. */
+export type ModalVariant = "centered" | "palette" | "floating";
 
 export type ModalContentProps = Omit<
-  React.ComponentPropsWithoutRef<"div">,
+  React.ComponentProps<"div">,
   "children"
 > & {
   children: React.ReactNode;
@@ -85,6 +93,7 @@ function Content({
   ...popupProps
 }: ModalContentProps) {
   const palette = variant === "palette";
+  const floating = variant === "floating";
   const popup = (
     <BaseDialog.Popup
       // Centered via a single composed transform so the enter/exit
@@ -124,23 +133,43 @@ function Content({
               "data-[ending-style]:-translate-y-1.5 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0",
               widthClassName ?? "w-[min(820px,100%)]",
             ]
-          : [
-              "fixed left-1/2 top-1/2 z-[10001] w-[90vw] -translate-x-1/2 -translate-y-1/2",
-              widthClassName ?? "max-w-[28rem]",
-              "max-h-[85dvh] overflow-y-auto overscroll-contain outline-none",
-              // A restrained dialog shell: lifted surface, soft edge,
-              // and enough radius to read as a modal without becoming a card.
-              // The edge is --dialog-ring rather than the shared hairline: on
-              // a scrim the fill's step above the page all but disappears, so
-              // the line is what holds the shape (base.css).
-              "rounded-[calc(22px*var(--rf))] bg-raised",
-              "[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
-              "p-6",
-              "flex flex-col gap-4",
-              "origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",
-              "data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0",
-              "data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0",
-            ],
+          : floating
+            ? [
+                // Above the page and its floating triggers (z-500), below
+                // the palettes (6000) and the modal tier (10000): a panel you
+                // keep open should never sit over a dialog you were asked to
+                // answer.
+                "fixed z-[5000] flex flex-col overflow-hidden outline-none",
+                "rounded-[calc(22px*var(--rf))]",
+                // Opaque, not the palette's glass: there is no scrim under
+                // this one, so glass would show the transcript it floats over
+                // through its own rows.
+                "bg-raised",
+                "[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
+                // The caller sets the transform origin to the corner the
+                // panel is parked in.
+                "transition-[transform,opacity] duration-[var(--dur-micro)] ease-[var(--ease)]",
+                "data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0",
+                "data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0",
+                widthClassName,
+              ]
+            : [
+                "fixed left-1/2 top-1/2 z-[10001] w-[90vw] -translate-x-1/2 -translate-y-1/2",
+                widthClassName ?? "max-w-[28rem]",
+                "max-h-[85dvh] overflow-y-auto overscroll-contain outline-none",
+                // A restrained dialog shell: lifted surface, soft edge,
+                // and enough radius to read as a modal without becoming a card.
+                // The edge is --dialog-ring rather than the shared hairline: on
+                // a scrim the fill's step above the page all but disappears, so
+                // the line is what holds the shape (base.css).
+                "rounded-[calc(22px*var(--rf))] bg-raised",
+                "[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
+                "p-6",
+                "flex flex-col gap-4",
+                "origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",
+                "data-[starting-style]:scale-[0.96] data-[starting-style]:opacity-0",
+                "data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0",
+              ],
         className,
       )}
       initialFocus={initialFocus}
@@ -151,37 +180,42 @@ function Content({
   );
   return (
     <BaseDialog.Portal keepMounted={keepMounted}>
-      <BaseDialog.Backdrop
-        className={cn(
-          "fixed inset-0 transition-opacity ease-out",
-          "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
-          // Palettes sit on their own, lower tier so anything that has
-          // always floated above them (the caret-anchored mention popup at
-          // 10500, the modal tier at 10000) keeps doing so.
-          // A lighter tint than the opaque shell needed, over a heavier
-          // blur: the palette is glass now, so the scrim composites
-          // THROUGH it — at the old 42% the page's dimming showed up
-          // inside the palette as a grey wash over its own fill.
-          palette
-            ? "z-[6000] bg-black/22 backdrop-blur-[6px] duration-[var(--dur-micro)]"
-            : "z-[10000] bg-black/25 backdrop-blur-[1px] duration-[var(--dur)]",
-          // `palette-backdrop` rides along purely as a runtime marker, and
-          // nothing styles it any more: the window-level chords (archive,
-          // pin, tab switching, open pull request) decline a keystroke while
-          // one is open, via `blockingOverlayOpen()` in
-          // lib/blocking-overlay, and a palette must keep matching it.
-          // That helper qualifies every marker with `:not([hidden])`, which
-          // is load-bearing rather than tidy: a `keepMounted` palette (the
-          // Desk) is in the DOM from boot, so the unqualified selector read
-          // true forever and every one of those chords was dead. The stylesheet rule it used to carry
-          // said the same z-index/tint/blur written above, plus flex and
-          // padding that are inert on a childless backdrop, so deleting it
-          // changed nothing visually. The NAME is removable once those two
-          // guards move to `[role=dialog]`, which App already uses for its
-          // bare-"n" check.
-          palette && "palette-backdrop",
-        )}
-      />
+      {/* A floating panel has no backdrop at all: the page stays live under
+			    it, and there is no `palette-backdrop` marker, so the window-level
+			    chords keep working while it is open (lib/blocking-overlay). */}
+      {!floating && (
+        <BaseDialog.Backdrop
+          className={cn(
+            "fixed inset-0 transition-opacity ease-out",
+            "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
+            // Palettes sit on their own, lower tier so anything that has
+            // always floated above them (the caret-anchored mention popup at
+            // 10500, the modal tier at 10000) keeps doing so.
+            // A lighter tint than the opaque shell needed, over a heavier
+            // blur: the palette is glass now, so the scrim composites
+            // THROUGH it — at the old 42% the page's dimming showed up
+            // inside the palette as a grey wash over its own fill.
+            palette
+              ? "z-[6000] bg-black/22 backdrop-blur-[6px] duration-[var(--dur-micro)]"
+              : "z-[10000] bg-black/25 backdrop-blur-[1px] duration-[var(--dur)]",
+            // `palette-backdrop` rides along purely as a runtime marker, and
+            // nothing styles it any more: the window-level chords (archive,
+            // pin, tab switching, open pull request) decline a keystroke while
+            // one is open, via `blockingOverlayOpen()` in
+            // lib/blocking-overlay, and a palette must keep matching it.
+            // That helper qualifies every marker with `:not([hidden])`, which
+            // is load-bearing rather than tidy: a `keepMounted` palette (the
+            // Desk) is in the DOM from boot, so the unqualified selector read
+            // true forever and every one of those chords was dead. The stylesheet rule it used to carry
+            // said the same z-index/tint/blur written above, plus flex and
+            // padding that are inert on a childless backdrop, so deleting it
+            // changed nothing visually. The NAME is removable once those two
+            // guards move to `[role=dialog]`, which App already uses for its
+            // bare-"n" check.
+            palette && "palette-backdrop",
+          )}
+        />
+      )}
       {palette ? (
         <BaseDialog.Viewport
           className={cn(
