@@ -341,6 +341,11 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   composer and session preferences refresh at launch and when the app foregrounds.
   On macOS, custom account keyboard bindings drive the supported app commands and
   their command-menu hints; iOS keeps its system shortcut and widget guide.
+  A live question's options wear A, B, C, and a bare letter typed anywhere in
+  the key window that is not a text field answers with that row; **Answer the
+  Question** (⌘I, rebindable as the web's `ask-focus`) moves focus from the
+  composer onto the card, where the arrows and Return pick (`AskKeyBridge`,
+  `AskLetterShortcuts`).
   Infrastructure → **Runners** lists the machines this instance trusts, read
   only: each one's status, hardware, workspace roots, toolchains and what it is
   working on. Connecting, revoking and permissions stay in the web settings —

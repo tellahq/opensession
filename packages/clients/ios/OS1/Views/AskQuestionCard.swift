@@ -11,6 +11,14 @@ import SwiftUI
 /// hairline-separated rows, and — for the free-text answer — the same
 /// accent-filled send disc the composer wears, so answering here feels like
 /// writing a message rather than filling in a form.
+///
+/// The letters are the keyboard's tap. Each option wears A, B, C, and a bare
+/// letter typed anywhere in the card's window that is not a text field picks
+/// that row and answers, exactly as a tap would. The composer is the one
+/// place the letters cannot reach (they are typing there), so the "Answer the
+/// question" command (⌘I) arms the card instead: it takes the keyboard back
+/// from the composer and rings the card, and the letters answer from there.
+/// Only the card in the key window hears any of it; see `AskKeyScope`.
 struct AskQuestionCard: View {
     let ask: AskQuestion
     let onAnswer: ([String: String]?) -> Void
@@ -20,8 +28,15 @@ struct AskQuestionCard: View {
     /// between the tap and the server retiring the card.
     @State private var chosen: String?
     @FocusState private var inputFocused: Bool
+    /// The card itself holds keyboard focus, after the focus command. This is
+    /// only what arms the card and draws the ring; the letters answer through
+    /// the window bridge whether or not the card holds focus, as long as no
+    /// text field is editing.
+    @FocusState private var cardFocused: Bool
 
     private var question: AskQuestion.Question? { ask.questions.first }
+
+    private var options: [AskQuestion.Option] { question?.options ?? [] }
 
     private var cardShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -36,9 +51,9 @@ struct AskQuestionCard: View {
             if let question {
                 prompt(question)
 
-                ForEach(question.options ?? [], id: \.label) { option in
+                ForEach(Array(options.enumerated()), id: \.element.label) { index, option in
                     hairline
-                    optionRow(option, in: question)
+                    optionRow(option, at: index, in: question)
                 }
 
                 hairline
@@ -50,6 +65,19 @@ struct AskQuestionCard: View {
         // a shade over it in dark — the one direction each appearance leaves.
         .background(OS1VisualStyle.flapSurface, in: cardShape)
         .overlay(cardShape.stroke(OS1VisualStyle.border, lineWidth: 0.5))
+        .focusRingShape(cardShape)
+        .focusable()
+        .focused($cardFocused)
+        .onKeyPress(.escape) {
+            guard cardFocused else { return .ignored }
+            cardFocused = false
+            return .handled
+        }
+        .askHardwareKeys(
+            active: chosen == nil,
+            onLetter: pressLetter,
+            onFocusCommand: focusCard
+        )
         .animation(.snappy(duration: 0.2), value: chosen)
         .animation(.snappy(duration: 0.2), value: trimmedFreeText.isEmpty)
         // Answering is the moment a stuck session starts moving again — worth
@@ -84,14 +112,17 @@ struct AskQuestionCard: View {
 
     private func optionRow(
         _ option: AskQuestion.Option,
+        at index: Int,
         in question: AskQuestion.Question
     ) -> some View {
-        Button {
-            guard chosen == nil else { return }
-            chosen = option.label
-            onAnswer([question.question: option.label])
+        let letter = AskLetterShortcuts.label(at: index)
+        return Button {
+            choose(option, in: question)
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
+                if let letter {
+                    keyCap(letter)
+                }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(option.label)
                         .font(.subheadline.weight(.medium))
@@ -117,10 +148,25 @@ struct AskQuestionCard: View {
             .padding(.vertical, 11)
         }
         .buttonStyle(AskOptionButtonStyle())
+        .askLetterKeyEquivalent(letter)
         // The unpicked rows step back once a choice is in flight, so the card
         // reads as answered rather than still waiting.
         .opacity(chosen == nil || chosen == option.label ? 1 : 0.4)
         .disabled(chosen != nil)
+        .accessibilityHint(letter.map { "Press \($0) to pick" } ?? "")
+    }
+
+    /// The letter a row answers to, drawn like a key so it reads as one.
+    private func keyCap(_ letter: String) -> some View {
+        Text(verbatim: letter)
+            .font(.caption2.weight(.semibold).monospaced())
+            .foregroundStyle(OS1VisualStyle.textDim)
+            .frame(width: 18, height: 18)
+            .background(
+                OS1VisualStyle.hover,
+                in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+            )
+            .accessibilityHidden(true)
     }
 
     private func freeTextRow(_ question: AskQuestion.Question) -> some View {
@@ -170,6 +216,34 @@ struct AskQuestionCard: View {
             .frame(maxWidth: .infinity)
     }
 
+    // MARK: - Answering
+
+    /// A tap, a letter, and Return all land here: pick the row and send.
+    private func choose(_ option: AskQuestion.Option, in question: AskQuestion.Question) {
+        guard chosen == nil else { return }
+        chosen = option.label
+        cardFocused = false
+        onAnswer([question.question: option.label])
+    }
+
+    /// A letter from the window. False when it names nothing on this
+    /// question, so the keystroke stays the system's.
+    private func pressLetter(_ letter: String) -> Bool {
+        guard chosen == nil, let question,
+              let option = AskLetterShortcuts.option(in: question, letter: letter)
+        else { return false }
+        choose(option, in: question)
+        return true
+    }
+
+    /// The "Answer the question" command: take the keyboard back from the
+    /// composer and ring the card so a letter answers it.
+    private func focusCard() {
+        guard chosen == nil else { return }
+        inputFocused = false
+        cardFocused = true
+    }
+
     private func sendFreeText() {
         guard let question, chosen == nil else { return }
         let text = trimmedFreeText
@@ -177,6 +251,19 @@ struct AskQuestionCard: View {
         chosen = text
         inputFocused = false
         onAnswer([question.question: text])
+    }
+}
+
+private extension View {
+    /// The system focus ring follows the card's corners. macOS is the platform
+    /// that draws one around a focusable container; iOS has no focus-effect
+    /// shape kind and draws its own keyboard focus halo.
+    func focusRingShape(_ shape: RoundedRectangle) -> some View {
+        #if os(macOS)
+        contentShape(.focusEffect, shape)
+        #else
+        self
+        #endif
     }
 }
 

@@ -814,6 +814,30 @@ struct SessionsListView: View {
             )
         }
 
+        // Only while the open session is waiting on a question, so the row
+        // never runs to nothing. The palette is a sheet and its action runs
+        // on dismiss; posting on the next turn lets the window be key again
+        // before the card checks whether the command is aimed at it.
+        if selectedSession?.waitingForInput == true {
+            items.append(
+                CommandPaletteItem(
+                    entry: CommandPaletteEntry(
+                        id: "command:ask-focus",
+                        title: "Answer the question",
+                        subtitle: "Jump to the question the assistant is waiting on",
+                        keywords: ["ask", "question", "input", "reply"],
+                        shortcut: shortcuts.primaryBinding(for: .askFocus)?.glyphs ?? [],
+                        symbol: "questionmark.bubble"
+                    ),
+                    run: {
+                        DispatchQueue.main.async {
+                            NotificationCenter.default.post(name: .os1AskFocus, object: nil)
+                        }
+                    }
+                )
+            )
+        }
+
         items.append(
             CommandPaletteItem(
                 entry: CommandPaletteEntry(

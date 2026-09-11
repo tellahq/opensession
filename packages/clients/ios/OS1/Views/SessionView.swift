@@ -950,6 +950,11 @@ struct SessionView: View {
                 if let drop = ProcessInfo.processInfo.environment["OS1_SHOW_CONNECTION_DROP"] {
                     viewModel.dropConnectionForScreenshot(sustained: drop == "sustained")
                 }
+                // Both platforms: the Mac capture is where the hardware keys
+                // get exercised.
+                if ProcessInfo.processInfo.environment["OS1_SHOW_ASK_FIXTURE"] == "1" {
+                    viewModel.showAskForScreenshot()
+                }
                 #endif
                 #if DEBUG && os(iOS)
                 // Install screenshot fixtures before network requests so a
@@ -3349,10 +3354,13 @@ private struct SessionInputBar: View {
         // Desk opens with a keyboard covering its own board.
         .onAppear {
             if viewModel.session.neverRan && autoFocusWhenNeverRan { inputFocused = true }
-            #if DEBUG && os(iOS)
+            #if DEBUG
             // Open with the keyboard up, for the same reason as the panel
             // hooks in `SessionView`: a headless capture host can tap
-            // nothing, so the focused state is only reachable this way.
+            // nothing, so the focused state is only reachable this way. On
+            // the Mac it is how the keyboard verification starts in the
+            // composer, the one place the question card's letters must not
+            // reach.
             if ProcessInfo.processInfo.environment["OS1_FOCUS_COMPOSER"] == "1" {
                 inputFocused = true
             }
