@@ -167,8 +167,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   rows sit under Move to Sandbox in the session overflow menu and in a Mac
   toolbar menu. The server's 428 (uncommitted files or unpushed commits that a
   fresh clone would not have) becomes a confirmation with its own sentence and
-  a Move anyway. Runner, automation, Ask, repo-less and already-sandboxed
-  sessions never see the rows, matching the server's refusals. Its Effective
+  a Move anyway. Runner, automation, Ask, repo-less, preparing and materialized
+  Sandbox sessions never see the rows. If provisioning fails before creating a
+  Sandbox ID, the overflow menu allows another move without reopening the
+  session; stale host snapshots still cannot enable a second move. Its Effective
   config section resolves the next turn's model, engine, account, MCP access,
   instructions, and permissions, with the source under every displayed value.
 - **Session panels** — on iOS, Assets, individual assets, PR, Changes, Portals,

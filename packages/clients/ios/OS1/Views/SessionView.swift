@@ -2002,7 +2002,7 @@ private struct SessionActionsMenu: View {
                 Menu {
                     SandboxMoveMenuItems(
                         model: sandboxMove,
-                        sessionId: viewModel.session.id,
+                        session: viewModel.session,
                         isRunning: viewModel.isRunning,
                         onMoved: adoptSandboxMove
                     )

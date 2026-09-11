@@ -1189,7 +1189,7 @@ struct WorktreeInfoView: View {
         }
         .buttonStyle(.plain)
         .disabled(
-            sandboxMove.working != nil || sandboxMove.hasMoved(currentSession.id) || viewModel.isRunning
+            sandboxMove.working != nil || sandboxMove.hasMoved(currentSession) || viewModel.isRunning
         )
     }
 

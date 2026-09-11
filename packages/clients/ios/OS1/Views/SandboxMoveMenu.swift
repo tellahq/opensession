@@ -9,7 +9,7 @@ import SwiftUI
 /// empty states want to be: readable, not tappable.
 struct SandboxMoveMenuItems: View {
     let model: SandboxMoveViewModel
-    let sessionId: String
+    let session: Session
     /// The server refuses a move while the agent runs; the rows say so
     /// instead of disappearing.
     let isRunning: Bool
@@ -23,7 +23,7 @@ struct SandboxMoveMenuItems: View {
                 ForEach(providers, id: \.self) { provider in
                     Button {
                         Task {
-                            if let status = await model.move(sessionId: sessionId, to: provider) {
+                            if let status = await model.move(sessionId: session.id, to: provider) {
                                 onMoved(status)
                             }
                         }
@@ -33,7 +33,7 @@ struct SandboxMoveMenuItems: View {
                             systemImage: "cube"
                         )
                     }
-                    .disabled(model.working != nil || model.hasMoved(sessionId) || isRunning)
+                    .disabled(model.working != nil || model.hasMoved(session) || isRunning)
                 }
                 if isRunning {
                     Text(SandboxMoveCopy.waitForAgent)
@@ -129,7 +129,7 @@ struct SandboxMoveToolbarMenu: View {
         Menu {
             SandboxMoveMenuItems(
                 model: model,
-                sessionId: viewModel.session.id,
+                session: viewModel.session,
                 isRunning: viewModel.isRunning,
                 onMoved: adopt
             )

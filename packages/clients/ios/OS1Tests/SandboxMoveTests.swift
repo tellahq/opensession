@@ -148,6 +148,40 @@ final class SandboxMoveTests: XCTestCase {
     }
 
     @MainActor
+    func testMoveLatchAllowsRetryAfterProvisioningFailureButBlocksStaleHost() async throws {
+        let preparing = try JSONDecoder().decode(SessionSandboxStatus.self, from: Data(
+            #"{"enabled":true,"provider":"daytona","lifecycle":"preparing","materialized":false}"#.utf8
+        ))
+        var requests = 0
+        let model = SandboxMoveViewModel { _, _, _ in
+            requests += 1
+            return .moved(preparing)
+        }
+        let host = try session(#"{"id":"bks-1","mode":"code","repo":"r"}"#)
+        XCTAssertFalse(model.hasMoved(host))
+        let attached = await model.move(sessionId: host.id, to: "daytona")
+        XCTAssertNotNil(attached)
+        XCTAssertNil(model.working)
+        XCTAssertTrue(model.hasMoved(host), "A stale host poll must not re-enable the rows")
+
+        var snapshot = host
+        snapshot.sandbox = SandboxMove.recorded(from: preparing)
+        XCTAssertTrue(model.hasMoved(snapshot))
+        snapshot.sandbox?.lifecycle = "needs_attention"
+        XCTAssertTrue(SandboxMove.canMove(snapshot))
+        XCTAssertFalse(model.hasMoved(snapshot), "The retained menu must allow retry after failure")
+        XCTAssertTrue(model.hasMoved(host), "Bypassing a failure must not release stale host snapshots")
+
+        snapshot.sandbox?.sandboxId = "sb-1"
+        XCTAssertTrue(model.hasMoved(snapshot), "A materialized failure uses Recreate instead")
+        let retried = await model.move(sessionId: host.id, to: "daytona")
+        XCTAssertNotNil(retried)
+        XCTAssertEqual(requests, 2)
+        snapshot.sandbox = SandboxMove.recorded(from: preparing)
+        XCTAssertTrue(model.hasMoved(snapshot))
+    }
+
+    @MainActor
     func testRefusalSurfacesTheServersMessage() async {
         let body = Data(#"{"error":"Wait for the agent to finish before moving this session."}"#.utf8)
         do {

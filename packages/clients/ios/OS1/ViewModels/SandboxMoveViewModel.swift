@@ -27,6 +27,16 @@ final class SandboxMoveViewModel {
     var confirmation: Confirmation?
     var error: String?
 
+    private let attach: (String, String, Bool) async throws -> SandboxAttachOutcome
+
+    init(
+        attach: @escaping (String, String, Bool) async throws -> SandboxAttachOutcome = { id, provider, confirm in
+            try await OS1API.attachSandbox(sessionId: id, provider: provider, confirm: confirm)
+        }
+    ) {
+        self.attach = attach
+    }
+
     func loadProviders() async {
         let status = try? await OS1API.sandboxStatus()
         providers = SandboxMove.choices(status)
@@ -45,11 +55,7 @@ final class SandboxMoveViewModel {
         error = nil
         defer { working = nil }
         do {
-            switch try await OS1API.attachSandbox(
-                sessionId: sessionId,
-                provider: provider,
-                confirm: confirm
-            ) {
+            switch try await attach(sessionId, provider, confirm) {
             case .moved(let status):
                 movedSessionId = sessionId
                 return status
@@ -67,8 +73,17 @@ final class SandboxMoveViewModel {
         }
     }
 
-    func hasMoved(_ sessionId: String) -> Bool {
-        movedSessionId == sessionId
+    func hasMoved(_ session: Session) -> Bool {
+        guard movedSessionId == session.id else { return false }
+        // Only an explicit provisioning failure releases the rows. A stale
+        // host snapshot must not allow another attach while provisioning.
+        if let sandbox = session.sandbox,
+           sandbox.lifecycle == "needs_attention",
+           let provider = sandbox.provider, !provider.isEmpty, provider != "local",
+           (sandbox.sandboxId ?? "").isEmpty {
+            return false
+        }
+        return true
     }
 
     /// Record the server's answer on the open session now, then take the row
