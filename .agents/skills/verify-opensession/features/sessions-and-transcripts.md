@@ -5,7 +5,7 @@ Sessions are conversations with an agent. Users open them from a workspace or di
 ## Sub-features
 
 - `session-open` opens a session from a sidebar workspace row or direct link.
-- `session-transcript` renders user messages, assistant text, tool calls, run notices, and failure states.
+- `session-transcript` renders user messages, assistant text, tool calls, rich response blocks, run notices, and failure states.
 - `session-workspace` switches among conversation, review, changes, and other available workspace panes.
 - `session-new` opens the new-session composer from the global button, keyboard shortcut, or a workspace.
 - `session-phone` keeps the transcript and composer operable at phone width.
@@ -24,10 +24,10 @@ Preconditions:
 - Doctor passes for the isolated demo run.
 - Demo session `bks-demo-pr` exists with title `Fix flaky upload retry test`.
 
-- **Open a direct session link.** Run `verify-opensession browser "$RUN_ID" open --route /session/bks-demo-pr --width 1440 --height 900`. Wait with `verify-opensession browser "$RUN_ID" wait --role heading --name "Fix flaky upload retry test"`. The session title and transcript appear.
-- **Inspect transcript semantics.** Run `verify-opensession browser "$RUN_ID" snapshot`. The tree contains the upload retry prompt and transcript controls. Capture a screenshot after expanding any collapsed tool call through its visible button.
-- **Inspect a failure.** Open `/session/bks-demo-failed`. The page identifies `Investigate memory spike in export worker` and shows its run failure instead of presenting the transcript as complete.
-- **Open the global composer.** Open `/new`, then wait for `group` named `New session`. The textbox placeholder is `What do you want to work on?`. Choose `Ask mode` and verify the placeholder changes to `What do you want to find out?`.
+- **Open a direct session link.** Run `verify-opensession browser "$RUN_ID" open --route /session/bks-demo-pr --width 1440 --height 900`, then wait for the stable transcript control with `verify-opensession browser "$RUN_ID" wait --role button --name "Show what this turn wrote to upload.ts"`. Take a snapshot and require the session title `Fix flaky upload retry test` and upload retry prompt.
+- **Inspect transcript semantics.** The seeded transcript includes assistant text, a collapsed file change, a chart, placed media, a comparison, a file tree, and quick replies. Capture a snapshot and screenshot before and after expanding `Show what this turn wrote to upload.ts`.
+- **Inspect a failure.** Open `/session/bks-demo-failed`, then wait for `button` named `Investigate memory spike in export worker, last run failed`. The page shows `Run failed` and the usage-limit message instead of presenting the transcript as complete.
+- **Open the global composer.** Open `/new`, then wait for `dialog` named `New session`. The `combobox` is named `What do you want to work on?`. Choose `Ask mode` and wait for the combobox name to change to `What do you want to find out?`.
 - **Check phone layout.** Reopen `/session/bks-demo-pr` at 390x844. Capture the transcript, then focus the composer and verify its controls remain reachable without horizontal scrolling.
 - **Proof.** Save before and after accessibility snapshots and screenshots. If the check creates a session, confirm its new ID through `/api/sessions` and reopen it from the sidebar before reporting persistence.
 
