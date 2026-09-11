@@ -136,6 +136,7 @@ import { Button } from "./ui/button";
 import { cn } from "./ui/cn";
 import { EmptyState, LoadingState } from "./ui/state";
 import { ToastHost, toast } from "./ui/toast";
+import { PulseDot } from "./ui/status";
 import { Tooltip } from "./ui/tooltip";
 import { TopBar, TopBarActions, TopBarTitle } from "./ui/top-bar";
 
@@ -472,6 +473,9 @@ export function AppContent({
     setShortcutsOpen,
     taskCount,
   } = appViewState;
+  // A Desk voice call outlives a minimised Desk; the trigger shows it is live.
+  const [deskCallActive, setDeskCallActive] = useState(false);
+  const deskCallShown = deskCallActive && !deskOverlay.open;
   const { closePalette, startNewSessionCreate } = useNewSessionCreateStart({
     getCurrentRoute,
     navigate,
@@ -1288,6 +1292,10 @@ export function AppContent({
               topbarTitle={topbarTitle}
               phoneTitleHandedOver={phoneTitleHandedOver}
               commandMenuRef={commandMenuRef}
+              deskCallActive={deskCallShown}
+              onOpenDesk={() =>
+                setDeskOverlay({ open: true, origin: "bottom-right" })
+              }
               setAppHeaderEl={setAppHeaderEl}
               setHeaderRepoEl={setHeaderRepoEl}
               setHeaderModelEl={setHeaderModelEl}
@@ -1884,7 +1892,11 @@ export function AppContent({
 				    on the root page (see .desk-fab). ⌘J and the command palette still
 				    summon it too. */}
             {(!isPhone || !mobileDetail) && (
-              <Tooltip label="Desk" side="left" shortcut={["⌘", "J"]}>
+              <Tooltip
+                label={deskCallShown ? "Desk call in progress" : "Desk"}
+                side="left"
+                shortcut={["⌘", "J"]}
+              >
                 <button
                   className={DESK_FAB}
                   style={
@@ -1899,9 +1911,18 @@ export function AppContent({
                   onClick={() =>
                     setDeskOverlay({ open: true, origin: "bottom-right" })
                   }
-                  aria-label="Open the Desk"
+                  aria-label={
+                    deskCallShown
+                      ? "Desk call in progress. Open the Desk"
+                      : "Open the Desk"
+                  }
                 >
                   <IconDesk size={24} />
+                  {/* The call keeps running behind a minimised Desk; the dot
+                      says so until the call ends or Desk is back up. */}
+                  {deskCallShown && (
+                    <PulseDot className="absolute top-0 right-0 ring-2 ring-[var(--composer-surface)]" />
+                  )}
                 </button>
               </Tooltip>
             )}
@@ -1915,6 +1936,7 @@ export function AppContent({
               }
               phone={isPhone}
               onOpenSession={(id) => navigate({ view: "session", id })}
+              onCallActiveChange={setDeskCallActive}
             />
 
             {/* ⌘K command palette — actions, PRs, and sessions across every view. */}

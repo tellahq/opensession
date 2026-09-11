@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { z } from "zod";
 import { BASE_PATH } from "../lib/base";
 import { getCurrentUser } from "./UserPicker";
@@ -50,6 +50,9 @@ interface DeskOverlayProps {
   phone: boolean;
   /** Open the Desk session in the full viewer. */
   onOpenSession: (sessionId: string) => void;
+  /** A voice call started or ended. The call outlives a minimised Desk, so
+   * the app shows it is still live on the trigger that reopens Desk. */
+  onCallActiveChange?: (active: boolean) => void;
 }
 
 function DeskBody({
@@ -57,6 +60,7 @@ function DeskBody({
   phone,
   onClose,
   onOpenSession,
+  onCallActiveChange,
   onGrab,
 }: Omit<DeskOverlayProps, "open" | "openOrigin"> & {
   active: boolean;
@@ -98,6 +102,17 @@ function DeskBody({
   );
 
   const voiceActive = voiceState !== "idle" && voiceState !== "error";
+  // Report through an effect event so a new callback identity does not
+  // re-announce an unchanged call; unmounting the body ends the call above.
+  const announceCall = useEffectEvent((active: boolean) =>
+    onCallActiveChange?.(active),
+  );
+  useEffect(() => {
+    announceCall(voiceActive);
+    return () => {
+      if (voiceActive) announceCall(false);
+    };
+  }, [voiceActive]);
   const voiceStatus: Record<DeskVoiceState, string | undefined> = {
     idle: undefined,
     error: undefined,
@@ -326,6 +341,7 @@ export function DeskOverlay({
   onClose,
   phone,
   onOpenSession,
+  onCallActiveChange,
 }: DeskOverlayProps) {
   // Base UI's keepMounted preserves the Desk after its first summon, but it
   // also mounts hidden content on a cold app load. Gate the body until then so
@@ -407,6 +423,7 @@ export function DeskOverlay({
             phone={phone}
             onClose={onClose}
             onOpenSession={onOpenSession}
+            onCallActiveChange={onCallActiveChange}
             onGrab={floating ? panel.startMove : undefined}
           />
         )}

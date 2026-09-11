@@ -105,6 +105,12 @@ router switches the page without remounting Desk. Desktop keeps the floating Des
 open. Phone minimizes its covering sheet while the mounted conversation and voice
 client remain alive. Reopen Desk to access its controls.
 
+While a call is live behind a minimised Desk, the Desk trigger carries a pulsing
+dot and its label reads "Desk call in progress"; pushed phone pages, which have
+no Desk FAB, show a handset control in the top bar instead. Both reopen Desk.
+The indicator clears when the call ends or Desk is back up
+(`DeskOverlay.onCallActiveChange`).
+
 ## Code and tests
 
 Paths below are relative to `packages/core/opensession-server/`.

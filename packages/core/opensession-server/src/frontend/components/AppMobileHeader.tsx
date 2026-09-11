@@ -17,12 +17,14 @@ import {
   HEADER_TITLE_ROW,
   HEADER_TITLE_TEXT,
   MOBILE_SEARCH_BTN,
+  MOBILE_TOP_BAR_CONTROL,
 } from "../lib/app-header-classes";
 import type { Route } from "../lib/app-route";
 import { sessionWasAgentStarted } from "../lib/sidebar-placement";
 import type { UnifiedSession, Workspace } from "../lib/types";
 import { cn } from "../ui/cn";
 import { OverflowFadeText } from "../ui/overflow-fade-text";
+import { PulseDot } from "../ui/status";
 import {
   TopBar,
   TopBarActions,
@@ -32,7 +34,7 @@ import {
 import type { CommandMenuHandle } from "./CommandMenuHost";
 import { OrganizationSwitcher } from "./OrganizationSwitcher";
 import { UpdatePill } from "./UpdatePill";
-import { IconRobot, IconSearch } from "./icons";
+import { IconCall, IconRobot, IconSearch } from "./icons";
 
 interface AppMobileHeaderProps {
   route: Route;
@@ -47,6 +49,10 @@ interface AppMobileHeaderProps {
   topbarTitle: string;
   phoneTitleHandedOver: boolean;
   commandMenuRef: RefObject<CommandMenuHandle | null>;
+  /** A Desk voice call is live behind the minimised Desk sheet. Pushed pages
+   * have no Desk FAB, so the top bar carries the reminder and the way back. */
+  deskCallActive: boolean;
+  onOpenDesk: () => void;
   setAppHeaderEl: ReturnType<
     typeof useAppShell
   >["mobileTopbar"]["setAppHeaderEl"];
@@ -74,6 +80,8 @@ export function AppMobileHeader({
   topbarTitle,
   phoneTitleHandedOver,
   commandMenuRef,
+  deskCallActive,
+  onOpenDesk,
   setAppHeaderEl,
   setHeaderRepoEl,
   setHeaderModelEl,
@@ -221,6 +229,16 @@ export function AppMobileHeader({
                 aria-label="Open command menu"
               >
                 <IconSearch size={22} />
+              </button>
+            )}
+            {mobileDetail && deskCallActive && (
+              <button
+                className={cn(MOBILE_TOP_BAR_CONTROL, "relative")}
+                onClick={onOpenDesk}
+                aria-label="Desk call in progress. Open the Desk"
+              >
+                <IconCall size={22} />
+                <PulseDot className="absolute top-1.5 right-1.5 ring-2 ring-[var(--mobile-header-control-surface)]" />
               </button>
             )}
           </TopBarActions>
