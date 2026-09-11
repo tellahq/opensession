@@ -77,7 +77,7 @@ import { getActiveViewTab, saveActiveViewTab } from "./lib/active-view-tab";
 import { cachedRepos, resolveWorkspaceApi } from "./lib/api";
 import { buildAppCommandActions } from "./components/app-command-actions";
 import { isToolView, parseRoute, routePath, type Route } from "./lib/app-route";
-import { onDeskShow, type DeskShowTarget } from "./lib/desk-show";
+import { useDeskShowNavigation } from "./hooks/useDeskShowNavigation";
 import {
   APP_BODY,
   DETAIL_TOPBAR,
@@ -803,42 +803,15 @@ export function AppContent({
     openReviewForSession,
   } = workspacePanes;
 
-  // Desk's show_in_app landed here (lib/desk-show). A workspace pane is part
-  // of the route; a session's tab is applied the way the sidebar does it: Review
-  // through the pending-open pulse that survives the workspace-change reset,
-  // chat by clearing the workspace's remembered pane before the route lands.
-  const voiceShow = useEffectEvent((target: DeskShowTarget, route: Route) => {
-    const shownSession =
-      target.kind === "session" && target.tab
-        ? sessions.find(
-            (session) =>
-              session.id === target.id || session.aliasIds?.includes(target.id),
-          )
-        : undefined;
-    const sessionKey = wsKeyFor(shownSession);
-    if (shownSession && target.tab === "review") {
-      openReviewForSession(shownSession);
-    } else if (shownSession && sessionKey && target.tab === "chat") {
-      saveActiveViewTab(sessionKey, null);
-      setActiveViewTabState(null);
-      navigate(route);
-    } else if (
-      shownSession?.workspaceId &&
-      (target.tab === "conversation" || target.tab === "video")
-    ) {
-      navigate({
-        view: "workspace",
-        id: shownSession.workspaceId,
-        tab: target.tab,
-      });
-    } else {
-      navigate(route);
-    }
-    // The phone sheet covers the page; minimise it so what was asked for is
-    // visible. The call keeps running in the mounted body.
-    if (isPhone) setDeskOverlay((desk) => ({ ...desk, open: false }));
+  useDeskShowNavigation({
+    sessions,
+    wsKeyFor,
+    openReviewForSession,
+    setActiveViewTabState,
+    navigate,
+    isPhone,
+    setDeskOverlay,
   });
-  useEffect(() => onDeskShow(voiceShow), []);
 
   const sessionTabs = useSessionTabs({
     routing: {

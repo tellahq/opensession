@@ -12,6 +12,7 @@ const ownedModules = [
   "../hooks/useAppGlobalHotkeys.ts",
   "../hooks/useAppRegistries.ts",
   "../hooks/useAppViewState.ts",
+  "../hooks/useDeskShowNavigation.ts",
   "../hooks/useNewSessionCreateStart.ts",
   "../hooks/useNewTabMorphTimer.ts",
   "../hooks/useSessionTabs.tsx",
@@ -50,6 +51,7 @@ describe("app source ownership", () => {
       "useAppDocumentInteractions",
       "useAppRegistries",
       "useAppViewState",
+      "useDeskShowNavigation",
       "useSessionTabs",
       "useWorkspacePanes",
     ]) {

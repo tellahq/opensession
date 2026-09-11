@@ -57,7 +57,6 @@ import { createHealthMcpServer } from "./health-mcp";
 import { createRunnersMcpServer } from "./runners-mcp";
 import { createScheduleMcpServer } from "./schedule-mcp";
 import { createPortalsMcpServer } from "./portals-mcp";
-import { createPullRequestMcpServer } from "./pull-request-mcp";
 import { createChartsMcpServer } from "./charts-mcp";
 import { createDesktopMcpServer } from "./desktop-mcp";
 import { createSelfDeployMcpServer } from "./self-deploy";
@@ -409,26 +408,6 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     condition:
       "Needs a session id. Held to the automation bar: its only write is offloaded chart data into the calling session's own assets.",
     build: () => createChartsMcpServer({ sessionId: SESSION_ID }),
-  },
-  {
-    name: "opensession-pull-requests",
-    summary: INTERNAL_MCP_CAPABILITIES["opensession-pull-requests"].summary,
-    source: "packages/core/opensession-server/src/server/pull-request-mcp.ts",
-    wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts"],
-    runClasses: ["interactive"],
-    condition:
-      "Only on a turn a connected person started: never a review handoff, a worker report, or an automation.",
-    note: "The gateway makes the request with the person's token; the run never holds it (docs/github-authority.md). propose_merge holds no token: the person merges from the PR panel.",
-    build: () =>
-      createPullRequestMcpServer({
-        sessionId: SESSION_ID,
-        login: "you",
-        credential: () => null,
-        workspace: () => null,
-        prMeta: async () => null,
-        prDetails: async () => null,
-        notice: async () => {},
-      }),
   },
   {
     name: "opensession-todos",

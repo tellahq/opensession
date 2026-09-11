@@ -854,14 +854,52 @@ export function githubAuthEnv(user?: string | null): Record<string, string> {
   return token ? { GH_TOKEN: token, GITHUB_TOKEN: token } : {};
 }
 
+/** The connected person a credential belongs to, read from its durable
+ * principal, so the answer follows the token the run actually holds: the
+ * mapped person in operator mode, the sole account in simple mode. Null for
+ * the service credential and for no credential. */
+export function githubCredentialLogin(
+  credential: GithubCredential | null | undefined,
+): string | null {
+  return credential?.kind === "user"
+    ? credential.principal.slice("user:".length) || null
+    : null;
+}
+
+/** What a trusted launcher projects for a code turn a connected person
+ * started: githubAuthEnv plus, as a non-secret marker, the login of the
+ * credential the host selected for the run, so the guest can answer "does
+ * this run act as a connected person?" without the person store
+ * (githubRunOwnerLogin). Empty when nobody resolves. An App-token projection
+ * is written elsewhere and never carries a login, so it stays guarded. */
+export function githubUserAuthProjection(
+  user?: string | null,
+): Record<string, string> {
+  const credential = githubCredentialForRun(user);
+  const token = credential?.env.GH_TOKEN;
+  if (!token) return {};
+  const login = githubCredentialLogin(credential);
+  return login
+    ? { GH_TOKEN: token, GITHUB_TOKEN: token, login }
+    : { GH_TOKEN: token, GITHUB_TOKEN: token };
+}
+
 /** A remote sandbox cannot read the server's per-user grant store. Its trusted
  * launcher writes only this run's access token to a private file and points the
  * host at it. The token never enters the persisted RunHostSpec or launch command. */
 export const GITHUB_RUN_AUTH_FILE_ENV = "OPENSESSION_GITHUB_RUN_AUTH_FILE";
 
-function projectedGithubAuthEnv(): Record<string, string> {
+interface ProjectedGithubAuth {
+  env: Record<string, string>;
+  /** The connected person the token belongs to; null for an App token. */
+  login: string | null;
+}
+
+const NO_PROJECTED_AUTH: ProjectedGithubAuth = { env: {}, login: null };
+
+function readProjectedGithubAuth(): ProjectedGithubAuth {
   const path = process.env[GITHUB_RUN_AUTH_FILE_ENV];
-  if (!path) return {};
+  if (!path) return NO_PROJECTED_AUTH;
   try {
     const parsed = JSON.parse(readFileSync(path, "utf-8")) as Record<
       string,
@@ -873,9 +911,16 @@ function projectedGithubAuthEnv(): Record<string, string> {
         : typeof parsed.GITHUB_TOKEN === "string"
           ? parsed.GITHUB_TOKEN
           : "";
-    return token ? { GH_TOKEN: token, GITHUB_TOKEN: token } : {};
+    if (!token) return NO_PROJECTED_AUTH;
+    // The marker only ever names a GitHub login; anything else is ignored
+    // rather than trusted as an identity.
+    const login =
+      typeof parsed.login === "string" && /^[A-Za-z0-9-]+$/.test(parsed.login)
+        ? parsed.login
+        : null;
+    return { env: { GH_TOKEN: token, GITHUB_TOKEN: token }, login };
   } catch {
-    return {};
+    return NO_PROJECTED_AUTH;
   }
 }
 
@@ -891,7 +936,14 @@ function githubProcessEnv(
  * This never consults a connected human account: on a remote host the
  * launcher already decided whose credential the run holds. */
 export function projectedGithubRunEnv(): Record<string, string> {
-  return githubProcessEnv(projectedGithubAuthEnv());
+  return githubProcessEnv(readProjectedGithubAuth().env);
+}
+
+/** The connected person a projected token belongs to, or null for an App
+ * token and for a missing or unreadable file. Only the launcher writes that
+ * file, so the marker is as trusted as the token beside it. */
+export function projectedGithubRunLogin(): string | null {
+  return readProjectedGithubAuth().login;
 }
 
 /** Shell environment for a code turn a connected person started: their
@@ -905,6 +957,16 @@ export function githubUserRunEnv(user?: string | null): Record<string, string> {
   if (process.env[GITHUB_RUN_AUTH_FILE_ENV]) return {};
   const auth = githubAuthEnv(user);
   return auth.GH_TOKEN ? githubProcessEnv(auth) : {};
+}
+
+/** The connected person a run acts as, wherever it runs: on a remote host the
+ * launcher's projected marker (the person store is not there, and a readable
+ * one must not be consulted), on the host the login of the credential
+ * githubUserRunEnv selects, which in simple mode is the sole connected
+ * account. Null keeps the run's publication guard. */
+export function githubRunOwnerLogin(user?: string | null): string | null {
+  if (process.env[GITHUB_RUN_AUTH_FILE_ENV]) return projectedGithubRunLogin();
+  return githubCredentialLogin(githubCredentialForRun(user));
 }
 
 export interface GithubCredential {

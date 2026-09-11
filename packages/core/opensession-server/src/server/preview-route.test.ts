@@ -116,7 +116,8 @@ function worktreeWith(port: number): string {
   return dir;
 }
 
-describe("host Portal Caddy route", () => {
+// Host listener discovery uses Linux's ss command, not available on macOS.
+describe.skipIf(process.platform !== "linux")("host Portal Caddy route", () => {
   test("a route Caddy already holds for this upstream is adopted without a write", async () => {
     const { getPreviewStatus, previewServerConfig, httpsPortFor } =
       await import("./preview");

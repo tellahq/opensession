@@ -60,7 +60,6 @@ touches an in-process tool:
 | [`opensession-workflows`](#opensession-workflows) | 8 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
 | [`opensession-assets`](#opensession-assets) | 4 | interactive | Needs a session id. Works in read-only Ask mode — assets land outside the checkout. |
 | [`opensession-charts`](#opensession-charts) | 1 | interactive, automation | Needs a session id. Held to the automation bar: its only write is offloaded chart data into the calling session's own assets. |
-| [`opensession-pull-requests`](#opensession-pull-requests) | 3 | interactive | Only on a turn a connected person started: never a review handoff, a worker report, or an automation. |
 | [`opensession-todos`](#opensession-todos) | 5 | interactive | Needs a session id. |
 | [`opensession-schedule`](#opensession-schedule) | 3 | interactive | Needs a session id. |
 | [`opensession-papercuts`](#opensession-papercuts) | 2 | interactive, automation | Dropped when the session's repo opted out (Settings → Papercuts). |
@@ -73,7 +72,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-32 servers, 144 tools.
+31 servers, 141 tools.
 
 ## opensession-sessions
 
@@ -895,34 +894,6 @@ Validate a Vega-Lite spec and get the ```vega-lite fence that renders as an inte
 `mcp__opensession-charts__make_chart` · input: `spec` (object | string, required), `data` (any[]), `title` (string), `name` (string)
 
 Turn a Vega-Lite spec into the ```vega-lite fence that renders as an interactive chart (tooltips, zoom, brushing) in this session. Compiles the spec with the same library the client uses and returns errors with their paths instead of a silent code block; large inline data is moved to a session asset the chart loads from. Paste the returned fence verbatim into your reply, on its own lines. Keep specs small and readable: aggregate first, use `data.values` (or the data argument) rather than external URLs, and omit width so the chart fills the column.
-
-## opensession-pull-requests
-
-Open and edit this session's pull request as the person who asked; propose a merge for them to tap.
-
-- **Source** `packages/core/opensession-server/src/server/pull-request-mcp.ts`
-- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
-- **Runs** interactive
-- **Condition** Only on a turn a connected person started: never a review handoff, a worker report, or an automation.
-- **Note** The gateway makes the request with the person's token; the run never holds it (docs/github-authority.md). propose_merge holds no token: the person merges from the PR panel.
-
-### `open_pull_request`
-
-`mcp__opensession-pull-requests__open_pull_request` · input: `repo` (string), `title` (string, required), `body` (string, required), `base` (string), `draft` (boolean)
-
-Open a pull request for this session's pushed branch under @you's own GitHub account. The request is made by the gateway with their token; you never hold it. Prefer this over `gh pr create`, which opens the PR as the bot. Push the branch first. End the body with the attribution footer from the session context.
-
-### `edit_pull_request`
-
-`mcp__opensession-pull-requests__edit_pull_request` · input: `repo` (string), `number` (integer), `title` (string), `body` (string), `ready` (boolean)
-
-Change the title, body, or draft state of this session's pull request as @you. The gateway makes the request with their token.
-
-### `propose_merge`
-
-`mcp__opensession-pull-requests__propose_merge` · input: `repo` (string), `method` ("squash" | "merge" | "rebase"), `note` (string)
-
-Hand a merge to @you. You cannot merge: no token in your reach can update the default branch. This checks the PR is open and reports its checks and review state, then posts a notice in the session; the person merges with one tap in the PR panel. Call it when asked to merge, or when the work is ready and reviewed.
 
 ## opensession-todos
 

@@ -16,8 +16,11 @@ import {
   GITHUB_RUN_AUTH_FILE_ENV,
   githubAuthEnv,
   githubCredentialForRun,
+  githubRunOwnerLogin,
+  githubUserAuthProjection,
   githubUserRunEnv,
   projectedGithubRunEnv,
+  projectedGithubRunLogin,
   githubCredentialForLogin,
   githubCredentialForPrincipal,
   githubReconnectRequired,
@@ -284,6 +287,78 @@ describe("token lookups + runner env", () => {
     expect(JSON.stringify(projectedGithubRunEnv())).not.toContain(
       "must-not-be-read",
     );
+    // No login marker: an App projection, so the guest keeps its guard.
+    expect(projectedGithubRunLogin()).toBeNull();
+  });
+
+  test("a person's projection names the login of the credential the run holds", () => {
+    seedToken();
+    // Simple mode: the sole account is the acting identity for any human
+    // sender, so the projection names it and the guest lifts the guard the
+    // way a host run does (githubRunOwnerLogin below).
+    for (const user of ["Alice", "Some Randomer", null]) {
+      expect(githubUserAuthProjection(user)).toEqual({
+        GH_TOKEN: "gho_test123",
+        GITHUB_TOKEN: "gho_test123",
+        login: "alice",
+      });
+      expect(githubRunOwnerLogin(user)).toBe("alice");
+    }
+    // Two connected accounts in simple mode: nobody, so no token and no login.
+    writeFileSync(
+      process.env.OPENSESSION_GITHUB_AUTH_STORE!,
+      JSON.stringify({
+        users: {
+          alice: { login: "alice", token: "gho_a", source: "device" },
+          bob: { login: "bob", token: "gho_b", source: "device" },
+        },
+      }),
+    );
+    expect(githubUserAuthProjection("Alice")).toEqual({});
+    expect(githubRunOwnerLogin("Alice")).toBeNull();
+    seedToken();
+    enableFeature();
+    expect(githubUserAuthProjection("Alice")).toEqual({
+      GH_TOKEN: "gho_test123",
+      GITHUB_TOKEN: "gho_test123",
+      login: "alice",
+    });
+    expect(githubUserAuthProjection("Bob")).toEqual({});
+    // Operator mode: the login follows the mapped person, nobody else.
+    expect(githubRunOwnerLogin("Bob")).toBeNull();
+    expect(githubRunOwnerLogin("Some Randomer")).toBeNull();
+  });
+
+  test("the guest reads the run's owner from the projected marker, never the store", () => {
+    enableFeature();
+    seedToken();
+    // Host run: the store answers.
+    expect(githubRunOwnerLogin("Alice")).toBe("alice");
+    // Remote run with a person's projection: the marker answers, whoever the
+    // guest thinks the sender is.
+    const projected = join(dir, "run-github-auth.json");
+    writeFileSync(
+      projected,
+      JSON.stringify({ GH_TOKEN: "ghu_remote123", login: "alice" }),
+    );
+    process.env[GITHUB_RUN_AUTH_FILE_ENV] = projected;
+    expect(projectedGithubRunLogin()).toBe("alice");
+    expect(githubRunOwnerLogin("Alice")).toBe("alice");
+    // An App projection stays guarded even though a store naming Alice is
+    // readable here.
+    writeFileSync(projected, JSON.stringify({ GH_TOKEN: "ghs_app123" }));
+    expect(githubRunOwnerLogin("Alice")).toBeNull();
+    // A marker without a token, a malformed marker, and a missing file all
+    // resolve nobody.
+    writeFileSync(projected, JSON.stringify({ login: "alice" }));
+    expect(githubRunOwnerLogin("Alice")).toBeNull();
+    writeFileSync(
+      projected,
+      JSON.stringify({ GH_TOKEN: "ghu_remote123", login: "not a login" }),
+    );
+    expect(githubRunOwnerLogin("Alice")).toBeNull();
+    process.env[GITHUB_RUN_AUTH_FILE_ENV] = join(dir, "missing-auth.json");
+    expect(githubRunOwnerLogin("Alice")).toBeNull();
   });
 
   test("an auto-continue turn resolves the session owner; automations resolve nobody", () => {
