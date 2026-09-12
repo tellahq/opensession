@@ -148,6 +148,15 @@ async function matchingNode() {
 }
 
 async function clickNode(node) {
+  const objectId = await resolveNode(node);
+  await send("Runtime.callFunctionOn", {
+    objectId,
+    functionDeclaration:
+      'function () { this.scrollIntoView({ behavior: "instant", block: "center", inline: "center" }); }',
+  });
+  // Let nested scroll containers and their compositor state reach the target
+  // before resolving its click coordinates.
+  await Bun.sleep(350);
   const model = await send("DOM.getBoxModel", {
     backendNodeId: node.backendDOMNodeId,
   });
