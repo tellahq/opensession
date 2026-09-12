@@ -116,6 +116,33 @@ describe("createWorktree start point for a named base", () => {
     expect(await git(wtPath, "rev-parse", "HEAD")).toBe(localHead);
   });
 
+  test("a stray local branch named origin/<default> does not break creation", async () => {
+    // `git fetch origin main:origin/main` creates refs/heads/origin/main. A
+    // bare `origin/main` is then ambiguous: rev-parse silently answers with
+    // the local branch and `worktree add -b` refuses outright. That one typo
+    // took every new session and automation on the shared checkout down.
+    await commit(publisherDir, "e.txt", "landed after the stray branch");
+    await git(publisherDir, "push", "-q", "origin", "main");
+    const remoteHead = await git(publisherDir, "rev-parse", "HEAD");
+    await git(repoDir, "fetch", "-q", "origin", "main");
+    await git(repoDir, "branch", "origin/main", "main");
+    expect(await git(repoDir, "rev-parse", "refs/heads/origin/main")).not.toBe(
+      remoteHead,
+    );
+
+    try {
+      const { createWorktree } = await import("./worktree");
+      const fromDefault = await createWorktree("after-stray", "scratch");
+      expect(await git(fromDefault, "rev-parse", "HEAD")).toBe(remoteHead);
+      const fromBase = await createWorktree("after-stray-base", "scratch", {
+        base: "main",
+      });
+      expect(await git(fromBase, "rev-parse", "HEAD")).toBe(remoteHead);
+    } finally {
+      await git(repoDir, "branch", "-D", "origin/main");
+    }
+  });
+
   test("a remote-only base starts from origin/<base>", async () => {
     await git(publisherDir, "checkout", "-q", "-b", "remote-only");
     await commit(publisherDir, "d.txt", "remote only");

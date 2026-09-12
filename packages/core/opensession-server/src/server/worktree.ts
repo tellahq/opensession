@@ -19,6 +19,7 @@ import {
   type Repo,
 } from "./config";
 import { stateDir } from "./paths";
+import { remoteRef } from "./git-remote-ref";
 
 // The Repo type + registry defaults live in config.ts now. Re-exported so existing
 // `import { type Repo } from "./worktree"` call sites keep working.
@@ -480,9 +481,10 @@ async function refreshAskCheckoutLocked(
       `Could not fetch ${repo.id}'s default branch ${repo.defaultBranch}: ${fetch.stderr.toString().trim()}`,
     );
   }
-  const reset = await $`git -C ${dir} reset --hard origin/${repo.defaultBranch}`
-    .quiet()
-    .nothrow();
+  const reset =
+    await $`git -C ${dir} reset --hard ${remoteRef(repo.defaultBranch)}`
+      .quiet()
+      .nothrow();
   if (reset.exitCode !== 0) {
     throw new Error(
       `Could not pin ${repo.id}'s Ask checkout to ${repo.defaultBranch}: ${reset.stderr.toString().trim()}`,
@@ -550,7 +552,7 @@ export async function ensureAskCheckout(repoId?: string): Promise<string> {
     await $`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`.nothrow();
     await $`git -C ${repo.repo} worktree prune`.quiet().nothrow();
     const add =
-      await $`git -C ${repo.repo} worktree add --detach ${dir} origin/${repo.defaultBranch}`
+      await $`git -C ${repo.repo} worktree add --detach ${dir} ${remoteRef(repo.defaultBranch)}`
         .quiet()
         .nothrow();
     if (add.exitCode !== 0 || !existsSync(dir)) {
@@ -615,7 +617,7 @@ export async function worktreeHasWork(
     const status = await $`git -C ${wtPath} status --porcelain`.text();
     if (status.trim() !== "") return true;
     const ahead =
-      await $`git -C ${wtPath} rev-list ${branch} --not origin/${repo.defaultBranch} --count`.text();
+      await $`git -C ${wtPath} rev-list ${branch} --not ${remoteRef(repo.defaultBranch)} --count`.text();
     return ahead.trim() !== "" && ahead.trim() !== "0";
   } catch {
     return true;
@@ -715,8 +717,8 @@ export async function reviveWorktree(
         await $`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`;
       }
       const startPoint = hasRemote
-        ? `origin/${branch}`
-        : `origin/${repo.defaultBranch}`;
+        ? remoteRef(branch)
+        : remoteRef(repo.defaultBranch);
       add =
         await $`git -C ${repo.repo} worktree add -b ${branch} ${wtPath} ${startPoint}`
           .quiet()
@@ -785,13 +787,13 @@ export async function createWorktreeForPrBranch(
       await $`git -C ${wtPath} fetch origin ${headRef} --quiet`
         .env(await githubServiceGitEnv(repo.ghRepo))
         .nothrow();
-      await $`git -C ${wtPath} reset --hard origin/${headRef}`
+      await $`git -C ${wtPath} reset --hard ${remoteRef(headRef)}`
         .quiet()
         .nothrow();
       return true;
     }
     await $`git -C ${repo.repo} worktree prune`.quiet();
-    await $`git -C ${repo.repo} worktree add ${wtPath} -B ${headRef}-os origin/${headRef}`;
+    await $`git -C ${repo.repo} worktree add ${wtPath} -B ${headRef}-os ${remoteRef(headRef)}`;
     return false;
   });
   if (reused) return wtPath;
@@ -831,8 +833,8 @@ export async function createReviewWorktreeForPrHead(
       // path and switched it onto the source branch. Restore review ownership.
       const repairAllowed = await clearStaleReviewIndexLock(wtPath);
       try {
-        await $`git -C ${wtPath} switch -C ${headRef}-os-review origin/${headRef}`.quiet();
-        await $`git -C ${wtPath} reset --hard origin/${headRef}`.quiet();
+        await $`git -C ${wtPath} switch -C ${headRef}-os-review ${remoteRef(headRef)}`.quiet();
+        await $`git -C ${wtPath} reset --hard ${remoteRef(headRef)}`.quiet();
         return wtPath;
       } catch (error) {
         // A restart can kill `git worktree add` after it creates the directory
@@ -850,7 +852,7 @@ export async function createReviewWorktreeForPrHead(
     } else {
       await $`git -C ${repo.repo} worktree prune`.quiet();
     }
-    await $`git -C ${repo.repo} worktree add ${wtPath} -B ${headRef}-os-review origin/${headRef}`;
+    await $`git -C ${repo.repo} worktree add ${wtPath} -B ${headRef}-os-review ${remoteRef(headRef)}`;
     return wtPath;
   });
 }
@@ -881,10 +883,10 @@ export async function createWorktreeForFollowup(
     await $`git -C ${repo.repo} fetch origin ${baseRef} --quiet`.nothrow();
     const startPoint =
       (
-        await $`git -C ${repo.repo} rev-parse --verify --quiet origin/${baseRef}`.nothrow()
+        await $`git -C ${repo.repo} rev-parse --verify --quiet ${remoteRef(baseRef)}`.nothrow()
       ).exitCode === 0
-        ? `origin/${baseRef}`
-        : `origin/${repo.defaultBranch}`;
+        ? remoteRef(baseRef)
+        : remoteRef(repo.defaultBranch);
     await $`git -C ${repo.repo} worktree add -b ${branch} ${wtPath} ${startPoint}`;
   });
 
@@ -930,7 +932,7 @@ export async function createWorktreeForExistingBranch(
     if (hasLocal) {
       await $`git -C ${repo.repo} worktree add ${wtPath} ${branch}`;
     } else {
-      await $`git -C ${repo.repo} worktree add -b ${branch} ${wtPath} origin/${branch}`;
+      await $`git -C ${repo.repo} worktree add -b ${branch} ${wtPath} ${remoteRef(branch)}`;
     }
   });
 
@@ -963,7 +965,7 @@ async function resolveStartPoint(
       await $`git -C ${repoDir} rev-parse --verify --quiet ${ref}^{commit}`.nothrow()
     ).exitCode === 0;
   const local = (await exists(base)) ? base : null;
-  const remote = (await exists(`origin/${base}`)) ? `origin/${base}` : null;
+  const remote = (await exists(remoteRef(base))) ? remoteRef(base) : null;
   if (local && remote) {
     const localBehind =
       (
@@ -971,7 +973,7 @@ async function resolveStartPoint(
       ).exitCode === 0;
     return localBehind ? remote : local;
   }
-  return local ?? remote ?? `origin/${defaultBranch}`;
+  return local ?? remote ?? remoteRef(defaultBranch);
 }
 
 /**
@@ -981,7 +983,7 @@ async function resolveStartPoint(
  * still gets worktrees instead of "invalid reference: origin/main".
  */
 async function defaultStartPoint(repo: Repo): Promise<string> {
-  const remote = `origin/${repo.defaultBranch}`;
+  const remote = remoteRef(repo.defaultBranch);
   const hasRemote =
     (
       await $`git -C ${repo.repo} rev-parse --verify --quiet ${remote}^{commit}`.nothrow()

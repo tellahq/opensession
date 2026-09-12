@@ -59,7 +59,11 @@ import {
   worktreeHeadBranch,
 } from "./worktree";
 import { engineSessionPatch } from "./sessions";
-import { recordRunOutcome, updateSessionFile } from "./session-cache";
+import {
+  getCachedSessionsAsync,
+  recordRunOutcome,
+  updateSessionFile,
+} from "./session-cache";
 import { sessionKernel } from "./session-kernel";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { getWorkspace } from "./workspaces";
@@ -112,7 +116,10 @@ import {
   sanitizeAutomationOutputs,
   type AutomationOutput,
 } from "./automation-outputs";
-import { automationIntentAlreadySettled } from "./automation-intent-recovery";
+import {
+  automationIntentAlreadySettled,
+  supersededPlainThreadIntents,
+} from "./automation-intent-recovery";
 
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
@@ -1510,6 +1517,8 @@ type PendingAutomationIntent = {
   modelOverride?: string;
   acceptedAt: string;
   deleteAutomationAfterRun?: boolean;
+  /** Boot may collapse this into another intent for the same Plain thread. */
+  coalescePlainThread?: boolean;
   terminalAt?: string;
   terminalError?: string;
 };
@@ -1584,13 +1593,54 @@ function hasAutomationIntent(sessionId: string): boolean {
   return existsSync(automationIntentPath(sessionId));
 }
 
+/** Plain thread id -> the most recent live session already triaging it. */
+async function livePlainThreadSessions(): Promise<Map<string, string>> {
+  const live = new Map<string, string>();
+  try {
+    const sessions = (await getCachedSessionsAsync())
+      .filter((s) => s.plainThreadId && !s.archived)
+      .sort(
+        (a, b) =>
+          new Date(b.lastActivity).getTime() -
+          new Date(a.lastActivity).getTime(),
+      );
+    for (const s of sessions)
+      if (!live.has(s.plainThreadId!)) live.set(s.plainThreadId!, s.id);
+  } catch (error) {
+    console.error("[automations] Live Plain session lookup failed:", error);
+  }
+  return live;
+}
+
 export async function resumePendingAutomationRuns(
   onSessionCreated?: (sessionId: string) => void,
 ): Promise<number> {
   if (isShuttingDown() || !existsSync(automationIntentDir)) return 0;
+  const entries = readdirSync(automationIntentDir).filter((entry) =>
+    entry.endsWith(".json"),
+  );
+  // A Plain ticket needs at most one triage session, however many intents a
+  // failing launch or a repeatedly clicked support-card link left behind for
+  // it (automation-intent-recovery.ts). Pending intents collapse to one per
+  // thread whether or not they carry `coalescePlainThread` (pre-flag intents
+  // do not); only flagged ones are dropped for a thread that already has a
+  // live session, so an explicit retrigger always replays. Decide that over
+  // the whole set first.
+  const pending: PendingAutomationIntent[] = [];
+  for (const entry of entries) {
+    try {
+      const intent = JSON.parse(
+        readFileSync(join(automationIntentDir, entry), "utf8"),
+      ) as PendingAutomationIntent;
+      if (!intent.terminalAt) pending.push(intent);
+    } catch {}
+  }
+  const superseded = supersededPlainThreadIntents(
+    pending,
+    await livePlainThreadSessions(),
+  );
   let resumed = 0;
-  for (const entry of readdirSync(automationIntentDir)) {
-    if (!entry.endsWith(".json")) continue;
+  for (const entry of entries) {
     try {
       const intent = JSON.parse(
         readFileSync(join(automationIntentDir, entry), "utf8"),
@@ -1647,6 +1697,16 @@ export async function resumePendingAutomationRuns(
           isAutomationRunning(automation.id))
       )
         continue;
+      const supersededReason = superseded.get(intent.sessionId);
+      if (supersededReason) {
+        // Never launched (a launch failure settles no ledger entry) and its
+        // ticket is covered, so there is nothing to settle: just retire it.
+        console.log(
+          `[automations] Intent ${intent.sessionId} not replayed: ${supersededReason}`,
+        );
+        clearAutomationIntent(intent.sessionId);
+        continue;
+      }
       void runAutomation(automation, onSessionCreated, {
         trigger: intent.trigger,
         eventContext: intent.eventContext,
@@ -1654,6 +1714,7 @@ export async function resumePendingAutomationRuns(
         osSessionId: intent.sessionId,
         acceptedAt: intent.acceptedAt,
         deleteAutomationAfterRun: intent.deleteAutomationAfterRun,
+        coalescePlainThread: intent.coalescePlainThread,
       }).finally(() => {
         if (!isShuttingDown())
           void resumePendingAutomationRuns(onSessionCreated).catch((error) =>
@@ -1688,6 +1749,13 @@ export async function runAutomation(
     /** Delete a consumed one-off only after intent/run settlement. */
     deleteAutomationAfterRun?: boolean;
     /**
+     * An automatic Plain launch (webhook or support-card click) whose durable
+     * intent boot may drop when the same thread already has a live session or
+     * an earlier pending intent. Explicit retriggers must not set this: the
+     * user asked for a fresh run despite the existing session.
+     */
+    coalescePlainThread?: boolean;
+    /**
      * Model for THIS run only, beating the automation's configured model —
      * e.g. the Plain ticket router downgrading a basic ticket to a cheaper
      * model. Callers pass an already-resolved model id.
@@ -1713,6 +1781,7 @@ export async function runAutomation(
     modelOverride: options?.modelOverride,
     acceptedAt,
     deleteAutomationAfterRun: options?.deleteAutomationAfterRun,
+    coalescePlainThread: options?.coalescePlainThread,
   });
   if (isShuttingDown()) {
     console.log(
@@ -2421,7 +2490,7 @@ export async function fireAutomationsForSlackChannel(
 export async function fireAutomationsForEvent(
   eventKey: string,
   payload: string,
-  opts?: { modelOverride?: string },
+  opts?: { modelOverride?: string; coalescePlainThread?: boolean },
 ): Promise<number> {
   let fired = 0;
   for (const automation of await listAutomations()) {
@@ -2431,6 +2500,7 @@ export async function fireAutomationsForEvent(
       trigger: "event",
       eventContext: payload,
       modelOverride: opts?.modelOverride,
+      coalescePlainThread: opts?.coalescePlainThread,
     });
     fired++;
   }
