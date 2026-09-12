@@ -91,9 +91,26 @@ case "$COMMAND" in
     START_HEAD="$(git -C "$ROOT" rev-parse HEAD)"
     SERVER_LOG="$RUN_DIR/server.log"
     KERNEL_LOG="$RUN_DIR/session-kernel.log"
+    DEMO_LOG="$RUN_DIR/demo-data.log"
     KERNEL_TOKEN="$(bun -e 'process.stdout.write(crypto.randomUUID() + crypto.randomUUID())')"
 
     cd "$ROOT"
+    # Seed before either service boots. Their catalogs and caches load state at
+    # startup, so in-process seeding after readiness leaves synthetic sessions
+    # and automations on disk but absent from the UI.
+    if ! env -i \
+      PATH="$PATH" \
+      HOME="$HOME" \
+      USER="${USER:-}" \
+      LANG="${LANG:-C.UTF-8}" \
+      OPENSESSION_STATE_DIR="$RUN_DIR/state" \
+      bun scripts/demo-data.ts >"$DEMO_LOG" 2>&1; then
+      echo "Demo dataset generation failed during launch" >&2
+      cat "$DEMO_LOG" >&2 || true
+      rm -rf "$RUN_DIR"
+      exit 1
+    fi
+
     setsid env -i \
       PATH="$PATH" \
       HOME="$HOME" \
@@ -119,6 +136,7 @@ KERNEL_PORT=$KERNEL_PORT
 KERNEL_PID=$KERNEL_PID
 KERNEL_LOG=$KERNEL_LOG
 SERVER_LOG=$SERVER_LOG
+DEMO_LOG=$DEMO_LOG
 START_HEAD=$START_HEAD
 EOF
     trap 'stop_run' ERR

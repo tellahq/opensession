@@ -26,7 +26,7 @@ Preconditions:
 
 - **Open Account.** Run `verify-opensession browser "$RUN_ID" open --route /settings --width 1440 --height 900`. The Account section opens as the desktop default.
 - **Open a direct section.** Run `verify-opensession browser "$RUN_ID" open --route /settings/preferences --width 1440 --height 900`, then wait for heading `Preferences`. The settings rail marks the same section active.
-- **Use search.** Return to `/settings`, take a snapshot to read the current search textbox name, fill it with `providers`, and choose the `Providers` result. The route becomes `/settings/providers` and the Providers heading appears.
+- **Use search.** Return to `/settings`, wait for the `searchbox` named `Search settings`, fill it with `providers`, and choose the `Providers` result. The route becomes `/settings/providers` and the Providers heading appears.
 - **Change a personal preference.** Choose the target control by its exact label, record its initial state from the accessibility snapshot, change it through the UI, navigate to another section, and return. Require the changed state to remain. Reload by opening `/settings/preferences` again and check once more.
 - **Change instance configuration.** Use only the disposable demo instance. Save through the visible form, then read the matching read-only API response and revisit the section. Never copy live credentials into this run.
 - **Check phone navigation.** Open `/settings` at 390x844. The settings section list appears first. Choose a section, then use its visible back action to return to the list.
