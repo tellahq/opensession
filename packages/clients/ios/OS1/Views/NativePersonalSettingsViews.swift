@@ -104,7 +104,7 @@ struct NotificationsSettingsView: View {
 struct PreferencesSettingsView: View {
     @AppStorage("os1.composer.defaultRepo") private var nativeDefaultRepo = ""
     @AppStorage(NativePreferences.sessionCheckoutsStorageKey) private var nativeSessionCheckouts = ""
-    @AppStorage("os1.composer.defaultModel") private var nativeDefaultModel = ""
+    @AppStorage(NativePreferences.defaultModelStorageKey) private var nativeDefaultModel = ""
     @AppStorage("os1.composer.defaultEngine") private var nativeDefaultEngine = ""
     @AppStorage("os1.composer.sendKey") private var nativeSendKey = "enter"
     @AppStorage("os1.composer.busySend") private var nativeBusySend = "queue"
@@ -167,7 +167,7 @@ struct PreferencesSettingsView: View {
             "session-checkouts": NativePreferences.validatedSessionCheckouts(
                 defaults.string(forKey: NativePreferences.sessionCheckoutsStorageKey)
             ) ?? "",
-            "default-model": defaults.string(forKey: "os1.composer.defaultModel") ?? "",
+            "default-model": defaults.string(forKey: NativePreferences.defaultModelStorageKey) ?? "",
             "default-engine": defaults.string(forKey: "os1.composer.defaultEngine") ?? "",
             "send-key": defaults.string(forKey: "os1.composer.sendKey") ?? "enter",
             "busy-send": defaults.string(forKey: "os1.composer.busySend") ?? "queue",
@@ -576,10 +576,36 @@ struct PreferencesSettingsView: View {
             }
             guard !patch.isEmpty else { saving = false; resaveNeeded = false; return }
             let requestContext = NativePreferences.context()
-            let response = try await SettingsAPI.updateUiPrefs(user: requestContext.user, prefs: patch)
+            let writesDefaultModel = patch.keys.contains("default-model")
+            let response: [String: String]
+            if writesDefaultModel {
+                guard let result = await NativePreferences.writeDefaultModel(
+                    current["default-model"] ?? "",
+                    prefs: patch
+                ).value else {
+                    self.error = "Could not save preferences."
+                    saving = false
+                    if resaveNeeded {
+                        resaveNeeded = false
+                        commit()
+                    }
+                    return
+                }
+                response = result
+            } else {
+                response = try await SettingsAPI.updateUiPrefs(
+                    user: requestContext.user,
+                    prefs: patch
+                )
+            }
             var confirmed = savedPrefs
             for (key, value) in current where patch.keys.contains(key) { confirmed[key] = value }
             confirmed.merge(response) { _, server in server }
+            if writesDefaultModel {
+                // Another model choice may have entered the queue after this
+                // response. Do not let this screen repaint that newer choice.
+                confirmed["default-model"] = nativeDefaultModel
+            }
             confirmed["session-checkouts"] = NativePreferences.validatedSessionCheckouts(
                 confirmed["session-checkouts"]
             ) ?? ""

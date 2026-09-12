@@ -16,6 +16,73 @@ enum NativePreferences {
     private static let identityKey = "os1.preferences.identity"
     private static let bucketKey = "os1.preferences.bucket"
     static let sessionCheckoutsStorageKey = "os1.composer.sessionCheckouts"
+    static let defaultModelStorageKey = "os1.composer.defaultModel"
+
+    /// The server call behind a ui-pref write, as the menus see it. Injectable
+    /// so a test can answer late, fail, or answer for an account that is no
+    /// longer active.
+    typealias UiPrefsWrite = @MainActor (
+        _ user: String, _ prefs: [String: String?]
+    ) async throws -> [String: String]
+
+    /// Writes a ui-pref patch containing `default-model`. Every native writer
+    /// of that key goes through this queue, including the Preferences screen,
+    /// so the server receives model choices in the order they were made.
+    ///
+    /// The local value changes immediately. A response for an older choice can
+    /// still update the other confirmed preferences, but cannot repaint a newer
+    /// model choice or cross into another account.
+    @discardableResult
+    static func writeDefaultModel(
+        _ model: String,
+        prefs: [String: String?],
+        write: @escaping UiPrefsWrite = { user, prefs in
+            try await SettingsAPI.updateUiPrefs(user: user, prefs: prefs)
+        }
+    ) -> Task<[String: String]?, Never> {
+        let requestContext = context()
+        let defaults = UserDefaults.standard
+        beginLocalWrite()
+        defaults.set(model, forKey: defaultModelStorageKey)
+        let previous = lastDefaultModelWrite
+        let task: Task<[String: String]?, Never> = Task { @MainActor in
+            defer { endLocalWrite() }
+            _ = await previous?.value
+            guard context() == requestContext,
+                  let response = try? await write(requestContext.user, prefs)
+            else { return nil }
+            var confirmed = response
+            let local = defaults.string(forKey: defaultModelStorageKey) ?? ""
+            confirmed["default-model"] = local == model
+                ? (confirmed["default-model"] ?? model)
+                : local
+            guard apply(confirmed, for: requestContext) else { return nil }
+            return confirmed
+        }
+        lastDefaultModelWrite = task
+        return task
+    }
+
+    /// Make `model` the personal default for new sessions, the way the web
+    /// menus do: this device immediately, then the same per-user ui-pref every
+    /// client reads.
+    @discardableResult
+    static func setDefaultModel(
+        _ model: String,
+        write: @escaping UiPrefsWrite = { user, prefs in
+            try await SettingsAPI.updateUiPrefs(user: user, prefs: prefs)
+        }
+    ) -> Task<Bool, Never> {
+        let writeTask = writeDefaultModel(
+            model,
+            prefs: ["default-model": model],
+            write: write
+        )
+        return Task { await writeTask.value != nil }
+    }
+
+    /// Tail of the default-model write chain; the next write waits on it.
+    private static var lastDefaultModelWrite: Task<[String: String]?, Never>?
 
     static func context() -> Context {
         let config = ServerConfig.shared
@@ -109,7 +176,7 @@ enum NativePreferences {
         set(
             prefs["default-model"],
             default: "",
-            key: "os1.composer.defaultModel",
+            key: defaultModelStorageKey,
             resetMissing: changedIdentity,
             in: defaults
         )
