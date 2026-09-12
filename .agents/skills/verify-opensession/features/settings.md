@@ -29,7 +29,7 @@ Preconditions:
 - **Use search.** Return to `/settings`, take a snapshot to read the current search textbox name, fill it with `providers`, and choose the `Providers` result. The route becomes `/settings/providers` and the Providers heading appears.
 - **Change a personal preference.** Choose the target control by its exact label, record its initial state from the accessibility snapshot, change it through the UI, navigate to another section, and return. Require the changed state to remain. Reload by opening `/settings/preferences` again and check once more.
 - **Change instance configuration.** Use only the disposable demo instance. Save through the visible form, then read the matching read-only API response and revisit the section. Never copy live credentials into this run.
-- **Check phone navigation.** Open `/settings` at 390x844. The settings section list appears first. Choose a section, then use its visible back action to return to the list.
+- **Check phone navigation.** Open `/settings` at 390x844 and wait for dialog `Settings`. The settings section list appears first. Choose a section, then use button `Back to settings` to return to the list.
 - **Proof.** Capture the initial control state, action, persisted state after navigation, and the phone section flow. Add the read-only API response for instance mutations.
 
 ## Gotchas
