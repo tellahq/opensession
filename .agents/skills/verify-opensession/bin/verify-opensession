@@ -83,6 +83,13 @@ case "$COMMAND" in
       exit 1
     fi
     mkdir -p "$RUN_DIR/state" "$EVIDENCE_DIR"
+    env -i \
+      PATH="$PATH" \
+      HOME="$HOME" \
+      USER="${USER:-}" \
+      LANG="${LANG:-C.UTF-8}" \
+      OPENSESSION_STATE_DIR="$RUN_DIR/state" \
+      bun scripts/demo-data.ts >/dev/null
     PORT="$(pick_port)"
     KERNEL_PORT="$(pick_port)"
     while [ "$KERNEL_PORT" = "$PORT" ]; do KERNEL_PORT="$(pick_port)"; done
