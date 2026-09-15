@@ -83,6 +83,8 @@ case "$COMMAND" in
       exit 1
     fi
     mkdir -p "$RUN_DIR/state" "$EVIDENCE_DIR"
+    trap 'stop_run' ERR
+    OPENSESSION_STATE_DIR="$RUN_DIR/state" bun scripts/demo-data.ts >/dev/null
     PORT="$(pick_port)"
     KERNEL_PORT="$(pick_port)"
     while [ "$KERNEL_PORT" = "$PORT" ]; do KERNEL_PORT="$(pick_port)"; done
@@ -121,7 +123,6 @@ KERNEL_LOG=$KERNEL_LOG
 SERVER_LOG=$SERVER_LOG
 START_HEAD=$START_HEAD
 EOF
-    trap 'stop_run' ERR
 
     kernel_ready=""
     for _ in $(seq 1 300); do
@@ -242,6 +243,11 @@ EOF
     auth="$(curl -fsS "$APP_URL/api/auth/status" 2>/dev/null || true)"
     if ! jq -e '.admin == true and ((.required == false) or (.authenticated == true))' >/dev/null 2>&1 <<<"$auth"; then
       echo "FAIL browser authentication is unusable or lacks demo admin access" >&2
+      errors=$((errors + 1))
+    fi
+    sessions="$(curl -fsS "$APP_URL/api/sessions?archived=include" 2>/dev/null || true)"
+    if ! jq -e 'map(.id) | contains(["bks-demo-pr", "bks-demo-failed", "bks-demo-automation-run"])' >/dev/null 2>&1 <<<"$sessions"; then
+      echo "FAIL demo sessions are missing from the session index" >&2
       errors=$((errors + 1))
     fi
     if ! curl -fsS "http://127.0.0.1:$CDP_PORT/json/version" >/dev/null 2>&1; then
