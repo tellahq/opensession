@@ -690,7 +690,7 @@ async function gateAndFireThreadCreated(
       null,
       2,
     ),
-    modelOverride ? { modelOverride } : undefined,
+    { modelOverride, coalescePlainThread: true },
   );
 }
 
