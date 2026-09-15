@@ -91,6 +91,53 @@ the first-run screen offers with `opensession.defaultServer` in `package.json`
 (or `OS1_CLOUD_URL`); a profile that already worked keeps using it and is never
 asked.
 
+## Organization networks on this Mac
+
+Use **OS → Organizations → Network on this Mac…** to associate a saved
+organization with a saved Tailscale account. Install Tailscale in Applications
+and sign in to each account in Tailscale first. The shell also recognizes the
+standard Homebrew CLI locations if the app binary is absent.
+
+The default is **Ask before switching networks**. **Switch networks automatically**
+is an explicit opt-in. **Leave Tailscale unchanged** removes the association.
+Only the profile ID and switching mode are stored alongside the organization's
+local ID in `server.json`. No Tailscale credentials or settings go to a server.
+Saving does not switch networks immediately; select the organization from the
+native menu or in-app picker to apply it, including selecting the current one
+from the native menu when it needs reconnecting.
+
+Tailscale switching affects the whole Mac. Other apps and organization windows
+may disconnect. Startup, window focus, notifications, and background reconnects
+do not switch networks. An explicit cross-organization deep link uses the normal
+switch path. Rapid selections are serialized across windows; only the latest
+selection may navigate. The shell waits for the selected Tailscale profile to
+be running and probes the destination server before changing the requesting
+window's organization. This reachability check does not replace server sign-in
+or authorization. Cancel or failure leaves that window on its old organization
+but does not automatically restore the old Tailscale profile.
+
+Network settings and switch progress are bundled local pages, so they work even
+when neither server is reachable. Only their dedicated main frames may use the
+network-settings IPC. Remotely served pages cannot list Tailscale profiles or
+change the association. Commands use fixed executable paths and exact saved
+profile IDs, without a shell, `sudo`, login, or logout.
+
+### Verification
+
+```sh
+bun test packages/clients/mac/src
+cd packages/clients/mac
+bun run verify:network
+```
+
+The Electron verification uses disposable local servers and a fake Tailscale
+client. It exercises settings, IPC rejection, account switching, route retention,
+failure recovery, and background-window isolation without changing the Mac's
+network. Set `OS1_NETWORK_PROOF_DIR` to save screenshots in a chosen directory.
+It does not test the actual device-wide switch; that requires an operator who
+can tolerate disconnecting other tailnet connections. No server deploy is needed
+for this shell-only change; it ships in the next signed Mac app release.
+
 ## Architecture
 
 - `src/main.js` — sandboxed `BrowserWindow`s that each own an organization and

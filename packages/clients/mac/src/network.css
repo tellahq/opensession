@@ -1,0 +1,39 @@
+main {
+  width: 420px;
+}
+.mark {
+  width: 44px;
+  height: 44px;
+}
+h1 {
+  margin-top: 12px;
+  font-size: 22px;
+}
+form {
+  width: 100%;
+  text-align: left;
+}
+label {
+  display: block;
+  margin-top: 16px;
+  font-size: 13px;
+}
+.field {
+  width: 100%;
+  margin-top: 5px;
+  text-align: left;
+  line-height: 1.4;
+}
+.field:disabled {
+  opacity: 0.5;
+}
+.warning {
+  font-size: 12px;
+  margin-top: 14px;
+}
+.actions {
+  margin-top: 16px;
+}
+#status {
+  font-size: 12px;
+}

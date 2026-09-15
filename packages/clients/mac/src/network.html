@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'"
+    />
+    <title>Network on this Mac</title>
+    <link rel="stylesheet" href="shell.css" />
+    <link rel="stylesheet" href="network.css" />
+    <script src="network-page.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <img class="mark" src="mark.png" width="76" height="76" alt="" />
+      <h1 id="title">Network on this Mac</h1>
+      <p class="message" id="description">
+        Link an organization to a saved Tailscale account. This setting stays on
+        this Mac.
+      </p>
+      <form id="settings" hidden>
+        <label for="organization">Organization</label>
+        <select class="field" id="organization" required></select>
+        <label for="profile">Tailscale account</label>
+        <select class="field" id="profile">
+          <option value="">Leave Tailscale unchanged</option>
+        </select>
+        <label for="mode">When switching organizations</label>
+        <select class="field" id="mode">
+          <option value="ask">Ask before switching networks</option>
+          <option value="automatic">Switch networks automatically</option>
+        </select>
+        <p class="message warning">
+          Switching changes networking for the whole Mac. Other apps and
+          organization windows may disconnect.
+        </p>
+        <div class="actions">
+          <button class="button" id="save" type="submit">Save</button>
+          <button class="button ghost" id="refresh" type="button">
+            Refresh accounts
+          </button>
+        </div>
+      </form>
+      <p id="status" role="status" aria-live="polite">Loading…</p>
+      <div class="actions">
+        <button class="button ghost" id="open" type="button">
+          Open Tailscale
+        </button>
+        <button class="button ghost" id="close" type="button">Done</button>
+      </div>
+    </main>
+  </body>
+</html>

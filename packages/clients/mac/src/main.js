@@ -21,6 +21,10 @@ const fs = require("node:fs");
 const crypto = require("node:crypto");
 const { execFile } = require("node:child_process");
 const { NativeDictation } = require("./native-dictation");
+const { readNetworkBinding, createLatestSwitchQueue } = require("./tailscale");
+const { OrganizationNetwork } = require("./organization-network");
+const queueOrganizationSwitch = createLatestSwitchQueue();
+let organizationNetwork = null;
 const {
   accountForContext,
   isOpenSessionAppUrl,
@@ -204,6 +208,9 @@ function readStoredAccounts() {
             label: String(account.label || new URL(url).host),
             url,
             lastUrl: resumableAccountUrl(url, account.lastUrl),
+            ...(readNetworkBinding(account.network)
+              ? { network: readNetworkBinding(account.network) }
+              : {}),
           },
         ];
       });
@@ -1203,12 +1210,57 @@ function syncBackgroundAccountWindows() {
   }
 }
 
-function switchAccount(id, targetURL = null, target = activeWindow()) {
+function switchAccount(
+  id,
+  targetURL = null,
+  target = activeWindow(),
+  switchNetwork = true,
+) {
+  if (!target || target.isDestroyed()) return;
+  void queueOrganizationSwitch(async (isLatest, signal) => {
+    const account = readStoredAccounts().accounts.find(
+      (candidate) => candidate.id === id,
+    );
+    if (!account || target.isDestroyed()) return;
+    const originalId = accountForWindow(target)?.id;
+    if (originalId === id && !account.network && !targetURL) return;
+    const isCurrent = () => {
+      if (!isLatest() || target.isDestroyed()) return false;
+      const stored = readStoredAccounts();
+      const saved = stored.accounts.find((candidate) => candidate.id === id);
+      return (
+        accountForWindow(target, stored)?.id === originalId &&
+        saved?.url === account.url &&
+        JSON.stringify(saved.network) === JSON.stringify(account.network)
+      );
+    };
+    if (
+      switchNetwork &&
+      organizationNetwork &&
+      !(await organizationNetwork.prepare(account, target, isCurrent, signal))
+    )
+      return;
+    if (!isCurrent()) return;
+    // A reselected current organization may only need its VPN reconnected.
+    // Keep a loaded app's drafts and scroll position; reload the offline page.
+    if (
+      originalId === id &&
+      !targetURL &&
+      inActiveWindow(target.webContents.getURL(), target)
+    )
+      return;
+    activateAccount(id, targetURL, target);
+  }).catch((error) =>
+    console.error("[network] organization switch failed", error),
+  );
+}
+
+function activateAccount(id, targetURL, target) {
   if (!target || target.isDestroyed()) return;
   const stored = readStoredAccounts();
   const account = stored.accounts.find((candidate) => candidate.id === id);
   const current = accountForWindow(target, stored);
-  if (!account || account.id === current?.id) return;
+  if (!account) return;
 
   // Keep each organization at its exact in-app URL. Loading the account root
   // delegated this to the web app's generic cold-start fallback, which could
@@ -1279,6 +1331,16 @@ function buildAppMenu() {
                 click: () => {
                   const target = showWindow();
                   showSetup("app", target, true);
+                },
+              },
+              {
+                label: "Network on this Mac…",
+                click: () => {
+                  const target = showWindow();
+                  organizationNetwork?.showSettings(
+                    target,
+                    accountForWindow(target)?.id,
+                  );
                 },
               },
               {
@@ -1395,14 +1457,19 @@ app.whenReady().then(async () => {
     );
     const target = eventWindow(e) || activeWindow();
     if (account && account.id !== accountForWindow(target, stored)?.id)
-      switchAccount(account.id, source, target);
+      // Notification/background activity must never change device networking.
+      switchAccount(account.id, source, target, false);
     else showWindow(target);
   });
 
   const fromActiveOrganizationPicker = (e) => {
     const source = e.senderFrame?.url ?? "";
     const target = eventWindow(e);
-    return !!target && inActiveWindow(source, target);
+    return (
+      !!target &&
+      e.senderFrame === e.sender.mainFrame &&
+      inActiveWindow(source, target)
+    );
   };
   ipcMain.handle("os1:organizations-list", (e) => {
     if (!fromActiveOrganizationPicker(e)) return null;
@@ -1419,7 +1486,11 @@ app.whenReady().then(async () => {
     };
   });
   ipcMain.on("os1:organizations-switch", (e, id) => {
-    if (fromActiveOrganizationPicker(e) && typeof id === "string") {
+    if (
+      fromActiveOrganizationPicker(e) &&
+      eventWindow(e)?.isFocused() &&
+      typeof id === "string"
+    ) {
       switchAccount(id, null, eventWindow(e));
     }
   });
@@ -1598,6 +1669,11 @@ app.whenReady().then(async () => {
     return { ok: true };
   });
 
+  organizationNetwork = new OrganizationNetwork({
+    readAccounts: readStoredAccounts,
+    writeAccounts: writeStoredAccounts,
+    probe: probeServer,
+  });
   buildAppMenu();
 
   appReady = true;

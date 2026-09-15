@@ -8,6 +8,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
+    "verify:network": "electron scripts/verify-network.js",
     "dist": "electron-builder --mac",
     "postinstall": "sh scripts/brand-dev-electron.sh || true"
   },
