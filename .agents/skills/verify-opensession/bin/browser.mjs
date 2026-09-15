@@ -148,12 +148,27 @@ async function matchingNode() {
 }
 
 async function clickNode(node) {
-  const model = await send("DOM.getBoxModel", {
-    backendNodeId: node.backendDOMNodeId,
-  });
-  const quad = model?.model?.border;
-  if (!Array.isArray(quad) || quad.length < 8)
-    fail("target has no clickable box");
+  const deadline = Date.now() + timeout;
+  let previousQuad;
+  let quad;
+  while (Date.now() <= deadline) {
+    const model = await send("DOM.getBoxModel", {
+      backendNodeId: node.backendDOMNodeId,
+    });
+    quad = model?.model?.border;
+    if (!Array.isArray(quad) || quad.length < 8)
+      fail("target has no clickable box");
+    if (
+      previousQuad?.every(
+        (coordinate, coordinateIndex) =>
+          Math.abs(coordinate - quad[coordinateIndex]) < 0.5,
+      )
+    )
+      break;
+    previousQuad = quad;
+    await Bun.sleep(100);
+  }
+  if (Date.now() > deadline) fail("target did not settle before click");
   const x = (quad[0] + quad[2] + quad[4] + quad[6]) / 4;
   const y = (quad[1] + quad[3] + quad[5] + quad[7]) / 4;
   await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });

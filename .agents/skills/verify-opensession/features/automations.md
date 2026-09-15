@@ -13,7 +13,7 @@ Automations create fresh sessions from schedules or external events. Users inspe
 
 ## How to get to it (user POV)
 
-- Choose `Automations` in the sidebar.
+- Choose `Automations` from settings tools.
 - Open `/automations` or a shared `/automations/<id>` link.
 - Choose `New automation`, then describe the task or select a template.
 - Open an automation row to inspect its runs and edit, run, or delete it.
@@ -26,7 +26,7 @@ Preconditions:
 - The demo seed contains `Nightly dependency audit` and `Deploy notes on release webhook`.
 
 - **Open the list.** Run `verify-opensession browser "$RUN_ID" open --route /automations --width 1440 --height 900`, then `verify-opensession browser "$RUN_ID" wait --role heading --name "Automations"`. A row for each seeded automation appears.
-- **Open details.** Run `verify-opensession browser "$RUN_ID" open --route /automations/auto-demo-nightly-audit --width 1440 --height 900`. The detail view shows `Nightly dependency audit`, its cron trigger, disabled state, and three seeded runs. Separately choose the seeded row from `/automations` when the list entry point is in scope.
+- **Open details.** Run `verify-opensession browser "$RUN_ID" open --route /automations/auto-demo-nightly-audit --width 1440 --height 900`, then wait for button `Edit`. The detail drawer shows `Nightly dependency audit`, its cron trigger, disabled state, and three seeded runs. Separately choose button `Open Nightly dependency audit` from `/automations` when the list entry point is in scope.
 - **Open authoring.** Choose `New automation`. A dialog headed `New automation` appears and focus moves to the textbox named `Describe the automation`.
 - **Use a template or description.** Enter a description and continue, or choose a visible template. Verify the generated form remains editable before saving.
 - **Confirm persistence.** After a create, edit, or toggle through the UI, run `verify-opensession api "$RUN_ID" /api/automations | jq .`. Match the saved name, trigger, mode, and enabled state, then reopen the automation from the list.
