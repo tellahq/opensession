@@ -41,3 +41,5 @@ Each feature file uses the same four H2 sections. `Sub-features` names the behav
 - [Goals](./goals.md) covers list and detail views, creating a goal, and confirming persistence.
 - [Archived sessions](./archived-sessions.md) covers the archived index, search, filters, restoration, and empty results.
 - [Settings](./settings.md) covers direct section routes, settings navigation, search, and persisted preferences or instance configuration.
+- [Issues](./issues.md) covers the open-issue list, search, repository scope, previews, and session actions.
+- [Databases](./databases.md) covers creating and managing durable SQLite stores, browsing rows, read-only queries, and phone navigation.
