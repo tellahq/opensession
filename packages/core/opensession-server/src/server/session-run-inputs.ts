@@ -23,6 +23,7 @@ import {
   automationMcpServersByName,
 } from "./automations";
 import { humanPrompter } from "./session-actors";
+import { plainDiscussionDeniedTools } from "./automation-denied-tools";
 
 /** Which config decided the run's MCP allowlist. */
 export type McpScopeSource =
@@ -39,6 +40,9 @@ export type McpScopeSource =
 export type InProcessMcpBranch =
   /** Automation-owned: nothing, unless the automation is `selfImprove`. */
   | "automation-self-improve"
+  /** Plain discussion session: only the approval server
+   *  (opensession-plain-discussion), never the interactive siblings. */
+  | "plain-discussion"
   /** Goal-driven session: the interactive set plus opensession-goal-self. */
   | "interactive+goal-self"
   /** The normal interactive self-management set. */
@@ -87,6 +91,7 @@ export type RunInputsSession = Pick<
   | "goalId"
   | "startedBy"
   | "createdByLogin"
+  | "plainDiscussionId"
 >;
 
 /** Which in-process server set the next turn carries. Pure — mirrors the
@@ -96,6 +101,7 @@ export function sessionInProcessMcpBranch(
 ): InProcessMcpBranch {
   if (session.automation || session.automationDescendantPolicy)
     return "automation-self-improve";
+  if (session.plainDiscussionId) return "plain-discussion";
   return session.goalId ? "interactive+goal-self" : "interactive";
 }
 
@@ -127,6 +133,14 @@ export async function resolveSessionRunInputs(
   const isAutomationSession = !!(
     session.automation || session.automationDescendantPolicy
   );
+  // A discussion session answers a trusted teammate but reads untrusted
+  // ticket text, so its turns get the triage automation's policy: the
+  // automation deny-set plus the customer-facing Plain writes and the Stripe
+  // money movers (both go through the opensession-plain-discussion approval
+  // card instead), and no user, so an allowedUsers-gated server stays
+  // invisible to it.
+  const isPlainDiscussionSession =
+    !isAutomationSession && !!session.plainDiscussionId;
   const source = sessionMcpScopeSource(session);
   const mcpServers = session.automationDescendantPolicy
     ? [...session.automationDescendantPolicy.mcpServers]
@@ -148,8 +162,13 @@ export async function resolveSessionRunInputs(
     // An automation whose record is gone (or that names no allowlist) resolves
     // to undefined, i.e. no allowlist — report the source honestly.
     mcpServersSource: mcpServers === undefined ? "all" : source,
-    deniedTools: isAutomationSession ? automationDeniedTools() : undefined,
-    user: isAutomationSession ? undefined : opts.user,
+    deniedTools: isAutomationSession
+      ? automationDeniedTools()
+      : isPlainDiscussionSession
+        ? plainDiscussionDeniedTools()
+        : undefined,
+    user:
+      isAutomationSession || isPlainDiscussionSession ? undefined : opts.user,
     mcpGrantUser: session.createdByLogin || undefined,
     accountUser: humanPrompter(opts.user) ?? undefined,
     inProcessMcpBranch: sessionInProcessMcpBranch(session),

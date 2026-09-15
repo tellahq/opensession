@@ -43,7 +43,10 @@ import { buildForkHandoffNote } from "./fork-handoff";
 import { ensureGeneratedTitle } from "./generated-titles";
 import { nameKnownSessionReferencesForTitle } from "./session-reference-title";
 import { onSessionIdle as onHumanAsksSessionIdle } from "./human-asks";
-import { interactiveMcpServers } from "./interactive-mcp";
+import {
+  interactiveMcpServers,
+  plainDiscussionSessionMcp,
+} from "./interactive-mcp";
 import { runAgentHosted } from "./host-client";
 import {
   accountProviderForModel,
@@ -87,6 +90,12 @@ import {
   watchExternalRunAndDrain,
 } from "./run-session";
 import { type McpScope, STRIPE_CONFIRM_TOOLS } from "./runner-shared";
+import { plainDiscussionDeniedTools } from "./automation-denied-tools";
+import {
+  mirrorTurnToPlainDiscussion,
+  plainDiscussionToolResult,
+  plainDiscussionToolUse,
+} from "../agents/plain/discussion-mirror";
 import {
   isRemoteSandboxProvider,
   resolveRequestedSandbox,
@@ -403,6 +412,7 @@ export interface ResolvedCreate {
   images?: ImageInput[];
   externalRefs?: NativeSessionFile["externalRefs"];
   plainThreadId?: string;
+  plainDiscussionId?: string;
   /** MCP allowlist persisted on the session file. Empty means no MCP servers. */
   persistMcpServers?: string[];
   /**
@@ -451,6 +461,7 @@ export function openingCreateTrustPolicy(
     | "runMcpServers"
     | "user"
     | "createdByLogin"
+    | "plainDiscussionId"
   >,
 ): {
   automation: boolean;
@@ -465,9 +476,12 @@ export function openingCreateTrustPolicy(
   return {
     automation: !!policy,
     mcpServers: policy ? [] : (spec.runMcpServers as McpScope),
-    user: policy ? undefined : spec.user,
+    // A Plain discussion session reads untrusted ticket text: like an
+    // automation run it passes no user, so an allowedUsers-gated server
+    // stays invisible (session-run-inputs.ts makes the same call on resume).
+    user: policy || spec.plainDiscussionId ? undefined : spec.user,
     mcpGrantUser: policy ? undefined : spec.createdByLogin,
-    aws: !policy,
+    aws: !policy && !spec.plainDiscussionId,
     trustProfile: policy ? "automation" : "interactive",
     ...(policy
       ? {
@@ -701,6 +715,9 @@ function createdSessionFileDefaults(spec: ResolvedCreate): NativeSessionFile {
     ...(spec.fastMode ? { fastMode: true } : {}),
     ...(spec.accountId ? { accountId: spec.accountId } : {}),
     ...(spec.plainThreadId ? { plainThreadId: spec.plainThreadId } : {}),
+    ...(spec.plainDiscussionId
+      ? { plainDiscussionId: spec.plainDiscussionId }
+      : {}),
     ...(spec.externalRefs?.length ? { externalRefs: spec.externalRefs } : {}),
     ...(spec.persistMcpServers !== undefined
       ? { mcpServers: spec.persistMcpServers }
@@ -1798,12 +1815,18 @@ export async function openCreatedSession(
       };
       const openingTrust = openingCreateTrustPolicy(spec);
       const automationChild = openingTrust.automation;
+      // A discussion session carries only the approval server, never the
+      // interactive siblings (see plainDiscussionSessionMcp).
       const openingMcp = automationChild
         ? {}
-        : interactiveMcpServers(spec.user, bksId);
+        : spec.plainDiscussionId
+          ? plainDiscussionSessionMcp(bksId, spec.plainDiscussionId)
+          : interactiveMcpServers(spec.user, bksId);
       const openingDeniedTools = automationChild
         ? (await import("./automations")).automationDeniedTools()
-        : undefined;
+        : spec.plainDiscussionId
+          ? plainDiscussionDeniedTools()
+          : undefined;
       const openingReposNote = automationChild
         ? undefined
         : [
@@ -1944,6 +1967,7 @@ export async function openCreatedSession(
         }
         if (event.type === "tool_use") {
           toolUseCount++;
+          plainDiscussionToolUse(spec.plainDiscussionId, event);
           const entry = {
             id: event.toolUseId || crypto.randomUUID(),
             type: "tool_use" as const,
@@ -1956,6 +1980,7 @@ export async function openCreatedSession(
           io.emit({ type: "stream_tool_use", entry });
         }
         if (event.type === "tool_result") {
+          plainDiscussionToolResult(spec.plainDiscussionId, event);
           const entry = {
             id: event.toolUseId ? `tr-${event.toolUseId}` : crypto.randomUUID(),
             type: "tool_result" as const,
@@ -2039,6 +2064,11 @@ export async function openCreatedSession(
 
     io.emit({ type: "stream_done" });
     io.emit({ type: "session_status", isRunning: false });
+    mirrorTurnToPlainDiscussion(spec.plainDiscussionId, {
+      assistantText,
+      endedWithError: !!runFailure,
+      runFailure,
+    });
     if (spec.finish === "auto-continue-guard") {
       // An opening turn announce-then-stops exactly like a later one, and
       // this path bypasses runSessionPromptInner — so run the shared guard
@@ -2069,6 +2099,13 @@ export async function openCreatedSession(
       return;
     }
     if (await openingTurnWasCancelled()) {
+      // A Stop from the discussion cancels the opening turn here, past the
+      // mirror above: report idle so Plain's composer unlocks.
+      mirrorTurnToPlainDiscussion(spec.plainDiscussionId, {
+        assistantText: "",
+        endedWithError: false,
+        runFailure: null,
+      });
       await settleCreationCancelled(
         bksId,
         creationIdentity,
@@ -2099,6 +2136,14 @@ export async function openCreatedSession(
         });
       }
       await reportSetupFailure(bksId, io, e.message || String(e));
+      // createSession already resolved at the announce, so the discussion
+      // handler cannot report this one: settle Plain from here or its
+      // composer stays locked on IN_PROGRESS.
+      mirrorTurnToPlainDiscussion(spec.plainDiscussionId, {
+        assistantText,
+        endedWithError: true,
+        runFailure: e.message || String(e),
+      });
     } else {
       io.fail(e.message || String(e));
     }

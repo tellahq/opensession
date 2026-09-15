@@ -56,6 +56,7 @@ touches an in-process tool:
 | [`opensession-desktop`](#opensession-desktop) | 8 | interactive | Needs a sandboxed session. |
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | Needs a session id. |
 | [`opensession-slack`](#opensession-slack) | 1 | interactive | Needs a session id. |
+| [`opensession-plain-discussion`](#opensession-plain-discussion) | 2 | interactive | Only a session that answers a Plain discussion (plainDiscussionId), which carries this server alone instead of the interactive set. |
 | [`opensession-ask`](#opensession-ask) | 1 | interactive, Slack loop | Needs a session id. |
 | [`opensession-workflows`](#opensession-workflows) | 8 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
 | [`opensession-assets`](#opensession-assets) | 4 | interactive | Needs a session id. Works in read-only Ask mode — assets land outside the checkout. |
@@ -72,7 +73,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-31 servers, 143 tools.
+32 servers, 145 tools.
 
 ## opensession-sessions
 
@@ -785,6 +786,27 @@ Open an editable Slack composer. The human still presses Send.
 `mcp__opensession-slack__compose_message` · input: `message` (string), `channel` (string), `images` (string[])
 
 Open an editable Slack composer in this Open Session and wait for the signed-in person to send or cancel it. Use this when a useful update is ready to share but the human should review the message, channel, and images first. This tool never posts by itself: the person must press Send in the UI.
+
+## opensession-plain-discussion
+
+Reply to the customer or run a Stripe action from a Plain Ask Sidekick discussion, behind the teammate's Approve/Deny card.
+
+- **Source** `packages/core/opensession-server/src/agents/plain/discussion-tools.ts`
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`, `packages/core/opensession-server/src/server/session-create.ts`, `packages/core/opensession-server/src/server/run-session.ts`
+- **Runs** interactive
+- **Condition** Only a session that answers a Plain discussion (plainDiscussionId), which carries this server alone instead of the interactive set.
+
+### `reply_to_customer`
+
+`mcp__opensession-plain-discussion__reply_to_customer` · input: `text` (string, required), `threadId` (string)
+
+Send a reply to the customer on the support thread, after the teammate approves it in Plain. Shows them the exact text on an Approve/Deny card and waits for the decision; on approval the reply is sent and the thread is snoozed as waiting for the customer. Nothing is sent on a denial. Use only when the teammate asked for a reply to go out.
+
+### `execute_stripe_action`
+
+`mcp__opensession-plain-discussion__execute_stripe_action` · input: `proposal` (string, required)
+
+Run a specific Stripe refund or subscription cancellation/update, after the teammate approves it in Plain. Describe the exact action (customer, subscription or charge, amount, reason); the card shows that description and, on approval, a dedicated execution turn with the Stripe tools carries out that action and nothing else. Propose in your reply first; call this only when the teammate asked for the action to happen.
 
 ## opensession-ask
 

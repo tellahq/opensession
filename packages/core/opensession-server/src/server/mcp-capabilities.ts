@@ -102,6 +102,12 @@ export const INTERNAL_MCP_CAPABILITIES = {
     guidance:
       "Open an editable Slack draft when the task needs human-reviewed communication. The human still presses Send.",
   },
+  "opensession-plain-discussion": {
+    summary:
+      "Reply to the customer or run a Stripe action from a Plain Ask Sidekick discussion, behind the teammate's Approve/Deny card.",
+    guidance:
+      "In a Plain discussion session, send a customer reply or run a proposed Stripe refund/cancellation only through these tools; each waits for the teammate's approval in Plain.",
+  },
   "opensession-ask": {
     summary: "Ask the human a blocking question.",
     guidance:

@@ -277,7 +277,13 @@ export async function inProcessServerNames(
       (await selfImproveMcpForSession(session, session.id)) || {},
     );
   }
-  const { interactiveMcpServers } = await import("./interactive-mcp");
+  const { interactiveMcpServers, plainDiscussionSessionMcp } =
+    await import("./interactive-mcp");
+  if (inputs.inProcessMcpBranch === "plain-discussion") {
+    return Object.keys(
+      plainDiscussionSessionMcp(session.id, session.plainDiscussionId || ""),
+    );
+  }
   const servers: Record<string, unknown> = {
     ...interactiveMcpServers(inputs.user, session.id),
   };

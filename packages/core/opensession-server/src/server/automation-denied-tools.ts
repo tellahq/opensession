@@ -75,3 +75,38 @@ export const AUTOMATION_DENIED_TOOLS: Record<string, string> = {
   mcp__incident__extension_plugin_sync: INCIDENT_WRITE_DENIAL,
   mcp__incident__extension_skill_feedback_update: INCIDENT_WRITE_DENIAL,
 };
+
+// A Plain discussion session (Ask Sidekick → Open Session) is driven by a
+// teammate, but the ticket text it reads is still untrusted, and the teammate
+// only sees the discussion — a reply sent straight through the Plain MCP would
+// be invisible to them until the customer answered, and a Stripe confirm card
+// in the Open Session UI would never be seen at all. Customer-facing writes
+// and money moves go through opensession-plain-discussion, whose tools park
+// behind an Approve/Deny card in the discussion; everything the triage
+// automation denies (identity and incident writes) stays denied here too.
+const PLAIN_DISCUSSION_DENIAL =
+  "This tool isn't available in a Plain discussion session. To reply to the " +
+  "customer use reply_to_customer (opensession-plain-discussion), which shows " +
+  "the teammate an Approve/Deny card in Plain; describe status changes in " +
+  "your reply for the teammate to do.";
+const PLAIN_DISCUSSION_MONEY_DENIAL =
+  "Money-moving Stripe actions can't run directly in a Plain discussion " +
+  "session. Propose the exact refund/cancellation in your reply and, when the " +
+  "teammate asks for it, call execute_stripe_action " +
+  "(opensession-plain-discussion): it shows them an Approve/Deny card and runs " +
+  "the approved action in a dedicated execution turn.";
+export const PLAIN_DISCUSSION_DENIED_TOOLS: Record<string, string> = {
+  ...AUTOMATION_DENIED_TOOLS,
+  mcp__plain__reply_to_thread: PLAIN_DISCUSSION_DENIAL,
+  mcp__plain__mark_thread_done: PLAIN_DISCUSSION_DENIAL,
+  mcp__plain__mark_thread_todo: PLAIN_DISCUSSION_DENIAL,
+  mcp__plain__snooze_thread: PLAIN_DISCUSSION_DENIAL,
+  mcp__stripe__create_refund: PLAIN_DISCUSSION_MONEY_DENIAL,
+  mcp__stripe__cancel_subscription: PLAIN_DISCUSSION_MONEY_DENIAL,
+  mcp__stripe__update_subscription: PLAIN_DISCUSSION_MONEY_DENIAL,
+  mcp__stripe__stripe_api_execute: PLAIN_DISCUSSION_MONEY_DENIAL,
+  mcp__stripe__stripe_api_write: PLAIN_DISCUSSION_MONEY_DENIAL,
+};
+export function plainDiscussionDeniedTools(): Record<string, string> {
+  return PLAIN_DISCUSSION_DENIED_TOOLS;
+}

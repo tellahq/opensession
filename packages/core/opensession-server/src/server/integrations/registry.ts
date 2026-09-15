@@ -83,6 +83,11 @@ export const INTEGRATIONS: IntegrationSpec[] = [
         name: "PLAIN_WEBHOOK_SECRET",
         description: "verifies inbound webhook signatures",
       },
+      {
+        name: "PLAIN_AGENT_API_KEY",
+        description:
+          "Custom-agent machine user key for Ask Sidekick discussions; falls back to PLAIN_API_KEY",
+      },
     ],
     links: [
       // Plain's settings URLs are workspace-scoped after login; this lands on

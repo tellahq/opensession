@@ -57,6 +57,14 @@ configuration for the run.
   deny-by-default on journal kind: interactive kinds
   (prompt/goal/create/linear/slack), unattended kinds
   (automation/plain/action/security-scan/github-*), everything else refused.
+- A Plain Ask Sidekick discussion session (`plainDiscussionId`,
+  `docs/setup/plain.md`) is prompted by a teammate but reads the same untrusted
+  ticket text, so every one of its turns carries the automation deny-set plus
+  the Plain customer-facing writes and the Stripe money movers, passes no
+  user, gets no AWS credentials, and mounts only `opensession-plain-discussion`
+  (the Approve/Deny-gated customer reply and Stripe execution) in place of the
+  interactive set. The run-rpc fallback builder serves that same set, so a
+  hosted or sandboxed turn cannot ask for more.
 - `mode` is per automation. Ask has guarded read/find/grep/ls/bash tools but
   no Write/Edit. For an unsandboxed ordinary repository it uses a stable,
   shared detached worktree pinned to `origin/<defaultBranch>`; only a

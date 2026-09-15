@@ -48,6 +48,7 @@ import { createSearchMcpServer } from "../agents/slack/search-tools";
 import { createSelfImproveMcpServer } from "../agents/slack/self-improve-tools";
 import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
 import { createSlackComposeMcpServer } from "../agents/slack/slack-compose-tools";
+import { createPlainDiscussionMcpServer } from "../agents/plain/discussion-tools";
 import { createTodosMcpServer } from "../agents/slack/todos-tools";
 import { createTurnMcpServer } from "../agents/slack/turn-tools";
 import { createWalkthroughMcpServer } from "../agents/slack/walkthrough-tools";
@@ -353,6 +354,25 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     runClasses: ["interactive"],
     condition: "Needs a session id.",
     build: () => createSlackComposeMcpServer({ sessionId: SESSION_ID }),
+  },
+  {
+    name: "opensession-plain-discussion",
+    summary: INTERNAL_MCP_CAPABILITIES["opensession-plain-discussion"].summary,
+    source:
+      "packages/core/opensession-server/src/agents/plain/discussion-tools.ts",
+    wiring: [
+      "packages/core/opensession-server/src/server/interactive-mcp.ts",
+      "packages/core/opensession-server/src/server/session-create.ts",
+      "packages/core/opensession-server/src/server/run-session.ts",
+    ],
+    runClasses: ["interactive"],
+    condition:
+      "Only a session that answers a Plain discussion (plainDiscussionId), which carries this server alone instead of the interactive set.",
+    build: () =>
+      createPlainDiscussionMcpServer({
+        sessionId: SESSION_ID,
+        discussionId: "disc_00000000000000000000000000",
+      }),
   },
   {
     name: "opensession-ask",

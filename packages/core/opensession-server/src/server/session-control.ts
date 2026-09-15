@@ -155,6 +155,9 @@ export interface CreateSessionOpts {
   reportBack?: boolean;
   /** Display name credited as the creator. */
   user?: string;
+  /** Plain discussion (Ask Sidekick) this session answers: the turn's reply is
+   * posted there and the approval-gated Plain tools are wired in. */
+  plainDiscussionId?: string;
   /**
    * Ask for a sandboxed session (the sandbox rollout plan). `true` = the config
    * default provider; a provider id (including "modal" / "lambda-microvm")

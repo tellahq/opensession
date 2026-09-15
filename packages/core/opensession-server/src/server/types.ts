@@ -216,6 +216,8 @@ export interface UnifiedSession {
    */
   slim?: boolean;
   plainThreadId?: string;
+  /** Plain discussion (Ask Sidekick) this session answers; every turn is mirrored there. */
+  plainDiscussionId?: string;
   /** Generic external-object linkage (feed items: videos, …) — the
    *  successor to per-source foreign keys like plainThreadId (see
    *  the feeds design). A session can carry several. */
@@ -618,6 +620,7 @@ export interface NativeSessionFile {
   automationEvent?: string;
 
   plainThreadId?: string; // Plain thread this session is triaging
+  plainDiscussionId?: string; // Plain discussion (Ask Sidekick) this session answers
   externalRefs?: ExternalRef[]; // generic feed-item linkage (the feeds design)
   model?: string; // model id for this session's runs; unset = default
   /** Original selection displaced by an automatic usage fallback. `null` means

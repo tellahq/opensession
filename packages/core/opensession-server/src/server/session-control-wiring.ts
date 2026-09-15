@@ -717,6 +717,7 @@ registerSessionControl({
       sandbox,
       forkFrom,
       accountId: accountIdInput,
+      plainDiscussionId,
     } = ownedInput;
     const bksId = requestedId;
     const createIdentity = new Bun.CryptoHasher("sha256")
@@ -1300,6 +1301,7 @@ ${createMentionsNote}`;
       // A session in a support-ticket workspace is on that ticket too —
       // same rule as the web tab strip's "+".
       plainThreadId: joinedWorkspace?.plainThreadId,
+      plainDiscussionId,
       // Persist the MCP scoping so follow-up prompts keep it.
       persistMcpServers: effectiveMcpServers,
       // Unscoped creates leave this undefined (read as "all" downstream,

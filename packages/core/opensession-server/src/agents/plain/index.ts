@@ -16,6 +16,7 @@ import {
   pendingConfirmations,
 } from "./handlers";
 import type { PlainWebhookPayload } from "./handlers";
+import { pendingApprovalCount } from "./discussions";
 import { configuredIntegration } from "../../server/config";
 
 const PLAIN_WEBHOOK_SECRET = process.env.PLAIN_WEBHOOK_SECRET || "";
@@ -155,6 +156,7 @@ export class PlainAgent implements AgentModule {
       status: "operational",
       activeSessions: activeSessions.size,
       pendingConfirmations: pendingConfirmations.size,
+      pendingDiscussionApprovals: pendingApprovalCount(),
     };
   }
 }
