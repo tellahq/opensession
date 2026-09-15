@@ -1,11 +1,11 @@
 # Archived sessions
 
-Archived sessions are removed from active workspace lanes but remain searchable, restorable conversations. Users can search, filter by repository or person, inspect a result, and restore it.
+Archived sessions are removed from active workspace lanes but remain searchable, restorable conversations. Users can search session titles and row metadata, filter by repository, owner, or archive reason, inspect a result, and restore it.
 
 ## Sub-features
 
 - `archive-list` groups archived sessions by time and workspace context.
-- `archive-search` filters titles and transcript metadata.
+- `archive-search` filters titles, repositories, branches, owners, and automation names.
 - `archive-filters` narrows results by repository, person, and archive reason.
 - `archive-open` opens a matching archived session without restoring it.
 - `archive-restore` returns a session to its active workspace.
@@ -22,11 +22,11 @@ Archived sessions are removed from active workspace lanes but remain searchable,
 Preconditions:
 
 - Doctor passes for the isolated demo run.
-- The demo seed has finished and cancelled sessions available to the archive UI.
+- The launcher archives stable completed, failed, and cancelled demo sessions before returning. The archive defaults to `My archived`, but seeded sessions belong to synthetic teammates, so choose `Owner, My archived` and then `Everyone` before checking seeded rows.
 
-- **Open the index.** Run `verify-opensession browser "$RUN_ID" open --route /archived --width 1440 --height 900`. Wait for textbox `Search archived sessions` and capture the unfiltered state.
-- **Search.** Run `verify-opensession browser "$RUN_ID" fill --role textbox --name "Search archived sessions" --value "retry"`. The visible results narrow to archived work matching `retry`, or an explicit no-results state appears if the seed's archive rules changed.
-- **Clear and filter.** Refill the search textbox with an empty value, choose the `Filters` button using the exact accessible name from the current snapshot, and select one visible repository or person. Capture the filter state and narrowed result list.
+- **Open the index.** Run `verify-opensession browser "$RUN_ID" open --route /archived --width 1440 --height 900`. Wait for `searchbox` named `Search archived sessions`, choose `Owner, My archived`, then choose the `menuitemradio` named `Everyone`. Capture the unfiltered state.
+- **Search.** Run `verify-opensession browser "$RUN_ID" fill --role searchbox --name "Search archived sessions" --value "retry"`. The visible results narrow to archived work matching `retry`, or an explicit no-results state appears if the seed's archive rules changed.
+- **Clear and filter.** Refill the searchbox with an empty value. Use the separately named `Owner, …` button and, when present, `Repository, …` or `Reason, …` to select one visible filter. Their options use the `menuitemradio` role. Capture the filter state and narrowed result list.
 - **Open a result.** Choose a visible archived session title. Its transcript opens and keeps the archived state visible.
 - **Restore.** From `/archived`, choose `Restore session` on one disposable demo result. Confirm it disappears from the matching archived results and reappears in its active workspace or `/api/sessions` response.
 - **Check phone layout.** Repeat search and result opening at 390x844. Search and filters must remain reachable without desktop hover.

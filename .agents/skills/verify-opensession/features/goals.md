@@ -30,7 +30,7 @@ Preconditions:
 - **Enter the mission.** Run `verify-opensession browser "$RUN_ID" fill --role textbox --name "Name" --value "$GOAL_NAME"` and `verify-opensession browser "$RUN_ID" fill --role textbox --name "Mission" --value "Inspect the isolated demo state and record one verification result."`. Capture the filled form so the action is visible.
 - **Save.** Run `verify-opensession browser "$RUN_ID" click --role button --name "Create goal"`. The form closes and the goals list returns.
 - **Confirm stored state.** Run `verify-opensession api "$RUN_ID" /api/goals | jq --arg name "$GOAL_NAME" '.[] | select(.name == $name)'`. Require one object with the entered mission. Set `GOAL_ID="$(verify-opensession api "$RUN_ID" /api/goals | jq -r --arg name "$GOAL_NAME" '.[] | select(.name == $name) | .id')"`, then open `/goals/$GOAL_ID`. The detail view names the saved goal.
-- **Check phone layout.** Open `/goals/$GOAL_ID` at 390x844. The saved detail appears with a visible `Goals` back action. Use that action to reach the phone list when list navigation is in scope.
+- **Check phone layout.** Open `/goals/$GOAL_ID` at 390x844 and wait for the `button` named `Goals`. The saved detail appears with that back action. Use it to reach the phone list when list navigation is in scope.
 - **Proof.** Save before, filled-form, and after snapshots and screenshots. Save the matching API object as `goals-api.json`.
 
 ## Gotchas
