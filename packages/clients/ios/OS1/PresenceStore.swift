@@ -1,9 +1,24 @@
 import Foundation
 import Observation
 
+/// One change to the sessions list, pushed by the active account's socket.
+/// `SessionsListViewModel` applies these between polls.
+enum SessionListEvent: Sendable {
+    /// A server snapshot of one row the list shows.
+    case row(Session)
+    /// A row the list no longer shows: archived, deleted, or filtered out.
+    case removed(sessionId: String)
+    /// A bulk change with no row to send. Re-read the list.
+    case invalidated
+    /// The socket (re)connected and subscribed. Frames sent while it was
+    /// down are gone, so the list should re-read once.
+    case subscribed
+}
+
 /// Who on the team is focused on which session, app-wide. One passive socket
 /// stays connected for every configured account, so inactive organizations can
-/// still deliver mention events and badge the account picker.
+/// still deliver mention events and badge the account picker. The active
+/// account's socket also carries the sessions list's row frames.
 @MainActor
 @Observable
 final class PresenceStore {
@@ -11,6 +26,9 @@ final class PresenceStore {
 
     private(set) var bySession: [String: [String]] = [:]
     private(set) var connectedAccountIDs: Set<String> = []
+
+    @ObservationIgnored
+    private var sessionListObservers: [UUID: @MainActor (SessionListEvent) -> Void] = [:]
 
     private var sockets: [String: OS1Socket] = [:]
     private var connectedAccounts: [String: ServerConnection] = [:]
@@ -37,6 +55,36 @@ final class PresenceStore {
 
     func isConnected(accountID: String) -> Bool {
         connectedAccountIDs.contains(accountID)
+    }
+
+    /// Hear the active account's list changes. Returns the token to remove
+    /// the observer with; the list view model holds one while it polls.
+    @discardableResult
+    func addSessionListObserver(
+        _ handler: @escaping @MainActor (SessionListEvent) -> Void
+    ) -> UUID {
+        let token = UUID()
+        sessionListObservers[token] = handler
+        return token
+    }
+
+    func removeSessionListObserver(_ token: UUID) {
+        sessionListObservers[token] = nil
+    }
+
+    private func notifySessionList(_ event: SessionListEvent) {
+        for handler in sessionListObservers.values { handler(event) }
+    }
+
+    /// Ask the active account's socket for row frames. Only that account's
+    /// list is on screen, so only its socket subscribes; a socket that is
+    /// still connecting subscribes from its hello instead. Idempotent on the
+    /// server, so a switch back to an already subscribed account is harmless.
+    private func subscribeActiveAccount() {
+        let activeId = ServerConfig.shared.activeId
+        guard connectedAccountIDs.contains(activeId) else { return }
+        sockets[activeId]?.subscribeSessions(query: OS1API.liveSessionsQuery)
+        notifySessionList(.subscribed)
     }
 
     func viewers(of sessions: [Session]) -> [String] {
@@ -72,6 +120,9 @@ final class PresenceStore {
         for (account, connection) in connections where sockets[account.id] == nil {
             connect(account: account, connection: connection)
         }
+        // An account switch lands here with the new account's socket already
+        // up: it has to start sending row frames now, not at its next hello.
+        subscribeActiveAccount()
     }
 
     /// iOS cannot retain network execution indefinitely in the background.
@@ -122,6 +173,15 @@ final class PresenceStore {
         switch event {
         case .hello:
             connectedAccountIDs.insert(account.id)
+            if account.id == config.activeId { subscribeActiveAccount() }
+        case .sessionRow(let row):
+            if account.id == config.activeId { notifySessionList(.row(row)) }
+        case .sessionRowRemoved(let sessionId):
+            if account.id == config.activeId {
+                notifySessionList(.removed(sessionId: sessionId))
+            }
+        case .sessionsInvalidated:
+            if account.id == config.activeId { notifySessionList(.invalidated) }
         case .globalPresence(let viewing):
             let mapped = mappedPresence(viewing, me: account.userName)
             presenceByAccount[account.id] = mapped
