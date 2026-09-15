@@ -1,3 +1,4 @@
+import { canAccessScope } from "../shared/access-scope";
 /**
  * Open Session instance configuration.
  *
@@ -369,6 +370,9 @@ function defined<T extends Record<string, unknown>>(o: T): Partial<T> {
 function parseRepoSection(v: unknown): RepoSection | undefined {
   const o = obj(v);
   if (!o) return undefined;
+  // This is the shared instance registry, never a personal repository store.
+  // Do not silently strip a claimed private scope and expose it as shared.
+  if (!canAccessScope(o.accessScope)) return undefined;
   const rawHost = str(o.host);
   // Unknown host values are dropped → the repo stays a plain GitHub repo.
   const host: RepoSection["host"] =

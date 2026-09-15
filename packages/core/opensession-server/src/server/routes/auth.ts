@@ -130,7 +130,12 @@ export async function handleAuthRoutes(
     } else if (watched && watched.status === "error") {
       return Response.json(watched);
     } else if (watched) {
-      result = { status: "ok", login: watched.login, name: watched.name };
+      result = {
+        status: "ok",
+        login: watched.login,
+        name: watched.name,
+        githubAccountId: watched.githubAccountId,
+      };
     } else {
       result = await pollGithubDeviceFlow(deviceCode);
     }
@@ -142,7 +147,7 @@ export async function handleAuthRoutes(
         error: `GitHub account @${result.login} is not a workspace member. Add it in Settings > Members before enabling sign-in.`,
       });
     }
-    const session = createWebSession(result.login);
+    const session = createWebSession(result.login, result.githubAccountId);
     if (!session)
       return Response.json(
         { status: "error", error: "Could not create a session" },

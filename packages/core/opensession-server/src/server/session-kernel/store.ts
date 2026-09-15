@@ -1,3 +1,7 @@
+import { canAccessScope } from "../../shared/access-scope";
+import { assertMetadataActorRequest } from "./metadata-protocol";
+import * as repositoryAccessStore from "./repository-access-store";
+import type { AccessPrincipal } from "../../shared/access-scope";
 import {
   DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS,
   GATEWAY_COMMAND_OPERATIONS,
@@ -262,7 +266,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
     bootId: linuxBootId(),
     start: linuxProcessStart(process.pid),
   } satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 34;
+export const SESSION_KERNEL_SCHEMA_VERSION = 35;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -1585,6 +1589,10 @@ export class SessionKernelStore {
     migrateAgentOperationCancellationSchema32(this.db, schemaVersion);
     metadataStore.migrateSessionMetadataSchema33(this.db, schemaVersion);
     catalogDocumentStore.migrateCatalogDocumentSchema34(this.db, schemaVersion);
+    repositoryAccessStore.migrateRepositoryCatalogSchema35(
+      this.db,
+      schemaVersion,
+    );
     assertAgentOperationSchema28(this.db);
     assertAgentOperationCancellationSchema32(this.db);
     if (path !== ":memory:") {
@@ -6224,7 +6232,14 @@ export class SessionKernelStore {
   ): SessionMetadataPutResult {
     if (this.isTombstoned(input.sessionId))
       throw new Error(`Session ${input.sessionId} was deleted`);
+    metadataStore.assertSessionMetadataCatalogWrite(this.db, input);
     return metadataStore.putSessionMetadata(this.db, input);
+  }
+
+  assertSessionMetadataCatalogWrite(
+    input: Extract<MetadataActorRequest, { op: "put" }>,
+  ): void {
+    metadataStore.assertSessionMetadataCatalogWrite(this.db, input);
   }
 
   settleSessionMetadataCatalog(
@@ -6242,20 +6257,76 @@ export class SessionKernelStore {
     return metadataStore.seedSessionMetadataCatalog(this.db, rows);
   }
 
+  repositoryCatalogGet(repositoryId: string, principal?: AccessPrincipal) {
+    return repositoryAccessStore.repositoryCatalogGet(
+      this.db,
+      repositoryId,
+      principal,
+    );
+  }
+
+  repositoryCatalogPage(
+    afterRepositoryId: string,
+    limit: number,
+    principal?: AccessPrincipal,
+  ) {
+    return repositoryAccessStore.repositoryCatalogPage(
+      this.db,
+      afterRepositoryId,
+      limit,
+      principal,
+    );
+  }
+
+  repositoryCatalogCount(principal?: AccessPrincipal) {
+    return repositoryAccessStore.repositoryCatalogCount(this.db, principal);
+  }
+
+  repositoryCatalogPut(input: repositoryAccessStore.RepositoryCatalogPut) {
+    assertMetadataActorRequest(input);
+    return repositoryAccessStore.repositoryCatalogPut(this.db, input);
+  }
+
+  accessibleSessionMetadata(
+    sessionId: string,
+    principal?: AccessPrincipal,
+  ): SessionMetadataRecord | null {
+    const current = this.sessionMetadata(sessionId);
+    return current &&
+      canAccessScope(JSON.parse(current.doc).accessScope, principal)
+      ? current
+      : null;
+  }
+
+  sessionMetadataCatalogRead(sessionId: string, principal?: AccessPrincipal) {
+    return metadataStore.sessionMetadataCatalogRead(
+      this.db,
+      sessionId,
+      principal,
+    );
+  }
+
   sessionMetadataCatalogGet(
     sessionId: string,
+    principal?: AccessPrincipal,
   ): SessionMetadataCatalogRow | null {
-    return metadataStore.sessionMetadataCatalogGet(this.db, sessionId);
+    return metadataStore.sessionMetadataCatalogGet(
+      this.db,
+      sessionId,
+      principal,
+    );
   }
 
   sessionMetadataCatalogPage(
     afterSessionId: string,
     limit: number,
+    principal?: AccessPrincipal,
   ): SessionMetadataCatalogRow[] {
     return metadataStore.sessionMetadataCatalogPage(
       this.db,
       afterSessionId,
       limit,
+      principal,
     );
   }
 
@@ -6265,8 +6336,8 @@ export class SessionKernelStore {
     return metadataStore.sessionMetadataPendingExports(this.db, limit);
   }
 
-  sessionMetadataCatalogCount(): number {
-    return metadataStore.sessionMetadataCatalogCount(this.db);
+  sessionMetadataCatalogCount(principal?: AccessPrincipal): number {
+    return metadataStore.sessionMetadataCatalogCount(this.db, principal);
   }
 
   sessionMetadataCatalogComplete(): boolean {

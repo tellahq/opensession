@@ -5,6 +5,7 @@
  */
 
 import { readFile } from "fs/promises";
+import { canAccessScope, type AccessPrincipal } from "../shared/access-scope";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
   engineSessionIdFor,
@@ -727,40 +728,104 @@ export function findSession(sessionId: string): UnifiedSession | undefined {
  * actor. The file remains the fallback for a session the catalog has not
  * seen, and the source for the synchronous readers.
  */
+type NativeSessionAccessRead =
+  | { status: "found"; session: UnifiedSession }
+  | { status: "missing" | "denied" | "unavailable" };
+
+/** Keep denied/unavailable terminal through alias resolution, rather than
+ * flattening them into a cache miss and reviving a stale shared projection. */
+async function readNativeSessionAccess(
+  sessionId: string,
+  principal?: AccessPrincipal,
+): Promise<NativeSessionAccessRead> {
+  if (!isNativeSessionId(sessionId) && !isAgentSessionId(sessionId))
+    return { status: "missing" };
+  if (!sessionKernelActorActive() && process.env.NODE_ENV !== "test")
+    return { status: "unavailable" };
+  try {
+    const result = await sessionMetadata({
+      op: "catalog_read",
+      sessionId,
+      principal,
+    });
+    if (result.status === "denied") return result;
+    if (result.status === "found") {
+      const data = JSON.parse(result.record.doc) as NativeSessionFile;
+      if (data?.id === sessionId)
+        return { status: "found", session: nativeSessionDetailFromData(data) };
+      // Agent sidecars have no id; their scope still gates the source row.
+      if (!canAccessScope(data?.accessScope, principal))
+        return { status: "denied" };
+      return { status: "missing" };
+    }
+  } catch {
+    // No filesystem or cached-row fallback when the authority is unavailable.
+    return { status: "unavailable" };
+  }
+  if (!isNativeSessionId(sessionId)) return { status: "missing" };
+  try {
+    const data = JSON.parse(
+      await readFile(`${SESSIONS_DIR}/${sessionId}.json`, "utf8"),
+    ) as NativeSessionFile;
+    // Only genuinely legacy shared exports can fill an absent catalog row.
+    // A personal record needs central ownership even for its claimed owner.
+    if (!canAccessScope(data?.accessScope)) return { status: "denied" };
+    return data?.id === sessionId
+      ? { status: "found", session: nativeSessionDetailFromData(data) }
+      : { status: "missing" };
+  } catch (error) {
+    return {
+      status:
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+          ? "missing"
+          : "unavailable",
+    };
+  }
+}
+
 export async function readNativeSessionAsync(
   sessionId: string,
+  principal?: AccessPrincipal,
 ): Promise<UnifiedSession | undefined> {
-  if (!/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) return undefined;
-  if (sessionKernelActorActive() || process.env.NODE_ENV === "test") {
-    try {
-      const stored = await sessionMetadata({ op: "catalog_get", sessionId });
-      if (stored) {
-        const data = JSON.parse(stored.doc) as NativeSessionFile;
-        if (data?.id === sessionId) return nativeSessionDetailFromData(data);
-      }
-    } catch (error) {
-      console.warn(
-        `[session-metadata] catalog read failed for ${sessionId}; reading the file:`,
-        error instanceof Error ? error.message : error,
-      );
-    }
-  }
-  return readNativeSession(sessionId);
+  const result = await readNativeSessionAccess(sessionId, principal);
+  return result.status === "found" ? result.session : undefined;
 }
 
 export async function findSessionAsync(
   sessionId: string,
+  principal?: AccessPrincipal,
 ): Promise<UnifiedSession | undefined> {
-  // Native ids come from the metadata catalog, exact Slack deep links map
-  // one-to-one to files. Either lets a newly announced conversation open
-  // before the materialized list projection has observed it. Historical
-  // aliases still need the merged list.
-  const direct =
-    (await readNativeSessionAsync(sessionId)) ?? readSlackSession(sessionId);
-  if (direct) return enrichSessionRuntime([direct])[0];
-  return (await getCachedSessionsAsync()).find(
+  const direct = await readNativeSessionAccess(sessionId, principal);
+  if (direct.status === "denied" || direct.status === "unavailable")
+    return undefined;
+  if (direct.status === "found") {
+    const identity = knownSessionIdentity(direct.session.id);
+    return enrichSessionRuntime([
+      {
+        ...direct.session,
+        ...(identity.id === direct.session.id && identity.aliasIds
+          ? { aliasIds: [...identity.aliasIds] }
+          : {}),
+      },
+    ])[0];
+  }
+  const slack = readSlackSession(sessionId);
+  if (slack && canAccessScope(slack.accessScope))
+    return enrichSessionRuntime([slack])[0];
+  const candidate = (await getCachedSessionsAsync()).find(
     (s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
   );
+  if (!candidate) return undefined;
+  // Re-authorize the canonical id. A historical alias must not bypass a
+  // private catalog row just because the cached projection predates its scope.
+  const canonical = await readNativeSessionAccess(candidate.id, principal);
+  if (canonical.status === "denied" || canonical.status === "unavailable")
+    return undefined;
+  if (canonical.status === "found")
+    return enrichSessionRuntime([
+      { ...canonical.session, aliasIds: candidate.aliasIds },
+    ])[0];
+  return canAccessScope(candidate.accessScope) ? candidate : undefined;
 }
 
 /** Canonical id followed by every historical alias for this session. Asset

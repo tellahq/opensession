@@ -1,3 +1,4 @@
+import { authorizeSharedSessionMessage } from "./ws-session-access";
 /**
  * The UI WebSocket: watch/unwatch sessions, live prompts and queue control,
  * question answers, terminals — plus the create_session flow. Extracted
@@ -610,6 +611,15 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
       return;
     }
 
+    // Capture navigation and implicit targets before the first authorization
+    // await. A later watch, unwatch or close invalidates this arrival token.
+    const arrivalWatchRequest =
+      msg?.type === "watch" || msg?.type === "unwatch"
+        ? (ws.data.watchRequest = (ws.data.watchRequest ?? 0) + 1)
+        : undefined;
+    if (msg?.type === "cancel" && typeof msg.sessionId !== "string")
+      msg.sessionId = ws.data.watchingSessionId;
+
     // A throw anywhere below used to escape as an unhandled rejection and
     // kill the whole process (2026-07-27: four crash-restarts from a prompt
     // message missing `content` — every in-process run died each time). One
@@ -643,6 +653,19 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
         ws.data.user = firstName;
         msg.user = firstName;
       }
+      const authorization = await authorizeSharedSessionMessage(msg);
+      if (
+        arrivalWatchRequest !== undefined &&
+        ws.data.watchRequest !== arrivalWatchRequest
+      )
+        return;
+      if (!authorization.allowed) {
+        ws.send(
+          JSON.stringify({ type: "error", message: "Session not found" }),
+        );
+        return;
+      }
+      if (msg.type === "cancel") msg.sessionId = authorization.sessionId;
       // Anything that isn't a heartbeat is a person doing something, so it
       // refreshes this socket's attention (ws-hub's idle window — a face means
       // "here now"). `away` carries its own stamp.
@@ -977,8 +1000,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
         case "watch": {
           const sessionId = msg.sessionId;
           const data = ws.data;
-          const watchRequest = (data.watchRequest ?? 0) + 1;
-          data.watchRequest = watchRequest;
+          const watchRequest = arrivalWatchRequest;
           const session = await findSessionAsync(sessionId);
           if (data.watchRequest !== watchRequest) return;
           if (!session) {
@@ -1118,7 +1140,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
           // stop streaming transcript events and clear their ghost presence.
           // Mirrors the disconnect/close cleanup; leaveSession broadcasts
           // presence to the viewers who remain.
-          ws.data.watchRequest = (ws.data.watchRequest ?? 0) + 1;
           stopAllWatchesForClient(ws);
           releaseTranscriptV2(ws);
           leaveSession(ws);

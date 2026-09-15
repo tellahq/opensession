@@ -114,7 +114,8 @@ export function startSessionKernelActorWorker(): void {
         const centralOnly =
           command.kind === "metadata" &&
           (command.request.op === "exported" ||
-            command.request.op === "catalog_get");
+            command.request.op === "catalog_get" ||
+            command.request.op === "catalog_read");
         if (sessionId && !centralOnly)
           store = host.storeForSession(
             sessionId,
@@ -278,9 +279,28 @@ export function startSessionKernelActorWorker(): void {
         } else if (command.kind === "metadata") {
           const metadata = command.request;
           assertMetadataActorRequest(metadata);
-          if (metadata.op === "get")
-            result = store.sessionMetadata(metadata.sessionId);
+          if (metadata.op === "repository_get")
+            result = host.central.repositoryCatalogGet(
+              metadata.repositoryId,
+              metadata.principal,
+            );
+          else if (metadata.op === "repository_page")
+            result = host.central.repositoryCatalogPage(
+              metadata.afterRepositoryId,
+              metadata.limit,
+              metadata.principal,
+            );
+          else if (metadata.op === "repository_count")
+            result = host.central.repositoryCatalogCount(metadata.principal);
+          else if (metadata.op === "repository_put")
+            result = host.central.repositoryCatalogPut(metadata);
+          else if (metadata.op === "get")
+            result = store.accessibleSessionMetadata(
+              metadata.sessionId,
+              metadata.principal,
+            );
           else if (metadata.op === "put") {
+            host.central.assertSessionMetadataCatalogWrite(metadata);
             const put = store.putSessionMetadata(metadata);
             if (put.status === "committed")
               host.settleSessionMetadataCatalog(metadata.sessionId);
@@ -290,12 +310,25 @@ export function startSessionKernelActorWorker(): void {
               metadata.sessionId,
               metadata.rev,
             );
+          else if (metadata.op === "catalog_read")
+            result = host.central.sessionMetadataCatalogRead(
+              metadata.sessionId,
+              metadata.principal,
+            );
           else if (metadata.op === "catalog_get")
-            result = host.central.sessionMetadataCatalogGet(metadata.sessionId);
+            result = host.central.sessionMetadataCatalogGet(
+              metadata.sessionId,
+              metadata.principal,
+            );
+          else if (metadata.op === "catalog_count")
+            result = host.central.sessionMetadataCatalogCount(
+              metadata.principal,
+            );
           else if (metadata.op === "catalog_page")
             result = host.central.sessionMetadataCatalogPage(
               metadata.afterSessionId,
               metadata.limit,
+              metadata.principal,
             );
           else if (metadata.op === "pending_exports")
             result = host.central.sessionMetadataPendingExports(metadata.limit);

@@ -1,3 +1,4 @@
+import { canAccessScope } from "../shared/access-scope";
 import { executeSessionProjection } from "./session-projection-executor";
 import {
   readdirSync,
@@ -851,7 +852,7 @@ export function readSlackSession(sessionId: string): UnifiedSession | null {
   const key = sessionId.slice("slack-".length);
   if (!key || key.includes("/") || key.includes("\\")) return null;
   const session = slackSessionRow(`${key}.json`);
-  if (!session) return null;
+  if (!session || !canAccessScope(session.accessScope)) return null;
   session.transcriptPath = resolveTranscriptPath(
     findTranscriptPath(session.worktreeDir, session.claudeSessionId),
     session.codexThreadId,
@@ -1059,6 +1060,7 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
   const archived = !!data.archived || isArchivedId(data.id);
   return {
     id: data.id,
+    accessScope: data.accessScope,
     duplicatedFromSessionId: data.duplicatedFromSessionId,
     claudeSessionId: data.claudeSessionId,
     source: "opensession",
@@ -1202,7 +1204,9 @@ export function readNativeSession(
   sessionId: string,
 ): UnifiedSession | undefined {
   const session = readNativeSessionListRow(sessionId);
-  return session ? withTranscriptPath(session) : undefined;
+  return session && canAccessScope(session.accessScope)
+    ? withTranscriptPath(session)
+    : undefined;
 }
 
 /** Detail shape of a native session document: the list row plus its resolved
@@ -1592,9 +1596,9 @@ export function getAllSessions(
   slice: SessionArchiveSlice = "include",
 ): UnifiedSession[] {
   return assembleSessions(
-    scanSlackSessions(),
-    scanLinearSessions(),
-    scanNativeSessions(),
+    scanSlackSessions().filter((row) => canAccessScope(row.accessScope)),
+    scanLinearSessions().filter((row) => canAccessScope(row.accessScope)),
+    scanNativeSessions().filter((row) => canAccessScope(row.accessScope)),
     slice,
   );
 }
@@ -1626,9 +1630,9 @@ export async function getAllSessionsAsync(
   // These overlays read and mutate process-local state, so they deliberately
   // remain on the server thread rather than crossing a Worker boundary.
   return await assembleSessionsAsync(
-    slackSessions,
-    linearSessions,
-    nativeSessions,
+    slackSessions.filter((row) => canAccessScope(row.accessScope)),
+    linearSessions.filter((row) => canAccessScope(row.accessScope)),
+    nativeSessions.filter((row) => canAccessScope(row.accessScope)),
     slice,
   );
 }

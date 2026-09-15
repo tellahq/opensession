@@ -14,6 +14,7 @@
  * way a lost invalidation did.
  */
 import { indexedSessionWithVisibilityGroup } from "./session-list-store";
+import { sessionMetadata } from "./session-kernel";
 import {
   loadSidebarSessionScopeContext,
   scopeSessionsForSidebar,
@@ -93,6 +94,14 @@ export async function sessionRowVisible(
 async function flushSessionRow(sessionId: string): Promise<void> {
   const subscribers = sidebarSubscribers();
   if (subscribers.size === 0) return;
+  // Missing index rows can mean "private", not "removed". Never broadcast a
+  // hidden id in a removal event or trust a stale shared row over the catalog.
+  try {
+    const access = await sessionMetadata({ op: "catalog_read", sessionId });
+    if (access.status === "denied") return;
+  } catch {
+    return;
+  }
   // One worker round trip: the row and the rows its visibility depends on.
   const stored = await indexedSessionWithVisibilityGroup(sessionId);
   if (!stored) {
@@ -145,3 +154,5 @@ export function __resetSessionRowPublishesForTest(): void {
   for (const timer of scheduled.values()) clearTimeout(timer);
   scheduled.clear();
 }
+
+export { flushSessionRow as __flushSessionRowForTest };

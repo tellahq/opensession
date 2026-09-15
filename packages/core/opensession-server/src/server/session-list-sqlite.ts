@@ -14,6 +14,9 @@
  */
 
 import { Database } from "bun:sqlite";
+import { canonicalizeAccessTable } from "./canonical-access-document";
+import { canAccessScope, type AccessPrincipal } from "../shared/access-scope";
+import { accessOwnerSql, accessPredicateSql } from "./access-scope-sql";
 import { chmodSync, existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import type { UnifiedSession } from "./types";
@@ -105,6 +108,26 @@ export class SessionListStore {
 			CREATE INDEX IF NOT EXISTS idx_session_list_created_by_activity
 				ON session_list(created_by, archived, last_activity_ms DESC);
 		`);
+    if (
+      !this.db
+        .query("SELECT 1 FROM session_list_meta WHERE key = 'access_json_v1'")
+        .get()
+    ) {
+      this.db
+        .transaction(() => {
+          canonicalizeAccessTable(this.db, "session_list", "payload");
+          this.db.run(
+            "INSERT INTO session_list_meta(key, value) VALUES ('access_json_v1', '1')",
+          );
+        })
+        .immediate();
+    }
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_session_list_access_owner_activity
+        ON session_list(${accessOwnerSql("payload")}, last_activity_ms DESC, id);
+      CREATE TEMP VIEW session_list_shared AS
+        SELECT * FROM session_list WHERE ${accessPredicateSql("payload")};
+    `);
     // `branch` arrived after the first index shipped. Add it in place and drop
     // coverage, so the next rebuild (a catalog page, not a file scan) fills it
     // for every row instead of leaving old rows unmatched by branch.
@@ -221,9 +244,11 @@ export class SessionListStore {
     this.db.run("DELETE FROM session_list WHERE id = ?", [id]);
   }
 
-  get(id: string): UnifiedSession | null {
+  get(id: string, principal?: AccessPrincipal): UnifiedSession | null {
     const row = this.db
-      .query("SELECT payload FROM session_list WHERE id = ?")
+      .query(
+        `SELECT payload FROM session_list WHERE id = ? AND ${accessPredicateSql("payload", principal)}`,
+      )
       .get(id) as StoredRow | null;
     return row ? (decodeRows([row])[0] ?? null) : null;
   }
@@ -236,19 +261,20 @@ export class SessionListStore {
    * needed.
    */
   listVisibilityGroup(session: UnifiedSession): UnifiedSession[] {
+    if (!canAccessScope(session.accessScope)) return [];
     const rows = new Map<string, UnifiedSession>([[session.id, session]]);
     // Live siblings only: the sidebar scopes its live slice, so an archived
     // sibling must not lend ownership or attention to this row.
     const members = session.workspaceId
       ? (this.db
           .query(
-            "SELECT payload FROM session_list WHERE workspace_id = ? AND archived = 0",
+            "SELECT payload FROM session_list_shared WHERE workspace_id = ? AND archived = 0",
           )
           .all(session.workspaceId) as StoredRow[])
       : session.worktreeDir?.includes("/worktrees/")
         ? (this.db
             .query(
-              "SELECT payload FROM session_list WHERE worktree_dir = ? AND archived = 0",
+              "SELECT payload FROM session_list_shared WHERE worktree_dir = ? AND archived = 0",
             )
             .all(session.worktreeDir) as StoredRow[])
         : [];
@@ -278,7 +304,7 @@ export class SessionListStore {
 
   setArchived(id: string, archived: boolean, reason?: string): void {
     const row = this.db
-      .query("SELECT payload FROM session_list WHERE id = ?")
+      .query("SELECT payload FROM session_list_shared WHERE id = ?")
       .get(id) as { payload: string } | null;
     if (!row) return;
     try {
@@ -297,25 +323,30 @@ export class SessionListStore {
     }
   }
 
-  count(): number {
+  count(principal?: AccessPrincipal): number {
     const row = this.db
-      .query("SELECT count(*) AS n FROM session_list")
+      .query(
+        `SELECT count(*) AS n FROM session_list WHERE ${accessPredicateSql("payload", principal)}`,
+      )
       .get() as {
       n: number;
     };
     return Number(row?.n || 0);
   }
 
-  list(slice: SessionListSlice = "include"): UnifiedSession[] {
+  list(
+    slice: SessionListSlice = "include",
+    principal?: AccessPrincipal,
+  ): UnifiedSession[] {
     const where =
       slice === "include"
         ? ""
         : slice === "only"
-          ? "WHERE archived = 1"
-          : "WHERE archived = 0";
+          ? "AND archived = 1"
+          : "AND archived = 0";
     const rows = this.db
       .query(
-        `SELECT payload FROM session_list ${where} ORDER BY last_activity_ms DESC, id`,
+        `SELECT payload FROM session_list WHERE ${accessPredicateSql("payload", principal)} ${where} ORDER BY last_activity_ms DESC, id`,
       )
       .all() as StoredRow[];
     return decodeRows(rows);
@@ -332,7 +363,7 @@ export class SessionListStore {
     if (!branches.length) return [];
     const rows = this.db
       .query(
-        `SELECT payload FROM session_list
+        `SELECT payload FROM session_list_shared
          WHERE archived = 0 AND branch IN (${branches.map(() => "?").join(", ")})`,
       )
       .all(...branches) as StoredRow[];
@@ -350,7 +381,7 @@ export class SessionListStore {
     const rows = this.db
       .query(
         `
-        SELECT payload FROM session_list
+        SELECT payload FROM session_list_shared
         WHERE workspace_id = ?
         ORDER BY last_activity_ms DESC
       `,
@@ -370,7 +401,7 @@ export class SessionListStore {
       ? (this.db
           .query(
             `
-						SELECT payload FROM session_list
+						SELECT payload FROM session_list_shared
 						WHERE archived = 1 AND (workspace_id = ? OR worktree_dir = ?)
 						ORDER BY last_activity_ms DESC
 					`,
@@ -379,7 +410,7 @@ export class SessionListStore {
       : (this.db
           .query(
             `
-						SELECT payload FROM session_list
+						SELECT payload FROM session_list_shared
 						WHERE workspace_id = ? AND archived = 1
 						ORDER BY last_activity_ms DESC
 					`,
@@ -404,7 +435,7 @@ export class SessionListStore {
     return (
       this.db
         .query(
-          "SELECT DISTINCT workspace_id FROM session_list WHERE archived = 0 AND workspace_id IS NOT NULL",
+          "SELECT DISTINCT workspace_id FROM session_list_shared WHERE archived = 0 AND workspace_id IS NOT NULL",
         )
         .all() as Array<{ workspace_id: string }>
     ).map((row) => row.workspace_id);
@@ -432,11 +463,11 @@ export class SessionListStore {
 							ORDER BY last_activity_ms DESC, id
 						) AS automation_rank,
 						count(*) OVER (PARTITION BY automation) AS automation_run_count
-					FROM session_list
+					FROM session_list_shared
 					WHERE archived = 0 AND automation IS NOT NULL
 				), selected AS (
 					SELECT payload, last_activity_ms, NULL AS automation_run_count
-					FROM session_list
+					FROM session_list_shared
 					WHERE archived = 0 AND automation IS NULL
 					UNION ALL
 					SELECT payload, last_activity_ms, automation_run_count
@@ -445,7 +476,7 @@ export class SessionListStore {
 						OR waiting_for_input = 1 OR manual_status IS NOT NULL OR id = ?
 					UNION ALL
 					SELECT payload, last_activity_ms, NULL AS automation_run_count
-					FROM session_list
+					FROM session_list_shared
 					WHERE archived = 1 AND id = ?
 				)
 				SELECT payload, automation_run_count

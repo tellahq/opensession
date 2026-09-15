@@ -1,3 +1,4 @@
+import { assertMetadataActorRequest } from "./metadata-protocol";
 /**
  * One logical owner for a session.
  *
@@ -206,11 +207,30 @@ export async function sessionCore<T extends CoreActorRequest>(
 export async function sessionMetadata<T extends MetadataActorRequest>(
   request: T,
 ): Promise<MetadataActorResult<T>> {
+  assertMetadataActorRequest(request);
   if (state.actor) return state.actor.decideMetadataAsync(request);
   const store = compatibilityStoreForTest("metadata");
   type R = MetadataActorResult<T>;
+  if (request.op === "repository_get")
+    return store.repositoryCatalogGet(
+      request.repositoryId,
+      request.principal,
+    ) as R;
+  if (request.op === "repository_page")
+    return store.repositoryCatalogPage(
+      request.afterRepositoryId,
+      request.limit,
+      request.principal,
+    ) as R;
+  if (request.op === "repository_count")
+    return store.repositoryCatalogCount(request.principal) as R;
+  if (request.op === "repository_put")
+    return store.repositoryCatalogPut(request) as R;
   if (request.op === "get")
-    return store.sessionMetadata(request.sessionId) as R;
+    return store.accessibleSessionMetadata(
+      request.sessionId,
+      request.principal,
+    ) as R;
   if (request.op === "put") {
     const result = store.putSessionMetadata(request);
     if (result.status === "committed")
@@ -225,12 +245,23 @@ export async function sessionMetadata<T extends MetadataActorRequest>(
       request.sessionId,
       request.rev,
     ) as R;
+  if (request.op === "catalog_read")
+    return store.sessionMetadataCatalogRead(
+      request.sessionId,
+      request.principal,
+    ) as R;
   if (request.op === "catalog_get")
-    return store.sessionMetadataCatalogGet(request.sessionId) as R;
+    return store.sessionMetadataCatalogGet(
+      request.sessionId,
+      request.principal,
+    ) as R;
+  if (request.op === "catalog_count")
+    return store.sessionMetadataCatalogCount(request.principal) as R;
   if (request.op === "catalog_page")
     return store.sessionMetadataCatalogPage(
       request.afterSessionId,
       request.limit,
+      request.principal,
     ) as R;
   if (request.op === "pending_exports")
     return store.sessionMetadataPendingExports(request.limit) as R;

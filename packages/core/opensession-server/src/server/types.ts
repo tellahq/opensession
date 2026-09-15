@@ -1,3 +1,4 @@
+import type { AccessScope } from "../shared/access-scope";
 export type SessionSource = "slack" | "linear" | "opensession" | "cli";
 
 /**
@@ -61,6 +62,7 @@ export interface SessionSafetyState {
 }
 
 export interface UnifiedSession {
+  accessScope?: AccessScope;
   id: string;
   /** Source chat copied into this session before its first turn. */
   duplicatedFromSessionId?: string;
@@ -542,6 +544,7 @@ export interface AutomationDescendantPolicy {
 }
 
 export interface NativeSessionFile {
+  accessScope?: AccessScope;
   id: string;
   /** Source chat copied into this session before its first turn. */
   duplicatedFromSessionId?: string;
