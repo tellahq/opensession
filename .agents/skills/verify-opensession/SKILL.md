@@ -19,7 +19,7 @@ export RUN_ID="verify-$(date +%Y%m%d-%H%M%S)-$$"
 ./.agents/skills/verify-opensession/bin/verify-opensession launch "$RUN_ID"
 ```
 
-The command prints `APP_URL`, `STATE_DIR`, and `EVIDENCE_DIR`. It starts the real Bun gateway and SessionKernel with a shared scratch credential, `OPENSESSION_DEV=1`, `OPENSESSION_DEMO=1`, and a disposable `OPENSESSION_STATE_DIR` under `/tmp`. The demo seed supplies sessions, transcripts, a repository, pull request state, automations, and a paused goal. External agents, schedulers, webhooks, executor work, and live credentials stay off.
+The command prints `APP_URL`, `STATE_DIR`, and `EVIDENCE_DIR`. It writes the demo seed into the disposable state before starting the real SessionKernel and Bun gateway, then runs them with a shared scratch credential, `OPENSESSION_DEV=1`, `OPENSESSION_DEMO=1`, and that `OPENSESSION_STATE_DIR` under `/tmp`. Pre-seeding lets both services index the same sessions and transcripts on first boot. The seed supplies a repository, pull request state, issues, automations, and a paused goal. External agents, schedulers, webhooks, executor work, and live credentials stay off.
 
 The instance is ready when launch returns successfully. Its log remains at `/tmp/opensession-verify-$RUN_ID/server.log` until cleanup.
 
@@ -120,4 +120,4 @@ Both shipped helpers are executable:
 - `bin/verify-opensession` owns launch, doctor, API reads, browser delegation, and cleanup. Invoke it exactly as shown above.
 - `bin/browser.mjs` is the CDP implementation. Do not call it directly because it needs run metadata. Use `verify-opensession browser`.
 
-The browser subcommands are `open`, `click`, `fill`, `press`, `wait`, `snapshot`, `screenshot`, `url`, and `eval`. `press` takes a bare key (`b`, `Enter`) or a chord with the modifiers first (`Control+i`, `Meta+Shift+g`). Reserve `eval` for read-only diagnosis. It is not acceptable proof of a user path or mutation.
+The browser subcommands are `open`, `click`, `fill`, `press`, `wait`, `snapshot`, `screenshot`, `url`, and `eval`. `click` scrolls an off-screen accessibility target into view before dispatching browser input. `press` takes a bare key (`b`, `Enter`) or a chord with the modifiers first (`Control+i`, `Meta+Shift+g`). Reserve `eval` for read-only diagnosis. It is not acceptable proof of a user path or mutation.

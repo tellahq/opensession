@@ -91,9 +91,19 @@ case "$COMMAND" in
     START_HEAD="$(git -C "$ROOT" rev-parse HEAD)"
     SERVER_LOG="$RUN_DIR/server.log"
     KERNEL_LOG="$RUN_DIR/session-kernel.log"
+    DEMO_LOG="$RUN_DIR/demo-seed.log"
     KERNEL_TOKEN="$(bun -e 'process.stdout.write(crypto.randomUUID() + crypto.randomUUID())')"
 
     cd "$ROOT"
+    env -i \
+      PATH="$PATH" \
+      HOME="$HOME" \
+      USER="${USER:-}" \
+      LANG="${LANG:-C.UTF-8}" \
+      OPENSESSION_STATE_DIR="$RUN_DIR/state" \
+      NODE_ENV=development \
+      bun scripts/demo-data.ts >"$DEMO_LOG" 2>&1
+
     setsid env -i \
       PATH="$PATH" \
       HOME="$HOME" \
@@ -119,6 +129,7 @@ KERNEL_PORT=$KERNEL_PORT
 KERNEL_PID=$KERNEL_PID
 KERNEL_LOG=$KERNEL_LOG
 SERVER_LOG=$SERVER_LOG
+DEMO_LOG=$DEMO_LOG
 START_HEAD=$START_HEAD
 EOF
     trap 'stop_run' ERR
@@ -242,6 +253,15 @@ EOF
     auth="$(curl -fsS "$APP_URL/api/auth/status" 2>/dev/null || true)"
     if ! jq -e '.admin == true and ((.required == false) or (.authenticated == true))' >/dev/null 2>&1 <<<"$auth"; then
       echo "FAIL browser authentication is unusable or lacks demo admin access" >&2
+      errors=$((errors + 1))
+    fi
+    demo_sessions="$(curl -fsS "$APP_URL/api/sessions" 2>/dev/null || true)"
+    demo_automations="$(curl -fsS "$APP_URL/api/automations" 2>/dev/null || true)"
+    demo_goals="$(curl -fsS "$APP_URL/api/goals" 2>/dev/null || true)"
+    if ! jq -e 'any(.id == "bks-demo-pr")' >/dev/null 2>&1 <<<"$demo_sessions" ||
+      ! jq -e 'any(.id == "auto-demo-nightly-audit")' >/dev/null 2>&1 <<<"$demo_automations" ||
+      ! jq -e 'any(.id == "goal-demo-flake-burndown")' >/dev/null 2>&1 <<<"$demo_goals"; then
+      echo "FAIL demo seed is unavailable to the running services" >&2
       errors=$((errors + 1))
     fi
     if ! curl -fsS "http://127.0.0.1:$CDP_PORT/json/version" >/dev/null 2>&1; then
