@@ -10,7 +10,9 @@
 export interface InternalMcpCapability {
   /** One-line catalog description used in generated docs. */
   summary: string;
-  /** Decision guidance shown only when this server is available to the run. */
+  /** Decision guidance for docs and review. NOT rendered into the run prompt:
+   *  ff4542949 dropped that loop. A tool a run must know about needs a line
+   *  in run-instructions.ts, because every MCP tool hides behind mcp_search. */
   guidance: string;
 }
 

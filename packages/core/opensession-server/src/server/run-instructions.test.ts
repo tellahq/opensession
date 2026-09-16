@@ -121,6 +121,11 @@ describe("buildRunInstructions", () => {
       "For PRs outside the current primary repository, write `<repo>#<number>`, never bare `#<number>`. " +
         "A bare `#<number>` reads as a PR; write GitHub issues as `issue #<number>`.",
     );
+    // Every MCP tool hides behind mcp_search; this line is the only way a run
+    // learns follow-ups have a home other than its reply text.
+    expect(prompt).toContain(
+      "goes to `suggest_task`, not a line in your reply",
+    );
     expect(prompt).toContain("`tella-stage` `lease_editor_fixture`");
     expect(prompt).toContain("this Open Session id as `leaseKey`");
     expect(prompt).toContain("pass only its `leaseId`");
@@ -132,9 +137,10 @@ describe("buildRunInstructions", () => {
       "Never merge, approve, or push the default branch",
     );
     expect(prompt).not.toContain("open_pull_request");
-    // The Media section names every block form the transcript renders live;
-    // that is the one list the model cannot learn from a skill.
-    expect(prompt.length).toBeLessThan(2_000);
+    // The Media section names every block form the transcript renders live,
+    // and New sessions names suggest_task: the two things a run cannot learn
+    // from a skill or from mcp_search without already knowing they exist.
+    expect(prompt.length).toBeLessThan(2_200);
   });
 
   test("tells a sandboxed run where it is, in one shared paragraph", () => {
