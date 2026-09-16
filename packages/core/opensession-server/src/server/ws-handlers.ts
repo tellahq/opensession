@@ -1,3 +1,20 @@
+import { personalSessionForAction } from "./personal-repository-coordinator";
+import { withSessionExecutionAccess } from "./application-access";
+import {
+  withSessionPublication,
+  sessionAudienceAllows,
+} from "./session-audience";
+import {
+  webSocketApplicationAccess,
+  validatePrivacyPrincipal,
+  PrivacyPrincipalChanged,
+} from "./application-access";
+import { PERSONAL_PRIVACY_PROTOCOL } from "../shared/access-scope";
+import {
+  authorizeSessionMessage,
+  authorizeSharedSessionMessage,
+  SESSION_SCOPED_WS_OPERATIONS,
+} from "./ws-session-access";
 /**
  * The UI WebSocket: watch/unwatch sessions, live prompts and queue control,
  * question answers, terminals — plus the create_session flow. Extracted
@@ -111,11 +128,13 @@ import {
 import { unarchiveForHumanTurn } from "./session-unarchive";
 import {
   resizeTerminal,
-  startSessionTerminal,
+  beginTerminalStart,
+  discardTerminalStart,
   stopAllTerminals,
   stopTerminal,
   writeTerminal,
 } from "./terminals";
+import { admitTerminalStart } from "./ws-terminal-start";
 import { subscribeTranscript } from "./transcript-bus";
 import { resumeSessionFeed } from "./session-feed";
 import type { SeqEntry } from "./transcript-store";
@@ -136,6 +155,7 @@ import {
   broadcastToAll,
   broadcastToSession,
   globalPresenceFrame,
+  canDeliverSession,
   joinSession,
   leaveSession,
   markClientSeen,
@@ -188,10 +208,22 @@ function lastRestartBy(): string {
  * replaces rather than merges them).
  */
 async function sendWatchExtras(
-  ws: any,
+  target: any,
   sessionId: string,
   session: NonNullable<Awaited<ReturnType<typeof findSessionAsync>>>,
+  watchRequest: number | undefined,
 ): Promise<void> {
+  const ws = {
+    data: target.data,
+    send: (payload: string) => {
+      if (
+        target.data.watchingSessionId === sessionId &&
+        target.data.watchRequest === watchRequest &&
+        canDeliverSession(target, sessionId, true)
+      )
+        target.send(payload);
+    },
+  };
   const pendingAsk = await pendingAskAwaitingAnswer(sessionId);
   if (pendingAsk) {
     ws.send(
@@ -329,9 +361,17 @@ function classifyV2Entries(entries: SeqEntry[]): SeqEntry[] {
 }
 
 function sendTranscriptFrame(
-  ws: { send(payload: string, compress?: boolean): unknown },
+  ws: {
+    data: WSClientData;
+    send(payload: string, compress?: boolean): unknown;
+  },
   frame: Record<string, unknown>,
 ): void {
+  if (
+    typeof frame.sessionId === "string" &&
+    !canDeliverSession(ws, frame.sessionId, true)
+  )
+    return;
   ws.send(JSON.stringify(frame), true);
 }
 
@@ -437,6 +477,7 @@ async function serveTranscriptV2(
   msg: any,
 ): Promise<boolean> {
   if (msg.supportsSeq !== true) return false;
+  const personal = session.accessScope?.kind === "personal";
   // Plain loop runs don't thread a unified session id to the runner (§3), so
   // their store rows would be forever partial — refuse v2, keep legacy.
   // (Linear runs DO since transcriptSessionId landed; they lazy-import here
@@ -452,6 +493,7 @@ async function serveTranscriptV2(
   // a socket-independent feed lifecycle exists — the one remaining step of
   // mirror retirement (design doc §11); mirror writes themselves are gone.
   if (
+    !personal &&
     session.isRunning &&
     !isAgentSessionBusy(
       session.claudeSessionId,
@@ -463,7 +505,9 @@ async function serveTranscriptV2(
 
   const store = transcript;
   try {
-    if (await store.needsImport(sessionId)) {
+    if (personal) {
+      // Personal sessions are actor-owned from birth, never provider imports.
+    } else if (await store.needsImport(sessionId)) {
       // Lazy import: small legacy transcripts import synchronously inside
       // the watch; big ones import in the background and THIS watch serves
       // legacy (the next one upgrades). The ceiling measures the WHOLE §8
@@ -511,7 +555,9 @@ async function serveTranscriptV2(
           ws,
           sessionId,
           () =>
-            ws.data?.watchingSessionId === sessionId && !!ws.data?.transcriptV2,
+            ws.data?.watchingSessionId === sessionId &&
+            !!ws.data?.transcriptV2 &&
+            canDeliverSession(ws, sessionId, true),
         );
       } catch (error) {
         console.warn(`[ws] transcript index failed for ${sessionId}:`, error);
@@ -525,7 +571,9 @@ async function serveTranscriptV2(
       socket: ws,
       subscribe: subscribeTranscript,
       isCurrent: () =>
-        ws.data?.watchingSessionId === sessionId && !!ws.data?.transcriptV2,
+        ws.data?.watchingSessionId === sessionId &&
+        !!ws.data?.transcriptV2 &&
+        canDeliverSession(ws, sessionId, true),
       ...(msg.supportsChangeSeq === true &&
       typeof msg.sinceChangeSeq === "number"
         ? { sinceChangeSeq: msg.sinceChangeSeq }
@@ -582,10 +630,16 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
           type: "hello",
           bootId: BOOT_ID,
           capabilities: { commandResults: true },
-          ...(ws.data?.authLogin
-            ? { commandScope: `github:${ws.data.authLogin.toLowerCase()}` }
+          ...(ws.data.privacyProtocol === PERSONAL_PRIVACY_PROTOCOL
+            ? {
+                commandScope: `github-account:${ws.data.expectedGithubAccountId}`,
+              }
+            : ws.data?.authLogin
+              ? { commandScope: `github:${ws.data.authLogin.toLowerCase()}` }
+              : {}),
+          ...(lastRestartBy() && canDeliverSession(ws, lastRestartBy()!)
+            ? { restartBy: lastRestartBy() }
             : {}),
-          ...(lastRestartBy() ? { restartBy: lastRestartBy() } : {}),
         }),
       );
     } catch {}
@@ -593,7 +647,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
     // so without this a client that just connected shows an empty team
     // until somebody opens or leaves a session.
     try {
-      ws.send(JSON.stringify(globalPresenceFrame()));
+      ws.send(JSON.stringify(globalPresenceFrame(ws)));
     } catch {}
     console.log("WebSocket client connected");
   },
@@ -610,6 +664,71 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
       return;
     }
 
+    // Validate the connection's captured identity BEFORE navigation, terminal
+    // reservations/stops or mailbox side effects. Message fields cannot alter it.
+    if (ws.data.privacyProtocol === PERSONAL_PRIVACY_PROTOCOL) {
+      const identity = ws.data.authLogin
+        ? refreshWebIdentity({
+            login: ws.data.authLogin,
+            name: ws.data.authUser || ws.data.authLogin,
+            githubAccountId: ws.data.authGithubAccountId,
+            ...(ws.data.authAutomation ? { automation: true } : {}),
+          })
+        : null;
+      try {
+        validatePrivacyPrincipal(
+          ws.data.privacyProtocol,
+          ws.data.expectedGithubAccountId === undefined
+            ? undefined
+            : String(ws.data.expectedGithubAccountId),
+          identity,
+        );
+      } catch (error) {
+        if (!(error instanceof PrivacyPrincipalChanged)) throw error;
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            code: error.code,
+            message: error.message,
+          }),
+        );
+        ws.close(4001, "Principal changed");
+        return;
+      }
+    }
+
+    // Capture navigation and implicit targets before the first authorization
+    // await. A later watch, unwatch or close invalidates this arrival token.
+    const arrivalWatchRequest =
+      msg?.type === "watch" || msg?.type === "unwatch"
+        ? (ws.data.watchRequest = (ws.data.watchRequest ?? 0) + 1)
+        : undefined;
+    if (msg?.type === "cancel" && typeof msg.sessionId !== "string")
+      msg.sessionId = ws.data.watchingSessionId;
+
+    const terminalId = typeof msg?.termId === "string" ? msg.termId : "0";
+    const terminalOpts = {
+      cols:
+        typeof msg?.cols === "number" || typeof msg?.cols === "string"
+          ? Number(msg.cols) || undefined
+          : undefined,
+      rows:
+        typeof msg?.rows === "number" || typeof msg?.rows === "string"
+          ? Number(msg.rows) || undefined
+          : undefined,
+      send: (frame: object) => {
+        try {
+          ws.send(JSON.stringify({ ...frame, termId: terminalId }));
+        } catch {}
+      },
+    };
+    const terminalStart =
+      msg?.type === "term_start"
+        ? beginTerminalStart(ws, terminalId, terminalOpts)
+        : undefined;
+    // Stop at arrival too: a delayed stop handler must not kill a newer start.
+    if (msg?.type === "term_stop") stopTerminal(ws, terminalId);
+
     // A throw anywhere below used to escape as an unhandled rejection and
     // kill the whole process (2026-07-27: four crash-restarts from a prompt
     // message missing `content` — every in-process run died each time). One
@@ -624,12 +743,14 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
         const identity = refreshWebIdentity({
           login: ws.data.authLogin,
           name: ws.data.authUser || ws.data.authLogin,
+          githubAccountId: ws.data.authGithubAccountId,
           ...(ws.data.authAutomation ? { automation: true } : {}),
         });
         if (
           !identity ||
           (!identity.automation && githubReconnectRequired(identity.login))
         ) {
+          stopAllTerminals(ws);
           ws.close(
             4001,
             identity
@@ -640,807 +761,965 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
         }
         const firstName = identity.name.split(" ")[0] || identity.name;
         ws.data.authUser = firstName;
+        ws.data.authGithubAccountId = identity.automation
+          ? undefined
+          : identity.githubAccountId;
         ws.data.user = firstName;
         msg.user = firstName;
       }
-      // Anything that isn't a heartbeat is a person doing something, so it
-      // refreshes this socket's attention (ws-hub's idle window — a face means
-      // "here now"). `away` carries its own stamp.
-      markClientSeen(ws, msg.type !== "ping" && msg.type !== "away");
-
-      // Every session mutation enters one per-session mailbox. The recursive
-      // call carries the private marker and executes the existing handler only
-      // after earlier commands for this session have committed. Read/watch and
-      // terminal frames stay outside the kernel because they do not own session
-      // lifecycle state.
-      const kernelCommands = new Set([
-        "prompt",
-        "interrupt_prompt",
-        "delete_queued_prompt",
-        "take_queued_prompt",
-        "take_steered_prompt",
-        "update_queued_prompt",
-        "steer_queued_prompt",
-        "interrupt_queued_prompt",
-        "reorder_queued_prompt",
-        "cancel",
-        "answer_question",
-      ]);
-      // Creation already has its own durable FSM and outbox. Wrapping it in a
-      // websocket_command holds the per-session mailbox while the opening effect
-      // tries to enter session_file_updated, so neither command can finish.
-      const requestId =
-        typeof msg.requestId === "string" && msg.requestId
-          ? msg.requestId.slice(0, 200)
-          : crypto.randomUUID();
-      const commandSessionId =
-        msg.type === "create_session"
-          ? typeof msg.clientSessionId === "string"
-            ? msg.clientSessionId
-            : sessionIdForRequest(
-                ws.data?.authLogin || msg.user || "anonymous",
-                requestId,
-              )
-          : typeof msg.sessionId === "string"
-            ? msg.sessionId
-            : msg.type === "cancel" &&
-                typeof ws.data?.watchingSessionId === "string"
-              ? ws.data.watchingSessionId
-              : typeof ws.data?.watchingSessionId === "string"
-                ? ws.data.watchingSessionId
-                : undefined;
-      const internalKernelToken = isInternalKernelDispatch(
-        kernelDispatchTokens,
-        msg.__sessionKernelToken,
+      if (msg.type === "term_start") {
+        markClientSeen(ws, true);
+        if (terminalStart)
+          await admitTerminalStart(
+            ws,
+            terminalId,
+            terminalStart,
+            terminalOpts,
+            () => authorizeSharedSessionMessage(msg),
+            () => findSessionAsync(msg.sessionId),
+          );
+        return;
+      }
+      if (msg.type === "term_stop") {
+        markClientSeen(ws, true);
+        return;
+      }
+      const access = webSocketApplicationAccess(ws.data);
+      const authorization = await authorizeSessionMessage(
+        msg,
+        access.principal,
       );
       if (
-        !internalKernelToken &&
-        commandSessionId &&
-        kernelCommands.has(msg.type)
-      ) {
-        const messageHash = new Bun.CryptoHasher("sha256")
-          .update(String(message))
-          .digest("hex");
-        // Cancel and interrupt target the run that existed when the command was
-        // first admitted. Replaying after a successor starts must fail payload
-        // identity instead of stopping the successor.
-        const targetsRun =
-          msg.type === "cancel" || msg.type === "interrupt_prompt";
-        const targetRun = targetsRun
-          ? sessionKernel(commandSessionId).runStateProjection()
-          : undefined;
-        const persistedCancel =
-          msg.type === "cancel"
-            ? (
-                await sessionTurn({
-                  op: "snapshot",
-                  sessionId: commandSessionId,
-                })
-              ).cancel
+        arrivalWatchRequest !== undefined &&
+        ws.data.watchRequest !== arrivalWatchRequest
+      )
+        return;
+      if (!authorization.allowed) {
+        ws.send(
+          JSON.stringify({ type: "error", message: "Session not found" }),
+        );
+        return;
+      }
+      if (authorization.sessionId) msg.sessionId = authorization.sessionId;
+      const dispatch = async () => {
+        // Anything that isn't a heartbeat is a person doing something, so it
+        // refreshes this socket's attention (ws-hub's idle window — a face means
+        // "here now"). `away` carries its own stamp.
+        markClientSeen(ws, msg.type !== "ping" && msg.type !== "away");
+
+        // Every session mutation enters one per-session mailbox. The recursive
+        // call carries the private marker and executes the existing handler only
+        // after earlier commands for this session have committed. Read/watch and
+        // terminal frames stay outside the kernel because they do not own session
+        // lifecycle state.
+        const kernelCommands = new Set([
+          "prompt",
+          "interrupt_prompt",
+          "delete_queued_prompt",
+          "take_queued_prompt",
+          "take_steered_prompt",
+          "update_queued_prompt",
+          "steer_queued_prompt",
+          "interrupt_queued_prompt",
+          "reorder_queued_prompt",
+          "cancel",
+          "answer_question",
+        ]);
+        // Creation already has its own durable FSM and outbox. Wrapping it in a
+        // websocket_command holds the per-session mailbox while the opening effect
+        // tries to enter session_file_updated, so neither command can finish.
+        const requestId =
+          typeof msg.requestId === "string" && msg.requestId
+            ? msg.requestId.slice(0, 200)
+            : crypto.randomUUID();
+        const commandSessionId =
+          msg.type === "create_session"
+            ? typeof msg.clientSessionId === "string"
+              ? msg.clientSessionId
+              : sessionIdForRequest(
+                  ws.data.privacyProtocol === PERSONAL_PRIVACY_PROTOCOL
+                    ? `github-account:${ws.data.expectedGithubAccountId}`
+                    : ws.data?.authLogin || msg.user || "anonymous",
+                  requestId,
+                )
+            : typeof msg.sessionId === "string"
+              ? msg.sessionId
+              : msg.type === "cancel" &&
+                  typeof ws.data?.watchingSessionId === "string"
+                ? ws.data.watchingSessionId
+                : typeof ws.data?.watchingSessionId === "string"
+                  ? ws.data.watchingSessionId
+                  : undefined;
+        const internalKernelToken = isInternalKernelDispatch(
+          kernelDispatchTokens,
+          msg.__sessionKernelToken,
+        );
+        if (
+          !internalKernelToken &&
+          commandSessionId &&
+          kernelCommands.has(msg.type)
+        ) {
+          const messageHash = new Bun.CryptoHasher("sha256")
+            .update(String(message))
+            .digest("hex");
+          // Cancel and interrupt target the run that existed when the command was
+          // first admitted. Replaying after a successor starts must fail payload
+          // identity instead of stopping the successor.
+          const targetsRun =
+            msg.type === "cancel" || msg.type === "interrupt_prompt";
+          const targetRun = targetsRun
+            ? sessionKernel(commandSessionId).runStateProjection()
             : undefined;
-        const persistedInterrupt =
-          msg.type === "interrupt_prompt"
-            ? deliveryInterruptForAnchor(
-                await sessionDelivery({
-                  op: "snapshot",
-                  sessionId: commandSessionId,
-                }),
-                requestId,
-              )
-            : undefined;
-        const priorCommandPayload = (
-          await durableSessionCommand(commandSessionId, requestId)
-        )?.payload as
-          | {
-              command?: string;
-              targetRunId?: string | null;
-              targetRunGeneration?: number;
-            }
-          | undefined;
-        const commandTarget =
-          !!priorCommandPayload &&
-          priorCommandPayload.command === msg.type &&
-          priorCommandPayload.targetRunId !== undefined &&
-          priorCommandPayload.targetRunGeneration !== undefined
-            ? {
-                runId: priorCommandPayload.targetRunId,
-                generation: priorCommandPayload.targetRunGeneration,
-              }
-            : undefined;
-        const replayedTarget =
-          commandTarget ||
-          targetForTurnCancel(persistedCancel, `stop:${requestId}`) ||
-          targetForDeliveryInterrupt(persistedInterrupt, requestId);
-        const targetRunId = targetRun
-          ? replayedTarget
-            ? replayedTarget.runId
-            : targetRun.currentRunId ||
-              (targetRun.state === "starting" || targetRun.state === "preparing"
-                ? currentAgentRunToken(commandSessionId)
-                : undefined) ||
-              null
-          : undefined;
-        const targetRunGeneration =
-          replayedTarget?.generation ?? targetRun?.generation;
-        const kernelToken = crypto.randomUUID();
-        kernelDispatchTokens.add(kernelToken);
-        let gatewayCommandExecuting = false;
-        let gatewayPhysicalFinished = false;
-        try {
-          const plan = await sessionGatewayCommand({
-            op: "request",
-            sessionId: commandSessionId,
-            requestId,
-            operation: "websocket_command",
-            identity: {
-              command: msg.type,
-              messageHash,
-              ...(msg.type === "prompt" && msg.busyMode === "steer"
-                ? { priority: true }
-                : {}),
-              ...(targetRunId !== undefined
-                ? { targetRunId, targetRunGeneration }
-                : {}),
-            },
-          });
-          if (plan.status === "in_progress")
-            throw Object.assign(
-              new Error("Session command is already in progress"),
-              {
-                retryable: true,
-              },
-            );
-          gatewayCommandExecuting = plan.status === "execute";
-          const accepted =
-            plan.status === "completed"
-              ? { result: plan.result, duplicate: true }
-              : await withSessionMutationLock(commandSessionId, async () => {
-                  if (targetRunId !== undefined) {
-                    const current =
-                      sessionKernel(commandSessionId).runStateProjection();
-                    const currentTargetId =
-                      current.currentRunId ||
-                      (current.state === "starting" ||
-                      current.state === "preparing"
-                        ? currentAgentRunToken(commandSessionId)
-                        : undefined) ||
-                      null;
-                    if (
-                      currentTargetId !== targetRunId ||
-                      current.generation !== targetRunGeneration
-                    ) {
-                      const cancelReplayMatches =
-                        persistedCancel?.cancelId === `stop:${requestId}` &&
-                        persistedCancel.runId === targetRunId &&
-                        persistedCancel.runGeneration === targetRunGeneration;
-                      const interruptReplayMatches =
-                        !!persistedInterrupt &&
-                        persistedInterrupt.anchorId === requestId &&
-                        persistedInterrupt.dispatchId === targetRunId &&
-                        persistedInterrupt.runGeneration ===
-                          targetRunGeneration;
-                      if (!cancelReplayMatches && !interruptReplayMatches)
-                        throw new Error(
-                          "The run targeted by this command has already changed",
-                        );
-                    }
-                  }
-                  await websocketHandlers.message?.(
-                    ws,
-                    JSON.stringify({
-                      ...msg,
-                      sessionId: commandSessionId,
-                      requestId,
-                      ...(targetRunId !== undefined
-                        ? {
-                            __targetRunId: targetRunId,
-                            __targetRunGeneration: targetRunGeneration,
-                          }
-                        : {}),
-                      __sessionKernelToken: kernelToken,
-                    }),
-                  );
-                  const dispatchError = kernelDispatchErrors.get(kernelToken);
-                  if (dispatchError) throw dispatchError;
-                  const result = kernelDispatchResults.get(kernelToken);
-                  gatewayPhysicalFinished = true;
-                  await sessionGatewayCommand({
-                    op: "complete",
+          const persistedCancel =
+            msg.type === "cancel"
+              ? (
+                  await sessionTurn({
+                    op: "snapshot",
                     sessionId: commandSessionId,
-                    requestId,
-                    operation: "websocket_command",
-                    result,
-                  });
-                  return { result, duplicate: false };
-                });
-          if (
-            accepted.duplicate &&
-            accepted.result &&
-            typeof accepted.result === "object"
-          )
-            ws.send(JSON.stringify(markReplayedCommandResult(accepted.result)));
-          ws.send(
-            JSON.stringify({
-              type: "command_result",
-              sessionId: commandSessionId,
-              requestId,
-              status: "completed",
-              result: accepted.result,
-            }),
-          );
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          const retryable = isRetryableSessionCommandError(error);
-          if (gatewayCommandExecuting && !gatewayPhysicalFinished)
-            await sessionGatewayCommand({
-              op: "fail",
+                  })
+                ).cancel
+              : undefined;
+          const persistedInterrupt =
+            msg.type === "interrupt_prompt"
+              ? deliveryInterruptForAnchor(
+                  await sessionDelivery({
+                    op: "snapshot",
+                    sessionId: commandSessionId,
+                  }),
+                  requestId,
+                )
+              : undefined;
+          const priorCommandPayload = (
+            await durableSessionCommand(commandSessionId, requestId)
+          )?.payload as
+            | {
+                command?: string;
+                targetRunId?: string | null;
+                targetRunGeneration?: number;
+              }
+            | undefined;
+          const commandTarget =
+            !!priorCommandPayload &&
+            priorCommandPayload.command === msg.type &&
+            priorCommandPayload.targetRunId !== undefined &&
+            priorCommandPayload.targetRunGeneration !== undefined
+              ? {
+                  runId: priorCommandPayload.targetRunId,
+                  generation: priorCommandPayload.targetRunGeneration,
+                }
+              : undefined;
+          const replayedTarget =
+            commandTarget ||
+            targetForTurnCancel(persistedCancel, `stop:${requestId}`) ||
+            targetForDeliveryInterrupt(persistedInterrupt, requestId);
+          const targetRunId = targetRun
+            ? replayedTarget
+              ? replayedTarget.runId
+              : targetRun.currentRunId ||
+                (targetRun.state === "starting" ||
+                targetRun.state === "preparing"
+                  ? currentAgentRunToken(commandSessionId)
+                  : undefined) ||
+                null
+            : undefined;
+          const targetRunGeneration =
+            replayedTarget?.generation ?? targetRun?.generation;
+          const kernelToken = crypto.randomUUID();
+          kernelDispatchTokens.add(kernelToken);
+          let gatewayCommandExecuting = false;
+          let gatewayPhysicalFinished = false;
+          try {
+            const plan = await sessionGatewayCommand({
+              op: "request",
               sessionId: commandSessionId,
               requestId,
               operation: "websocket_command",
-              error: message,
-              retryable,
+              identity: {
+                command: msg.type,
+                messageHash,
+                ...(msg.type === "prompt" && msg.busyMode === "steer"
+                  ? { priority: true }
+                  : {}),
+                ...(targetRunId !== undefined
+                  ? { targetRunId, targetRunGeneration }
+                  : {}),
+              },
             });
-          ws.send(
-            JSON.stringify({
-              type: "command_result",
-              sessionId: commandSessionId,
-              requestId,
-              status: "failed",
-              error: message,
-              terminal: !retryable,
-            }),
-          );
-          ws.send(
-            JSON.stringify({
-              type: "error",
-              sessionId: commandSessionId,
-              message,
-            }),
-          );
-          if (retryable)
-            setTimeout(
-              () => ws.close(1012, "Retry session command"),
-              50,
-            ).unref?.();
-        } finally {
-          kernelDispatchTokens.delete(kernelToken);
-          kernelDispatchResults.delete(kernelToken);
-          kernelDispatchErrors.delete(kernelToken);
-        }
-        return;
-      }
-
-      switch (msg.type) {
-        case "ping": {
-          // App-level liveness probe (browsers can't send WS protocol pings).
-          // The client closes + reconnects a socket whose ping goes unanswered
-          // — how a half-open iOS/Safari socket gets detected.
-          ws.send('{"type":"pong"}');
-          break;
-        }
-
-        case "command_ack": {
-          if (msg.sessionId && msg.requestId) {
-            await acknowledgeSessionCommand(msg.sessionId, msg.requestId);
+            if (plan.status === "in_progress")
+              throw Object.assign(
+                new Error("Session command is already in progress"),
+                {
+                  retryable: true,
+                },
+              );
+            gatewayCommandExecuting = plan.status === "execute";
+            const accepted =
+              plan.status === "completed"
+                ? { result: plan.result, duplicate: true }
+                : await withSessionMutationLock(commandSessionId, async () => {
+                    if (targetRunId !== undefined) {
+                      const current =
+                        sessionKernel(commandSessionId).runStateProjection();
+                      const currentTargetId =
+                        current.currentRunId ||
+                        (current.state === "starting" ||
+                        current.state === "preparing"
+                          ? currentAgentRunToken(commandSessionId)
+                          : undefined) ||
+                        null;
+                      if (
+                        currentTargetId !== targetRunId ||
+                        current.generation !== targetRunGeneration
+                      ) {
+                        const cancelReplayMatches =
+                          persistedCancel?.cancelId === `stop:${requestId}` &&
+                          persistedCancel.runId === targetRunId &&
+                          persistedCancel.runGeneration === targetRunGeneration;
+                        const interruptReplayMatches =
+                          !!persistedInterrupt &&
+                          persistedInterrupt.anchorId === requestId &&
+                          persistedInterrupt.dispatchId === targetRunId &&
+                          persistedInterrupt.runGeneration ===
+                            targetRunGeneration;
+                        if (!cancelReplayMatches && !interruptReplayMatches)
+                          throw new Error(
+                            "The run targeted by this command has already changed",
+                          );
+                      }
+                    }
+                    await websocketHandlers.message?.(
+                      ws,
+                      JSON.stringify({
+                        ...msg,
+                        sessionId: commandSessionId,
+                        requestId,
+                        ...(targetRunId !== undefined
+                          ? {
+                              __targetRunId: targetRunId,
+                              __targetRunGeneration: targetRunGeneration,
+                            }
+                          : {}),
+                        __sessionKernelToken: kernelToken,
+                      }),
+                    );
+                    const dispatchError = kernelDispatchErrors.get(kernelToken);
+                    if (dispatchError) throw dispatchError;
+                    const result = kernelDispatchResults.get(kernelToken);
+                    gatewayPhysicalFinished = true;
+                    await sessionGatewayCommand({
+                      op: "complete",
+                      sessionId: commandSessionId,
+                      requestId,
+                      operation: "websocket_command",
+                      result,
+                    });
+                    return { result, duplicate: false };
+                  });
+            if (
+              accepted.duplicate &&
+              accepted.result &&
+              typeof accepted.result === "object"
+            )
+              ws.send(
+                JSON.stringify(markReplayedCommandResult(accepted.result)),
+              );
             ws.send(
               JSON.stringify({
-                type: "command_ack_result",
-                sessionId: msg.sessionId,
-                requestId: msg.requestId,
+                type: "command_result",
+                sessionId: commandSessionId,
+                requestId,
+                status: "completed",
+                result: accepted.result,
               }),
             );
-          }
-          break;
-        }
-
-        case "away": {
-          // Presence, not subscription: the tab went hidden or unfocused (or came
-          // back). The watch stays put — the transcript must keep streaming so
-          // unread counts and notifications still land — but an away socket
-          // stops showing its owner's face to everyone else.
-          const presenceSuppressed = ws.data.presenceSuppressed === true;
-          setClientAway(ws, presenceSuppressed || msg.away === true);
-          // Coming back to a session whose turn finished while everyone was
-          // away → drop in an away-summary system chip (recap.ts).
-          const returnedTo = ws.data?.watchingSessionId;
-          if (!presenceSuppressed && msg.away !== true && returnedTo) {
-            maybeRecapOnReturn(returnedTo, ws.data?.user || undefined);
-            // Same return: offer the finished turn's choice as chips if it
-            // ended one while nobody was here (reply-suggestions.ts).
-            maybeSuggestRepliesOnReturn(returnedTo, ws.data?.user || undefined);
-          }
-          break;
-        }
-
-        case "sessions_subscribe": {
-          // The sidebar query this socket renders. Row frames are evaluated
-          // against it (session-row-events) so a write reaches only the
-          // sockets whose lens can show the row. A non-sidebar query still
-          // subscribes, unscoped, and hears about every live row.
-          const raw = typeof msg.query === "string" ? msg.query : "";
-          const params = new URLSearchParams(
-            raw.startsWith("?") ? raw.slice(1, 2049) : raw.slice(0, 2048),
-          );
-          const user =
-            ws.data.authUser || ws.data.user || params.get("user") || "";
-          ws.data.sidebarScope = parseSidebarSessionScope(params, user);
-          break;
-        }
-
-        case "typing": {
-          if (typeof msg.sessionId !== "string") break;
-          setClientTyping(ws, msg.sessionId, msg.typing === true);
-          break;
-        }
-
-        case "watch": {
-          const sessionId = msg.sessionId;
-          const data = ws.data;
-          const watchRequest = (data.watchRequest ?? 0) + 1;
-          data.watchRequest = watchRequest;
-          const session = await findSessionAsync(sessionId);
-          if (data.watchRequest !== watchRequest) return;
-          if (!session) {
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            const retryable = isRetryableSessionCommandError(error);
+            if (gatewayCommandExecuting && !gatewayPhysicalFinished)
+              await sessionGatewayCommand({
+                op: "fail",
+                sessionId: commandSessionId,
+                requestId,
+                operation: "websocket_command",
+                error: message,
+                retryable,
+              });
             ws.send(
-              JSON.stringify({ type: "error", message: "Session not found" }),
+              JSON.stringify({
+                type: "command_result",
+                sessionId: commandSessionId,
+                requestId,
+                status: "failed",
+                error: message,
+                terminal: !retryable,
+              }),
             );
-            return;
-          }
-
-          // Stop watching any previous session first
-          stopAllWatchesForClient(ws);
-          releaseTranscriptV2(ws);
-          leaveSession(ws);
-
-          data.watchingSessionId = sessionId;
-          data.supportsFeed = msg.supportsFeed === true;
-          data.sinceFeedSeq =
-            typeof msg.sinceFeedSeq === "number" ? msg.sinceFeedSeq : undefined;
-          data.feedEpoch =
-            typeof msg.feedEpoch === "string" ? msg.feedEpoch : undefined;
-          if (msg.user) data.user = msg.user;
-          joinSession(ws, sessionId);
-          console.log(
-            `[presence] watch user=${JSON.stringify(data.user || "Anonymous")} login=${JSON.stringify(data.authLogin || null)} session=${JSON.stringify(sessionId)} client=${JSON.stringify(data.presenceClient || "unknown")}`,
-          );
-
-          // Opening a session whose last turn finished with nobody watching →
-          // drop in an away-summary system chip (recap.ts). Fire-and-forget;
-          // the recap arrives through the transcript bus like any append.
-          if (data.presenceSuppressed !== true) {
-            maybeRecapOnReturn(sessionId, data.user || undefined);
-            maybeSuggestRepliesOnReturn(sessionId, data.user || undefined);
-          }
-
-          // Transcript v2 (flag + supportsSeq gated): eligible watches are
-          // served from the owned store + bus with seq cursors — no mirror
-          // file-watcher. Ineligible/flag-off falls through byte-identical.
-          // The call itself is guarded: a throw anywhere in the v2 path must
-          // degrade to the legacy watch, never kill the watch silently (a
-          // cold-boot binding failure did exactly that on 2026-07-23 — the
-          // client got no init and no error).
-          let v2Served = false;
-          try {
-            v2Served = await serveTranscriptV2(ws, sessionId, session, msg);
-          } catch (e) {
-            console.error(
-              `[ws] transcript v2 serve threw for ${sessionId} — falling back to legacy watch:`,
-              e,
+            ws.send(
+              JSON.stringify({
+                type: "error",
+                sessionId: commandSessionId,
+                message,
+              }),
             );
+            if (retryable)
+              setTimeout(
+                () => ws.close(1012, "Retry session command"),
+                50,
+              ).unref?.();
+          } finally {
+            kernelDispatchTokens.delete(kernelToken);
+            kernelDispatchResults.delete(kernelToken);
+            kernelDispatchErrors.delete(kernelToken);
           }
-          if (v2Served) {
-            await sendWatchExtras(ws, sessionId, session);
+          return;
+        }
+
+        switch (msg.type) {
+          case "ping": {
+            // App-level liveness probe (browsers can't send WS protocol pings).
+            // The client closes + reconnects a socket whose ping goes unanswered
+            // — how a half-open iOS/Safari socket gets detected.
+            ws.send('{"type":"pong"}');
             break;
           }
 
-          // Reconnect resume: a client that still holds this session's entries
-          // re-watches with the byte cursor of the last transcript frame it
-          // received (sinceOffset + sinceRev from transcript_init/append). When
-          // the cursor still matches the live mirror file — same rev (the
-          // transcript didn't rotate to a new engine id) and an offset the file
-          // still covers — skip the full-tail transcript_init replace and let
-          // the file-watcher's gap-fill replay exactly the missed entries from
-          // the jsonl (the client's id-keyed upsert absorbs any overlap). The
-          // jsonl IS the replay buffer: append-only, restart-proof, and it
-          // covers entries written while nobody was watching. Any mismatch
-          // falls through to the full snapshot below.
-          const sinceOffset =
-            typeof msg.sinceOffset === "number" && msg.sinceOffset > 0
-              ? msg.sinceOffset
-              : undefined;
-          if (
-            sinceOffset !== undefined &&
-            typeof msg.sinceRev === "string" &&
-            session.transcriptPath &&
-            msg.sinceRev === transcriptRev(session.transcriptPath) &&
-            existsSync(session.transcriptPath) &&
-            sinceOffset <= statSync(session.transcriptPath).size
-          ) {
-            startWatching(session.transcriptPath, ws, sinceOffset, sessionId);
-            await sendWatchExtras(ws, sessionId, session);
-            break;
-          }
-
-          // Send one bounded transcript tail so the loading state transitions to
-          // a complete conversation instead of first painting a screenful and
-          // prepending the rest a beat later. The tighter INIT wire clamp keeps
-          // that snapshot manageable: the UI eagerly renders only
-          // ~6KB of markdown per bubble and fetches the full entry on demand,
-          // so the fat 32KB clamp only bought transfer time (a heavy tail hit
-          // 1.7MB on the wire). `startOffset` is the pagination cursor for
-          // "load earlier".
-          let { entries, truncated, endOffset, startOffset } =
-            session.transcriptPath
-              ? parseTranscriptTail(session.transcriptPath)
-              : { entries: [], truncated: false, endOffset: 0, startOffset: 0 };
-          if (!entries.length) {
-            // No mirror file yet — a fresh session, or an engine-id rotation
-            // whose next run hasn't seeded the new id's file. Without this the
-            // thread renders blank until the next send (which seeds the file);
-            // serve history via the cross-engine fallback (old transcript file
-            // merged with Pi's SQLite store) instead. No byte cursor into
-            // a file here, so no "load earlier" paging — the next run's seeded
-            // file restores it.
-            const merged = await mergedSessionTranscriptAsync(session);
-            if (data.watchRequest !== watchRequest) return;
-            if (merged.length) {
-              truncated = merged.length > 120;
-              entries = truncated ? merged.slice(-120) : merged;
-              startOffset = 0;
-            }
-          }
-          sendTranscriptFrame(ws, {
-            type: "transcript_init",
-            sessionId,
-            entries: entriesForWire(entries, INIT_WIRE_CLAMP_BYTES),
-            truncated,
-            startOffset,
-            // Resume cursor (see the sinceOffset branch above): where this
-            // snapshot ends in the mirror file, and which file that was.
-            ...(session.transcriptPath
-              ? { endOffset, rev: transcriptRev(session.transcriptPath) }
-              : {}),
-          });
-
-          // Start file watcher from where the tail parse left off — bytes
-          // appended between the parse and the watch would otherwise be lost.
-          if (session.transcriptPath) {
-            startWatching(session.transcriptPath, ws, endOffset, sessionId);
-          }
-
-          await sendWatchExtras(ws, sessionId, session);
-          break;
-        }
-
-        case "unwatch": {
-          // Viewer navigated away from the session (not just to another one):
-          // stop streaming transcript events and clear their ghost presence.
-          // Mirrors the disconnect/close cleanup; leaveSession broadcasts
-          // presence to the viewers who remain.
-          ws.data.watchRequest = (ws.data.watchRequest ?? 0) + 1;
-          stopAllWatchesForClient(ws);
-          releaseTranscriptV2(ws);
-          leaveSession(ws);
-          break;
-        }
-
-        case "load_transcript_index": {
-          if (
-            ws.data?.transcriptV2 &&
-            ws.data?.watchingSessionId === msg.sessionId
-          ) {
-            try {
-              await sendTranscriptIndex(
-                ws,
-                msg.sessionId,
-                () =>
-                  ws.data?.watchingSessionId === msg.sessionId &&
-                  !!ws.data?.transcriptV2,
+          case "command_ack": {
+            if (msg.sessionId && msg.requestId) {
+              await acknowledgeSessionCommand(msg.sessionId, msg.requestId);
+              ws.send(
+                JSON.stringify({
+                  type: "command_ack_result",
+                  sessionId: msg.sessionId,
+                  requestId: msg.requestId,
+                }),
               );
+            }
+            break;
+          }
+
+          case "away": {
+            // Presence, not subscription: the tab went hidden or unfocused (or came
+            // back). The watch stays put — the transcript must keep streaming so
+            // unread counts and notifications still land — but an away socket
+            // stops showing its owner's face to everyone else.
+            const presenceSuppressed = ws.data.presenceSuppressed === true;
+            setClientAway(ws, presenceSuppressed || msg.away === true);
+            // Coming back to a session whose turn finished while everyone was
+            // away → drop in an away-summary system chip (recap.ts).
+            const returnedTo = ws.data?.watchingSessionId;
+            if (
+              !presenceSuppressed &&
+              msg.away !== true &&
+              returnedTo &&
+              sessionAudienceAllows(returnedTo)
+            ) {
+              maybeRecapOnReturn(returnedTo, ws.data?.user || undefined);
+              // Same return: offer the finished turn's choice as chips if it
+              // ended one while nobody was here (reply-suggestions.ts).
+              maybeSuggestRepliesOnReturn(
+                returnedTo,
+                ws.data?.user || undefined,
+              );
+            }
+            break;
+          }
+
+          case "sessions_subscribe": {
+            // The sidebar query this socket renders. Row frames are evaluated
+            // against it (session-row-events) so a write reaches only the
+            // sockets whose lens can show the row. A non-sidebar query still
+            // subscribes, unscoped, and hears about every live row.
+            const raw = typeof msg.query === "string" ? msg.query : "";
+            const params = new URLSearchParams(
+              raw.startsWith("?") ? raw.slice(1, 2049) : raw.slice(0, 2048),
+            );
+            const user =
+              ws.data.authUser || ws.data.user || params.get("user") || "";
+            ws.data.sidebarScope = parseSidebarSessionScope(params, user);
+            break;
+          }
+
+          case "typing": {
+            if (typeof msg.sessionId !== "string") break;
+            setClientTyping(ws, msg.sessionId, msg.typing === true);
+            break;
+          }
+
+          case "watch": {
+            const sessionId = msg.sessionId;
+            const data = ws.data;
+            const watchRequest = arrivalWatchRequest;
+            const session = await findSessionAsync(
+              sessionId,
+              webSocketApplicationAccess(ws.data).principal,
+            );
+            if (data.watchRequest !== watchRequest) return;
+            if (!session) {
+              ws.send(
+                JSON.stringify({ type: "error", message: "Session not found" }),
+              );
+              return;
+            }
+
+            // Stop watching any previous session first
+            stopAllWatchesForClient(ws);
+            releaseTranscriptV2(ws);
+            leaveSession(ws);
+
+            data.watchingSessionId = sessionId;
+            data.supportsFeed = msg.supportsFeed === true;
+            data.sinceFeedSeq =
+              typeof msg.sinceFeedSeq === "number"
+                ? msg.sinceFeedSeq
+                : undefined;
+            data.feedEpoch =
+              typeof msg.feedEpoch === "string" ? msg.feedEpoch : undefined;
+            if (msg.user) data.user = msg.user;
+            joinSession(ws, sessionId);
+            console.log(
+              `[presence] watch user=${JSON.stringify(data.user || "Anonymous")} login=${JSON.stringify(data.authLogin || null)} session=${JSON.stringify(sessionId)} client=${JSON.stringify(data.presenceClient || "unknown")}`,
+            );
+
+            // Opening a session whose last turn finished with nobody watching →
+            // drop in an away-summary system chip (recap.ts). Fire-and-forget;
+            // the recap arrives through the transcript bus like any append.
+            if (
+              data.presenceSuppressed !== true &&
+              session.accessScope?.kind !== "personal"
+            ) {
+              maybeRecapOnReturn(sessionId, data.user || undefined);
+              maybeSuggestRepliesOnReturn(sessionId, data.user || undefined);
+            }
+
+            // Transcript v2 (flag + supportsSeq gated): eligible watches are
+            // served from the owned store + bus with seq cursors — no mirror
+            // file-watcher. Ineligible/flag-off falls through byte-identical.
+            // The call itself is guarded: a throw anywhere in the v2 path must
+            // degrade to the legacy watch, never kill the watch silently (a
+            // cold-boot binding failure did exactly that on 2026-07-23 — the
+            // client got no init and no error).
+            let v2Served = false;
+            try {
+              v2Served = await serveTranscriptV2(ws, sessionId, session, msg);
+            } catch (e) {
+              console.error(
+                `[ws] transcript v2 serve threw for ${sessionId} — falling back to legacy watch:`,
+                e,
+              );
+            }
+            if (v2Served) {
+              await sendWatchExtras(ws, sessionId, session, watchRequest);
+              break;
+            }
+            if (session.accessScope?.kind === "personal") {
+              releaseTranscriptV2(ws);
+              leaveSession(ws);
+              ws.send(
+                JSON.stringify({
+                  type: "error",
+                  message: "Private transcript unavailable",
+                }),
+              );
+              break;
+            }
+
+            // Reconnect resume: a client that still holds this session's entries
+            // re-watches with the byte cursor of the last transcript frame it
+            // received (sinceOffset + sinceRev from transcript_init/append). When
+            // the cursor still matches the live mirror file — same rev (the
+            // transcript didn't rotate to a new engine id) and an offset the file
+            // still covers — skip the full-tail transcript_init replace and let
+            // the file-watcher's gap-fill replay exactly the missed entries from
+            // the jsonl (the client's id-keyed upsert absorbs any overlap). The
+            // jsonl IS the replay buffer: append-only, restart-proof, and it
+            // covers entries written while nobody was watching. Any mismatch
+            // falls through to the full snapshot below.
+            const sinceOffset =
+              typeof msg.sinceOffset === "number" && msg.sinceOffset > 0
+                ? msg.sinceOffset
+                : undefined;
+            if (
+              sinceOffset !== undefined &&
+              typeof msg.sinceRev === "string" &&
+              session.transcriptPath &&
+              msg.sinceRev === transcriptRev(session.transcriptPath) &&
+              existsSync(session.transcriptPath) &&
+              sinceOffset <= statSync(session.transcriptPath).size
+            ) {
+              startWatching(session.transcriptPath, ws, sinceOffset, sessionId);
+              await sendWatchExtras(ws, sessionId, session, watchRequest);
+              break;
+            }
+
+            // Send one bounded transcript tail so the loading state transitions to
+            // a complete conversation instead of first painting a screenful and
+            // prepending the rest a beat later. The tighter INIT wire clamp keeps
+            // that snapshot manageable: the UI eagerly renders only
+            // ~6KB of markdown per bubble and fetches the full entry on demand,
+            // so the fat 32KB clamp only bought transfer time (a heavy tail hit
+            // 1.7MB on the wire). `startOffset` is the pagination cursor for
+            // "load earlier".
+            let { entries, truncated, endOffset, startOffset } =
+              session.transcriptPath
+                ? parseTranscriptTail(session.transcriptPath)
+                : {
+                    entries: [],
+                    truncated: false,
+                    endOffset: 0,
+                    startOffset: 0,
+                  };
+            if (!entries.length) {
+              // No mirror file yet — a fresh session, or an engine-id rotation
+              // whose next run hasn't seeded the new id's file. Without this the
+              // thread renders blank until the next send (which seeds the file);
+              // serve history via the cross-engine fallback (old transcript file
+              // merged with Pi's SQLite store) instead. No byte cursor into
+              // a file here, so no "load earlier" paging — the next run's seeded
+              // file restores it.
+              const merged = await mergedSessionTranscriptAsync(session);
+              if (data.watchRequest !== watchRequest) return;
+              if (merged.length) {
+                truncated = merged.length > 120;
+                entries = truncated ? merged.slice(-120) : merged;
+                startOffset = 0;
+              }
+            }
+            sendTranscriptFrame(ws, {
+              type: "transcript_init",
+              sessionId,
+              entries: entriesForWire(entries, INIT_WIRE_CLAMP_BYTES),
+              truncated,
+              startOffset,
+              // Resume cursor (see the sinceOffset branch above): where this
+              // snapshot ends in the mirror file, and which file that was.
+              ...(session.transcriptPath
+                ? { endOffset, rev: transcriptRev(session.transcriptPath) }
+                : {}),
+            });
+
+            // Start file watcher from where the tail parse left off — bytes
+            // appended between the parse and the watch would otherwise be lost.
+            if (session.transcriptPath) {
+              startWatching(session.transcriptPath, ws, endOffset, sessionId);
+            }
+
+            await sendWatchExtras(ws, sessionId, session, watchRequest);
+            break;
+          }
+
+          case "unwatch": {
+            // Viewer navigated away from the session (not just to another one):
+            // stop streaming transcript events and clear their ghost presence.
+            // Mirrors the disconnect/close cleanup; leaveSession broadcasts
+            // presence to the viewers who remain.
+            stopAllWatchesForClient(ws);
+            releaseTranscriptV2(ws);
+            leaveSession(ws);
+            break;
+          }
+
+          case "load_transcript_index": {
+            if (
+              ws.data?.transcriptV2 &&
+              ws.data?.watchingSessionId === msg.sessionId
+            ) {
+              try {
+                await sendTranscriptIndex(
+                  ws,
+                  msg.sessionId,
+                  () =>
+                    ws.data?.watchingSessionId === msg.sessionId &&
+                    !!ws.data?.transcriptV2,
+                );
+              } catch (error) {
+                console.warn(
+                  `[ws] transcript index refresh failed for ${msg.sessionId}:`,
+                  error,
+                );
+              }
+            }
+            break;
+          }
+
+          case "load_transcript_range": {
+            if (
+              !ws.data?.transcriptV2 ||
+              ws.data?.watchingSessionId !== msg.sessionId
+            )
+              break;
+            const firstSeq = Math.max(1, Math.floor(msg.firstSeq));
+            const lastSeq = Math.max(firstSeq, Math.floor(msg.lastSeq));
+            const afterSeq =
+              typeof msg.afterSeq === "number"
+                ? Math.floor(msg.afterSeq)
+                : firstSeq - 1;
+            try {
+              const page = await transcript.readRange(
+                msg.sessionId,
+                firstSeq,
+                lastSeq,
+                afterSeq,
+                TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT,
+              );
+              sendTranscriptFrame(ws, {
+                type: "transcript_range",
+                sessionId: msg.sessionId,
+                requestId: msg.requestId,
+                entries: clampV2InitEntries(classifyV2Entries(page.entries)),
+                firstSeq: page.firstSeq,
+                lastSeq: page.lastSeq,
+                coveredThroughSeq: page.coveredThroughSeq,
+                complete: page.complete,
+                epoch: await transcript.getLastResetChangeSeq(msg.sessionId),
+                lastChangeSeq: await transcript.getLastChangeSeq(msg.sessionId),
+              });
             } catch (error) {
               console.warn(
-                `[ws] transcript index refresh failed for ${msg.sessionId}:`,
+                `[ws] transcript range failed for ${msg.sessionId}:`,
                 error,
               );
             }
-          }
-          break;
-        }
-
-        case "load_transcript_range": {
-          if (
-            !ws.data?.transcriptV2 ||
-            ws.data?.watchingSessionId !== msg.sessionId
-          )
             break;
-          const firstSeq = Math.max(1, Math.floor(msg.firstSeq));
-          const lastSeq = Math.max(firstSeq, Math.floor(msg.lastSeq));
-          const afterSeq =
-            typeof msg.afterSeq === "number"
-              ? Math.floor(msg.afterSeq)
-              : firstSeq - 1;
-          try {
-            const page = await transcript.readRange(
-              msg.sessionId,
-              firstSeq,
-              lastSeq,
-              afterSeq,
-              TRANSCRIPT_ACTOR_RANGE_PAGE_LIMIT,
-            );
-            sendTranscriptFrame(ws, {
-              type: "transcript_range",
-              sessionId: msg.sessionId,
-              requestId: msg.requestId,
-              entries: clampV2InitEntries(classifyV2Entries(page.entries)),
-              firstSeq: page.firstSeq,
-              lastSeq: page.lastSeq,
-              coveredThroughSeq: page.coveredThroughSeq,
-              complete: page.complete,
-              epoch: await transcript.getLastResetChangeSeq(msg.sessionId),
-              lastChangeSeq: await transcript.getLastChangeSeq(msg.sessionId),
-            });
-          } catch (error) {
-            console.warn(
-              `[ws] transcript range failed for ${msg.sessionId}:`,
-              error,
-            );
           }
-          break;
-        }
 
-        case "load_history": {
-          // "Load earlier history": one PAGE of history — the byte window just
-          // before the client's earliest offset (`beforeOffset`, threaded from
-          // transcript_init/transcript_history startOffset). The old behavior
-          // (re-send the ENTIRE transcript) hit ~15MB wire payloads and a
-          // 600-bubble render on big transcripts; it survives only as the
-          // fallback for clients that don't send an offset.
-          //
-          // Transcript v2 seq paging: a client in seq mode pages backwards
-          // with `beforeSeq` → one ~40-entry page from the store. Legacy
-          // offset paging below is untouched; a store failure falls
-          // through to it.
-          if (typeof msg.beforeSeq === "number" && msg.beforeSeq > 0) {
-            try {
-              // "Jump to the start" walks the entire backlog, so it asks for
-              // fatter pages: fewer round trips, and — the real cost — fewer
-              // whole-transcript reconciliations per entry recovered. Capped
-              // because each visible entry can still carry 6KB on the wire.
-              const page = await transcript.readBefore(
-                msg.sessionId,
-                Math.floor(msg.beforeSeq),
-                Math.min(Math.max(1, Math.floor(msg.limit ?? 40)), 200),
+          case "load_history": {
+            // "Load earlier history": one PAGE of history — the byte window just
+            // before the client's earliest offset (`beforeOffset`, threaded from
+            // transcript_init/transcript_history startOffset). The old behavior
+            // (re-send the ENTIRE transcript) hit ~15MB wire payloads and a
+            // 600-bubble render on big transcripts; it survives only as the
+            // fallback for clients that don't send an offset.
+            //
+            // Transcript v2 seq paging: a client in seq mode pages backwards
+            // with `beforeSeq` → one ~40-entry page from the store. Legacy
+            // offset paging below is untouched; a store failure falls
+            // through to it.
+            if (typeof msg.beforeSeq === "number" && msg.beforeSeq > 0) {
+              try {
+                // "Jump to the start" walks the entire backlog, so it asks for
+                // fatter pages: fewer round trips, and — the real cost — fewer
+                // whole-transcript reconciliations per entry recovered. Capped
+                // because each visible entry can still carry 6KB on the wire.
+                const page = await transcript.readBefore(
+                  msg.sessionId,
+                  Math.floor(msg.beforeSeq),
+                  Math.min(Math.max(1, Math.floor(msg.limit ?? 40)), 200),
+                );
+                sendTranscriptFrame(ws, {
+                  type: "transcript_history",
+                  sessionId: msg.sessionId,
+                  // Backlog pages take the same init clamp as legacy history
+                  // pages (see clampV2InitEntries).
+                  entries: clampV2InitEntries(classifyV2Entries(page.entries)),
+                  firstSeq: page.firstSeq,
+                  lastSeq: page.lastSeq,
+                  truncated: page.firstSeq > 1,
+                  v2: true,
+                });
+                break;
+              } catch (e) {
+                console.warn(
+                  `[ws] v2 load_history failed for ${msg.sessionId}:`,
+                  e,
+                );
+              }
+            }
+            const session = await findSessionAsync(
+              msg.sessionId,
+              webSocketApplicationAccess(ws.data).principal,
+            );
+            if (session?.accessScope?.kind === "personal") {
+              ws.send(
+                JSON.stringify({
+                  type: "error",
+                  message: "Private history unavailable",
+                }),
+              );
+              return;
+            }
+            if (!session?.transcriptPath) {
+              // Same no-mirror-file state as the watch fallback: serve the merged
+              // cross-engine history rather than blanking the client's view.
+              sendTranscriptFrame(ws, {
+                type: "transcript_init",
+                sessionId: msg.sessionId,
+                entries: session
+                  ? entriesForWire(await mergedSessionTranscriptAsync(session))
+                  : [],
+                truncated: false,
+              });
+              return;
+            }
+            const before =
+              typeof msg.beforeOffset === "number" && msg.beforeOffset > 0
+                ? msg.beforeOffset
+                : null;
+            if (before !== null) {
+              const rev = transcriptRev(session.transcriptPath);
+              let fileSize: number | null = null;
+              try {
+                if (existsSync(session.transcriptPath)) {
+                  fileSize = statSync(session.transcriptPath).size;
+                }
+              } catch {
+                fileSize = null;
+              }
+              if (
+                msg.beforeRev !== rev ||
+                fileSize === null ||
+                before > fileSize
+              ) {
+                if (fileSize === null) {
+                  sendTranscriptFrame(ws, {
+                    type: "transcript_init",
+                    sessionId: msg.sessionId,
+                    entries: entriesForWire(
+                      await mergedSessionTranscriptAsync(session),
+                    ),
+                    truncated: false,
+                  });
+                  break;
+                }
+                const tail = parseTranscriptTail(session.transcriptPath);
+                sendTranscriptFrame(ws, {
+                  type: "transcript_init",
+                  sessionId: msg.sessionId,
+                  entries: entriesForWire(tail.entries, INIT_WIRE_CLAMP_BYTES),
+                  truncated: tail.truncated,
+                  startOffset: tail.startOffset,
+                  endOffset: tail.endOffset,
+                  rev,
+                });
+                break;
+              }
+              // ~40 entries per page; the 1MB soft window cap bounds the server
+              // read through fat tool-result regions, but the parser still
+              // guarantees ≥10 entries per page (see parseTranscriptWindow) —
+              // 2-entry pages made "load earlier" feel broken and kept the
+              // infinite-scroll sentinel in range, chaining loads every ~1.6s.
+              const page = parseTranscriptWindow(
+                session.transcriptPath,
+                before,
+                undefined,
+                40,
+                1024 * 1024,
               );
               sendTranscriptFrame(ws, {
                 type: "transcript_history",
                 sessionId: msg.sessionId,
-                // Backlog pages take the same init clamp as legacy history
-                // pages (see clampV2InitEntries).
-                entries: clampV2InitEntries(classifyV2Entries(page.entries)),
-                firstSeq: page.firstSeq,
-                lastSeq: page.lastSeq,
-                truncated: page.firstSeq > 1,
-                v2: true,
+                entries: entriesForWire(page.entries, INIT_WIRE_CLAMP_BYTES),
+                truncated: page.truncated,
+                startOffset: page.startOffset,
               });
               break;
-            } catch (e) {
-              console.warn(
-                `[ws] v2 load_history failed for ${msg.sessionId}:`,
-                e,
-              );
             }
-          }
-          const session = await findSessionAsync(msg.sessionId);
-          if (!session?.transcriptPath) {
-            // Same no-mirror-file state as the watch fallback: serve the merged
-            // cross-engine history rather than blanking the client's view.
+            const entries = await parseTranscriptAsync(session.transcriptPath);
             sendTranscriptFrame(ws, {
               type: "transcript_init",
               sessionId: msg.sessionId,
-              entries: session
-                ? entriesForWire(await mergedSessionTranscriptAsync(session))
-                : [],
+              entries: entriesForWire(entries),
               truncated: false,
             });
-            return;
+            break;
           }
-          const before =
-            typeof msg.beforeOffset === "number" && msg.beforeOffset > 0
-              ? msg.beforeOffset
-              : null;
-          if (before !== null) {
-            const rev = transcriptRev(session.transcriptPath);
-            let fileSize: number | null = null;
-            try {
-              if (existsSync(session.transcriptPath)) {
-                fileSize = statSync(session.transcriptPath).size;
-              }
-            } catch {
-              fileSize = null;
-            }
+
+          case "prompt": {
+            const { sessionId, user } = msg;
+            // Non-string content (a client bug — e.g. `text` instead of
+            // `content`) used to flow all the way into the run path and crash
+            // the process. Coerce, and reject a send with nothing in it. Pasted
+            // blocks fold in here, at intake, so the queue, the steer channel,
+            // persistence and the model all see one string.
+            const content = withPastedTexts(
+              typeof msg.content === "string" ? msg.content : "",
+              pastedTextsFromWire(msg.pastedTexts),
+            );
+            const images = parseImageDataUrls(msg.images);
+            const imageUrls = asDataUrlList(msg.images);
+            const rawContextSessions = Array.isArray(msg.contextSessions)
+              ? msg.contextSessions
+              : Array.isArray(msg.contextChats)
+                ? msg.contextChats
+                : undefined;
+            const contextSessions = rawContextSessions?.filter(
+              (id: unknown): id is string => typeof id === "string",
+            );
             if (
-              msg.beforeRev !== rev ||
-              fileSize === null ||
-              before > fileSize
+              !content.trim() &&
+              !images?.length &&
+              !(Array.isArray(msg.files) && msg.files.length)
             ) {
-              if (fileSize === null) {
-                sendTranscriptFrame(ws, {
-                  type: "transcript_init",
-                  sessionId: msg.sessionId,
-                  entries: entriesForWire(
-                    await mergedSessionTranscriptAsync(session),
-                  ),
-                  truncated: false,
-                });
-                break;
-              }
-              const tail = parseTranscriptTail(session.transcriptPath);
-              sendTranscriptFrame(ws, {
-                type: "transcript_init",
-                sessionId: msg.sessionId,
-                entries: entriesForWire(tail.entries, INIT_WIRE_CLAMP_BYTES),
-                truncated: tail.truncated,
-                startOffset: tail.startOffset,
-                endOffset: tail.endOffset,
-                rev,
-              });
+              ws.send(
+                JSON.stringify({
+                  type: "error",
+                  message: "Empty prompt (no content/images/files)",
+                }),
+              );
+              return;
+            }
+            const session = await findSessionAsync(
+              sessionId,
+              webSocketApplicationAccess(ws.data).principal,
+            );
+            if (!session) {
+              ws.send(
+                JSON.stringify({ type: "error", message: "Session not found" }),
+              );
+              return;
+            }
+
+            // The composer's effort pill rides every send; persist a change so
+            // this and future runs (queue drains, resumes) honor it.
+            maybePersistEffort(session, msg.effort);
+            maybePersistFastMode(session, msg.fastMode);
+
+            // Slash commands are handled by opensession itself
+            const notice = handleSlashCommand(
+              session,
+              String(content || "").trim(),
+              user,
+            );
+            if (notice !== null) {
+              ws.send(JSON.stringify({ type: "notice", message: notice }));
+              publishSessionChange(session.id);
               break;
             }
-            // ~40 entries per page; the 1MB soft window cap bounds the server
-            // read through fat tool-result regions, but the parser still
-            // guarantees ≥10 entries per page (see parseTranscriptWindow) —
-            // 2-entry pages made "load earlier" feel broken and kept the
-            // infinite-scroll sentinel in range, chaining loads every ~1.6s.
-            const page = parseTranscriptWindow(
-              session.transcriptPath,
-              before,
-              undefined,
-              40,
-              1024 * 1024,
-            );
-            sendTranscriptFrame(ws, {
-              type: "transcript_history",
-              sessionId: msg.sessionId,
-              entries: entriesForWire(page.entries, INIT_WIRE_CLAMP_BYTES),
-              truncated: page.truncated,
-              startOffset: page.startOffset,
-            });
-            break;
-          }
-          const entries = await parseTranscriptAsync(session.transcriptPath);
-          sendTranscriptFrame(ws, {
-            type: "transcript_init",
-            sessionId: msg.sessionId,
-            entries: entriesForWire(entries),
-            truncated: false,
-          });
-          break;
-        }
 
-        case "prompt": {
-          const { sessionId, user } = msg;
-          // Non-string content (a client bug — e.g. `text` instead of
-          // `content`) used to flow all the way into the run path and crash
-          // the process. Coerce, and reject a send with nothing in it. Pasted
-          // blocks fold in here, at intake, so the queue, the steer channel,
-          // persistence and the model all see one string.
-          const content = withPastedTexts(
-            typeof msg.content === "string" ? msg.content : "",
-            pastedTextsFromWire(msg.pastedTexts),
-          );
-          const images = parseImageDataUrls(msg.images);
-          const imageUrls = asDataUrlList(msg.images);
-          const rawContextSessions = Array.isArray(msg.contextSessions)
-            ? msg.contextSessions
-            : Array.isArray(msg.contextChats)
-              ? msg.contextChats
-              : undefined;
-          const contextSessions = rawContextSessions?.filter(
-            (id: unknown): id is string => typeof id === "string",
-          );
-          if (
-            !content.trim() &&
-            !images?.length &&
-            !(Array.isArray(msg.files) && msg.files.length)
-          ) {
-            ws.send(
-              JSON.stringify({
-                type: "error",
-                message: "Empty prompt (no content/images/files)",
-              }),
-            );
-            return;
-          }
-          const session = await findSessionAsync(sessionId);
-          if (!session) {
-            ws.send(
-              JSON.stringify({ type: "error", message: "Session not found" }),
-            );
-            return;
-          }
+            // Codex sessions start a fresh thread on first prompt. Open Session
+            // sessions with no engine id are *fresh* sessions (a new sibling from the
+            // tab strip's +): runSessionPrompt starts a new conversation. Only
+            // non-opensession sources genuinely need an id to resume.
+            if (
+              providerFor(session.model) === "claude" &&
+              !session.claudeSessionId &&
+              session.source !== "opensession"
+            ) {
+              ws.send(
+                JSON.stringify({
+                  type: "error",
+                  message: "No Claude session to resume",
+                }),
+              );
+              return;
+            }
 
-          // The composer's effort pill rides every send; persist a change so
-          // this and future runs (queue drains, resumes) honor it.
-          maybePersistEffort(session, msg.effort);
-          maybePersistFastMode(session, msg.fastMode);
+            // Sending a new human turn makes archived work active again. Do this
+            // only after validation and slash-command handling have accepted the turn.
+            await unarchiveForHumanTurn(session);
 
-          // Slash commands are handled by opensession itself
-          const notice = handleSlashCommand(
-            session,
-            String(content || "").trim(),
-            user,
-          );
-          if (notice !== null) {
-            ws.send(JSON.stringify({ type: "notice", message: notice }));
-            publishSessionChange(session.id);
-            break;
-          }
+            // @People-mentions in a prompt ping the tagged teammates (roster
+            // from the identity config, never the sender). Fires at send time
+            // on every path — direct, queued, steer.
+            if (session.accessScope?.kind !== "personal")
+              void notifyMentions(
+                String(content || ""),
+                String(user || ""),
+                sessionId,
+                "prompt",
+                session.title || "a session",
+              );
 
-          // Codex sessions start a fresh thread on first prompt. Open Session
-          // sessions with no engine id are *fresh* sessions (a new sibling from the
-          // tab strip's +): runSessionPrompt starts a new conversation. Only
-          // non-opensession sources genuinely need an id to resume.
-          if (
-            providerFor(session.model) === "claude" &&
-            !session.claudeSessionId &&
-            session.source !== "opensession"
-          ) {
-            ws.send(
-              JSON.stringify({
-                type: "error",
-                message: "No Claude session to resume",
-              }),
-            );
-            return;
-          }
+            // An explicit send is the user's next action after a Stop, so it lifts the
+            // stop latch here rather than inside the run the latch prevents. Without
+            // this the message below queues durably and the drain parks it forever.
+            await liftUserStop(sessionId);
 
-          // Sending a new human turn makes archived work active again. Do this
-          // only after validation and slash-command handling have accepted the turn.
-          await unarchiveForHumanTurn(session);
+            if (
+              session.desk &&
+              !session.automation &&
+              !session.automationDescendantPolicy
+            ) {
+              deskTextNavigation.accept(
+                sessionId,
+                msg.requestId,
+                ws.data.authAutomation
+                  ? undefined
+                  : ws.data.authLogin || undefined,
+              );
+            }
 
-          // @People-mentions in a prompt ping the tagged teammates (roster
-          // from the identity config, never the sender). Fires at send time
-          // on every path — direct, queued, steer.
-          void notifyMentions(
-            String(content || ""),
-            String(user || ""),
-            sessionId,
-            "prompt",
-            session.title || "a session",
-          );
-
-          // An explicit send is the user's next action after a Stop, so it lifts the
-          // stop latch here rather than inside the run the latch prevents. Without
-          // this the message below queues durably and the drain parks it forever.
-          await liftUserStop(sessionId);
-
-          if (
-            session.desk &&
-            !session.automation &&
-            !session.automationDescendantPolicy
-          ) {
-            deskTextNavigation.accept(
-              sessionId,
-              msg.requestId,
-              ws.data.authAutomation
-                ? undefined
-                : ws.data.authLogin || undefined,
-            );
-          }
-
-          // Busy sends queue by default, so the user can still delete/edit or
-          // manually steer the message. Settings can opt the composer into
-          // steer-by-default (`busyMode: "steer"`), delivered at the next turn
-          // boundary and falling back to queue when the run isn't steerable.
-          if (
-            isAgentSessionBusy(
-              session.claudeSessionId,
-              session.codexThreadId,
-              session.id,
-            )
-          ) {
-            if (msg.busyMode === "queue") {
+            // Busy sends queue by default, so the user can still delete/edit or
+            // manually steer the message. Settings can opt the composer into
+            // steer-by-default (`busyMode: "steer"`), delivered at the next turn
+            // boundary and falling back to queue when the run isn't steerable.
+            if (
+              isAgentSessionBusy(
+                session.claudeSessionId,
+                session.codexThreadId,
+                session.id,
+              )
+            ) {
+              if (msg.busyMode === "queue") {
+                await enqueuePrompt(sessionId, {
+                  id: msg.requestId,
+                  content,
+                  user,
+                  images: imageUrls,
+                  files: msg.files,
+                  contextSessions,
+                  // Queue-by-choice: held until the agent FULLY completes
+                  // (including running child workers), not just until the
+                  // next turn boundary. Steer is the deliver-sooner path.
+                  hold: true,
+                });
+                watchExternalRunAndDrain(sessionId);
+                break;
+              }
+              const attributed = user ? `[${user}] ${content}` : content;
+              const steerItem = durableQueueItem(
+                sessionId,
+                queueItem({
+                  id: msg.requestId,
+                  content,
+                  user,
+                  images: imageUrls,
+                }),
+              );
+              // Images fold into the live run as content blocks; disk-staged
+              // files can't ride the steer channel, so a send carrying files
+              // falls through to the queue (its drain delivers images + files
+              // together at the run's next idle point).
+              const hasFiles = Array.isArray(msg.files) && msg.files.length > 0;
+              const hasContext = !!contextSessions?.length;
+              if (
+                msg.busyMode === "steer" &&
+                !hasFiles &&
+                !hasContext &&
+                steerItem.id
+              ) {
+                const steerResult = await prepareAndSteerQueuedPrompt({
+                  sessionId,
+                  itemId: steerItem.id,
+                  item: steerItem,
+                  text: attributed,
+                  images,
+                });
+                if (steerResult !== "not_prepared") {
+                  if (steerResult === "rejected")
+                    watchExternalRunAndDrain(sessionId);
+                  break;
+                }
+                const promptEntryId = steerItem.promptEntryId || steerItem.id;
+                await promoteQueuedPrompt(
+                  sessionId,
+                  steerItem.id,
+                  promptEntryId,
+                  { ...steerItem, promptEntryId },
+                );
+                await storeAppendUserLineEarly(
+                  sessionId,
+                  transcriptLineUser(
+                    attributed,
+                    promptEntryId,
+                    undefined,
+                    images,
+                  ),
+                  { required: true },
+                );
+                watchExternalRunAndDrain(sessionId);
+                break;
+              }
               await enqueuePrompt(sessionId, {
                 id: msg.requestId,
                 content,
@@ -1448,87 +1727,38 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
                 images: imageUrls,
                 files: msg.files,
                 contextSessions,
-                // Queue-by-choice: held until the agent FULLY completes
-                // (including running child workers), not just until the
-                // next turn boundary. Steer is the deliver-sooner path.
-                hold: true,
               });
               watchExternalRunAndDrain(sessionId);
               break;
             }
-            const attributed = user ? `[${user}] ${content}` : content;
-            const steerItem = durableQueueItem(
-              sessionId,
-              queueItem({
+
+            // A Sandbox send is durable before it can wake compute. The drain has
+            // a per-session single-flight lock, so the first queued message owns
+            // the wake and later messages remain FIFO behind it.
+            if (
+              session.sandbox?.sandboxId &&
+              session.sandbox.provider !== "local"
+            ) {
+              await enqueuePrompt(sessionId, {
                 id: msg.requestId,
                 content,
                 user,
                 images: imageUrls,
-              }),
-            );
-            // Images fold into the live run as content blocks; disk-staged
-            // files can't ride the steer channel, so a send carrying files
-            // falls through to the queue (its drain delivers images + files
-            // together at the run's next idle point).
-            const hasFiles = Array.isArray(msg.files) && msg.files.length > 0;
-            const hasContext = !!contextSessions?.length;
-            if (
-              msg.busyMode === "steer" &&
-              !hasFiles &&
-              !hasContext &&
-              steerItem.id
-            ) {
-              const steerResult = await prepareAndSteerQueuedPrompt({
-                sessionId,
-                itemId: steerItem.id,
-                item: steerItem,
-                text: attributed,
-                images,
+                files: msg.files,
+                contextSessions,
               });
-              if (steerResult !== "not_prepared") {
-                if (steerResult === "rejected")
-                  watchExternalRunAndDrain(sessionId);
-                break;
-              }
-              const promptEntryId = steerItem.promptEntryId || steerItem.id;
-              await promoteQueuedPrompt(
-                sessionId,
-                steerItem.id,
-                promptEntryId,
-                { ...steerItem, promptEntryId },
-              );
-              await storeAppendUserLineEarly(
-                sessionId,
-                transcriptLineUser(
-                  attributed,
-                  promptEntryId,
-                  undefined,
-                  images,
+              void drainQueue(sessionId).catch((error) =>
+                console.error(
+                  `[queue] Sandbox wake drain failed for ${sessionId}:`,
+                  error,
                 ),
-                { required: true },
               );
-              watchExternalRunAndDrain(sessionId);
               break;
             }
-            await enqueuePrompt(sessionId, {
-              id: msg.requestId,
-              content,
-              user,
-              images: imageUrls,
-              files: msg.files,
-              contextSessions,
-            });
-            watchExternalRunAndDrain(sessionId);
-            break;
-          }
 
-          // A Sandbox send is durable before it can wake compute. The drain has
-          // a per-session single-flight lock, so the first queued message owns
-          // the wake and later messages remain FIFO behind it.
-          if (
-            session.sandbox?.sandboxId &&
-            session.sandbox.provider !== "local"
-          ) {
+            // Every accepted prompt enters the durable queue first. drainQueue moves
+            // it into a dispatch record that survives a restart until the engine has
+            // written its own active-run journal.
             await enqueuePrompt(sessionId, {
               id: msg.requestId,
               content,
@@ -1539,316 +1769,304 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
             });
             void drainQueue(sessionId).catch((error) =>
               console.error(
-                `[queue] Sandbox wake drain failed for ${sessionId}:`,
+                `[queue] Prompt drain failed for ${sessionId}:`,
                 error,
               ),
             );
             break;
           }
 
-          // Every accepted prompt enters the durable queue first. drainQueue moves
-          // it into a dispatch record that survives a restart until the engine has
-          // written its own active-run journal.
-          await enqueuePrompt(sessionId, {
-            id: msg.requestId,
-            content,
-            user,
-            images: imageUrls,
-            files: msg.files,
-            contextSessions,
-          });
-          void drainQueue(sessionId).catch((error) =>
-            console.error(
-              `[queue] Prompt drain failed for ${sessionId}:`,
-              error,
-            ),
-          );
-          break;
-        }
-
-        case "interrupt_prompt": {
-          const { sessionId, user } = msg;
-          const content = withPastedTexts(
-            typeof msg.content === "string" ? msg.content : "",
-            pastedTextsFromWire(msg.pastedTexts),
-          );
-          const images = parseImageDataUrls(msg.images);
-          const imageUrls = asDataUrlList(msg.images);
-          const session = await findSessionAsync(sessionId);
-          if (!session) {
-            ws.send(
-              JSON.stringify({ type: "error", message: "Session not found" }),
+          case "interrupt_prompt": {
+            const { sessionId, user } = msg;
+            const content = withPastedTexts(
+              typeof msg.content === "string" ? msg.content : "",
+              pastedTextsFromWire(msg.pastedTexts),
             );
-            return;
-          }
-          await unarchiveForHumanTurn(session);
-          maybePersistEffort(session, msg.effort);
-          maybePersistFastMode(session, msg.fastMode);
-          await liftUserStop(sessionId);
-          await enqueuePrompt(sessionId, {
-            id: msg.requestId,
-            content,
-            user,
-            images: imageUrls,
-            files: msg.files,
-          });
-          if (
-            isAgentSessionBusy(
-              session.claudeSessionId,
-              session.codexThreadId,
-              session.id,
-            )
-          ) {
-            if (
-              !(await abortTurnAndDrain(
-                sessionId,
-                session,
-                undefined,
-                msg.requestId,
-              ))
-            )
-              watchExternalRunAndDrain(sessionId);
-          } else {
-            void drainQueue(sessionId).catch((error) =>
-              console.error(
-                `[queue] Interrupt prompt failed for ${sessionId}:`,
-                error,
-              ),
+            const images = parseImageDataUrls(msg.images);
+            const imageUrls = asDataUrlList(msg.images);
+            const session = await findSessionAsync(
+              sessionId,
+              webSocketApplicationAccess(ws.data).principal,
             );
-          }
-          break;
-        }
-
-        case "delete_queued_prompt": {
-          const { sessionId, queueId, queueIndex } = msg;
-          await deleteQueuedPrompt(sessionId, queueId, queueIndex);
-          break;
-        }
-
-        case "take_queued_prompt": {
-          const { sessionId, queueId } = msg;
-          const item = await takeQueuedPrompt(
-            sessionId,
-            queueId,
-            ws.data.authUser || ws.data.user || undefined,
-          );
-          const response = {
-            type: "queued_prompt_taken",
-            sessionId,
-            queueId,
-            ...(item
-              ? { item: queueItemForClient(item) }
-              : { message: "That queued message could not be edited." }),
-          };
-          if (typeof msg.__sessionKernelToken === "string")
-            kernelDispatchResults.set(msg.__sessionKernelToken, response);
-          ws.send(JSON.stringify(response));
-          if (item) watchExternalRunAndDrain(sessionId);
-          break;
-        }
-
-        case "take_steered_prompt": {
-          const { sessionId, queueId } = msg;
-          const actor = ws.data.authUser || ws.data.user || undefined;
-          const session = await findSessionAsync(sessionId);
-          const receipt = editableSteerReceipt(sessionId, queueId, actor);
-          const retracted =
-            !!session &&
-            !!receipt &&
-            (await retractAgentSteer(
-              [session.claudeSessionId, session.codexThreadId, session.id],
-              queueId,
-            ));
-          const item = retracted
-            ? ((await takeSteeredPrompt(sessionId, queueId, actor)) ?? receipt)
-            : undefined;
-          const response = {
-            type: "queued_prompt_taken",
-            sessionId,
-            queueId,
-            ...(item
-              ? { item: queueItemForClient(item) }
-              : { message: "That steering message has already been sent." }),
-          };
-          if (typeof msg.__sessionKernelToken === "string")
-            kernelDispatchResults.set(msg.__sessionKernelToken, response);
-          ws.send(JSON.stringify(response));
-          break;
-        }
-
-        case "update_queued_prompt": {
-          const { sessionId, queueId, queueIndex, content } = msg;
-          const images = Array.isArray(msg.images)
-            ? (asDataUrlList(msg.images) ?? [])
-            : undefined;
-          await updateQueuedPrompt(
-            sessionId,
-            queueId,
-            queueIndex,
-            String(content || "").trim(),
-            images,
-          );
-          break;
-        }
-
-        case "steer_queued_prompt": {
-          const { sessionId, queueId, queueIndex } = msg;
-          if (!(await steerQueuedPrompt(sessionId, queueId, queueIndex))) {
-            ws.send(
-              JSON.stringify({
-                type: "notice",
-                sessionId,
-                message:
-                  "Could not steer that queued message right now. It is still queued.",
-              }),
-            );
-          }
-          break;
-        }
-
-        case "interrupt_queued_prompt": {
-          const { sessionId, queueId, queueIndex } = msg;
-          if (!(await interruptQueuedPrompt(sessionId, queueId, queueIndex))) {
-            ws.send(
-              JSON.stringify({
-                type: "notice",
-                sessionId,
-                message:
-                  "Could not interrupt with that message right now. It is still queued.",
-              }),
-            );
-          }
-          break;
-        }
-
-        case "reorder_queued_prompt": {
-          const { sessionId, order } = msg;
-          if (
-            Array.isArray(order) &&
-            order.every((x) => typeof x === "string")
-          ) {
-            await reorderQueuedPrompt(sessionId, order);
-          }
-          break;
-        }
-
-        case "cancel": {
-          const data = ws.data;
-          const sessionId = msg.sessionId || data.watchingSessionId;
-          if (sessionId) {
-            const session = await findSessionAsync(sessionId);
-            const target = msg as typeof msg & {
-              __targetRunId?: string | null;
-              __targetRunGeneration?: number;
-            };
-            const expectedRunId = target.__targetRunId;
-            const expectedGeneration = target.__targetRunGeneration;
-            let requeued = 0;
-            if (session && expectedRunId && expectedGeneration !== undefined) {
-              ({ requeued } = await requestTurnCancel(sessionId, session, {
-                cancelId: `stop:${msg.requestId}`,
-                expectedRunId,
-                expectedGeneration,
-                source: "ui_stop",
-                user: data.user || undefined,
-              }));
-              console.log(
-                `[ws] run stop prepared on ${sessionId} by ${data.user || "unknown"}`,
+            if (!session) {
+              ws.send(
+                JSON.stringify({ type: "error", message: "Session not found" }),
               );
-              audit({
-                msg: "run_cancelled",
-                session_id: sessionId,
-                source: "ui_stop",
-                user: data.user,
-              });
-              // Projection remains idempotent by its stable request-derived id.
-              if (session.claudeSessionId) {
-                try {
-                  await appendTranscriptEntries(session.claudeSessionId, [
-                    transcriptLineRunnerNotice(
-                      `Stopped by ${data.user || "someone"}.`,
-                      `stop-${msg.requestId}`,
-                    ),
-                  ]);
-                } catch {}
+              return;
+            }
+            await unarchiveForHumanTurn(session);
+            maybePersistEffort(session, msg.effort);
+            maybePersistFastMode(session, msg.fastMode);
+            await liftUserStop(sessionId);
+            await enqueuePrompt(sessionId, {
+              id: msg.requestId,
+              content,
+              user,
+              images: imageUrls,
+              files: msg.files,
+            });
+            if (
+              isAgentSessionBusy(
+                session.claudeSessionId,
+                session.codexThreadId,
+                session.id,
+              )
+            ) {
+              if (
+                !(await abortTurnAndDrain(
+                  sessionId,
+                  session,
+                  undefined,
+                  msg.requestId,
+                ))
+              )
+                watchExternalRunAndDrain(sessionId);
+            } else {
+              void drainQueue(sessionId).catch((error) =>
+                console.error(
+                  `[queue] Interrupt prompt failed for ${sessionId}:`,
+                  error,
+                ),
+              );
+            }
+            break;
+          }
+
+          case "delete_queued_prompt": {
+            const { sessionId, queueId, queueIndex } = msg;
+            await deleteQueuedPrompt(sessionId, queueId, queueIndex);
+            break;
+          }
+
+          case "take_queued_prompt": {
+            const { sessionId, queueId } = msg;
+            const item = await takeQueuedPrompt(
+              sessionId,
+              queueId,
+              ws.data.authUser || ws.data.user || undefined,
+            );
+            const response = {
+              type: "queued_prompt_taken",
+              sessionId,
+              queueId,
+              ...(item
+                ? { item: queueItemForClient(item) }
+                : { message: "That queued message could not be edited." }),
+            };
+            if (typeof msg.__sessionKernelToken === "string")
+              kernelDispatchResults.set(msg.__sessionKernelToken, response);
+            ws.send(JSON.stringify(response));
+            if (item) watchExternalRunAndDrain(sessionId);
+            break;
+          }
+
+          case "take_steered_prompt": {
+            const { sessionId, queueId } = msg;
+            const actor = ws.data.authUser || ws.data.user || undefined;
+            const session = await findSessionAsync(
+              sessionId,
+              webSocketApplicationAccess(ws.data).principal,
+            );
+            const receipt = editableSteerReceipt(sessionId, queueId, actor);
+            const retracted =
+              !!session &&
+              !!receipt &&
+              (await retractAgentSteer(
+                [session.claudeSessionId, session.codexThreadId, session.id],
+                queueId,
+              ));
+            const item = retracted
+              ? ((await takeSteeredPrompt(sessionId, queueId, actor)) ??
+                receipt)
+              : undefined;
+            const response = {
+              type: "queued_prompt_taken",
+              sessionId,
+              queueId,
+              ...(item
+                ? { item: queueItemForClient(item) }
+                : { message: "That steering message has already been sent." }),
+            };
+            if (typeof msg.__sessionKernelToken === "string")
+              kernelDispatchResults.set(msg.__sessionKernelToken, response);
+            ws.send(JSON.stringify(response));
+            break;
+          }
+
+          case "update_queued_prompt": {
+            const { sessionId, queueId, queueIndex, content } = msg;
+            const images = Array.isArray(msg.images)
+              ? (asDataUrlList(msg.images) ?? [])
+              : undefined;
+            await updateQueuedPrompt(
+              sessionId,
+              queueId,
+              queueIndex,
+              String(content || "").trim(),
+              images,
+            );
+            break;
+          }
+
+          case "steer_queued_prompt": {
+            const { sessionId, queueId, queueIndex } = msg;
+            if (!(await steerQueuedPrompt(sessionId, queueId, queueIndex))) {
+              ws.send(
+                JSON.stringify({
+                  type: "notice",
+                  sessionId,
+                  message:
+                    "Could not steer that queued message right now. It is still queued.",
+                }),
+              );
+            }
+            break;
+          }
+
+          case "interrupt_queued_prompt": {
+            const { sessionId, queueId, queueIndex } = msg;
+            if (
+              !(await interruptQueuedPrompt(sessionId, queueId, queueIndex))
+            ) {
+              ws.send(
+                JSON.stringify({
+                  type: "notice",
+                  sessionId,
+                  message:
+                    "Could not interrupt with that message right now. It is still queued.",
+                }),
+              );
+            }
+            break;
+          }
+
+          case "reorder_queued_prompt": {
+            const { sessionId, order } = msg;
+            if (
+              Array.isArray(order) &&
+              order.every((x) => typeof x === "string")
+            ) {
+              await reorderQueuedPrompt(sessionId, order);
+            }
+            break;
+          }
+
+          case "cancel": {
+            const data = ws.data;
+            const sessionId = msg.sessionId || data.watchingSessionId;
+            if (sessionId) {
+              const session = await findSessionAsync(
+                sessionId,
+                webSocketApplicationAccess(ws.data).principal,
+              );
+              const target = msg as typeof msg & {
+                __targetRunId?: string | null;
+                __targetRunGeneration?: number;
+              };
+              const expectedRunId = target.__targetRunId;
+              const expectedGeneration = target.__targetRunGeneration;
+              let requeued = 0;
+              if (
+                session &&
+                expectedRunId &&
+                expectedGeneration !== undefined
+              ) {
+                ({ requeued } = await requestTurnCancel(sessionId, session, {
+                  cancelId: `stop:${msg.requestId}`,
+                  expectedRunId,
+                  expectedGeneration,
+                  source: "ui_stop",
+                  user: data.user || undefined,
+                }));
+                console.log(
+                  `[ws] run stop prepared on ${sessionId} by ${data.user || "unknown"}`,
+                );
+                audit({
+                  msg: "run_cancelled",
+                  session_id: sessionId,
+                  source: "ui_stop",
+                  user: data.user,
+                });
+                // Projection remains idempotent by its stable request-derived id.
+                if (session.claudeSessionId) {
+                  try {
+                    await appendTranscriptEntries(session.claudeSessionId, [
+                      transcriptLineRunnerNotice(
+                        `Stopped by ${data.user || "someone"}.`,
+                        `stop-${msg.requestId}`,
+                      ),
+                    ]);
+                  } catch {}
+                }
+              }
+              if (requeued > 0) {
+                broadcastToSession(sessionId, {
+                  type: "notice",
+                  message: `Stopped — ${requeued} steered message${requeued === 1 ? "" : "s"} returned to the queue.`,
+                });
               }
             }
-            if (requeued > 0) {
-              broadcastToSession(sessionId, {
-                type: "notice",
-                message: `Stopped — ${requeued} steered message${requeued === 1 ? "" : "s"} returned to the queue.`,
-              });
+            break;
+          }
+
+          case "answer_question": {
+            const { sessionId, questionId, answers } = msg;
+            const pending = await pendingAskAwaitingAnswer(sessionId);
+            if (pending && pending.questionId === questionId) {
+              await pending.resolve(
+                answers && typeof answers === "object" ? answers : null,
+              );
             }
+            break;
           }
-          break;
-        }
 
-        case "answer_question": {
-          const { sessionId, questionId, answers } = msg;
-          const pending = await pendingAskAwaitingAnswer(sessionId);
-          if (pending && pending.questionId === questionId) {
-            await pending.resolve(
-              answers && typeof answers === "object" ? answers : null,
-            );
+          // ── Interactive shell (Shell tab) — multiple PTYs per socket, one
+          // per shell tab, keyed by the client's termId ("0" for legacy
+          // clients that predate multi-tab shells). Outbound frames are
+          // tagged with the termId so the client routes them to the right tab.
+          case "term_input": {
+            if (typeof msg.data === "string")
+              writeTerminal(
+                ws,
+                typeof msg.termId === "string" ? msg.termId : "0",
+                msg.data,
+              );
+            break;
           }
-          break;
-        }
-
-        // ── Interactive shell (Shell tab) — multiple PTYs per socket, one
-        // per shell tab, keyed by the client's termId ("0" for legacy
-        // clients that predate multi-tab shells). Outbound frames are
-        // tagged with the termId so the client routes them to the right tab.
-        case "term_start": {
-          const termId = typeof msg.termId === "string" ? msg.termId : "0";
-          // Sandbox-aware: docker/daytona sessions get the shell INSIDE
-          // their sandbox; host worktree shell otherwise (terminals.ts).
-          void startSessionTerminal(
-            ws,
-            termId,
-            await findSessionAsync(msg.sessionId),
-            {
-              cols: Number(msg.cols) || undefined,
-              rows: Number(msg.rows) || undefined,
-              send: (m) => {
-                try {
-                  ws.send(JSON.stringify({ ...m, termId }));
-                } catch {}
-              },
-            },
-          );
-          break;
-        }
-        case "term_input": {
-          if (typeof msg.data === "string")
-            writeTerminal(
+          case "term_resize": {
+            resizeTerminal(
               ws,
               typeof msg.termId === "string" ? msg.termId : "0",
-              msg.data,
+              Number(msg.cols),
+              Number(msg.rows),
             );
-          break;
+            break;
+          }
+          case "create_session": {
+            const response = await handleCreateSessionMessage(ws, msg);
+            if (typeof msg.__sessionKernelToken === "string" && response)
+              kernelDispatchResults.set(msg.__sessionKernelToken, response);
+            break;
+          }
         }
-        case "term_resize": {
-          resizeTerminal(
-            ws,
-            typeof msg.termId === "string" ? msg.termId : "0",
-            Number(msg.cols),
-            Number(msg.rows),
-          );
-          break;
-        }
-        case "term_stop": {
-          stopTerminal(ws, typeof msg.termId === "string" ? msg.termId : "0");
-          break;
-        }
-
-        case "create_session": {
-          const response = await handleCreateSessionMessage(ws, msg);
-          if (typeof msg.__sessionKernelToken === "string" && response)
-            kernelDispatchResults.set(msg.__sessionKernelToken, response);
-          break;
-        }
-      }
+      };
+      if (authorization.session?.accessScope?.kind === "personal") {
+        const owned =
+          msg.type === "prompt"
+            ? await personalSessionForAction(authorization.session)
+            : authorization.session;
+        await withSessionExecutionAccess(owned, () =>
+          withSessionPublication(
+            owned.id,
+            owned.accessScope!.kind === "personal"
+              ? owned.accessScope!.ownerGithubAccountId
+              : 0,
+            dispatch,
+          ),
+        );
+      } else await dispatch();
     } catch (e) {
+      if (terminalStart) discardTerminalStart(ws, terminalId, terminalStart);
       console.error(`[ws] ${msg?.type || "unknown"} handler failed:`, e);
       const kernelToken = isInternalKernelDispatch(
         kernelDispatchTokens,

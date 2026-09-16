@@ -13,8 +13,13 @@ export const SESSION_LIST_DB_FILE = ".opensession-session-list.db";
 
 /** Store methods the facade may invoke by name. Anything else is refused. */
 export const SESSION_LIST_STORE_METHODS = [
+  "scopeState",
+  "filterScopeIds",
+  "resetScopeReplica",
+  "applyScopeDelta",
   "upsert",
   "upsertMany",
+  "upsertScopePage",
   "upsertManyCovered",
   "replaceAll",
   "markCovered",

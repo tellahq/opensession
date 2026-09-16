@@ -1,4 +1,11 @@
-import React from "react";
+import React, { useState, useSyncExternalStore } from "react";
+import { SWRConfig } from "swr";
+import { UserGate } from "./components/UserPicker";
+import {
+  captureClientDataScope,
+  subscribeClientDataScope,
+} from "./lib/client-data-scope";
+import { installClientDataTransport } from "./lib/client-data-transport";
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
 import { EffectRegistryProvider } from "./components/EffectRegistryProvider";
@@ -23,11 +30,33 @@ import "./styles/legacy.css";
 
 export function App(props: AppProps = {}) {
   return (
-    <EffectRegistryProvider>
-      <AppContent {...props} />
-    </EffectRegistryProvider>
+    <UserGate>
+      <ScopedApp {...props} />
+    </UserGate>
   );
 }
+
+function ScopedApp(props: AppProps) {
+  const scope = useSyncExternalStore(
+    subscribeClientDataScope,
+    captureClientDataScope,
+    () => null,
+  );
+  return scope ? <ScopedAppContent key={scope.generation} {...props} /> : null;
+}
+function ScopedAppContent(props: AppProps) {
+  const [cache] = useState(() => new Map());
+  return (
+    <SWRConfig value={{ provider: () => cache }}>
+      <EffectRegistryProvider>
+        <AppContent {...props} />
+      </EffectRegistryProvider>
+    </SWRConfig>
+  );
+}
+
+// Install before mounting any private-capable application hooks.
+installClientDataTransport();
 
 // The marketing-site preview imports this component into its own fixture root.
 // Keep the ordinary SPA bootstrap intact for every production build, including

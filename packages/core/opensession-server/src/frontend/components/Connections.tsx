@@ -45,6 +45,7 @@ import { UserAvatar } from "./UserAvatar";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { ProjectsSection } from "./ProjectsSection";
 import { GithubPrivateKeyField } from "./GithubPrivateKeyField";
+import { PersonalGithubConnection } from "./PersonalGithubConnection";
 import { request } from "../lib/api/request";
 import { errorMessage } from "../lib/error-message";
 import type { McpConnection } from "../lib/mcp-connections";
@@ -1865,6 +1866,9 @@ export function GithubAccounts({
             : "Personal GitHub sign-in is not enabled for this workspace. Pull requests use the workspace bot."}
         </SettingsHint>
       )}
+      {/* Your own GitHub App, separate from the workspace App above: it only
+          exists behind sign-in, where the server holds a verified account. */}
+      {personal && <PersonalGithubConnection />}
     </>
   );
 }

@@ -1,3 +1,4 @@
+import { publishClientDataIdentity } from "./client-data-scope";
 import { afterEach, expect, test } from "bun:test";
 import { agentIdentity } from "./agent-identity";
 import {
@@ -152,4 +153,41 @@ test("agent hover names the full session task, not the workspace or a truncated 
   ]);
   expect(sessionAgentTitle("worker")).toBe("Worker task");
   expect(sessionAgentTitle("missing")).toBe("");
+});
+
+test("numeric identity replacement clears private family ancestry and hover titles", () => {
+  const identify = (githubAccountId: number) =>
+    publishClientDataIdentity({
+      required: true,
+      authenticated: true,
+      githubAccountId,
+      login: "same-login",
+    });
+  try {
+    identify(101);
+    setSessionTitles([["private-root", "Private root task"]]);
+    setResolvedSessionTitles([
+      {
+        requestedId: "private-child-alias",
+        id: "private-child",
+        title: "Private child task",
+        parentSessionId: "private-root",
+      },
+    ]);
+    expect(sessionAgentName("private-child")).toBe(
+      agentIdentity("private-child", "private-root").name,
+    );
+    expect(sessionAgentTitle("private-child-alias")).toBe("Private child task");
+    identify(202);
+    expect(sessionAgentTitle("private-child-alias")).toBe("");
+    expect(sessionAgentTitle("private-root")).toBe("");
+    expect(sessionAgentName("private-child")).toBe(
+      agentIdentity("private-child").name,
+    );
+    expect(sessionAgentName("private-child-alias")).toBe(
+      agentIdentity("private-child-alias").name,
+    );
+  } finally {
+    publishClientDataIdentity(null);
+  }
 });

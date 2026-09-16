@@ -1,3 +1,4 @@
+import { withSessionScopeFence } from "./session-scope-coverage";
 /**
  * Searchable session history.
  *
@@ -16,7 +17,7 @@ import { transcript } from "./actor-transcript";
 import { audit } from "./audit";
 import {
   findSessionAsync,
-  getCachedSessions,
+  getCachedSessionsAsync,
   getSessionListSnapshotAsync,
 } from "./session-cache";
 import { foldContext, foldFamilies, type Folded } from "./session-family";
@@ -62,18 +63,30 @@ export function searchIndex(): SessionSearchStore {
 const FOLD_POOL = 60;
 const MAX_RESULTS = 25;
 
-export function searchSessionHistory(
+export async function searchSessionHistory(
   query: string,
   opts: { repo?: string; limit?: number; days?: number } = {},
-): Folded<SearchHit>[] {
-  const sinceTs = opts.days ? Date.now() - opts.days * 86_400_000 : undefined;
-  const limit = Math.min(Math.max(opts.limit ?? 8, 1), MAX_RESULTS);
-  const hits = searchIndex().search(query, {
-    repo: opts.repo,
-    limit: FOLD_POOL,
-    sinceTs,
+): Promise<Folded<SearchHit>[]> {
+  return withSessionScopeFence(async () => {
+    const sessions = await getCachedSessionsAsync();
+    const visible = new Set(
+      sessions.flatMap((session) => [session.id, ...(session.aliasIds ?? [])]),
+    );
+    const sinceTs = opts.days ? Date.now() - opts.days * 86_400_000 : undefined;
+    const limit = Math.min(Math.max(opts.limit ?? 8, 1), MAX_RESULTS);
+    const hits = searchIndex().search(query, {
+      repo: opts.repo,
+      limit: FOLD_POOL,
+      sinceTs,
+    });
+    return foldFamilies(
+      hits.filter((hit) =>
+        visible.has(hit.id.startsWith("session:") ? hit.id.slice(8) : hit.id),
+      ),
+      foldContext(sessions),
+      limit,
+    );
   });
-  return foldFamilies(hits, foldContext(getCachedSessions()), limit);
 }
 
 function clamp(value: string, length: number): string {

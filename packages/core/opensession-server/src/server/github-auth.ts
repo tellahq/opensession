@@ -44,6 +44,7 @@
  * (runner) or a 403 (web mutation routes).
  */
 
+import { githubAccountId } from "./personal-access";
 import { stateDir } from "./paths";
 import { isDevInstance } from "./dev-mode";
 import { chmodSync, readFileSync, statSync } from "fs";
@@ -331,7 +332,7 @@ export async function startGithubDeviceFlow(): Promise<
 export type DeviceFlowPoll =
   | { status: "pending" }
   | { status: "slow_down"; interval: number }
-  | { status: "ok"; login: string; name?: string }
+  | { status: "ok"; login: string; name?: string; githubAccountId?: number }
   | { status: "error"; error: string };
 
 /** Public view of a stored account. Every credential is destructured away by
@@ -433,7 +434,7 @@ export async function pollGithubDeviceFlow(
 
 export type DeviceFlowServerState =
   | { status: "pending" }
-  | { status: "ok"; login: string; name?: string }
+  | { status: "ok"; login: string; name?: string; githubAccountId?: number }
   | { status: "error"; error: string };
 
 type WatchedFlow = DeviceFlowServerState & { expiresAt: number };
@@ -484,6 +485,7 @@ export function watchGithubDeviceFlow(flow: DeviceFlowStart): void {
           status: "ok",
           login: result.login,
           name: result.name,
+          githubAccountId: result.githubAccountId,
           expiresAt: keepUntil,
         });
         console.log(
@@ -600,7 +602,14 @@ async function identifyAndStoreToken(
   }
   writeStore(store);
   audit({ kind: "github_auth_connect", login, scopes: scope });
-  return { status: "ok", login, ...(user.name ? { name: user.name } : {}) };
+  return {
+    status: "ok",
+    login,
+    ...(user.name ? { name: user.name } : {}),
+    ...(githubAccountId(user.id) !== undefined
+      ? { githubAccountId: user.id }
+      : {}),
+  };
 }
 
 // ── Token refresh (GitHub App user tokens) ───────────────────────────────────

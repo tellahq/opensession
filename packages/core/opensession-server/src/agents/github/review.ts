@@ -429,7 +429,7 @@ export async function runReview(
       publicReview ? prRepo?.repo || DEFAULT_REPO_DIR : cwd,
     );
     const summaryOnly = details.changedFiles > reviewOpts.summaryOnlyOverFiles;
-    const author = publicReview ? null : authorFamilyFor(pr);
+    const author = publicReview ? null : await authorFamilyFor(pr);
     const testOnBase: Promise<TestOnBaseResult | null> =
       !publicReview && reviewOpts.testOnBase
         ? runTestOnBaseCheck({
@@ -517,7 +517,9 @@ export async function runReview(
     // (shared blind spots — see model-inversion.ts). Falls back to the
     // configured model for human-authored PRs.
     let reviewModel = config.model;
-    const inversion = publicReview ? null : inverseReviewModel(pr, reviewModel);
+    const inversion = publicReview
+      ? null
+      : await inverseReviewModel(pr, reviewModel);
     if (inversion) {
       reviewModel = inversion.model;
       console.log(

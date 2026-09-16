@@ -309,14 +309,14 @@ export async function workerReportPayload(
   try {
     const parentOf =
       deps?.parentOf ??
-      ((id: string) => {
+      (async (id: string) => {
         try {
-          return getSessionControl().getSession(id)?.parentSessionId;
+          return (await getSessionControl().getSession(id))?.parentSessionId;
         } catch {
           return undefined;
         }
       });
-    if (parentOf(me) !== targetId) return fallback;
+    if ((await parentOf(me)) !== targetId) return fallback;
 
     const evidence =
       deps?.evidence ??
@@ -445,31 +445,31 @@ function spawnDepthMap(): Map<string, number> {
 
 /** A session's spawn depth: session file first (authoritative + fresh), then
  *  the in-process map (pre-init window), then the control registry's summary. */
-export function resolveSpawnDepth(
+export async function resolveSpawnDepth(
   sessionId: string | undefined,
   deps: Pick<SpawnTaskDeps, "control" | "readSessionFile">,
-): number {
+): Promise<number> {
   if (!sessionId) return 0;
   const file = deps.readSessionFile(sessionId);
   if (typeof file?.spawnDepth === "number") return file.spawnDepth;
   const mem = spawnDepthMap().get(sessionId);
   if (typeof mem === "number") return mem;
   try {
-    const s = deps.control.getSession(sessionId);
+    const s = await deps.control.getSession(sessionId);
     if (typeof s?.spawnDepth === "number") return s.spawnDepth;
   } catch {}
   return 0;
 }
 
-function isAutomationOwned(
+async function isAutomationOwned(
   sessionId: string,
   deps: Pick<SpawnTaskDeps, "control" | "readSessionFile">,
-): boolean {
+): Promise<boolean> {
   const file = deps.readSessionFile(sessionId);
   if (file?.automation) return true;
   if (file?.createdBy?.endsWith(" (automation)")) return true;
   try {
-    return Boolean(deps.control.getSession(sessionId)?.automation);
+    return Boolean((await deps.control.getSession(sessionId))?.automation);
   } catch {
     return false;
   }
@@ -517,14 +517,14 @@ export async function spawnTaskImpl(
     caller &&
     !ctx.automationSelf &&
     !ctx.humanResume &&
-    isAutomationOwned(caller, deps)
+    (await isAutomationOwned(caller, deps))
   ) {
     return {
       ok: false,
       error: "spawn_task is not available from automation sessions.",
     };
   }
-  const myDepth = resolveSpawnDepth(caller, deps);
+  const myDepth = await resolveSpawnDepth(caller, deps);
   if (myDepth >= MAX_SPAWN_DEPTH) {
     return {
       ok: false,
@@ -543,7 +543,7 @@ export async function spawnTaskImpl(
     let sharable = false;
     if (caller) {
       try {
-        const parent = deps.control.getSession(caller);
+        const parent = await deps.control.getSession(caller);
         sharable = Boolean(
           parent &&
           parent.mode === "code" &&
@@ -605,7 +605,7 @@ export async function taskStatusImpl(
   args: { taskId: string; transcript_lines?: number },
   deps: SpawnTaskDeps = defaultSpawnDeps(),
 ): Promise<string> {
-  const s = deps.control.getSession(args.taskId);
+  const s = await deps.control.getSession(args.taskId);
   if (!s) return `No task/session with id \`${args.taskId}\`.`;
   const state = taskStateOf(s);
   const parts = [
@@ -645,18 +645,19 @@ export async function taskStatusImpl(
   return parts.join("\n");
 }
 
-/** Whether `taskId` is a child spawned by `caller` (its persisted
- *  parentSessionId), read from the live summary or the session file. */
+/** Only the authoritative scoped summary may prove child ownership.
+ * Missing or unavailable authority must never fall back to a stale export. */
 async function spawnedByCaller(
   taskId: string,
   caller: string | undefined,
   deps: SpawnTaskDeps,
 ): Promise<boolean> {
   if (!caller) return false;
-  const parent =
-    (await deps.control.getSession(taskId))?.parentSessionId ??
-    deps.readSessionFile(taskId)?.parentSessionId;
-  return parent === caller;
+  try {
+    return (await deps.control.getSession(taskId))?.parentSessionId === caller;
+  } catch {
+    return false;
+  }
 }
 
 export async function cancelTaskImpl(
@@ -709,7 +710,7 @@ export function createSessionsMcpServer(
         createdBy?: string;
       }) => {
         const filter = args.filter || "all";
-        let sessions = getSessionControl().listSessions();
+        let sessions = await getSessionControl().listSessions();
         if (filter === "waiting") {
           sessions = sessions.filter((s) => s.state === "waiting_question");
         } else if (filter === "active") {
@@ -753,7 +754,7 @@ export function createSessionsMcpServer(
       },
       async (args: { id: string; transcript_lines?: number }) => {
         const ctrl = getSessionControl();
-        const s = ctrl.getSession(args.id);
+        const s = await ctrl.getSession(args.id);
         if (!s) return text(`No session with id \`${args.id}\`.`);
         const parts = [formatSessionLine(s)];
         if (s.goal) parts.push(`\n*Pinned goal:* ${s.goal}`);
@@ -826,8 +827,8 @@ export function createSessionsMcpServer(
         const input: Record<string, unknown> = { ...args };
         if (!args.repo?.trim() && ctx.currentSessionId) {
           try {
-            const repo = getSessionControl().getSession(
-              ctx.currentSessionId,
+            const repo = (
+              await getSessionControl().getSession(ctx.currentSessionId)
             )?.repo;
             if (repo) input.repo = repo;
           } catch {}
@@ -914,7 +915,7 @@ export function createSessionsMcpServer(
               "This run has no Open Session id, so it cannot register a background wait.",
             );
           const waitId = durableToolRequestId(ctx, "wait_for", extra, args);
-          const current = getSessionControl().getSession(sessionId);
+          const current = await getSessionControl().getSession(sessionId);
           const result =
             args.kind === "timer"
               ? await registerTimerAgentWait({
@@ -1114,10 +1115,10 @@ export function createSessionsMcpServer(
               "File sending needs a current Open Session session id.",
             );
           const ctrl = getSessionControl();
-          const from = ctrl.getSession(fromId);
+          const from = await ctrl.getSession(fromId);
           if (!from)
             return text(`The sending session \`${fromId}\` no longer exists.`);
-          const to = ctrl.getSession(args.id);
+          const to = await ctrl.getSession(args.id);
           if (!to) return text(`No session with id \`${args.id}\`.`);
           try {
             const file = await transferSessionFile({
@@ -1408,7 +1409,7 @@ export function createSessionsMcpServer(
           // re-checks via the run journal): a running/queued session's model
           // must not be flipped under its in-flight turn.
           try {
-            const s = getSessionControl().getSession(args.sessionId);
+            const s = await getSessionControl().getSession(args.sessionId);
             if (
               s &&
               (s.state === "running" || s.state === "waiting_question")

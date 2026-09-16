@@ -1,3 +1,6 @@
+import { withSessionScopeFence } from "./session-scope-coverage";
+import { sessionMetadata } from "./session-kernel";
+import type { AccessPrincipal } from "../shared/access-scope";
 /**
  * Gateway facade for the materialized session-list index.
  *
@@ -301,6 +304,66 @@ function callIndex<M extends SessionListStoreMethod>(
   return sessionListBackend().call(method, args);
 }
 
+export function scopeProjectionCall<
+  M extends
+    | "scopeState"
+    | "resetScopeReplica"
+    | "applyScopeDelta"
+    | "upsertScopePage",
+>(
+  method: M,
+  ...args: SessionListStoreArgs<M>
+): Promise<SessionListStoreResult<M>> {
+  return callIndex(method, ...args);
+}
+
+function readIndex<M extends SessionListStoreMethod>(
+  method: M,
+  ...args: SessionListStoreArgs<M>
+): Promise<SessionListStoreResult<M>> {
+  return withSessionScopeFence(async () => {
+    const value = await callIndex(method, ...args);
+    if (Array.isArray(value) && value.length && typeof value[0] === "object")
+      shareWorkspacePrRefs(value as UnifiedSession[]);
+    else if (method === "get" && value)
+      shareWorkspacePrRefs([value as UnifiedSession]);
+    else if (method === "getWithVisibilityGroup" && value)
+      shareWorkspacePrRefs((value as { group: UnifiedSession[] }).group);
+    return value;
+  });
+}
+
+/** Bootstrap-only pre-merge filtering. It prevents a stale shared payload from
+ * lending private PR/workspace fields to a genuinely shared row during folding. */
+export function filterCollectionSourceRows(
+  rows: UnifiedSession[],
+): Promise<UnifiedSession[]> {
+  return withSessionScopeFence(async () => {
+    const allowed = new Set<string>();
+    for (let i = 0; i < rows.length; i += 1000)
+      for (const id of await callIndex(
+        "filterScopeIds",
+        rows.slice(i, i + 1000).map((row) => row.id),
+      ))
+        allowed.add(id);
+    return rows.filter((row) => allowed.has(row.id));
+  });
+}
+
+async function registerAliases(sessions: UnifiedSession[]): Promise<void> {
+  const rows: Array<{ id: string; aliases: string[] }> = [];
+  for (const session of sessions) {
+    const aliases = session.aliasIds ?? [];
+    for (let i = 0; i < aliases.length; i += 64)
+      rows.push({ id: session.id, aliases: aliases.slice(i, i + 64) });
+  }
+  for (let i = 0; i < rows.length; i += 1000)
+    await sessionMetadata({
+      op: "scope_aliases",
+      rows: rows.slice(i, i + 1000),
+    });
+}
+
 /** Restore the workspace PR projection on independently indexed rows. PRs
  * are workspace state, so a list slice must show them on every member. */
 function shared<T extends UnifiedSession[] | null>(rows: T): T {
@@ -342,11 +405,11 @@ export function __sessionListIndexPendingForTest(): number {
 
 /** Whether `slice` has been fully materialized, without moving any rows. */
 export function indexedCoverage(slice: SessionListSlice): Promise<boolean> {
-  return callIndex("hasCoverage", slice);
+  return readIndex("hasCoverage", slice);
 }
 
-export function indexedCount(): Promise<number> {
-  return callIndex("count");
+export function indexedCount(principal?: AccessPrincipal): Promise<number> {
+  return readIndex("count", principal);
 }
 
 /** Release the worker (operator scripts call this before exiting). The next
@@ -359,8 +422,9 @@ export function closeSessionListIndex(): void {
 
 export function indexedSessions(
   slice: SessionListSlice = "include",
+  principal?: AccessPrincipal,
 ): Promise<UnifiedSession[] | null> {
-  return callIndex("listCovered", slice).then(shared);
+  return readIndex("listCovered", slice, principal);
 }
 
 /** Live rows on any of `branches`, or null while the live slice has no
@@ -368,19 +432,20 @@ export function indexedSessions(
 export function indexedLiveSessionsByBranch(
   branches: string[],
 ): Promise<UnifiedSession[] | null> {
-  return callIndex("listLiveByBranchCovered", branches).then(shared);
+  return readIndex("listLiveByBranchCovered", branches);
 }
 
 export function indexedWorkspaceMembers(
   workspaceId: string,
 ): Promise<UnifiedSession[]> {
-  return callIndex("listWorkspaceMembers", workspaceId).then(shared);
+  return readIndex("listWorkspaceMembers", workspaceId);
 }
 
 export function indexedSidebarSessions(
   selectedSessionId?: string,
+  principal?: AccessPrincipal,
 ): Promise<UnifiedSession[] | null> {
-  return callIndex("listSidebarCovered", selectedSessionId).then(shared);
+  return readIndex("listSidebarCovered", selectedSessionId, principal);
 }
 
 export function indexedWorkspaceMemberSessions(
@@ -393,29 +458,32 @@ export function indexedWorkspaceSessions(
   workspaceId: string,
   worktreeDir?: string | null,
 ): Promise<UnifiedSession[] | null> {
-  return callIndex("listWorkspaceCovered", workspaceId, worktreeDir).then(
-    shared,
-  );
+  return readIndex("listWorkspaceCovered", workspaceId, worktreeDir);
 }
 
 export function indexedActiveWorkspaceIds(): Promise<string[] | null> {
-  return callIndex("activeWorkspaceIdsCovered");
+  return readIndex("activeWorkspaceIdsCovered");
 }
 
-export function upsertIndexedSession(session: UnifiedSession): Promise<void> {
+export async function upsertIndexedSession(
+  session: UnifiedSession,
+): Promise<void> {
+  await registerAliases([session]);
   return callIndex("upsert", session);
 }
 
-export function upsertIndexedSessions(
+export async function upsertIndexedSessions(
   sessions: UnifiedSession[],
   slice?: SessionListSlice,
 ): Promise<void> {
+  await registerAliases(sessions);
   return callIndex("upsertManyCovered", sessions, slice);
 }
 
-export function rebuildSessionListIndex(
+export async function rebuildSessionListIndex(
   sessions: UnifiedSession[],
 ): Promise<void> {
+  await registerAliases(sessions);
   return callIndex("replaceAll", sessions);
 }
 
@@ -423,25 +491,26 @@ export function removeIndexedSession(id: string): Promise<void> {
   return callIndex("remove", id);
 }
 
-export function indexedSession(id: string): Promise<UnifiedSession | null> {
-  return callIndex("get", id).then((session) =>
-    session ? shared([session])[0]! : null,
-  );
+export function indexedSession(
+  id: string,
+  principal?: AccessPrincipal,
+): Promise<UnifiedSession | null> {
+  return readIndex("get", id, principal);
 }
 
 export function indexedVisibilityGroup(
   session: UnifiedSession,
 ): Promise<UnifiedSession[]> {
-  return callIndex("listVisibilityGroup", session).then(shared);
+  return readIndex("listVisibilityGroup", session);
 }
 
 /** One session plus its visibility group in a single round trip. */
 export function indexedSessionWithVisibilityGroup(
   id: string,
 ): Promise<{ session: UnifiedSession; group: UnifiedSession[] } | null> {
-  return callIndex("getWithVisibilityGroup", id).then((result) => {
+  return readIndex("getWithVisibilityGroup", id).then((result) => {
     if (!result) return null;
-    shared(result.group);
+
     const session =
       result.group.find((row) => row.id === result.session.id) ??
       result.session;

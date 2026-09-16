@@ -37,10 +37,10 @@ function summary(
 }
 
 describe("GitHub session notification matching", () => {
-  test("does not treat a shared checkout HEAD as every session's branch", () => {
+  test("does not treat a shared checkout HEAD as every session's branch", async () => {
     const shared = summary({ id: "shared-session", branch: "recorded-branch" });
     expect(
-      matchSessions(
+      await matchSessions(
         controlWith([shared]),
         defaultRepo().id,
         "shared-checkout-head",
@@ -48,7 +48,7 @@ describe("GitHub session notification matching", () => {
     ).toEqual([]);
   });
 
-  test("still follows actual HEAD for an isolated worktree", () => {
+  test("still follows actual HEAD for an isolated worktree", async () => {
     const dir = mkdtempSync(join(tmpdir(), "session-notify-worktree-"));
     scratch.push(dir);
     mkdirSync(join(dir, ".git"));
@@ -58,7 +58,7 @@ describe("GitHub session notification matching", () => {
     );
     const isolated = summary({ id: "isolated-session", worktreeDir: dir });
     expect(
-      matchSessions(
+      await matchSessions(
         controlWith([isolated]),
         defaultRepo().id,
         "renamed-by-agent",

@@ -24,7 +24,13 @@ import { z } from "zod";
 import { fetchDrafts, saveDraftApi } from "./api";
 import { reconcileDrafts } from "./drafts-sync";
 import { getCurrentUser } from "../components/UserPicker";
-import { whenCurrentUserReady } from "./auth-ready";
+import {
+  captureClientDataScope,
+  isCurrentClientDataScope,
+  subscribeClientDataScope,
+  type ClientDataScope,
+} from "./client-data-scope";
+import { randomUUID } from "./random-uuid";
 import type { FileAttachment } from "./images";
 import type { PastedTextAttachment } from "./pasted-text";
 
@@ -42,8 +48,71 @@ export const NEW_SESSION_DRAFT_KEY = "new-session";
 
 /** The draft key for a workspace's own composer. Attachments parked from the
  *  new-session palette land here, which is where WorkspacePane reads them. */
-export function workspaceDraftKey(workspaceId: string): string {
-  return `workspace-home:${workspaceId}`;
+export function workspaceDraftKey(
+  workspaceId: string,
+  scope = captureClientDataScope(),
+): string {
+  return bindDraftKey(`workspace-home:${workspaceId}`, scope);
+}
+
+const BOUND_PREFIX = "scope-draft-v2:";
+const legacyQuarantine = randomUUID();
+/** Capture before asynchronous work. A bound key never rebinds to a later
+ * lifetime, including logout and re-login as the same numeric owner. */
+export function bindDraftKey(
+  key: string,
+  scope = captureClientDataScope(),
+): string {
+  if (key.startsWith(BOUND_PREFIX)) return key;
+  return scope
+    ? `${BOUND_PREFIX}${scope.generation}:${encodeURIComponent(scope.key)}:${encodeURIComponent(key)}`
+    : `${BOUND_PREFIX}unresolved`;
+}
+function keyParts(
+  key: string,
+): { generation: number; owner: string; raw: string } | null {
+  if (!key.startsWith(BOUND_PREFIX)) return null;
+  try {
+    const [generation, owner, raw, extra] = key
+      .slice(BOUND_PREFIX.length)
+      .split(":");
+    if (!generation || !owner || !raw || extra !== undefined) return null;
+    return {
+      generation: Number(generation),
+      owner: decodeURIComponent(owner),
+      raw: decodeURIComponent(raw),
+    };
+  } catch {
+    return null;
+  }
+}
+export function draftClientDataScope(key: string): ClientDataScope | null {
+  const parts = keyParts(key);
+  const scope = captureClientDataScope();
+  return parts &&
+    scope &&
+    parts.generation === scope.generation &&
+    parts.owner === scope.key
+    ? scope
+    : null;
+}
+export function requireDraftWriteScope(key: string): ClientDataScope {
+  const scope = draftClientDataScope(key);
+  if (!scope || scope.key === "shared:legacy")
+    throw new Error("Sign in again before sending.");
+  return scope;
+}
+
+function diskKey(key: string): string | null {
+  const parts = keyParts(key);
+  if (!parts) return null;
+  const owner =
+    parts.owner === "shared:legacy"
+      ? `quarantine:${legacyQuarantine}:${parts.generation}`
+      : parts.owner;
+  return (
+    SS_PREFIX + encodeURIComponent(owner) + ":" + encodeURIComponent(parts.raw)
+  );
 }
 
 const EMPTY: ComposerDraft = {
@@ -108,6 +177,7 @@ declare global {
 }
 
 function emit(key?: string) {
+  if (key && !draftClientDataScope(key)) return;
   window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: key }));
 }
 
@@ -115,8 +185,10 @@ function emit(key?: string) {
  *  A key identifies a local change. An undefined key means several drafts may
  *  have changed during hydration and subscribers should re-read their scope. */
 export function onDraftsChanged(handler: (key?: string) => void): () => void {
-  const listener = (event: WindowEventMap[typeof CHANGE_EVENT]) =>
-    handler(event.detail);
+  const listener = (event: WindowEventMap[typeof CHANGE_EVENT]) => {
+    if (event.detail && !draftClientDataScope(event.detail)) return;
+    handler(event.detail ? keyParts(event.detail)?.raw : undefined);
+  };
   window.addEventListener(CHANGE_EVENT, listener);
   return () => window.removeEventListener(CHANGE_EVENT, listener);
 }
@@ -126,7 +198,7 @@ export function hasDraft(key: string): boolean {
   return !isEmpty(loadDraft(key));
 }
 
-const SS_PREFIX = "backstage-draft:";
+const SS_PREFIX = "backstage-draft:v2:";
 // Stay well under the ~5MB sessionStorage quota; an oversized draft (big
 // screenshots) just stays memory-only instead of throwing.
 const MAX_PERSIST_BYTES = 3_000_000;
@@ -142,12 +214,15 @@ function isEmpty(d: ComposerDraft): boolean {
   );
 }
 
-function persistNow(key: string) {
+function persistNow(key: string, quarantine = false) {
   timers.delete(key);
+  if (!quarantine && !draftClientDataScope(key)) return;
+  const storageKey = diskKey(key);
+  if (!storageKey) return;
   const d = drafts.get(key);
   try {
     if (!d || isEmpty(d)) {
-      sessionStorage.removeItem(SS_PREFIX + key);
+      sessionStorage.removeItem(storageKey);
       return;
     }
     const serialize = (draft: ComposerDraft) =>
@@ -157,7 +232,7 @@ function persistNow(key: string) {
       });
     const json = serialize(d);
     if (json.length <= MAX_PERSIST_BYTES) {
-      sessionStorage.setItem(SS_PREFIX + key, json);
+      sessionStorage.setItem(storageKey, json);
       return;
     }
     // Over the cap, so something has to give — but never the whole draft.
@@ -172,14 +247,15 @@ function persistNow(key: string) {
       files: d.files.filter((file) => !file.dataUrl),
     });
     if (lean.length <= MAX_PERSIST_BYTES)
-      sessionStorage.setItem(SS_PREFIX + key, lean);
-    else sessionStorage.removeItem(SS_PREFIX + key);
+      sessionStorage.setItem(storageKey, lean);
+    else sessionStorage.removeItem(storageKey);
   } catch {
     // Quota or private-mode failure — the in-memory copy still holds the draft.
   }
 }
 
 function schedulePersist(key: string) {
+  if (!draftClientDataScope(key)) return;
   clearTimeout(timers.get(key));
   timers.set(
     key,
@@ -202,10 +278,12 @@ if (persistenceLifecycleCapabilitiesSchema.safeParse(globalThis).success) {
 
 /** Current draft for a key ("" / empty arrays when none). Treat as immutable. */
 export function loadDraft(key: string): ComposerDraft {
+  key = bindDraftKey(key);
+  if (!draftClientDataScope(key)) return EMPTY;
   const mem = drafts.get(key);
   if (mem) return mem;
   try {
-    const raw = sessionStorage.getItem(SS_PREFIX + key);
+    const raw = sessionStorage.getItem(diskKey(key)!);
     if (raw) {
       const parsed = persistedDraftSchema.parse(JSON.parse(raw));
       const d: ComposerDraft = {
@@ -230,6 +308,7 @@ function writeLocal(
   next: ComposerDraft,
   opts?: { notifyText?: boolean },
 ): void {
+  if (!draftClientDataScope(key)) return;
   const previous = loadDraft(key);
   const had = !isEmpty(previous);
   const previousText = previous.text;
@@ -255,7 +334,7 @@ function writeLocal(
     clearTimeout(timers.get(key));
     timers.delete(key);
     try {
-      sessionStorage.removeItem(SS_PREFIX + key);
+      sessionStorage.removeItem(diskKey(key)!);
     } catch {}
   }
   if (
@@ -266,20 +345,23 @@ function writeLocal(
     emit(key);
 }
 
-/** Merge a partial update into the stored draft; an all-empty result deletes it. */
+/** Writes require bindDraftKey captured before work starts. Stale/unresolved
+ * keys do nothing; reads may accept a raw key for current-scope indicators. */
 export function saveDraft(key: string, patch: Partial<ComposerDraft>): void {
+  if (!draftClientDataScope(key)) return;
   const before = loadDraft(key).text;
   writeLocal(key, { ...loadDraft(key), ...patch });
   if (loadDraft(key).text !== before) markEdited(key);
 }
 
 export function clearDraft(key: string): void {
+  if (!draftClientDataScope(key)) return;
   const had = hasDraft(key);
   drafts.delete(key);
   clearTimeout(timers.get(key));
   timers.delete(key);
   try {
-    sessionStorage.removeItem(SS_PREFIX + key);
+    sessionStorage.removeItem(diskKey(key)!);
   } catch {}
   syncedText.delete(key);
   if (had) {
@@ -309,26 +391,28 @@ let textMutation = 0;
 let unloading = false;
 
 function sessionIdOf(key: string): string | null {
-  return key.startsWith(SESSION_PREFIX)
-    ? key.slice(SESSION_PREFIX.length)
+  const raw = keyParts(key)?.raw;
+  return raw?.startsWith(SESSION_PREFIX)
+    ? raw.slice(SESSION_PREFIX.length)
     : null;
 }
 
 function pushNow(key: string): void {
   clearTimeout(pushTimers.get(key));
   pushTimers.delete(key);
+  const scope = draftClientDataScope(key);
   const id = sessionIdOf(key);
-  if (!id) return;
+  if (!scope || scope.key === "shared:legacy" || !id) return;
   const text = loadDraft(key).text;
   const at = editedAt.get(key) || new Date().toISOString();
   const user = getCurrentUser();
   attemptedText.set(key, text);
-  saveDraftApi(user, id, text, at, unloading)
+  saveDraftApi(user, id, text, at, unloading, scope)
     .then((result) => {
       // Refused as older than the stored copy: leave this key dirty rather
       // than adopting the server's text under someone's cursor. The next
       // keystroke carries a newer stamp and wins.
-      if (getCurrentUser() !== user) return;
+      if (!isCurrentClientDataScope(scope)) return;
       if (attemptedText.get(key) === text) attemptedText.delete(key);
       if (result.applied && loadDraft(key).text === text) {
         syncedText.set(key, result.draft?.text ?? "");
@@ -338,7 +422,7 @@ function pushNow(key: string): void {
       }
     })
     .catch(() => {
-      if (getCurrentUser() === user && attemptedText.get(key) === text) {
+      if (isCurrentClientDataScope(scope) && attemptedText.get(key) === text) {
         attemptedText.delete(key);
       }
     });
@@ -346,7 +430,8 @@ function pushNow(key: string): void {
 
 /** Text changed locally: stamp it and schedule (or force) the push. */
 function markEdited(key: string, opts?: { immediate?: boolean }): void {
-  if (!sessionIdOf(key)) return;
+  const scope = draftClientDataScope(key);
+  if (!scope || scope.key === "shared:legacy" || !sessionIdOf(key)) return;
   editedAt.set(key, new Date().toISOString());
   textMutation++;
   if (opts?.immediate) {
@@ -362,21 +447,31 @@ function markEdited(key: string, opts?: { immediate?: boolean }): void {
 
 /** Adopt the server's text for a clean key, keeping any staged attachments. */
 function applyRemote(key: string, text: string): void {
+  if (!draftClientDataScope(key)) return;
   syncedText.set(key, text);
   writeLocal(key, { ...loadDraft(key), text }, { notifyText: true });
   editedAt.delete(key);
 }
 
-async function hydrate(user: string): Promise<void> {
+async function hydrate(scope: ClientDataScope): Promise<void> {
+  if (!isCurrentClientDataScope(scope) || scope.key === "shared:legacy") return;
+  let user: string;
+  try {
+    user = getCurrentUser();
+  } catch {
+    return;
+  }
   const version = ++hydrateVersion;
   const mutation = textMutation;
   let server: Record<string, { text: string; updatedAt: string }>;
   try {
-    server = await fetchDrafts(user);
+    server = await fetchDrafts(user, scope);
   } catch {
+    if (!isCurrentClientDataScope(scope)) return;
     clearTimeout(hydrateRetry);
     hydrateRetry = setTimeout(() => {
-      if (getCurrentUser() === user && hydratedFor !== user) void hydrate(user);
+      if (isCurrentClientDataScope(scope) && hydratedFor !== scope.key)
+        void hydrate(scope);
     }, 5_000);
     return;
   }
@@ -384,19 +479,22 @@ async function hydrate(user: string): Promise<void> {
   if (
     version !== hydrateVersion ||
     mutation !== textMutation ||
-    getCurrentUser() !== user
+    !isCurrentClientDataScope(scope)
   )
     return;
   clearTimeout(hydrateRetry);
   hydrateRetry = undefined;
-  hydratedFor = user;
+  hydratedFor = scope.key;
 
   const storedKeys = new Set<string>();
   try {
     for (let index = 0; index < sessionStorage.length; index++) {
       const storageKey = sessionStorage.key(index);
-      if (storageKey?.startsWith(SS_PREFIX + SESSION_PREFIX)) {
-        storedKeys.add(storageKey.slice(SS_PREFIX.length));
+      const prefix = SS_PREFIX + encodeURIComponent(scope.key) + ":";
+      if (storageKey?.startsWith(prefix)) {
+        const raw = decodeURIComponent(storageKey.slice(prefix.length));
+        if (raw.startsWith(SESSION_PREFIX))
+          storedKeys.add(bindDraftKey(raw, scope));
       }
     }
   } catch {}
@@ -410,8 +508,9 @@ async function hydrate(user: string): Promise<void> {
       local,
       synced: Object.fromEntries([...syncedText, ...attemptedText]),
     },
-    (id) => SESSION_PREFIX + id,
+    (id) => bindDraftKey(SESSION_PREFIX + id, scope),
   )) {
+    if (!isCurrentClientDataScope(scope)) return;
     if (action.kind === "adopt") applyRemote(action.key, action.text);
     else if (action.kind === "agree") {
       syncedText.set(action.key, action.text);
@@ -421,67 +520,52 @@ async function hydrate(user: string): Promise<void> {
   // Keys the server dropped and we no longer hold are settled: stop tracking
   // them so the map doesn't grow for the life of the tab.
   for (const key of [...syncedText.keys()]) {
-    if (!loadDraft(key).text && !server[key.slice(SESSION_PREFIX.length)]) {
+    if (!loadDraft(key).text && !server[sessionIdOf(key)!]) {
       syncedText.delete(key);
     }
   }
 }
 
-/** Forget every session draft held for the previous user (they are that
- *  person's unsent writing, not the new user's). */
-function dropSessionDrafts(): void {
-  let changed = false;
-  for (const key of [...drafts.keys()]) {
-    if (!sessionIdOf(key)) continue;
-    if (!isEmpty(loadDraft(key))) changed = true;
-    clearTimeout(pushTimers.get(key));
-    pushTimers.delete(key);
-    drafts.delete(key);
-    clearTimeout(timers.get(key));
-    timers.delete(key);
-    try {
-      sessionStorage.removeItem(SS_PREFIX + key);
-    } catch {}
-  }
-  try {
-    for (let index = sessionStorage.length - 1; index >= 0; index--) {
-      const key = sessionStorage.key(index);
-      if (key?.startsWith(SS_PREFIX + SESSION_PREFIX))
-        sessionStorage.removeItem(key);
-    }
-  } catch {}
-  syncedText.clear();
-  attemptedText.clear();
-  editedAt.clear();
-  if (changed) emit();
-}
-
-function rehydrateForCurrentUser(): void {
+/** Preserve the old principal's data, but clear ALL composer memory/timers.
+ * Old unscoped and name-based storage is never adopted or indiscriminately deleted. */
+let previousScope = captureClientDataScope();
+function rehydrateForCurrentScope(): void {
+  const nextScope = captureClientDataScope();
+  if (nextScope === previousScope) return;
+  previousScope = nextScope;
+  ++hydrateVersion;
   clearTimeout(hydrateRetry);
   hydrateRetry = undefined;
   hydratedFor = null;
-  dropSessionDrafts();
-  void hydrate(getCurrentUser());
+  for (const timer of [...timers.values(), ...pushTimers.values()])
+    clearTimeout(timer);
+  for (const key of drafts.keys()) persistNow(key, true);
+  timers.clear();
+  pushTimers.clear();
+  drafts.clear();
+  syncedText.clear();
+  attemptedText.clear();
+  editedAt.clear();
+  if (windowEventCapabilitiesSchema.safeParse(globalThis).success) emit();
+  const scope = captureClientDataScope();
+  if (scope) void hydrate(scope);
+}
+subscribeClientDataScope(rehydrateForCurrentScope);
+function hydrateCurrentScope(): void {
+  const scope = captureClientDataScope();
+  if (scope) void hydrate(scope);
 }
 
 if (windowEventCapabilitiesSchema.safeParse(globalThis).success) {
-  whenCurrentUserReady((user) => void hydrate(user));
-  window.addEventListener("opensession-user-changed", rehydrateForCurrentUser);
-  window.addEventListener("storage", (event) => {
-    if (event.key === "opensession-user" || event.key === "backstage-user") {
-      rehydrateForCurrentUser();
-    }
-  });
+  hydrateCurrentScope();
   if (documentLifecycleCapabilitiesSchema.safeParse(globalThis).success) {
     // Coming back to a tab that sat in the background: pick up what was typed
     // (or sent) on the other device while it was away.
     document.addEventListener?.("visibilitychange", () => {
-      if (document.visibilityState === "visible")
-        void hydrate(getCurrentUser());
+      if (document.visibilityState === "visible") hydrateCurrentScope();
     });
     window.setInterval(() => {
-      if (document.visibilityState === "visible")
-        void hydrate(getCurrentUser());
+      if (document.visibilityState === "visible") hydrateCurrentScope();
     }, 30_000);
   }
   // Don't let the debounce eat the last keystrokes when the tab goes away.

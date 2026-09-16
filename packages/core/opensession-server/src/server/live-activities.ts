@@ -1,3 +1,4 @@
+import { canAccessScope } from "../shared/access-scope";
 /**
  * ActivityKit delivery for the native iOS app.
  *
@@ -10,7 +11,7 @@ import { connect } from "node:http2";
 import { importPkcs8Pem } from "./codestorage/auth";
 import { stateDir } from "./paths";
 import { getReads, isUnread } from "./reads";
-import { getCachedSessions } from "./session-cache";
+import { getCachedSessionsAsync } from "./session-cache";
 import { onSessionStateChange } from "./session-state-events";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { userMatchesAny } from "./shared/user-mappings";
@@ -181,6 +182,8 @@ export function liveActivitySnapshot(
 ): LiveActivitySnapshot {
   const active = sessions
     .filter((session) => {
+      // Push audiences remain shared-only, even for the private owner.
+      if (!canAccessScope(session.accessScope)) return false;
       const observed = liveState.get(session.id);
       if (observed && observed.expiresAt <= now) liveState.delete(session.id);
       const running =
@@ -220,6 +223,7 @@ export function liveActivitySnapshot(
     totalCount: active.length,
     unreadCount: sessions.filter(
       (session) =>
+        canAccessScope(session.accessScope) &&
         !session.archived &&
         !session.automation &&
         !session.desk &&
@@ -678,7 +682,7 @@ async function syncLiveActivitiesOnce(): Promise<void> {
   if (!config) return;
   const devices = await withStoreLock(() => readStore().devices);
   if (devices.length === 0) return;
-  const sessions = getCachedSessions();
+  const sessions = await getCachedSessionsAsync();
   const outcomes: DeviceSyncResult[] = [];
   for (const device of devices) {
     try {

@@ -20,7 +20,7 @@ import {
 } from "./session-control";
 import { setTranscriptForwarder } from "./transcript-forward";
 import { __setSessionsDirForTest, sessionsDir } from "./paths";
-import { sessionAsk } from "./session-kernel";
+import { sessionAsk, __sessionKernelStoreForTest } from "./session-kernel";
 import { stripContext } from "./prompt-context";
 
 const SESSION = "os-pending-ask-restart-test";
@@ -361,6 +361,15 @@ describe("pending ask restart persistence", () => {
     const previousSessionsDir = sessionsDir();
     __setSessionsDirForTest(scratch);
     try {
+      __sessionKernelStoreForTest().seedSessionMetadataCatalog([
+        {
+          sessionId: SESSION,
+          doc: JSON.stringify({ id: SESSION, accessScope: { kind: "shared" } }),
+          rev: 1,
+          archived: false,
+          lastActivityMs: 1,
+        },
+      ]);
       const resultPromise = makeAskHandler(SESSION)({ questions: [QUESTION] });
       const questionId = pendingAsks.get(SESSION)?.questionId ?? null;
 
@@ -422,4 +431,40 @@ describe("pending ask restart persistence", () => {
       __setSessionsDirForTest(previousSessionsDir);
     }
   });
+});
+
+test("boot leaves private pending asks durable without shared restoration or escalation", async () => {
+  const id = "private-ask-boot";
+  const store = __sessionKernelStoreForTest();
+  store.seedSessionMetadataCatalog([
+    {
+      sessionId: id,
+      doc: JSON.stringify({
+        id,
+        accessScope: { kind: "personal", ownerGithubAccountId: 101 },
+      }),
+      rev: 1,
+      archived: false,
+      lastActivityMs: 1,
+    },
+  ]);
+  store.markAskMigrationComplete();
+  const ask = {
+    questionId: "private-question",
+    questions: [QUESTION],
+    askedAt: Date.now(),
+  };
+  store.setAskRecord(id, ask);
+  let checked = false;
+  expect(
+    await restorePendingAsks({
+      sessionExists: () => {
+        checked = true;
+        return true;
+      },
+    }),
+  ).toBe(0);
+  expect(checked).toBe(false);
+  expect(store.askSnapshot(id)).toEqual(ask);
+  expect(pendingAskTimers.has(id)).toBe(false);
 });

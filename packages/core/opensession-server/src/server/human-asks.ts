@@ -926,7 +926,7 @@ export function isAwaiting(askId: string): boolean {
  * Fires any scheduled "when_done" asks for it, plus "on_pr" asks once the
  * session has a PR. Idempotent — a delivered ask won't re-fire.
  */
-export function onSessionIdle(sessionId: string): void {
+export async function onSessionIdle(sessionId: string): Promise<void> {
   // A block ask can only hold a turn while its run is alive — the session
   // going idle means the awaiting tool call is gone (interrupt, cancel, or
   // crash). Degrade to async so a late reply steers into the session as a new
@@ -959,9 +959,11 @@ export function onSessionIdle(sessionId: string): void {
     (a) => a.sessionId === sessionId && a.state === "scheduled",
   );
   if (!pending.length) return;
-  let hasPr = false;
   const ctrl = tryGetSessionControl();
-  if (ctrl) hasPr = !!ctrl.getSession(sessionId)?.prUrl;
+  if (!ctrl) return;
+  const session = await ctrl.getSession(sessionId);
+  if (!session) return;
+  const hasPr = !!session.prUrl;
   for (const a of pending) {
     if (a.deliver === "when_done" || (a.deliver === "on_pr" && hasPr)) {
       enqueueAskDelivery(a, true);

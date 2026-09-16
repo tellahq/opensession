@@ -1,3 +1,4 @@
+import { captureClientDataScope } from "../../lib/client-data-scope";
 import React, { useEffect, useEffectEvent, useState } from "react";
 import {
   fetchGithubOrganizationProfile,
@@ -138,19 +139,23 @@ export function OrganizationProfileSection({
       !settings.organizationName || settings.organizationName === PRODUCT_NAME;
     const needsIcon = !settings.organizationIconUrl;
     if (!needsName && !needsIcon) return;
+    const scope = captureClientDataScope();
     prefilled.current = true;
     void (async () => {
       const profile = await fetchGithubOrganizationProfile(login);
       await update(async () => {
         if (needsIcon && profile?.avatarUrl) {
           const icon = await pngFromImageUrl(profile.avatarUrl);
-          if (icon) await uploadOrganizationIcon(icon);
+          if (icon) await uploadOrganizationIcon(icon, scope);
         }
         return needsName
-          ? saveOrganizationSettings({
-              organizationName: profile?.name || login,
-            })
-          : saveOrganizationSettings({});
+          ? saveOrganizationSettings(
+              {
+                organizationName: profile?.name || login,
+              },
+              scope,
+            )
+          : saveOrganizationSettings({}, scope);
       }, `Filled in from ${login} on GitHub.`);
     })();
   });
@@ -159,9 +164,10 @@ export function OrganizationProfileSection({
   }, [githubOrganization, settings, busy]);
 
   async function upload(file: File) {
+    const scope = captureClientDataScope();
     await update(async () => {
       const png = await pngFromImageFile(file);
-      return uploadOrganizationIcon(png);
+      return uploadOrganizationIcon(png, scope);
     }, "Organization icon updated.");
   }
 

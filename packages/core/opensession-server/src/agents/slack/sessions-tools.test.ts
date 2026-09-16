@@ -290,7 +290,7 @@ describe("spawnTaskImpl", () => {
     );
     expect(r1.ok).toBe(true);
     const child = (r1 as { taskId: string }).taskId;
-    expect(resolveSpawnDepth(child, h1.deps)).toBe(1);
+    expect(await resolveSpawnDepth(child, h1.deps)).toBe(1);
 
     const h2 = makeHarness(`bks-test-c2-${++uniq}`);
     const r2 = await spawnTaskImpl(
@@ -300,7 +300,7 @@ describe("spawnTaskImpl", () => {
     );
     expect(r2.ok).toBe(true);
     const grandchild = (r2 as { taskId: string }).taskId;
-    expect(resolveSpawnDepth(grandchild, h2.deps)).toBe(2);
+    expect(await resolveSpawnDepth(grandchild, h2.deps)).toBe(2);
 
     const h3 = makeHarness();
     const r3 = await spawnTaskImpl(
@@ -804,6 +804,33 @@ describe("task_status / cancel_task", () => {
     expect(h.cancelled).toEqual(["bks-test-task"]);
   });
 
+  it("cancel_task awaits authority and denies unavailable ownership without export fallback", async () => {
+    const h = makeHarness();
+    const parent = "bks-authoritative-parent";
+    const child = "bks-authoritative-child";
+    let resolve!: (value: SessionSummary | undefined) => void;
+    h.deps.control.getSession = () =>
+      new Promise((done) => {
+        resolve = done;
+      });
+    h.deps.readSessionFile = () => {
+      throw new Error("Export fallback forbidden");
+    };
+    const context = { isAdmin: false, currentSessionId: parent };
+    const pending = cancelTaskImpl({ taskId: child }, context, h.deps);
+    expect(h.cancelled).toEqual([]);
+    resolve({ id: child, parentSessionId: parent } as SessionSummary);
+    expect(await pending).toContain("Cancelled");
+    expect(h.cancelled).toEqual([child]);
+    h.deps.control.getSession = async () => {
+      throw new Error("Authority unavailable");
+    };
+    expect(await cancelTaskImpl({ taskId: child }, context, h.deps)).toContain(
+      "not spawned by this session",
+    );
+    expect(h.cancelled).toEqual([child]);
+  });
+
   it("cancel_task without isAdmin only reaches the caller's own spawned children", async () => {
     const h = makeHarness();
     const parent = `bks-test-parent-${++uniq}`;
@@ -835,12 +862,13 @@ describe("task_status / cancel_task", () => {
       "Cancelled",
     );
     expect(h.cancelled).toEqual([child]);
-    // A child whose summary is gone still resolves through its session file.
+    // A stale exported child cannot bypass missing authoritative ownership.
     const finished = `bks-test-finished-${++uniq}`;
     h.files.set(finished, { id: finished, parentSessionId: parent });
     expect(
       await cancelTaskImpl({ taskId: finished }, scoped, h.deps),
-    ).toContain("Cancelled");
+    ).toContain("not spawned by this session");
+    expect(h.cancelled).toEqual([child]);
     // No caller session at all never clears the gate.
     expect(
       await cancelTaskImpl(

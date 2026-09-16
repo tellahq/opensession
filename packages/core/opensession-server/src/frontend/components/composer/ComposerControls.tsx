@@ -139,6 +139,9 @@ interface ComposerAddMenuProps {
   disabled?: boolean;
   canAttach: boolean;
   canAttachFiles: boolean;
+  /** Set when attaching is off for a reason worth reading (a private
+   * session): shown where the attach entries would be. */
+  attachmentsUnavailable?: string;
   isPhone: boolean;
   attachChord: string | null;
   mentionEnabled: boolean;
@@ -171,6 +174,7 @@ export function ComposerAddMenu({
   disabled,
   canAttach,
   canAttachFiles,
+  attachmentsUnavailable,
   isPhone,
   attachChord,
   mentionEnabled,
@@ -230,6 +234,14 @@ export function ComposerAddMenu({
             composerMenuAnchorLeft,
           )}
         >
+          {attachmentsUnavailable && (
+            <div
+              role="note"
+              className="max-w-[300px] px-3 py-1.5 text-supporting leading-snug text-faint"
+            >
+              {attachmentsUnavailable}
+            </div>
+          )}
           {canAttach && (
             <ComposerPressButton
               type="button"

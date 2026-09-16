@@ -1,3 +1,4 @@
+import { captureClientDataScope } from "../lib/client-data-scope";
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/input";
@@ -533,9 +534,10 @@ function RepoTileButton({
   const autoActive = !repo?.hasIcon && !repo?.colorChosen;
 
   async function upload(file: File) {
+    const scope = captureClientDataScope();
     await run(async () => {
       const png = await pngFromImageFile(file);
-      await uploadRepoIconApi(id, png);
+      await uploadRepoIconApi(id, png, scope);
     });
   }
 

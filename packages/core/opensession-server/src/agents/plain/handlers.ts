@@ -713,10 +713,11 @@ async function deliverNoteToLinkedSession(
   try {
     const { tryGetSessionControl } =
       await import("../../server/session-control");
-    const { getCachedSessions } = await import("../../server/session-cache");
+    const { getCachedSessionsAsync } =
+      await import("../../server/session-cache");
     const control = tryGetSessionControl();
     if (!control) return false;
-    const session = getCachedSessions()
+    const session = (await getCachedSessionsAsync())
       .filter((s) => s.plainThreadId === threadId && !s.archived)
       .sort(
         (a, b) =>

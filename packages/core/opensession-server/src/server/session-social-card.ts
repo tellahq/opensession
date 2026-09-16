@@ -20,6 +20,7 @@ import { findSessionAsync } from "./session-cache";
 import { transcript } from "./actor-transcript";
 import { isWithinUploads, stagedImageRef } from "./uploads";
 import type { TranscriptEntry, UnifiedSession } from "./types";
+import { canAccessScope } from "../shared/access-scope";
 
 /**
  * sharp is loaded lazily and treated as optional. Its platform `@img/sharp-*`
@@ -622,6 +623,9 @@ export function sessionHtmlWithSocialMeta(
   session: UnifiedSession,
   pathname: string,
 ): string {
+  // SPA navigation can bypass the authenticated fetch dispatcher. Its public
+  // shell must never embed personal metadata, even for a signed-in owner.
+  if (!canAccessScope(session.accessScope)) return htmlSource;
   const data = sessionSocialCardBaseData(session);
   const image = sessionSocialCardUrl(session.id);
   const page = `${configuredServer().publicBaseUrl.replace(/\/+$/, "")}${pathname}`;
@@ -715,7 +719,10 @@ export function sessionSocialCardPublicRoutes(): Map<
     if (!validCardToken(sessionId, match[2]))
       return Response.json({ error: "Not found" }, { status: 404 });
     const session = await findSessionAsync(sessionId);
-    if (!session) return Response.json({ error: "Not found" }, { status: 404 });
+    // A card capability is not permission to export personal content. Check
+    // before transcript/media reads and before consulting the public cache.
+    if (!session || !canAccessScope(session.accessScope))
+      return Response.json({ error: "Not found" }, { status: 404 });
     const data = await sessionSocialCardData(session, { includeShot: true });
     if (!(await loadSharp()))
       return Response.json(

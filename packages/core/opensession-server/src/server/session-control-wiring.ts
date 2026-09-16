@@ -1,3 +1,11 @@
+import {
+  currentExecutionAccess,
+  canWriteApplicationResource,
+  accessForVerifiedWebIdentity,
+} from "./application-access";
+import { sameAccessScope } from "../shared/access-scope";
+import { reserveSharedSessionCreation } from "./personal-session-reservation";
+import { withSessionScopeFence } from "./session-scope-coverage";
 /**
  * Wires the SessionControl registry (src/server/session-control.ts) — the
  * surface behind the opensession-sessions MCP — into the same in-process state and
@@ -63,7 +71,7 @@ import { isShuttingDown } from "./shutdown-state";
 import { resolveInteractiveSandbox } from "./sandbox/defaults";
 import {
   findSession,
-  getCachedSessions,
+  findSessionAsync,
   getCachedSessionsAsync,
   getSessionListSnapshotAsync,
   publishSessionChange,
@@ -226,13 +234,14 @@ function refreshSessionSummaries(): Promise<void> {
   return summaryState.refresh;
 }
 
-function listSessionSummaries(): SessionSummary[] {
-  void refreshSessionSummaries().catch((error) =>
-    console.warn("[sessions] summary refresh failed:", error),
-  );
-  return getCachedSessions().map(
-    (session) => summaryState.byId.get(session.id) ?? buildSummary(session),
-  );
+async function listSessionSummaries(): Promise<SessionSummary[]> {
+  return withSessionScopeFence(async () => {
+    await refreshSessionSummaries();
+    const sessions = await getCachedSessionsAsync();
+    return sessions.map(
+      (session) => summaryState.byId.get(session.id) ?? buildSummary(session),
+    );
+  });
 }
 
 // --- Session control surface (powers the opensession-sessions MCP) ---
@@ -270,26 +279,48 @@ class SessionDeliveryError extends Error {
   }
 }
 
+async function mutationSession(id: string) {
+  const session = await findSessionAsync(id);
+  return session &&
+    canWriteApplicationResource(
+      currentExecutionAccess() ?? accessForVerifiedWebIdentity(undefined),
+      session.accessScope,
+    )
+    ? session
+    : undefined;
+}
+
 registerSessionControl({
   listSessions: listSessionSummaries,
 
-  getSession: (id) => {
-    void refreshSessionSummaries().catch((error) =>
-      console.warn("[sessions] summary refresh failed:", error),
-    );
-    const s = findSession(id);
-    return s ? (summaryState.byId.get(s.id) ?? buildSummary(s)) : undefined;
-  },
+  getSession: async (id) =>
+    withSessionScopeFence(async () => {
+      const session = await findSessionAsync(id);
+      if (!session) return undefined;
+      const [pending, queued] = await Promise.all([
+        sessionAsk({ op: "snapshot", sessionId: session.id }) as Promise<
+          PendingAsk | undefined
+        >,
+        sessionDelivery({ op: "snapshot", sessionId: session.id }),
+      ]);
+      return buildSummary(
+        session,
+        pending?.answerReceived ? undefined : pending,
+        queued.queued.length,
+      );
+    }),
 
   transcriptTail: async (id, n) => {
-    const s = findSession(id);
-    if (!s) return [];
-    // Engine-spanning read (file + actor store) — same as the transcript
-    // route, so get_session works after shared-store retirement.
-    return (await mergedSessionTranscriptAsync(s)).slice(-Math.max(0, n));
+    const session = await findSessionAsync(id);
+    return session
+      ? (await mergedSessionTranscriptAsync(session)).slice(-Math.max(0, n))
+      : [];
   },
 
   answerQuestion: async (id, answers, opts) => {
+    const authorized = await mutationSession(id);
+    if (!authorized) return false;
+    id = authorized.id;
     const requestId = opts?.requestId || randomUUIDv7();
     const questionId = (await pendingAskAwaitingAnswer(id))?.questionId || null;
     // The actor records the answer durably under the caller's retry
@@ -324,6 +355,9 @@ registerSessionControl({
   },
 
   deliverToSession: async (id, content, user, opts) => {
+    const authorized = await mutationSession(id);
+    if (!authorized) throw new Error("Session not found");
+    id = authorized.id;
     const deliveryId = opts?.deliveryId || randomUUIDv7();
 
     const identity = {
@@ -346,7 +380,7 @@ registerSessionControl({
         .digest("hex"),
     };
     const deliverOwned = async () => {
-      const session = findSession(id);
+      const session = await mutationSession(id);
       if (!session)
         throw new SessionDeliveryError({
           status: "error",
@@ -595,6 +629,9 @@ registerSessionControl({
   },
 
   cancelSession: async (id, opts) => {
+    const authorized = await mutationSession(id);
+    if (!authorized) return false;
+    id = authorized.id;
     const requestId = opts?.requestId || randomUUIDv7();
     const plan = await sessionTurn({
       op: "request_cancel_command",
@@ -605,7 +642,7 @@ registerSessionControl({
     if (plan.status === "completed") return plan.result;
     let cancelPhysicalFinished = false;
     try {
-      const currentSession = findSession(id);
+      const currentSession = await mutationSession(id);
       if (!currentSession) {
         cancelPhysicalFinished = true;
         return await sessionTurn({
@@ -641,10 +678,28 @@ registerSessionControl({
   },
 
   reparentSession: async (id, parentSessionId) => {
-    const validation = validateSessionReparent(
-      id,
-      parentSessionId,
-      findSession,
+    const session = await mutationSession(id);
+    if (!session) return { ok: false as const, error: "Session not found" };
+    id = session.id;
+    const known = new Map<string, UnifiedSession>([[id, session]]);
+    let cursor = parentSessionId;
+    let first = true;
+    while (cursor && !known.has(cursor)) {
+      if (known.size >= 128)
+        return { ok: false as const, error: "Parent chain unavailable" };
+      const parent = await findSessionAsync(cursor);
+      if (!parent || !sameAccessScope(parent.accessScope, session.accessScope))
+        return { ok: false as const, error: "Parent session unavailable" };
+      known.set(cursor, parent);
+      known.set(parent.id, parent);
+      if (first) {
+        parentSessionId = parent.id;
+        first = false;
+      }
+      cursor = parent.parentSessionId || parent.spawnedBy;
+    }
+    const validation = validateSessionReparent(id, parentSessionId, (key) =>
+      known.get(key),
     );
     if (!validation.ok) return validation;
 
@@ -676,6 +731,11 @@ registerSessionControl({
   },
 
   createSession: async (input: CreateSessionOpts) => {
+    if (
+      currentExecutionAccess()?.origin?.kind === "personal" ||
+      input.repo?.startsWith("personal-")
+    )
+      throw new Error("Private MCP creation is not supported");
     const requestId = input.requestId || randomUUIDv7();
     const actorScope = input.requestScope || input.user || "automation";
     const requestedId = input.id || sessionIdForRequest(actorScope, requestId);
@@ -722,12 +782,13 @@ registerSessionControl({
     const createIdentity = new Bun.CryptoHasher("sha256")
       .update(canonicalCommandPayload(ownedInput))
       .digest("hex");
+    await reserveSharedSessionCreation(bksId, createIdentity);
     const durableCreation = await sessionKernel(bksId).creationState();
     if (durableCreation && durableCreation.identity !== createIdentity)
       throw new Error(
         "Create request identity crossed durable session ownership",
       );
-    let completedCreate = findSession(requestedId);
+    let completedCreate = await findSessionAsync(requestedId);
     if (
       durableCreation?.state === "opening_dispatched" ||
       durableCreation?.state === "ready" ||
@@ -814,7 +875,11 @@ registerSessionControl({
       ? fork.source.accountId
       : resolvePinnedAccountId(model, accountIdInput, user);
     const images = parseImageDataUrls(imageUrls);
-    const parentSession = parentSessionId ? findSession(parentSessionId) : null;
+    const parentSession = parentSessionId
+      ? await findSessionAsync(parentSessionId)
+      : null;
+    if (parentSessionId && !parentSession)
+      throw new Error("Parent session unavailable");
     // opensession-sessions is withheld from automation-owned runs. Scope the
     // server-owned worktree fetch to this trusted interactive creator.
     const githubCredential = parentSession?.automation
@@ -829,7 +894,11 @@ registerSessionControl({
     // helper sessions — a scratch session spun up mid-run — out of the human's
     // rows. The Desk is deliberately exempt: it delegates on the user's behalf,
     // so the work it spawns is the user's own and stays visible.
-    const spawnerSession = spawnedByInput ? findSession(spawnedByInput) : null;
+    const spawnerSession = spawnedByInput
+      ? await findSessionAsync(spawnedByInput)
+      : null;
+    if (spawnedByInput && !spawnerSession)
+      throw new Error("Spawner session unavailable");
     const spawnedBy =
       spawnerSession && !spawnerSession.desk ? spawnerSession.id : undefined;
     // Explicit workspace join (the native apps' "new session in this workspace" —
@@ -1176,7 +1245,7 @@ registerSessionControl({
     // session spun up to watch others) get the same resolving footer as
     // prompts on existing sessions — this create path bypasses
     // runSessionPromptInner.
-    const createMentionsNote = sessionMentionsNote(prompt);
+    const createMentionsNote = await sessionMentionsNote(prompt);
     const attachmentSources =
       createPlan.attachments ??
       prepareCreationAttachmentSources(bksId, rawFiles);

@@ -27,3 +27,47 @@ describe("authGatesOut", () => {
     expect(authGatesOut(undefined)).toBe(false);
   });
 });
+
+test("remembered names never hydrate before verified readiness or on an unresolved auth event", async () => {
+  const { publishClientDataIdentity } = await import("./client-data-scope");
+  const { whenCurrentUserReady, AUTH_STATUS_EVENT } =
+    await import("./auth-ready");
+  const windowDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "window",
+  );
+  const storageDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "localStorage",
+  );
+  const events = new EventTarget();
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: events,
+  });
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: { getItem: () => "Same" },
+  });
+  publishClientDataIdentity(null);
+  const hydrated: string[] = [];
+  const cancel = whenCurrentUserReady((name) => hydrated.push(name));
+  events.dispatchEvent(new Event(AUTH_STATUS_EVENT));
+  expect(hydrated).toEqual([]);
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 11,
+  });
+  expect(hydrated).toEqual([]);
+  events.dispatchEvent(new Event(AUTH_STATUS_EVENT));
+  expect(hydrated).toEqual(["Same"]);
+  cancel();
+  publishClientDataIdentity(null);
+  if (windowDescriptor)
+    Object.defineProperty(globalThis, "window", windowDescriptor);
+  else Reflect.deleteProperty(globalThis, "window");
+  if (storageDescriptor)
+    Object.defineProperty(globalThis, "localStorage", storageDescriptor);
+  else Reflect.deleteProperty(globalThis, "localStorage");
+});

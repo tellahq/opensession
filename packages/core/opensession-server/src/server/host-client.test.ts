@@ -266,6 +266,7 @@ describe("uncertain host reconciliation", () => {
         throw new Error("not connectable");
       },
       events: async function* () {},
+      tagEvent: (event: unknown) => event,
       executionEvidence: async () => ({ started: false }),
       stopAndWait: async () => {
         terminal = { type: "done", result: "live finish" };
@@ -292,6 +293,7 @@ describe("uncertain host reconciliation", () => {
         throw new Error("not connectable");
       },
       events: async function* () {},
+      tagEvent: (event: unknown) => event,
       executionEvidence: async () => ({ started: false }),
       stopAndWait: async () => false,
     };

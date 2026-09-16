@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { deliverSessionPrompt, type PromptDelivery } from "./api/sessions";
 import { BASE } from "./api/request";
+import {
+  captureClientDataScope,
+  isCurrentClientDataScope,
+  subscribeClientDataScope,
+  type ClientDataScope,
+} from "./client-data-scope";
 import { randomUUID } from "./random-uuid";
 
 export type PromptOutboxState = "pending" | "sending" | "failed";
@@ -110,6 +116,7 @@ function copy(item: PromptOutboxItem): PromptOutboxItem {
  * composer persists first, then subscribes to state and delivery observations.
  */
 export class PromptOutbox {
+  private disposed = false;
   private items: PromptOutboxItem[] = [];
   private listeners = new Set<Listener>();
   private observers = new Set<DeliveryObserver>();
@@ -122,6 +129,7 @@ export class PromptOutbox {
     }
   };
   private readonly onOnline = () => {
+    if (!this.active()) return;
     const now = this.now();
     let changed = false;
     this.items = this.items.map((item) => {
@@ -135,6 +143,7 @@ export class PromptOutbox {
 
   constructor(
     private readonly opts: {
+      isCurrent?: () => boolean;
       storage?: Pick<Storage, "getItem" | "setItem">;
       scope?: string;
       now?: () => number;
@@ -163,6 +172,8 @@ export class PromptOutbox {
   }
 
   dispose(): void {
+    this.disposed = true;
+    this.items = [];
     if (this.timer !== undefined) clearTimeout(this.timer);
     if (typeof window !== "undefined") {
       window.removeEventListener("storage", this.onStorage);
@@ -170,7 +181,18 @@ export class PromptOutbox {
     }
   }
 
+  private active(): boolean {
+    return !this.disposed && (this.opts.isCurrent?.() ?? false);
+  }
+  private assertActive(): void {
+    if (!this.active())
+      throw new Error(
+        "Sign-in changed. Wait for your account to be verified before sending.",
+      );
+  }
+
   list(sessionId?: string): PromptOutboxItem[] {
+    if (!this.active()) return [];
     return this.items
       .filter((item) => !sessionId || item.sessionId === sessionId)
       .map(copy);
@@ -188,6 +210,7 @@ export class PromptOutbox {
 
   /** Persists synchronously before returning. Throws rather than evicting data. */
   enqueue(input: PromptOutboxInput): PromptOutboxItem {
+    this.assertActive();
     this.reload(false);
     if (this.items.length >= PROMPT_OUTBOX_MAX_ITEMS)
       throw new Error(
@@ -226,6 +249,7 @@ export class PromptOutbox {
   }
 
   discard(clientId: string): void {
+    this.assertActive();
     this.reload(false);
     const next = this.items.filter((item) => item.clientId !== clientId);
     if (next.length === this.items.length) return;
@@ -248,6 +272,7 @@ export class PromptOutbox {
   }
 
   async flush(): Promise<void> {
+    if (!this.active()) return;
     this.reload(false);
     const now = this.now();
     const sendingSessions = new Set(
@@ -274,6 +299,7 @@ export class PromptOutbox {
   }
 
   private async flushSession(sessionId: string): Promise<void> {
+    if (!this.active()) return;
     const locks =
       this.opts.locks ??
       (typeof navigator !== "undefined" ? navigator.locks : undefined);
@@ -289,13 +315,14 @@ export class PromptOutbox {
     // after ownership transfers: the prior tab usually removed the item while
     // this caller waited, so there is then nothing left to deliver.
     await locks.request(`${this.key}:deliver:${sessionId}`, async () => {
+      if (!this.active()) return;
       this.reload(false);
       await this.flushSessionOwned(sessionId);
     });
   }
 
   private async flushSessionOwned(sessionId: string): Promise<void> {
-    while (true) {
+    while (this.active()) {
       const item = this.items.find(
         (candidate) =>
           candidate.sessionId === sessionId &&
@@ -311,16 +338,22 @@ export class PromptOutbox {
         return;
       }
       try {
+        if (!this.active()) return;
         const result = await (
           this.opts.deliver ?? ((id, body) => deliverSessionPrompt(id, body))
         )(sessionId, this.body(item));
+        if (!this.active()) return;
         this.items = this.items.filter(
           (candidate) => candidate.clientId !== item.clientId,
         );
         this.persist();
         this.emit();
-        for (const observer of this.observers) observer(copy(item), result);
+        for (const observer of this.observers) {
+          if (!this.active()) return;
+          observer(copy(item), result);
+        }
       } catch (error) {
+        if (!this.active()) return;
         const attempts = item.attempts + 1;
         const message =
           error instanceof Error ? error.message : "Prompt delivery failed";
@@ -366,6 +399,7 @@ export class PromptOutbox {
     clientId: string,
     change: (item: PromptOutboxItem) => PromptOutboxItem,
   ): void {
+    this.assertActive();
     this.reload(false);
     const item = this.items.find(
       (candidate) => candidate.clientId === clientId,
@@ -392,6 +426,7 @@ export class PromptOutbox {
   }
 
   private reload(notify = true): void {
+    if (!this.active()) return;
     const raw =
       this.opts.storage?.getItem(this.key) ??
       (typeof localStorage === "undefined"
@@ -435,6 +470,7 @@ export class PromptOutbox {
   }
 
   private persist(): void {
+    this.assertActive();
     const storage =
       this.opts.storage ??
       (typeof localStorage === "undefined" ? undefined : localStorage);
@@ -472,6 +508,7 @@ export class PromptOutbox {
 
   private schedule(): void {
     if (this.timer !== undefined) clearTimeout(this.timer);
+    if (!this.active()) return;
     const next = this.items
       .filter((item) => item.state === "pending")
       .reduce(
@@ -490,10 +527,114 @@ export class PromptOutbox {
   }
 }
 
-/** One process-wide queue. Multiple mounted session panes subscribe to their
- * own slice, while a single sender preserves ordering and avoids redundant
- * retries inside one tab. Stable client ids still make cross-tab races safe. */
-export const promptOutbox = new PromptOutbox();
+/** Lazily bind a sender to one verified auth lifetime. Origin-only v1 records
+ * are deliberately left untouched, never adopted into the next cookie owner. */
+class ScopedPromptOutbox {
+  private current: { scope: ClientDataScope; outbox: PromptOutbox } | undefined;
+  private listeners = new Set<Listener>();
+  private observers = new Set<DeliveryObserver>();
+  constructor() {
+    subscribeClientDataScope(() => {
+      if (
+        this.current &&
+        this.current.scope === captureClientDataScope() &&
+        isCurrentClientDataScope(this.current.scope)
+      )
+        return;
+      this.current?.outbox.dispose();
+      this.current = undefined;
+      for (const listener of this.listeners) listener();
+      this.resume();
+    });
+    this.resume();
+  }
+  private resume(): void {
+    const scope = captureClientDataScope();
+    if (!scope || scope.key === "shared:legacy") return;
+    // Auth, not a mounted session pane, starts recovery. Preserve the capture
+    // across the microtask; unavailable storage leaves durable data untouched.
+    void Promise.resolve()
+      .then(() => this.get(scope)?.flush())
+      .catch(() => {});
+  }
+  private get(scope = captureClientDataScope()): PromptOutbox | undefined {
+    if (
+      !scope ||
+      scope.key === "shared:legacy" ||
+      !isCurrentClientDataScope(scope)
+    )
+      return undefined;
+    if (!this.current) {
+      const outbox = new PromptOutbox({
+        scope: `${serverScope()}:principal-v2:${encodeURIComponent(scope.key)}`,
+        isCurrent: () => isCurrentClientDataScope(scope),
+        deliver: (id, body) => deliverSessionPrompt(id, body, scope),
+      });
+      this.current = { scope, outbox };
+      outbox.subscribe(() => {
+        for (const listener of this.listeners) listener();
+      });
+      outbox.observeDelivery((item, result) => {
+        for (const observer of this.observers) {
+          if (!isCurrentClientDataScope(scope)) return;
+          observer(item, result);
+        }
+      });
+    }
+    return this.current.scope === scope ? this.current.outbox : undefined;
+  }
+  list(
+    sessionId?: string,
+    scope = captureClientDataScope(),
+  ): PromptOutboxItem[] {
+    return this.get(scope)?.list(sessionId) ?? [];
+  }
+  enqueue(
+    input: PromptOutboxInput,
+    scope = captureClientDataScope(),
+  ): PromptOutboxItem {
+    const outbox = this.get(scope);
+    if (!outbox)
+      throw new Error("Wait for your account to be verified before sending.");
+    return outbox.enqueue(input);
+  }
+  subscribe(listener: Listener, scope = captureClientDataScope()): () => void {
+    const bound = () => {
+      if (isCurrentClientDataScope(scope)) listener();
+    };
+    this.listeners.add(bound);
+    this.get(scope);
+    return () => {
+      this.listeners.delete(bound);
+    };
+  }
+  observeDelivery(
+    observer: DeliveryObserver,
+    scope = captureClientDataScope(),
+  ): () => void {
+    const bound: DeliveryObserver = (item, result) => {
+      if (isCurrentClientDataScope(scope)) observer(item, result);
+    };
+    this.observers.add(bound);
+    this.get(scope);
+    return () => {
+      this.observers.delete(bound);
+    };
+  }
+  async flush(scope = captureClientDataScope()): Promise<void> {
+    await this.get(scope)?.flush();
+  }
+  retry(id: string): void {
+    this.get()?.retry(id);
+  }
+  discard(id: string): void {
+    this.get()?.discard(id);
+  }
+  edit(id: string, patch: Partial<PromptOutboxInput>): void {
+    this.get()?.edit(id, patch);
+  }
+}
+export const promptOutbox = new ScopedPromptOutbox();
 
 function retryDelay(attempt: number): number {
   return Math.min(

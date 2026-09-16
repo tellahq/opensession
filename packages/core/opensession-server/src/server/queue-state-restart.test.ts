@@ -303,3 +303,43 @@ describe("steer receipt restart persistence", () => {
     ).toEqual([receipts[2]]);
   });
 });
+
+test("actor queue restoration parks denied sources and continues independent shared work", async () => {
+  const store = __sessionKernelStoreForTest();
+  store.markDeliveryMigrationComplete();
+  const denied = "restore-private-denied",
+    failed = "restore-private-failed",
+    shared = "restore-shared-ok";
+  for (const id of [denied, failed, shared]) {
+    await promptQueues.set(id, [{ id: `queued-${id}`, content: "queued" }]);
+    await steeredReceipts.set(id, [{ id: `steer-${id}`, content: "steered" }]);
+  }
+  const touched: string[] = [];
+  const result = await restorePersistedQueueState({
+    withSessionRestore: async (id, work) => {
+      if (id === denied) return false;
+      if (id === failed) throw new Error("original source unavailable");
+      await work();
+      return true;
+    },
+    sessionExists: async (id) => {
+      touched.push(id);
+      return true;
+    },
+    journalOwnsPrompt: () => false,
+    runOwnsSteers: () => false,
+    deliveredUserTexts: () => [],
+    effects: false,
+  });
+  expect(touched).not.toContain(denied);
+  expect(touched).not.toContain(failed);
+  expect(touched).toContain(shared);
+  expect(result.queuedSessionIds).toContain(shared);
+  expect(result.queuedSessionIds).not.toContain(denied);
+  expect(result.queuedSessionIds).not.toContain(failed);
+  for (const id of [denied, failed]) {
+    expect(promptQueues.get(id)).toHaveLength(1);
+    expect(steeredReceipts.get(id)).toHaveLength(1);
+  }
+  expect(promptQueues.get(shared)).toHaveLength(2);
+});

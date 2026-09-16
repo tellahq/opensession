@@ -9,6 +9,8 @@ import {
   executorSocketPath,
 } from "@tellahq/opensession-protocol/executor";
 import { existsSync, readFileSync } from "fs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { RunHostMeta } from "../runner-host/protocol";
 import { HOST_META_NAME, HOST_SOCK_NAME } from "../runner-host/protocol";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
@@ -241,6 +243,92 @@ export async function launchHostViaExecutor(
   }
   noteDelegatedLaunch();
   return true;
+}
+
+/** The executor serializes stop behind accepted launches, even if their reply
+ * was lost. Unknown, unavailable or a mismatched receipt never means absent. */
+export async function stopHostViaExecutor(
+  hostId: string,
+  specHash: string,
+  options?: { socketPath?: string; token?: string; timeoutMs?: number },
+): Promise<void> {
+  const socketPath =
+    options?.socketPath ?? executorSocketPath(OPENSESSION_SESSIONS_DIR);
+  let token = options?.token;
+  if (!token) {
+    const explicit = process.env.OPENSESSION_EXECUTOR_TOKEN?.trim();
+    if (
+      explicit &&
+      (process.env.NODE_ENV === "test" || process.env.OPENSESSION_DEV === "1")
+    )
+      token = explicit;
+    else if (process.env.CREDENTIALS_DIRECTORY) {
+      try {
+        token = (
+          await readFile(
+            join(process.env.CREDENTIALS_DIRECTORY, "executor-token"),
+            "utf8",
+          )
+        ).trim();
+      } catch {}
+    }
+  }
+  if (!token)
+    throw new ExecutorProtocolError(
+      "Executor stop credential unavailable",
+      true,
+    );
+  const timeout = options?.timeoutMs ?? 30_000;
+  const helloId = crypto.randomUUID();
+  const hello = await requestExecutor(
+    socketPath,
+    {
+      t: "hello",
+      requestId: helloId,
+      token,
+      minVersion: EXECUTOR_PROTOCOL_MIN_VERSION,
+      maxVersion: EXECUTOR_PROTOCOL_VERSION,
+    },
+    timeout,
+  );
+  const helloStatus = assertResponse(
+    hello,
+    helloId,
+    "executor stop handshake failed",
+    true,
+  );
+  if (!hello.ok || !hello.compatible || helloStatus)
+    throw new ExecutorProtocolError("Executor stop handshake invalid", true);
+  const requestId = crypto.randomUUID();
+  const response = await requestExecutor(
+    socketPath,
+    {
+      t: "stop_host",
+      requestId,
+      token,
+      version: hello.version,
+      hostId,
+      specHash,
+    },
+    timeout,
+  );
+  const status = assertResponse(
+    response,
+    requestId,
+    "executor stop failed",
+    true,
+  );
+  if (
+    !status ||
+    status.hostId !== hostId ||
+    status.specHash !== specHash ||
+    status.state !== "stopped" ||
+    status.ready
+  )
+    throw new ExecutorProtocolError(
+      "Executor stop did not confirm the exact host",
+      true,
+    );
 }
 
 export async function waitForLocalHost(

@@ -1,3 +1,15 @@
+import { parseAccessScope } from "../../shared/access-scope";
+import {
+  assertPrivateActorFence,
+  type PrivateActorFence,
+} from "./private-access";
+import { reserveCreationAccess } from "./creation-access-store";
+import type { CreationAccessReservation } from "./creation-access-protocol";
+import * as accessLedger from "./access-ledger";
+import { canAccessScope } from "../../shared/access-scope";
+import { assertMetadataActorRequest } from "./metadata-protocol";
+import * as repositoryAccessStore from "./repository-access-store";
+import type { AccessPrincipal } from "../../shared/access-scope";
 import {
   DESTINATION_IDEMPOTENT_GATEWAY_OPERATIONS,
   GATEWAY_COMMAND_OPERATIONS,
@@ -262,7 +274,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
     bootId: linuxBootId(),
     start: linuxProcessStart(process.pid),
   } satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 34;
+export const SESSION_KERNEL_SCHEMA_VERSION = 37;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -1585,6 +1597,15 @@ export class SessionKernelStore {
     migrateAgentOperationCancellationSchema32(this.db, schemaVersion);
     metadataStore.migrateSessionMetadataSchema33(this.db, schemaVersion);
     catalogDocumentStore.migrateCatalogDocumentSchema34(this.db, schemaVersion);
+    repositoryAccessStore.migrateRepositoryCatalogSchema35(
+      this.db,
+      schemaVersion,
+    );
+    accessLedger.migrateAccessLedgerSchema36(this.db, schemaVersion);
+    repositoryAccessStore.migrateRepositoryBindingsSchema37(
+      this.db,
+      schemaVersion,
+    );
     assertAgentOperationSchema28(this.db);
     assertAgentOperationCancellationSchema32(this.db);
     if (path !== ":memory:") {
@@ -2858,6 +2879,7 @@ export class SessionKernelStore {
 
   tombstoneSession(sessionId: string): void {
     const tx = this.db.transaction(() => {
+      accessLedger.tombstoneScope(this.db, sessionId);
       for (const table of [
         "session_kernel_state",
         "session_kernel_creation",
@@ -2892,6 +2914,7 @@ export class SessionKernelStore {
 
   clearSession(sessionId: string): void {
     const tx = this.db.transaction(() => {
+      accessLedger.tombstoneScope(this.db, sessionId);
       for (const table of [
         "session_kernel_state",
         "session_kernel_creation",
@@ -3659,6 +3682,24 @@ export class SessionKernelStore {
       .all() as Array<{ session_id: string }>;
     let count = 0;
     for (const row of rows) {
+      // Global boot reconciliation has no private producer provenance. An
+      // exact recovered host owns these receipts; leave them untouched.
+      const scope = this.sessionScopeLookup(row.session_id);
+      const metadata = this.sessionMetadata(row.session_id);
+      let documentScope;
+      try {
+        documentScope = metadata
+          ? parseAccessScope(JSON.parse(metadata.doc).accessScope)
+          : undefined;
+      } catch {
+        continue;
+      }
+      if (
+        (scope && (scope.deleted || scope.owner !== 0)) ||
+        (metadata && (!documentScope || documentScope.kind === "personal"))
+      )
+        continue;
+
       this.mutateDelivery(
         row.session_id,
         "delivery_steer_recovered",
@@ -6224,7 +6265,14 @@ export class SessionKernelStore {
   ): SessionMetadataPutResult {
     if (this.isTombstoned(input.sessionId))
       throw new Error(`Session ${input.sessionId} was deleted`);
+    metadataStore.assertSessionMetadataCatalogWrite(this.db, input);
     return metadataStore.putSessionMetadata(this.db, input);
+  }
+
+  assertSessionMetadataCatalogWrite(
+    input: Extract<MetadataActorRequest, { op: "put" }>,
+  ): void {
+    metadataStore.assertSessionMetadataCatalogWrite(this.db, input);
   }
 
   settleSessionMetadataCatalog(
@@ -6242,20 +6290,143 @@ export class SessionKernelStore {
     return metadataStore.seedSessionMetadataCatalog(this.db, rows);
   }
 
+  sessionScopeReadable(id: string, principal?: AccessPrincipal): boolean {
+    const scope = accessLedger.scopeRecord(this.db, id);
+    return (
+      !scope ||
+      (!scope.deleted &&
+        (scope.owner === 0 ||
+          (scope.owner > 0 && scope.owner === principal?.githubAccountId)))
+    );
+  }
+
+  sessionScopeFence() {
+    return accessLedger.scopeFence(this.db);
+  }
+  sessionScopeChanges(after: number, limit: number) {
+    return accessLedger.scopeChanges(this.db, after, limit);
+  }
+  registerSessionScopeAliases(rows: Array<{ id: string; aliases: string[] }>) {
+    return accessLedger.registerScopeAliases(this.db, rows);
+  }
+  tombstoneSessionScope(id: string): void {
+    this.db
+      .transaction(() => accessLedger.tombstoneScope(this.db, id))
+      .immediate();
+  }
+
+  repositoryCatalogAppPage(input: repositoryAccessStore.RepositoryAppPage) {
+    return repositoryAccessStore.repositoryCatalogAppPage(this.db, input);
+  }
+
+  withPrivateActorRead<T>(
+    owner: number,
+    targetId: string,
+    operation: () => T,
+  ): T {
+    return this.db
+      .transaction(() => {
+        const scope = accessLedger.scopeRecord(this.db, targetId);
+        if (!scope || scope.deleted || scope.owner !== owner || owner <= 0)
+          throw new Error("Private actor read authority changed");
+        return operation();
+      })
+      .immediate();
+  }
+
+  withPrivateActorFence<T>(
+    fence: PrivateActorFence,
+    targetId: string,
+    operation: () => T,
+  ): T {
+    return this.db
+      .transaction(() => {
+        assertPrivateActorFence(this.db, targetId, fence);
+        return operation();
+      })
+      .immediate();
+  }
+
+  sessionScopeLookup(sessionId: string) {
+    return accessLedger.scopeRecord(this.db, sessionId);
+  }
+
+  reserveCreationAccess(input: CreationAccessReservation) {
+    return reserveCreationAccess(this.db, input);
+  }
+
+  repositoryCatalogGet(repositoryId: string, principal?: AccessPrincipal) {
+    return repositoryAccessStore.repositoryCatalogGet(
+      this.db,
+      repositoryId,
+      principal,
+    );
+  }
+
+  repositoryCatalogPage(
+    afterRepositoryId: string,
+    limit: number,
+    principal?: AccessPrincipal,
+  ) {
+    return repositoryAccessStore.repositoryCatalogPage(
+      this.db,
+      afterRepositoryId,
+      limit,
+      principal,
+    );
+  }
+
+  repositoryCatalogCount(principal?: AccessPrincipal) {
+    return repositoryAccessStore.repositoryCatalogCount(this.db, principal);
+  }
+
+  repositoryCatalogPut(input: repositoryAccessStore.RepositoryCatalogPut) {
+    assertMetadataActorRequest(input);
+    return repositoryAccessStore.repositoryCatalogPut(this.db, input);
+  }
+
+  accessibleSessionMetadata(
+    sessionId: string,
+    principal?: AccessPrincipal,
+  ): SessionMetadataRecord | null {
+    const current = this.sessionMetadata(sessionId);
+    return current &&
+      canAccessScope(JSON.parse(current.doc).accessScope, principal)
+      ? current
+      : null;
+  }
+
+  sessionMetadataCatalogRead(sessionId: string, principal?: AccessPrincipal) {
+    return metadataStore.sessionMetadataCatalogRead(
+      this.db,
+      sessionId,
+      principal,
+    );
+  }
+
   sessionMetadataCatalogGet(
     sessionId: string,
+    principal?: AccessPrincipal,
   ): SessionMetadataCatalogRow | null {
-    return metadataStore.sessionMetadataCatalogGet(this.db, sessionId);
+    return metadataStore.sessionMetadataCatalogGet(
+      this.db,
+      sessionId,
+      principal,
+    );
   }
 
   sessionMetadataCatalogPage(
     afterSessionId: string,
     limit: number,
+    principal?: AccessPrincipal,
+    privateOnly = false,
   ): SessionMetadataCatalogRow[] {
     return metadataStore.sessionMetadataCatalogPage(
       this.db,
       afterSessionId,
       limit,
+      principal,
+      privateOnly,
     );
   }
 
@@ -6265,8 +6436,8 @@ export class SessionKernelStore {
     return metadataStore.sessionMetadataPendingExports(this.db, limit);
   }
 
-  sessionMetadataCatalogCount(): number {
-    return metadataStore.sessionMetadataCatalogCount(this.db);
+  sessionMetadataCatalogCount(principal?: AccessPrincipal): number {
+    return metadataStore.sessionMetadataCatalogCount(this.db, principal);
   }
 
   sessionMetadataCatalogComplete(): boolean {
@@ -6306,6 +6477,19 @@ export class SessionKernelStore {
     limit: number,
   ): CatalogDocumentRecord[] {
     return catalogDocumentStore.catalogDocumentPage(
+      this.db,
+      namespace,
+      afterKey,
+      limit,
+    );
+  }
+
+  catalogDocumentPageLive(
+    namespace: string,
+    afterKey: string,
+    limit: number,
+  ): CatalogDocumentRecord[] {
+    return catalogDocumentStore.catalogDocumentPageLive(
       this.db,
       namespace,
       afterKey,

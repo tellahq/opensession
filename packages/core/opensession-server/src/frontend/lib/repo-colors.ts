@@ -1,3 +1,7 @@
+import {
+  captureClientDataScope,
+  subscribeClientDataScope,
+} from "./client-data-scope";
 /**
  * The color a repo's fallback letter tile wears.
  *
@@ -68,6 +72,7 @@ export function rememberRepoColors(
     iconRev?: number | null;
   }>,
 ): void {
+  if (!captureClientDataScope()) return;
   for (const repo of repos) {
     if (repo.color) assigned.set(repo.id, repo.color);
     if (repo.hasIcon) iconRepos.add(repo.id);
@@ -113,3 +118,10 @@ function hashIndex(id: string): number {
 export function repoColor(id: string): string {
   return assigned.get(id) ?? REPO_TILE_COLORS[hashIndex(id)];
 }
+
+subscribeClientDataScope(() => {
+  assigned.clear();
+  revisions.clear();
+  iconRepos.clear();
+  iconSources.clear();
+});

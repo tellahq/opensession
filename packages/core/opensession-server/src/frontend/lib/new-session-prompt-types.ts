@@ -22,6 +22,12 @@ export interface NewSessionPromptConfig {
   repo: string;
   /** A non-empty selection narrows which connected tools "@" offers. */
   mcpServers?: string[];
+  /**
+   * A private repository is selected: "@" neither requests nor offers
+   * connected services, matching the "Unavailable" the services control
+   * reports. Workspace, session, people and file references stay.
+   */
+  privateRepo?: boolean;
   placeholder: string;
   disabled: boolean;
   images: string[];

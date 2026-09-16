@@ -1,8 +1,19 @@
+import {
+  PERSONAL_PRIVACY_HEADER,
+  EXPECTED_GITHUB_ACCOUNT_HEADER,
+} from "../../shared/access-scope";
+import {
+  validatePrivacyPrincipal,
+  type ApplicationAccess,
+  type CanonicalSessionHandle,
+} from "../application-access";
 /**
  * Shared request context for the HTTP route handlers under src/server/routes/.
  * Built once per request in opensession.ts's fetch and passed down the
  * ordered handler chain.
  */
+
+import type { WebIdentity } from "../web-auth";
 
 export interface RouteContext {
   req: Request;
@@ -17,7 +28,9 @@ export interface RouteContext {
   /** Verified sign-in identity (web-auth.ts) when GitHub web sign-in is
    *  active; null when signed out or when the feature is off. When set,
    *  handlers should prefer it over any client-supplied `user` field. */
-  authUser?: { login: string; name: string } | null;
+  authUser?: WebIdentity | null;
+  applicationAccess?: ApplicationAccess;
+  authorizedSession?: CanonicalSessionHandle;
 }
 
 export type RouteHandler = (ctx: RouteContext) => Promise<Response | undefined>;
@@ -33,4 +46,13 @@ export type RouteHandler = (ctx: RouteContext) => Promise<Response | undefined>;
 export function requestUser(ctx: RouteContext, claimed?: unknown): string {
   if (ctx.authUser?.name) return ctx.authUser.name.split(" ")[0];
   return typeof claimed === "string" ? claimed.trim() : "";
+}
+
+/** Captured from the verified transport identity, never a query/body principal. */
+export function requestApplicationAccess(ctx: RouteContext): ApplicationAccess {
+  return (ctx.applicationAccess ??= validatePrivacyPrincipal(
+    ctx.req.headers.get(PERSONAL_PRIVACY_HEADER),
+    ctx.req.headers.get(EXPECTED_GITHUB_ACCOUNT_HEADER),
+    ctx.authUser,
+  ));
 }

@@ -1,5 +1,9 @@
+import {
+  captureClientDataScope,
+  isCurrentClientDataScope,
+} from "../lib/client-data-scope";
 import type { Dispatch, SetStateAction } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { RepoInfo } from "../lib/api";
 import {
   cachedRepos,
@@ -30,6 +34,7 @@ export function useAppRegistries({
   serviceWorker,
   setRegisteredRepoInfo,
 }: UseAppRegistriesOptions) {
+  const [scope] = useState(captureClientDataScope);
   // Session-reference chips in transcripts (`bks-…`), and the pill the
   // composer projects a draft id into, label themselves from this registry.
   // markdown.ts renders to an HTML string rather than React nodes, so it
@@ -41,6 +46,7 @@ export function useAppRegistries({
   // which delegated task the chip opens, while their inherited workspace name
   // would incorrectly repeat the parent session's subject for every worker.
   useEffect(() => {
+    if (!isCurrentClientDataScope(scope)) return;
     setSessionTitles(
       sessions.map(
         (s) =>
@@ -72,7 +78,7 @@ export function useAppRegistries({
         ...(session.prs ?? []),
       ]),
     );
-  }, [sessions]);
+  }, [sessions, scope]);
   // The live list intentionally omits archived history. Resolve only archived
   // sessions that a visible transcript or draft actually references, rather
   // than restoring the several-thousand-row archived payload to cold start.
@@ -82,6 +88,7 @@ export function useAppRegistries({
         for (const requestedId of ids) {
           void fetchSession(requestedId)
             .then((session) => {
+              if (!isCurrentClientDataScope(scope)) return;
               setResolvedSessionTitles([
                 {
                   requestedId,
@@ -98,10 +105,13 @@ export function useAppRegistries({
                 },
               ]);
             })
-            .catch(() => retrySessionTitleResolution(requestedId));
+            .catch(() => {
+              if (isCurrentClientDataScope(scope))
+                retrySessionTitleResolution(requestedId);
+            });
         }
       }),
-    [],
+    [scope],
   );
   // Same deal for PR-mention chips (`opensession#128`): markdown.ts only links
   // a qualified mention it can place, so it needs the repos this instance
@@ -116,7 +126,7 @@ export function useAppRegistries({
     const loadRepos = () =>
       fetchRepos()
         .then((repos) => {
-          if (live) {
+          if (live && isCurrentClientDataScope(scope)) {
             setKnownRepos(repos);
             setRegisteredRepoInfo(repos);
           }
@@ -128,7 +138,7 @@ export function useAppRegistries({
       live = false;
       window.removeEventListener(REPOS_CHANGED_EVENT, loadRepos);
     };
-  }, [setRegisteredRepoInfo]);
+  }, [setRegisteredRepoInfo, scope]);
   // Register the service worker at boot, not just when enabling push: it also
   // caches the app shell (sw.js), so a cold start on a flaky tailnet paints
   // the app instead of white-screening.

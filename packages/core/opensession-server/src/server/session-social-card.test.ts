@@ -467,3 +467,53 @@ describe("session social card", () => {
     expect(response.status).toBe(404);
   });
 });
+
+test("public SPA HTML never embeds personal or ambiguous ownership metadata", () => {
+  const source =
+    '<html><title>Open Session</title><meta property="og:type" content="website"></html>';
+  for (const accessScope of [
+    { kind: "personal", ownerGithubAccountId: 41 },
+    null,
+    { kind: "future" },
+  ]) {
+    const record = session({
+      title: "Private title canary",
+      accessScope: accessScope as UnifiedSession["accessScope"],
+    });
+    expect(sessionHtmlWithSocialMeta(source, record, "/session/private")).toBe(
+      source,
+    );
+  }
+});
+
+test("a valid public card capability cannot export a personal session", async () => {
+  const id = "os-private-social-card-synthetic";
+  const { __sessionKernelStoreForTest } =
+    await import("./session-kernel/kernel");
+  const store = __sessionKernelStoreForTest();
+  store.seedSessionMetadataCatalog([
+    {
+      sessionId: id,
+      doc: JSON.stringify(
+        session({
+          id,
+          title: "Private card canary",
+          accessScope: { kind: "personal", ownerGithubAccountId: 41 },
+        }),
+      ),
+      rev: 1,
+      archived: false,
+      lastActivityMs: 1,
+    },
+  ]);
+  expect(
+    store.sessionMetadataCatalogGet(id, { githubAccountId: 41 })?.doc,
+  ).toContain("Private card canary");
+  invalidateSessionsCache();
+  const url = new URL(sessionSocialCardUrl(id));
+  const handler = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
+  const response = await handler(new Request(url), url);
+  expect(response.status).toBe(404);
+  expect(await response.text()).not.toContain("Private card canary");
+  expect(response.headers.get("cache-control") ?? "").not.toContain("public");
+});

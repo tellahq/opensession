@@ -1,3 +1,6 @@
+import { stampPrivateQueueRequest } from "./private-queue-admission";
+import { samePersonalRepoIdentity } from "../personal-repository-identity";
+import { parseAccessScope } from "../../shared/access-scope";
 import {
   isSessionKernelCentralStoreFailure,
   isSessionKernelInfrastructureFailure,
@@ -32,6 +35,22 @@ class SessionQuarantinedError extends Error {
     super(`Session ${sessionId} is quarantined: ${reason}`);
     this.name = "SessionQuarantinedError";
   }
+}
+
+/** Unqualified kernel maintenance is limited to exact effect acknowledgments,
+ * never user payloads, new work, or general lifecycle decisions. */
+function privateMaintenance(command: SessionActorReducerCommand): boolean {
+  if (command.kind === "core")
+    return ["ack_outbox", "defer_outbox"].includes(command.request.op);
+  if (command.kind === "turn")
+    return [
+      "begin_cancel_effect",
+      "settle_cancel",
+      "complete_cancel_command",
+      "begin_outcome_projection",
+      "settle_outcome_projection",
+    ].includes(command.request.op);
+  return false;
 }
 
 function reducerSessionId(
@@ -90,15 +109,66 @@ export function startSessionKernelActorWorker(): void {
   /** Executes the call exactly once and bounds its encoded result. */
   function executeCall(
     request: KernelActorServiceCall["request"],
+    insidePrivateFence = false,
   ): KernelActorCallResult {
     let store = host.central;
     let requestSessionId: string | undefined;
     try {
       let result: unknown;
       if (request.t === "reduce") {
-        const command = request.command;
+        let command = request.command;
         const sessionId = reducerSessionId(command, host);
         requestSessionId = sessionId;
+        if (sessionId && !insidePrivateFence) {
+          const scope = host.central.sessionScopeLookup(sessionId);
+          const access = command.access;
+          if (access?.fence) {
+            if (
+              command.kind === "metadata" &&
+              command.request.op === "put" &&
+              access.fence.binding
+            ) {
+              const next = JSON.parse(command.request.doc).personalRepo;
+              if (
+                !next ||
+                !samePersonalRepoIdentity(next, access.fence.binding)
+              )
+                throw new Error("Private metadata binding crossed source");
+            }
+            return host.central.withPrivateActorFence(
+              access.fence,
+              sessionId,
+              () => executeCall(request, true),
+            );
+          }
+          if (scope?.deleted && isReadReducer(command)) {
+            if (command.kind === "metadata" && command.request.op === "get")
+              return boundCallResult(
+                JSON.stringify({ ok: true, result: null }),
+                true,
+              );
+            throw new Error("Session actor unavailable");
+          }
+          if (scope && scope.owner > 0 && !scope.deleted) {
+            if (isReadReducer(command)) {
+              if (access?.principal !== scope.owner) {
+                if (command.kind === "metadata" && command.request.op === "get")
+                  return boundCallResult(
+                    JSON.stringify({ ok: true, result: null }),
+                    true,
+                  );
+                throw new Error("Private actor read unavailable");
+              }
+              return host.central.withPrivateActorRead(
+                access.principal,
+                sessionId,
+                () => executeCall(request, true),
+              );
+            }
+            if (!isReadReducer(command) && !privateMaintenance(command))
+              throw new Error("Private actor source fence required");
+          }
+        }
         if (command.kind === "transcript")
           assertTranscriptActorRequest(command.request);
         if (!isReadReducer(command) && sessionId) {
@@ -114,13 +184,53 @@ export function startSessionKernelActorWorker(): void {
         const centralOnly =
           command.kind === "metadata" &&
           (command.request.op === "exported" ||
-            command.request.op === "catalog_get");
+            command.request.op === "catalog_get" ||
+            command.request.op === "catalog_read");
         if (sessionId && !centralOnly)
           store = host.storeForSession(
             sessionId,
             command.kind === "transcript" ? false : !isReadReducer(command),
             reducerMutatesSparseProjection(command),
           );
+        if (sessionId && !centralOnly) {
+          const actual = store.sessionMetadata(sessionId);
+          const actualScope = actual
+            ? JSON.parse(actual.doc).accessScope
+            : undefined;
+          if (actual && !parseAccessScope(actualScope))
+            throw new Error("Actor payload scope unavailable");
+          const current = host.central.sessionScopeLookup(sessionId);
+          if (actualScope?.kind === "personal") {
+            if (
+              !current ||
+              current.deleted ||
+              current.owner !== actualScope.ownerGithubAccountId ||
+              (isReadReducer(command) &&
+                command.access?.principal !== actualScope.ownerGithubAccountId)
+            )
+              throw new Error("Private actor payload ownership mismatch");
+          }
+          if (
+            (command.kind === "transcript" || isReadReducer(command)) &&
+            current &&
+            current.owner > 0 &&
+            (!actual || actualScope?.kind !== "personal")
+          )
+            throw new Error("Private actor payload scope unavailable");
+        }
+        if (
+          command.kind === "delivery" &&
+          command.access?.fence &&
+          !isReadReducer(command)
+        )
+          command = {
+            ...command,
+            request: stampPrivateQueueRequest(
+              command.request,
+              command.access.fence,
+              store.deliverySnapshot(sessionId!),
+            ),
+          };
         if (
           command.kind === "transcript" &&
           !isReadReducer(command) &&
@@ -272,15 +382,55 @@ export function startSessionKernelActorWorker(): void {
             result = store.clearSession(core.sessionId);
           else result = store.tombstoneSession(core.sessionId);
           if (core.op === "clear" || core.op === "tombstone") {
+            host.central.tombstoneSessionScope(core.sessionId);
             host.refreshSessionProjections(core.sessionId);
             host.settleSessionMetadataCatalog(core.sessionId);
           }
         } else if (command.kind === "metadata") {
           const metadata = command.request;
           assertMetadataActorRequest(metadata);
-          if (metadata.op === "get")
-            result = store.sessionMetadata(metadata.sessionId);
+          if (metadata.op === "reserve_creation")
+            result = host.central.reserveCreationAccess(metadata);
+          else if (metadata.op === "scope_lookup")
+            result = host.central.sessionScopeLookup(metadata.sessionId);
+          else if (metadata.op === "scope_fence")
+            result = host.central.sessionScopeFence();
+          else if (metadata.op === "scope_changes")
+            result = host.central.sessionScopeChanges(
+              metadata.after,
+              metadata.limit,
+            );
+          else if (metadata.op === "scope_aliases")
+            result = host.central.registerSessionScopeAliases(metadata.rows);
+          else if (metadata.op === "repository_app_page")
+            result = host.central.repositoryCatalogAppPage(metadata);
+          else if (metadata.op === "repository_get")
+            result = host.central.repositoryCatalogGet(
+              metadata.repositoryId,
+              metadata.principal,
+            );
+          else if (metadata.op === "repository_page")
+            result = host.central.repositoryCatalogPage(
+              metadata.afterRepositoryId,
+              metadata.limit,
+              metadata.principal,
+            );
+          else if (metadata.op === "repository_count")
+            result = host.central.repositoryCatalogCount(metadata.principal);
+          else if (metadata.op === "repository_put")
+            result = host.central.repositoryCatalogPut(metadata);
+          else if (metadata.op === "get")
+            result = host.central.sessionScopeReadable(
+              metadata.sessionId,
+              metadata.principal,
+            )
+              ? store.accessibleSessionMetadata(
+                  metadata.sessionId,
+                  metadata.principal,
+                )
+              : null;
           else if (metadata.op === "put") {
+            host.central.assertSessionMetadataCatalogWrite(metadata);
             const put = store.putSessionMetadata(metadata);
             if (put.status === "committed")
               host.settleSessionMetadataCatalog(metadata.sessionId);
@@ -290,12 +440,29 @@ export function startSessionKernelActorWorker(): void {
               metadata.sessionId,
               metadata.rev,
             );
+          else if (metadata.op === "catalog_read")
+            result = host.central.sessionMetadataCatalogRead(
+              metadata.sessionId,
+              metadata.principal,
+            );
           else if (metadata.op === "catalog_get")
-            result = host.central.sessionMetadataCatalogGet(metadata.sessionId);
-          else if (metadata.op === "catalog_page")
+            result = host.central.sessionMetadataCatalogGet(
+              metadata.sessionId,
+              metadata.principal,
+            );
+          else if (metadata.op === "catalog_count")
+            result = host.central.sessionMetadataCatalogCount(
+              metadata.principal,
+            );
+          else if (
+            metadata.op === "catalog_page" ||
+            metadata.op === "catalog_private_page"
+          )
             result = host.central.sessionMetadataCatalogPage(
               metadata.afterSessionId,
               metadata.limit,
+              metadata.principal,
+              metadata.op === "catalog_private_page",
             );
           else if (metadata.op === "pending_exports")
             result = host.central.sessionMetadataPendingExports(metadata.limit);
@@ -327,6 +494,12 @@ export function startSessionKernelActorWorker(): void {
             );
           else if (document.op === "page")
             result = central.catalogDocumentPage(
+              document.namespace,
+              document.afterKey,
+              document.limit,
+            );
+          else if (document.op === "page_live")
+            result = central.catalogDocumentPageLive(
               document.namespace,
               document.afterKey,
               document.limit,
@@ -402,6 +575,27 @@ export function startSessionKernelActorWorker(): void {
         const route = routedStoreCall(request.method, request.args, host);
         const { sessionId } = route;
         requestSessionId = sessionId;
+        if (sessionId && !insidePrivateFence) {
+          const scope = host.central.sessionScopeLookup(sessionId);
+          if (request.access?.fence)
+            return host.central.withPrivateActorFence(
+              request.access.fence,
+              sessionId,
+              () => executeCall(request, true),
+            );
+          if (scope?.deleted) throw new Error("Session actor unavailable");
+          if (scope && scope.owner > 0) {
+            if (route.mutation)
+              throw new Error("Private store source fence required");
+            if (request.access?.principal !== scope.owner)
+              throw new Error("Private store read unavailable");
+            return host.central.withPrivateActorRead(
+              request.access.principal,
+              sessionId,
+              () => executeCall(request, true),
+            );
+          }
+        }
         if (
           route.mutation &&
           sessionId &&
@@ -412,6 +606,44 @@ export function startSessionKernelActorWorker(): void {
           if (quarantine)
             throw new SessionQuarantinedError(sessionId, quarantine.reason);
         }
+        if (sessionId) {
+          const current = host.central.sessionScopeLookup(sessionId);
+          const actor = host.storeForSession(sessionId, false, false);
+          const actual = actor.sessionMetadata(sessionId);
+          const scope = actual
+            ? parseAccessScope(JSON.parse(actual.doc).accessScope)
+            : undefined;
+          if (actual && !scope)
+            throw new Error("Actor payload scope unavailable");
+          if (
+            current &&
+            current.owner > 0 &&
+            (!scope || scope.kind !== "personal")
+          )
+            throw new Error("Private actor payload scope unavailable");
+          if (
+            scope?.kind === "personal" &&
+            (!current ||
+              current.deleted ||
+              current.owner !== scope.ownerGithubAccountId ||
+              (!route.mutation &&
+                request.access?.principal !== scope.ownerGithubAccountId))
+          )
+            throw new Error("Private actor payload ownership mismatch");
+        }
+        if (
+          request.access?.fence &&
+          [
+            "setDeliverySlot",
+            "prepareSteerDelivery",
+            "requeueSteerDeliveries",
+            "claimDeliveryDispatch",
+            "claimNextDeliveryDispatch",
+          ].includes(request.method)
+        )
+          throw new Error(
+            "Private queue writes require stamped delivery reducer",
+          );
         result = host.call(request.method, request.args);
       }
       return boundCallResult(JSON.stringify({ ok: true, result }), true);

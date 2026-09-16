@@ -1,3 +1,4 @@
+import type { ActorAccess } from "./private-access";
 import type { SessionActorReducerCommand } from "./lifecycle-protocol";
 import type {
   DurableOutboxItem,
@@ -5,7 +6,7 @@ import type {
   RunEventDecisionResult,
 } from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 40;
+export const SESSION_KERNEL_ACTOR_VERSION = 41;
 export const SESSION_KERNEL_TRANSPORT_VERSION = 1;
 // A transcript mutation can carry one accepted 50 MiB legacy/base64 image
 // (about 67 MiB on the JSON wire) before the actor splits it into blob storage.
@@ -82,14 +83,20 @@ export type KernelActorAsyncResponse =
 /** Gateway-worker-only async call. The transport wraps this in a service call;
  * it never crosses the independently supervised service boundary directly. */
 export type KernelActorClientCallRequest =
-  | { t: "store"; rpcId: string; method: string; args: unknown[] }
+  | {
+      t: "store";
+      access?: ActorAccess;
+      rpcId: string;
+      method: string;
+      args: unknown[];
+    }
   | { t: "reduce"; rpcId: string; command: SessionActorReducerCommand };
 
 export type KernelActorServiceCall = {
   t: "call";
   rpcId: string;
   request:
-    | { t: "store"; method: string; args: unknown[] }
+    | { t: "store"; access?: ActorAccess; method: string; args: unknown[] }
     | { t: "reduce"; command: SessionActorReducerCommand };
   /** Compatibility field. The actor validates it against
    * `SESSION_KERNEL_MAX_RESPONSE_BYTES` but every call is executed exactly once

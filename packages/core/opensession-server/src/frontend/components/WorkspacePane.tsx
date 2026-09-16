@@ -1,3 +1,5 @@
+import { isCurrentClientDataScope } from "../lib/client-data-scope";
+import { draftClientDataScope } from "../lib/drafts";
 import { AGENT_NAME } from "../lib/brand";
 import React, {
   useCallback,
@@ -195,6 +197,7 @@ export function WorkspacePane({
   rightPanelEl,
 }: Props) {
   const draftKey = workspaceDraftKey(workspace.id);
+  const draftScope = draftClientDataScope(draftKey);
   // Seed from the local (this-browser) draft first: it's the freshest thing
   // typed here. Fall back to the server's parked draft (typed on
   // another device, or by whoever saved it from the New Session composer).
@@ -246,6 +249,11 @@ export function WorkspacePane({
   // Stable per workspace: refs + module fns otherwise.
   const pushServerDraft = useCallback(
     (text: string) => {
+      if (
+        !isCurrentClientDataScope(draftScope) ||
+        draftScope?.key === "shared:legacy"
+      )
+        return;
       const patch = workspaceDraftPatch(
         text,
         new Date().toISOString(),
@@ -254,7 +262,11 @@ export function WorkspacePane({
       );
       serverDraftWrites.current = serverDraftWrites.current
         .then(async () => {
-          const updated = await updateWorkspaceApi(workspace.id, patch);
+          const updated = await updateWorkspaceApi(
+            workspace.id,
+            patch,
+            draftScope,
+          );
           const present = !!updated.draft;
           const presenceChanged = present !== serverDraftPresentRef.current;
           serverDraftPresentRef.current = present;
@@ -267,7 +279,7 @@ export function WorkspacePane({
         // the next keystroke's debounce tries again.
         .catch(() => {});
     },
-    [workspace.id],
+    [workspace.id, draftScope],
   );
   useEffect(() => {
     saveDraft(draftKey, { text: prompt, images, files });

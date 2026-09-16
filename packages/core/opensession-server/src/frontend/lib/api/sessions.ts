@@ -1,3 +1,8 @@
+import {
+  captureClientDataScope,
+  assertClientDataScope,
+  type ClientDataScope,
+} from "../client-data-scope";
 import { ApiError, BASE, request } from "./request";
 import type { SessionNote, TranscriptEntry, UnifiedSession } from "../types";
 import { resolveAnonymousUserPath } from "../auth-ready";
@@ -96,8 +101,11 @@ export async function deliverSessionPrompt(
     user?: string;
     clientId: string;
   },
+  scope: ClientDataScope | null = captureClientDataScope(),
 ): Promise<PromptDelivery> {
+  assertClientDataScope(scope);
   const images = await preparePromptImages(body.images);
+  assertClientDataScope(scope);
   const requestBody = { ...body };
   if (images) requestBody.images = images;
   return request<PromptDelivery>(
@@ -106,6 +114,7 @@ export async function deliverSessionPrompt(
       method: "POST",
       body: requestBody,
       label: "Failed to deliver prompt",
+      scope,
     },
   );
 }
@@ -288,6 +297,15 @@ export async function fetchFileMentions(
   }
 }
 
+/**
+ * Narrowing-only options for the "@" palette request. `tools: "none"` asks
+ * the server for no connected-service rows at all, bypassing its catalog
+ * (an empty `mcp` list would mean "every service"). It never grants access.
+ */
+export interface MentionSuggestionOptions {
+  tools?: "none";
+}
+
 /** People-independent rows for the inline @ palette. Kept separate from the
  * repository search so tools and recent sessions never wait for git. */
 export async function fetchMentionSuggestions(
@@ -295,11 +313,13 @@ export async function fetchMentionSuggestions(
   sessionId?: string,
   user?: string,
   mcpServers?: string[],
+  options?: MentionSuggestionOptions,
 ): Promise<FileMention[]> {
   const params = new URLSearchParams({ q: query });
   if (sessionId) params.set("session", sessionId);
   if (user) params.set("user", user);
-  for (const server of mcpServers || []) params.append("mcp", server);
+  if (options?.tools === "none") params.set("tools", "none");
+  else for (const server of mcpServers || []) params.append("mcp", server);
   try {
     const data = await request<{ items?: FileMention[] }>(
       `/mention-suggestions?${params.toString()}`,

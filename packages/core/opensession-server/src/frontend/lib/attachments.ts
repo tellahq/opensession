@@ -1,3 +1,4 @@
+import { isCurrentClientDataScope } from "./client-data-scope";
 /**
  * Staging an attachment outlives the composer that asked for it.
  *
@@ -21,7 +22,7 @@
  * back and resurrect a draft that is finished.
  */
 import { MAX_PROMPT_IMAGES } from "@tellahq/opensession-protocol/session";
-import { loadDraft, saveDraft } from "./drafts";
+import { draftClientDataScope, loadDraft, saveDraft } from "./drafts";
 import { splitAttachments, type FileAttachment } from "./images";
 import { createPastedTextAttachment } from "./pasted-text";
 
@@ -115,9 +116,20 @@ export async function attachToDraft(
   picked: FileList | File[],
   signal?: AbortSignal,
 ): Promise<AttachResult> {
+  const scope = draftClientDataScope(key);
+  if (!scope || scope.key === "shared:legacy")
+    return { rejected: [], applied: false };
   const generation = generations.get(key) ?? 0;
-  const { images, files, rejected } = await splitAttachments(picked, signal);
-  if (signal?.aborted || (generations.get(key) ?? 0) !== generation) {
+  const { images, files, rejected } = await splitAttachments(
+    picked,
+    signal,
+    scope,
+  );
+  if (
+    !isCurrentClientDataScope(scope) ||
+    signal?.aborted ||
+    (generations.get(key) ?? 0) !== generation
+  ) {
     return { rejected, applied: false };
   }
   if (images.length || files.length) {

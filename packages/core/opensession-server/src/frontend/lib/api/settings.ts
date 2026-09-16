@@ -1,3 +1,9 @@
+import {
+  captureClientDataScope,
+  assertClientDataScope,
+  clientDataScopeHeaders,
+  type ClientDataScope,
+} from "../client-data-scope";
 import { z } from "zod";
 import { API_BASE, ApiError, request } from "./request";
 
@@ -354,21 +360,27 @@ export async function fetchOrganizationSettings(): Promise<OrganizationSettingsD
 }
 
 /** Empty string resets the name to the instance's product name. */
-export async function saveOrganizationSettings(patch: {
-  organizationName?: string;
-}): Promise<OrganizationSettingsDto> {
-  return request("/settings/general", { method: "PUT", body: patch });
+export async function saveOrganizationSettings(
+  patch: {
+    organizationName?: string;
+  },
+  scope: ClientDataScope | null = captureClientDataScope(),
+): Promise<OrganizationSettingsDto> {
+  return request("/settings/general", { method: "PUT", body: patch, scope });
 }
 
 export async function uploadOrganizationIcon(
   png: Blob,
+  scope: ClientDataScope | null = captureClientDataScope(),
 ): Promise<OrganizationSettingsDto> {
+  assertClientDataScope(scope);
   const res = await fetch(`${API_BASE}/settings/general/icon`, {
     method: "POST",
-    headers: { "Content-Type": "image/png" },
+    headers: { ...clientDataScopeHeaders(scope), "Content-Type": "image/png" },
     body: png,
   });
   const body: unknown = await res.json().catch(() => null);
+  assertClientDataScope(scope);
   if (!res.ok) {
     const error = ERROR_RESPONSE_SCHEMA.safeParse(body);
     throw new ApiError(

@@ -2,9 +2,12 @@ import { describe, expect, it } from "bun:test";
 import {
   foldRecoveredSessionUsage,
   foldSessionUsage,
-  sessionMentionsNote,
+  renderSessionMentionsNote,
 } from "./run-session";
 import { wrapContext, stripContext } from "./prompt-context";
+
+const sessionMentionsNote = (content: string, excludeIds?: Iterable<string>) =>
+  renderSessionMentionsNote(content, [], excludeIds);
 
 describe("sessionMentionsNote exclusion (no double-context)", () => {
   it("skips ids already inlined as a digest, still footers the rest", () => {

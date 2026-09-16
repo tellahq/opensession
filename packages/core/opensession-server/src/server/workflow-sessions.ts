@@ -199,7 +199,7 @@ export function createWorkflowSessionController(
 
   const status = async (id: string): Promise<WorkflowSessionStatus> => {
     assertOwned(id);
-    const session = control.getSession(id);
+    const session = await control.getSession(id);
     if (!session) throw new Error(`No child session with id \`${id}\``);
     const pushed = await deps.branchPushed(session);
     return {
@@ -294,7 +294,7 @@ export function createWorkflowSessionController(
           "spawnSession() workspace.baseSessionId must be a session id",
         );
       const parent =
-        control.getSession(opts.parentSessionId) ||
+        (await control.getSession(opts.parentSessionId)) ||
         findSession(opts.parentSessionId);
       if (!parent) throw new Error("Workflow parent session no longer exists");
       const depth = (parent.spawnDepth || 0) + 1;
@@ -339,7 +339,7 @@ export function createWorkflowSessionController(
       if (input.workspace?.baseSessionId) {
         const baseId = input.workspace.baseSessionId;
         assertOwned(baseId);
-        const base = control.getSession(baseId);
+        const base = await control.getSession(baseId);
         if (!base)
           throw new Error(`Base session \`${baseId}\` no longer exists`);
         if (base.repo !== input.repo)
@@ -415,7 +415,7 @@ export function createWorkflowSessionController(
           : {}),
         spawnDepth: depth,
       });
-      const child = control.getSession(created.id);
+      const child = await control.getSession(created.id);
       const result: WorkflowSpawnedSession = {
         id: created.id,
         url: `${deps.baseUrl}/session/${encodeURIComponent(created.id)}`,

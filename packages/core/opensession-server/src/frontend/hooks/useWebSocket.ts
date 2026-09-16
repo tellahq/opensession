@@ -1,4 +1,9 @@
 import {
+  captureClientDataScope,
+  isCurrentClientDataScope,
+  negotiatedClientCommandScope,
+} from "../lib/client-data-scope";
+import {
   use,
   useState,
   useEffect,
@@ -17,6 +22,7 @@ import { toast } from "../ui/toast";
 import { authGatesOut, whenCurrentUserReady } from "../lib/auth-ready";
 import { publishAuthStatus } from "../components/UserPicker";
 import {
+  createEphemeralCommandOutbox,
   describePutFailure,
   localCommandScope,
   shouldRetireCommandResult,
@@ -85,6 +91,7 @@ function flushTypingOffSignal(
 }
 
 export function useWebSocket(presenceActive = true) {
+  const [dataScope] = useState(captureClientDataScope);
   const registry = use(RegistryContext);
   const [runtime] = useState(() =>
     SessionSocketRuntime.makeSessionSocketRuntime({ registry }),
@@ -101,9 +108,8 @@ export function useWebSocket(presenceActive = true) {
   const aliveRef = useRef(true);
   // Whether this socket has ever been accepted in this page's life. It is what
   // separates "the session died under an open tab" from "we are sitting on the
-  // sign-in screen": this hook mounts ABOVE UserGate, so on the gate the socket
-  // never opens and the upgrade 401s for ever. Reloading on that would be an
-  // endless refresh of the sign-in card.
+  // sign-in screen. UserGate now mounts this hook only after verification;
+  // an immediately refused upgrade can still reveal an expired cookie.
   const everOpenRef = useRef(false);
   // A graceful handoff gets a bounded fast reconnect loop until a replacement
   // server completes its hello. Ordinary outages retain the calmer 2s backoff.
@@ -131,6 +137,7 @@ export function useWebSocket(presenceActive = true) {
   // a transient drop doesn't silently swallow intent like create_session — the
   // "I clicked create, nothing happened after switching networks" bug. Bounded
   // so a long outage can't replay a stale flood.
+  const ephemeralPendingRef = useRef(new Map<string, WSClientMessage>());
   const outboxRef = useRef<{ msg: WSClientMessage; at: number }[]>([]);
   const feedCursorsRef = useRef(
     new Map<string, { feedEpoch: string; feedSeq: number }>(),
@@ -140,6 +147,7 @@ export function useWebSocket(presenceActive = true) {
   const connectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
+    if (!isCurrentClientDataScope(dataScope)) return;
     // Already open OR mid-handshake — don't stack a second socket.
     const state = wsRef.current?.readyState;
     if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
@@ -150,23 +158,36 @@ export function useWebSocket(presenceActive = true) {
     wsRef.current = ws;
     aliveRef.current = true;
 
+    const ephemeralOutbox = createEphemeralCommandOutbox(
+      () =>
+        wsRef.current === ws &&
+        ws.readyState === WebSocket.OPEN &&
+        commandNegotiatedRef.current &&
+        isCurrentClientDataScope(dataScope),
+    );
     const finishCommandNegotiation = (
       supported: boolean,
       commandScope?: string,
     ) => {
       if (wsRef.current !== ws || commandNegotiatedRef.current) return;
+      if (!isCurrentClientDataScope(dataScope)) return;
+      if (dataScope?.key === "shared:legacy") {
+        // Legacy logins never become numeric principals or durable owners.
+        commandNegotiatedRef.current = true;
+        commandResultsRef.current =
+          supported && (!commandScope || commandScope.startsWith("github:"));
+        commandOutboxRef.current = ephemeralOutbox;
+        return;
+      }
+      const negotiated = negotiatedClientCommandScope(dataScope, commandScope);
+      if (!negotiated) {
+        if (dataScope?.privacy) ws.close();
+        return;
+      }
       commandResultsRef.current = supported;
-      const commandOutbox = wsCommandOutboxForScope(
-        commandScope || localCommandScope(),
-      );
+      const commandOutbox = wsCommandOutboxForScope(negotiated);
       const provisional = wsCommandOutboxForScope(localCommandScope());
       commandOutboxRef.current = commandOutbox;
-      try {
-        localStorage.setItem(
-          "opensession-command-scope",
-          commandScope || localCommandScope(),
-        );
-      } catch {}
       const inMemory = [...negotiatingCommandsRef.current.values()];
       negotiatingCommandsRef.current.clear();
       commandNegotiatedRef.current = true;
@@ -218,7 +239,7 @@ export function useWebSocket(presenceActive = true) {
     };
 
     ws.onopen = () => {
-      if (wsRef.current !== ws) return;
+      if (wsRef.current !== ws || !isCurrentClientDataScope(dataScope)) return;
       setConnected(true);
       everOpenRef.current = true;
       // Flush anything queued while we were down. FIFO preserves the order the
@@ -242,7 +263,7 @@ export function useWebSocket(presenceActive = true) {
     };
 
     ws.onmessage = (e) => {
-      if (wsRef.current !== ws) return; // superseded socket, ignore stragglers
+      if (wsRef.current !== ws || !isCurrentClientDataScope(dataScope)) return; // superseded socket, ignore stragglers
       aliveRef.current = true;
       const data = String(e.data);
       const byteLength =
@@ -265,6 +286,7 @@ export function useWebSocket(presenceActive = true) {
         }
         if (msg.type === "server_restarting") handoffPendingRef.current = true;
         if (msg.type === "command_result" && shouldRetireCommandResult(msg)) {
+          ephemeralPendingRef.current.delete(msg.requestId);
           const acknowledged = commandOutboxRef.current.ack(
             msg.requestId,
             msg.sessionId,
@@ -347,8 +369,32 @@ export function useWebSocket(presenceActive = true) {
     ws.onclose = async (event) => {
       // A close from an already-replaced socket must not flip `connected` or
       // schedule a competing reconnect — only the current socket owns state.
-      if (wsRef.current !== ws) return;
+      if (wsRef.current !== ws || !isCurrentClientDataScope(dataScope)) return;
       setConnected(false);
+      if (dataScope?.key === "shared:legacy") {
+        commandNegotiatedRef.current = false;
+        commandResultsRef.current = false;
+        if (ephemeralPendingRef.current.size)
+          toast(
+            "Connection lost. The action outcome is unknown. Check before retrying.",
+            { variant: "error" },
+          );
+        for (const command of ephemeralPendingRef.current.values()) {
+          const message: WSServerMessage = {
+            type: "error",
+            sessionId:
+              command.type === "create_session"
+                ? command.clientSessionId
+                : "sessionId" in command
+                  ? command.sessionId
+                  : undefined,
+            message:
+              "Connection lost. The action outcome is unknown. Check before retrying.",
+          };
+          for (const handler of handlersRef.current) handler(message);
+        }
+        ephemeralPendingRef.current.clear();
+      }
       if (disposedRef.current) return;
       if (event.code === 4001) {
         window.location.reload();
@@ -358,6 +404,7 @@ export function useWebSocket(presenceActive = true) {
         try {
           const response = await fetch(`${API_BASE}/auth/status`);
           const status = response.ok ? await response.json() : null;
+          if (!isCurrentClientDataScope(dataScope)) return;
           if (status?.local && !status.authenticated) return;
           if (authGatesOut(status)) {
             if (everOpenRef.current) {
@@ -387,7 +434,7 @@ export function useWebSocket(presenceActive = true) {
     };
 
     ws.onerror = () => ws.close();
-  }, [runtime, setConnected]);
+  }, [dataScope, runtime, setConnected]);
   useLayoutEffect(() => {
     connectRef.current = connect;
   }, [connect]);
@@ -529,8 +576,34 @@ export function useWebSocket(presenceActive = true) {
 
   const send = useCallback(
     (msg: WSClientMessage) => {
+      if (!isCurrentClientDataScope(dataScope)) return;
       msg = withMutationRequestId(msg);
       const mutationRequestId = "requestId" in msg ? msg.requestId : undefined;
+      if (mutationRequestId && dataScope?.key === "shared:legacy") {
+        const socket = wsRef.current;
+        if (
+          !commandNegotiatedRef.current ||
+          socket?.readyState !== WebSocket.OPEN
+        )
+          throw new Error(
+            "This action needs a ready connection. Try again when connected.",
+          );
+        if (!commandResultsRef.current)
+          throw new Error(
+            "This action is unsupported by this sign-in. Sign in again.",
+          );
+        const saved = commandOutboxRef.current.tryPut(msg);
+        if (!saved.ok) throw new Error(describePutFailure(saved.reason));
+        ephemeralPendingRef.current.set(mutationRequestId, msg);
+        try {
+          socket.send(JSON.stringify(msg));
+        } catch {
+          throw new Error(
+            "The action outcome is unknown. Check before retrying.",
+          );
+        }
+        return;
+      }
       if (mutationRequestId && !commandNegotiatedRef.current) {
         const provisional = wsCommandOutboxForScope(localCommandScope());
         const saved = provisional.tryPut(msg);
@@ -588,7 +661,7 @@ export function useWebSocket(presenceActive = true) {
         connect();
       }
     },
-    [connect, runtime],
+    [connect, dataScope, runtime],
   );
 
   const setTyping = useCallback(

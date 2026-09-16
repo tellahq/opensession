@@ -80,6 +80,7 @@ describe("catalog-backed list rebuild", () => {
 
     // Not complete yet: the rebuild still scans the directory.
     expect(await indexedSessions("include")).toBeNull();
+    await primeSessionListIndex();
     const scanned = await getCachedSessionsAsync("include");
     expect(scanned.map((s) => s.id)).toEqual(["file-only"]);
 

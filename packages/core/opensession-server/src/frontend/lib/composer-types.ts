@@ -72,6 +72,11 @@ export interface ComposerConfig {
    */
   prefill?: ComposerPrefill | null;
   hint?: string;
+  /** Why attaching is off for this composer: a private session, whose images
+   * and files the server rejects. Hides the attach entries, refuses pasted or
+   * dropped media before anything is staged (showing this copy), and leaves
+   * pasted text inline. Shared sessions leave it unset. */
+  attachmentsUnavailable?: string;
   /** Lets the focused session pane claim the attachment shortcut even when
    * focus is in the transcript rather than the textarea. */
   attachmentShortcutActive?: boolean;

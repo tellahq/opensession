@@ -227,7 +227,7 @@ describe("transcript snapshots", () => {
     });
 
     // The human switches models to the other engine, then keeps going.
-    h.patchSession(sid, { model: "pi/openai/gpt-5.6-sol" });
+    await h.patchSession(sid, { model: "pi/openai/gpt-5.6-sol" });
     await h.prompt({
       sessionId: sid,
       content: "keep going",

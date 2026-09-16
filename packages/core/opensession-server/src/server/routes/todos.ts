@@ -112,7 +112,7 @@ export async function handleTodosRoutes(
   if (path === "/api/desk/state" && req.method === "GET") {
     const user = requestUser(ctx, url.searchParams.get("user"));
     if (!user) return Response.json({ error: "missing user" }, { status: 400 });
-    return Response.json(buildDeskState(user));
+    return Response.json(await buildDeskState(user));
   }
 
   // Hide the transcript before now in the overlay (display marker only — the full

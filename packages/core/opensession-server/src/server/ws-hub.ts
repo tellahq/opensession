@@ -1,3 +1,11 @@
+import {
+  sessionAudienceAllows,
+  sessionAudienceIncarnation,
+  sessionPublicationAllowed,
+  unscopedPublicationAllowed,
+} from "./session-audience";
+import { webSocketApplicationAccess } from "./application-access";
+import type { AccessPrincipal } from "../shared/access-scope";
 /**
  * WebSocket fan-out hub: which sockets are watching which session, and
  * every broadcast primitive built on that. Pure client/presence state — no
@@ -20,9 +28,69 @@ import type { SidebarSessionScope } from "./sidebar-session-scope";
 export const BOOT_ID: string = (g.__bootId ??= crypto.randomUUID());
 export const allClients: Set<WebSocketClient> = (g.__allClients ??= new Set());
 
+/** Server-defined reference fields only, not arbitrary tool arguments/text. */
+function messageSessionIds(msg: object): string[] {
+  const value = msg as Record<string, unknown>;
+  const ids = new Set<string>();
+  const add = (candidate: unknown) => {
+    if (typeof candidate === "string" && candidate) ids.add(candidate);
+  };
+  const refs = (record: Record<string, unknown>) => {
+    for (const key of [
+      "sessionId",
+      "parentSessionId",
+      "fromSessionId",
+      "toSessionId",
+      "sourceSessionId",
+      "targetSessionId",
+      "duplicatedFromSessionId",
+      "restartBy",
+    ])
+      add(record[key]);
+  };
+  refs(value);
+  if (typeof value.type === "string" && value.type.startsWith("session_"))
+    add(value.id);
+  for (const key of ["row", "session"]) {
+    const nested = value[key];
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      add((nested as Record<string, unknown>).id);
+      refs(nested as Record<string, unknown>);
+    }
+  }
+  return [...ids];
+}
+function socketPrincipal(
+  ws: Pick<WebSocketClient, "data">,
+): AccessPrincipal | undefined {
+  return webSocketApplicationAccess(ws.data ?? {}).principal;
+}
+export function canDeliverSession(
+  ws: Pick<WebSocketClient, "data">,
+  id: string,
+  watching = false,
+): boolean {
+  try {
+    return sessionAudienceAllows(
+      id,
+      socketPrincipal(ws),
+      watching ? ws.data.watchAudienceIncarnation : undefined,
+    );
+  } catch {
+    return false;
+  }
+}
 export function broadcastToAll(msg: object) {
+  const ids = messageSessionIds(msg);
+  if (
+    ids.length
+      ? ids.some((id) => !sessionPublicationAllowed(id))
+      : !unscopedPublicationAllowed()
+  )
+    return;
   const payload = JSON.stringify(msg);
   for (const ws of allClients) {
+    if (ids.some((id) => !canDeliverSession(ws, id))) continue;
     try {
       ws.send(payload);
     } catch {}
@@ -36,10 +104,18 @@ export function broadcastToAll(msg: object) {
  * exactly that person's other windows and devices.
  */
 export function broadcastToUser(user: string, msg: object) {
+  const ids = messageSessionIds(msg);
+  if (
+    ids.length
+      ? ids.some((id) => !sessionPublicationAllowed(id))
+      : !unscopedPublicationAllowed()
+  )
+    return;
   const wanted = user.trim().toLowerCase();
   if (!wanted) return;
   const payload = JSON.stringify(msg);
   for (const ws of allClients) {
+    if (ids.some((id) => !canDeliverSession(ws, id))) continue;
     const identity = ws.data.authUser || ws.data.user;
     if (identity?.trim().toLowerCase() !== wanted) continue;
     try {
@@ -57,6 +133,10 @@ export interface WSClientData {
   authUser?: string | null;
   /** Verified GitHub login of the signed-in user (createdByLogin stamping). */
   authLogin?: string | null;
+  /** Positive numeric identity verified at upgrade, never a message field. */
+  authGithubAccountId?: number;
+  privacyProtocol?: "personal-v1";
+  expectedGithubAccountId?: number;
   /** Machine sessions do not belong to the human roster. */
   authAutomation?: boolean;
   /**
@@ -82,6 +162,7 @@ export interface WSClientData {
   watchJoinedAt?: number;
   /** Monotonic guard for async watch lookup. A later watch/unwatch/close wins. */
   watchRequest?: number;
+  watchAudienceIncarnation?: string;
   /** This socket is served by the transcript store instead of a file watcher. */
   transcriptV2?: boolean;
   /** User-agent provenance for presence diagnostics. */
@@ -120,6 +201,9 @@ export const preparingWorkspaces: Set<string> = (g.__preparingWorkspaces ??=
   new Set());
 
 export function joinSession(ws: WebSocketClient, sessionId: string) {
+  if (!canDeliverSession(ws, sessionId))
+    throw new Error("Session audience unavailable");
+  ws.data.watchAudienceIncarnation = sessionAudienceIncarnation();
   let set = sessionWatchers.get(sessionId);
   if (!set) {
     set = new Set();
@@ -173,7 +257,7 @@ function fanOutToSession(
   const set = sessionWatchers.get(sessionId);
   if (!set) return;
   for (const ws of set) {
-    if (ws === except) continue;
+    if (ws === except || !canDeliverSession(ws, sessionId, true)) continue;
     try {
       ws.send(ws.data?.supportsFeed && feedPayload ? feedPayload : payload);
     } catch {}
@@ -185,6 +269,7 @@ export function broadcastToSession(
   msg: object,
   except?: WebSocketClient,
 ) {
+  if (!sessionPublicationAllowed(sessionId)) return;
   // Advance feed state even with no viewers, so a backgrounded client can
   // recover an active run on reconnect. A status frame may be normalized by
   // the feed when background activity still holds the session busy; legacy
@@ -413,10 +498,13 @@ function ensurePresenceSweep() {
  */
 export function computeGlobalPresence(
   watchers: ReadonlyMap<string, ReadonlySet<Pick<WebSocketClient, "data">>>,
+  principal?: AccessPrincipal,
 ): Array<{ user: string; sessionId: string }> {
   const latest = new Map<string, { sessionId: string; at: number }>();
   for (const [sessionId, set] of watchers) {
+    if (!sessionAudienceAllows(sessionId, principal)) continue;
     for (const ws of set) {
+      if (!canDeliverSession(ws, sessionId, true)) continue;
       const user = ws.data?.user;
       if (!user || user === "Anonymous") continue;
       if (!isPresent(ws)) continue;
@@ -437,19 +525,24 @@ export function computeGlobalPresence(
  * until someone happened to open or leave a session — send this once at the
  * handshake (ws-handlers.ts) to start it off with the truth.
  */
-export function globalPresenceFrame() {
+export function globalPresenceFrame(ws?: Pick<WebSocketClient, "data">) {
   return {
     type: "global_presence",
-    viewing: computeGlobalPresence(sessionWatchers),
+    viewing: computeGlobalPresence(
+      sessionWatchers,
+      ws ? socketPrincipal(ws) : undefined,
+    ),
   };
 }
 
 function broadcastGlobalPresence() {
-  const frame = JSON.stringify(globalPresenceFrame());
-  if (g.__lastGlobalPresence === frame) return;
-  g.__lastGlobalPresence = frame;
+  const previous: WeakMap<WebSocketClient, string> =
+    (g.__scopedGlobalPresence ??= new WeakMap());
   for (const ws of allClients) {
     try {
+      const frame = JSON.stringify(globalPresenceFrame(ws));
+      if (previous.get(ws) === frame) continue;
+      previous.set(ws, frame);
       ws.send(frame);
     } catch {}
   }

@@ -253,7 +253,7 @@ describe("single session ownership", () => {
     expect(actor).toContain('delivery.op === "claim_next_dispatch"');
     expect(actor).toContain("store.claimNextDeliveryDispatch(delivery)");
     expect(queue).toMatch(
-      /failPromptDispatch\(\s*sessionId,\s*dispatch\.promptEntryId,\s*false\s*\)/,
+      /failPromptDispatch\(\s*sessionId,\s*dispatch\.promptEntryId,\s*false\s*,?\s*\)/,
     );
     expect(run).toContain(
       'registerSessionEffectExecutor("delivery_interrupt_cancel"',
@@ -676,7 +676,7 @@ describe("single session ownership", () => {
     expect(runSession).toContain("cancelAgentRunToken(dispatchId)");
     expect(runSession).toContain("cancelAgentRunTokenAndWait(dispatchId)");
     expect(runSession).toContain(
-      "journalRetireCancelledAbnormalAfterSettlement(",
+      "journalRetireCancelledAbnormalAfterSettlementAsync(",
     );
     const turnExecutor = runSession.indexOf(
       'registerSessionEffectExecutor("turn_cancel"',
@@ -687,7 +687,7 @@ describe("single session ownership", () => {
     );
     expect(missingCancel).toBeLessThan(
       runSession.indexOf(
-        "journalRetireCancelledAbnormalAfterSettlement(",
+        "journalRetireCancelledAbnormalAfterSettlementAsync(",
         missingCancel,
       ),
     );

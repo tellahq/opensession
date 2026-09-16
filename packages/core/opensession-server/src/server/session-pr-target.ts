@@ -1,3 +1,4 @@
+import { parseAccessScope } from "../shared/access-scope";
 import type { SessionPrRef, UnifiedSession } from "./types";
 import { defaultRepo, githubBotLogins } from "./config";
 import type { PrInfo } from "./pr-cache";
@@ -254,9 +255,17 @@ export function shareWorkspacePrRefs(sessions: UnifiedSession[]): void {
   const groups = new Map<string, UnifiedSession[]>();
   for (const session of sessions) {
     if (!session.workspaceId) continue;
-    const group = groups.get(session.workspaceId);
+    const scope = parseAccessScope(session.accessScope);
+    if (!scope) continue;
+    // An owner's view may contain shared and private rows simultaneously.
+    // Do not relabel a private PR as shared through workspace enrichment.
+    const key = JSON.stringify([
+      session.workspaceId,
+      scope.kind === "personal" ? scope.ownerGithubAccountId : 0,
+    ]);
+    const group = groups.get(key);
     if (group) group.push(session);
-    else groups.set(session.workspaceId, [session]);
+    else groups.set(key, [session]);
   }
 
   for (const group of groups.values()) {

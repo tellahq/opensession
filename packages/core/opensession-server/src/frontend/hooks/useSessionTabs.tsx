@@ -1,7 +1,7 @@
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { mutate as revalidateApiResources } from "swr";
+import { useSWRConfig } from "swr";
 import type { SplitSide } from "../components/SessionSplit";
 import { SessionTabs } from "../components/SessionTabs";
 import { getCurrentUser } from "../components/UserPicker";
@@ -168,6 +168,7 @@ export function useSessionTabs({
   view,
   panes,
 }: UseSessionTabsOptions) {
+  const { mutate: revalidateApiResources } = useSWRConfig();
   const {
     route,
     navigate,

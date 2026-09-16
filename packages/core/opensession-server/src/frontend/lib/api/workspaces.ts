@@ -1,3 +1,7 @@
+import {
+  captureClientDataScope,
+  type ClientDataScope,
+} from "../client-data-scope";
 import { request } from "./request";
 import type { ExternalRef, Workspace } from "../types";
 
@@ -104,15 +108,19 @@ export async function fetchWorkspaces(options?: {
   }
 }
 
-export async function createWorkspaceApi(input: {
-  name: string;
-  repo?: string;
-  draft?: Workspace["draft"];
-}): Promise<Workspace> {
+export async function createWorkspaceApi(
+  input: {
+    name: string;
+    repo?: string;
+    draft?: Workspace["draft"];
+  },
+  scope: ClientDataScope | null = captureClientDataScope(),
+): Promise<Workspace> {
   const body = await request<{ workspace: Workspace }>("/workspaces", {
     method: "POST",
     body: input,
     label: "Failed to create the workspace",
+    scope,
   });
   return body.workspace;
 }
@@ -129,18 +137,23 @@ export async function updateWorkspaceApi(
     /** null clears the draft. */
     draft?: Workspace["draft"] | null;
   },
+  scope: ClientDataScope | null = captureClientDataScope(),
 ): Promise<Workspace> {
   const body = await request<{ workspace: Workspace }>(
     `/workspaces/${encodeURIComponent(id)}`,
-    { method: "PATCH", body: patch },
+    { method: "PATCH", body: patch, scope },
   );
   return body.workspace;
 }
 
-export async function deleteWorkspaceApi(id: string): Promise<void> {
+export async function deleteWorkspaceApi(
+  id: string,
+  scope: ClientDataScope | null = captureClientDataScope(),
+): Promise<void> {
   await request<void>(`/workspaces/${encodeURIComponent(id)}`, {
     method: "DELETE",
     label: "Failed to delete workspace",
+    scope,
   });
 }
 

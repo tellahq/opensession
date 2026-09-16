@@ -54,7 +54,23 @@ check_config || {
   exit 1
 }
 
+personal_runtime_available() {
+  if [ "$runner_mode" = "source" ]; then
+    [ -f "$repo_dir/packages/core/opensession-server/src/runner-host/personal-host.ts" ]
+  else
+    # Fixed query, service identity, minimal environment, bounded time/output.
+    # An old compiled binary cannot accidentally opt into the new entrypoint.
+    result="$(/bin/bash -o pipefail -c 'timeout 10s runuser -u "$1" -- env -i HOME="$2" PATH="$3" "$4" personal-runner-capability 2>/dev/null | head -c 128' _ "$service_user" "$home_dir" "$service_path" "$runner_bin")" || return 1
+    [ "$result" = "personal-runner-host-v2" ]
+  fi
+}
+
 action="${1:-}"
+if [ "$action" = "check-personal" ]; then
+  [ "$#" -eq 1 ] || exit 2
+  personal_runtime_available || { echo "personal run-host runtime unsupported" >&2; exit 3; }
+  exit 0
+fi
 if [ "$action" = "check" ]; then
   [ "$#" -eq 1 ] || exit 2
   exit 0
@@ -116,7 +132,7 @@ fi
 unit="bks-run-$host_id"
 
 case "$action" in
-  launch)
+  launch|launch-personal)
     [ "$#" -eq 4 ] || exit 2
     dir="$3"
     spec_hash="$4"
@@ -128,10 +144,21 @@ case "$action" in
       echo "invalid run-host spec hash" >&2
       exit 2
     }
-    [ -f "$dir/spec.json" ] || {
-      echo "missing run-host spec" >&2
+    [ -f "$dir/spec.json" ] && [ ! -L "$dir/spec.json" ] || {
+      echo "missing or redirected run-host spec" >&2
       exit 2
     }
+    # Parse data only, never execute service-owned code as root. An old executor
+    # calling ordinary launch with a new personal spec must fail before spawn.
+    personal_spec="$(/usr/bin/python3 -I -c 'import json,os,sys; f=os.fdopen(os.open(sys.argv[1],os.O_RDONLY|os.O_NOFOLLOW)); value=json.load(f); assert isinstance(value,dict); print(int("personalRepo" in value))' "$dir/spec.json")" || exit 2
+    if [ "$action" = "launch-personal" ]; then
+      [ "$personal_spec" = "1" ] || exit 2
+      personal_runtime_available || { echo "personal run-host runtime unsupported" >&2; exit 3; }
+      [ -f "$dir/personal-github-auth.json" ] && [ ! -L "$dir/personal-github-auth.json" ] || exit 2
+    else
+      [ "$personal_spec" = "0" ] || { echo "personal specs require launch-personal" >&2; exit 3; }
+    fi
+    personal_launch="$action"
     set -- "$systemd_run" \
       --collect --quiet \
       "--unit=$unit" \
@@ -149,6 +176,12 @@ case "$action" in
       -p "IPAddressDeny=169.254.169.254/32" \
       -p "StandardOutput=journal" \
       -p "StandardError=journal"
+    if [ "$personal_launch" = "launch-personal" ]; then
+      if [ "$runner_mode" = "compiled" ]; then
+        exec "$@" "$runner_bin" personal-runner-host "$dir/spec.json"
+      fi
+      exec "$@" "$runner_bin" run "$repo_dir/packages/core/opensession-server/src/runner-host/personal-host.ts" "$dir/spec.json"
+    fi
     if [ "$runner_mode" = "compiled" ]; then
       exec "$@" "$runner_bin" runner-host "$dir/spec.json"
     fi
@@ -159,7 +192,7 @@ case "$action" in
     exec "$systemctl_bin" stop "$unit"
     ;;
   *)
-    echo "usage: opensession-run-host check | check-version <version> | launch <host-id> <dir> <spec-hash> | stop <host-id>" >&2
+    echo "usage: opensession-run-host check | check-version <version> | check-personal | launch|launch-personal <host-id> <dir> <spec-hash> | stop <host-id>" >&2
     exit 2
     ;;
 esac

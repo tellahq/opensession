@@ -146,7 +146,7 @@ export interface SnapshotHarness {
   /** Write (or overwrite) a session file and invalidate the list cache. */
   writeSession(id: string, extra?: Record<string, unknown>): void;
   /** Merge fields into an existing session file (a mid-session model switch). */
-  patchSession(id: string, extra: Record<string, unknown>): void;
+  patchSession(id: string, extra: Record<string, unknown>): Promise<void>;
   readSession(id: string): Record<string, unknown>;
   /** Give an engine session a transcript FILE, the way a session that ran
    *  before this process did. A session's `transcriptPath` is derived, never
@@ -269,8 +269,11 @@ export async function loadSnapshotHarness(): Promise<SnapshotHarness> {
     dirs: d,
     writeSession,
     readSession,
-    patchSession(id, extra) {
-      writeSession(id, { ...readSession(id), ...extra });
+    async patchSession(id, extra) {
+      await sessionCache.updateSessionFile(id, (data) => ({
+        ...data,
+        ...extra,
+      }));
     },
     async writeEngineTranscript(engineSessionId, lines) {
       const files = require("fs").readdirSync(d.sessions) as string[];

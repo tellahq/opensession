@@ -9,7 +9,7 @@ import {
 import { Composer } from "./Composer";
 import { useCurrentUser } from "./UserPicker";
 import { ConversationPane } from "./ConversationPane";
-import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
+import { bindDraftKey, loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { resolveNewSessionModel } from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
 
@@ -39,7 +39,7 @@ export function SupportPreview({
   addHandler,
   onOpenSession,
 }: Props) {
-  const draftKey = `support-preview:${threadId}`;
+  const draftKey = bindDraftKey(`support-preview:${threadId}`);
   const [prompt, setPrompt] = useState(() => loadDraft(draftKey).text);
   useEffect(() => {
     saveDraft(draftKey, { text: prompt });

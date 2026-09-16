@@ -1,3 +1,9 @@
+import {
+  assertLedgerScope,
+  claimScope,
+  scopeRecord,
+  tombstoneScope,
+} from "./access-ledger";
 /**
  * SQL for actor-owned session metadata and its central catalog projection.
  *
@@ -10,12 +16,22 @@
  * centrally.
  */
 import type { Database } from "bun:sqlite";
+import { canonicalAccessDocument } from "../canonical-access-document";
+import {
+  assertAccessPrincipal,
+  canAccessScope,
+  parseAccessScope,
+  sameAccessScope,
+  type AccessPrincipal,
+} from "../../shared/access-scope";
+import { accessPredicateSql, accessOwnerSql } from "../access-scope-sql";
 import {
   assertMetadataActorRequest,
   type MetadataActorRequest,
   type SessionMetadataCatalogRow,
   type SessionMetadataPutResult,
   type SessionMetadataRecord,
+  type SessionMetadataReadResult,
   type SessionMetadataSeedRow,
 } from "./metadata-protocol";
 
@@ -100,6 +116,7 @@ export function putSessionMetadata(
   input: Extract<MetadataActorRequest, { op: "put" }>,
 ): SessionMetadataPutResult {
   assertMetadataActorRequest(input);
+  input = { ...input, doc: canonicalAccessDocument(db, input.doc) };
   const tx = db.transaction((): SessionMetadataPutResult => {
     const current = db
       .query(
@@ -107,6 +124,25 @@ export function putSessionMetadata(
          FROM session_kernel_metadata WHERE session_id = ?`,
       )
       .get(input.sessionId) as MetadataRow | null;
+    const next = JSON.parse(input.doc);
+    if (
+      !next ||
+      typeof next !== "object" ||
+      Array.isArray(next) ||
+      !parseAccessScope(next.accessScope)
+    )
+      throw new Error("Invalid session access scope");
+    if (
+      !canAccessScope(next.accessScope, input.principal) ||
+      (current &&
+        !canAccessScope(JSON.parse(current.doc).accessScope, input.principal))
+    )
+      throw new Error("Session not found");
+    if (
+      current &&
+      !sameAccessScope(JSON.parse(current.doc).accessScope, next.accessScope)
+    )
+      throw new Error("Session access scope is immutable");
     if (current && current.request_id === input.requestId)
       return { status: "duplicate", rev: Number(current.rev) };
     const currentRev = current ? Number(current.rev) : null;
@@ -125,7 +161,7 @@ export function putSessionMetadata(
          updated_at = excluded.updated_at`,
       [
         input.sessionId,
-        input.doc,
+        JSON.stringify(next),
         input.rev,
         input.requestId,
         input.archived ? 1 : 0,
@@ -147,6 +183,50 @@ export function deleteSessionMetadata(db: Database, sessionId: string): void {
   ]);
 }
 
+/** Consult the central authority before a lazy actor seed or recovery write.
+ * The actor may not have a document yet even when the catalog already does. */
+export function assertSessionMetadataCatalogScope(
+  db: Database,
+  sessionId: string,
+  doc: string,
+): void {
+  const current = db
+    .query(
+      "SELECT doc FROM session_kernel_metadata_catalog WHERE session_id = ?",
+    )
+    .get(sessionId) as { doc: string } | null;
+  if (
+    current &&
+    !sameAccessScope(
+      JSON.parse(current.doc).accessScope,
+      JSON.parse(canonicalAccessDocument(db, doc)).accessScope,
+    )
+  )
+    throw new Error("Session access scope is immutable");
+}
+
+export function assertSessionMetadataCatalogWrite(
+  db: Database,
+  input: Extract<MetadataActorRequest, { op: "put" }>,
+): void {
+  assertLedgerScope(
+    db,
+    input.sessionId,
+    canonicalAccessDocument(db, input.doc),
+  );
+  const current = db
+    .query(
+      "SELECT doc FROM session_kernel_metadata_catalog WHERE session_id = ?",
+    )
+    .get(input.sessionId) as { doc: string } | null;
+  if (
+    current &&
+    !canAccessScope(JSON.parse(current.doc).accessScope, input.principal)
+  )
+    throw new Error("Session not found");
+  assertSessionMetadataCatalogScope(db, input.sessionId, input.doc);
+}
+
 /** Central only. Never moves the catalog backwards: a stale settle after a
  * newer commit is a no-op, and the export marker survives re-settles. */
 export function settleSessionMetadataCatalog(
@@ -154,14 +234,20 @@ export function settleSessionMetadataCatalog(
   sessionId: string,
   current: SessionMetadataRecord | undefined,
 ): void {
-  if (!current) {
-    db.run("DELETE FROM session_kernel_metadata_catalog WHERE session_id = ?", [
-      sessionId,
-    ]);
-    return;
-  }
-  db.run(
-    `INSERT INTO session_kernel_metadata_catalog
+  db.transaction(() => {
+    if (!current) {
+      if (scopeRecord(db, sessionId)) tombstoneScope(db, sessionId);
+      db.run(
+        "DELETE FROM session_kernel_metadata_catalog WHERE session_id = ?",
+        [sessionId],
+      );
+      return;
+    }
+    current = { ...current, doc: canonicalAccessDocument(db, current.doc) };
+    claimScope(db, sessionId, current.doc);
+    assertSessionMetadataCatalogScope(db, sessionId, current.doc);
+    db.run(
+      `INSERT INTO session_kernel_metadata_catalog
        (session_id, doc, rev, exported_rev, archived, last_activity_ms, updated_at)
      VALUES (?, ?, ?, 0, ?, ?, ?)
      ON CONFLICT(session_id) DO UPDATE SET
@@ -171,15 +257,16 @@ export function settleSessionMetadataCatalog(
        last_activity_ms = excluded.last_activity_ms,
        updated_at = excluded.updated_at
      WHERE excluded.rev >= session_kernel_metadata_catalog.rev`,
-    [
-      sessionId,
-      current.doc,
-      current.rev,
-      current.archived ? 1 : 0,
-      current.lastActivityMs,
-      Date.now(),
-    ],
-  );
+      [
+        sessionId,
+        current.doc,
+        current.rev,
+        current.archived ? 1 : 0,
+        current.lastActivityMs,
+        Date.now(),
+      ],
+    );
+  }).immediate();
 }
 
 /** Central only. Project historical session files that predate actor-owned
@@ -200,9 +287,11 @@ export function seedSessionMetadataCatalog(
     const now = Date.now();
     let inserted = 0;
     for (const row of rows) {
+      const doc = canonicalAccessDocument(db, row.doc);
+      claimScope(db, row.sessionId, doc);
       inserted += insert.run(
         row.sessionId,
-        row.doc,
+        doc,
         row.rev,
         row.rev,
         row.archived ? 1 : 0,
@@ -231,31 +320,83 @@ export function markSessionMetadataExported(
 export function sessionMetadataCatalogGet(
   db: Database,
   sessionId: string,
+  principal?: AccessPrincipal,
 ): SessionMetadataCatalogRow | null {
+  if (scopeRecord(db, sessionId)?.deleted) return null;
   const row = db
     .query(
       `SELECT session_id, doc, rev, exported_rev, archived, last_activity_ms, updated_at
-       FROM session_kernel_metadata_catalog WHERE session_id = ?`,
+       FROM session_kernel_metadata_catalog WHERE session_id = ? AND ${accessPredicateSql("doc", principal)}`,
     )
     .get(sessionId) as MetadataRow | null;
   return row ? { ...record(row), exportedRev: Number(row.exported_rev) } : null;
+}
+
+/** Internal read seam distinguishes denied from absent so a legacy export
+ * fallback cannot resurrect an existing but hidden catalog document. */
+export function sessionMetadataCatalogRead(
+  db: Database,
+  sessionId: string,
+  principal?: AccessPrincipal,
+): SessionMetadataReadResult {
+  const scope = scopeRecord(db, sessionId);
+  if (scope?.deleted)
+    return { status: scope.owner === 0 ? "deleted" : "denied" };
+  if (
+    scope &&
+    (scope.owner < 0 ||
+      (scope.owner > 0 && scope.owner !== principal?.githubAccountId))
+  )
+    return { status: "denied" };
+  if (scope) sessionId = scope.canonicalId;
+  const visible = sessionMetadataCatalogGet(db, sessionId, principal);
+  if (visible) {
+    const aliases = db
+      .query(
+        "SELECT id FROM session_kernel_access_scope WHERE canonical_id=? AND id<>? AND deleted=0 ORDER BY generation LIMIT 1025",
+      )
+      .all(sessionId, sessionId) as Array<{ id: string }>;
+    if (aliases.length > 1024)
+      throw new Error("Session alias set exceeds read budget");
+    return {
+      status: "found",
+      record: visible,
+      aliases: aliases.map((row) => row.id),
+    };
+  }
+  const exists = db
+    .query("SELECT 1 FROM session_kernel_metadata_catalog WHERE session_id = ?")
+    .get(sessionId);
+  return { status: exists ? "denied" : "missing" };
 }
 
 export function sessionMetadataCatalogPage(
   db: Database,
   afterSessionId: string,
   limit: number,
+  principal?: AccessPrincipal,
+  privateOnly = false,
 ): SessionMetadataCatalogRow[] {
+  assertAccessPrincipal(principal);
+  if (privateOnly && !principal)
+    throw new Error("Private catalog principal required");
+  const predicate = privateOnly
+    ? `${accessOwnerSql("doc")} = ?`
+    : accessPredicateSql("doc", principal);
   return (
     db
       .query(
         `SELECT session_id, doc, rev, exported_rev, archived, last_activity_ms, updated_at
          FROM session_kernel_metadata_catalog
-         WHERE session_id > ?
+         WHERE session_id > ? AND ${predicate}
          ORDER BY session_id
          LIMIT ?`,
       )
-      .all(afterSessionId, limit) as MetadataRow[]
+      .all(
+        afterSessionId,
+        ...(privateOnly ? [principal!.githubAccountId] : []),
+        limit,
+      ) as MetadataRow[]
   ).map((row) => ({ ...record(row), exportedRev: Number(row.exported_rev) }));
 }
 
@@ -270,7 +411,7 @@ export function sessionMetadataPendingExports(
       .query(
         `SELECT session_id, rev, exported_rev
          FROM session_kernel_metadata_catalog
-         WHERE exported_rev < rev
+         WHERE exported_rev < rev AND ${accessPredicateSql("doc")}
          ORDER BY session_id
          LIMIT ?`,
       )
@@ -286,9 +427,14 @@ export function sessionMetadataPendingExports(
   }));
 }
 
-export function sessionMetadataCatalogCount(db: Database): number {
+export function sessionMetadataCatalogCount(
+  db: Database,
+  principal?: AccessPrincipal,
+): number {
   const row = db
-    .query("SELECT count(*) AS n FROM session_kernel_metadata_catalog")
+    .query(
+      `SELECT count(*) AS n FROM session_kernel_metadata_catalog WHERE ${accessPredicateSql("doc", principal)}`,
+    )
     .get() as { n: number } | null;
   return Number(row?.n ?? 0);
 }

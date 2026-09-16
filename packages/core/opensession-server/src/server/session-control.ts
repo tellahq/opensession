@@ -188,9 +188,11 @@ export interface CreateSessionOpts {
  */
 export interface SessionControl {
   /** All sessions with creator identity, derived state, queue depth and controllability. */
-  listSessions(): SessionSummary[];
+  listSessions(): Promise<SessionSummary[]> | SessionSummary[];
   /** One session's summary including creator identity, or undefined if no such id. */
-  getSession(id: string): SessionSummary | undefined;
+  getSession(
+    id: string,
+  ): Promise<SessionSummary | undefined> | SessionSummary | undefined;
   /** Last `n` transcript entries for a session (for the "what's it doing" view). */
   transcriptTail(id: string, n: number): Promise<TranscriptEntry[]>;
   /**

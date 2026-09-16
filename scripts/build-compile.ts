@@ -350,6 +350,16 @@ async function buildSharpSidecar(
  */
 const WORKER_SIDECARS: Array<{ entry: string; name: string }> = [
   {
+    entry:
+      "packages/core/opensession-server/src/server/personal-repo-runtime-policy-worker.ts",
+    name: "personal-repo-runtime-policy-worker.js",
+  },
+  {
+    entry:
+      "packages/core/opensession-server/src/server/personal-github/connection-worker.ts",
+    name: "personal-github-connection-worker.js",
+  },
+  {
     entry: "packages/core/opensession-server/src/session-kernel-worker.ts",
     name: "session-kernel-worker.js",
   },

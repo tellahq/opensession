@@ -45,7 +45,6 @@ import { SupportTinder } from "./components/SupportTinder";
 import { Tasks } from "./components/Tasks";
 import { UpdatePill } from "./components/UpdatePill";
 import {
-  UserGate,
   getCurrentUser,
   useAuthStatus,
   useCurrentUser,
@@ -92,7 +91,13 @@ import {
 import { appTopbarTitle } from "./lib/app-topbar-title";
 import type { AppProps, PendingCreateDraft } from "./lib/app-types";
 import { dropStagingAttachments } from "./lib/attachments";
-import { NEW_SESSION_DRAFT_KEY, clearDraft, saveDraft } from "./lib/drafts";
+import {
+  bindDraftKey,
+  draftClientDataScope,
+  NEW_SESSION_DRAFT_KEY as RAW_NEW_SESSION_DRAFT_KEY,
+  clearDraft,
+  saveDraft,
+} from "./lib/drafts";
 import { DESK_FAB, MOBILE_FAB } from "./lib/fab-classes";
 import { pickLandingSession } from "./lib/landing-session";
 import { receiveMention, receiveMentionsCleared } from "./lib/mentions";
@@ -152,6 +157,7 @@ export function AppContent({
   serviceWorker = true,
   initialTeamViewing = [],
 }: AppProps = {}) {
+  const NEW_SESSION_DRAFT_KEY = bindDraftKey(RAW_NEW_SESSION_DRAFT_KEY);
   // The worker-parent bridge has to exist before routing initializes. Session
   // hydration happens later, and every Back entry point reads its latest value.
   const currentSessionRef = useRef<UnifiedSession | null>(null);
@@ -595,7 +601,10 @@ export function AppContent({
           // its parked workspace here so the next global create cannot reuse it
           // as an existing workspace and appear as another tab.
           if (draft.workspaceId)
-            consumeNewSessionWorkspaceDraft(draft.workspaceId);
+            consumeNewSessionWorkspaceDraft(
+              draft.workspaceId,
+              draftClientDataScope(NEW_SESSION_DRAFT_KEY),
+            );
         }
         if (!shouldApplyCreatedSessionReply(msg.replayed, !!draft)) {
           // The durable command outbox replayed a create that this page already
@@ -715,6 +724,7 @@ export function AppContent({
       }
     });
   }, [
+    NEW_SESSION_DRAFT_KEY,
     addHandler,
     paletteOpenRef,
     patch,
@@ -1223,7 +1233,7 @@ export function AppContent({
   } satisfies NavigationActions;
 
   const content = (
-    <UserGate>
+    <>
       <RestartOverlay connected={connected} addHandler={addHandler} />
       <MediaLightboxHost />
       <BlockExpandHost />
@@ -1970,7 +1980,7 @@ export function AppContent({
           </>
         )}
       </div>
-    </UserGate>
+    </>
   );
   return (
     <NavigationProvider actions={navigationActions}>

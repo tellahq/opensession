@@ -14,9 +14,20 @@
  */
 
 import { Database } from "bun:sqlite";
+import type {
+  ScopeFence,
+  ScopeDelta,
+  ScopeLedgerRow,
+} from "./session-kernel/access-ledger";
+import { assertAccessPrincipal } from "../shared/access-scope";
+import { canonicalizeAccessTable } from "./canonical-access-document";
+import { canAccessScope, type AccessPrincipal } from "../shared/access-scope";
+import { accessOwnerSql, accessPredicateSql } from "./access-scope-sql";
 import { chmodSync, existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import type { UnifiedSession } from "./types";
+
+export type ScopeReplicaState = ScopeFence & { replica: string };
 
 export type SessionListSlice = "include" | "exclude" | "only";
 
@@ -46,6 +57,13 @@ function decodeRows(rows: StoredRow[]): UnifiedSession[] {
     }
   }
   return sessions;
+}
+
+function scopeOwnerPredicate(principal?: AccessPrincipal): string {
+  assertAccessPrincipal(principal);
+  return principal
+    ? `access_owner IN (0, ${principal.githubAccountId})`
+    : "access_owner=0";
 }
 
 export class SessionListStore {
@@ -105,6 +123,50 @@ export class SessionListStore {
 			CREATE INDEX IF NOT EXISTS idx_session_list_created_by_activity
 				ON session_list(created_by, archived, last_activity_ms DESC);
 		`);
+    if (
+      !this.db
+        .query("SELECT 1 FROM session_list_meta WHERE key = 'access_json_v1'")
+        .get()
+    ) {
+      this.db
+        .transaction(() => {
+          canonicalizeAccessTable(this.db, "session_list", "payload");
+          this.db.run(
+            "INSERT INTO session_list_meta(key, value) VALUES ('access_json_v1', '1')",
+          );
+        })
+        .immediate();
+    }
+    const scopeColumns = this.db
+      .query("PRAGMA table_info(session_list)")
+      .all() as Array<{ name: string }>;
+    if (!scopeColumns.some((column) => column.name === "access_owner")) {
+      this.db
+        .exec(`ALTER TABLE session_list ADD COLUMN access_owner INTEGER NOT NULL DEFAULT -1;
+        UPDATE session_list SET access_owner = CASE WHEN ${accessPredicateSql("payload")} THEN 0 ELSE -1 END;
+        DROP INDEX IF EXISTS idx_session_list_access_owner_activity;`);
+    }
+    this.db
+      .exec(`CREATE TABLE IF NOT EXISTS session_list_scope (id TEXT PRIMARY KEY, canonical_id TEXT NOT NULL, owner INTEGER NOT NULL, deleted INTEGER NOT NULL, generation INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS idx_list_scope_owner ON session_list_scope(owner, deleted, canonical_id, id);
+      CREATE TABLE IF NOT EXISTS session_list_alias_claims (row_id TEXT NOT NULL, alias_id TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY(row_id, alias_id));
+      CREATE INDEX IF NOT EXISTS idx_list_alias_claims_alias ON session_list_alias_claims(alias_id, row_id);
+      CREATE INDEX IF NOT EXISTS idx_session_list_access_owner_activity ON session_list(access_owner, last_activity_ms DESC, id);
+      CREATE TEMP VIEW session_list_shared AS SELECT * FROM session_list WHERE access_owner=0;`);
+    if (
+      !this.db
+        .query("SELECT 1 FROM session_list_meta WHERE key='alias_claims_v1'")
+        .get()
+    ) {
+      this.db
+        .transaction(() => {
+          this.db
+            .exec(`INSERT OR IGNORE INTO session_list_alias_claims(row_id, alias_id, position)
+          SELECT s.id, j.value, CAST(j.key AS INTEGER) FROM session_list s, json_each(CASE WHEN json_valid(s.payload) THEN s.payload ELSE '{}' END, '$.aliasIds') j WHERE j.type='text';
+          INSERT INTO session_list_meta VALUES ('alias_claims_v1','1');`);
+        })
+        .immediate();
+    }
     // `branch` arrived after the first index shipped. Add it in place and drop
     // coverage, so the next rebuild (a catalog page, not a file scan) fills it
     // for every row instead of leaving old rows unmatched by branch.
@@ -172,10 +234,223 @@ export class SessionListStore {
       session.branch || null,
       JSON.stringify(session),
     );
+    this.db.run("DELETE FROM session_list_alias_claims WHERE row_id=?", [
+      session.id,
+    ]);
+    for (const [position, alias] of (session.aliasIds ?? []).entries()) {
+      this.db.run(
+        "INSERT OR IGNORE INTO session_list_alias_claims VALUES (?, ?, ?)",
+        [session.id, alias, position],
+      );
+    }
+    this.refreshScopeRow(session.id);
+  }
+
+  scopeState(): ScopeReplicaState | null {
+    const row = this.db
+      .query("SELECT value FROM session_list_meta WHERE key='scope_fence'")
+      .get() as { value: string } | null;
+    const value = row ? JSON.parse(row.value) : null;
+    return value && typeof value.replica === "string" ? value : null;
+  }
+
+  resetScopeReplica(incarnation: string): void {
+    this.db
+      .transaction(() => {
+        const previous = this.scopeState();
+        this.db.exec("DELETE FROM session_list_scope;");
+        if (previous)
+          this.db.exec(
+            "DELETE FROM session_list_meta WHERE key LIKE 'covered:%';",
+          );
+        if (previous && previous.incarnation !== incarnation)
+          this.db.exec(
+            "DELETE FROM session_list; DELETE FROM session_list_alias_claims;",
+          );
+        this.db.run(
+          "INSERT OR REPLACE INTO session_list_meta VALUES ('scope_fence', ?)",
+          [
+            JSON.stringify({
+              incarnation,
+              generation: 0,
+              replica: crypto.randomUUID(),
+            }),
+          ],
+        );
+        this.db.exec(
+          `UPDATE session_list SET access_owner=CASE WHEN ${accessPredicateSql("payload")} THEN 0 ELSE -1 END`,
+        );
+      })
+      .immediate();
+  }
+
+  applyScopeDelta(expected: ScopeReplicaState, delta: ScopeDelta): void {
+    this.db
+      .transaction(() => {
+        const current = this.scopeState();
+        if (
+          !current ||
+          current.incarnation !== expected.incarnation ||
+          current.generation !== expected.generation ||
+          current.replica !== expected.replica ||
+          delta.fence.incarnation !== current.incarnation
+        )
+          throw new Error("Scope replica changed");
+        if (
+          delta.rows.length > 1000 ||
+          delta.fence.generation < current.generation
+        )
+          throw new Error("Invalid scope delta");
+        let through = current.generation;
+        const affected = new Set<string>();
+        for (const row of delta.rows) {
+          if (
+            !Number.isSafeInteger(row.generation) ||
+            row.generation <= through ||
+            row.generation > delta.fence.generation ||
+            !Number.isSafeInteger(row.owner) ||
+            row.owner < -1 ||
+            !row.id ||
+            !row.canonicalId
+          )
+            throw new Error("Invalid scope row");
+          this.db.run(
+            "INSERT OR REPLACE INTO session_list_scope VALUES (?, ?, ?, ?, ?)",
+            [
+              row.id,
+              row.canonicalId,
+              row.owner,
+              row.deleted ? 1 : 0,
+              row.generation,
+            ],
+          );
+          through = row.generation;
+          affected.add(row.id);
+          for (const claim of this.db
+            .query(
+              "SELECT row_id FROM session_list_alias_claims WHERE alias_id=?",
+            )
+            .all(row.id) as Array<{ row_id: string }>)
+            affected.add(claim.row_id);
+          if (affected.size > 10000)
+            throw new Error("Scope delta fanout exceeds projection budget");
+        }
+        for (const id of affected) this.refreshScopeRow(id);
+        // Never claim the page's newest clock if later rows were not applied.
+        this.db.run(
+          "UPDATE session_list_meta SET value=? WHERE key='scope_fence'",
+          [
+            JSON.stringify({
+              incarnation: current.incarnation,
+              generation: through,
+              replica: current.replica,
+            }),
+          ],
+        );
+      })
+      .immediate();
+  }
+
+  filterScopeIds(ids: string[]): string[] {
+    if (ids.length > 1000) throw new Error("Scope identifier batch too large");
+    if (!ids.length) return [];
+    const scopes = new Map(
+      (
+        this.db
+          .query(
+            `SELECT id, owner, deleted FROM session_list_scope WHERE id IN (${ids.map(() => "?").join(",")})`,
+          )
+          .all(...ids) as Array<{ id: string; owner: number; deleted: number }>
+      ).map((row) => [row.id, row]),
+    );
+    return ids.filter((id) => {
+      const scope = scopes.get(id);
+      return !scope || (!scope.deleted && scope.owner === 0);
+    });
+  }
+
+  private personalCoverage(principal?: AccessPrincipal): boolean {
+    if (!principal) return true;
+    assertAccessPrincipal(principal);
+    return !this.db
+      .query(`SELECT 1 FROM session_list_scope s LEFT JOIN session_list l ON l.id=s.id
+      WHERE s.owner=? AND s.deleted=0 AND s.canonical_id=s.id AND (l.id IS NULL OR l.access_owner<>s.owner) LIMIT 1`)
+      .get(principal.githubAccountId);
+  }
+
+  private refreshScopeRow(id: string): void {
+    const stored = this.db
+      .query("SELECT payload FROM session_list WHERE id=?")
+      .get(id) as { payload: string } | null;
+    if (!stored) return;
+    let data: UnifiedSession;
+    try {
+      data = JSON.parse(stored.payload);
+      if (
+        !data ||
+        typeof data !== "object" ||
+        Array.isArray(data) ||
+        data.id !== id
+      )
+        throw new Error("Invalid session projection");
+    } catch {
+      this.db.run("UPDATE session_list SET access_owner=-1 WHERE id=?", [id]);
+      return;
+    }
+    const authority = this.db
+      .query(
+        "SELECT owner, deleted, canonical_id FROM session_list_scope WHERE id=?",
+      )
+      .get(id) as {
+      owner: number;
+      deleted: number;
+      canonical_id: string;
+    } | null;
+    const owner = authority
+      ? authority.deleted || authority.canonical_id !== id
+        ? -1
+        : authority.owner
+      : canAccessScope(data.accessScope)
+        ? 0
+        : -1;
+    data.accessScope =
+      owner === 0
+        ? { kind: "shared" }
+        : owner > 0
+          ? { kind: "personal", ownerGithubAccountId: owner }
+          : (null as never);
+    const aliases = this.db
+      .query(`SELECT c.alias_id FROM session_list_alias_claims c LEFT JOIN session_list_scope s ON s.id=c.alias_id
+      WHERE c.row_id=? AND ((s.id IS NULL AND ?=0) OR (s.deleted=0 AND s.owner=? AND (s.canonical_id=? OR s.canonical_id=s.id))) ORDER BY c.position`)
+      .all(id, owner, owner, id) as Array<{ alias_id: string }>;
+    if (data.aliasIds) data.aliasIds = aliases.map((row) => row.alias_id);
+    this.db.run(
+      "UPDATE session_list SET access_owner=?, payload=? WHERE id=?",
+      [owner, JSON.stringify(data), id],
+    );
   }
 
   upsert(session: UnifiedSession): void {
     this.write(session);
+  }
+
+  upsertScopePage(
+    sessions: UnifiedSession[],
+    expected: ScopeReplicaState,
+  ): void {
+    this.db
+      .transaction(() => {
+        const current = this.scopeState();
+        if (
+          !current ||
+          current.incarnation !== expected.incarnation ||
+          current.generation !== expected.generation ||
+          current.replica !== expected.replica
+        )
+          throw new Error("Scope changed before projection write");
+        this.upsertMany(sessions);
+      })
+      .immediate();
   }
 
   upsertMany(sessions: UnifiedSession[]): void {
@@ -219,11 +494,14 @@ export class SessionListStore {
 
   remove(id: string): void {
     this.db.run("DELETE FROM session_list WHERE id = ?", [id]);
+    this.db.run("DELETE FROM session_list_alias_claims WHERE row_id=?", [id]);
   }
 
-  get(id: string): UnifiedSession | null {
+  get(id: string, principal?: AccessPrincipal): UnifiedSession | null {
     const row = this.db
-      .query("SELECT payload FROM session_list WHERE id = ?")
+      .query(
+        `SELECT payload FROM session_list WHERE id = ? AND ${scopeOwnerPredicate(principal)}`,
+      )
       .get(id) as StoredRow | null;
     return row ? (decodeRows([row])[0] ?? null) : null;
   }
@@ -235,20 +513,26 @@ export class SessionListStore {
    * ancestors, so a lone row would be misjudged; the whole list is never
    * needed.
    */
-  listVisibilityGroup(session: UnifiedSession): UnifiedSession[] {
+  listVisibilityGroup(
+    session: UnifiedSession,
+    principal?: AccessPrincipal,
+  ): UnifiedSession[] {
+    const authorized = this.get(session.id, principal);
+    if (!authorized) return [];
+    session = authorized;
     const rows = new Map<string, UnifiedSession>([[session.id, session]]);
     // Live siblings only: the sidebar scopes its live slice, so an archived
     // sibling must not lend ownership or attention to this row.
     const members = session.workspaceId
       ? (this.db
           .query(
-            "SELECT payload FROM session_list WHERE workspace_id = ? AND archived = 0",
+            `SELECT payload FROM session_list WHERE ${scopeOwnerPredicate(principal)} AND workspace_id = ? AND archived = 0`,
           )
           .all(session.workspaceId) as StoredRow[])
       : session.worktreeDir?.includes("/worktrees/")
         ? (this.db
             .query(
-              "SELECT payload FROM session_list WHERE worktree_dir = ? AND archived = 0",
+              `SELECT payload FROM session_list WHERE ${scopeOwnerPredicate(principal)} AND worktree_dir = ? AND archived = 0`,
             )
             .all(session.worktreeDir) as StoredRow[])
         : [];
@@ -257,7 +541,7 @@ export class SessionListStore {
     let parentId = session.parentSessionId;
     while (parentId && !seen.has(parentId) && seen.size < 16) {
       seen.add(parentId);
-      const parent = rows.get(parentId) ?? this.get(parentId);
+      const parent = rows.get(parentId) ?? this.get(parentId, principal);
       if (!parent) break;
       rows.set(parent.id, parent);
       parentId = parent.parentSessionId;
@@ -269,16 +553,24 @@ export class SessionListStore {
    * the index has no row for it (a removed session). */
   getWithVisibilityGroup(
     id: string,
+    principal?: AccessPrincipal,
   ): { session: UnifiedSession; group: UnifiedSession[] } | null {
-    const session = this.get(id);
+    const session = this.get(id, principal);
     return session
-      ? { session, group: this.listVisibilityGroup(session) }
+      ? { session, group: this.listVisibilityGroup(session, principal) }
       : null;
   }
 
-  setArchived(id: string, archived: boolean, reason?: string): void {
+  setArchived(
+    id: string,
+    archived: boolean,
+    reason?: string,
+    principal?: AccessPrincipal,
+  ): void {
     const row = this.db
-      .query("SELECT payload FROM session_list WHERE id = ?")
+      .query(
+        `SELECT payload FROM session_list WHERE ${scopeOwnerPredicate(principal)} AND id = ?`,
+      )
       .get(id) as { payload: string } | null;
     if (!row) return;
     try {
@@ -297,43 +589,58 @@ export class SessionListStore {
     }
   }
 
-  count(): number {
+  count(principal?: AccessPrincipal): number {
+    if (!this.personalCoverage(principal))
+      throw new Error("Personal scope projection incomplete");
     const row = this.db
-      .query("SELECT count(*) AS n FROM session_list")
+      .query(
+        `SELECT count(*) AS n FROM session_list WHERE ${scopeOwnerPredicate(principal)}`,
+      )
       .get() as {
       n: number;
     };
     return Number(row?.n || 0);
   }
 
-  list(slice: SessionListSlice = "include"): UnifiedSession[] {
+  list(
+    slice: SessionListSlice = "include",
+    principal?: AccessPrincipal,
+  ): UnifiedSession[] {
     const where =
       slice === "include"
         ? ""
         : slice === "only"
-          ? "WHERE archived = 1"
-          : "WHERE archived = 0";
+          ? "AND archived = 1"
+          : "AND archived = 0";
     const rows = this.db
       .query(
-        `SELECT payload FROM session_list ${where} ORDER BY last_activity_ms DESC, id`,
+        `SELECT payload FROM session_list WHERE ${scopeOwnerPredicate(principal)} ${where} ORDER BY last_activity_ms DESC, id`,
       )
       .all() as StoredRow[];
     return decodeRows(rows);
   }
 
   /** `list(slice)` when the slice has coverage, else null. */
-  listCovered(slice: SessionListSlice): UnifiedSession[] | null {
-    return this.hasCoverage(slice) ? this.list(slice) : null;
+  listCovered(
+    slice: SessionListSlice,
+    principal?: AccessPrincipal,
+  ): UnifiedSession[] | null {
+    return this.hasCoverage(slice) && this.personalCoverage(principal)
+      ? this.list(slice, principal)
+      : null;
   }
 
   /** Live rows on any of `branches`. PR state changes fan out to exactly
    * these rows instead of telling every client to refetch its list. */
-  listLiveByBranch(branches: string[]): UnifiedSession[] {
+  listLiveByBranch(
+    branches: string[],
+    principal?: AccessPrincipal,
+  ): UnifiedSession[] {
     if (!branches.length) return [];
     const rows = this.db
       .query(
         `SELECT payload FROM session_list
-         WHERE archived = 0 AND branch IN (${branches.map(() => "?").join(", ")})`,
+         WHERE ${scopeOwnerPredicate(principal)} AND archived = 0 AND branch IN (${branches.map(() => "?").join(", ")})`,
       )
       .all(...branches) as StoredRow[];
     return decodeRows(rows);
@@ -341,17 +648,25 @@ export class SessionListStore {
 
   /** `listLiveByBranch` when the live slice has coverage, else null: without
    * coverage a branch lookup could miss rows. */
-  listLiveByBranchCovered(branches: string[]): UnifiedSession[] | null {
-    return this.hasCoverage("exclude") ? this.listLiveByBranch(branches) : null;
+  listLiveByBranchCovered(
+    branches: string[],
+    principal?: AccessPrincipal,
+  ): UnifiedSession[] | null {
+    return this.hasCoverage("exclude")
+      ? this.listLiveByBranch(branches, principal)
+      : null;
   }
 
   /** Every materialized member of one known workspace, live or archived. */
-  listWorkspaceMembers(workspaceId: string): UnifiedSession[] {
+  listWorkspaceMembers(
+    workspaceId: string,
+    principal?: AccessPrincipal,
+  ): UnifiedSession[] {
     const rows = this.db
       .query(
         `
         SELECT payload FROM session_list
-        WHERE workspace_id = ?
+        WHERE ${scopeOwnerPredicate(principal)} AND workspace_id = ?
         ORDER BY last_activity_ms DESC
       `,
       )
@@ -362,6 +677,7 @@ export class SessionListStore {
   listWorkspace(
     workspaceId: string,
     worktreeDir?: string | null,
+    principal?: AccessPrincipal,
   ): UnifiedSession[] {
     const isolatedWorktree = worktreeDir?.includes("/worktrees/")
       ? worktreeDir
@@ -371,7 +687,7 @@ export class SessionListStore {
           .query(
             `
 						SELECT payload FROM session_list
-						WHERE archived = 1 AND (workspace_id = ? OR worktree_dir = ?)
+						WHERE ${scopeOwnerPredicate(principal)} AND archived = 1 AND (workspace_id = ? OR worktree_dir = ?)
 						ORDER BY last_activity_ms DESC
 					`,
           )
@@ -380,7 +696,7 @@ export class SessionListStore {
           .query(
             `
 						SELECT payload FROM session_list
-						WHERE workspace_id = ? AND archived = 1
+						WHERE ${scopeOwnerPredicate(principal)} AND workspace_id = ? AND archived = 1
 						ORDER BY last_activity_ms DESC
 					`,
           )
@@ -392,27 +708,30 @@ export class SessionListStore {
   listWorkspaceCovered(
     workspaceId: string,
     worktreeDir?: string | null,
+    principal?: AccessPrincipal,
   ): UnifiedSession[] | null {
     return this.hasCoverage("only")
-      ? this.listWorkspace(workspaceId, worktreeDir)
+      ? this.listWorkspace(workspaceId, worktreeDir, principal)
       : null;
   }
 
   /** Workspace ids that can produce a live sidebar row, without decoding the
    * session payloads behind them. */
-  activeWorkspaceIds(): string[] {
+  activeWorkspaceIds(principal?: AccessPrincipal): string[] {
     return (
       this.db
         .query(
-          "SELECT DISTINCT workspace_id FROM session_list WHERE archived = 0 AND workspace_id IS NOT NULL",
+          `SELECT DISTINCT workspace_id FROM session_list WHERE ${scopeOwnerPredicate(principal)} AND archived = 0 AND workspace_id IS NOT NULL`,
         )
         .all() as Array<{ workspace_id: string }>
     ).map((row) => row.workspace_id);
   }
 
   /** `activeWorkspaceIds` when the live slice has coverage, else null. */
-  activeWorkspaceIdsCovered(): string[] | null {
-    return this.hasCoverage("exclude") ? this.activeWorkspaceIds() : null;
+  activeWorkspaceIdsCovered(principal?: AccessPrincipal): string[] | null {
+    return this.hasCoverage("exclude")
+      ? this.activeWorkspaceIds(principal)
+      : null;
   }
 
   /**
@@ -420,7 +739,10 @@ export class SessionListStore {
    * Ranking and counting stay inside SQLite, so JavaScript never parses the
    * thousands of automation payloads a collapsed sidebar cannot display.
    */
-  listSidebar(selectedSessionId?: string): UnifiedSession[] {
+  listSidebar(
+    selectedSessionId?: string,
+    principal?: AccessPrincipal,
+  ): UnifiedSession[] {
     const rows = this.db
       .query(
         `
@@ -433,11 +755,11 @@ export class SessionListStore {
 						) AS automation_rank,
 						count(*) OVER (PARTITION BY automation) AS automation_run_count
 					FROM session_list
-					WHERE archived = 0 AND automation IS NOT NULL
+					WHERE ${scopeOwnerPredicate(principal)} AND archived = 0 AND automation IS NOT NULL
 				), selected AS (
 					SELECT payload, last_activity_ms, NULL AS automation_run_count
 					FROM session_list
-					WHERE archived = 0 AND automation IS NULL
+					WHERE ${scopeOwnerPredicate(principal)} AND archived = 0 AND automation IS NULL
 					UNION ALL
 					SELECT payload, last_activity_ms, automation_run_count
 					FROM ranked_automation
@@ -446,7 +768,7 @@ export class SessionListStore {
 					UNION ALL
 					SELECT payload, last_activity_ms, NULL AS automation_run_count
 					FROM session_list
-					WHERE archived = 1 AND id = ?
+					WHERE ${scopeOwnerPredicate(principal)} AND archived = 1 AND id = ?
 				)
 				SELECT payload, automation_run_count
 				FROM selected
@@ -458,9 +780,12 @@ export class SessionListStore {
   }
 
   /** `listSidebar` when the live slice has coverage, else null. */
-  listSidebarCovered(selectedSessionId?: string): UnifiedSession[] | null {
-    return this.hasCoverage("exclude")
-      ? this.listSidebar(selectedSessionId)
+  listSidebarCovered(
+    selectedSessionId?: string,
+    principal?: AccessPrincipal,
+  ): UnifiedSession[] | null {
+    return this.hasCoverage("exclude") && this.personalCoverage(principal)
+      ? this.listSidebar(selectedSessionId, principal)
       : null;
   }
 

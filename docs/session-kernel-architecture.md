@@ -489,7 +489,14 @@ see deletions. A page is bounded by rows and by bytes: SQLite takes at most
 of keys and values, but always returns the first row, so a page is never
 empty while rows remain and costs O(limit) however large the namespace. Callers therefore
 continue from the last key until they receive an empty page; a short page
-does not mean the end. `get_many` answers a bounded key set in one indexed
+does not mean the end. `page_live` is `page` without tombstones: its inner query is pinned to the
+partial index `idx_skcd_live` (`(namespace, key) WHERE value IS NOT NULL`,
+created idempotently on every open, no schema version of its own), so a
+live page costs O(limit) live keys however many deletions the namespace has
+accumulated, where the unpinned form would walk the covering primary key
+through every tombstone. Projections that only need what currently exists
+(the private run journal, `personal-run-journal.ts`) hydrate with it; importers
+and cache rebuilds keep `page`. `get_many` answers a bounded key set in one indexed
 `IN` lookup, omitting missing keys and keeping tombstones, so a list-shaped
 lookup (sidebar workspace audiences) is one actor request instead of one per
 key. Because a trimmed answer would read as missing keys, `get_many` refuses

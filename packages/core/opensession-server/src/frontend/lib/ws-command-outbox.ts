@@ -1,3 +1,8 @@
+import {
+  captureClientDataScope,
+  isCurrentClientDataScope,
+  type ClientDataScope,
+} from "./client-data-scope";
 import { z } from "zod";
 import type { WSClientMessage } from "./types";
 
@@ -187,11 +192,13 @@ type Tombstone = z.infer<typeof retiredRecordSchema>;
 
 /** Why a command could not be saved. `full` is our own byte budget; `blocked`
  * is the browser refusing the write (origin quota, private mode, corruption). */
-export type PutFailure = "unavailable" | "full" | "blocked";
+export type PutFailure = "identity" | "unavailable" | "full" | "blocked";
 export type PutResult = { ok: true } | { ok: false; reason: PutFailure };
 
 export function describePutFailure(reason: PutFailure): string {
   switch (reason) {
+    case "identity":
+      return "Your account changed. Sign in again before sending.";
     case "unavailable":
       return "This browser has no local storage, so the command cannot be saved for reconnect.";
     case "full":
@@ -233,7 +240,9 @@ export class WsCommandOutbox {
     private readonly store: StorageLike | undefined = storage(),
     private readonly now = () => Date.now(),
     private readonly keyPrefix = `${KEY_PREFIX}:local:anonymous`,
+    private readonly isCurrent = () => true,
   ) {
+    if (!this.isCurrent()) return;
     this.migrateAggregate();
     this.prune();
   }
@@ -244,6 +253,7 @@ export class WsCommandOutbox {
 
   tryPut(message: WSClientMessage): PutResult {
     const id = requestId(message);
+    if (!this.isCurrent()) return { ok: false, reason: "identity" };
     if (!this.store) return { ok: false, reason: "unavailable" };
     if (!id || message.type === "command_ack")
       return { ok: false, reason: "blocked" };
@@ -278,6 +288,7 @@ export class WsCommandOutbox {
   ack(id: string, sessionId: string): boolean {
     if (
       !this.store ||
+      !this.isCurrent() ||
       !this.allItems().some((item) => item.message.requestId === id)
     )
       return false;
@@ -294,7 +305,7 @@ export class WsCommandOutbox {
 
   /** Old servers have no receipt/ack protocol, so one successful send retires. */
   retireLegacy(id: string): boolean {
-    if (!this.store) return false;
+    if (!this.store || !this.isCurrent()) return false;
     const existed = this.allItems().some(
       (item) => item.message.requestId === id,
     );
@@ -311,7 +322,11 @@ export class WsCommandOutbox {
   }
 
   confirmAck(id: string): boolean {
-    if (!this.store || !this.read(this.ackKey(id), ackMessageSchema))
+    if (
+      !this.isCurrent() ||
+      !this.store ||
+      !this.read(this.ackKey(id), ackMessageSchema)
+    )
       return false;
     if (
       this.isLegacyId(id) &&
@@ -349,7 +364,11 @@ export class WsCommandOutbox {
 
   /** Explicit recovery escape hatch. The tombstone prevents a stale tab write. */
   forget(id: string): boolean {
-    if (!this.store || !this.write(this.retiredKey(id), this.tombstone(id)))
+    if (
+      !this.isCurrent() ||
+      !this.store ||
+      !this.write(this.retiredKey(id), this.tombstone(id))
+    )
       return false;
     try {
       this.store.removeItem(this.itemKey(id));
@@ -360,37 +379,9 @@ export class WsCommandOutbox {
     return !this.allItems().some((item) => item.message.requestId === id);
   }
 
-  /** Move the previously shipped user key into this verified scope. */
-  adoptLegacyPrefix(oldPrefix: string): void {
-    if (!this.store || oldPrefix === this.keyPrefix) return;
-    const marker = `${oldPrefix}:migration-scope`;
-    const bound = this.store.getItem(marker);
-    if (bound && bound !== this.keyPrefix) return;
-    const copies: Array<[string, string, string]> = [];
-    for (let index = 0; index < this.store.length; index++) {
-      const key = this.store.key(index);
-      if (
-        !key ||
-        key === marker ||
-        (key !== oldPrefix && !key.startsWith(`${oldPrefix}:`))
-      )
-        continue;
-      const suffix = key.slice(oldPrefix.length);
-      const value = this.store.getItem(key);
-      if (value != null)
-        copies.push([`${this.keyPrefix}${suffix}`, value, key]);
-    }
-    try {
-      this.store.setItem(marker, this.keyPrefix);
-      if (this.store.getItem(marker) !== this.keyPrefix) return;
-      for (const [key, value] of copies) {
-        if (this.store.getItem(key) == null) this.store.setItem(key, value);
-        if (this.store.getItem(key) !== value) return;
-      }
-      this.migrateAggregate();
-      for (const [, , source] of copies) this.store.removeItem(source);
-    } catch {}
-  }
+  /** Legacy records have no verified-principal provenance, even when their
+   * display name happens to be decimal. Preserve them in place for recovery. */
+  adoptLegacyPrefix(_oldPrefix: string): void {}
 
   private allItems(): StoredItem[] {
     const retired = new Set(
@@ -419,7 +410,7 @@ export class WsCommandOutbox {
   /** Drop expired pending items and tombstones. Best effort: a failed removal
    * is invisible because allItems() already filters by age. */
   private prune(): void {
-    if (!this.store) return;
+    if (!this.store || !this.isCurrent()) return;
     const now = this.now();
     const stale: string[] = [];
     for (const key of this.keys(":item:")) {
@@ -442,7 +433,7 @@ export class WsCommandOutbox {
   }
 
   private keys(kind: ":item:" | ":retired:" | ":legacy:"): string[] {
-    if (!this.store) return [];
+    if (!this.store || !this.isCurrent()) return [];
     const prefix = `${this.keyPrefix}${kind}`;
     const found: string[] = [];
     for (let index = 0; index < this.store.length; index++) {
@@ -464,7 +455,7 @@ export class WsCommandOutbox {
   }
 
   private migrateAggregate(): void {
-    if (!this.store) return;
+    if (!this.store || !this.isCurrent()) return;
     const raw = this.store.getItem(this.keyPrefix);
     if (!raw) return;
     try {
@@ -497,7 +488,7 @@ export class WsCommandOutbox {
     kind: ":item:" | ":ack:" | ":retired:",
     schema: z.ZodType<T>,
   ): T[] {
-    if (!this.store) return [];
+    if (!this.store || !this.isCurrent()) return [];
     const prefix = `${this.keyPrefix}${kind}`;
     const records: T[] = [];
     for (let index = 0; index < this.store.length; index++) {
@@ -533,6 +524,7 @@ export class WsCommandOutbox {
   }
 
   private read<T>(key: string, schema: z.ZodType<T>): T | undefined {
+    if (!this.isCurrent()) return undefined;
     try {
       const raw = this.store?.getItem(key);
       if (!raw) return undefined;
@@ -544,7 +536,7 @@ export class WsCommandOutbox {
   }
 
   private write(key: string, value: JsonValue): boolean {
-    if (!this.store) return false;
+    if (!this.store || !this.isCurrent()) return false;
     try {
       this.store.setItem(key, JSON.stringify(value));
       return this.store.getItem(key) === JSON.stringify(value);
@@ -554,41 +546,60 @@ export class WsCommandOutbox {
   }
 }
 
-const scopedOutboxes = new Map<string, WsCommandOutbox>();
-
+let scopedOutbox:
+  | { scope: ClientDataScope; outbox: WsCommandOutbox }
+  | undefined;
 export function normalizeCommandScope(scope: string): string {
-  const normalized = scope.trim().toLowerCase();
-  return normalized ? encodeURIComponent(normalized) : "local%3Aanonymous";
+  return encodeURIComponent(scope.trim().toLowerCase());
 }
-
 export function localCommandScope(): string {
-  try {
-    return `local:${globalThis.localStorage?.getItem("opensession-user") || "anonymous"}`;
-  } catch {
-    return "local:anonymous";
+  const scope = captureClientDataScope();
+  return scope && scope.key !== "shared:legacy" ? scope.key : "unresolved";
+}
+export function wsCommandOutboxForScope(scope: string): WsCommandOutbox {
+  const captured = captureClientDataScope();
+  const permitted =
+    captured && captured.key !== "shared:legacy" && scope === captured.key;
+  if (!permitted)
+    return new WsCommandOutbox(undefined, Date.now, "unresolved", () => false);
+  if (scopedOutbox?.scope !== captured) {
+    scopedOutbox = {
+      scope: captured,
+      outbox: new WsCommandOutbox(
+        storage(),
+        Date.now,
+        `opensession-ws-command-outbox:v2:${normalizeCommandScope(scope)}`,
+        () => isCurrentClientDataScope(captured),
+      ),
+    };
   }
+  return scopedOutbox.outbox;
 }
 
-export function wsCommandOutboxForScope(scope: string): WsCommandOutbox {
-  const normalized = normalizeCommandScope(scope);
-  let outbox = scopedOutboxes.get(normalized);
-  if (!outbox) {
-    outbox = new WsCommandOutbox(
-      storage(),
-      () => Date.now(),
-      `${KEY_PREFIX}:${normalized}`,
-    );
-    const priorScoped = scope
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9:._-]/g, "_");
-    outbox.adoptLegacyPrefix(`${KEY_PREFIX}:${priorScoped}`);
-    try {
-      const legacyUser =
-        globalThis.localStorage?.getItem("opensession-user") || "anonymous";
-      outbox.adoptLegacyPrefix(`${KEY_PREFIX}:${legacyUser.toLowerCase()}`);
-    } catch {}
-    scopedOutboxes.set(normalized, outbox);
-  }
-  return outbox;
+/** A fresh, nonpersistent receipt set for ONE live legacy socket. The caller
+ * must require that exact socket to be ready, discard this instance on close,
+ * and report uncertainty instead of replaying on a replacement connection. */
+export function createEphemeralCommandOutbox(
+  isCurrentConnection: () => boolean,
+): WsCommandOutbox {
+  const values = new Map<string, string>();
+  const store: StorageLike = {
+    get length() {
+      return values.size;
+    },
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => {
+      values.set(key, value);
+    },
+    removeItem: (key) => {
+      values.delete(key);
+    },
+    key: (index) => [...values.keys()][index] ?? null,
+  };
+  return new WsCommandOutbox(
+    store,
+    Date.now,
+    "ephemeral-connection",
+    isCurrentConnection,
+  );
 }

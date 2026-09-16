@@ -22,7 +22,7 @@ import {
   updateWorkspace,
   type Workspace,
 } from "./workspaces";
-import { getCachedSessions, updateSessionFile } from "./session-cache";
+import { getCachedSessionsAsync, updateSessionFile } from "./session-cache";
 import { getOpenPrs, getRecentPrs } from "./sessions";
 import { workspaceOwningWorktree } from "./session-repos";
 import { getRepo, listWorktrees } from "./worktree";
@@ -94,11 +94,11 @@ async function repairPrWorkspaceName(
  * workspace yet (serialized field-scoped writes — a concurrent filing wins;
  * see the transcript-v2 §6 note in session-cache). Best-effort, never throws.
  */
-function adoptSiblingSessions(
+async function adoptSiblingSessions(
   workspaceId: string,
   predicate: (s: UnifiedSession) => boolean,
-): void {
-  for (const s of getCachedSessions()) {
+): Promise<void> {
+  for (const s of await getCachedSessionsAsync()) {
     if (!isNativeSessionId(s.id) || s.workspaceId || s.archived) continue;
     if (!predicate(s)) continue;
     void updateSessionFile(s.id, (data) =>
@@ -227,20 +227,20 @@ export async function resolvePrWorkspace(input: {
           branch,
           title,
         );
-        adoptSiblingSessions(named.id, matches);
+        await adoptSiblingSessions(named.id, matches);
         return { workspace: named, created: false, pr };
       }
 
       // 2. A session already carrying this PR that's filed under a workspace.
       if (branch) {
         for (const s of newestFirst(
-          getCachedSessions().filter((x) => !x.archived),
+          (await getCachedSessionsAsync()).filter((x) => !x.archived),
         )) {
           if (!s.workspaceId || !matches(s)) continue;
           const ws = await getWorkspace(s.workspaceId);
           if (!ws) continue;
           const stamped = (await stampWorkspaceIdentity(ws.id, stamp)) || ws;
-          adoptSiblingSessions(stamped.id, matches);
+          await adoptSiblingSessions(stamped.id, matches);
           return { workspace: stamped, created: false, pr };
         }
         // 3. A workspace owning the PR head branch's worktree.
@@ -251,7 +251,7 @@ export async function resolvePrWorkspace(input: {
         if (owner) {
           const stamped =
             (await stampWorkspaceIdentity(owner.id, stamp)) || owner;
-          adoptSiblingSessions(stamped.id, matches);
+          await adoptSiblingSessions(stamped.id, matches);
           return { workspace: stamped, created: false, pr };
         }
       }
@@ -266,7 +266,7 @@ export async function resolvePrWorkspace(input: {
         ...(number !== undefined ? { prNumber: number } : {}),
         ...(branch ? { branch } : {}),
       });
-      adoptSiblingSessions(workspace.id, matches);
+      await adoptSiblingSessions(workspace.id, matches);
       return { workspace, created: true, pr };
     },
   );
@@ -289,13 +289,13 @@ export async function resolvePlainWorkspace(input: {
 
   const byKey = await findWorkspaceByKey(key);
   if (byKey) {
-    adoptSiblingSessions(byKey.id, matches);
+    await adoptSiblingSessions(byKey.id, matches);
     return { workspace: byKey, created: false };
   }
 
   // A session already triaging this thread that's filed under a workspace
   // (prefer live sessions, newest first — matches resolvePlainTriageSession).
-  const all = getCachedSessions().filter(matches);
+  const all = (await getCachedSessionsAsync()).filter(matches);
   for (const s of newestFirst([
     ...all.filter((x) => !x.archived),
     ...all.filter((x) => x.archived),
@@ -306,7 +306,7 @@ export async function resolvePlainWorkspace(input: {
     const stamped =
       (await stampWorkspaceIdentity(ws.id, { key, plainThreadId: threadId })) ||
       ws;
-    adoptSiblingSessions(stamped.id, matches);
+    await adoptSiblingSessions(stamped.id, matches);
     return { workspace: stamped, created: false };
   }
 
@@ -317,7 +317,7 @@ export async function resolvePlainWorkspace(input: {
     key,
     plainThreadId: threadId,
   });
-  adoptSiblingSessions(workspace.id, matches);
+  await adoptSiblingSessions(workspace.id, matches);
   return { workspace, created: true };
 }
 
@@ -338,11 +338,11 @@ export async function resolveExternalWorkspace(input: {
 
   const byKey = await findWorkspaceByKey(key);
   if (byKey) {
-    adoptSiblingSessions(byKey.id, matches);
+    await adoptSiblingSessions(byKey.id, matches);
     return { workspace: byKey, created: false };
   }
 
-  const all = getCachedSessions().filter(matches);
+  const all = (await getCachedSessionsAsync()).filter(matches);
   for (const s of newestFirst([
     ...all.filter((x) => !x.archived),
     ...all.filter((x) => x.archived),
@@ -352,7 +352,7 @@ export async function resolveExternalWorkspace(input: {
     if (!ws) continue;
     const stamped =
       (await stampWorkspaceIdentity(ws.id, { key, externalRef: ref })) || ws;
-    adoptSiblingSessions(stamped.id, matches);
+    await adoptSiblingSessions(stamped.id, matches);
     return { workspace: stamped, created: false };
   }
 
@@ -364,6 +364,6 @@ export async function resolveExternalWorkspace(input: {
     key,
     externalRefs: [ref],
   });
-  adoptSiblingSessions(workspace.id, matches);
+  await adoptSiblingSessions(workspace.id, matches);
   return { workspace, created: true };
 }

@@ -317,6 +317,47 @@ async function resolveTarget(
   return hostShellTarget(session);
 }
 
+/** Reserve at message arrival, before any authorization or target lookup. */
+export function beginTerminalStart(
+  ws: unknown,
+  termId: string,
+  opts: TerminalOpts,
+): object | undefined {
+  stopTerminal(ws, termId); // one shell per (socket, termId)
+  const open = (terms.get(ws)?.size ?? 0) + (pendingStarts.get(ws)?.size ?? 0);
+  if (open >= MAX_TERMINALS_PER_SOCKET) {
+    opts.send({
+      type: "term_notice",
+      message: `too many open shells (${MAX_TERMINALS_PER_SOCKET}) — close one first`,
+    });
+    opts.send({ type: "term_exit", code: 1 });
+    return undefined;
+  }
+  const token = {};
+  {
+    let pend = pendingStarts.get(ws);
+    if (!pend) pendingStarts.set(ws, (pend = new Map()));
+    pend.set(termId, token);
+  }
+  return token;
+}
+
+export function isTerminalStartCurrent(
+  ws: unknown,
+  termId: string,
+  token: object,
+): boolean {
+  return pendingStarts.get(ws)?.get(termId) === token;
+}
+
+export function discardTerminalStart(
+  ws: unknown,
+  termId: string,
+  token: object,
+): void {
+  if (isTerminalStartCurrent(ws, termId, token)) deletePending(ws, termId);
+}
+
 /**
  * Session-aware terminal start (the term_start WS handler's entry): resolves
  * the target (host / Docker / Daytona / Box) and connects the shell
@@ -327,24 +368,15 @@ async function resolveTarget(
 export async function startSessionTerminal(
   ws: unknown,
   termId: string,
-  session: TerminalSessionInfo | null | undefined,
+  session: TerminalSessionInfo,
   opts: TerminalOpts,
+  token: object,
 ): Promise<void> {
-  stopTerminal(ws, termId); // one shell per (socket, termId)
-  const open = (terms.get(ws)?.size ?? 0) + (pendingStarts.get(ws)?.size ?? 0);
-  if (open >= MAX_TERMINALS_PER_SOCKET) {
-    opts.send({
-      type: "term_notice",
-      message: `too many open shells (${MAX_TERMINALS_PER_SOCKET}) — close one first`,
-    });
-    opts.send({ type: "term_exit", code: 1 });
-    return;
-  }
-  const token = {};
-  {
-    let pend = pendingStarts.get(ws);
-    if (!pend) pendingStarts.set(ws, (pend = new Map()));
-    pend.set(termId, token);
+  if (!isTerminalStartCurrent(ws, termId, token)) return;
+  // Defense in depth for untyped callers: never resolve a missing session to HOME.
+  if (!session) {
+    discardTerminalStart(ws, termId, token);
+    throw new Error("Session not found");
   }
   // A silent hang here (e.g. a sandbox wake that never returns) used to leave
   // the tab dead with zero feedback — say what we're waiting on. NOTE: in a
@@ -352,6 +384,7 @@ export async function startSessionTerminal(
   // this notice can't fire either; the tripwire is the real alarm there.
   const slow = setTimeout(() => {
     try {
+      if (!isTerminalStartCurrent(ws, termId, token)) return;
       opts.send({
         type: "term_notice",
         message:
@@ -363,12 +396,17 @@ export async function startSessionTerminal(
   let target: TermTarget;
   try {
     target = await resolveTarget(session);
+    if (!isTerminalStartCurrent(ws, termId, token)) {
+      if (target.kind === "spawn") target.dispose?.();
+      return;
+    }
 
     if (target.kind === "remote") {
       try {
         await connectRemote(ws, termId, token, target, opts);
         return;
       } catch (e: any) {
+        if (!isTerminalStartCurrent(ws, termId, token)) return;
         if (target.target === "runner") {
           deletePending(ws, termId);
           opts.send({
@@ -403,8 +441,8 @@ export async function startSessionTerminal(
     } catch {}
     return;
   }
-  deletePending(ws, termId);
   spawnPty(ws, termId, target, opts);
+  discardTerminalStart(ws, termId, token);
 }
 
 /** Connect a provider-managed remote PTY (daytona) and register it. */
@@ -425,6 +463,11 @@ async function connectRemote(
     cols: clampCols(opts.cols),
     rows: clampRows(opts.rows),
     onData: (chunk) => {
+      if (
+        !isTerminalStartCurrent(ws, termId, token) &&
+        terms.get(ws)?.get(termId) !== entry
+      )
+        return;
       opts.send({
         type: "term_data",
         data: Buffer.from(chunk).toString("base64"),
@@ -470,6 +513,7 @@ function spawnPty(
       cols: clampCols(opts.cols),
       rows: clampRows(opts.rows),
       data: (_term: unknown, chunk: Uint8Array) => {
+        if (terms.get(ws)?.get(termId) !== entry) return;
         opts.send({
           type: "term_data",
           data: Buffer.from(chunk).toString("base64"),

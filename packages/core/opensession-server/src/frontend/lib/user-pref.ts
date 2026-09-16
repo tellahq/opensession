@@ -1,3 +1,7 @@
+import {
+  captureClientDataScope,
+  isCurrentClientDataScope,
+} from "./client-data-scope";
 // Factory for per-user UI preferences that follow you across devices. Each
 // preference is stored server-side in the per-user ui-prefs map, with a
 // localStorage copy as the synchronous cache: reads stay sync (right on first
@@ -27,6 +31,7 @@ export interface UserPref<T> {
 export function makeUserPref<T>(opts: {
   /** localStorage key for the synchronous cache. */
   localKey: string;
+  localOnlyIdentity?: boolean;
   /** Key inside the server-side ui-prefs map. */
   prefKey: string;
   /** Window event dispatched whenever the value changes. */
@@ -40,6 +45,11 @@ export function makeUserPref<T>(opts: {
   const { localKey, prefKey, changeEvent, defaultValue, decode, encode } = opts;
 
   function get(): T {
+    if (
+      opts.localOnlyIdentity &&
+      captureClientDataScope()?.key !== "shared:local"
+    )
+      return defaultValue;
     return decode(localStorage.getItem(localKey)) ?? defaultValue;
   }
 
@@ -54,6 +64,11 @@ export function makeUserPref<T>(opts: {
   let writeStamp = 0;
 
   function set(value: T) {
+    if (
+      opts.localOnlyIdentity &&
+      captureClientDataScope()?.key !== "shared:local"
+    )
+      return;
     writeStamp++;
     writeLocal(value);
     window.dispatchEvent(new Event(changeEvent));
@@ -69,6 +84,8 @@ export function makeUserPref<T>(opts: {
   // localStorage-only era) pushes that value up instead, so nobody's setting
   // is lost by the migration.
   async function hydrate(user: string) {
+    const scope = captureClientDataScope();
+    if (opts.localOnlyIdentity && scope?.key !== "shared:local") return;
     const stampAtStart = writeStamp;
     let prefs: Record<string, string>;
     try {
@@ -76,6 +93,7 @@ export function makeUserPref<T>(opts: {
     } catch {
       return; // offline/error: keep the local cache
     }
+    if (!isCurrentClientDataScope(scope)) return;
     if (writeStamp !== stampAtStart) return; // user changed it mid-fetch
     const server = decode(prefs[prefKey]);
     if (server !== null) {

@@ -1,3 +1,7 @@
+import {
+  clientDataStorageKey,
+  subscribeClientDataScope,
+} from "./client-data-scope";
 /**
  * The registered repositories as of the last `/api/repos` answer, remembered
  * across loads.
@@ -61,10 +65,12 @@ let cached: CachedRepoList | null | undefined;
 let live = false;
 
 function read(): CachedRepoList | null {
+  const key = clientDataStorageKey(KEY);
+  if (!key) return null;
   if (cached !== undefined) return cached;
   cached = null;
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(key);
     const parsed = raw ? cachedRepoListSchema.safeParse(JSON.parse(raw)) : null;
     if (parsed?.success) {
       cached = {
@@ -97,11 +103,18 @@ export function cachedNewSessionRepo(): string {
 
 /** Record a fresh `/repos` answer (called as the list lands). */
 export function rememberRepos(repos: RepoInfo[], newSessionRepo: string): void {
+  const key = clientDataStorageKey(KEY);
+  if (!key) return;
   live = true;
   cached = { repos, newSessionRepo: concreteDefault(repos, newSessionRepo) };
   try {
-    localStorage.setItem(KEY, JSON.stringify(cached));
+    localStorage.setItem(key, JSON.stringify(cached));
   } catch {
     // A browser with storage blocked still gets the in-memory list.
   }
 }
+
+subscribeClientDataScope(() => {
+  cached = undefined;
+  live = false;
+});

@@ -1,4 +1,25 @@
-import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { suspendPrivateDocument } from "../lib/suspend-private-document";
+import {
+  beginClientLogout,
+  captureAuthProbeEpoch,
+  isCurrentAuthProbeEpoch,
+  LOGOUT_STARTED_EVENT,
+  LOGOUT_FAILED_EVENT,
+} from "../lib/auth-probe-lifetime";
+import {
+  captureClientDataScope,
+  clientAuthStatusSchema,
+  publishClientDataIdentity,
+  subscribeClientDataScope,
+} from "../lib/client-data-scope";
+import React, {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import { BrandMark } from "./BrandMark";
 import { UserAvatar } from "./UserAvatar";
 import { IconArrowUpRight } from "./icons";
@@ -68,6 +89,7 @@ export function useCurrentUser(): string {
 }
 
 export interface AuthStatus {
+  githubAccountId?: number;
   required: boolean;
   authenticated: boolean;
   admin?: boolean;
@@ -91,7 +113,19 @@ export interface AuthStatus {
 // instead of re-fetching.
 let authStatusCache: AuthStatus | null = null;
 
+const AUTH_EPOCH_KEY = "opensession-auth-epoch";
+function broadcastAuthChange() {
+  try {
+    localStorage.setItem(AUTH_EPOCH_KEY, crypto.randomUUID());
+  } catch {
+    /* Storage may be disabled. Focus/visibility still reverify. */
+  }
+}
 function setAuthStatusCache(status: AuthStatus) {
+  if (captureAuthProbeEpoch() === null) return;
+  const previous = captureClientDataScope();
+  publishClientDataIdentity(status);
+  if (previous && previous !== captureClientDataScope()) broadcastAuthChange();
   authStatusCache = status;
   window.dispatchEvent(new Event(AUTH_STATUS_EVENT));
 }
@@ -118,10 +152,22 @@ export function useAuthStatus(): AuthStatus | null {
 
 /** Sign out of the GitHub web session and return to the sign-in screen. */
 export async function signOut(): Promise<void> {
-  await (async () => {
-    await fetch(`${BASE_PATH}/api/auth/logout`, { method: "POST" });
-  })().catch(async () => {});
-  window.location.reload();
+  beginClientLogout();
+  window.dispatchEvent(new Event(LOGOUT_STARTED_EVENT));
+  publishClientDataIdentity(null);
+  authStatusCache = null;
+  window.dispatchEvent(new Event(AUTH_STATUS_EVENT));
+  broadcastAuthChange();
+  try {
+    const response = await fetch(`${BASE_PATH}/api/auth/logout`, {
+      method: "POST",
+    });
+    if (!response.ok) throw new Error("Sign-out failed");
+    window.location.reload();
+  } catch {
+    // Keep the logout fence closed even if the old cookie still exists.
+    window.dispatchEvent(new Event(LOGOUT_FAILED_EVENT));
+  }
 }
 
 /**
@@ -242,15 +288,39 @@ export function UserGate({ children }: { children: React.ReactNode }) {
   TEAM.splice(0, TEAM.length, ...roster.map(({ name }) => name));
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [authFailed, setAuthFailed] = useState(false);
+  const [logoutState, setLogoutState] = useState<"pending" | "failed" | null>(
+    null,
+  );
+  const authRequest = useRef(0);
+  const curtainRef = useRef<HTMLDivElement | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(false);
+  const scope = useSyncExternalStore(
+    subscribeClientDataScope,
+    captureClientDataScope,
+    () => null,
+  );
+  // All body-level portals join the suspension, not only the SPA subtree.
+  const hidePrivateRendering = checkingAuth && !!auth && !!scope;
+  useLayoutEffect(() => {
+    if (hidePrivateRendering && curtainRef.current)
+      return suspendPrivateDocument(curtainRef.current);
+  }, [hidePrivateRendering]);
   const loadAuth = () => {
+    const epoch = captureAuthProbeEpoch();
+    if (epoch === null) return;
+    const request = ++authRequest.current;
     setAuthFailed(false);
+    setCheckingAuth(true);
     fetch(`${BASE_PATH}/api/auth/status`)
       .then((r) => {
         if (!r.ok) throw new Error(`Authentication status failed: ${r.status}`);
         return r.json();
       })
-      .then(async (body: AuthStatus | null) => {
-        if (!body) throw new Error("Authentication status was empty");
+      .then(async (raw) => {
+        if (request !== authRequest.current || !isCurrentAuthProbeEpoch(epoch))
+          return;
+        const body = clientAuthStatusSchema.parse(raw);
+        publishClientDataIdentity(body);
         if (body.required && body.authenticated && body.name) {
           const user = body.name.split(" ")[0];
           setStoredUser(user);
@@ -266,16 +336,83 @@ export function UserGate({ children }: { children: React.ReactNode }) {
           if (people.length <= 1)
             setStoredUser(people[0]?.name ?? "Local User");
         }
+        if (request !== authRequest.current || !isCurrentAuthProbeEpoch(epoch))
+          return;
         setAuth(body);
-        // Publish readiness after localStorage carries the verified or local
-        // name so deferred per-user stores hydrate the right account.
         setAuthStatusCache(body);
+        setCheckingAuth(false);
       })
-      .catch(() => setAuthFailed(true));
+      .catch(() => {
+        if (request !== authRequest.current || !isCurrentAuthProbeEpoch(epoch))
+          return;
+        // A failed routine probe is not evidence of an identity replacement.
+        // Keep mounted resources, but keep private rendering hidden until a
+        // successful probe. Confirmed logout/change invalidates separately.
+        setAuthFailed(true);
+      });
   };
 
   useEffect(() => {
+    const logoutFailed = () => setLogoutState("failed");
+    window.addEventListener(LOGOUT_FAILED_EVENT, logoutFailed);
+    const logoutStarted = () => {
+      setLogoutState("pending");
+      ++authRequest.current;
+      setAuth(null);
+      setCheckingAuth(false);
+    };
+    window.addEventListener(LOGOUT_STARTED_EVENT, logoutStarted);
+    const cancelAuthRequest = () => {
+      ++authRequest.current;
+    };
+    const recheck = () => loadAuth();
+    const offline = () => {
+      // Losing connectivity is not a new principal. Fence any earlier probe
+      // and suspend private rendering, retaining the mounted app and sockets.
+      ++authRequest.current;
+      setCheckingAuth(true);
+      setAuthFailed(true);
+    };
+    const principalChanged = () => {
+      publishClientDataIdentity(null);
+      setAuth(null);
+      authStatusCache = null;
+      window.dispatchEvent(new Event(AUTH_STATUS_EVENT));
+      loadAuth();
+    };
+    const storage = (event: StorageEvent) => {
+      if (
+        event.key === AUTH_EPOCH_KEY ||
+        event.key === "opensession-user" ||
+        event.key === "backstage-user" ||
+        event.key === null
+      )
+        principalChanged();
+    };
+    const visibility = () => {
+      if (document.visibilityState === "visible") recheck();
+    };
+    window.addEventListener("storage", storage);
+    window.addEventListener("focus", recheck);
+    window.addEventListener("online", recheck);
+    window.addEventListener("offline", offline);
+    window.addEventListener("opensession-principal-changed", principalChanged);
+    document.addEventListener("visibilitychange", visibility);
     loadAuth();
+    return () => {
+      cancelAuthRequest();
+      window.removeEventListener(LOGOUT_STARTED_EVENT, logoutStarted);
+      window.removeEventListener(LOGOUT_FAILED_EVENT, logoutFailed);
+      window.removeEventListener("storage", storage);
+      window.removeEventListener("focus", recheck);
+      window.removeEventListener("online", recheck);
+      window.removeEventListener("offline", offline);
+      window.removeEventListener(
+        "opensession-principal-changed",
+        principalChanged,
+      );
+      document.removeEventListener("visibilitychange", visibility);
+    };
   }, []);
 
   // A refused WebSocket upgrade can reveal the gate is up before this
@@ -284,12 +421,33 @@ export function UserGate({ children }: { children: React.ReactNode }) {
   // signal so the sign-in card, not a "reconnecting" overlay, stands in for a
   // browser the server will no longer accept.
   const liveAuth = useAuthStatus();
-  const signedIn = (status: AuthStatus) => {
-    if (returnToPortalAfterSignIn()) return;
-    setAuth(status);
-    setAuthStatusCache(status);
+  const signedIn = () => {
+    broadcastAuthChange();
+    publishClientDataIdentity(null);
+    setAuth(null);
+    // Device-flow success establishes the cookie; only fresh auth/status
+    // establishes the numeric client-data principal.
+    loadAuth();
   };
-  if (authGatesOut(liveAuth) && !(auth?.required && auth.authenticated)) {
+  if (logoutState)
+    return (
+      <AuthCard
+        title={logoutState === "failed" ? "Couldn't sign out" : "Signing out"}
+      >
+        {logoutState === "failed" && (
+          <>
+            <AuthCopy>
+              The server didn't confirm sign-out. Try again to finish signing
+              out.
+            </AuthCopy>
+            <Button variant="primary" size="lg" onClick={() => void signOut()}>
+              Try again
+            </Button>
+          </>
+        )}
+      </AuthCard>
+    );
+  if (authGatesOut(liveAuth)) {
     return (
       <GithubSignIn
         reconnect={liveAuth!.reconnectRequired === true}
@@ -299,12 +457,10 @@ export function UserGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Returning visitors already have a local identity. Let the app paint while
-  // the server verifies its HttpOnly session, as it did before this check grew
-  // a blocking loading screen. The server still enforces auth on every route.
-  if (!auth && !authFailed && user !== "Anonymous") return <>{children}</>;
+  // A remembered display name is not a verified identity. Never mount the
+  // application (including its hooks) while auth is unresolved or offline.
 
-  if (!auth) {
+  if (!auth || (!scope && auth.authenticated)) {
     if (authFailed) {
       return (
         <AuthCard title="Couldn't check sign-in">
@@ -331,8 +487,53 @@ export function UserGate({ children }: { children: React.ReactNode }) {
   // below is unreachable. The two are alternatives, never steps of one flow
   // (web-auth.ts: "Off (default): the UI keeps today's localStorage name
   // picker"), so nobody signing in with GitHub is ever asked to pick a name.
+  const privateChildren = (
+    <>
+      {children}
+      {hidePrivateRendering &&
+        createPortal(
+          <div
+            ref={curtainRef}
+            data-auth-probe-curtain=""
+            className="fixed inset-0 z-[9999] bg-surface"
+          >
+            <style>
+              {"[data-auth-suspended] { display: none !important; }"}
+            </style>
+            <AuthCard
+              title={authFailed ? "Couldn't check sign-in" : "Checking sign-in"}
+            >
+              {authFailed && (
+                <>
+                  <AuthCopy>
+                    The server didn't answer. Your content is hidden until
+                    sign-in is checked.
+                  </AuthCopy>
+                  <Button variant="primary" size="lg" onClick={loadAuth}>
+                    Try again
+                  </Button>
+                </>
+              )}
+            </AuthCard>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
   if (auth?.required) {
-    if (auth.authenticated) return <>{children}</>;
+    if (auth.authenticated && !auth.githubAccountId)
+      return (
+        <AuthCard title="Sign in again to continue">
+          <AuthCopy>
+            This browser's older sign-in needs a one-time update. Sign out, then
+            sign in with GitHub again.
+          </AuthCopy>
+          <Button variant="primary" size="lg" onClick={() => void signOut()}>
+            Sign out and sign in again
+          </Button>
+        </AuthCard>
+      );
+    if (auth.authenticated) return privateChildren;
     return (
       <GithubSignIn
         reconnect={auth.reconnectRequired === true}
@@ -342,7 +543,7 @@ export function UserGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (user !== "Anonymous") return <>{children}</>;
+  if (user !== "Anonymous") return privateChildren;
 
   // No sign-in configured with more than one rostered person. Fresh and
   // single-person instances are assigned above and skip this choice entirely.

@@ -1,3 +1,6 @@
+import { withSessionScopeFence } from "../session-scope-coverage";
+import { requestApplicationAccess } from "./context";
+import { sessionListResponseRevision } from "../session-list-response-revision";
 /**
  * Session listing, transcripts, transcript search/images, archive/title/status/review overrides, delete.
  *
@@ -373,7 +376,7 @@ async function sessionsListResponse(
     "Cache-Control": "private, no-cache",
     "Content-Type": "application/json; charset=utf-8",
     ETag: etag,
-    Vary: "Accept-Encoding",
+    Vary: "Accept-Encoding, Cookie, Authorization",
   });
   if (gzip) headers.set("Content-Encoding", "gzip");
   if (req.headers.get("If-None-Match") === etag)
@@ -1173,106 +1176,100 @@ export async function handleSessionsRoutes(
   // screen of every TestFlight build already in the wild. Clients opt in as
   // they learn to fetch the index and hydrate what they open.
   if (path === "/api/sessions" && req.method === "GET") {
+    const access = requestApplicationAccess(ctx);
     const variant = sessionsVariant(url.searchParams);
     const sidebarScope = parseSidebarSessionScope(
       url.searchParams,
       requestUser(ctx, url.searchParams.get("user")),
     );
-    if (variant === "exclude" && sidebarScope) {
-      const key = sidebarSessionScopeKey(sidebarScope);
-      const cached = sessionsResponseSnapshots.get(key);
-      return await sessionsListResponse(
-        req,
-        cached && cached.expiresAt > Date.now()
-          ? cached
-          : await refreshSidebarSessionsResponse(sidebarScope),
-      );
-    }
-    // `?workspace=<id>` narrows an archived slice to one workspace's group,
-    // which is what the tab strip's history menu needs: a few rows instead
-    // of the whole index (1,984 KB and growing on this instance), fetched
-    // per workspace someone opens. Answered before the shared snapshot
-    // cache and never stored in it: that cache exists to amortize a
-    // MB-scale stringify across every poller, while a scoped body is a
-    // cheap filter over the already-cached session list, and keying it per
-    // workspace would grow an entry per workspace forever.
-    const scope = archivedScope(url.searchParams, variant);
-    if (scope) {
-      const indexed = scope.workspaceId
-        ? await indexedWorkspaceSessions(scope.workspaceId, scope.worktreeDir)
-        : null;
-      const selected =
-        indexed ??
-        (await getCachedSessionsAsync("only")).filter((session) =>
-          inWorkspaceGroup(session, scope),
-        );
-      const signals = await sessionListRuntimeSignals();
-      const context = sessionEnrichmentContext();
-      const rows = selected.map((session) =>
-        enrichSession(session, signals, context, "row"),
-      );
-      shareWorkspacePrRefs(rows);
-      const text = JSON.stringify(
-        variant === "only-slim"
-          ? rows.map(archivedIndexRow)
-          : rows.map(sessionListRow),
-      );
-      // Still ETagged, so a client polling its workspace settles into 304s.
-      return await sessionsListResponse(req, {
-        text,
-        hash: Bun.hash(text).toString(16),
-        expiresAt: 0,
+    const workspaceScope = archivedScope(url.searchParams, variant);
+    // Ownership/replica epoch and content revision partition every serialized
+    // response and in-flight build. A warm body/304 is not authorization.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const revision = sessionListResponseRevision();
+      const response = await withSessionScopeFence(async (fence) => {
+        const key = JSON.stringify([
+          "scoped",
+          access.audience,
+          fence,
+          revision,
+          variant,
+          sidebarScope,
+          workspaceScope,
+        ]);
+        let snapshot = sessionsResponseSnapshots.get(key);
+        if (!snapshot || snapshot.expiresAt <= Date.now()) {
+          let pending = sessionsResponseRefreshes.get(key);
+          if (!pending) {
+            if (sessionsResponseRefreshes.size >= 256)
+              throw new Error("Session response builds busy");
+            pending = (async () => {
+              const slice =
+                variant === "exclude"
+                  ? "exclude"
+                  : variant === "include"
+                    ? "include"
+                    : "only";
+              const indexed =
+                variant === "exclude"
+                  ? await indexedSidebarSessions(
+                      sidebarScope?.selectedSessionId,
+                      access.principal,
+                    )
+                  : await indexedSessions(slice, access.principal);
+              const source =
+                indexed ??
+                (await getCachedSessionsAsync(slice, access.principal));
+              const selected = workspaceScope
+                ? source.filter((row) => inWorkspaceGroup(row, workspaceScope))
+                : source;
+              const signals = await sessionListRuntimeSignals();
+              const enrichment = sessionEnrichmentContext();
+              let rows = selected.map((row) =>
+                enrichSession(row, signals, enrichment, "row"),
+              );
+              shareWorkspacePrRefs(rows);
+              if (variant === "exclude" && !indexed)
+                rows = sidebarLiveSessions(rows);
+              if (variant === "exclude" && sidebarScope) {
+                rows = scopeSessionsForSidebar(
+                  rows,
+                  sidebarScope,
+                  await loadSidebarSessionScopeContext(sidebarScope, rows),
+                );
+              }
+              const text = JSON.stringify(
+                variant === "only-slim"
+                  ? rows.map(archivedIndexRow)
+                  : rows.map(sessionListRow),
+              );
+              const built = {
+                text,
+                hash: Bun.hash(
+                  `${access.audience}:${fence.incarnation}:${fence.generation}:${fence.replica}:${text}`,
+                ).toString(16),
+                expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
+              };
+              while (sessionsResponseSnapshots.size >= 256) {
+                const oldest = sessionsResponseSnapshots.keys().next().value;
+                if (oldest === undefined) break;
+                sessionsResponseSnapshots.delete(oldest);
+              }
+              sessionsResponseSnapshots.set(key, built);
+              return built;
+            })().finally(() => sessionsResponseRefreshes.delete(key));
+            sessionsResponseRefreshes.set(key, pending);
+          }
+          snapshot = await pending;
+        }
+        // Gzip materialization is inside the authority fence too.
+        return sessionsListResponse(req, snapshot);
       });
+      if (revision === sessionListResponseRevision()) return response;
     }
-    const cached = sessionsResponseSnapshots.get(variant);
-    if (cached && cached.expiresAt > Date.now())
-      return await sessionsListResponse(req, cached);
-    if (cached && variant === "exclude") {
-      // Polling should never make the sidebar wait for a fresh scan of every
-      // source file. Keep handing out the last complete, bounded list while
-      // one shared refresh catches up. Cache invalidation marks this snapshot
-      // stale rather than deleting it for the same reason.
-      cached.expiresAt = Date.now() + SESSIONS_RESPONSE_TTL_MS;
-      if (!sessionsResponseRefreshes.has(variant)) {
-        setTimeout(() => {
-          void refreshSessionsResponse(variant).catch((error) =>
-            console.warn(
-              "[sessions] live-list background refresh failed:",
-              error,
-            ),
-          );
-        }, 250).unref?.();
-      }
-      return await sessionsListResponse(req, cached);
-    }
-
-    // A process restart loses the in-memory list but not the last complete
-    // response. Serve that once so the sidebar can paint, while the ordinary
-    // cache refresh catches up in the background. In-process invalidations do
-    // not reuse disk because readDiskLiveList is intentionally one-shot.
-    if (variant === "exclude" && !cached) {
-      const disk = readDiskLiveList();
-      if (disk) {
-        sessionsResponseSnapshots.set(variant, disk);
-        // Starting the cooperative scan still does some synchronous index
-        // setup before its first yield. Keep boot quiet long enough for the
-        // session, sidebar and workspace shell to finish their own requests;
-        // the persisted response keeps the list useful in the meantime.
-        setTimeout(() => {
-          void refreshSessionsResponse(variant).catch((error) =>
-            console.warn(
-              "[sessions] live-list background refresh failed:",
-              error,
-            ),
-          );
-        }, 30_000).unref?.();
-        return await sessionsListResponse(req, disk);
-      }
-    }
-
-    return await sessionsListResponse(
-      req,
-      await refreshSessionsResponse(variant),
+    return Response.json(
+      { error: "Session collection changed" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
     );
   }
 

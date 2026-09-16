@@ -179,12 +179,14 @@ export async function notifyConflictedPrSession(
     if (!control) return;
 
     let target = event.sessionRef
-      ? control.getSession(event.sessionRef)
+      ? await control.getSession(event.sessionRef)
       : undefined;
     if (target?.state === "archived") target = undefined;
     if (!target) {
       const { matchSessions } = await import("./session-notify");
-      target = [...matchSessions(control, event.repoId, event.branch)].sort(
+      target = [
+        ...(await matchSessions(control, event.repoId, event.branch)),
+      ].sort(
         (a, b) =>
           (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0),
       )[0];

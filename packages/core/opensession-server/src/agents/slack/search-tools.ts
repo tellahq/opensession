@@ -59,7 +59,7 @@ export function createSearchMcpServer() {
         limit?: number;
       }) => {
         try {
-          const hits = searchSessionHistory(args.query, {
+          const hits = await searchSessionHistory(args.query, {
             repo: args.repo,
             days: args.days,
             limit: args.limit,

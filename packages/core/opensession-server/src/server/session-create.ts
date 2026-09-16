@@ -1,3 +1,24 @@
+import { finalizeHostedRun } from "./host-run-lifetime";
+import { consumeOpeningRunEvents } from "./opening-run-events";
+import {
+  assertPersonalImagesAbsent,
+  assertPersonalAttachmentsAbsent,
+} from "./personal-image-admission";
+import {
+  samePersonalRepoBinding,
+  type PersonalRepoBinding,
+} from "./personal-repo-runtime";
+import { personalRepoRuntime } from "./personal-repo-runtime-default";
+import {
+  webSocketApplicationAccess,
+  withSessionExecutionAccess,
+} from "./application-access";
+import {
+  bindSessionPublication,
+  sessionPublicationAllowed,
+  sessionAudiencesReady,
+} from "./session-audience";
+import { verifyPersonalRunHostHelper } from "../executor/host-unit";
 /**
  * Session creation — the ONE create path shared by the web UI and the
  * opensession-sessions MCP (session-control-wiring.ts).
@@ -32,7 +53,7 @@ import {
 } from "./agent-runner";
 import {
   activeRunRecords,
-  journalClearIfLineage,
+  journalClearIfLineageAsync,
   journalRecordAbnormalCompletion,
 } from "./run-journal";
 import { makeAskHandler } from "./asks";
@@ -168,6 +189,7 @@ import {
   settleCreationFailed,
   settleCreationSucceeded,
   sessionKernel,
+  sessionMetadata,
   sessionRunStateSnapshot,
   sessionTurn,
   sessionTurnSnapshot,
@@ -199,7 +221,10 @@ import {
   markReplayedCommandResult,
   replayedSessionCreatedResult,
 } from "./command-replay";
-import { sessionIdForRequest } from "./session-request-id";
+import {
+  sessionIdForRequest,
+  canonicalCommandPayload,
+} from "./session-request-id";
 import { isClientSessionId } from "./paths";
 import {
   clearCreatePlan,
@@ -337,6 +362,7 @@ export function resolvePinnedAccountId(
  * between those paths lives in how they fill this in.
  */
 export interface ResolvedCreate {
+  personalRepo?: PersonalRepoBinding;
   id: string;
   /** Raw first-line title persisted immediately (replaced by the generated summary). */
   title: string;
@@ -451,6 +477,7 @@ export function openingCreateTrustPolicy(
   spec: Pick<
     ResolvedCreate,
     | "automationDescendantPolicy"
+    | "personalRepo"
     | "branch"
     | "runMcpServers"
     | "user"
@@ -468,10 +495,11 @@ export function openingCreateTrustPolicy(
   const policy = spec.automationDescendantPolicy;
   return {
     automation: !!policy,
-    mcpServers: policy ? [] : (spec.runMcpServers as McpScope),
+    mcpServers:
+      policy || spec.personalRepo ? [] : (spec.runMcpServers as McpScope),
     user: policy ? undefined : spec.user,
-    mcpGrantUser: policy ? undefined : spec.createdByLogin,
-    aws: !policy,
+    mcpGrantUser: policy || spec.personalRepo ? undefined : spec.createdByLogin,
+    aws: !policy && !spec.personalRepo,
     trustProfile: policy ? "automation" : "interactive",
     ...(policy
       ? {
@@ -632,6 +660,26 @@ export async function waitForCreatedSessionProjection(
   }
 }
 
+/** Private plans live in the actor. Never fall back to legacy files or perform
+ * synchronous legacy cleanup for a private/denied catalog identity. */
+async function isPrivateCreation(sessionId: string): Promise<boolean> {
+  const result = await sessionMetadata({ op: "catalog_read", sessionId });
+  return (
+    result.status === "denied" ||
+    (result.status === "found" &&
+      JSON.parse(result.record.doc).accessScope?.kind === "personal")
+  );
+}
+async function clearLegacyCreatePlan(sessionId: string): Promise<void> {
+  let personal: boolean;
+  try {
+    personal = await isPrivateCreation(sessionId);
+  } catch {
+    return;
+  } // Unknown authority retains evidence, never reads/deletes it.
+  if (!personal) clearCreatePlan(sessionId);
+}
+
 export async function actorCreationSetupPlan(
   sessionId: string,
   identity: string,
@@ -639,6 +687,7 @@ export async function actorCreationSetupPlan(
   const state = await ensureCreationPlanned(sessionId, identity);
   if (state.setupPlan || !["planned", "preparing"].includes(state.state))
     return (state.setupPlan ?? {}) as CreationSetupPlan;
+  if (await isPrivateCreation(sessionId)) return {};
   const legacy = readCreatePlan(sessionId, identity);
   if (!legacy) return {};
   return await patchCreationSetupPlan(sessionId, identity, {
@@ -669,6 +718,16 @@ function snapshotOpeningPlan(spec: ResolvedCreate): Record<string, unknown> {
 function createdSessionFileDefaults(spec: ResolvedCreate): NativeSessionFile {
   return {
     id: spec.id,
+    ...(spec.personalRepo
+      ? {
+          accessScope: {
+            kind: "personal" as const,
+            ownerGithubAccountId:
+              spec.personalRepo.descriptor.ownerGithubAccountId,
+          },
+          personalRepo: spec.personalRepo,
+        }
+      : {}),
     claudeSessionId: "",
     branch: spec.persistBranch,
     worktreeDir: spec.wtPath,
@@ -777,6 +836,35 @@ async function appendOpeningPromptLine(
 // Until the opening turn takes run admission the session is held busy, so a
 // prompt sent meanwhile queues instead of starting a turn in a worktree that
 // does not exist yet.
+export function mergeCreatedSessionDefaults(
+  spec: ResolvedCreate,
+  existing: Partial<NativeSessionFile>,
+): NativeSessionFile {
+  const defaults = createdSessionFileDefaults(spec);
+  if (!spec.personalRepo) return { ...defaults, ...existing };
+  if (
+    (existing.personalRepo &&
+      !samePersonalRepoBinding(spec.personalRepo, existing.personalRepo)) ||
+    (existing.accessScope &&
+      (existing.accessScope.kind !== "personal" ||
+        existing.accessScope.ownerGithubAccountId !==
+          spec.personalRepo.descriptor.ownerGithubAccountId)) ||
+    (existing.worktreeDir && existing.worktreeDir !== spec.wtPath) ||
+    (existing.repo && existing.repo !== spec.repoId)
+  )
+    throw new Error("Private creation metadata binding changed");
+  // The central reservation has empty checkout placeholders, not a prepared path.
+  return {
+    ...defaults,
+    ...existing,
+    accessScope: defaults.accessScope,
+    personalRepo: spec.personalRepo,
+    repo: spec.repoId,
+    branch: existing.branch || spec.persistBranch,
+    worktreeDir: spec.wtPath,
+  };
+}
+
 async function projectAcceptedCreate(
   spec: ResolvedCreate,
   openingPromptEntryId: string,
@@ -784,10 +872,9 @@ async function projectAcceptedCreate(
 ): Promise<void> {
   holdPendingOpening(spec.id);
   try {
-    await updateSessionFile(spec.id, (data) => ({
-      ...createdSessionFileDefaults(spec),
-      ...data,
-    }));
+    await updateSessionFile(spec.id, (data) =>
+      mergeCreatedSessionDefaults(spec, data),
+    );
     await appendOpeningPromptLine(spec, openingPromptEntryId);
   } catch (error) {
     releasePendingOpening(spec.id);
@@ -1031,11 +1118,16 @@ async function restorePlannedOpening(sessionId: string): Promise<{
     (creation?.setupPlan?.resolved as Record<string, unknown> | undefined);
   const legacyPlan = actorPlan
     ? undefined
-    : readCreatePlanForRecovery(sessionId);
+    : (await isPrivateCreation(sessionId))
+      ? undefined
+      : readCreatePlanForRecovery(sessionId);
   const openingPlan = actorPlan ?? legacyPlan?.resolved;
   const identity = actorPlan ? creation!.identity : legacyPlan?.identity;
   if (!openingPlan || !identity) return null;
   const restored = restoreResolvedCreate<ResolvedCreate>(openingPlan);
+  assertPersonalAttachmentsAbsent(restored);
+  if (!restored.personalRepo && (await isPrivateCreation(sessionId)))
+    throw new Error("Private recovery binding missing");
   let dispatch = promptDispatches.get(sessionId);
   if (
     !dispatch &&
@@ -1071,9 +1163,19 @@ async function restorePlannedOpening(sessionId: string): Promise<{
     dispatch = recoveredDispatch;
   }
   if (dispatch?.kind !== "create") return null;
-  const restoredGitEnv = githubCredentialForPrincipal(
-    restored.gitPrincipal,
-  )?.env;
+  if (
+    restored.personalRepo &&
+    (restored.gitPrincipal ||
+      restored.needsWorktree ||
+      restored.workspaceId ||
+      restored.attachRepos ||
+      restored.runnerTarget ||
+      restored.sandboxProvider)
+  )
+    throw new Error("Unsupported private recovery configuration");
+  const restoredGitEnv = restored.personalRepo
+    ? undefined
+    : githubCredentialForPrincipal(restored.gitPrincipal)?.env;
   if (
     typeof restored.wtPath !== "string" ||
     typeof restored.branch !== "string" ||
@@ -1169,7 +1271,7 @@ export async function settleStoppedCreationOpening(
     item.sessionId,
     item.payload.openingPromptEntryId,
   );
-  clearCreatePlan(item.sessionId);
+  await clearLegacyCreatePlan(item.sessionId);
   return true;
 }
 
@@ -1192,7 +1294,7 @@ export async function executeCreationOpeningEffect(
       item.payload.openingPromptEntryId,
     );
     if (state.state === "ready" || state.state === "cancelled")
-      clearCreatePlan(item.sessionId);
+      await clearLegacyCreatePlan(item.sessionId);
     return;
   }
   if (await settleStoppedCreationOpening(item)) return;
@@ -1228,7 +1330,7 @@ export async function executeCreationOpeningEffect(
       item.sessionId,
       item.payload.openingPromptEntryId,
     );
-    journalClearIfLineage(openingJournal);
+    await journalClearIfLineageAsync(openingJournal);
     return;
   }
   const localRecovery =
@@ -1250,7 +1352,7 @@ export async function executeCreationOpeningEffect(
           item.payload.openingPromptEntryId,
         );
         if (recovered.state === "ready" || recovered.state === "cancelled")
-          clearCreatePlan(item.sessionId);
+          await clearLegacyCreatePlan(item.sessionId);
         return;
       }
       if (await settleStoppedCreationOpening(item)) return;
@@ -1319,7 +1421,8 @@ export async function executeCreationOpeningEffect(
             item.sessionId,
             item.payload.openingPromptEntryId,
           );
-          if (run.state !== "failed") clearCreatePlan(item.sessionId);
+          if (run.state !== "failed")
+            await clearLegacyCreatePlan(item.sessionId);
           return;
         }
       }
@@ -1353,7 +1456,7 @@ export async function executeCreationOpeningEffect(
   );
   const settled = await sessionKernel(item.sessionId).creationState();
   if (settled?.state === "ready" || settled?.state === "cancelled")
-    clearCreatePlan(item.sessionId);
+    await clearLegacyCreatePlan(item.sessionId);
   else if (settled?.state !== "failed")
     throw new Error(
       "Opening effect returned without terminal actor settlement",
@@ -1363,7 +1466,7 @@ export async function executeCreationOpeningEffect(
 export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
   const state = await sessionKernel(sessionId).creationState();
   if (state?.state === "ready" || state?.state === "cancelled") {
-    clearCreatePlan(sessionId);
+    await clearLegacyCreatePlan(sessionId);
     return true;
   }
   if (
@@ -1405,6 +1508,104 @@ export async function openCreatedSession(
   creationEffectId?: string,
   openingRun?: { runId: string; generation: number },
 ): Promise<void> {
+  if (
+    !spec.personalRepo &&
+    ((spec.repoId?.startsWith("personal-") ?? false) ||
+      (await isPrivateCreation(spec.id)))
+  )
+    throw new Error("Private opening binding missing");
+  if (!spec.personalRepo)
+    return openCreatedSessionInner(
+      spec,
+      io,
+      creationIdentity,
+      creationEffectId,
+      openingRun,
+    );
+  assertPersonalAttachmentsAbsent(spec);
+  if (
+    spec.workspaceId ||
+    spec.attachRepos ||
+    spec.runnerTarget ||
+    spec.sandboxProvider ||
+    spec.volumeWorkspace ||
+    spec.remoteSandbox ||
+    spec.fork ||
+    spec.gitEnv ||
+    spec.gitPrincipal ||
+    spec.needsWorktree ||
+    spec.materializeWorktree ||
+    spec.automationDescendantPolicy ||
+    !Array.isArray(spec.runMcpServers) ||
+    spec.runMcpServers.length !== 0 ||
+    !Array.isArray(spec.persistMcpServers) ||
+    spec.persistMcpServers.length !== 0
+  )
+    throw new Error("Unsupported private opening configuration");
+  const binding = spec.personalRepo;
+  const owner = binding.descriptor.ownerGithubAccountId;
+  const consume = async () => {
+    if (!sessionPublicationAllowed(spec.id))
+      throw new Error("Private opening provenance expired");
+    const fresh = await personalCreateDependencies.readBinding(
+      owner,
+      binding.registryId,
+    );
+    if (
+      !samePersonalRepoBinding(binding, fresh) ||
+      !sessionPublicationAllowed(spec.id)
+    )
+      throw new Error("Private opening binding changed");
+    await openCreatedSessionInner(
+      spec,
+      io,
+      creationIdentity,
+      creationEffectId,
+      openingRun,
+    );
+  };
+  await withPersonalOpeningPublication(spec, creationIdentity, consume);
+}
+
+/** Wrap the consuming lifetime, even when the effect dispatcher has no inherited
+ * ALS context. This retains admission provenance; it is not admission itself. */
+export async function withPersonalOpeningPublication(
+  spec: ResolvedCreate,
+  creationIdentity: string,
+  consume: () => Promise<void>,
+): Promise<void> {
+  const binding = spec.personalRepo;
+  if (!binding) throw new Error("Private opening binding missing");
+  const owner = binding.descriptor.ownerGithubAccountId;
+  const original = privateOpeningLeases.get(spec.id);
+  if (original) {
+    if (
+      original.identity !== creationIdentity ||
+      !samePersonalRepoBinding(original.binding, binding)
+    )
+      throw new Error("Private opening admission changed");
+    return original.run(consume);
+  }
+  await personalCreateDependencies.ready();
+  const reservation = await personalCreateDependencies.reserve({
+    sessionId: spec.id,
+    createIdentity: creationIdentity,
+    ownerGithubAccountId: owner,
+    binding,
+  });
+  await withSessionExecutionAccess(reservation.document, async () => {
+    const bound = await bindSessionPublication(spec.id, owner, consume);
+    await bound();
+  });
+}
+
+async function openCreatedSessionInner(
+  spec: ResolvedCreate,
+  io: CreateSessionIO,
+  creationIdentity: string,
+  creationEffectId?: string,
+  openingRun?: { runId: string; generation: number },
+): Promise<void> {
   assertAutomationDescendantOpeningIsolation(spec);
   const bksId = spec.id;
   const pstackMode = specPstackMode(spec);
@@ -1418,24 +1619,26 @@ export async function openCreatedSession(
   // wore the raw first line) and keeps that name for life — later sessions
   // never rename it, and a manual rename in the meantime wins.
   const wsToName = spec.autoNameWorkspace;
-  void nameKnownSessionReferencesForTitle(spec.titlePrompt)
-    .then((titlePrompt) =>
-      ensureGeneratedTitle(bksId, titlePrompt, spec.user, spec.model),
-    )
-    .then(async (t) => {
-      if (!t) return;
-      await publishSessionChange(bksId);
-      if (!wsToName) return;
-      const cur = await getWorkspace(wsToName.id);
-      if (cur && cur.name === wsToName.name)
-        await updateWorkspace(wsToName.id, { name: t });
-    })
-    .catch(() => {});
+  if (!spec.personalRepo)
+    void nameKnownSessionReferencesForTitle(spec.titlePrompt)
+      .then((titlePrompt) =>
+        ensureGeneratedTitle(bksId, titlePrompt, spec.user, spec.model),
+      )
+      .then(async (t) => {
+        if (!t) return;
+        await publishSessionChange(bksId);
+        if (!wsToName) return;
+        const cur = await getWorkspace(wsToName.id);
+        if (cur && cur.name === wsToName.name)
+          await updateWorkspace(wsToName.id, { name: t });
+      })
+      .catch(() => {});
 
   // Set once the session has been announced — a later failure must then
   // close out the stream instead of leaving the just-opened viewer spinning.
   let announced = false;
   let creationSettled = false;
+  let privateHostedStream: AsyncGenerator<StreamEvent> | undefined;
   let engineSessionId = "";
   let effectiveModel = spec.model;
   let selectedModel = spec.model;
@@ -1473,7 +1676,7 @@ export async function openCreatedSession(
   // Actual worktree HEAD when it drifted from the recorded branch (the
   // agent switched/renamed branches during the opening turn).
   const headBranchPatch = () => {
-    if (spec.runnerTarget) return {};
+    if (spec.runnerTarget || spec.personalRepo) return {};
     const head = spec.persistBranch ? worktreeHeadBranch(spec.wtPath) : null;
     return head && head !== spec.branch ? { branch: head } : {};
   };
@@ -1487,8 +1690,7 @@ export async function openCreatedSession(
       // Widen to Partial: the file may not exist yet.
       const existing: Partial<NativeSessionFile> = data;
       return {
-        ...createdSessionFileDefaults(spec),
-        ...existing,
+        ...mergeCreatedSessionDefaults(spec, existing),
         ...(engineSessionId
           ? engineSessionPatch(effectiveProvider, engineSessionId)
           : {}),
@@ -1581,13 +1783,14 @@ export async function openCreatedSession(
       // any other message: the session exists now, so the badge has a row
       // to land on. Scanned from the raw prompt, never the assembled one,
       // so a repo note or a handoff cannot invent a mention.
-      void notifyMentions(
-        spec.titlePrompt,
-        spec.user || "",
-        bksId,
-        "prompt",
-        spec.title || "a session",
-      );
+      if (!spec.personalRepo)
+        void notifyMentions(
+          spec.titlePrompt,
+          spec.user || "",
+          bksId,
+          "prompt",
+          spec.title || "a session",
+        );
       // Projection is latency-sensitive; the agent turn is capacity-sensitive.
       // Persist and announce every accepted session first, then wait for one of
       // the bounded opening-run slots. Keeping the gate here prevents eight long
@@ -1804,9 +2007,10 @@ export async function openCreatedSession(
       };
       const openingTrust = openingCreateTrustPolicy(spec);
       const automationChild = openingTrust.automation;
-      const openingMcp = automationChild
-        ? {}
-        : interactiveMcpServers(spec.user, bksId);
+      const openingMcp =
+        automationChild || spec.personalRepo
+          ? {}
+          : interactiveMcpServers(spec.user, bksId);
       const openingDeniedTools = automationChild
         ? (await import("./automations")).automationDeniedTools()
         : undefined;
@@ -1824,10 +2028,12 @@ export async function openCreatedSession(
                   branch: spec.branch,
                   worktreeDir: spec.wtPath,
                 }),
-            await memoryNoteFor(spec.user, [
-              ...spec.memoryRepoIds,
-              ...attachedRepoIds,
-            ]),
+            spec.personalRepo
+              ? ""
+              : await memoryNoteFor(spec.user, [
+                  ...spec.memoryRepoIds,
+                  ...attachedRepoIds,
+                ]),
           ]
             .filter(Boolean)
             .join("\n\n") || undefined;
@@ -1840,6 +2046,7 @@ export async function openCreatedSession(
           ? null
           : runAgentHosted({
               osSessionId: bksId,
+              personalRepo: spec.personalRepo,
               prompt: openingPromptForRun,
               // A recovered create is the same logical turn. Reuse the durable
               // intake id so the transcript upserts the original user row.
@@ -1877,148 +2084,164 @@ export async function openCreatedSession(
               onAskUser: automationChild ? undefined : makeAskHandler(bksId),
               fallbackInProcessMcp: () => openingMcp,
             });
+      // Capture the opaque lifetime before first next(), including zero-event
+      // failures. Never infer cleanup authority from a final event or alias.
+      if (spec.personalRepo && localOpeningRun)
+        privateHostedStream = localOpeningRun;
       const openingRun =
         sandboxOpeningRun ?? runnerOpeningRun ?? localOpeningRun;
       if (!openingRun) throw new Error("Opening run isolation unavailable");
-      for await (const event of openingRun) {
-        // Opening turns use this event ladder instead of run-session's
-        // follow-up ladder. Consume Pi's exact boundary acknowledgement here
-        // too, including context-only steers that transcript parsing hides.
-        if (event.type === "steer_delivered" && event.steerId) {
-          await acknowledgeSteerDelivery(bksId, event.steerId);
-        }
-        if (event.type === "init") {
-          engineSessionId = event.sessionId || "";
-          if (event.provider) effectiveProvider = event.provider;
-          if (event.model) effectiveModel = event.model;
-          // Session was persisted/announced before setup — just record
-          // the engine id so the run is resumable while it streams.
-          await touchNativeSession(bksId, {
-            ...engineSessionPatch(effectiveProvider, engineSessionId),
-            ...(engineSessionId
-              ? { lastEngineProvider: effectiveProvider }
-              : {}),
-            ...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
-          });
-          // The transcript file didn't exist when viewers sent their
-          // watch (fresh session) — attach them now so this first turn
-          // streams live instead of only appearing after a re-watch.
-          if (engineSessionId) {
-            attachSessionWatchersToEngineTranscript(
-              bksId,
-              effectiveProvider,
-              spec.wtPath,
-              engineSessionId,
-            );
+      await consumeOpeningRunEvents(
+        openingRun,
+        !!spec.personalRepo,
+        async (event) => {
+          // Opening turns use this event ladder instead of run-session's
+          // follow-up ladder. Consume Pi's exact boundary acknowledgement here
+          // too, including context-only steers that transcript parsing hides.
+          if (event.type === "steer_delivered" && event.steerId) {
+            await acknowledgeSteerDelivery(bksId, event.steerId);
           }
-        }
-        if (event.type === "model_switch") {
-          const to = event.toModel || "";
-          const reason = `auto-switch — ${modelLabel(event.fromModel)} ${event.switchReason || "out of credits"}`;
-          if (to) {
-            effectiveModel = to;
-            effectiveProvider = providerFor(to);
-            if (shouldPersistModelSwitch(event)) {
-              selectedModel = to;
-              modelHistory.push({
-                model: to,
-                from: event.fromModel,
-                at: new Date().toISOString(),
-                by: reason,
-              });
-              await touchNativeSession(bksId, {
-                model: selectedModel,
-                modelHistory,
-              });
-              io.emit({
-                type: "model_changed",
-                model: to,
-                from: event.fromModel,
-                by: reason,
-              });
-            } else {
-              io.emit({
-                type: "notice",
-                message: `${modelLabel(event.fromModel)} ${event.switchReason || "fell back"} — using ${modelLabel(to)} for this turn only.`,
-              });
+          if (event.type === "init") {
+            engineSessionId = event.sessionId || "";
+            if (event.provider) effectiveProvider = event.provider;
+            if (event.model) effectiveModel = event.model;
+            // Session was persisted/announced before setup — just record
+            // the engine id so the run is resumable while it streams.
+            await touchNativeSession(bksId, {
+              ...engineSessionPatch(effectiveProvider, engineSessionId),
+              ...(engineSessionId
+                ? { lastEngineProvider: effectiveProvider }
+                : {}),
+              ...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
+            });
+            // The transcript file didn't exist when viewers sent their
+            // watch (fresh session) — attach them now so this first turn
+            // streams live instead of only appearing after a re-watch.
+            if (engineSessionId) {
+              attachSessionWatchersToEngineTranscript(
+                bksId,
+                effectiveProvider,
+                spec.wtPath,
+                engineSessionId,
+              );
             }
           }
-        }
-        if (event.type === "text_chunk") {
-          assistantText += event.text;
-          io.emit({ type: "stream_text", text: event.text });
-        }
-        if (event.type === "tool_use") {
-          toolUseCount++;
-          const entry = {
-            id: event.toolUseId || crypto.randomUUID(),
-            type: "tool_use" as const,
-            content: `Using ${event.toolName}`,
-            timestamp: new Date().toISOString(),
-            toolName: event.toolName,
-            toolInput: event.toolInput,
-            toolUseId: event.toolUseId,
-          };
-          io.emit({ type: "stream_tool_use", entry });
-        }
-        if (event.type === "tool_result") {
-          const entry = {
-            id: event.toolUseId ? `tr-${event.toolUseId}` : crypto.randomUUID(),
-            type: "tool_result" as const,
-            content: event.content || "",
-            timestamp: new Date().toISOString(),
-            toolUseId: event.toolUseId,
-            ...(event.images && event.images.length > 0
-              ? { images: event.images }
-              : {}),
-            ...(event.videos && event.videos.length > 0
-              ? { videos: event.videos }
-              : {}),
-            ...(event.featuredMedia && event.featuredMedia.length > 0
-              ? { featuredMedia: event.featuredMedia }
-              : {}),
-          };
-          io.emit({ type: "stream_tool_result", entry });
-        }
-        if (event.type === "usage_snapshot" && event.usage) {
-          // Live mid-run cost/context. Snapshots are run-cumulative and
-          // this is the session's only run, so the fold base is empty —
-          // each snapshot recomputes the total from scratch (folding
-          // onto latestUsage would double-count).
-          latestUsage = foldSessionUsage(
-            undefined,
-            event.usage,
-            effectiveModel,
-          );
-          io.emit({ type: "usage_update", usage: latestUsage });
-        }
-        if (event.type === "done") {
-          engineSessionId = event.sessionId || engineSessionId;
-          if (event.provider) effectiveProvider = event.provider;
-          if (event.model) effectiveModel = event.model;
-          if (event.usageLimitExhausted)
-            runFailure = event.result || "Usage limit reached on every account";
-          if (event.usage) {
+          if (event.type === "model_switch") {
+            const to = event.toModel || "";
+            const reason = `auto-switch — ${modelLabel(event.fromModel)} ${event.switchReason || "out of credits"}`;
+            if (to) {
+              effectiveModel = to;
+              effectiveProvider = providerFor(to);
+              if (shouldPersistModelSwitch(event)) {
+                selectedModel = to;
+                modelHistory.push({
+                  model: to,
+                  from: event.fromModel,
+                  at: new Date().toISOString(),
+                  by: reason,
+                });
+                await touchNativeSession(bksId, {
+                  model: selectedModel,
+                  modelHistory,
+                });
+                io.emit({
+                  type: "model_changed",
+                  model: to,
+                  from: event.fromModel,
+                  by: reason,
+                });
+              } else {
+                io.emit({
+                  type: "notice",
+                  message: `${modelLabel(event.fromModel)} ${event.switchReason || "fell back"} — using ${modelLabel(to)} for this turn only.`,
+                });
+              }
+            }
+          }
+          if (event.type === "text_chunk") {
+            assistantText += event.text;
+            io.emit({ type: "stream_text", text: event.text });
+          }
+          if (event.type === "tool_use") {
+            toolUseCount++;
+            const entry = {
+              id: event.toolUseId || crypto.randomUUID(),
+              type: "tool_use" as const,
+              content: `Using ${event.toolName}`,
+              timestamp: new Date().toISOString(),
+              toolName: event.toolName,
+              toolInput: event.toolInput,
+              toolUseId: event.toolUseId,
+            };
+            io.emit({ type: "stream_tool_use", entry });
+          }
+          if (event.type === "tool_result") {
+            const entry = {
+              id: event.toolUseId
+                ? `tr-${event.toolUseId}`
+                : crypto.randomUUID(),
+              type: "tool_result" as const,
+              content: event.content || "",
+              timestamp: new Date().toISOString(),
+              toolUseId: event.toolUseId,
+              ...(event.images && event.images.length > 0
+                ? { images: event.images }
+                : {}),
+              ...(event.videos && event.videos.length > 0
+                ? { videos: event.videos }
+                : {}),
+              ...(event.featuredMedia && event.featuredMedia.length > 0
+                ? { featuredMedia: event.featuredMedia }
+                : {}),
+            };
+            io.emit({ type: "stream_tool_result", entry });
+          }
+          if (event.type === "usage_snapshot" && event.usage) {
+            // Live mid-run cost/context. Snapshots are run-cumulative and
+            // this is the session's only run, so the fold base is empty —
+            // each snapshot recomputes the total from scratch (folding
+            // onto latestUsage would double-count).
             latestUsage = foldSessionUsage(
               undefined,
               event.usage,
-              event.model || effectiveModel,
+              effectiveModel,
             );
-            // emit (not a bare broadcast) so it also reaches the
-            // creator's socket in the window before they watch.
             io.emit({ type: "usage_update", usage: latestUsage });
           }
-          if (event.cacheMissWarning)
-            io.emit({ type: "cache_warning", sessionId: bksId });
-        }
-        if (event.type === "error") {
-          runFailure = event.content || "Run failed";
-          if (event.noticePersisted) failureNoticePersisted = true;
-          io.emit({ type: "error", message: event.content });
-        }
-        if (event.type === "done" || event.type === "error")
-          await settlePhysicalCompletion();
-      }
+          if (event.type === "done") {
+            engineSessionId = event.sessionId || engineSessionId;
+            if (event.provider) effectiveProvider = event.provider;
+            if (event.model) effectiveModel = event.model;
+            if (event.usageLimitExhausted)
+              runFailure =
+                event.result || "Usage limit reached on every account";
+            if (event.usage) {
+              latestUsage = foldSessionUsage(
+                undefined,
+                event.usage,
+                event.model || effectiveModel,
+              );
+              // emit (not a bare broadcast) so it also reaches the
+              // creator's socket in the window before they watch.
+              io.emit({ type: "usage_update", usage: latestUsage });
+            }
+            if (event.cacheMissWarning)
+              io.emit({ type: "cache_warning", sessionId: bksId });
+          }
+          if (event.type === "error") {
+            runFailure = event.content || "Run failed";
+            if (event.noticePersisted) failureNoticePersisted = true;
+            io.emit({ type: "error", message: event.content });
+          }
+          if (event.type === "done" || event.type === "error") {
+            await settlePhysicalCompletion();
+            if (spec.personalRepo) {
+              io.emit({ type: "stream_done" });
+              io.emit({ type: "session_status", isRunning: false });
+            }
+          }
+        },
+      );
       if (!creationSettled) {
         for (const record of activeRunRecords()) {
           if (
@@ -2043,8 +2266,10 @@ export async function openCreatedSession(
       preparingWorkspaces.delete(bksId);
     }
 
-    io.emit({ type: "stream_done" });
-    io.emit({ type: "session_status", isRunning: false });
+    if (!spec.personalRepo) {
+      io.emit({ type: "stream_done" });
+      io.emit({ type: "session_status", isRunning: false });
+    }
     if (spec.finish === "auto-continue-guard") {
       // An opening turn announce-then-stops exactly like a later one, and
       // this path bypasses runSessionPromptInner — so run the shared guard
@@ -2122,8 +2347,12 @@ export async function openCreatedSession(
         record.promptEntryId === openingPromptEntryId &&
         record.terminalFailure
       )
-        journalClearIfLineage(record);
+        await journalClearIfLineageAsync(record);
     }
+  } finally {
+    // Includes terminal postprocessing, setup/abnormal failure, and early return.
+    // An unknown physical result rejects while its durable obligation remains.
+    if (privateHostedStream) await finalizeHostedRun(privateHostedStream);
   }
 }
 
@@ -2162,6 +2391,14 @@ export async function handleCreateSessionMessage(
   ws: ServerWebSocket<WSClientData>,
   msg: CreateSessionMessage,
 ): Promise<Record<string, unknown> | undefined> {
+  if (
+    (typeof msg.repo === "string" && msg.repo.startsWith("personal-")) ||
+    (Array.isArray(msg.attachRepos) &&
+      msg.attachRepos.some(
+        (repo) => typeof repo === "string" && repo.startsWith("personal-"),
+      ))
+  )
+    return handlePersonalCreateSessionMessage(ws, msg);
   const rawClientSessionId = msg.clientSessionId;
   if (
     rawClientSessionId !== undefined &&
@@ -2221,6 +2458,14 @@ export async function handleCreateSessionMessage(
         )
       : newSessionId());
   const createIdentity = requestId || clientSessionId || bksId;
+  try {
+    await (
+      await import("./personal-session-reservation")
+    ).reserveSharedSessionCreation(bksId, createIdentity);
+  } catch {
+    failCreate("Session create ownership unavailable");
+    return;
+  }
   const durableCreation = await sessionKernel(bksId).creationState();
   if (durableCreation && durableCreation.identity !== createIdentity) {
     failCreate("Create request identity crossed durable session ownership");
@@ -2246,7 +2491,7 @@ export async function handleCreateSessionMessage(
       durableCreation.state === "ready" ||
       durableCreation.state === "cancelled"
     )
-      clearCreatePlan(bksId);
+      await clearLegacyCreatePlan(bksId);
     const response = replayedSessionCreatedResult(
       bksId,
       recoveringSession.workspaceId,
@@ -2260,7 +2505,7 @@ export async function handleCreateSessionMessage(
     recoveringSession?.codexThreadId ||
     recoveringSession?.piSessionId
   ) {
-    clearCreatePlan(bksId);
+    await clearLegacyCreatePlan(bksId);
     const response = replayedSessionCreatedResult(
       recoveringSession.id,
       recoveringSession.workspaceId,
@@ -2827,7 +3072,7 @@ export async function handleCreateSessionMessage(
     // resolving footer as prompts on existing sessions (see
     // runSessionPromptInner) — this create path bypasses it.
     {
-      const mentionsNote = sessionMentionsNote(openingPrompt);
+      const mentionsNote = await sessionMentionsNote(openingPrompt);
       if (mentionsNote) openingPrompt += `\n\n${mentionsNote}`;
     }
     // Session opened from the Support view: link it to its Plain
@@ -3051,7 +3296,7 @@ export async function handleCreateSessionMessage(
     }
     // Setup failed before anything was persisted or announced. Every socket
     // that replayed this create receives the same terminal response.
-    clearCreatePlan(bksId);
+    await clearLegacyCreatePlan(bksId);
     failCreate(e.message || String(e));
     return;
   }
@@ -3099,7 +3344,7 @@ export async function handleCreateSessionMessage(
   }
   void opening.done
     .then(
-      () => clearCreatePlan(bksId),
+      () => clearLegacyCreatePlan(bksId),
       (error) =>
         console.error(`[create_session] opening run ${bksId} failed:`, error),
     )
@@ -3109,4 +3354,415 @@ export async function handleCreateSessionMessage(
   // run continues under generation fencing.
   await admitted;
   return createResponse;
+}
+
+class PersonalCreateInputError extends Error {}
+
+type PrivateCreateReservation = {
+  sessionId: string;
+  createIdentity: string;
+  ownerGithubAccountId: number;
+  binding: PersonalRepoBinding;
+  title?: string;
+  createdBy?: string;
+  createdByLogin?: string;
+  model?: string;
+};
+export interface PersonalCreateDependencies {
+  ready(): Promise<void>;
+  readBinding(owner: number, registryId: string): Promise<PersonalRepoBinding>;
+  reserve(input: PrivateCreateReservation): Promise<{
+    sessionId: string;
+    created: boolean;
+    document: NativeSessionFile;
+  }>;
+  runtime(): ReturnType<typeof personalRepoRuntime>;
+  replay(id: string, identity: string): Promise<boolean>;
+  start(
+    spec: ResolvedCreate,
+    io: CreateSessionIO,
+    identity: string,
+  ): Promise<void>;
+}
+const personalCreateDependencies: PersonalCreateDependencies = {
+  async ready() {
+    if (!sessionAudiencesReady())
+      throw new Error("Private authority unavailable");
+    await verifyPersonalRunHostHelper();
+  },
+  async readBinding(owner, id) {
+    return (
+      await import("./personal-repository-coordinator")
+    ).readPersonalRepository(owner, id);
+  },
+  async reserve(input) {
+    return (
+      await import("./personal-session-reservation")
+    ).reservePersonalSession(input);
+  },
+  runtime: personalRepoRuntime,
+  async replay(id, identity) {
+    const state = await sessionKernel(id).creationState();
+    if (state && state.identity !== identity)
+      throw new Error("Private create identity changed");
+    return (
+      !!state &&
+      ["opening_dispatched", "ready", "failed", "cancelled"].includes(
+        state.state,
+      )
+    );
+  },
+  async start(spec, io, identity) {
+    await ensureCreationPlanned(spec.id, identity);
+    await patchCreationSetupPlan(spec.id, identity, {
+      branch: spec.branch,
+      resolved: snapshotOpeningCreate(spec),
+    });
+    await runOpeningCreateOnce(spec, io, identity).done;
+  },
+};
+type PrivateOpeningLease = {
+  identity: string;
+  binding: PersonalRepoBinding;
+  run(work: () => Promise<void>): Promise<void>;
+};
+const privateOpeningLeases = new Map<string, PrivateOpeningLease>();
+const pendingPersonalCreates = new Map<
+  string,
+  {
+    announced: boolean;
+    identity: string;
+    sockets: Set<ServerWebSocket<WSClientData>>;
+    response: Promise<Record<string, unknown> | undefined>;
+  }
+>();
+
+/** A separate admission path before any legacy replay, actor or repo lookup.
+ * Dependencies are trusted composition/test seams, never client options. */
+export async function handlePersonalCreateSessionMessage(
+  ws: ServerWebSocket<WSClientData>,
+  input: CreateSessionMessage,
+  deps: PersonalCreateDependencies = personalCreateDependencies,
+): Promise<Record<string, unknown> | undefined> {
+  let id: string | undefined;
+  let admittedOwner: number | undefined;
+  try {
+    const msg = structuredClone(input);
+    const owner = webSocketApplicationAccess(ws.data).principal
+      ?.githubAccountId;
+    if (!owner)
+      throw new PersonalCreateInputError(
+        "Sign in again to create a private session",
+      );
+    admittedOwner = owner;
+    if (
+      typeof msg.repo !== "string" ||
+      !msg.repo.startsWith("personal-") ||
+      typeof msg.prompt !== "string" ||
+      !msg.prompt.trim() ||
+      !["ask", "code"].includes(msg.mode || "") ||
+      typeof msg.model !== "string" ||
+      !msg.model ||
+      msg.model.length > 200 ||
+      (msg.clientSessionId !== undefined &&
+        !isClientSessionId(msg.clientSessionId)) ||
+      (msg.requestId !== undefined &&
+        (typeof msg.requestId !== "string" ||
+          !msg.requestId ||
+          msg.requestId.length > 256)) ||
+      (msg.branch !== undefined && typeof msg.branch !== "string")
+    )
+      throw new PersonalCreateInputError(
+        "Choose a private repository, model, and ask or code mode",
+      );
+    if (
+      msg.workspaceId ||
+      msg.modelWorkspaceId ||
+      msg.createWorkspace ||
+      msg.plainThreadId ||
+      msg.forkFrom ||
+      msg.fromPr ||
+      msg.runner ||
+      (msg.sandbox != null &&
+        msg.sandbox !== false &&
+        msg.sandbox !== "local") ||
+      msg.accountId ||
+      (msg.mcpServers !== undefined &&
+        (!Array.isArray(msg.mcpServers) || msg.mcpServers.length !== 0)) ||
+      (msg.attachRepos !== undefined &&
+        (!Array.isArray(msg.attachRepos) || msg.attachRepos.length)) ||
+      (msg.files !== undefined &&
+        (!Array.isArray(msg.files) || msg.files.length)) ||
+      (msg.worktreeMode !== undefined && msg.worktreeMode !== "isolated") ||
+      (msg.checkoutMode !== undefined && msg.checkoutMode !== "worktree")
+    )
+      throw new PersonalCreateInputError(
+        "Private sessions require an isolated local checkout with no workspace, fork, file, account, or MCP overrides",
+      );
+    assertPersonalImagesAbsent(msg.images);
+    const assertIngressOwner = () => {
+      if (
+        webSocketApplicationAccess(ws.data).principal?.githubAccountId !== owner
+      )
+        throw new Error("Private create principal changed");
+    };
+    const scope = `github-account:${owner}`;
+    id =
+      typeof msg.clientSessionId === "string"
+        ? msg.clientSessionId
+        : msg.requestId
+          ? sessionIdForRequest(scope, msg.requestId)
+          : newSessionId();
+    const sessionId = id;
+    const identity = `personal-create:${new Bun.CryptoHasher("sha256")
+      .update(
+        canonicalCommandPayload({
+          owner,
+          id,
+          requestId: msg.requestId,
+          repo: msg.repo,
+          prompt: msg.prompt,
+          mode: msg.mode,
+          branch: msg.branch,
+          model: msg.model,
+          effort: msg.effort,
+          fastMode: msg.fastMode,
+          pstackMode: msg.pstackMode,
+          images: msg.images,
+          pastedTexts: msg.pastedTexts,
+          mcpServers: msg.mcpServers,
+        }),
+      )
+      .digest("hex")}`;
+    await deps.ready();
+    assertIngressOwner();
+    const binding = await deps.readBinding(owner, msg.repo);
+    assertIngressOwner();
+    if (
+      binding.descriptor.ownerGithubAccountId !== owner ||
+      binding.registryId !== msg.repo
+    )
+      throw new Error("Private repository owner changed");
+    assertIngressOwner();
+    const reservation = await deps.reserve({
+      sessionId,
+      createIdentity: identity,
+      ownerGithubAccountId: owner,
+      binding,
+      title: msg.prompt.split("\n")[0]!.slice(0, 200),
+      createdBy: ws.data.authUser || ws.data.authLogin || "",
+      createdByLogin: ws.data.authLogin || undefined,
+      model: msg.model,
+    });
+    assertIngressOwner();
+    if (
+      reservation.sessionId !== sessionId ||
+      reservation.document.id !== sessionId ||
+      reservation.document.accessScope?.kind !== "personal" ||
+      reservation.document.accessScope.ownerGithubAccountId !== owner ||
+      !reservation.document.personalRepo ||
+      !samePersonalRepoBinding(binding, reservation.document.personalRepo)
+    )
+      throw new Error("Private reservation changed");
+    const key = `${scope}:${sessionId}`;
+    const send = (socket: ServerWebSocket<WSClientData>, frame: unknown) => {
+      try {
+        if (
+          webSocketApplicationAccess(socket.data).principal?.githubAccountId ===
+          owner
+        )
+          socket.send(JSON.stringify(frame));
+      } catch {}
+    };
+    assertIngressOwner();
+    const pending = pendingPersonalCreates.get(key);
+    if (pending) {
+      if (pending.identity !== identity)
+        throw new Error("Private create identity changed");
+      const wasAnnounced = pending.announced;
+      pending.sockets.add(ws);
+      const response = await pending.response;
+      if (
+        webSocketApplicationAccess(ws.data).principal?.githubAccountId !== owner
+      )
+        return;
+      if (response && wasAnnounced)
+        send(ws, markReplayedCommandResult(response));
+      return response;
+    }
+    if (pendingPersonalCreates.size >= 128)
+      throw new Error("Private creates busy");
+    const reply = Promise.withResolvers<Record<string, unknown> | undefined>();
+    const entry = {
+      announced: false,
+      identity,
+      sockets: new Set([ws]),
+      response: reply.promise,
+    };
+    pendingPersonalCreates.set(key, entry);
+    const work = withSessionExecutionAccess(reservation.document, async () => {
+      const bound = await bindSessionPublication(
+        sessionId,
+        owner,
+        async (fn: () => Promise<void>) => {
+          if (!sessionPublicationAllowed(sessionId))
+            throw new Error("Private create provenance expired");
+          await fn();
+        },
+      );
+      const lease: PrivateOpeningLease = {
+        identity,
+        binding,
+        run: (fn) =>
+          withSessionExecutionAccess(reservation.document, () => bound(fn)),
+      };
+      privateOpeningLeases.set(sessionId, lease);
+      const current = () => {
+        if (
+          webSocketApplicationAccess(ws.data).principal?.githubAccountId !==
+            owner ||
+          !sessionPublicationAllowed(sessionId)
+        )
+          throw new Error("Private create provenance expired");
+      };
+      try {
+        await lease.run(async () => {
+          current();
+          if (await deps.replay(sessionId, identity)) {
+            current();
+            const response = replayedSessionCreatedResult(sessionId);
+            entry.announced = true;
+            for (const socket of entry.sockets) send(socket, response);
+            reply.resolve(response);
+            return;
+          }
+          const runtime = await deps.runtime();
+          const resolved = await runtime.resolve(
+            owner,
+            binding.registryId,
+            binding,
+          );
+          current();
+          const prepared = await runtime.prepare(owner, resolved.binding, {
+            sessionId,
+            mode: msg.mode as "ask" | "code",
+            ...(msg.branch ? { branch: msg.branch } : {}),
+          });
+          current();
+          const fresh = await deps.readBinding(owner, binding.registryId);
+          if (
+            !samePersonalRepoBinding(binding, fresh) ||
+            !samePersonalRepoBinding(binding, prepared.binding)
+          )
+            throw new Error("Private repository binding changed");
+          current();
+          const spec: ResolvedCreate = {
+            id: sessionId,
+            personalRepo: prepared.binding,
+            repoId: binding.registryId,
+            title: msg.prompt.split("\n")[0]!.slice(0, 200),
+            titlePrompt: msg.prompt,
+            displayPrompt: msg.prompt,
+            openingPrompt: withPastedTexts(
+              msg.prompt,
+              pastedTextsFromWire(msg.pastedTexts),
+            ),
+            user: ws.data.authUser || ws.data.authLogin || undefined,
+            createdBy: reservation.document.createdBy,
+            createdByLogin: ws.data.authLogin || undefined,
+            createdAt: reservation.document.createdAt,
+            mode: msg.mode as "ask" | "code",
+            wtPath: prepared.cwd,
+            persistBranch: prepared.branch,
+            branch: prepared.branch,
+            memoryRepoIds: [],
+            model: msg.model as string,
+            effort: typeof msg.effort === "string" ? msg.effort : undefined,
+            fastMode: msg.fastMode === true,
+            pstackMode: msg.pstackMode === true,
+            images: undefined,
+            persistMcpServers: [],
+            runMcpServers: [],
+            sandboxProvider: null,
+            volumeWorkspace: false,
+            remoteSandbox: false,
+            openingPromptEntryId: `create-${identity}`,
+            needsWorktree: false,
+            finish: "drain",
+          };
+          snapshotOpeningPlan(spec);
+          await deps.start(
+            spec,
+            {
+              announce(info) {
+                current();
+                const response = { type: "session_created", id: info.id };
+                entry.announced = true;
+                for (const socket of entry.sockets) send(socket, response);
+                reply.resolve(response);
+              },
+              emit(frame) {
+                current();
+                const scoped = { ...frame, sessionId };
+                for (const socket of entry.sockets) {
+                  if (!socket.data.watchingSessionId) send(socket, scoped);
+                }
+                broadcastToSession(
+                  sessionId,
+                  scoped,
+                  !ws.data.watchingSessionId ? ws : undefined,
+                );
+              },
+              fail() {
+                throw new Error("Private opening unavailable");
+              },
+            },
+            identity,
+          );
+        });
+      } finally {
+        if (privateOpeningLeases.get(sessionId) === lease)
+          privateOpeningLeases.delete(sessionId);
+      }
+    });
+    void work
+      .catch(() => {
+        for (const socket of entry.sockets)
+          send(socket, {
+            type: "error",
+            sessionId,
+            message:
+              "Private session unavailable. Check your connection and retry.",
+          });
+      })
+      .finally(() => {
+        reply.resolve(undefined);
+        if (pendingPersonalCreates.get(key) === entry)
+          pendingPersonalCreates.delete(key);
+      });
+    const response = await reply.promise;
+    if (
+      webSocketApplicationAccess(ws.data).principal?.githubAccountId !== owner
+    )
+      return;
+    return response;
+  } catch {
+    try {
+      if (
+        admittedOwner !== undefined &&
+        webSocketApplicationAccess(ws.data).principal?.githubAccountId !==
+          admittedOwner
+      )
+        return;
+      ws.send(
+        JSON.stringify({
+          type: "error",
+          ...(id ? { sessionId: id } : {}),
+          message:
+            "Private session unavailable. Check your connection and retry.",
+        }),
+      );
+    } catch (error) {}
+    return;
+  }
 }

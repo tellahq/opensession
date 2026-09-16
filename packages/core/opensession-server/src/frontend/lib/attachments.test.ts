@@ -1,3 +1,4 @@
+import { publishClientDataIdentity } from "./client-data-scope";
 import { expect, test, beforeEach, afterEach } from "bun:test";
 
 // The store reads the signed-in user and mirrors to sessionStorage on the way
@@ -73,10 +74,10 @@ const {
   attachingLabel,
   countStaging,
 } = await import("./attachments");
-const { loadDraft, saveDraft, clearDraft, onDraftsChanged } =
+const { bindDraftKey, loadDraft, saveDraft, clearDraft, onDraftsChanged } =
   await import("./drafts");
 
-const KEY = "test-attachments";
+let KEY: string;
 const realFetch = globalThis.fetch;
 
 /** Stand in for POST /api/upload, held open until `release` is called, so a
@@ -116,8 +117,21 @@ const png = (name: string) =>
     type: "image/png",
   });
 
-beforeEach(() => clearDraft(KEY));
+beforeEach(() => {
+  globalThis.fetch = Object.assign(async () => Response.json({}), {
+    preconnect: realFetch.preconnect,
+  });
+  localStorage.setItem("opensession-user", "Same name");
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 11,
+  });
+  KEY = bindDraftKey("test-attachments");
+  clearDraft(KEY);
+});
 afterEach(() => {
+  publishClientDataIdentity(null);
   globalThis.fetch = realFetch;
   clearDraft(KEY);
 });
@@ -224,7 +238,11 @@ test("every pasted-text change is announced", () => {
   } finally {
     stop();
   }
-  expect(keys).toEqual([KEY, KEY, KEY]);
+  expect(keys).toEqual([
+    "test-attachments",
+    "test-attachments",
+    "test-attachments",
+  ]);
 });
 
 // A staged attachment is a ~90-character ref, but an image the server refused
@@ -239,7 +257,9 @@ test("an inline image too big for the mirror does not take the text with it", as
   await new Promise((resolve) => setTimeout(resolve, 500));
 
   const mirrored = JSON.parse(
-    sessionStorage.getItem(`backstage-draft:${KEY}`)!,
+    sessionStorage.getItem(
+      "backstage-draft:v2:github-account%3A11:test-attachments",
+    )!,
   );
   expect(mirrored.text).toBe("keep me");
   expect(mirrored.images).toEqual([]);
@@ -280,4 +300,206 @@ test("a seventh image is left out of the draft and named", async () => {
     `/media?path=${encodeURIComponent("/uploads/staged/six.png")}`,
   );
   expect(result.rejected).toEqual(["1 image (a message holds up to 6)"]);
+});
+
+test("all composer surfaces fence same-name A/B, late saves and logout/relogin", () => {
+  const names = [
+    "session:scope-test",
+    "new-session",
+    "workspace-home:scope-test",
+    "plain-reply:scope-test",
+    "support-preview:scope-test",
+  ];
+  sessionStorage.setItem(
+    "backstage-draft:new-session",
+    JSON.stringify({ text: "ambiguous legacy A" }),
+  );
+  const keys = names.map((name) => bindDraftKey(name));
+  for (const key of keys)
+    saveDraft(key, {
+      text: "A private draft",
+      images: ["/media?path=A"],
+      files: [{ name: "A", type: "text/plain", path: "/A" }],
+      pastedTexts: [{ id: "A", text: "A paste" }],
+    });
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 12,
+  });
+  for (let i = 0; i < names.length; i++) {
+    expect(loadDraft(names[i]).text).toBe("");
+    saveDraft(keys[i], {
+      text: "late A cleanup",
+      images: ["A late attachment"],
+    });
+    expect(loadDraft(names[i]).images).toEqual([]);
+  }
+  expect(sessionStorage.getItem("backstage-draft:new-session")).toContain(
+    "ambiguous legacy A",
+  );
+  const b = bindDraftKey("new-session");
+  saveDraft(b, { text: "B draft" });
+  publishClientDataIdentity(null);
+  expect(loadDraft("new-session").text).toBe("");
+  saveDraft(b, { text: "late B" });
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 11,
+  });
+  for (const name of names) {
+    expect(loadDraft(name)).toMatchObject({
+      text: "A private draft",
+      images: ["/media?path=A"],
+    });
+    clearDraft(bindDraftKey(name));
+  }
+  saveDraft(keys[1], { text: "old A lifetime" });
+  expect(loadDraft("new-session").text).toBe("");
+});
+
+test("an upload completion cannot enter B's same-name composer", async () => {
+  const server = stagingServer();
+  const a = bindDraftKey("new-session");
+  const pending = attachToDraft(a, [png("A-private.png")]);
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 12,
+  });
+  server.release();
+  const result = await pending.then(
+    (value) => value,
+    () => ({ applied: false }),
+  );
+  expect(result.applied).toBe(false);
+  expect(loadDraft("new-session").images).toEqual([]);
+});
+
+test("unknown and authenticated legacy scopes cannot adopt old drafts or sync uploads", async () => {
+  publishClientDataIdentity(null);
+  expect(loadDraft("new-session").text).toBe("");
+  const unresolved = bindDraftKey("new-session");
+  saveDraft(unresolved, { text: "unknown" });
+  publishClientDataIdentity({ required: true, authenticated: true });
+  const legacy = bindDraftKey("new-session");
+  saveDraft(legacy, { text: "quarantined legacy writing" });
+  expect((await attachToDraft(legacy, [png("legacy.png")])).applied).toBe(
+    false,
+  );
+  publishClientDataIdentity(null);
+  publishClientDataIdentity({ required: true, authenticated: true });
+  expect(loadDraft("new-session").text).toBe("");
+  const stored = Array.from({ length: sessionStorage.length }, (_, index) =>
+    sessionStorage.getItem(sessionStorage.key(index)!),
+  ).join("\n");
+  expect(stored).toContain("quarantined legacy writing");
+});
+
+test("late draft hydration and deferred save never enter same-name B scope", async () => {
+  publishClientDataIdentity(null);
+  const pending: Array<{
+    headers: Headers;
+    resolve: (response: Response) => void;
+  }> = [];
+  const puts: RequestInit[] = [];
+  globalThis.fetch = Object.assign(
+    (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        puts.push(init);
+        return Promise.resolve(Response.json({ applied: true }));
+      }
+      return new Promise<Response>((resolve) =>
+        pending.push({ headers: new Headers(init?.headers), resolve }),
+      );
+    },
+    { preconnect: realFetch.preconnect },
+  );
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 71,
+  });
+  const a = bindDraftKey("session:hydration-scope");
+  saveDraft(a, { text: "A pending keystrokes" });
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 72,
+  });
+  expect(
+    pending.map((request) =>
+      request.headers.get("X-OpenSession-Expected-GitHub-Account-Id"),
+    ),
+  ).toEqual(["71", "72"]);
+  let stop = () => {};
+  const hydrated = new Promise<void>((resolve) => {
+    stop = onDraftsChanged((key) => {
+      if (
+        key === "session:hydration-scope" &&
+        loadDraft(key).text === "B server"
+      )
+        resolve();
+    });
+  });
+  pending[0].resolve(
+    Response.json({
+      drafts: {
+        "hydration-scope": { text: "late A server", updatedAt: "2026-01-01" },
+      },
+    }),
+  );
+  pending[1].resolve(
+    Response.json({
+      drafts: {
+        "hydration-scope": { text: "B server", updatedAt: "2026-01-01" },
+      },
+    }),
+  );
+  await hydrated;
+  stop();
+  expect(loadDraft("session:hydration-scope").text).toBe("B server");
+  expect(puts).toEqual([]);
+  expect(loadDraft(a).text).toBe("");
+});
+
+test("late refused save cannot restore A text under same-name B", async () => {
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 81,
+  });
+  const a = bindDraftKey("session:late-save");
+  saveDraft(a, { text: "A writing" });
+  let release!: (response: Response) => void;
+  let put: RequestInit | undefined;
+  globalThis.fetch = Object.assign(
+    (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method !== "PUT")
+        return Promise.resolve(Response.json({ drafts: {} }));
+      put = init;
+      return new Promise<Response>((resolve) => {
+        release = resolve;
+      });
+    },
+    { preconnect: realFetch.preconnect },
+  );
+  clearDraft(a);
+  expect(
+    new Headers(put?.headers).get("X-OpenSession-Expected-GitHub-Account-Id"),
+  ).toBe("81");
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 82,
+  });
+  release(
+    Response.json({
+      applied: false,
+      draft: { text: "A server text", updatedAt: "2026-01-01" },
+    }),
+  );
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  expect(loadDraft("session:late-save").text).toBe("");
 });

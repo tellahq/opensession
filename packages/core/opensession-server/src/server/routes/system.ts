@@ -317,7 +317,7 @@ export async function handleSystemRoutes(
       if (sessions.length >= 8) break;
       // Pins also hold workspace rows (`workspace:<id>`) — not sessions.
       if (key.startsWith("workspace:")) continue;
-      const s = control.getSession(key);
+      const s = await control.getSession(key);
       if (!s || s.state === "archived") continue;
       // A queued prompt means the session is about to run — show it as
       // working, same as taskStateOf (sessions-tools.ts). An engine session

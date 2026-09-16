@@ -1,3 +1,9 @@
+import {
+  currentExecutionAccess,
+  executionReadPrincipal,
+  canWriteApplicationResource,
+} from "../application-access";
+import { assertMetadataActorRequest } from "./metadata-protocol";
 /**
  * One logical owner for a session.
  *
@@ -206,11 +212,85 @@ export async function sessionCore<T extends CoreActorRequest>(
 export async function sessionMetadata<T extends MetadataActorRequest>(
   request: T,
 ): Promise<MetadataActorResult<T>> {
+  // Only resource operations inherit admitted run authority. Global catalog,
+  // list and bootstrap queries never silently become an owner's private view.
+  const execution = currentExecutionAccess();
+  if (
+    execution &&
+    (request.op === "get" ||
+      request.op === "put" ||
+      request.op === "catalog_get" ||
+      request.op === "catalog_read" ||
+      request.op === "reserve_creation")
+  ) {
+    request = {
+      ...request,
+      principal: executionReadPrincipal(request.principal),
+    };
+  } else if (execution && "principal" in request) {
+    executionReadPrincipal(request.principal);
+  }
+  if (
+    execution &&
+    (request.op === "put" || request.op === "reserve_creation")
+  ) {
+    const scope =
+      request.op === "put"
+        ? JSON.parse(request.doc).accessScope
+        : request.accessScope;
+    if (!canWriteApplicationResource(execution, scope))
+      throw new Error("Private context cannot write another scope");
+  }
+  const result = await dispatchSessionMetadata(request);
+  if (
+    request.op === "reserve_creation" ||
+    request.op === "put" ||
+    request.op === "seed_catalog" ||
+    request.op === "scope_aliases"
+  )
+    await (await import("../session-audience")).refreshSessionAudiences();
+  return result;
+}
+
+async function dispatchSessionMetadata<T extends MetadataActorRequest>(
+  request: T,
+): Promise<MetadataActorResult<T>> {
+  assertMetadataActorRequest(request);
   if (state.actor) return state.actor.decideMetadataAsync(request);
   const store = compatibilityStoreForTest("metadata");
   type R = MetadataActorResult<T>;
+  if (request.op === "reserve_creation")
+    return store.reserveCreationAccess(request) as R;
+  if (request.op === "scope_lookup")
+    return store.sessionScopeLookup(request.sessionId) as R;
+  if (request.op === "scope_fence") return store.sessionScopeFence() as R;
+  if (request.op === "scope_changes")
+    return store.sessionScopeChanges(request.after, request.limit) as R;
+  if (request.op === "scope_aliases")
+    return store.registerSessionScopeAliases(request.rows) as R;
+  if (request.op === "repository_app_page")
+    return store.repositoryCatalogAppPage(request) as R;
+  if (request.op === "repository_get")
+    return store.repositoryCatalogGet(
+      request.repositoryId,
+      request.principal,
+    ) as R;
+  if (request.op === "repository_page")
+    return store.repositoryCatalogPage(
+      request.afterRepositoryId,
+      request.limit,
+      request.principal,
+    ) as R;
+  if (request.op === "repository_count")
+    return store.repositoryCatalogCount(request.principal) as R;
+  if (request.op === "repository_put")
+    return store.repositoryCatalogPut(request) as R;
   if (request.op === "get")
-    return store.sessionMetadata(request.sessionId) as R;
+    return (
+      store.sessionScopeReadable(request.sessionId, request.principal)
+        ? store.accessibleSessionMetadata(request.sessionId, request.principal)
+        : null
+    ) as R;
   if (request.op === "put") {
     const result = store.putSessionMetadata(request);
     if (result.status === "committed")
@@ -225,12 +305,24 @@ export async function sessionMetadata<T extends MetadataActorRequest>(
       request.sessionId,
       request.rev,
     ) as R;
+  if (request.op === "catalog_read")
+    return store.sessionMetadataCatalogRead(
+      request.sessionId,
+      request.principal,
+    ) as R;
   if (request.op === "catalog_get")
-    return store.sessionMetadataCatalogGet(request.sessionId) as R;
-  if (request.op === "catalog_page")
+    return store.sessionMetadataCatalogGet(
+      request.sessionId,
+      request.principal,
+    ) as R;
+  if (request.op === "catalog_count")
+    return store.sessionMetadataCatalogCount(request.principal) as R;
+  if (request.op === "catalog_page" || request.op === "catalog_private_page")
     return store.sessionMetadataCatalogPage(
       request.afterSessionId,
       request.limit,
+      request.principal,
+      request.op === "catalog_private_page",
     ) as R;
   if (request.op === "pending_exports")
     return store.sessionMetadataPendingExports(request.limit) as R;
@@ -260,6 +352,12 @@ export async function sessionCatalogDocument<T extends CatalogDocumentRequest>(
     return store.catalogDocumentGetMany(request.namespace, request.keys) as R;
   if (request.op === "page")
     return store.catalogDocumentPage(
+      request.namespace,
+      request.afterKey,
+      request.limit,
+    ) as R;
+  if (request.op === "page_live")
+    return store.catalogDocumentPageLive(
       request.namespace,
       request.afterKey,
       request.limit,

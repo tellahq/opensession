@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { publishClientDataIdentity } from "./client-data-scope";
 import {
   fetchProviderAccounts,
   fetchRepos,
@@ -9,6 +10,11 @@ import {
   newSessionApi,
 } from "./api";
 
+// Every case starts from the same known identity so no scope leaks in
+// from another test.
+beforeEach(() =>
+  publishClientDataIdentity({ required: false, authenticated: false }),
+);
 const originalFetch = globalThis.fetch;
 type FetchImplementation = (
   input: Parameters<typeof fetch>[0],
@@ -264,4 +270,35 @@ test("workspace projection explicitly includes the selected workspace", async ()
   });
   await fetchWorkspaces({ includeWorkspaceId: "ws-archived" });
   expect(url).toBe("/api/workspaces?active=1&includeWorkspaceId=ws-archived");
+});
+
+test("a late A repository result cannot write B's cache or retry under B", async () => {
+  const { captureClientDataScope } = await import("./client-data-scope");
+  const { cachedRepos } = await import("./repo-cache");
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 11,
+  });
+  let resolve!: (response: Response) => void;
+  const deferred = new Promise<Response>((done) => {
+    resolve = done;
+  });
+  globalThis.fetch = stubFetch(async () => deferred);
+  const pending = fetchRepos();
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 22,
+  });
+  resolve(
+    Response.json({
+      repos: [
+        { id: "A-private", defaultBranch: "main", sharedCheckout: false },
+      ],
+    }),
+  );
+  await expect(pending).rejects.toThrow("account changed");
+  expect(cachedRepos()).toEqual([]);
+  expect(captureClientDataScope()?.githubAccountId).toBe(22);
 });

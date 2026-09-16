@@ -1,3 +1,4 @@
+import { captureClientDataScope } from "../lib/client-data-scope";
 import {
   useEffect,
   useEffectEvent,
@@ -9,7 +10,8 @@ import {
   type SetStateAction,
 } from "react";
 import { useAttachmentUploads } from "./useAttachmentUploads";
-import { clearDraft, loadDraft, saveDraft } from "../lib/drafts";
+import { toast } from "../ui/toast";
+import { bindDraftKey, clearDraft, loadDraft, saveDraft } from "../lib/drafts";
 import { dropStagingAttachments } from "../lib/attachments";
 import { attachToDraft, sameFiles, sameImages } from "../lib/attachments";
 import { foregroundFileComposerOpen, hasDraggedFiles } from "../lib/file-drag";
@@ -57,7 +59,7 @@ export function useSessionComposerDraft({
   // switching to another session/workspace — which remounts this component —
   // doesn't lose typed work. Text rides Composer's `draftKey`; the staged
   // images/files live here, seeded from and mirrored into the same draft.
-  const draftKey = `session:${sessionId}`;
+  const draftKey = bindDraftKey(`session:${sessionId}`);
   const [images, setImages] = useState<string[]>(
     () => loadDraft(draftKey).images,
   );
@@ -209,11 +211,12 @@ export function useSessionPromptOutbox({
   // Pending ids the server has CONFIRMED (transcript entry or queue/steer
   // receipt). Their durable outbox row is hidden, so one message can't render
   // as a transcript bubble and a "Sending" flap row at the same time.
+  const clientDataScope = captureClientDataScope();
   const [landedOutboxIds, setLandedOutboxIds] = useState<Set<string>>(
     () => new Set(),
   );
   const [outboxItems, setOutboxItems] = useState<PromptOutboxItem[]>(() =>
-    promptOutbox.list(sessionId),
+    promptOutbox.list(sessionId, clientDataScope),
   );
   useEffect(() => {
     const stopObserving = promptOutbox.observeDelivery((item, result) => {
@@ -273,9 +276,9 @@ export function useSessionPromptOutbox({
               },
             ],
       );
-    });
+    }, clientDataScope);
     const sync = () => {
-      const items = promptOutbox.list(sessionId);
+      const items = promptOutbox.list(sessionId, clientDataScope);
       setOutboxItems(items);
       // Forget claims the outbox no longer holds (delivered, discarded, or
       // another session's), so the set can't grow for the life of the tab.
@@ -287,16 +290,16 @@ export function useSessionPromptOutbox({
       });
     };
     sync();
-    const unsubscribe = promptOutbox.subscribe(sync);
-    void promptOutbox.flush();
+    const unsubscribe = promptOutbox.subscribe(sync, clientDataScope);
+    void promptOutbox.flush(clientDataScope);
     return () => {
       unsubscribe();
       stopObserving();
     };
-  }, [dispatch, sessionId, setEntries]);
+  }, [dispatch, sessionId, setEntries, clientDataScope]);
   useEffect(() => {
-    if (connected) void promptOutbox.flush();
-  }, [connected]);
+    if (connected) void promptOutbox.flush(clientDataScope);
+  }, [connected, clientDataScope]);
   useEffect(() => {
     if (!initialPending) return;
     const content = initialPending.content.trim();
@@ -420,7 +423,14 @@ export function usePendingPromptReconciliation({
 }
 
 interface SessionAttachmentDropOptions {
-  identity: { focused: boolean; sessionHidden: boolean; noteMode: boolean };
+  identity: {
+    focused: boolean;
+    sessionHidden: boolean;
+    noteMode: boolean;
+    /** A private session: every pick, paste, or drop is refused with this
+     * copy before anything is staged or uploaded. */
+    attachmentsUnavailable?: string;
+  };
   draft: {
     draftKey: string;
     setImages: Dispatch<SetStateAction<string[]>>;
@@ -442,6 +452,7 @@ export function useImageRegionComposer({
     isolatedImages?: string[],
   ) => boolean | Promise<boolean>;
 }) {
+  const clientDataScope = captureClientDataScope();
   const imageRegionCommentRef = useRef<
     (request: ImageRegionCommentRequest) => Promise<void>
   >(async () => {});
@@ -450,7 +461,7 @@ export function useImageRegionComposer({
       if (request.sessionId !== sessionId)
         throw new Error("That session changed");
       const crop = await cropImageRegionFile(request.src, request.region);
-      const staged = await splitAttachments([crop]);
+      const staged = await splitAttachments([crop], undefined, clientDataScope);
       if (staged.images.length === 0)
         throw new Error(
           staged.rejected[0] || "Could not attach the selected image",
@@ -468,7 +479,7 @@ export function useImageRegionComposer({
 }
 
 export function useSessionAttachmentDrop({
-  identity: { focused, sessionHidden, noteMode },
+  identity: { focused, sessionHidden, noteMode, attachmentsUnavailable },
   draft: { draftKey, setImages, setFiles, uploads },
 }: SessionAttachmentDropOptions) {
   const dragDepthRef = useRef(0);
@@ -480,6 +491,12 @@ export function useSessionAttachmentDrop({
   const [fileDragActive, setFileDragActive] = useState(false);
 
   async function addSessionAttachments(picked: FileList | File[]) {
+    // The one intake for picks, pastes, and drops: a private session refuses
+    // here, before uploads.upload stages anything in the shared path.
+    if (attachmentsUnavailable) {
+      toast(attachmentsUnavailable);
+      return;
+    }
     const selected = Array.from(picked);
     const noteImageTypes = new Set([
       "image/png",

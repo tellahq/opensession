@@ -52,9 +52,9 @@ function sessionFileModel(bksId: string): string | undefined {
 }
 
 /** Which model family authored the PR's current head, and how we know. */
-export function authorFamilyFor(
+export async function authorFamilyFor(
   pr: PrRef,
-): { family: ModelFamily; source: string } | null {
+): Promise<{ family: ModelFamily; source: string } | null> {
   // 1. A live session owns the branch — its model wrote the code. Same
   //    resolution as the review handoff (handoff.ts), so the model that gets
   //    the findings is also the one whose reviewer is inverted.
@@ -62,7 +62,7 @@ export function authorFamilyFor(
   if (control) {
     const workspaceId = workspaceIdForRepo(pr.ghRepo || defaultRepo().ghRepo);
     if (workspaceId) {
-      const owners = matchSessions(control, workspaceId, pr.headRef)
+      const owners = (await matchSessions(control, workspaceId, pr.headRef))
         .filter((s) => !s.id.startsWith("bks-ghpr-"))
         .sort(
           (a, b) =>
@@ -95,12 +95,12 @@ export function authorFamilyFor(
  * Returns a switch only when the reviewer that would otherwise run shares the
  * author's family.
  */
-export function inverseReviewModel(
+export async function inverseReviewModel(
   pr: PrRef,
   configured?: string,
-): { model: string; family: ModelFamily; source: string } | null {
+): Promise<{ model: string; family: ModelFamily; source: string } | null> {
   if (!inversionEnabled()) return null;
-  const author = authorFamilyFor(pr);
+  const author = await authorFamilyFor(pr);
   if (!author) return null;
   // Unset config runs on the Anthropic pool (session-file/runner default).
   const reviewerFamily = familyOf(configured) || "anthropic";

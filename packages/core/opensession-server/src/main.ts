@@ -65,7 +65,19 @@ if (process.env.OPENSESSION_DISPATCH_DEBUG === "1")
     `[dispatch] sub=${JSON.stringify(sub)} execPath=${process.execPath} argv=${JSON.stringify(process.argv)}`,
   );
 
-if (sub === "runner-host") {
+if (sub === "personal-runner-capability") {
+  if (process.argv.length !== 3) process.exit(2);
+  console.log("personal-runner-host-v2");
+} else if (sub === "personal-runner-host") {
+  process.argv.splice(2, 1);
+  const { runPersonalHost } = await import("./runner-host/personal-host");
+  try {
+    await runPersonalHost();
+  } catch {
+    console.error("Personal host preflight failed");
+    process.exit(1);
+  }
+} else if (sub === "runner-host") {
   process.argv.splice(2, 1);
   await import("./runner-host/host");
 } else if (sub === "mcp-proxy") {

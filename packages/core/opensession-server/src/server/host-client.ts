@@ -28,6 +28,44 @@
 
 import type { McpScope } from "./runner-shared";
 import { audit } from "./audit";
+import {
+  createHostedRunLifetime,
+  attachHostedRunLifetime,
+  type HostedLifetimeControl,
+} from "./host-run-lifetime";
+export { finalizeHostedRun } from "./host-run-lifetime";
+import {
+  tagHostedEvent,
+  hostedEventPublication,
+  withHostedEventPublication,
+  type HostedEventPublication,
+} from "./host-event-publication";
+import {
+  createPersonalHostTransitions,
+  sharedPersonalHostTransitions,
+} from "./personal-host-transitions";
+import { stopPersonalPhysicalHost } from "./personal-host-physical";
+import { assertPersonalHostMcpNone } from "./personal-repo-runtime-mcp";
+import { assertPersonalHostLineage } from "./personal-repo-runtime-host";
+import {
+  personalRunRetired,
+  personalRunRetirementConfirmed,
+  requestPersonalRunRetirement,
+  assertPersonalRunConsumerEnrolled,
+  confirmPersonalRunPhysicalCompletion,
+  retirePersonalRunConsumer,
+  registerPersonalRunConsumer,
+  type PersonalRunConsumer,
+} from "./personal-run-consumers";
+import { sessionPublicationAllowed } from "./session-audience";
+import {
+  bindHostPublication,
+  bindHostPublicationSuccessor,
+  hostPublicationContext,
+  type HostPublication,
+  type HostPublicationSource,
+} from "./personal-repo-runtime-publication";
+import { samePersonalRepoBinding } from "./personal-repo-runtime";
 import { waitForRunHostAdmission } from "./host-admission";
 import {
   isRetryableSessionCommandError,
@@ -43,7 +81,7 @@ import {
   type StreamEvent,
 } from "./agent-runner";
 import {
-  journalClear,
+  journalClearIfLineageAsync,
   journalRecordAbnormalCompletion,
   journalSet,
   registerActiveRunProbe,
@@ -58,7 +96,7 @@ import {
 import { sameProcess } from "./process-identity";
 import type { GitIdentity } from "./shared/user-mappings";
 import { modelSupportsSteer, providerFor } from "./models";
-import { OPENSESSION_SESSIONS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR, stateContext } from "./paths";
 import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import {
   registerHostRun,
@@ -90,6 +128,7 @@ import {
 } from "./executor-client";
 import {
   hostUnitActive,
+  verifyPersonalRunHostHelper,
   launchHostUnitDirect,
   stopHostUnitDirect,
 } from "../executor/host-unit";
@@ -155,6 +194,144 @@ function hostedKernelCall<T>(
 }
 
 const HOSTS_DIR = runHostsDir(OPENSESSION_SESSIONS_DIR);
+// A process-local fact minted only after exclusive creation, never metadata.
+const freshPersonalSpecs = new WeakSet<RunHostSpec>();
+const personalHostState = Object.freeze({
+  ...stateContext(),
+  sessionsDir: OPENSESSION_SESSIONS_DIR,
+  explicitSessionsDir: process.env.OPENSESSION_SESSIONS_DIR ?? null,
+});
+function assertPersonalHostState(): void {
+  const current = {
+    ...stateContext(),
+    sessionsDir: OPENSESSION_SESSIONS_DIR,
+    explicitSessionsDir: process.env.OPENSESSION_SESSIONS_DIR ?? null,
+  };
+  if (JSON.stringify(current) !== JSON.stringify(personalHostState))
+    throw new Error(
+      "Personal host state changed; reinitialize this runtime before use",
+    );
+  if (
+    personalHostState.explicitSessionsDir &&
+    runHostsDir(personalHostState.explicitSessionsDir) !== HOSTS_DIR
+  )
+    throw new Error("Personal host sessions path changed");
+  if (
+    !personalHostState.explicitSessionsDir &&
+    personalHostState.stateRoot &&
+    !HOSTS_DIR.startsWith(`${personalHostState.stateRoot.replace(/\/$/, "")}/`)
+  )
+    throw new Error("Personal host path belongs to another state context");
+}
+function personalHostTransitions() {
+  assertPersonalHostState();
+  return sharedPersonalHostTransitions(
+    { ...personalHostState, hostsDir: HOSTS_DIR },
+    () =>
+      createPersonalHostTransitions({
+        retired: (c) => {
+          assertPersonalHostState();
+          return personalRunRetired(c);
+        },
+        enrolled: (c) => {
+          assertPersonalHostState();
+          return assertPersonalRunConsumerEnrolled(c);
+        },
+        requestRetirement: (c) => {
+          assertPersonalHostState();
+          return requestPersonalRunRetirement(c);
+        },
+        async spec(c) {
+          assertPersonalHostState();
+          const bytes = await readFile(
+            `${HOSTS_DIR}/${c.hostId}/${HOST_SPEC_NAME}`,
+          );
+          return {
+            spec: JSON.parse(bytes.toString("utf8")),
+            hash: new Bun.CryptoHasher("sha256").update(bytes).digest("hex"),
+          };
+        },
+        stopPhysical: (c, hash, dispatch) => {
+          assertPersonalHostState();
+          return stopPersonalPhysicalHost(
+            c,
+            `${HOSTS_DIR}/${c.hostId}`,
+            hash,
+            dispatch,
+          );
+        },
+      }),
+  );
+}
+export function stopPersonalHostAndConfirm(consumer: PersonalRunConsumer) {
+  return personalHostTransitions().stop(consumer);
+}
+function privateLifetime(
+  original:
+    | {
+        runKey: string;
+        sessionId: string;
+        binding: import("./personal-repo-runtime").PersonalRepoBinding;
+      }
+    | undefined,
+) {
+  return createHostedRunLifetime(original, {
+    stop: stopPersonalHostAndConfirm,
+    confirmed: (c) => {
+      assertPersonalHostState();
+      return personalRunRetirementConfirmed(c);
+    },
+    async retire(c) {
+      assertPersonalHostState();
+      await retirePersonalRunConsumer(c);
+      personalHostTransitions().forget(c);
+      await personalHostTransitions().cleanupEvidence(c, () =>
+        rm(`${HOSTS_DIR}/${c.hostId}`, { recursive: true, force: true }),
+      );
+    },
+  });
+}
+function hostedLifetimeOptions<T extends HostedRunOpts>(
+  input: T,
+): { opts: T; lifetime: HostedLifetimeControl } {
+  const opts = input.personalRepo
+    ? {
+        ...input,
+        startToken: input.startToken || `rh-${Bun.randomUUIDv7()}`,
+        personalRepo: structuredClone(input.personalRepo),
+      }
+    : input;
+  const lifetime = privateLifetime(
+    opts.personalRepo
+      ? {
+          runKey: opts.startToken!,
+          sessionId: opts.osSessionId,
+          binding: opts.personalRepo,
+        }
+      : undefined,
+  );
+  return {
+    lifetime,
+    opts: opts.personalRepo
+      ? {
+          ...opts,
+          shouldCancel: () => lifetime.closed || !!input.shouldCancel?.(),
+        }
+      : opts,
+  };
+}
+
+function consumerForSpec(spec: RunHostSpec): PersonalRunConsumer {
+  assertPersonalHostLineage(spec);
+  if (!spec.personalRepo) throw new Error("Personal host binding unavailable");
+  return {
+    runKey: spec.logicalRunId!,
+    hostId: spec.hostId,
+    sessionId: spec.osSessionId,
+    binding: spec.personalRepo,
+  };
+}
+
 const DISABLE_FILE = `${OPENSESSION_SESSIONS_DIR}/disable-run-hosts`;
 
 // A fresh host can be journaled while the boot recovery sweep is still
@@ -204,6 +381,7 @@ function runHostsEnabled(): boolean {
 /** Options for a hosted run: RunAgentOpts minus the non-serializable bits,
  *  plus the host/session context. */
 export interface HostedRunOpts {
+  personalRepo?: import("./personal-repo-runtime").PersonalRepoBinding;
   osSessionId: string;
   prompt: string;
   /** Transcript uuid of the server's already-written user line (see
@@ -276,9 +454,21 @@ export interface HostedRunOpts {
  * runAgent. A Linux host never falls back into the gateway: launch failure is
  * visible and retryable, while non-systemd platforms retain in-process mode.
  */
-export async function* runAgentHosted(
+export function runAgentHosted(
   opts: HostedRunOpts,
 ): AsyncGenerator<StreamEvent> {
+  const prepared = hostedLifetimeOptions(opts);
+  return attachHostedRunLifetime(
+    runAgentHostedInner(prepared.opts, prepared.lifetime),
+    prepared.lifetime.api,
+  );
+}
+async function* runAgentHostedInner(
+  opts: HostedRunOpts,
+  lifetime: HostedLifetimeControl,
+): AsyncGenerator<StreamEvent> {
+  if (opts.personalRepo) lifetime.assertOpen();
+  assertPersonalHostMcpNone(opts);
   if (opts.shouldCancel?.()) return;
   if (!runHostsEnabled()) {
     if (localRunHostsSupported()) {
@@ -313,7 +503,7 @@ export async function* runAgentHosted(
   try {
     // spawnHostRun reserves activeHostedRunKeys synchronously before its first
     // await. Transfer the admission reservation without opening a race.
-    const launch = spawnHostRun(opts);
+    const launch = spawnHostRun(opts, "session", "session", lifetime);
     pendingRunHostAdmissions.delete(admission);
     spawned = await launch;
   } catch (error) {
@@ -350,9 +540,21 @@ export interface AuxiliaryHostedRunOpts extends HostedRunOpts {
  * or cannot launch; absorbing workers into the gateway would defeat the
  * control-plane cgroup boundary this API exists to preserve.
  */
-export async function* runAuxiliaryAgentHosted(
+export function runAuxiliaryAgentHosted(
   opts: AuxiliaryHostedRunOpts,
 ): AsyncGenerator<StreamEvent> {
+  const prepared = hostedLifetimeOptions(opts);
+  return attachHostedRunLifetime(
+    runAuxiliaryAgentHostedInner(prepared.opts, prepared.lifetime),
+    prepared.lifetime.api,
+  );
+}
+async function* runAuxiliaryAgentHostedInner(
+  opts: AuxiliaryHostedRunOpts,
+  lifetime: HostedLifetimeControl,
+): AsyncGenerator<StreamEvent> {
+  if (opts.personalRepo) lifetime.assertOpen();
+  assertPersonalHostMcpNone(opts);
   const shouldCancel = () =>
     Boolean(opts.signal?.aborted || opts.shouldCancel?.());
   if (!runHostsEnabled()) {
@@ -388,6 +590,7 @@ export async function* runAuxiliaryAgentHosted(
       { ...opts, shouldCancel },
       "auxiliary",
       opts.transcriptTarget ?? "none",
+      lifetime,
     );
     pendingRunHostAdmissions.delete(admission);
     spawned = await launch;
@@ -414,6 +617,10 @@ async function* runAgentInProcess(
   opts: HostedRunOpts,
   lifecycle: "session" | "auxiliary" = "session",
 ): AsyncGenerator<StreamEvent> {
+  if (opts.personalRepo)
+    throw new Error(
+      "Personal repositories require the compatible detached runtime",
+    );
   yield* runAgent({
     prompt: opts.prompt,
     promptEntryId: opts.promptEntryId,
@@ -473,8 +680,21 @@ export async function* hostedEventsWithJournal(
   handle: HostHandle,
   spec: RunHostSpec,
 ): AsyncGenerator<StreamEvent> {
+  await handle.bindPublication();
+  const call = <T>(
+    operation: string,
+    work: () => T | Promise<T>,
+    context = handle.eventContext(),
+  ) =>
+    context.run(() =>
+      hostedKernelCall(spec, operation, () => {
+        if (!context.alive())
+          throw new Error("Run host publication unavailable");
+        return work();
+      }),
+    );
   const record = hostedRunRecord(spec);
-  const owner = await hostedKernelCall(spec, "initial_owner_read", () =>
+  const owner = await call("initial_owner_read", () =>
     sessionKernel(spec.osSessionId).runStateProjection(),
   );
   if (
@@ -494,49 +714,93 @@ export async function* hostedEventsWithJournal(
     return;
   }
   handle.setHostChangeHandler(async (hostId) => {
+    const replaces =
+      record.personalRepo && record.hostId && record.osSessionId
+        ? {
+            runKey: record.runKey,
+            hostId: record.hostId,
+            sessionId: record.osSessionId,
+            binding: record.personalRepo,
+          }
+        : undefined;
     record.hostId = hostId;
-    await hostedKernelCall(spec, "host_change_journal", () =>
-      journalSet(record),
+    const successor = { ...record };
+    await call("host_change_journal", () =>
+      journalSet(successor, undefined, { replaces }),
     );
   });
-  await hostedKernelCall(spec, "initial_journal", () => journalSet(record));
+  await call("initial_journal", () => journalSet(record));
   let sourceCompleted = false;
   let sawTerminal = false;
   try {
     for await (const ev of handle.events()) {
-      const isCurrent = await hostedKernelCall(spec, "event_owner_read", () =>
-        sessionKernel(spec.osSessionId).isCurrentRunProjection(record.runKey),
-      );
-      if (!isCurrent) {
-        handle.requestCancel();
-        audit({
-          msg: "stale_executor_event_rejected",
-          session_id: spec.osSessionId,
-          run_key: record.runKey,
-          event_type: ev.type,
-        });
+      const context = hostedEventPublication(ev) ?? handle.eventContext();
+      if (context.consumer && context.consumer.hostId !== record.hostId)
         continue;
+      const eventRecord = { ...record };
+      let deliver = false;
+      try {
+        deliver =
+          (await withHostedEventPublication(
+            ev,
+            async () => {
+              const isCurrent = await call(
+                "event_owner_read",
+                () =>
+                  sessionKernel(spec.osSessionId).isCurrentRunProjection(
+                    record.runKey,
+                  ),
+                context,
+              );
+              if (
+                !isCurrent ||
+                !context.alive() ||
+                record.hostId !== eventRecord.hostId
+              ) {
+                if (context.alive()) handle.requestCancel();
+                audit({
+                  msg: "stale_executor_event_rejected",
+                  session_id: spec.osSessionId,
+                  run_key: record.runKey,
+                  event_type: ev.type,
+                });
+                return false;
+              }
+              if (
+                ev.type === "init" &&
+                ev.sessionId &&
+                ev.sessionId !== record.claudeSessionId
+              ) {
+                eventRecord.claudeSessionId = ev.sessionId;
+                await call(
+                  "engine_session_journal",
+                  () => journalSet(eventRecord),
+                  context,
+                );
+              }
+              if (ev.type === "model_switch" && ev.toModel) {
+                eventRecord.model = ev.toModel;
+                eventRecord.transientFallback = ev.temporaryFallback === true;
+                if (shouldPersistModelSwitch(ev))
+                  eventRecord.selectedModel = ev.toModel;
+                await call(
+                  "model_switch_journal",
+                  () => journalSet(eventRecord),
+                  context,
+                );
+              }
+              if (record.hostId !== eventRecord.hostId || !context.alive())
+                return false;
+              Object.assign(record, eventRecord);
+              if (ev.type === "done" || ev.type === "error") sawTerminal = true;
+              return true;
+            },
+            !!spec.personalRepo,
+          )) === true;
+      } catch (error) {
+        if (context.alive()) throw error;
       }
-      if (
-        ev.type === "init" &&
-        ev.sessionId &&
-        ev.sessionId !== record.claudeSessionId
-      ) {
-        record.claudeSessionId = ev.sessionId;
-        await hostedKernelCall(spec, "engine_session_journal", () =>
-          journalSet(record),
-        );
-      }
-      if (ev.type === "model_switch" && ev.toModel) {
-        record.model = ev.toModel;
-        record.transientFallback = ev.temporaryFallback === true;
-        if (shouldPersistModelSwitch(ev)) record.selectedModel = ev.toModel;
-        await hostedKernelCall(spec, "model_switch_journal", () =>
-          journalSet(record),
-        );
-      }
-      if (ev.type === "done" || ev.type === "error") sawTerminal = true;
-      yield ev;
+      if (deliver) yield ev;
     }
     sourceCompleted = true;
   } finally {
@@ -545,9 +809,9 @@ export async function* hostedEventsWithJournal(
       sourceCompleted &&
       (sawTerminal || handle.endedAfterCancellation)
     )
-      journalClear(record.runKey);
-    else if (handle.ended && sourceCompleted)
-      await hostedKernelCall(spec, "abnormal_completion_journal", () =>
+      await journalClearIfLineageAsync({ ...record });
+    else if (handle.ended && sourceCompleted && handle.publicationCurrent())
+      await call("abnormal_completion_journal", () =>
         journalRecordAbnormalCompletion(record),
       );
   }
@@ -555,9 +819,10 @@ export async function* hostedEventsWithJournal(
 
 function hostedRunRecord(spec: RunHostSpec): ActiveRunRecord {
   return {
-    runKey: spec.hostId,
+    runKey: spec.personalRepo ? spec.logicalRunId! : spec.hostId,
     hostId: spec.hostId,
     osSessionId: spec.osSessionId,
+    personalRepo: spec.personalRepo,
     claudeSessionId: spec.engineSessionId,
     prompt: spec.prompt,
     promptEntryId: spec.promptEntryId,
@@ -598,6 +863,7 @@ async function spawnHostRun(
   opts: HostedRunOpts,
   lifecycle: "session" | "auxiliary" = "session",
   transcriptTarget: "session" | "engine" | "none" = "session",
+  lifetime?: HostedLifetimeControl,
 ): Promise<{ handle: HostHandle; spec: RunHostSpec }> {
   const hostId = opts.startToken || `rh-${Bun.randomUUIDv7()}`;
   const dir = `${HOSTS_DIR}/${hostId}`;
@@ -623,6 +889,8 @@ async function spawnHostRun(
     engineSessionId: opts.sessionId,
     cwd: opts.cwd,
     mode: opts.mode,
+    personalRepo: opts.personalRepo,
+    ...(opts.personalRepo ? { logicalRunId: hostId } : {}),
     mcpGrantUser: opts.mcpGrantUser,
     model: opts.model,
     images: opts.images,
@@ -657,7 +925,26 @@ async function spawnHostRun(
     lastResumeAt: opts.lastResumeAt,
   };
   try {
-    await writeJsonAtomicAsync(`${dir}/${HOST_SPEC_NAME}`, spec);
+    if (spec.personalRepo) {
+      await personalHostTransitions().publishSpec(consumerForSpec(spec), () =>
+        import("node:fs/promises").then(({ writeFile }) =>
+          writeFile(`${dir}/${HOST_SPEC_NAME}`, JSON.stringify(spec), {
+            flag: "wx",
+            mode: 0o600,
+          }),
+        ),
+      );
+      freshPersonalSpecs.add(spec);
+      const c = consumerForSpec(spec);
+      lifetime?.track(c);
+      personalHostTransitions().remember(
+        c,
+        () => {},
+        false,
+        undefined,
+        () => lifetime?.assertOpen(),
+      );
+    } else await writeJsonAtomicAsync(`${dir}/${HOST_SPEC_NAME}`, spec);
   } catch (error) {
     if (lifecycle === "session") activeHostedRunKeys.delete(hostId);
     throw error;
@@ -677,22 +964,36 @@ async function spawnHostRun(
   // journal instead: registering them as the parent session's physical run
   // would race its real run generation.
   try {
+    if (spec.personalRepo)
+      await registerPersonalRunConsumer(consumerForSpec(spec));
     if (lifecycle === "session") {
       // Persist before launch. If opensession restarts between systemd-run and
       // socket attachment, the boot sweep can still find the surviving host.
       await journalSet(hostedRunRecord(spec));
     }
+    handle = new HostHandle(
+      dir,
+      spec,
+      {
+        onAskUser: opts.onAskUser,
+        onEngineSession: opts.onEngineSession,
+        onSteerFailed: opts.onSteerFailed,
+      },
+      systemdHostLauncher,
+      spec.logicalRunId ?? spec.hostId,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      lifetime,
+    );
+    await handle.bindPublication();
     try {
       await launchHostUnit(hostId, dir);
     } catch (error) {
       if (!(error instanceof ExecutorProtocolError && error.ambiguousLaunch)) {
         throw error;
       }
-      handle = new HostHandle(dir, spec, {
-        onAskUser: opts.onAskUser,
-        onEngineSession: opts.onEngineSession,
-        onSteerFailed: opts.onSteerFailed,
-      });
       try {
         await handle.connectWithWait(120_000);
         return { handle, spec };
@@ -701,20 +1002,35 @@ async function spawnHostRun(
       }
     }
     launchCompleted = true;
-    handle = new HostHandle(dir, spec, {
-      onAskUser: opts.onAskUser,
-      onEngineSession: opts.onEngineSession,
-      onSteerFailed: opts.onSteerFailed,
-    });
     await handle.connectWithWait(20_000);
     return { handle, spec };
   } catch (cause) {
     let error = cause;
     if (launchCompleted) {
       try {
-        await stopAndVerifyHostAbsent(hostId, dir);
+        if (spec.personalRepo)
+          await personalHostTransitions().finishPhysical(
+            consumerForSpec(spec),
+            true,
+          );
+        else await stopAndVerifyHostAbsent(hostId, dir);
       } catch (cleanupError) {
         error = cleanupError;
+      }
+    }
+    if (
+      spec.personalRepo &&
+      !(error instanceof ExecutorProtocolError && error.ambiguousLaunch)
+    ) {
+      try {
+        const c = consumerForSpec(spec);
+        await stopPersonalHostAndConfirm(c);
+        await retirePersonalRunConsumer(c);
+      } catch {
+        error = new ExecutorProtocolError(
+          "Personal failed launch cleanup remains uncertain",
+          true,
+        );
       }
     }
     if (!(error instanceof ExecutorProtocolError && error.ambiguousLaunch)) {
@@ -722,7 +1038,8 @@ async function spawnHostRun(
       // The HostHandle ctor registered its host-registry control. Drop it only
       // after absence is proven; uncertain launches must remain visibly busy.
       handle?.abandon();
-      if (lifecycle === "session") journalClear(spec.hostId);
+      if (lifecycle === "session")
+        await journalClearIfLineageAsync(hostedRunRecord(spec));
       unregisterRunToken(rpcToken);
       await rm(dir, { recursive: true, force: true }).catch(() => {});
     }
@@ -738,9 +1055,53 @@ async function spawnHostRun(
  * opensession.service deliberately denies.
  */
 async function launchHostUnit(hostId: string, dir: string): Promise<void> {
+  const specBytes = await readFile(`${dir}/${HOST_SPEC_NAME}`);
   const specHash = new Bun.CryptoHasher("sha256")
-    .update(readFileSync(`${dir}/${HOST_SPEC_NAME}`))
+    .update(specBytes)
     .digest("hex");
+  const spec = JSON.parse(specBytes.toString("utf8")) as RunHostSpec;
+  if (Object.hasOwn(spec, "personalRepo")) {
+    const {
+      preparePersonalHostProjection,
+      launchPersonalWithCleanup,
+      PersonalLaunchUncertainError,
+    } = await import("./personal-repo-runtime-host");
+    try {
+      const consumer = consumerForSpec(spec);
+      await launchPersonalWithCleanup(spec, dir, specHash, {
+        prepare: async () => {
+          await personalHostTransitions().assertMayExecute(consumer);
+          await verifyPersonalRunHostHelper();
+          await preparePersonalHostProjection(spec, dir, specHash);
+        },
+        launch: () =>
+          personalHostTransitions().dispatch(
+            consumer,
+            async () => {},
+            async (finalHash) => {
+              if (finalHash !== specHash)
+                throw new Error("Personal spec changed during preparation");
+              if (await launchHostViaExecutor(hostId, dir, { specHash }))
+                return;
+              noteExecutorFallback();
+              await launchHostUnitDirect(hostId, dir, specHash);
+            },
+            process.env.OPENSESSION_EXECUTOR === "0",
+          ),
+        proveAbsent: async () => {
+          if (!(await personalRunRetirementConfirmed(consumer)))
+            await personalHostTransitions().finishPhysical(consumer, true);
+        },
+        ambiguous: (error) =>
+          error instanceof ExecutorProtocolError && error.ambiguousLaunch,
+      });
+    } catch (error) {
+      if (error instanceof PersonalLaunchUncertainError)
+        throw new ExecutorProtocolError(error.message, true);
+      throw error;
+    }
+    return;
+  }
   if (await launchHostViaExecutor(hostId, dir, { specHash })) return;
   noteExecutorFallback();
   try {
@@ -933,7 +1294,7 @@ function unixSocketConnector(sockPath: string): HostConnector {
 }
 
 /** Default launcher: transient systemd units on this host. */
-const systemdHostLauncher: HostLauncher = {
+export const systemdHostLauncher: HostLauncher = {
   async alive(dir, meta) {
     meta ??= await readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
     if (!meta?.pid) return false;
@@ -1015,6 +1376,14 @@ export interface HandleCallbacks {
 
 export class HostHandle {
   private queue = new AsyncEventQueue();
+  private publicationSetup?: Promise<void>;
+  private readonly publicationRejections = new WeakSet<HostPublication>();
+  private readonly publications = new Map<string, HostPublication>();
+  private readonly eventContexts = new WeakMap<
+    HostPublication,
+    HostedEventPublication
+  >();
+  private readonly publicationSource: HostPublicationSource;
   private conn: HostConnection | null = null;
   private connector: HostConnector;
   private up = false;
@@ -1065,11 +1434,27 @@ export class HostHandle {
     private spec: RunHostSpec,
     private cb: HandleCallbacks,
     private launcher: HostLauncher = systemdHostLauncher,
-    private readonly logicalRunId: string = spec.hostId,
+    private readonly logicalRunId: string = spec.personalRepo
+      ? (spec.logicalRunId ?? spec.hostId)
+      : spec.hostId,
     private readonly cancelGraceMs = 5_000,
     private readonly reconnectDelayMs = HOST_RECONNECT_DELAY_MS,
     private readonly connectAttemptTimeoutMs = CONNECT_ATTEMPT_TIMEOUT_MS,
+    private publication?: HostPublication,
+    private readonly lifetime?: HostedLifetimeControl,
   ) {
+    assertPersonalHostLineage(spec);
+    assertPersonalHostMcpNone(spec);
+    if (spec.personalRepo && spec.logicalRunId !== logicalRunId)
+      throw new Error("Personal logical lineage mismatch");
+    this.publicationSource = {
+      osSessionId: spec.osSessionId,
+      cwd: spec.cwd,
+      hostId: spec.hostId,
+      logicalRunId: spec.logicalRunId,
+      personalRepo: spec.personalRepo && structuredClone(spec.personalRepo),
+    };
+    if (publication) this.publications.set(spec.hostId, publication);
     this.connector =
       launcher.connector?.(dir, spec) ??
       unixSocketConnector(`${dir}/${HOST_SOCK_NAME}`);
@@ -1101,6 +1486,16 @@ export class HostHandle {
         this.send({ t: "interrupt_steer", text, images }),
       cancel: () => this.cancelHost(),
     };
+    if (spec.personalRepo && launcher === systemdHostLauncher) {
+      const c = consumerForSpec(spec);
+      personalHostTransitions().remember(
+        c,
+        () => this.retireStoppedConsumer(c),
+        !freshPersonalSpecs.delete(spec),
+        () => this.invalidatePublications(),
+        () => this.lifetime?.assertOpen(),
+      );
+    }
     registerHostRun(
       [
         logicalRunId,
@@ -1113,8 +1508,119 @@ export class HostHandle {
     if (spec.engineSessionId) this.engineSessionId = spec.engineSessionId;
   }
 
-  events(): AsyncGenerator<StreamEvent> {
-    return this.queue[Symbol.asyncIterator]();
+  private currentPersonalConsumer(): PersonalRunConsumer | undefined {
+    if (!this.publicationSource.personalRepo) return;
+    return {
+      runKey: this.logicalRunId,
+      hostId: this.ctl.hostId,
+      sessionId: this.publicationSource.osSessionId,
+      binding: this.publicationSource.personalRepo,
+    };
+  }
+  private invalidatePublications(): void {
+    for (const publication of this.publications.values()) publication.abort();
+  }
+  private retireStoppedConsumer(c: PersonalRunConsumer): void {
+    if (
+      this.logicalRunId === c.runKey &&
+      this.publicationSource.osSessionId === c.sessionId &&
+      this.publicationSource.personalRepo &&
+      samePersonalRepoBinding(this.publicationSource.personalRepo, c.binding)
+    ) {
+      for (const publication of this.publications.values()) publication.abort();
+    }
+    if (
+      this.ctl.hostId !== c.hostId ||
+      this.logicalRunId !== c.runKey ||
+      this.publicationSource.osSessionId !== c.sessionId ||
+      !this.publicationSource.personalRepo ||
+      !samePersonalRepoBinding(this.publicationSource.personalRepo, c.binding)
+    )
+      return;
+    this.stopRequested = true;
+    this.stopping = true;
+    this.cancelledCompletion = true;
+    this.abandon(); // no model/source callbacks and no broker work
+  }
+  private async assertNotRetired(): Promise<void> {
+    if (this.publicationSource.personalRepo) {
+      this.lifetime?.assertOpen();
+      if (this.launcher === systemdHostLauncher) assertPersonalHostState();
+    }
+    const c = this.currentPersonalConsumer();
+    if (c && (await this.withPublication(() => personalRunRetired(c))))
+      throw new Error("Personal logical run retired");
+  }
+
+  /** One admission for this producer, never renewed by reconnect or respawn. */
+  async bindPublication(): Promise<void> {
+    if (this.publication) return;
+    this.publicationSetup ??= this.assertNotRetired()
+      .then(() => bindHostPublication(this.publicationSource))
+      .then((publish) => {
+        this.publication = publish;
+        this.publications.set(publish.source.hostId, publish);
+      });
+    await this.publicationSetup;
+  }
+
+  withPublication<T>(work: () => T, publication = this.publication): T {
+    if (!publication) return work(); // legacy shared callers only
+    let result!: T;
+    publication(() => {
+      result = work();
+    });
+    return result;
+  }
+
+  /** Synchronous original-source fence, including queued consumer work. */
+  publicationCurrent(publication = this.publication): boolean {
+    if (
+      (!publication && this.publicationSource.personalRepo) ||
+      publication?.signal.aborted
+    )
+      return false;
+    let allowed = false;
+    this.withPublication(() => {
+      allowed = sessionPublicationAllowed(this.publicationSource.osSessionId);
+    }, publication);
+    return allowed;
+  }
+
+  eventContext(publication = this.publication): HostedEventPublication {
+    const existing = publication && this.eventContexts.get(publication);
+    if (existing) return existing;
+    const context = publication
+      ? hostPublicationContext(publication)
+      : Object.freeze({
+          personal: !!this.publicationSource.personalRepo,
+          alive: () => this.publicationCurrent(publication),
+          run: <T>(work: () => T) => this.withPublication(work, publication),
+        });
+    if (publication) this.eventContexts.set(publication, context);
+    return context;
+  }
+  tagEvent(event: StreamEvent, publication = this.publication): StreamEvent {
+    if (!this.publicationSource.personalRepo || hostedEventPublication(event))
+      return event;
+    return tagHostedEvent(event, this.eventContext(publication));
+  }
+  private pushEvent(event: StreamEvent, publication = this.publication): void {
+    const context = this.eventContext(publication);
+    if (context.alive())
+      this.queue.push(
+        context.personal ? tagHostedEvent(event, context) : event,
+      );
+  }
+
+  async *events(): AsyncGenerator<StreamEvent> {
+    for await (const event of this.queue) {
+      if (
+        !this.publicationSource.personalRepo ||
+        hostedEventPublication(event)?.alive()
+      )
+        yield event;
+    }
   }
 
   /** True once the run reached its clean end (terminal consumed, or the host
@@ -1126,7 +1632,11 @@ export class HostHandle {
   takeObservedTerminal(): StreamEvent | undefined {
     const terminal = this.terminalEvent;
     this.terminalEvent = undefined;
-    return terminal;
+    return terminal &&
+      (!this.publicationSource.personalRepo ||
+        hostedEventPublication(terminal)?.alive())
+      ? terminal
+      : undefined;
   }
 
   /** Resolves once the handle finished or was abandoned and its run-dir
@@ -1164,6 +1674,8 @@ export class HostHandle {
       const owned = this.captureOwnership();
       const moved = () => this.endedClean || this.ownershipMoved(owned);
       const observation: Promise<HostObservation> = (async () => {
+        await this.bindPublication();
+        const publication = this.publication;
         const standDown = (): HostObservation => ({
           ended: this.endedClean,
           alive: true,
@@ -1181,7 +1693,11 @@ export class HostHandle {
         let meta = await this.readMeta();
         if (moved()) return standDown();
         if (meta?.hostId && meta.hostId !== owned.hostId) meta = null;
-        const ended = await this.acceptOfflineTerminal(meta, owned);
+        const ended = await this.acceptOfflineTerminal(
+          meta,
+          owned,
+          publication,
+        );
         return { ended, alive: false, meta };
       })().finally(() => {
         if (this.terminalObservation === observation)
@@ -1206,15 +1722,31 @@ export class HostHandle {
     );
   }
 
-  private readMeta(): Promise<RunHostMeta | null> {
-    return readJsonSafe<RunHostMeta>(`${this.dir}/${HOST_META_NAME}`);
+  private async readMeta(): Promise<RunHostMeta | null> {
+    const hostId = this.ctl.hostId;
+    const meta = await readJsonSafe<RunHostMeta>(
+      `${this.dir}/${HOST_META_NAME}`,
+    );
+    if (
+      this.publicationSource.personalRepo &&
+      meta &&
+      (meta.hostId !== hostId ||
+        meta.osSessionId !== this.publicationSource.osSessionId)
+    )
+      return null;
+    return meta;
   }
 
-  private acceptTerminal(done: StreamEvent): void {
-    if (this.sawTerminal) return;
+  private acceptTerminal(
+    done: StreamEvent,
+    publication = this.publication,
+  ): void {
+    if (this.sawTerminal || !this.publicationCurrent(publication)) return;
     this.sawTerminal = true;
-    this.terminalEvent = done;
-    this.queue.push(done);
+    this.terminalEvent = this.publicationSource.personalRepo
+      ? tagHostedEvent(done, this.eventContext(publication))
+      : done;
+    this.pushEvent(done, publication);
   }
 
   /**
@@ -1228,6 +1760,7 @@ export class HostHandle {
   private async acceptOfflineTerminal(
     meta: RunHostMeta | null,
     owned: { hostId: string; generation: number },
+    publication = this.publication,
   ): Promise<boolean> {
     if (this.endedClean) return true;
     const done = meta?.done;
@@ -1235,13 +1768,19 @@ export class HostHandle {
     if (this.ownershipMoved(owned)) return false;
     if (meta.hostId && meta.hostId !== owned.hostId) return false;
     await new Promise<void>((resolve) =>
-      this.enqueueProjectionFrame(() => {
-        if (!this.endedClean && !this.ownershipMoved(owned)) {
-          this.acceptTerminal(done);
-          this.finish();
-        }
-        resolve();
-      }, true),
+      this.enqueueProjectionFrame(
+        () => {
+          if (!this.endedClean && !this.ownershipMoved(owned)) {
+            if (!this.publicationCurrent(publication))
+              this.cancelledCompletion = true;
+            this.acceptTerminal(done, publication);
+            this.finish();
+          }
+          resolve();
+        },
+        true,
+        publication,
+      ),
     );
     return this.endedClean;
   }
@@ -1278,14 +1817,27 @@ export class HostHandle {
   }
 
   async executionEvidence(): Promise<HostExecutionEvidence> {
-    if (this.launcher.evidence) return this.launcher.evidence(this.dir);
+    await this.bindPublication();
+    const publication = this.publication;
+    if (this.launcher.evidence) {
+      const evidence = await this.launcher.evidence(this.dir);
+      return this.publicationCurrent(publication)
+        ? {
+            ...evidence,
+            ...(evidence.done
+              ? { done: this.tagEvent(evidence.done, publication) }
+              : {}),
+          }
+        : { started: evidence.started };
+    }
     const meta = await this.readMeta();
+    if (!this.publicationCurrent(publication)) return { started: !!meta?.pid };
     return {
       started: !!meta?.pid,
       ...(meta?.engineSessionId
         ? { engineSessionId: meta.engineSessionId }
         : {}),
-      ...(meta?.done ? { done: meta.done } : {}),
+      ...(meta?.done ? { done: this.tagEvent(meta.done, publication) } : {}),
     };
   }
 
@@ -1300,6 +1852,21 @@ export class HostHandle {
     preserveEvidence = false,
   ): Promise<boolean> {
     if (this.ended) return true;
+    const personal = this.currentPersonalConsumer();
+    if (personal && this.launcher === systemdHostLauncher) {
+      try {
+        await stopPersonalHostAndConfirm(personal);
+        await retirePersonalRunConsumer(personal);
+        if (!preserveEvidence)
+          await rm(`${HOSTS_DIR}/${personal.hostId}`, {
+            recursive: true,
+            force: true,
+          });
+        return true;
+      } catch {
+        return false;
+      }
+    }
     this.stopping = true;
     this.send({ t: "cancel" });
     const deadline = Date.now() + timeoutMs;
@@ -1352,6 +1919,23 @@ export class HostHandle {
 
   private cancelHost(): boolean {
     if (this.endedClean || this.stopRequested) return true;
+    const personal = this.currentPersonalConsumer();
+    if (personal && this.launcher === systemdHostLauncher) {
+      this.stopRequested = true;
+      this.send({ t: "cancel" });
+      void stopPersonalHostAndConfirm(personal)
+        .then(async () => {
+          await retirePersonalRunConsumer(personal);
+          await rm(`${HOSTS_DIR}/${personal.hostId}`, {
+            recursive: true,
+            force: true,
+          });
+        })
+        .catch(() => {
+          this.stopRequested = false;
+        });
+      return true;
+    }
     const delivered = this.send({ t: "cancel" });
     if (!this.launcher.stop) return delivered;
 
@@ -1409,6 +1993,7 @@ export class HostHandle {
    *  the WS connector while the host's dial-back hasn't arrived — either way
    *  the 300ms poll below preserves the old "wait for the socket" cadence.) */
   async connectWithWait(timeoutMs: number): Promise<void> {
+    await this.bindPublication();
     const deadline = Date.now() + timeoutMs;
     let lastErr: unknown = null;
     let attempts = 0;
@@ -1441,6 +2026,11 @@ export class HostHandle {
    * the current attempt and are handled as before.
    */
   private async connectOnce(): Promise<void> {
+    await this.assertNotRetired();
+    await this.bindPublication();
+    await this.assertNotRetired();
+    if (!this.publicationCurrent())
+      throw new Error("Run host publication unavailable");
     const attempt = ++this.connectAttempt;
     const owned = this.captureOwnership();
     const connector = this.connector;
@@ -1452,10 +2042,11 @@ export class HostHandle {
       this.hostGeneration !== owned.generation ||
       this.ctl.hostId !== owned.hostId ||
       (adopted ? this.conn !== adopted : this.connectAttempt !== attempt);
+    const publication = this.publication;
     const connecting = connector.connect({
       onMsg: (m) => {
         if (stale()) return;
-        this.handleMsg(m);
+        this.handleMsg(m, publication);
       },
       onClose: () => {
         if (stale()) return;
@@ -1468,7 +2059,9 @@ export class HostHandle {
         }
         this.up = false;
         this.conn = null;
-        void this.onDisconnect();
+        this.withPublication(() => {
+          void this.onDisconnect();
+        }, publication);
       },
     });
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -1531,7 +2124,27 @@ export class HostHandle {
     } catch {}
   }
 
-  private acceptsSideEffectFrame(frameType: string): boolean {
+  private rejectPublication(publication = this.publication): void {
+    if (publication) {
+      if (
+        publication.source.personalRepo &&
+        publication.source.hostId !== this.ctl.hostId
+      )
+        return;
+      if (this.publicationRejections.has(publication)) return;
+      this.publicationRejections.add(publication);
+    }
+    this.requestCancel();
+  }
+
+  private acceptsSideEffectFrame(
+    frameType: string,
+    publication = this.publication,
+  ): boolean {
+    if (!this.publicationCurrent(publication)) {
+      this.rejectPublication(publication);
+      return false;
+    }
     if (this.spec.lifecycle === "auxiliary") return true;
     const kernel = sessionKernel(this.spec.osSessionId);
     if (kernel.isCurrentRunProjection(this.logicalRunId)) return true;
@@ -1568,20 +2181,28 @@ export class HostHandle {
   private enqueueProjectionFrame(
     operation: () => void | Promise<void>,
     runAfterFailure = false,
+    publication = this.publication,
   ): void {
     const prior = this.projectionTail ?? Promise.resolve();
     const current = prior.then(async () => {
       if (this.projectionFailure && !runAfterFailure)
         throw this.projectionFailure;
-      await operation();
+      let result: void | Promise<void> = undefined;
+      this.withPublication(() => {
+        result = operation();
+      }, publication);
+      await result;
     });
     const observed = current.catch((error) => {
       if (!this.projectionFailure) {
         this.projectionFailure = error;
-        this.queue.push({
-          type: "error",
-          content: `Run host projection failed: ${error instanceof Error ? error.message : String(error)}`,
-        });
+        this.pushEvent(
+          {
+            type: "error",
+            content: `Run host projection failed: ${error instanceof Error ? error.message : String(error)}`,
+          },
+          publication,
+        );
       }
     });
     this.projectionTail = observed;
@@ -1630,7 +2251,7 @@ export class HostHandle {
     });
   }
 
-  private deferEndedHelloFinish(): void {
+  private deferEndedHelloFinish(publication = this.publication): void {
     this.pendingEndedHello = true;
     if (this.endedHelloFallback) clearTimeout(this.endedHelloFallback);
     this.endedHelloFallback = setTimeout(() => {
@@ -1640,9 +2261,22 @@ export class HostHandle {
       // compatibility fence. Still serialize cleanup behind every projection
       // received before that window closed. A frame arriving while those
       // projections drain re-arms the timer and cancels this cleanup attempt.
-      this.enqueueProjectionFrame(() => {
-        if (this.pendingEndedHello && !this.endedHelloFallback) this.finish();
-      }, true);
+      this.enqueueProjectionFrame(
+        () => {
+          if (
+            publication?.source.personalRepo &&
+            publication.source.hostId !== this.ctl.hostId
+          )
+            return;
+          if (this.pendingEndedHello && !this.endedHelloFallback) {
+            if (!this.publicationCurrent(publication))
+              this.cancelledCompletion = true;
+            this.finish();
+          }
+        },
+        true,
+        publication,
+      );
     }, ENDED_HELLO_CATCHUP_FALLBACK_MS);
   }
 
@@ -1652,9 +2286,48 @@ export class HostHandle {
     this.pendingEndedHello = false;
   }
 
-  private handleMsg(msg: HostToClientMsg): void {
+  /** Revocation fences data, not positively proven physical completion.
+   * A live replay's catchup_complete is NOT an ended-host receipt. */
+  private discardUnpublishedFrame(
+    msg: HostToClientMsg,
+    publication = this.publication,
+  ): boolean {
+    if (this.publicationCurrent(publication)) return false;
+    this.rejectPublication(publication);
+    if (
+      publication?.source.personalRepo &&
+      publication.source.hostId !== this.ctl.hostId
+    )
+      return true;
+    if (msg.t === "hello" && msg.state === "ended") {
+      this.deferEndedHelloFinish(publication);
+    } else if (
+      msg.t === "end" ||
+      (msg.t === "catchup_complete" && this.pendingEndedHello)
+    ) {
+      this.cancelledCompletion = true;
+      this.finish();
+    }
+    return true;
+  }
+
+  private handleMsg(
+    msg: HostToClientMsg,
+    publication = this.publication,
+  ): void {
+    this.withPublication(
+      () => this.handlePublishedMsg(msg, publication),
+      publication,
+    );
+  }
+
+  private handlePublishedMsg(
+    msg: HostToClientMsg,
+    publication = this.publication,
+  ): void {
+    if (this.discardUnpublishedFrame(msg, publication)) return;
     if (msg.t === "transcript" && this.pendingEndedHello) {
-      this.deferEndedHelloFinish();
+      this.deferEndedHelloFinish(publication);
     }
     if (
       msg.t !== "transcript" &&
@@ -1666,16 +2339,30 @@ export class HostHandle {
       // projectionFailure is a permanent authority failure for this handle,
       // not just queue state.
       const cleanupFrame = msg.t === "end" || msg.t === "catchup_complete";
-      this.enqueueProjectionFrame(() => this.handleMsgNow(msg), cleanupFrame);
+      this.enqueueProjectionFrame(
+        () => this.handleMsgNow(msg, publication),
+        cleanupFrame,
+        publication,
+      );
       return;
     }
-    this.handleMsgNow(msg);
+    this.handleMsgNow(msg, publication);
   }
 
-  private handleMsgNow(msg: HostToClientMsg): void {
+  private handleMsgNow(
+    msg: HostToClientMsg,
+    publication = this.publication,
+  ): void {
+    if (this.discardUnpublishedFrame(msg, publication)) return;
+    if (
+      msg.t !== "transcript" &&
+      publication?.source.personalRepo &&
+      publication.source.hostId !== this.ctl.hostId
+    )
+      return;
     switch (msg.t) {
       case "hello": {
-        if (!this.acceptsSideEffectFrame("hello")) break;
+        if (!this.acceptsSideEffectFrame("hello", publication)) break;
         if (msg.engineSessionId) this.noteEngineId(msg.engineSessionId);
         if (msg.effectiveModel) {
           this.effectiveModel = msg.effectiveModel;
@@ -1694,34 +2381,38 @@ export class HostHandle {
         ) {
           const fromModel = this.reportedSelectedModel;
           this.reportedSelectedModel = msg.selectedModel;
-          this.queue.push({
-            type: "model_switch",
-            fromModel,
-            toModel: msg.selectedModel,
-            switchReason: "out of credits",
-            temporaryFallback: false,
-          });
+          this.pushEvent(
+            {
+              type: "model_switch",
+              fromModel,
+              toModel: msg.selectedModel,
+              switchReason: "out of credits",
+              temporaryFallback: false,
+            },
+            publication,
+          );
         }
         this.connectedBefore = true;
         if (
           msg.pendingAsks?.length &&
-          this.acceptsSideEffectFrame("hello.pendingAsks")
+          this.acceptsSideEffectFrame("hello.pendingAsks", publication)
         )
           for (const ask of msg.pendingAsks)
-            this.handleAsk(ask.askId, ask.input);
+            this.handleAsk(ask.askId, ask.input, publication);
         if (msg.state === "ended") {
-          if (msg.done) this.acceptTerminal(msg.done);
+          if (msg.done) this.acceptTerminal(msg.done, publication);
           // A detached host sends hello before replaying transcript frames.
           // Finishing here closes the socket and discards summaries produced
           // while the gateway was down. catchup_complete is the exact fence;
           // the timer only supports hosts from before that frame existed.
-          this.deferEndedHelloFinish();
+          this.deferEndedHelloFinish(publication);
         }
         break;
       }
       case "event": {
         const ev = msg.event;
-        if (!this.acceptsSideEffectFrame(`event:${ev.type}`)) break;
+        if (!this.acceptsSideEffectFrame(`event:${ev.type}`, publication))
+          break;
         if (ev.type === "init" && ev.sessionId) this.noteEngineId(ev.sessionId);
         if (ev.type === "model_switch" && ev.toModel) {
           this.effectiveModel = ev.toModel;
@@ -1732,33 +2423,40 @@ export class HostHandle {
         }
         if (ev.type === "done" || ev.type === "error") {
           this.sawTerminal = true;
-          this.terminalEvent = ev;
+          this.terminalEvent = this.publicationSource.personalRepo
+            ? tagHostedEvent(ev, this.eventContext(publication))
+            : ev;
         }
-        this.queue.push(ev);
+        this.pushEvent(ev, publication);
         break;
       }
       case "ask":
-        if (this.acceptsSideEffectFrame("ask"))
-          this.handleAsk(msg.askId, msg.input);
+        if (this.acceptsSideEffectFrame("ask", publication))
+          this.handleAsk(msg.askId, msg.input, publication);
         break;
       case "transcript":
         // Transcript frames bypass the StreamEvent queue, so fence them here
         // against the same run generation as ordinary host events.
-        if (!this.acceptsSideEffectFrame("transcript")) break;
-        this.enqueueProjectionFrame(() => {
-          const lines = this.alignSteerTranscriptIds(msg.lines);
-          if (this.spec.transcriptTarget === "none") return;
-          return this.spec.transcriptTarget === "engine"
-            ? appendTranscriptEntries(msg.engineSessionId, lines)
-            : applyForwardedTranscriptStrict(
-                this.spec.osSessionId,
-                msg.engineSessionId,
-                lines,
-              );
-        });
+        if (!this.acceptsSideEffectFrame("transcript", publication)) break;
+        this.enqueueProjectionFrame(
+          () => {
+            if (!this.acceptsSideEffectFrame("transcript", publication)) return;
+            const lines = this.alignSteerTranscriptIds(msg.lines);
+            if (this.spec.transcriptTarget === "none") return;
+            return this.spec.transcriptTarget === "engine"
+              ? appendTranscriptEntries(msg.engineSessionId, lines)
+              : applyForwardedTranscriptStrict(
+                  this.spec.osSessionId,
+                  msg.engineSessionId,
+                  lines,
+                );
+          },
+          false,
+          publication,
+        );
         break;
       case "steer_failed":
-        if (this.acceptsSideEffectFrame("steer_failed")) {
+        if (this.acceptsSideEffectFrame("steer_failed", publication)) {
           const failed = this.pendingSteerTranscripts.findIndex(
             (pending) => pending.text === msg.text,
           );
@@ -1782,7 +2480,7 @@ export class HostHandle {
       }
       case "end": {
         if (!msg.done && this.stopRequested) this.cancelledCompletion = true;
-        if (msg.done) this.acceptTerminal(msg.done);
+        if (msg.done) this.acceptTerminal(msg.done, publication);
         this.finish();
         break;
       }
@@ -1792,11 +2490,18 @@ export class HostHandle {
     }
   }
 
-  private handleAsk(askId: string, input: Record<string, unknown>): void {
+  private handleAsk(
+    askId: string,
+    input: Record<string, unknown>,
+    publication = this.publication,
+  ): void {
     // A reconnect re-delivers pending asks in hello — don't double-handle ones
     // this process is already blocking a human on.
-    if (this.handlingAsks.has(askId)) return;
-    this.handlingAsks.add(askId);
+    const key = publication?.source.personalRepo
+      ? `${publication.source.hostId}:${askId}`
+      : askId;
+    if (this.handlingAsks.has(key)) return;
+    this.handlingAsks.add(key);
     void (async () => {
       let result:
         | { behavior: "allow"; updatedInput: Record<string, unknown> }
@@ -1815,8 +2520,13 @@ export class HostHandle {
           message: `Question UI failed (${e?.message || e}) — decide yourself and note the assumption.`,
         };
       }
-      this.handlingAsks.delete(askId);
-      if (!this.acceptsSideEffectFrame("ask_answer")) return;
+      this.handlingAsks.delete(key);
+      if (
+        !this.acceptsSideEffectFrame("ask_answer", publication) ||
+        (publication?.source.personalRepo &&
+          publication.source.hostId !== this.ctl.hostId)
+      )
+        return;
       this.send({ t: "ask_answer", askId, result });
     })();
   }
@@ -1829,6 +2539,7 @@ export class HostHandle {
    * shutdown message and run-dir removal (the failing caller owns the dir).
    */
   abandon(): void {
+    if (this.publicationSource.personalRepo) this.publication?.abort();
     if (this.endedClean) return;
     this.endedClean = true;
     this.clearEndedHelloFallback();
@@ -1853,6 +2564,11 @@ export class HostHandle {
     unregisterHostRun(this.ctl);
     unregisterRunToken(this.spec.rpcToken);
     this.connector.dispose?.();
+    if (this.publicationSource.personalRepo) {
+      // Caller-owned completion acknowledgement follows all post-loop writes.
+      this.finalized.resolve();
+      return;
+    }
     void rm(this.dir, { recursive: true, force: true })
       .catch(() => {})
       .finally(() => this.finalized.resolve());
@@ -1929,7 +2645,7 @@ export class HostHandle {
               "[host-client] uncertain replacement host did not become connectable:",
               connectError,
             );
-            this.queue.push({
+            this.pushEvent({
               type: "error",
               content:
                 "The replacement run host may still be starting. Recovery state was preserved to avoid running the turn twice.",
@@ -1940,7 +2656,7 @@ export class HostHandle {
         }
       }
     }
-    this.queue.push({
+    this.pushEvent({
       type: "error",
       content: "Run host process died unexpectedly and could not be resumed.",
     });
@@ -1962,8 +2678,21 @@ export class HostHandle {
     meta?: RunHostMeta | null,
     onReserved?: (owned: { hostId: string; generation: number }) => void,
   ): Promise<void> {
+    if (
+      this.endedClean ||
+      this.stopRequested ||
+      this.stopping ||
+      !this.publicationCurrent()
+    )
+      throw new Error(
+        "respawn refused: handle is ending or publication expired",
+      );
+    await this.assertNotRetired();
     if (this.endedClean || this.stopRequested || this.stopping)
-      throw new Error("respawn refused: handle is ending");
+      throw new Error("Personal respawn superseded");
+    const oldConsumer = this.currentPersonalConsumer();
+    const oldPublication = this.publication;
+    const oldProjections = this.projectionTail;
     const oldDir = this.dir;
     const hostId = `rh-${Bun.randomUUIDv7()}`;
     const dir = this.launcher.newRunDir(hostId);
@@ -1997,6 +2726,7 @@ export class HostHandle {
     this.ctl.hostId = hostId;
     onReserved?.({ hostId, generation });
     const lost = () =>
+      !this.publicationCurrent() ||
       this.endedClean ||
       this.stopRequested ||
       this.stopping ||
@@ -2006,7 +2736,12 @@ export class HostHandle {
       if (launched) {
         // Whoever is stopping this handle targets this host id too; proving
         // absence twice is idempotent.
-        await (this.launcher.stop ?? stopAndVerifyHostAbsent)(hostId, dir);
+        if (spec.personalRepo && this.launcher === systemdHostLauncher)
+          await personalHostTransitions().finishPhysical(
+            consumerForSpec(spec),
+            true,
+          );
+        else await (this.launcher.stop ?? stopAndVerifyHostAbsent)(hostId, dir);
       } else {
         await rm(dir, { recursive: true, force: true }).catch(() => {});
       }
@@ -2017,10 +2752,55 @@ export class HostHandle {
       await this.launcher.writeSpec(dir, spec);
     } else {
       await mkdir(dir, { recursive: true });
-      await writeJsonAtomicAsync(`${dir}/${HOST_SPEC_NAME}`, spec);
+      if (spec.personalRepo && this.launcher === systemdHostLauncher)
+        await personalHostTransitions().publishSpec(consumerForSpec(spec), () =>
+          import("node:fs/promises").then(({ writeFile }) =>
+            writeFile(`${dir}/${HOST_SPEC_NAME}`, JSON.stringify(spec), {
+              flag: "wx",
+              mode: 0o600,
+            }),
+          ),
+        );
+      else await writeJsonAtomicAsync(`${dir}/${HOST_SPEC_NAME}`, spec);
+    }
+    if (oldConsumer && this.launcher === systemdHostLauncher) {
+      const next = this.currentPersonalConsumer()!;
+      personalHostTransitions().remember(
+        next,
+        () => this.retireStoppedConsumer(next),
+        false,
+        () => this.invalidatePublications(),
+        () => this.lifetime?.assertOpen(),
+      );
     }
     if (lost()) await refuse("spec export", false);
-    await this.onHostChanged?.(hostId);
+    const nextConsumer = this.currentPersonalConsumer();
+    if (nextConsumer) {
+      this.lifetime?.track(nextConsumer);
+      if (this.launcher === systemdHostLauncher)
+        await this.withPublication(() =>
+          registerPersonalRunConsumer(nextConsumer),
+        );
+    }
+    await this.withPublication(() => this.onHostChanged?.(hostId));
+    if (
+      oldConsumer &&
+      oldPublication &&
+      this.launcher === systemdHostLauncher
+    ) {
+      await oldProjections;
+      const successor = await bindHostPublicationSuccessor(
+        oldPublication,
+        spec,
+      );
+      this.publication = successor;
+      this.publications.set(hostId, successor);
+      oldPublication.abort();
+      await personalHostTransitions().finishPhysical(oldConsumer);
+      await confirmPersonalRunPhysicalCompletion(oldConsumer);
+      personalHostTransitions().forget(oldConsumer);
+    }
+    await this.assertNotRetired();
     if (lost()) await refuse("host change", false);
     // The old host id's transport registration (WS token/conn) is dead with
     // the old host — swap in a connector for the new id (same wsToken; the
@@ -2031,7 +2811,10 @@ export class HostHandle {
       unixSocketConnector(`${dir}/${HOST_SOCK_NAME}`);
     // Expose the dispatch so a concurrent stop waits for it to settle before
     // proving this host absent (see stopOwnedHost).
-    const dispatch = this.launcher.launch(hostId, dir);
+    if (this.publicationSource.personalRepo) this.lifetime?.assertOpen();
+    const dispatch = this.withPublication(() =>
+      this.launcher.launch(hostId, dir),
+    );
     const settled = dispatch.then(
       () => {},
       () => {},
@@ -2048,7 +2831,12 @@ export class HostHandle {
       await this.connectWithWait(20_000);
     } catch (cause) {
       try {
-        await (this.launcher.stop ?? stopAndVerifyHostAbsent)(hostId, dir);
+        if (spec.personalRepo && this.launcher === systemdHostLauncher)
+          await personalHostTransitions().finishPhysical(
+            consumerForSpec(spec),
+            true,
+          );
+        else await (this.launcher.stop ?? stopAndVerifyHostAbsent)(hostId, dir);
       } catch (cleanupError) {
         throw cleanupError;
       }
@@ -2095,21 +2883,21 @@ export async function* reconcileUncertainHostEvents(
           yield finalEvidence.done;
           return;
         }
-        yield {
+        yield handle.tagEvent({
           type: "error",
           content:
             evidence.started || finalEvidence.started
               ? `${label} may have executed before it was stopped. Recovery evidence was retained.`
               : `${label} was not observed and its process was stopped.`,
-        };
+        });
         return;
       }
       if (!reportedUncertain) {
         reportedUncertain = true;
-        yield {
+        yield handle.tagEvent({
           type: "runner_notice",
           text: `${label} launch outcome remains uncertain. Recovery ownership was retained.`,
-        };
+        });
       }
       console.warn(`[host-client] ${label} remains uncertain:`, error);
       deadline = Date.now() + 60_000;
@@ -2162,15 +2950,62 @@ export function resolveInactiveHostRecovery(
  * or an engine session that can be resumed in-process. Execution evidence
  * without an engine id stays uncertain so the original prompt is not replayed.
  */
-export async function resumeLocalHostRun(
+export function resumeLocalHostRun(
   run: ActiveRunRecord,
   callbacks: HandleCallbacks,
 ): Promise<AsyncGenerator<StreamEvent> | "uncertain" | null> {
+  const lifetime = privateLifetime(
+    run.personalRepo
+      ? {
+          runKey: run.runKey,
+          sessionId: run.osSessionId!,
+          binding: run.personalRepo,
+        }
+      : undefined,
+  );
+  if (run.personalRepo && run.hostId)
+    lifetime.track({
+      runKey: run.runKey,
+      hostId: run.hostId,
+      sessionId: run.osSessionId!,
+      binding: run.personalRepo,
+    });
+  const pending = resumeLocalHostRunInner(run, callbacks, lifetime).then(
+    (result) => {
+      if (result && typeof result === "object")
+        attachHostedRunLifetime(result, lifetime.api);
+      return result;
+    },
+  );
+  return attachHostedRunLifetime(pending, lifetime.api);
+}
+async function resumeLocalHostRunInner(
+  run: ActiveRunRecord,
+  callbacks: HandleCallbacks,
+  lifetime: HostedLifetimeControl,
+): Promise<AsyncGenerator<StreamEvent> | "uncertain" | null> {
+  if (run.personalRepo) lifetime.assertOpen();
   if (!run.hostId) return null;
+  if (
+    run.personalRepo &&
+    (await personalRunRetired({
+      runKey: run.runKey,
+      hostId: run.hostId,
+      sessionId: run.osSessionId!,
+      binding: run.personalRepo,
+    }))
+  )
+    return "uncertain";
   const dir = `${HOSTS_DIR}/${run.hostId}`;
   let meta = await readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
   const spec = await readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`);
+  const matchingMeta = (value: RunHostMeta | null) =>
+    !run.personalRepo ||
+    !value ||
+    (value.hostId === run.hostId && value.osSessionId === run.osSessionId);
+  if (!matchingMeta(meta)) return "uncertain";
   if (!spec) {
+    if (run.personalRepo) return "uncertain";
     try {
       if (await hostUnitActive(run.hostId)) return "uncertain";
     } catch {
@@ -2188,19 +3023,43 @@ export async function resumeLocalHostRun(
     }
     return null;
   }
+  if (
+    spec.hostId !== run.hostId ||
+    spec.osSessionId !== run.osSessionId ||
+    (run.personalRepo && spec.logicalRunId !== run.runKey) ||
+    !!spec.personalRepo !== !!run.personalRepo ||
+    (run.personalRepo &&
+      (!spec.personalRepo ||
+        !samePersonalRepoBinding(run.personalRepo, spec.personalRepo)))
+  )
+    return "uncertain";
+  assertPersonalHostMcpNone(spec);
+  const publication = await bindHostPublication(spec);
+  const publicationCurrent = () => {
+    let allowed = false;
+    publication(() => {
+      allowed = sessionPublicationAllowed(spec.osSessionId);
+    });
+    return allowed;
+  };
   let alive = await systemdHostLauncher.alive(dir, meta);
   if (!alive && !meta?.done) {
     await waitForLocalHost(dir, 30_000);
     meta = await readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
+    if (!matchingMeta(meta)) return "uncertain";
     alive = await systemdHostLauncher.alive(dir, meta);
   }
   if (!alive) {
     if (meta?.done) {
       const done = meta.done;
       unregisterRunToken(spec.rpcToken);
-      await rm(dir, { recursive: true, force: true }).catch(() => {});
+      if (!spec.personalRepo)
+        await rm(dir, { recursive: true, force: true }).catch(() => {});
       return (async function* () {
-        yield done;
+        if (publicationCurrent())
+          yield spec.personalRepo
+            ? tagHostedEvent(done, hostPublicationContext(publication))
+            : done;
       })();
     }
     try {
@@ -2234,12 +3093,29 @@ export async function resumeLocalHostRun(
     callbacks,
     systemdHostLauncher,
     run.runKey,
+    undefined,
+    undefined,
+    undefined,
+    publication,
+    lifetime,
   );
   handle.setHostChangeHandler(async (hostId) => {
+    const replaces =
+      run.personalRepo && run.hostId && run.osSessionId
+        ? {
+            runKey: run.runKey,
+            hostId: run.hostId,
+            sessionId: run.osSessionId,
+            binding: run.personalRepo,
+          }
+        : undefined;
     run.hostId = hostId;
-    await hostedKernelCall(spec, "reattach_host_change_journal", () =>
-      journalSet({ ...run, claimedAt: undefined }),
-    );
+    const successor = { ...run, claimedAt: undefined };
+    await hostedKernelCall(spec, "reattach_host_change_journal", () => {
+      if (!handle.publicationCurrent())
+        throw new Error("Run host publication unavailable");
+      return journalSet(successor, undefined, { replaces });
+    });
   });
   try {
     await handle.connectWithWait(20_000);
@@ -2255,9 +3131,13 @@ export async function resumeLocalHostRun(
       return "uncertain";
     }
     meta = await readJsonSafe<RunHostMeta>(`${dir}/${HOST_META_NAME}`);
+    if (!matchingMeta(meta)) return "uncertain";
     if (meta?.done) {
       return (async function* () {
-        yield meta.done!;
+        if (publicationCurrent())
+          yield spec.personalRepo
+            ? tagHostedEvent(meta.done!, hostPublicationContext(publication))
+            : meta.done!;
       })();
     }
     const recovery = resolveInactiveHostRecovery(
@@ -2275,27 +3155,49 @@ export async function resumeLocalHostRun(
   return (async function* (): AsyncGenerator<StreamEvent> {
     try {
       for await (const event of handle.events()) {
-        let changed = false;
-        if (
-          event.type === "init" &&
-          event.sessionId &&
-          event.sessionId !== run.claudeSessionId
-        ) {
-          run.claudeSessionId = event.sessionId;
-          changed = true;
+        const context = hostedEventPublication(event) ?? handle.eventContext();
+        if (context.consumer && context.consumer.hostId !== run.hostId)
+          continue;
+        const eventRecord = { ...run };
+        let deliver = false;
+        try {
+          deliver =
+            (await withHostedEventPublication(
+              event,
+              async () => {
+                let changed = false;
+                if (
+                  event.type === "init" &&
+                  event.sessionId &&
+                  event.sessionId !== run.claudeSessionId
+                ) {
+                  eventRecord.claudeSessionId = event.sessionId;
+                  changed = true;
+                }
+                if (event.type === "model_switch" && event.toModel) {
+                  eventRecord.model = event.toModel;
+                  eventRecord.transientFallback =
+                    event.temporaryFallback === true;
+                  if (shouldPersistModelSwitch(event))
+                    eventRecord.selectedModel = event.toModel;
+                  changed = true;
+                }
+                if (changed)
+                  await journalSet({ ...eventRecord, claimedAt: undefined });
+                if (!context.alive() || run.hostId !== eventRecord.hostId)
+                  return false;
+                Object.assign(run, eventRecord);
+                return true;
+              },
+              !!spec.personalRepo,
+            )) === true;
+        } catch (error) {
+          if (context.alive()) throw error;
         }
-        if (event.type === "model_switch" && event.toModel) {
-          run.model = event.toModel;
-          run.transientFallback = event.temporaryFallback === true;
-          if (shouldPersistModelSwitch(event))
-            run.selectedModel = event.toModel;
-          changed = true;
-        }
-        if (changed) await journalSet({ ...run, claimedAt: undefined });
-        yield event;
+        if (deliver) yield event;
       }
     } finally {
-      if (handle.ended) journalClear(run.runKey);
+      if (handle.ended) await journalClearIfLineageAsync({ ...run });
     }
   })();
 }

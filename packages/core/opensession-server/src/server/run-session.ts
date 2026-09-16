@@ -1,3 +1,22 @@
+import { assertPersonalAttachmentsAbsent } from "./personal-image-admission";
+import { withPrivateQueueAdmission } from "./private-queue-recovery";
+import { finalizeHostedRun } from "./host-run-lifetime";
+import { withHostedEventPublication } from "./host-event-publication";
+import { sessionMetadata } from "./session-kernel";
+import {
+  currentExecutionAccess,
+  withSessionExecutionAccess,
+} from "./application-access";
+import {
+  capturePrivateActorResultGuard,
+  withSessionPublication,
+} from "./session-audience";
+import { personalRepoRuntime } from "./personal-repo-runtime-default";
+import {
+  personalSessionForAction,
+  personalRepositoryId,
+} from "./personal-repository-coordinator";
+import { createSessionLoopTick } from "./session-loop-tick";
 /**
  * Driving a session turn: runSessionPrompt(Inner) and everything that feeds it —
  * the queue-coupled delivery ops (enqueue/steer/interrupt/drain), the sandbox
@@ -70,7 +89,7 @@ import { takeVoiceHandoff } from "./desk-voice";
 import {
   activeRunRecords,
   journalClearIfLineage,
-  journalRetireCancelledAbnormalAfterSettlement,
+  journalRetireCancelledAbnormalAfterSettlementAsync,
   setJournalSetListener,
   type ActiveRunRecord,
 } from "./run-journal";
@@ -153,7 +172,8 @@ import {
 import type { SessionUsage, TranscriptEntry, UnifiedSession } from "./types";
 import {
   findSession,
-  getCachedSessions,
+  findSessionAsync,
+  getCachedSessionsAsync,
   publishSessionChange,
   persistAutoModelSwitch,
   retryAutoFallbackModel,
@@ -282,9 +302,9 @@ if (
 if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
   registerSessionEffectExecutor("delivery_interrupt_cancel", async (item) => {
     const { interruptId, dispatchId, runIds, runGeneration } = item.payload;
-    const retireConfirmedAbnormal = () => {
+    const retireConfirmedAbnormal = async () => {
       if (dispatchId)
-        journalRetireCancelledAbnormalAfterSettlement(
+        await journalRetireCancelledAbnormalAfterSettlementAsync(
           item.sessionId,
           dispatchId,
         );
@@ -296,12 +316,12 @@ if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
     );
     if (decision === "settled") return;
     if (decision === "confirmed") {
-      retireConfirmedAbnormal();
+      await retireConfirmedAbnormal();
       return;
     }
     if (decision === "adopt_confirmed") {
       await settlePromptInterrupt(item.sessionId, interruptId, "confirmed");
-      retireConfirmedAbnormal();
+      await retireConfirmedAbnormal();
       return;
     }
     const aborted = dispatchId
@@ -342,7 +362,10 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
     });
     if (decision === "missing") return;
     if (decision === "settled") {
-      journalRetireCancelledAbnormalAfterSettlement(item.sessionId, dispatchId);
+      await journalRetireCancelledAbnormalAfterSettlementAsync(
+        item.sessionId,
+        dispatchId,
+      );
       retireAbsentInProcessOwner();
       return;
     }
@@ -356,7 +379,10 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
         outcome,
       });
       if (!settled) return false;
-      journalRetireCancelledAbnormalAfterSettlement(item.sessionId, dispatchId);
+      await journalRetireCancelledAbnormalAfterSettlementAsync(
+        item.sessionId,
+        dispatchId,
+      );
       // An explicit prompt may already be parked behind this cancellation.
       // Re-arm delivery only after actor settlement removes the cancel gate.
       watchExternalRunAndDrain(item.sessionId);
@@ -580,9 +606,9 @@ const queueHoldNotified: Set<string> = (g.__queueHoldNotified ??= new Set());
  * items while any child run is busy; the queue chip's steer button is the
  * explicit deliver-sooner escape hatch.
  */
-export function runningChildCount(sessionId: string): number {
+export async function runningChildCount(sessionId: string): Promise<number> {
   let n = 0;
-  for (const s of getCachedSessions()) {
+  for (const s of await getCachedSessionsAsync()) {
     if (s.parentSessionId !== sessionId || s.archived) continue;
     if (isAgentSessionBusy(s.claudeSessionId, s.codexThreadId, s.id)) n++;
   }
@@ -656,13 +682,18 @@ export async function steerQueuedPrompt(
   queueId?: string,
   queueIndex?: number,
 ): Promise<boolean> {
-  const session = findSession(sessionId);
+  const session = await findSessionAsync(sessionId);
   const queue = promptQueues.get(sessionId);
   if (!session || !queue) return false;
   const index = queuedPromptIndex(queue, queueId, queueIndex);
   if (index < 0) return false;
   const rawItem = queue[index];
   if (!rawItem) return false;
+  assertPersonalAttachmentsAbsent({
+    ...rawItem,
+    personalRepo:
+      session.accessScope?.kind === "personal" || session.personalRepo,
+  });
   const item = queueItem(rawItem);
   const promptEntryId = item.promptEntryId || item.id;
   const sentItem = { ...item, promptEntryId };
@@ -790,12 +821,17 @@ export async function interruptQueuedPrompt(
   queueId?: string,
   queueIndex?: number,
 ): Promise<boolean> {
-  const session = findSession(sessionId);
+  const session = await findSessionAsync(sessionId);
   if (!session) return false;
   const receipt = queueId
     ? (steeredReceipts.get(sessionId) || []).find((s) => s.id === queueId)
     : undefined;
   if (receipt) {
+    assertPersonalAttachmentsAbsent({
+      ...receipt,
+      personalRepo:
+        session.accessScope?.kind === "personal" || session.personalRepo,
+    });
     // A receipt means the running turn has ACCEPTED this message: it sits in
     // the engine's steering queue and is read at the next step boundary,
     // which a long tool call can push out by minutes. "Deliver now" forces
@@ -824,6 +860,11 @@ export async function interruptQueuedPrompt(
   if (index < 0) return false;
   let item = queue[index];
   if (!item) return false;
+  assertPersonalAttachmentsAbsent({
+    ...item,
+    personalRepo:
+      session.accessScope?.kind === "personal" || session.personalRepo,
+  });
   if (
     isGitHubQueueItem(item) ||
     (Array.isArray(item.files) && item.files.length > 0)
@@ -885,7 +926,31 @@ export async function restorePromptQueues(
 ): Promise<void> {
   const active = activeRunRecords();
   const restored = await restorePersistedQueueState({
-    sessionExists: (sessionId) => !!findSession(sessionId),
+    withSessionRestore: async (sessionId, work, items) => {
+      const scope = await sessionMetadata({ op: "scope_lookup", sessionId });
+      if (
+        !scope ||
+        scope.deleted ||
+        scope.owner < 0 ||
+        scope.canonicalId !== sessionId
+      )
+        return false;
+      if (scope.owner > 0) {
+        await withPrivateQueueAdmission(sessionId, items, work);
+        return true;
+      }
+      await work();
+      return true;
+    },
+    sessionExists: async (sessionId) => {
+      const scope = await sessionMetadata({ op: "scope_lookup", sessionId });
+      if (scope) {
+        if (scope.owner < 0 && !scope.deleted)
+          throw new Error("Queue scope unavailable");
+        return !scope.deleted;
+      }
+      return !!(await findSessionAsync(sessionId));
+    },
     // Preserve quarantined queue state without projecting or mutating it. A
     // quarantine is intentionally inert until an operator releases it.
     sessionQuarantined: sessionIsQuarantined,
@@ -899,7 +964,24 @@ export async function restorePromptQueues(
       resumedSessionIds.has(sessionId) &&
       active.some((run) => run.osSessionId === sessionId),
     deliveredUserTexts: async (sessionId) => {
-      const session = findSession(sessionId);
+      const scope = await sessionMetadata({ op: "scope_lookup", sessionId });
+      if (scope?.deleted) return [];
+      if (scope && scope.owner > 0)
+        return withSessionExecutionAccess(
+          {
+            id: sessionId,
+            accessScope: {
+              kind: "personal",
+              ownerGithubAccountId: scope.owner,
+            },
+          },
+          async () => {
+            const session = await findSessionAsync(sessionId);
+            if (!session) throw new Error("Queued session unavailable");
+            return engineUserTexts(session);
+          },
+        );
+      const session = await findSessionAsync(sessionId);
       return session ? engineUserTexts(session) : [];
     },
   });
@@ -1089,7 +1171,7 @@ export async function persistRecoveredRunUsage(
   event: StreamEvent,
   runId?: string,
 ): Promise<void> {
-  const session = findSession(osSessionId);
+  const session = await findSessionAsync(osSessionId);
   const turnUsage = event.usage;
   if (!session || session.source !== "opensession" || !turnUsage) return;
   let usage: SessionUsage | undefined;
@@ -1118,7 +1200,7 @@ export async function recordRecoveredRunEvent(
   osSessionId: string,
   event: StreamEvent,
 ): Promise<void> {
-  const session = findSession(osSessionId);
+  const session = await findSessionAsync(osSessionId);
   if (!session) return;
   if (session.source !== "opensession") {
     // Slack/linear-source sessions: a recovered run's engine-id/model flips
@@ -1432,117 +1514,133 @@ export function drainQueue(sessionId: string): Promise<void> {
 }
 
 async function drainQueueInner(sessionId: string): Promise<void> {
-  let queue;
-  while ((queue = promptQueues.get(sessionId)) && queue.length > 0) {
-    // The user pressed stop: leave the queue visible-but-parked until their
-    // next explicit action instead of restarting the run they just stopped.
-    if (await isUserStopped(sessionId)) return;
-    // Graceful shutdown: park the queue instead of starting a turn. A turn
-    // started after the shutdown snapshot races the drain deadline (an
-    // in-process one is SIGKILLed there and redone from the journal), and
-    // the sender's socket dies mid-stream either way. The queue is already
-    // persisted, so the next boot's restorePromptQueues delivers this
-    // message cleanly instead.
-    if (parkQueueForShutdown(sessionId)) return;
-    // A racing run can own the session by the time we loop again (e.g. our
-    // last batch lost the start race and got re-queued) — hand off to the
-    // idle-watcher instead of busy-spinning runs that immediately bounce.
-    const session = findSession(sessionId);
-    const ownerActive = () =>
-      isAgentSessionBusy(
-        session?.claudeSessionId,
-        session?.codexThreadId,
-        sessionId,
-      );
-    if (ownerActive()) {
-      watchExternalRunAndDrain(sessionId);
-      return;
-    }
-    if (await recoverUnownedPromptDispatch(sessionId, ownerActive)) {
-      console.warn(
-        `[queue] Restored an unowned prompt dispatch before draining ${sessionId}`,
-      );
-      continue;
-    }
-    // Batch selection lives in the actor's pure queue reducer: a solo
-    // interrupt (queue chip ▲) delivers one item, a head auto-continue
-    // delivers alone, and while child worker runs are still going, human
-    // composer sends (item.hold) stay parked until the agent FULLY
-    // completes. Orchestration traffic (worker reports, FYIs) keeps
-    // flowing so held items can't wedge the run.
-    //
-    // Selection, interrupt consumption, and claim are one actor reduction.
-    // Queue contents cannot change between choosing a batch and durable
-    // dispatch ownership, and a crash cannot lose or duplicate the interrupt.
-    const claim = await beginNextPromptDispatch(sessionId, {
-      stillWorking: runningChildCount(sessionId) > 0,
-    });
-    if (claim.kind === "empty") continue;
-    if (claim.kind === "hold") {
-      if (!queueHoldNotified.has(sessionId)) {
-        queueHoldNotified.add(sessionId);
-        broadcastToSession(sessionId, {
-          type: "notice",
-          sessionId,
-          message: `Holding ${claim.heldCount} queued message${claim.heldCount === 1 ? "" : "s"} until the agent fully completes (worker sessions still running). Steer sends one in sooner.`,
-        });
-      }
-      watchExternalRunAndDrain(sessionId);
-      return;
-    }
-    queueHoldNotified.delete(sessionId);
-    const { batch, promptEntryId, interrupted } = claim;
-    await broadcastQueue(sessionId);
-    let combined = batch
-      .map((m) =>
-        batch.length > 1 && m.user ? `[${m.user}] ${m.content}` : m.content,
-      )
-      .join("\n\n");
-    // Interrupt delivery (busy-send aborted the turn to land this batch):
-    // append the fenced steer note so the model resumes the interrupted work
-    // instead of acknowledge-and-parking. Fenced, so the transcript shows
-    // only the user's text.
-    if (interrupted) {
-      combined = `${combined}\n\n${wrapContext(INTERRUPT_STEER_NOTE, "steer-note")}`;
-    }
-    // Attachments queued alongside the text ride the drained turn: images are
-    // decoded to ImageInput, files handed through as staged/inline refs.
-    const combinedImages = parseImageDataUrls(
-      batch.flatMap((m) => m.images ?? []),
-    );
-    const combinedFiles = batch.flatMap((m) =>
-      Array.isArray(m.files) ? m.files : [],
-    );
-    const contextSessions = [
-      ...new Set(batch.flatMap((m) => m.contextSessions ?? [])),
-    ];
-    // A queued Slack-thread reply carries its origin thread — the turn's answer
-    // mirrors back there. Last one wins if a batch somehow spans threads.
-    const slackReplyTo = [...batch]
-      .reverse()
-      .find((m) => m.slackReplyTo)?.slackReplyTo;
-    const sourceMessageIds = batch.flatMap((item) =>
-      item.id ? [item.id] : [],
-    );
-    try {
-      await runSessionPrompt(
-        sessionId,
-        combined,
-        batch[0].user,
-        combinedImages,
-        combinedFiles.length ? combinedFiles : undefined,
-        contextSessions.length ? contextSessions : undefined,
-        slackReplyTo,
-        promptEntryId,
-        sourceMessageIds,
-      );
-    } catch (e) {
-      // The batch was already spliced out and persisted away — put it back at
-      // the front of the queue so a throw doesn't lose the messages.
-      await failPromptDispatch(sessionId, promptEntryId);
-      throw e;
-    }
+  while (promptQueues.get(sessionId)?.length) {
+    const scope = await sessionMetadata({ op: "scope_lookup", sessionId });
+    if (scope?.deleted) return;
+    if (scope && (scope.owner < 0 || scope.canonicalId !== sessionId))
+      throw new Error("Queued session authority unavailable");
+    const progress =
+      scope && scope.owner > 0
+        ? await withPrivateQueueAdmission(
+            sessionId,
+            promptQueues.get(sessionId) ?? [],
+            () => drainQueueStep(sessionId),
+          )
+        : await drainQueueStep(sessionId);
+    if (!progress) return;
   }
+}
+
+async function drainQueueStep(sessionId: string): Promise<boolean> {
+  const queue = promptQueues.get(sessionId);
+  if (!queue?.length) return false;
+  // The user pressed stop: leave the queue visible-but-parked until their
+  // next explicit action instead of restarting the run they just stopped.
+  if (await isUserStopped(sessionId)) return false;
+  // Graceful shutdown: park the queue instead of starting a turn. A turn
+  // started after the shutdown snapshot races the drain deadline (an
+  // in-process one is SIGKILLed there and redone from the journal), and
+  // the sender's socket dies mid-stream either way. The queue is already
+  // persisted, so the next boot's restorePromptQueues delivers this
+  // message cleanly instead.
+  if (parkQueueForShutdown(sessionId)) return false;
+  // A racing run can own the session by the time we loop again (e.g. our
+  // last batch lost the start race and got re-queued) — hand off to the
+  // idle-watcher instead of busy-spinning runs that immediately bounce.
+  const session = await findSessionAsync(sessionId);
+  const ownerActive = () =>
+    isAgentSessionBusy(
+      session?.claudeSessionId,
+      session?.codexThreadId,
+      sessionId,
+    );
+  if (ownerActive()) {
+    watchExternalRunAndDrain(sessionId);
+    return false;
+  }
+  if (await recoverUnownedPromptDispatch(sessionId, ownerActive)) {
+    console.warn(
+      `[queue] Restored an unowned prompt dispatch before draining ${sessionId}`,
+    );
+    return true;
+  }
+  // Batch selection lives in the actor's pure queue reducer: a solo
+  // interrupt (queue chip ▲) delivers one item, a head auto-continue
+  // delivers alone, and while child worker runs are still going, human
+  // composer sends (item.hold) stay parked until the agent FULLY
+  // completes. Orchestration traffic (worker reports, FYIs) keeps
+  // flowing so held items can't wedge the run.
+  //
+  // Selection, interrupt consumption, and claim are one actor reduction.
+  // Queue contents cannot change between choosing a batch and durable
+  // dispatch ownership, and a crash cannot lose or duplicate the interrupt.
+  const claim = await beginNextPromptDispatch(sessionId, {
+    stillWorking: (await runningChildCount(sessionId)) > 0,
+  });
+  if (claim.kind === "empty") return true;
+  if (claim.kind === "hold") {
+    if (!queueHoldNotified.has(sessionId)) {
+      queueHoldNotified.add(sessionId);
+      broadcastToSession(sessionId, {
+        type: "notice",
+        sessionId,
+        message: `Holding ${claim.heldCount} queued message${claim.heldCount === 1 ? "" : "s"} until the agent fully completes (worker sessions still running). Steer sends one in sooner.`,
+      });
+    }
+    watchExternalRunAndDrain(sessionId);
+    return false;
+  }
+  queueHoldNotified.delete(sessionId);
+  const { batch, promptEntryId, interrupted } = claim;
+  await broadcastQueue(sessionId);
+  let combined = batch
+    .map((m) =>
+      batch.length > 1 && m.user ? `[${m.user}] ${m.content}` : m.content,
+    )
+    .join("\n\n");
+  // Interrupt delivery (busy-send aborted the turn to land this batch):
+  // append the fenced steer note so the model resumes the interrupted work
+  // instead of acknowledge-and-parking. Fenced, so the transcript shows
+  // only the user's text.
+  if (interrupted) {
+    combined = `${combined}\n\n${wrapContext(INTERRUPT_STEER_NOTE, "steer-note")}`;
+  }
+  // Attachments queued alongside the text ride the drained turn: images are
+  // decoded to ImageInput, files handed through as staged/inline refs.
+  const combinedImages = parseImageDataUrls(
+    batch.flatMap((m) => m.images ?? []),
+  );
+  const combinedFiles = batch.flatMap((m) =>
+    Array.isArray(m.files) ? m.files : [],
+  );
+  const contextSessions = [
+    ...new Set(batch.flatMap((m) => m.contextSessions ?? [])),
+  ];
+  // A queued Slack-thread reply carries its origin thread — the turn's answer
+  // mirrors back there. Last one wins if a batch somehow spans threads.
+  const slackReplyTo = [...batch]
+    .reverse()
+    .find((m) => m.slackReplyTo)?.slackReplyTo;
+  const sourceMessageIds = batch.flatMap((item) => (item.id ? [item.id] : []));
+  try {
+    await runSessionPrompt(
+      sessionId,
+      combined,
+      batch[0].user,
+      combinedImages,
+      combinedFiles.length ? combinedFiles : undefined,
+      contextSessions.length ? contextSessions : undefined,
+      slackReplyTo,
+      promptEntryId,
+      sourceMessageIds,
+    );
+  } catch (e) {
+    // The batch was already spliced out and persisted away — put it back at
+    // the front of the queue so a throw doesn't lose the messages.
+    await failPromptDispatch(sessionId, promptEntryId);
+    throw e;
+  }
+  return true;
 }
 
 export async function runSessionPromptAndDrain(
@@ -1615,7 +1713,11 @@ export function watchExternalRunAndDrain(sessionId: string): void {
   };
   const tick = async (): Promise<void> => {
     try {
-      const session = findSession(sessionId);
+      const scope = await sessionMetadata({ op: "scope_lookup", sessionId });
+      const session =
+        scope && scope.owner > 0 && !scope.deleted
+          ? await findSessionAsync(sessionId, { githubAccountId: scope.owner })
+          : await findSessionAsync(sessionId);
       if (!session) {
         stop();
         return;
@@ -1754,6 +1856,7 @@ export function foldSessionUsage(
 export async function autoPushSessionBranches(
   session: UnifiedSession,
 ): Promise<void> {
+  if (session.accessScope?.kind === "personal" || session.personalRepo) return;
   const githubGitEnv =
     session.automation ||
     session.automationId ||
@@ -2373,8 +2476,10 @@ export async function maybeQueueAutoContinue(opts: {
       });
     return false;
   };
-  const session = opts.session ?? findSession(sessionId);
+  const session = opts.session ?? (await findSessionAsync(sessionId));
   if (!session) return suppressed("session_not_found");
+  if (session.accessScope?.kind === "personal")
+    return suppressed("private_auto_continue_unavailable");
   const queuedBehind = (promptQueues.get(sessionId) || []).filter(
     (m) => m.user !== AUTO_CONTINUE_USER,
   ).length;
@@ -2522,6 +2627,43 @@ class RunPreparationDeferredError extends Error {
 
 /** Run a prompt against an existing session, broadcasting to all watchers. */
 export async function runSessionPrompt(
+  ...args: Parameters<typeof runSessionPromptAdmitted>
+): Promise<void> {
+  const session = await findSessionAsync(args[0]);
+  if (!session) throw new Error("Session not found");
+  if (session.accessScope?.kind !== "personal")
+    return runSessionPromptAdmitted(...args);
+  if (
+    routeModel(session.model, { interactive: true }).engine !== "pi" ||
+    session.mcpServers?.length
+  )
+    throw new Error("Private runtime or MCP override unavailable");
+  if (
+    !session.personalRepo ||
+    session.repo !== session.personalRepo.registryId ||
+    session.automation ||
+    session.desk ||
+    session.sandbox ||
+    session.runner ||
+    session.attachedRepos?.length ||
+    args[3]?.length ||
+    args[4] !== undefined ||
+    args[5]?.length ||
+    args[6]
+  )
+    throw new Error(
+      "Private session input or execution surface is unavailable",
+    );
+  const current = await personalSessionForAction(session);
+  return withSessionPublication(
+    session.id,
+    session.accessScope.ownerGithubAccountId,
+    () => runSessionPromptAdmitted(...args),
+    { binding: current.personalRepo },
+  );
+}
+
+async function runSessionPromptAdmitted(
   sessionId: string,
   content: string,
   user?: string,
@@ -2538,7 +2680,7 @@ export async function runSessionPrompt(
   // journal exists. Give it the same durable dispatch record as a queue drain,
   // so a restart during provisioning requeues the complete prompt.
   let durablePromptEntryId = promptEntryId;
-  if (!durablePromptEntryId && findSession(sessionId)?.sandbox) {
+  if (!durablePromptEntryId && (await findSessionAsync(sessionId))?.sandbox) {
     durablePromptEntryId = await beginPromptDispatch(sessionId, [
       {
         content,
@@ -2642,9 +2784,74 @@ async function runSessionPromptInner(
   promptEntryId?: string,
   sourceMessageIds?: string[],
 ): Promise<void> {
+  const foundSession = await findSessionAsync(sessionId);
+  if (!foundSession) return;
+  const session: UnifiedSession = foundSession;
+  const personal = session.accessScope?.kind === "personal";
+  assertPersonalAttachmentsAbsent({
+    personalRepo: personal || session.personalRepo,
+    images,
+    files: rawFiles,
+  });
+  if (personal) {
+    const fresh = await personalSessionForAction(session);
+    await updateSessionFile(session.id, (data) => ({
+      ...data,
+      personalRepo: fresh.personalRepo,
+    }));
+    session.personalRepo = fresh.personalRepo;
+  }
+  const assertRetrySource = capturePrivateActorResultGuard();
   const autoRetry = await retryAutoFallbackModel(sessionId);
-  const session = findSession(sessionId);
-  if (!session) return;
+  assertRetrySource();
+  if (autoRetry) {
+    const refreshed = await findSessionAsync(sessionId);
+    assertRetrySource();
+    if (!refreshed) return;
+    // Retry persisted the selection after our initial snapshot. Refresh only
+    // model state, never replace this turn's original scope or repository binding.
+    session.model = refreshed.model;
+    session.modelHistory = refreshed.modelHistory;
+  }
+  let privateWorkspace:
+    | Awaited<
+        ReturnType<Awaited<ReturnType<typeof personalRepoRuntime>>["prepare"]>
+      >
+    | undefined;
+  if (personal) {
+    if (!session.personalRepo || session.mode === "scratch")
+      throw new Error("Private repository binding unavailable");
+    const owner =
+      session.accessScope!.kind === "personal"
+        ? session.accessScope!.ownerGithubAccountId
+        : 0;
+    const runtime = await personalRepoRuntime();
+    const resolved = await runtime.resolve(
+      owner,
+      session.personalRepo.registryId,
+    );
+    if (
+      personalRepositoryId(resolved.binding.descriptor) !==
+        personalRepositoryId(session.personalRepo.descriptor) ||
+      resolved.binding.descriptor.githubAppId !==
+        session.personalRepo.descriptor.githubAppId
+    )
+      throw new Error("Private repository identity changed");
+    privateWorkspace = await runtime.prepare(owner, resolved.binding, {
+      sessionId: session.id,
+      mode: session.mode === "ask" ? "ask" : "code",
+      branch: session.branch || undefined,
+    });
+    await updateSessionFile(session.id, (data) => ({
+      ...data,
+      personalRepo: resolved.binding,
+      worktreeDir: privateWorkspace!.cwd,
+      branch: privateWorkspace!.branch,
+    }));
+    session.personalRepo = resolved.binding;
+    session.worktreeDir = privateWorkspace.cwd;
+    session.branch = privateWorkspace.branch;
+  }
   if (autoRetry) {
     broadcastToSession(sessionId, {
       type: "model_changed",
@@ -2700,6 +2907,10 @@ async function runSessionPromptInner(
   const routedEngine = routeModel(session.model, {
     interactive: !session.automation,
   }).engine;
+  if (personal && routedEngine !== "pi")
+    throw new Error(
+      "Private sessions require the compatible detached Pi runtime",
+    );
   const provider = routedEngine;
   let effectiveProvider: Provider = provider;
   let effectiveModel = session.model;
@@ -2829,66 +3040,71 @@ async function runSessionPromptInner(
   // files): resolve them to the pinned ask checkout, never the mutable main
   // checkout, whose parked branch is a false context clue (ensureAskCheckout —
   // 82a296a6 covered the create paths but missed this prompt-path fallback).
-  let cwd =
-    session.worktreeDir ||
-    (session.mode === "scratch"
-      ? ensureScratchDir(session.workspaceId || session.id)
-      : session.mode === "ask"
-        ? await ensureAskCheckout(session.repo)
-        : defaultRepo().repo);
-  if (!repoForPathOrNull(cwd)) {
-    // A dir no registered repo owns: a scratch dir, or a repo-less ask
-    // session's inert cwd. Nothing to revive — just make sure it exists
-    // after cleanups/moves. (Asking the path rather than the mode is what
-    // keeps a repo-less ask session out of the revive branch below, whose
-    // repoForPath would throw on it.)
-    if (!existsSync(cwd) && !hasRemoteWorkspace(session))
-      mkdirSync(cwd, { recursive: true });
-  } else if (
-    session.worktreeDir &&
-    !existsSync(session.worktreeDir) &&
-    !hasRemoteWorkspace(session)
-  ) {
-    const repo = session.repo
-      ? getRepo(session.repo)
-      : repoForPath(session.worktreeDir);
-    if (session.branch) {
-      broadcastToSession(sessionId, {
-        type: "notice",
-        message: `This session's worktree was cleaned up — recreating it from branch ${session.branch}…`,
-      });
-      let revived = false;
-      try {
-        cwd = await reviveWorktree(session.branch, repo.id);
-        revived = true;
-      } catch (e) {
+  let cwd: string;
+  if (privateWorkspace) {
+    cwd = privateWorkspace.cwd;
+  } else {
+    cwd =
+      session.worktreeDir ||
+      (session.mode === "scratch"
+        ? ensureScratchDir(session.workspaceId || session.id)
+        : session.mode === "ask"
+          ? await ensureAskCheckout(session.repo)
+          : defaultRepo().repo);
+    if (!repoForPathOrNull(cwd)) {
+      // A dir no registered repo owns: a scratch dir, or a repo-less ask
+      // session's inert cwd. Nothing to revive — just make sure it exists
+      // after cleanups/moves. (Asking the path rather than the mode is what
+      // keeps a repo-less ask session out of the revive branch below, whose
+      // repoForPath would throw on it.)
+      if (!existsSync(cwd) && !hasRemoteWorkspace(session))
+        mkdirSync(cwd, { recursive: true });
+    } else if (
+      session.worktreeDir &&
+      !existsSync(session.worktreeDir) &&
+      !hasRemoteWorkspace(session)
+    ) {
+      const repo = session.repo
+        ? getRepo(session.repo)
+        : repoForPath(session.worktreeDir);
+      if (session.branch) {
         broadcastToSession(sessionId, {
           type: "notice",
-          message: `Couldn't recreate the worktree (${e}); running in the main checkout instead.`,
+          message: `This session's worktree was cleaned up — recreating it from branch ${session.branch}…`,
+        });
+        let revived = false;
+        try {
+          cwd = await reviveWorktree(session.branch, repo.id);
+          revived = true;
+        } catch (e) {
+          broadcastToSession(sessionId, {
+            type: "notice",
+            message: `Couldn't recreate the worktree (${e}); running in the main checkout instead.`,
+          });
+          cwd = repo.repo;
+        }
+        // A branch rename changes reviveWorktree's path. Keep the owning row on
+        // the checkout we just created so activity protection and every later
+        // turn stop targeting the missing pre-rename path.
+        if (
+          revived &&
+          session.source === "opensession" &&
+          cwd !== session.worktreeDir
+        ) {
+          await updateSessionFile(session.id, (data) => ({
+            ...data,
+            worktreeDir: cwd,
+          }));
+          session.worktreeDir = cwd;
+        }
+      } else {
+        broadcastToSession(sessionId, {
+          type: "notice",
+          message:
+            "This session's worktree is gone; running in the main checkout.",
         });
         cwd = repo.repo;
       }
-      // A branch rename changes reviveWorktree's path. Keep the owning row on
-      // the checkout we just created so activity protection and every later
-      // turn stop targeting the missing pre-rename path.
-      if (
-        revived &&
-        session.source === "opensession" &&
-        cwd !== session.worktreeDir
-      ) {
-        await updateSessionFile(session.id, (data) => ({
-          ...data,
-          worktreeDir: cwd,
-        }));
-        session.worktreeDir = cwd;
-      }
-    } else {
-      broadcastToSession(sessionId, {
-        type: "notice",
-        message:
-          "This session's worktree is gone; running in the main checkout.",
-      });
-      cwd = repo.repo;
     }
   }
   // Bridge a cross-provider engine switch (computed above) so the incoming
@@ -2962,13 +3178,13 @@ async function runSessionPromptInner(
   // reads the same answer this turn runs with.
   const runInputs = await resolveSessionRunInputs(session, { user });
   const isAutomationSession = runInputs.isAutomationSession;
-  const mcpServers = runInputs.mcpServers;
+  const mcpServers = personal ? [] : runInputs.mcpServers;
   const deniedTools = runInputs.deniedTools;
 
   // Retrieval is query-specific context for this turn. Keep it out of the
   // stable system prefix so an unrelated memory write cannot invalidate every
   // cached token behind the run instructions.
-  if (!isAutomationSession) {
+  if (!personal && !isAutomationSession) {
     const memoryContext = await retrievedMemoryNoteFor(
       content,
       user,
@@ -2979,8 +3195,8 @@ async function runSessionPromptInner(
 
   // @session:<id> mentions → footer resolving them for the agent's
   // opensession-sessions tools. Interactive sessions only (same gate as the tools).
-  if (!isAutomationSession) {
-    const mentionsNote = sessionMentionsNote(prompt, inlinedSessionIds);
+  if (!personal && !isAutomationSession) {
+    const mentionsNote = await sessionMentionsNote(prompt, inlinedSessionIds);
     if (mentionsNote) prompt += `\n\n${mentionsNote}`;
   }
 
@@ -2990,6 +3206,7 @@ async function runSessionPromptInner(
   // like the create_session paths do — a session must get this context no
   // matter how it was created (the feeds design).
   if (
+    !personal &&
     !isAutomationSession &&
     session.externalRefs?.length &&
     !session.claudeSessionId &&
@@ -3093,7 +3310,7 @@ async function runSessionPromptInner(
   // the automation's MCP allowlist and denials still apply. Sandboxed
   // descendants carry none of it.
   const automationMcp =
-    isAutomationSession && !session.automationDescendantPolicy
+    !personal && isAutomationSession && !session.automationDescendantPolicy
       ? await automationSessionMcp(session, sessionId, {
           humanPrompter: runInputs.humanPrompter,
         })
@@ -3184,6 +3401,7 @@ async function runSessionPromptInner(
     !runnerRun && !sandboxRun && routedEngine === "pi"
       ? runAgentHosted({
           osSessionId: session.id,
+          personalRepo: session.personalRepo,
           prompt,
           promptEntryId: durablePromptEntryId,
           startToken,
@@ -3194,29 +3412,32 @@ async function runSessionPromptInner(
           mode: session.mode,
           // Automation runs pass no MCP grant identity: a human's OAuth
           // grants must not ride an automation-owned session's turns.
-          mcpGrantUser: isAutomationSession
-            ? undefined
-            : session.createdByLogin || undefined,
+          mcpGrantUser:
+            personal || isAutomationSession
+              ? undefined
+              : session.createdByLogin || undefined,
           model: session.model,
           images,
           mcpServers: mcpServers ?? "all",
-          proxyMcpServers: session.automationDescendantPolicy
-            ? []
-            : isAutomationSession
-              ? automationProxyMcpServers
-              : [
-                  ...Object.keys(
-                    interactiveMcpServers(
-                      user,
-                      sessionId,
-                      durablePromptEntryId,
+          proxyMcpServers:
+            personal || session.automationDescendantPolicy
+              ? []
+              : isAutomationSession
+                ? automationProxyMcpServers
+                : [
+                    ...Object.keys(
+                      interactiveMcpServers(
+                        user,
+                        sessionId,
+                        durablePromptEntryId,
+                      ),
                     ),
-                  ),
-                  ...(session.goalId ? ["opensession-goal-self"] : []),
-                ],
-          reposNote: isAutomationSession
-            ? undefined
-            : await buildSessionNote(session, user),
+                    ...(session.goalId ? ["opensession-goal-self"] : []),
+                  ],
+          reposNote:
+            personal || isAutomationSession
+              ? undefined
+              : await buildSessionNote(session, user),
           deniedTools,
           publicationPolicy: session.automationDescendantPolicy
             ? {
@@ -3226,11 +3447,13 @@ async function runSessionPromptInner(
               }
             : undefined,
           confirmTools: STRIPE_CONFIRM_TOOLS,
-          aws: !isAutomationSession,
+          aws: !personal && !isAutomationSession,
           author: commitAuthorFor(user, sessionPrincipal(session)),
           user: runInputs.user,
           accountUser: runInputs.accountUser,
-          fallbackModel: interactiveFallbackModel(session.model),
+          fallbackModel: personal
+            ? undefined
+            : interactiveFallbackModel(session.model),
           effort: session.effort,
           fastMode: session.fastMode,
           pstackMode: session.pstackMode,
@@ -3242,20 +3465,26 @@ async function runSessionPromptInner(
           onAskUser: makeAskHandler(sessionId),
           onSteerFailed: (text) => requeueFailedSteer(session.id, text, user),
           fallbackInProcessMcp: () =>
-            isAutomationSession
-              ? automationMcp
-              : session.goalId
-                ? {
-                    ...interactiveMcpServers(
+            personal
+              ? {}
+              : isAutomationSession
+                ? automationMcp
+                : session.goalId
+                  ? {
+                      ...interactiveMcpServers(
+                        user,
+                        sessionId,
+                        durablePromptEntryId,
+                      ),
+                      "opensession-goal-self": createGoalSelfMcpServer(
+                        session.goalId,
+                      ),
+                    }
+                  : interactiveMcpServers(
                       user,
                       sessionId,
                       durablePromptEntryId,
                     ),
-                    "opensession-goal-self": createGoalSelfMcpServer(
-                      session.goalId,
-                    ),
-                  }
-                : interactiveMcpServers(user, sessionId, durablePromptEntryId),
         })
       : null;
 
@@ -3279,514 +3508,547 @@ async function runSessionPromptInner(
   // while human messages are queued behind ongoing work.
   let toolUseCount = 0;
 
-  for await (const event of runnerRun ??
-    sandboxRun ??
-    hostedRun ??
-    runAgent({
-      prompt,
-      promptEntryId: durablePromptEntryId,
-      sessionId: engineSessionId || undefined,
-      cwd,
-      mode: session.mode,
-      model: session.model,
-      // Reasoning effort from the composer pill, persisted on the session.
-      effort: session.effort,
-      fastMode: session.fastMode,
-      pstackMode: session.pstackMode,
-      // Pinned subscription for this session (claude-runner prefers it, pool
-      // fallback on exhaustion). Ignored by Codex models. A person's turn in
-      // an automation-owned session carries no pin, so their own subscription
-      // is tried before the automation's account and the pool.
-      ...runAccountSpec(session, runInputs),
-      // Only switch models when a fallback is explicitly configured. By default,
-      // usage exhaustion stops the run so the human can choose what to do.
-      fallbackModel: interactiveFallbackModel(session.model),
-      images,
-      // Engine switch: seed the fresh pi session's persisted transcript
-      // with the prior history (same entries the handoff note was built from)
-      // so the UI transcript stays continuous. Everything dispatches onto the
-      // pi engine, so no provider gate — the picker id's provider can be
-      // "codex"/"claude" (bare gpt-5.6-sol) while the run still lands on
-      // pi; the old `provider === "pi"` guard silently dropped the
-      // seed for exactly those switches.
-      seedTranscriptEntries:
-        switchHandoff && switchHandoffEntries.length
-          ? switchHandoffEntries
+  try {
+    for await (const event of runnerRun ??
+      sandboxRun ??
+      hostedRun ??
+      runAgent({
+        prompt,
+        promptEntryId: durablePromptEntryId,
+        sessionId: engineSessionId || undefined,
+        cwd,
+        mode: session.mode,
+        model: session.model,
+        // Reasoning effort from the composer pill, persisted on the session.
+        effort: session.effort,
+        fastMode: session.fastMode,
+        pstackMode: session.pstackMode,
+        // Pinned subscription for this session (claude-runner prefers it, pool
+        // fallback on exhaustion). Ignored by Codex models. A person's turn in
+        // an automation-owned session carries no pin, so their own subscription
+        // is tried before the automation's account and the pool.
+        ...runAccountSpec(session, runInputs),
+        // Only switch models when a fallback is explicitly configured. By default,
+        // usage exhaustion stops the run so the human can choose what to do.
+        fallbackModel: interactiveFallbackModel(session.model),
+        images,
+        // Engine switch: seed the fresh pi session's persisted transcript
+        // with the prior history (same entries the handoff note was built from)
+        // so the UI transcript stays continuous. Everything dispatches onto the
+        // pi engine, so no provider gate — the picker id's provider can be
+        // "codex"/"claude" (bare gpt-5.6-sol) while the run still lands on
+        // pi; the old `provider === "pi"` guard silently dropped the
+        // seed for exactly those switches.
+        seedTranscriptEntries:
+          switchHandoff && switchHandoffEntries.length
+            ? switchHandoffEntries
+            : undefined,
+        mcpServers: mcpServers ?? "all",
+        // Self-management tools for normal sessions; withheld from automation
+        // sessions (and their interactive resumes), same gate as deniedTools
+        // above. Automation-owned sessions keep their automation-bar set
+        // (papercuts + report/workflows rebuild + the selfImprove pair, the
+        // same fail-closed set the hosted path proxies and run-rpc's fallback
+        // builder serves) so a Slack thread reply reaches a session with the
+        // same tools its unattended run had.
+        // A goal-driven session also gets its own opensession-goal-self controls, so an
+        // interactive turn (a human steering it in the UI) can set the next wake,
+        // append to the ledger, or pause/finish — the same tools the headless wake has.
+        inProcessMcp: session.automationDescendantPolicy
+          ? {}
+          : isAutomationSession
+            ? automationMcp
+            : session.goalId
+              ? {
+                  ...interactiveMcpServers(
+                    user,
+                    sessionId,
+                    durablePromptEntryId,
+                  ),
+                  "opensession-goal-self": createGoalSelfMcpServer(
+                    session.goalId,
+                  ),
+                }
+              : interactiveMcpServers(user, sessionId, durablePromptEntryId),
+        reposNote: isAutomationSession
+          ? undefined
+          : await buildSessionNote(session, user),
+        deniedTools,
+        publicationPolicy: session.automationDescendantPolicy
+          ? {
+              repo: session.automationDescendantPolicy.publicationRepo,
+              branch: session.automationDescendantPolicy.baseBranch,
+              headBranch: session.branch || "",
+            }
           : undefined,
-      mcpServers: mcpServers ?? "all",
-      // Self-management tools for normal sessions; withheld from automation
-      // sessions (and their interactive resumes), same gate as deniedTools
-      // above. Automation-owned sessions keep their automation-bar set
-      // (papercuts + report/workflows rebuild + the selfImprove pair, the
-      // same fail-closed set the hosted path proxies and run-rpc's fallback
-      // builder serves) so a Slack thread reply reaches a session with the
-      // same tools its unattended run had.
-      // A goal-driven session also gets its own opensession-goal-self controls, so an
-      // interactive turn (a human steering it in the UI) can set the next wake,
-      // append to the ledger, or pause/finish — the same tools the headless wake has.
-      inProcessMcp: session.automationDescendantPolicy
-        ? {}
-        : isAutomationSession
-          ? automationMcp
-          : session.goalId
-            ? {
-                ...interactiveMcpServers(user, sessionId, durablePromptEntryId),
-                "opensession-goal-self": createGoalSelfMcpServer(
-                  session.goalId,
-                ),
+        confirmTools: STRIPE_CONFIRM_TOOLS,
+        aws: !isAutomationSession, // automation descendants never receive AWS credentials
+        // Attribute any commits this turn makes to whoever sent the prompt, or
+        // to the person the session acts for when nobody did (an auto-continue,
+        // a restart resume, a queue drain): the last person who prompted it,
+        // else its creator.
+        author: commitAuthorFor(user, sessionPrincipal(session)),
+        // Gate per-user MCP servers (allowedUsers) to the prompt's author. Automation
+        // sessions pass no user, so they never see a user-restricted server.
+        user: runInputs.user,
+        // The person who sent the prompt may spend their own subscription even
+        // when the session is automation-owned (the pool stays the backup).
+        accountUser: runInputs.accountUser,
+        // The creator grant also gives provider routing a safe human identity for
+        // synthetic continuations such as worker reports and restart recovery.
+        mcpGrantUser: runInputs.mcpGrantUser,
+        journal: { osSessionId: session.id, kind: "prompt" },
+        startToken,
+        onAskUser: makeAskHandler(sessionId),
+      })) {
+      const consumeEvent = async () => {
+        firstEventMs ??= Date.now() - turnMetricStartedAt;
+        switch (event.type) {
+          case "init":
+            if (event.provider) effectiveProvider = event.provider;
+            if (event.model) effectiveModel = event.model;
+            if (event.sessionId && event.sessionId !== finalSessionId) {
+              finalSessionId = event.sessionId;
+              // The engine session id just changed (first run of a fresh session, or
+              // a rotation fork): the run writes to a transcript file nobody is
+              // watching yet. Persist + attach NOW — waiting for the run to end
+              // (the old behavior) left the entire turn invisible to viewers.
+              if (session.source === "opensession") {
+                await touchNativeSession(session.id, {
+                  ...engineSessionPatch(effectiveProvider, finalSessionId),
+                  lastEngineProvider: effectiveProvider,
+                  ...(effectiveModel
+                    ? {
+                        lastEngineModel: effectiveModel,
+                      }
+                    : {}),
+                });
+                await publishSessionChange(session.id); // new watchers must see the new transcriptPath
+              } else if (
+                // Slack/linear-source sessions need the same persistence, into
+                // the owning agent's store — otherwise a fallback/rotation-minted
+                // id lives only in the run journal, the session file keeps
+                // pointing at the dead engine session (frozen transcript), and
+                // queued prompts fork the stale thread (slack-can-you-try,
+                // 2026-07-16). Pi ids take their own patch slot: shape-ambiguous
+                // in the claude slot, the next turn's run-start arm couldn't
+                // tell them from a claude id and minted a fresh pi session.
+                syncAgentSessionEngine(
+                  session,
+                  effectiveProvider === "pi"
+                    ? { piSessionId: finalSessionId }
+                    : { engineSessionId: finalSessionId },
+                )
+              ) {
+                await publishSessionChange(session.id);
               }
-            : interactiveMcpServers(user, sessionId, durablePromptEntryId),
-      reposNote: isAutomationSession
-        ? undefined
-        : await buildSessionNote(session, user),
-      deniedTools,
-      publicationPolicy: session.automationDescendantPolicy
-        ? {
-            repo: session.automationDescendantPolicy.publicationRepo,
-            branch: session.automationDescendantPolicy.baseBranch,
-            headBranch: session.branch || "",
-          }
-        : undefined,
-      confirmTools: STRIPE_CONFIRM_TOOLS,
-      aws: !isAutomationSession, // automation descendants never receive AWS credentials
-      // Attribute any commits this turn makes to whoever sent the prompt, or
-      // to the person the session acts for when nobody did (an auto-continue,
-      // a restart resume, a queue drain): the last person who prompted it,
-      // else its creator.
-      author: commitAuthorFor(user, sessionPrincipal(session)),
-      // Gate per-user MCP servers (allowedUsers) to the prompt's author. Automation
-      // sessions pass no user, so they never see a user-restricted server.
-      user: runInputs.user,
-      // The person who sent the prompt may spend their own subscription even
-      // when the session is automation-owned (the pool stays the backup).
-      accountUser: runInputs.accountUser,
-      // The creator grant also gives provider routing a safe human identity for
-      // synthetic continuations such as worker reports and restart recovery.
-      mcpGrantUser: runInputs.mcpGrantUser,
-      journal: { osSessionId: session.id, kind: "prompt" },
-      startToken,
-      onAskUser: makeAskHandler(sessionId),
-    })) {
-    firstEventMs ??= Date.now() - turnMetricStartedAt;
-    switch (event.type) {
-      case "init":
-        if (event.provider) effectiveProvider = event.provider;
-        if (event.model) effectiveModel = event.model;
-        if (event.sessionId && event.sessionId !== finalSessionId) {
-          finalSessionId = event.sessionId;
-          // The engine session id just changed (first run of a fresh session, or
-          // a rotation fork): the run writes to a transcript file nobody is
-          // watching yet. Persist + attach NOW — waiting for the run to end
-          // (the old behavior) left the entire turn invisible to viewers.
-          if (session.source === "opensession") {
-            await touchNativeSession(session.id, {
-              ...engineSessionPatch(effectiveProvider, finalSessionId),
-              lastEngineProvider: effectiveProvider,
-              ...(effectiveModel
-                ? {
-                    lastEngineModel: effectiveModel,
-                  }
-                : {}),
+              attachSessionWatchersToEngineTranscript(
+                sessionId,
+                effectiveProvider,
+                cwd,
+                finalSessionId,
+              );
+            }
+            break;
+          case "text_chunk":
+            firstTokenMs ??= Date.now() - turnMetricStartedAt;
+            assistantText += event.text;
+            broadcastToSession(sessionId, {
+              type: "stream_text",
+              sessionId,
+              text: event.text,
+              // Which assistant block this belongs to, when the engine names
+              // them: a viewer cancels the live copy by id the moment the
+              // durable entry lands (see LiveTextBuffer).
+              ...(event.blockId ? { blockId: event.blockId } : {}),
             });
-            await publishSessionChange(session.id); // new watchers must see the new transcriptPath
-          } else if (
-            // Slack/linear-source sessions need the same persistence, into
-            // the owning agent's store — otherwise a fallback/rotation-minted
-            // id lives only in the run journal, the session file keeps
-            // pointing at the dead engine session (frozen transcript), and
-            // queued prompts fork the stale thread (slack-can-you-try,
-            // 2026-07-16). Pi ids take their own patch slot: shape-ambiguous
-            // in the claude slot, the next turn's run-start arm couldn't
-            // tell them from a claude id and minted a fresh pi session.
-            syncAgentSessionEngine(
-              session,
-              effectiveProvider === "pi"
-                ? { piSessionId: finalSessionId }
-                : { engineSessionId: finalSessionId },
-            )
-          ) {
-            await publishSessionChange(session.id);
+            break;
+          case "model_switch": {
+            // Every fallback changes the model driving this turn. Only a usage
+            // fallback changes the user's selection; transient infra recovery is
+            // intentionally scoped to this turn.
+            const to = event.toModel || "";
+            const reason = `auto-switch — ${modelLabel(event.fromModel)} ${event.switchReason || "out of credits"}`;
+            if (to) {
+              effectiveModel = to;
+              effectiveProvider = providerFor(to);
+            }
+            const persistSwitch = to && shouldPersistModelSwitch(event);
+            if (to && !persistSwitch) {
+              broadcastToSession(sessionId, {
+                type: "notice",
+                message: `${modelLabel(event.fromModel)} ${event.switchReason || "fell back"} — using ${modelLabel(to)} for this turn only.`,
+              });
+            }
+            if (persistSwitch && session.source === "opensession") {
+              await persistAutoModelSwitch({
+                sessionId: session.id,
+                expectedModel: lastPersistedModel,
+                model: to,
+                entry: {
+                  model: to,
+                  from: event.fromModel,
+                  at: new Date().toISOString(),
+                  by: reason,
+                },
+              }).then(() => publishSessionChange(session.id));
+              // Track it either way: a walk that hops twice must expect what
+              // IT last wrote, and if the first write was refused (a human
+              // chose meanwhile) every later hop is refused too, which is
+              // exactly right — their choice stands.
+              lastPersistedModel = to;
+            } else if (
+              persistSwitch &&
+              syncAgentSessionEngine(session, { model: to })
+            ) {
+              // Keep the slack/linear store's model in step so the next turn
+              // (from the loop or the UI) resumes on the fallback, not the
+              // exhausted model. The new engine id follows via the init event.
+              await publishSessionChange(session.id);
+            }
+            if (persistSwitch)
+              broadcastToSession(sessionId, {
+                type: "model_changed",
+                sessionId,
+                model: to,
+                from: event.fromModel,
+                by: reason,
+              });
+            break;
           }
-          attachSessionWatchersToEngineTranscript(
-            sessionId,
-            effectiveProvider,
-            cwd,
-            finalSessionId,
-          );
+          case "tool_use":
+            toolUseCount++;
+            broadcastToSession(sessionId, {
+              type: "stream_tool_use",
+              sessionId,
+              entry: {
+                id: event.toolUseId || crypto.randomUUID(),
+                type: "tool_use",
+                content: `Using ${event.toolName}`,
+                timestamp: new Date().toISOString(),
+                toolName: event.toolName,
+                toolInput: event.toolInput,
+                toolUseId: event.toolUseId,
+              },
+            });
+            break;
+          case "tool_result":
+            broadcastToSession(sessionId, {
+              type: "stream_tool_result",
+              sessionId,
+              entry: {
+                // Same id scheme as the jsonl tail so the full (untruncated)
+                // transcript entry upserts over this streamed copy
+                id: event.toolUseId
+                  ? `tr-${event.toolUseId}`
+                  : crypto.randomUUID(),
+                type: "tool_result",
+                content: event.content || "",
+                timestamp: new Date().toISOString(),
+                toolUseId: event.toolUseId,
+                ...(event.images && event.images.length > 0
+                  ? { images: event.images }
+                  : {}),
+                ...(event.videos && event.videos.length > 0
+                  ? { videos: event.videos }
+                  : {}),
+                ...(event.featuredMedia && event.featuredMedia.length > 0
+                  ? { featuredMedia: event.featuredMedia }
+                  : {}),
+              },
+            });
+            break;
+          case "steer_delivered":
+            // Exact engine acknowledgement, consumed internally. Context-only
+            // system steers are intentionally absent from the visible transcript,
+            // so transcript matching alone cannot retire their receipts.
+            if (event.steerId)
+              await acknowledgeSteerDelivery(sessionId, event.steerId);
+            break;
+          case "usage_snapshot":
+            // Live mid-run cost/context — same fold as `done`, recomputed from
+            // the pre-run base (snapshots are cumulative for the run). Broadcast
+            // only; persistence waits for the end of the run.
+            if (event.usage) {
+              latestUsage = foldSessionUsage(
+                usageBase,
+                event.usage,
+                effectiveModel,
+              );
+              broadcastToSession(sessionId, {
+                type: "usage_update",
+                sessionId,
+                usage: latestUsage,
+              });
+            }
+            break;
+          case "done":
+            finalSessionId = event.sessionId || finalSessionId;
+            if (event.provider) effectiveProvider = event.provider;
+            if (event.model) effectiveModel = event.model;
+            // Dying on usage limits with no account left reports as a `done`
+            // whose result is the limit notice (not an `error` event) — but it
+            // still needs a human, so treat it as a failure.
+            if (event.usageLimitExhausted) {
+              runFailure =
+                event.result || "Usage limit reached on every account";
+              // This one was a clean `done`, not an error — recordRunOutcome
+              // writes the transcript chip below, worded as a stop.
+              failureNoticeLabel = "Run stopped";
+            }
+            // Fold this run's token/cost into the session total and push it live
+            // to viewers (persisted below with the rest of the session patch).
+            if (event.usage) {
+              latestUsage = foldSessionUsage(
+                usageBase,
+                event.usage,
+                event.model || effectiveModel,
+              );
+              usageBase = latestUsage;
+              broadcastToSession(sessionId, {
+                type: "usage_update",
+                sessionId,
+                usage: latestUsage,
+              });
+            }
+            // A cache miss is the one cost event worth keeping: it re-sent the
+            // whole conversation, at roughly twenty times a cached turn. It used
+            // to be a toast, which the person who paid for it usually never saw
+            // (the turn often finishes with nobody watching), so it lands in the
+            // transcript instead, on the turn it happened to, where the token
+            // count still means something a week later.
+            if (event.cacheMissWarning) {
+              const ocId = finalSessionId || session.claudeSessionId;
+              if (ocId) {
+                try {
+                  await appendTranscriptEntries(ocId, [
+                    transcriptLineRunnerNotice(
+                      cacheMissNotice(event.usage?.cacheCreationTokens),
+                    ),
+                  ]);
+                } catch {}
+              }
+            }
+            await publishSessionChange(sessionId);
+            break;
+          case "error":
+            // "Session is busy" = we lost the start race to a concurrent run (the
+            // pendingStarts guard closes most of that window; the runner's own
+            // check is the last line). Queue the message for delivery after the
+            // winning run instead of dropping it as an error toast. Return early:
+            // the tail below (steer-receipt clearing, stream_done) belongs to the
+            // run that actually owns the session.
+            if (event.content === "Session is busy") {
+              await enqueuePrompt(sessionId, { content, user });
+              watchExternalRunAndDrain(sessionId);
+              broadcastToSession(sessionId, {
+                type: "notice",
+                message:
+                  "Session was busy — message queued; it sends when the current run finishes.",
+              });
+              return true;
+            }
+            if (event.usage) {
+              latestUsage = foldSessionUsage(
+                usageBase,
+                event.usage,
+                event.model || effectiveModel,
+              );
+              broadcastToSession(sessionId, {
+                type: "usage_update",
+                sessionId,
+                usage: latestUsage,
+              });
+            }
+            endedWithError = true;
+            runFailure = event.content || "Run failed";
+            // The transcript chip is written by recordRunOutcome below — this is
+            // the choke point AFTER agent-runner's rotation/fallback walk, so only
+            // the final, user-facing error lands (one line per dead run). Skipped
+            // when the runner already wrote a friendlier line (timeout).
+            if (event.noticePersisted) failureNoticePersisted = true;
+            broadcastToSession(sessionId, {
+              type: "error",
+              sessionId,
+              message: event.content,
+            });
+            break;
         }
-        break;
-      case "text_chunk":
-        firstTokenMs ??= Date.now() - turnMetricStartedAt;
-        assistantText += event.text;
-        broadcastToSession(sessionId, {
-          type: "stream_text",
-          sessionId,
-          text: event.text,
-          // Which assistant block this belongs to, when the engine names
-          // them: a viewer cancels the live copy by id the moment the
-          // durable entry lands (see LiveTextBuffer).
-          ...(event.blockId ? { blockId: event.blockId } : {}),
-        });
-        break;
-      case "model_switch": {
-        // Every fallback changes the model driving this turn. Only a usage
-        // fallback changes the user's selection; transient infra recovery is
-        // intentionally scoped to this turn.
-        const to = event.toModel || "";
-        const reason = `auto-switch — ${modelLabel(event.fromModel)} ${event.switchReason || "out of credits"}`;
-        if (to) {
-          effectiveModel = to;
-          effectiveProvider = providerFor(to);
-        }
-        const persistSwitch = to && shouldPersistModelSwitch(event);
-        if (to && !persistSwitch) {
-          broadcastToSession(sessionId, {
-            type: "notice",
-            message: `${modelLabel(event.fromModel)} ${event.switchReason || "fell back"} — using ${modelLabel(to)} for this turn only.`,
-          });
-        }
-        if (persistSwitch && session.source === "opensession") {
-          await persistAutoModelSwitch({
-            sessionId: session.id,
-            expectedModel: lastPersistedModel,
-            model: to,
-            entry: {
-              model: to,
-              from: event.fromModel,
-              at: new Date().toISOString(),
-              by: reason,
-            },
-          }).then(() => publishSessionChange(session.id));
-          // Track it either way: a walk that hops twice must expect what
-          // IT last wrote, and if the first write was refused (a human
-          // chose meanwhile) every later hop is refused too, which is
-          // exactly right — their choice stands.
-          lastPersistedModel = to;
-        } else if (
-          persistSwitch &&
-          syncAgentSessionEngine(session, { model: to })
-        ) {
-          // Keep the slack/linear store's model in step so the next turn
-          // (from the loop or the UI) resumes on the fallback, not the
-          // exhausted model. The new engine id follows via the init event.
-          await publishSessionChange(session.id);
-        }
-        if (persistSwitch)
-          broadcastToSession(sessionId, {
-            type: "model_changed",
-            sessionId,
-            model: to,
-            from: event.fromModel,
-            by: reason,
-          });
-        break;
-      }
-      case "tool_use":
-        toolUseCount++;
-        broadcastToSession(sessionId, {
-          type: "stream_tool_use",
-          sessionId,
-          entry: {
-            id: event.toolUseId || crypto.randomUUID(),
-            type: "tool_use",
-            content: `Using ${event.toolName}`,
-            timestamp: new Date().toISOString(),
-            toolName: event.toolName,
-            toolInput: event.toolInput,
-            toolUseId: event.toolUseId,
-          },
-        });
-        break;
-      case "tool_result":
-        broadcastToSession(sessionId, {
-          type: "stream_tool_result",
-          sessionId,
-          entry: {
-            // Same id scheme as the jsonl tail so the full (untruncated)
-            // transcript entry upserts over this streamed copy
-            id: event.toolUseId ? `tr-${event.toolUseId}` : crypto.randomUUID(),
-            type: "tool_result",
-            content: event.content || "",
-            timestamp: new Date().toISOString(),
-            toolUseId: event.toolUseId,
-            ...(event.images && event.images.length > 0
-              ? { images: event.images }
-              : {}),
-            ...(event.videos && event.videos.length > 0
-              ? { videos: event.videos }
-              : {}),
-            ...(event.featuredMedia && event.featuredMedia.length > 0
-              ? { featuredMedia: event.featuredMedia }
-              : {}),
-          },
-        });
-        break;
-      case "steer_delivered":
-        // Exact engine acknowledgement, consumed internally. Context-only
-        // system steers are intentionally absent from the visible transcript,
-        // so transcript matching alone cannot retire their receipts.
-        if (event.steerId)
-          await acknowledgeSteerDelivery(sessionId, event.steerId);
-        break;
-      case "usage_snapshot":
-        // Live mid-run cost/context — same fold as `done`, recomputed from
-        // the pre-run base (snapshots are cumulative for the run). Broadcast
-        // only; persistence waits for the end of the run.
-        if (event.usage) {
-          latestUsage = foldSessionUsage(
-            usageBase,
-            event.usage,
-            effectiveModel,
-          );
-          broadcastToSession(sessionId, {
-            type: "usage_update",
-            sessionId,
-            usage: latestUsage,
-          });
-        }
-        break;
-      case "done":
-        finalSessionId = event.sessionId || finalSessionId;
-        if (event.provider) effectiveProvider = event.provider;
-        if (event.model) effectiveModel = event.model;
-        // Dying on usage limits with no account left reports as a `done`
-        // whose result is the limit notice (not an `error` event) — but it
-        // still needs a human, so treat it as a failure.
-        if (event.usageLimitExhausted) {
-          runFailure = event.result || "Usage limit reached on every account";
-          // This one was a clean `done`, not an error — recordRunOutcome
-          // writes the transcript chip below, worded as a stop.
-          failureNoticeLabel = "Run stopped";
-        }
-        // Fold this run's token/cost into the session total and push it live
-        // to viewers (persisted below with the rest of the session patch).
-        if (event.usage) {
-          latestUsage = foldSessionUsage(
-            usageBase,
-            event.usage,
-            event.model || effectiveModel,
-          );
-          usageBase = latestUsage;
-          broadcastToSession(sessionId, {
-            type: "usage_update",
-            sessionId,
-            usage: latestUsage,
-          });
-        }
-        // A cache miss is the one cost event worth keeping: it re-sent the
-        // whole conversation, at roughly twenty times a cached turn. It used
-        // to be a toast, which the person who paid for it usually never saw
-        // (the turn often finishes with nobody watching), so it lands in the
-        // transcript instead, on the turn it happened to, where the token
-        // count still means something a week later.
-        if (event.cacheMissWarning) {
-          const ocId = finalSessionId || session.claudeSessionId;
-          if (ocId) {
-            try {
-              await appendTranscriptEntries(ocId, [
-                transcriptLineRunnerNotice(
-                  cacheMissNotice(event.usage?.cacheCreationTokens),
-                ),
-              ]);
-            } catch {}
-          }
-        }
-        await publishSessionChange(sessionId);
-        break;
-      case "error":
-        // "Session is busy" = we lost the start race to a concurrent run (the
-        // pendingStarts guard closes most of that window; the runner's own
-        // check is the last line). Queue the message for delivery after the
-        // winning run instead of dropping it as an error toast. Return early:
-        // the tail below (steer-receipt clearing, stream_done) belongs to the
-        // run that actually owns the session.
-        if (event.content === "Session is busy") {
-          await enqueuePrompt(sessionId, { content, user });
-          watchExternalRunAndDrain(sessionId);
-          broadcastToSession(sessionId, {
-            type: "notice",
-            message:
-              "Session was busy — message queued; it sends when the current run finishes.",
-          });
-          return;
-        }
-        if (event.usage) {
-          latestUsage = foldSessionUsage(
-            usageBase,
-            event.usage,
-            event.model || effectiveModel,
-          );
-          broadcastToSession(sessionId, {
-            type: "usage_update",
-            sessionId,
-            usage: latestUsage,
-          });
-        }
-        endedWithError = true;
-        runFailure = event.content || "Run failed";
-        // The transcript chip is written by recordRunOutcome below — this is
-        // the choke point AFTER agent-runner's rotation/fallback walk, so only
-        // the final, user-facing error lands (one line per dead run). Skipped
-        // when the runner already wrote a friendlier line (timeout).
-        if (event.noticePersisted) failureNoticePersisted = true;
-        broadcastToSession(sessionId, {
-          type: "error",
-          sessionId,
-          message: event.content,
-        });
-        break;
+
+        return false;
+      };
+      const stopped = await withHostedEventPublication(
+        event,
+        consumeEvent,
+        personal,
+      );
+      if (stopped === true) return;
+      if (
+        personal &&
+        stopped === false &&
+        (event.type === "done" || event.type === "error")
+      )
+        await withHostedEventPublication(event, finishTurn, true);
     }
+    if (!personal) await finishTurn();
+  } finally {
+    if (personal && hostedRun) await finalizeHostedRun(hostedRun);
   }
 
-  audit({
-    kind: "session_turn_metric",
-    session_id: session.id,
-    environment: sandboxRun ? "sandbox" : "worktree",
-    provider: sandboxRun?.sandboxProvider || "host",
-    sandbox_id: sandboxRun?.sandboxId,
-    sandbox_ready_ms: sandboxRun?.sandboxReadyMs,
-    start_to_first_event_ms: firstEventMs,
-    start_to_first_token_ms: firstTokenMs,
-    duration_ms: Date.now() - turnMetricStartedAt,
-    outcome: endedWithError || runFailure ? "failed" : "ok",
-  });
+  async function finishTurn(): Promise<void> {
+    audit({
+      kind: "session_turn_metric",
+      session_id: session.id,
+      environment: sandboxRun ? "sandbox" : "worktree",
+      provider: sandboxRun?.sandboxProvider || "host",
+      sandbox_id: sandboxRun?.sandboxId,
+      sandbox_ready_ms: sandboxRun?.sandboxReadyMs,
+      start_to_first_event_ms: firstEventMs,
+      start_to_first_token_ms: firstTokenMs,
+      duration_ms: Date.now() - turnMetricStartedAt,
+      outcome: endedWithError || runFailure ? "failed" : "ok",
+    });
 
-  // Persist activity on our own session store. Slack/linear stores stay the
-  // owning agent's property, with one surgical exception: engine-id/model
-  // flips sync through agent-session-sync so the file never points at a dead
-  // engine session (see that module's doc).
-  if (session.source === "opensession") {
-    // The agent may have switched branches in its worktree during the turn
-    // (e.g. renaming an auto-generated branch before opening a PR). Keep the
-    // record on the actual HEAD so PR lookups, the PR tab, and the review
-    // handoff keep resolving this session. Shared checkouts (a repo's main
-    // or ask checkout) are exempt: no session owns their HEAD, so syncing
-    // would stamp whatever branch another flow left parked there onto this
-    // session (bks-019f97ec, 2026-07-25).
-    const headBranch =
-      session.branch && !isSharedCheckoutDir(session.worktreeDir)
-        ? worktreeHeadBranch(session.worktreeDir)
-        : null;
-    // Export the engine identity and usage before settling or draining the
-    // next prompt, whose resume inputs can still come from the session file.
-    await touchNativeSession(session.id, {
-      ...engineSessionPatch(effectiveProvider, finalSessionId),
-      lastEngineProvider: effectiveProvider,
-      ...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
-      ...(latestUsage
+    // Persist activity on our own session store. Slack/linear stores stay the
+    // owning agent's property, with one surgical exception: engine-id/model
+    // flips sync through agent-session-sync so the file never points at a dead
+    // engine session (see that module's doc).
+    if (session.source === "opensession") {
+      // The agent may have switched branches in its worktree during the turn
+      // (e.g. renaming an auto-generated branch before opening a PR). Keep the
+      // record on the actual HEAD so PR lookups, the PR tab, and the review
+      // handoff keep resolving this session. Shared checkouts (a repo's main
+      // or ask checkout) are exempt: no session owns their HEAD, so syncing
+      // would stamp whatever branch another flow left parked there onto this
+      // session (bks-019f97ec, 2026-07-25).
+      const headBranch = personal
+        ? await privateHeadBranch(session.worktreeDir)
+        : session.branch && !isSharedCheckoutDir(session.worktreeDir)
+          ? worktreeHeadBranch(session.worktreeDir)
+          : null;
+      // Export the engine identity and usage before settling or draining the
+      // next prompt, whose resume inputs can still come from the session file.
+      await touchNativeSession(session.id, {
+        ...engineSessionPatch(effectiveProvider, finalSessionId),
+        lastEngineProvider: effectiveProvider,
+        ...(effectiveModel ? { lastEngineModel: effectiveModel } : {}),
+        ...(latestUsage
+          ? {
+              usage: latestUsage,
+              ...(startToken ? { usageRunId: startToken } : {}),
+            }
+          : {}),
+        ...(headBranch && headBranch !== session.branch
+          ? { branch: headBranch }
+          : {}),
+      });
+    } else if (finalSessionId) {
+      syncAgentSessionEngine(
+        session,
+        effectiveProvider === "pi"
+          ? { piSessionId: finalSessionId }
+          : { engineSessionId: finalSessionId },
+      );
+    }
+
+    // A terminal failure keeps the session in the "Needs input" bucket until a
+    // later run finishes cleanly (which clears it here too), and lands in the
+    // transcript as a system chip. finalSessionId wins over the session file's
+    // id: a run that rotated to a fresh engine session mid-turn must write the
+    // chip into the transcript the conversation actually continues in.
+    await recordRunOutcome(session.id, runFailure, {
+      engineSessionId: finalSessionId || session.claudeSessionId || undefined,
+      noticePersisted: failureNoticePersisted,
+      noticeLabel: failureNoticeLabel,
+      ...(startToken
         ? {
-            usage: latestUsage,
-            ...(startToken ? { usageRunId: startToken } : {}),
+            runId: startToken,
+            runGeneration: sessionKernel(session.id).runStateProjection()
+              .generation,
+            projectionId: `outcome:${startToken}`,
           }
-        : {}),
-      ...(headBranch && headBranch !== session.branch
-        ? { branch: headBranch }
         : {}),
     });
-  } else if (finalSessionId) {
-    syncAgentSessionEngine(
-      session,
-      effectiveProvider === "pi"
-        ? { piSessionId: finalSessionId }
-        : { engineSessionId: finalSessionId },
+
+    // A socket-level steer acceptance is not engine delivery. Exact boundary
+    // acknowledgements already retired consumed receipts; anything left must
+    // become the immediate next turn, including after a clean run-end race.
+    const unreadSteers = await requeueSteerReceipts(
+      sessionId,
+      await engineUserTexts(session),
     );
-  }
+    if (unreadSteers > 0) watchExternalRunAndDrain(sessionId);
 
-  // A terminal failure keeps the session in the "Needs input" bucket until a
-  // later run finishes cleanly (which clears it here too), and lands in the
-  // transcript as a system chip. finalSessionId wins over the session file's
-  // id: a run that rotated to a fresh engine session mid-turn must write the
-  // chip into the transcript the conversation actually continues in.
-  await recordRunOutcome(session.id, runFailure, {
-    engineSessionId: finalSessionId || session.claudeSessionId || undefined,
-    noticePersisted: failureNoticePersisted,
-    noticeLabel: failureNoticeLabel,
-    ...(startToken
-      ? {
-          runId: startToken,
-          runGeneration: sessionKernel(session.id).runStateProjection()
-            .generation,
-          projectionId: `outcome:${startToken}`,
-        }
-      : {}),
-  });
+    broadcastToSession(sessionId, { type: "stream_done", sessionId });
+    broadcastToSession(sessionId, {
+      type: "session_status",
+      sessionId,
+      isRunning: false,
+    });
 
-  // A socket-level steer acceptance is not engine delivery. Exact boundary
-  // acknowledgements already retired consumed receipts; anything left must
-  // become the immediate next turn, including after a clean run-end race.
-  const unreadSteers = await requeueSteerReceipts(
-    sessionId,
-    await engineUserTexts(session),
-  );
-  if (unreadSteers > 0) watchExternalRunAndDrain(sessionId);
-
-  broadcastToSession(sessionId, { type: "stream_done", sessionId });
-  broadcastToSession(sessionId, {
-    type: "session_status",
-    sessionId,
-    isRunning: false,
-  });
-
-  // Mirror the agent's reply back to Slack: a turn that came from a Slack thread
-  // (a reply under a message this session posted — see slackReplyTo plumbing)
-  // answers in that thread.
-  if (!endedWithError && assistantText.trim() && slackReplyTo) {
-    void sendSlackMessage(
-      slackReplyTo.channel,
-      assistantText.trim().slice(0, 38000),
-      slackReplyTo.threadTs,
-    ).catch(() => {});
-  }
-
-  // Announce-then-stop guard (shared with the create path — see
-  // maybeQueueAutoContinue). runSessionPromptAndDrain delivers what it queues.
-  await maybeQueueAutoContinue({
-    sessionId,
-    session,
-    assistantText,
-    toolUseCount,
-    endedWithError,
-    runFailure,
-  });
-
-  // The session just finished a turn; if nothing's queued it's idle now, so fire
-  // any "when_done" / "on_pr" human asks waiting on this session. Idempotent.
-  if (!promptQueues.get(sessionId)?.length) {
-    onHumanAsksSessionIdle(sessionId);
-    // Ephemeral providers can persist an exact, session-private filesystem
-    // image now that the turn is quiescent. This is detached from response
-    // latency; the provider serializes a follow-up restore behind it.
-    if (
-      !endedWithError &&
-      sandboxRun?.sandboxId &&
-      isRunnableSandboxProvider(sandboxRun.sandboxProvider)
-    ) {
-      const provider = getSandboxProvider(sandboxRun.sandboxProvider);
-      if (provider.checkpoint) {
-        void provider.checkpoint(sandboxRun.sandboxId).catch((error) => {
-          console.warn(
-            `[sandbox] checkpoint ${sandboxRun!.sandboxId} after ${sessionId} failed:`,
-            error,
-          );
-        });
-      }
+    // Mirror the agent's reply back to Slack: a turn that came from a Slack thread
+    // (a reply under a message this session posted — see slackReplyTo plumbing)
+    // answers in that thread.
+    if (!endedWithError && assistantText.trim() && slackReplyTo) {
+      void sendSlackMessage(
+        slackReplyTo.channel,
+        assistantText.trim().slice(0, 38000),
+        slackReplyTo.threadTs,
+      ).catch(() => {});
     }
-    // Publish any commits the turn left unpushed so the status header doesn't
-    // linger on "Ahead by N commits" (see autoPushSessionBranches). Only on a
-    // clean finish — an errored/aborted turn may be mid-work. Fire-and-forget.
-    if (!endedWithError) void autoPushSessionBranches(session);
-    // Clean finish with nobody looking → next returning viewer gets a recap
-    // system chip (recap.ts). Errored turns already land a failure chip, and
-    // a turn that published a walkthrough already summarized itself, which is
-    // what the turn's start time lets recap.ts check.
-    if (!endedWithError && (assistantText.trim() || toolUseCount > 0))
-      markRecapPendingIfUnwatched(sessionId, turnMetricStartedAt);
-    // A turn that ended on a choice ("fix both, or only step 1?") offers that
-    // choice as chips above the composer. Generated only for a watcher who is
-    // actually there; anyone arriving later gets them on watch instead
-    // (reply-suggestions.ts).
-    if (!endedWithError && assistantText.trim())
-      maybeSuggestReplies(sessionId, user || session.startedBy || undefined);
+
+    // Announce-then-stop guard (shared with the create path — see
+    // maybeQueueAutoContinue). runSessionPromptAndDrain delivers what it queues.
+    await maybeQueueAutoContinue({
+      sessionId,
+      session,
+      assistantText,
+      toolUseCount,
+      endedWithError,
+      runFailure,
+    });
+
+    // The session just finished a turn; if nothing's queued it's idle now, so fire
+    // any "when_done" / "on_pr" human asks waiting on this session. Idempotent.
+    if (!personal && !promptQueues.get(sessionId)?.length) {
+      void onHumanAsksSessionIdle(sessionId).catch((error) =>
+        console.error("[human-asks] scoped idle reconciliation failed", error),
+      );
+      // Ephemeral providers can persist an exact, session-private filesystem
+      // image now that the turn is quiescent. This is detached from response
+      // latency; the provider serializes a follow-up restore behind it.
+      if (
+        !endedWithError &&
+        sandboxRun?.sandboxId &&
+        isRunnableSandboxProvider(sandboxRun.sandboxProvider)
+      ) {
+        const provider = getSandboxProvider(sandboxRun.sandboxProvider);
+        if (provider.checkpoint) {
+          void provider.checkpoint(sandboxRun.sandboxId).catch((error) => {
+            console.warn(
+              `[sandbox] checkpoint ${sandboxRun!.sandboxId} after ${sessionId} failed:`,
+              error,
+            );
+          });
+        }
+      }
+      // Publish any commits the turn left unpushed so the status header doesn't
+      // linger on "Ahead by N commits" (see autoPushSessionBranches). Only on a
+      // clean finish — an errored/aborted turn may be mid-work. Fire-and-forget.
+      if (!endedWithError) void autoPushSessionBranches(session);
+      // Clean finish with nobody looking → next returning viewer gets a recap
+      // system chip (recap.ts). Errored turns already land a failure chip, and
+      // a turn that published a walkthrough already summarized itself, which is
+      // what the turn's start time lets recap.ts check.
+      if (!endedWithError && (assistantText.trim() || toolUseCount > 0))
+        markRecapPendingIfUnwatched(sessionId, turnMetricStartedAt);
+      // A turn that ended on a choice ("fix both, or only step 1?") offers that
+      // choice as chips above the composer. Generated only for a watcher who is
+      // actually there; anyone arriving later gets them on watch instead
+      // (reply-suggestions.ts).
+      if (!endedWithError && assistantText.trim())
+        maybeSuggestReplies(sessionId, user || session.startedBy || undefined);
+    }
   }
 }
 
@@ -3796,8 +4058,21 @@ async function runSessionPromptInner(
  * this note resolves stable ids into names, state, and workspace membership.
  * Interactive sessions only: automations don't get opensession-sessions.
  */
-export function sessionMentionsNote(
+export async function sessionMentionsNote(
   content: string,
+  excludeIds?: Iterable<string>,
+): Promise<string | null> {
+  if (!renderSessionMentionsNote(content, [], excludeIds)) return null;
+  return renderSessionMentionsNote(
+    content,
+    await getCachedSessionsAsync(),
+    excludeIds,
+  );
+}
+
+export function renderSessionMentionsNote(
+  content: string,
+  sessions: readonly UnifiedSession[],
   excludeIds?: Iterable<string>,
 ): string | null {
   // Only the human's visible message counts. Fenced <opensession:context> blocks
@@ -3828,7 +4103,9 @@ export function sessionMentionsNote(
   const sections: string[] = [];
   if (sessionIds.length) {
     const lines = sessionIds.map((id) => {
-      const session = findSession(id);
+      const session = sessions.find(
+        (session) => session.id === id || session.aliasIds?.includes(id),
+      );
       if (!session) return `- @session:${id} · no session with this id`;
       const busy = isAgentSessionBusy(
         session.claudeSessionId,
@@ -3845,7 +4122,6 @@ export function sessionMentionsNote(
     sections.push(`Sessions:\n${lines.join("\n")}`);
   }
   if (workspaceIds.length) {
-    const sessions = getCachedSessions();
     const lines = workspaceIds.map((id) => {
       // Memory projection: the note is assembled synchronously per prompt.
       const workspace = peekWorkspace(id);
@@ -3886,35 +4162,50 @@ export function sessionMentionsNote(
  */
 export function startLoopTicker(): void {
   if (g.__loopTicker || isDevInstance()) return;
-  g.__loopTicker = setInterval(() => {
-    for (const session of getCachedSessions()) {
-      const loop = session.loop;
-      if (!loop || session.archived || session.source !== "opensession")
-        continue;
-      if (!session.claudeSessionId && !session.codexThreadId) continue;
-      if (
-        isAgentSessionBusy(
-          session.claudeSessionId,
-          session.codexThreadId,
-          session.id,
-        )
-      )
-        continue;
-      const last = loop.lastRunAt ? new Date(loop.lastRunAt).getTime() : 0;
-      if (Date.now() - last < loop.intervalMinutes * 60_000) continue;
-      touchNativeSession(session.id, {
-        loop: { ...loop, lastRunAt: new Date().toISOString() },
-      });
-      console.log(
-        `[loop] Firing loop prompt for ${session.id} (every ${loop.intervalMinutes}m)`,
-      );
-      void runSessionPromptAndDrain(
+  const tick = createSessionLoopTick({
+    sessions: () => getCachedSessionsAsync("exclude"),
+    resolve: findSessionAsync,
+    busy: (session) =>
+      isAgentSessionBusy(
+        session.claudeSessionId,
+        session.codexThreadId,
         session.id,
-        loop.prompt,
-        loopActor(loop.setBy),
-      ).catch((e) =>
-        console.error(`[loop] Loop prompt failed for ${session.id}:`, e),
-      );
-    }
+      ),
+    stamp: (id, loop) =>
+      updateSessionFile(id, (data) => {
+        if (
+          !data.loop ||
+          data.loop.prompt !== loop.prompt ||
+          data.loop.intervalMinutes !== loop.intervalMinutes ||
+          data.loop.setBy !== loop.setBy
+        )
+          throw new Error("Session loop changed before admission");
+        return { ...data, loop: { ...data.loop, lastRunAt: loop.lastRunAt } };
+      }),
+    run: (id, loop) =>
+      runSessionPromptAndDrain(id, loop.prompt, loopActor(loop.setBy)),
+    failed: (error) =>
+      console.error("[loop] Scoped loop admission failed", error),
+  });
+  g.__loopTicker = setInterval(() => {
+    void tick();
   }, 60_000);
+}
+
+async function privateHeadBranch(cwd: string | null): Promise<string | null> {
+  if (!cwd) return null;
+  const proc = Bun.spawn(
+    ["git", "-C", cwd, "symbolic-ref", "--quiet", "--short", "HEAD"],
+    {
+      stdout: "pipe",
+      stderr: "ignore",
+      env: {
+        PATH: process.env.PATH,
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_TERMINAL_PROMPT: "0",
+      },
+    },
+  );
+  const text = await new Response(proc.stdout).text();
+  return (await proc.exited) === 0 ? text.trim() || null : null;
 }

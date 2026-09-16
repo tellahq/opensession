@@ -44,7 +44,26 @@ export type McpScope = "all" | string[];
 
 /** Everything a host needs to drive one run — a serializable RunAgentOpts. */
 export interface RunHostSpec {
+  /** Nonsecret catalog identity. Requires the personal-runner-host preflight;
+   * ordinary/legacy runner-host entrypoints must refuse this field. */
+  personalRepo?: {
+    readonly registryId: string;
+    readonly descriptor: {
+      readonly kind: "personal";
+      readonly ownerGithubAccountId: number;
+      readonly appRecordId: string;
+      readonly githubAppId: number;
+      readonly installationId: number;
+      readonly repositoryId: number;
+      readonly repositoryOwnerGithubAccountId: number;
+      readonly accessRevision: number;
+      readonly fullName: string;
+    };
+  };
   hostId: string;
+  /** Original logical journal runKey, preserved across personal host respawns.
+   * Required for personal specs; shared legacy hosts may omit it. */
+  logicalRunId?: string;
   /** Open Session session this run belongs to (busy/steer/cancel key, journal). */
   osSessionId: string;
   /** Session runs participate in the owning actor's run lifecycle. Auxiliary

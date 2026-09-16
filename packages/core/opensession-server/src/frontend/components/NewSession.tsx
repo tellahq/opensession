@@ -1,3 +1,4 @@
+import { isCurrentClientDataScope } from "../lib/client-data-scope";
 import React, {
   useCallback,
   useEffect,
@@ -31,11 +32,14 @@ import { getCurrentUser } from "./UserPicker";
 import { type FileAttachment } from "../lib/images";
 import { type PastedTextAttachment } from "../lib/pasted-text";
 import {
+  bindDraftKey,
+  draftClientDataScope,
+  requireDraftWriteScope,
   loadDraft,
   saveDraft,
   clearDraft,
   onDraftsChanged,
-  NEW_SESSION_DRAFT_KEY as DRAFT_KEY,
+  NEW_SESSION_DRAFT_KEY,
   workspaceDraftKey,
 } from "../lib/drafts";
 import {
@@ -86,8 +90,23 @@ import {
 import type { WSClientMessage, WSServerMessage } from "../lib/types";
 import { findPrWorkspaceId } from "../lib/pr-workspace";
 import { newClientSessionId } from "../lib/session-id";
+import {
+  createMcpServers,
+  isPrivateRepoOption,
+  mcpControlReadout,
+  mcpControlState,
+} from "../lib/new-session-mcp";
+import {
+  PRIVATE_ATTACHMENTS_STAGED,
+  PRIVATE_ATTACHMENTS_UNAVAILABLE,
+  privateAttachmentsBlocked,
+} from "../lib/private-session-attachments";
 import { errorMatchesPendingCreate } from "../lib/new-session-navigation";
 import {
+  consumePendingDraftParks,
+  draftParkInFlight,
+  pendingDraftParks,
+  type PendingDraftPark,
   consumeNewSessionWorkspaceDraft,
   forgetParkedNewSessionWorkspace,
   getParkedNewSessionWorkspaceId,
@@ -148,15 +167,11 @@ import {
   type CreateStatus,
 } from "../lib/new-session-classes";
 import {
-  consumePendingDraftParks,
-  draftParkInFlight,
   firstNonEmptyLine,
   migratedRepoPref,
-  pendingDraftParks,
   readPrefill,
   type NewSessionCreateDraft,
   type NewSessionProps,
-  type PendingDraftPark,
   type RepoOption,
   type SessionStartPoint,
   type Worktree,
@@ -194,6 +209,8 @@ export function NewSession({
   sessions,
   onCreateStarted,
 }: NewSessionProps) {
+  const DRAFT_KEY = bindDraftKey(NEW_SESSION_DRAFT_KEY);
+  const draftScope = draftClientDataScope(DRAFT_KEY);
   const [prefill] = useState(readPrefill);
   // What the session may do, and nothing else — the footer's Ask toggle. The
   // repo is a separate axis, so Scratch is not a third value here: it is what
@@ -267,6 +284,7 @@ export function NewSession({
       label: item.label || item.id,
       default: item.default,
       sharedCheckout: item.sharedCheckout,
+      accessScope: item.accessScope,
     }));
   // The workspace's configured choice is what a user with no preference of
   // their own starts on; the repo flagged `default` is the fallback behind it.
@@ -283,6 +301,16 @@ export function NewSession({
     const seeded = repoOptions(cachedRepos());
     return seeded.length ? resolveDefaultRepo(seeded) : "";
   });
+  // A private repository's run gets no connected services: the server forces
+  // an empty allowlist and rejects any list a create names. The control below
+  // reads unavailable and the create omits the field; the shared pick stays
+  // in state so switching back to a shared repo restores it.
+  const privateRepo = isPrivateRepoOption(
+    repos.find((option) => option.id === repo),
+  );
+  // A refused pick, drop, or paste for the private repo; the notice lasts
+  // until the repository changes, which is also what would lift the refusal.
+  const [attachmentsRefused, setAttachmentsRefused] = useState(false);
   const startsInLocalCheckout =
     mode === "code" &&
     startPoint.kind === "new" &&
@@ -391,7 +419,7 @@ export function NewSession({
         ? prev
         : stored.pastedTexts,
     );
-  }, []);
+  }, [DRAFT_KEY]);
   // An upload that lands while this palette is open belongs on screen even
   // though it was staged by the instance that closed: the store fires on an
   // attachment change for exactly this.
@@ -656,7 +684,7 @@ export function NewSession({
   }
 
   function handleCardKeyDown(e: React.KeyboardEvent) {
-    if (!busy && matchesShortcut(e, "composer-attach")) {
+    if (!busy && !privateRepo && matchesShortcut(e, "composer-attach")) {
       e.preventDefault();
       fileInputRef.current?.click();
       return;
@@ -787,7 +815,10 @@ export function NewSession({
       dropStagingAttachments(DRAFT_KEY);
       clearDraft(DRAFT_KEY);
       if (consumedWorkspaceId)
-        consumeNewSessionWorkspaceDraft(consumedWorkspaceId);
+        consumeNewSessionWorkspaceDraft(
+          consumedWorkspaceId,
+          draftClientDataScope(DRAFT_KEY),
+        );
       // "Create more" stays in the palette and resets for the next task. The
       // other actions close it after App handles the same announcement.
       if (createAction === "more" || inline) {
@@ -812,8 +843,19 @@ export function NewSession({
   // Re-send the same client-minted id after a drop. The server deduplicates an
   // in-flight request and returns the existing session if it already persisted.
   useEffect(() => {
-    if (!creatingRef.current) return;
+    if (!creatingRef.current || !isCurrentClientDataScope(draftScope)) return;
     if (!connected) {
+      if (draftScope?.key === "shared:legacy") {
+        replayCreateRef.current = false;
+        creatingRef.current = false;
+        createMessageRef.current = null;
+        setStatus({
+          kind: "failed",
+          message:
+            "Connection lost. Check the session list before trying again.",
+        });
+        return;
+      }
       replayCreateRef.current = true;
       setStatus({ kind: "reconnecting" });
       return;
@@ -822,9 +864,18 @@ export function NewSession({
     replayCreateRef.current = false;
     setStatus({ kind: "creating" });
     send(createMessageRef.current);
-  }, [connected, send]);
+  }, [connected, send, draftScope]);
 
   async function addAttachments(picked: FileList | File[]) {
+    // A private session takes no images or files (the server rejects them),
+    // so a pick, drop, or paste is refused here, before anything is staged
+    // or uploaded. Pasted text is not affected: it chips inline.
+    if (privateRepo) {
+      // Inline rather than a toast: the palette's backdrop blurs the toast
+      // layer, so the refusal reads beside the prompt it answers.
+      setAttachmentsRefused(true);
+      return;
+    }
     // The staging commits to the draft store itself, so a screenshot pasted
     // while the app is still loading survives this palette closing before
     // its upload lands. Adopt the store rather than the result: it is the
@@ -853,16 +904,26 @@ export function NewSession({
   // composer, so the draft you find in the sidebar has its files too.
   const parkingDraftRef = useRef(false);
   async function parkDraftOnExit() {
+    if (
+      !isCurrentClientDataScope(draftScope) ||
+      draftScope?.key === "shared:legacy"
+    )
+      return;
     const text = promptText.current.trim();
     if (
       !text ||
       busy ||
       parkingDraftRef.current ||
-      draftParkInFlight(text, workspaceId)
+      draftParkInFlight(text, workspaceId, draftScope)
     )
       return;
     parkingDraftRef.current = true;
-    const operation: PendingDraftPark = { text, workspaceId, consumed: false };
+    const operation: PendingDraftPark = {
+      text,
+      workspaceId,
+      consumed: false,
+      scope: draftScope,
+    };
     pendingDraftParks.add(operation);
     const draft = {
       text,
@@ -876,52 +937,71 @@ export function NewSession({
           draft: { ...draft, autoName: true },
         };
         if (repo && repo !== NO_REPO) input.repo = repo;
-        return createWorkspaceApi(input);
+        return createWorkspaceApi(input, draftScope);
       };
-      const parkedId = getParkedNewSessionWorkspaceId();
+      const parkedId = getParkedNewSessionWorkspaceId(draftScope);
       const workspace = workspaceId
         ? // Scoped to an existing workspace: update its draft, never rename it.
-          await updateWorkspaceApi(workspaceId, { draft })
+          await updateWorkspaceApi(workspaceId, { draft }, draftScope)
         : parkedId
           ? // Re-parking the draft this palette already saved. The name still
             // follows the text server-side while autoName holds. Only a
             // workspace that is gone earns a fresh one; any other failure is
             // reported rather than answered with a duplicate.
-            await updateWorkspaceApi(parkedId, {
-              draft: { ...draft, autoName: true },
-            }).catch((e) => {
+            await updateWorkspaceApi(
+              parkedId,
+              {
+                draft: { ...draft, autoName: true },
+              },
+              draftScope,
+            ).catch((e) => {
               if (e instanceof ApiError && e.status === 404) {
-                forgetParkedNewSessionWorkspace(parkedId);
+                forgetParkedNewSessionWorkspace(
+                  parkedId,
+                  draftClientDataScope(DRAFT_KEY),
+                );
                 return createWorkspace();
               }
               throw e;
             })
           : await createWorkspace();
+      if (!isCurrentClientDataScope(draftScope)) return;
       if (operation.consumed) {
         // The same prompt started while this request was in flight. A create
         // that adopted this workspace only needs its late draft cleared. When
         // it created elsewhere, remove the now-empty duplicate workspace.
         if (workspaceId || operation.consumedIntoWorkspaceId === workspace.id) {
-          await updateWorkspaceApi(workspace.id, { draft: null });
+          await updateWorkspaceApi(workspace.id, { draft: null }, draftScope);
         } else {
-          forgetParkedNewSessionWorkspace(workspace.id);
-          await deleteWorkspaceApi(workspace.id);
+          forgetParkedNewSessionWorkspace(
+            workspace.id,
+            draftClientDataScope(DRAFT_KEY),
+          );
+          await deleteWorkspaceApi(workspace.id, draftScope);
         }
       } else {
-        if (!workspaceId) rememberParkedNewSessionWorkspace(workspace.id);
+        if (!workspaceId)
+          rememberParkedNewSessionWorkspace(
+            workspace.id,
+            draftClientDataScope(DRAFT_KEY),
+          );
         // Attachments live in this browser's draft store, not on the server
         // record, so hand them to the workspace composer directly.
         const staged = loadDraft(DRAFT_KEY);
-        saveDraft(workspaceDraftKey(workspace.id), {
-          text,
-          images: staged.images,
-          files: staged.files,
-          pastedTexts: staged.pastedTexts,
-        });
+        saveDraft(
+          workspaceDraftKey(workspace.id, draftClientDataScope(DRAFT_KEY)),
+          {
+            text,
+            images: staged.images,
+            files: staged.files,
+            pastedTexts: staged.pastedTexts,
+          },
+        );
       }
       window.dispatchEvent(new Event("opensession:workspaces-changed"));
     })()
       .catch(async (e) => {
+        if (!isCurrentClientDataScope(draftScope)) return;
         if (!operation.consumed) {
           toast(
             e instanceof ApiError
@@ -970,7 +1050,7 @@ export function NewSession({
       workspaceId ||
       prWorkspaceId ||
       (!selectedPullRequest
-        ? getParkedNewSessionWorkspaceId() || undefined
+        ? getParkedNewSessionWorkspaceId(draftScope) || undefined
         : undefined);
     const worktreeMode =
       createMode === "ask"
@@ -1050,9 +1130,8 @@ export function NewSession({
     // Once defaults have loaded, Host is an explicit override ("local").
     // Omitting the field would make the server re-apply the user's default.
     if (sandboxStatus) createMessage.sandbox = sandboxProvider || "local";
-    if (selectedMcpServers.length) {
-      createMessage.mcpServers = selectedMcpServers;
-    }
+    const mcpServers = createMcpServers(privateRepo, selectedMcpServers);
+    if (mcpServers) createMessage.mcpServers = mcpServers;
     if (images.length) createMessage.images = images;
     if (pastedBlocks.length) createMessage.pastedTexts = pastedBlocks;
     if (files.length) {
@@ -1070,8 +1149,14 @@ export function NewSession({
       ? null
       : (createWorkspaceId ?? null);
     try {
+      requireDraftWriteScope(DRAFT_KEY);
       send(createMessage);
-      consumePendingDraftParks(prompt, workspaceId, createWorkspaceId);
+      consumePendingDraftParks(
+        prompt,
+        workspaceId,
+        createWorkspaceId,
+        draftScope,
+      );
       if (createAction === "open") {
         // The send was accepted. Consume the global composer now, before App
         // opens the optimistic session, so reopening it during workspace setup
@@ -1095,8 +1180,18 @@ export function NewSession({
     }
   }
 
+  // Media staged under a shared repository and still in the draft after the
+  // repository changed to a private one: the server would reject the create,
+  // so it is blocked here with the way out named beside the prompt.
+  const privateAttachmentsStaged = privateAttachmentsBlocked(privateRepo, {
+    images: images.length,
+    files: files.length,
+  });
+  const showAttachmentsRefused =
+    privateRepo && attachmentsRefused && !privateAttachmentsStaged;
   const canCreate =
     !busy &&
+    !privateAttachmentsStaged &&
     // An attachment is not attached until its upload lands, and the create
     // reads the list as it stands. Creating a second earlier would send the
     // prompt without the screenshot it is about, silently.
@@ -1434,13 +1529,13 @@ export function NewSession({
           button, and the pick governs the whole session rather than one
           prompt. The row stays mounted so the last chip can animate out. */}
           <div className="flex flex-wrap items-start gap-x-1 px-4 phone:px-3 phone:pt-1">
-            {selectedMcpServers.length > 0 && (
+            {!privateRepo && selectedMcpServers.length > 0 && (
               <span className="mr-1 self-center text-meta font-medium text-faint phone:block desktop:hidden">
                 Using
               </span>
             )}
             <AnimatePresence initial={false}>
-              {selectedMcpServers.map((mcp) => (
+              {(privateRepo ? [] : selectedMcpServers).map((mcp) => (
                 <ComposerContextChip
                   key={mcp}
                   icon={<IconTile name={mcp} size={15} />}
@@ -1461,6 +1556,7 @@ export function NewSession({
               initialText: initialPrompt,
               repo,
               mcpServers: selectedMcpServers,
+              privateRepo,
               // Ask sessions read and explain; they never touch the code. Asking
               // "what to work on" in that mode invites a prompt the session
               // cannot carry out.
@@ -1519,17 +1615,37 @@ export function NewSession({
               {sandboxModelWarning}
             </div>
           )}
+          {privateAttachmentsStaged && (
+            <div className={ERROR} role="alert">
+              {PRIVATE_ATTACHMENTS_STAGED}
+            </div>
+          )}
+          {showAttachmentsRefused && (
+            <div className={ERROR} role="alert">
+              {PRIVATE_ATTACHMENTS_UNAVAILABLE}
+            </div>
+          )}
 
           {/* Footer toolbar */}
           <div className={cn(FOOTER, edges.bottom && EDGE_DIVIDER)}>
             <div className={FOOTER_LEFT}>
-              <Tooltip label="Attach a file" shortcut={attachKeys ?? undefined}>
+              <Tooltip
+                label={
+                  privateRepo
+                    ? PRIVATE_ATTACHMENTS_UNAVAILABLE
+                    : "Attach a file"
+                }
+                shortcut={privateRepo ? undefined : (attachKeys ?? undefined)}
+              >
                 <button
                   type="button"
                   className={FOOTER_ICON_BTN}
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={busy}
+                  disabled={busy || privateRepo}
                   aria-label="Attach a file"
+                  title={
+                    privateRepo ? PRIVATE_ATTACHMENTS_UNAVAILABLE : undefined
+                  }
                 >
                   <IconPaperclip size={20} />
                 </button>
@@ -1601,7 +1717,7 @@ export function NewSession({
                         sandboxProvider ||
                         pstackMode ||
                         modelEngine(effectiveModelId) !== "pi" ||
-                        selectedMcpServers.length > 0) &&
+                        (!privateRepo && selectedMcpServers.length > 0)) &&
                         paletteIconBtnOn,
                     )}
                     disabled={busy}
@@ -1746,10 +1862,12 @@ export function NewSession({
                         {/* Nothing picked is not "none": an empty allowlist means
                           the run gets every service you can see
                           (filterMcpServers, scope "all"), so the readout says
-                          so rather than promising a session with no tools. */}
-                        {selectedMcpServers.length
-                          ? `${selectedMcpServers.length} on`
-                          : "All"}
+                          so rather than promising a session with no tools. A
+                          private repository is the exception: its run gets
+                          no services at all, and says so. */}
+                        {mcpControlReadout(
+                          mcpControlState(privateRepo, selectedMcpServers),
+                        )}
                         <IconChevronRight
                           className="shrink-0 text-faint"
                           size={17}
@@ -1757,7 +1875,17 @@ export function NewSession({
                       </span>
                     </Menu.SubmenuTrigger>
                     <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-                      {availableMcpServers.length > 0 && (
+                      {privateRepo && (
+                        <div
+                          role="note"
+                          className="max-w-[300px] px-2 pb-1 text-supporting leading-snug text-faint"
+                        >
+                          Not available for a private repository. The session
+                          gets built-in tools only. Your picks stay for shared
+                          repositories.
+                        </div>
+                      )}
+                      {!privateRepo && availableMcpServers.length > 0 && (
                         <div className="max-w-[300px] px-2 pb-1 text-supporting leading-snug text-faint">
                           Picked services are the only ones the session gets.
                         </div>
@@ -1768,11 +1896,15 @@ export function NewSession({
                         </Menu.Item>
                       )}
                       {availableMcpServers.map((mcp) => {
-                        const checked = selectedMcpServers.includes(mcp);
+                        // Disabled and unchecked for a private repo: the pick
+                        // is neither sent nor lost, only out of reach here.
+                        const checked =
+                          !privateRepo && selectedMcpServers.includes(mcp);
                         return (
                           <Menu.CheckboxItem
                             key={mcp}
                             checked={checked}
+                            disabled={privateRepo}
                             closeOnClick={false}
                             onCheckedChange={(on) => toggleMcpServer(mcp, on)}
                             className={cn(

@@ -4,6 +4,7 @@ import { existsSync } from "fs";
 import { resolve } from "path";
 import { SHIM_PATH } from "../../../../../scripts/lib/paths";
 import { isCompiledBinary } from "../runner-host/exe";
+import { githubGitCredentialEnvWithHelper } from "./github-git-credential-env";
 
 const GH_CREDENTIAL_SCRIPT = resolve(
   import.meta.dir,
@@ -49,18 +50,5 @@ export function githubGitCredentialEnv(
   token: string,
   helper = githubCredentialHelperCommand(),
 ): Record<string, string> {
-  return {
-    GH_TOKEN: token,
-    GITHUB_TOKEN: token,
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_CONFIG_COUNT: "4",
-    GIT_CONFIG_KEY_0: "credential.https://github.com.helper",
-    GIT_CONFIG_VALUE_0: "",
-    GIT_CONFIG_KEY_1: "credential.https://github.com.helper",
-    GIT_CONFIG_VALUE_1: helper,
-    GIT_CONFIG_KEY_2: "url.https://github.com/.insteadOf",
-    GIT_CONFIG_VALUE_2: "git@github.com:",
-    GIT_CONFIG_KEY_3: "url.https://github.com/.insteadOf",
-    GIT_CONFIG_VALUE_3: "ssh://git@github.com/",
-  };
+  return githubGitCredentialEnvWithHelper(token, helper);
 }

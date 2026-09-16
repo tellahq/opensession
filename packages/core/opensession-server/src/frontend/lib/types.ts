@@ -1,5 +1,6 @@
 // Type-only (erased at build): the dynamic-workflow run snapshot broadcast to
 // the session's Agents panel.
+import type { AccessScope } from "../../shared/access-scope";
 import type { WorkflowRunSnapshot } from "../../shared/workflow-types";
 import type { MentionRecord } from "./api/user-state";
 // The protocol core: durable record types and the WebSocket frames any
@@ -410,6 +411,13 @@ export interface SessionSafetyState {
 
 export interface UnifiedSession {
   id: string;
+  /**
+   * Server-projected access scope of the row. `kind: "personal"` marks a
+   * session bound to a private repository from the creator's own GitHub
+   * connection: no connected services, no images or files. The same shape the
+   * repository list carries; the client never infers privacy from a name.
+   */
+  accessScope?: AccessScope;
   /** Source chat copied into this session before its first turn. */
   duplicatedFromSessionId?: string;
   /** Historical marker retained while old session files age out. */

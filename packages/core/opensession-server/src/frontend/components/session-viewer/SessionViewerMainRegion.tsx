@@ -11,11 +11,7 @@ import { duration, ease } from "../../ui/motion";
 import { EmptyState, InlineAlert } from "../../ui/state";
 import { AGENT_NAME } from "../../lib/brand";
 import { withQuotes, type Quote } from "../../lib/quotes";
-import {
-  fetchFileMentions,
-  fetchMentionSuggestions,
-  fetchSkillMentions,
-} from "../../lib/api";
+import { fetchFileMentions, fetchSkillMentions } from "../../lib/api";
 import { fetchSlackChannels } from "../../lib/api/shipped-changes";
 import { getCurrentUser } from "../UserPicker";
 import { SessionPreviewSurface } from "../session/SessionPreviewSurface";
@@ -100,6 +96,13 @@ import type { useSessionAssets } from "../AssetsPanel";
 import type { useSessionRuntimeController } from "../../hooks/useSessionRuntimeController";
 import type { useTranscriptHistoryController } from "../../hooks/useTranscriptHistoryController";
 import type { useSessionComposerDraft } from "../../hooks/useSessionComposerController";
+import {
+  PRIVATE_ATTACHMENTS_STAGED,
+  PRIVATE_ATTACHMENTS_UNAVAILABLE,
+  isPrivateSession,
+  privateAttachmentsBlocked,
+} from "../../lib/private-session-attachments";
+import { fetchMentionPalette } from "../../lib/private-mention-palette";
 
 type Send = ReturnType<typeof useSessionSocket>["send"];
 type Navigation = ReturnType<typeof useNavigation>;
@@ -1280,9 +1283,24 @@ export function SessionViewerMainRegion({
                                   ? `Ask ${AGENT_NAME}, read-only…`
                                   : `Ask ${AGENT_NAME}…`,
                     disabled: !!safety || (!connected && !!forkFrom),
+                    // A private session attaches nothing; media staged while
+                    // the draft belonged elsewhere blocks the send and says why.
+                    attachmentsUnavailable: isPrivateSession(session)
+                      ? PRIVATE_ATTACHMENTS_UNAVAILABLE
+                      : undefined,
+                    sendTitle: privateAttachmentsBlocked(
+                      isPrivateSession(session),
+                      { images: images.length, files: files.length },
+                    )
+                      ? PRIVATE_ATTACHMENTS_STAGED
+                      : undefined,
                     sendDisabled: (text) =>
                       !!safety ||
                       promoting ||
+                      privateAttachmentsBlocked(isPrivateSession(session), {
+                        images: images.length,
+                        files: files.length,
+                      }) ||
                       (!text.trim() &&
                         images.length === 0 &&
                         (noteMode || files.length === 0) &&
@@ -1354,11 +1372,11 @@ export function SessionViewerMainRegion({
                     mentionFetch: (query) =>
                       fetchFileMentions(query, session.id),
                     paletteFetch: (query) =>
-                      fetchMentionSuggestions(
-                        query,
-                        session.id,
-                        getCurrentUser(),
-                      ),
+                      fetchMentionPalette(query, {
+                        privateTarget: isPrivateSession(session),
+                        sessionId: session.id,
+                        user: getCurrentUser(),
+                      }),
                     skillsFetch: (query) =>
                       fetchSkillMentions(query, session.id),
                   }}

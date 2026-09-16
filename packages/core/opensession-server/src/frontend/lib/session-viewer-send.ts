@@ -1,8 +1,8 @@
+import { draftClientDataScope } from "./drafts";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { getCurrentUser } from "../components/UserPicker";
 import type { SessionSocketSend } from "../hooks/useSessionSocket";
 import { postSessionNoteApi } from "./api";
-import { MAX_PROMPT_IMAGES } from "@tellahq/opensession-protocol/session";
 import { dropStagingAttachments } from "./attachments";
 import type { ComposerSendOptions } from "./composer-types";
 import { unhideForSession } from "./hides";
@@ -103,13 +103,6 @@ export function sendSessionMessage(
     pastedTexts.length === 0
   )
     return false;
-  // Attaching already stops at the cap; this catches a message brought back
-  // for editing with more. The server would refuse it, and a refused message
-  // used to sit in the outbox retrying with nothing to press.
-  if (images.length > MAX_PROMPT_IMAGES) {
-    toast(`Attach up to ${MAX_PROMPT_IMAGES} images per message`);
-    return false;
-  }
 
   // Note mode: post a team note on this session — never a prompt. The
   // server broadcast echoes it back into `notes` for every viewer, so
@@ -218,7 +211,10 @@ export function sendSessionMessage(
     if (pastedTexts.length) input.pastedTexts = pastedTexts;
     if (!isolated && draft.contextSessions.length)
       input.contextSessions = draft.contextSessions;
-    outboxItem = promptOutbox.enqueue(input);
+    outboxItem = promptOutbox.enqueue(
+      input,
+      draftClientDataScope(draft.draftKey),
+    );
   } catch (error) {
     toast(
       error instanceof Error

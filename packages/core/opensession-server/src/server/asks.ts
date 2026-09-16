@@ -1,3 +1,6 @@
+import { currentPrivateActorFence } from "./session-audience";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { currentExecutionAccess } from "./application-access";
 /**
  * Interactive AskUserQuestion: questions broadcast to session watchers, answered
  * from the UI. If nobody answers in the UI within ASK_UI_TIMEOUT_MS, the question
@@ -34,6 +37,7 @@ import {
   fireStoredSessionTimer,
   registerSessionTimerHandler,
   sessionAsk,
+  sessionMetadata,
   sessionAskMigrationComplete,
   sessionKernel,
   markSessionAskMigrationComplete,
@@ -562,6 +566,7 @@ async function armAskEscalation(
   questions: AskQuestionInput[],
   now = Date.now(),
 ): Promise<void> {
+  if (currentExecutionAccess()?.origin?.kind === "personal") return;
   await clearAskTimer(sessionId);
   if (!ask.askedAt) return;
   if (ask.escalatedAskId) {
@@ -662,6 +667,21 @@ export async function restorePendingAsks(
     options.sessionExists ?? ((sessionId) => !!findSession(sessionId));
   let restored = 0;
   for (const saved of stored.asks || []) {
+    if (actorAuthority && saved?.sessionId) {
+      const scope = await sessionMetadata({
+        op: "scope_lookup",
+        sessionId: saved.sessionId,
+      });
+      // Boot is not a private run source. Leave actor evidence for exact
+      // recovered-host adoption rather than rearming shared Slack escalation.
+      if (
+        !scope ||
+        scope.deleted ||
+        scope.owner !== 0 ||
+        scope.canonicalId !== saved.sessionId
+      )
+        continue;
+    }
     if (
       !saved?.sessionId ||
       !saved.questionId ||
@@ -812,7 +832,18 @@ export function makeAskHandler(sessionId: string) {
       };
     }
 
-    const existing = pendingAsks.get(sessionId);
+    const personal = currentExecutionAccess()?.origin?.kind === "personal";
+    const existing = personal
+      ? await pendingAsks.getAsync(sessionId)
+      : pendingAsks.get(sessionId);
+    // Boot leaves private asks inert. Only a live source-context tool call can
+    // adopt its actor-owned receipt, preserving the original answer identity.
+    if (
+      personal &&
+      existing?.durable &&
+      sameQuestions(existing.questions, questions)
+    )
+      existing.restored = true;
     const adopted =
       !!existing?.restored &&
       !!existing.durable &&
@@ -839,21 +870,31 @@ export function makeAskHandler(sessionId: string) {
       },
     );
     let finishing: Promise<void> | undefined;
-    const finish = (a: Record<string, string> | null): Promise<void> => {
+    const originalSource = AsyncLocalStorage.snapshot();
+    const finishInSource = (
+      a: Record<string, string> | null,
+    ): Promise<void> => {
+      if (personal && !currentPrivateActorFence())
+        return Promise.reject(new Error("Private ask source unavailable"));
       if (settled) return Promise.resolve();
       if (finishing) return finishing;
       const attempt = (async () => {
         await clearAskTimer(sessionId);
+        if (personal) currentPrivateActorFence();
         const durableAnswer = pendingAsks.get(sessionId);
         if (durableAnswer?.questionId === questionId) {
-          durableAnswer.answerReceived = true;
-          durableAnswer.earlyAnswer = a;
-          await pendingAsks.set(sessionId, durableAnswer);
+          await pendingAsks.set(sessionId, {
+            ...durableAnswer,
+            answerReceived: true,
+            earlyAnswer: a,
+          });
+          if (personal) currentPrivateActorFence();
           persistPendingAsks(durableAnswer.storePath);
         }
         await transitionRunState(sessionId, "ask_resolved", {
           answered: a !== null,
         });
+        if (personal) currentPrivateActorFence();
         settled = true;
         // Before the card goes: the transcript's only trace of it.
         recordAskAnswer(sessionId, questions, a);
@@ -867,6 +908,16 @@ export function makeAskHandler(sessionId: string) {
       });
       return finishing;
     };
+
+    const finish = (answers: Record<string, string> | null): Promise<void> =>
+      originalSource(async () => {
+        try {
+          await finishInSource(answers);
+        } catch (error) {
+          if (personal) rejectAnswers(error);
+          throw error;
+        }
+      });
 
     const ask: PendingAsk = {
       questionId,
@@ -882,10 +933,11 @@ export function makeAskHandler(sessionId: string) {
       ...(adopted && existing!.escalationWaitStarted
         ? { escalationWaitStarted: true }
         : {}),
-      ...(adopted && existing!.answerReceived
+      ...(adopted && (existing!.answerReceived || existing!.answer)
         ? {
             answerReceived: true,
-            earlyAnswer: existing!.earlyAnswer ?? null,
+            earlyAnswer:
+              existing!.earlyAnswer ?? existing!.answer?.answers ?? null,
           }
         : {}),
       // Preserve the durable answer receipt across adoption so retry
@@ -918,7 +970,7 @@ export function makeAskHandler(sessionId: string) {
       // never lets a push hiccup affect the ask flow. Deduped on the
       // question text: a restart resumes ask-blocked runs, which re-ask
       // the same question — that re-ask must not buzz again.
-      if (!adopted && !ask.answerReceived)
+      if (!personal && !adopted && !ask.answerReceived)
         void (async () => {
           try {
             const s = findSession(sessionId);

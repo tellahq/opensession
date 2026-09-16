@@ -21,7 +21,10 @@ import {
   writeAsset,
   MAX_WRITE_BYTES,
 } from "../../server/session-assets";
-import { findSession, sessionIdsFor } from "../../server/session-cache";
+import {
+  findSessionAsync,
+  sessionIdsForAsync,
+} from "../../server/session-cache";
 import {
   publishSessionFile,
   type PublishSessionFileInput,
@@ -55,7 +58,7 @@ export function createAssetsMcpServer(
   ctx: { sessionId: string },
   deps: AssetsToolsDeps = {},
 ) {
-  const assetSessionIds = () => sessionIdsFor(ctx.sessionId);
+  const assetSessionIds = () => sessionIdsForAsync(ctx.sessionId);
   const tools = [
     tool(
       "write_asset",
@@ -110,8 +113,9 @@ export function createAssetsMcpServer(
           let f: { path: string; size: number };
           const sourcePath = args.sourcePath;
           if (sourcePath !== undefined) {
-            const session =
-              deps.findSession?.(ctx.sessionId) || findSession(ctx.sessionId);
+            const session = deps.findSession
+              ? await deps.findSession(ctx.sessionId)
+              : await findSessionAsync(ctx.sessionId);
             if (!session) throw new Error("this session no longer exists");
             f = await (deps.publishSessionFile || publishSessionFile)({
               session,
@@ -120,7 +124,8 @@ export function createAssetsMcpServer(
               description: args.description,
             });
           } else {
-            const sessionId = assetSessionIds()[0] || ctx.sessionId;
+            const sessionId = (await assetSessionIds())[0];
+            if (!sessionId) throw new Error("this session no longer exists");
             f = await (deps.writeAsset || writeAsset)(
               sessionId,
               args.path,
@@ -145,7 +150,8 @@ export function createAssetsMcpServer(
       "List this session's assets (path, size, modified time) and the configured storage location. Assets are files the agent saved with write_asset or received with send_file. Files and images the person attaches in chat are NOT assets: they arrive with that message, images inline plus an on-disk path in the same turn's attachment note. Nobody can upload to the Assets tab, so never ask the person to.",
       {},
       async () => {
-        const sessionIds = assetSessionIds();
+        const sessionIds = await assetSessionIds();
+        if (!sessionIds.length) return text("This session no longer exists.");
         const location = assetStorageLocation(sessionIds[0] || ctx.sessionId);
         const files = await listAssetsAcross(sessionIds);
         if (!files.length)
@@ -172,7 +178,10 @@ export function createAssetsMcpServer(
       },
       async (args: { path: string }) => {
         try {
-          const found = await readAssetAcross(assetSessionIds(), args.path);
+          const found = await readAssetAcross(
+            await assetSessionIds(),
+            args.path,
+          );
           if (!found) throw new Error(`no such asset: ${args.path}`);
           const body = found.data.subarray(0, READ_CAP).toString("utf8");
           return text(
@@ -193,7 +202,7 @@ export function createAssetsMcpServer(
       },
       async (args: { path: string }) => {
         try {
-          await deleteAssetAcross(assetSessionIds(), args.path);
+          await deleteAssetAcross(await assetSessionIds(), args.path);
           return text(`Deleted ${args.path}.`);
         } catch (error) {
           return text(`Couldn't delete ${args.path}: ${errorMessage(error)}`);

@@ -1,3 +1,4 @@
+import { captureClientDataScope } from "../lib/client-data-scope";
 import React, {
   useEffect,
   useEffectEvent,
@@ -87,6 +88,7 @@ export function DeskConversation({
   onOpenSubagent,
   suggestions,
 }: DeskConversationProps) {
+  const clientDataScope = captureClientDataScope();
   const { connected, send, setTyping, addHandler } =
     useWebSocket(presenceActive);
   const textNavigationRef = useRef<DeskTextNavigationClient | null>(null);
@@ -164,7 +166,7 @@ export function DeskConversation({
 
   async function addDeskAttachments(picked: FileList | File[]) {
     const results = await uploads.upload(picked, (file, signal) =>
-      splitAttachments([file], signal),
+      splitAttachments([file], signal, clientDataScope),
     );
     const addedImages = results.flatMap((result) => result.images);
     const addedFiles = results.flatMap((result) => result.files);

@@ -158,3 +158,19 @@ describe("liveActivityRegistrationMatches", () => {
     ).toBe(true);
   });
 });
+
+test("live activity snapshots remain shared-only even for the personal owner's registration", () => {
+  const privateRow = session("private", "Alice", true, "2026-01-01", {
+    accessScope: { kind: "personal", ownerGithubAccountId: 101 },
+  });
+  const shared = session("shared", "Alice", true, "2026-01-01");
+  const result = liveActivitySnapshot(
+    { user: "Alice" },
+    [privateRow, shared],
+    Date.now(),
+    { private: "2025-12-31", shared: "2025-12-31" },
+  );
+  expect(result.sessions.map((row) => row.id)).toEqual(["shared"]);
+  expect(result.totalCount).toBe(1);
+  expect(result.unreadCount).toBe(1);
+});

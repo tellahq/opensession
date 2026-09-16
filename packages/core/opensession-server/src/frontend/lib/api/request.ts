@@ -1,3 +1,9 @@
+import {
+  captureClientDataScope,
+  assertClientDataScope,
+  clientDataScopeHeaders,
+  type ClientDataScope,
+} from "../client-data-scope";
 import { BASE_PATH } from "../base";
 import { resolveAnonymousUserPath } from "../auth-ready";
 
@@ -34,6 +40,7 @@ export function request<T>(
   path: string,
   opts: {
     method?: string;
+    scope?: ClientDataScope | null;
     /** JSON-encoded and sent with a Content-Type header when present. */
     body?: unknown;
     signal?: AbortSignal;
@@ -42,32 +49,49 @@ export function request<T>(
     label?: string;
   } = {},
 ): Promise<T> {
-  const method = opts.method || "GET";
-  if (method === "GET" && /[?&]user=Anonymous(?:&|$)/.test(path)) {
-    return resolveAnonymousUserPath(path).then((resolvedPath) =>
-      request<T>(resolvedPath, opts),
-    );
+  const scope =
+    opts.scope === undefined ? captureClientDataScope() : opts.scope;
+  const exempt = path.startsWith("/auth/");
+  if (!exempt) {
+    try {
+      assertClientDataScope(scope);
+    } catch (error) {
+      return Promise.reject(error);
+    }
   }
+  const method = opts.method || "GET";
   const share = method === "GET" && opts.body === undefined && !opts.signal;
-  const createResponse = () => {
+  const key = `${scope?.generation ?? "unknown"}:${path}`;
+  const createResponse = async () => {
+    const resolvedPath =
+      method === "GET" && /[?&]user=Anonymous(?:&|$)/.test(path)
+        ? await resolveAnonymousUserPath(path)
+        : path;
+    if (!exempt) assertClientDataScope(scope);
     const init: RequestInit = {
       method,
+      headers: clientDataScopeHeaders(scope),
+      cache: "no-store",
       signal: opts.signal,
       keepalive: opts.keepalive,
     };
     if (opts.body !== undefined) {
-      init.headers = { "Content-Type": "application/json" };
+      init.headers = {
+        ...clientDataScopeHeaders(scope),
+        "Content-Type": "application/json",
+      };
       init.body = JSON.stringify(opts.body);
     }
-    return fetch(`${BASE}${path}`, init);
+    return fetch(`${BASE}${resolvedPath}`, init);
   };
 
-  let responsePending = share ? inflightGets.get(path) : undefined;
+  let responsePending = share ? inflightGets.get(key) : undefined;
   const ownsSharedRequest = share && !responsePending;
   if (!responsePending) responsePending = createResponse();
-  if (ownsSharedRequest) inflightGets.set(path, responsePending);
+  if (ownsSharedRequest) inflightGets.set(key, responsePending);
 
   const pending = responsePending.then(async (sharedResponse) => {
+    if (!exempt) assertClientDataScope(scope);
     const res = share ? sharedResponse.clone() : sharedResponse;
     if (!res.ok) {
       const body: { error?: string } | null = await res
@@ -79,14 +103,15 @@ export function request<T>(
       );
     }
     const body: T = await res.json().catch(() => null);
+    if (!exempt) assertClientDataScope(scope);
     return body;
   });
 
   if (ownsSharedRequest) {
     void pending
       .finally(() => {
-        if (inflightGets.get(path) === responsePending) {
-          inflightGets.delete(path);
+        if (inflightGets.get(key) === responsePending) {
+          inflightGets.delete(key);
         }
       })
       .catch(() => {});
@@ -96,7 +121,12 @@ export function request<T>(
 
 export function getWebSocketUrl(): string {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${location.host}${BASE_PATH}/ws`;
+  const scope = captureClientDataScope();
+  assertClientDataScope(scope);
+  const query = scope.privacy
+    ? `?privacy=personal-v1&githubAccountId=${scope.githubAccountId}`
+    : "";
+  return `${proto}//${location.host}${BASE_PATH}/ws${query}`;
 }
 
 export function relativeTime(dateStr: string): string {

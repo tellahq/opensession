@@ -1,3 +1,10 @@
+import { executionReadPrincipal } from "./application-access";
+import {
+  primeSessionScopeCoverage,
+  sameScopeReadFence,
+  withSessionScopeFence,
+} from "./session-scope-coverage";
+import type { ScopeReadFence } from "./session-scope-coverage";
 /**
  * The short-TTL unified-session cache and the small helpers that read/write a
  * session's file through it. Everything that used to flip `sessionsCache = null`
@@ -5,6 +12,11 @@
  */
 
 import { readFile } from "fs/promises";
+import {
+  assertAccessPrincipal,
+  canAccessScope,
+  type AccessPrincipal,
+} from "../shared/access-scope";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
   engineSessionIdFor,
@@ -21,7 +33,9 @@ import {
   type SessionArchiveSlice,
 } from "./sessions";
 import {
+  scopeProjectionCall,
   indexedActiveWorkspaceIds,
+  filterCollectionSourceRows,
   indexedCoverage,
   indexedLiveSessionsByBranch,
   indexedSessions,
@@ -77,51 +91,47 @@ export const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 const g = globalThis as any;
 
 type SessionsCache = {
+  scopeFence?: ScopeReadFence;
   data: UnifiedSession[];
   ts: number;
-  /** A process-local write landed after this snapshot. Synchronous readers
-   * still rebuild immediately; async request paths may serve it briefly while
-   * one cooperative refresh catches up. */
+  /** A process-local write landed after this snapshot. */
   invalidated: boolean;
 } | null;
 const CACHE_SLICES = ["include", "exclude", "only"] as const;
-const sessionsCaches: Record<SessionArchiveSlice, SessionsCache> = {
-  include: null,
-  exclude: null,
-  only: null,
-};
-const sessionsRefreshes: Record<
-  SessionArchiveSlice,
-  Promise<UnifiedSession[]> | null
-> = {
-  include: null,
-  exclude: null,
-  only: null,
-};
-const sessionsCacheGenerations: Record<SessionArchiveSlice, number> = {
-  include: 0,
-  exclude: 0,
-  only: 0,
-};
-// One in-flight index read per slice. A refresh wave of concurrent readers
-// must not ask the index worker for the same multi-thousand-row list N times.
-const indexedRefreshes: Record<
-  SessionArchiveSlice,
-  Promise<UnifiedSession[] | null> | null
-> = {
-  include: null,
-  exclude: null,
-  only: null,
-};
+type CacheSlices = Record<SessionArchiveSlice, SessionsCache>;
+function emptyCacheSlices(): CacheSlices {
+  return { include: null, exclude: null, only: null };
+}
+// Identity hints deliberately see ONLY the shared cache. Never merge owner
+// caches into peekCachedSessions or use an owner's snapshot as a default.
+const sessionsCaches = emptyCacheSlices();
+const personalCaches = new Map<number, CacheSlices>();
+const MAX_PERSONAL_CACHE_AUDIENCES = 64;
+function cacheForPrincipal(principal?: AccessPrincipal): CacheSlices {
+  assertAccessPrincipal(principal);
+  if (!principal) return sessionsCaches;
+  const id = principal.githubAccountId;
+  const existing = personalCaches.get(id);
+  if (existing) {
+    personalCaches.delete(id);
+    personalCaches.set(id, existing);
+    return existing;
+  }
+  if (personalCaches.size >= MAX_PERSONAL_CACHE_AUDIENCES) {
+    const oldest = personalCaches.keys().next().value;
+    if (oldest !== undefined) personalCaches.delete(oldest);
+  }
+  const slices = emptyCacheSlices();
+  personalCaches.set(id, slices);
+  return slices;
+}
 // The UI refreshes on WebSocket invalidations, with a slow fallback poll. Keep
 // the expensive multi-thousand-file fallback scan out of every refresh wave;
 // in-process mutations invalidate this cache immediately.
 const CACHE_TTL = 10_000;
 
-/** Mark cached lists stale. Synchronous readers still re-read from disk on
- * their next access. Async request paths retain the last complete snapshot so
- * a routine session write cannot make unrelated HTTP requests wait for a scan
- * of every historical session. */
+/** Mark content snapshots stale. Authority changes are separately fenced and
+ * never served stale, even while an ordinary content TTL remains valid. */
 export function invalidateSessionsCache(): void {
   markSessionListStale();
   // Publish only after every cache layer is stale, so a client reacting
@@ -254,8 +264,8 @@ export async function publishSessionRowsForBranch(
  * so the whole-list broadcast stays reserved for mutations that have no row
  * to send yet. */
 export function markSessionListStale(): void {
+  personalCaches.clear();
   for (const slice of CACHE_SLICES) {
-    sessionsCacheGenerations[slice]++;
     if (sessionsCaches[slice]) sessionsCaches[slice]!.invalidated = true;
   }
   // Fence a response build already reading the previous projection. The
@@ -362,138 +372,74 @@ export function enrichSessionRuntime(
 function enrichCachedSessions(
   slice: SessionArchiveSlice,
   data: UnifiedSession[],
+  scopeFence: ScopeReadFence,
+  caches: CacheSlices,
 ): UnifiedSession[] {
   enrichSessionRuntime(data);
   const ts = Date.now();
-  sessionsCaches[slice] = { data, ts, invalidated: false };
-  // An internal/legacy whole-list scan already paid for both halves. Seed the
-  // narrower caches when they are idle so the next UI poll does not rescan the
-  // same files immediately after a background index refresh.
+  caches[slice] = { data, ts, invalidated: false, scopeFence };
+  // Seed narrower slices only within this same audience partition.
   if (slice === "include") {
-    if (!sessionsRefreshes.exclude && !sessionsCaches.exclude)
-      sessionsCaches.exclude = {
+    if (!caches.exclude)
+      caches.exclude = {
         data: data.filter((session) => !session.archived),
         ts,
         invalidated: false,
+        scopeFence,
       };
-    if (!sessionsRefreshes.only && !sessionsCaches.only)
-      sessionsCaches.only = {
+    if (!caches.only)
+      caches.only = {
         data: data.filter((session) => !!session.archived),
         ts,
         invalidated: false,
+        scopeFence,
       };
   }
   return data;
 }
 
-export function getCachedSessions(): UnifiedSession[] {
-  const cached = sessionsCaches.include;
-  // Targeted writes update the authoritative session file and SQLite list row
-  // immediately. Rebuilding the entire materialized list after each one only
-  // turns active-run bookkeeping into continuous 10,000-row deserialization.
-  // Whole-list synchronous consumers may use the last complete snapshot for
-  // this short TTL, matching the async path below; direct session reads remain
-  // current.
-  if (cached && Date.now() - cached.ts < CACHE_TTL) {
-    return cached.data;
-  }
-  if (cached) {
-    // The index lives on a worker thread, so a synchronous reader cannot
-    // wait for it. Serve the last complete snapshot and refresh it in the
-    // background; the next call inside the TTL sees the fresh one.
-    void getCachedSessionsAsync("include").catch((error) =>
-      console.warn(
-        "[session-cache] background include refresh failed:",
-        error instanceof Error ? error.message : error,
-      ),
-    );
-    return cached.data;
-  }
-  // Legacy unit fixtures can still construct a synchronous source. The live
-  // gateway must finish async priming; a cold reader cannot scan files here.
-  if (process.env.NODE_ENV === "test") {
-    sessionsCacheGenerations.include++;
-    return enrichCachedSessions("include", getAllSessions());
-  }
-  throw new Error("Session list is not primed; use getCachedSessionsAsync");
+/** Synchronous projections cannot prove current authority. Keep a loud guard
+ * for old integrations rather than returning stale data or an empty success. */
+export function getCachedSessions(): never {
+  throw new Error(
+    "Synchronous session collections are not authorized; use getCachedSessionsAsync",
+  );
 }
 
-/** The materialized list for `slice`, enriched and installed as the cache
- * snapshot, or null while the slice has no coverage. Concurrent callers share
- * one worker round trip and one enrichment pass. */
-function refreshFromIndex(
-  slice: SessionArchiveSlice,
-): Promise<UnifiedSession[] | null> {
-  return (indexedRefreshes[slice] ??= indexedSessions(slice)
-    .then((indexed) => (indexed ? enrichCachedSessions(slice, indexed) : null))
-    .finally(() => {
-      indexedRefreshes[slice] = null;
-    }));
-}
-
-/**
- * Return the same cache shape as getCachedSessions(), but let request traffic
- * through while thousands of session files are read.
- *
- * Once a complete snapshot exists, async request paths use stale-while-refresh:
- * expiry or process-local invalidation starts one cooperative scan, while the
- * caller immediately receives the last complete snapshot. This matters because
- * active runs update session files often, and making every unrelated route join
- * that refresh turned a background 10,000-file scan into multi-second TTFB.
- *
- * One call performs at most one cooperative scan. If a write lands mid-scan,
- * publish the completed snapshot when no synchronous reader already installed
- * a newer one. The direct native-session lookup keeps the open conversation
- * fresh, and the next poll repairs list-level staleness without monopolising
- * Bun's event loop.
- */
+/** Read a fenced, principal-partitioned snapshot. Public callers must derive
+ * the principal from a verified access context, not request parameters. Missing
+ * materialization stays unavailable; this never scans files on the request. */
 export async function getCachedSessionsAsync(
   slice: SessionArchiveSlice = "include",
+  principal?: AccessPrincipal,
 ): Promise<UnifiedSession[]> {
-  const cached = sessionsCaches[slice];
-  // Async callers may serve a complete snapshot through the short TTL even
-  // after a targeted write. The SQLite row and detail endpoint are already
-  // current; invalidation must not turn a burst of writes into a burst of
-  // whole-list deserializations.
-  const needsRefresh = !cached || Date.now() - cached.ts >= CACHE_TTL;
-  if (cached && !needsRefresh) return cached.data;
-  const indexed = await refreshFromIndex(slice);
-  if (indexed) return indexed;
-
-  if (!sessionsRefreshes[slice]) {
-    const generation = ++sessionsCacheGenerations[slice];
-    const startingCache = sessionsCaches[slice];
-    sessionsRefreshes[slice] = getAllSessionsAsync(
-      slice,
-      catalogNativeSessionRows,
+  assertAccessPrincipal(principal);
+  // Capture the verified scalar once, before yielding to authority RPCs.
+  const captured = principal
+    ? { githubAccountId: principal.githubAccountId }
+    : undefined;
+  return withSessionScopeFence(async (fence) => {
+    const caches = cacheForPrincipal(captured);
+    const cached = caches[slice];
+    if (
+      cached &&
+      !cached.invalidated &&
+      sameScopeReadFence(cached.scopeFence, fence) &&
+      Date.now() - cached.ts < CACHE_TTL
     )
-      .then(async (data) => {
-        await upsertIndexedSessions(data, slice);
-        const current = sessionsCaches[slice];
-        if (
-          sessionsCacheGenerations[slice] === generation ||
-          current === startingCache ||
-          !current
-        )
-          return enrichCachedSessions(slice, data);
-        return current.data;
-      })
-      .finally(() => {
-        sessionsRefreshes[slice] = null;
-      });
-  }
-
-  if (cached) {
-    // Observe failures even though this request deliberately does not wait.
-    void sessionsRefreshes[slice]!.catch((error) =>
-      console.warn(
-        `[session-cache] ${slice} background refresh failed:`,
-        error instanceof Error ? error.message : error,
-      ),
+      return cached.data;
+    const indexed = await indexedSessions(slice, captured);
+    if (indexed !== null)
+      return enrichCachedSessions(slice, indexed, fence, caches);
+    // Never scan files or rebuild an entire catalog on a request. Recovery is
+    // one explicit, coalesced bootstrap job; this request remains unavailable.
+    void (
+      captured ? primePersonalSessionList(captured) : primeSessionListIndex()
+    ).catch((error) =>
+      console.warn("[session-list] background rebuild failed", error),
     );
-    return cached.data;
-  }
-  return await sessionsRefreshes[slice];
+    throw new Error("Session collection coverage unavailable");
+  });
 }
 
 /**
@@ -512,9 +458,8 @@ export async function getSessionListSnapshotAsync(
 }
 
 /**
- * Return the last session snapshot without triggering a synchronous disk scan.
- * Hot-path autocomplete can safely omit optional session suggestions until the
- * normal sessions refresh repopulates this cache.
+ * Internal identity/projection hints only. This does not authorize content:
+ * API consumers must use an awaited, scope-fenced collection or exact read.
  */
 export function peekCachedSessions(): UnifiedSession[] {
   if (sessionsCaches.include) return sessionsCaches.include.data;
@@ -727,47 +672,153 @@ export function findSession(sessionId: string): UnifiedSession | undefined {
  * actor. The file remains the fallback for a session the catalog has not
  * seen, and the source for the synchronous readers.
  */
+type NativeSessionAccessRead =
+  | { status: "found"; session: UnifiedSession }
+  | { status: "missing" | "denied" | "unavailable" };
+
+/** Keep denied/unavailable terminal through alias resolution, rather than
+ * flattening them into a cache miss and reviving a stale shared projection. */
+async function readNativeSessionAccess(
+  sessionId: string,
+  principal?: AccessPrincipal,
+): Promise<NativeSessionAccessRead> {
+  if (!isNativeSessionId(sessionId) && !isAgentSessionId(sessionId))
+    return { status: "missing" };
+  if (!sessionKernelActorActive() && process.env.NODE_ENV !== "test")
+    return { status: "unavailable" };
+  try {
+    const result = await sessionMetadata({
+      op: "catalog_read",
+      sessionId,
+      principal,
+    });
+    if (result.status === "denied" || result.status === "deleted")
+      return { status: "denied" };
+    if (result.status === "found") {
+      const data = JSON.parse(result.record.doc) as NativeSessionFile;
+      if (data?.id === result.record.sessionId)
+        return {
+          status: "found",
+          session: {
+            ...nativeSessionDetailFromData(data),
+            aliasIds: result.aliases,
+          },
+        };
+      // Agent sidecars have no id; their scope still gates the source row.
+      if (!canAccessScope(data?.accessScope, principal))
+        return { status: "denied" };
+      return { status: "missing" };
+    }
+  } catch {
+    // No filesystem or cached-row fallback when the authority is unavailable.
+    return { status: "unavailable" };
+  }
+  if (!isNativeSessionId(sessionId)) return { status: "missing" };
+  try {
+    const data = JSON.parse(
+      await readFile(`${SESSIONS_DIR}/${sessionId}.json`, "utf8"),
+    ) as NativeSessionFile;
+    // Only genuinely legacy shared exports can fill an absent catalog row.
+    // A personal record needs central ownership even for its claimed owner.
+    if (!canAccessScope(data?.accessScope)) return { status: "denied" };
+    return data?.id === sessionId
+      ? { status: "found", session: nativeSessionDetailFromData(data) }
+      : { status: "missing" };
+  } catch (error) {
+    return {
+      status:
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+          ? "missing"
+          : "unavailable",
+    };
+  }
+}
+
 export async function readNativeSessionAsync(
   sessionId: string,
+  principal?: AccessPrincipal,
 ): Promise<UnifiedSession | undefined> {
-  if (!/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) return undefined;
-  if (sessionKernelActorActive() || process.env.NODE_ENV === "test") {
-    try {
-      const stored = await sessionMetadata({ op: "catalog_get", sessionId });
-      if (stored) {
-        const data = JSON.parse(stored.doc) as NativeSessionFile;
-        if (data?.id === sessionId) return nativeSessionDetailFromData(data);
-      }
-    } catch (error) {
-      console.warn(
-        `[session-metadata] catalog read failed for ${sessionId}; reading the file:`,
-        error instanceof Error ? error.message : error,
-      );
-    }
-  }
-  return readNativeSession(sessionId);
+  const result = await readNativeSessionAccess(sessionId, principal);
+  return result.status === "found" ? result.session : undefined;
 }
 
 export async function findSessionAsync(
   sessionId: string,
+  principal?: AccessPrincipal,
 ): Promise<UnifiedSession | undefined> {
-  // Native ids come from the metadata catalog, exact Slack deep links map
-  // one-to-one to files. Either lets a newly announced conversation open
-  // before the materialized list projection has observed it. Historical
-  // aliases still need the merged list.
-  const direct =
-    (await readNativeSessionAsync(sessionId)) ?? readSlackSession(sessionId);
-  if (direct) return enrichSessionRuntime([direct])[0];
-  return (await getCachedSessionsAsync()).find(
-    (s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
-  );
+  principal = executionReadPrincipal(principal);
+  const direct = await readNativeSessionAccess(sessionId, principal);
+  if (direct.status === "denied" || direct.status === "unavailable")
+    return undefined;
+  if (direct.status === "found") {
+    const identity = knownSessionIdentity(direct.session.id);
+    if (
+      !direct.session.aliasIds?.length &&
+      identity.id === direct.session.id &&
+      identity.aliasIds?.length
+    ) {
+      try {
+        for (let i = 0; i < identity.aliasIds.length; i += 64)
+          await sessionMetadata({
+            op: "scope_aliases",
+            rows: [
+              {
+                id: direct.session.id,
+                aliases: [...identity.aliasIds.slice(i, i + 64)],
+              },
+            ],
+          });
+        const canonical = await readNativeSessionAccess(
+          direct.session.id,
+          principal,
+        );
+        return canonical.status === "found"
+          ? enrichSessionRuntime([canonical.session])[0]
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    return enrichSessionRuntime([direct.session])[0];
+  }
+  const slack = readSlackSession(sessionId);
+  if (slack && canAccessScope(slack.accessScope))
+    return enrichSessionRuntime([slack])[0];
+  let candidate: UnifiedSession | undefined;
+  try {
+    candidate = (await getCachedSessionsAsync()).find(
+      (s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
+    );
+  } catch {
+    return undefined;
+  }
+  if (!candidate) return undefined;
+  try {
+    if (candidate.aliasIds?.length) {
+      for (let i = 0; i < candidate.aliasIds.length; i += 64)
+        await sessionMetadata({
+          op: "scope_aliases",
+          rows: [
+            { id: candidate.id, aliases: candidate.aliasIds.slice(i, i + 64) },
+          ],
+        });
+    }
+    const canonical = await readNativeSessionAccess(candidate.id, principal);
+    if (canonical.status === "denied" || canonical.status === "unavailable")
+      return undefined;
+    if (canonical.status === "found")
+      return enrichSessionRuntime([canonical.session])[0];
+    return canAccessScope(candidate.accessScope) ? candidate : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Canonical id followed by every historical alias for this session. Asset
  * stores and other id-keyed sidecars use this to survive session deduping. */
 export function sessionIdsFor(
   sessionId: string,
-  sessions: UnifiedSession[] = getCachedSessions(),
+  sessions: UnifiedSession[],
 ): string[] {
   const session = sessions.find(
     (s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
@@ -783,9 +834,7 @@ export function sessionIdsFor(
  * just to resolve one asset namespace. */
 export async function sessionIdsForAsync(sessionId: string): Promise<string[]> {
   const session = await findSessionAsync(sessionId);
-  return session
-    ? [...new Set([session.id, ...(session.aliasIds || [])])]
-    : [sessionId];
+  return session ? [...new Set([session.id, ...(session.aliasIds || [])])] : [];
 }
 
 // ── Serialized session metadata writes ────────────────────────────────────────
@@ -1010,13 +1059,14 @@ const SESSION_METADATA_CATALOG_PAGE = 500;
 // Monotonic: once an operator marked the catalog complete it stays complete,
 // so the flag is asked once per process and then remembered.
 let metadataCatalogComplete = false;
+let metadataCatalogIncarnation: string | undefined;
 
 /**
  * Native rows for a cold list rebuild. Once every historical session file has
  * been seeded (scripts/seed-session-metadata-catalog.ts) the central catalog
  * is the source: pages of committed documents from one database instead of a
- * readdir and parse over every session file. Until then, or if the catalog
- * cannot be read, the caller falls back to the directory scan.
+ * readdir and parse over every session file. Only an explicitly incomplete
+ * legacy catalog permits bootstrap import. Authority errors never permit it.
  */
 async function catalogNativeSessionRows(): Promise<
   UnifiedSession[] | undefined
@@ -1026,6 +1076,11 @@ async function catalogNativeSessionRows(): Promise<
   if (!sessionKernelActorActive() && process.env.NODE_ENV !== "test")
     return undefined;
   try {
+    const authority = await sessionMetadata({ op: "scope_fence" });
+    if (metadataCatalogIncarnation !== authority.incarnation) {
+      metadataCatalogComplete = false;
+      metadataCatalogIncarnation = authority.incarnation;
+    }
     if (!metadataCatalogComplete) {
       metadataCatalogComplete = await sessionMetadata({
         op: "catalog_complete",
@@ -1059,11 +1114,7 @@ async function catalogNativeSessionRows(): Promise<
     }
     return rows;
   } catch (error) {
-    console.warn(
-      "[session-metadata] catalog read failed; scanning session files instead:",
-      error instanceof Error ? error.message : error,
-    );
-    return undefined;
+    throw error;
   }
 }
 
@@ -1074,7 +1125,16 @@ async function catalogNativeSessionRows(): Promise<
  * metadata catalog when it is complete. Without this the first synchronous
  * `getCachedSessions()` reader would fill it by reading every session file.
  */
-export async function primeSessionListIndex(): Promise<void> {
+let listPriming: Promise<void> | undefined;
+export function primeSessionListIndex(): Promise<void> {
+  if (!listPriming)
+    listPriming = primeSessionListIndexOnce().finally(() => {
+      listPriming = undefined;
+    });
+  return listPriming;
+}
+async function primeSessionListIndexOnce(): Promise<void> {
+  await primeSessionScopeCoverage();
   if (await indexedCoverage("include")) {
     // Coverage persists across restarts, but the gateway's memory snapshot
     // does not. Populate it before synchronous memory-only readers run.
@@ -1085,9 +1145,10 @@ export async function primeSessionListIndex(): Promise<void> {
   const sessions = await getAllSessionsAsync(
     "include",
     catalogNativeSessionRows,
+    filterCollectionSourceRows,
   );
   await upsertIndexedSessions(sessions, "include");
-  enrichCachedSessions("include", sessions);
+  await getCachedSessionsAsync("include");
   console.log(
     `[session-cache] primed the list index with ${sessions.length} session(s) in ${Math.round(performance.now() - startedAt)}ms`,
   );
@@ -1545,4 +1606,52 @@ export async function applyRunOutcomeProjection(
       else await touchNativeSession(id, { lastRunError: undefined });
     }
   }
+}
+
+const personalPrimes = new Map<number, Promise<void>>();
+/** Coalesced background materialization from the indexed OWNER-only central
+ * catalog. No export/file scan and no per-session actor database fanout. */
+export function primePersonalSessionList(
+  principal: AccessPrincipal,
+): Promise<void> {
+  assertAccessPrincipal(principal);
+  const owner = principal.githubAccountId;
+  const pending = personalPrimes.get(owner);
+  if (pending) return pending;
+  if (personalPrimes.size >= 64)
+    return Promise.reject(new Error("Private projection queue full"));
+  const captured = { githubAccountId: owner };
+  const job = (async () => {
+    await primeSessionListIndex();
+    let afterSessionId = "";
+    for (;;) {
+      const page = await withSessionScopeFence(async (fence) => {
+        const rows = await sessionMetadata({
+          op: "catalog_private_page",
+          afterSessionId,
+          limit: 256,
+          principal: captured,
+        });
+        const projected = rows.map((record) => {
+          const doc = JSON.parse(record.doc) as NativeSessionFile;
+          if (
+            doc.id !== record.sessionId ||
+            !canAccessScope(doc.accessScope, captured)
+          )
+            throw new Error("Private catalog projection mismatch");
+          return nativeSessionListRowFromData(doc);
+        });
+        // The worker compares the original read epoch IN the write transaction.
+        // A replaced authority must never relabel old A bytes as new B rows.
+        await scopeProjectionCall("upsertScopePage", projected, fence);
+        return rows;
+      });
+      if (page.length < 256) break;
+      afterSessionId = page.at(-1)!.sessionId;
+    }
+    personalCaches.delete(owner);
+    advanceSessionListResponseRevision();
+  })().finally(() => personalPrimes.delete(owner));
+  personalPrimes.set(owner, job);
+  return job;
 }

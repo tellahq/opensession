@@ -19,7 +19,7 @@ export async function handleSearchRoutes(
     const limit =
       parseInt(url.searchParams.get("limit") || "", 10) || undefined;
     return Response.json({
-      hits: searchSessionHistory(q, { repo, days, limit }),
+      hits: await searchSessionHistory(q, { repo, days, limit }),
       total: searchIndex().count(),
     });
   }

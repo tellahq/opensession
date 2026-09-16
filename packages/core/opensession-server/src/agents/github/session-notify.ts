@@ -71,12 +71,12 @@ export function workspaceIdForRepo(fullName: string): string | null {
 
 /** Live (non-archived) sessions working on `branch` of `workspaceId`, primary or attached.
  *  Also used by handoff.ts to find the session that owns a PR's branch. */
-export function matchSessions(
+export async function matchSessions(
   control: SessionControl,
   workspaceId: string,
   branch: string,
-): SessionSummary[] {
-  return control.listSessions().filter((s) => {
+): Promise<SessionSummary[]> {
+  return (await control.listSessions()).filter((s) => {
     if (s.state === "archived") return false;
     if ((s.repo || defaultRepo().id) === workspaceId) {
       if (s.branch === branch) return true;
@@ -159,7 +159,7 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
   const control = tryGetSessionControl();
   if (!control) return;
 
-  const sessions = matchSessions(control, workspaceId, headRef);
+  const sessions = await matchSessions(control, workspaceId, headRef);
   if (!sessions.length) return;
 
   const prNumber: number = pr.number;

@@ -1,3 +1,18 @@
+import { assertPersonalAttachmentsAbsent } from "./personal-image-admission";
+import { finalizeHostedRun } from "./host-run-lifetime";
+import {
+  withHostedEventPublication,
+  hostedEventPublication,
+  tagHostedEvent,
+  type HostedEventPublication,
+} from "./host-event-publication";
+import {
+  capturePersonalRecoveryContext,
+  withPersonalRecoveryContext,
+  personalRecoveryConsumer,
+  samePersonalRecoveryLineage,
+} from "./personal-repo-runtime-recovery";
+import { personalRunConsumerKey } from "./personal-run-identity";
 /**
  * Agent runner dispatcher: one entry point for every model turn.
  * All production turns run on Pi. The dispatcher owns the fallback walk,
@@ -5,13 +20,15 @@
  * StreamEvent contract.
  */
 
+import { assertPersonalMcpNone } from "./personal-repo-runtime-mcp";
 import {
   journalClear,
-  journalClearIfLineage,
+  journalClearIfLineageAsync,
   hasActiveRunFor,
-  journalQuarantine,
+  journalQuarantineAsync,
+  journalMarkRecoveryAttachedAsync,
   journalMarkRecoveryAttached,
-  journalStartRecovery,
+  journalStartRecoveryIfCurrent,
   activeRunRecords,
   takeInterruptedRuns,
   type ActiveRunRecord,
@@ -103,6 +120,9 @@ export type { StreamEvent };
 export const EMPTY_COMPLETION_RESULT = "Done! (no text output)";
 
 export interface RunAgentOpts {
+  /** Catalog-validated immutable personal identity, never credential material.
+   * Revalidate at every run; a persisted copy is not authorization. */
+  personalRepo?: import("./personal-repo-runtime").PersonalRepoBinding;
   prompt: string;
   /** Engine session id to resume (claude session id or codex thread id). */
   sessionId?: string;
@@ -361,6 +381,8 @@ async function* runOnModel(
   opts: RunAgentOpts,
   model: string | undefined,
 ): AsyncGenerator<StreamEvent> {
+  assertPersonalAttachmentsAbsent(opts);
+  assertPersonalMcpNone(opts); // every model fallback hop, before context effects
   // All production turns route to Pi. The fake seam stays before dispatch so
   // consumer tests exercise the same context logging and fallback walk.
   const requested = model || getDefaultModel();
@@ -418,6 +440,8 @@ async function* runOnModel(
     process.env.OPENSESSION_SYNTHETIC_ENGINE === "1" &&
     process.env.OPENSESSION_DEV === "1"
   ) {
+    if (opts.personalRepo)
+      throw new Error("Synthetic private engine path is unsupported");
     const { syntheticEngine } = await import("./testing/synthetic-engine");
     yield* syntheticEngine(opts, mapped);
     return;
@@ -448,6 +472,8 @@ export function isInteractiveRun(opts: {
 export async function* runAgent(
   opts: RunAgentOpts,
 ): AsyncGenerator<StreamEvent> {
+  assertPersonalAttachmentsAbsent(opts);
+  assertPersonalMcpNone(opts);
   const osSessionId = opts.journal?.osSessionId;
   const runAliases = new Set(
     [osSessionId, opts.transcriptSessionId, opts.sessionId].filter(
@@ -1482,7 +1508,7 @@ async function settleDurableCancelForAbsentOwner(
     getRunState(run.osSessionId) !== "stopped"
   )
     return false;
-  journalClearIfLineage(run);
+  await journalClearIfLineageAsync(run);
   return true;
 }
 
@@ -1506,6 +1532,31 @@ export async function resumeInterruptedRuns(
   deferRecovery?: (run: ActiveRunRecord) => boolean | Promise<boolean>,
 ): Promise<string[]> {
   const resumed: string[] = [];
+  const privateRecoverySources = new WeakMap<
+    ActiveRunRecord,
+    HostedEventPublication
+  >();
+  const recoveryControl = async <T>(
+    run: ActiveRunRecord,
+    work: () => Promise<T>,
+  ): Promise<T | undefined> => {
+    if (!run.personalRepo) return work();
+    const source = privateRecoverySources.get(run);
+    if (!source) return;
+    let invoked = false;
+    try {
+      return await withPersonalRecoveryContext(run, source, () => {
+        invoked = true;
+        return work();
+      });
+    } catch (error) {
+      if (invoked) throw error;
+      console.warn(
+        `[runner] Private recovery source unavailable for ${run.runKey}; preserving evidence`,
+      );
+      return;
+    }
+  };
   const settledRunKeys = new Set<string>();
   const settlingRunKeys = new Set<string>();
   const rememberHandledSession = (run: ActiveRunRecord) => {
@@ -1520,25 +1571,32 @@ export async function resumeInterruptedRuns(
     try {
       await onEvent?.(run.osSessionId, event);
     } catch (e) {
+      if (run.personalRepo) throw e;
       console.error(
         `[runner] Recovered event observer failed for ${run.runKey}:`,
         e,
       );
     }
   };
-  const settleRecovery = async (
+  const settleRecoveryWithinSource = async (
     run: ActiveRunRecord,
     event: StreamEvent,
   ): Promise<boolean> => {
     if (settledRunKeys.has(run.runKey) || settlingRunKeys.has(run.runKey))
       return false;
     settlingRunKeys.add(run.runKey);
+    const settledRecord = { ...run };
     rememberHandledSession(run);
     try {
       await emitRecoveryEvent(run, event);
       try {
-        await onResumed?.(run.osSessionId, event, run);
+        await onResumed?.(
+          run.osSessionId,
+          event,
+          run.personalRepo ? settledRecord : run,
+        );
       } catch (e) {
+        if (run.personalRepo) throw e;
         console.error(
           `[runner] Recovery settlement callback failed for ${run.runKey}:`,
           e,
@@ -1568,13 +1626,41 @@ export async function resumeInterruptedRuns(
           },
         );
       }
-      journalClear(run.runKey);
+      await journalClearIfLineageAsync(settledRecord);
+      if (
+        run.personalRepo &&
+        activeRunRecords().some(
+          (current) =>
+            current.runKey === settledRecord.runKey &&
+            current.personalRepo &&
+            current.hostId &&
+            personalRunConsumerKey(personalRecoveryConsumer(current)) !==
+              personalRunConsumerKey(personalRecoveryConsumer(settledRecord)),
+        )
+      )
+        return false;
       settledRunKeys.add(run.runKey);
       if (!activeRecoveryWorkerRunKeys.has(run.runKey)) untrackRecovery(run);
       return true;
     } finally {
       settlingRunKeys.delete(run.runKey);
     }
+  };
+  const settleRecovery = async (
+    run: ActiveRunRecord,
+    event: StreamEvent,
+  ): Promise<boolean> => {
+    if (!run.personalRepo) return settleRecoveryWithinSource(run, event);
+    const source = privateRecoverySources.get(run);
+    if (!source) return false;
+    return (
+      (await recoveryControl(run, () =>
+        settleRecoveryWithinSource(
+          run,
+          hostedEventPublication(event) ? event : tagHostedEvent(event, source),
+        ),
+      )) ?? false
+    );
   };
   const reportRecoveryFailure = async (
     run: ActiveRunRecord,
@@ -1592,6 +1678,11 @@ export async function resumeInterruptedRuns(
       (current) =>
         current.runKey === run.runKey &&
         current.osSessionId === run.osSessionId &&
+        (!run.personalRepo ||
+          (!!current.personalRepo &&
+            !!current.hostId &&
+            personalRunConsumerKey(personalRecoveryConsumer(current)) ===
+              personalRunConsumerKey(personalRecoveryConsumer(run)))) &&
         (current.firstJournaledAt || current.startedAt) === expectedLineage,
     );
   };
@@ -1626,10 +1717,10 @@ export async function resumeInterruptedRuns(
     // before clearing its journal; otherwise a queue successor can overlap a
     // still-running predecessor.
     if (detached) return false;
-    journalClearIfLineage(run);
+    await journalClearIfLineageAsync(run);
     return true;
   };
-  const checkpointStoppedRecovery = async (
+  const checkpointStoppedRecoveryWithinSource = async (
     run: ActiveRunRecord,
   ): Promise<boolean> => {
     let ownershipBackoffMs = 100;
@@ -1662,6 +1753,22 @@ export async function resumeInterruptedRuns(
       cancelRecoveredEngine(run);
     }
     return abandoned;
+  };
+  const checkpointStoppedRecovery = async (
+    run: ActiveRunRecord,
+  ): Promise<boolean> => {
+    if (!run.personalRepo) return checkpointStoppedRecoveryWithinSource(run);
+    const source = privateRecoverySources.get(run);
+    if (!source || !source.alive() || !samePersonalRecoveryLineage(run, source))
+      return true;
+    // A valid same-lineage physical handoff can precede B's first event. Never
+    // use A's physical fence for B, nor cancel B merely for that gap.
+    if (source.consumer?.hostId !== run.hostId) return false;
+    try {
+      return await source.run(() => checkpointStoppedRecoveryWithinSource(run));
+    } catch {
+      return true;
+    }
   };
   const recoveryTask = (
     run: ActiveRunRecord,
@@ -1765,7 +1872,7 @@ export async function resumeInterruptedRuns(
   // claim so resumeLocalHostRun owns them synchronously and the generic
   // drained-session wake cannot start a second host for the same turn.
   const { interrupted, quarantined } = sanitizeInterruptedRuns(taken);
-  journalQuarantine(quarantined);
+  await journalQuarantineAsync(quarantined);
   for (const entry of quarantined) {
     if (!entry.notify || !entry.run.osSessionId) continue;
     await reportRecoveryFailure(entry.run, recoveryQuarantineMessage(entry));
@@ -1773,7 +1880,27 @@ export async function resumeInterruptedRuns(
   const recoveryTasks: Array<() => Promise<void>> = [];
 
   for (const run of interrupted) {
-    if (run.terminalFailure) {
+    if (run.personalRepo) {
+      rememberHandledSession(run);
+      if (!run.hostId || !run.osSessionId || run.runnerId || run.sandboxId) {
+        console.warn(
+          `[runner] Private recovery has no compatible original host for ${run.runKey}; preserving evidence`,
+        );
+        continue;
+      }
+      try {
+        privateRecoverySources.set(
+          run,
+          await capturePersonalRecoveryContext(run),
+        );
+      } catch {
+        console.warn(
+          `[runner] Private recovery enrollment/source unavailable for ${run.runKey}; preserving evidence`,
+        );
+        continue;
+      }
+    }
+    if (run.terminalFailure && !run.personalRepo) {
       await reportRecoveryFailure(run, run.terminalFailure.content);
       continue;
     }
@@ -1789,7 +1916,7 @@ export async function resumeInterruptedRuns(
     // Other GitHub behaviors still own their recovery (simplify re-trigger on
     // the next PR event; auto-fix loops are resumed by the GitHub startup
     // sweep). Resuming them generically would double-drive an auto-fix loop.
-    if (run.kind?.startsWith("github-")) {
+    if (!run.personalRepo && run.kind?.startsWith("github-")) {
       rememberHandledSession(run);
       journalClear(run.runKey);
       if (run.osSessionId)
@@ -1799,7 +1926,7 @@ export async function resumeInterruptedRuns(
     // Slack runs journal (their bks session id feeds the in-process MCP proxy
     // path), but the Slack queue re-delivers interrupted messages itself — a
     // generic resume would double-drive the turn with no streamer attached.
-    if (run.kind?.startsWith("slack")) {
+    if (!run.personalRepo && run.kind?.startsWith("slack")) {
       rememberHandledSession(run);
       journalClear(run.runKey);
       if (run.osSessionId)
@@ -1810,7 +1937,7 @@ export async function resumeInterruptedRuns(
     // orchestration state (the script's Worker) died with the process — the
     // workflow store marks the run interrupted on boot, and replaying a lone
     // child agent without its script would be noise.
-    if (run.kind?.startsWith("workflow")) {
+    if (!run.personalRepo && run.kind?.startsWith("workflow")) {
       rememberHandledSession(run);
       journalClear(run.runKey);
       if (run.osSessionId)
@@ -1829,7 +1956,9 @@ export async function resumeInterruptedRuns(
           let terminalSeen = false;
           try {
             if (await checkpointStoppedRecovery(run)) return;
-            Object.assign(run, journalStartRecovery(run));
+            const currentRecovery = await journalStartRecoveryIfCurrent(run);
+            if (!currentRecovery) return;
+            Object.assign(run, currentRecovery);
             const events = await (
               await import("./runner-session")
             ).resumeRunnerRun(run, {
@@ -1914,7 +2043,9 @@ export async function resumeInterruptedRuns(
           };
           try {
             if (await checkpointStoppedRecovery(run)) return;
-            Object.assign(run, journalStartRecovery(run));
+            const currentRecovery = await journalStartRecoveryIfCurrent(run);
+            if (!currentRecovery) return;
+            Object.assign(run, currentRecovery);
             const resume = (await import("./sandbox/adapters/bootstrap"))
               .resumeRemoteSandboxRun;
             if (await checkpointStoppedRecovery(run)) return;
@@ -1991,21 +2122,35 @@ export async function resumeInterruptedRuns(
       recoveryTasks.push(
         recoveryTask(run, async (releaseQueueSlot) => {
           let terminalSeen = false;
+          let pendingHost: object | undefined;
           try {
             if (await checkpointStoppedRecovery(run)) return;
-            Object.assign(run, journalStartRecovery(run));
-            if (run.osSessionId && !(await durableCancelOwnsRecovery(run)))
-              await transitionRunState(run.osSessionId, "reattach_start", {
-                run_key: run.runKey,
-              });
+            const currentRecovery = await recoveryControl(run, () =>
+              journalStartRecoveryIfCurrent(run),
+            );
+            if (!currentRecovery) return;
+            Object.assign(run, currentRecovery);
+            const starting = await recoveryControl(run, async () => {
+              if (run.osSessionId && !(await durableCancelOwnsRecovery(run)))
+                await transitionRunState(run.osSessionId, "reattach_start", {
+                  run_key: run.runKey,
+                });
+              return true;
+            });
+            if (run.personalRepo && starting !== true) return;
             const resumeLocalHost =
               localHostResumeForTest ??
               (await import("./host-client")).resumeLocalHostRun;
-            const reattached = await resumeLocalHost(run, {
-              onAskUser: run.osSessionId
-                ? askHandlerFor?.(run.osSessionId)
-                : undefined,
-            }).catch((e) => {
+            const invokeResume = () =>
+              resumeLocalHost(run, {
+                onAskUser: run.osSessionId
+                  ? askHandlerFor?.(run.osSessionId)
+                  : undefined,
+              });
+            const source = privateRecoverySources.get(run);
+            const pending = source ? source.run(invokeResume) : invokeResume();
+            pendingHost = pending;
+            const reattached = await pending.catch((e) => {
               console.warn(
                 `[runner] Local host reattach failed for ${run.runKey}:`,
                 e,
@@ -2022,14 +2167,26 @@ export async function resumeInterruptedRuns(
               );
               return;
             }
-            if (run.osSessionId && !(await durableCancelOwnsRecovery(run)))
-              await transitionRunState(
-                run.osSessionId,
-                reattached ? "reattach_ok" : "reattach_fail",
-                { run_key: run.runKey },
-              );
+            const transitioned = await recoveryControl(run, async () => {
+              if (run.osSessionId && !(await durableCancelOwnsRecovery(run)))
+                await transitionRunState(
+                  run.osSessionId,
+                  reattached ? "reattach_ok" : "reattach_fail",
+                  { run_key: run.runKey },
+                );
+              return true;
+            });
+            if (run.personalRepo && transitioned !== true) return;
             if (reattached) {
-              Object.assign(run, journalMarkRecoveryAttached(run) || {});
+              // Revalidate after the awaited actor transition. A denied source
+              // must not reset recovery evidence through the global journal API.
+              const attached = await recoveryControl(run, async () => {
+                const current = await journalMarkRecoveryAttachedAsync(run);
+                if (run.personalRepo && !current) return false;
+                Object.assign(run, current || {});
+                return true;
+              });
+              if (run.personalRepo && attached !== true) return;
               // Reaching this point proves the detached host is connected and this
               // worker owns its stream. The turn can remain quiet for minutes while
               // the model is working, so do not hold the single boot-admission slot
@@ -2039,6 +2196,10 @@ export async function resumeInterruptedRuns(
             }
             let events = reattached;
             if (!events) {
+              if (run.personalRepo)
+                throw new Error(
+                  "Private recovery requires detached host; in-process fallback denied",
+                );
               // The launcher positively proved this cancelled host absent. Settle
               // actor ownership before retiring its journal and never resurrect
               // the stopped turn as a fresh engine run.
@@ -2109,12 +2270,37 @@ export async function resumeInterruptedRuns(
               // A fallback re-prompt is lazy. Its first event proves that the
               // engine has started. A live host released the slot when attached.
               releaseQueueSlot();
+              const eventSource = hostedEventPublication(event);
+              if (run.personalRepo) {
+                if (
+                  !eventSource ||
+                  !samePersonalRecoveryLineage(run, eventSource)
+                )
+                  throw new Error("Private recovered event source unavailable");
+                privateRecoverySources.set(run, eventSource);
+              }
               if (await checkpointStoppedRecovery(run)) return;
-              markRecoveryProgress(run, event);
-              if (event.type === "done" || event.type === "error") {
-                terminalSeen =
-                  (await settleRecovery(run, event)) || terminalSeen;
-              } else await emitRecoveryEvent(run, event);
+              await withHostedEventPublication(
+                event,
+                async () => {
+                  if (run.personalRepo) {
+                    if (
+                      event.type === "text_chunk" ||
+                      event.type === "tool_use" ||
+                      event.type === "tool_result"
+                    )
+                      Object.assign(
+                        run,
+                        (await journalMarkRecoveryAttachedAsync(run)) || {},
+                      );
+                  } else markRecoveryProgress(run, event);
+                  if (event.type === "done" || event.type === "error") {
+                    terminalSeen =
+                      (await settleRecovery(run, event)) || terminalSeen;
+                  } else await emitRecoveryEvent(run, event);
+                },
+                !!run.personalRepo,
+              );
             }
             if (await checkpointStoppedRecovery(run)) return;
             if (!terminalSeen && recoveryStillOwnsJournal(run)) {
@@ -2134,6 +2320,9 @@ export async function resumeInterruptedRuns(
                 run,
                 "Restart recovery failed while reconnecting to the detached run host. Send the prompt again to continue.",
               );
+          } finally {
+            if (run.personalRepo && pendingHost)
+              await finalizeHostedRun(pendingHost);
           }
         }),
       );
@@ -2164,7 +2353,9 @@ export async function resumeInterruptedRuns(
           let terminalSeen = false;
           try {
             if (await checkpointStoppedRecovery(run)) return;
-            Object.assign(run, journalStartRecovery(run));
+            const currentRecovery = await journalStartRecoveryIfCurrent(run);
+            if (!currentRecovery) return;
+            Object.assign(run, currentRecovery);
             if (run.osSessionId)
               await transitionRunState(run.osSessionId, "resume_reprompt", {
                 run_key: run.runKey,
@@ -2173,6 +2364,10 @@ export async function resumeInterruptedRuns(
             // claimed record now (runAgent's intake journalSet is the very next step,
             // so the unprotected window is one generator start, not the whole
             // adoption+probe phase the old wipe-on-take left open).
+            if (run.personalRepo)
+              throw new Error(
+                "Private recovery cannot fall back to an in-process run",
+              );
             journalClear(run.runKey);
             for await (const event of runAgent({
               prompt: run.prompt!,
@@ -2252,7 +2447,9 @@ export async function resumeInterruptedRuns(
         let recoverySettled = false;
         try {
           if (await checkpointStoppedRecovery(run)) return;
-          Object.assign(run, journalStartRecovery(run));
+          const currentRecovery = await journalStartRecoveryIfCurrent(run);
+          if (!currentRecovery) return;
+          Object.assign(run, currentRecovery);
           let repairingRecoveredResult = false;
           console.log(
             repairingRecoveredResult
@@ -2267,6 +2464,10 @@ export async function resumeInterruptedRuns(
           // The continuation reuses this proven-absent lineage key. Drop the
           // claimed record only now, AFTER the reattach probe settled: dying
           // mid-probe used to lose the run to the wipe-on-take (2026-07-27).
+          if (run.personalRepo)
+            throw new Error(
+              "Private recovery cannot fall back to an in-process run",
+            );
           journalClear(run.runKey);
           for await (const event of runAgent({
             prompt: repairingRecoveredResult

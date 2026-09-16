@@ -1,3 +1,10 @@
+import type { ActorAccess } from "./private-access";
+import { sessionActorReducerRoute } from "./actor-routing";
+import { currentExecutionAccess } from "../application-access";
+import {
+  capturePrivateActorResultGuard,
+  currentPrivateActorFence,
+} from "../session-audience";
 import type { SessionActorReducerCommand } from "./lifecycle-protocol";
 import {
   type CreationEventDecision,
@@ -215,11 +222,50 @@ export class SessionKernelActorClient {
   /** Awaited store/reduce RPC over the posted-message transport. */
   async callAsync<TResult>(
     request:
-      | { t: "store"; method: string; args: unknown[] }
+      | { t: "store"; method: string; args: unknown[]; access?: ActorAccess }
       | { t: "reduce"; command: SessionActorReducerCommand },
     label: string,
     large = false,
   ): Promise<TResult> {
+    if (request.t === "reduce") {
+      const command = request.command;
+      const metadataPrincipal =
+        command.kind === "metadata" && "principal" in command.request
+          ? command.request.principal?.githubAccountId
+          : undefined;
+      request = {
+        ...request,
+        command: {
+          ...command,
+          access: {
+            principal:
+              currentExecutionAccess()?.principal?.githubAccountId ??
+              metadataPrincipal,
+            fence:
+              sessionActorReducerRoute(command).scope === "session" ||
+              sessionActorReducerRoute(command).scope === "outbox"
+                ? currentPrivateActorFence()
+                : undefined,
+          },
+        },
+      };
+    }
+    if (request.t === "store")
+      request = {
+        ...request,
+        access: {
+          principal: currentExecutionAccess()?.principal?.githubAccountId,
+          fence: currentPrivateActorFence(),
+        },
+      };
+    const sourceFence =
+      request.t === "reduce"
+        ? request.command.access?.fence
+        : request.access?.fence;
+    // Global exact-lineage cleanup must remain usable after producer revocation.
+    const resultGuard = sourceFence
+      ? capturePrivateActorResultGuard()
+      : undefined;
     const deadline = Date.now() + 15_000;
     const retryableRead =
       request.t === "reduce"
@@ -228,12 +274,14 @@ export class SessionKernelActorClient {
     let delayMs = 10;
     while (true) {
       try {
-        return await this.callAsyncOnce<TResult>(
+        const result = await this.callAsyncOnce<TResult>(
           request,
           label,
           large,
           Math.max(1, deadline - Date.now()),
         );
+        resultGuard?.();
+        return result;
       } catch (error) {
         if (
           !retryableRead ||
@@ -250,7 +298,7 @@ export class SessionKernelActorClient {
 
   private callAsyncOnce<TResult>(
     request:
-      | { t: "store"; method: string; args: unknown[] }
+      | { t: "store"; method: string; args: unknown[]; access?: ActorAccess }
       | { t: "reduce"; command: SessionActorReducerCommand },
     label: string,
     large: boolean,

@@ -1,3 +1,4 @@
+import { assertPersonalAttachmentsAbsent } from "./personal-image-admission";
 /**
  * Pi coding-agent runner. Every production model id routes here.
  *
@@ -141,6 +142,11 @@ import {
   createPiRuntimeBinding,
   prewarmPiSdk as prewarmPiSdkBinding,
 } from "./pi-runtime-binding";
+import {
+  assertPersonalMcpNone,
+  assertPersonalPiPath,
+  createRunMcpRuntime,
+} from "./personal-repo-runtime-mcp";
 import { createPiMcpBridge, type PiMcpBridge } from "./pi-mcp-bridge";
 import { controlPlaneWorkloadCommand, stopUserScope } from "./systemd-scopes";
 import {
@@ -208,6 +214,10 @@ export async function githubReadRunEnv(
 /** The GitHub credential one run's shell holds (docs/setup/github.md, "Who
  * holds which credential").
  *
+ * Personal runs always hold a single-repository installation token (read for
+ * ask, write for code), never the App-wide user grant. The rules below apply
+ * only to shared repositories.
+ *
  * - A code turn a connected person started (`ownerTurn`) acts as them: their
  *   token for gh and HTTPS git, so the push and the PR carry their identity.
  * - Every other code run, including an owner turn whose person is not
@@ -220,15 +230,39 @@ export async function githubReadRunEnv(
  *
  * A remote host never consults the person store: its launcher already
  * projected the run's credential (githubUserRunEnv is empty there). */
-export async function runGithubEnv(input: {
-  isCode: boolean;
-  ownerTurn: boolean;
-  /** The person the turn acts for (githubCredentialUser). */
-  user?: string | null;
-  githubKindRun: boolean;
-  launcherEnv?: Record<string, string>;
-  cwd: string;
-}): Promise<Record<string, string>> {
+export async function runGithubEnv(
+  input: {
+    personalRepo?: import("./personal-repo-runtime").PersonalRepoBinding;
+    isCode: boolean;
+    ownerTurn: boolean;
+    /** The person the turn acts for (githubCredentialUser). */
+    user?: string | null;
+    githubKindRun: boolean;
+    launcherEnv?: Record<string, string>;
+    cwd: string;
+  },
+  projectPersonal = async (
+    binding: import("./personal-repo-runtime").PersonalRepoBinding,
+    isCode: boolean,
+    ownerTurn: boolean,
+  ) => {
+    const { personalRepoRunEnv } =
+      await import("./personal-repo-runtime-default");
+    return personalRepoRunEnv(binding, isCode, ownerTurn);
+  },
+): Promise<Record<string, string>> {
+  if (input.personalRepo) {
+    // Mandatory first branch for ask AND code: never consult shared connected
+    // people, organization Apps or caller launcherEnv on a personal run.
+    const env = await projectPersonal(
+      input.personalRepo,
+      input.isCode,
+      input.ownerTurn,
+    );
+    if (!env.GH_TOKEN || env.GH_TOKEN !== env.GITHUB_TOKEN)
+      throw new Error("Personal repository credential unavailable");
+    return env;
+  }
   if (!input.isCode) return githubReadRunEnv(input.cwd);
   const person = input.ownerTurn ? githubUserRunEnv(input.user) : {};
   if (person.GH_TOKEN) return person;
@@ -243,8 +277,9 @@ export function runGithubMergeGuard(input: {
   isCode: boolean;
   ownerLogin: string | null;
   baseBranch: string;
+  personalRepo?: import("./personal-repo-runtime").PersonalRepoBinding;
 }): MergeGuard | undefined {
-  return input.isCode && input.ownerLogin
+  return input.isCode && input.ownerLogin && !input.personalRepo
     ? undefined
     : { baseBranch: input.baseBranch };
 }
@@ -1837,6 +1872,10 @@ async function* runPiAttempt(
   model: string,
   walk: PiAccountWalk,
 ): AsyncGenerator<StreamEvent> {
+  assertPersonalAttachmentsAbsent(opts);
+  assertPersonalMcpNone(opts);
+  if (opts.personalRepo && opts.disableLocalWorkspaceTools)
+    throw new Error("Personal runs require their adopted local workspace");
   // Config gate first: the clearest refusal when the engine is off entirely.
   if (!piEngineEnabled()) {
     yield {
@@ -1862,6 +1901,7 @@ async function* runPiAttempt(
   // The routed id plus the session's stored id: a workspace preset's wiring
   // (enginePresetId oracle, pinned effort) survives only on the stored one.
   const resolved = resolvePiRoutedModel(model, opts.model);
+  assertPersonalPiPath(opts.personalRepo, resolved);
   const parsed = resolved
     ? { providerID: resolved.providerID, modelID: resolved.modelID }
     : null;
@@ -2154,6 +2194,11 @@ async function* runPiAttempt(
     // scratch dir, a repo-less ask session). Dynamic import to avoid a static
     // module-init cycle through "./worktree".
     const cwdRepo = await (async () => {
+      if (opts.personalRepo) {
+        const { personalRepoRunConfig } =
+          await import("./personal-repo-runtime-default");
+        return personalRepoRunConfig(opts.personalRepo);
+      }
       try {
         return (await import("./worktree")).repoForPathOrNull(cwd);
       } catch {
@@ -2164,21 +2209,24 @@ async function* runPiAttempt(
     // synthetic auto-continue driver, in which case the author fallback
     // names the session owner (#322). A machine sender (a review handoff, a
     // worker report, an automation) is nobody. In code mode an owner turn
-    // puts their connected token in the shell (runGithubEnv) and describes
+    // on a shared repository puts their connected token in the shell and describes
     // PR authorship as theirs; every other run holds an App token.
     const githubUser = githubCredentialUser(user, author?.name);
     const ownerTurn =
       !policy.unattended &&
       INTERACTIVE_KINDS.has(baseJournalKind(journal?.kind)) &&
       !isMachineActor(githubUser);
-    // On a remote host this reads the launcher's projected marker, not the
+    // Shared remote hosts read the launcher's projected marker, not the
     // person store, so a sandboxed owner turn drops the guard exactly when
     // a host run would.
-    const githubUserLogin = ownerTurn ? githubRunOwnerLogin(githubUser) : null;
+    // Personal runs use repository-scoped App credentials, never human OAuth authority.
+    const githubUserLogin =
+      ownerTurn && !opts.personalRepo ? githubRunOwnerLogin(githubUser) : null;
     // GitHub permissions and repository rulesets bound the chosen credential.
     // Ask, unattended, and publication-policy command gates still apply.
     const githubKindRun = baseJournalKind(journal?.kind).startsWith("github-");
     const githubEnv = await runGithubEnv({
+      personalRepo: opts.personalRepo,
       isCode: mode === "code",
       ownerTurn,
       user: githubUser,
@@ -2190,6 +2238,7 @@ async function* runPiAttempt(
     const mergeGuard = runGithubMergeGuard({
       isCode: mode === "code",
       ownerLogin: githubUserLogin,
+      personalRepo: opts.personalRepo,
       baseBranch: cwdRepo?.defaultBranch || "main",
     });
     const binding = await createPiRuntimeBinding({
@@ -2345,24 +2394,26 @@ async function* runPiAttempt(
     // turn. Pi only adapts its exact catalog into mcp_search/mcp_call. The
     // detached runner-host proxy shape remains solely at this named migration
     // boundary until Agent operation routing replaces it.
-    const mcpMounts = splitMcpMigrationBoundary(opts.inProcessMcp);
-    mcpRuntime = await createMcpRuntime({
-      mcpServers,
-      user,
-      mcpGrantUser: opts.mcpGrantUser,
-      deniedToolIds: new Set(Object.keys(policy.disables)),
-      inProcessMcp: mcpMounts.sdk,
-      legacyProxyMcp: mcpMounts.legacyProxy,
-      onAudit: (e) =>
-        audit({
-          msg: "pi_mcp_call",
-          request_id: requestId,
-          session: journal?.osSessionId,
-          server: e.server,
-          tool: e.tool,
-          ok: e.ok,
-          ms: e.ms,
-        }),
+    mcpRuntime = await createRunMcpRuntime(opts, () => {
+      const mcpMounts = splitMcpMigrationBoundary(opts.inProcessMcp);
+      return createMcpRuntime({
+        mcpServers,
+        user,
+        mcpGrantUser: opts.mcpGrantUser,
+        deniedToolIds: new Set(Object.keys(policy.disables)),
+        inProcessMcp: mcpMounts.sdk,
+        legacyProxyMcp: mcpMounts.legacyProxy,
+        onAudit: (e) =>
+          audit({
+            msg: "pi_mcp_call",
+            request_id: requestId,
+            session: journal?.osSessionId,
+            server: e.server,
+            tool: e.tool,
+            ok: e.ok,
+            ms: e.ms,
+          }),
+      });
     });
     mcpBridge = await createPiMcpBridge(mcpRuntime);
     // Tool policy: ask mode is read-only — no edit/write, and bash screened
@@ -2819,6 +2870,10 @@ async function* runPiAttempt(
         });
     };
     handle.steer = (text, images, steerId) => {
+      assertPersonalAttachmentsAbsent({
+        personalRepo: opts.personalRepo,
+        images,
+      });
       // Same skill expansion as the prompt path. The queue holds the expanded
       // text so the delivery match stays exact; the audit line below still
       // records what the person typed.

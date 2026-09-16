@@ -105,7 +105,7 @@ export async function maybeHandoffFindings(
 
     // The PR's own review/fix runs also sit on this branch — never hand off to
     // those; deliver to the most recently active real session.
-    const owners = matchSessions(control, workspaceId, pr.headRef)
+    const owners = (await matchSessions(control, workspaceId, pr.headRef))
       .filter((s) => !s.id.startsWith("bks-ghpr-"))
       .sort(
         (a, b) =>

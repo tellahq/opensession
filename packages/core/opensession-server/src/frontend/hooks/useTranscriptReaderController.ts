@@ -1,4 +1,8 @@
 import {
+  captureClientDataScope,
+  isCurrentClientDataScope,
+} from "../lib/client-data-scope";
+import {
   useCallback,
   useEffect,
   useEffectEvent,
@@ -112,6 +116,7 @@ export function useTranscriptReaderLayout({
   history: { controller: transcriptHistory, loadingHistory },
   send,
 }: ReaderLayoutOptions) {
+  const [dataScope] = useState(captureClientDataScope);
   const transcriptHistoryRef = useRef(transcriptHistory);
   // Intent-aware scrolling: stick to the live edge only while the reader is there,
   // pin new turns near the top, and surface a "Jump to latest" affordance.
@@ -217,6 +222,7 @@ export function useTranscriptReaderLayout({
     if (cursors.transcriptReadySessionRef.current !== session.id) return;
     const previous = cachedTranscriptView(session.id);
     const el = messagesRef.current;
+    if (!isCurrentClientDataScope(dataScope)) return;
     cacheTranscriptView(session.id, {
       entries,
       cursor: cursors.transcriptCursorRef.current,
@@ -231,6 +237,7 @@ export function useTranscriptReaderLayout({
       anchorTop: previous?.anchorTop ?? null,
     });
   }, [
+    dataScope,
     entries,
     following,
     historyTruncated,
@@ -250,6 +257,7 @@ export function useTranscriptReaderLayout({
     // Nothing qualifying at the top edge clears the pair, rather than
     // leaving one the reader has scrolled away from.
     const anchor = pickScrollAnchor(el);
+    if (!isCurrentClientDataScope(dataScope)) return;
     cacheTranscriptView(session.id, {
       ...cached,
       scrollTop: el.scrollTop,
@@ -259,7 +267,7 @@ export function useTranscriptReaderLayout({
         ? anchor.getBoundingClientRect().top - el.getBoundingClientRect().top
         : null,
     });
-  }, [followingLive, messagesRef, session.id]);
+  }, [dataScope, followingLive, messagesRef, session.id]);
   const anchorCaptureRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduleAnchorCapture = useCallback(() => {
     if (anchorCaptureRef.current) clearTimeout(anchorCaptureRef.current);

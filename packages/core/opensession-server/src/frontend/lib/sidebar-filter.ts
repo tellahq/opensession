@@ -1,3 +1,7 @@
+import {
+  clientDataStorageKey,
+  subscribeClientDataScope,
+} from "./client-data-scope";
 import React from "react";
 import { z } from "zod";
 import { DEFAULT_REPO_ID } from "./brand";
@@ -219,10 +223,9 @@ export function setFilter(patch: Partial<FilterState>) {
   const next: StoredFilterState = { ...stored!, ...patch };
   stored = next;
   current = null;
-  localStorage.setItem(
-    FILTER_KEY,
-    JSON.stringify({ ...next, v: FILTER_VERSION }),
-  );
+  const key = clientDataStorageKey(FILTER_KEY);
+  if (key)
+    localStorage.setItem(key, JSON.stringify({ ...next, v: FILTER_VERSION }));
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
@@ -237,7 +240,7 @@ export function onFilterChanged(handler: () => void): () => void {
 // window to listen on and a module-scope call throws before the first test runs.
 if (globalThis.window?.addEventListener) {
   globalThis.window.addEventListener("storage", (event) => {
-    if (event.key !== FILTER_KEY) return;
+    if (event.key !== clientDataStorageKey(FILTER_KEY)) return;
     stored = null;
     current = null;
     globalThis.window.dispatchEvent(new Event(CHANGE_EVENT));
@@ -394,7 +397,8 @@ function storedGrouping(v: StoredFilterInput): StoredGrouping {
 
 export function readStoredFilter(): StoredFilterState {
   try {
-    const parsed = JSON.parse(localStorage.getItem(FILTER_KEY) || "{}");
+    const key = clientDataStorageKey(FILTER_KEY);
+    const parsed = JSON.parse((key ? localStorage.getItem(key) : null) || "{}");
     const storedInput = storedFilterInputSchema.parse(parsed);
     const grouping = storedGrouping(storedInput);
     return {
@@ -466,3 +470,8 @@ export function sessionPrKeys(c: UnifiedSession): string[] {
     keys.push(`${ref.repo}\n${ref.branch}`);
   return keys;
 }
+
+subscribeClientDataScope(() => {
+  stored = null;
+  current = null;
+});

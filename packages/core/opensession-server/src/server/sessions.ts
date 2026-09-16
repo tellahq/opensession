@@ -1,3 +1,4 @@
+import { canAccessScope } from "../shared/access-scope";
 import { executeSessionProjection } from "./session-projection-executor";
 import {
   readdirSync,
@@ -837,7 +838,7 @@ export function readSlackSession(sessionId: string): UnifiedSession | null {
   const key = sessionId.slice("slack-".length);
   if (!key || key.includes("/") || key.includes("\\")) return null;
   const session = slackSessionRow(`${key}.json`);
-  if (!session) return null;
+  if (!session || !canAccessScope(session.accessScope)) return null;
   session.transcriptPath = resolveTranscriptPath(
     findTranscriptPath(session.worktreeDir, session.claudeSessionId),
     session.codexThreadId,
@@ -1042,9 +1043,13 @@ function scanLinearSessions(): UnifiedSession[] {
  * so the catalog-backed rebuild in session-cache builds rows from committed
  * documents the same way the file scan does. */
 export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
-  const archived = !!data.archived || isArchivedId(data.id);
+  const archived =
+    !!data.archived ||
+    (data.accessScope?.kind !== "personal" && isArchivedId(data.id));
   return {
     id: data.id,
+    accessScope: data.accessScope,
+    personalRepo: data.personalRepo,
     duplicatedFromSessionId: data.duplicatedFromSessionId,
     claudeSessionId: data.claudeSessionId,
     source: "opensession",
@@ -1083,7 +1088,11 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
     archived: archived || undefined,
     archivedReason:
       data.archivedReason ||
-      (archived ? getArchiveReason(data.id) || "manual" : undefined),
+      (archived
+        ? data.accessScope?.kind === "personal"
+          ? "manual"
+          : getArchiveReason(data.id) || "manual"
+        : undefined),
     plainThreadId: data.plainThreadId,
     externalRefs: data.externalRefs,
     // The MCP allowlist the session was created with. Dropping it here left
@@ -1161,6 +1170,8 @@ export function nativeSessionListRowFromData(
  * the registries.
  */
 export function applySessionOverlays(session: UnifiedSession): void {
+  // Legacy sidecars are unversioned/shared. Personal rows use only their owned document.
+  if (session.accessScope?.kind === "personal") return;
   const generated =
     getGeneratedTitle(session.id) ??
     session.aliasIds?.map((a) => getGeneratedTitle(a)).find(Boolean);
@@ -1188,7 +1199,9 @@ export function readNativeSession(
   sessionId: string,
 ): UnifiedSession | undefined {
   const session = readNativeSessionListRow(sessionId);
-  return session ? withTranscriptPath(session) : undefined;
+  return session && canAccessScope(session.accessScope)
+    ? withTranscriptPath(session)
+    : undefined;
 }
 
 /** Detail shape of a native session document: the list row plus its resolved
@@ -1217,7 +1230,7 @@ function* nativeSessionRows(): Generator<UnifiedSession> {
     // Skip non-session bookkeeping files in this dir (active-runs.json,
     // prompt-queues.json, active-at-shutdown.json, …) — a real session always
     // has an id, these don't, so they'd otherwise become bogus id:undefined rows.
-    if (!data || !data.id) continue;
+    if (!data || !data.id || data.id !== file.slice(0, -5)) continue;
     yield nativeSessionRow(data);
   }
 }
@@ -1578,9 +1591,9 @@ export function getAllSessions(
   slice: SessionArchiveSlice = "include",
 ): UnifiedSession[] {
   return assembleSessions(
-    scanSlackSessions(),
-    scanLinearSessions(),
-    scanNativeSessions(),
+    scanSlackSessions().filter((row) => canAccessScope(row.accessScope)),
+    scanLinearSessions().filter((row) => canAccessScope(row.accessScope)),
+    scanNativeSessions().filter((row) => canAccessScope(row.accessScope)),
     slice,
   );
 }
@@ -1595,6 +1608,7 @@ export type NativeSessionRowSource = () => Promise<
 export async function getAllSessionsAsync(
   slice: SessionArchiveSlice = "include",
   nativeSource?: NativeSessionRowSource,
+  authorizeRows?: (rows: UnifiedSession[]) => Promise<UnifiedSession[]>,
 ): Promise<UnifiedSession[]> {
   // Warm the indexes before row parsing starts. Running these in the same
   // Promise.all as the scans lets the first transcript miss fall back to the
@@ -1609,12 +1623,22 @@ export async function getAllSessionsAsync(
         )
       : collectSessionRows(nativeSessionRows()),
   ]);
-  // These overlays read and mutate process-local state, so they deliberately
-  // remain on the server thread rather than crossing a Worker boundary.
+  const authorized = authorizeRows
+    ? new Set(
+        await authorizeRows([
+          ...slackSessions,
+          ...linearSessions,
+          ...nativeSessions,
+        ]),
+      )
+    : null;
+  const visible = (row: UnifiedSession) =>
+    (!authorized || authorized.has(row)) && canAccessScope(row.accessScope);
+  // Authorize before grouping or overlays can copy one row's fields to siblings.
   return await assembleSessionsAsync(
-    slackSessions,
-    linearSessions,
-    nativeSessions,
+    slackSessions.filter(visible),
+    linearSessions.filter(visible),
+    nativeSessions.filter(visible),
     slice,
   );
 }
