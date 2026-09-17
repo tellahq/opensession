@@ -287,6 +287,70 @@ describe("Portals MCP staging routes", () => {
 });
 
 describe("Simulator Portal MCP", () => {
+  test("storage clearing requires explicit true confirmation before resolving a workspace", async () => {
+    let consultedWorkspace = false;
+    const { runtime } = await harness(undefined, {
+      worktreeDir: () => {
+        consultedWorkspace = true;
+        return undefined;
+      },
+    });
+    for (const args of [{}, { confirm: false }, { confirm: "true" }]) {
+      await expect(
+        runtime.callExact("opensession-portals_clear_simulator_storage", args, {
+          toolCallId: "clear-unconfirmed",
+        }),
+      ).rejects.toThrow("confirm");
+      expect(consultedWorkspace).toBe(false);
+    }
+  });
+
+  test("storage clearing refuses missing and remote workspaces without waking them", async () => {
+    let woke = false;
+    const contexts: Array<Partial<PortalsMcpContext>> = [
+      { worktreeDir: () => undefined },
+      { hasSandbox: () => true },
+      {
+        runner: () => ({
+          id: "runner-session",
+          source: "opensession",
+          claudeSessionId: null,
+          branch: "main",
+          worktreeDir: "/workspace",
+          startedBy: null,
+          title: "Runner",
+          lastActivity: "",
+          createdAt: "",
+          isRunning: false,
+          transcriptPath: null,
+          runner: {
+            id: "runner-1",
+            name: "Test runner",
+            workspacePath: "/workspace",
+          },
+        }),
+      },
+    ];
+    for (const context of contexts) {
+      const { runtime } = await harness(undefined, {
+        sandbox: async () => {
+          woke = true;
+          return null;
+        },
+        ...context,
+      });
+      const response = await runtime.callExact(
+        "opensession-portals_clear_simulator_storage",
+        { confirm: true },
+        { toolCallId: "clear-wrong-workspace" },
+      );
+      expect(response.content[0]).toMatchObject({
+        type: "text",
+        text: expect.stringContaining("workspace"),
+      });
+      expect(woke).toBe(false);
+    }
+  });
   test("the tool is discoverable and refuses Sandbox workspaces without waking them", async () => {
     let woke = false;
     const { runtime } = await harness(undefined, {

@@ -1,3 +1,4 @@
+import { simulatorStorageRoot } from "../simulator-portal/storage-root";
 import { createHash } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
@@ -30,6 +31,64 @@ export const simulatorPortalInput = {
     ),
 };
 
+async function simulatorEntryPath() {
+  const entry = resolve(import.meta.dir, "../simulator-portal/main.ts");
+  if (!(await stat(entry).catch(() => null))?.isFile())
+    throw new Error(
+      "Simulator Portals currently require a source installation of Open Session on macOS.",
+    );
+  return entry;
+}
+
+/** No shell and no caller-controlled device or storage path. */
+export async function simulatorStorageClearCommand(workspaceDir: string) {
+  return [
+    process.execPath,
+    await simulatorEntryPath(),
+    "--storage-root",
+    simulatorStorageRoot(),
+    "--workspace",
+    await realpath(workspaceDir),
+    "--clear-storage",
+    "--confirm",
+  ];
+}
+
+export async function clearSimulatorPortalStorage(workspaceDir: string) {
+  const argv = await simulatorStorageClearCommand(workspaceDir);
+  const env: Record<string, string> = {};
+  for (const key of [
+    "PATH",
+    "HOME",
+    "LANG",
+    "USER",
+    "LOGNAME",
+    "TMPDIR",
+    "OPENSESSION_STATE_DIR",
+  ]) {
+    const value = process.env[key];
+    if (value !== undefined) env[key] = value;
+  }
+  // Maintenance runs outside the gateway. The helper bounds native commands;
+  // do not kill its storage owner mid-delete while a simctl child is still live.
+  const child = Bun.spawn(argv, {
+    env,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [status, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  if (status !== 0)
+    throw new Error(
+      stderr.trim() || stdout.trim() || "Simulator storage cleanup failed",
+    );
+  return stdout.trim();
+}
+
 export async function simulatorPortalCommand(
   input: z.infer<z.ZodObject<typeof simulatorPortalInput>> & {
     sessionId: string;
@@ -52,17 +111,15 @@ export async function simulatorPortalCommand(
     throw new Error(
       "appPath must be an already-built simulator .app directory.",
     );
-  const entry = resolve(import.meta.dir, "../simulator-portal/main.ts");
-  if (!(await stat(entry).catch(() => null))?.isFile())
-    throw new Error(
-      "Simulator Portals currently require a source installation of Open Session on macOS.",
-    );
+  const entry = await simulatorEntryPath();
   const name = `ios-simulator-${createHash("sha256").update(input.sessionId).digest("hex").slice(0, 12)}`;
   const args = [
     process.execPath,
     entry,
     "--session",
     input.sessionId,
+    "--storage-root",
+    simulatorStorageRoot(),
     "--workspace",
     workspace,
     "--app",

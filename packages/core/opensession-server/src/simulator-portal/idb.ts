@@ -1,6 +1,17 @@
+import { simulatorStorageRoot } from "./storage-root";
 import { createHash, randomUUID } from "crypto";
-import { mkdir, open, readFile, realpath, rename, rm, stat } from "fs/promises";
-import { basename, extname, isAbsolute, join, relative } from "path";
+import {
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  stat,
+} from "fs/promises";
+import { basename, dirname, extname, isAbsolute, join, relative } from "path";
 import {
   createPersistentIdbInput,
   idbHidEvent,
@@ -44,6 +55,8 @@ export type OpenIdbSimulatorOptions = {
   appPath: string;
   deviceType?: string;
   runtime?: string;
+  /** Pinned by the supervisor, never accepted as an MCP argument. */
+  storageRoot?: string;
 };
 
 type RunResult = { exitCode: number; stdout: string; stderr: string };
@@ -63,6 +76,8 @@ export type IdbSimulatorDependencies = {
   platform: NodeJS.Platform;
   pid: number;
   capacityRoot?: string;
+  /** Durable storage root. Tests should always provide a private directory. */
+  durableRoot?: string;
   createInput?: (socketPath: string) => PersistentIdbInput;
 };
 
@@ -73,7 +88,7 @@ const PROCESS_STOP_TIMEOUT_MS = 5_000;
 const CAPACITY_ROOT = "/tmp/opensession-idb-simulator-capacity";
 const MAX_ACTIVE_SIMULATORS = 2;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const LEASE_ROOT = /^\/tmp\/osi-[0-9a-f]{8}-[0-9a-f]{8}$/;
+const LEGACY_LEASE_ROOT = /^\/tmp\/osi-[0-9a-f]{8}-[0-9a-f]{8}$/;
 
 const environment = (): Record<string, string> => {
   const result: Record<string, string> = {
@@ -235,6 +250,9 @@ type SlotOwner = {
   leaseRoot: string;
   deviceSet: string;
   udid?: string;
+  kind?: "persistent";
+  repositoryRoot?: string;
+  durableRoot?: string;
 };
 type CapacityLease = {
   updateUdid: (udid: string) => Promise<void>;
@@ -248,26 +266,42 @@ const parseSlotOwner = (value: unknown): SlotOwner | undefined => {
   if (!isRecord(value)) return undefined;
   if (
     typeof value.pid !== "number" ||
+    !Number.isSafeInteger(value.pid) ||
+    value.pid <= 0 ||
     typeof value.token !== "string" ||
+    !/^[A-Za-z0-9-]{1,128}$/.test(value.token) ||
     typeof value.leaseRoot !== "string" ||
     typeof value.deviceSet !== "string" ||
-    (value.udid !== undefined && typeof value.udid !== "string")
+    (value.udid !== undefined && typeof value.udid !== "string") ||
+    (value.kind !== undefined && value.kind !== "persistent") ||
+    (value.repositoryRoot !== undefined &&
+      typeof value.repositoryRoot !== "string") ||
+    (value.durableRoot !== undefined && typeof value.durableRoot !== "string")
   )
     return undefined;
+  if (value.kind === "persistent" && !UUID.test(value.token)) return undefined;
   return {
     pid: value.pid,
     token: value.token,
     leaseRoot: value.leaseRoot,
     deviceSet: value.deviceSet,
     ...(value.udid === undefined ? {} : { udid: value.udid }),
+    ...(value.kind === undefined ? {} : { kind: value.kind }),
+    ...(value.repositoryRoot === undefined
+      ? {}
+      : { repositoryRoot: value.repositoryRoot }),
+    ...(value.durableRoot === undefined
+      ? {}
+      : { durableRoot: value.durableRoot }),
   };
 };
 
 const readOwner = async (slot: string): Promise<SlotOwner | undefined> => {
   try {
-    return parseSlotOwner(
-      JSON.parse(await readFile(join(slot, "owner.json"), "utf8")),
-    );
+    const ownerPath = join(slot, "owner.json");
+    const ownerStat = await lstat(ownerPath);
+    if (!ownerStat.isFile() || ownerStat.isSymbolicLink()) return undefined;
+    return parseSlotOwner(JSON.parse(await readFile(ownerPath, "utf8")));
   } catch {
     return undefined;
   }
@@ -284,14 +318,58 @@ const processExists = async (
   );
 };
 
+const validatedPersistentSet = async (
+  owner: SlotOwner,
+  expectedDurableRoot: string | undefined,
+): Promise<string> => {
+  if (
+    owner.kind !== "persistent" ||
+    owner.repositoryRoot === undefined ||
+    owner.durableRoot === undefined ||
+    !isAbsolute(owner.repositoryRoot) ||
+    !isAbsolute(owner.durableRoot) ||
+    !isAbsolute(owner.deviceSet) ||
+    owner.durableRoot !== expectedDurableRoot
+  ) {
+    throw new Error("Invalid persistent simulator lease metadata");
+  }
+  const durableRoot = await realpath(owner.durableRoot);
+  const repositoryRoot = await realpath(owner.repositoryRoot);
+  const deviceSet = await realpath(owner.deviceSet);
+  const repositoryRelative = relative(durableRoot, repositoryRoot);
+  const setRelative = relative(repositoryRoot, deviceSet);
+  if (
+    durableRoot !== owner.durableRoot ||
+    repositoryRoot !== owner.repositoryRoot ||
+    deviceSet !== owner.deviceSet ||
+    !/^repositories\/[0-9a-f]{64}$/.test(repositoryRelative) ||
+    !(
+      /^profiles\/[0-9a-f]{64}\/set$/.test(setRelative) ||
+      setRelative === "control-set" ||
+      setRelative === "clear-set"
+    ) ||
+    (await lstat(deviceSet)).isSymbolicLink()
+  ) {
+    throw new Error("Unsafe persistent simulator path; refusing cleanup");
+  }
+  return deviceSet;
+};
+
 const cleanupStale = async (
   runner: ProcessRunner,
   simctl: string,
   owner: SlotOwner | undefined,
+  expectedDurableRoot?: string,
 ): Promise<void> => {
+  if (owner?.kind === "persistent") {
+    const deviceSet = await validatedPersistentSet(owner, expectedDurableRoot);
+    await runChecked(runner, [simctl, "--set", deviceSet, "shutdown", "all"]);
+    await assertDeviceSetShutdown(runner, simctl, deviceSet);
+    return;
+  }
   if (
     owner === undefined ||
-    !LEASE_ROOT.test(owner.leaseRoot) ||
+    !LEGACY_LEASE_ROOT.test(owner.leaseRoot) ||
     owner.deviceSet !== join(owner.leaseRoot, "set")
   ) {
     throw new Error(
@@ -299,9 +377,6 @@ const cleanupStale = async (
     );
   }
   const prefix = [simctl, "--set", owner.deviceSet];
-  // A crash can happen between create and persisting the returned UDID.
-  // This set belongs exclusively to this lease, so deleting all of *this
-  // private set* also recovers that gap, never another session's devices.
   await runner.run([...prefix, "shutdown", "all"], {
     timeoutMs: COMMAND_TIMEOUT_MS,
   });
@@ -319,6 +394,7 @@ const acquireCapacity = async (
   for (let index = 0; index < MAX_ACTIVE_SIMULATORS; index += 1) {
     const slot = join(capacityRoot, `slot-${index}`);
     let recovering: string | undefined;
+    let repositoryRecovery: RepositoryLease | undefined;
     try {
       await mkdir(slot, { mode: 0o700 });
     } catch (error) {
@@ -334,12 +410,41 @@ const acquireCapacity = async (
       // Missing or damaged metadata cannot prove which device set is ours.
       // Fail closed, including the brief initial mkdir/owner-write window.
       if (previous === undefined) continue;
+      if (
+        previous.kind === "persistent" &&
+        previous.repositoryRoot !== owner.repositoryRoot
+      ) {
+        if (
+          previous.repositoryRoot === undefined ||
+          previous.durableRoot === undefined ||
+          previous.durableRoot !== owner.durableRoot
+        )
+          continue;
+        try {
+          await validatedPersistentSet(previous, owner.durableRoot);
+          repositoryRecovery = await acquireRepository(
+            runner,
+            simctl,
+            previous.repositoryRoot,
+            {
+              ...previous,
+              pid: owner.pid,
+              token: randomUUID(),
+            },
+          );
+        } catch {
+          // A newer owner may already be using this repository. Its stale
+          // capacity record must never be allowed to shut that owner down.
+          continue;
+        }
+      }
       // Keep the capacity slot occupied throughout recovery. Moving the slot
       // away would admit another simulator before the old device was deleted.
       const recovery = join(slot, "recovering");
       try {
         await mkdir(recovery, { mode: 0o700 });
       } catch {
+        await repositoryRecovery?.release();
         continue;
       }
       const current = await readOwner(slot);
@@ -348,12 +453,14 @@ const acquireCapacity = async (
         (current && (await processExists(runner, current.pid)))
       ) {
         await rm(recovery, { recursive: true, force: true });
+        await repositoryRecovery?.release();
         continue;
       }
       try {
-        await cleanupStale(runner, simctl, current);
+        await cleanupStale(runner, simctl, current, owner.durableRoot);
       } catch (cause) {
         await rm(recovery, { recursive: true, force: true });
+        await repositoryRecovery?.release();
         throw new Error(
           "Could not recover the previous simulator; its capacity slot was preserved",
           { cause },
@@ -372,8 +479,14 @@ const acquireCapacity = async (
       }
       await rename(temporary, join(slot, "owner.json"));
     };
-    await writeOwner();
-    if (recovering) await rm(recovering, { recursive: true, force: true });
+    try {
+      await writeOwner();
+      if (recovering) await rm(recovering, { recursive: true, force: true });
+    } catch (error) {
+      await repositoryRecovery?.release();
+      throw error;
+    }
+    await repositoryRecovery?.release();
     return {
       async updateUdid(udid) {
         owner.udid = udid;
@@ -389,6 +502,232 @@ const acquireCapacity = async (
   throw new Error(
     `Simulator capacity is full (${MAX_ACTIVE_SIMULATORS} active sessions)`,
   );
+};
+
+type RepositoryLease = {
+  update: () => Promise<void>;
+  release: () => Promise<void>;
+};
+type StoredProfile = {
+  deviceIdentifier: string;
+  runtimeIdentifier: string;
+  deviceName: string;
+  udid?: string;
+};
+
+type RepositoryStorage = {
+  repositoryRoot: string;
+  durableRoot: string;
+};
+
+const writeJsonAtomic = async (path: string, value: unknown): Promise<void> => {
+  const temporary = join(
+    dirname(path),
+    `.${basename(path)}-${randomUUID()}.tmp`,
+  );
+  const file = await open(temporary, "wx", 0o600);
+  try {
+    await file.writeFile(JSON.stringify(value));
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+  await rename(temporary, path);
+};
+
+const canonicalRepository = async (
+  runner: ProcessRunner,
+  workspaceDir: string,
+): Promise<string> => {
+  const workspace = await realpath(workspaceDir);
+  const git = await runner.run(
+    [
+      "/usr/bin/git",
+      "-C",
+      workspace,
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+    ],
+    { timeoutMs: COMMAND_TIMEOUT_MS },
+  );
+  if (git.exitCode !== 0) {
+    const detail = git.stderr.trim() || git.stdout.trim();
+    if (/not a git repository|not a git work tree/i.test(detail))
+      return workspace;
+    throw new Error(
+      `Could not resolve git common directory: ${detail || `exit ${git.exitCode}`}`,
+    );
+  }
+  const commonDirectory = git.stdout.trim();
+  if (!isAbsolute(commonDirectory)) {
+    throw new Error("git returned a non-absolute common directory");
+  }
+  return realpath(commonDirectory);
+};
+
+const prepareRepositoryStorage = async (
+  runner: ProcessRunner,
+  workspaceDir: string,
+  durableRootOption: string | undefined,
+): Promise<RepositoryStorage> => {
+  const canonicalPath = await canonicalRepository(runner, workspaceDir);
+  const requestedRoot = durableRootOption ?? simulatorStorageRoot();
+  await mkdir(requestedRoot, { recursive: true, mode: 0o700 });
+  const durableRoot = await realpath(requestedRoot);
+  const repositoryRoot = join(
+    durableRoot,
+    "repositories",
+    createHash("sha256").update(canonicalPath).digest("hex"),
+  );
+  await mkdir(repositoryRoot, { recursive: true, mode: 0o700 });
+  if ((await realpath(repositoryRoot)) !== repositoryRoot) {
+    throw new Error("Unsafe simulator repository storage path");
+  }
+  const metadataPath = join(repositoryRoot, "repository.json");
+  try {
+    if ((await lstat(metadataPath)).isSymbolicLink())
+      throw new Error("Unsafe simulator repository metadata");
+    const metadata: unknown = JSON.parse(await readFile(metadataPath, "utf8"));
+    if (!isRecord(metadata) || metadata.canonicalPath !== canonicalPath) {
+      throw new Error("Simulator repository metadata does not match workspace");
+    }
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      await writeJsonAtomic(metadataPath, { version: 1, canonicalPath });
+    } else if (error instanceof SyntaxError) {
+      throw new Error("Invalid simulator repository metadata; refusing access");
+    } else {
+      throw error;
+    }
+  }
+  return { repositoryRoot, durableRoot };
+};
+
+const profilePath = (
+  repositoryRoot: string,
+  deviceIdentifier: string,
+  runtimeIdentifier: string,
+): string =>
+  join(
+    repositoryRoot,
+    "profiles",
+    createHash("sha256")
+      .update(`${deviceIdentifier}\0${runtimeIdentifier}`)
+      .digest("hex"),
+  );
+
+const readStoredProfile = async (
+  profileRoot: string,
+  expected: Omit<StoredProfile, "udid">,
+): Promise<StoredProfile> => {
+  await mkdir(profileRoot, { recursive: true, mode: 0o700 });
+  if ((await realpath(profileRoot)) !== profileRoot)
+    throw new Error("Unsafe simulator profile path");
+  const metadataPath = join(profileRoot, "profile.json");
+  try {
+    await lstat(join(profileRoot, ".clearing"));
+    throw new Error(
+      "Simulator storage clear was interrupted; retry clearing storage",
+    );
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+      throw error;
+  }
+  try {
+    if ((await lstat(metadataPath)).isSymbolicLink())
+      throw new Error("Unsafe simulator profile metadata");
+    const value: unknown = JSON.parse(await readFile(metadataPath, "utf8"));
+    if (
+      !isRecord(value) ||
+      value.deviceIdentifier !== expected.deviceIdentifier ||
+      value.runtimeIdentifier !== expected.runtimeIdentifier ||
+      value.deviceName !== expected.deviceName ||
+      (value.udid !== undefined &&
+        (typeof value.udid !== "string" || !UUID.test(value.udid)))
+    ) {
+      throw new Error("Invalid simulator profile metadata; refusing access");
+    }
+    return { ...expected, ...(value.udid ? { udid: value.udid } : {}) };
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      await writeJsonAtomic(metadataPath, expected);
+      return expected;
+    }
+    throw error instanceof SyntaxError
+      ? new Error("Invalid simulator profile metadata; refusing access")
+      : error;
+  }
+};
+
+const acquireRepository = async (
+  runner: ProcessRunner,
+  simctl: string,
+  repositoryRoot: string,
+  owner: SlotOwner,
+): Promise<RepositoryLease> => {
+  const active = join(repositoryRoot, "active");
+  try {
+    await mkdir(active, { mode: 0o700 });
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !("code" in error) ||
+      error.code !== "EEXIST"
+    )
+      throw error;
+    const activeStat = await lstat(active);
+    if (!activeStat.isDirectory() || activeStat.isSymbolicLink())
+      throw new Error("Unsafe simulator repository lock path");
+    const previous = await readOwner(active);
+    if (previous === undefined)
+      throw new Error("Simulator repository is locked by invalid metadata");
+    if (await processExists(runner, previous.pid))
+      throw new Error("A simulator for this repository is already in use");
+    const recovery = join(active, "recovering");
+    try {
+      await mkdir(recovery, { mode: 0o700 });
+    } catch {
+      throw new Error("Simulator repository recovery is already in progress");
+    }
+    const current = await readOwner(active);
+    if (
+      current?.token !== previous.token ||
+      current.repositoryRoot !== repositoryRoot ||
+      current.durableRoot !== owner.durableRoot ||
+      (await processExists(runner, current.pid))
+    ) {
+      await rm(recovery, { recursive: true, force: true });
+      throw new Error("A simulator for this repository is already in use");
+    }
+    try {
+      await cleanupStale(runner, simctl, current, owner.durableRoot);
+      await rm(active, { recursive: true });
+    } catch (cause) {
+      await rm(recovery, { recursive: true, force: true });
+      throw new Error(
+        "Could not safely recover the repository simulator lock",
+        {
+          cause,
+        },
+      );
+    }
+    return acquireRepository(runner, simctl, repositoryRoot, owner);
+  }
+  const writeOwner = () => writeJsonAtomic(join(active, "owner.json"), owner);
+  try {
+    await writeOwner();
+  } catch (error) {
+    await rm(active, { recursive: true, force: true });
+    throw error;
+  }
+  return {
+    update: writeOwner,
+    async release() {
+      if ((await readOwner(active))?.token === owner.token)
+        await rm(active, { recursive: true, force: true });
+    },
+  };
 };
 
 type DeviceType = { name: string; identifier: string };
@@ -627,6 +966,278 @@ const parseDimensions = (
   };
 };
 
+const findStoredUdid = async (
+  runner: ProcessRunner,
+  simctl: string,
+  deviceSet: string,
+  configuration: {
+    deviceIdentifier: string;
+    runtimeIdentifier: string;
+  },
+): Promise<string | undefined> => {
+  const value: unknown = JSON.parse(
+    await runChecked(runner, [
+      simctl,
+      "--set",
+      deviceSet,
+      "list",
+      "devices",
+      "-j",
+    ]),
+  );
+  if (!isRecord(value) || !isRecord(value.devices))
+    throw new Error("simctl returned invalid retained device data");
+  const retained: string[] = [];
+  for (const [runtime, devices] of Object.entries(value.devices)) {
+    if (!Array.isArray(devices))
+      throw new Error("simctl returned invalid retained device data");
+    for (const device of devices) {
+      if (
+        runtime !== configuration.runtimeIdentifier ||
+        !isRecord(device) ||
+        typeof device.udid !== "string" ||
+        !UUID.test(device.udid) ||
+        (device.deviceTypeIdentifier !== undefined &&
+          device.deviceTypeIdentifier !== configuration.deviceIdentifier)
+      ) {
+        throw new Error("Unexpected device in retained simulator profile");
+      }
+      retained.push(device.udid);
+    }
+  }
+  if (retained.length > 1)
+    throw new Error("Retained simulator profile contains multiple devices");
+  return retained[0];
+};
+
+const assertDeviceSetShutdown = async (
+  runner: ProcessRunner,
+  simctl: string,
+  deviceSet: string,
+): Promise<void> => {
+  const value: unknown = JSON.parse(
+    await runChecked(runner, [
+      simctl,
+      "--set",
+      deviceSet,
+      "list",
+      "devices",
+      "-j",
+    ]),
+  );
+  if (!isRecord(value) || !isRecord(value.devices))
+    throw new Error(
+      "simctl returned invalid device state while clearing storage",
+    );
+  for (const devices of Object.values(value.devices)) {
+    if (!Array.isArray(devices))
+      throw new Error(
+        "simctl returned invalid device state while clearing storage",
+      );
+    for (const device of devices) {
+      if (!isRecord(device) || device.state !== "Shutdown")
+        throw new Error("Simulator did not shut down; storage was preserved");
+    }
+  }
+};
+
+const releaseRepositoryCapacityRecords = async (
+  runner: ProcessRunner,
+  capacityRoot: string,
+  storage: RepositoryStorage,
+  verifiedDeviceSets: ReadonlySet<string>,
+): Promise<void> => {
+  for (let index = 0; index < MAX_ACTIVE_SIMULATORS; index += 1) {
+    const slot = join(capacityRoot, `slot-${index}`);
+    let slotStat;
+    try {
+      slotStat = await lstat(slot);
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT")
+        continue;
+      throw error;
+    }
+    if (!slotStat.isDirectory() || slotStat.isSymbolicLink())
+      throw new Error("Unsafe simulator capacity slot; refusing clear");
+    const previous = await readOwner(slot);
+    if (previous === undefined)
+      throw new Error("Invalid simulator capacity metadata; refusing clear");
+    if (
+      previous.kind !== "persistent" ||
+      previous.repositoryRoot !== storage.repositoryRoot ||
+      previous.durableRoot !== storage.durableRoot
+    ) {
+      continue;
+    }
+    const setRelative = relative(storage.repositoryRoot, previous.deviceSet);
+    if (
+      !isAbsolute(previous.deviceSet) ||
+      !/^profiles\/[0-9a-f]{64}\/set$/.test(setRelative) ||
+      !verifiedDeviceSets.has(previous.deviceSet)
+    ) {
+      throw new Error("Invalid repository capacity metadata; refusing clear");
+    }
+    if (await processExists(runner, previous.pid))
+      throw new Error(
+        "The repository still has an active simulator capacity lease",
+      );
+    const recovery = join(slot, "recovering");
+    try {
+      await mkdir(recovery, { mode: 0o700 });
+    } catch {
+      throw new Error("Simulator capacity recovery is already in progress");
+    }
+    const current = await readOwner(slot);
+    if (
+      current?.token !== previous.token ||
+      current.repositoryRoot !== storage.repositoryRoot ||
+      current.durableRoot !== storage.durableRoot ||
+      (await processExists(runner, current.pid))
+    ) {
+      await rm(recovery, { recursive: true, force: true });
+      throw new Error("Simulator capacity changed while clearing storage");
+    }
+    await rm(slot, { recursive: true });
+  }
+};
+
+export const clearIdbSimulatorStorage = async (
+  options: { workspaceDir: string; storageRoot?: string },
+  dependencies: IdbSimulatorDependencies = {
+    runner: defaultRunner,
+    platform: process.platform,
+    pid: process.pid,
+  },
+): Promise<void> => {
+  if (dependencies.platform !== "darwin")
+    throw new Error("Simulator storage can only be cleared on macOS");
+  const simctl = await findExecutable(dependencies.runner, "simctl");
+  const storage = await prepareRepositoryStorage(
+    dependencies.runner,
+    options.workspaceDir,
+    dependencies.durableRoot ?? options.storageRoot,
+  );
+  const clearSet = join(storage.repositoryRoot, "clear-set");
+  await mkdir(clearSet, { recursive: true, mode: 0o700 });
+  if ((await realpath(clearSet)) !== clearSet)
+    throw new Error("Unsafe simulator clear path");
+  const token = randomUUID();
+  const owner: SlotOwner = {
+    pid: dependencies.pid,
+    token,
+    leaseRoot: storage.repositoryRoot,
+    deviceSet: clearSet,
+    kind: "persistent",
+    repositoryRoot: storage.repositoryRoot,
+    durableRoot: storage.durableRoot,
+  };
+  const lease = await acquireRepository(
+    dependencies.runner,
+    simctl,
+    storage.repositoryRoot,
+    owner,
+  );
+  try {
+    const profilesRoot = join(storage.repositoryRoot, "profiles");
+    let entries: Array<{
+      name: string;
+      isDirectory: () => boolean;
+      isSymbolicLink: () => boolean;
+    }> = [];
+    try {
+      if ((await realpath(profilesRoot)) !== profilesRoot)
+        throw new Error("Unsafe simulator profiles path");
+      entries = await readdir(profilesRoot, { withFileTypes: true });
+    } catch (error) {
+      if (
+        !(error instanceof Error && "code" in error && error.code === "ENOENT")
+      )
+        throw error;
+    }
+    const profiles: Array<{ root: string; deviceSet: string }> = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.isSymbolicLink())
+        throw new Error("Invalid simulator profile entry; refusing clear");
+      const root = join(profilesRoot, entry.name);
+      if ((await realpath(root)) !== root)
+        throw new Error("Unsafe simulator profile path; refusing clear");
+      const metadataPath = join(root, "profile.json");
+      let clearing = false;
+      try {
+        const marker = await lstat(join(root, ".clearing"));
+        if (!marker.isFile() || marker.isSymbolicLink())
+          throw new Error("Unsafe simulator clear marker");
+        clearing = true;
+      } catch (error) {
+        if (
+          !(
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT"
+          )
+        )
+          throw error;
+      }
+      if (!clearing) {
+        if ((await lstat(metadataPath)).isSymbolicLink())
+          throw new Error("Unsafe simulator profile metadata; refusing clear");
+        const metadata: unknown = JSON.parse(
+          await readFile(metadataPath, "utf8"),
+        );
+        if (
+          !isRecord(metadata) ||
+          typeof metadata.deviceIdentifier !== "string" ||
+          typeof metadata.runtimeIdentifier !== "string" ||
+          typeof metadata.deviceName !== "string" ||
+          (metadata.udid !== undefined &&
+            (typeof metadata.udid !== "string" || !UUID.test(metadata.udid)))
+        ) {
+          throw new Error("Invalid simulator profile metadata; refusing clear");
+        }
+      }
+      const deviceSet = join(root, "set");
+      if ((await realpath(deviceSet)) !== deviceSet)
+        throw new Error("Unsafe simulator device set; refusing clear");
+      profiles.push({ root, deviceSet });
+    }
+    // Preflight every retained profile before changing any of them.
+    for (const { deviceSet } of profiles) {
+      await runChecked(dependencies.runner, [
+        simctl,
+        "--set",
+        deviceSet,
+        "shutdown",
+        "all",
+      ]);
+    }
+    for (const { deviceSet } of profiles)
+      await assertDeviceSetShutdown(dependencies.runner, simctl, deviceSet);
+    await releaseRepositoryCapacityRecords(
+      dependencies.runner,
+      dependencies.capacityRoot ?? CAPACITY_ROOT,
+      storage,
+      new Set(profiles.map(({ deviceSet }) => deviceSet)),
+    );
+    for (const { root, deviceSet } of profiles) {
+      await writeJsonAtomic(join(root, ".clearing"), { version: 1 });
+      await rm(join(root, "profile.json"), { force: true });
+      await runChecked(dependencies.runner, [
+        simctl,
+        "--set",
+        deviceSet,
+        "delete",
+        "all",
+      ]);
+      // Removing each completed profile makes an interrupted clear retryable:
+      // no retained metadata can point at a device that was already deleted.
+      await rm(root, { recursive: true });
+    }
+    await rm(profilesRoot, { recursive: true, force: true });
+  } finally {
+    await lease.release();
+  }
+};
+
 export const openIdbSimulator = async (
   options: OpenIdbSimulatorOptions,
   dependencies: IdbSimulatorDependencies = {
@@ -652,28 +1263,75 @@ export const openIdbSimulator = async (
     findExecutable(dependencies.runner, "idb"),
     findExecutable(dependencies.runner, "idb_companion"),
   ]);
+  const configuration = await chooseConfiguration(
+    dependencies.runner,
+    simctl,
+    options.deviceType,
+    options.runtime,
+  );
+  const storage = await prepareRepositoryStorage(
+    dependencies.runner,
+    options.workspaceDir,
+    dependencies.durableRoot ?? options.storageRoot,
+  );
+  const profileRoot = profilePath(
+    storage.repositoryRoot,
+    configuration.deviceIdentifier,
+    configuration.runtimeIdentifier,
+  );
+  const deviceSet = join(profileRoot, "set");
+  const controlSet = join(storage.repositoryRoot, "control-set");
+  await mkdir(controlSet, { recursive: true, mode: 0o700 });
+  if ((await realpath(controlSet)) !== controlSet)
+    throw new Error("Unsafe simulator control path");
+
   const token = randomUUID();
-  const sessionHash = createHash("sha256")
-    .update(options.sessionId)
-    .digest("hex")
-    .slice(0, 8);
-  const leaseRoot = `/tmp/osi-${sessionHash}-${token.slice(0, 8)}`;
-  const deviceSet = join(leaseRoot, "set");
-  const socketPath = join(leaseRoot, "idb.sock");
-  await mkdir(deviceSet, { recursive: true, mode: 0o700 });
+  const repositoryHash = basename(storage.repositoryRoot).slice(0, 8);
+  const runtimeRoot = `/tmp/osi-${repositoryHash}-${token.slice(0, 8)}`;
+  const socketPath = join(runtimeRoot, "idb.sock");
+  await mkdir(runtimeRoot, { mode: 0o700 });
+  const owner: SlotOwner = {
+    pid: dependencies.pid,
+    token,
+    leaseRoot: runtimeRoot,
+    deviceSet: controlSet,
+    kind: "persistent",
+    repositoryRoot: storage.repositoryRoot,
+    durableRoot: storage.durableRoot,
+  };
+  let repositoryLease: RepositoryLease;
   let capacity: CapacityLease;
+  let storedProfile: StoredProfile;
   try {
-    capacity = await acquireCapacity(
+    repositoryLease = await acquireRepository(
       dependencies.runner,
       simctl,
-      { pid: dependencies.pid, token, leaseRoot, deviceSet },
-      dependencies.capacityRoot ?? CAPACITY_ROOT,
+      storage.repositoryRoot,
+      owner,
     );
+    try {
+      storedProfile = await readStoredProfile(profileRoot, configuration);
+      await mkdir(deviceSet, { recursive: true, mode: 0o700 });
+      if ((await realpath(deviceSet)) !== deviceSet)
+        throw new Error("Unsafe simulator device set path");
+      owner.deviceSet = deviceSet;
+      if (storedProfile.udid !== undefined) owner.udid = storedProfile.udid;
+      await repositoryLease.update();
+      capacity = await acquireCapacity(
+        dependencies.runner,
+        simctl,
+        owner,
+        dependencies.capacityRoot ?? CAPACITY_ROOT,
+      );
+    } catch (error) {
+      await repositoryLease.release();
+      throw error;
+    }
   } catch (error) {
-    await rm(leaseRoot, { recursive: true, force: true });
+    await rm(runtimeRoot, { recursive: true, force: true });
     throw error;
   }
-  let udid: string | undefined;
+  let udid: string | undefined = storedProfile.udid;
   let companionProcess: RunningProcess | undefined;
   let video: { stop: () => Promise<void> } | undefined;
   let inputTransport: PersistentIdbInput | undefined;
@@ -689,39 +1347,51 @@ export const openIdbSimulator = async (
     if (companionProcess !== undefined)
       await stopProcess(companionProcess).catch(() => undefined);
     if (udid !== undefined) {
-      await dependencies.runner
-        .run([...simctlPrefix, "shutdown", udid], {
-          timeoutMs: COMMAND_TIMEOUT_MS,
-        })
-        .catch(() => undefined);
-      // Keep the durable slot if CoreSimulator refuses deletion. The next
-      // start can recover it after this owner exits instead of losing track
-      // of a still-running device and admitting another one.
-      await runChecked(dependencies.runner, [...simctlPrefix, "delete", udid]);
+      // Do not release either lease until CoreSimulator confirms shutdown.
+      // A failed shutdown remains recoverable without admitting a third boot.
+      await runChecked(dependencies.runner, [
+        ...simctlPrefix,
+        "shutdown",
+        udid,
+      ]);
+      await assertDeviceSetShutdown(dependencies.runner, simctl, deviceSet);
     }
-    await rm(leaseRoot, { recursive: true, force: true }).catch(
-      () => undefined,
-    );
     await capacity.release();
+    await repositoryLease.release();
+    await rm(runtimeRoot, { recursive: true, force: true });
   };
 
   try {
-    const configuration = await chooseConfiguration(
-      dependencies.runner,
-      simctl,
-      options.deviceType,
-      options.runtime,
-    );
-    const uniqueName = `Open Session ${sessionHash} ${token.slice(0, 6)}`;
-    udid = await runChecked(dependencies.runner, [
-      ...simctlPrefix,
-      "create",
-      uniqueName,
-      configuration.deviceIdentifier,
-      configuration.runtimeIdentifier,
-    ]);
-    if (!UUID.test(udid))
-      throw new Error(`simctl create returned an invalid UDID: ${udid}`);
+    if (udid === undefined) {
+      udid = await findStoredUdid(
+        dependencies.runner,
+        simctl,
+        deviceSet,
+        configuration,
+      );
+      if (udid !== undefined) {
+        await writeJsonAtomic(join(profileRoot, "profile.json"), {
+          ...configuration,
+          udid,
+        });
+      }
+    }
+    if (udid === undefined) {
+      const uniqueName = `Open Session ${repositoryHash} ${basename(profileRoot).slice(0, 6)}`;
+      udid = await runChecked(dependencies.runner, [
+        ...simctlPrefix,
+        "create",
+        uniqueName,
+        configuration.deviceIdentifier,
+        configuration.runtimeIdentifier,
+      ]);
+      if (!UUID.test(udid))
+        throw new Error(`simctl create returned an invalid UDID: ${udid}`);
+      await writeJsonAtomic(join(profileRoot, "profile.json"), {
+        ...configuration,
+        udid,
+      });
+    }
     await capacity.updateUdid(udid);
     await runChecked(dependencies.runner, [...simctlPrefix, "boot", udid]);
     await runChecked(
@@ -751,7 +1421,7 @@ export const openIdbSimulator = async (
       "--grpc-domain-sock",
       socketPath,
       "--log-file-path",
-      join(leaseRoot, "companion.log"),
+      join(runtimeRoot, "companion.log"),
       "--terminate-offline",
       "1",
     ]);
