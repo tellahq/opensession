@@ -1007,7 +1007,15 @@ struct SessionView: View {
                 }
                 #endif
                 catalog = try? await OS1API.models(workspaceId: viewModel.session.workspaceId)
+                #if DEBUG
+                if ProcessInfo.processInfo.environment["OS1_WEEKLY_REMAINING_FIXTURE"] != nil {
+                    accounts = ModelSettingsMenu.fixtureAccounts(viewer: ServerConfig.shared.userName)
+                } else {
+                    accounts = await SettingsAPI.providerAccountPools()
+                }
+                #else
                 accounts = await SettingsAPI.providerAccountPools()
+                #endif
                 #if DEBUG && os(iOS)
                 if ProcessInfo.processInfo.environment["OS1_OPEN_WORKTREE_INFO"] == "1" {
                     showWorktreeInfo = true
@@ -1925,6 +1933,15 @@ private struct SessionActionsMenu: View {
     /// one list from being offered in two places at once.
     var workspaceHistory: WorkspaceSessionHistory?
 
+    private var showWeeklyRemainingAction: (() -> Void)? {
+        #if os(iOS)
+        { showWeeklyRemaining = true }
+        #else
+        nil
+        #endif
+    }
+
+    @State private var showWeeklyRemaining = false
     @State private var pendingMerge: String?
     @State private var merging = false
     @State private var mergeError: String?
@@ -2033,7 +2050,8 @@ private struct SessionActionsMenu: View {
             // the web changes from the composer.
             Menu {
                 ModelSettingsMenu(
-                    viewModel: viewModel, catalog: catalog, accounts: accounts, showsUsage: false
+                    viewModel: viewModel, catalog: catalog, accounts: accounts, showsUsage: false,
+                    onShowWeeklyRemaining: showWeeklyRemainingAction
                 )
             } label: {
                 Label("Model settings", systemImage: "slider.horizontal.3")
@@ -2187,6 +2205,18 @@ private struct SessionActionsMenu: View {
             // a session that cannot move: the menu shows the rows before it
             // is opened, so they must be known before then.
             if canMoveToSandbox { await sandboxMove.loadProviders() }
+        }
+        .sheet(isPresented: $showWeeklyRemaining) {
+            NavigationStack {
+                ModelSettingsMenu(viewModel: viewModel, catalog: catalog, accounts: accounts)
+                    .weeklyRemainingOverview
+                    .navigationTitle("Weekly remaining")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showWeeklyRemaining = false }
+                        }
+                    }
+            }
         }
         .confirmationDialog(
             mergeConfirmationTitle,
