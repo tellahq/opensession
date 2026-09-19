@@ -114,7 +114,7 @@ struct NewSessionView: View {
     @AppStorage("os1.newSession.repo") private var lastRepo = ""
     @AppStorage("os1.composer.defaultRepo") private var preferredRepo = ""
     @AppStorage(NativePreferences.sessionCheckoutsStorageKey) private var sessionCheckouts = ""
-    @AppStorage("os1.composer.defaultModel") private var preferredModel = ""
+    @AppStorage(NativePreferences.defaultModelStorageKey) private var preferredModel = ""
     @AppStorage("os1.composer.defaultEngine") private var preferredEngine = ""
 
     var body: some View {
@@ -676,6 +676,21 @@ struct NewSessionView: View {
         selectedModelOption?.fastModeSupported == true
     }
 
+    private var isPreferredDefault: Bool {
+        !effectiveModelID.isEmpty && preferredModel == effectiveModelID
+    }
+
+    /// Nothing to put back: on the workspace default model at its own default
+    /// effort, standard speed. Drives the reset row's disabled state.
+    private var isAtDefault: Bool {
+        guard let catalog else { return true }
+        let defaultModel = catalog.defaultModel ?? ""
+        let onDefaultModel =
+            model.isEmpty || defaultModel.isEmpty || model == defaultModel
+        return onDefaultModel && !fastMode
+            && effort == Self.defaultSelection(in: catalog).effort
+    }
+
     private var modelChipText: String {
         let id = model.isEmpty ? catalog?.defaultModel : model
         #if os(iOS)
@@ -898,6 +913,20 @@ struct NewSessionView: View {
                     ForEach(catalog.regular) { option in
                         modelButton(option)
                     }
+                }
+                Section {
+                    Button(action: setAsDefault) {
+                        Label(
+                            "Set as default",
+                            systemImage: isPreferredDefault ? "checkmark" : "pin"
+                        )
+                    }
+                    .disabled(effectiveModelID.isEmpty || isPreferredDefault)
+
+                    Button(action: resetToDefault) {
+                        Label("Reset to default", systemImage: "arrow.uturn.backward")
+                    }
+                    .disabled(isAtDefault)
                 }
             }
         } label: {
@@ -1146,6 +1175,36 @@ struct NewSessionView: View {
         model = routed
         defaultEffortForCurrentModel()
         if !(option.fastModeSupported == true) { fastMode = false }
+    }
+
+    /// The same personal default the conversation menu sets: this device now,
+    /// the account's `default-model` ui-pref behind it, so the next New session
+    /// on every client starts here.
+    private func setAsDefault() {
+        let model = effectiveModelID
+        guard !model.isEmpty, model != preferredModel else { return }
+        NativePreferences.setDefaultModel(model)
+    }
+
+    /// Back where a fresh composer starts before any preference: the
+    /// workspace's own default model at its default effort, standard speed.
+    /// The web's reset sends "" (follow the default); this pins the same id
+    /// so the menu keeps a checked row, and the run resolves identically.
+    private func resetToDefault() {
+        guard let catalog else { return }
+        let selection = Self.defaultSelection(in: catalog)
+        model = selection.model
+        effort = selection.effort
+        fastMode = false
+    }
+
+    /// Where reset lands: the catalog's interactive default and that model's
+    /// own default effort, resolved against the default rather than the
+    /// current model, whose effort may not exist there.
+    static func defaultSelection(in catalog: ModelCatalog) -> (model: String, effort: String) {
+        let model = catalog.defaultModel ?? ""
+        let efforts = catalog.option(for: model)?.efforts ?? []
+        return (model, efforts.contains("high") ? "high" : (efforts.first ?? ""))
     }
 
     /// "High" is the palette's default where supported; presets (dial) have
