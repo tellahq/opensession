@@ -32,7 +32,7 @@ export const INTERNAL_MCP_CAPABILITIES = {
     // used to land there too, which flooded threads with cards for things
     // the same session would have picked up anyway; those stay in the reply.
     guidance:
-      "Create, inspect, steer, or cancel visible sessions and worker tasks. A request for a new session means `create_session` (or `spawn_task` where that is the only one offered), not an in-process worker. `suggest_task` is only for a drive-by finding: self-contained work unrelated to the current request that this session will not pick up (a bug spotted on the way, a missing test elsewhere). Follow-ups and next steps of the current work go in your reply as a plain suggestion so the person decides. Suggest each task at most once, and do not start it.",
+      "Create, inspect, steer, or cancel visible sessions and worker tasks. A request for a new session means a top-level one: `create_session` with `standalone: true` (or `spawn_task` where that is the only one offered), not a child or in-process worker, unless a child, worker, or sub-session is explicitly asked for. `suggest_task` is only for a drive-by finding: self-contained work unrelated to the current request that this session will not pick up (a bug seen on the way). Follow-ups and next steps go in your reply as a plain suggestion so the person decides. Suggest each at most once; do not start it.",
   },
   "opensession-admin": {
     summary: "Manage automations, MCP connections and channel memory.",
