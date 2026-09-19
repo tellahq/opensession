@@ -255,15 +255,14 @@ jobs:
             const text = kind === "launchd"
               ? `${renderPlist()}\n${renderLauncher()}`
               : await renderUnit();
-            // A source install runs the gateway supervisor; a compiled one
-            // runs `opensession server`.
-            if (
-              !text.includes("gateway-supervisor.ts") &&
-              !text.includes("opensession.ts") &&
-              !text.includes("opensession server")
-            ) {
-              throw new Error("no service command");
-            }
+            // Source installs run TypeScript through bun; compiled installs
+            // run the stable opensession shim. Reject extra arguments or
+            // suffixed script names in either case.
+            const command =
+              kind === "launchd"
+                ? /^exec (?:\S*bun run packages\/core\/opensession-server\/opensession\.ts|\S*opensession server)$/m
+                : /^ExecStart=(?:\S+ run packages\/core\/opensession-server\/src\/server\/gateway-supervisor\.ts|\S+ server)$/m;
+            if (!command.test(text)) throw new Error("wrong service command");
             const user = text.match(/^User=(.*)$/m)?.[1];
             if (user === "unknown") throw new Error("User=unknown would fail 217/USER");
             console.log("service definition ok");
