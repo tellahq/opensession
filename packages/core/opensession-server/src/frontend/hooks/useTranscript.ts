@@ -218,7 +218,21 @@ export function useTranscript({
     setIndexExpected(true);
     indexEpochRef.current = message.epoch;
     setOutlineReady(true);
-    setIndexState({ sessionId, entries: message.entries });
+    // The actor's index read can finish before a live append whose frame
+    // reaches us first. Replace the covered history, but retain mutations
+    // newer than that snapshot. A plain replacement loses already-delivered
+    // prompts; merging all old rows would resurrect history after a reset.
+    setIndexState((current) => ({
+      sessionId,
+      entries: mergeTranscriptIndexEntries(
+        message.entries,
+        current?.sessionId === sessionId
+          ? current.entries.filter(
+              (entry) => entry.changeSeq > message.lastChangeSeq,
+            )
+          : [],
+      ),
+    }));
     rangeDemandReadyRef.current = false;
   };
 
@@ -290,7 +304,9 @@ export function useTranscript({
   };
 
   const projectAppend = (entries: TranscriptEntry[], firstSeq?: number) => {
-    if (indexEpochRef.current === null) return;
+    // Init establishes a provisional outline before the full index arrives.
+    // Appends during that gap still need structural rows: the indexed renderer
+    // deliberately does not render sequenced payloads outside its outline.
     const projected = entries
       .map(transcriptIndexEntryFromPayload)
       .filter((entry): entry is TranscriptIndexEntry => entry !== null);
@@ -302,7 +318,11 @@ export function useTranscript({
           }
         : current,
     );
-    if (entries.length === 0 && firstSeq !== undefined)
+    if (
+      indexEpochRef.current !== null &&
+      entries.length === 0 &&
+      firstSeq !== undefined
+    )
       send({ type: "load_transcript_index", sessionId });
   };
 
