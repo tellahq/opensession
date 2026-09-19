@@ -123,8 +123,11 @@ START_HEAD=$START_HEAD
 EOF
     trap 'stop_run' ERR
 
+    # Cold starts pay for transpiling the server and generating the demo
+    # dataset before either process answers, so these waits are generous:
+    # a timeout here tears the whole run down and costs a relaunch.
     kernel_ready=""
-    for _ in $(seq 1 300); do
+    for _ in $(seq 1 600); do
       if ! kill -0 "$KERNEL_PID" 2>/dev/null; then
         echo "Session kernel exited during launch" >&2
         tail -n 80 "$KERNEL_LOG" >&2 || true
@@ -174,7 +177,7 @@ EOF
     printf 'SERVER_PID=%s\n' "$SERVER_PID" >>"$RUN_FILE"
 
     ready=""
-    for _ in $(seq 1 900); do
+    for _ in $(seq 1 3000); do
       if ! kill -0 "$SERVER_PID" 2>/dev/null; then
         echo "Open Session exited during launch" >&2
         tail -n 80 "$SERVER_LOG" >&2 || true
@@ -188,6 +191,8 @@ EOF
     if [ -z "$ready" ]; then
       echo "Open Session did not become healthy at $APP_URL" >&2
       tail -n 80 "$SERVER_LOG" >&2 || true
+      echo "--- session kernel log ---" >&2
+      tail -n 40 "$KERNEL_LOG" >&2 || true
       stop_run
       exit 1
     fi

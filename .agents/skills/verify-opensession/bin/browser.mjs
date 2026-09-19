@@ -191,17 +191,47 @@ async function matchingNode() {
   );
 }
 
+/**
+ * Mouse input travels in viewport coordinates, so a target parked below the
+ * fold of the page or of a scrollable dialog has to be brought into view
+ * first. Without this the press lands wherever those coordinates happen to
+ * fall — usually on a backdrop, which dismisses the dialog and looks like a
+ * click that did nothing.
+ */
+async function scrollIntoView(node) {
+  await send("DOM.scrollIntoViewIfNeeded", {
+    backendNodeId: node.backendDOMNodeId,
+  });
+}
+
 async function nodeCenter(node) {
+  await scrollIntoView(node);
   const model = await send("DOM.getBoxModel", {
     backendNodeId: node.backendDOMNodeId,
   });
   const quad = model?.model?.border;
   if (!Array.isArray(quad) || quad.length < 8)
     fail("target has no clickable box");
-  return {
+  const center = {
     x: (quad[0] + quad[2] + quad[4] + quad[6]) / 4,
     y: (quad[1] + quad[3] + quad[5] + quad[7]) / 4,
   };
+  // Still outside the viewport after scrolling: report it instead of
+  // dispatching a press at coordinates no element occupies.
+  const { cssLayoutViewport: viewportBox } = await send(
+    "Page.getLayoutMetrics",
+  );
+  if (
+    viewportBox &&
+    (center.x < 0 ||
+      center.y < 0 ||
+      center.x > viewportBox.clientWidth ||
+      center.y > viewportBox.clientHeight)
+  )
+    fail(
+      `target sits outside the ${viewportBox.clientWidth}x${viewportBox.clientHeight} viewport at ${Math.round(center.x)},${Math.round(center.y)} even after scrolling`,
+    );
+  return center;
 }
 
 /** Move the mouse over the node without pressing: opens hover-only UI such

@@ -12,7 +12,7 @@ Goals resume one session across repeated wakes. Users inspect a goal and its led
 
 ## How to get to it (user POV)
 
-- Choose `Goals` from settings tools.
+- Choose `Settings`, then `Goals` in the settings rail. Like automations, goals render inside the settings overlay.
 - Open `/goals` or a shared `/goals/<id>` link.
 - Choose `New goal` from the goals page.
 - Choose a goal row to inspect its ledger and state actions.
@@ -26,10 +26,11 @@ Preconditions:
 - Set `GOAL_NAME="Verification goal $RUN_ID"` so this run's mutation is unambiguous.
 
 - **Open the list.** Run `verify-opensession browser "$RUN_ID" open --route /goals --width 1440 --height 900`, then `verify-opensession browser "$RUN_ID" wait --role heading --name "Goals"`. Capture the seeded list before changing it.
-- **Open the form.** Run `verify-opensession browser "$RUN_ID" click --role button --name "New goal"`, then `verify-opensession browser "$RUN_ID" wait --role button --name "Create goal"`. A form titled `New goal` appears.
+- **Open the form.** Run `verify-opensession browser "$RUN_ID" click --role button --name "New goal"`, then `verify-opensession browser "$RUN_ID" wait --role button --name "Create goal"`. The form exposes textboxes `Name`, `Mission`, and `MCP servers`, comboboxes `Mode`, `Repository`, `Model`, and `Fallback model`, and spinbuttons `Minutes between wakes` and `Max wakes`. `Create goal` starts disabled.
 - **Enter the mission.** Run `verify-opensession browser "$RUN_ID" fill --role textbox --name "Name" --value "$GOAL_NAME"` and `verify-opensession browser "$RUN_ID" fill --role textbox --name "Mission" --value "Inspect the isolated demo state and record one verification result."`. Capture the filled form so the action is visible.
 - **Save.** Run `verify-opensession browser "$RUN_ID" click --role button --name "Create goal"`. The form closes and the goals list returns.
-- **Confirm stored state.** Run `verify-opensession api "$RUN_ID" /api/goals | jq --arg name "$GOAL_NAME" '.[] | select(.name == $name)'`. Require one object with the entered mission. Set `GOAL_ID="$(verify-opensession api "$RUN_ID" /api/goals | jq -r --arg name "$GOAL_NAME" '.[] | select(.name == $name) | .id')"`, then open `/goals/$GOAL_ID`. The detail view names the saved goal.
+- **Confirm stored state.** Run `verify-opensession api "$RUN_ID" /api/goals | jq --arg name "$GOAL_NAME" '.[] | select(.name == $name)'`. Require one object with the entered mission. Set `GOAL_ID="$(verify-opensession api "$RUN_ID" /api/goals | jq -r --arg name "$GOAL_NAME" '.[] | select(.name == $name) | .id')"`, then open `/goals/$GOAL_ID`. The row expands in place under the goals list and names the saved goal, with `Wake now`, `Pause`, and `Edit`.
+- **Change its state.** Choose `Pause`. The stored goal turns `status: "paused"` with a `pauseReason` recorded from the UI, and the detail action becomes `Resume`. Pausing changes stored state only; it starts no wake.
 - **Check phone layout.** Open `/goals/$GOAL_ID` at 390x844. The saved detail appears with a visible `Goals` back action. Use that action to reach the phone list when list navigation is in scope.
 - **Proof.** Save before, filled-form, and after snapshots and screenshots. Save the matching API object as `goals-api.json`.
 
