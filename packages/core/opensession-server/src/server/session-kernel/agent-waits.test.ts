@@ -49,7 +49,9 @@ function handlerDeps(
     schedule: () => {},
     deliver: async () => {},
     getSession: () => undefined,
-    runState: () => "idle",
+    runState: async () => "idle",
+    hasQueuedWork: async () => false,
+    lastTurnEnd: () => undefined,
     transcriptTail: async () => [],
     watch: () => {},
     ...overrides,
@@ -85,7 +87,9 @@ function turnDeps(
   return {
     now: () => 1_000,
     getSession: () => summary("running"),
-    runState: () => "running",
+    runState: async () => "running",
+    hasQueuedWork: async () => false,
+    lastTurnEnd: () => undefined,
     ...overrides,
   };
 }
@@ -375,6 +379,11 @@ describe("session turn waits", () => {
       "pending_question",
     );
     expect(sessionTurnOutcome(summary("idle"), "idle")).toBe("idle");
+    // Work that will run but has not started yet is not a settled turn.
+    expect(sessionTurnOutcome(summary("queued"), "idle")).toBeUndefined();
+    expect(sessionTurnOutcome(summary("idle"), "idle", true)).toBeUndefined();
+    expect(sessionTurnOutcome(summary("idle"), "starting")).toBeUndefined();
+    expect(sessionTurnOutcome(summary("idle"), "preparing")).toBeUndefined();
     expect(sessionTurnOutcome(summary("idle"), "stopped")).toBe("cancelled");
     expect(sessionTurnOutcome(summary("idle"), "failed")).toBe("failed");
     expect(
@@ -411,10 +420,134 @@ describe("session turn waits", () => {
     expect(await getAgentWait("caller-1")).toBeUndefined();
   });
 
+  test("send-then-wait: queued or admitted work keeps an idle-looking target unsettled", async () => {
+    // send_to_session returns once the prompt is durable; the drain that
+    // starts the turn runs later. The warm summary still says idle.
+    const queued = await registerSessionTurnAgentWait(
+      base,
+      turnDeps({
+        getSession: () => summary("idle"),
+        runState: async () => "idle",
+        hasQueuedWork: async () => true,
+      }),
+    );
+    if (!queued.ok) throw new Error(queued.error);
+    expect(queued.wait.kind).toBe("session_turn");
+    expect((queued.wait as SessionTurnAgentWait).observedEndAt).toBeUndefined();
+    expect(store.timer("caller-1", "agent-wait")?.dueAt).toBe(31_000);
+
+    const admitted = await registerSessionTurnAgentWait(
+      { ...base, waitId: "call-turn-admitted" },
+      turnDeps({
+        getSession: () => summary("idle"),
+        runState: async () => "starting",
+      }),
+    );
+    if (!admitted.ok) throw new Error(admitted.error);
+    expect(admitted.replaced).toBe(true);
+    expect(
+      (admitted.wait as SessionTurnAgentWait).observedEndAt,
+    ).toBeUndefined();
+
+    // The poll keeps waiting for the same reasons.
+    const scheduled: number[] = [];
+    expect(
+      await handleAgentWait(
+        (await getAgentWait("caller-1")) as SessionTurnAgentWait,
+        handlerDeps({
+          now: () => 31_000,
+          getSession: () => summary("idle"),
+          hasQueuedWork: async () => true,
+          schedule: (_wait, dueAt) => scheduled.push(dueAt),
+        }),
+      ),
+    ).toBe("rescheduled");
+    expect(scheduled).toEqual([61_000]);
+  });
+
+  test("catches a turn end that passes while registration is mid-await", async () => {
+    // The retained record moves between the snapshot taken before
+    // classification and the recheck after the wait is persisted.
+    const ends = [
+      { at: 500, pendingQuestion: false, seq: 1 },
+      { at: 1_200, pendingQuestion: true, seq: 2 },
+    ];
+    let reads = 0;
+    const registered = await registerSessionTurnAgentWait(
+      base,
+      turnDeps({ lastTurnEnd: () => ends[Math.min(reads++, 1)] }),
+    );
+    expect(registered).toMatchObject({
+      ok: true,
+      wait: {
+        turnEndBefore: { at: 500, seq: 1 },
+        observedEndAt: 1_200,
+        observedOutcome: "pending_question",
+      },
+    });
+    expect(store.timer("caller-1", "agent-wait")?.dueAt).toBe(1_200);
+  });
+
+  test("a poll detects a boundary from the retained record when the target is busy again", async () => {
+    const registered = await registerSessionTurnAgentWait(
+      base,
+      turnDeps({
+        lastTurnEnd: () => ({ at: 500, pendingQuestion: false, seq: 1 }),
+      }),
+    );
+    if (!registered.ok) throw new Error(registered.error);
+    expect(registered.wait).toMatchObject({
+      turnEndBefore: { at: 500, seq: 1 },
+    });
+    expect(
+      (registered.wait as SessionTurnAgentWait).observedEndAt,
+    ).toBeUndefined();
+
+    // Same record: nothing happened, keep polling.
+    const scheduled: number[] = [];
+    expect(
+      await handleAgentWait(
+        registered.wait,
+        handlerDeps({
+          now: () => 31_000,
+          getSession: () => summary("running"),
+          runState: async () => "running",
+          lastTurnEnd: () => ({ at: 500, pendingQuestion: false, seq: 1 }),
+          schedule: (_wait, dueAt) => scheduled.push(dueAt),
+        }),
+      ),
+    ).toBe("rescheduled");
+    expect(scheduled).toEqual([61_000]);
+
+    // A newer record while the target runs its next turn: the boundary
+    // passed (listener missed it, or the process restarted), so deliver.
+    const delivered: string[] = [];
+    expect(
+      await handleAgentWait(
+        registered.wait,
+        handlerDeps({
+          now: () => 61_000,
+          getSession: () => summary("running"),
+          runState: async () => "running",
+          lastTurnEnd: () => ({ at: 40_000, pendingQuestion: false, seq: 7 }),
+          transcriptTail: async () => [assistant("Reply to the brief.")],
+          deliver: async (_wait, message) => {
+            delivered.push(message);
+          },
+        }),
+      ),
+    ).toBe("delivered");
+    expect(delivered[0]).toContain("is idle (turn finished).");
+    expect(delivered[0]).toContain("has since started another turn");
+  });
+
   test("settles immediately when the target is already idle, with the payload", async () => {
     const registered = await registerSessionTurnAgentWait(
       base,
-      turnDeps({ getSession: () => summary("idle"), runState: () => "idle" }),
+      turnDeps({
+        getSession: () => summary("idle"),
+        runState: async () => "idle",
+      }),
     );
     expect(registered).toMatchObject({
       ok: true,
@@ -476,7 +609,7 @@ describe("session turn waits", () => {
         handlerDeps({
           now: () => 31_000,
           getSession: () => summary("running"),
-          runState: () => "running",
+          runState: async () => "running",
           schedule: (_wait, dueAt) => scheduled.push(dueAt),
           watch: (w) => watched.push(w.targetSessionId),
         }),
@@ -542,7 +675,7 @@ describe("session turn waits", () => {
         handlerDeps({
           now: () => 6_000,
           getSession: () => waiting,
-          runState: () => "ask_blocked",
+          runState: async () => "ask_blocked",
           transcriptTail: async () => [assistant("Which auth method?")],
           deliver: async (_wait, message) => {
             delivered.push(message);
@@ -572,7 +705,7 @@ describe("session turn waits", () => {
         handlerDeps({
           now: () => 61_000,
           getSession: () => summary("running"),
-          runState: () => "running",
+          runState: async () => "running",
           schedule: (_wait, dueAt) => scheduled.push(dueAt),
           transcriptTail: async () => [assistant("Still digging.")],
           deliver: async (_wait, message) => {
@@ -608,7 +741,7 @@ describe("session turn waits", () => {
         handlerDeps({
           now: () => 11_000,
           getSession: () => summary("running"),
-          runState: () => "running",
+          runState: async () => "running",
           transcriptTail: async () => [assistant("Reply to the brief.")],
           deliver: async (_wait, message) => {
             delivered.push(message);

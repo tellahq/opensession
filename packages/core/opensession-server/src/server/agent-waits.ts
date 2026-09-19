@@ -17,22 +17,35 @@
  * wait survives restarts; an in-process listener on the session-state event
  * bus pulls the timer forward the moment the target settles, so the common
  * case wakes within a drain tick rather than a poll interval.
+ *
+ * "Settled" is read from authoritative actor state, not the warm summary
+ * cache: a prompt that send_to_session has queued or dispatched but that has
+ * not started yet, and a run that is preparing or starting, both count as
+ * unsettled. The event bus also retains each session's last turn end, so a
+ * boundary that passes while registration or a poll is mid-await is still
+ * detected instead of being mistaken for the next turn.
  */
 import { randomUUIDv7 } from "bun";
 import { getPrDetailsFresh, type PrDetails } from "./pr-info";
 import { wrapContext } from "./prompt-context";
-import { getRunState } from "./run-state";
+import { isRunStateUnsettled, type RunState } from "./run-state";
 import { getSessionControl, type SessionSummary } from "./session-control";
 import {
   registerSessionTimerHandler,
+  sessionDelivery,
   sessionKernel,
+  sessionRunStateSnapshot,
   sessionTimerSnapshot,
   type DurableTimer,
 } from "./session-kernel";
 import { requestSessionKernelRuntimeDrain } from "./session-kernel/wakes";
 import {
+  hasPendingOpening,
+  isTurnEndEvent,
+  lastSessionTurnEnd,
   onSessionStateChange,
   type SessionStateEvent,
+  type SessionTurnEnd,
 } from "./session-state-events";
 import type { TranscriptEntry } from "./types";
 
@@ -99,10 +112,15 @@ export interface SessionTurnAgentWait {
   createdAt: number;
   deadlineAt: number;
   pollSeconds: number;
+  /** The target's last retained turn end when the wait was registered. A
+   * different record later means a boundary passed since registration, even
+   * if the target is busy again by the time anyone looks. */
+  turnEndBefore?: { at: number; seq: number };
   /** Set once a turn end was observed (at registration when the target was
-   * already settled, or by the in-process state listener). The durable
-   * handler then delivers even if the target has already started another
-   * turn, so a busy target cannot make the wait miss the boundary. */
+   * already settled, by the in-process state listener, or from the retained
+   * turn-end record). The durable handler then delivers even if the target
+   * has already started another turn, so a busy target cannot make the wait
+   * miss the boundary. */
   observedEndAt?: number;
   observedOutcome?: SessionTurnOutcome;
 }
@@ -277,31 +295,83 @@ export async function registerPrChecksAgentWait(input: {
   return { ok: true, wait, replaced: !!current };
 }
 
+/** The authoritative reads a session_turn wait classifies a target with.
+ * `getSession` is the same visibility gate as get_session; the rest cross
+ * the actor boundary so a prompt that was just queued or admitted counts. */
 export interface SessionTurnWaitDeps {
   now: () => number;
   /** Same visibility as get_session: undefined when the caller cannot see it. */
   getSession: (id: string) => SessionSummary | undefined;
-  runState: (id: string) => string;
+  /** Durable run state from the session actor, not the gateway projection. */
+  runState: (id: string) => Promise<string>;
+  /** A prompt queued or dispatched for the session that no run owns yet, or
+   * an accepted create whose opening turn has not started. */
+  hasQueuedWork: (id: string) => Promise<boolean>;
+  lastTurnEnd: (id: string) => SessionTurnEnd | undefined;
+}
+
+async function authoritativeRunState(id: string): Promise<string> {
+  return (await sessionRunStateSnapshot(id)).state;
+}
+
+async function authoritativeQueuedWork(id: string): Promise<boolean> {
+  if (hasPendingOpening(id)) return true;
+  const delivery = await sessionDelivery({ op: "snapshot", sessionId: id });
+  return delivery.queued.length > 0 || delivery.dispatch !== undefined;
 }
 
 const defaultSessionTurnDeps: SessionTurnWaitDeps = {
   now: () => Date.now(),
   getSession: (id) => getSessionControl().getSession(id),
-  runState: getRunState,
+  runState: authoritativeRunState,
+  hasQueuedWork: authoritativeQueuedWork,
+  lastTurnEnd: lastSessionTurnEnd,
 };
 
-/** Classify a watched session. `undefined` means its turn is still running. */
+/** Classify a watched session. `undefined` means its turn has not ended:
+ * it is running, or work is queued, dispatched, or starting that will run. */
 export function sessionTurnOutcome(
   session: SessionSummary | undefined,
   runState: string,
+  queuedWork = false,
 ): SessionTurnOutcome | undefined {
   if (!session) return "missing";
   if (session.state === "archived") return "archived";
   if (session.state === "waiting_question") return "pending_question";
-  if (session.state === "running") return undefined;
+  if (session.state === "running" || session.state === "queued")
+    return undefined;
+  if (queuedWork || isRunStateUnsettled(runState as RunState)) return undefined;
   if (runState === "stopped") return "cancelled";
   if (runState === "failed" || session.lastRunError) return "failed";
   return "idle";
+}
+
+async function classifyTarget(
+  targetSessionId: string,
+  deps: Pick<SessionTurnWaitDeps, "getSession" | "runState" | "hasQueuedWork">,
+): Promise<{
+  target: SessionSummary | undefined;
+  outcome: SessionTurnOutcome | undefined;
+}> {
+  const target = deps.getSession(targetSessionId);
+  if (!target) return { target, outcome: "missing" };
+  const [runState, queuedWork] = await Promise.all([
+    deps.runState(targetSessionId),
+    deps.hasQueuedWork(targetSessionId),
+  ]);
+  return { target, outcome: sessionTurnOutcome(target, runState, queuedWork) };
+}
+
+/** A retained turn end that is not the one the wait was registered against. */
+function turnEndSince(
+  wait: SessionTurnAgentWait,
+  retained: SessionTurnEnd | undefined,
+): SessionTurnEnd | undefined {
+  if (!retained) return undefined;
+  const before = wait.turnEndBefore;
+  if (before && before.at === retained.at && before.seq === retained.seq)
+    return undefined;
+  return retained;
 }
 
 export async function registerSessionTurnAgentWait(
@@ -332,7 +402,13 @@ export async function registerSessionTurnAgentWait(
       error:
         "A session cannot wait for its own turn to end. Use kind=timer to wake this session later.",
     };
-  const target = deps.getSession(targetSessionId);
+  // Snapshot the retained boundary before classifying, so a turn that ends
+  // anywhere between here and the recheck below is seen as new.
+  const turnEndBefore = deps.lastTurnEnd(targetSessionId);
+  const { target, outcome: settledNow } = await classifyTarget(
+    targetSessionId,
+    deps,
+  );
   if (!target)
     return {
       ok: false,
@@ -349,7 +425,6 @@ export async function registerSessionTurnAgentWait(
     DEFAULT_SESSION_TURN_TIMEOUT_SECONDS,
     pollSeconds,
   );
-  const settledNow = sessionTurnOutcome(target, deps.runState(targetSessionId));
   const wait: SessionTurnAgentWait = {
     version: 1,
     id: input.waitId || `wait-${randomUUIDv7()}`,
@@ -363,6 +438,9 @@ export async function registerSessionTurnAgentWait(
     createdAt: now,
     deadlineAt: now + timeoutSeconds * 1000,
     pollSeconds,
+    ...(turnEndBefore
+      ? { turnEndBefore: { at: turnEndBefore.at, seq: turnEndBefore.seq } }
+      : {}),
     ...(settledNow ? { observedEndAt: now, observedOutcome: settledNow } : {}),
   };
   const current = await getAgentWait(sessionId);
@@ -378,8 +456,27 @@ export async function registerSessionTurnAgentWait(
       : Math.min(wait.deadlineAt, now + pollSeconds * 1000),
     payload: wait,
   });
-  if (settledNow) requestSessionKernelRuntimeDrain();
-  else watchSessionTurn(wait);
+  if (settledNow) {
+    requestSessionKernelRuntimeDrain();
+    return { ok: true, wait, replaced: !!current };
+  }
+  watchSessionTurn(wait);
+  // The listener was not installed while the awaits above ran. If the
+  // target's turn ended in that window, the retained record is newer than
+  // the snapshot: treat it as the observed boundary rather than waiting for
+  // a later turn.
+  const missed = turnEndSince(wait, deps.lastTurnEnd(targetSessionId));
+  if (missed) {
+    await observeSessionTurnEnd(sessionId, {
+      sessionId: targetSessionId,
+      isRunning: false,
+      pendingQuestion: missed.pendingQuestion,
+      at: missed.at,
+    });
+    const observed = await getAgentWait(sessionId);
+    if (observed?.kind === "session_turn" && observed.id === wait.id)
+      return { ok: true, wait: observed, replaced: !!current };
+  }
   return { ok: true, wait, replaced: !!current };
 }
 
@@ -400,16 +497,12 @@ const turnWatchState: TurnWatchState = ((
   }
 ).__opensessionSessionTurnWatchers ??= { watchers: new Map() });
 
-function turnEnded(event: SessionStateEvent): boolean {
-  return !event.isRunning || event.pendingQuestion === true;
-}
-
 /** Subscribe once to session-state changes. Idempotent, called lazily from a
  * registration or a durable poll rather than at import time. */
 export function ensureSessionTurnWatcher(): void {
   if (turnWatchState.stop) return;
   turnWatchState.stop = onSessionStateChange((event) => {
-    if (!turnEnded(event)) return;
+    if (!isTurnEndEvent(event)) return;
     const waiting = turnWatchState.watchers.get(event.sessionId);
     if (!waiting?.size) return;
     turnWatchState.watchers.delete(event.sessionId);
@@ -613,7 +706,9 @@ export interface AgentWaitHandlerDeps {
   schedule: (wait: AgentWait, dueAt: number) => void;
   deliver: (wait: AgentWait, message: string) => Promise<void>;
   getSession: (id: string) => SessionSummary | undefined;
-  runState: (id: string) => string;
+  runState: (id: string) => Promise<string>;
+  hasQueuedWork: (id: string) => Promise<boolean>;
+  lastTurnEnd: (id: string) => SessionTurnEnd | undefined;
   transcriptTail: (id: string, n: number) => Promise<TranscriptEntry[]>;
   /** Re-arm the in-process listener for a still-running target. */
   watch: (wait: SessionTurnAgentWait) => void;
@@ -659,7 +754,9 @@ const defaultHandlerDeps: AgentWaitHandlerDeps = {
     if (result.status === "error") throw new Error(result.message);
   },
   getSession: (id) => getSessionControl().getSession(id),
-  runState: getRunState,
+  runState: authoritativeRunState,
+  hasQueuedWork: authoritativeQueuedWork,
+  lastTurnEnd: lastSessionTurnEnd,
   transcriptTail: (id, n) => getSessionControl().transcriptTail(id, n),
   watch: watchSessionTurn,
 };
@@ -676,13 +773,20 @@ async function handleSessionTurnWait(
   deps: AgentWaitHandlerDeps,
   now: number,
 ): Promise<"delivered" | "rescheduled"> {
-  const target = deps.getSession(wait.targetSessionId);
-  const current = sessionTurnOutcome(
-    target,
-    deps.runState(wait.targetSessionId),
+  const { target, outcome: current } = await classifyTarget(
+    wait.targetSessionId,
+    deps,
   );
+  // A boundary the listener did not see (it was not installed yet, or the
+  // process restarted between the end and this poll) still counts once the
+  // retained record differs from the one registration snapshotted.
+  let observed: SessionTurnOutcome | undefined = wait.observedOutcome;
+  if (wait.observedEndAt == null) {
+    const missed = turnEndSince(wait, deps.lastTurnEnd(wait.targetSessionId));
+    if (missed) observed = missed.pendingQuestion ? "pending_question" : "idle";
+  }
   const timedOut = now >= wait.deadlineAt;
-  if (!current && wait.observedEndAt == null && !timedOut) {
+  if (!current && !observed && !timedOut) {
     deps.watch(wait);
     deps.schedule(wait, nextPrPoll(wait, now));
     return "rescheduled";
@@ -690,8 +794,7 @@ async function handleSessionTurnWait(
   // A settled target wins over an earlier observation: the wake-up reports
   // what the target looks like now. When it already started another turn,
   // report the observed end and say so.
-  const outcome =
-    current ?? (wait.observedEndAt != null ? wait.observedOutcome : undefined);
+  const outcome = current ?? observed;
   let transcript: TranscriptEntry[] = [];
   try {
     transcript = await deps.transcriptTail(
