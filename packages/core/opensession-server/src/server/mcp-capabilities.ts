@@ -32,7 +32,7 @@ export const INTERNAL_MCP_CAPABILITIES = {
     // used to land there too, which flooded threads with cards for things
     // the same session would have picked up anyway; those stay in the reply.
     guidance:
-      "Create, inspect, steer, or cancel visible sessions and worker tasks. A request for a new session means a top-level one: `create_session` with `standalone: true` (or `spawn_task` where that is the only one offered), not a child or in-process worker, unless a child, worker, or sub-session is explicitly asked for. `suggest_task` is only for a drive-by finding: self-contained work unrelated to the current request that this session will not pick up (a bug seen on the way). Follow-ups and next steps go in your reply as a plain suggestion so the person decides. Suggest each at most once; do not start it.",
+      "Create, inspect, steer, or cancel visible sessions and worker tasks. A request for a new session means a top-level one: `create_session` with `standalone: true` (or `spawn_task` where that is the only one offered), not a child or in-process worker, unless a child, worker, or sub-session is explicitly asked for. `suggest_task` is only for a drive-by finding: self-contained work unrelated to the current request that this session will not pick up (a bug seen on the way). Follow-ups and next steps go in your reply as a plain suggestion so the person decides. Suggest each at most once; do not start it. After `send_to_session`, wait for the reply with `wait_for` kind `session_turn`, not a timer.",
   },
   "opensession-admin": {
     summary: "Manage automations, MCP connections and channel memory.",
@@ -151,7 +151,7 @@ export const INTERNAL_MCP_CAPABILITIES = {
   "opensession-schedule": {
     summary: "Schedule a prompt for this session at a future time.",
     guidance:
-      "Check back on slow external work (a release workflow, CI, a deploy) by scheduling a prompt to this session and ending the turn, instead of polling, sleeping, or reaching for harness cron tools.",
+      "Check back on slow external work (a release workflow, CI, a deploy) by scheduling a prompt to this session and ending the turn, instead of polling, sleeping, or reaching for harness cron tools. For another session's reply, use `wait_for` kind `session_turn` instead.",
   },
   "opensession-papercuts": {
     summary: "Append-only friction log.",

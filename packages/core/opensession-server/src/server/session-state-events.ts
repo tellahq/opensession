@@ -2,6 +2,18 @@ export interface SessionStateEvent {
   sessionId: string;
   isRunning: boolean;
   at: number;
+  /** The run is still owned but paused on a question for a human. Emitted
+   * when an AskUserQuestion is posed so turn watchers do not have to poll. */
+  pendingQuestion?: boolean;
+}
+
+/** The most recent turn end seen for a session in this process. `seq` is a
+ * process-wide monotonic counter, so two records are the same boundary only
+ * when both `seq` and `at` match. */
+export interface SessionTurnEnd {
+  at: number;
+  pendingQuestion: boolean;
+  seq: number;
 }
 
 type SessionStateListener = (event: SessionStateEvent) => void;
@@ -11,10 +23,47 @@ const g = globalThis as {
   __osPrimarySessionRunning?: Map<string, boolean>;
   __osSessionRunningHolds?: Map<string, Set<string>>;
   __osPendingOpenings?: Set<string>;
+  __osLastTurnEnds?: Map<string, SessionTurnEnd>;
+  __osTurnEndSeq?: number;
 };
+
+const MAX_RETAINED_TURN_ENDS = 4096;
 
 function listeners(): Set<SessionStateListener> {
   return (g.__osSessionStateListeners ??= new Set());
+}
+
+function lastTurnEnds(): Map<string, SessionTurnEnd> {
+  return (g.__osLastTurnEnds ??= new Map());
+}
+
+/** Whether an event marks the end of a turn for anyone waiting on it: the
+ * session stopped running, or it paused on a question for a human. */
+export function isTurnEndEvent(event: SessionStateEvent): boolean {
+  return !event.isRunning || event.pendingQuestion === true;
+}
+
+/** The last turn end retained for a session, so a watcher that subscribes
+ * after the event can still tell that a boundary passed. Process-local. */
+export function lastSessionTurnEnd(
+  sessionId: string,
+): SessionTurnEnd | undefined {
+  return lastTurnEnds().get(sessionId);
+}
+
+function retainTurnEnd(event: SessionStateEvent): void {
+  const ends = lastTurnEnds();
+  // Re-insert so the map stays in recency order and the cap drops the oldest.
+  ends.delete(event.sessionId);
+  ends.set(event.sessionId, {
+    at: event.at,
+    pendingQuestion: event.pendingQuestion === true,
+    seq: (g.__osTurnEndSeq = (g.__osTurnEndSeq ?? 0) + 1),
+  });
+  if (ends.size > MAX_RETAINED_TURN_ENDS) {
+    const oldest = ends.keys().next().value;
+    if (oldest !== undefined) ends.delete(oldest);
+  }
 }
 
 function primaryRunning(): Map<string, boolean> {
@@ -120,6 +169,7 @@ export function onSessionStateChange(
 }
 
 export function emitSessionStateChange(event: SessionStateEvent): void {
+  if (isTurnEndEvent(event)) retainTurnEnd(event);
   for (const listener of listeners()) {
     try {
       listener(event);

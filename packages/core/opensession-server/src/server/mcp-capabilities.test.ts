@@ -54,7 +54,7 @@ describe("renderInternalMcpCapabilities", () => {
     );
     // Every server mounted at once is the ceiling; keep it a section, not
     // a manual.
-    expect(note.length).toBeLessThan(6_500);
+    expect(note.length).toBeLessThan(6_650);
   });
 
   test("is empty when nothing internal is mounted", () => {
