@@ -2,6 +2,9 @@ export interface SessionStateEvent {
   sessionId: string;
   isRunning: boolean;
   at: number;
+  /** The run is still owned but paused on a question for a human. Emitted
+   * when an AskUserQuestion is posed so turn watchers do not have to poll. */
+  pendingQuestion?: boolean;
 }
 
 type SessionStateListener = (event: SessionStateEvent) => void;

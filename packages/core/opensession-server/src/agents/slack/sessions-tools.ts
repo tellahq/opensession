@@ -21,6 +21,7 @@ import {
   cancelAgentWait,
   getAgentWait,
   registerPrChecksAgentWait,
+  registerSessionTurnAgentWait,
   registerTimerAgentWait,
 } from "../../server/agent-waits";
 import {
@@ -859,12 +860,18 @@ export function createSessionsMcpServer(
       // ---------------------------------------------------------------------
       tool(
         "wait_for",
-        "End this turn cleanly and wake this same session later without sleeping in a tool call. Register the wait, then write the human a normal status/final message and STOP the turn. A timer wakes after the requested delay. A pr_checks wait polls durably outside the model turn, waits for the check set to remain settled, then starts a new turn with the result; it also wakes on PR close/merge or timeout. One wait may be active per session, and a new one replaces it. Never call sleep after this tool succeeds.",
+        "End this turn cleanly and wake this same session later without sleeping in a tool call. Register the wait, then write the human a normal status/final message and STOP the turn. A timer wakes after the requested delay. A pr_checks wait polls durably outside the model turn, waits for the check set to remain settled, then starts a new turn with the result; it also wakes on PR close/merge or timeout. A session_turn wait wakes when ANOTHER session's turn ends (it goes idle, stops on a question for a human, fails, or is cancelled); the wake-up carries that session's final state and last assistant message, so use it after send_to_session instead of guessing a delay. An already idle target wakes you right away. One wait may be active per session, and a new one replaces it. Never call sleep after this tool succeeds.",
         {
           kind: z
-            .enum(["timer", "pr_checks"])
+            .enum(["timer", "pr_checks", "session_turn"])
             .describe(
-              "timer for a one-shot delay, or pr_checks to wake when this branch's PR checks settle.",
+              "timer for a one-shot delay, pr_checks to wake when this branch's PR checks settle, or session_turn to wake when another session finishes its current turn.",
+            ),
+          session_id: z
+            .string()
+            .optional()
+            .describe(
+              "The session to watch, required for kind=session_turn. Must be visible to this session (same rules as get_session).",
             ),
           seconds: z
             .number()
@@ -888,7 +895,7 @@ export function createSessionsMcpServer(
             .number()
             .optional()
             .describe(
-              "Maximum PR wait before waking anyway. Defaults to 2 hours, maximum 24 hours.",
+              "Maximum wait before waking anyway, for kind=pr_checks and kind=session_turn. Defaults to 2 hours, maximum 24 hours.",
             ),
           prompt: z
             .string()
@@ -899,7 +906,8 @@ export function createSessionsMcpServer(
         },
         async (
           args: {
-            kind: "timer" | "pr_checks";
+            kind: "timer" | "pr_checks" | "session_turn";
+            session_id?: string;
             seconds?: number;
             repo?: string;
             branch?: string;
@@ -924,15 +932,24 @@ export function createSessionsMcpServer(
                   prompt: args.prompt,
                   waitId,
                 })
-              : await registerPrChecksAgentWait({
-                  sessionId,
-                  user: ctx.createdBy,
-                  repo: args.repo || current?.repo || "",
-                  branch: args.branch || current?.branch || "",
-                  timeoutSeconds: args.timeout_seconds,
-                  prompt: args.prompt,
-                  waitId,
-                });
+              : args.kind === "session_turn"
+                ? await registerSessionTurnAgentWait({
+                    sessionId,
+                    user: ctx.createdBy,
+                    targetSessionId: args.session_id || "",
+                    timeoutSeconds: args.timeout_seconds,
+                    prompt: args.prompt,
+                    waitId,
+                  })
+                : await registerPrChecksAgentWait({
+                    sessionId,
+                    user: ctx.createdBy,
+                    repo: args.repo || current?.repo || "",
+                    branch: args.branch || current?.branch || "",
+                    timeoutSeconds: args.timeout_seconds,
+                    prompt: args.prompt,
+                    waitId,
+                  });
           if (!result.ok) return text(result.error);
           audit({
             msg: "agent_wait_registered",
@@ -944,7 +961,11 @@ export function createSessionsMcpServer(
           const when =
             result.wait.kind === "timer"
               ? new Date(result.wait.dueAt).toISOString()
-              : `when ${result.wait.repo}/${result.wait.branch} checks settle (timeout ${new Date(result.wait.deadlineAt).toISOString()})`;
+              : result.wait.kind === "session_turn"
+                ? result.wait.observedEndAt != null
+                  ? `right away: session ${result.wait.targetSessionId} is not running`
+                  : `when session ${result.wait.targetSessionId} finishes its turn (timeout ${new Date(result.wait.deadlineAt).toISOString()})`
+                : `when ${result.wait.repo}/${result.wait.branch} checks settle (timeout ${new Date(result.wait.deadlineAt).toISOString()})`;
           return text(
             `Background wait \`${result.wait.id}\` registered for ${when}. ` +
               `${result.replaced ? "It replaced the previous wait. " : ""}` +
@@ -965,6 +986,10 @@ export function createSessionsMcpServer(
           if (wait.kind === "timer")
             return text(
               `Timer wait \`${wait.id}\` wakes at ${new Date(wait.dueAt).toISOString()}.`,
+            );
+          if (wait.kind === "session_turn")
+            return text(
+              `Session turn wait \`${wait.id}\` watches session ${wait.targetSessionId}; timeout ${new Date(wait.deadlineAt).toISOString()}.`,
             );
           return text(
             `PR wait \`${wait.id}\` watches ${wait.repo}/${wait.branch}; timeout ${new Date(wait.deadlineAt).toISOString()}.`,
@@ -1024,7 +1049,7 @@ export function createSessionsMcpServer(
       ),
       tool(
         "send_to_session",
-        "Send a message to another session. If it's mid-run it's folded into the current turn (picked up at the next stopping point); if it's idle it starts a new turn; external runs (CLI/tmux) get the message queued. Use this to redirect or follow up on a session without opening it. Slash commands are handled by opensession itself instead of being delivered as prompt text: `/loop <interval> <prompt>` sets a recurring self-prompt on the TARGET session (fires only while it is idle; min 5m), `/loop status` / `/loop stop` inspect or clear it — works on your own session id too, so a monitor session can stop its own loop when the work is done.",
+        "Send a message to another session. If it's mid-run it's folded into the current turn (picked up at the next stopping point); if it's idle it starts a new turn; external runs (CLI/tmux) get the message queued. Use this to redirect or follow up on a session without opening it. To wait for the reply, register wait_for kind=session_turn with that session's id and end your turn; do not schedule a timer and guess. Slash commands are handled by opensession itself instead of being delivered as prompt text: `/loop <interval> <prompt>` sets a recurring self-prompt on the TARGET session (fires only while it is idle; min 5m), `/loop status` / `/loop stop` inspect or clear it — works on your own session id too, so a monitor session can stop its own loop when the work is done.",
         {
           id: z.string().describe("The target session's id."),
           message: z.string().describe("The message to deliver."),

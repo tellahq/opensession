@@ -173,7 +173,7 @@ describe("buildRunInstructions", () => {
     // cannot learn from a skill or from mcp_search without already knowing
     // they exist. Two servers mounted here; a full interactive mount adds
     // roughly 150 chars per server on top.
-    expect(prompt.length).toBeLessThan(2_800);
+    expect(prompt.length).toBeLessThan(2_900);
   });
 
   test("tells a sandboxed run where it is, in one shared paragraph", () => {

@@ -105,9 +105,9 @@ Propose a drive-by finding for a person to start in a new Open Session session, 
 
 ### `wait_for`
 
-`mcp__opensession-sessions__wait_for` · input: `kind` ("timer" | "pr_checks", required), `seconds` (number), `repo` (string), `branch` (string), `timeout_seconds` (number), `prompt` (string)
+`mcp__opensession-sessions__wait_for` · input: `kind` ("timer" | "pr_checks" | "session_turn", required), `session_id` (string), `seconds` (number), `repo` (string), `branch` (string), `timeout_seconds` (number), `prompt` (string)
 
-End this turn cleanly and wake this same session later without sleeping in a tool call. Register the wait, then write the human a normal status/final message and STOP the turn. A timer wakes after the requested delay. A pr_checks wait polls durably outside the model turn, waits for the check set to remain settled, then starts a new turn with the result; it also wakes on PR close/merge or timeout. One wait may be active per session, and a new one replaces it. Never call sleep after this tool succeeds.
+End this turn cleanly and wake this same session later without sleeping in a tool call. Register the wait, then write the human a normal status/final message and STOP the turn. A timer wakes after the requested delay. A pr_checks wait polls durably outside the model turn, waits for the check set to remain settled, then starts a new turn with the result; it also wakes on PR close/merge or timeout. A session_turn wait wakes when ANOTHER session's turn ends (it goes idle, stops on a question for a human, fails, or is cancelled); the wake-up carries that session's final state and last assistant message, so use it after send_to_session instead of guessing a delay. An already idle target wakes you right away. One wait may be active per session, and a new one replaces it. Never call sleep after this tool succeeds.
 
 ### `wait_status`
 
@@ -131,7 +131,7 @@ Answer a session that's paused on a question (state 'waiting_question'). Provide
 
 `mcp__opensession-sessions__send_to_session` · input: `id` (string, required), `message` (string, required), `delivery_id` (string)
 
-Send a message to another session. If it's mid-run it's folded into the current turn (picked up at the next stopping point); if it's idle it starts a new turn; external runs (CLI/tmux) get the message queued. Use this to redirect or follow up on a session without opening it. Slash commands are handled by opensession itself instead of being delivered as prompt text: `/loop <interval> <prompt>` sets a recurring self-prompt on the TARGET session (fires only while it is idle; min 5m), `/loop status` / `/loop stop` inspect or clear it — works on your own session id too, so a monitor session can stop its own loop when the work is done.
+Send a message to another session. If it's mid-run it's folded into the current turn (picked up at the next stopping point); if it's idle it starts a new turn; external runs (CLI/tmux) get the message queued. Use this to redirect or follow up on a session without opening it. To wait for the reply, register wait_for kind=session_turn with that session's id and end your turn; do not schedule a timer and guess. Slash commands are handled by opensession itself instead of being delivered as prompt text: `/loop <interval> <prompt>` sets a recurring self-prompt on the TARGET session (fires only while it is idle; min 5m), `/loop status` / `/loop stop` inspect or clear it — works on your own session id too, so a monitor session can stop its own loop when the work is done.
 
 ### `send_file_to_session`
 
