@@ -1263,7 +1263,7 @@ export function createSessionsMcpServer(
       ),
       tool(
         "create_session",
-        `Spin up a visible ${productName()} session and start it on a prompt. Use this as the sub-session primitive: workers can delegate focused tasks and report back to this parent session. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A worker targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. Pass isolatedWorktree true to instead give the worker its own worktree and branch (child/report-back linkage is kept) — use it when fanning work out across separate workspaces. \`branch\` is only used when there is nothing to share — a standalone worker, or a worker targeting a repo the parent does not carry — and is generated from the prompt when omitted. Repo defaults to the parent session's repo (${defaultRepo().id} when standalone); pass another registered repo id to override. For workers that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures. When called from a session, the worker defaults to the same workspace and is instructed to report back here; set standalone true or reportBack false to opt out. When a HUMAN asks for "a new session" ("create a new session for X", "spin one up on Y"), this tool is what they mean — a detached session that appears in their sidebar and outlives the current run — never an in-process subagent or task agent; reply with the new session's URL.`,
+        `Spin up a visible ${productName()} session and start it on a prompt. When a PERSON asks for a new session ("start a new session", "open a new session", "kick off a session for X", "spin one up on Y"), they mean a new TOP-LEVEL session: call this tool with standalone true. That creates a detached session with no parent link and no report-back that appears in their sidebar and outlives the current run; never an in-process subagent or task agent. Reply with the new session's URL. Only create a child session (standalone omitted) when YOU are delegating for yourself, such as fanning out focused sub-tasks whose results this session will consume, or when the person explicitly asks for a worker, child, or sub-session. A child defaults to this session as its parent, shares its workspace, and is instructed to report back here. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A child targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. Pass isolatedWorktree true to instead give the child its own worktree and branch (child/report-back linkage is kept); use it when fanning work out across separate workspaces. \`branch\` is only used when there is nothing to share, a standalone session or a child targeting a repo the parent does not carry, and is generated from the prompt when omitted. Repo defaults to the parent session's repo (${defaultRepo().id} when standalone); pass another registered repo id to override. For sessions that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures.`,
         {
           prompt: z
             .string()
@@ -1302,19 +1302,19 @@ export function createSessionsMcpServer(
             .string()
             .optional()
             .describe(
-              "Session id this worker should report back to. Defaults to the current session when available.",
+              "Session id the child should report back to. Defaults to the current session when available. Ignored when standalone is true.",
             ),
           reportBack: z
             .boolean()
             .optional()
             .describe(
-              "Whether to append report-back instructions to the worker prompt. Defaults true when a parent session id is available.",
+              "Whether to append report-back instructions to the child's prompt. Defaults true when a parent session id is available. Ignored when standalone is true.",
             ),
           standalone: z
             .boolean()
             .optional()
             .describe(
-              "Create an unrelated standalone session instead of a child of the current session.",
+              "Create a new top-level session with no parent link and no report-back instead of a child of the current session. This is the answer when the person asked for a new session. parentSessionId and reportBack are ignored when set.",
             ),
           isolatedWorktree: z
             .boolean()
@@ -1370,7 +1370,10 @@ export function createSessionsMcpServer(
           const parentSessionId = args.standalone
             ? undefined
             : args.parentSessionId || ctx.currentSessionId;
-          const shouldReportBack = args.reportBack ?? Boolean(parentSessionId);
+          // No parent means nothing to report back to: standalone ignores an
+          // explicit reportBack the same way it ignores parentSessionId.
+          const shouldReportBack =
+            Boolean(parentSessionId) && (args.reportBack ?? true);
           const prompt = parentSessionId
             ? buildChildSessionPrompt({
                 prompt: args.prompt,
@@ -1408,7 +1411,9 @@ export function createSessionsMcpServer(
               `Started session \`${id}\` (${args.mode === "code" ? (branch ? `code on ${branch}` : "code session") : "ask"}). Metadata: createdBy=${JSON.stringify(createdBy)} · createdAt=${createdAt}. It'll appear in list_sessions as it boots.`,
               parentSessionId && shouldReportBack
                 ? `It is linked to \`${parentSessionId}\` and has instructions to report back there.`
-                : "",
+                : parentSessionId
+                  ? `It is linked to \`${parentSessionId}\` without report-back instructions.`
+                  : "It is a top-level session with no parent link.",
             ]
               .filter(Boolean)
               .join(" "),
@@ -1467,11 +1472,11 @@ export function createSessionsMcpServer(
     tools.push(
       tool(
         "spawn_task",
-        "Delegate a self-contained task to a child session and return IMMEDIATELY with {taskId, url} — the lightweight alternative to create_session + send_to_session choreography when you just want work done and a handle to poll. The child is created through the same code path as create_session (it shares this session's worktree in code mode when repos match, inherits your user, is linked as a child, and is told to report back here); poll it with task_status and stop it with cancel_task. Mode defaults to 'code' (pass a branch, or isolatedWorktree true for a generated one, unless the child can share this session's code worktree); use 'ask' for read-only investigation. Loop guard: spawned children may delegate one further level, then spawn_task refuses (depth ≥ 2)." +
+        "Delegate a self-contained task to a child session and return IMMEDIATELY with {taskId, url} — the lightweight alternative to create_session + send_to_session choreography when you just want work done and a handle to poll. The child is created through the same code path as create_session (it shares this session's worktree in code mode when repos match, inherits your user, is linked as a child, and is told to report back here); poll it with task_status and stop it with cancel_task. Mode defaults to 'code' (pass a branch, or isolatedWorktree true for a generated one, unless the child can share this session's code worktree); use 'ask' for read-only investigation. Loop guard: spawned children may delegate one further level, then spawn_task refuses (depth ≥ 2). This tool ALWAYS creates a child of this session, so it is not the tool for a person's \"start a new session\" request; that means a top-level session, which is create_session with standalone true wherever create_session is offered." +
           (ctx.automationSelf
             ? " Children may edit code and open PRs but NEVER merge — a human reviews every PR."
             : ctx.humanResume
-              ? ` The child is created for ${ctx.createdBy}, the person prompting this session, and appears in their sidebar; reply with its URL. When they ask for "a new session", this tool is what they mean.`
+              ? ` Exception: create_session is not offered in this session, so when ${ctx.createdBy}, the person prompting this session, asks for "a new session", this is the only way to start it. The child is created for them and appears in their sidebar; reply with its URL.`
               : " Not available from automation sessions."),
         {
           prompt: z
