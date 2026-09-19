@@ -42,7 +42,14 @@ export const CommandMenuHost = React.forwardRef<CommandMenuHandle, Props>(
       let live = true;
       fetchToolAccounts()
         .then(({ servers }) => {
-          if (live) setMcpServers(servers.map((server) => server.name));
+          if (!live) return;
+          const next = servers.map((server) => server.name);
+          setMcpServers((current) =>
+            current.length === next.length &&
+            current.every((server, index) => server === next[index])
+              ? current
+              : next,
+          );
         })
         .catch(() => {});
       return () => {
