@@ -14,7 +14,7 @@ Archived sessions are removed from active workspace lanes but remain searchable,
 
 - Choose `Archived` at the bottom of the sidebar.
 - Open `/archived` directly.
-- Open a workspace or session menu and choose its archived-sessions action.
+- Open a session's `More actions` menu and choose `Archive workspace` to put its disposable workspace in the archive.
 - Choose an archived result to inspect it, or its restore action to return it.
 
 ## Driving it with verify-opensession
@@ -22,20 +22,21 @@ Archived sessions are removed from active workspace lanes but remain searchable,
 Preconditions:
 
 - Doctor passes for the isolated demo run.
-- The demo seed has finished and cancelled sessions available to the archive UI.
+- The demo seed has finished and cancelled sessions that are safe to archive, but starts with no archived sessions.
+- Before opening the index, open `/session/bks-demo-cancelled`, choose `More actions`, then choose `Archive workspace`.
 
-- **Open the index.** Run `verify-opensession browser "$RUN_ID" open --route /archived --width 1440 --height 900`. Wait for textbox `Search archived sessions` and capture the unfiltered state.
-- **Search.** Run `verify-opensession browser "$RUN_ID" fill --role textbox --name "Search archived sessions" --value "retry"`. The visible results narrow to archived work matching `retry`, or an explicit no-results state appears if the seed's archive rules changed.
-- **Clear and filter.** Refill the search textbox with an empty value, choose the `Filters` button using the exact accessible name from the current snapshot, and select one visible repository or person. Capture the filter state and narrowed result list.
-- **Open a result.** Choose a visible archived session title. Its transcript opens and keeps the archived state visible.
-- **Restore.** From `/archived`, choose `Restore session` on one disposable demo result. Confirm it disappears from the matching archived results and reappears in its active workspace or `/api/sessions` response.
-- **Check phone layout.** Repeat search and result opening at 390x844. Search and filters must remain reachable without desktop hover.
+- **Open the index.** Run `verify-opensession browser "$RUN_ID" open --route /archived --width 1440 --height 900`. Wait for `searchbox` named `Search archived sessions`. The default `My archived` owner filter may hide the seeded session because its synthetic owner is Alex. If so, open `Owner, My archived` and choose `Everyone`, then capture the unfiltered state.
+- **Search.** Run `verify-opensession browser "$RUN_ID" fill --role searchbox --name "Search archived sessions" --value "date helpers"`. The visible results narrow to `Refactor date helpers into shared/`.
+- **Clear and filter.** Refill the searchbox with an empty value. Use the current snapshot to choose a visible owner, repository, or archive-reason picker, then select one option. Capture the picker state and narrowed result list.
+- **Open a result.** Choose the result button whose accessible name starts with `Refactor date helpers into shared/`. Its transcript opens with an `Unarchive` action on desktop and an `Archived` marker on phone.
+- **Check phone layout.** Before restoring, repeat search and result opening at 390x844. Search and pickers must remain reachable without desktop hover. Phone result names include their source, owner, and relative time, so take a fresh snapshot instead of guessing the full name.
+- **Restore.** From `/archived` at desktop width, choose `Restore session` on the disposable result. Confirm it disappears from the matching archived results and reappears in its active workspace or `/api/sessions` response.
 - **Proof.** Capture unfiltered, filtered, and resulting states. For restore behavior, save a read-only session API response after the UI action.
 
 ## Gotchas
 
 - Searching is read-only. It does not prove restore behavior.
 - A session may be hidden by archive reason or current-person defaults. Record active filters in proof.
-- The filter button's accessible name includes the active-filter count. Take a fresh snapshot after each change.
-- Restoring mutates disposable demo state. Run it last if later checks depend on the seeded archive list.
+- Picker accessible names include their current values, such as `Owner, Everyone`. Take a fresh snapshot after each change.
+- Archiving and restoring mutate disposable demo state. Run restore last because the seed does not start with an archived result.
 - Opening a direct session URL does not prove the archived index entry point.
