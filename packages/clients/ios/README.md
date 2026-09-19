@@ -11,7 +11,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
 
 ## Features (v0.1)
 
-- **Sessions list:** polls `GET /api/sessions` every 5s (matching the web UI);
+- **Sessions list:** live over the presence socket (`sessions_subscribe`, then
+  `session_row` / `session_row_removed` per change) with a 5s
+  `GET /api/sessions` poll underneath as the fallback (matching the web UI);
   flat single-line workspace rows with live/PR status marks and a running-time
   ticker, larger mobile type, and the web client's warm dark palette. Inbox
   keeps Active work in stable creation order with a nearby Snoozed shelf,
@@ -529,7 +531,7 @@ OS1/
     ServerEvent.swift        WS frame parsing (unknown types -> .ignored)
     OS1Socket.swift          WebSocket: bearer auth, ping loop, typed events
   ViewModels/
-    SessionsListViewModel.swift  5s polling + memoized sidebar grouping
+    SessionsListViewModel.swift  row frames + 5s fallback poll, memoized sidebar grouping
     SessionViewModel.swift       watch/stream/prompt/ask state machine
     TranscriptBlocks.swift       Turn grouping (fold/answer/footer) + fold state
     SessionViewModelCache.swift  Bounded recently visited conversation cache
@@ -592,6 +594,21 @@ OS1/
 - Entries can arrive clamped (`contentClamped`); full content is at
   `GET /api/sessions/:id/entry/:entryId`. The assistant's **Show full message**
   action and expanded clamped tool results fetch it on demand.
+- The active account's presence socket sends `sessions_subscribe` with the
+  live list's query (`?archived=exclude`) after every hello. The server then
+  pushes `session_row` (one row, the list projection) or `session_row_removed`
+  (`id`) for most metadata changes, and `sessions_invalidated` only for bulk
+  ones. `SessionsListViewModel` coalesces frames for ~120ms and merges them
+  off the main actor; the poll stays as the fallback. A poll's response
+  predates any frame applied while its request was out, so the poll replays
+  those frames over the response and publishes only if the list did not
+  move again meanwhile (a later poll's publish, or a mid-pass flush, wins).
+  The poll's side effects (a consumed hide, an older server's archive
+  index) wait for the same acceptance, since a cleared hide is persisted.
+  Before the first list has loaded, frames are kept for that replay rather
+  than merged, and the first response reruns its passes until it lands
+  instead of giving up on a list that keeps moving.
+  `OS1_SESSIONS_POLL_SECONDS` lengthens the poll for a build under test.
 - `presence` lists everyone watching the session, one name per socket. The
   header facepile drops our own name and dedupes devices; names resolve to
   GitHub pictures through `GET /api/people` (`TeamDirectory`).
@@ -606,4 +623,3 @@ OS1/
 ## Next milestones
 
 - Image attachments in assistant markdown
-- Push-style updates for the sessions list (it polls today)
