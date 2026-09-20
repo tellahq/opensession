@@ -36,6 +36,7 @@ import {
   SWIPE_REVEAL_PX,
   clampSwipe,
   fullSwipeThreshold,
+  swipeActionForOffset,
   swipeCommitOffset,
   type SwipeAction,
 } from "../../lib/sidebar-swipe";
@@ -234,7 +235,7 @@ export function SidebarItem({
     pressTimer.current = null;
     pressOrigin.current = null;
   }
-  function onTouchStart(e: React.TouchEvent) {
+  function onTouchStart(e: React.TouchEvent<HTMLButtonElement>) {
     if (editing || e.touches.length !== 1) return;
     const t = e.touches[0];
     longPressed.current = false;
@@ -256,7 +257,7 @@ export function SidebarItem({
       setSheetOpen(true);
     }, LONG_PRESS_MS);
   }
-  function onTouchMove(e: React.TouchEvent) {
+  function onTouchMove(e: React.TouchEvent<HTMLButtonElement>) {
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
     const swipeO = swipeOrigin.current;
@@ -276,7 +277,16 @@ export function SidebarItem({
         e.preventDefault();
         const offset = clampSwipe(swipeDx, swipeO.width);
         swipeOffsetRef.current = offset;
-        setSwipeOffset(offset);
+        // Position follows the finger without asking React to rebuild the row
+        // and its popover tree on every touchmove. React only tracks which
+        // action is showing; touchend reconciles the snapped offset.
+        const row = e.currentTarget;
+        row.style.transform = `translateX(${offset}px)`;
+        row.parentElement?.style.setProperty(
+          "--swipe-action-w",
+          `${Math.max(SWIPE_REVEAL_PX, Math.abs(offset))}px`,
+        );
+        setSwipeAction(swipeActionForOffset(offset));
         return;
       }
     }
@@ -290,7 +300,7 @@ export function SidebarItem({
       clearPress();
     }
   }
-  function onTouchEnd(e: React.TouchEvent) {
+  function onTouchEnd(e: React.TouchEvent<HTMLButtonElement>) {
     const hadOrigin = pressOrigin.current !== null;
     const wasSwiping = swiping.current;
     const rowWidth = swipeOrigin.current?.width ?? e.currentTarget.clientWidth;
@@ -299,6 +309,11 @@ export function SidebarItem({
     swipeOrigin.current = null;
     swiping.current = false;
     setDragging(false);
+    // The drag wrote these directly. Clear them before React applies the
+    // committed offset below, or an unsnapped frame would keep winning.
+    const row = e.currentTarget;
+    row.style.removeProperty("transform");
+    row.parentElement?.style.removeProperty("--swipe-action-w");
     if (editing) return;
     if (wasSwiping) {
       e.preventDefault();
@@ -506,11 +521,16 @@ export function SidebarItem({
               onTouchStart={onTouchStart}
               onTouchMove={onTouchMove}
               onTouchEnd={onTouchEnd}
-              onTouchCancel={() => {
+              onTouchCancel={(event) => {
                 clearPress();
                 swipeOrigin.current = null;
                 swiping.current = false;
                 setDragging(false);
+                event.currentTarget.style.removeProperty("transform");
+                event.currentTarget.parentElement?.style.removeProperty(
+                  "--swipe-action-w",
+                );
+                setSwipeOffset(swipeOffsetRef.current);
               }}
               onContextMenu={(e) => {
                 // The sidebar's background carries a menu of its own, so this
