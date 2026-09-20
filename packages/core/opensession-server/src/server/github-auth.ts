@@ -918,7 +918,18 @@ function readProjectedGithubAuth(): ProjectedGithubAuth {
       typeof parsed.login === "string" && /^[A-Za-z0-9-]+$/.test(parsed.login)
         ? parsed.login
         : null;
-    return { env: { GH_TOKEN: token, GITHUB_TOKEN: token }, login };
+    // A launcher may project the read-only sibling-repository token beside
+    // the primary one (Automation.readRepos); it rides along untouched.
+    const readToken =
+      typeof parsed.GH_READ_TOKEN === "string" ? parsed.GH_READ_TOKEN : "";
+    return {
+      env: {
+        GH_TOKEN: token,
+        GITHUB_TOKEN: token,
+        ...(readToken ? { GH_READ_TOKEN: readToken } : {}),
+      },
+      login,
+    };
   } catch {
     return NO_PROJECTED_AUTH;
   }
@@ -929,7 +940,10 @@ function githubProcessEnv(
 ): Record<string, string> {
   // Empty authority still rewrites GitHub SSH remotes to non-interactive HTTPS.
   // A missing projected token must fail closed, never inherit a host key.
-  return githubGitCredentialEnv(auth.GH_TOKEN || "");
+  return {
+    ...githubGitCredentialEnv(auth.GH_TOKEN || ""),
+    ...(auth.GH_READ_TOKEN ? { GH_READ_TOKEN: auth.GH_READ_TOKEN } : {}),
+  };
 }
 
 /** Consume only the private run-scoped file projected by a remote launcher.

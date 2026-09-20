@@ -75,6 +75,33 @@ describe("buildRunInstructions", () => {
     expect(interactiveSource).not.toContain("prReviewer:");
   });
 
+  test("names the read token and the sibling repositories it covers", async () => {
+    const prompt = buildRunInstructions({
+      isAsk: false,
+      hasSession: true,
+      readRepos: ["tellahq/api", "tellahq/web"],
+    });
+    expect(prompt).toContain("## Cross-repository reads");
+    expect(prompt).toContain(
+      "`GH_READ_TOKEN` in the shell is a read-only GitHub token covering this repository and `tellahq/api`, `tellahq/web`.",
+    );
+    expect(prompt).toContain("GH_TOKEN=$GH_READ_TOKEN gh pr list --repo");
+    expect(
+      buildRunInstructions({ isAsk: false, hasSession: true }),
+    ).not.toContain("GH_READ_TOKEN");
+
+    // Only automations carry the list; an interactive turn never mints a
+    // second token.
+    const automationSource = await Bun.file(
+      new URL("./automations.ts", import.meta.url),
+    ).text();
+    const interactiveSource = await Bun.file(
+      new URL("./run-session.ts", import.meta.url),
+    ).text();
+    expect(automationSource).toContain("readRepos: automation.readRepos");
+    expect(interactiveSource).not.toContain("readRepos:");
+  });
+
   test("names the model worker sessions must use", () => {
     const prompt = buildRunInstructions({
       isAsk: false,
@@ -113,7 +140,7 @@ describe("buildRunInstructions", () => {
       "## References",
       "## Working directory",
       "## Pull requests",
-      "## New sessions",
+      "## Tools",
       "## Portals",
       "## Media",
     ]);
@@ -121,6 +148,15 @@ describe("buildRunInstructions", () => {
       "For PRs outside the current primary repository, write `<repo>#<number>`, never bare `#<number>`. " +
         "A bare `#<number>` reads as a PR; write GitHub issues as `issue #<number>`.",
     );
+    // Every MCP tool hides behind mcp_search; the Tools section is the only
+    // way a run learns a tool exists before it knows to search for it, and it
+    // names only the servers this run carries.
+    expect(prompt).toContain(
+      "- `opensession-sessions`: Create, inspect, steer, or cancel",
+    );
+    expect(prompt).toContain("`suggest_task` is only for a drive-by finding");
+    expect(prompt).toContain("- `opensession-portals`: ");
+    expect(prompt).not.toContain("`opensession-memory`");
     expect(prompt).toContain("`tella-stage` `lease_editor_fixture`");
     expect(prompt).toContain("this Open Session id as `leaseKey`");
     expect(prompt).toContain("pass only its `leaseId`");
@@ -132,9 +168,12 @@ describe("buildRunInstructions", () => {
       "Never merge, approve, or push the default branch",
     );
     expect(prompt).not.toContain("open_pull_request");
-    // The Media section names every block form the transcript renders live;
-    // that is the one list the model cannot learn from a skill.
-    expect(prompt.length).toBeLessThan(2_000);
+    // The Media section names every block form the transcript renders live,
+    // and Tools names what each mounted server is for: the two things a run
+    // cannot learn from a skill or from mcp_search without already knowing
+    // they exist. Two servers mounted here; a full interactive mount adds
+    // roughly 150 chars per server on top.
+    expect(prompt.length).toBeLessThan(3_000);
   });
 
   test("tells a sandboxed run where it is, in one shared paragraph", () => {
@@ -162,6 +201,39 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain("## Desktop");
     expect(prompt).toContain("`opensession-desktop`");
     expect(prompt).toContain("Desktop tab");
+  });
+
+  // A public repository's PRs and commits are readable by anyone, while the
+  // run's inputs (memory, Slack, Linear, session context) are private. The
+  // rule is per repo, never per session, and only code runs can publish.
+  test("tells a public-repo code run what may never leave the session", () => {
+    const prompt = buildRunInstructions({
+      isAsk: false,
+      hasSession: true,
+      publicRepo: true,
+    });
+    expect(prompt).toContain("## Public repository");
+    expect(prompt).toContain(
+      "Treat the primary repository as public: its PRs, commits, branch names, comments, and files are readable by anyone.",
+    );
+    expect(prompt).toContain(
+      "anything from memory, Slack, Linear, local instructions, or the session context",
+    );
+    expect(prompt).toContain(
+      "The attribution footer and commit trailer from the session context are the only exception.",
+    );
+    expect(prompt.indexOf("## Public repository")).toBeGreaterThan(
+      prompt.indexOf("## Pull requests"),
+    );
+
+    for (const input of [
+      { isAsk: false, hasSession: true },
+      { isAsk: false, hasSession: true, publicRepo: false },
+      { isAsk: true, publicRepo: true },
+      { isAsk: false, isScratch: true, publicRepo: true },
+    ]) {
+      expect(buildRunInstructions(input)).not.toContain("## Public repository");
+    }
   });
 
   test("carries no per-session facts", () => {

@@ -459,6 +459,7 @@ export function NewSession({
         setKnownEffort(nextEffort);
     }
   }
+  const [autoFallback, setAutoFallback] = useState(true);
   const [fastMode, setFastMode] = useState(false);
   // Pstack mode: the pstack playbooks and skills load for every turn. Off by
   // default so an ordinary session never sees them.
@@ -1103,6 +1104,7 @@ export function NewSession({
     if (selectedPullRequest) createMessage.fromPr = true;
     if (model) createMessage.model = model;
     // This assignment replaces `...(fastMode ? { fastMode: true } : {})`.
+    createMessage.autoFallback = autoFallback;
     if (fastMode) createMessage.fastMode = true;
     if (pstackMode) createMessage.pstackMode = true;
     if (accountProvider && accountId) createMessage.accountId = accountId;
@@ -1909,6 +1911,7 @@ export function NewSession({
                   model,
                   preferredDefaultModel,
                   effort,
+                  autoFallback,
                   fastMode,
                   accounts,
                   accountId,
@@ -1922,6 +1925,7 @@ export function NewSession({
                   changeModel: setModel,
                   setAsDefault: setPreferredDefaultModel,
                   changeEffort: setEffort,
+                  changeAutoFallback: setAutoFallback,
                   changeFastMode: setFastMode,
                   changeAccount: setAccountId,
                 }}

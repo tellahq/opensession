@@ -345,7 +345,7 @@ export interface SandboxStatusInfo {
   enabled: boolean;
   defaultProvider: string;
   providers: Array<{
-    id: "daytona" | "box";
+    id: "daytona" | "box" | "tart";
     configured: boolean;
     certified: boolean;
     lastPassedAt?: string;
@@ -387,7 +387,7 @@ export type SandboxConnectionState =
 
 export interface SandboxConnectionInfo {
   id: string;
-  provider: "daytona" | "box";
+  provider: "daytona" | "box" | "tart";
   enabled: boolean;
   settings: Record<string, string | number | boolean | undefined>;
   qualification?: {

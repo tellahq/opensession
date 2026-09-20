@@ -30,7 +30,7 @@
     "setup": "bun scripts/cli.ts onboard",
     "start": "bun packages/core/opensession-server/opensession.ts",
     "test": "bun test packages/core/opensession-server/src scripts",
-    "test:snapshots": "OPENSESSION_EXECUTOR=0 OPENSESSION_TEST_IN_PROCESS_RUNS=1 OPENSESSION_SNAPSHOT_STRICT=1 bun test ./packages/core/opensession-server/src/server/zz-snapshot-runs.test.ts",
+    "test:snapshots": "bun scripts/test-isolated.ts --snapshots ./packages/core/opensession-server/src/server/zz-snapshot-runs.test.ts",
     "test:transcript-scroll": "bun packages/core/opensession-server/src/frontend/tools/transcript-scroll-regression.ts",
     "lint": "bun run check:compiler && oxlint packages/core/opensession-server/src/frontend",
     "check:compiler": "bun scripts/check-react-compiler.ts",

@@ -15,7 +15,8 @@
  */
 import { $ } from "bun";
 import { createHash } from "node:crypto";
-import { readFileSync, statSync, rmSync } from "fs";
+import { constants } from "node:fs";
+import { open, rm } from "node:fs/promises";
 import { join } from "path";
 import type { WorkspaceExec } from "./sandbox/workspace-exec";
 
@@ -140,6 +141,11 @@ export class SessionDiffTimeoutError extends Error {
 
 const MAX_RAW_PATCH = 600_000; // chars — keep huge diffs from flooding the browser
 const MAX_UNTRACKED_BYTES = 60_000;
+// Generated media trees can contain hundreds of thousands of untracked files.
+// Bound both metadata and content work, including binary files with no patch.
+export const MAX_UNTRACKED_FILES = 1_000;
+const MAX_UNTRACKED_LIST_BYTES = 1_000_000;
+const MAX_UNTRACKED_SCAN_BYTES = 2_000_000;
 const DIFF_TIMEOUT_MS = 30_000;
 const g = globalThis as any;
 const inflightDiffs: Map<
@@ -174,14 +180,52 @@ async function resolveMergeBase(
   return null;
 }
 
+/** A fixed-size async read: never slurp a growing file or wait on a FIFO. */
+async function readUntrackedPrefix(
+  path: string,
+  limit: number,
+  signal?: AbortSignal,
+): Promise<{ content: string; bytes: number; truncated: boolean }> {
+  const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    signal?.throwIfAborted();
+    const stat = await file.stat();
+    if (!stat.isFile() || stat.size > limit)
+      return { content: "", bytes: 0, truncated: true };
+    const buffer = Buffer.alloc(limit + 1);
+    let bytes = 0;
+    while (bytes < buffer.length) {
+      signal?.throwIfAborted();
+      const result = await file.read(
+        buffer,
+        bytes,
+        buffer.length - bytes,
+        bytes,
+      );
+      if (!result.bytesRead) break;
+      bytes += result.bytesRead;
+    }
+    return {
+      content: buffer.subarray(0, bytes).toString("utf8"),
+      bytes,
+      truncated: bytes > limit,
+    };
+  } finally {
+    await file.close();
+  }
+}
+
 async function computeSessionDiff(
   worktreeDir: string,
   baseBranch = "main",
   exec?: WorkspaceExec,
   patchLimit?: number,
   paths?: string[],
+  signal?: AbortSignal,
 ): Promise<SessionDiff> {
   const base = await resolveMergeBase(worktreeDir, baseBranch, exec);
+  signal?.throwIfAborted();
+  const patchBudget = Math.min(patchLimit ?? MAX_RAW_PATCH, MAX_RAW_PATCH);
   const scopedPaths =
     paths === undefined ? undefined : [...new Set(paths)].sort();
   const pathspec = scopedPaths?.length ? ["--", ...scopedPaths] : [];
@@ -193,6 +237,7 @@ async function computeSessionDiff(
       null;
   } catch {}
 
+  signal?.throwIfAborted();
   const files: DiffFile[] = [];
   let rawPatch = "";
   let truncated = false;
@@ -217,6 +262,7 @@ async function computeSessionDiff(
         ],
         exec,
       );
+      signal?.throwIfAborted();
       for (const line of numstat.split("\n")) {
         if (!line.trim()) continue;
         const [add, del, ...rest] = line.split("\t");
@@ -231,6 +277,7 @@ async function computeSessionDiff(
     } catch {}
 
     try {
+      signal?.throwIfAborted();
       const output = await gitTextPrefix(
         worktreeDir,
         [
@@ -241,7 +288,7 @@ async function computeSessionDiff(
           base,
           ...pathspec,
         ],
-        Math.min(patchLimit ?? MAX_RAW_PATCH, MAX_RAW_PATCH),
+        patchBudget,
         exec,
       );
       rawPatch = output.text;
@@ -254,54 +301,83 @@ async function computeSessionDiff(
     } catch {}
   }
 
+  signal?.throwIfAborted();
   // Untracked files as synthetic all-added patch entries
   if (scopedPaths?.length !== 0) {
     try {
-      const untracked = (
-        await gitText(
-          worktreeDir,
-          [
-            "-c",
-            "core.quotePath=false",
-            "--literal-pathspecs",
-            "ls-files",
-            "-z",
-            "--others",
-            "--exclude-standard",
-            ...pathspec,
-          ],
-          exec,
-        )
-      )
-        .split("\0")
-        .filter(Boolean);
-
-      for (const path of untracked) {
+      const listing = await gitTextPrefix(
+        worktreeDir,
+        [
+          "-c",
+          "core.quotePath=false",
+          "--literal-pathspecs",
+          "ls-files",
+          "-z",
+          "--others",
+          "--exclude-standard",
+          ...pathspec,
+        ],
+        MAX_UNTRACKED_LIST_BYTES,
+        exec,
+      );
+      signal?.throwIfAborted();
+      // A capped NUL-delimited listing must never turn a partial path into a read.
+      const names = listing.truncated
+        ? listing.text.slice(0, listing.text.lastIndexOf("\0") + 1)
+        : listing.text;
+      const untracked = names.split("\0").filter(Boolean);
+      truncated ||= listing.truncated || untracked.length > MAX_UNTRACKED_FILES;
+      let scannedBytes = 0;
+      for (const path of untracked.slice(0, MAX_UNTRACKED_FILES)) {
+        signal?.throwIfAborted();
+        if (
+          rawPatch.length >= patchBudget ||
+          scannedBytes >= MAX_UNTRACKED_SCAN_BYTES
+        ) {
+          truncated = true;
+          break;
+        }
         const full = `${worktreeDir}/${path}`;
         try {
-          // Volume-mode workspaces have no host copy — read size/content through
-          // the sandbox exec. Host-visible workspaces keep the direct fs reads.
-          let size: number;
-          let readContent: () => Promise<string>;
+          const limit = Math.min(
+            MAX_UNTRACKED_BYTES,
+            MAX_UNTRACKED_SCAN_BYTES - scannedBytes,
+          );
+          let content: string;
+          let oversized: boolean;
           if (exec?.remote) {
             const st = await exec(["stat", "-c", "%s", "--", path], {
               timeoutMs: DIFF_TIMEOUT_MS,
             });
-            size = st.exitCode === 0 ? parseInt(st.stdout.trim(), 10) : NaN;
+            signal?.throwIfAborted();
+            const size =
+              st.exitCode === 0 ? parseInt(st.stdout.trim(), 10) : NaN;
             if (!Number.isFinite(size)) continue;
-            readContent = async () => {
-              const r = await exec(["cat", "--", path], {
-                timeoutMs: DIFF_TIMEOUT_MS,
-              });
-              if (r.exitCode !== 0)
-                throw new Error(r.stderr.trim() || `cat ${path} failed`);
-              return r.stdout;
-            };
+            oversized = size > limit;
+            content = "";
+            if (!oversized) {
+              // Also bound the read if the file grows after stat.
+              const result = await exec(
+                ["head", "-c", String(limit + 1), "--", path],
+                {
+                  timeoutMs: DIFF_TIMEOUT_MS,
+                },
+              );
+              signal?.throwIfAborted();
+              if (result.exitCode !== 0) continue;
+              content = result.stdout;
+              const bytes = Buffer.byteLength(content);
+              scannedBytes += bytes;
+              oversized = bytes > limit;
+            }
           } else {
-            size = statSync(full).size;
-            readContent = async () => readFileSync(full, "utf-8");
+            const result = await readUntrackedPrefix(full, limit, signal);
+            content = result.content;
+            oversized = result.truncated;
+            scannedBytes += result.bytes;
           }
-          if (size > MAX_UNTRACKED_BYTES) {
+          signal?.throwIfAborted();
+          if (oversized) {
             files.push({
               path,
               status: "untracked",
@@ -311,7 +387,6 @@ async function computeSessionDiff(
             truncated = true;
             continue;
           }
-          const content = await readContent();
           if (content.includes("\0")) {
             files.push({
               path,
@@ -331,7 +406,7 @@ async function computeSessionDiff(
             additions: lines.length,
             deletions: 0,
           });
-          rawPatch +=
+          const patch =
             `diff --git a/${path} b/${path}\n` +
             `new file mode 100644\n` +
             `--- /dev/null\n` +
@@ -339,16 +414,22 @@ async function computeSessionDiff(
             `@@ -0,0 +1,${lines.length} @@\n` +
             lines.map((l) => `+${l}`).join("\n") +
             "\n";
+          if (rawPatch.length + patch.length > patchBudget) {
+            truncated = true;
+            break;
+          }
+          rawPatch += patch;
         } catch {}
       }
     } catch {}
   }
 
-  if (rawPatch.length > MAX_RAW_PATCH) {
+  signal?.throwIfAborted();
+  if (rawPatch.length > patchBudget) {
     // Cut at a file boundary so the renderer never sees a torn patch
-    const cut = rawPatch.lastIndexOf("\ndiff --git ", MAX_RAW_PATCH);
+    const cut = rawPatch.lastIndexOf("\ndiff --git ", patchBudget);
     rawPatch =
-      cut > 0 ? rawPatch.slice(0, cut + 1) : rawPatch.slice(0, MAX_RAW_PATCH);
+      cut > 0 ? rawPatch.slice(0, cut + 1) : rawPatch.slice(0, patchBudget);
     truncated = true;
   }
 
@@ -377,19 +458,22 @@ export function getSessionDiff(
     paths === undefined ? undefined : [...new Set(paths)].sort();
   const pathKey = scopedPaths === undefined ? "all" : scopedPaths.join("\0");
   const compute = () => {
+    const controller = new AbortController();
     const work = computeSessionDiff(
       worktreeDir,
       baseBranch,
       exec,
       patchLimit,
       scopedPaths,
+      controller.signal,
     );
     let timer: ReturnType<typeof setTimeout>;
     const bounded = new Promise<SessionDiff>((resolve, reject) => {
-      timer = setTimeout(
-        () => reject(new SessionDiffTimeoutError(timeoutMs)),
-        timeoutMs,
-      );
+      timer = setTimeout(() => {
+        const error = new SessionDiffTimeoutError(timeoutMs);
+        controller.abort(error);
+        reject(error);
+      }, timeoutMs);
       work.then(resolve, reject);
     });
     return { work, bounded: bounded.finally(() => clearTimeout(timer)) };
@@ -458,7 +542,7 @@ export async function discardSessionFile(
       } catch {}
       try {
         if (exec?.remote) await exec(["rm", "-f", "--", p]);
-        else rmSync(join(worktreeDir, p), { force: true });
+        else await rm(join(worktreeDir, p), { force: true });
       } catch {}
     }
   };

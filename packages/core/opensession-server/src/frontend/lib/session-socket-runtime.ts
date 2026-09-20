@@ -20,6 +20,7 @@ export type SessionSocketFiber =
   | "resume-probe"
   | "presence-idle"
   | "typing-idle"
+  | "typing-text"
   | "visibility"
   | "focus"
   | "blur"

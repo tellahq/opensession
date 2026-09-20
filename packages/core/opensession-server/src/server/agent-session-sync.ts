@@ -30,6 +30,7 @@
 import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { statePath } from "./paths";
+import { publishSessionChange } from "./session-cache";
 import {
   activeSessions as slackActiveSessions,
   getSessionKey as slackSessionKey,
@@ -116,6 +117,10 @@ export function syncAgentSessionEngine(
       files.add(`${SLACK_SESSION_DIR}/${session.branch}.json`);
     let wrote = false;
     for (const f of files) wrote = patchFile(f, patch, "lastActivity") || wrote;
+    // The list index and the catalog projection learn source files only from
+    // targeted publishes; without one a cold rebuild would still show the
+    // dead engine session this write just replaced.
+    if (wrote) void publishSessionChange(session.id);
 
     // The loop's live copy, so an in-flight thread doesn't fork the old id.
     if (session.slackThread?.channel) {
@@ -138,11 +143,13 @@ export function syncAgentSessionEngine(
 
   if (session.source === "linear") {
     if (!session.branch) return false;
-    return patchFile(
+    const wrote = patchFile(
       `${LINEAR_SESSION_DIR}/${session.branch}.json`,
       patch,
       "updatedAt",
     );
+    if (wrote) void publishSessionChange(session.id);
+    return wrote;
   }
 
   return false;

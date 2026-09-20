@@ -84,6 +84,19 @@ export interface UserMap<V> {
 // Maps that answer a server push, by the name the frame carries.
 const registry = new Map<string, UserMap<never>["resync"]>();
 
+/** Register stores with custom persistence, such as ordered pins. */
+export function registerUserMapResync(
+  name: string,
+  resync: (user: string) => Promise<void>,
+): void {
+  registry.set(name, resync);
+}
+
+/** Catch up frames missed before connection or during a network interruption. */
+export async function resyncUserMaps(user: string): Promise<void> {
+  await Promise.all([...registry.values()].map((resync) => resync(user)));
+}
+
 /** A `user_map_changed` frame: re-read that map if it belongs to this user. */
 export function resyncUserMap(name: string, user: string): Promise<void> {
   return registry.get(name)?.(user) ?? Promise.resolve();
@@ -222,7 +235,7 @@ export function makeUserMap<V>(opts: {
     clearTimeout(retry);
     const handle = setTimeout(() => {
       retry = undefined;
-      if (currentUser() === user && hydratedFor !== user) void hydrate(user);
+      if (currentUser() === user) void hydrate(user);
     }, retryMs);
     retry = handle;
     // Never hold a test runner or a script open on the retry.
@@ -244,19 +257,20 @@ export function makeUserMap<V>(opts: {
     } catch {
       // Offline, or the server is restarting: keep the cache and stay
       // unhydrated, so no write can mistake it for the user's map.
+      if (version !== hydrationVersion || currentUser() !== user) return;
       hydrating = false;
       scheduleRetry(user);
       return;
     }
+    if (version !== hydrationVersion || currentUser() !== user) return;
     hydrating = false;
     // A newer hydration, a user switch, or a write confirmed after this GET
     // began wins. In the last case the response may be the pre-write map.
-    if (
-      version !== hydrationVersion ||
-      currentUser() !== user ||
-      (confirmedVersions.get(user) ?? 0) !== confirmedAtStart
-    )
-      return;
+    if ((confirmedVersions.get(user) ?? 0) !== confirmedAtStart) {
+      // The invalidation is still owed a fresh read. Dropping this response
+      // without replacing it loses another window's simultaneous edit.
+      return hydrate(user);
+    }
     // Anything still outstanding goes back on top: the server map may have
     // been read before our write landed, and it is never authoritative about
     // a change it hasn't confirmed yet.

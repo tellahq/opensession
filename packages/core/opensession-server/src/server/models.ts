@@ -1078,10 +1078,13 @@ export function resolveConcreteModel(
 }
 
 /** Fallback model for an interactive session. Haiku crosses to its explicit
- * OpenAI peer; other models retain the configured global preference. */
+ * OpenAI peer; other models retain the configured global preference. A session
+ * opt-out uses the explicit sentinel so even dynamic selectors cannot switch. */
 export function interactiveFallbackModel(
   primaryModel?: string,
+  autoFallback?: boolean,
 ): string | undefined {
+  if (autoFallback === false) return "none";
   if (!getModelFallbackAuto()) return undefined;
   return automaticFallbackModel(primaryModel);
 }

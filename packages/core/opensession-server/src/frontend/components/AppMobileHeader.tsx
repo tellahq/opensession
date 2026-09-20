@@ -1,6 +1,4 @@
 import type { RefObject } from "react";
-import { useIsPhone } from "../hooks/useIsPhone";
-import { ServerHealthMonitor } from "./ServerHealthMonitor";
 import type { useAppRoute } from "../hooks/useAppRoute";
 import type { useAppShell } from "../hooks/useAppShell";
 import type { useWebSocket } from "../hooks/useWebSocket";
@@ -89,7 +87,6 @@ export function AppMobileHeader({
   setHeaderModelEl,
   setHeaderActionsEl,
 }: AppMobileHeaderProps) {
-  const isPhone = useIsPhone();
   return (
     <>
       {/* Mobile-only top bar. On the sidebar-root page the organization icon
@@ -221,7 +218,6 @@ export function AppMobileHeader({
             }
             ref={setHeaderActionsEl}
           >
-            {isPhone && <ServerHealthMonitor compact />}
             {/* On the root page the actions slot is otherwise empty (session
 						    actions only portal in on pushed pages) — it carries Search,
 						    which lives in the top bar on phones instead of the sidebar.

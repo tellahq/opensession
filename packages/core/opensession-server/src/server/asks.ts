@@ -29,6 +29,10 @@ import { tryGetSessionControl } from "./session-control";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { broadcastToSession } from "./ws-hub";
 import {
+  emitSessionStateChange,
+  sessionRunningWithHolds,
+} from "./session-state-events";
+import {
   AskOwnedMap,
   EphemeralSessionMap,
   fireStoredSessionTimer,
@@ -911,6 +915,15 @@ export function makeAskHandler(sessionId: string) {
           sessionId,
           questionId,
           questions,
+        });
+        // The run stays owned while it waits, so no running boundary fires.
+        // Turn watchers (agent session_turn waits) still need to hear that
+        // this session stopped for a human.
+        emitSessionStateChange({
+          sessionId,
+          isRunning: sessionRunningWithHolds(sessionId, true),
+          pendingQuestion: true,
+          at: Date.now(),
         });
       }
       // Phone buzz: Web Push to the session owner's registered devices

@@ -240,6 +240,7 @@ struct EntryNotice: Decodable, Equatable, Sendable {
         case "merge": "arrow.triangle.merge"
         case "deploy": "arrow.up.circle"
         case "done": "checkmark"
+        case "clock": "clock"
         default: nil
         }
     }

@@ -26,3 +26,15 @@ export async function buildAtCurrentSessionListRevision<T>(
     if (revision === sessionListResponseRevision()) return result;
   }
 }
+
+/** Personal overlays change sidebar membership without changing a session row. */
+export function invalidateSidebarSessionResponses(): void {
+  advanceSessionListResponseRevision();
+  const snapshots = (
+    globalThis as typeof globalThis & {
+      __osSessionsResponseSnapshots?: Map<string, { expiresAt: number }>;
+    }
+  ).__osSessionsResponseSnapshots;
+  for (const [key, snapshot] of snapshots ?? [])
+    if (key.startsWith("sidebar\u0000")) snapshot.expiresAt = 0;
+}

@@ -158,6 +158,13 @@ export async function getPrAutomationDetails(
     deletions: Number(pr.deletions) || cached?.deletions || 0,
     changedFiles: Number(pr.changed_files) || cached?.changedFiles || 0,
     author: pr.user?.login || "",
+    ...(Array.isArray(pr.labels)
+      ? {
+          labels: pr.labels
+            .map((l: { name?: unknown }) => l?.name)
+            .filter((n: unknown): n is string => typeof n === "string" && !!n),
+        }
+      : {}),
     body: typeof pr.body === "string" ? pr.body : cached?.body || "",
     mergeable:
       pr.mergeable === true

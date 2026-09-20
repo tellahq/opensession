@@ -23,8 +23,8 @@ import {
   useSessionPrResource,
   useWorkspaceOverviewResource,
 } from "../hooks/useApiResources";
-import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
-import { FileDiff } from "@pierre/diffs/react";
+import { PatchDiffs, PatchFileDiff } from "./DeferredDiff";
+import { patchFileNames } from "../lib/patch-file-names";
 import { assetPreviewKind, isVisualAsset } from "../lib/asset-preview";
 import { useAssetViewMode } from "../lib/asset-view-mode";
 import { AssetViewToggle } from "./AssetViewToggle";
@@ -251,7 +251,8 @@ type SummaryChangeFile = {
   path: string;
   additions: number;
   deletions: number;
-  meta?: FileDiffMetadata;
+  /** The patch carrying this file's diff, when one does. */
+  patch?: string;
 };
 
 type ReviewLine = {
@@ -679,47 +680,29 @@ export function WorkspaceSummaryBody({
     changedFiles > 0 && !(git?.sharedCheckout && commits.length > 0);
   const changeFiles = (() => {
     if (pr) {
-      const byPath = new Map<string, FileDiffMetadata>();
       const patchIsCurrent =
         !pr.headRefOid || prDiffResource.data?.headRefOid === pr.headRefOid;
       const patch = patchIsCurrent ? prDiffResource.data?.patch || "" : "";
-      if (patch.trim()) {
-        try {
-          for (const parsedPatch of parsePatchFiles(patch)) {
-            for (const file of parsedPatch.files) byPath.set(file.name, file);
-          }
-        } catch {
-          // A truncated or malformed patch still leaves the file list useful.
-        }
-      }
+      const inPatch = patchFileNames(patch);
       return (pr.files ?? []).map((file) => ({
         key: file.path,
         path: file.path,
         additions: file.additions,
         deletions: file.deletions,
-        meta: byPath.get(file.path),
+        patch: inPatch.has(file.path) ? patch : undefined,
       }));
     }
 
     const files: SummaryChangeFile[] = [];
     for (const repo of diffResource.data?.repos ?? []) {
-      const byPath = new Map<string, FileDiffMetadata>();
-      if (repo.diff.rawPatch.trim()) {
-        try {
-          for (const parsedPatch of parsePatchFiles(repo.diff.rawPatch)) {
-            for (const file of parsedPatch.files) byPath.set(file.name, file);
-          }
-        } catch {
-          // Keep names and line totals when this repo's patch cannot be parsed.
-        }
-      }
+      const inPatch = patchFileNames(repo.diff.rawPatch);
       for (const file of repo.diff.files) {
         files.push({
           key: `${repo.repo}\0${file.path}`,
           path: file.path,
           additions: file.additions,
           deletions: file.deletions,
-          meta: byPath.get(file.path),
+          patch: inPatch.has(file.path) ? repo.diff.rawPatch : undefined,
         });
       }
     }
@@ -970,7 +953,7 @@ export function WorkspaceSummaryBody({
     return (
       <Popover.Root key={file.key} exclusive={false}>
         <Popover.Trigger
-          openOnHover={Boolean(file.meta)}
+          openOnHover={Boolean(file.patch)}
           delay={200}
           closeDelay={90}
           type="button"
@@ -982,7 +965,7 @@ export function WorkspaceSummaryBody({
           {path}
           {stats}
         </Popover.Trigger>
-        {file.meta && (
+        {file.patch && (
           <Popover.Popup
             portalContainer={
               typeof document !== "undefined" ? document.body : undefined
@@ -999,10 +982,10 @@ export function WorkspaceSummaryBody({
                 {stats}
               </div>
               <div className="min-h-0 flex-1 overflow-auto text-label">
-                <FileDiff
-                  fileDiff={file.meta}
+                <PatchFileDiff
+                  patch={file.patch}
+                  path={file.path}
                   options={options}
-                  disableWorkerPool
                 />
               </div>
             </div>
@@ -1099,16 +1082,6 @@ export function WorkspaceSummaryBody({
     const rawPatch =
       details?.rawPatch ||
       (prPatchIsCurrent ? prDiffResource.data?.patch : undefined);
-    const commitDiffs = (() => {
-      if (!rawPatch?.trim()) return [];
-      try {
-        return parsePatchFiles(rawPatch).flatMap(
-          (parsedPatch) => parsedPatch.files,
-        );
-      } catch {
-        return [];
-      }
-    })();
     const commitDiffOptions = {
       diffStyle: "unified" as const,
       overflow: "scroll" as const,
@@ -1162,20 +1135,18 @@ export function WorkspaceSummaryBody({
                 )}
               </div>
             </div>
-            {commitDiffs.length > 0 && (
-              <div className="border-t border-divider bg-code-well text-label">
-                <div className="px-3 py-2 text-meta font-semibold text-dim">
-                  Changes
-                </div>
-                {commitDiffs.map((file) => (
-                  <FileDiff
-                    key={`${diffTheme}:${file.prevName ?? ""}:${file.name}`}
-                    fileDiff={file}
-                    options={commitDiffOptions}
-                    disableWorkerPool
-                  />
-                ))}
-              </div>
+            {rawPatch?.trim() && (
+              <PatchDiffs
+                key={diffTheme}
+                patch={rawPatch}
+                options={commitDiffOptions}
+                className="border-t border-divider bg-code-well text-label"
+                header={
+                  <div className="px-3 py-2 text-meta font-semibold text-dim">
+                    Changes
+                  </div>
+                }
+              />
             )}
             {details?.patchTruncated && (
               <div className="border-t border-divider bg-surface p-3 text-meta text-faint">

@@ -12,7 +12,11 @@
  * label-driven flow, so the agent never pushes to a human's branch uninvited.
  * Kill switch: OPENSESSION_REVIEW_HANDOFF=0.
  */
-import { defaultRepo } from "../../server/config";
+import {
+  configuredRepos,
+  defaultRepo,
+  getConfigAsync,
+} from "../../server/config";
 import { audit } from "../../server/audit";
 import { tryGetSessionControl } from "../../server/session-control";
 import {
@@ -99,13 +103,14 @@ export async function maybeHandoffFindings(
 
     const control = tryGetSessionControl();
     if (!control) return;
-    const repoFull = pr.ghRepo || defaultRepo().ghRepo;
-    const workspaceId = workspaceIdForRepo(repoFull);
+    const repoFull =
+      pr.ghRepo || defaultRepo(configuredRepos(await getConfigAsync())).ghRepo;
+    const workspaceId = await workspaceIdForRepo(repoFull);
     if (!workspaceId) return;
 
     // The PR's own review/fix runs also sit on this branch — never hand off to
     // those; deliver to the most recently active real session.
-    const owners = matchSessions(control, workspaceId, pr.headRef)
+    const owners = (await matchSessions(workspaceId, pr.headRef))
       .filter((s) => !s.id.startsWith("bks-ghpr-"))
       .sort(
         (a, b) =>
@@ -228,7 +233,8 @@ async function settleHandoff(
   if (!handoff?.rounds || !handoff.sessionId) return;
   const control = tryGetSessionControl();
   if (!control) return;
-  const repoFull = pr.ghRepo || defaultRepo().ghRepo;
+  const repoFull =
+    pr.ghRepo || defaultRepo(configuredRepos(await getConfigAsync())).ghRepo;
   const sha = state?.lastReviewedSha || pr.headSha;
   const message = buildReviewSettledMessage({
     prNumber: pr.number,

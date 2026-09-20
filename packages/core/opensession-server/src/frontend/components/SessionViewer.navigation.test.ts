@@ -155,7 +155,14 @@ test("duplicate session stays available at the current tip inside a workspace", 
   expect(viewer).toContain('<span className="grow">Duplicate session</span>');
   expect(viewer).not.toContain("{!workspaceScopedMenu && forkAction}");
   expect(viewer).toContain("                handleFork();");
-  expect(conversation).toContain("void navigation.duplicateSession();");
+  expect(conversation).toContain(
+    "void navigation.duplicateSession(messageId);",
+  );
+  const forkAction = conversation.slice(
+    conversation.indexOf("const handleFork ="),
+    conversation.indexOf("const continueAfterFailure ="),
+  );
+  expect(forkAction).not.toContain("setForkFrom");
   expect(viewer).not.toContain("const lastAssistantId = entries.findLast(");
   expect(send).toContain("forkFrom.messageId = draft.forkFrom.messageId;");
 });

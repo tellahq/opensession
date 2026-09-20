@@ -423,6 +423,15 @@ export function IconPlay(p: IconProps) {
   );
 }
 
+// Pause bars on the same 24-unit grid as the transport controls.
+export function IconPause(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M7 5.5h3v13H7zM14 5.5h3v13h-3z" />
+    </Svg>
+  );
+}
+
 // Outlined play triangle — same glyph, stroke-only so it reads like the rest of
 // the icon set (used for the session-header preview affordance, where the state
 // color carries the meaning and a filled wedge looked heavy). Drawn large in the

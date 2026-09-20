@@ -7,6 +7,7 @@ import { z } from "zod";
 import { fetchPins, fetchUiPrefs, savePinsApi, saveUiPrefsApi } from "./api";
 import { getCurrentUser } from "../components/UserPicker";
 import { whenCurrentUserReady } from "./auth-ready";
+import { registerUserMapResync } from "./user-map";
 
 const LEGACY_KEY = "opensession-pins"; // old per-browser store, migrated once
 const MIGRATED_FLAG = "opensession-pins-migrated";
@@ -15,6 +16,32 @@ const USER_CHANGE_EVENT = "opensession-user-changed";
 
 let cache: string[] = [];
 let loadedFor: string | null = null;
+let loadVersion = 0;
+const saves = new Map<string, Promise<void>>();
+
+function save(user: string, pins: string[]): void {
+  ++loadVersion;
+  const pending = (saves.get(user) ?? Promise.resolve())
+    .then(() => savePinsApi(user, pins))
+    .then(
+      () => {},
+      () => {},
+    );
+  saves.set(user, pending);
+  void pending.then(() => {
+    if (saves.get(user) !== pending) return;
+    saves.delete(user);
+    if (getCurrentUser() === user) void load(user);
+  });
+}
+
+async function resyncPins(user: string): Promise<void> {
+  const me = getCurrentUser();
+  if (user.trim().toLowerCase() !== me.trim().toLowerCase()) return;
+  await saves.get(me);
+  if (getCurrentUser() === me && !saves.has(me)) await load(me);
+}
+registerUserMapResync("pins", resyncPins);
 
 function emit() {
   window.dispatchEvent(new Event(CHANGE_EVENT));
@@ -43,11 +70,12 @@ function readLegacy(): string[] {
 // "Anonymous") so legacy pins land on the right account, and runs at most once.
 async function load(user: string) {
   loadedFor = user;
+  const version = ++loadVersion;
   let pins: string[] = [];
   try {
     pins = await fetchPins(user);
   } catch {
-    pins = [];
+    return;
   }
 
   if (user !== "Anonymous" && !localStorage.getItem(MIGRATED_FLAG)) {
@@ -64,7 +92,7 @@ async function load(user: string) {
   }
 
   // A newer load() (user switched mid-flight) wins.
-  if (loadedFor !== user) return;
+  if (loadedFor !== user || version !== loadVersion || saves.has(user)) return;
   cache = pins;
   emit();
 }
@@ -89,7 +117,7 @@ export function pin(id: string): string[] {
   const next = [id, ...cache];
   cache = next;
   emit();
-  void savePinsApi(getCurrentUser(), next).catch(() => {});
+  save(getCurrentUser(), next);
   return next;
 }
 
@@ -189,7 +217,10 @@ window.addEventListener(
 
 /** Apply an authoritative server push without writing the same list back. */
 export function receivePins(user: string, pins: string[]): void {
-  if (user !== getCurrentUser()) return;
+  const me = getCurrentUser();
+  if (user.trim().toLowerCase() !== me.trim().toLowerCase() || saves.has(me))
+    return;
+  ++loadVersion;
   cache = Array.from(new Set(pins));
   emit();
 }
@@ -210,7 +241,7 @@ export function unpin(ids: string[]): string[] {
   if (next.length === cache.length) return cache;
   cache = next;
   emit();
-  void savePinsApi(getCurrentUser(), next).catch(() => {});
+  save(getCurrentUser(), next);
   return next;
 }
 
@@ -221,7 +252,7 @@ export function togglePin(id: string): string[] {
     : [id, ...cache];
   cache = next;
   emit();
-  void savePinsApi(getCurrentUser(), next).catch(() => {});
+  save(getCurrentUser(), next);
   return next;
 }
 
@@ -236,7 +267,7 @@ export function reorderPins(ids: string[]): string[] {
   for (const id of cache) if (!next.includes(id)) next.push(id);
   cache = next;
   emit();
-  void savePinsApi(getCurrentUser(), next).catch(() => {});
+  save(getCurrentUser(), next);
   return next;
 }
 

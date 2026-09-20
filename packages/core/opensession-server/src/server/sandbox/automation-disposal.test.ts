@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
@@ -22,6 +23,7 @@ process.env.HOME = root;
 process.env.OPENSESSION_STATE_DIR = root;
 process.env.OPENSESSION_SESSIONS_DIR = join(root, "sessions");
 process.env.OPENSESSION_CONFIG = join(root, "config.json");
+await getConfigAsync();
 writeFileSync(process.env.OPENSESSION_CONFIG, JSON.stringify({ repos: {} }));
 // Set isolated paths before importing modules that cache configuration. Keep
 // the real list worker so asynchronous export completion is exercised too.

@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { describe, test, expect, afterEach } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
@@ -24,7 +25,7 @@ const dirs: string[] = [];
 
 /** Config with both repos, in the given key order. Returns the temp root so
  *  tests can put a real worktree on disk under it. */
-function withConfig(order: ("app" | "app-web")[]): string {
+async function withConfig(order: ("app" | "app-web")[]): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), "os-wtpath-test-"));
   dirs.push(root);
   const entries: Record<string, unknown> = {};
@@ -45,6 +46,7 @@ function withConfig(order: ("app" | "app-web")[]): string {
   );
   for (const k of ENV_KEYS) delete process.env[k];
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
   return root;
 }
 
@@ -62,8 +64,8 @@ describe("repoForPathOrNull with prefix-overlapping repo ids", () => {
     ["app", "app-web"],
     ["app-web", "app"],
   ] as const) {
-    test(`resolves by longest prefix, config order ${order.join(",")}`, () => {
-      const root = withConfig([...order]);
+    test(`resolves by longest prefix, config order ${order.join(",")}`, async () => {
+      const root = await withConfig([...order]);
       const wt = join(root, "worktrees");
       // Nothing on disk: the path fallback decides, and it must pick the
       // most specific prefix rather than the first-registered one.
@@ -75,8 +77,8 @@ describe("repoForPathOrNull with prefix-overlapping repo ids", () => {
     });
   }
 
-  test("a live worktree's .git pointer beats the path convention", () => {
-    const root = withConfig(["app", "app-web"]);
+  test("a live worktree's .git pointer beats the path convention", async () => {
+    const root = await withConfig(["app", "app-web"]);
     // `app` with a branch called `web-x` lands on a dir the `app-web`
     // convention also claims. Git knows which checkout cut it.
     const dir = join(root, "worktrees", "app-web-x");

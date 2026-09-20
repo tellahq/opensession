@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Dispatch } from "react";
+import { useSessionSocket } from "./useSessionSocket";
+import { getCurrentUser } from "../components/UserPicker";
 import { BASE_PATH } from "../lib/base";
 import {
   fetchModels,
@@ -19,6 +21,7 @@ export function useSessionModelWorkflowController(
   session: UnifiedSession,
   dispatchSessionRuntime: Dispatch<SessionRuntimeAction>,
 ) {
+  const { send } = useSessionSocket();
   // Per-session model (switchable from the composer; "" = default)
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
@@ -31,6 +34,9 @@ export function useSessionModelWorkflowController(
   // Persisted on the session server-side and enforced per run (Claude effort /
   // Codex modelReasoningEffort), so seed from the session's stored value.
   const [effort, setEffort] = useState(session.effort || "high");
+  const [autoFallback, setAutoFallback] = useState(
+    session.autoFallback !== false,
+  );
   const [fastMode, setFastMode] = useState(session.fastMode || false);
   // Optimistic goal: reflects a just-set/cleared goal instantly (the /goal
   // command persists server-side but doesn't broadcast a live session update).
@@ -75,6 +81,9 @@ export function useSessionModelWorkflowController(
   useEffect(() => {
     setEffort(session.effort || "high");
   }, [session.id, session.effort]);
+  useEffect(() => {
+    setAutoFallback(session.autoFallback !== false);
+  }, [session.id, session.autoFallback]);
   useEffect(() => {
     setFastMode(session.fastMode || false);
   }, [session.id, session.fastMode]);
@@ -138,6 +147,19 @@ export function useSessionModelWorkflowController(
     }).catch(() => {});
   }
 
+  const changeAutoFallback =
+    session.source === "opensession"
+      ? (enabled: boolean) => {
+          setAutoFallback(enabled);
+          send({
+            type: "prompt",
+            sessionId: session.id,
+            content: `/fallback ${enabled ? "on" : "off"}`,
+            user: getCurrentUser(),
+          });
+        }
+      : undefined;
+
   return {
     model: {
       models,
@@ -145,6 +167,14 @@ export function useSessionModelWorkflowController(
       accounts,
       accountId,
       effort,
+      runPreferences: {
+        effort,
+        setEffort,
+        fastMode,
+        setFastMode,
+        autoFallback,
+        changeAutoFallback,
+      },
       fastMode,
       goalOverride,
       currentGoal,

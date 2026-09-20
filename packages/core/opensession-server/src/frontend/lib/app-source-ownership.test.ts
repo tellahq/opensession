@@ -6,6 +6,7 @@ const ownedModules = [
   "../components/AppMobileHeader.tsx",
   "../components/AppSessionPane.tsx",
   "../components/AppSidebar.tsx",
+  "../components/DeferredPanes.tsx",
   "../components/DeferredSettings.tsx",
   "../hooks/useActiveSession.ts",
   "../hooks/useAppDocumentInteractions.ts",

@@ -45,6 +45,19 @@ export const AUTOMATION_ACTOR_SUFFIX = " (automation)";
 export const LOOP_ACTOR_SUFFIX = " (loop)";
 export const LOOP_ACTOR = "loop";
 
+/** Suffix a scheduled check-back (opensession-schedule's schedule_prompt)
+ *  carries as sender: `"<person whose session it is> (scheduled)"`. */
+export const SCHEDULED_ACTOR_SUFFIX = " (scheduled)";
+export const SCHEDULED_ACTOR = "scheduled";
+
+/** Sender for a delivered scheduled prompt. Same contract as `loopActor`:
+ *  the person keeps ownership, commit identity and provider account, but
+ *  the agent wrote the prompt, so nobody pressed send. */
+export function scheduledActor(setBy?: string | null): string {
+  const name = (setBy || "").trim();
+  return name ? `${name}${SCHEDULED_ACTOR_SUFFIX}` : SCHEDULED_ACTOR;
+}
+
 /** Sender for a scheduled `/loop` tick. The person who set the loop stays
  *  in the name: the session is still theirs (ownership, commit identity,
  *  provider account), but no person pressed send on this turn. */
@@ -54,15 +67,21 @@ export function loopActor(setBy?: string | null): string {
 }
 
 /**
- * True for a sender our scheduler minted on a person's behalf (`loopActor`).
- * Not a machine actor: the person is credited, so `humanPrompter` keeps the
- * name. But nothing that requires a person to be present right now (the
- * spawn suite an automation-owned session earns on a human's turn) may treat
- * a scheduled tick as that person; use `interactivePrompter` there.
+ * True for a sender our scheduler minted on a person's behalf (`loopActor`,
+ * `scheduledActor`). Not a machine actor: the person is credited, so
+ * `humanPrompter` keeps the name. But nothing that requires a person to be
+ * present right now (the spawn suite an automation-owned session earns on a
+ * human's turn) may treat a scheduled tick as that person; use
+ * `interactivePrompter` there.
  */
 export function isScheduledActor(sender?: string | null): boolean {
   const lower = (sender || "").trim().toLowerCase();
-  return lower === LOOP_ACTOR || lower.endsWith(LOOP_ACTOR_SUFFIX);
+  return (
+    lower === LOOP_ACTOR ||
+    lower.endsWith(LOOP_ACTOR_SUFFIX) ||
+    lower === SCHEDULED_ACTOR ||
+    lower.endsWith(SCHEDULED_ACTOR_SUFFIX)
+  );
 }
 
 /**

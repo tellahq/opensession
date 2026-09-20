@@ -22,18 +22,25 @@ import { getWorkflowRun } from "./workflow-store";
 import type { UnifiedSession } from "./types";
 
 const savedWorkflowDir = process.env.OPENSESSION_WORKFLOWS_DIR;
+// The opening policy below expects the default (no AWS for untrusted runs);
+// pin the flag so an instance config that opts in does not leak into it.
+const savedUntrustedRuns = process.env.AGENT_AWS_UNTRUSTED_RUNS;
 const workflowDirs: string[] = [];
 
 beforeEach(() => {
   const dir = mkdtempSync(join(tmpdir(), "unattended-swarm-integration-"));
   workflowDirs.push(dir);
   process.env.OPENSESSION_WORKFLOWS_DIR = dir;
+  process.env.AGENT_AWS_UNTRUSTED_RUNS = "false";
 });
 
 afterAll(() => {
   if (savedWorkflowDir === undefined)
     delete process.env.OPENSESSION_WORKFLOWS_DIR;
   else process.env.OPENSESSION_WORKFLOWS_DIR = savedWorkflowDir;
+  if (savedUntrustedRuns === undefined)
+    delete process.env.AGENT_AWS_UNTRUSTED_RUNS;
+  else process.env.AGENT_AWS_UNTRUSTED_RUNS = savedUntrustedRuns;
   for (const dir of workflowDirs) rmSync(dir, { recursive: true, force: true });
 });
 

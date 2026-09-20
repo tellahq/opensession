@@ -38,10 +38,13 @@ export const msgRow = `${msgRowBase} mb-4.5`;
 export const msgSystemRow = `${msgRowBase} mb-3 text-center`;
 
 /**
- * Your own and a teammate's turns start 4px lower — the old 22px collapsed
- * against the previous sibling's bottom margin, which flex margins don't do.
+ * Your own and a teammate's turns start 4px lower. Use padding so this gap
+ * cannot collapse through static row wrappers: optimistic messages share the
+ * previous indexed range, then move into their own absolute range when saved.
+ * A top margin collapsed only in the optimistic shape, shifting the text 4px
+ * on confirmation.
  */
-export const msgOwnTurn = "mt-1";
+export const msgOwnTurn = "pt-1";
 
 /**
  * Speaker label. Right-aligned (row-reverse) so the identity dot lands on the

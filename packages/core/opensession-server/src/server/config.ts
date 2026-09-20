@@ -4,8 +4,8 @@
  * Single `~/.opensession/config.json` (dual-read fallback to `~/.backstage/
  * config.json`; path overridable via OPENSESSION_CONFIG, or the deprecated
  * OPENSESSION_CONFIG),
- * read fresh per call with the sandbox/config.ts pattern: tolerant parse,
- * missing/invalid file → portable built-in defaults.
+ * asynchronously loaded snapshots: tolerant parse, missing/invalid file →
+ * portable built-in defaults. Hot getters never inspect the filesystem.
  *
  * Precedence per key: existing env var → config.json → built-in default.
  *
@@ -16,7 +16,8 @@
  */
 
 import { homeDir } from "./paths";
-import { existsSync, readFileSync, statSync } from "fs";
+import { existsSync, readFileSync } from "fs";
+import { readFile, stat } from "node:fs/promises";
 import { resolve as resolvePath } from "path";
 import { statePath } from "./paths";
 import { writeFileAtomic } from "./shared/atomic-write";
@@ -107,6 +108,10 @@ export interface RepoSection {
   sharedCheckout?: boolean;
   /** Worktree publication preference; absent = pull-request. */
   publicationMode?: RepoPublicationMode;
+  /** Pins the repository's visibility for the public-repository rules
+   *  (repo-visibility.ts). Absent = ask GitHub, and treat an unconfirmed
+   *  answer as public. */
+  public?: boolean;
   /** Marks this repo as the instance default (see defaultRepo()). */
   default?: boolean;
   /** PNG served as the repo's tile icon (absolute path, or relative to the
@@ -200,6 +205,10 @@ export interface PolicySection {
   githubWriteOwners?: string[];
   /** Bot accounts trusted to attach PRs to sessions via attribution footers. */
   githubBotLogins?: string[];
+  /** Private organization terms (hostnames, customer names, private repo
+   *  names) that a publishing command in a public repository may never
+   *  contain; see privateTermsDenyReason in command-policy.ts. */
+  privateTerms?: string[];
 }
 
 /** Persona copy in prompt builders. */
@@ -279,6 +288,8 @@ export interface Repo {
   sharedCheckout?: boolean;
   /** Worktree publication preference; absent = pull-request. */
   publicationMode?: RepoPublicationMode;
+  /** Pinned visibility (see RepoSection.public). */
+  public?: boolean;
   /** Instance default repo (defaultRepo()). */
   default?: boolean;
   /** Tile-icon PNG path (see RepoSection.icon). */
@@ -400,6 +411,7 @@ function parseRepoSection(v: unknown): RepoSection | undefined {
     csRepo: str(o.csRepo),
     sharedCheckout: bool(o.sharedCheckout),
     publicationMode,
+    public: bool(o.public),
     default: bool(o.default),
     icon: str(o.icon),
     iconSource,
@@ -573,6 +585,7 @@ function parseConfig(text: string): OpenSessionConfig {
         automationDeniedTools: strArray(policy.automationDeniedTools),
         githubWriteOwners: strArray(policy.githubWriteOwners),
         githubBotLogins: strArray(policy.githubBotLogins),
+        privateTerms: strArray(policy.privateTerms),
       });
     }
     const organization = obj(raw.organization);
@@ -603,37 +616,101 @@ function parseConfig(text: string): OpenSessionConfig {
   }
 }
 
-// Read fresh per call, with an mtime/size guard so hot paths (the REPOS proxy
-// in worktree.ts hits this on every property access) don't re-parse an
-// unchanged file. Missing/unreadable/invalid file = {} = built-in defaults.
-let cache: {
-  path: string;
-  mtimeMs: number;
-  size: number;
-  value: OpenSessionConfig;
-} | null = null;
+// One snapshot per configuration namespace. Switching a test/dev state root must
+// never return another root's identity or policy. A new path requires an awaited
+// getConfigAsync(), just like initial module loading below.
+interface ConfigSnapshot {
+  value?: OpenSessionConfig;
+  fingerprint?: string;
+  revision: number;
+  checkedAt: number;
+  pending?: Promise<OpenSessionConfig>;
+}
+const snapshots = new Map<string, ConfigSnapshot>();
+const CONFIG_REFRESH_MS = 1_000;
 
-/** Raw config.json contents (typed, tolerant). Never throws. */
+function snapshotFor(path: string): ConfigSnapshot {
+  let snapshot = snapshots.get(path);
+  if (!snapshot) {
+    snapshot = { revision: 0, checkedAt: -Infinity };
+    snapshots.set(path, snapshot);
+  }
+  return snapshot;
+}
+
+function refreshConfig(
+  path: string,
+  snapshot: ConfigSnapshot,
+): Promise<OpenSessionConfig> {
+  if (snapshot.pending) return snapshot.pending;
+  const revision = snapshot.revision;
+  snapshot.pending = (async () => {
+    try {
+      const st = await stat(path);
+      // Include inode and ctime: an atomic replacement can preserve size/mtime.
+      const fingerprint = `${st.dev}:${st.ino}:${st.ctimeMs}:${st.mtimeMs}:${st.size}`;
+      if (
+        revision === snapshot.revision &&
+        fingerprint !== snapshot.fingerprint
+      ) {
+        const value = parseConfig(await readFile(path, "utf-8"));
+        // A completed local write wins over an older in-flight disk read.
+        if (revision === snapshot.revision) {
+          snapshot.value = value;
+          snapshot.fingerprint = fingerprint;
+        }
+      }
+    } catch {
+      if (revision === snapshot.revision) {
+        snapshot.value = {};
+        snapshot.fingerprint = undefined;
+      }
+    } finally {
+      snapshot.checkedAt = performance.now();
+      snapshot.pending = undefined;
+    }
+    return snapshot.value!;
+  })();
+  return snapshot.pending;
+}
+
+/** Read the loaded snapshot. No synchronous I/O, including missing-file paths.
+ * Active background consumers notice external edits through at most one
+ * coalesced async refresh per second. Admission boundaries await getConfigAsync
+ * instead, so identity/policy checks do not rely on stale-while-refresh reads.
+ */
 export function getConfig(): OpenSessionConfig {
   const path = configPath();
-  try {
-    const st = statSync(path);
-    if (
-      cache &&
-      cache.path === path &&
-      cache.mtimeMs === st.mtimeMs &&
-      cache.size === st.size
-    ) {
-      return cache.value;
-    }
-    const value = parseConfig(readFileSync(path, "utf-8"));
-    cache = { path, mtimeMs: st.mtimeMs, size: st.size, value };
-    return value;
-  } catch {
-    cache = null;
-    return {};
-  }
+  const snapshot = snapshots.get(path);
+  if (!snapshot?.value)
+    throw new Error(
+      "Configuration is not loaded; await getConfigAsync() after changing its path",
+    );
+  if (performance.now() - snapshot.checkedAt >= CONFIG_REFRESH_MS)
+    void refreshConfig(path, snapshot);
+  return snapshot.value;
 }
+
+/** Fresh disk snapshot, coalesced with concurrent reads. No sync fallback. */
+export function getConfigAsync(): Promise<OpenSessionConfig> {
+  const path = configPath();
+  return refreshConfig(path, snapshotFor(path));
+}
+
+/** Publish only AFTER a successful atomic config write. Prevents a settings
+ * save or identity revocation from waiting for the background refresh window.
+ */
+export function publishConfigSnapshot(path: string, contents: string): void {
+  const snapshot = snapshotFor(path);
+  snapshot.revision++;
+  snapshot.value = parseConfig(contents);
+  snapshot.fingerprint = undefined;
+  snapshot.checkedAt = performance.now();
+}
+
+// Imports can synchronously consume configuration, but initialization itself
+// must not block the gateway. No watcher, timer, socket or subprocess is started.
+await getConfigAsync();
 
 // ---------------------------------------------------------------------------
 // Typed getters (env var → config.json → portable default)
@@ -765,8 +842,10 @@ export function configuredSelfDev(): SelfDevMode {
  * The repo registry. An explicit `repos` object is authoritative; without one,
  * a source checkout gets a portable self-repo so a first run is useful.
  */
-export function configuredRepos(): Record<string, Repo> {
-  const configured = getConfig().repos;
+export function configuredRepos(
+  config: OpenSessionConfig = getConfig(),
+): Record<string, Repo> {
+  const configured = config.repos;
   const merged = configured ? {} : builtinRepos();
   for (const [id, entry] of Object.entries(configured || {})) {
     const base = merged[id];
@@ -787,6 +866,7 @@ export function configuredRepos(): Record<string, Repo> {
           csRepo: entry.csRepo,
           sharedCheckout: entry.sharedCheckout,
           publicationMode: entry.publicationMode,
+          public: entry.public,
           default: entry.default,
           icon: entry.icon,
           iconSource: entry.iconSource,
@@ -853,8 +933,9 @@ export function newSessionRepoDefault(): string {
 }
 
 /** The instance's operational default repository. */
-export function defaultRepo(): Repo {
-  const repos = configuredRepos();
+export function defaultRepo(
+  repos: Record<string, Repo> = configuredRepos(),
+): Repo {
   const repo =
     Object.values(repos).find((r) => r.default) || Object.values(repos)[0];
   if (!repo) throw new Error("No repositories are registered");
@@ -934,7 +1015,9 @@ export function updateIdentityConfig(patch: IdentityPatch): void {
   setOrDelete("persona", "name", patch.personaName);
   setOrDelete("branding", "productName", patch.productName);
   setOrDelete("branding", "productMark", patch.productMark);
-  writeFileAtomic(path, JSON.stringify(raw, null, 2) + "\n");
+  const contents = JSON.stringify(raw, null, 2) + "\n";
+  writeFileAtomic(path, contents);
+  publishConfigSnapshot(path, contents);
 }
 
 /**
@@ -978,6 +1061,12 @@ export function githubWriteOwners(): string[] {
         .filter(Boolean),
     ),
   ];
+}
+
+/** Private organization terms a public repository may never receive
+ *  (policy.privateTerms; see privateTermsDenyReason). */
+export function privateTerms(): string[] {
+  return getConfig().policy?.privateTerms || [];
 }
 
 export function githubBotLogins(): string[] {

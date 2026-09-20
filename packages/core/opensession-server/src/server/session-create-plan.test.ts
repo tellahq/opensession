@@ -180,3 +180,14 @@ describe("durable create plan", () => {
     }
   });
 });
+
+test("durable create recovery preserves an explicit fallback opt-out", () => {
+  const snapshot = snapshotResolvedCreate({
+    id: "os-no-fallback",
+    autoFallback: false,
+  });
+  expect(snapshot.autoFallback).toBe(false);
+  expect(restoreResolvedCreate(snapshot)).toMatchObject({
+    autoFallback: false,
+  });
+});

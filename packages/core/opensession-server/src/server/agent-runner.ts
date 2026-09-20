@@ -168,6 +168,12 @@ export interface RunAgentOpts {
    * anyone's review queue. Preserved across model fallback and restart resume.
    */
   prReviewer?: string;
+  /**
+   * Sibling GitHub repositories the run may read through `GH_READ_TOKEN`
+   * (Automation.readRepos; pi-runner runGithubEnv mints the token per turn).
+   * Non-secret names only, so they journal and resume like prReviewer.
+   */
+  readRepos?: string[];
   /** Images attached to the opening message. */
   images?: ImageInput[];
   /** Non-image attachments shipped inline to a host on another machine; the
@@ -593,11 +599,12 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
   const wantsBestCodex = requestedModel?.id === BEST_AVAILABLE_CODEX_MODEL;
   const primaryModel =
     workspacePreset?.model || resolveConcreteModel(opts.model);
-  const preferredFallback = /^(?:claude|codex)\//.test(primaryModel)
-    ? "none"
-    : wantsBestCodex
-      ? BEST_AVAILABLE_CODEX_MODEL
-      : opts.fallbackModel;
+  const preferredFallback =
+    opts.fallbackModel === "none" || /^(?:claude|codex)\//.test(primaryModel)
+      ? "none"
+      : wantsBestCodex
+        ? BEST_AVAILABLE_CODEX_MODEL
+        : opts.fallbackModel;
   // No fallback configured (interactive auto-switch off, or an automation with
   // fallbackModel:"none") ⇒ run the primary and surface whatever it does.
   if (!preferredFallback || preferredFallback === "none") {
@@ -1887,7 +1894,9 @@ export async function resumeInterruptedRuns(
     // out of processes that never touch them.
     if (
       run.sandboxId &&
-      (run.sandboxProvider === "daytona" || run.sandboxProvider === "box")
+      (run.sandboxProvider === "daytona" ||
+        run.sandboxProvider === "box" ||
+        run.sandboxProvider === "tart")
     ) {
       rememberHandledSession(run);
       trackRecovery(run);
@@ -2205,6 +2214,7 @@ export async function resumeInterruptedRuns(
               accountStrict: run.accountStrict,
               usageCredits: run.usageCredits,
               prReviewer: run.prReviewer,
+              readRepos: run.readRepos,
               journal: {
                 osSessionId: run.osSessionId,
                 kind: recoveryKind(run.kind, "rerun"),
@@ -2304,6 +2314,7 @@ export async function resumeInterruptedRuns(
             accountStrict: run.accountStrict,
             usageCredits: run.usageCredits,
             prReviewer: run.prReviewer,
+            readRepos: run.readRepos,
             journal: {
               osSessionId: run.osSessionId,
               kind: recoveryKind(run.kind, "resume"),

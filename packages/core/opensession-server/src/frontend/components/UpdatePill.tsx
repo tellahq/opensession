@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { subscribeFrontendVersion } from "../lib/frontend-version";
+import { onShellUpdated } from "../lib/push";
 import { PERSISTENT_NOTICE_CARD } from "../lib/notification-classes";
 import { Tooltip } from "../ui/tooltip";
 
@@ -129,6 +130,11 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
   // asleep through the rebuild, a socket that reconnected across it): poll the
   // build version and nudge. Never forces — same non-blocking nudge as above.
   useEffect(() => subscribeFrontendVersion(() => setShow(true)), []);
+
+  // A launch the service worker answered from its shell cache because the
+  // server was slow: the late answer named a newer bundle, so this page is
+  // already behind. Same nudge, never forced (sw.js shellNavigate).
+  useEffect(() => onShellUpdated(() => setShow(true)), []);
 
   useEffect(() => {
     const updates = os1Updates();

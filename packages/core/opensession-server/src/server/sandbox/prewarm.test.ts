@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 /**
  * Unit tests for the warm-on-typing prewarm pool's state machine
  * (src/server/sandbox/prewarm.ts): request/reuse, atomic claim, signature
@@ -69,7 +70,7 @@ const environmentsPath = () => join(scratch, "environments.json");
 // answers "disabled"; skip the behavioral tests rather than fight it.
 const killSwitch = !sandboxesEnabled();
 
-beforeAll(() => {
+beforeAll(async () => {
   scratch = mkdtempSync(join(tmpdir(), "bks-prewarm-"));
   mkdirSync(join(scratch, "sessions"), { recursive: true });
   prevSessionsDir = __setSessionsDirForTest(join(scratch, "sessions"));
@@ -78,6 +79,7 @@ beforeAll(() => {
   prevSecretsStore = process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
   prevEnvironmentsStore = process.env.OPENSESSION_SANDBOX_ENVIRONMENTS_STORE;
   process.env.OPENSESSION_CONFIG = instanceConfigPath();
+  await getConfigAsync();
   process.env.OPENSESSION_SANDBOX_CONFIG = cfgPath();
   process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(
     scratch,
@@ -95,14 +97,18 @@ beforeAll(() => {
       ),
     }),
   );
+  await getConfigAsync();
 });
 
-afterAll(() => {
+afterAll(async () => {
   _stopPrewarmSweepForTest();
   _resetPrewarmForTest();
   __setSessionsDirForTest(prevSessionsDir);
   if (prevInstanceConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = prevInstanceConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = prevInstanceConfig;
+    await getConfigAsync();
+  }
   if (prevEnvConfig === undefined)
     delete process.env.OPENSESSION_SANDBOX_CONFIG;
   else process.env.OPENSESSION_SANDBOX_CONFIG = prevEnvConfig;

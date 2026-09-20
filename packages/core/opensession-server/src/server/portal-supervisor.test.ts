@@ -777,6 +777,92 @@ describe("session Portal supervisor", () => {
     expect(failed?.pid).toBeUndefined();
   }, 10_000);
 
+  test("recovers a transiently failed Sandbox probe only for the surviving owner", async () => {
+    const sandbox = sandboxFor(worktree, 18_708);
+    const exec = sandbox.exec.bind(sandbox);
+    let alive = true;
+    let listening = false;
+    sandbox.exec = async (command, options) => {
+      if (command[0] === "kill")
+        return { exitCode: alive ? 0 : 1, stdout: "", stderr: "" };
+      if (command[0] === "timeout")
+        return { exitCode: listening ? 0 : 1, stdout: "", stderr: "" };
+      return exec(command, options);
+    };
+    const record = {
+      name: "recovering",
+      key: "WEBAPP_PORT",
+      port: 18_708,
+      command: "dev-server",
+      state: "awake",
+      pid: 987_654_321,
+    };
+    writeFileSync(
+      join(worktree, ".ports.conf"),
+      PREFIX(record) + "\nWEBAPP_PORT=18708\n",
+    );
+    expect((await listSandboxPortalServices(sandbox))[0]?.state).toBe("failed");
+    expect((await listSandboxPortalServices(sandbox))[0]?.state).toBe("failed");
+    listening = true;
+    const recovered = (await listSandboxPortalServices(sandbox))[0];
+    expect(recovered?.state).toBe("awake");
+    expect(recovered?.lastError).toBeUndefined();
+    listening = false;
+    expect((await listSandboxPortalServices(sandbox))[0]?.state).toBe("failed");
+    alive = false;
+    listening = true;
+    expect((await listSandboxPortalServices(sandbox))[0]?.state).toBe("failed");
+  });
+
+  test("reaps Sandbox children even when their leader exited and they ignore TERM", async () => {
+    const pid = 987_654_321;
+    writeFileSync(
+      join(worktree, ".ports.conf"),
+      PREFIX({
+        name: "dead-leader",
+        key: "WEBAPP_PORT",
+        port: 18_707,
+        command: "failed-wrapper",
+        state: "failed",
+        pid,
+      }) + "\nWEBAPP_PORT=18707\n",
+    );
+    const sandbox = sandboxFor(worktree, 18_707);
+    const exec = sandbox.exec.bind(sandbox);
+    const signals: string[] = [];
+    let groupAlive = true;
+    sandbox.exec = async (command, options) => {
+      // Bun's --no-orphans test runner reaps real orphan fixtures itself.
+      // Model the remote group separately from its already-dead leader.
+      if (command[0] === "kill") return { exitCode: 1, stdout: "", stderr: "" };
+      if (command[2]?.startsWith("kill -0 --"))
+        return { exitCode: groupAlive ? 0 : 1, stdout: "", stderr: "" };
+      if (
+        command[2]?.startsWith("kill -TERM") ||
+        command[2]?.startsWith("kill -KILL")
+      ) {
+        expect(command[2]).toContain(`-- -${pid}`);
+        const signal = command[2].startsWith("kill -TERM") ? "TERM" : "KILL";
+        signals.push(signal);
+        if (signal === "KILL") groupAlive = false;
+        return { exitCode: 0, stdout: "", stderr: "" };
+      }
+      return exec(command, options);
+    };
+    await stopSandboxPortalService({
+      sessionId: "os-dead-leader",
+      sandbox,
+      name: "dead-leader",
+    });
+    expect(signals).toEqual(["TERM", "KILL"]);
+    expect(groupAlive).toBe(false);
+    expect(readPortalRegistry(worktree)[0]).toMatchObject({
+      name: "dead-leader",
+      state: "stopped",
+    });
+    expect(readPortalRegistry(worktree)[0]?.pid).toBeUndefined();
+  }, 10_000);
+
   test("reaps a Portal whose durable owner no longer owns the worktree", async () => {
     const port = 18_703;
     await startPortalService({

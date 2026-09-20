@@ -1027,6 +1027,7 @@ export async function handleSessionsRoutes(
       mode?: unknown;
       model?: unknown;
       effort?: unknown;
+      autoFallback?: unknown;
       fastMode?: unknown;
       images?: unknown;
       files?: unknown;
@@ -1139,6 +1140,7 @@ export async function handleSessionsRoutes(
         ...(typeof body?.effort === "string" && body.effort
           ? { effort: body.effort }
           : {}),
+        ...(body?.autoFallback === false ? { autoFallback: false } : {}),
         ...(body?.fastMode === true ? { fastMode: true } : {}),
         // Where the session runs, as the native composer's sandbox chip
         // names it ("local" is the host, chosen explicitly). Omitted, the

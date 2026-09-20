@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 import { $ } from "bun";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import {
@@ -83,9 +84,12 @@ function createGitRepo(dir: string): string {
   return repo;
 }
 
-afterEach(() => {
+afterEach(async () => {
   if (originalConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = originalConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = originalConfig;
+    await getConfigAsync();
+  }
   for (const dir of tempDirs.splice(0))
     rmSync(dir, { recursive: true, force: true });
 });
@@ -177,7 +181,10 @@ describe("GET /api/setup/github/repos with several App installations", () => {
     invalidateGithubRepoListCache();
   });
 
-  function writeAppConfig(path: string, installationOwner?: string): void {
+  async function writeAppConfig(
+    path: string,
+    installationOwner?: string,
+  ): Promise<void> {
     writeFileSync(
       path,
       JSON.stringify({
@@ -190,6 +197,7 @@ describe("GET /api/setup/github/repos with several App installations", () => {
         },
       }),
     );
+    await getConfigAsync();
   }
 
   async function getRepos(refresh = false): Promise<any> {
@@ -206,13 +214,17 @@ describe("GET /api/setup/github/repos with several App installations", () => {
     return response!.json();
   }
 
-  function writeAppIdentity(dir: string, installationOwner?: string): string {
+  async function writeAppIdentity(
+    dir: string,
+    installationOwner?: string,
+  ): Promise<string> {
     const config = join(dir, "config.json");
     const keyPath = join(dir, "github-app.pem");
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     writeFileSync(keyPath, privateKey.export({ format: "pem", type: "pkcs8" }));
-    writeAppConfig(config, installationOwner);
+    await writeAppConfig(config, installationOwner);
     process.env.OPENSESSION_CONFIG = config;
+    await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
     __setGithubAppKeyPathForTest(keyPath);
     return config;
@@ -272,7 +284,7 @@ describe("GET /api/setup/github/repos with several App installations", () => {
   test("lists the union of every installation and marks the default owner", async () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-picker-installs-"));
     tempDirs.push(dir);
-    writeAppIdentity(dir, "solo-dev");
+    await writeAppIdentity(dir, "solo-dev");
     const listCalls: string[] = [];
     globalThis.fetch = twoInstallationFetch(listCalls);
 
@@ -305,8 +317,9 @@ describe("GET /api/setup/github/repos with several App installations", () => {
 
     // Switching the default owner changes the marker only: the list is the
     // same union, served from the cache.
-    writeAppConfig(join(dir, "config-acme.json"), "acme-org");
+    await writeAppConfig(join(dir, "config-acme.json"), "acme-org");
     process.env.OPENSESSION_CONFIG = join(dir, "config-acme.json");
+    await getConfigAsync();
     const switched = await getRepos();
     expect(switched.appConfigured).toBe(true);
     expect(switched.appInstallUrl).toBe(body.appInstallUrl);
@@ -323,7 +336,7 @@ describe("GET /api/setup/github/repos with several App installations", () => {
   test("refresh discovers a new personal installation and updated repository grants", async () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-picker-refresh-"));
     tempDirs.push(dir);
-    writeAppIdentity(dir, "acme-org");
+    await writeAppIdentity(dir, "acme-org");
     const listCalls: string[] = [];
     const baseFetch = twoInstallationFetch(listCalls);
     let personalInstalled = false;
@@ -370,7 +383,7 @@ describe("GET /api/setup/github/repos with several App installations", () => {
   test("skips an installation that cannot mint instead of hiding the rest", async () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-picker-broken-"));
     tempDirs.push(dir);
-    writeAppIdentity(dir);
+    await writeAppIdentity(dir);
     const listCalls: string[] = [];
     globalThis.fetch = twoInstallationFetch(listCalls, [1]);
 
@@ -387,7 +400,7 @@ describe("GET /api/setup/github/repos with several App installations", () => {
   test("reports an installation whose repository list request fails", async () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-picker-list-error-"));
     tempDirs.push(dir);
-    writeAppIdentity(dir);
+    await writeAppIdentity(dir);
     const listCalls: string[] = [];
     globalThis.fetch = twoInstallationFetch(listCalls, [], [2]);
 
@@ -404,7 +417,7 @@ describe("GET /api/setup/github/repos with several App installations", () => {
   test("still names the installations when no installation can mint", async () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-picker-orphan-"));
     tempDirs.push(dir);
-    writeAppIdentity(dir, "gone-org");
+    await writeAppIdentity(dir, "gone-org");
     globalThis.fetch = twoInstallationFetch([], [1, 2]);
 
     const body = await getRepos();
@@ -421,7 +434,7 @@ describe("GET /api/setup/github/repos with several App installations", () => {
   test("clones through the repository owner's installation", async () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-picker-clone-"));
     tempDirs.push(dir);
-    writeAppIdentity(dir, "solo-dev");
+    await writeAppIdentity(dir, "solo-dev");
     globalThis.fetch = twoInstallationFetch([]);
 
     // An owner the App is not installed on fails closed before any clone.
@@ -497,6 +510,7 @@ describe("repository default branch settings", () => {
     const path = join(dir, "config.json");
     const repo = createGitRepo(dir);
     process.env.OPENSESSION_CONFIG = path;
+    await getConfigAsync();
     writeFileSync(
       path,
       JSON.stringify({
@@ -510,6 +524,7 @@ describe("repository default branch settings", () => {
         },
       }),
     );
+    await getConfigAsync();
 
     const url = new URL("http://localhost/api/setup/repos/compiler%3Alegacy");
     const response = await handleSetupRepoRoutes({
@@ -540,6 +555,7 @@ describe("repository default branch settings", () => {
     const path = join(dir, "config.json");
     const repo = createGitRepo(dir);
     process.env.OPENSESSION_CONFIG = path;
+    await getConfigAsync();
     writeFileSync(
       path,
       JSON.stringify({
@@ -558,6 +574,7 @@ describe("repository default branch settings", () => {
         },
       }),
     );
+    await getConfigAsync();
 
     const url = new URL("http://localhost/api/setup/repos/compiler");
     const response = await handleSetupRepoRoutes({
@@ -589,6 +606,7 @@ describe("repository default branch settings", () => {
     const path = join(dir, "config.json");
     const repo = createGitRepo(dir);
     process.env.OPENSESSION_CONFIG = path;
+    await getConfigAsync();
     writeFileSync(
       path,
       JSON.stringify({
@@ -603,6 +621,7 @@ describe("repository default branch settings", () => {
         },
       }),
     );
+    await getConfigAsync();
 
     const url = new URL("http://localhost/api/setup/repos/app");
     const response = await handleSetupRepoRoutes({
@@ -629,10 +648,12 @@ describe("repository default branch settings", () => {
     const path = join(dir, "config.json");
     const repo = createGitRepo(dir);
     process.env.OPENSESSION_CONFIG = path;
+    await getConfigAsync();
     writeFileSync(
       path,
       JSON.stringify({ repos: { app: { repo, defaultBranch: "main" } } }),
     );
+    await getConfigAsync();
 
     const url = new URL("http://localhost/api/setup/repos/app");
     const response = await handleSetupRepoRoutes({
@@ -658,10 +679,12 @@ describe("repository default branch settings", () => {
     const path = join(dir, "config.json");
     const repo = createGitRepo(dir);
     process.env.OPENSESSION_CONFIG = path;
+    await getConfigAsync();
     writeFileSync(
       path,
       JSON.stringify({ repos: { compiler: { repo, defaultBranch: "main" } } }),
     );
+    await getConfigAsync();
 
     const url = new URL("http://localhost/api/setup/repos/compiler");
     const response = await handleSetupRepoRoutes({
@@ -704,6 +727,7 @@ describe("repository default branch settings", () => {
     const path = join(dir, "config.json");
     const repo = createGitRepo(dir);
     process.env.OPENSESSION_CONFIG = path;
+    await getConfigAsync();
     writeFileSync(
       path,
       JSON.stringify({
@@ -712,6 +736,7 @@ describe("repository default branch settings", () => {
         },
       }),
     );
+    await getConfigAsync();
 
     const url = new URL("http://localhost/api/setup/repos/app");
     const response = await handleSetupRepoRoutes({
@@ -816,9 +841,12 @@ const savedWorktreesDir = process.env.OPENSESSION_WORKTREES_DIR;
 const savedHome = process.env.HOME;
 const localRoots: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = savedConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = savedConfig;
+    await getConfigAsync();
+  }
   if (savedWorktreesDir === undefined)
     delete process.env.OPENSESSION_WORKTREES_DIR;
   else process.env.OPENSESSION_WORKTREES_DIR = savedWorktreesDir;
@@ -890,7 +918,9 @@ describe("local repository registration", () => {
     const checkout = createRemoteCheckout(root);
     const configPath = join(root, "config.json");
     writeFileSync(configPath, JSON.stringify({ repos: {} }));
+    await getConfigAsync();
     process.env.OPENSESSION_CONFIG = configPath;
+    await getConfigAsync();
     process.env.OPENSESSION_WORKTREES_DIR = join(root, "worktrees");
 
     const response = await handleSetupRepoRoutes(
@@ -919,6 +949,7 @@ describe("local repository registration", () => {
     const checkout = createRemoteCheckout(root, "local-project");
     const configPath = join(root, "missing-config.json");
     process.env.OPENSESSION_CONFIG = configPath;
+    await getConfigAsync();
 
     const response = await handleSetupRepoRoutes(
       postRepo({ source: "local", path: checkout }),
@@ -950,7 +981,9 @@ describe("local repository registration", () => {
       git(["remote", "set-head", "origin", "-d"], checkout);
       const configPath = join(root, "config.json");
       writeFileSync(configPath, JSON.stringify({ repos: {} }));
+      await getConfigAsync();
       process.env.OPENSESSION_CONFIG = configPath;
+      await getConfigAsync();
 
       const response = await handleSetupRepoRoutes(
         postRepo({ source: "local", path: checkout }),
@@ -972,7 +1005,9 @@ describe("local repository registration", () => {
     git(["commit", "-m", "Initial commit"], checkout);
     const configPath = join(root, "config.json");
     writeFileSync(configPath, JSON.stringify({ repos: {} }));
+    await getConfigAsync();
     process.env.OPENSESSION_CONFIG = configPath;
+    await getConfigAsync();
 
     const response = await handleSetupRepoRoutes(
       postRepo({ source: "local", path: checkout }),
@@ -1002,7 +1037,9 @@ describe("local repository registration", () => {
         },
       }),
     );
+    await getConfigAsync();
     process.env.OPENSESSION_CONFIG = configPath;
+    await getConfigAsync();
 
     const response = await handleSetupRepoRoutes(
       postRepo({ source: "local", path: checkout }),
@@ -1030,7 +1067,9 @@ describe("local repository registration", () => {
         },
       }),
     );
+    await getConfigAsync();
     process.env.OPENSESSION_CONFIG = configPath;
+    await getConfigAsync();
 
     const response = await handleSetupRepoRoutes(
       postRepo({ source: "local", path: checkout }),
@@ -1065,7 +1104,9 @@ describe("local repository registration", () => {
         },
       }),
     );
+    await getConfigAsync();
     process.env.OPENSESSION_CONFIG = configPath;
+    await getConfigAsync();
 
     const response = await handleSetupRepoRoutes(
       postRepo({ source: "local", path: duplicateCheckout }),
@@ -1097,8 +1138,10 @@ describe("local repository registration", () => {
           },
         }),
       );
+      await getConfigAsync();
       process.env.HOME = root;
       process.env.OPENSESSION_CONFIG = configPath;
+      await getConfigAsync();
 
       const response = await handleSetupRepoRoutes(
         postRepo({ fullName: "acme/widget" }),
@@ -1133,7 +1176,9 @@ describe("local repository registration", () => {
         },
       }),
     );
+    await getConfigAsync();
     process.env.OPENSESSION_CONFIG = configPath;
+    await getConfigAsync();
 
     const response = await handleSetupRepoRoutes(
       postRepo({ source: "local", path: checkout }),
@@ -1159,7 +1204,9 @@ describe("local repository registration", () => {
     const checkout = createRemoteCheckout(root, "malformed-config");
     const configPath = join(root, "config.json");
     writeFileSync(configPath, JSON.stringify({ repos: [] }));
+    await getConfigAsync();
     process.env.OPENSESSION_CONFIG = configPath;
+    await getConfigAsync();
 
     const response = await handleSetupRepoRoutes(
       postRepo({ source: "local", path: checkout }),
@@ -1193,8 +1240,10 @@ describe("new repository creation", () => {
       const root = localRoot();
       const configPath = join(root, "config.json");
       writeFileSync(configPath, JSON.stringify({ repos: {} }));
+      await getConfigAsync();
       process.env.HOME = root;
       process.env.OPENSESSION_CONFIG = configPath;
+      await getConfigAsync();
       process.env.OPENSESSION_WORKTREES_DIR = join(root, "worktrees");
 
       const response = await handleSetupRepoRoutes(
@@ -1232,8 +1281,10 @@ describe("new repository creation", () => {
     const root = localRoot();
     const configPath = join(root, "config.json");
     writeFileSync(configPath, JSON.stringify({ repos: {} }));
+    await getConfigAsync();
     process.env.HOME = root;
     process.env.OPENSESSION_CONFIG = configPath;
+    await getConfigAsync();
 
     for (const name of [
       "",
@@ -1265,8 +1316,10 @@ describe("new repository creation", () => {
       const root = localRoot();
       const configPath = join(root, "config.json");
       writeFileSync(configPath, JSON.stringify({ repos: {} }));
+      await getConfigAsync();
       process.env.HOME = root;
       process.env.OPENSESSION_CONFIG = configPath;
+      await getConfigAsync();
       const existing = join(root, "checkouts", "widget");
       mkdirSync(existing, { recursive: true });
       writeFileSync(join(existing, "keep.txt"), "mine\n");
@@ -1294,8 +1347,10 @@ describe("new repository creation", () => {
       const checkout = createRemoteCheckout(root, "constructor");
       const configPath = join(root, "config.json");
       writeFileSync(configPath, JSON.stringify({ repos: {} }));
+      await getConfigAsync();
       process.env.HOME = root;
       process.env.OPENSESSION_CONFIG = configPath;
+      await getConfigAsync();
 
       const response = await handleSetupRepoRoutes(
         postRepo({ source: "local", path: checkout }),
@@ -1318,8 +1373,10 @@ describe("new repository creation", () => {
         },
       }),
     );
+    await getConfigAsync();
     process.env.HOME = root;
     process.env.OPENSESSION_CONFIG = configPath;
+    await getConfigAsync();
 
     const response = await handleSetupRepoRoutes(
       postRepo({ source: "new", name: "Taken" }),
@@ -1355,7 +1412,7 @@ describe("GitHub browser creation handoff", () => {
 
   /** An App installed on a person and an organization, pinned to the org,
    *  with an empty registry and HOME under `root`. */
-  function setUp(root: string): string {
+  async function setUp(root: string): Promise<string> {
     const configPath = join(root, "config.json");
     const keyPath = join(root, "github-app.pem");
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -1373,8 +1430,10 @@ describe("GitHub browser creation handoff", () => {
         },
       }),
     );
+    await getConfigAsync();
     process.env.HOME = root;
     process.env.OPENSESSION_CONFIG = configPath;
+    await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
     __setGithubAppKeyPathForTest(keyPath);
     return configPath;
@@ -1389,7 +1448,7 @@ describe("GitHub browser creation handoff", () => {
     "refuses legacy GitHub creation without minting or creating anything",
     async () => {
       const root = localRoot();
-      const configPath = setUp(root);
+      const configPath = await setUp(root);
       const before = readFileSync(configPath, "utf-8");
       const calls: string[] = [];
       globalThis.fetch = (async (
@@ -1424,7 +1483,7 @@ describe("GitHub browser creation handoff", () => {
     "connects a browser-created repository using ordinary credentials",
     async () => {
       const root = localRoot();
-      const configPath = setUp(root);
+      const configPath = await setUp(root);
       const mints: Record<string, string>[] = [];
       globalThis.fetch = (async (
         input: string | URL | Request,
@@ -1468,7 +1527,7 @@ describe("GitHub browser creation handoff", () => {
 
   test.serial("lists the App's accounts for the location picker", async () => {
     const root = localRoot();
-    setUp(root);
+    await setUp(root);
     globalThis.fetch = (async (input: string | URL | Request) => {
       expect(String(input)).toStartWith(
         "https://api.github.com/app/installations?",

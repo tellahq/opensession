@@ -30,7 +30,7 @@ import type {
   UnifiedSession,
   WSServerMessage,
 } from "../lib/types";
-import { otherTypingUsers } from "../lib/typing";
+import { otherTyping, type TypingPresence } from "../lib/typing";
 import type { LiveTurnStore } from "../lib/live-turn-store";
 import { toast } from "../ui/toast";
 import type { ReplySuggestion } from "../lib/reply-suggestions";
@@ -108,7 +108,7 @@ interface SubscriptionHistory {
 interface SubscriptionRuntime {
   setWorkflowRuns: Setter<WorkflowRunSnapshot[]>;
   setViewers: Setter<string[]>;
-  setTypingUsers: Setter<string[]>;
+  setTypingPresence: Setter<TypingPresence>;
   dispatch: Dispatch<SessionRuntimeAction>;
   setGitRefreshTick: Setter<number>;
   prTargetsRef: RefObject<Set<string>>;
@@ -185,7 +185,7 @@ export function useSessionViewerSubscription({
   runtime: {
     setWorkflowRuns,
     setViewers,
-    setTypingUsers,
+    setTypingPresence,
     dispatch: dispatchSessionRuntime,
     setGitRefreshTick,
     prTargetsRef: sessionPrTargetsRef,
@@ -476,7 +476,7 @@ export function useSessionViewerSubscription({
           break;
         case "typing":
           if (msg.sessionId === session.id)
-            setTypingUsers(otherTypingUsers(msg.users, getCurrentUser()));
+            setTypingPresence(otherTyping(msg, getCurrentUser()));
           break;
         case "queue_update":
           setSyncing(false);

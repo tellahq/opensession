@@ -28,6 +28,7 @@ import type { LiveTurnStore } from "../lib/live-turn-store";
 import { isPinned, onPinsChanged, togglePin } from "../lib/pins";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { portalTargetFor } from "../lib/portals";
+import { NO_TYPING, type TypingPresence } from "../lib/typing";
 import { withPreviewPath } from "../lib/preview-url";
 import type { SessionViewerProps } from "../lib/session-viewer-bindings";
 import { sessionHasWorkspace } from "../lib/session-workspace";
@@ -120,7 +121,8 @@ export function useSessionRuntimeController({
     );
   }, [session.repo, session.branch, session.attachedRepos, session.prs]);
   const [viewers, setViewers] = useState<string[]>([]);
-  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [typingPresence, setTypingPresence] =
+    useState<TypingPresence>(NO_TYPING);
   // The create run is still preparing this session's worktree (new workspaces
   // announce the session before the slow git work). While true the conversation
   // shows creation progress, and the opening message holds above the composer.
@@ -525,8 +527,8 @@ export function useSessionRuntimeController({
       sessionPrTargetsRef,
       viewers,
       setViewers,
-      typingUsers,
-      setTypingUsers,
+      typingPresence,
+      setTypingPresence,
       workspacePreparing,
       setWorkspacePreparing,
     },

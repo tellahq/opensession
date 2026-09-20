@@ -342,6 +342,10 @@ async function adapterFor(provider: string): Promise<PrewarmAdapter | null> {
     const { boxPrewarmAdapter } = await import("./adapters/box");
     return boxPrewarmAdapter;
   }
+  if (provider === "tart") {
+    const { tartPrewarmAdapter } = await import("./adapters/tart");
+    return tartPrewarmAdapter;
+  }
   return null;
 }
 

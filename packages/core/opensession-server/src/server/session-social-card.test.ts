@@ -64,6 +64,15 @@ await updateSessionFile(signedRouteSessionId, (data) => ({
   lastActivity: "2026-08-18T12:00:00Z",
   mode: "ask",
 }));
+// The list is rebuilt from the catalogs only, never from the files this
+// fixture exports. Everything it wrote is in them, so mark them complete the
+// way the seed script does for a live store.
+const { sessionMetadata } = await import("./session-kernel");
+const { markAgentSessionCatalogImportComplete } =
+  await import("./agent-session-catalog");
+await sessionMetadata({ op: "mark_catalog_complete" });
+await markAgentSessionCatalogImportComplete("slack");
+await markAgentSessionCatalogImportComplete("linear");
 invalidateSessionsCache();
 
 afterAll(() => {

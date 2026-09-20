@@ -131,6 +131,10 @@ export type NoticeKind =
   | "workflow"
   | "session-notice"
   | "recovery"
+  /** A prompt the agent scheduled for its own session (schedule_prompt), now
+   *  delivered. Sent in the name of the person whose session it is, so
+   *  without this it reads as words they typed. */
+  | "scheduled-prompt"
   /** A model-visible payload the harness injected into a prompt (a handoff,
    *  the repos note, an attached session's excerpt). Recorded so the model's
    *  input is reconstructable from the log; NOT conversation, so servers drop
@@ -164,7 +168,7 @@ export type NoticeBody = "inline" | "collapsed";
  * instead. Clients map the name to their own icon set; an unknown name, or
  * none, renders as plain text.
  */
-export type NoticeIcon = "merge" | "deploy" | "done";
+export type NoticeIcon = "merge" | "deploy" | "done" | "clock";
 
 /** Exact read-only data behind an answered AskUserQuestion card. Versioned so
  *  a newer server can extend the record while older clients keep rendering the
@@ -457,6 +461,34 @@ const RECOVERY_NOTICE_RE =
 export function parseRecoveryNotice(content?: string): { body: string } | null {
   if (!content || !RECOVERY_NOTICE_RE.test(content)) return null;
   return { body: content };
+}
+
+/**
+ * A prompt the agent scheduled for itself (opensession-schedule's
+ * schedule_prompt), delivered by the kernel timer in the session owner's name.
+ * Always marked: the message is free text the agent wrote, so there is no
+ * phrasing to fall back on, and prompts delivered before the sentinel shipped
+ * keep reading as the person's own turn.
+ */
+const SCHEDULED_PROMPT_SENTINEL_RE =
+  /^<!--os:scheduled-prompt(?::([^\s>]+))?-->\s*/;
+
+/** The wire form scheduled-prompts.ts delivers: sentinel, then the prompt. */
+export function scheduledPromptMessage(id: string, prompt: string): string {
+  return `<!--os:scheduled-prompt:${id}-->\n${prompt}`;
+}
+
+export function parseScheduledPrompt(
+  content?: string,
+): { id: string | null; body: string } | null {
+  if (!content) return null;
+  const text = content.replace(ATTR_PREFIX_RE, "");
+  const sentinel = text.match(SCHEDULED_PROMPT_SENTINEL_RE);
+  if (!sentinel) return null;
+  return {
+    id: sentinel[1] || null,
+    body: stripLeadingSentinels(text.slice(sentinel[0].length)).trim(),
+  };
 }
 
 /**
@@ -781,6 +813,20 @@ function classifyDelivery(entry: TranscriptEntry): TranscriptEntry {
               },
             }
           : {}),
+      },
+    };
+
+  const scheduled = parseScheduledPrompt(entry.content);
+  if (scheduled)
+    return {
+      ...entry,
+      content: scheduled.body,
+      notice: {
+        kind: "scheduled-prompt",
+        title: "Scheduled check-back",
+        tone: "info",
+        icon: "clock",
+        body: "collapsed",
       },
     };
 

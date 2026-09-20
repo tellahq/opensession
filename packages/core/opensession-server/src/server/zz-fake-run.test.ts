@@ -502,6 +502,39 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     expect(retried.autoFallbackModel).toBeUndefined();
   });
 
+  test("the picker opt-out persists and stops Fable from falling back", async () => {
+    if (!redirected) return;
+    const sid = "bks-zz-no-auto-fallback";
+    const model = "pi/anthropic/claude-fable-5-1";
+    writeSessionFile(sid, { model });
+    sessionCache.invalidateSessionsCache();
+    const session = sessionCache.findSession(sid)!;
+    expect(slashCommands.handleSlashCommand(session, "/fallback")).toContain(
+      "is on",
+    );
+    expect(
+      slashCommands.handleSlashCommand(session, "/fallback off"),
+    ).toContain("Auto-fallback off");
+    // Await the same session's command lane before reading its projection.
+    await sessionCache.updateSessionFile(sid, (data) => data);
+    expect(sessionJson(sid).autoFallback).toBe(false);
+    const fake = fakeEngineMod.makeFakeEngine([
+      { kind: "usage_exhausted" },
+      { kind: "clean", text: ["must not run"] },
+    ]);
+    agentRunner.__setEngineForTest(fake.engine);
+    await runSession.runSessionPromptAndDrain(sid, "stay on Fable", "Test");
+    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls[0].model).toBe(model);
+    expect(sessionJson(sid).model).toBe(model);
+    expect(sessionJson(sid).autoFallbackModel).toBeUndefined();
+    expect(slashCommands.handleSlashCommand(session, "/fallback on")).toContain(
+      "Auto-fallback on",
+    );
+    await sessionCache.updateSessionFile(sid, (data) => data);
+    expect(sessionJson(sid).autoFallback).toBe(true);
+  });
+
   test("an explicit model choice cancels the automatic retry", async () => {
     if (!redirected) return;
     const sid = "bks-zz-cancel-model-retry";

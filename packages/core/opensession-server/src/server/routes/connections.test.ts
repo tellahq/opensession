@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
 import {
@@ -39,11 +40,12 @@ for (const k of ENV_KEYS) saved[k] = process.env[k];
 
 let dir: string;
 
-beforeEach(() => {
+beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "os-connections-test-"));
   for (const k of ENV_KEYS) delete process.env[k];
   // Missing config = simple mode (sign-in off, feature off, no client id).
   process.env.OPENSESSION_CONFIG = join(dir, "config.json");
+  await getConfigAsync();
   process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
   process.env.OPENSESSION_WEB_SESSIONS_STORE = join(dir, "web-sessions.json");
   __setGithubAppKeyPathForTest(join(dir, "github-app.pem"));
@@ -60,7 +62,7 @@ afterEach(() => {
 
 /** Operator mode: userPrAuth + a client id makes webAuthRequired() true. A
  *  fresh path each call sidesteps getConfig's mtime cache. */
-function enableOperatorMode(): void {
+async function enableOperatorMode(): Promise<void> {
   const path = join(
     dir,
     `operator-${Math.random().toString(36).slice(2)}.json`,
@@ -74,9 +76,10 @@ function enableOperatorMode(): void {
     }),
   );
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
 }
 
-function enableRoleAwareConnections(): string {
+async function enableRoleAwareConnections(): Promise<string> {
   const mcpConfig = join(dir, "mcp-config.json");
   writeFileSync(
     mcpConfig,
@@ -124,6 +127,7 @@ function enableRoleAwareConnections(): string {
     }),
   );
   process.env.OPENSESSION_CONFIG = config;
+  await getConfigAsync();
   return mcpConfig;
 }
 
@@ -162,7 +166,7 @@ const ADMIN = { login: "admin", name: "Admin" };
 
 describe("Apple release connection authorization", () => {
   test("rejects a non-admin self-add through Apple mobile setup", async () => {
-    const mcpConfig = enableRoleAwareConnections();
+    const mcpConfig = await enableRoleAwareConnections();
 
     const response = await handleConnectionsRoutes(
       context("/api/connections/apple-mobile", "PUT", MEMBER, {
@@ -184,7 +188,7 @@ describe("Apple release connection authorization", () => {
   });
 
   test("rejects non-admin generic Apple release mutations", async () => {
-    const mcpConfig = enableRoleAwareConnections();
+    const mcpConfig = await enableRoleAwareConnections();
 
     for (const path of [
       "/api/connections/mcp/apple-release",
@@ -225,7 +229,7 @@ describe("Apple release connection authorization", () => {
   });
 
   test("keeps ordinary MCP mutations available to non-admin teammates", async () => {
-    const mcpConfig = enableRoleAwareConnections();
+    const mcpConfig = await enableRoleAwareConnections();
 
     const update = await handleConnectionsRoutes(
       context("/api/connections/mcp/ordinary", "PUT", MEMBER, {
@@ -245,7 +249,7 @@ describe("Apple release connection authorization", () => {
   });
 
   test("allows admins to update, remove, and reconfigure Apple release", async () => {
-    const mcpConfig = enableRoleAwareConnections();
+    const mcpConfig = await enableRoleAwareConnections();
 
     const update = await handleConnectionsRoutes(
       context("/api/connections/mcp/apple-release", "PUT", ADMIN, {
@@ -264,7 +268,7 @@ describe("Apple release connection authorization", () => {
     expect(remove?.status).toBe(200);
     expect(storedMcpServers(mcpConfig)["apple-release"]).toBeUndefined();
 
-    enableRoleAwareConnections();
+    await enableRoleAwareConnections();
     const setup = await handleConnectionsRoutes(
       context("/api/connections/apple-mobile", "PUT", ADMIN, {
         buildEnabled: false,
@@ -279,7 +283,7 @@ describe("Apple release connection authorization", () => {
 
 describe("Model provider authorization", () => {
   test("rejects non-admin provider mutations and discovery", async () => {
-    enableRoleAwareConnections();
+    await enableRoleAwareConnections();
     const providerConfig = join(dir, "model-providers.json");
     const original = JSON.stringify({
       providers: {
@@ -348,7 +352,7 @@ describe("GitHub connect gating", () => {
   });
 
   test("operator mode requires sign-in before starting a connection (403)", async () => {
-    enableOperatorMode();
+    await enableOperatorMode();
     const response = await handleConnectionsRoutes(
       context(DEVICE, "POST", null),
     );
@@ -394,6 +398,7 @@ describe("GitHub connect gating", () => {
       }),
     );
     process.env.OPENSESSION_CONFIG = path;
+    await getConfigAsync();
     const response = await handleConnectionsRoutes(
       context("/api/connections/github", "GET", null),
     );
@@ -408,7 +413,7 @@ describe("GitHub connect gating", () => {
 
 describe("GitHub disconnect ownership", () => {
   test("operator mode: cannot disconnect another signed-in user's account", async () => {
-    enableOperatorMode();
+    await enableOperatorMode();
     const response = await handleConnectionsRoutes(
       context("/api/connections/github/account/happylinks", "DELETE", {
         login: "9ranty",
@@ -610,7 +615,7 @@ describe("GitHub App config (simple mode)", () => {
   });
 
   test("POST is gated to simple mode (operator mode → 403)", async () => {
-    enableOperatorMode();
+    await enableOperatorMode();
     const res = await handleConnectionsRoutes(
       context(APP, "POST", null, { clientId: "Iv1.abc", slug: "my-app" }),
     );
@@ -636,10 +641,10 @@ describe("GitHub App config (simple mode)", () => {
 
 const POLL = "/api/connections/github/device/poll";
 
-function writeGithubConfig(
+async function writeGithubConfig(
   github: Record<string, unknown>,
   team?: Record<string, unknown>[],
-): string {
+): Promise<string> {
   const path = join(dir, `boot-${Math.random().toString(36).slice(2)}.json`);
   writeFileSync(
     path,
@@ -649,6 +654,7 @@ function writeGithubConfig(
     }),
   );
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
   return path;
 }
 
@@ -679,7 +685,7 @@ function stubGithubDeviceFetch(login: string, name?: string): () => void {
 
 describe("connect-time auth bootstrap", () => {
   test("personal authOnConnect: replaces the local user, flips userPrAuth, and sets a session cookie", async () => {
-    const cfg = writeGithubConfig(
+    const cfg = await writeGithubConfig(
       {
         oauthClientId: "cid",
         authOnConnect: true,
@@ -737,7 +743,7 @@ describe("connect-time auth bootstrap", () => {
     // enabling sign-in for Alice would roster an admin whose token is gone
     // (githubCredentialForLogin("alice") is null). The in-lock revalidation must
     // refuse and leave the gate + intent untouched.
-    const cfg = writeGithubConfig({
+    const cfg = await writeGithubConfig({
       oauthClientId: "cid",
       authOnConnect: true,
     });
@@ -770,7 +776,7 @@ describe("connect-time auth bootstrap", () => {
   });
 
   test("no authOnConnect: simple mode is unchanged (no cookie, no flip, no roster)", async () => {
-    const cfg = writeGithubConfig({ oauthClientId: "cid" });
+    const cfg = await writeGithubConfig({ oauthClientId: "cid" });
     const restore = stubGithubDeviceFetch("octocat", "Octo Cat");
     try {
       const res = await handleConnectionsRoutes(
@@ -794,7 +800,7 @@ describe("connect-time auth bootstrap", () => {
   });
 
   test("preflight refuses the flip when no rostered github login results", async () => {
-    const cfg = writeGithubConfig({
+    const cfg = await writeGithubConfig({
       oauthClientId: "cid",
       appOrg: "acme-inc",
       authOnConnect: true,
@@ -810,7 +816,7 @@ describe("connect-time auth bootstrap", () => {
   });
 
   test("refuses a second bootstrap once the intent is consumed (TOCTOU)", async () => {
-    const cfg = writeGithubConfig({
+    const cfg = await writeGithubConfig({
       oauthClientId: "cid",
       authOnConnect: true,
     });

@@ -216,6 +216,62 @@
           // focusout precedes the app removing kb-open. The delayed attempts
           // wait for that class and the keyboard animation to settle.
           document.addEventListener("focusout", resyncStandaloneScreen);
+
+          // iOS 26.6+ can bring a standalone web app back from the background,
+          // or out of a keyboard cycle, with a phantom keyboard-sized visual
+          // viewport inset while nothing is focused (WebKit bugs 322900 and
+          // 323322). The next gesture then pans the visual viewport by that
+          // inset. The app's body is position: fixed, so it rides the pan and
+          // every control looks in place, but WebKit keeps painting against the
+          // unpanned layout viewport: the fixed navigation bar at the top is
+          // not painted at all and the transcript's tiles above the pan height
+          // stay unpainted, a hard-edged band of page colour under the status
+          // bar that lasts until the next scroll releases the pan. A keyboard
+          // pan is the one legitimate case, and it always has a focused text
+          // field; with nothing focused the pan is phantom, and scrolling the
+          // window back to 0 releases it the way that next gesture would.
+          var viewport = window.visualViewport;
+          if (viewport && typeof window.scrollTo === "function") {
+            var editableFocused = function () {
+              var el = document.activeElement;
+              if (!el) return false;
+              return (
+                el.tagName === "TEXTAREA" ||
+                el.tagName === "INPUT" ||
+                el.isContentEditable === true
+              );
+            };
+            var releasePhantomPan = function () {
+              if (document.hidden || keyboardOpen() || editableFocused())
+                return;
+              if (viewport.scale !== 1) return;
+              var pan = viewport.offsetTop || 0;
+              var scrolled = window.scrollY || 0;
+              if (pan <= 0 && scrolled <= 0) return;
+              window.scrollTo(0, 0);
+            };
+            // The keyboard's own dismissal animates the pan back to 0 through
+            // a run of viewport scroll events with nothing focused; waiting
+            // out the last one leaves that animation alone and only touches a
+            // pan that has come to rest.
+            var panReleaseTimer;
+            var scheduleRelease = function (delay) {
+              clearTimeout(panReleaseTimer);
+              panReleaseTimer = setTimeout(releasePhantomPan, delay);
+            };
+            var onViewportMove = function () {
+              scheduleRelease(120);
+            };
+            var onViewportSettle = function () {
+              scheduleRelease(600);
+            };
+            viewport.addEventListener("scroll", onViewportMove);
+            viewport.addEventListener("resize", onViewportMove);
+            window.addEventListener("scroll", onViewportMove);
+            document.addEventListener("focusout", onViewportSettle);
+            document.addEventListener("visibilitychange", onViewportSettle);
+            window.addEventListener("pageshow", onViewportSettle);
+          }
         }
 
         // The Electron shell owns a hidden native titlebar even when Chromium

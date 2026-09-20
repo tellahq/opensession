@@ -43,6 +43,7 @@ interface WorkspacesState {
 
 export function useWorkspaces(selectedWorkspaceId?: string): WorkspacesState {
   const selectedIdRef = useRef(selectedWorkspaceId);
+  const refreshVersion = useRef(0);
   useLayoutEffect(() => {
     selectedIdRef.current = selectedWorkspaceId;
   }, [selectedWorkspaceId]);
@@ -52,11 +53,16 @@ export function useWorkspaces(selectedWorkspaceId?: string): WorkspacesState {
   // socket handler depend on it. Keep it stable in uncompiled development.
   const [refresh] = useState(() => () => {
     const includeWorkspaceId = selectedIdRef.current;
+    const version = ++refreshVersion.current;
     return loadWorkspaces(
       () => fetchWorkspaces({ includeWorkspaceId }),
       (rows) => {
         // A prior route's slower refresh must not hide the selected workspace.
-        if (selectedIdRef.current === includeWorkspaceId) setWorkspaces(rows);
+        if (
+          selectedIdRef.current === includeWorkspaceId &&
+          version === refreshVersion.current
+        )
+          setWorkspaces(rows);
       },
       () => setLoaded(true),
     );

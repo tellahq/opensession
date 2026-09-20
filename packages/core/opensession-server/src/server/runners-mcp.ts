@@ -141,6 +141,7 @@ export function createRunnersMcpServer(
                   Math.max((args.timeoutSeconds ?? 600) * 1000, 1_000),
                   3_600_000,
                 ),
+                aws: true,
                 user: context.user,
                 repo: context.repo?.(),
                 sessionId: context.sessionId,

@@ -1654,6 +1654,33 @@ describe("makePiBashTool exit-gated completion", () => {
     ).rejects.toThrow(/cannot merge/);
   });
 
+  test("refuses to publish a configured private term to a public repo", async () => {
+    const guarded = makePiBashTool({
+      cwd: tmpdir(),
+      env,
+      gated: false,
+      unattended: false,
+      privateTermsGuard: { terms: ["intranet.acme.test"] },
+    });
+    await expect(
+      (guarded as any).execute(
+        "private-term-denied",
+        {
+          command: "gh pr create --title t --body 'seen on intranet.acme.test'",
+        },
+        undefined,
+        undefined,
+      ),
+    ).rejects.toThrow(/private term "intranet\.acme\.test"/);
+    const res = await (guarded as any).execute(
+      "private-term-read",
+      { command: "echo intranet.acme.test" },
+      undefined,
+      undefined,
+    );
+    expect(res.content[0].text).toContain("intranet.acme.test");
+  });
+
   test("a background child holding stdout does not wedge the tool", async () => {
     const started = Date.now();
     const res = (await (tool as any).execute(

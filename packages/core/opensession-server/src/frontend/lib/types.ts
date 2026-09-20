@@ -571,6 +571,8 @@ export interface UnifiedSession {
   model?: string;
   /** Pi reasoning variant for this session's runs; unset = model default. */
   effort?: string;
+  /** Allow automatic model switching when the selected model is unavailable. Defaults to true. */
+  autoFallback?: boolean;
   /** OpenAI priority service tier for ChatGPT OAuth Codex runs. */
   fastMode?: boolean;
   /** Pstack mode: the pstack skill family loads for this session's runs. */
@@ -964,7 +966,9 @@ export type WSClientMessage =
   // session_row frames instead of asking every client to refetch.
   | { type: "sessions_subscribe"; query: string }
   // Short-lived composer activity. The server expires it unless refreshed.
-  | { type: "typing"; sessionId: string; typing: boolean }
+  // `text` is the head of the draft, shown to co-viewers who hover the
+  // indicator; it travels only while the lease is live and is never stored.
+  | { type: "typing"; sessionId: string; typing: boolean; text?: string }
   // Interactive shell frames. The terminal tab multiplexes PTYs by termId.
   | {
       type: "term_start";
@@ -983,7 +987,14 @@ export type WSServerMessage =
   // usage, queue, asks, session_created / workspace_status / model_changed.
   | ProtocolServerMessage
   | { type: "presence"; sessionId: string; viewers: string[] }
-  | { type: "typing"; sessionId: string; users: string[] }
+  // `drafts` maps a typing user to the head of their draft; absent when
+  // nobody's lease carried text.
+  | {
+      type: "typing";
+      sessionId: string;
+      users: string[];
+      drafts?: Record<string, string>;
+    }
   | {
       type: "global_presence";
       viewing: Array<{ user: string; sessionId: string }>;
@@ -992,15 +1003,16 @@ export type WSServerMessage =
   // One of this person's sidebar maps was written from any client. Sent only
   // to that person's sockets and carries no entries: the receiver re-reads the
   // map, so a claim made on the phone reaches a desktop window that never
-  // lost visibility. Native clients safely ignore this frame.
+  // lost visibility. Older clients safely ignore unknown map names.
   | {
       type: "user_map_changed";
-      map: "lanes" | "snoozes" | "hides";
+      map: "lanes" | "snoozes" | "hides" | "tab-colors" | "reads";
       user: string;
     }
   // The materialized session list changed. Web clients refetch their scoped
   // sidebar projection; older and native clients safely ignore this frame.
   | { type: "sessions_invalidated" }
+  | { type: "workspaces_changed" }
   // One session's list row changed and is visible in this socket's subscribed
   // sidebar scope (sessions_subscribe). Replaces a whole-list refetch for the
   // common write. `session_row_removed` is the same change for a row the
@@ -1016,7 +1028,7 @@ export type WSServerMessage =
   | {
       type: "term_ready";
       termId?: string;
-      target: "host" | "daytona" | "box" | "runner";
+      target: "host" | "daytona" | "box" | "tart" | "runner";
       cwd?: string;
     }
   | { type: "term_notice"; termId?: string; message: string }

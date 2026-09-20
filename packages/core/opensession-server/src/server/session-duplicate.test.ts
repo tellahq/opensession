@@ -1,77 +1,88 @@
 import { describe, expect, test } from "bun:test";
 import {
   duplicateContextSessionIds,
-  duplicateSessionTranscript,
+  readDuplicateSessionTranscript,
 } from "./session-duplicate";
 import type { TranscriptEntry, UnifiedSession } from "./types";
 
 function entry(id: string, content: string): TranscriptEntry {
-  return { id, type: "user", content, timestamp: "2026-09-01T09:00:00Z" };
+  return { id, type: "assistant", content, timestamp: "2026-09-01T09:00:00Z" };
 }
 
+const duplicate = {
+  id: "os-copy",
+  claudeSessionId: null,
+  duplicatedFromSessionId: "bks-source",
+};
+
 describe("duplicateContextSessionIds", () => {
-  test("uses the copied chat as context for the first turn", () => {
+  test("uses its frozen copied chat, not the live source, for the first turn", () => {
     expect(
-      duplicateContextSessionIds(
-        {
-          claudeSessionId: null,
-          duplicatedFromSessionId: "bks-source",
-        },
-        ["bks-attached"],
-      ),
-    ).toEqual(["bks-attached", "bks-source"]);
+      duplicateContextSessionIds(duplicate, ["bks-attached", "os-copy"]),
+    ).toEqual(["bks-attached", "os-copy"]);
   });
 
-  test("stops injecting it after an engine session exists", () => {
+  test.each([
+    { claudeSessionId: "engine-session" },
+    { codexThreadId: "engine-session" },
+    { piSessionId: "engine-session" },
+  ])("stops injecting it after an engine session exists: %j", (engine) => {
     expect(
-      duplicateContextSessionIds(
-        {
-          claudeSessionId: "engine-session",
-          duplicatedFromSessionId: "bks-source",
-        },
-        [],
-      ),
+      duplicateContextSessionIds({ ...duplicate, ...engine }, ["os-copy"]),
     ).toEqual([]);
+  });
+
+  test("ordinary sessions cannot attach themselves", () => {
+    expect(
+      duplicateContextSessionIds({ id: "os-session", claudeSessionId: null }, [
+        "os-session",
+        "other",
+        "other",
+      ]),
+    ).toEqual(["other"]);
   });
 });
 
-describe("duplicateSessionTranscript", () => {
-  test("copies the complete source chat into the sibling", async () => {
-    const source = { id: "bks-source" } as UnifiedSession;
-    const entries = [entry("one", "First"), entry("two", "Second")];
-    const replacements: Array<{
-      sessionId: string;
-      entries: TranscriptEntry[];
-    }> = [];
+describe("readDuplicateSessionTranscript", () => {
+  const source = { id: "bks-source" } as UnifiedSession;
+  const entries = [
+    entry("one", "First"),
+    entry("two", "Second"),
+    entry("three", "Later"),
+  ];
+  const load = async (loaded: UnifiedSession) => {
+    expect(loaded).toBe(source);
+    return entries;
+  };
 
-    const count = await duplicateSessionTranscript(source, "os-copy", {
-      load: async (loaded) => {
-        expect(loaded).toBe(source);
-        return entries;
-      },
-      replace: async (sessionId, copied) => {
-        replacements.push({ sessionId, entries: copied });
-      },
-    });
-
-    expect(count).toBe(2);
-    expect(replacements).toEqual([{ sessionId: "os-copy", entries }]);
+  test("copies the complete source chat at the tip", async () => {
+    expect(
+      await readDuplicateSessionTranscript(source, undefined, load),
+    ).toEqual(entries);
   });
 
-  test("does not create an empty transcript actor", async () => {
-    let replacements = 0;
-    const count = await duplicateSessionTranscript(
-      { id: "bks-empty" } as UnifiedSession,
-      "os-copy",
-      {
-        load: async () => [],
-        replace: async () => {
-          replacements++;
-        },
-      },
+  test("copies through the selected message, excluding later turns", async () => {
+    expect(await readDuplicateSessionTranscript(source, "two", load)).toEqual(
+      entries.slice(0, 2),
     );
+    expect(await readDuplicateSessionTranscript(source, "one", load)).toEqual(
+      entries.slice(0, 1),
+    );
+    expect(entries).toHaveLength(3);
+  });
 
-    expect(count).toBe(0);
-    expect(replacements).toBe(0);
+  test("rejects a missing boundary instead of silently copying the full chat", async () => {
+    expect(
+      await readDuplicateSessionTranscript(source, "missing", load),
+    ).toBeNull();
+  });
+
+  test("allows an empty tip but not a missing message in an empty source", async () => {
+    expect(
+      await readDuplicateSessionTranscript(source, undefined, async () => []),
+    ).toEqual([]);
+    expect(
+      await readDuplicateSessionTranscript(source, "missing", async () => []),
+    ).toBeNull();
   });
 });

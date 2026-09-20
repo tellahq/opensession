@@ -284,6 +284,7 @@ export async function handlePrefsRoutes(
     }
     const user = requestUser(ctx, body.user) || "Anonymous";
     const reads = setUserReads(user, body.reads);
+    broadcastToUser(user, { type: "user_map_changed", map: "reads", user });
     scheduleLiveActivitySync();
     return Response.json({ reads });
   }
@@ -385,12 +386,6 @@ export async function handlePrefsRoutes(
     const next = await updateUserLanes(user, (current) =>
       mergeMapDelta(current, delta),
     );
-    // These maps decide what the sidebar shows, and a client only re-reads
-    // them on load or when its tab regains visibility. A claim made on the
-    // phone must reach a desktop window that never lost visibility, so the
-    // write tells that person's other sockets to re-read. No entries ride
-    // along: the frame is a nudge, and the GET stays the authority.
-    broadcastToUser(user, { type: "user_map_changed", map: "lanes", user });
     return Response.json({ lanes: next });
   }
 
@@ -419,7 +414,6 @@ export async function handlePrefsRoutes(
     const next = await updateUserSnoozes(user, (current) =>
       mergeMapDelta(current, delta),
     );
-    broadcastToUser(user, { type: "user_map_changed", map: "snoozes", user });
     return Response.json({
       snoozes: next,
     });
@@ -447,7 +441,6 @@ export async function handlePrefsRoutes(
     const next = await updateUserHides(user, (current) =>
       mergeMapDelta(current, delta),
     );
-    broadcastToUser(user, { type: "user_map_changed", map: "hides", user });
     return Response.json({ hides: next });
   }
 
@@ -499,9 +492,13 @@ export async function handlePrefsRoutes(
     }
     const user = requestUser(ctx, body.user) || "Anonymous";
     const next = mergeMapDelta(getUserTabColors(user), delta);
-    return Response.json({
-      colors: setUserTabColors(user, next),
+    const colors = setUserTabColors(user, next);
+    broadcastToUser(user, {
+      type: "user_map_changed",
+      map: "tab-colors",
+      user,
     });
+    return Response.json({ colors });
   }
 
   return undefined;

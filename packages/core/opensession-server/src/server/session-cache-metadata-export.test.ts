@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 /**
  * A committed session document projects straight into the list index and the
  * derived export file. The row comes from the document the compare-and-set
@@ -92,6 +93,7 @@ beforeAll(async () => {
   process.env.HOME = home;
   process.env.OPENSESSION_STATE_DIR = home;
   process.env.OPENSESSION_CONFIG = join(home, "config.json");
+  await getConfigAsync();
   priorSessionsDir = (await import("./paths")).__setSessionsDirForTest(
     sessionsDir,
   );

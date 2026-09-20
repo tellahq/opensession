@@ -35,7 +35,7 @@ test("SessionViewer receives its socket capabilities from context", async () => 
   expect(props).not.toContain("setTyping:");
   expect(props).toContain("composer: ComposerBinding;");
   expect(bindings).toContain(
-    "setTyping: (sessionId: string, active: boolean) => void;",
+    "setTyping: (sessionId: string, active: boolean, text?: string) => void;",
   );
   expect(props).toContain("lifecycle: SessionViewerLifecycleBinding;");
   expect(lifecycle).toContain("connected: boolean;");

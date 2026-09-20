@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 /**
  * Unit tests for the sandbox provider-status surface (GET /api/sandbox/status
  * serves sandboxCapabilityStatus() verbatim — the route itself is a one-liner,
@@ -58,46 +59,51 @@ let prevInstanceConfig: string | undefined;
 const cfgPath = () => join(scratch, "sandbox.json");
 const instanceCfgPath = () => join(scratch, "config.json");
 
-beforeAll(() => {
+beforeAll(async () => {
   scratch = mkdtempSync(join(tmpdir(), "bks-sandbox-status-"));
   prevEnvConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
   prevSecretsStore = process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
   prevInstanceConfig = process.env.OPENSESSION_CONFIG;
   process.env.OPENSESSION_SANDBOX_CONFIG = cfgPath();
   process.env.OPENSESSION_CONFIG = instanceCfgPath();
+  await getConfigAsync();
   process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = join(
     scratch,
     "secrets.json",
   );
 });
 
-afterEach(() => {
+afterEach(async () => {
   for (const path of [cfgPath(), instanceCfgPath()]) {
     try {
       unlinkSync(path);
     } catch {}
   }
+  await getConfigAsync();
 });
 
-afterAll(() => {
+afterAll(async () => {
   if (prevEnvConfig === undefined)
     delete process.env.OPENSESSION_SANDBOX_CONFIG;
   else process.env.OPENSESSION_SANDBOX_CONFIG = prevEnvConfig;
   if (prevSecretsStore !== undefined)
     process.env.OPENSESSION_WORKSPACE_SECRETS_STORE = prevSecretsStore;
   else delete process.env.OPENSESSION_WORKSPACE_SECRETS_STORE;
-  if (prevInstanceConfig !== undefined)
+  if (prevInstanceConfig !== undefined) {
     process.env.OPENSESSION_CONFIG = prevInstanceConfig;
-  else delete process.env.OPENSESSION_CONFIG;
+    await getConfigAsync();
+  } else delete process.env.OPENSESSION_CONFIG;
   rmSync(scratch, { recursive: true, force: true });
 });
 
 const write = (cfg: object) => writeFileSync(cfgPath(), JSON.stringify(cfg));
-const writeIngress = (publicBaseUrl: string) =>
+const writeIngress = async (publicBaseUrl: string) => {
   writeFileSync(
     instanceCfgPath(),
     JSON.stringify({ ingress: { publicBaseUrl, exposure: "custom" } }),
   );
+  await getConfigAsync();
+};
 const ready = (provider: "daytona" | "box") => {
   connectSandboxProvider(provider, { secret: `test-${provider}-key` });
   setSandboxConnectionQualification(provider, { status: "ready" });
@@ -189,11 +195,12 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     const s = sandboxCapabilityStatus();
     expect(s.enabled).toBe(false);
     expect(s.defaultProvider).toBe("local");
-    expect(s.providers.map((p) => p.id)).toEqual(["daytona", "box"]);
+    expect(s.providers.map((p) => p.id)).toEqual(["daytona", "box", "tart"]);
     expect(s.providers.every((p) => !p.configured)).toBe(true);
     expect(s.providers.filter((p) => p.certified).map((p) => p.id)).toEqual([
       "daytona",
       "box",
+      "tart",
     ]);
     expect(s.killSwitch).toBe(!sandboxesEnabled());
   });
@@ -224,9 +231,9 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     expect(d.note).toContain("no public ingress configured");
   });
 
-  test("healthy provider (public ingress configured) carries no note", () => {
+  test("healthy provider (public ingress configured) carries no note", async () => {
     write({ provider: "daytona" });
-    writeIngress("https://example.ts.net");
+    await writeIngress("https://example.ts.net");
     ready("daytona");
     const d = sandboxCapabilityStatus().providers.find(
       (p) => p.id === "daytona",

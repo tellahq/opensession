@@ -265,7 +265,6 @@ export function useSessionConversationActions({
     openSession,
     openAsset,
     navigation,
-    composerSettersRef,
   } = runtime;
   const slackSettersRef = useRef({
     setComposer,
@@ -273,7 +272,6 @@ export function useSessionConversationActions({
     setReconnect,
     setSent,
   });
-  const stableComposerSettersRef = useRef(composerSettersRef);
   const sendComposedSlackMessage = useCallback(
     async (message: string, channel: string, screenshots: string[]) => {
       await sendComposedSlackMessageAction({
@@ -314,14 +312,7 @@ export function useSessionConversationActions({
   const canForkSession = session.source === "opensession" && !!session.ran;
   const handleFork = useCallback(
     (messageId?: string) => {
-      if (!messageId) {
-        void navigation.duplicateSession();
-        return;
-      }
-      stableComposerSettersRef.current.current.setForkFrom({
-        kind: "message",
-        messageId,
-      });
+      void navigation.duplicateSession(messageId);
     },
     [navigation],
   );

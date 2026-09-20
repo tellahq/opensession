@@ -21,6 +21,19 @@ configuration for the run.
   is not added to Pi's local-tool environment. MCP subprocesses use safe SDK
   defaults plus their configured headers/env or OAuth projection. Neither path
   inherits the server's full environment or `~/.opensession.env`.
+- The host's instance-role AWS session is never sent to a Runner. A Runner
+  run host receives credentials only for the IAM role an administrator
+  configured on that Runner, assumed server-side and fetched by the host with
+  its per-launch dial-back token (`src/server/routes/run-host-aws.ts`). The
+  run's `aws` grant is decided by the server at launch and checked again
+  there, so an automation descendant cannot ask its way into the role.
+  The interactive-only Runner MCP also grants the configured role to bounded
+  commands, after checking Runner command permissions. It sends only the
+  assumed role's AWS environment over the authenticated channel, never in
+  the command text or audit log. Clients explicitly advertise support, and
+  failed credential issuance prevents dispatch. Internal workspace probes
+  do not opt into this grant; the MCP is not mounted for unattended runs.
+  ([runners.md](runners.md#aws-access-from-a-runner))
 - Each automation has an optional `mcpServers` allowlist (per-automation
   field, settable via the API); runs only see those servers. Example: a
   support-triage automation might name only its support-inbox, identity,
@@ -61,7 +74,9 @@ configuration for the run.
   `docs/setup/plain.md`) is prompted by a teammate but reads the same untrusted
   ticket text, so every one of its turns carries the automation deny-set plus
   the Plain customer-facing writes and the Stripe money movers, passes no
-  user, gets no AWS credentials, and mounts only `opensession-plain-discussion`
+  user, gets no AWS credentials (unless the instance opts untrusted runs in
+  with `integrations.aws.untrustedRuns`), and mounts only
+  `opensession-plain-discussion`
   (the Approve/Deny-gated customer reply and Stripe execution) in place of the
   interactive set. The run-rpc fallback builder serves that same set, so a
   hosted or sandboxed turn cannot ask for more.
@@ -106,6 +121,12 @@ configuration for the run.
   but it grants no GitHub authority. It matters only when the run already has
   an authorized publication path. See
   [Automation PR credentials and review requests](setup/github.md#automation-pr-credentials-and-review-requests).
+- An automation's `readRepos` (sibling `owner/repo` names under its own
+  owner) gives its runs a second, read-only installation token,
+  `GH_READ_TOKEN`, covering its repo plus those. The primary `GH_TOKEN` is
+  never widened, the mint fails closed when the App is not installed on one
+  of the repositories, and only the names are journaled. See
+  [Who holds which credential](setup/github.md#who-holds-which-credential).
 
 ## Stripe: a third enforcement tier
 
@@ -129,6 +150,48 @@ to perform the approved action. (Dropping the whole server from interactive
 runs was tried and reverted: it blanked Stripe reads for no security gain. The
 money movers were unreachable either way, and Stripe enforces the restricted
 key's write ceiling.)
+
+## Mac Keychain requests
+
+The interactive-only `opensession-keychain` server can request one macOS Keychain
+generic-password item for one exact HTTPS API call. Requests carry only the
+service/account identifiers, purpose and HTTP intent. A ten-minute, memory-only
+queue binds each to the prompting teammate's roster-resolved GitHub login and
+session. Verified human web identity is required; name-picker fallback and machine
+authentication are rejected. Restart revokes pending requests. Atomic claim
+precedes execution, so two Macs cannot execute the same request and failures do
+not retry it.
+
+Execution starts only through the native app menu. The full intent appears in a
+native menu; selecting **Use once** dispatches an exact service/account lookup to
+the packaged, signed `OS Keychain` helper. No remote-page IPC can read credentials
+or trigger execution. The Mac revalidates and freezes the intent and checks the
+session/organization again after selection and claim. The helper directly calls
+Apple's `SecKeychainFindGenericPassword`, never `/usr/bin/security`, a shell, or
+1Password. macOS supplies its own item-access prompt and enforces the item's ACL.
+**Allow** grants that access once; **Always Allow** changes subsequent behavior.
+Existing trusted-application permissions may suppress prompts. The app neither
+changes ACLs nor forces prompts by disturbing the user's Keychain settings. Every
+request still requires an explicit native menu action, including when Keychain
+already trusts the helper.
+
+The helper receives only service/account identifiers, a minimal environment with
+no inherited dynamic-library injection variables or credentials, and a two-minute
+deadline. It returns the value through a private pipe to Electron's main process
+and exits. The value never goes to a renderer, server, agent-readable file,
+environment, or model context. The main process injects it into one approved HTTPS
+request with a thirty-second deadline. No browser cookies, redirects,
+private/loopback/tailnet DNS targets, custom ports, arbitrary headers, helper error
+text, or response content are forwarded. The model receives only a fixed outcome
+and numeric HTTP status. This deliberately sacrifices response data: substring
+redaction cannot prove an API won't echo or encode the credential. The human must
+trust the approved API destination with the secret; Open Session cannot control
+that service after receipt.
+
+This replaces the earlier CLI-based 1Password path. It does not offer 1Password
+vault access, item enumeration, raw export, Apple Passwords/iCloud access, or
+Keychain mutation. Native tests use a new disposable keychain with interaction
+disabled, never the default search list or real user credentials.
 
 ## Per-user MCP servers (`allowedUsers`)
 
@@ -245,6 +308,39 @@ interactive code runs; they cannot be narrowed by the installation-token
 mint sets. Changing and auditing public-intake settings remains a one-time
 human-admin task. See [GitHub authority](github-authority.md) for the
 connected-user and host-private-key implications.
+
+## Private information and public repositories
+
+A run's inputs are the organization's private record: session context, memory,
+Slack and Linear threads, local instructions, other checkouts, and the
+instance config. A public repository's PRs, commits, branch names, comments,
+and files are readable by anyone. Nothing may cross from the first set to the
+second.
+
+The boundary has three layers:
+
+- **Visibility is resolved per repo and fails closed.** `treatRepoAsPublic`
+  (`repo-visibility.ts`) honors an explicit `repos.<id>.public` in
+  `config.json`, otherwise asks GitHub for the repository's visibility with the
+  instance credential. code.storage repos are private to the instance. No
+  token, an API failure, or no GitHub remote all count as public.
+- **Every code run in a public repo gets the `## Public repository` rule** in
+  its shared run instructions (`run-instructions.ts`): describe the change in
+  terms of the repository alone; the attribution footer and `Co-authored-by`
+  trailer are the only session facts allowed through. The rule is per repo, so
+  it does not fragment the prompt cache across a repo's sessions.
+- **`policy.privateTerms` is a server-side tripwire.** List the hostnames,
+  customer names, private repository names, and other terms that must never
+  appear in public. In a public repo, a bash command that publishes text
+  (`git commit`, `tag`, `push`, `branch`, `checkout -b`, `gh pr create`, `edit`,
+  `comment`, `review`, `gh issue`, `gh api`, and so on) is refused before it
+  runs when it contains one of the terms, heredoc and quoted bodies included.
+  Read-only commands stay usable. The list is instance-local configuration:
+  do not commit it to a public repository.
+
+The tripwire is not the boundary. A term list only catches the terms it knows,
+and text that reaches a file before being committed is not scanned. The
+prompt rule and reviewers remain responsible for everything else.
 
 ## GitHub credential scoping (out-of-org writes fail server-side)
 

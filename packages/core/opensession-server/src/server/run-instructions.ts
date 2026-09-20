@@ -9,6 +9,7 @@
 
 import { join } from "path";
 import { configuredServer, personaName } from "./config";
+import { renderInternalMcpCapabilities } from "./mcp-capabilities";
 import { githubLoginFor, type GitIdentity } from "./shared/user-mappings";
 
 const UI_BASE =
@@ -46,6 +47,9 @@ export function buildRunInstructions(input: {
   /** Reviewer to request on PRs this run opens (GitHub login, `org/team`
    *  slug, or comma-separated list) — see RunAgentOpts.prReviewer. */
   prReviewer?: string;
+  /** Sibling repositories `GH_READ_TOKEN` in the shell can read. Set only
+   *  when the run actually holds that token (pi-runner). */
+  readRepos?: string[];
   inProcessMcp?: Record<string, unknown>;
   /** The run executes inside the session's Sandbox (Daytona or Box). One
    *  boolean, not a per-session fact, so the prompt prefix stays shared. */
@@ -57,6 +61,10 @@ export function buildRunInstructions(input: {
    *  "codestorage" swaps the PR-flow instructions for push-the-branch ones
    *  (code.storage has no PRs — a pushed branch is the change request). */
   repoHost?: "github" | "codestorage";
+  /** The primary repo is public, or its visibility could not be confirmed
+   *  (treatRepoAsPublic). Per repo, not per session, so the prompt prefix
+   *  stays shared across a repo's sessions. */
+  publicRepo?: boolean;
   /** Untracked instance-local instructions (readLocalInstructions) — appended
    *  verbatim so operator-private guidance never has to live in the tracked
    *  AGENTS.md. */
@@ -161,14 +169,41 @@ export function buildRunInstructions(input: {
       );
     }
   }
-
-  const inproc = (input.inProcessMcp || {}) as Record<string, unknown>;
-  if (inproc["opensession-sessions"]) {
+  // Everything a run publishes to a public repository is readable by anyone,
+  // while its inputs (session context, memory, Slack, Linear, local
+  // instructions, other checkouts) are the organization's private record.
+  // Say so once, in shared text, so no engine or engine prompt has to.
+  if (!input.isAsk && !input.isScratch && input.publicRepo) {
     parts.push(
-      "## New sessions\nA request for a new session means `create_session`, not an " +
-        "in-process worker.",
+      "## Public repository\nTreat the primary repository as public: its PRs, commits, branch " +
+        "names, comments, and files are readable by anyone. Never put private organization " +
+        "information there: internal hostnames, URLs, or paths, private repositories' names or " +
+        "code, teammate or customer details, secrets, internal plans, or anything from memory, " +
+        "Slack, Linear, local instructions, or the session context. Describe what the change " +
+        "does in terms of this repository alone. The attribution footer and commit trailer from " +
+        "the session context are the only exception. Apply the same rule before writing to any " +
+        "other public repository.",
     );
   }
+
+  if (input.readRepos?.length) {
+    parts.push(
+      "## Cross-repository reads\n`GH_READ_TOKEN` in the shell is a read-only GitHub token " +
+        `covering this repository and ${input.readRepos.map((r) => `\`${r}\``).join(", ")}. ` +
+        "Use it per command for those repositories, for example " +
+        "`GH_TOKEN=$GH_READ_TOKEN gh pr list --repo owner/name` or " +
+        "`GH_TOKEN=$GH_READ_TOKEN gh api repos/owner/name/contents/path`. " +
+        "`GH_TOKEN` itself reaches only this repository and cannot write anywhere else.",
+    );
+  }
+
+  const inproc = (input.inProcessMcp || {}) as Record<string, unknown>;
+  // One guidance line per mounted internal server. Every MCP tool hides
+  // behind mcp_search, so this is how a run learns which tools exist before
+  // it knows to search for them. The sections below add the standing rules
+  // (Portals, Attachments, Media) that a one-line intention cannot carry.
+  const tools = renderInternalMcpCapabilities(inproc);
+  if (tools) parts.push(tools);
   if (input.sandboxed) {
     parts.push(
       "## Sandbox\nThis session runs in its own Sandbox: a Linux machine with the " +
@@ -226,7 +261,8 @@ export function buildRunInstructions(input: {
       (inproc["opensession-charts"]
         ? " `make_chart` validates one and offloads large data."
         : "") +
-      " Live fences: mermaid, math, csv, json, ansi, palette, metrics (`Label: value " +
+      ' Live fences: mermaid (quote labels with punctuation: `A["v1 (beta)"]`, ' +
+      '`-->|"@x"|`), math, csv, json, ansi, palette, metrics (`Label: value ' +
       "(delta)`), choices (a reply per line, click sends), tree, artifact (sandboxed " +
       "HTML), svg, slides (`---`); `> [!NOTE]` is a callout.",
   );

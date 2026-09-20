@@ -56,6 +56,8 @@ export type RunnerInfo = {
     allowedModels: string[];
     allowedTasks: Array<"chat" | "embedding" | "image" | "video">;
   };
+  /** IAM role runs on this Runner assume through the Open Session host. */
+  aws?: { roleArn: string; externalId?: string };
   workload?: { sessionId?: string; operation?: string; startedAt?: string };
   reservation?: {
     sessionId?: string;
@@ -130,6 +132,8 @@ export type RunnerPatch = Partial<
 > & {
   permissions?: Partial<RunnerPermissions>;
   capabilities?: Partial<RunnerInfo["capabilities"]>;
+  /** `null` removes the role. */
+  aws?: RunnerInfo["aws"] | null;
 };
 
 export async function updateRunner(

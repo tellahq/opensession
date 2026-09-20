@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
 import {
@@ -53,13 +54,14 @@ function context(
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "opensession-github-manifest-"));
   configPath = join(dir, "config.json");
   envPath = join(dir, ".opensession.env");
   keyPath = join(dir, "github-app.pem");
   writeFileSync(configPath, JSON.stringify({ integrations: {} }));
   process.env.OPENSESSION_CONFIG = configPath;
+  await getConfigAsync();
   process.env.OPENSESSION_ENV_FILE = envPath;
   delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
   delete process.env.OPENSESSION_GITHUB_APP_KEY;
@@ -68,12 +70,15 @@ beforeEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-afterEach(() => {
+afterEach(async () => {
   globalThis.fetch = originalFetch;
   __setGithubAppKeyPathForTest(undefined);
   __resetGithubManifestStatesForTest();
   if (saved.config === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = saved.config;
+  else {
+    process.env.OPENSESSION_CONFIG = saved.config;
+    await getConfigAsync();
+  }
   if (saved.envFile === undefined) delete process.env.OPENSESSION_ENV_FILE;
   else process.env.OPENSESSION_ENV_FILE = saved.envFile;
   if (saved.clientId === undefined)

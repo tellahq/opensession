@@ -18,6 +18,7 @@ import {
   testSandboxConnection,
   updateSandboxConnection,
 } from "../../lib/api/sandboxes";
+import { fetchRunners, type RunnerInfo } from "../../lib/api/runners";
 import { errorMessage } from "../../lib/error-message";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
@@ -54,6 +55,12 @@ const PROVIDERS: Array<{
     label: "Boat",
     description:
       "Persistent Linux VMs in your Boat account with fast snapshot restores and private Portals.",
+  },
+  {
+    id: "tart",
+    label: "Mac VM",
+    description:
+      "macOS virtual machines with Xcode on a Mac you paired as a Runner, one VM per session.",
   },
 ];
 
@@ -111,7 +118,30 @@ type MachineProfile = {
   settings: SandboxMachineSettings;
 };
 
-const MACHINE_PROFILES: Record<"daytona" | "box", MachineProfile[]> = {
+const MACHINE_PROFILES: Record<
+  SandboxConnectionInfo["provider"],
+  MachineProfile[]
+> = {
+  tart: [
+    {
+      id: "small",
+      label: "Small",
+      detail: "2 CPU · 4 GB",
+      settings: { cpu: 2, memoryMb: 4096 },
+    },
+    {
+      id: "medium",
+      label: "Medium",
+      detail: "4 CPU · 6 GB",
+      settings: { cpu: 4, memoryMb: 6144 },
+    },
+    {
+      id: "large",
+      label: "Large",
+      detail: "6 CPU · 10 GB",
+      settings: { cpu: 6, memoryMb: 10_240 },
+    },
+  ],
   daytona: [
     {
       id: "small",
@@ -163,7 +193,7 @@ function machineProfiles(
 function defaultMachineProfile(
   provider: SandboxConnectionInfo["provider"],
 ): string {
-  return provider === "daytona" ? "medium" : "default";
+  return provider === "box" ? "default" : "medium";
 }
 
 function machineProfileForSettings(
@@ -206,6 +236,34 @@ function ConnectDialog({
   const [memoryMb, setMemoryMb] = useState(
     String(connection.settings.memoryMb || ""),
   );
+  const isMac = connection.provider === "tart";
+  const [runner, setRunner] = useState(
+    String(connection.settings.runner || ""),
+  );
+  const [image, setImage] = useState(String(connection.settings.image || ""));
+  const [maxVms, setMaxVms] = useState(
+    String(connection.settings.maxVms || ""),
+  );
+  const [macRunners, setMacRunners] = useState<RunnerInfo[] | null>(null);
+  useEffect(() => {
+    if (!isMac || !open) return;
+    let cancelled = false;
+    fetchRunners()
+      .then((response) => {
+        if (cancelled) return;
+        const macs = response.runners.filter(
+          (candidate) => candidate.platform === "darwin",
+        );
+        setMacRunners(macs);
+        setRunner((current) => current || macs[0]?.name || "");
+      })
+      .catch(() => {
+        if (!cancelled) setMacRunners([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isMac, open]);
   const [saving, setSaving] = useState(false);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   // The credential field, so the dialog opens ready to paste rather than with
@@ -224,6 +282,12 @@ function ConnectDialog({
       if (snapshot) settings.snapshot = snapshot;
       if (cpu) settings.cpu = Number(cpu);
       if (memoryMb) settings.memoryMb = Number(memoryMb);
+      if (isMac) {
+        if (!runner) throw new Error("Choose the Mac that hosts the VMs");
+        settings.runner = runner;
+        if (image) settings.image = image;
+        if (maxVms) settings.maxVms = Number(maxVms);
+      }
       const response = await connectSandbox(connection.provider, body);
       onChanged(response);
       onOpenChange(false);
@@ -275,37 +339,103 @@ function ConnectDialog({
         <Modal.Header
           title={`${exists ? "Configure" : "Connect"} ${provider.label}`}
           description={
-            connection.provider === "box"
-              ? "Credentials stay on this server. Open Session tests ingress, creates a disposable Boat sandbox, verifies archive/resume and snapshot restore, then archives it."
-              : "Credentials stay on this server. Open Session tests ingress, creates a disposable sandbox, restores a snapshot, and cleans up."
+            isMac
+              ? "No credential needed: the Mac is a paired Runner. Open Session installs Tart on it, pulls the image once (about 70 GB, up to an hour), prepares a base VM, then proves a disposable VM and deletes it."
+              : connection.provider === "box"
+                ? "Credentials stay on this server. Open Session tests ingress, creates a disposable Boat sandbox, verifies archive/resume and snapshot restore, then archives it."
+                : "Credentials stay on this server. Open Session tests ingress, creates a disposable sandbox, restores a snapshot, and cleans up."
           }
         />
 
-        <Field
-          label={
-            connection.provider === "box" ? "Boat API key" : "Daytona API key"
-          }
-        >
-          <Input
-            ref={firstFieldRef}
-            type="password"
-            autoComplete="off"
-            placeholder={
-              connection.hasCredentials
-                ? "Leave blank to keep current key"
-                : `Enter ${connection.provider === "box" ? "boat_…" : "API key"}`
+        {isMac ? (
+          <>
+            <Field label="Mac host">
+              <Select
+                value={runner}
+                onChange={(event) => setRunner(event.target.value)}
+                disabled={!macRunners?.length}
+              >
+                {!macRunners?.length && (
+                  <option value="">
+                    {macRunners === null
+                      ? "Loading Runners…"
+                      : "No macOS Runner paired yet"}
+                  </option>
+                )}
+                {(macRunners || []).map((candidate) => (
+                  <option key={candidate.id} value={candidate.name}>
+                    {candidate.name}
+                    {candidate.state !== "online" ? " (offline)" : ""}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Image">
+                <Input
+                  ref={firstFieldRef}
+                  value={image}
+                  onChange={(event) => setImage(event.target.value)}
+                  placeholder="ghcr.io/cirruslabs/macos-tahoe-xcode:26.5"
+                />
+              </Field>
+              <Field label="Max VMs">
+                <Input
+                  type="number"
+                  min="1"
+                  max="8"
+                  value={maxVms}
+                  onChange={(event) => setMaxVms(event.target.value)}
+                  placeholder="2"
+                />
+              </Field>
+              <Field label="CPU">
+                <Input
+                  type="number"
+                  min="1"
+                  value={cpu}
+                  onChange={(event) => setCpu(event.target.value)}
+                  placeholder="4"
+                />
+              </Field>
+              <Field label="Memory (MB)">
+                <Input
+                  type="number"
+                  min="2048"
+                  value={memoryMb}
+                  onChange={(event) => setMemoryMb(event.target.value)}
+                  placeholder="6144"
+                />
+              </Field>
+            </div>
+          </>
+        ) : (
+          <Field
+            label={
+              connection.provider === "box" ? "Boat API key" : "Daytona API key"
             }
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-          />
-        </Field>
+          >
+            <Input
+              ref={firstFieldRef}
+              type="password"
+              autoComplete="off"
+              placeholder={
+                connection.hasCredentials
+                  ? "Leave blank to keep current key"
+                  : `Enter ${connection.provider === "box" ? "boat_…" : "API key"}`
+              }
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+            />
+          </Field>
+        )}
 
         <>
           <p className="m-0 text-supporting text-dim">
             Sandboxes reach this server through Public callback under Domains
             for run streaming and workload identity.
           </p>
-          {connection.provider !== "box" && (
+          {connection.provider === "daytona" && (
             <details className="rounded-lg bg-surface p-3 text-supporting text-dim">
               <summary className="cursor-pointer font-medium text-fg">
                 Provider settings
@@ -738,6 +868,8 @@ function ProjectEnvironmentDialog({
             "Daytona supports custom resource combinations, but these documented sizes avoid invalid or undersized setups."}
           {provider === "box" &&
             "Boat exposes three fixed machine types. Stop and resume retain the disk, and new sandboxes restore from this project's named snapshot."}
+          {provider === "tart" &&
+            "The VM shape applies when a VM boots. Memory is shared with the Mac itself, so keep the total of running VMs below what the host can spare."}
         </div>
 
         <Modal.Footer>

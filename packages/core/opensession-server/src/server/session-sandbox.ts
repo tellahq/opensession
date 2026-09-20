@@ -21,7 +21,7 @@ import {
   listSandboxPortalServices,
   MAX_PORTAL_READY_MS,
   portalsToRestore,
-  SANDBOX_PORTAL_PATH,
+  sandboxPortalPathFor,
   readSandboxPortalRecords,
   restartSandboxPortalService,
 } from "./portal-supervisor";
@@ -352,7 +352,7 @@ async function primeSandboxForPortals(sandbox: Sandbox): Promise<void> {
       [
         "bash",
         "-c",
-        `export PATH=${SANDBOX_PORTAL_PATH}; opensession sandbox id-token --help >/dev/null 2>&1; curl -fsS --max-time 10 ${issuer}/.well-known/openid-configuration >/dev/null 2>&1; true`,
+        `export PATH=${sandboxPortalPathFor(sandbox.provider)}; opensession sandbox id-token --help >/dev/null 2>&1; curl -fsS --max-time 10 ${issuer}/.well-known/openid-configuration >/dev/null 2>&1; true`,
       ],
       { timeoutMs: 90_000 },
     );

@@ -4,6 +4,8 @@ import {
   catalogDocuments,
   type ApplicationCatalogNamespace,
 } from "../catalog-documents";
+import { broadcastToUser } from "../ws-hub";
+import { invalidateSidebarSessionResponses } from "../session-list-response-revision";
 import { canonicalName, legacyNames } from "./user-store-key";
 
 export function documentField(value: unknown, field: string): unknown {
@@ -19,6 +21,16 @@ export function catalogUserStore<T>(options: {
 }) {
   const { name, field, clean } = options;
   const documents = catalogDocuments(name);
+  function publish(user: string, value: T): void {
+    if (!["lanes", "hides", "snoozes", "pins"].includes(name)) return;
+    invalidateSidebarSessionResponses();
+    broadcastToUser(
+      user,
+      name === "pins"
+        ? { type: "pins_changed", user, pins: value }
+        : { type: "user_map_changed", map: name, user },
+    );
+  }
   async function raw(user: string): Promise<unknown | null> {
     const keys = [canonicalName(user), ...legacyNames(user)];
     const values = new Map(
@@ -36,6 +48,7 @@ export function catalogUserStore<T>(options: {
     async set(user: string, value: unknown): Promise<T> {
       const cleaned = clean(value);
       await documents.set(canonicalName(user), { [field]: cleaned });
+      publish(user, cleaned);
       return cleaned;
     },
     /** Read-mutate-write under the catalog CAS. The result is cleaned like
@@ -47,7 +60,9 @@ export function catalogUserStore<T>(options: {
           mutate(clean(documentField(current ?? fallback, field))),
         ),
       }));
-      return clean(documentField(stored, field));
+      const cleaned = clean(documentField(stored, field));
+      publish(user, cleaned);
+      return cleaned;
     },
   };
 }

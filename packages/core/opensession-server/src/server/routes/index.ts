@@ -18,6 +18,7 @@ import { handleSystemRoutes } from "./system";
 import { handleSessionAssetsRoutes } from "./session-assets";
 import { handleSessionNotesRoutes } from "./session-notes";
 import { handleSessionContextRoutes } from "./session-context";
+import { handleSessionVoiceRoutes } from "./session-voice";
 import { handleEffectiveConfigRoutes } from "./effective-config";
 import { handleMentionsRoutes } from "./mentions";
 import { handleMentionPaletteRoutes } from "./mention-palette";
@@ -34,6 +35,7 @@ import { handleWorkspaceRoutes } from "./workspace";
 import { handleAutomationsRoutes } from "./automations";
 import { handleHumanAsksRoutes } from "./human-asks";
 import { handleKeychainRoutes } from "./keychain";
+import { handleMacKeychainRoutes } from "./mac-keychain";
 import { handleDeployRoutes } from "./deploys";
 import { handlePeopleRoutes } from "./people";
 import { handleMemoryRoutes } from "./memory";
@@ -83,6 +85,7 @@ export const routeHandlers: RouteHandler[] = [
   handleSessionAssetsRoutes,
   handleSessionNotesRoutes,
   handleSessionContextRoutes,
+  handleSessionVoiceRoutes,
   handleEffectiveConfigRoutes,
   handleMentionsRoutes,
   handleMentionPaletteRoutes,
@@ -99,6 +102,7 @@ export const routeHandlers: RouteHandler[] = [
   handleAutomationsRoutes,
   handleHumanAsksRoutes,
   handleKeychainRoutes,
+  handleMacKeychainRoutes,
   handleDeployRoutes,
   handlePeopleRoutes,
   handleMemoryRoutes,

@@ -15,15 +15,18 @@ import { join } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { writeJsonAtomic } from "../shared/atomic-write";
 import {
+  remoteGuestOsForProvider,
+  remoteLayoutForProvider,
   remoteWarmWorkspaceDir,
   runnerToolchainSignature,
   shellQuoteWord,
   type RemoteDriver,
+  type RemoteGuestOs,
 } from "./adapters/bootstrap";
 import { getSandboxConnection } from "./connections";
 import { configuredRepos } from "../config";
 
-export type RemoteTemplateProvider = "daytona" | "box";
+export type RemoteTemplateProvider = "daytona" | "box" | "tart";
 
 export interface RemoteRepoTemplate {
   provider: RemoteTemplateProvider;
@@ -57,8 +60,13 @@ export function remoteRepoTemplateNeedsRefresh(
   return now - Date.parse(template.createdAt) >= refreshMs;
 }
 
-export function remoteRepoTemplateProofPath(repoId: string): string {
-  return `/home/ubuntu/.opensession/repo-template-${clean(repoId)}.json`;
+export function remoteRepoTemplateProofPath(
+  repoId: string,
+  os: RemoteGuestOs = "linux",
+): string {
+  const home =
+    os === "darwin" ? remoteLayoutForProvider("tart").home : "/home/ubuntu";
+  return `${home}/.opensession/repo-template-${clean(repoId)}.json`;
 }
 
 /** Fail closed before a provider snapshot is published, then write a nonce
@@ -70,7 +78,9 @@ export async function sealRemoteRepoTemplate(
   provider: RemoteTemplateProvider,
   repo: { id: string },
 ): Promise<string> {
-  const warmDir = remoteWarmWorkspaceDir(repo.id);
+  const os = remoteGuestOsForProvider(provider);
+  const home = remoteLayoutForProvider(provider).home;
+  const warmDir = remoteWarmWorkspaceDir(repo.id, os);
   const origin = await driver.exec("git remote get-url origin", {
     cwd: warmDir,
   });
@@ -96,13 +106,13 @@ export async function sealRemoteRepoTemplate(
   const sensitive = await driver.exec(
     "for f in " +
       [
-        "/home/ubuntu/.claude/.credentials.json",
-        "/home/ubuntu/.codex/auth.json",
-        "/home/ubuntu/.config/pi/auth.json",
-        "/home/ubuntu/.opensession-claude-accounts.json",
-        "/home/ubuntu/.opensession-codex-accounts.json",
-        "/home/ubuntu/.opensession-xai-accounts.json",
-        "/home/ubuntu/.opensession-pi.json",
+        `${home}/.claude/.credentials.json`,
+        `${home}/.codex/auth.json`,
+        `${home}/.config/pi/auth.json`,
+        `${home}/.opensession-claude-accounts.json`,
+        `${home}/.opensession-codex-accounts.json`,
+        `${home}/.opensession-xai-accounts.json`,
+        `${home}/.opensession-pi.json`,
       ]
         .map(shellQuoteWord)
         .join(" ") +
@@ -122,7 +132,7 @@ export async function sealRemoteRepoTemplate(
     nonce,
     sealedAt: new Date().toISOString(),
   });
-  const path = remoteRepoTemplateProofPath(repo.id);
+  const path = remoteRepoTemplateProofPath(repo.id, os);
   const written = await driver.exec(
     `mkdir -p ${shellQuoteWord(path.slice(0, path.lastIndexOf("/")))} && printf %s ${shellQuoteWord(proof)} > ${shellQuoteWord(path)}`,
   );
@@ -139,8 +149,9 @@ export async function validateRemoteRepoTemplate(
   provider: RemoteTemplateProvider,
   repo: { id: string },
 ): Promise<string> {
+  const os = remoteGuestOsForProvider(provider);
   const proof = await driver.exec(
-    `cat ${shellQuoteWord(remoteRepoTemplateProofPath(repo.id))}`,
+    `cat ${shellQuoteWord(remoteRepoTemplateProofPath(repo.id, os))}`,
   );
   if (proof.exitCode !== 0) {
     throw new Error(`restored ${provider} template has no seal for ${repo.id}`);
@@ -171,8 +182,8 @@ export async function validateRemoteRepoTemplate(
     );
   }
   const warm = await driver.exec(
-    `test -d ${shellQuoteWord(remoteWarmWorkspaceDir(repo.id))}/.git && git remote get-url origin`,
-    { cwd: remoteWarmWorkspaceDir(repo.id) },
+    `test -d ${shellQuoteWord(remoteWarmWorkspaceDir(repo.id, os))}/.git && git remote get-url origin`,
+    { cwd: remoteWarmWorkspaceDir(repo.id, os) },
   );
   if (warm.exitCode !== 0 || /https?:\/\/[^/\s]+@/i.test(warm.stdout)) {
     throw new Error(
@@ -329,7 +340,9 @@ export function remoteRepoTemplateSignature(
   const shape =
     provider === "daytona"
       ? { baseSnapshot: settings.snapshot || "default" }
-      : { machineProfile: settings.profile || "default" };
+      : provider === "tart"
+        ? { image: settings.image || "default", runner: settings.runner || "" }
+        : { machineProfile: settings.profile || "default" };
   return createHash("sha256")
     .update(
       `repo-template-v3|${runnerToolchainSignature()}|${JSON.stringify(shape)}`,

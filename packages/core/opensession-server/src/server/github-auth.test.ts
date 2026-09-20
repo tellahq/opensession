@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 /**
  * Per-user GitHub auth: config gating, token store lookups, runner env
  * building, the web sign-in resolution, and how the device flow's start reads
@@ -62,12 +63,13 @@ for (const k of ENV_KEYS) saved[k] = process.env[k];
 
 let dir: string;
 
-beforeEach(() => {
+beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "bks-github-auth-test-"));
   for (const k of ENV_KEYS) delete process.env[k];
   // Isolate from the machine's real ~/.opensession/config.json (which may
   // have the feature enabled): a missing file = {} = built-in defaults.
   process.env.OPENSESSION_CONFIG = join(dir, "no-config.json");
+  await getConfigAsync();
   process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
   process.env.OPENSESSION_WEB_SESSIONS_STORE = join(dir, "web-sessions.json");
 });
@@ -82,7 +84,9 @@ afterEach(() => {
   delete (globalThis as any).__webAuthSessions;
 });
 
-function enableFeature(memberName: string | null = "Alice Example"): void {
+async function enableFeature(
+  memberName: string | null = "Alice Example",
+): Promise<void> {
   const path = join(dir, "config.json");
   writeFileSync(
     path,
@@ -106,6 +110,7 @@ function enableFeature(memberName: string | null = "Alice Example"): void {
     }),
   );
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
 }
 
 function seedToken(login = "alice", token = "gho_test123"): void {
@@ -129,6 +134,7 @@ describe("service credential boundary", () => {
     const path = join(dir, "config.json");
     writeFileSync(path, JSON.stringify({ integrations: { github: {} } }));
     process.env.OPENSESSION_CONFIG = path;
+    await getConfigAsync();
     expect(await botGhToken()).toBeNull();
     await expect(
       resolveGithubCredential(serviceGithubCredential),
@@ -144,8 +150,8 @@ describe("githubUserAuthSettings", () => {
     expect(webAuthRequired()).toBe(false);
   });
 
-  test("enabled + client id from config activates the feature", () => {
-    enableFeature();
+  test("enabled + client id from config activates the feature", async () => {
+    await enableFeature();
     const s = githubUserAuthSettings();
     expect(s.enabled).toBe(true);
     expect(s.clientId).toBe("test-client-id");
@@ -153,27 +159,28 @@ describe("githubUserAuthSettings", () => {
     expect(webAuthRequired()).toBe(true);
   });
 
-  test("enabled without a client id is not active", () => {
+  test("enabled without a client id is not active", async () => {
     const path = join(dir, "config.json");
     writeFileSync(
       path,
       JSON.stringify({ integrations: { github: { userPrAuth: true } } }),
     );
     process.env.OPENSESSION_CONFIG = path;
+    await getConfigAsync();
     expect(githubUserAuthSettings().enabled).toBe(true);
     expect(githubUserAuthActive()).toBe(false);
   });
 
-  test("env client id wins over config", () => {
-    enableFeature();
+  test("env client id wins over config", async () => {
+    await enableFeature();
     process.env.OPENSESSION_GITHUB_CLIENT_ID = "env-client-id";
     expect(githubUserAuthSettings().clientId).toBe("env-client-id");
   });
 });
 
 describe("token lookups + runner env", () => {
-  test("resolves the session user through the identity table", () => {
-    enableFeature();
+  test("resolves the session user through the identity table", async () => {
+    await enableFeature();
     seedToken();
     // Configured aliases, Slack ids, email addresses, and GitHub logins all
     // resolve through the same identity table as commit attribution.
@@ -186,7 +193,7 @@ describe("token lookups + runner env", () => {
     }
   });
 
-  test("simple mode uses the sole account; operator mode empty for unknown/unconnected", () => {
+  test("simple mode uses the sole account; operator mode empty for unknown/unconnected", async () => {
     seedToken();
     // Feature off (simple mode): the single connected account is the identity
     // for every server-side call on a person's behalf, whoever is passed.
@@ -197,15 +204,15 @@ describe("token lookups + runner env", () => {
     // per-user login); the sole account is still the identity.
     expect(token(null)).toBe("gho_test123");
     expect(token("Some Randomer")).toBe("gho_test123");
-    enableFeature();
+    await enableFeature();
     expect(githubCredentialForRun("Some Randomer")).toBeNull(); // unknown user
     expect(githubCredentialForRun(null)).toBeNull();
     expect(githubCredentialForRun("Bob")).toBeNull(); // unknown, never connected
     expect(githubUserLoginForRun("Bob")).toBeNull();
   });
 
-  test("a person's credential gives server-side git and gh their token", () => {
-    enableFeature();
+  test("a person's credential gives server-side git and gh their token", async () => {
+    await enableFeature();
     seedToken();
     expect(githubCredentialForRun("Alice")?.env).toMatchObject({
       GH_TOKEN: "gho_test123",
@@ -218,8 +225,8 @@ describe("token lookups + runner env", () => {
     });
   });
 
-  test("a connected person's run env carries their token for gh and HTTPS git", () => {
-    enableFeature();
+  test("a connected person's run env carries their token for gh and HTTPS git", async () => {
+    await enableFeature();
     seedToken();
     // API variables only: what the sandbox launcher projects into the
     // run-scoped auth file.
@@ -243,8 +250,8 @@ describe("token lookups + runner env", () => {
     );
   });
 
-  test("an unconnected or unknown person yields no run env, never a host fallback", () => {
-    enableFeature();
+  test("an unconnected or unknown person yields no run env, never a host fallback", async () => {
+    await enableFeature();
     seedToken();
     // Operator mode: an unmapped sender and a mapped-but-disconnected one
     // both resolve nothing, so the caller falls back to the App token. The
@@ -259,8 +266,8 @@ describe("token lookups + runner env", () => {
     expect(githubUserRunEnv("Alice")).toEqual({});
   });
 
-  test("a remote host never consults the person store", () => {
-    enableFeature();
+  test("a remote host never consults the person store", async () => {
+    await enableFeature();
     seedToken();
     // The launcher already projected this run's credential; the guest must
     // use only that file even if a store happens to be readable.
@@ -291,7 +298,7 @@ describe("token lookups + runner env", () => {
     expect(projectedGithubRunLogin()).toBeNull();
   });
 
-  test("a person's projection names the login of the credential the run holds", () => {
+  test("a person's projection names the login of the credential the run holds", async () => {
     seedToken();
     // Simple mode: the sole account is the acting identity for any human
     // sender, so the projection names it and the guest lifts the guard the
@@ -317,7 +324,7 @@ describe("token lookups + runner env", () => {
     expect(githubUserAuthProjection("Alice")).toEqual({});
     expect(githubRunOwnerLogin("Alice")).toBeNull();
     seedToken();
-    enableFeature();
+    await enableFeature();
     expect(githubUserAuthProjection("Alice")).toEqual({
       GH_TOKEN: "gho_test123",
       GITHUB_TOKEN: "gho_test123",
@@ -329,8 +336,8 @@ describe("token lookups + runner env", () => {
     expect(githubRunOwnerLogin("Some Randomer")).toBeNull();
   });
 
-  test("the guest reads the run's owner from the projected marker, never the store", () => {
-    enableFeature();
+  test("the guest reads the run's owner from the projected marker, never the store", async () => {
+    await enableFeature();
     seedToken();
     // Host run: the store answers.
     expect(githubRunOwnerLogin("Alice")).toBe("alice");
@@ -361,8 +368,8 @@ describe("token lookups + runner env", () => {
     expect(githubRunOwnerLogin("Alice")).toBeNull();
   });
 
-  test("an auto-continue turn resolves the session owner; automations resolve nobody", () => {
-    enableFeature();
+  test("an auto-continue turn resolves the session owner; automations resolve nobody", async () => {
+    await enableFeature();
     seedToken();
     // A drained nudge turn is sent by the synthetic auto-continue driver
     // while the commit author carries the session owner. The owner is who
@@ -433,11 +440,11 @@ describe("token lookups + runner env", () => {
     expect((account as any).refreshFailedAt).toBeUndefined();
   });
 
-  test("a dead grant is what the sign-in gate refuses, and only that", () => {
+  test("a dead grant is what the sign-in gate refuses, and only that", async () => {
     // The gate blocks the whole app, so what it does NOT fire on matters as
     // much as what it does: a healthy grant, someone who never connected, and
     // an instance with the feature off all have to walk straight through.
-    enableFeature();
+    await enableFeature();
     seedToken();
     expect(githubReconnectRequired("alice")).toBe(false);
     expect(githubReconnectRequired("bob")).toBe(false);
@@ -469,7 +476,7 @@ describe("token lookups + runner env", () => {
     expect(githubReconnectRequired("alice")).toBe(false);
   });
 
-  test("nobody is gated when the feature is off, or when the store is unreadable", () => {
+  test("nobody is gated when the feature is off, or when the store is unreadable", async () => {
     // Fail-open, deliberately. A GitHub outage or a garbled store must not
     // lock the team out of reading their own sessions; the credential getters
     // are where this fails closed.
@@ -487,14 +494,14 @@ describe("token lookups + runner env", () => {
       }),
     );
     expect(githubReconnectRequired("alice")).toBe(false); // feature off
-    enableFeature();
+    await enableFeature();
     expect(githubReconnectRequired("alice")).toBe(true);
     writeFileSync(process.env.OPENSESSION_GITHUB_AUTH_STORE!, "{ not json");
     expect(githubReconnectRequired("alice")).toBe(false);
   });
 
-  test("accepts pre-source App grants but rejects old static bearer records", () => {
-    enableFeature();
+  test("accepts pre-source App grants but rejects old static bearer records", async () => {
+    await enableFeature();
     writeFileSync(
       process.env.OPENSESSION_GITHUB_AUTH_STORE!,
       JSON.stringify({
@@ -518,8 +525,8 @@ describe("token lookups + runner env", () => {
     expect(githubCredentialForLogin("staticuser")).toBeNull();
   });
 
-  test("builds a credential only for the exact connected login", () => {
-    enableFeature();
+  test("builds a credential only for the exact connected login", async () => {
+    await enableFeature();
     seedToken("Alice");
     const credential = githubCredentialForLogin("alice");
     expect(credential).toMatchObject({
@@ -538,8 +545,8 @@ describe("token lookups + runner env", () => {
     expect(githubCredentialForLogin("bob")).toBeNull();
   });
 
-  test("durable principals resolve the current token without changing identity", () => {
-    enableFeature();
+  test("durable principals resolve the current token without changing identity", async () => {
+    await enableFeature();
     seedToken("Alice", "gho_old");
     expect(githubCredentialForPrincipal("user:alice")?.env.GH_TOKEN).toBe(
       "gho_old",
@@ -584,7 +591,7 @@ describe("starting the device flow", () => {
     // the setting only if you already know the setting. This is the one
     // misconfiguration that locks the whole team out, so the sentence has to
     // carry the fix: every client shows this string verbatim.
-    enableFeature();
+    await enableFeature();
     githubAnswers(400, {
       error: "device_flow_disabled",
       error_description: "Device flow is disabled.",
@@ -598,13 +605,13 @@ describe("starting the device flow", () => {
   });
 
   test("any other GitHub failure keeps GitHub's own description", async () => {
-    enableFeature();
+    await enableFeature();
     githubAnswers(404, { error: "not_found", error_description: "Not Found" });
     expect(await startGithubDeviceFlow()).toEqual({ error: "Not Found" });
   });
 
   test("a configured app gets its code back with the canonical browser URL", async () => {
-    enableFeature();
+    await enableFeature();
     let requestedScope = "";
     globalThis.fetch = (async (
       _input: string | URL | Request,
@@ -632,8 +639,8 @@ describe("starting the device flow", () => {
 });
 
 describe("web sign-in resolution", () => {
-  test("local automation gets a distinct machine identity, ordered before humans", () => {
-    enableFeature();
+  test("local automation gets a distinct machine identity, ordered before humans", async () => {
+    await enableFeature();
     const now = Date.now();
     writeFileSync(
       process.env.OPENSESSION_WEB_SESSIONS_STORE!,
@@ -669,16 +676,16 @@ describe("web sign-in resolution", () => {
     expect(stored.sessions[1].login).toBe("alice");
   });
 
-  test("team gate: only configured github logins may sign in", () => {
+  test("team gate: only configured github logins may sign in", async () => {
     expect(teamMemberForLogin("alice")).toBeNull();
-    enableFeature();
+    await enableFeature();
     expect(teamMemberForLogin("alice")?.name).toBe("Alice Example");
     expect(teamMemberForLogin("Alice")?.name).toBe("Alice Example");
     expect(teamMemberForLogin("some-rando")).toBeNull();
   });
 
-  test("resolves the session cookie and Bearer token from a seeded store", () => {
-    enableFeature();
+  test("resolves the session cookie and Bearer token from a seeded store", async () => {
+    await enableFeature();
     const now = Date.now();
     writeFileSync(
       process.env.OPENSESSION_WEB_SESSIONS_STORE!,
@@ -716,8 +723,8 @@ describe("web sign-in resolution", () => {
     ).toBeNull();
   });
 
-  test("refreshes a session name from the current roster row", () => {
-    enableFeature();
+  test("refreshes a session name from the current roster row", async () => {
+    await enableFeature();
     const now = Date.now();
     writeFileSync(
       process.env.OPENSESSION_WEB_SESSIONS_STORE!,
@@ -741,7 +748,7 @@ describe("web sign-in resolution", () => {
     );
     expect(identity).toEqual({ login: "alice", name: "Alice Example" });
 
-    enableFeature("Alice Newly Renamed");
+    await enableFeature("Alice Newly Renamed");
     const renamed = resolveWebAuth(
       new Request("http://x/", {
         headers: { authorization: "Bearer renamed-token" },
@@ -755,8 +762,8 @@ describe("web sign-in resolution", () => {
     ).toBe("Alice Newly Renamed");
   });
 
-  test("revokes a human session when its roster row is removed", () => {
-    enableFeature();
+  test("revokes a human session when its roster row is removed", async () => {
+    await enableFeature();
     const now = Date.now();
     writeFileSync(
       process.env.OPENSESSION_WEB_SESSIONS_STORE!,
@@ -781,7 +788,7 @@ describe("web sign-in resolution", () => {
       ),
     ).toEqual({ login: "alice", name: "Alice Example" });
 
-    enableFeature(null);
+    await enableFeature(null);
     expect(
       resolveWebAuth(
         new Request("http://x/", {
@@ -796,14 +803,14 @@ describe("web sign-in resolution", () => {
     ).toEqual([]);
   });
 
-  test("refreshes identities used by long-lived transports", () => {
-    enableFeature();
+  test("refreshes identities used by long-lived transports", async () => {
+    await enableFeature();
     expect(refreshWebIdentity({ login: "alice", name: "Old Alice" })).toEqual({
       login: "alice",
       name: "Alice Example",
     });
 
-    enableFeature(null);
+    await enableFeature(null);
     expect(
       refreshWebIdentity({ login: "alice", name: "Alice Example" }),
     ).toBeNull();
@@ -858,7 +865,7 @@ describe("simple-mode credential (App connected, sign-in off)", () => {
 
   // A personal App: client id + secret configured, but userPrAuth stays off, so
   // githubUserAuthActive()/webAuthRequired() are both false.
-  function simpleModeApp(): void {
+  async function simpleModeApp(): Promise<void> {
     const path = join(dir, "config.json");
     writeFileSync(
       path,
@@ -869,6 +876,7 @@ describe("simple-mode credential (App connected, sign-in off)", () => {
       }),
     );
     process.env.OPENSESSION_CONFIG = path;
+    await getConfigAsync();
   }
 
   function writeStore(users: Record<string, unknown>): void {
@@ -879,7 +887,7 @@ describe("simple-mode credential (App connected, sign-in off)", () => {
   }
 
   test("refreshes a personal-app token even with sign-in off", async () => {
-    simpleModeApp();
+    await simpleModeApp();
     expect(githubUserAuthActive()).toBe(false);
     const soon = new Date(Date.now() + 60_000).toISOString(); // inside the skew window
     writeStore({
@@ -915,7 +923,7 @@ describe("simple-mode credential (App connected, sign-in off)", () => {
   });
 
   test("reconnect authorizing a different account replaces, never strands two", async () => {
-    simpleModeApp();
+    await simpleModeApp();
     writeStore({
       alice: {
         login: "alice",

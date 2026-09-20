@@ -43,7 +43,8 @@ import {
   workspaceOwningWorktree,
 } from "../session-repos";
 import { getOpenPrs, getTranscriptPath } from "../sessions";
-import { duplicateSessionTranscript } from "../session-duplicate";
+import { readDuplicateSessionTranscript } from "../session-duplicate";
+import { importLegacyTranscript } from "../actor-transcript";
 import {
   configuredIdentity,
   configuredRepos,
@@ -712,6 +713,8 @@ export async function handleWorkspaceRoutes(
       model?: string;
       /** Copy the source chat into this idle sibling. */
       duplicate?: boolean;
+      /** Inclusive transcript boundary for Duplicate from here. */
+      messageId?: unknown;
     };
     // share (default): reuse the workspace's worktree/branch (parallel sessions,
     // one branch). stack: a new worktree branched off it (stacked PRs). ask:
@@ -741,6 +744,19 @@ export async function handleWorkspaceRoutes(
         id: bksId,
         session: await sessionDetail(existing),
       });
+    if (
+      body.messageId !== undefined &&
+      (!body.duplicate || typeof body.messageId !== "string" || !body.messageId)
+    )
+      return Response.json(
+        { error: "Invalid duplicate message" },
+        { status: 400 },
+      );
+    const copiedEntries = body.duplicate
+      ? await readDuplicateSessionTranscript(src, body.messageId)
+      : [];
+    if (copiedEntries === null)
+      return Response.json({ error: "Message not found" }, { status: 400 });
     let branch = src.branch || "";
     let worktreeDir = src.worktreeDir || "";
     let mode: "ask" | "code" | "scratch" = src.mode || "code";
@@ -920,7 +936,8 @@ export async function handleWorkspaceRoutes(
         : {}),
     };
     await updateSessionFile(bksId, () => data);
-    if (body.duplicate) await duplicateSessionTranscript(src, bksId);
+    if (body.duplicate)
+      await importLegacyTranscript(bksId, copiedEntries, "duplicate", null);
     // Also return the full unified session so the client can drop it into
     // its session list and render the new session instantly, instead of
     // flashing a loading screen until the next sessions poll lands. The

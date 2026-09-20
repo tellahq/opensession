@@ -444,19 +444,51 @@ scanning the directory. A session written before the actor owned metadata
 seeds from its file on its first write. Direct session JSON writes outside
 the facade are rejected by a structural test.
 
-Historical files are projected into the catalog once by an operator:
+Historical files are projected into the catalogs once by an operator:
 `bun scripts/seed-session-metadata-catalog.ts` runs online against the live
-kernel service, inserts a row for every file that has none (`metadata
-seed_catalog`, central only, already exported, no actor database opened),
-verifies coverage, and marks the catalog complete. From then on a cold list
-rebuild pages `catalog_page` from the central database instead of reading
-every session file (`catalogNativeSessionRows` in `session-cache.ts`); the
-directory scan remains the fallback while the catalog is incomplete or
-unreadable. Boot primes the list index this way right after the actor
-starts (`primeSessionListIndex`), before any boot step or route reads the
-list, and only then builds the Slack thread index from that snapshot
-(`ensureSlackLinkIndex`). A seeded session's first real write commits the
-next revision from the file and supersedes the seeded row.
+kernel service (catalog RPC only, no actor database opened) and
+
+- inserts a metadata catalog row for every native session file that has
+  none (`metadata seed_catalog`, central only, already exported), and for
+  every sidecar stored under a Slack/Linear id (the natively owned extras);
+- projects every `~/.slack-sessions/*.json` and `~/.linear-sessions/*.json`
+  source file into the `slack-sessions` and `linear-sessions` catalog-document
+  namespaces (`agent-session-catalog.ts`);
+- verifies coverage and marks the metadata catalog complete and both
+  namespaces imported.
+
+Re-running is safe; a new state root seeds in one empty run, which is why
+`opensession service install` and a foreground `opensession start` run the
+seed between starting the kernel and the gateway. Once all three completion
+markers are set the seed exits without scanning (`--rescan` overrides). The gateway
+never lists a session directory: the list is served from the list index, and
+a cold rebuild (no index coverage: first boot, operator rebuild, an index
+schema change) reads the catalogs only (`catalogSessionListSources` in
+`session-cache.ts`: `catalog_page` for native rows and sidecars, the two
+namespaces for Slack and Linear rows). While any catalog is unmarked or
+unreadable the rebuild fails with `SessionListUnavailableError`: a reader
+holding a snapshot keeps it, a reader without one gets the bounded error, and
+boot (`primeSessionListIndex`, right after the actor starts) refuses to
+continue, because an empty or partial list would let every whole-list consumer
+treat missing sessions as finished. Nothing infers completeness from an empty
+catalog. The only list-source directory reader is `session-source-scan.ts`, which
+refuses to run outside a test, the isolated demo instance (which seeds its
+generated dataset before priming) or an operator script;
+`session-list-sources.test.ts` pins that boundary. Boot then builds the Slack
+thread index from the primed snapshot (`ensureSlackLinkIndex`). A seeded
+session's first real write commits the next revision from the file and
+supersedes the seeded row.
+
+The agent namespaces stay current by observation: the targeted read behind
+every Slack or Linear row publish (`readAgentSessionListRowAsync`) records
+what it saw, ordered by observation time and serialized per key, before the
+row reaches the list index, and a deletion records an ordered marker. The
+record is coupled to the publish: a projection that cannot be written fails
+the publish, so the index never runs ahead of the catalog and a later cold
+rebuild cannot roll a session back behind it. The Linear loop and
+`agent-session-sync` publish after every write for the same reason. List
+rows carry no transcript path; a detail read of a row taken from the list
+resolves the one session it opens (`resolveSessionTranscriptPathAsync`).
 
 ### Central catalog documents
 

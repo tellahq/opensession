@@ -133,6 +133,10 @@ export interface RunHostSpec {
    *  slug, or comma-separated list): an automation-owned session keeps its
    *  automation's PR-review policy when its turn moves into a host. */
   prReviewer?: string;
+  /** Sibling GitHub repositories (`owner/name`) the run may read through a
+   *  second read-only token, GH_READ_TOKEN (an automation's readRepos). Names
+   *  only: the launcher mints the token into the private run auth file. */
+  readRepos?: string[];
   journalKind?: string;
   /** Durable restart-recovery lineage (see server/run-journal.ts). */
   firstJournaledAt?: string;

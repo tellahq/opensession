@@ -23,6 +23,7 @@ import {
   wsCommandOutboxForScope,
 } from "../lib/ws-command-outbox";
 import { webSocketReconnectDelay } from "../lib/ws-reconnect";
+import { TYPING_PREVIEW_MAX } from "../lib/typing";
 import { IGNORE_WS_MESSAGES, type SessionSocket } from "./useSessionSocket";
 import * as SessionSocketRuntime from "../lib/session-socket-runtime";
 
@@ -50,6 +51,9 @@ const ACTIVE_REFRESH_MS = 60_000;
 // A pause retires it promptly even when the draft stays in the field.
 const TYPING_REFRESH_MS = 2_000;
 const TYPING_IDLE_MS = 3_000;
+// The draft preview rides on the lease. Text changes go out at most this
+// often, with a trailing send so a burst ends on the text that stayed.
+const TYPING_TEXT_REFRESH_MS = 350;
 /**
  * One UI WebSocket. `presenceActive` controls only whether this surface may
  * claim the user's presence; its watch and transcript stream stay alive. This
@@ -125,7 +129,9 @@ export function useWebSocket(presenceActive = true) {
     sessionId: string;
     active: boolean;
     lastSent: number;
-  }>({ sessionId: "", active: false, lastSent: 0 });
+    /** The preview last handed to setTyping, sent or still pending. */
+    text: string;
+  }>({ sessionId: "", active: false, lastSent: 0, text: "" });
   // Outbound messages issued while the socket wasn't OPEN (wifi switch, server
   // restart, PWA resume): held here and flushed in order on the next onopen, so
   // a transient drop doesn't silently swallow intent like create_session — the
@@ -592,49 +598,66 @@ export function useWebSocket(presenceActive = true) {
   );
 
   const setTyping = useCallback(
-    (sessionId: string, active: boolean) => {
+    (sessionId: string, active: boolean, text = "") => {
       const state = typingRef.current;
-      const ws = wsRef.current;
-      const emit = (id: string, typing: boolean) => {
+      const emit = (id: string, typing: boolean, preview?: string) => {
+        const ws = wsRef.current;
         if (ws?.readyState !== WebSocket.OPEN) return;
         try {
-          ws.send(JSON.stringify({ type: "typing", sessionId: id, typing }));
+          ws.send(
+            JSON.stringify(
+              typing
+                ? { type: "typing", sessionId: id, typing, text: preview }
+                : { type: "typing", sessionId: id, typing },
+            ),
+          );
         } catch {}
+      };
+      const retire = () => {
+        runtime.cancel("typing-text");
+        if (state.active) emit(state.sessionId, false);
+        state.active = false;
+        state.lastSent = 0;
+        state.text = "";
       };
 
       if (!active) {
         runtime.cancel("typing-idle");
-        if (state.active) emit(state.sessionId, false);
-        state.active = false;
-        state.lastSent = 0;
+        retire();
         return;
       }
 
-      if (state.active && state.sessionId !== sessionId) {
-        emit(state.sessionId, false);
-        state.active = false;
-        state.lastSent = 0;
-      }
+      if (state.active && state.sessionId !== sessionId) retire();
       state.sessionId = sessionId;
+      const preview = text.slice(0, TYPING_PREVIEW_MAX);
+      const changed = preview !== state.text;
+      state.text = preview;
       const now = Date.now();
-      if (!state.active || now - state.lastSent >= TYPING_REFRESH_MS) {
-        emit(sessionId, true);
+      if (
+        !state.active ||
+        now - state.lastSent >= TYPING_REFRESH_MS ||
+        (changed && now - state.lastSent >= TYPING_TEXT_REFRESH_MS)
+      ) {
+        runtime.cancel("typing-text");
+        emit(sessionId, true, preview);
         state.lastSent = now;
+      } else if (changed) {
+        runtime.schedule("typing-text", TYPING_TEXT_REFRESH_MS, () => {
+          const latest = typingRef.current;
+          if (!latest.active || latest.sessionId !== sessionId) return;
+          emit(sessionId, true, latest.text);
+          latest.lastSent = Date.now();
+        });
       }
       state.active = true;
       runtime.schedule("typing-idle", TYPING_IDLE_MS, () => {
         const latest = typingRef.current;
         if (!latest.active || latest.sessionId !== sessionId) return;
-        const socket = wsRef.current;
-        if (socket?.readyState === WebSocket.OPEN) {
-          try {
-            socket.send(
-              JSON.stringify({ type: "typing", sessionId, typing: false }),
-            );
-          } catch {}
-        }
+        runtime.cancel("typing-text");
+        emit(sessionId, false);
         latest.active = false;
         latest.lastSent = 0;
+        latest.text = "";
       });
     },
     [runtime],

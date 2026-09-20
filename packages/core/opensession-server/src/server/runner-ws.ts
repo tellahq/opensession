@@ -8,6 +8,7 @@
 
 import { randomBytes } from "crypto";
 import { audit } from "./audit";
+import { runnerCommandAwsEnv } from "./runner-command-aws";
 import {
   authenticateRunner,
   getRunner,
@@ -36,6 +37,7 @@ type Connection = {
   ws: any;
   connectedAt: number;
   protocolVersion: number;
+  execAws: boolean;
   capabilities: Runner["capabilities"];
   resources?: Runner["resources"];
   pending: Map<string, Pending>;
@@ -72,6 +74,8 @@ export type RunnerExecResult = {
   data?: unknown;
 };
 export type RunnerExecOptions = {
+  /** Server-owned grant. Only the interactive Runner MCP opts in. */
+  aws?: boolean;
   cwd?: string;
   timeoutMs?: number;
   user?: string;
@@ -654,6 +658,7 @@ export function runnerWsOpen(ws: any): boolean {
     ws,
     connectedAt: Date.now(),
     protocolVersion: 0,
+    execAws: false,
     capabilities: runner.capabilities,
     resources: runner.resources,
     pending: new Map(),
@@ -688,6 +693,7 @@ export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
         return true;
       }
       connection.protocolVersion = version;
+      connection.execAws = message.execAws === true;
       const capabilities =
         message.capabilities && typeof message.capabilities === "object"
           ? message.capabilities
@@ -1230,8 +1236,34 @@ export async function execOnRunner(
     throw new Error(
       `Runner ${runner?.name ?? runnerId} is not permitted for this command`,
     );
+  const role = options.aws ? runner.aws : undefined;
+  if (role && !connection.execAws)
+    throw new Error(
+      `Update Runner ${runner.name} to support AWS command credentials`,
+    );
+  const awsEnv = role
+    ? await runnerCommandAwsEnv(runner, options.timeoutMs)
+    : undefined;
+  // Minting is asynchronous: a revocation or reconnect must not race dispatch.
+  const current = getRunner(runnerId);
+  if (
+    connections.get(runnerId) !== connection ||
+    !current ||
+    !runnerAllowed(current, {
+      user: options.user,
+      repo: options.repo,
+      permission: "commands",
+    }) ||
+    (role &&
+      (current.aws?.roleArn !== role.roleArn ||
+        current.aws?.externalId !== role.externalId))
+  )
+    throw new Error(
+      "Runner connection or permissions changed before command dispatch",
+    );
   return execRunnerCommand(connection, runnerId, command, {
     ...options,
+    awsEnv,
     permission: "commands",
     operation: "command",
   });
@@ -1244,6 +1276,7 @@ async function execRunnerCommand(
   options: RunnerExecOptions & {
     permission: "commands" | "fullSessions";
     operation: string;
+    awsEnv?: Record<string, string>;
   },
 ): Promise<RunnerExecResult> {
   const id = `r${++executionCounter}-${Date.now().toString(36)}`;
@@ -1292,6 +1325,7 @@ async function execRunnerCommand(
           operationToken,
           sessionId: options.sessionId,
           command,
+          awsEnv: options.awsEnv,
           cwd: options.cwd,
           timeoutMs,
         }),

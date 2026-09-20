@@ -699,6 +699,57 @@ describe("session creator metadata", () => {
     }
   });
 
+  it("documents a person's new session as top-level and makes standalone ignore parent linkage", async () => {
+    const h = makeHarness();
+    registerSessionControl(h.deps.control);
+    const server = createSessionsMcpServer(ctx("bks-parent"));
+    const client = new Client({
+      name: "sessions-tools-test",
+      version: "1.0.0",
+    });
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    await server.instance.connect(serverTransport);
+    await client.connect(clientTransport);
+    try {
+      const { tools } = await client.listTools();
+      const createTool = tools.find((tool) => tool.name === "create_session");
+      // A human's "start a new session" is a top-level session, not a child;
+      // an agent reading only the descriptions must land on standalone true.
+      expect(createTool?.description).toContain("TOP-LEVEL session");
+      expect(createTool?.description).toContain("standalone true");
+      const standaloneSchema = createTool?.inputSchema.properties
+        ?.standalone as { description?: string } | undefined;
+      expect(standaloneSchema?.description).toContain(
+        "parentSessionId and reportBack are ignored",
+      );
+      const spawnTool = tools.find((tool) => tool.name === "spawn_task");
+      expect(spawnTool?.description).toContain(
+        "ALWAYS creates a child of this session",
+      );
+
+      const result = await client.callTool({
+        name: "create_session",
+        arguments: {
+          prompt: "Investigate the flaky build.",
+          standalone: true,
+          parentSessionId: "bks-other",
+          reportBack: true,
+        },
+      });
+      expect(h.created[0].parentSessionId).toBeUndefined();
+      expect(h.created[0].reportBack).toBe(false);
+      expect(h.created[0].prompt).toBe("Investigate the flaky build.");
+      const resultText = (
+        result as { content: Array<{ type: string; text: string }> }
+      ).content[0].text;
+      expect(resultText).toContain("top-level session with no parent link");
+    } finally {
+      await client.close();
+      await server.instance.close();
+    }
+  });
+
   it("gives cross-session messages agent provenance and a stable receipt", async () => {
     const h = makeHarness();
     registerSessionControl(h.deps.control);

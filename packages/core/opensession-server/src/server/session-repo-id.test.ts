@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { describe, test, expect, afterEach } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
@@ -26,7 +27,7 @@ const dirs: string[] = [];
 const WT_DIR = "/repoid-test/worktrees";
 const APP_REPO = "/repoid-test/app-main";
 
-function withConfig(): void {
+async function withConfig(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "os-repoid-test-"));
   dirs.push(dir);
   const path = join(dir, "config.json");
@@ -47,6 +48,7 @@ function withConfig(): void {
   );
   for (const k of ENV_KEYS) delete process.env[k];
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
 }
 
 afterEach(() => {
@@ -59,15 +61,15 @@ afterEach(() => {
 });
 
 describe("repoForPathOrNull", () => {
-  test("owns main checkouts and their worktrees", () => {
-    withConfig();
+  test("owns main checkouts and their worktrees", async () => {
+    await withConfig();
     expect(repoForPathOrNull(APP_REPO)?.id).toBe("app");
     expect(repoForPathOrNull(`${WT_DIR}/app-feat-x`)?.id).toBe("app");
     expect(repoForPathOrNull(`${WT_DIR}/lib-feat-x`)?.id).toBe("lib");
   });
 
-  test("undefined instead of throwing for a path no repo owns", () => {
-    withConfig();
+  test("undefined instead of throwing for a path no repo owns", async () => {
+    await withConfig();
     expect(
       repoForPathOrNull("/var/lib/opensession/scratch/os-123"),
     ).toBeUndefined();
@@ -80,28 +82,28 @@ describe("repoForPathOrNull", () => {
 });
 
 describe("sessionRepoId", () => {
-  test("an explicit repo wins over the path", () => {
-    withConfig();
+  test("an explicit repo wins over the path", async () => {
+    await withConfig();
     expect(
       sessionRepoId({ repo: "lib", worktreeDir: `${WT_DIR}/app-feat-x` }),
     ).toBe("lib");
   });
 
-  test("derives from worktreeDir for sessions stored before the repo field", () => {
-    withConfig();
+  test("derives from worktreeDir for sessions stored before the repo field", async () => {
+    await withConfig();
     expect(sessionRepoId({ worktreeDir: `${WT_DIR}/app-feat-x` })).toBe("app");
     expect(sessionRepoId({ worktreeDir: APP_REPO })).toBe("app");
   });
 
-  test("no worktree, no repo → undefined", () => {
-    withConfig();
+  test("no worktree, no repo → undefined", async () => {
+    await withConfig();
     expect(sessionRepoId({})).toBeUndefined();
     expect(sessionRepoId({ worktreeDir: "" })).toBeUndefined();
     expect(sessionRepoId({ worktreeDir: null })).toBeUndefined();
   });
 
-  test("repo-less sessions resolve by path, whatever their mode", () => {
-    withConfig();
+  test("repo-less sessions resolve by path, whatever their mode", async () => {
+    await withConfig();
     const scratchDir = "/var/lib/opensession/scratch/ws-1";
     // Scratch: unchanged from the old `mode !== "scratch"` test.
     expect(sessionRepoId({ worktreeDir: scratchDir })).toBeUndefined();

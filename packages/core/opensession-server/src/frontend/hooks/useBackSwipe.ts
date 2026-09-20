@@ -1,15 +1,22 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 
+import {
+  axisVerdict,
+  type EdgeZone,
+  edgeZoneAt,
+  shouldPop,
+  SLOP,
+} from "../lib/back-swipe";
 import { PHONE_QUERY } from "../lib/breakpoints";
 
 /**
  * iOS-style edge-swipe-to-go-back for the mobile page stack, plus a permanent
  * guard against the browser's own history-navigation gesture. On phones the
- * sidebar is the root page and a session/view is pushed over it (see the
- * `.mobile-detail` rules in legacy.css); overlays (the workspace/right panel,
- * the session info page) stack further layers on top. A drag that STARTS near
- * the left edge pulls the topmost active layer's pane to the right under the
- * finger and, past the halfway point, pops it (calls its `onBack`).
+ * sidebar is the root page and a session/view is pushed over it (see
+ * DETAIL_PANE in lib/app-shell-classes); overlays (the session info page)
+ * stack further layers on top. A drag that STARTS near the left edge pulls
+ * the topmost active layer's pane to the right under the finger and, past the
+ * halfway point, pops it (calls its `onBack`).
  *
  * Several components mount this hook at once, so it's a module-level manager
  * rather than per-instance listeners: every mounted instance registers a
@@ -18,18 +25,23 @@ import { PHONE_QUERY } from "../lib/breakpoints";
  * 0; overlays register higher). Registration order can't express that stacking
  * because React runs child effects before parent effects.
  *
- * The guard is deliberately NOT gated on any layer being active: as long as
- * one instance is mounted (App's always is), a touch starting in the edge zone
- * is preventDefault-ed even when there's nothing to pop — e.g. on the home
- * root or under the phone Settings sheet. Before this, those states had no
- * listener at all and an edge swipe fell through to the browser's native
- * back/forward navigation, kicking the user out of the app's history.
+ * Two start zones (lib/back-swipe.ts has the numbers and the reasoning):
  *
- * - Only reacts at mobile widths; desktop touches pass straight through.
- * - Must start within EDGE px of the left edge, so it doesn't hijack
- *   horizontal scrolling inside diffs/code.
- * - Vertical-dominant (or leftward) moves abort immediately, leaving normal
- *   scrolling alone.
+ * - HARD, the bezel edge. Touches starting there are preventDefault-ed at
+ *   touchstart, and deliberately NOT only when a layer is active: as long as
+ *   one instance is mounted (App's always is) the edge is app-owned, even on
+ *   the home root or under the phone Settings sheet, so the browser's own
+ *   back/forward swipe can't start a real history navigation there. That
+ *   cancel also swallows the tap→click synthesis and any scroll, which is why
+ *   the zone is narrow and why onEnd completes a plain tap itself.
+ * - SOFT, the strip beside it. Nothing is cancelled at touchstart: a tap on a
+ *   row's icon, a vertical scroll or a long-press starting there stays native.
+ *   The first movement past SLOP decides, and only a clearly rightward one
+ *   claims the touch. A start inside a horizontally scrolled element (a code
+ *   block panned to the right) is never claimed: a rightward drag there is
+ *   the user scrolling back.
+ *
+ * Only reacts at mobile widths; desktop touches pass straight through.
  *
  * Stranded gestures. WebKit keeps dispatching a touch's move/end events to the
  * element the touch STARTED on even after that element leaves the DOM — and a
@@ -56,10 +68,7 @@ interface Opts {
   priority?: number;
 }
 
-const EDGE = 32; // px from the left that may begin a back drag
-const SLOP = 8; // px of movement before committing to an axis
 const SNAP_MS = 260; // matches the CSS page transition
-const FLICK_VX = 0.35; // px/ms rightward at release that pops even a short drag
 const STALL_MS = 1500; // silence on a committed drag that means the touch is gone
 
 interface Layer {
@@ -79,7 +88,7 @@ let handler: Layer | null = null; // layer that owns the current gesture
 let startX = 0;
 let startY = 0;
 let width = 0;
-let candidate = false; // touch began in the left-edge zone
+let zone: EdgeZone | null = null; // touch began in an edge zone (candidate)
 let dragging = false; // committed to a horizontal drag
 let startTarget: EventTarget | null = null;
 let lastX = 0;
@@ -172,8 +181,29 @@ function armStall() {
   }, STALL_MS);
 }
 
+// A start inside something already panned to the right: a rightward drag
+// there scrolls it back, so the touch is the scroller's. An unscrolled element
+// has nowhere to go rightward and is no reason to decline.
+function insideScrolledRow(target: EventTarget | null): boolean {
+  let el = target instanceof Element ? target : null;
+  while (el && el !== document.body) {
+    if (el.scrollLeft > 0) return true;
+    el = el.parentElement;
+  }
+  return false;
+}
+
+// The nearest thing that can take a synthetic click. SVG glyphs (a row's
+// icon, the back chevron's stroke) have no click(); the button around them
+// does, and a click dispatched there bubbles like the real one would have.
+function clickableAround(target: EventTarget | null): HTMLElement | null {
+  let el = target instanceof Element ? target : null;
+  while (el && !(el instanceof HTMLElement)) el = el.parentElement;
+  return el;
+}
+
 function endGestureState() {
-  candidate = false;
+  zone = null;
   dragging = false;
   startTarget = null;
   lastHandled = null;
@@ -219,7 +249,7 @@ function onStart(e: TouchEvent) {
   // A single live touch means the previous one is over, however quietly it
   // went. If it left a drag behind, drop it now so the pane can't stay stuck
   // past the next tap — a stranded transform outlives its gesture otherwise.
-  if (dragging || candidate) {
+  if (dragging || zone) {
     const stale = pane();
     endGestureState();
     resetPaneStyles(stale);
@@ -232,16 +262,17 @@ function onStart(e: TouchEvent) {
   lastT = performance.now();
   vx = 0;
   dragging = false;
-  candidate = startX <= EDGE;
-  startTarget = candidate ? e.target : null;
-  // The edge zone is app-owned gesture territory: preventDefault here is what
-  // stops the browser's native back-swipe (iOS Safari) from starting a real
-  // history navigation and racing our pane drag — even when no layer is
+  zone = edgeZoneAt(startX);
+  if (zone === "soft" && insideScrolledRow(e.target)) zone = null;
+  startTarget = zone ? e.target : null;
+  // The bezel edge is app-owned gesture territory: preventDefault here is
+  // what stops the browser's native back-swipe (iOS Safari) from starting a
+  // real history navigation and racing our pane drag — even when no layer is
   // active and the swipe will simply be swallowed. It also swallows the
-  // tap→click synthesis for touches starting in the zone, so onEnd
-  // re-dispatches a click when the touch turns out to be a plain tap.
-  if (candidate && e.cancelable) e.preventDefault();
-  if (!candidate) return;
+  // tap→click synthesis for touches starting there, so onEnd re-dispatches a
+  // click when the touch turns out to be a plain tap.
+  if (zone === "hard" && e.cancelable) e.preventDefault();
+  if (!zone) return;
   mirrorOn(startTarget);
   handler = topLayer();
   const el = pane();
@@ -251,32 +282,28 @@ function onStart(e: TouchEvent) {
 }
 
 function onMove(e: TouchEvent) {
-  if (!candidate || e.touches.length !== 1) return;
+  if (!zone || e.touches.length !== 1) return;
   if (lastHandled === e) return;
   lastHandled = e;
   const t = e.touches[0];
   const dx = t.clientX - startX;
   const dy = t.clientY - startY;
   if (!dragging) {
-    const ax = Math.abs(dx);
-    const ay = Math.abs(dy);
-    if (ax < SLOP && ay < SLOP) return;
-    // Commit on a rightward move within ~50° of horizontal. Only a clearly
-    // vertical (or leftward) move aborts; an ambiguous diagonal keeps
-    // watching instead of giving up forever on the first sample — the old
-    // strict dy>dx test killed any thumb arc that dipped a few px first.
-    if (dx > 0 && ax >= ay * 0.8) {
-      dragging = true;
-      settleSeq++; // this drag now owns the pane; older settles must not reset it
-    } else if (dx < -SLOP || ay > ax * 1.4) {
+    const verdict = axisVerdict(zone, dx, dy);
+    if (verdict === "release") {
       endGestureState();
       return;
-    } else {
-      return;
     }
+    if (verdict === "wait") return;
+    dragging = true;
+    settleSeq++; // this drag now owns the pane; older settles must not reset it
   }
   if (!handler) return; // guard-only: nothing to drag, gesture is swallowed
-  e.preventDefault(); // we own this gesture now; stop scrolling
+  // We own this gesture now; stop scrolling. A soft-zone touch whose first
+  // samples were not cancelled may already be a native scroll, in which case
+  // WebKit reports the move as non-cancelable and the pane simply drags
+  // alongside it — the scroller is vertical-only, so nothing visibly moves.
+  if (e.cancelable) e.preventDefault();
   armStall();
   const now = performance.now();
   if (now > lastT) {
@@ -290,37 +317,36 @@ function onMove(e: TouchEvent) {
 }
 
 function onEnd(e: TouchEvent) {
-  if (!candidate) return;
+  if (!zone) return;
   if (lastHandled === e) return;
   lastHandled = e;
   const wasDragging = dragging;
+  const wasHard = zone === "hard";
   const target = startTarget;
   endGestureState();
   const el = pane();
   if (!wasDragging || !el) {
     resetPaneStyles(el);
     handler = null;
-    // preventDefault on touchstart suppressed the browser's own tap→click,
-    // so a touch that never became a drag and barely moved is a tap we
-    // must complete ourselves.
+    // preventDefault on a hard-zone touchstart suppressed the browser's own
+    // tap→click, so a touch that never became a drag and barely moved is a
+    // tap we must complete ourselves. A soft-zone tap was never cancelled
+    // and clicks on its own.
     const t = e.changedTouches?.[0];
     if (
+      wasHard &&
       e.type === "touchend" &&
       t &&
       Math.abs(t.clientX - startX) < SLOP &&
-      Math.abs(t.clientY - startY) < SLOP &&
-      target instanceof HTMLElement
+      Math.abs(t.clientY - startY) < SLOP
     ) {
-      target.click();
+      clickableAround(target)?.click();
     }
     return;
   }
   const m = /translateX\(([-0-9.]+)px\)/.exec(el.style.transform);
   const px = m ? parseFloat(m[1]) : 0;
-  // A rightward flick pops even a short drag (and a leftward flick cancels
-  // even a long one); a slow release falls back to the halfway rule.
-  const pop = vx > FLICK_VX ? px > 24 : vx < -FLICK_VX ? false : px > width / 2;
-  settle(pop);
+  settle(shouldPop(px, vx, width));
 }
 
 function syncListeners() {

@@ -181,6 +181,24 @@ describe("expandSkillCommand", () => {
     );
   });
 
+  test("loads auto capture and expands its command with optional context", () => {
+    const loaded = loadShippedSkills();
+    expect(loaded.diagnostics).toEqual([]);
+    const skill = loaded.skills.find((item) => item.name === "auto-capture");
+    expect(skill).toBeDefined();
+    expect(skill!.description).toContain('"run auto capture"');
+
+    for (const command of ["/auto-capture", "/skill:auto-capture"]) {
+      const expanded = expandSkillCommand(command, loaded.skills);
+      expect(expanded).toContain('<skill name="auto-capture"');
+      expect(expanded).toContain("# Auto capture");
+      expect(expanded).not.toContain("\nname: auto-capture");
+      expect(
+        expandSkillCommand(`${command} focus on the new menu`, loaded.skills),
+      ).toEndWith("</skill>\n\nfocus on the new menu");
+    }
+  });
+
   test("expands a nested pstack skill with its references and arguments", () => {
     const loaded = loadShippedSkills().skills;
     const skill = loaded.find(
@@ -214,6 +232,7 @@ describe("searchSkills", () => {
       "deslop",
       "control-ui",
       "workflow-authoring",
+      "auto-capture",
       "poteto-mode",
       "show-me",
       "vercel-react-best-practices",

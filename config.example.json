@@ -47,6 +47,7 @@
       "wtPrefix": "widget",
       "defaultBranch": "main",
       "ghRepo": "acme/widget",
+      "public": false,
       "default": true,
       "icon": "assets/widget-icon.png",
       "worktreeSetup": "git submodule update --init --depth 1",
@@ -66,6 +67,7 @@
       "wtPrefix": "opensession",
       "defaultBranch": "main",
       "ghRepo": "acme/opensession",
+      "public": true,
       "sharedCheckout": true,
       "publicationMode": "pull-request"
     },
@@ -101,7 +103,8 @@
     "slackNames": {}
   },
   "policy": {
-    "githubWriteOwners": ["acme"]
+    "githubWriteOwners": ["acme"],
+    "privateTerms": ["intranet.acme.test", "acme-build-node"]
   },
   "integrations": {
     "github": {

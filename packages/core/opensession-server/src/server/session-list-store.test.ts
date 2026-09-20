@@ -3,7 +3,10 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionListStore } from "./session-list-sqlite";
+import {
+  SessionListStore,
+  SESSION_BRANCH_LOOKUP_SQL,
+} from "./session-list-sqlite";
 import type { UnifiedSession } from "./types";
 
 const stores: SessionListStore[] = [];
@@ -40,6 +43,101 @@ function memoryStore(): SessionListStore {
 }
 
 describe("SessionListStore", () => {
+  test("maintains indexed primary and attached branch ownership atomically", () => {
+    const store = memoryStore();
+    const row = session("owner", "2026-09-17T00:00:00Z", {
+      repo: "alpha",
+      branch: "first",
+      attachedRepos: [{ repo: "beta", branch: "feature", dir: "/unused" }],
+    });
+    expect(
+      store.listLiveByRepoBranchCovered("alpha", "first", "alpha"),
+    ).toBeNull();
+    store.upsertManyCovered([row], "include");
+    const lookup = (repo: string, branch: string) =>
+      store
+        .listLiveByRepoBranchCovered(repo, branch, "alpha")!
+        .map((s) => s.id);
+    expect(lookup("alpha", "first")).toEqual(["owner"]);
+    expect(lookup("beta", "feature")).toEqual(["owner"]);
+    expect(lookup("other", "first")).toEqual([]);
+    store.upsert({ ...row, branch: "second", attachedRepos: [] });
+    expect(lookup("alpha", "first")).toEqual([]);
+    expect(lookup("beta", "feature")).toEqual([]);
+    expect(lookup("alpha", "second")).toEqual(["owner"]);
+    store.setArchived("owner", true);
+    expect(lookup("alpha", "second")).toEqual([]);
+    store.setArchived("owner", false);
+    expect(lookup("alpha", "second")).toEqual(["owner"]);
+    store.remove("owner");
+    expect(lookup("alpha", "second")).toEqual([]);
+    store.upsert(row);
+    store.replaceAll([]);
+    expect(lookup("alpha", "first")).toEqual([]);
+    expect(
+      store
+        .queryPlan(
+          "SELECT session_id FROM session_list_branches WHERE repo IN (?, ?) AND branch = ? LIMIT 26",
+          "alpha",
+          "",
+          "first",
+        )
+        .join(" "),
+    ).toMatch(/SEARCH .*USING COVERING INDEX/);
+  });
+
+  test("the production lookup probes only bounded matching row IDs, not all live rows", () => {
+    const store = memoryStore();
+    const plan = store
+      .queryPlan(SESSION_BRANCH_LOOKUP_SQL, "alpha", "", "feature")
+      .join("\n");
+    expect(plan).toContain("SEARCH session_list_branches USING COVERING INDEX");
+    expect(plan).toContain(
+      "SEARCH s USING INDEX sqlite_autoindex_session_list_1 (id=?)",
+    );
+    expect(plan).not.toMatch(/SCAN s\b|archived=\?/);
+  });
+
+  test("upgrades branch membership from the existing catalog, with no file discovery", () => {
+    const dir = mkdtempSync(join(tmpdir(), "session-branches-upgrade-"));
+    const path = join(dir, "index.sqlite");
+    let store = new SessionListStore(path);
+    try {
+      store.upsertManyCovered(
+        [
+          session("existing", "2026-09-17T00:00:00Z", {
+            repo: "alpha",
+            branch: "feature",
+            attachedRepos: [
+              { repo: "beta", branch: "attached", dir: "/never-opened" },
+            ],
+          }),
+        ],
+        "include",
+      );
+      store.close();
+      const old = new Database(path);
+      old.exec(
+        "DROP TABLE session_list_branches; DELETE FROM session_list_meta WHERE key = 'branch_membership:v1'",
+      );
+      old.close();
+      store = new SessionListStore(path);
+      expect(
+        store
+          .listLiveByRepoBranchCovered("alpha", "feature", "alpha")
+          ?.map((s) => s.id),
+      ).toEqual(["existing"]);
+      expect(
+        store
+          .listLiveByRepoBranchCovered("beta", "attached", "alpha")
+          ?.map((s) => s.id),
+      ).toEqual(["existing"]);
+    } finally {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("finds live rows by branch through the branch index", () => {
     const store = memoryStore();
     store.upsertMany([

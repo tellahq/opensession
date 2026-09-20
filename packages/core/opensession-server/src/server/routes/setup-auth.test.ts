@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -20,7 +21,7 @@ function context(login: string): RouteContext {
   };
 }
 
-function roleAwareConfig(): void {
+async function roleAwareConfig(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "opensession-setup-auth-"));
   dirs.push(dir);
   const path = join(dir, "config.json");
@@ -39,12 +40,16 @@ function roleAwareConfig(): void {
     }),
   );
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
   process.env.OPENSESSION_GITHUB_CLIENT_ID = "test-client";
 }
 
-afterEach(() => {
+afterEach(async () => {
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = savedConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = savedConfig;
+    await getConfigAsync();
+  }
   if (savedClientId === undefined)
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
   else process.env.OPENSESSION_GITHUB_CLIENT_ID = savedClientId;
@@ -54,7 +59,7 @@ afterEach(() => {
 
 describe("workspace setup authorization", () => {
   test("owner discovery and GitHub creation require an administrator", async () => {
-    roleAwareConfig();
+    await roleAwareConfig();
     for (const [path, method] of [
       ["/api/setup/github/owners", "GET"],
       ["/api/setup/repos", "POST"],
@@ -68,7 +73,7 @@ describe("workspace setup authorization", () => {
   });
 
   test("rejects configured non-admin teammates", async () => {
-    roleAwareConfig();
+    await roleAwareConfig();
     const response = await handleSetupRoutes(context("grace"));
     expect(response?.status).toBe(403);
     expect(await response?.json()).toEqual({
@@ -79,7 +84,7 @@ describe("workspace setup authorization", () => {
 
 /** A simple-mode config carrying the captured org intent (userPrAuth absent, so
  *  sign-in is off and any caller administers the workspace). */
-function orgIntentConfig(): void {
+async function orgIntentConfig(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "opensession-setup-intent-"));
   dirs.push(dir);
   const path = join(dir, "config.json");
@@ -92,19 +97,21 @@ function orgIntentConfig(): void {
     }),
   );
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
   delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
 }
 
-function singleUserConfig(): void {
+async function singleUserConfig(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "opensession-setup-single-"));
   dirs.push(dir);
   const path = join(dir, "config.json");
   writeFileSync(path, JSON.stringify({ integrations: {} }));
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
   delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
 }
 
-function ingressConfig(): void {
+async function ingressConfig(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "opensession-setup-ingress-"));
   dirs.push(dir);
   const path = join(dir, "config.json");
@@ -119,6 +126,7 @@ function ingressConfig(): void {
     }),
   );
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
   delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
 }
 
@@ -172,7 +180,7 @@ describe("GitHub App onboarding link", () => {
 
 describe("setup status ingress snapshot", () => {
   test("exposes configured URLs without waiting for health probes", async () => {
-    ingressConfig();
+    await ingressConfig();
     const response = await handleSetupRoutes(context("anyone"));
     expect(response?.status).toBe(200);
     const body = await response?.json();
@@ -184,7 +192,7 @@ describe("setup status ingress snapshot", () => {
 
 describe("setup status github snapshot exposes install intent", () => {
   test("appOrg + authOnConnect ride the snapshot", async () => {
-    orgIntentConfig();
+    await orgIntentConfig();
     const response = await handleSetupRoutes(context("anyone"));
     expect(response?.status).toBe(200);
     const body = await response?.json();
@@ -195,7 +203,7 @@ describe("setup status github snapshot exposes install intent", () => {
   });
 
   test("a single-user install exposes no intent", async () => {
-    singleUserConfig();
+    await singleUserConfig();
     const response = await handleSetupRoutes(context("anyone"));
     const body = await response?.json();
     expect(body.github.appOrg).toBe(null);

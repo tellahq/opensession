@@ -283,6 +283,12 @@ async function resolveTarget(
       };
     }
 
+    if (sb.provider === "tart") {
+      // The guest is reachable only from its Mac host; a relayed PTY is not
+      // built yet, so say so instead of silently opening a host shell.
+      throw new Error("Mac VM terminals are not available yet");
+    }
+
     if (sb.provider === "box" && sandboxProviderConfigured("box")) {
       const { boxSshTarget } = await import("./sandbox/adapters/box");
       const target = await boxSshTarget(sb.sandboxId);

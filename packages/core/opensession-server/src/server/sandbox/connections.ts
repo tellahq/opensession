@@ -11,6 +11,7 @@ import { audit } from "../audit";
 import {
   sandboxAdapterSignature,
   sandboxAdapterSignatureCurrent,
+  sandboxProviderNeedsCredential,
 } from "./adapter-signature";
 import { stateDir } from "../paths";
 import { writeJsonAtomic } from "../shared/atomic-write";
@@ -21,7 +22,7 @@ import {
   workspaceSecretExists,
 } from "../workspace-secrets";
 export { sandboxAdapterSignature } from "./adapter-signature";
-export const WORKSPACE_SANDBOX_PROVIDERS = ["daytona", "box"] as const;
+export const WORKSPACE_SANDBOX_PROVIDERS = ["daytona", "box", "tart"] as const;
 export type WorkspaceSandboxProvider =
   (typeof WORKSPACE_SANDBOX_PROVIDERS)[number];
 
@@ -41,6 +42,10 @@ export interface SandboxConnectionSettings {
   endpoint?: string;
   cloud?: string;
   publicPreviews?: boolean;
+  /** tart: the paired macOS Runner (id or name) that hosts the VMs. */
+  runner?: string;
+  /** tart: how many VMs may run on that host at once. */
+  maxVms?: number;
 }
 
 export interface SandboxConnectionQualification {
@@ -140,6 +145,8 @@ function settings(value: unknown): SandboxConnectionSettings {
     ...(typeof raw.publicPreviews === "boolean"
       ? { publicPreviews: raw.publicPreviews }
       : {}),
+    ...(string(raw.runner) ? { runner: string(raw.runner) } : {}),
+    ...(number(raw.maxVms) ? { maxVms: Math.round(number(raw.maxVms)!) } : {}),
   };
 }
 
@@ -237,7 +244,7 @@ export function safeSandboxConnections(): SafeSandboxConnection[] {
     }
     const hasCredentials = connection.credentialRef
       ? workspaceSecretExists(connection.credentialRef)
-      : false;
+      : !sandboxProviderNeedsCredential(provider);
     const signatureCurrent = sandboxAdapterSignatureCurrent(
       provider,
       connection.qualification?.adapterSignature,
@@ -284,10 +291,17 @@ export function connectSandboxProvider(
       credentialRef,
     );
   }
-  if (!credentialRef) {
+  if (!credentialRef && sandboxProviderNeedsCredential(provider)) {
     throw new Error(
       `${provider === "box" ? "Boat" : "Daytona"} API key is required`,
     );
+  }
+  if (
+    provider === "tart" &&
+    !string(input.settings?.runner) &&
+    !previous?.settings.runner
+  ) {
+    throw new Error("Choose the paired macOS Runner that hosts the Mac VMs");
   }
   const now = new Date().toISOString();
   const connection: SandboxConnection = {
@@ -397,6 +411,7 @@ export function sandboxConnectionReady(
     )
   )
     return false;
+  if (!sandboxProviderNeedsCredential(provider)) return true;
   return Boolean(
     connection.credentialRef && workspaceSecretExists(connection.credentialRef),
   );

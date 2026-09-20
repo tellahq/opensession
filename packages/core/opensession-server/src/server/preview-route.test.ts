@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -80,7 +81,7 @@ function listenLow(body: string): ReturnType<typeof Bun.serve> {
   throw new Error("no free low port");
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), "bks-preview-route-"));
   caddy = fakeCaddy();
   // The "service" a .ports.conf entry points at; it only has to listen.
@@ -96,6 +97,7 @@ beforeAll(() => {
     }),
   );
   process.env.OPENSESSION_CONFIG = join(root, "config.json");
+  await getConfigAsync();
   process.env.PREVIEW_HOST = "portals.test";
 });
 

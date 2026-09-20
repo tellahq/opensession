@@ -100,6 +100,10 @@ export interface ActiveRunRecord {
    *  unlike reposNote there is no rebuild callback for automation sessions, so
    *  an unjournaled value would be silently dropped by a restart. */
   prReviewer?: string;
+  /** Sibling repositories readable through GH_READ_TOKEN (automation
+   *  config), preserved across resume for the same reason as prReviewer.
+   *  Names only; the token itself is minted fresh per turn, never journaled. */
+  readRepos?: string[];
   /** Legacy pool key retained while decoding old run records — lets resume-after-
    *  restart REATTACH to a detached server that survived (adoption via the
    *  pi-detach registry) instead of re-prompting a fresh one. */
@@ -187,6 +191,7 @@ export function buildRunJournalRecord(
     accountStrict?: boolean;
     usageCredits?: boolean;
     prReviewer?: string;
+    readRepos?: string[];
     journal?: {
       firstJournaledAt?: string;
       resumeAttempts?: number;
@@ -218,6 +223,7 @@ export function buildRunJournalRecord(
     accountStrict: site.accountStrict ?? opts.accountStrict,
     usageCredits: site.usageCredits ?? opts.usageCredits,
     prReviewer: site.prReviewer ?? opts.prReviewer,
+    readRepos: site.readRepos ?? opts.readRepos,
     deniedTools: opts.deniedTools,
     publicationPolicy: opts.publicationPolicy,
     aws: !!opts.aws,

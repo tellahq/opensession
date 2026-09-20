@@ -604,6 +604,7 @@ try {
     accountStrict: spec.accountStrict,
     usageCredits: spec.usageCredits,
     prReviewer: spec.prReviewer,
+    readRepos: spec.readRepos,
     journal: {
       ...(spec.lifecycle === "auxiliary"
         ? {}

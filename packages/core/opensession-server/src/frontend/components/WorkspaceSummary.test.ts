@@ -28,8 +28,8 @@ test("Changes expands to files with hover diff previews", () => {
     "onClick={() => setChangesOpen((open) => !open)}",
   );
   expect(summarySource).toContain("changeFiles.map(fileChangeRow)");
-  expect(summarySource).toContain("openOnHover={Boolean(file.meta)}");
-  expect(summarySource).toContain("<FileDiff");
+  expect(summarySource).toContain("openOnHover={Boolean(file.patch)}");
+  expect(summarySource).toContain("<PatchFileDiff");
   expect(summarySource).toContain("useSessionPrDiffResource(");
   expect(summarySource).not.toContain("files committed");
 });
@@ -64,9 +64,8 @@ test("a commit opens its details and code changes in a nested overlay", () => {
     "enabled: (changesOpen || Boolean(openCommit)) && Boolean(pr)",
   );
   expect(summarySource).toContain("prCommits.length === 1");
-  expect(summarySource).toContain("parsePatchFiles(rawPatch)");
-  expect(summarySource).toContain("commitDiffs.map((file)");
-  expect(summarySource).toContain("<FileDiff");
+  expect(summarySource).toContain("{rawPatch?.trim() && (");
+  expect(summarySource).toContain("<PatchDiffs");
   expect(summarySource).toContain("Some large changes aren’t shown.");
   expect(summarySource).toContain("exclusive={false}");
   expect(summarySource).toContain('side={embedded ? "top" : "left"}');

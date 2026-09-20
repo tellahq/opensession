@@ -36,7 +36,7 @@ test("SessionViewer receives app-owned composer wiring through one binding", asy
 
   expect(binding).toContain("export interface ComposerBinding {");
   expect(binding).toContain(
-    "setTyping: (sessionId: string, active: boolean) => void;",
+    "setTyping: (sessionId: string, active: boolean, text?: string) => void;",
   );
   expect(binding).toContain("resetSeq?: number;");
   expect(binding).toContain("autoFocus?: boolean;");

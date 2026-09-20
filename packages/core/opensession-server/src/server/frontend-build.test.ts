@@ -20,6 +20,7 @@ import {
   isPrebuiltFrontend,
   renderIndexHtml,
   SPA_HEADERS,
+  staticImportClosure,
 } from "./frontend-build";
 import { __setIdentitiesForTest } from "./shared/user-mappings";
 import { publishStableFrontendSnapshot } from "./stable-frontend";
@@ -138,11 +139,76 @@ describe("renderIndexHtml", () => {
     );
   });
 
+  it("preloads the entry's static chunks and nothing when the meta predates them", () => {
+    const html = renderIndexHtml({
+      ...meta,
+      preload: ["App-shared.js", "App-leaf.js"],
+    });
+    expect(html).toContain('<link rel="modulepreload" href="/App-shared.js">');
+    expect(html).toContain('<link rel="modulepreload" href="/App-leaf.js">');
+    expect(html.indexOf('rel="modulepreload"')).toBeLessThan(
+      html.indexOf("</head>", html.indexOf('rel="modulepreload"')),
+    );
+    expect(renderIndexHtml(meta)).not.toContain("modulepreload");
+  });
+
   it("only enables Agentation through the explicit runtime flag", () => {
     delete process.env.OPENSESSION_AGENTATION;
     expect(renderIndexHtml(meta)).not.toContain('"agentationEnabled":true');
     process.env.OPENSESSION_AGENTATION = "1";
     expect(renderIndexHtml(meta)).toContain('"agentationEnabled":true');
+  });
+});
+
+describe("staticImportClosure", () => {
+  it("follows static imports transitively and skips dynamic ones", () => {
+    const dist = mkdtempSync(join(tmpdir(), "os1-closure-"));
+    try {
+      const write = (name: string, source: string) =>
+        writeFileSync(join(dist, name), source);
+      write(
+        "App-entry.js",
+        'import{a}from"/App-shared.js";import"/App-side.js";const x=()=>import("/Settings-lazy.js");export*from"/App-reexport.js";',
+      );
+      write("App-shared.js", 'import{b}from"/App-deep.js";export const a=1;');
+      write("App-side.js", "");
+      write("App-reexport.js", 'import{a}from"/App-shared.js";export{a};');
+      write("App-deep.js", 'import"/App-entry.js";export const b=2;');
+      write("Settings-lazy.js", 'import"/App-only-lazy.js";');
+      write("App-only-lazy.js", "");
+      const outputs = new Set([
+        "App-entry.js",
+        "App-shared.js",
+        "App-side.js",
+        "App-reexport.js",
+        "App-deep.js",
+        "Settings-lazy.js",
+        "App-only-lazy.js",
+      ]);
+      expect(staticImportClosure("App-entry.js", outputs, dist)).toEqual([
+        "App-shared.js",
+        "App-side.js",
+        "App-reexport.js",
+        "App-deep.js",
+      ]);
+    } finally {
+      rmSync(dist, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores names the build did not emit", () => {
+    const dist = mkdtempSync(join(tmpdir(), "os1-closure-"));
+    try {
+      writeFileSync(
+        join(dist, "App-entry.js"),
+        'import"/App-gone.js";const s="from \\"/not-a-chunk.js\\"";',
+      );
+      expect(
+        staticImportClosure("App-entry.js", new Set(["App-entry.js"]), dist),
+      ).toEqual([]);
+    } finally {
+      rmSync(dist, { recursive: true, force: true });
+    }
   });
 });
 

@@ -8,7 +8,6 @@ import {
   resourcePercent,
   type ResourceMetric,
 } from "../lib/server-resource-chart";
-import { MOBILE_TOP_BAR_CONTROL } from "../lib/app-header-classes";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Popover } from "../ui/popover";
@@ -52,11 +51,8 @@ function ResourceGraph({
   );
 }
 
-export function ServerHealthMonitor({
-  compact = false,
-}: {
-  compact?: boolean;
-}) {
+/** Desktop sidebar only. Phones keep the top bar clear of host metrics. */
+export function ServerHealthMonitor() {
   const state = useServerResources();
   const samples = state.kind === "ready" ? state.data.samples : [];
   const latest = samples.at(-1);
@@ -71,24 +67,10 @@ export function ServerHealthMonitor({
       <Popover.Trigger
         aria-label="Server health"
         render={<Button variant="ghost" size="sm" />}
-        className={cn(
-          "shrink-0 gap-1.5 min-h-8 phone:min-h-11 font-normal [-webkit-app-region:no-drag] [app-region:no-drag]",
-          compact
-            ? cn(
-                MOBILE_TOP_BAR_CONTROL,
-                "phone:w-auto phone:gap-1.5 phone:px-2",
-              )
-            : "px-1 @max-[160px]/server-health:p-0",
-        )}
+        className="shrink-0 gap-1.5 min-h-8 px-1 font-normal [-webkit-app-region:no-drag] [app-region:no-drag] @max-[160px]/server-health:p-0"
       >
         {/* The sidebar slot measures space left after traffic lights and navigation. */}
-        <span
-          className={
-            compact
-              ? "flex"
-              : "hidden @min-[64px]/server-health:@max-[160px]/server-health:flex"
-          }
-        >
+        <span className="hidden @min-[64px]/server-health:@max-[160px]/server-health:flex">
           {latest?.cpu != null ? (
             <ResourceGraph
               samples={samples}
@@ -99,25 +81,23 @@ export function ServerHealthMonitor({
             <IconServer size={20} />
           )}
         </span>
-        {!compact && (
-          <span className="flex gap-1.5 @max-[160px]/server-health:hidden">
-            {RESOURCE_METRICS.map(({ key, shortLabel }) => (
-              <span key={key} className="flex w-9 flex-col gap-0.5">
-                <span className="flex flex-col items-center gap-0.5 text-meta leading-none">
-                  <span className="text-faint">{shortLabel}</span>
-                  <span className="tabular-nums text-dim">
-                    {formatResourcePercent(resourcePercent(latest, key))}
-                  </span>
+        <span className="flex gap-1.5 @max-[160px]/server-health:hidden">
+          {RESOURCE_METRICS.map(({ key, shortLabel }) => (
+            <span key={key} className="flex w-9 flex-col gap-0.5">
+              <span className="flex flex-col items-center gap-0.5 text-meta leading-none">
+                <span className="text-faint">{shortLabel}</span>
+                <span className="tabular-nums text-dim">
+                  {formatResourcePercent(resourcePercent(latest, key))}
                 </span>
-                <ResourceGraph
-                  samples={samples}
-                  metric={key}
-                  className="h-1 w-full text-dim"
-                />
               </span>
-            ))}
-          </span>
-        )}
+              <ResourceGraph
+                samples={samples}
+                metric={key}
+                className="h-1 w-full text-dim"
+              />
+            </span>
+          ))}
+        </span>
         <FrontendFpsCounter />
       </Popover.Trigger>
       <Popover.Popup

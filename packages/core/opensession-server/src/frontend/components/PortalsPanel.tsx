@@ -37,6 +37,7 @@ function statusLabel(
 function providerName(id: string): string {
   if (id === "daytona") return "Daytona";
   if (id === "box") return "Boat";
+  if (id === "tart") return "Mac VM";
   return id;
 }
 

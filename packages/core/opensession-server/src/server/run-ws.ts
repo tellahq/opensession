@@ -66,6 +66,22 @@ type UpgradableServer = {
 /** hostId → expected bearer for the run's dial-back. */
 const wsTokens: Map<string, string> = (g.__runWsTokens ??= new Map());
 
+/**
+ * What the server knows about a dialed-in host beyond its token. Runner
+ * launches register their Runner and the run's AWS eligibility here so the
+ * credential endpoint (routes/run-host-aws.ts) answers from memory: no run
+ * journal read on the gateway thread, and nothing the host itself asserts.
+ */
+export interface RunWsHostContext {
+  runnerId: string;
+  /** The run's `aws` grant as the server decided it (spec.aws). */
+  aws: boolean;
+}
+
+/** hostId → launch context; only Runner launches populate it. */
+const wsHostContexts: Map<string, RunWsHostContext> = (g.__runWsHostContexts ??=
+  new Map());
+
 // ── Seq/ack state (host-side buffering + replay; ws-buffer.ts is the peer) ───
 // Host→server frames carry a monotonic `seq` (WS transport only). `seq` here
 // is the CONSUMED watermark — the highest seq delivered to an attached
@@ -180,12 +196,38 @@ export interface SandboxWsData {
 
 // ── Token registry (launchers mint + register; dispose unregisters) ──────────
 
-export function registerRunWsHost(hostId: string, token: string): void {
+export function registerRunWsHost(
+  hostId: string,
+  token: string,
+  context?: RunWsHostContext,
+): void {
   wsTokens.set(hostId, token);
+  if (context) wsHostContexts.set(hostId, context);
+  else wsHostContexts.delete(hostId);
+}
+
+export function runWsHostContext(hostId: string): RunWsHostContext | undefined {
+  return wsHostContexts.get(hostId);
+}
+
+/**
+ * Does this request carry the registered dial-back bearer for `hostId`? The
+ * same gate the run-ws/rpc-ws upgrades apply, for the host's plain HTTP
+ * calls. Unregistered hosts fail: an empty registry means every call is
+ * refused, exactly like the upgrades.
+ */
+export function runHostRequestAuthorized(
+  req: Request,
+  hostId: string,
+): boolean {
+  const expected = wsTokens.get(hostId);
+  const presented = bearerFrom(req);
+  return Boolean(expected && presented && timingSafeEqStr(expected, presented));
 }
 
 export function unregisterRunWsHost(hostId: string): void {
   wsTokens.delete(hostId);
+  wsHostContexts.delete(hostId);
   wsSeqs.delete(hostId);
   fireDialWaiters(hostId, new Error(`run-ws host ${hostId} unregistered`));
   const st = wsConns.get(hostId);

@@ -407,7 +407,7 @@ function serverExec(compiled = isCompiledBinary()): {
   };
 }
 
-function bunPath(): string {
+export function bunPath(): string {
   // A release install carries its own bun at <checkout>/bin/bun and puts no
   // bun on PATH; prefer it so the rendered ExecStart works even when the unit
   // is installed from a shell where bun is not on PATH (else 203/EXEC). Fall
@@ -589,7 +589,10 @@ export async function renderUnit(
     .replace(/^WantedBy=.*$/m, "WantedBy=default.target");
 }
 
-function executorPathEnvironment(): string {
+/** The state-location variables every service process shares: the units
+ * carry them as Environment= lines and the catalog seed step inherits them,
+ * so both resolve the same store. */
+function stateEnvironment(): Record<string, string> {
   const values = [
     ["HOME", HOME],
     [
@@ -603,14 +606,76 @@ function executorPathEnvironment(): string {
         envFileValue("OPENSESSION_SESSIONS_DIR"),
     ],
   ] satisfies Array<readonly [string, string | undefined]>;
-  const lines: string[] = [];
-  for (const [key, value] of values) {
-    if (!value) continue;
-    lines.push(
-      `Environment="${key}=${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`,
-    );
-  }
-  return lines.join("\n");
+  const env: Record<string, string> = {};
+  for (const [key, value] of values) if (value) env[key] = value;
+  return env;
+}
+
+function executorPathEnvironment(): string {
+  return Object.entries(stateEnvironment())
+    .map(
+      ([key, value]) =>
+        `Environment="${key}=${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`,
+    )
+    .join("\n");
+}
+
+/** What the install log calls the seed step when it fails. */
+export const SEED_SESSION_CATALOGS_STEP = "seed the session catalogs";
+
+/**
+ * Project the session source files into the catalogs before the gateway
+ * boots. The gateway primes its session list from the catalogs alone and
+ * refuses to boot until an operator has marked them complete
+ * (session-cache.ts primeSessionListIndex); it never scans the session
+ * directories itself. This is that operator step, run by every install so a
+ * fresh state root (which seeds in one empty run) and an installer-driven
+ * upgrade of a legacy store both come up without a manual command. On an
+ * instance whose catalogs are already marked complete the seed exits after
+ * three RPC calls without reading a source file, so a reinstall or restart
+ * does not pay for every session on disk. The seed talks to the kernel over
+ * its RPC and opens no actor database, so the kernel must already be
+ * running and the gateway must not be yet. Returns
+ * the seed's exit code; a non-zero one must stop the install, since a
+ * gateway started anyway would only crash-loop on the same missing catalog.
+ */
+export async function seedSessionCatalogs(opts: {
+  /** The kernel credential: the file a user-scope or launchd install owns,
+   *  or the token itself when the file is root-only (system scope) or was
+   *  minted for one foreground run. Both travel in the environment, never
+   *  in argv. */
+  credential: { tokenFile: string } | { token: string };
+  cwd?: string;
+  env?: Record<string, string>;
+  compiled?: boolean;
+  runCommand?: typeof runInherit;
+}): Promise<number> {
+  const compiled = opts.compiled ?? isCompiledBinary();
+  // A compiled binary ships the seed as its own subcommand (src/main.ts);
+  // a source checkout runs the operator script directly.
+  const command = compiled
+    ? [SHIM_PATH, "seed-session-catalogs"]
+    : [bunPath(), "scripts/seed-session-metadata-catalog.ts"];
+  const credential: Record<string, string> =
+    "token" in opts.credential
+      ? { OPENSESSION_SESSION_KERNEL_TOKEN: opts.credential.token }
+      : { OPENSESSION_SESSION_KERNEL_TOKEN_FILE: opts.credential.tokenFile };
+  info(dim("seeding the session catalogs"));
+  return await (opts.runCommand ?? runInherit)(
+    command,
+    opts.cwd ?? serviceWorkdir(),
+    { ...stateEnvironment(), ...credential, ...opts.env },
+  );
+}
+
+/** The system-scope kernel token is root-only; read it through sudo for the
+ * seed step, which runs as the installing user like the units do. */
+async function systemSessionKernelToken(): Promise<string | undefined> {
+  const result = await run(["sudo", "cat", SESSION_KERNEL_TOKEN_PATH], {
+    quiet: true,
+  });
+  const token = result.stdout.trim();
+  return result.code === 0 && token ? token : undefined;
 }
 
 /** Render the independently restartable executor for system scope. */
@@ -1122,11 +1187,24 @@ export async function install(
           ],
           ["sudo", "systemctl", "enable", SESSION_KERNEL_SERVICE_NAME],
           ["sudo", "systemctl", "restart", SESSION_KERNEL_SERVICE_NAME],
+          // The gateway boots from the catalogs the seed step fills.
+          async () => {
+            const token = await systemSessionKernelToken();
+            if (!token) {
+              warn(`cannot read ${SESSION_KERNEL_TOKEN_PATH}`);
+              return 1;
+            }
+            return await seedSessionCatalogs({ credential: { token } });
+          },
           ["sudo", "systemctl", "enable", "--now", SERVICE_NAME],
         ];
-        for (const cmd of start) {
-          if ((await runInherit(cmd)) !== 0) {
-            warn(`failed: ${cmd.join(" ")}`);
+        for (const step of start) {
+          const code =
+            typeof step === "function" ? await step() : await runInherit(step);
+          if (code !== 0) {
+            warn(
+              `failed: ${typeof step === "function" ? SEED_SESSION_CATALOGS_STEP : step.join(" ")}`,
+            );
             if (migratedUserUnit) {
               warn("restoring the user service");
               mkdirSync(dirname(USER_UNIT_PATH), { recursive: true });
@@ -1191,7 +1269,7 @@ export async function install(
         return true;
       }
 
-      for (const cmd of [
+      for (const step of [
         ...(wasActive ? [systemctl(scope, ["stop", SERVICE_NAME])] : []),
         systemctl(scope, ["daemon-reload"]),
         ...(sourceIngress
@@ -1206,10 +1284,22 @@ export async function install(
           : []),
         systemctl(scope, ["enable", SESSION_KERNEL_SERVICE_NAME]),
         systemctl(scope, ["restart", SESSION_KERNEL_SERVICE_NAME]),
+        // The gateway boots from the catalogs the seed step fills.
+        () =>
+          seedSessionCatalogs({
+            credential: { tokenFile: USER_SESSION_KERNEL_TOKEN_PATH },
+            env,
+          }),
         systemctl(scope, ["enable", "--now", SERVICE_NAME]),
       ]) {
-        if ((await runInherit(cmd, undefined, env)) !== 0) {
-          warn(`failed: ${cmd.join(" ")}`);
+        const code =
+          typeof step === "function"
+            ? await step()
+            : await runInherit(step, undefined, env);
+        if (code !== 0) {
+          warn(
+            `failed: ${typeof step === "function" ? SEED_SESSION_CATALOGS_STEP : step.join(" ")}`,
+          );
           return false;
         }
       }
@@ -1253,6 +1343,15 @@ export async function install(
       );
       if (kernel.code !== 0) {
         warn(`launchctl actor bootstrap failed: ${kernel.stderr}`);
+        return false;
+      }
+      // The gateway boots from the catalogs the seed step fills.
+      if (
+        (await seedSessionCatalogs({
+          credential: { tokenFile: USER_SESSION_KERNEL_TOKEN_PATH },
+        })) !== 0
+      ) {
+        warn(`failed: ${SEED_SESSION_CATALOGS_STEP}`);
         return false;
       }
       const { code, stderr } = await bootstrapLaunchAgent(

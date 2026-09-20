@@ -31,7 +31,8 @@ export function broadcastToAll(msg: object) {
 
 /**
  * Every socket that belongs to `user`: the verified sign-in first name when
- * web auth stamped one, else the client-claimed UserPicker name. Both spell
+ * web auth stamped one, else the sidebar subscription or watch UserPicker
+ * name. A home-screen socket need not watch any session. These spell
  * the person the way `requestUser` does, so a per-user store write can tell
  * exactly that person's other windows and devices.
  */
@@ -40,7 +41,8 @@ export function broadcastToUser(user: string, msg: object) {
   if (!wanted) return;
   const payload = JSON.stringify(msg);
   for (const ws of allClients) {
-    const identity = ws.data.authUser || ws.data.user;
+    const identity =
+      ws.data.authUser || ws.data.sidebarScope?.user || ws.data.user;
     if (identity?.trim().toLowerCase() !== wanted) continue;
     try {
       ws.send(payload);
@@ -91,6 +93,9 @@ export interface WSClientData {
   /** Typing is a short lease refreshed by composer input. The deadline makes
    * stale indicators self-clear when a client disappears without stopping. */
   typingUntil?: number;
+  /** The head of the draft behind the lease, shown to co-viewers on hover.
+   * Lives and dies with `typingUntil`; never persisted. */
+  typingText?: string;
   /**
    * The sidebar projection this socket renders (sessions_subscribe). Row
    * frames are evaluated against it so a client only hears about sessions its
@@ -140,7 +145,7 @@ export function joinSession(ws: WebSocketClient, sessionId: string) {
   const typing = broadcastTyping(sessionId, ws);
   try {
     ws.send(JSON.stringify({ type: "presence", sessionId, viewers }));
-    ws.send(JSON.stringify({ type: "typing", sessionId, users: typing }));
+    ws.send(JSON.stringify(typingFrame(sessionId, typing)));
   } catch {}
 }
 
@@ -151,6 +156,7 @@ export function leaveSession(ws: WebSocketClient) {
   if (set) {
     set.delete(ws);
     ws.data.typingUntil = undefined;
+    ws.data.typingText = undefined;
     if (set.size === 0) {
       sessionWatchers.delete(sessionId);
       lastPresence.delete(sessionId);
@@ -270,7 +276,10 @@ export function setClientAway(ws: WebSocketClient, away: boolean) {
   ws.data.away = away;
   ws.data.lastSeenAt = Date.now();
   if (!away) ws.data.activeAt = Date.now();
-  if (away) ws.data.typingUntil = undefined;
+  if (away) {
+    ws.data.typingUntil = undefined;
+    ws.data.typingText = undefined;
+  }
   const sessionId = ws.data.watchingSessionId;
   if (isPresent(ws) !== was) {
     if (sessionId) broadcastPresence(sessionId);
@@ -314,6 +323,9 @@ function broadcastPresence(
 
 const TYPING_TTL_MS = 4_000;
 const TYPING_SWEEP_MS = 1_000;
+/** A hover preview, not the draft store. The client trims to the same bound
+ * (frontend/lib/typing.ts); this is the server's own ceiling. */
+export const TYPING_PREVIEW_MAX = 500;
 
 function isTyping(
   ws: Pick<WebSocketClient, "data">,
@@ -326,39 +338,72 @@ function isTyping(
   );
 }
 
-/** One entry per person even when they are composing on two devices. */
+export interface TypingPresence {
+  users: string[];
+  /** user → head of their draft, for the users whose lease carried text. */
+  drafts: Record<string, string>;
+}
+
+/** One entry per person even when they are composing on two devices; the
+ * draft shown is the one from their freshest lease. */
+export function computeTypingPresence(
+  watchers: ReadonlySet<Pick<WebSocketClient, "data">> | undefined,
+  now = Date.now(),
+): TypingPresence {
+  const users = new Set<string>();
+  const drafts: Record<string, string> = {};
+  const freshest: Record<string, number> = {};
+  for (const ws of watchers || []) {
+    if (!isTyping(ws, now)) continue;
+    const user = ws.data.user;
+    if (!user || user === "Anonymous") continue;
+    users.add(user);
+    const until = ws.data.typingUntil || 0;
+    const text = ws.data.typingText;
+    if (text && until > (freshest[user] || 0)) {
+      freshest[user] = until;
+      drafts[user] = text;
+    }
+  }
+  return { users: [...users], drafts };
+}
+
 export function computeTypingUsers(
   watchers: ReadonlySet<Pick<WebSocketClient, "data">> | undefined,
   now = Date.now(),
 ): string[] {
-  const users = new Set<string>();
-  for (const ws of watchers || []) {
-    if (!isTyping(ws, now)) continue;
-    const user = ws.data.user;
-    if (user && user !== "Anonymous") users.add(user);
-  }
-  return [...users];
+  return computeTypingPresence(watchers, now).users;
+}
+
+/** Older clients (and the native app) read `users` and ignore the rest. */
+function typingFrame(sessionId: string, { users, drafts }: TypingPresence) {
+  return Object.keys(drafts).length > 0
+    ? { type: "typing", sessionId, users, drafts }
+    : { type: "typing", sessionId, users };
 }
 
 function broadcastTyping(
   sessionId: string,
   except?: WebSocketClient,
-): string[] {
-  const users = computeTypingUsers(sessionWatchers.get(sessionId));
-  const key = users.join("\u0000");
+): TypingPresence {
+  const presence = computeTypingPresence(sessionWatchers.get(sessionId));
+  const frame = typingFrame(sessionId, presence);
+  const key = JSON.stringify(frame);
   if (lastTyping.get(sessionId) !== key) {
     lastTyping.set(sessionId, key);
-    broadcastToSession(sessionId, { type: "typing", sessionId, users }, except);
+    broadcastToSession(sessionId, frame, except);
   }
   if (!sessionWatchers.has(sessionId)) lastTyping.delete(sessionId);
-  return users;
+  return presence;
 }
 
-/** Refresh or retire the short typing lease for this socket. */
+/** Refresh or retire the short typing lease for this socket. `text` is the
+ * draft head that co-viewers may preview; it is dropped with the lease. */
 export function setClientTyping(
   ws: WebSocketClient,
   sessionId: string,
   typing: boolean,
+  text?: string,
 ) {
   if (
     !ws?.data ||
@@ -367,6 +412,8 @@ export function setClientTyping(
   )
     return;
   ws.data.typingUntil = typing ? Date.now() + TYPING_TTL_MS : undefined;
+  const preview = typing && text ? text.slice(0, TYPING_PREVIEW_MAX) : "";
+  ws.data.typingText = preview.trim() ? preview : undefined;
   broadcastTyping(sessionId, ws);
   if (typing) ensureTypingSweep();
 }
@@ -376,7 +423,7 @@ function ensureTypingSweep() {
   g.__typingSweep = setInterval(() => {
     let active = false;
     for (const sessionId of sessionWatchers.keys()) {
-      const users = broadcastTyping(sessionId);
+      const { users } = broadcastTyping(sessionId);
       if (users.length > 0) active = true;
     }
     if (!active) {

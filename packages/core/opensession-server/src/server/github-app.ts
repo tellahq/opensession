@@ -622,6 +622,75 @@ export async function githubServiceReadOnlyEnv(
   return githubGitCredentialEnv(token || "");
 }
 
+/** Env var carrying the read-only sibling-repository token of an automation
+ * run (Automation.readRepos). Not GH_TOKEN: gh only honors that one, so a
+ * script opts in per command with `GH_TOKEN=$GH_READ_TOKEN gh …`. */
+export const GH_READ_TOKEN_ENV = "GH_READ_TOKEN";
+
+/**
+ * One read-only installation token covering `ghRepo` and every repository in
+ * `readRepos` (all `owner/name` under the same owner). A second mint rather
+ * than a wider first one: an installation token carries one permission set
+ * for every repository it lists, so folding the read repos into the code
+ * mint would hand the run contents:write on repositories it should only
+ * read. Fails closed: when the App is not installed on one of the
+ * repositories GitHub refuses the whole mint, and the caller gets null,
+ * never a token minted without `repositories`.
+ */
+export async function githubAppReadReposToken(
+  ghRepo: string,
+  readRepos: string[],
+): Promise<string | null> {
+  if (!githubConfiguredCredential()) return null;
+  const owner = githubRepoOwner(ghRepo);
+  const repos = [ghRepo, ...readRepos];
+  const names = repos.map((r) => r.split("/")[1]);
+  if (
+    !owner ||
+    repos.some(
+      (r) => githubRepoOwner(r)?.toLowerCase() !== owner.toLowerCase(),
+    ) ||
+    names.some((n) => !n)
+  ) {
+    console.warn(
+      `[github-app] read token refused: ${repos.join(", ")} are not all under ${owner || "one owner"}`,
+    );
+    return null;
+  }
+  const headers = await appAuthHeaders().catch(() => null);
+  if (!headers) return null;
+  try {
+    const installation = await selectInstallation(owner, headers);
+    if (!githubRepositoryMatchesInstallation(ghRepo, installation.owner)) {
+      throw new Error(`installation belongs to ${installation.owner}`);
+    }
+    const token = await mintInstallationToken(installation.id, headers, {
+      repositories: names,
+      permissions: READ_PERMISSIONS,
+    });
+    return token.token;
+  } catch (error) {
+    console.warn(
+      `[github-app] read token unavailable for ${repos.join(", ")} (is the App installed on every one of them?): ${String(error).slice(0, 160)}`,
+    );
+    return null;
+  }
+}
+
+/** `{ GH_READ_TOKEN }` for a run whose automation lists sibling repositories
+ * to read, or `{}` when the mint is refused. Only ever added on top of the
+ * run's primary credential env: the primary GH_TOKEN and the git credential
+ * wiring are untouched, and this token is process-local the same way, never
+ * written to git config, URLs, session files, or the run journal. */
+export async function githubServiceReadReposEnv(
+  ghRepo: string,
+  readRepos: string[] | undefined,
+): Promise<Record<string, string>> {
+  if (!readRepos?.length) return {};
+  const token = await githubAppReadReposToken(ghRepo, readRepos);
+  return token ? { [GH_READ_TOKEN_ENV]: token } : {};
+}
+
 /**
  * The git author/committer identity for commits an agent run makes: the App's
  * bot user, with GitHub's noreply address so the commits link to the bot

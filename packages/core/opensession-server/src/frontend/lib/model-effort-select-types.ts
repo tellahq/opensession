@@ -13,6 +13,7 @@ export interface ModelEffortSelection {
   modelTitle?: string;
   /** When effort isn't wired, the menu is just the model list. */
   effort?: string;
+  autoFallback?: boolean;
   fastMode?: boolean;
   /**
    * Pinnable provider accounts. The menu filters these to the active model's
@@ -42,6 +43,7 @@ export interface ModelEffortActions {
   /** Makes the current conversation model this person's default for new sessions. */
   setAsDefault?: (model: string) => void;
   changeEffort?: (effort: string) => void;
+  changeAutoFallback?: (enabled: boolean) => void;
   changeFastMode?: (fastMode: boolean) => void;
   changeAccount?: (accountId: string) => void;
   /** Fires as the menu opens/closes. The phone composer needs it: the popup

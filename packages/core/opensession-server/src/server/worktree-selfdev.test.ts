@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { describe, test, expect, afterEach, spyOn } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
@@ -24,8 +25,7 @@ import {
  * like every other repo. All assertions here stay on the pure decision
  * functions (worktreePathFor + the shared-mode early returns), so no git
  * side effects — same seams as worktree-adopt.test.ts (OPENSESSION_CONFIG /
- * OPENSESSION_WORKTREES_DIR; the config loader caches by path+mtime, so each
- * case writes a fresh file).
+ * OPENSESSION_WORKTREES_DIR; each case loads a fresh config snapshot).
  */
 
 const ENV_KEYS = [
@@ -41,7 +41,7 @@ const dirs: string[] = [];
 const WT_DIR = "/selfdev-test/worktrees";
 const SELF_REPO = "/selfdev-test/self-main";
 
-function withConfig(extra: Record<string, unknown>): void {
+async function withConfig(extra: Record<string, unknown>): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "bks-selfdev-test-"));
   dirs.push(dir);
   const path = join(dir, "config.json");
@@ -64,6 +64,7 @@ function withConfig(extra: Record<string, unknown>): void {
   );
   for (const k of ENV_KEYS) delete process.env[k];
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
 }
 
 afterEach(() => {
@@ -76,27 +77,27 @@ afterEach(() => {
 });
 
 describe("configuredSelfDev parsing", () => {
-  test("absent → shared", () => {
-    withConfig({});
+  test("absent → shared", async () => {
+    await withConfig({});
     expect(configuredSelfDev()).toBe("shared");
   });
 
-  test('explicit "shared"', () => {
-    withConfig({ selfDev: "shared" });
+  test('explicit "shared"', async () => {
+    await withConfig({ selfDev: "shared" });
     expect(configuredSelfDev()).toBe("shared");
   });
 
-  test('explicit "worktree"', () => {
-    withConfig({ selfDev: "worktree" });
+  test('explicit "worktree"', async () => {
+    await withConfig({ selfDev: "worktree" });
     expect(configuredSelfDev()).toBe("worktree");
   });
 
-  test("invalid value → shared, one console.warn per parse", () => {
+  test("invalid value → shared, one console.warn per parse", async () => {
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     try {
-      withConfig({ selfDev: "wortkree" });
+      await withConfig({ selfDev: "wortkree" });
       expect(configuredSelfDev()).toBe("shared");
-      // Cached parse (same path+mtime): repeated reads don't re-warn.
+      // Repeated snapshot reads don't re-parse or re-warn.
       expect(configuredSelfDev()).toBe("shared");
       expect(warn).toHaveBeenCalledTimes(1);
       expect(String(warn.mock.calls[0][0])).toContain("selfDev");
@@ -109,8 +110,8 @@ describe("configuredSelfDev parsing", () => {
 });
 
 describe("personal new-session checkout choice", () => {
-  test("overrides either repository default and rejects unknown values", () => {
-    withConfig({});
+  test("overrides either repository default and rejects unknown values", async () => {
+    await withConfig({});
     const shared = getRepo("self");
     const isolated = getRepo("lib");
 
@@ -124,7 +125,7 @@ describe("personal new-session checkout choice", () => {
 
 describe("selfDev absent/shared — byte-identical current behavior", () => {
   test("new-session paths resolve to the live main checkout", async () => {
-    withConfig({});
+    await withConfig({});
     const repo = getRepo("self");
     expect(sharedCheckoutForNewSessions(repo)).toBe(true);
     expect(worktreePathFor("feat-x", "self")).toBe(SELF_REPO);
@@ -146,6 +147,7 @@ describe("selfDev absent/shared — byte-identical current behavior", () => {
     dirs.push(dir);
     for (const k of ENV_KEYS) delete process.env[k];
     process.env.OPENSESSION_CONFIG = join(dir, "never-written.json");
+    await getConfigAsync();
 
     const OPENSESSION_ROOT = resolvePath(import.meta.dir, "../../../../..");
     expect(configuredSelfDev()).toBe("shared");
@@ -205,7 +207,7 @@ describe("Ask checkout default branch invalidation", () => {
     git("-C", repo, "remote", "add", "origin", remote);
     git("-C", repo, "push", "-q", "-u", "origin", "main", "release");
 
-    const writeConfig = (defaultBranch: string) => {
+    const writeConfig = async (defaultBranch: string) => {
       writeFileSync(
         config,
         JSON.stringify({
@@ -216,6 +218,7 @@ describe("Ask checkout default branch invalidation", () => {
         }),
       );
       process.env.OPENSESSION_CONFIG = config;
+      await getConfigAsync();
     };
     const branchHead = (dir: string, branch: string) =>
       Bun.spawnSync(["git", "-C", dir, "rev-parse", branch])
@@ -227,11 +230,11 @@ describe("Ask checkout default branch invalidation", () => {
 
   test("waits for the checkout to move to the new default before returning", async () => {
     const { branchHead, repo, repoId, writeConfig } = setupAskRepo();
-    writeConfig("main");
+    await writeConfig("main");
     const askDir = await ensureAskCheckout(repoId);
     expect(branchHead(askDir, "HEAD")).toBe(branchHead(repo, "origin/main"));
 
-    writeConfig("release");
+    await writeConfig("release");
     invalidateAskCheckoutRefresh(repoId);
     expect(await ensureAskCheckout(repoId)).toBe(askDir);
     expect(branchHead(askDir, "HEAD")).toBe(branchHead(repo, "origin/release"));
@@ -239,7 +242,7 @@ describe("Ask checkout default branch invalidation", () => {
 
   test("applies an invalidation queued while another call creates the checkout", async () => {
     const { branchHead, repo, repoId, writeConfig } = setupAskRepo();
-    writeConfig("main");
+    await writeConfig("main");
 
     let releaseLock!: () => void;
     let enteredLock!: () => void;
@@ -252,7 +255,7 @@ describe("Ask checkout default branch invalidation", () => {
     await entered;
 
     const creating = ensureAskCheckout(repoId);
-    writeConfig("release");
+    await writeConfig("release");
     invalidateAskCheckoutRefresh(repoId);
     const afterChange = ensureAskCheckout(repoId);
     releaseLock();
@@ -265,8 +268,8 @@ describe("Ask checkout default branch invalidation", () => {
 });
 
 describe('selfDev: "worktree" — isolated worktrees for the self repo', () => {
-  test("new-session paths pick the per-branch worktree", () => {
-    withConfig({ selfDev: "worktree" });
+  test("new-session paths pick the per-branch worktree", async () => {
+    await withConfig({ selfDev: "worktree" });
     const repo = getRepo("self");
     expect(sharedCheckoutForNewSessions(repo)).toBe(false);
     expect(worktreePathFor("feat-x", "self")).toBe(`${WT_DIR}/self-feat-x`);
@@ -275,14 +278,14 @@ describe('selfDev: "worktree" — isolated worktrees for the self repo', () => {
     );
   });
 
-  test("non-shared repos are unaffected", () => {
-    withConfig({ selfDev: "worktree" });
+  test("non-shared repos are unaffected", async () => {
+    await withConfig({ selfDev: "worktree" });
     expect(sharedCheckoutForNewSessions(getRepo("lib"))).toBe(false);
     expect(worktreePathFor("feat-x", "lib")).toBe(`${WT_DIR}/lib-feat-x`);
   });
 
-  test("existing shared-mode dirs are still recognized (guards keep applying)", () => {
-    withConfig({ selfDev: "worktree" });
+  test("existing shared-mode dirs are still recognized (guards keep applying)", async () => {
+    await withConfig({ selfDev: "worktree" });
     // isSharedCheckoutDir stays keyed on the repo property, NOT the mode:
     // sessions created before the flip recorded the live checkout as their
     // dir, and its no-reset/commit-scoping guards must survive the mode.

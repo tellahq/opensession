@@ -4,7 +4,7 @@
  * Centralized here so multiple modules (handlers, queue, worktree-channels,
  * github-reviews, index) can read/write without circular imports.
  */
-
+import { completeAgentSessionCatalogSources } from "../../server/agent-session-catalog";
 import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { configuredPaths, defaultRepo } from "../../server/config";
@@ -183,29 +183,21 @@ export async function loadSession(key: string): Promise<SlackSession | null> {
 const STALE_SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export async function loadActiveSessionsOnStartup(): Promise<void> {
-  const { readdirSync, statSync } = require("fs");
-  console.log("[slack] Loading active sessions from disk...");
-
+  console.log("[slack] Loading active sessions from catalog...");
   try {
-    const files = readdirSync(SESSION_DIR).filter((f: string) =>
-      f.endsWith(".json"),
-    );
+    const sources = await completeAgentSessionCatalogSources("slack");
 
     let skippedStale = 0;
-    for (const file of files) {
+    for (const { file, data, mtime } of sources) {
       try {
         const key = file.replace(".json", "");
-        const session = await loadSession(key);
+        const session = data as SlackSession;
 
         if (session && session.claudeSessionId) {
           let lastActive = Date.parse(
             session.lastActivity || session.createdAt || "",
           );
-          if (!lastActive) {
-            try {
-              lastActive = statSync(`${SESSION_DIR}/${file}`).mtimeMs;
-            } catch {}
-          }
+          if (!lastActive) lastActive = Date.parse(mtime);
           if (!lastActive || Date.now() - lastActive > STALE_SESSION_MS) {
             skippedStale++;
             continue;
@@ -222,7 +214,11 @@ export async function loadActiveSessionsOnStartup(): Promise<void> {
         `[slack] Skipped ${skippedStale} stale session file(s) (idle > 7 days)`,
       );
     }
-  } catch {
-    console.log("[slack] No active sessions to load");
+  } catch (error) {
+    console.error(
+      "[slack] Session catalog unavailable; restoration deferred:",
+      error,
+    );
+    throw error;
   }
 }

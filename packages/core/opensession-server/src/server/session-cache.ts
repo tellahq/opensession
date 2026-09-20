@@ -7,25 +7,34 @@
 import { readFile } from "fs/promises";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
+  assembleSessionListAsync,
   engineSessionIdFor,
   getAllSessions,
   isAgentSessionId,
   isNativeSessionId,
-  getAllSessionsAsync,
   nativeSessionDetailFromData,
   nativeSessionListRowFromData,
-  nativeSessionRow,
   readAgentSessionListRowAsync,
   readNativeSession,
   readSlackSession,
+  resolveSessionTranscriptPath,
+  resolveSessionTranscriptPathAsync,
+  sessionListSourcesFromDocuments,
   type SessionArchiveSlice,
+  type SessionListSources,
 } from "./sessions";
+import {
+  agentSessionCatalogImportComplete,
+  agentSessionCatalogSources,
+  type AgentSessionKind,
+} from "./agent-session-catalog";
 import {
   indexedActiveWorkspaceIds,
   indexedCoverage,
   indexedLiveSessionsByBranch,
   indexedSessions,
   indexedWorkspaceMembers,
+  rebuildSessionListIndex,
   upsertIndexedSession,
   upsertIndexedSessions,
 } from "./session-list-store";
@@ -409,14 +418,43 @@ export function getCachedSessions(): UnifiedSession[] {
     );
     return cached.data;
   }
-  // Legacy unit fixtures can still construct a synchronous source. The live
-  // gateway must finish async priming; a cold reader cannot scan files here.
+  // Legacy unit fixtures can still construct a synchronous source; the
+  // scanner behind getAllSessions refuses to run anywhere but a test. The
+  // live gateway must finish async priming; a cold reader never reads files.
   if (process.env.NODE_ENV === "test") {
     sessionsCacheGenerations.include++;
     return enrichCachedSessions("include", getAllSessions());
   }
-  throw new Error("Session list is not primed; use getCachedSessionsAsync");
+  throw new SessionListUnavailableError(
+    sessionListUnavailableReason ??
+      "the session list is not primed; use getCachedSessionsAsync",
+  );
 }
+
+/**
+ * The session list cannot be served: no snapshot exists and the catalogs a
+ * cold rebuild reads are unseeded or unreachable. A bounded failure by
+ * design. The alternative, reading every session file on the gateway thread,
+ * is what turned routine list refreshes into multi-second stalls for every
+ * request, and an empty list in its place would let the worktree reaper and
+ * every other whole-list consumer treat missing sessions as finished.
+ */
+export class SessionListUnavailableError extends Error {
+  constructor(
+    readonly reason: string,
+    options?: { cause?: unknown },
+  ) {
+    super(`Session list unavailable: ${reason}`, options);
+    this.name = "SessionListUnavailableError";
+  }
+}
+
+const SEED_INSTRUCTION =
+  "run `bun scripts/seed-session-metadata-catalog.ts` against the live kernel";
+
+/** Why the last catalog rebuild could not run, for the error a
+ * snapshot-less reader receives. Cleared by a rebuild. */
+let sessionListUnavailableReason: string | undefined;
 
 /** The materialized list for `slice`, enriched and installed as the cache
  * snapshot, or null while the slice has no coverage. Concurrent callers share
@@ -460,13 +498,14 @@ export async function getCachedSessionsAsync(
   const indexed = await refreshFromIndex(slice);
   if (indexed) return indexed;
 
+  // The slice has no coverage: rebuild it from the catalogs. This is the
+  // only cold path, and it never reads a session directory. When the
+  // catalogs cannot serve it, a caller holding a snapshot keeps that
+  // snapshot and a caller without one gets a bounded failure.
   if (!sessionsRefreshes[slice]) {
     const generation = ++sessionsCacheGenerations[slice];
     const startingCache = sessionsCaches[slice];
-    sessionsRefreshes[slice] = getAllSessionsAsync(
-      slice,
-      catalogNativeSessionRows,
-    )
+    sessionsRefreshes[slice] = rebuildSessionListFromCatalogs(slice)
       .then(async (data) => {
         await upsertIndexedSessions(data, slice);
         const current = sessionsCaches[slice];
@@ -714,9 +753,14 @@ export function findSession(sessionId: string): UnifiedSession | undefined {
   if (direct) return enrichSessionRuntime([direct])[0];
   // A synchronous alias lookup can only use the already-primed snapshot.
   // Callers needing a cold authoritative lookup must await findSessionAsync.
-  return peekCachedSessions().find(
+  const listed = peekCachedSessions().find(
     (s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
   );
+  // List rows carry no transcript path; the one session opened resolves its
+  // own (Linear rows and merged aliases have no direct reader).
+  return listed && listed.transcriptPath === null
+    ? resolveSessionTranscriptPath(listed)
+    : listed;
 }
 
 /**
@@ -758,9 +802,12 @@ export async function findSessionAsync(
   const direct =
     (await readNativeSessionAsync(sessionId)) ?? readSlackSession(sessionId);
   if (direct) return enrichSessionRuntime([direct])[0];
-  return (await getCachedSessionsAsync()).find(
+  const listed = (await getCachedSessionsAsync()).find(
     (s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
   );
+  return listed && listed.transcriptPath === null
+    ? resolveSessionTranscriptPathAsync(listed)
+    : listed;
 }
 
 /** Canonical id followed by every historical alias for this session. Asset
@@ -1007,35 +1054,65 @@ async function projectExportedSessionMetadata(
 
 const SESSION_METADATA_CATALOG_PAGE = 500;
 
-// Monotonic: once an operator marked the catalog complete it stays complete,
-// so the flag is asked once per process and then remembered.
+// Monotonic: once an operator marked a catalog complete it stays complete,
+// so each flag is asked until it is true and then remembered.
 let metadataCatalogComplete = false;
+const agentCatalogComplete: Record<AgentSessionKind, boolean> = {
+  slack: false,
+  linear: false,
+};
+const AGENT_SESSION_KINDS: readonly AgentSessionKind[] = ["slack", "linear"];
+
+function catalogFacadeAvailable(): boolean {
+  // Tests run the facade on the in-process compatibility store.
+  return sessionKernelActorActive() || process.env.NODE_ENV === "test";
+}
 
 /**
- * Native rows for a cold list rebuild. Once every historical session file has
- * been seeded (scripts/seed-session-metadata-catalog.ts) the central catalog
- * is the source: pages of committed documents from one database instead of a
- * readdir and parse over every session file. Until then, or if the catalog
- * cannot be read, the caller falls back to the directory scan.
+ * The sources of a cold list rebuild, from the catalogs only:
+ *
+ * - native rows and the sidecars stored under Slack/Linear ids from pages of
+ *   the session metadata catalog, once an operator has seeded every
+ *   historical file into it (scripts/seed-session-metadata-catalog.ts);
+ * - Slack and Linear rows from their catalog-document namespaces
+ *   (agent-session-catalog.ts), seeded by the same script and kept current
+ *   by every targeted read of a source file.
+ *
+ * There is no other source. A catalog that is not marked complete, or one
+ * that cannot be read, makes the rebuild fail with SessionListUnavailableError
+ * rather than fall back to reading the session directories: an incomplete
+ * catalog would silently drop sessions, and a directory scan of thousands of
+ * files on the gateway thread is what this replaces.
  */
-async function catalogNativeSessionRows(): Promise<
-  UnifiedSession[] | undefined
-> {
-  // Before the actor is up the facade cannot answer; scan instead of logging
-  // a failure. Tests run the facade on the in-process compatibility store.
-  if (!sessionKernelActorActive() && process.env.NODE_ENV !== "test")
-    return undefined;
+async function catalogSessionListSources(): Promise<SessionListSources> {
+  if (!catalogFacadeAvailable())
+    throw new SessionListUnavailableError(
+      "the session kernel actor is not attached",
+    );
   try {
     if (!metadataCatalogComplete) {
       metadataCatalogComplete = await sessionMetadata({
         op: "catalog_complete",
       });
-      if (!metadataCatalogComplete) return undefined;
+      if (!metadataCatalogComplete)
+        throw new SessionListUnavailableError(
+          `the session metadata catalog is not seeded; ${SEED_INSTRUCTION}`,
+        );
       console.log(
-        "[session-metadata] catalog is complete; list rebuilds page it instead of scanning session files",
+        "[session-metadata] catalog is complete; list rebuilds page it",
       );
     }
-    const rows: UnifiedSession[] = [];
+    for (const kind of AGENT_SESSION_KINDS) {
+      if (agentCatalogComplete[kind]) continue;
+      agentCatalogComplete[kind] =
+        await agentSessionCatalogImportComplete(kind);
+      if (!agentCatalogComplete[kind])
+        throw new SessionListUnavailableError(
+          `the ${kind} session store is not imported into the catalog; ${SEED_INSTRUCTION}`,
+        );
+    }
+    const native: NativeSessionFile[] = [];
+    const sidecars = new Map<string, NativeSessionFile>();
     let afterSessionId = "";
     for (;;) {
       const page = await sessionMetadata({
@@ -1050,29 +1127,61 @@ async function catalogNativeSessionRows(): Promise<
         } catch {
           continue;
         }
-        if (data?.id === row.sessionId) rows.push(nativeSessionRow(data));
+        if (!data || typeof data !== "object") continue;
+        if (data.id === row.sessionId) native.push(data);
+        else if (data.id == null && isAgentSessionId(row.sessionId))
+          sidecars.set(row.sessionId, data);
       }
       if (page.length < SESSION_METADATA_CATALOG_PAGE) break;
       afterSessionId = page[page.length - 1]!.sessionId;
-      // Let request traffic through between pages, as the file scan does.
+      // Let request traffic through between pages.
       await Bun.sleep(0);
     }
-    return rows;
+    const [slack, linear] = await Promise.all([
+      agentSessionCatalogSources("slack"),
+      agentSessionCatalogSources("linear"),
+    ]);
+    return sessionListSourcesFromDocuments({ native, sidecars, slack, linear });
   } catch (error) {
-    console.warn(
-      "[session-metadata] catalog read failed; scanning session files instead:",
-      error instanceof Error ? error.message : error,
+    if (error instanceof SessionListUnavailableError) throw error;
+    throw new SessionListUnavailableError(
+      `catalog read failed: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     );
-    return undefined;
+  }
+}
+
+/** One assembled slice from the catalogs. Records the reason when the
+ * catalogs cannot serve it, for readiness and snapshot-less readers. */
+async function rebuildSessionListFromCatalogs(
+  slice: SessionArchiveSlice,
+): Promise<UnifiedSession[]> {
+  try {
+    const sessions = await assembleSessionListAsync(
+      await catalogSessionListSources(),
+      slice,
+    );
+    sessionListUnavailableReason = undefined;
+    return sessions;
+  } catch (error) {
+    if (error instanceof SessionListUnavailableError)
+      sessionListUnavailableReason = error.reason;
+    throw error;
   }
 }
 
 /**
  * Boot: make sure the list index has coverage before any boot step or route
  * reads the session list. Called right after the session actor starts, so
- * an index that is missing (first boot, operator rebuild) fills from the
- * metadata catalog when it is complete. Without this the first synchronous
- * `getCachedSessions()` reader would fill it by reading every session file.
+ * an index that is missing (first boot, operator rebuild, an index schema
+ * change that dropped coverage) fills from the catalogs. Without coverage
+ * and without seeded catalogs this throws SessionListUnavailableError and
+ * the gateway does not boot: a gateway with no session list is not healthy,
+ * an empty list would let every whole-list consumer treat missing sessions
+ * as finished, and the directories are never read to recover. The operator
+ * seeds the catalogs first (a new state root seeds in one empty run), then
+ * boots. The isolated demo instance seeds its generated dataset before this
+ * runs.
  */
 export async function primeSessionListIndex(): Promise<void> {
   if (await indexedCoverage("include")) {
@@ -1082,15 +1191,57 @@ export async function primeSessionListIndex(): Promise<void> {
     return;
   }
   const startedAt = performance.now();
-  const sessions = await getAllSessionsAsync(
-    "include",
-    catalogNativeSessionRows,
-  );
-  await upsertIndexedSessions(sessions, "include");
-  enrichCachedSessions("include", sessions);
-  console.log(
-    `[session-cache] primed the list index with ${sessions.length} session(s) in ${Math.round(performance.now() - startedAt)}ms`,
-  );
+  try {
+    const sessions = await getCachedSessionsAsync("include");
+    console.log(
+      `[session-cache] primed the list index with ${sessions.length} session(s) from the catalogs in ${Math.round(performance.now() - startedAt)}ms`,
+    );
+  } catch (error) {
+    if (error instanceof SessionListUnavailableError)
+      console.error(
+        `[session-cache] the list index has no coverage and cannot be rebuilt: ${error.reason}. ` +
+          "The gateway will not boot without a session list, and it never scans the session directories to build one.",
+      );
+    throw error;
+  }
+}
+
+/** Test-only: forget catalog completeness, the unavailable reason and every
+ * memory snapshot, as a fresh gateway process would. */
+export function __resetSessionListCatalogStateForTest(): void {
+  metadataCatalogComplete = false;
+  for (const kind of AGENT_SESSION_KINDS) agentCatalogComplete[kind] = false;
+  sessionListUnavailableReason = undefined;
+  for (const slice of CACHE_SLICES) {
+    sessionsCaches[slice] = null;
+    sessionsRefreshes[slice] = null;
+    indexedRefreshes[slice] = null;
+  }
+}
+
+/** Test-only: age every memory snapshot past the TTL without dropping it. */
+export function __expireSessionListCacheForTest(): void {
+  for (const slice of CACHE_SLICES) {
+    const cached = sessionsCaches[slice];
+    if (cached) cached.ts = 0;
+  }
+}
+
+/**
+ * Replace the list index and the memory snapshot from the catalogs after
+ * rows were seeded in-process (the demo instance seeds its generated
+ * dataset at boot). Operators seed offline and restart instead.
+ */
+export async function rebuildSessionListFromCatalogsNow(): Promise<
+  UnifiedSession[]
+> {
+  const sessions = await rebuildSessionListFromCatalogs("include");
+  await rebuildSessionListIndex(sessions);
+  sessionsCaches.exclude = null;
+  sessionsCaches.only = null;
+  const data = enrichCachedSessions("include", sessions);
+  invalidateSessionsCache();
+  return data;
 }
 
 export const SESSION_METADATA_EXPORT_REPAIR_LIMIT = 500;
@@ -1351,8 +1502,7 @@ export const runErrors: Map<string, { message: string; at: string }> =
  * `lastRunError` but wrote no transcript line, so for those the banner was the
  * only trace the run had died (bks-019fb757, 2026-07-31).
  *
- * `require` rather than a static import: pi-transcript lazily requires
- * this module back (its own cycle-breaker), and the transcript write must be
+ * A dynamic import breaks the transcript cycle, and the write must be
  * ordered so it lands before the client re-reads the transcript.
  * Never throws unless strict projection ownership requires fail-closed behavior.
  */
@@ -1366,8 +1516,7 @@ async function persistRunFailureNotice(
   strict = false,
 ): Promise<void> {
   try {
-    const m =
-      require("./transcript-persistence") as typeof import("./transcript-persistence");
+    const m = await import("./transcript-persistence");
     const line = m.transcriptLineRunnerNotice(
       `${label}: ${message}`,
       projectionId,

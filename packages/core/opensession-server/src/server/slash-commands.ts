@@ -35,6 +35,7 @@ export function handleSlashCommand(
   text: string,
   user?: string,
 ): string | null {
+  const fallbackCommand = text === "/fallback" || text.startsWith("/fallback ");
   const accountCommand =
     text === "/account" ||
     text.startsWith("/account ") ||
@@ -46,6 +47,7 @@ export function handleSlashCommand(
     !text.startsWith("/loop") &&
     !text.startsWith("/model") &&
     !accountCommand &&
+    !fallbackCommand &&
     text !== "/compact" &&
     !text.startsWith("/compact ") &&
     text !== "/help"
@@ -75,11 +77,23 @@ export function handleSlashCommand(
       "/loop stop — stop the loop",
       "/model — show the session's model and what's available",
       "/model <name> — switch model (e.g. /model opus, /model sol)",
+      "/fallback on|off - allow or prevent automatic model switching on future turns",
       "/account — show the session's provider account and what's available",
       "/account <name> — prefer one Claude or Codex account for this conversation",
       "/account auto — back to automatic (personal-first, shared-pool fallback)",
       "/compact — summarize the conversation so far to shrink context and cost (Claude sessions only)",
     ].join("\n");
+  }
+
+  if (fallbackCommand) {
+    const value = text.slice("/fallback".length).trim();
+    if (value !== "on" && value !== "off") {
+      return `Auto-fallback is ${session.autoFallback !== false ? "on" : "off"}. Use /fallback on or /fallback off.`;
+    }
+    const autoFallback = value === "on";
+    touchNativeSession(session.id, { autoFallback });
+    session.autoFallback = autoFallback;
+    return `Auto-fallback ${value}. Applies from the next prompt.`;
   }
 
   if (isPstackCommand(text)) {

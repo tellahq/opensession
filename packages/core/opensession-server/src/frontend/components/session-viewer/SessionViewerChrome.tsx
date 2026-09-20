@@ -1,3 +1,4 @@
+import type { useSessionModelWorkflowController } from "../../hooks/useSessionModelWorkflowController";
 import type React from "react";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { createPortal } from "react-dom";
@@ -222,10 +223,9 @@ interface ChromeModel {
   effectiveModel: string;
   handleModelChange: (next: string) => void;
   prettyModel: (id: string) => string;
-  effort: string;
-  setEffort: Dispatch<SetStateAction<string>>;
-  fastMode: boolean;
-  setFastMode: Dispatch<SetStateAction<boolean>>;
+  runPreferences: ReturnType<
+    typeof useSessionModelWorkflowController
+  >["model"]["runPreferences"];
   accounts: ProviderAccountOption[];
   accountId: string;
   handleAccountChange: (next: string) => void;
@@ -403,16 +403,21 @@ export function SessionViewerChrome({
     effectiveModel,
     handleModelChange,
     prettyModel,
-    effort,
-    setEffort,
-    fastMode,
-    setFastMode,
+    runPreferences,
     accounts,
     accountId,
     handleAccountChange,
     usage,
     isRunningLive,
   } = modelState;
+  const {
+    effort,
+    setEffort,
+    fastMode,
+    setFastMode,
+    autoFallback,
+    changeAutoFallback,
+  } = runPreferences;
   const {
     infoPageOpen,
     setInfoPageOpen,
@@ -1345,6 +1350,8 @@ export function SessionViewerChrome({
                                 prettyLabel={prettyModel}
                                 effort={effort}
                                 onEffortChange={setEffort}
+                                autoFallback={autoFallback}
+                                onAutoFallbackChange={changeAutoFallback}
                                 fastMode={fastMode}
                                 onFastModeChange={setFastMode}
                                 accounts={accounts}

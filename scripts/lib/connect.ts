@@ -154,6 +154,30 @@ export function runnerExecCommand(
     : ["bash", "-lc", command];
 }
 
+/** Accept only the server-vended AWS subset, never arbitrary environment injection. */
+export function runnerCommandAwsEnvironment(
+  value: unknown,
+): Record<string, string> {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object")
+    throw new Error("Invalid AWS command credentials");
+  const source = value as Record<string, unknown>;
+  const env: Record<string, string> = {};
+  for (const key of [
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AWS_REGION",
+    "AWS_DEFAULT_REGION",
+  ] as const) {
+    if (typeof source[key] !== "string" || !source[key])
+      throw new Error("Incomplete AWS command credentials");
+    env[key] = source[key];
+  }
+  env.AWS_EC2_METADATA_DISABLED = "true";
+  return env;
+}
+
 async function readIdentity(): Promise<Identity | undefined> {
   if (!existsSync(IDENTITY_PATH)) return undefined;
   try {
@@ -799,7 +823,9 @@ export async function runnerRun(): Promise<number> {
           };
         };
         const initial = await report();
-        socket.send(JSON.stringify({ t: "hello", version: 1, ...initial }));
+        socket.send(
+          JSON.stringify({ t: "hello", version: 1, execAws: true, ...initial }),
+        );
         const heartbeat = setInterval(() => {
           void report()
             .then((next) =>
@@ -907,7 +933,10 @@ export async function runnerRun(): Promise<number> {
           const command = runnerExecCommand(String(msg.command));
           const proc = Bun.spawn(command, {
             cwd: typeof msg.cwd === "string" && msg.cwd ? msg.cwd : undefined,
-            env: runnerEnvironment(),
+            env: {
+              ...runnerEnvironment(),
+              ...runnerCommandAwsEnvironment(msg.awsEnv),
+            },
             stdout: "pipe",
             stderr: "pipe",
           });

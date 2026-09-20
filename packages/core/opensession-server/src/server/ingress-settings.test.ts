@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -23,7 +24,7 @@ const previousPublicIpv4 = process.env.OPENSESSION_PUBLIC_IPV4;
 const previousPublicIpv6 = process.env.OPENSESSION_PUBLIC_IPV6;
 const dirs: string[] = [];
 
-function fixture() {
+async function fixture() {
   const dir = mkdtempSync(join(tmpdir(), "opensession-ingress-settings-"));
   dirs.push(dir);
   const path = join(dir, "config.json");
@@ -40,6 +41,7 @@ function fixture() {
   const envPath = join(dir, ".opensession.env");
   writeFileSync(envPath, "OPENSESSION_UI_BASE=https://app.example.test\n");
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
   process.env.OPENSESSION_ENV_FILE = envPath;
   delete process.env.OPENSESSION_INGRESS_BASE;
   delete process.env.OPENSESSION_PUBLIC_IPV4;
@@ -47,9 +49,12 @@ function fixture() {
   return { path, envPath };
 }
 
-afterEach(() => {
+afterEach(async () => {
   if (previous === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = previous;
+  else {
+    process.env.OPENSESSION_CONFIG = previous;
+    await getConfigAsync();
+  }
   if (previousEnvFile === undefined) delete process.env.OPENSESSION_ENV_FILE;
   else process.env.OPENSESSION_ENV_FILE = previousEnvFile;
   if (previousUiBase === undefined) delete process.env.OPENSESSION_UI_BASE;
@@ -68,8 +73,8 @@ afterEach(() => {
 });
 
 describe("public ingress settings", () => {
-  test("requires a separate public HTTPS origin", () => {
-    fixture();
+  test("requires a separate public HTTPS origin", async () => {
+    await fixture();
     expect(normalizeIngressOrigin("https://ingress.example.test/")).toBe(
       "https://ingress.example.test",
     );
@@ -84,8 +89,8 @@ describe("public ingress settings", () => {
     );
   });
 
-  test("custom domains do not require URL syntax", () => {
-    fixture();
+  test("custom domains do not require URL syntax", async () => {
+    await fixture();
     expect(normalizeCustomIngressOrigin("ingress.example.test")).toBe(
       "https://ingress.example.test",
     );
@@ -206,7 +211,7 @@ describe("public ingress settings", () => {
   });
 
   test("saves a bare private app domain and keeps status on the persisted value", async () => {
-    const { path, envPath } = fixture();
+    const { path, envPath } = await fixture();
     process.env.OPENSESSION_UI_BASE = "https://app.example.test";
     expect(normalizePrivateAppOrigin("team.example.test")).toBe(
       "https://team.example.test",
@@ -223,7 +228,7 @@ describe("public ingress settings", () => {
   });
 
   test("persists and immediately activates the public callback origin", async () => {
-    const { path, envPath } = fixture();
+    const { path, envPath } = await fixture();
     process.env.OPENSESSION_INGRESS_BASE = "https://old-ingress.example.test";
     await savePublicIngress({
       publicBaseUrl: "https://ingress.example.test",
@@ -245,7 +250,7 @@ describe("public ingress settings", () => {
   });
 
   test("saves a public address override for direct HTTPS", async () => {
-    const { envPath } = fixture();
+    const { envPath } = await fixture();
     await savePublicIngress({
       publicBaseUrl: "https://ingress.example.test",
       exposure: "custom",
@@ -265,7 +270,7 @@ describe("public ingress settings", () => {
   });
 
   test("writes one canonical owner and removes retired server fields", async () => {
-    const { path } = fixture();
+    const { path } = await fixture();
     await savePublicIngress({
       publicBaseUrl: "https://ingress.example.test",
       exposure: "cloudflare",

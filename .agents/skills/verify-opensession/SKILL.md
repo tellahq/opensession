@@ -51,7 +51,7 @@ Open a desktop route:
 ./.agents/skills/verify-opensession/bin/verify-opensession browser "$RUN_ID" open --route /goals --width 1440 --height 900
 ```
 
-Open the phone web client by changing the viewport. Widths at or below 720 use mobile emulation and a device pixel ratio of 3:
+Open the phone web client by changing the viewport. Widths at or below 720 use mobile emulation, a device pixel ratio of 3, and touch-first media (`hover: none`, `pointer: coarse`), so hover-only affordances swap to their phone form as they would on a device:
 
 ```bash
 ./.agents/skills/verify-opensession/bin/verify-opensession browser "$RUN_ID" open --route /session/bks-demo-pr --width 390 --height 844
@@ -120,4 +120,4 @@ Both shipped helpers are executable:
 - `bin/verify-opensession` owns launch, doctor, API reads, browser delegation, and cleanup. Invoke it exactly as shown above.
 - `bin/browser.mjs` is the CDP implementation. Do not call it directly because it needs run metadata. Use `verify-opensession browser`.
 
-The browser subcommands are `open`, `click`, `fill`, `press`, `wait`, `snapshot`, `screenshot`, `url`, and `eval`. `press` takes a bare key (`b`, `Enter`) or a chord with the modifiers first (`Control+i`, `Meta+Shift+g`). Reserve `eval` for read-only diagnosis. It is not acceptable proof of a user path or mutation.
+The browser subcommands are `open`, `click`, `hover`, `fill`, `press`, `wait`, `snapshot`, `screenshot`, `url`, and `eval`. `hover` moves the mouse over an element without pressing, for tooltips and other hover-only UI. `press` takes a bare key (`b`, `Enter`) or a chord with the modifiers first (`Control+i`, `Meta+Shift+g`). Reserve `eval` for read-only diagnosis. It is not acceptable proof of a user path or mutation.

@@ -104,6 +104,12 @@ jobs:
             --version "$(jq -r .version package.json)" \
             --include-dev
 
+      - name: Test native Keychain lookup with disposable data
+        run: |
+          xcrun swiftc -DKEYCHAIN_TESTING native/KeychainHelper.swift native/KeychainHelperTests.swift \
+            -parse-as-library -framework Security -o "$RUNNER_TEMP/keychain-tests"
+          "$RUNNER_TEMP/keychain-tests"
+
       - name: Build, sign & notarize
         run: |
           # Only the top-level app carries the associated-domains entitlement
@@ -148,6 +154,11 @@ jobs:
           APP="dist/mac-arm64/$(jq -r .productName package.json).app"
           codesign --verify --deep --strict --verbose=2 "$APP" ||
             { echo '::error::Packaged app failed deep signature verification'; exit 1; }
+          KEYCHAIN_HELPER="$APP/Contents/Resources/os-keychain"
+          test -x "$KEYCHAIN_HELPER" || { echo '::error::Keychain helper is missing'; exit 1; }
+          codesign --verify --strict --verbose=2 "$KEYCHAIN_HELPER" ||
+            { echo '::error::Keychain helper signature is invalid'; exit 1; }
+          otool -L "$KEYCHAIN_HELPER" | grep -F 'Security.framework'
 
       - name: Verify packaged locales and report size
         run: |

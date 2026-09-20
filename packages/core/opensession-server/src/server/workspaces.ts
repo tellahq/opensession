@@ -34,6 +34,8 @@
  * Team-internal, no auth.
  */
 
+import { broadcastToAll } from "./ws-hub";
+import { invalidateSidebarSessionResponses } from "./session-list-response-revision";
 import { rm } from "fs/promises";
 import { randomUUID } from "crypto";
 import { catalogDocuments } from "./catalog-documents";
@@ -475,10 +477,16 @@ export async function getWorkspace(id: string): Promise<Workspace | null> {
   return workspace;
 }
 
+function publishWorkspaceChange(): void {
+  invalidateSidebarSessionResponses();
+  broadcastToAll({ type: "workspaces_changed" });
+}
+
 /** The one write path for a whole record, so the projection stays current. */
 async function saveWorkspace(workspace: Workspace): Promise<Workspace> {
   await store().set(workspace.id, workspace);
   project(workspace.id, workspace);
+  publishWorkspaceChange();
   return workspace;
 }
 
@@ -509,6 +517,7 @@ async function mutateWorkspace(
     });
     if (!next) return null;
     project(id, next);
+    publishWorkspaceChange();
     return next;
   } catch (error) {
     if (error === missing) return null;
@@ -846,6 +855,7 @@ export async function deleteWorkspace(id: string): Promise<boolean> {
   const existed = await store().delete(id);
   if (!existed) return false;
   project(id, null);
+  publishWorkspaceChange();
   // A deleted workspace's scratch dir (scratch-mode sessions — see
   // worktree.ts ensureScratchDir) goes with it; safeId() already rules
   // out anything path-escaping.

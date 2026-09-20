@@ -12,7 +12,7 @@
  * Pure reads of /proc, statfs and the cgroup tree. No side effects at import.
  */
 
-import { readFileSync, readdirSync, statfsSync } from "node:fs";
+import { readFile, readdir, statfs } from "node:fs/promises";
 import { cpus, loadavg } from "node:os";
 
 // ── Gateway event-loop lag ──────────────────────────────────────────────────
@@ -87,19 +87,60 @@ function eventLoopSnapshot(): Record<string, unknown> | null {
   };
 }
 
+// /proc/<pid>/cmdline can wait for another process's memory lock or swapped
+// pages. Even a health probe must not do that read on the gateway thread or
+// await its completion. Keep one refresh in flight and serve the last snapshot.
+export function createHostMetricsReader(
+  collect: () => Promise<Record<string, unknown>> = collectSystemStats,
+  now: () => number = Date.now,
+): () => Record<string, unknown> {
+  let snapshot: Record<string, unknown> = {
+    error: "Host metrics are warming up",
+  };
+  let refresh: Promise<void> | undefined;
+  let nextRefreshAt = 0;
+  return () => {
+    if (!refresh && now() >= nextRefreshAt) {
+      // Defer even the collector's synchronous prefix out of the health read.
+      refresh = Promise.resolve()
+        .then(collect)
+        .then((metrics) => {
+          snapshot = { ...metrics, collectedAt: new Date(now()).toISOString() };
+        })
+        .catch((error) => {
+          snapshot = { ...snapshot, refreshError: String(error) };
+        })
+        .finally(() => {
+          nextRefreshAt = now() + 5_000;
+          refresh = undefined;
+        });
+    }
+    return snapshot;
+  };
+}
+
+const readHostMetrics = createHostMetricsReader();
+
+export function systemStats(): Record<string, unknown> {
+  return {
+    ...readHostMetrics(),
+    eventLoop: eventLoopSnapshot(),
+  };
+}
+
 /** Host metrics for /api/health and the `read_host_metrics` tool. The
  *  health-monitor automation reads these numbers through the tool: it runs
  *  unattended in ask mode, which has no shell on either engine, and it cannot
  *  fetch its own host over HTTP because web-fetch.ts refuses loopback. Keep
  *  these fields stable, and keep both readers on this one builder. */
-export function systemStats(): Record<string, unknown> {
+async function collectSystemStats(): Promise<Record<string, unknown>> {
   try {
     const mem: Record<string, number> = {};
-    for (const line of readFileSync("/proc/meminfo", "utf-8").split("\n")) {
+    for (const line of (await readFile("/proc/meminfo", "utf-8")).split("\n")) {
       const m = line.match(/^(\w+):\s+(\d+) kB/);
       if (m) mem[m[1]] = Number(m[2]) * 1024;
     }
-    const s = statfsSync("/");
+    const s = await statfs("/");
     const totalBytes = s.blocks * s.bsize;
     const availBytes = s.bavail * s.bsize;
     const [load1, load5, load15] = loadavg();
@@ -122,9 +163,8 @@ export function systemStats(): Record<string, unknown> {
         ).toFixed(2),
       },
       load: { "1m": load1, "5m": load5, "15m": load15, cores: cpus().length },
-      eventLoop: eventLoopSnapshot(),
-      processes: processCensus(),
-      cgroups: cgroupCensus(),
+      processes: await processCensus(),
+      cgroups: await cgroupCensus(),
     };
   } catch (e) {
     return { error: String((e as Error)?.message || e) };
@@ -146,9 +186,9 @@ interface CgroupMemorySnapshot {
 
 const gb = (bytes: number): number => +(bytes / 1e9).toFixed(2);
 
-function readCgroupNumber(path: string): number | null {
+async function readCgroupNumber(path: string): Promise<number | null> {
   try {
-    const value = readFileSync(path, "utf8").trim();
+    const value = (await readFile(path, "utf8")).trim();
     if (!value || value === "max") return null;
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : null;
@@ -157,10 +197,10 @@ function readCgroupNumber(path: string): number | null {
   }
 }
 
-function readCgroupMap(path: string): Record<string, number> {
+async function readCgroupMap(path: string): Promise<Record<string, number>> {
   const values: Record<string, number> = {};
   try {
-    for (const line of readFileSync(path, "utf8").split("\n")) {
+    for (const line of (await readFile(path, "utf8")).split("\n")) {
       const [key, raw] = line.trim().split(/\s+/, 2);
       const parsed = Number(raw);
       if (key && Number.isFinite(parsed)) values[key] = parsed;
@@ -169,15 +209,17 @@ function readCgroupMap(path: string): Record<string, number> {
   return values;
 }
 
-function cgroupSnapshot(dir: string): CgroupMemorySnapshot | null {
-  const current = readCgroupNumber(`${dir}/memory.current`);
+async function cgroupSnapshot(
+  dir: string,
+): Promise<CgroupMemorySnapshot | null> {
+  const current = await readCgroupNumber(`${dir}/memory.current`);
   if (current == null) return null;
-  const peak = readCgroupNumber(`${dir}/memory.peak`);
-  const high = readCgroupNumber(`${dir}/memory.high`);
-  const max = readCgroupNumber(`${dir}/memory.max`);
-  const tasks = readCgroupNumber(`${dir}/pids.current`);
-  const stat = readCgroupMap(`${dir}/memory.stat`);
-  const events = readCgroupMap(`${dir}/memory.events`);
+  const peak = await readCgroupNumber(`${dir}/memory.peak`);
+  const high = await readCgroupNumber(`${dir}/memory.high`);
+  const max = await readCgroupNumber(`${dir}/memory.max`);
+  const tasks = await readCgroupNumber(`${dir}/pids.current`);
+  const stat = await readCgroupMap(`${dir}/memory.stat`);
+  const events = await readCgroupMap(`${dir}/memory.events`);
   return {
     unit: dir.slice(dir.lastIndexOf("/") + 1),
     currentGb: gb(current),
@@ -192,17 +234,21 @@ function cgroupSnapshot(dir: string): CgroupMemorySnapshot | null {
   };
 }
 
-function collectScopeDirs(root: string, out: string[], depth = 0): void {
+async function collectScopeDirs(
+  root: string,
+  out: string[],
+  depth = 0,
+): Promise<void> {
   if (depth > 5) return;
   try {
-    for (const entry of readdirSync(root, { withFileTypes: true })) {
+    for (const entry of await readdir(root, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const path = `${root}/${entry.name}`;
       if (/^opensession-(?:oc|preview)-.*\.scope$/.test(entry.name)) {
         out.push(path);
         continue;
       }
-      collectScopeDirs(path, out, depth + 1);
+      await collectScopeDirs(path, out, depth + 1);
     }
   } catch {}
 }
@@ -228,26 +274,28 @@ let cgroupCache: { at: number; data: Record<string, unknown> } | null = null;
 /** cgroup v2 resource accounting for the coordinator and detached fleets.
  * Includes anon vs file cache so a reclaimable compiler cache is not mistaken
  * for the anonymous-memory exhaustion that wedged the host on 2026-07-31. */
-function cgroupCensus(): Record<string, unknown> {
+async function cgroupCensus(): Promise<Record<string, unknown>> {
   if (cgroupCache && Date.now() - cgroupCache.at < 60_000)
     return cgroupCache.data;
   try {
     const uid = typeof process.getuid === "function" ? process.getuid() : 1000;
     const userRoot = `/sys/fs/cgroup/user.slice/user-${uid}.slice/user@${uid}.service`;
     const dirs: string[] = [];
-    collectScopeDirs(userRoot, dirs);
-    const snapshots = dirs
-      .map(cgroupSnapshot)
-      .filter((snapshot): snapshot is CgroupMemorySnapshot => snapshot != null);
-    const selfRelative = readFileSync("/proc/self/cgroup", "utf8")
+    await collectScopeDirs(userRoot, dirs);
+    const snapshots: CgroupMemorySnapshot[] = [];
+    for (const dir of dirs) {
+      const snapshot = await cgroupSnapshot(dir);
+      if (snapshot) snapshots.push(snapshot);
+    }
+    const selfRelative = (await readFile("/proc/self/cgroup", "utf8"))
       .split("\n")
       .find((line) => line.startsWith("0::"))
       ?.slice(3);
     const data = {
       coordinator: selfRelative
-        ? cgroupSnapshot(`/sys/fs/cgroup${selfRelative}`)
+        ? await cgroupSnapshot(`/sys/fs/cgroup${selfRelative}`)
         : null,
-      user: cgroupSnapshot(userRoot),
+      user: await cgroupSnapshot(userRoot),
       engines: summarizeScopes(
         snapshots.filter((scope) => scope.unit.startsWith("opensession-oc-")),
       ),
@@ -271,7 +319,7 @@ function cgroupCensus(): Record<string, unknown> {
  *  /proc scan, 60s-cached — RestartOverlay polls this endpoint at 1.5s during
  *  incidents. */
 let censusCache: { at: number; data: Record<string, number> } | null = null;
-function processCensus(): Record<string, number> {
+async function processCensus(): Promise<Record<string, number>> {
   if (censusCache && Date.now() - censusCache.at < 60_000)
     return censusCache.data;
   const counts = {
@@ -282,12 +330,12 @@ function processCensus(): Record<string, number> {
     total: 0,
   };
   try {
-    for (const pid of readdirSync("/proc")) {
+    for (const pid of await readdir("/proc")) {
       if (!/^\d+$/.test(pid)) continue;
       counts.total++;
       let cmd = "";
       try {
-        cmd = readFileSync(`/proc/${pid}/cmdline`, "utf-8").replaceAll(
+        cmd = (await readFile(`/proc/${pid}/cmdline`, "utf-8")).replaceAll(
           "\0",
           " ",
         );

@@ -58,11 +58,17 @@ function scratchName(sessionId: string): string | null {
  * always takes the `~/.opensession/<name>` layout; the host's own root may be
  * a legacy path or an isolated state dir and must not leak in.
  */
-export function sandboxSessionScratchDir(sessionId: string): string {
-  return join(
-    "/home/ubuntu/.opensession/session-scratch",
-    scratchName(sessionId) ?? "_",
-  );
+export function sandboxSessionScratchDir(
+  sessionId: string,
+  /** The Sandbox's provider, which decides the guest home (macOS guests on
+   *  tart live under /Users/admin). Absent = the Linux layout. */
+  provider?: string | null,
+): string {
+  const root =
+    provider === "tart"
+      ? "/Users/admin/.opensession/session-scratch"
+      : "/home/ubuntu/.opensession/session-scratch";
+  return join(root, scratchName(sessionId) ?? "_");
 }
 
 /**

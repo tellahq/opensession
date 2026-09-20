@@ -39,6 +39,8 @@ extraResources:
     to: Assets.car
   - from: build/vendor/os1-dictation
     to: os1-dictation
+  - from: build/vendor/os-keychain
+    to: os-keychain
   - from: ../../../LICENSE
     to: LICENSE
   - from: ../../../THIRD-PARTY-NOTICES.md

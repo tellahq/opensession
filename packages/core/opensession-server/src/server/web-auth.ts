@@ -27,14 +27,13 @@
  * recipes reach it), and the origin is tailnet-only.
  */
 
-import { chmodSync, existsSync, readdirSync, readFileSync } from "fs";
+import { chmodSync, existsSync, readFileSync } from "fs";
 import { randomBytes, timingSafeEqual } from "crypto";
 import { audit } from "./audit";
 import { configuredIdentity } from "./config";
 import { githubUserAuthActive } from "./github-auth";
-import { isNativeSessionId, OPENSESSION_SESSIONS_DIR, stateDir } from "./paths";
+import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { githubLoginFor } from "./shared/user-mappings";
 
 /** Env override is for tests; read once at first use (the map loads lazily). */
 function sessionsPath(): string {
@@ -331,60 +330,4 @@ export function crossSiteViolation(req: Request): string | null {
     return `origin host ${originHost} != ${host || "(no host)"}`;
   }
   return null;
-}
-
-// ── One-time migration: link existing sessions to GitHub logins ──────────────
-
-/**
- * Backfill `createdByLogin` on existing session files by resolving their
- * `createdBy` (historical picker first names) through the SAME
- * identity table the sign-in uses — so sessions created before GitHub auth
- * belong to the same verified person afterwards. Runs once at boot when
- * sign-in is active (marker file), atomic per-file, and only ADDS the login
- * field: automation sessions and unresolvable creators are left untouched.
- */
-export function migrateSessionsToGithubUser(): void {
-  if (!webAuthRequired()) return;
-  const marker = `${OPENSESSION_SESSIONS_DIR}/.github-user-migration.json`;
-  if (existsSync(marker)) return;
-  let scanned = 0;
-  let stamped = 0;
-  try {
-    for (const file of readdirSync(OPENSESSION_SESSIONS_DIR)) {
-      // Both id prefixes: `os-` is minted today, `bks-` predates the rename.
-      if (!file.endsWith(".json") || !isNativeSessionId(file)) continue;
-      const path = `${OPENSESSION_SESSIONS_DIR}/${file}`;
-      scanned++;
-      try {
-        const data = JSON.parse(readFileSync(path, "utf-8"));
-        if (!data || typeof data !== "object") continue;
-        if (data.createdByLogin) continue;
-        const createdBy: unknown = data.createdBy;
-        if (typeof createdBy !== "string" || !createdBy) continue;
-        if (createdBy.endsWith(" (automation)")) continue;
-        const login = githubLoginFor(createdBy);
-        if (!login) continue;
-        data.createdByLogin = login;
-        writeJsonAtomic(path, data);
-        stamped++;
-      } catch {}
-    }
-  } catch (e) {
-    console.error("[web-auth] session→github-user migration failed:", e);
-    return; // no marker — retry next boot
-  }
-  writeJsonAtomic(marker, {
-    migratedAt: new Date().toISOString(),
-    scanned,
-    stamped,
-  });
-  // Lazy: session-cache statically imports runner internals, which test
-  // processes must never load (the bun-test rpc-socket trap).
-  import("./session-cache")
-    .then((m) => m.invalidateSessionsCache())
-    .catch(() => {});
-  audit({ kind: "web_auth_session_migration", scanned, stamped });
-  console.log(
-    `[web-auth] linked ${stamped}/${scanned} existing sessions to GitHub logins`,
-  );
 }

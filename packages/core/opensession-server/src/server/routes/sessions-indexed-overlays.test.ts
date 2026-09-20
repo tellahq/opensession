@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 /**
  * The list and sidebar routes serve rows out of the session-list index, and
  * those rows already carry the registry overlays (generated title, rename,
@@ -105,6 +106,7 @@ beforeAll(async () => {
   process.env.HOME = home;
   process.env.OPENSESSION_STATE_DIR = home;
   process.env.OPENSESSION_CONFIG = join(home, "config.json");
+  await getConfigAsync();
   priorGhBackoff = (await import("../github-limit")).__setGhBackoffForTest(
     Date.now() + 60 * 60 * 1000,
   );

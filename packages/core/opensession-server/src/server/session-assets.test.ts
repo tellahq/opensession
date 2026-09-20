@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   DeleteObjectsCommand,
@@ -27,13 +28,17 @@ const testConfig = join(
   `missing-assets-config-${process.pid}.json`,
 );
 
-beforeEach(() => {
+beforeEach(async () => {
   process.env.OPENSESSION_CONFIG = testConfig;
+  await getConfigAsync();
 });
 
-afterEach(() => {
+afterEach(async () => {
   if (originalConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = originalConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = originalConfig;
+    await getConfigAsync();
+  }
   rmSync(`${ASSETS_ROOT}/${canonicalId}`, { recursive: true, force: true });
   rmSync(`${ASSETS_ROOT}/${aliasId}`, { recursive: true, force: true });
 });

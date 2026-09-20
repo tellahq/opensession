@@ -1,44 +1,43 @@
-import { replaceTranscriptEvents } from "./actor-transcript";
 import { mergedSessionTranscriptAsync } from "./sessions";
 import type { TranscriptEntry, UnifiedSession } from "./types";
 
-interface DuplicateTranscriptDependencies {
-  load(source: UnifiedSession): Promise<TranscriptEntry[]>;
-  replace(sessionId: string, entries: TranscriptEntry[]): Promise<unknown>;
-}
-
-const dependencies: DuplicateTranscriptDependencies = {
-  load: mergedSessionTranscriptAsync,
-  replace: replaceTranscriptEvents,
-};
-
 type DuplicateContextSession = Pick<
   UnifiedSession,
+  | "id"
   | "claudeSessionId"
   | "codexThreadId"
   | "piSessionId"
   | "duplicatedFromSessionId"
 >;
 
-/** Add the copied chat as engine context until the duplicate starts its first turn. */
+/** Use the duplicate's frozen chat, never later messages from the source. */
 export function duplicateContextSessionIds(
   session: DuplicateContextSession,
   explicitIds: readonly string[],
 ): string[] {
-  const sourceId =
-    !session.claudeSessionId && !session.codexThreadId && !session.piSessionId
-      ? session.duplicatedFromSessionId
-      : undefined;
-  return [...new Set([...explicitIds, ...(sourceId ? [sourceId] : [])])];
+  const needsCopiedContext =
+    session.duplicatedFromSessionId &&
+    !session.claudeSessionId &&
+    !session.codexThreadId &&
+    !session.piSessionId;
+  return [
+    ...new Set([
+      ...explicitIds.filter((id) => id !== session.id),
+      ...(needsCopiedContext ? [session.id] : []),
+    ]),
+  ];
 }
 
-/** Copy one known source chat into its newly created sibling session. */
-export async function duplicateSessionTranscript(
+/** Snapshot before creating the sibling. A missing boundary must not copy the tip. */
+export async function readDuplicateSessionTranscript(
   source: UnifiedSession,
-  sessionId: string,
-  deps: DuplicateTranscriptDependencies = dependencies,
-): Promise<number> {
-  const entries = await deps.load(source);
-  if (entries.length) await deps.replace(sessionId, entries);
-  return entries.length;
+  messageId?: string,
+  load: (
+    source: UnifiedSession,
+  ) => Promise<TranscriptEntry[]> = mergedSessionTranscriptAsync,
+): Promise<TranscriptEntry[] | null> {
+  const entries = await load(source);
+  if (messageId === undefined) return entries;
+  const index = entries.findIndex((entry) => entry.id === messageId);
+  return index < 0 ? null : entries.slice(0, index + 1);
 }

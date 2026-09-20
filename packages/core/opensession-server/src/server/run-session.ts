@@ -8,6 +8,7 @@
  * cache in session-cache.ts.
  */
 
+import { ownedWorktreeHeadBranch } from "./session-branch-ownership";
 import {
   mirrorSlackSessionReply,
   SLACK_SESSION_NOTE,
@@ -38,6 +39,7 @@ import { runAgentHosted } from "./host-client";
 import { getRunState, transitionRunState } from "./run-state";
 import { resolveSessionRunInputs, runAccountSpec } from "./session-run-inputs";
 import { defaultRepo } from "./config";
+import { agentAwsCredsForUntrustedRuns } from "./aws-creds";
 import { isDevInstance } from "./dev-mode";
 import {
   buildSessionContextNote,
@@ -144,12 +146,10 @@ import {
   ensureAskCheckout,
   ensureScratchDir,
   getRepo,
-  isSharedCheckoutDir,
   repoForPath,
   repoForPathOrNull,
   reviveWorktree,
   sessionRepoId,
-  worktreeHeadBranch,
 } from "./worktree";
 import { createGoalSelfMcpServer } from "../agents/slack/goal-tools";
 import { runHostsDir, type RunHostSpec } from "../runner-host/protocol";
@@ -1927,8 +1927,11 @@ export function sandboxRunSecuritySpec(
         }
       : undefined,
     // No AWS credentials for untrusted text: automation runs and Plain
-    // discussion sessions (which read customer ticket text).
-    aws: !opts.isAutomationSession && !session.plainDiscussionId,
+    // discussion sessions (which read customer ticket text), unless the
+    // instance opts them in (`integrations.aws.untrustedRuns`).
+    aws:
+      (!opts.isAutomationSession && !session.plainDiscussionId) ||
+      agentAwsCredsForUntrustedRuns(),
     user: opts.isAutomationSession ? undefined : opts.user,
     mcpGrantUser: opts.isAutomationSession
       ? undefined
@@ -2266,7 +2269,7 @@ export async function maybeLaunchSandboxedRun(
       ),
       fallbackModel: opts.isAutomationSession
         ? undefined
-        : interactiveFallbackModel(session.model),
+        : interactiveFallbackModel(session.model, session.autoFallback),
       effort: portablePreset?.effort ?? session.effort,
       fastMode: session.fastMode,
       pstackMode: session.pstackMode,
@@ -3004,8 +3007,7 @@ async function runSessionPromptInner(
       contextSessions ?? [],
     );
     const attachedSessions = attachedIds
-      .filter((id) => id !== sessionId)
-      .map((id) => findSession(id))
+      .map((id) => (id === sessionId ? session : findSession(id)))
       .filter((s): s is UnifiedSession => !!s);
     const attachedDigests: {
       id: string;
@@ -3020,7 +3022,11 @@ async function runSessionPromptInner(
         model: s.model,
         // Async: an attached session's transcript can be multi-MB. Read the
         // actor-owned transcript first, with the legacy file fallback.
-        entries: await mergedSessionTranscriptAsync(s),
+        // For a duplicate, its own copied transcript is the snapshot. Intake
+        // already appended this prompt, so leave it out of the history note.
+        entries: (await mergedSessionTranscriptAsync(s)).filter(
+          (entry) => s.id !== sessionId || entry.id !== durablePromptEntryId,
+        ),
       });
     }
     for (const c of attachedDigests) inlinedSessionIds.add(c.id);
@@ -3343,11 +3349,16 @@ async function runSessionPromptInner(
               }
             : undefined,
           confirmTools: STRIPE_CONFIRM_TOOLS,
-          aws: !isAutomationSession && !session.plainDiscussionId,
+          aws:
+            (!isAutomationSession && !session.plainDiscussionId) ||
+            agentAwsCredsForUntrustedRuns(),
           author: commitAuthorFor(user, sessionPrincipal(session)),
           user: runInputs.user,
           accountUser: runInputs.accountUser,
-          fallbackModel: interactiveFallbackModel(session.model),
+          fallbackModel: interactiveFallbackModel(
+            session.model,
+            session.autoFallback,
+          ),
           effort: session.effort,
           fastMode: session.fastMode,
           pstackMode: session.pstackMode,
@@ -3401,9 +3412,11 @@ async function runSessionPromptInner(
       // an automation-owned session carries no pin, so their own subscription
       // is tried before the automation's account and the pool.
       ...runAccountSpec(session, runInputs),
-      // Only switch models when a fallback is explicitly configured. By default,
-      // usage exhaustion stops the run so the human can choose what to do.
-      fallbackModel: interactiveFallbackModel(session.model),
+      // Respect the session opt-out as well as the instance fallback policy.
+      fallbackModel: interactiveFallbackModel(
+        session.model,
+        session.autoFallback,
+      ),
       images,
       // Engine switch: seed the fresh pi session's persisted transcript
       // with the prior history (same entries the handoff note was built from)
@@ -3434,8 +3447,11 @@ async function runSessionPromptInner(
         : undefined,
       confirmTools: STRIPE_CONFIRM_TOOLS,
       // Automation descendants and Plain discussion sessions (untrusted
-      // ticket text) never receive AWS credentials.
-      aws: !isAutomationSession && !session.plainDiscussionId,
+      // ticket text) receive AWS credentials only when the instance opts
+      // them in (`integrations.aws.untrustedRuns`).
+      aws:
+        (!isAutomationSession && !session.plainDiscussionId) ||
+        agentAwsCredsForUntrustedRuns(),
       // Attribute any commits this turn makes to whoever sent the prompt, or
       // to the person the session acts for when nobody did (an auto-continue,
       // a restart resume, a queue drain): the last person who prompted it,
@@ -3752,10 +3768,9 @@ async function runSessionPromptInner(
     // or ask checkout) are exempt: no session owns their HEAD, so syncing
     // would stamp whatever branch another flow left parked there onto this
     // session (bks-019f97ec, 2026-07-25).
-    const headBranch =
-      session.branch && !isSharedCheckoutDir(session.worktreeDir)
-        ? worktreeHeadBranch(session.worktreeDir)
-        : null;
+    const headBranch = session.branch
+      ? await ownedWorktreeHeadBranch(session.worktreeDir)
+      : null;
     // Export the engine identity and usage before settling or draining the
     // next prompt, whose resume inputs can still come from the session file.
     await touchNativeSession(session.id, {

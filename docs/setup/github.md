@@ -142,6 +142,28 @@ its `GH_CONFIG_DIR` is run-scoped, so a missing token fails with "not logged in"
 See [github-authority.md](../github-authority.md) for the credential and
 publication boundaries.
 
+An automation that must read sibling repositories (`readRepos` in its
+config: `owner/repo` names under the same owner as its own repo) additionally
+holds `GH_READ_TOKEN`: a second installation token minted for its own
+repository plus every listed one, with the read permission set only. It is a
+separate token on purpose. One mint carries one permission set for every
+repository it lists, so folding the read repos into the primary mint would
+give the run `contents:write` and `pull_requests:write` on repositories it
+should only read. `GH_TOKEN` stays the one-repository code set, and `gh`
+honors only `GH_TOKEN`, so a script opts in per command:
+`GH_TOKEN=$GH_READ_TOKEN gh pr list --repo owner/name`. The run's
+instructions name the token and the repositories it covers.
+
+The App must be installed on every repository in `readRepos` (organization
+settings, the Open Session App, repository access). GitHub refuses the whole
+mint when the installation cannot see one of them; the server then logs a
+warning naming the repositories and the run gets no `GH_READ_TOKEN` at all.
+It never falls back to a token minted without a repository list. In a
+sandbox the launcher mints the read token on the host and projects it in the
+same private run-scoped file as the primary one. Like the primary token it is
+process-local: never written into git config, remote URLs, session files, or
+the run journal, which stores only the repository names.
+
 A push from a person-started code turn therefore reaches GitHub as that
 person; pushes from every other run reach it as the bot account, and the PR
 webhook sees the bot as the `synchronize` sender. The review automation
@@ -164,6 +186,13 @@ including direct pushes where a shared-main workflow permits them. GitHub
 permissions and rulesets remain the credential boundary. Ask-mode read-only
 checks, unattended command policy, and automation-descendant publication
 restrictions still apply; this does not grant automations human authority.
+
+A public repository adds one more layer. Runs there receive the
+`## Public repository` instruction, and publishing commands are refused when
+they contain a term from `policy.privateTerms`. Pin visibility with
+`repos.<id>.public` when the instance credential cannot read it; unconfirmed
+visibility counts as public. See
+[../security-model.md](../security-model.md#private-information-and-public-repositories).
 
 Threat model: agent bash shares the server's uid, so every credential present
 on an Open Session host should be scoped as if the agent will read and use it
@@ -323,6 +352,120 @@ Prompts and `pr-info.ts` defaults are config-driven (they interpolate the
 default repo's `ghRepo`, or the PR's own repo when threaded) — no code edits
 needed to point the PR agent at your repos.
 
+## Review options and rules
+
+A repository tunes its own reviews with `.os-review.json` at its root, so the
+knobs are versioned with the code they score. Every field is optional:
+
+```jsonc
+{
+  "ignoreGlobs": ["**/*.lock", "generated/**"], // never post findings here
+  "minInlineSeverity": "P3", // post inline comments at or above this
+  "summaryOnlyOverFiles": 80, // giant PRs get a summary, no inline noise
+  "skipKeywords": ["[skip-review]"], // in the PR title: no automatic review
+  "testOnBase": true, // new tests must fail on the merge base
+  "secretScan": true, // TruffleHog scan of the PR's added lines
+  "mergeRisk": true, // separate diff-only merge-risk score
+  "rules": [
+    {
+      "name": "marketing-only",
+      "when": { "allFilesMatch": ["apps/marketing/**", "**/*.mdx"] },
+      "then": {
+        "result": { "verdict": "approve", "score": 5 },
+        "note": "Marketing-only change",
+      },
+    },
+    {
+      "name": "migration-needs-human",
+      "when": { "anyFileMatches": ["**/migrations/**"] },
+      "then": { "maxConfidence": 3, "minRisk": "medium" },
+    },
+    {
+      "name": "lockfile-only",
+      "when": { "allFilesMatch": ["**/bun.lock"] },
+      "then": { "skipReview": true },
+    },
+  ],
+  "groups": [
+    {
+      "name": "Design",
+      "rules": [
+        {
+          "name": "CSS only",
+          "when": { "allFilesMatch": ["**/*.css"] },
+          "then": { "result": { "verdict": "approve" } },
+        },
+        {
+          "name": "Tone",
+          "when": { "anyFileMatches": ["apps/marketing/**"] },
+          "prompt": "Does copy added in this PR sound like us: short, direct, no jargon?",
+        },
+      ],
+    },
+  ],
+}
+```
+
+`rules` is the deterministic layer alongside the model's verdict. Each rule
+has a unique `name`, a `when` clause whose conditions are all required, and a
+`then` clause with the outcomes. Up to 50 rules are supported.
+
+`groups` collect rules that report together: each group has a `name` and its
+own `rules` list (names unique within the group), and its matching rules
+render under one heading in the summary comment, one line per rule, for
+example `Design` with `CSS only: approved` and `Tone: approved · 4/5 · ...`.
+Grouped rules support the same `when`, `then`, and `prompt` fields as
+top-level ones and apply after them, in file order. Up to 20 groups.
+
+A rule with a `prompt` instead of `then` is a **prompt rule**: the question is
+put to a separate tool-less model call over the PR's diff, with a clean
+context, and the answer is published as an independent result for that rule:
+a verdict, a 1-5 score, and a one-line reason. `when` is optional on a prompt
+rule (omit it to evaluate every PR) and it may not carry `then`. Prompt rules
+never change the AI's scores, findings, or gates, and cannot skip a review; a
+model or parse failure shows as `not evaluated` for that rule and never blocks
+the review. Each costs one model call per review, so a config keeps at most
+10 prompt rules (extras are dropped with a warning). Every prompt rule's
+outcome is recorded in the audit log (`review_rule_prompt`).
+
+Use `then.result` for an **independent custom result**: an optional `verdict`
+(`approve`, `comment`, `request_changes`) and/or a `score` (1-5). Matching rules
+appear by name in a separate "Custom rule results" section, for example
+`marketing-only: approved · 5/5`. Multiple results coexist; they do not
+replace one another or change the AI's quality, risk, verdict, findings, or
+merge/fix-round gates. A custom approval is a policy result, not a GitHub
+approval or permission to merge. Nonmatching rules show no result.
+
+The existing top-level `then.confidence`, `then.verdict`, and `then.risk`
+outcomes still explicitly override the shared model scores. Omit them when
+only an independent result is wanted.
+
+Available conditions and outcomes:
+
+- `when`: `allFilesMatch`, `anyFileMatches`, `noFileMatches` (globs over the
+  changed paths), `minChangedLines` / `maxChangedLines`, `minFiles` /
+  `maxFiles`, `labels` (any of, case-insensitive), `baseBranch` (globs),
+  and the model's result: `verdict` (`approve`, `comment`,
+  `request_changes`), `minConfidence` / `maxConfidence` (1-5), `risk`
+  (`low`, `medium`, `high`). A rule needs at least one condition.
+- `then`: `result` publishes an independent verdict and/or score;
+  `confidence` sets the 1-5 quality score, `confidenceDelta` adjusts
+  it, `minConfidence` floors it, `maxConfidence` caps it; `verdict` replaces
+  the verdict; `risk` sets the merge-risk level, `minRisk` raises it,
+  `maxRisk` lowers it; `note` is shown on the PR; `skipReview: true` stops
+  the automatic review before it starts.
+
+Rules apply in file order after the model's verdict is parsed, and the
+summary comment shows the model's original score next to the rule-adjusted
+one (`quality 5/5 (model 3/5)`) with a "Rules applied" section naming each
+rule. Rules never remove findings, so a P0 the model found still counts as
+blocking for the fix-round gates, and the secret scan's cap wins over any
+rule. Skip rules read the repo's main checkout and only gate the automatic
+path; label-forced and manual reviews still run. Rules that read the model's
+result cannot skip. Public-fork PRs use the base checkout's file, so a
+contributor cannot score their own PR. Every applied or skipping rule is
+recorded in the audit log (`review_rules_applied`, `review_skipped_by_rule`).
+
 ## Automation PR credentials and review requests
 
 Ordinary `code` automations can edit an isolated worktree, but currently receive
@@ -332,7 +475,11 @@ credential. An ordinary automation therefore cannot push or open a GitHub PR.
 Its optional `prReviewer` value is validated, preserved across resume, and
 added to unattended run instructions, but it grants no GitHub authority. The
 reviewer is not added to existing PRs or PRs created from human-steered turns.
-Do not rely on this setting to publish or surface automation work.
+Do not rely on this setting to publish or surface automation work. The
+optional `readRepos` list is validated the same way (same owner, valid names,
+deduped) and preserved across resume; it widens only what the run can read,
+through the separate `GH_READ_TOKEN` described under
+[Who holds which credential](#who-holds-which-credential).
 
 For a PR created by an authorized path, request a GitHub login or `org/team`
 reviewer directly. The reviewer must be a repository collaborator; a requested

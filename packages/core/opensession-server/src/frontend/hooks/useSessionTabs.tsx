@@ -746,6 +746,7 @@ export function useSessionTabs({
     morphOrigin?: NewTabMorphOrigin,
     persistedSource: Promise<UnifiedSession> = Promise.resolve(src),
     duplicate = false,
+    messageId?: string,
   ): Promise<string> {
     const now = new Date().toISOString();
     const user = getCurrentUser();
@@ -823,7 +824,14 @@ export function useSessionTabs({
 
     return await (async () => {
       const source = await persistedSource;
-      const created = await newSessionApi(source.id, user, mode, id, duplicate);
+      const created = await newSessionApi(
+        source.id,
+        user,
+        mode,
+        id,
+        duplicate,
+        messageId,
+      );
       const createdId = created.id;
       if (abandonedSessionCreatesRef.current.delete(id)) {
         unstick(id);
@@ -917,6 +925,7 @@ export function useSessionTabs({
     side: SplitSide | null = null,
     morphOrigin?: NewTabMorphOrigin,
     duplicate = false,
+    messageId?: string,
   ) => {
     const openSessionlessWorkspaceComposer = () => {
       if (route.view !== "workspace") return;
@@ -973,6 +982,7 @@ export function useSessionTabs({
         morphOrigin,
         persistedSource,
         duplicate,
+        messageId,
       );
       if (side === "right" && tabOrderKey && activeTabSplit)
         saveTabSplit(tabOrderKey, {

@@ -1,15 +1,18 @@
 import { executeSessionProjection } from "./session-projection-executor";
-import {
-  readdirSync,
-  readFileSync,
-  statSync,
-  unlinkSync,
-  writeFileSync,
-} from "fs";
+import { readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { opendir, readFile, stat } from "fs/promises";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { statePath } from "./paths";
 import { existsSync } from "fs";
+import {
+  AGENT_SESSION_STORE_SKIP_FILES,
+  agentSessionSourceKey,
+  mirrorAgentSessionSource,
+  type AgentSessionKind,
+  type AgentSessionSource,
+  type LinearSessionSource,
+  type SlackSessionSource,
+} from "./agent-session-catalog";
 import { slackIdToFirstName } from "./shared/user-mappings";
 import { isArchivedId, getArchiveReason } from "./archive";
 import { purgeDraftsForSessions } from "./drafts";
@@ -35,13 +38,13 @@ import {
   sessionForEngineId,
 } from "./transcript-persistence";
 import { activeRunRecords } from "./run-journal";
-import { configuredRepos, defaultRepo } from "./config";
+import { configuredRepos, defaultRepo, getConfigAsync } from "./config";
 import {
   prWorkspaceReader,
   sessionPrBranch,
   shareWorkspacePrRefs,
 } from "./session-pr-target";
-import { readPrState } from "../agents/github/state";
+import { readPrState, readPrStateAsync } from "../agents/github/state";
 import {
   getPrsByRepo,
   prsBySessionRef,
@@ -53,7 +56,6 @@ import type {
   UnifiedSession,
   SlackSessionFile,
   LinearSessionFile,
-  CLISessionFile,
   NativeSessionFile,
   SessionPrRef,
   TranscriptEntry,
@@ -88,19 +90,14 @@ export {
 // synthetic sessions (2026-08-05).
 const SLACK_SESSIONS_DIR = statePath(".slack-sessions");
 const LINEAR_SESSIONS_DIR = statePath(".linear-sessions");
-const CLI_SESSIONS_DIR = statePath(".claude/sessions");
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 const CLAUDE_PROJECTS_DIR = statePath(".claude/projects");
 
-const SKIP_FILES = new Set([
-  "worktree-channels.json",
-  "message-queue.json",
-  "active-worktrees.json",
-  "prompt-queues.json",
-  "active-at-shutdown.json",
-  "active-runs.json",
-  "processed-events.json",
-]);
+// This module never lists a session directory. Targeted reads open exactly
+// one file for one id; the whole list is assembled from explicit sources
+// (SessionListSources) that session-cache.ts pages out of the catalogs.
+// Only session-source-scan.ts, offline and test-only, reads the directories.
+const SKIP_FILES = AGENT_SESSION_STORE_SKIP_FILES;
 
 /** Which archive half a scan should return. `include` is the legacy/internal
  * whole-list contract; request paths use the narrower halves. */
@@ -905,10 +902,10 @@ export function isAgentSessionId(sessionId: string): boolean {
   return agentSessionSource(sessionId) !== undefined;
 }
 
-type AgentSessionSource = { kind: "slack" | "linear"; file: string };
+type AgentSessionRef = { kind: AgentSessionKind; file: string };
 
 /** The agent-owned source file behind a `slack-` or `linear-` id. */
-function agentSessionSource(sessionId: string): AgentSessionSource | undefined {
+function agentSessionSource(sessionId: string): AgentSessionRef | undefined {
   const kind = sessionId.startsWith("slack-")
     ? "slack"
     : sessionId.startsWith("linear-")
@@ -920,27 +917,71 @@ function agentSessionSource(sessionId: string): AgentSessionSource | undefined {
   return { kind, file: `${key}.json` };
 }
 
-/** slackSessionRow / linearSessionRow without the sidecar overlay and
- * without blocking: the source file and its mtime are read asynchronously. */
-async function agentSourceRowAsync(
-  source: AgentSessionSource,
-): Promise<UnifiedSession | null> {
-  if (source.kind === "slack") {
-    if (SKIP_FILES.has(source.file)) return null;
-    const path = `${SLACK_SESSIONS_DIR}/${source.file}`;
-    const data = await readJsonSafeAsync<SlackSessionFile>(path);
-    if (!data) return null;
-    // Only a file that records no creation time falls back to its mtime;
-    // the constructor never asks otherwise, so the stat is skipped as the
-    // sync reader skips it.
-    const mtime = data.createdAt || (await getFileMtimeAsync(path));
-    return slackSessionRowFromData(source.file, data, () => mtime);
+/**
+ * The source document behind one agent-owned file, read without blocking:
+ * undefined when there is no such file, null when it exists but cannot be
+ * parsed (already warned). One targeted read of one path, never a listing.
+ */
+async function readAgentSessionSourceAsync(
+  ref: AgentSessionRef,
+): Promise<AgentSessionSource | null | undefined> {
+  if (ref.kind === "slack" && SKIP_FILES.has(ref.file)) return undefined;
+  const path = `${ref.kind === "slack" ? SLACK_SESSIONS_DIR : LINEAR_SESSIONS_DIR}/${ref.file}`;
+  let text: string;
+  try {
+    text = await readFile(path, "utf-8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return undefined;
+    console.warn(`[sessions] Failed to read ${path}:`, error);
+    return null;
   }
-  const path = `${LINEAR_SESSIONS_DIR}/${source.file}`;
-  const data = await readJsonSafeAsync<LinearSessionFile>(path);
+  let data: SlackSessionFile | LinearSessionFile;
+  try {
+    data = JSON.parse(text);
+  } catch (error) {
+    console.warn(`[sessions] Failed to parse ${path}:`, error);
+    return null;
+  }
   if (!data) return null;
-  const mtime = await getFileMtimeAsync(path);
-  return linearSessionRowFromData(data, () => mtime);
+  // Only a Slack file that records no creation time consults its mtime; the
+  // row constructor never asks otherwise, so the stat is skipped as the
+  // sync reader skips it. Linear rows date from the file's clock.
+  const mtime =
+    (ref.kind === "slack" && (data as SlackSessionFile).createdAt) ||
+    (await getFileMtimeAsync(path));
+  return { file: ref.file, data, mtime };
+}
+
+/** slackSessionRow / linearSessionRow without the sidecar overlay and
+ * without blocking. What this read observed is recorded in the catalog
+ * projection before the row can reach the list index, so a cold rebuild
+ * sees at least what the index saw; a file that is gone records its
+ * deletion. A projection that cannot be written fails the read, and with it
+ * the publish, rather than let the index run ahead of the catalog. */
+async function agentSourceRowAsync(
+  ref: AgentSessionRef,
+): Promise<UnifiedSession | null> {
+  const observedAt = Date.now();
+  const observed = await readAgentSessionSourceAsync(ref);
+  if (observed === null)
+    throw new Error(
+      `Cannot project unreadable ${ref.kind} session source ${ref.file}`,
+    );
+  await mirrorAgentSessionSource(ref.kind, ref.file, {
+    source: observed ?? null,
+    observedAt,
+  });
+  if (!observed) return null;
+  return ref.kind === "slack"
+    ? slackSessionRowFromData(
+        observed.file,
+        observed.data as SlackSessionFile,
+        () => observed.mtime,
+      )
+    : linearSessionRowFromData(
+        observed.data as LinearSessionFile,
+        () => observed.mtime,
+      );
 }
 
 function agentSessionListRow(
@@ -954,17 +995,28 @@ function agentSessionListRow(
   return session;
 }
 
-function* slackSessionRows(): Generator<UnifiedSession> {
-  if (!existsSync(SLACK_SESSIONS_DIR)) return [];
-
-  for (const file of readdirSync(SLACK_SESSIONS_DIR)) {
-    const session = slackSessionRow(file);
-    if (session) yield session;
-  }
+/** The list row for one Slack source document (a catalog projection or an
+ * offline file read) with its committed sidecar overlaid: the rebuild's
+ * counterpart of the targeted file reader, with no I/O of its own. */
+export function slackSessionSourceRow(
+  source: SlackSessionSource,
+  sidecar?: NativeSessionFile | null,
+): UnifiedSession {
+  return applySidecarExtras(
+    slackSessionRowFromData(source.file, source.data, () => source.mtime),
+    sidecar,
+  );
 }
 
-function scanSlackSessions(): UnifiedSession[] {
-  return [...slackSessionRows()];
+/** linearSessionRow for a Linear source document already in hand. */
+export function linearSessionSourceRow(
+  source: LinearSessionSource,
+  sidecar?: NativeSessionFile | null,
+): UnifiedSession {
+  return applySidecarExtras(
+    linearSessionRowFromData(source.data, () => source.mtime),
+    sidecar,
+  );
 }
 
 function linearSessionRow(file: string): UnifiedSession | null {
@@ -1027,19 +1079,6 @@ function linearSessionRowFromData(
   };
 }
 
-function* linearSessionRows(): Generator<UnifiedSession> {
-  if (!existsSync(LINEAR_SESSIONS_DIR)) return [];
-
-  for (const file of readdirSync(LINEAR_SESSIONS_DIR)) {
-    const session = linearSessionRow(file);
-    if (session) yield session;
-  }
-}
-
-function scanLinearSessions(): UnifiedSession[] {
-  return [...linearSessionRows()];
-}
-
 /** The list row for one native session document, before overlays. Exported
  * so the catalog-backed rebuild in session-cache builds rows from committed
  * documents the same way the file scan does. */
@@ -1097,6 +1136,7 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
     mcpServers: data.mcpServers,
     model: data.model,
     effort: data.effort,
+    autoFallback: data.autoFallback,
     fastMode: data.fastMode,
     pstackMode: data.pstackMode,
     accountId: data.accountId,
@@ -1214,88 +1254,137 @@ function withTranscriptPath(session: UnifiedSession): UnifiedSession {
   return session;
 }
 
-function* nativeSessionRows(): Generator<UnifiedSession> {
-  if (!existsSync(SESSIONS_DIR)) return [];
-
-  for (const file of readdirSync(SESSIONS_DIR)) {
-    if (!file.endsWith(".json") || SKIP_FILES.has(file)) continue;
-    const data = readJsonSafe<NativeSessionFile>(`${SESSIONS_DIR}/${file}`);
-    // Skip non-session bookkeeping files in this dir (active-runs.json,
-    // prompt-queues.json, active-at-shutdown.json, …) — a real session always
-    // has an id, these don't, so they'd otherwise become bogus id:undefined rows.
-    if (!data || !data.id) continue;
-    yield nativeSessionRow(data);
-  }
+/** Resolve one session's engine transcript path in place. List rows carry
+ * none (the list path never discovers transcripts); a detail read of a row
+ * taken from the list resolves it here, synchronously, for that one session. */
+export function resolveSessionTranscriptPath(
+  session: UnifiedSession,
+): UnifiedSession {
+  return withTranscriptPath(session);
 }
 
-function scanNativeSessions(): UnifiedSession[] {
-  return [...nativeSessionRows()];
+/** resolveSessionTranscriptPath without blocking: the direct candidates are
+ * stat'ed asynchronously and the reverse index, the last resort, is warmed
+ * cooperatively for this one session. */
+export async function resolveSessionTranscriptPathAsync(
+  session: UnifiedSession,
+): Promise<UnifiedSession> {
+  session.transcriptPath = resolveTranscriptPath(
+    await findTranscriptPathAsync(session.worktreeDir, session.claudeSessionId),
+    session.codexThreadId,
+    session.model,
+  );
+  return session;
 }
 
-/**
- * Read a synchronous row iterator without monopolising Bun's event loop.
- *
- * Session files still use the existing, battle-tested synchronous parser; the
- * async list path merely yields between small batches. This keeps workspace
- * filing, PR-cache overlays and every other process-local side effect on the
- * main thread while allowing WebSocket upgrades and transcript reads through
- * during an 8,000-file cold scan.
- */
-async function collectSessionRows(
-  rows: Generator<UnifiedSession>,
-): Promise<UnifiedSession[]> {
-  const sessions: UnifiedSession[] = [];
-  for (const session of rows) {
-    sessions.push(session);
-    if (sessions.length % 8 === 0) await Bun.sleep(0);
-  }
-  return sessions;
-}
-
-function getRunningPids(): Map<string, number> {
-  // Map of sessionId → pid for currently running CLI sessions
-  const running = new Map<string, number>();
-  if (!existsSync(CLI_SESSIONS_DIR)) return running;
-
-  for (const file of readdirSync(CLI_SESSIONS_DIR)) {
-    if (!file.endsWith(".json")) continue;
-    const data = readJsonSafe<CLISessionFile>(`${CLI_SESSIONS_DIR}/${file}`);
-    if (!data) continue;
-
+async function findTranscriptPathAsync(
+  worktreeDir: string | null,
+  sessionId: string | null,
+): Promise<string | null> {
+  if (!sessionId) return null;
+  const candidates = [
+    ...(worktreeDir ? [getTranscriptPath(worktreeDir, sessionId)] : []),
+    `${CLAUDE_PROJECTS_DIR}/${(process.env.HOME || "").replaceAll("/", "-")}/${sessionId}.jsonl`,
+  ];
+  for (const path of candidates) {
     try {
-      process.kill(data.pid, 0); // Check if PID is alive
-      running.set(data.sessionId, data.pid);
+      await stat(path);
+      return path;
     } catch {
-      // PID is dead
+      continue;
     }
   }
-  return running;
+  await warmTranscriptIndexAsync();
+  return findTranscriptBySessionId(sessionId);
 }
 
 /**
- * `fileWorkspaces` selects the workspace step: the async runner yields the
- * catalog-backed filing promise and awaits it; the sync runner can do no I/O,
- * so it only re-applies filings already pending in memory.
+ * The rows a list assembly starts from, one array per source. The live
+ * gateway fills these from the catalogs (session-cache.ts); the offline
+ * scanner fills them from files. The assembly itself never reads a directory,
+ * so the choice of source is made in exactly one place per caller.
+ */
+export type SessionListSources = {
+  native: UnifiedSession[];
+  slack: UnifiedSession[];
+  linear: UnifiedSession[];
+};
+
+/** Source documents already read by some other owner: session-source-scan
+ * (offline) or the catalogs. Sidecars are keyed by unified id. */
+export type SessionSourceDocuments = {
+  native: NativeSessionFile[];
+  sidecars: ReadonlyMap<string, NativeSessionFile>;
+  slack: SlackSessionSource[];
+  linear: LinearSessionSource[];
+};
+
+/** Build every source row from documents in hand: the one row constructor
+ * per source, with the sidecar the unified id owns overlaid on agent rows. */
+export function sessionListSourcesFromDocuments(
+  docs: SessionSourceDocuments,
+): SessionListSources {
+  return {
+    native: docs.native.map((data) => nativeSessionRow(data)),
+    slack: docs.slack.map((source) =>
+      slackSessionSourceRow(
+        source,
+        docs.sidecars.get(`slack-${agentSessionSourceKey(source.file)}`),
+      ),
+    ),
+    linear: docs.linear.map((source) =>
+      linearSessionSourceRow(
+        source,
+        docs.sidecars.get(`linear-${agentSessionSourceKey(source.file)}`),
+      ),
+    ),
+  };
+}
+
+type AssemblyOptions = {
+  /** The cooperative (gateway) runner: workspace filing and PR state reads
+   * are yielded as promises and awaited. The sync runner does no I/O beyond
+   * the process-local overlays and the synchronous PR state read. */
+  cooperative?: boolean;
+  /** Resolve engine transcript paths per row. Only the offline/test assembly
+   * does; the catalog list path leaves them null and a detail read resolves
+   * the one session it opens (resolveSessionTranscriptPath). */
+  resolveTranscripts?: boolean;
+  /** The repo registry, read once per assembly instead of once per row. */
+  repos?: ReturnType<typeof configuredRepos>;
+};
+
+function prStateKey(prNumber: number, ghRepo: string | undefined): string {
+  return `${ghRepo ?? ""}#${prNumber}`;
+}
+
+/**
+ * The steps of one list assembly. Every step is memory-only except the two
+ * the cooperative runner awaits: catalog-backed workspace filing and the
+ * read-ahead of the PR states the rows will show. Nothing here opens a
+ * directory or reads a file per row.
  */
 function* assembleSessionSteps(
-  slackSessions: UnifiedSession[],
-  linearSessions: UnifiedSession[],
-  nativeSessions: UnifiedSession[],
+  sources: SessionListSources,
   slice: SessionArchiveSlice = "include",
-  fileWorkspaces = false,
+  options: AssemblyOptions = {},
 ): Generator<void | Promise<void>, UnifiedSession[]> {
-  const runningPids = getRunningPids();
-
+  const { cooperative = false, resolveTranscripts = false } = options;
+  const repos = options.repos ?? configuredRepos();
+  let defaultRepoId: string | undefined;
+  const repoIdOf = (session: UnifiedSession): string =>
+    session.repo || (defaultRepoId ??= defaultRepo(repos).id);
   // Merge all sessions, deduplicating by engine id (Claude session or Codex
   // thread). Keep the one with richer data (opensession > linear > slack), and
-  // preserve dropped ids as aliases for deep links.
+  // preserve dropped ids as aliases for deep links. Live run state is not
+  // decided here: enrichSessionRuntime owns isRunning for every row served.
   const byEngineId = new Map<string, UnifiedSession>();
   const allSessions: UnifiedSession[] = [];
 
   for (const session of [
-    ...nativeSessions,
-    ...linearSessions,
-    ...slackSessions,
+    ...sources.native,
+    ...sources.linear,
+    ...sources.slack,
   ]) {
     yield;
     const engineKeys = sessionEngineKeys(session);
@@ -1305,9 +1394,6 @@ function* assembleSessionSteps(
       if (existing) break;
     }
     if (existing) {
-      if (session.claudeSessionId && runningPids.has(session.claudeSessionId)) {
-        existing.isRunning = true;
-      }
       // Keep the dropped ID as an alias so deep links to it (e.g. the
       // Slack "Open in Open Session" button, which uses slack-<channel>-<ts>)
       // still resolve to the surviving session.
@@ -1318,11 +1404,6 @@ function* assembleSessionSteps(
       }
       for (const aliasKey of engineKeys) byEngineId.set(aliasKey, existing);
       continue;
-    }
-
-    // Mark running status
-    if (session.claudeSessionId && runningPids.has(session.claudeSessionId)) {
-      session.isRunning = true;
     }
 
     allSessions.push(session);
@@ -1375,8 +1456,8 @@ function* assembleSessionSteps(
       yield;
       const branch = sessionPrBranch(session, workspaceOf(session));
       if (!branch) continue;
-      const repoId = session.repo || defaultRepo().id;
-      if (branch === configuredRepos()[repoId]?.defaultBranch) continue;
+      const repoId = repoIdOf(session);
+      if (branch === repos[repoId]?.defaultBranch) continue;
       const found = footerPrsFor(prsBySession, session);
       if (!found.length) continue;
       const key = `${repoId}\x00${branch}`;
@@ -1386,21 +1467,45 @@ function* assembleSessionSteps(
     }
   }
   // Transcript discovery traverses engine stores and is the dominant per-row
-  // cost. Resolve it only after archive slicing so the live poll never enriches
-  // the archived half (and vice versa).
-  for (const session of selectedSessions) {
-    yield;
-    session.transcriptPath = resolveTranscriptPath(
-      findTranscriptPath(session.worktreeDir, session.claudeSessionId),
-      session.codexThreadId,
-      session.model,
-    );
+  // cost. The list never pays it: a detail read resolves the one session it
+  // opens. The offline/test assembly keeps it for the legacy fixtures.
+  if (resolveTranscripts)
+    for (const session of selectedSessions) {
+      yield;
+      withTranscriptPath(session);
+    }
+  // The last review summary of each primary PR lives in a state file. Read
+  // the distinct ones ahead, asynchronously, instead of one synchronous read
+  // per row inside the enrichment loop.
+  const prStates = new Map<string, ReturnType<typeof readPrState>>();
+  if (cooperative) {
+    const wanted = new Map<string, [number, string | undefined]>();
+    for (const session of selectedSessions) {
+      yield;
+      const primaryBranch = sessionPrBranch(session, workspaceOf(session));
+      if (!primaryBranch) continue;
+      const repoId = repoIdOf(session);
+      const pr = prsByRepo.get(repoId)?.get(primaryBranch);
+      if (!pr) continue;
+      const ghRepo = repos[repoId]?.ghRepo;
+      wanted.set(prStateKey(pr.number, ghRepo), [pr.number, ghRepo]);
+    }
+    if (wanted.size > 0)
+      yield Promise.all(
+        [...wanted].map(async ([key, [prNumber, ghRepo]]) => {
+          prStates.set(key, await readPrStateAsync(prNumber, ghRepo));
+        }),
+      ).then(() => undefined);
   }
+  const prState = (prNumber: number, ghRepo: string | undefined) =>
+    cooperative
+      ? (prStates.get(prStateKey(prNumber, ghRepo)) ?? null)
+      : readPrState(prNumber, ghRepo);
   for (const session of selectedSessions) {
     yield;
     const primaryBranch = sessionPrBranch(session, workspaceOf(session));
     if (primaryBranch) {
-      const sessionRepoId = session.repo || defaultRepo().id;
+      const sessionRepoId = repoIdOf(session);
       const pr = prsByRepo.get(sessionRepoId)?.get(primaryBranch);
       if (pr) {
         session.prUrl = pr.url;
@@ -1419,8 +1524,7 @@ function* assembleSessionSteps(
         session.prUpdatedAt = pr.updatedAt;
         session.prChecks = pr.checks;
         session.prOsReview = lastReviewSummary(
-          readPrState(pr.number, configuredRepos()[sessionRepoId]?.ghRepo)
-            ?.lastReview,
+          prState(pr.number, repos[sessionRepoId]?.ghRepo)?.lastReview,
           pr.headRefOid,
         );
       }
@@ -1434,7 +1538,7 @@ function* assembleSessionSteps(
     }> = [];
     if (primaryBranch)
       targets.push({
-        repo: session.repo || defaultRepo().id,
+        repo: repoIdOf(session),
         branch: primaryBranch,
         source: "primary",
       });
@@ -1455,9 +1559,8 @@ function* assembleSessionSteps(
     for (const found of [
       ...footerPrsFor(prsBySession, session),
       ...(primaryBranch
-        ? discoveredByBranch.get(
-            `${session.repo || defaultRepo().id}\x00${primaryBranch}`,
-          ) || []
+        ? discoveredByBranch.get(`${repoIdOf(session)}\x00${primaryBranch}`) ||
+          []
         : []),
     ])
       targets.push({
@@ -1528,7 +1631,7 @@ function* assembleSessionSteps(
   // that surfaced without one — in memory now, on disk right after — so the
   // sidebar only ever has workspace rows to render. Runs after the title
   // registries above so a minted workspace takes the session's final name.
-  if (fileWorkspaces) yield ensureSessionWorkspaces(selectedSessions);
+  if (cooperative) yield ensureSessionWorkspaces(selectedSessions);
   else applyPendingSessionWorkspaces(selectedSessions);
 
   // Sort by lastActivity descending
@@ -1540,37 +1643,43 @@ function* assembleSessionSteps(
   return selectedSessions;
 }
 
-function assembleSessions(
-  slackSessions: UnifiedSession[],
-  linearSessions: UnifiedSession[],
-  nativeSessions: UnifiedSession[],
+/**
+ * Assemble the unified list synchronously from rows already in hand, the
+ * way legacy unit fixtures construct it: process-local overlays, pending
+ * workspace filings re-applied in memory, transcript paths resolved per row.
+ * Only the offline/test scanner runs this.
+ */
+export function assembleSessionList(
+  sources: SessionListSources,
   slice: SessionArchiveSlice = "include",
 ): UnifiedSession[] {
-  const steps = assembleSessionSteps(
-    slackSessions,
-    linearSessions,
-    nativeSessions,
-    slice,
-  );
+  const steps = assembleSessionSteps(sources, slice, {
+    resolveTranscripts: true,
+  });
   while (true) {
     const step = steps.next();
     if (step.done) return step.value;
   }
 }
 
-async function assembleSessionsAsync(
-  slackSessions: UnifiedSession[],
-  linearSessions: UnifiedSession[],
-  nativeSessions: UnifiedSession[],
+/**
+ * Cooperative assembly for the gateway: the rows come from the catalogs
+ * (session-cache.ts pages them), never from a directory, and the list never
+ * discovers transcripts. The config is read once asynchronously, the
+ * workspace projection is warmed first, and the assembly yields between
+ * batches so request traffic flows while a multi-thousand-row list is built.
+ */
+export async function assembleSessionListAsync(
+  sources: SessionListSources,
   slice: SessionArchiveSlice = "include",
 ): Promise<UnifiedSession[]> {
-  const steps = assembleSessionSteps(
-    slackSessions,
-    linearSessions,
-    nativeSessions,
-    slice,
-    true,
-  );
+  const [config] = await Promise.all([getConfigAsync(), warmWorkspacesAsync()]);
+  // These overlays read and mutate process-local state, so they deliberately
+  // remain on the server thread rather than crossing a Worker boundary.
+  const steps = assembleSessionSteps(sources, slice, {
+    cooperative: true,
+    repos: configuredRepos(config),
+  });
   let batch = 0;
   while (true) {
     const step = steps.next();
@@ -1580,47 +1689,23 @@ async function assembleSessionsAsync(
   }
 }
 
+/**
+ * Test-only: the list assembled from a synchronous scan of every source
+ * directory, the way legacy unit fixtures construct it. The live gateway
+ * never calls this. Its lists come from the list index and, for a cold
+ * rebuild, the catalogs (session-cache.ts); the scanner behind this refuses
+ * to run in any process that is not a test, a demo, or an offline script.
+ */
 export function getAllSessions(
   slice: SessionArchiveSlice = "include",
 ): UnifiedSession[] {
-  return assembleSessions(
-    scanSlackSessions(),
-    scanLinearSessions(),
-    scanNativeSessions(),
-    slice,
-  );
-}
-
-/** Alternative source of native rows for a cold rebuild. Returning undefined
- * falls back to the session directory scan. */
-export type NativeSessionRowSource = () => Promise<
-  UnifiedSession[] | undefined
->;
-
-/** Cooperative counterpart for request paths that can await a cold scan. */
-export async function getAllSessionsAsync(
-  slice: SessionArchiveSlice = "include",
-  nativeSource?: NativeSessionRowSource,
-): Promise<UnifiedSession[]> {
-  // Warm the indexes before row parsing starts. Running these in the same
-  // Promise.all as the scans lets the first transcript miss fall back to the
-  // synchronous builders while the cooperative warm-up is still in flight.
-  await Promise.all([warmWorkspacesAsync(), warmTranscriptIndexAsync()]);
-  const [slackSessions, linearSessions, nativeSessions] = await Promise.all([
-    collectSessionRows(slackSessionRows()),
-    collectSessionRows(linearSessionRows()),
-    nativeSource
-      ? nativeSource().then(
-          (rows) => rows ?? collectSessionRows(nativeSessionRows()),
-        )
-      : collectSessionRows(nativeSessionRows()),
-  ]);
-  // These overlays read and mutate process-local state, so they deliberately
-  // remain on the server thread rather than crossing a Worker boundary.
-  return await assembleSessionsAsync(
-    slackSessions,
-    linearSessions,
-    nativeSessions,
+  // Required lazily so the scanner stays out of this module's import graph.
+  const scan =
+    require("./session-source-scan") as typeof import("./session-source-scan");
+  return assembleSessionList(
+    sessionListSourcesFromDocuments(
+      scan.scanSessionSourceDocuments("getAllSessions"),
+    ),
     slice,
   );
 }
@@ -1633,6 +1718,12 @@ async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
       const filename = session.id.replace(/^slack-/, "") + ".json";
       const path = `${SLACK_SESSIONS_DIR}/${filename}`;
       if (existsSync(path)) unlinkSync(path);
+      // Record the deletion after the unlink, so a read that saw the file
+      // just before cannot resurrect it in the catalog projection.
+      await mirrorAgentSessionSource("slack", filename, {
+        source: null,
+        observedAt: Date.now(),
+      });
       break;
     }
     case "linear": {
@@ -1640,6 +1731,10 @@ async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
       const branch = session.id.replace(/^linear-/, "");
       const path = `${LINEAR_SESSIONS_DIR}/${branch}.json`;
       if (existsSync(path)) unlinkSync(path);
+      await mirrorAgentSessionSource("linear", `${branch}.json`, {
+        source: null,
+        observedAt: Date.now(),
+      });
       break;
     }
     case "opensession": {

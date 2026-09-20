@@ -230,6 +230,8 @@ export interface UnifiedSession {
   pstackMode?: boolean;
   /** Pi reasoning variant for runs in this session; unset = model default. */
   effort?: string;
+  /** Allow automatic model switching when the selected model is unavailable. Defaults to true. */
+  autoFallback?: boolean;
   /** Use OpenAI's priority service tier for ChatGPT OAuth Codex runs. */
   fastMode?: boolean;
   /**
@@ -650,6 +652,8 @@ export interface NativeSessionFile {
   presetNote?: string;
   pstackMode?: boolean; // sticky pstack engineering mode, toggled with /pstack or /poteto-mode
   effort?: string; // Pi reasoning variant for this session's runs; unset = model default
+  /** Allow automatic model switching when the selected model is unavailable. Defaults to true. */
+  autoFallback?: boolean;
   fastMode?: boolean; // OpenAI priority service tier for ChatGPT OAuth Codex runs
   accountId?: string; // pinned Claude/Codex provider account; unset = auto pool
   codexThreadId?: string; // codex thread id once the session has run on a codex model

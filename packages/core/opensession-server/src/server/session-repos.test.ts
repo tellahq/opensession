@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -16,10 +17,11 @@ import { getRepo } from "./worktree";
 const previousConfig = process.env.OPENSESSION_CONFIG;
 let configDir = "";
 
-beforeAll(() => {
+beforeAll(async () => {
   configDir = mkdtempSync(join(tmpdir(), "session-repos-config-"));
   const configPath = join(configDir, "config.json");
   process.env.OPENSESSION_CONFIG = configPath;
+  await getConfigAsync();
   writeFileSync(
     configPath,
     JSON.stringify({
@@ -46,11 +48,15 @@ beforeAll(() => {
       },
     }),
   );
+  await getConfigAsync();
 });
 
-afterAll(() => {
+afterAll(async () => {
   if (previousConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = previousConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = previousConfig;
+    await getConfigAsync();
+  }
   rmSync(configDir, { recursive: true, force: true });
 });
 

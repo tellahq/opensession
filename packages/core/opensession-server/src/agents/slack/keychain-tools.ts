@@ -1,10 +1,11 @@
 /**
  * opensession-keychain — borrow a teammate's credential for a stated purpose.
  *
- * Three tools, no secret-handling among them: list what exists, ask an owner
+ * No tool handles secret values: list what exists, ask an owner
  * for a scoped grant, list this session's grants. Approved calls go through
  * the broker (routes/keychain.ts) with the credential injected server-side, so
  * the model never holds the secret and cannot leak one it never had.
+ * Mac requests instead resolve one Keychain item locally and return status only.
  *
  * Interactive runs ONLY — same boundary as opensession-humans. An ask is a DM
  * to a teammate carrying a model-authored "purpose" string; letting untrusted
@@ -17,6 +18,11 @@
 
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 import { z } from "zod";
+import { githubLoginFor } from "../../server/shared/user-mappings";
+import {
+  macKeychainRequestSchema,
+  macKeychainRequests,
+} from "../../server/mac-keychain-requests";
 import {
   listCredentials,
   listGrants,
@@ -36,6 +42,53 @@ function text(s: string) {
 
 export function createKeychainMcpServer(ctx: KeychainToolContext) {
   const tools = [
+    tool(
+      "request_mac_keychain",
+      "Request ONE generic-password item from the prompting teammate's macOS Keychain for ONE exact HTTPS API call. Supply the item's exact service and account identifiers, never its value. This uses Apple's Keychain access prompt, not 1Password and not a vault-wide grant. No listing, shell commands, ACL changes, or raw secret export. The human opens this session in the Mac app, chooses OS → Keychain requests…, inspects the destination and selects Use once. macOS controls whether access needs Allow / Always Allow / Deny; recommend Allow, never Always Allow. Existing item permissions may allow access without another prompt. Requests expire after 10 minutes and can execute only once. Only HTTP status returns; no response data, headers or secret values enter model context. Do not use a model-provider endpoint as the destination. After a decline/failure do not retry without the human's go-ahead.",
+      macKeychainRequestSchema.shape,
+      async (args) => {
+        const login = githubLoginFor(ctx.user);
+        if (!login)
+          return text("A verified teammate with a GitHub login is required.");
+        const parsed = macKeychainRequestSchema.safeParse(args);
+        if (!parsed.success)
+          return text(
+            "Invalid request: provide one Keychain service, account, purpose and exact HTTPS request (body at most 512 characters). Never supply the secret itself.",
+          );
+        try {
+          const request = macKeychainRequests.request(
+            ctx.sessionId,
+            login,
+            parsed.data,
+          );
+          return text(
+            JSON.stringify({
+              ...request,
+              next: "Ask the human to open this session in the Mac app and choose OS → Keychain requests…. Check mac_keychain_request_status after they finish.",
+            }),
+          );
+        } catch {
+          return text(
+            "Couldn't create the request. This session may already have a pending request, or the queue is full. Check its status before asking again.",
+          );
+        }
+      },
+    ),
+    tool(
+      "mac_keychain_request_status",
+      "Check this session's macOS Keychain request. Returns only pending/claimed/completed/declined/failed and an HTTP status when completed. No secrets, response bodies, headers or helper errors are available. Missing requests expired or were revoked by a server restart.",
+      { requestId: z.string().uuid() },
+      async ({ requestId }) => {
+        const login = githubLoginFor(ctx.user);
+        return text(
+          JSON.stringify(
+            login
+              ? macKeychainRequests.status(requestId, ctx.sessionId, login)
+              : null,
+          ),
+        );
+      },
+    ),
     tool(
       "list_credentials",
       "List the credentials teammates have registered in the keychain — service, owner, target host, and any method/path limits. Secrets are never included. Use this to find out whether the access you need already exists before asking anyone for a token.",

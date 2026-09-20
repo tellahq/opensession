@@ -9,7 +9,7 @@ import type {
 import type { sectionsWithPatches } from "../../lib/pr-review-guide";
 import { WS_SUMMARY_REVIEW_CANVAS_CLEARANCE } from "../../lib/workspace-summary-classes";
 import { CodeFlow } from "../CodeFlow";
-import { CommentableDiff } from "../CommentableDiff";
+import { CommentableDiff } from "../DeferredDiff";
 import { DiffPanel } from "../DiffPanel";
 import { PrFileTree } from "./PrFileTree";
 

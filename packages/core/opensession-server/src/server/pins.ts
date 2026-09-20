@@ -13,7 +13,9 @@
 import { catalogDocuments } from "./catalog-documents";
 import { documentField } from "./shared/catalog-user-store";
 import { catalogUserStore } from "./shared/catalog-user-store";
-import { broadcastToAll } from "./ws-hub";
+import { allClients, broadcastToUser } from "./ws-hub";
+import { canonicalName, legacyNames } from "./shared/user-store-key";
+import { invalidateSidebarSessionResponses } from "./session-list-response-revision";
 
 /** Keep session-id strings only, de-duped. Defines the empty list too. */
 function clean(input: unknown): string[] {
@@ -56,6 +58,24 @@ export async function unpinEverywhere(keys: string[]): Promise<void> {
             ),
           },
     );
+    // The catalog key is a filename stem, not a display name. Resolve only
+    // connected identities, never enumerate session actors or user files.
+    invalidateSidebarSessionResponses();
+    const users = new Set(
+      [...allClients].map(
+        (ws) => ws.data.authUser || ws.data.sidebarScope?.user || ws.data.user,
+      ),
+    );
+    for (const user of users) {
+      if (user && [canonicalName(user), ...legacyNames(user)].includes(key))
+        broadcastToUser(user, {
+          type: "pins_changed",
+          user,
+          // A legacy document may coexist with the canonical one. Publish
+          // the same authoritative map a fresh GET would choose.
+          pins: await getPins(user),
+        });
+    }
   }
 }
 
@@ -69,6 +89,5 @@ export async function pinForUser(user: string, id: string): Promise<string[]> {
   const next = await store.update(user, (pins) =>
     pins.includes(id) ? pins : [id, ...pins],
   );
-  broadcastToAll({ type: "pins_changed", user, pins: next });
   return next;
 }

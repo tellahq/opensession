@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { afterAll, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,6 +13,7 @@ const previous = {
 };
 process.env.OPENSESSION_STATE_DIR = scratch;
 process.env.OPENSESSION_CONFIG = join(scratch, "config.json");
+await getConfigAsync();
 delete process.env.OPENSESSION_GITHUB_RUN_AUTH_FILE;
 const cwd = join(scratch, "repo");
 mkdirSync(cwd);
@@ -22,6 +24,7 @@ writeFileSync(
     repos: { app: { repo: cwd, ghRepo: "tellahq/app", defaultBranch: "main" } },
   }),
 );
+await getConfigAsync();
 const { readSlackSession, readAgentSessionListRowAsync } =
   await import("./sessions");
 const { runGithubEnv } = await import("./pi-runner");

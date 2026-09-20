@@ -9,13 +9,15 @@
  *   days never do).
  * - Pi's native session JSONL for per-request model, token and list-price usage,
  *   including retries, tool rounds, failed attempts and cache writes.
- * - The session store (~/.opensession-sessions) for who created what: person,
+ * - Central metadata and Slack catalogs for who created what: person,
  *   automation, mode, branch, repo.
  * - `gh pr list` for PRs opened/merged in the range, attributed to Open Session
  *   by head-branch ∈ {branches of code-mode sessions} (review sessions are
  *   ask-mode and don't own their branch, so reviewed-only PRs don't count).
  */
-
+import { catalogNativeSessions } from "./session-catalog-read";
+import { completeAgentSessionCatalogSources } from "./agent-session-catalog";
+import { getConfigAsync } from "./config";
 import {
   existsSync,
   mkdirSync,
@@ -26,12 +28,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { $ } from "bun";
-import {
-  isNativeSessionId,
-  OPENSESSION_SESSIONS_DIR,
-  stateDir,
-  statePath,
-} from "./paths";
+import { stateDir } from "./paths";
 import { configuredRepos, defaultRepo, githubBotLogins } from "./config";
 import { noteGithubGraphqlCall } from "./github-budget";
 import { readFeedback } from "../agents/github/feedback";
@@ -502,76 +499,68 @@ export function analyticsRepo(
 let sessionMetaCache: { at: number; map: Map<string, SessionMeta> } | null =
   null;
 
-function loadSessionMeta(): Map<string, SessionMeta> {
+let sessionMetaRefresh: Promise<Map<string, SessionMeta>> | null = null;
+
+export async function loadSessionMeta(): Promise<Map<string, SessionMeta>> {
   if (sessionMetaCache && Date.now() - sessionMetaCache.at < 60_000)
     return sessionMetaCache.map;
+  return (sessionMetaRefresh ??= refreshSessionMeta().finally(() => {
+    sessionMetaRefresh = null;
+  }));
+}
+
+async function refreshSessionMeta(): Promise<Map<string, SessionMeta>> {
   const map = new Map<string, SessionMeta>();
-  try {
-    for (const file of readdirSync(OPENSESSION_SESSIONS_DIR)) {
-      if (!isNativeSessionId(file) || !file.endsWith(".json")) continue;
-      try {
-        const s = JSON.parse(
-          readFileSync(`${OPENSESSION_SESSIONS_DIR}/${file}`, "utf-8"),
-        );
-        const id = String(s.id || file.slice(0, -5));
-        const createdBy = String(s.createdBy || "");
-        const autoMatch = createdBy.match(/^(.*) \(automation\)$/);
-        map.set(id, {
-          id,
-          createdAt: String(s.createdAt || ""),
-          createdBy,
-          createdByLogin: String(s.createdByLogin || ""),
-          mode: String(s.mode || ""),
-          model: String(s.model || ""),
-          branch: String(s.branch || ""),
-          repo: analyticsRepo(
-            String(s.repo || s.project || ""),
-            String(s.worktreeDir || ""),
-          ),
-          automationName: autoMatch ? autoMatch[1] : null,
-          goalId: s.goalId ? String(s.goalId) : null,
-          parentSessionId: s.parentSessionId ? String(s.parentSessionId) : null,
-          isReview:
-            id.startsWith("bks-ghpr-") || createdBy === "GitHub (automation)",
-        });
-      } catch {}
-    }
-  } catch (e) {
-    console.error("[analytics] session scan failed:", e);
+  const repos = configuredRepos(await getConfigAsync());
+  for (const s of await catalogNativeSessions()) {
+    const id = s.id;
+    const createdBy = String(s.createdBy || "");
+    const autoMatch = createdBy.match(/^(.*) \(automation\)$/);
+    map.set(id, {
+      id,
+      createdAt: String(s.createdAt || ""),
+      createdBy,
+      createdByLogin: String(s.createdByLogin || ""),
+      mode: String(s.mode || ""),
+      model: String(s.model || ""),
+      branch: String(s.branch || ""),
+      repo: analyticsRepo(
+        String(s.repo || ("project" in s ? s.project : "") || ""),
+        String(s.worktreeDir || ""),
+        repos,
+      ),
+      automationName: autoMatch ? autoMatch[1] : null,
+      goalId: s.goalId ? String(s.goalId) : null,
+      parentSessionId: s.parentSessionId ? String(s.parentSessionId) : null,
+      isReview:
+        id.startsWith("bks-ghpr-") || createdBy === "GitHub (automation)",
+    });
   }
   sessionMetaCache = { at: Date.now(), map };
   return map;
 }
 
-// The Slack agent keeps its threads in its own store, so they never reach
-// loadSessionMeta and used to land in an anonymous "Slack" row. They do record
-// who wrote the message: read that (read-only, per AGENTS.md) and credit them.
-const SLACK_SESSIONS_DIR = statePath(".slack-sessions");
-// GitHub delivery replay state remains in this legacy directory so upgrades
-// preserve accepted delivery IDs after webhook ownership moved to GithubAgent.
-const SLACK_STORE_SKIP = new Set([
-  "processed-events.json",
-  "github-deliveries.json",
-]);
 let slackOwnerCache: { at: number; map: Map<string, string> } | null = null;
 
-/** Audit session id (`slack-<thread key>`) to the raw user the thread names. */
-function loadSlackSessionOwners(): Map<string, string> {
+/** Audit session id to its creator, projected by the Slack source writer. */
+let slackOwnerRefresh: Promise<Map<string, string>> | null = null;
+
+export async function loadSlackSessionOwners(): Promise<Map<string, string>> {
   if (slackOwnerCache && Date.now() - slackOwnerCache.at < 60_000)
     return slackOwnerCache.map;
+  return (slackOwnerRefresh ??= refreshSlackSessionOwners().finally(() => {
+    slackOwnerRefresh = null;
+  }));
+}
+
+async function refreshSlackSessionOwners(): Promise<Map<string, string>> {
   const map = new Map<string, string>();
-  try {
-    for (const file of readdirSync(SLACK_SESSIONS_DIR)) {
-      if (!file.endsWith(".json") || SLACK_STORE_SKIP.has(file)) continue;
-      try {
-        const s = JSON.parse(
-          readFileSync(`${SLACK_SESSIONS_DIR}/${file}`, "utf-8"),
-        );
-        const user = String(s?.userId || "").trim();
-        if (user) map.set(`slack-${file.slice(0, -5)}`, user);
-      } catch {}
-    }
-  } catch {}
+  for (const { file, data } of await completeAgentSessionCatalogSources(
+    "slack",
+  )) {
+    const user = String(data.userId || "").trim();
+    if (user) map.set(`slack-${file.slice(0, -5)}`, user);
+  }
   slackOwnerCache = { at: Date.now(), map };
   return map;
 }
@@ -1180,8 +1169,8 @@ export async function buildAnalytics(
   to: string,
 ): Promise<AnalyticsSummary> {
   const dates = utcDatesBetween(from, to);
-  const meta = loadSessionMeta();
-  const slackOwners = loadSlackSessionOwners();
+  const meta = await loadSessionMeta();
+  const slackOwners = await loadSlackSessionOwners();
 
   // PRs: query every repo that has ever hosted a code-mode session, and
   // attribute by head branch against those sessions' branches.

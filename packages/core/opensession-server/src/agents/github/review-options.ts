@@ -10,7 +10,9 @@
  *     "summaryOnlyOverFiles": 80,                       // giant PRs get a summary, no inline noise
  *     "skipKeywords": ["[skip-review]"],                // in the PR title → no auto review
  *     "secretScan": true,                               // TruffleHog scan of the PR's added lines
- *     "mergeRisk": true                                 // diff-only merge-risk (recoverability) score
+ *     "mergeRisk": true,                                // diff-only merge-risk (recoverability) score
+ *     "rules": [ { "name", "when", "then" } ],          // custom scoring rules (review-rules.ts)
+ *     "groups": [ { "name", "rules": [ ... ] } ]         // rules reported together under one name
  *   }
  *
  * Auto-review gating (skipKeywords) reads the repo's MAIN checkout copy (the
@@ -18,6 +20,12 @@
  * finding filters read the PR-head worktree copy for exactness.
  */
 import { existsSync, readFileSync } from "fs";
+import {
+  capPromptRules,
+  normalizeReviewRuleGroups,
+  normalizeReviewRules,
+  type ReviewRule,
+} from "./review-rules";
 
 export interface ReviewOptions {
   ignoreGlobs: string[];
@@ -32,6 +40,9 @@ export interface ReviewOptions {
   secretScan: boolean;
   /** Separate tool-less merge-risk score (merge-risk.ts) next to quality. */
   mergeRisk: boolean;
+  /** Custom rules (review-rules.ts): top-level `rules` first, then every
+   *  group's rules in file order, each carrying its group name. */
+  rules: ReviewRule[];
 }
 
 export const REVIEW_OPTION_DEFAULTS: ReviewOptions = {
@@ -42,6 +53,7 @@ export const REVIEW_OPTION_DEFAULTS: ReviewOptions = {
   testOnBase: true,
   secretScan: true,
   mergeRisk: true,
+  rules: [],
 };
 
 const OPTIONS_FILE = ".os-review.json";
@@ -52,11 +64,30 @@ export function loadReviewOptions(repoDir: string | undefined): ReviewOptions {
   if (!existsSync(path)) return REVIEW_OPTION_DEFAULTS;
   try {
     const raw = JSON.parse(readFileSync(path, "utf-8"));
+    const rejected = collectReviewRules(raw).rejected;
+    if (rejected.length)
+      console.warn(
+        `[github] ${path}: dropped malformed review rule(s) ${rejected.join(", ")}`,
+      );
     return normalizeReviewOptions(raw);
   } catch (e) {
     console.warn(`[github] malformed ${path} — using review defaults:`, e);
     return REVIEW_OPTION_DEFAULTS;
   }
+}
+
+/** Flat rules, then grouped ones; the per-config prompt-rule cap spans both. */
+function collectReviewRules(raw: any): {
+  rules: ReviewRule[];
+  rejected: string[];
+} {
+  const flat = normalizeReviewRules(raw?.rules);
+  const grouped = normalizeReviewRuleGroups(raw?.groups);
+  const capped = capPromptRules([...flat.rules, ...grouped.rules]);
+  return {
+    rules: capped.rules,
+    rejected: [...flat.rejected, ...grouped.rejected, ...capped.rejected],
+  };
 }
 
 /** Pure merge/validation (unit-tested separately from the fs read). */
@@ -86,6 +117,7 @@ export function normalizeReviewOptions(raw: any): ReviewOptions {
     secretScan:
       typeof raw.secretScan === "boolean" ? raw.secretScan : d.secretScan,
     mergeRisk: typeof raw.mergeRisk === "boolean" ? raw.mergeRisk : d.mergeRisk,
+    rules: collectReviewRules(raw).rules,
   };
 }
 

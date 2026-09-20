@@ -74,6 +74,11 @@ export async function qualifySandboxConnection(
     if (provider === "daytona") {
       const { qualifyDaytonaConnection } = await import("./adapters/daytona");
       await qualifyDaytonaConnection();
+    } else if (provider === "tart") {
+      const { qualifyTartConnection } = await import("./adapters/tart");
+      await qualifyTartConnection((stage, progress) =>
+        update({ stage, progress }),
+      );
     } else {
       const { qualifyBoxConnection } = await import("./adapters/box");
       await qualifyBoxConnection((stage, progress) =>

@@ -9,7 +9,7 @@ import { sessionAgentName } from "../lib/markdown";
 import { useAgentName } from "../hooks/useAgentName";
 import type { TranscriptEntry } from "../lib/types";
 import { CodeHighlight } from "./LazyCode";
-import { ToolInputDiff } from "./ToolInputDiff";
+import { ToolInputDiff } from "./DeferredDiff";
 import { langForFile, langForGrep } from "../lib/lang";
 import { toolInputDiff } from "../lib/tool-input-diff";
 import {

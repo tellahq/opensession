@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 import { afterEach, describe, expect, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -59,6 +60,7 @@ describe("GitHub integration status", () => {
     writeFileSync(envFile, "ENABLE_GITHUB_AGENT=true\n");
     process.env.HOME = dir;
     process.env.OPENSESSION_CONFIG = config;
+    await getConfigAsync();
     process.env.OPENSESSION_ENV_FILE = envFile;
     process.env.ENABLE_GITHUB_AGENT = "true";
 

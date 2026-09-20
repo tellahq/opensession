@@ -273,7 +273,9 @@ try {
   const target = await realpath(resolve(root, path));
   if (!target.startsWith(prefix)) throw new Error("outside workspace");
   handle = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
-  const descriptor = await readlink("/proc/self/fd/" + handle.fd);
+  // Linux resolves the open descriptor's real path; macOS guests have no
+  // /proc, so the already-canonical target stands in there.
+  const descriptor = await readlink("/proc/self/fd/" + handle.fd).catch(() => target);
   const canonical = await realpath(descriptor);
   const [opened, current] = await Promise.all([handle.stat(), fileStat(canonical)]);
   if (!opened.isFile() || opened.size > limit || opened.dev !== current.dev || opened.ino !== current.ino || !canonical.startsWith(prefix))
@@ -303,7 +305,7 @@ async function worktreeFile(
   if (!validPath(path)) return null;
   if (exec.remote) {
     return execText(exec, [
-      "/home/ubuntu/.bun/bin/bun",
+      exec.guestBun ?? "/home/ubuntu/.bun/bin/bun",
       "-e",
       REMOTE_BOUNDED_READ,
       path,

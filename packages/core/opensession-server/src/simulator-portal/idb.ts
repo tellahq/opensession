@@ -416,12 +416,12 @@ const acquireCapacity = async (
       ) {
         if (
           previous.repositoryRoot === undefined ||
-          previous.durableRoot === undefined ||
-          previous.durableRoot !== owner.durableRoot
+          previous.durableRoot === undefined
         )
           continue;
         try {
-          await validatedPersistentSet(previous, owner.durableRoot);
+          // Capacity is host-wide; a dead owner can belong to another instance.
+          await validatedPersistentSet(previous, previous.durableRoot);
           repositoryRecovery = await acquireRepository(
             runner,
             simctl,
@@ -457,7 +457,7 @@ const acquireCapacity = async (
         continue;
       }
       try {
-        await cleanupStale(runner, simctl, current, owner.durableRoot);
+        await cleanupStale(runner, simctl, current, previous.durableRoot);
       } catch (cause) {
         await rm(recovery, { recursive: true, force: true });
         await repositoryRecovery?.release();
@@ -1155,6 +1155,7 @@ export const clearIdbSimulatorStorage = async (
         throw error;
     }
     const profiles: Array<{ root: string; deviceSet: string }> = [];
+    const metadataOnlyProfiles: string[] = [];
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.isSymbolicLink())
         throw new Error("Invalid simulator profile entry; refusing clear");
@@ -1178,6 +1179,7 @@ export const clearIdbSimulatorStorage = async (
         )
           throw error;
       }
+      let hasStoredDevice = true;
       if (!clearing) {
         if ((await lstat(metadataPath)).isSymbolicLink())
           throw new Error("Unsafe simulator profile metadata; refusing clear");
@@ -1194,8 +1196,25 @@ export const clearIdbSimulatorStorage = async (
         ) {
           throw new Error("Invalid simulator profile metadata; refusing clear");
         }
+        hasStoredDevice = metadata.udid !== undefined;
       }
       const deviceSet = join(root, "set");
+      try {
+        // lstat distinguishes the pre-device crash gap from a dangling symlink.
+        await lstat(deviceSet);
+      } catch (error) {
+        if (
+          !hasStoredDevice &&
+          !clearing &&
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
+          metadataOnlyProfiles.push(root);
+          continue;
+        }
+        throw error;
+      }
       if ((await realpath(deviceSet)) !== deviceSet)
         throw new Error("Unsafe simulator device set; refusing clear");
       profiles.push({ root, deviceSet });
@@ -1218,6 +1237,8 @@ export const clearIdbSimulatorStorage = async (
       storage,
       new Set(profiles.map(({ deviceSet }) => deviceSet)),
     );
+    for (const root of metadataOnlyProfiles)
+      await rm(root, { recursive: true });
     for (const { root, deviceSet } of profiles) {
       await writeJsonAtomic(join(root, ".clearing"), { version: 1 });
       await rm(join(root, "profile.json"), { force: true });

@@ -1,0 +1,3 @@
+[test]
+# Even a direct `bun test file.test.ts` must not inherit the operator's stores.
+preload = ["./scripts/test-setup.ts"]

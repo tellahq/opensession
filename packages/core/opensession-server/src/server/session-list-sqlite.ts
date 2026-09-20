@@ -17,8 +17,21 @@ import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import type { UnifiedSession } from "./types";
+import { SESSION_BRANCH_MATCH_LIMIT } from "./session-list-protocol";
 
 export type SessionListSlice = "include" | "exclude" | "only";
+
+/** Materialize the bounded ownership set FIRST. An `id IN (subquery)` plus
+ * `archived = 0` lets SQLite choose an archive-index scan of all live sessions.
+ * CROSS JOIN fixes the small relation as the outer loop, then probes row PKs. */
+export const SESSION_BRANCH_LOOKUP_SQL = `
+  SELECT s.payload FROM (
+    SELECT DISTINCT session_id FROM session_list_branches
+    WHERE repo IN (?, ?) AND branch = ?
+    LIMIT ${SESSION_BRANCH_MATCH_LIMIT + 1}
+  ) matches CROSS JOIN session_list s ON s.id = matches.session_id
+  WHERE s.archived = 0
+`;
 
 type StoredRow = {
   payload: string;
@@ -127,6 +140,40 @@ export class SessionListStore {
         if (existsSync(file)) chmodSync(file, 0o600);
       }
     }
+    // A maintained relation, not json_each over every session at lookup time.
+    // Upgrade from the existing catalog projection only, never session files.
+    this.db.transaction(() => {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS session_list_branches (
+          session_id TEXT NOT NULL,
+          repo TEXT NOT NULL,
+          branch TEXT NOT NULL,
+          PRIMARY KEY (repo, branch, session_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_list_branches_session
+          ON session_list_branches(session_id);
+      `);
+      const seeded = this.db
+        .query(
+          "SELECT 1 FROM session_list_meta WHERE key = 'branch_membership:v1'",
+        )
+        .get();
+      if (!seeded) {
+        this.db.exec(`
+          INSERT OR IGNORE INTO session_list_branches
+            SELECT id, COALESCE(repo, ''), branch FROM session_list
+            WHERE branch IS NOT NULL AND branch != '' AND archived = 0
+              AND COALESCE(json_extract(payload, '$.repoLess'), 0) = 0;
+          INSERT OR IGNORE INTO session_list_branches
+            SELECT s.id, json_extract(a.value, '$.repo'), json_extract(a.value, '$.branch')
+            FROM session_list s, json_each(s.payload, '$.attachedRepos') a
+            WHERE s.archived = 0
+              AND json_extract(a.value, '$.repo') IS NOT NULL
+              AND json_extract(a.value, '$.branch') IS NOT NULL;
+          INSERT INTO session_list_meta VALUES ('branch_membership:v1', '1');
+        `);
+      }
+    })();
     this.upsertStatement = this.db.prepare(`
 			INSERT INTO session_list (
 				id, source, archived, last_activity_ms, workspace_id, worktree_dir,
@@ -172,10 +219,29 @@ export class SessionListStore {
       session.branch || null,
       JSON.stringify(session),
     );
+    this.db.run("DELETE FROM session_list_branches WHERE session_id = ?", [
+      session.id,
+    ]);
+    if (!session.archived) {
+      const branches = [...(session.attachedRepos ?? [])];
+      if (session.branch && !session.repoLess)
+        branches.push({
+          repo: session.repo || "",
+          branch: session.branch,
+          dir: session.worktreeDir || "",
+        });
+      for (const { repo, branch } of branches) {
+        if (!branch) continue;
+        this.db.run(
+          "INSERT OR IGNORE INTO session_list_branches VALUES (?, ?, ?)",
+          [session.id, repo, branch],
+        );
+      }
+    }
   }
 
   upsert(session: UnifiedSession): void {
-    this.write(session);
+    this.db.transaction(() => this.write(session))();
   }
 
   upsertMany(sessions: UnifiedSession[]): void {
@@ -195,6 +261,7 @@ export class SessionListStore {
 
   replaceAll(sessions: UnifiedSession[]): void {
     this.db.transaction((rows: UnifiedSession[]) => {
+      this.db.run("DELETE FROM session_list_branches");
       this.db.run("DELETE FROM session_list");
       for (const session of rows) this.write(session);
       this.markCovered("include");
@@ -218,7 +285,12 @@ export class SessionListStore {
   }
 
   remove(id: string): void {
-    this.db.run("DELETE FROM session_list WHERE id = ?", [id]);
+    this.db.transaction(() => {
+      this.db.run("DELETE FROM session_list_branches WHERE session_id = ?", [
+        id,
+      ]);
+      this.db.run("DELETE FROM session_list WHERE id = ?", [id]);
+    })();
   }
 
   get(id: string): UnifiedSession | null {
@@ -291,7 +363,7 @@ export class SessionListStore {
         delete session.archived;
         delete session.archivedReason;
       }
-      this.write(session);
+      this.upsert(session);
     } catch {
       this.remove(id);
     }
@@ -343,6 +415,20 @@ export class SessionListStore {
    * coverage a branch lookup could miss rows. */
   listLiveByBranchCovered(branches: string[]): UnifiedSession[] | null {
     return this.hasCoverage("exclude") ? this.listLiveByBranch(branches) : null;
+  }
+
+  /** Exact primary/attached-repository ownership, with a bounded response.
+   * Unknown coverage is NOT an empty result and must never trigger file scans. */
+  listLiveByRepoBranchCovered(
+    repo: string,
+    branch: string,
+    defaultRepoId: string,
+  ): UnifiedSession[] | null {
+    if (!this.hasCoverage("exclude")) return null;
+    const rows = this.db
+      .query(SESSION_BRANCH_LOOKUP_SQL)
+      .all(repo, repo === defaultRepoId ? "" : repo, branch) as StoredRow[];
+    return decodeRows(rows);
   }
 
   /** Every materialized member of one known workspace, live or archived. */

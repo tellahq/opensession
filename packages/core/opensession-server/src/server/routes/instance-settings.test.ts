@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -17,10 +18,10 @@ const saved = {
 };
 const dirs: string[] = [];
 
-function seed(options: { storage?: boolean } = {}): {
+async function seed(options: { storage?: boolean } = {}): Promise<{
   root: string;
   config: string;
-} {
+}> {
   const root = mkdtempSync(join(tmpdir(), "opensession-instance-settings-"));
   dirs.push(root);
   const config = join(root, "config.json");
@@ -57,6 +58,7 @@ function seed(options: { storage?: boolean } = {}): {
     }),
   );
   process.env.OPENSESSION_CONFIG = config;
+  await getConfigAsync();
   process.env.OPENSESSION_STATE_DIR = root;
   process.env.OPENSESSION_GITHUB_CLIENT_ID = "test-client";
   return { root, config };
@@ -118,7 +120,7 @@ afterEach(() => {
 
 describe("instance general settings", () => {
   test("writes the organization name and preserves unrelated config", async () => {
-    const { config } = seed();
+    const { config } = await seed();
     const response = await handleInstanceSettingsRoutes(
       context("/api/settings/general", "PUT", {
         login: "ada",
@@ -133,7 +135,7 @@ describe("instance general settings", () => {
   });
 
   test("persists the worktree policy for new shared-checkout sessions", async () => {
-    const { config } = seed();
+    const { config } = await seed();
     const initial = await handleInstanceSettingsRoutes(
       context("/api/settings/worktrees", "GET", { login: "ada" }),
     );
@@ -154,7 +156,7 @@ describe("instance general settings", () => {
   });
 
   test("rejects an invalid worktree policy", async () => {
-    const { config } = seed();
+    const { config } = await seed();
     const response = await handleInstanceSettingsRoutes(
       context("/api/settings/worktrees", "PUT", {
         login: "ada",
@@ -166,7 +168,7 @@ describe("instance general settings", () => {
   });
 
   test("rejects shared-setting writes from non-admin teammates", async () => {
-    const { config } = seed();
+    const { config } = await seed();
     for (const path of [
       "/api/settings/general",
       "/api/settings/identity",
@@ -191,7 +193,7 @@ describe("instance general settings", () => {
   });
 
   test("masks the asset secret and retains it when a draft leaves it blank", async () => {
-    seed({ storage: true });
+    await seed({ storage: true });
     const response = await handleInstanceSettingsRoutes(
       context("/api/settings/asset-storage", "GET", { login: "ada" }),
     );
@@ -229,7 +231,7 @@ describe("instance general settings", () => {
   });
 
   test("switches back to local without deleting unrelated config", async () => {
-    const { config } = seed({ storage: true });
+    const { config } = await seed({ storage: true });
     const response = await handleInstanceSettingsRoutes(
       context("/api/settings/asset-storage", "PUT", {
         login: "ada",
@@ -244,7 +246,7 @@ describe("instance general settings", () => {
   });
 
   test("stores, serves, and removes the organization icon", async () => {
-    seed();
+    await seed();
     const bytes = squarePngHeader();
     const upload = await handleInstanceSettingsRoutes(
       context("/api/settings/general/icon", "POST", { login: "ada", bytes }),
@@ -275,7 +277,7 @@ describe("instance general settings", () => {
   });
 
   test("rejects non-square or oversized icon dimensions", async () => {
-    seed();
+    await seed();
     const bytes = squarePngHeader(4096);
     const response = await handleInstanceSettingsRoutes(
       context("/api/settings/general/icon", "POST", { login: "ada", bytes }),
@@ -285,7 +287,7 @@ describe("instance general settings", () => {
   });
 
   test("rejects oversized icon bodies before storing them", async () => {
-    seed();
+    await seed();
     const response = await handleInstanceSettingsRoutes(
       context("/api/settings/general/icon", "POST", {
         login: "ada",

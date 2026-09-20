@@ -119,6 +119,70 @@ describe("transcript snapshots", () => {
     h.snapshot("plain-turn-context-fencing", { sessionId: sid, calls });
   });
 
+  test("duplicate first prompt uses only the copied boundary, not the live source", async () => {
+    if (!h.ready) return;
+    const { importLegacyTranscript } = await import("./actor-transcript");
+    const { readDuplicateSessionTranscript } =
+      await import("./session-duplicate");
+    const { findSessionAsync } = await import("./session-cache");
+    const sourceId = "bks-snap-duplicate-source";
+    const sid = "bks-snap-duplicate";
+    h.writeSession(sourceId, { mode: "scratch", title: "Source conversation" });
+    h.writeSession(sid, {
+      mode: "scratch",
+      title: "Copied conversation",
+      duplicatedFromSessionId: sourceId,
+    });
+    await importLegacyTranscript(
+      sourceId,
+      [
+        {
+          id: "copy-one",
+          type: "user",
+          content: "Investigate the retry loop.",
+          timestamp: "2026-01-01T00:00:00Z",
+        },
+        {
+          id: "copy-two",
+          type: "assistant",
+          content: "The retry boundary is off by one.",
+          timestamp: "2026-01-01T00:00:01Z",
+        },
+        {
+          id: "copy-three",
+          type: "assistant",
+          content: "LATER SOURCE MESSAGE MUST NOT LEAK",
+          timestamp: "2026-01-01T00:00:02Z",
+        },
+      ],
+      "test",
+      null,
+    );
+    const source = await findSessionAsync(sourceId);
+    expect(source).not.toBeNull();
+    const copied = await readDuplicateSessionTranscript(source!, "copy-two");
+    expect(copied).toHaveLength(2);
+    await importLegacyTranscript(sid, copied!, "duplicate", null);
+
+    const calls: FakeCall[] = [];
+    await h.prompt({
+      sessionId: sid,
+      content: "Explain this boundary.",
+      collect: calls,
+      turns: [
+        {
+          kind: "clean",
+          engineSessionId: "ses_snap_duplicate",
+          text: ["The loop stops one attempt early."],
+        },
+      ],
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].prompt).toContain("The retry boundary is off by one.");
+    expect(calls[0].prompt).not.toContain("LATER SOURCE MESSAGE MUST NOT LEAK");
+    expect(calls[0].prompt.match(/Explain this boundary\./g)).toHaveLength(1);
+  });
+
   // An automation-owned session, prompted by a human: the case that must keep
   // the automation's scoping rather than inheriting an interactive run's. Two
   // strips are visible in the fixture: the allowlist drops `snapshot-beta`, and

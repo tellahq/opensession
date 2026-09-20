@@ -7,10 +7,12 @@
  */
 import { randomUUIDv7 } from "bun";
 import { existsSync, readFileSync } from "fs";
+import { scheduledPromptMessage } from "@tellahq/opensession-protocol/notices";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { stateDir } from "./paths";
 import { registerSessionTimerHandler, sessionKernel } from "./session-kernel";
 import { getSessionControl } from "./session-control";
+import { scheduledActor } from "./session-actors";
 
 let STORE_PATH = stateDir("scheduled-prompts.json");
 
@@ -75,10 +77,13 @@ registerSessionTimerHandler(TIMER_KIND, async (timer) => {
     typeof prompt.prompt !== "string"
   )
     throw new Error("Invalid scheduled prompt timer payload");
+  // The sentinel is what lets every client show the turn as a scheduled
+  // check-back instead of words the person typed (protocol notices.ts), and
+  // the sender keeps the person's credit without counting as their presence.
   const result = await getSessionControl().deliverToSession(
     prompt.sessionId,
-    prompt.prompt,
-    prompt.user,
+    scheduledPromptMessage(prompt.id, prompt.prompt),
+    scheduledActor(prompt.user),
     { deliveryId: prompt.id },
   );
   if (result.status === "error") throw new Error(result.message);

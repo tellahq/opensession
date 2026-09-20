@@ -6,24 +6,26 @@
  * A session that reports into an auto-triage discussion has that discussion
  * resolved first and is archived only once that succeeded. A failed
  * resolution therefore leaves the session unarchived, which keeps it in the
- * sweep's candidate set: the next pass retries both steps, so the session file
- * itself is the retry index and no separate pending-resolution state exists.
+ * sweep's catalog candidate set: the next pass retries both steps, so the
+ * metadata itself is the retry index and no separate pending-resolution state exists.
  */
+import { catalogNativeSessions } from "./session-catalog-read";
 import { executeSessionProjection } from "./session-projection-executor";
-import { readdirSync, readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { plainApiUrl } from "./config";
 import {
   discussionAgentConfigured,
   resolveDiscussion,
   withDiscussionOrder,
 } from "../agents/plain/discussion-api";
-import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
+import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { updateSessionFile } from "./session-cache";
 import { releasePreviewPathLease } from "./preview-path-leases";
 import type { NativeSessionFile } from "./types";
 
-const HOME = homeDir();
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
+
+const PLAIN_ARCHIVE_BATCH = 40;
 
 type PlainSessionCandidate = { data: NativeSessionFile };
 type SessionProjector = typeof executeSessionProjection;
@@ -43,18 +45,10 @@ export async function resolvePlainDiscussion(
   );
 }
 
-function activePlainSessions(): PlainSessionCandidate[] {
-  if (!existsSync(SESSIONS_DIR)) return [];
-  const out: PlainSessionCandidate[] = [];
-  for (const file of readdirSync(SESSIONS_DIR)) {
-    if (!file.endsWith(".json")) continue;
-    const path = `${SESSIONS_DIR}/${file}`;
-    try {
-      const data = JSON.parse(readFileSync(path, "utf-8")) as NativeSessionFile;
-      if (data.id && data.plainThreadId && !data.archived) out.push({ data });
-    } catch {}
-  }
-  return out;
+export async function activePlainSessions(): Promise<PlainSessionCandidate[]> {
+  return (await catalogNativeSessions())
+    .filter((data) => data.plainThreadId && !data.archived)
+    .map((data) => ({ data }));
 }
 
 /**
@@ -96,7 +90,7 @@ export async function archiveSessionsForThread(
 ): Promise<number> {
   return archivePlainSessionCandidates(
     threadId,
-    activePlainSessions(),
+    await activePlainSessions(),
     executeSessionProjection,
   );
 }
@@ -121,18 +115,29 @@ export async function archivePlainSessionCandidates(
   resolveSessionDiscussion: DiscussionResolver = resolvePlainDiscussion,
 ): Promise<number> {
   let archived = 0;
-  for (const { data } of sessions) {
-    if (data.plainThreadId !== threadId) continue;
+  for (const { data } of sessions
+    .filter((row) => row.data.plainThreadId === threadId)
+    .slice(0, PLAIN_ARCHIVE_BATCH)) {
     try {
       if (data.plainDiscussionId)
         await resolveSessionDiscussion(data.plainDiscussionId);
       await project(data.id, "plain_archive_set", () =>
-        updateSessionFile(data.id, (current) => ({
-          ...current,
-          archived: true,
-          archivedAt: new Date().toISOString(),
-          archivedReason: "plain",
-        })),
+        updateSessionFile(data.id, (current) => {
+          if (
+            current.archived ||
+            current.plainThreadId !== threadId ||
+            current.plainDiscussionId !== data.plainDiscussionId
+          )
+            throw new Error(
+              "Plain session changed since candidate selection; retry from the catalog",
+            );
+          return {
+            ...current,
+            archived: true,
+            archivedAt: new Date().toISOString(),
+            archivedReason: "plain",
+          };
+        }),
       );
       try {
         releaseLease(data.id);
@@ -180,16 +185,20 @@ let sweepInterval: ReturnType<typeof setInterval> | null = null;
 export function startPlainArchiveSweep(): void {
   if (sweepInterval) return;
 
+  let afterId = "";
+  let running = false;
   const sweep = async () => {
-    const sessions = activePlainSessions();
-    const threadIds = [
-      ...new Set(sessions.map((s) => s.data.plainThreadId!)),
-    ].slice(0, 40);
+    const all = await activePlainSessions();
+    let pending = all.filter((row) => row.data.id > afterId);
+    if (!pending.length) pending = all;
+    const sessions = pending.slice(0, PLAIN_ARCHIVE_BATCH);
+    afterId = sessions.at(-1)?.data.id ?? "";
+    const threadIds = [...new Set(sessions.map((s) => s.data.plainThreadId!))];
     let archived = 0;
     for (const threadId of threadIds) {
       const status = await fetchThreadStatus(threadId);
       if (status === "DONE")
-        archived += await archiveSessionsForThread(threadId);
+        archived += await archivePlainSessionCandidates(threadId, sessions);
     }
     if (archived > 0)
       console.log(
@@ -198,9 +207,13 @@ export function startPlainArchiveSweep(): void {
   };
 
   const runSweep = () => {
-    void sweep().catch((error) =>
-      console.error("[plain-archive] Sweep failed:", error),
-    );
+    if (running) return;
+    running = true;
+    void sweep()
+      .catch((error) => console.error("[plain-archive] Sweep failed:", error))
+      .finally(() => {
+        running = false;
+      });
   };
 
   sweepInterval = setInterval(runSweep, 15 * 60 * 1000);

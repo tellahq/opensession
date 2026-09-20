@@ -148,36 +148,9 @@ export function prImageMarkdown(img: UploadedPrImage): string {
 // a PUBLIC repo, GitHub's camo proxy caches the image and anyone reading the
 // thread sees it — equivalent to publishing the screenshot (PR #78 review
 // P1). The registry can contain PUBLIC repos, and the instance credential
-// can post to them, so callers MUST gate image
-// comments on visibility. Fail-closed: unknown visibility refuses.
-const repoVisibilityCache = new Map<string, boolean>();
-
-/** True = private, false = public, null = could not determine (treat as
- *  public / refuse). Cached per ghRepo for the process lifetime. */
-export async function repoIsPrivate(ghRepo: string): Promise<boolean | null> {
-  const cached = repoVisibilityCache.get(ghRepo);
-  if (cached !== undefined) return cached;
-  const { botGhToken } = await import("./github-limit");
-  const token = await botGhToken({ repo: ghRepo });
-  if (!token) return null;
-  try {
-    const res = await fetch(`https://api.github.com/repos/${ghRepo}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-        "User-Agent": "opensession",
-      },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return null;
-    const data: any = await res.json().catch(() => null);
-    if (typeof data?.private !== "boolean") return null;
-    repoVisibilityCache.set(ghRepo, data.private);
-    return data.private;
-  } catch {
-    return null;
-  }
-}
+// can post to them, so callers MUST gate image comments on visibility with
+// repoIsPrivate (repo-visibility.ts). Fail-closed: unknown visibility refuses.
+export { repoIsPrivate } from "./repo-visibility";
 
 /**
  * Substitute `{{image:N}}` placeholders (1-based) in a markdown body with the

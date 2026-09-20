@@ -79,6 +79,17 @@ if (sub === "runner-host") {
   process.argv.splice(2, 1);
   const { runSessionKernelService } = await import("./session-kernel-service");
   await runSessionKernelService();
+} else if (sub === "seed-session-catalogs") {
+  // The operator seed the installer runs between starting the kernel and the
+  // gateway (scripts/lib/service.ts seedSessionCatalogs); a compiled binary
+  // has no scripts/ on disk, so it carries the script as a subcommand.
+  process.argv.splice(2, 1);
+  try {
+    await import("../../../../scripts/seed-session-metadata-catalog");
+  } catch (e) {
+    console.error("[opensession] session catalog seed failed:", e);
+    process.exit(1);
+  }
 } else if (sub === "transcript-search-worker") {
   process.argv.splice(2, 1);
   const { runTranscriptSearchWorker } =

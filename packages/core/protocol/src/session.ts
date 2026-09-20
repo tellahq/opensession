@@ -435,6 +435,8 @@ export type ProtocolClientMessage =
       pastedTexts?: string[];
       /** Reasoning effort persisted on the new session and enforced per run. */
       effort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
+      /** Allow automatic model switching on exhaustion. Omitted means true. */
+      autoFallback?: boolean;
       /** OpenAI priority service tier for the opening and later turns. */
       fastMode?: boolean;
       /** Start in pstack mode: the pstack skill family loads for every turn. */

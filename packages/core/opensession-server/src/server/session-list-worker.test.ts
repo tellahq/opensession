@@ -17,6 +17,7 @@ import {
   SessionListIndexError,
   indexedCoverage,
   indexedSession,
+  indexedLiveSessionsByRepoBranch,
   indexedSessionWithVisibilityGroup,
   indexedSessions,
   indexedSidebarSessions,
@@ -66,7 +67,10 @@ afterAll(() => {
 describe("session list worker", () => {
   test("a read posted after a write observes it, and the file lands under the state root", async () => {
     const write = upsertIndexedSessions(
-      [session("first"), session("second", { workspaceId: "ws-1" })],
+      [
+        session("first", { repo: "alpha", branch: "feature" }),
+        session("second", { workspaceId: "ws-1" }),
+      ],
       "exclude",
     );
     const read = indexedSessions("exclude");
@@ -92,7 +96,11 @@ describe("session list worker", () => {
         action: "stall",
         ms: stallMs,
       });
-      const delayedRead = indexedSession("first");
+      const delayedRead = indexedLiveSessionsByRepoBranch(
+        "alpha",
+        "feature",
+        "alpha",
+      );
       let ticks = 0;
       const ticker = setInterval(() => ticks++, 10);
       const startedAt = performance.now();
@@ -104,7 +112,7 @@ describe("session list worker", () => {
       // The loop kept ticking while the worker thread slept.
       expect(ticks).toBeGreaterThanOrEqual(5);
       await stalled;
-      expect((await delayedRead)?.id).toBe("first");
+      expect((await delayedRead).map((row) => row.id)).toEqual(["first"]);
     } finally {
       server.stop(true);
     }
@@ -171,6 +179,16 @@ describe("session list worker", () => {
     try {
       expect(await indexedSession("first")).toBeNull();
       expect(await indexedCoverage("exclude")).toBe(false);
+      const unavailable = await indexedLiveSessionsByRepoBranch(
+        "alpha",
+        "feature",
+        "alpha",
+      ).then(
+        () => null,
+        (error: Error) => error,
+      );
+      expect(unavailable).toBeInstanceOf(SessionListIndexError);
+      expect(unavailable?.message).toContain("not ready");
       expect(await indexedSidebarSessions()).toBeNull();
       await upsertIndexedSession(session("only-in-b"));
       expect(existsSync(join(stateB, SESSION_LIST_DB_FILE))).toBe(true);

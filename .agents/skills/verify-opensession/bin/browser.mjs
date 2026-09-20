@@ -105,6 +105,50 @@ await Promise.all([
   send("Accessibility.enable"),
 ]);
 
+/**
+ * Chrome drops parts of the emulation state when a CDP client disconnects,
+ * and every helper command is its own connection. The viewport chosen at
+ * `open` is recorded in the run directory and re-applied on each command so
+ * a screenshot or media query later in the run still sees the same device.
+ */
+const viewportFile = `${runDir}/viewport.json`;
+
+function readViewport() {
+  try {
+    return JSON.parse(readFileSync(viewportFile, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+async function applyViewport({ width, height }) {
+  const phone = width <= 720;
+  await send("Emulation.setDeviceMetricsOverride", {
+    width,
+    height,
+    deviceScaleFactor: phone ? 3 : 2,
+    mobile: phone,
+  });
+  // A phone is touch-first: the UI reads `(hover: none) and (pointer:
+  // coarse)` to swap hover-only affordances for inline ones, so the emulated
+  // page must report what a real phone does.
+  await send("Emulation.setTouchEmulationEnabled", {
+    enabled: phone,
+    maxTouchPoints: phone ? 5 : 1,
+  });
+  await send("Emulation.setEmulatedMedia", {
+    features: phone
+      ? [
+          { name: "hover", value: "none" },
+          { name: "pointer", value: "coarse" },
+        ]
+      : [
+          { name: "hover", value: "hover" },
+          { name: "pointer", value: "fine" },
+        ],
+  });
+}
+
 const role = flag("role");
 const name = flag("name");
 const timeout = Number(flag("timeout", "10000"));
@@ -147,15 +191,28 @@ async function matchingNode() {
   );
 }
 
-async function clickNode(node) {
+async function nodeCenter(node) {
   const model = await send("DOM.getBoxModel", {
     backendNodeId: node.backendDOMNodeId,
   });
   const quad = model?.model?.border;
   if (!Array.isArray(quad) || quad.length < 8)
     fail("target has no clickable box");
-  const x = (quad[0] + quad[2] + quad[4] + quad[6]) / 4;
-  const y = (quad[1] + quad[3] + quad[5] + quad[7]) / 4;
+  return {
+    x: (quad[0] + quad[2] + quad[4] + quad[6]) / 4,
+    y: (quad[1] + quad[3] + quad[5] + quad[7]) / 4,
+  };
+}
+
+/** Move the mouse over the node without pressing: opens hover-only UI such
+ * as tooltips. */
+async function hoverNode(node) {
+  const { x, y } = await nodeCenter(node);
+  await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+}
+
+async function clickNode(node) {
+  const { x, y } = await nodeCenter(node);
   await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
   await send("Input.dispatchMouseEvent", {
     type: "mousePressed",
@@ -195,17 +252,18 @@ async function waitForReady() {
 }
 
 try {
+  if (command !== "open") {
+    const viewport = readViewport();
+    if (viewport) await applyViewport(viewport);
+  }
   switch (command) {
     case "open": {
       const route = flag("route", "/");
       const width = Number(flag("width", "1440"));
       const height = Number(flag("height", "900"));
-      await send("Emulation.setDeviceMetricsOverride", {
-        width,
-        height,
-        deviceScaleFactor: width <= 720 ? 3 : 2,
-        mobile: width <= 720,
-      });
+      const viewport = { width, height };
+      writeFileSync(viewportFile, JSON.stringify(viewport));
+      await applyViewport(viewport);
       await send("Page.navigate", { url: new URL(route, appUrl).href });
       await waitForReady();
       console.log(new URL(route, appUrl).href);
@@ -215,6 +273,12 @@ try {
       const node = await matchingNode();
       await clickNode(node);
       console.log(`clicked ${role} ${JSON.stringify(name)}`);
+      break;
+    }
+    case "hover": {
+      const node = await matchingNode();
+      await hoverNode(node);
+      console.log(`hovering ${role} ${JSON.stringify(name)}`);
       break;
     }
     case "fill": {

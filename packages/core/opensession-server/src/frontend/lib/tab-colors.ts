@@ -24,6 +24,7 @@ export function colorHex(key: string | undefined): string | null {
 
 const store = userMap.makeUserMap<string>({
   changeEvent: CHANGE_EVENT,
+  name: "tab-colors",
   fetchMap: fetchTabColors,
   saveDelta: saveTabColorsApi,
 });

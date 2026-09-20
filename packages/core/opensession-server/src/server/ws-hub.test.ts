@@ -4,7 +4,9 @@ import {
   broadcastToSession,
   broadcastToUser,
   computeGlobalPresence,
+  computeTypingPresence,
   computeTypingUsers,
+  TYPING_PREVIEW_MAX,
   joinSession,
   leaveSession,
   sessionWatchers,
@@ -304,6 +306,100 @@ describe("typing presence", () => {
       users: [],
     });
   });
+
+  test("carries the draft head to the other viewers and drops it with the lease", () => {
+    const sessionId = crypto.randomUUID();
+    const received: any[] = [];
+    const ada = {
+      data: { user: "Ada", watchingSessionId: sessionId },
+      send() {},
+    };
+    const grace = {
+      data: { user: "Grace", watchingSessionId: sessionId },
+      send(payload: string) {
+        received.push(JSON.parse(payload));
+      },
+    };
+    joinSession(ada, sessionId);
+    joinSession(grace, sessionId);
+    received.length = 0;
+
+    setClientTyping(ada, sessionId, true, "Could we show ");
+    expect(received.at(-1)).toEqual({
+      type: "typing",
+      sessionId,
+      users: ["Ada"],
+      drafts: { Ada: "Could we show " },
+    });
+
+    // Same lease, newer text: the frame goes out again.
+    received.length = 0;
+    setClientTyping(ada, sessionId, true, "Could we show what");
+    expect(received.at(-1)?.drafts).toEqual({ Ada: "Could we show what" });
+
+    // The preview is bounded and never persisted beyond the socket.
+    received.length = 0;
+    setClientTyping(ada, sessionId, true, "x".repeat(TYPING_PREVIEW_MAX + 50));
+    expect(received.at(-1)?.drafts.Ada).toHaveLength(TYPING_PREVIEW_MAX);
+
+    received.length = 0;
+    setClientTyping(ada, sessionId, false);
+    expect(received.at(-1)).toEqual({ type: "typing", sessionId, users: [] });
+    expect(ada.data).not.toHaveProperty("typingText", expect.any(String));
+  });
+
+  test("a viewer who arrives mid-draft gets the draft in the join snapshot", () => {
+    const sessionId = crypto.randomUUID();
+    const ada = {
+      data: { user: "Ada", watchingSessionId: sessionId },
+      send() {},
+    };
+    joinSession(ada, sessionId);
+    setClientTyping(ada, sessionId, true, "still here");
+
+    const received: any[] = [];
+    const grace = {
+      data: { user: "Grace", watchingSessionId: sessionId },
+      send(payload: string) {
+        received.push(JSON.parse(payload));
+      },
+    };
+    joinSession(grace, sessionId);
+    expect(received).toContainEqual({
+      type: "typing",
+      sessionId,
+      users: ["Ada"],
+      drafts: { Ada: "still here" },
+    });
+  });
+
+  test("the freshest lease wins when one person composes on two devices", () => {
+    const now = Date.now();
+    const viewers = new Set<any>([
+      {
+        data: {
+          user: "Ada",
+          typingUntil: now + 1_000,
+          typingText: "older",
+          activeAt: now,
+          lastSeenAt: now,
+        },
+      },
+      {
+        data: {
+          user: "Ada",
+          typingUntil: now + 2_000,
+          typingText: "newer",
+          activeAt: now,
+          lastSeenAt: now,
+        },
+      },
+    ]);
+    expect(computeTypingPresence(viewers, now)).toEqual({
+      users: ["Ada"],
+      drafts: { Ada: "newer" },
+    });
+  });
 });
 
 describe("broadcastToUser", () => {
@@ -323,6 +419,15 @@ describe("broadcastToUser", () => {
   test("reaches every socket of that person and nobody else", () => {
     const signedIn = socket({ user: "michiel", authUser: "Michiel" });
     const picker = socket({ user: "Michiel" });
+    const sidebar = socket({
+      user: null,
+      sidebarScope: {
+        user: "Michiel",
+        person: "me",
+        repo: "all",
+        autoCreated: "hide",
+      },
+    });
     const claimsOtherwise = socket({ user: "Michiel", authUser: "Louise" });
     const teammate = socket({ user: "Louise" });
     const anonymous = socket({});
@@ -332,6 +437,7 @@ describe("broadcastToUser", () => {
     const frame = { type: "user_map_changed", map: "lanes" };
     expect(signedIn).toEqual([frame]);
     expect(picker).toEqual([frame]);
+    expect(sidebar).toEqual([frame]);
     expect(claimsOtherwise).toEqual([]);
     expect(teammate).toEqual([]);
     expect(anonymous).toEqual([]);

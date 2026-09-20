@@ -9,6 +9,7 @@ import {
   isScheduledActor,
   isWorkerActor,
   loopActor,
+  scheduledActor,
   machineActorLabel,
   providerAccountUser,
   sessionPrincipal,
@@ -110,6 +111,15 @@ describe("machine actors", () => {
     }
     expect(humanPrompter(loopActor("Kent"))).toBe("Kent (loop)");
     expect(isScheduledActor("Kent")).toBe(false);
+    // A schedule_prompt check-back is the agent's own text, not Kent's send.
+    expect(scheduledActor("Kent")).toBe("Kent (scheduled)");
+    expect(scheduledActor(undefined)).toBe("scheduled");
+    for (const sender of [scheduledActor("Kent"), scheduledActor(null)]) {
+      expect(isScheduledActor(sender)).toBe(true);
+      expect(isMachineActor(sender)).toBe(false);
+      expect(interactivePrompter(sender)).toBeNull();
+    }
+    expect(humanPrompter(scheduledActor("Kent"))).toBe("Kent (scheduled)");
     expect(interactivePrompter("Kent")).toBe("Kent");
     expect(interactivePrompter(workerActor(SESSION))).toBeNull();
     expect(interactivePrompter("Anonymous")).toBeNull();

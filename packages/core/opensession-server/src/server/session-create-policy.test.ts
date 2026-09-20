@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
   assertAutomationDescendantOpeningIsolation,
   openingCreateTrustPolicy,
@@ -40,7 +40,33 @@ describe("automation descendant opening policy", () => {
     ).not.toThrow();
   });
 
+  // The flag overrides the instance config, which on a developer box may
+  // already opt untrusted runs into AWS: pin it per test, restore it after.
+  const savedUntrustedRuns = process.env.AGENT_AWS_UNTRUSTED_RUNS;
+  afterEach(() => {
+    if (savedUntrustedRuns === undefined)
+      delete process.env.AGENT_AWS_UNTRUSTED_RUNS;
+    else process.env.AGENT_AWS_UNTRUSTED_RUNS = savedUntrustedRuns;
+  });
+
+  test("an instance that opts untrusted runs into AWS vends it to the opening turn", () => {
+    process.env.AGENT_AWS_UNTRUSTED_RUNS = "true";
+    const policy = openingCreateTrustPolicy({
+      automationDescendantPolicy: descendant,
+      branch: "compat/layout",
+      runMcpServers: [],
+      user: "Automation (automation)",
+    });
+    expect(policy.aws).toBe(true);
+    // Only AWS moves: the automation scoping is untouched.
+    expect(policy.automation).toBe(true);
+    expect(policy.user).toBeUndefined();
+    expect(policy.mcpServers).toEqual([]);
+    expect(policy.trustProfile).toBe("automation");
+  });
+
   test("opening turn is automation-scoped with no user, AWS, or MCP", () => {
+    process.env.AGENT_AWS_UNTRUSTED_RUNS = "false";
     expect(
       openingCreateTrustPolicy({
         automationDescendantPolicy: descendant,
@@ -137,6 +163,7 @@ describe("automation descendant opening policy", () => {
   });
 
   test("sandbox host spec preserves the complete descendant security boundary", () => {
+    process.env.AGENT_AWS_UNTRUSTED_RUNS = "false";
     expect(
       sandboxRunSecuritySpec(
         {

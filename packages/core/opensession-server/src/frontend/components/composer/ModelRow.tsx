@@ -22,6 +22,8 @@ interface ModelRowProps {
   modelTitle?: string;
   effort?: string;
   onEffortChange?: (effort: string) => void;
+  autoFallback?: boolean;
+  onAutoFallbackChange?: (enabled: boolean) => void;
   fastMode?: boolean;
   onFastModeChange?: (fastMode: boolean) => void;
   accounts?: ProviderAccountOption[];
@@ -46,6 +48,8 @@ export function ModelRow({
   modelTitle,
   effort,
   onEffortChange,
+  autoFallback,
+  onAutoFallbackChange,
   fastMode,
   onFastModeChange,
   accounts,
@@ -75,6 +79,7 @@ export function ModelRow({
               modelDisabled,
               modelTitle,
               effort,
+              autoFallback,
               fastMode,
               accounts,
               accountId,
@@ -99,6 +104,7 @@ export function ModelRow({
               changeModel: onModelChange,
               setAsDefault: onSetAsDefault,
               changeEffort: onEffortChange,
+              changeAutoFallback: onAutoFallbackChange,
               changeFastMode: onFastModeChange,
               changeAccount: onAccountChange,
               changeOpen: onOpenChange,

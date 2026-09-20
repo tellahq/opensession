@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { $ } from "bun";
 import {
@@ -49,6 +50,7 @@ beforeAll(async () => {
     }),
   );
   process.env.OPENSESSION_CONFIG = join(root, "config.json");
+  await getConfigAsync();
   process.env.OPENSESSION_WORKTREES_DIR = join(root, "worktrees");
 });
 

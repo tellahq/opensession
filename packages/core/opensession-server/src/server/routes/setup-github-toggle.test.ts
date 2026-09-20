@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 import { afterEach, describe, expect, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
@@ -11,7 +12,7 @@ const savedAuthStore = process.env.OPENSESSION_GITHUB_AUTH_STORE;
 const savedAppKey = process.env.OPENSESSION_GITHUB_APP_KEY;
 const dirs: string[] = [];
 
-function setupFiles(account?: { login: string; name?: string }) {
+async function setupFiles(account?: { login: string; name?: string }) {
   const dir = mkdtempSync(join(tmpdir(), "opensession-setup-github-toggle-"));
   dirs.push(dir);
   const config = join(dir, "config.json");
@@ -52,6 +53,7 @@ function setupFiles(account?: { login: string; name?: string }) {
     }),
   );
   process.env.OPENSESSION_CONFIG = config;
+  await getConfigAsync();
   process.env.OPENSESSION_GITHUB_AUTH_STORE = authStore;
   process.env.OPENSESSION_GITHUB_APP_KEY = appKey;
   return config;
@@ -71,9 +73,12 @@ function githubRequest(body: Record<string, unknown>): RouteContext {
   };
 }
 
-afterEach(() => {
+afterEach(async () => {
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = savedConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = savedConfig;
+    await getConfigAsync();
+  }
   if (savedAuthStore === undefined)
     delete process.env.OPENSESSION_GITHUB_AUTH_STORE;
   else process.env.OPENSESSION_GITHUB_AUTH_STORE = savedAuthStore;
@@ -85,7 +90,7 @@ afterEach(() => {
 
 describe("enabling GitHub sign-in", () => {
   test("rosters the sole connected account as admin on a personal install", async () => {
-    const config = setupFiles({ login: "jasmoony", name: "Jas Moony" });
+    const config = await setupFiles({ login: "jasmoony", name: "Jas Moony" });
 
     const response = await handleSetupRoutes(
       githubRequest({ userPrAuth: true }),
@@ -101,7 +106,7 @@ describe("enabling GitHub sign-in", () => {
   });
 
   test("refuses to lock an empty personal install behind sign-in", async () => {
-    const config = setupFiles();
+    const config = await setupFiles();
 
     const response = await handleSetupRoutes(
       githubRequest({ userPrAuth: true }),
@@ -117,7 +122,7 @@ describe("enabling GitHub sign-in", () => {
   });
 
   test("saves the mention handle used by the GitHub agent", async () => {
-    const config = setupFiles();
+    const config = await setupFiles();
 
     const response = await handleSetupRoutes(
       githubRequest({ mentionHandle: "@session-bot" }),
@@ -131,7 +136,7 @@ describe("enabling GitHub sign-in", () => {
 
 describe("GitHub App identity settings", () => {
   test("persists the slug and installation owner with the existing client id", async () => {
-    const config = setupFiles();
+    const config = await setupFiles();
     const url = new URL("http://localhost/api/setup/github");
     const response = await handleSetupRoutes({
       req: new Request(url, {
@@ -157,7 +162,7 @@ describe("GitHub App identity settings", () => {
   });
 
   test("clears a legacy installation id when changing owners", async () => {
-    const config = setupFiles();
+    const config = await setupFiles();
     const current = JSON.parse(readFileSync(config, "utf8"));
     current.integrations.github.installationId = 123;
     writeFileSync(config, JSON.stringify(current));
@@ -173,7 +178,7 @@ describe("GitHub App identity settings", () => {
   });
 
   test("allows clearing the optional default installation owner", async () => {
-    const config = setupFiles();
+    const config = await setupFiles();
     const url = new URL("http://localhost/api/setup/github");
     const response = await handleSetupRoutes({
       req: new Request(url, {

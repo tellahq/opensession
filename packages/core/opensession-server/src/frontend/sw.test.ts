@@ -11,18 +11,34 @@ type WorkerEvent = {
 
 type WorkerListener = (event: WorkerEvent) => void;
 type CacheInput = string | { url: string };
+/** What the worker posts to a window client (sw.js notifyShellUpdated). */
+type WorkerMessage = { type: string };
 
 function cacheUrl(input: CacheInput): string {
   return input instanceof Object ? input.url : input;
 }
 
-function workerHarness(scopePath = "/", existingCacheNames: string[] = []) {
+type NetworkFetch = (
+  input: string | { url: string },
+  init?: RequestInit,
+) => Promise<Response>;
+
+const offline: NetworkFetch = async () => {
+  throw new TypeError("offline");
+};
+
+function workerHarness(
+  scopePath = "/",
+  existingCacheNames: string[] = [],
+  networkFetch: NetworkFetch = offline,
+) {
   const origin = "https://os.test";
   const scope = new URL(scopePath, origin).href;
   const listeners = new Map<string, WorkerListener>();
   const added: string[] = [];
   const deletedCacheNames: string[] = [];
   const navigated: string[] = [];
+  const posted: WorkerMessage[] = [];
   const entries = new Map<string, Response>();
   const cache = {
     async add(input: string) {
@@ -73,6 +89,9 @@ function workerHarness(scopePath = "/", existingCacheNames: string[] = []) {
             async navigate(url: string) {
               navigated.push(url);
             },
+            postMessage(message: WorkerMessage) {
+              posted.push(message);
+            },
           },
         ];
       },
@@ -83,9 +102,6 @@ function workerHarness(scopePath = "/", existingCacheNames: string[] = []) {
       listeners.set(type, listener);
     },
   };
-  const networkFetch = async () => {
-    throw new TypeError("offline");
-  };
 
   new Function("self", "caches", "fetch", workerSource)(
     serviceWorker,
@@ -93,7 +109,30 @@ function workerHarness(scopePath = "/", existingCacheNames: string[] = []) {
     networkFetch,
   );
 
-  return { added, deletedCacheNames, listeners, navigated };
+  return { added, deletedCacheNames, listeners, navigated, posted, cache };
+}
+
+function shellHtml(entry: string): Response {
+  return new Response(
+    `<html><head></head><body><script type="module" crossorigin src="/${entry}"></script></body></html>`,
+    { headers: { "content-type": "text/html; charset=utf-8" } },
+  );
+}
+
+async function navigateShell(harness: ReturnType<typeof workerHarness>) {
+  let response: Promise<Response> | undefined;
+  const tasks: Promise<unknown>[] = [];
+  harness.listeners.get("fetch")?.({
+    request: { method: "GET", mode: "navigate", url: "https://os.test/" },
+    respondWith(value: Promise<Response>) {
+      response = value;
+    },
+    waitUntil(task: Promise<unknown>) {
+      tasks.push(task);
+    },
+  });
+  const html = await (await response!).text();
+  return { html, settled: Promise.all(tasks) };
 }
 
 async function runWorkerLifecycleEvent(
@@ -147,6 +186,67 @@ describe("service worker navigation freshness", () => {
 
     expect(harness.deletedCacheNames).toEqual([]);
     expect(harness.navigated).toEqual([]);
+  });
+
+  test("serves the network shell when it answers, without a nudge", async () => {
+    const harness = workerHarness("/", [], async () => shellHtml("App-new.js"));
+    await harness.cache.put("/__app-shell__", shellHtml("App-old.js"));
+
+    const { html, settled } = await navigateShell(harness);
+    await settled;
+
+    expect(html).toContain("App-new.js");
+    expect(harness.posted).toEqual([]);
+  });
+
+  test("paints the cached shell once the network stalls and nudges when the late answer is a newer build", async () => {
+    let answer: (response: Response) => void = () => {};
+    const harness = workerHarness(
+      "/",
+      [],
+      () => new Promise<Response>((resolve) => (answer = resolve)),
+    );
+    await harness.cache.put("/__app-shell__", shellHtml("App-old.js"));
+
+    const { html, settled } = await navigateShell(harness);
+    expect(html).toContain("App-old.js");
+    expect(harness.posted).toEqual([]);
+
+    answer(shellHtml("App-new.js"));
+    await settled;
+
+    expect(harness.posted).toEqual([{ type: "os1-shell-updated" }]);
+    const cached = await harness.cache.match("/__app-shell__");
+    expect(await cached!.text()).toContain("App-new.js");
+  });
+
+  test("stays quiet when the late answer is the same build", async () => {
+    let answer: (response: Response) => void = () => {};
+    const harness = workerHarness(
+      "/",
+      [],
+      () => new Promise<Response>((resolve) => (answer = resolve)),
+    );
+    await harness.cache.put("/__app-shell__", shellHtml("App-same.js"));
+
+    const { html, settled } = await navigateShell(harness);
+    expect(html).toContain("App-same.js");
+
+    answer(shellHtml("App-same.js"));
+    await settled;
+
+    expect(harness.posted).toEqual([]);
+  });
+
+  test("falls back to the cached shell when the network fails outright", async () => {
+    const harness = workerHarness();
+    await harness.cache.put("/__app-shell__", shellHtml("App-old.js"));
+
+    const { html, settled } = await navigateShell(harness);
+    await settled;
+
+    expect(html).toContain("App-old.js");
+    expect(harness.posted).toEqual([]);
   });
 });
 

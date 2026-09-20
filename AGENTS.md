@@ -3,6 +3,19 @@ Default to Bun instead of Node.js.
 Keep instance-private operator instructions in an untracked `AGENTS.local.md` or
 `CLAUDE.local.md`, never in this file.
 
+## Public repository
+
+This repository is public. Everything that lands here is readable by anyone:
+commits, branch names, PR titles and bodies, review comments, issues, code,
+docs, tests, fixtures, and screenshots. Never put private organization
+information in any of them: internal hostnames, URLs, or paths, private
+repositories' names or code, teammate or customer details, secrets, internal
+plans, or anything taken from memory, Slack, Linear, local instructions, or
+the session context. Describe what a change does in terms of this repository
+alone. The session attribution footer and the `Co-authored-by` trailer are the
+only exception. Use placeholder names (`acme`, `example.test`) in examples and
+tests.
+
 ## Publishing to repositories
 
 Repositories owned by your own organization are fair game, including public
@@ -155,7 +168,13 @@ filesystem APIs for migrations and exports, and async RPC to worker-owned
 catalogs for application state. An `async` function that calls `readFileSync`,
 `Bun.spawnSync`, or synchronous SQLite still violates this rule. Never add a
 synchronous fallback when a worker is unavailable. Cross-session views belong
-in the central catalog, not in directory scans or per-session database reads.
+in the central catalog, not in directory scans or per-session database reads. PR/branch
+ownership lookups must use indexed catalog projections (including attached
+repos), not a full session list followed by checkout/HEAD probes. Missing
+coverage or catalog errors must serve an existing snapshot or fail unavailable,
+never fall back to scanning session files. Keep filesystem discovery in explicit
+offline migrations and targeted, asynchronous per-session writers. The catalog
+and GitHub ownership boundary tests in `bun run check` guard these paths.
 
 `packages/core/opensession-server/opensession.ts` is composition and boot code.
 Put HTTP handlers in `src/server/routes/`, WebSocket handling in

@@ -11,6 +11,9 @@ import type { SessionListStore } from "./session-list-sqlite";
 /** The index file, resolved with statePath rules inside the worker. */
 export const SESSION_LIST_DB_FILE = ".opensession-session-list.db";
 
+/** Bounded PR ownership response; one extra row detects overflow. */
+export const SESSION_BRANCH_MATCH_LIMIT = 25;
+
 /** Store methods the facade may invoke by name. Anything else is refused. */
 export const SESSION_LIST_STORE_METHODS = [
   "upsert",
@@ -29,6 +32,7 @@ export const SESSION_LIST_STORE_METHODS = [
   "listCovered",
   "listLiveByBranch",
   "listLiveByBranchCovered",
+  "listLiveByRepoBranchCovered",
   "listWorkspaceMembers",
   "listWorkspace",
   "listWorkspaceCovered",

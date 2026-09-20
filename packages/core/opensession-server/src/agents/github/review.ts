@@ -62,12 +62,23 @@ import {
   type SecretScanResult,
 } from "./secret-scan";
 import {
-  mergeRiskBadge,
   mergeRiskSection,
   runMergeRiskCheck,
   type MergeRiskResult,
   type RiskFactor,
 } from "./merge-risk";
+import {
+  applyReviewRules,
+  diffFilePaths,
+  matchingPromptRules,
+  reviewRulesSection,
+  ruleKey,
+  ruleScoreSuffixes,
+  type PromptRuleOutcome,
+  type ReviewRuleContext,
+  type ReviewRuleEvaluation,
+} from "./review-rules";
+import { runPromptRules } from "./review-rule-prompt";
 import {
   loadReviewOptions,
   pathIgnored,
@@ -187,6 +198,8 @@ export interface ReviewResult {
   findings: number;
   /** Findings that should block merge: P0/P1 severity, or a request_changes verdict. */
   blocking: number;
+  /** `.os-review.json` rules that changed the verdict or a score. */
+  rulesApplied?: string[];
   /** The reviewed source was an external fork and used the isolated public path. */
   publicReview?: true;
   error?: string;
@@ -429,7 +442,7 @@ export async function runReview(
       publicReview ? prRepo?.repo || DEFAULT_REPO_DIR : cwd,
     );
     const summaryOnly = details.changedFiles > reviewOpts.summaryOnlyOverFiles;
-    const author = publicReview ? null : authorFamilyFor(pr);
+    const author = publicReview ? null : await authorFamilyFor(pr);
     const testOnBase: Promise<TestOnBaseResult | null> =
       !publicReview && reviewOpts.testOnBase
         ? runTestOnBaseCheck({
@@ -517,7 +530,9 @@ export async function runReview(
     // (shared blind spots — see model-inversion.ts). Falls back to the
     // configured model for human-authored PRs.
     let reviewModel = config.model;
-    const inversion = publicReview ? null : inverseReviewModel(pr, reviewModel);
+    const inversion = publicReview
+      ? null
+      : inverseReviewModel(author, reviewModel);
     if (inversion) {
       reviewModel = inversion.model;
       console.log(
@@ -587,16 +602,53 @@ export async function runReview(
             return null;
           })
         : Promise.resolve(null);
+    // Prompt rules (.os-review.json rules with a `prompt`) are scored the same
+    // way: one tool-less one-shot each over the immutable patch. Rules whose
+    // conditions do not read the model's result start now, alongside the
+    // review; the rest wait for the parsed verdict below.
+    const hasPromptRules = reviewOpts.rules.some((r) => r.prompt);
+    const baseRuleCtx = reviewOpts.rules.length
+      ? await reviewRuleContext(pr, details)
+      : null;
+    const scorePromptRules = (
+      rules: ReturnType<typeof matchingPromptRules>,
+      patch: string | undefined,
+    ): Promise<Map<string, PromptRuleOutcome>> =>
+      patch && rules.length
+        ? runPromptRules({
+            rules,
+            pr: details,
+            patch,
+            model: reviewModel,
+            prNumber: pr.number,
+            ghRepo: pr.ghRepo,
+          }).catch((e) => {
+            console.warn(
+              `[github] prompt rules failed for PR #${pr.number}:`,
+              e,
+            );
+            return new Map<string, PromptRuleOutcome>();
+          })
+        : Promise.resolve(new Map<string, PromptRuleOutcome>());
     let mergeRisk: Promise<MergeRiskResult | null> = Promise.resolve(null);
-    if (!publicReview && reviewOpts.mergeRisk) {
-      mergeRisk = getPrDiff(String(pr.number), pr.ghRepo || undefined)
+    let earlyPromptOutcomes: Promise<Map<string, PromptRuleOutcome>> =
+      Promise.resolve(new Map());
+    let scorerPatch: Promise<string | undefined> = Promise.resolve(undefined);
+    if (!publicReview && (reviewOpts.mergeRisk || hasPromptRules)) {
+      scorerPatch = getPrDiff(String(pr.number), pr.ghRepo || undefined)
         .catch(() => null)
         // A patch for a different head would score code we are not reviewing.
         .then((diff) =>
-          scoreMergeRisk(
-            pr.headSha && diff?.headRefOid !== pr.headSha
-              ? undefined
-              : diff?.patch,
+          pr.headSha && diff?.headRefOid !== pr.headSha
+            ? undefined
+            : diff?.patch,
+        );
+      if (reviewOpts.mergeRisk) mergeRisk = scorerPatch.then(scoreMergeRisk);
+      if (hasPromptRules && baseRuleCtx)
+        earlyPromptOutcomes = scorerPatch.then((patch) =>
+          scorePromptRules(
+            matchingPromptRules(reviewOpts.rules, baseRuleCtx, "before-model"),
+            patch,
           ),
         );
     }
@@ -720,6 +772,12 @@ export async function runReview(
           };
         }
         if (reviewOpts.mergeRisk) mergeRisk = scoreMergeRisk(diff.patch);
+        scorerPatch = Promise.resolve(diff.patch);
+        if (hasPromptRules && baseRuleCtx)
+          earlyPromptOutcomes = scorePromptRules(
+            matchingPromptRules(reviewOpts.rules, baseRuleCtx, "before-model"),
+            diff.patch,
+          );
         const isolated = await runToollessPublicReview(isolatedInput);
         finalResult = {
           bksId,
@@ -850,6 +908,57 @@ export async function runReview(
       return null;
     }
 
+    // Repo-owned review rules (.os-review.json `rules`): independent policy
+    // results or explicit overrides on top of the model's result. Findings are left
+    // alone, so a P0 the model found still blocks the fix-round gates, and the
+    // secret-scan cap below still wins over any rule.
+    let ruleEval: ReviewRuleEvaluation | null = null;
+    if (parsed && baseRuleCtx) {
+      const ruleCtx: ReviewRuleContext = {
+        ...baseRuleCtx,
+        verdict: parsed.verdict,
+        confidence: parsed.confidence,
+        risk: risk?.risk,
+      };
+      const promptOutcomes = await earlyPromptOutcomes;
+      if (hasPromptRules) {
+        const late = await scorePromptRules(
+          matchingPromptRules(reviewOpts.rules, ruleCtx, "after-model"),
+          await scorerPatch,
+        );
+        for (const [key, outcome] of late) promptOutcomes.set(key, outcome);
+      }
+      if (cancellationRequested())
+        return finishCancelled(placeholderId || undefined);
+      ruleEval = applyReviewRules(reviewOpts.rules, ruleCtx, promptOutcomes);
+      if (ruleEval.applied.length) {
+        parsed.verdict = ruleEval.final.verdict;
+        parsed.confidence = ruleEval.final.confidence;
+        const names = ruleEval.applied.map(ruleKey);
+        console.log(
+          `[github] PR #${pr.number} review rules applied: ${names.join(", ")} (${ruleEval.applied.flatMap((r) => r.changes).join("; ") || "independent results or notes only"})`,
+        );
+        audit({
+          msg: "review_rules_applied",
+          pr_number: pr.number,
+          repo: pr.ghRepo || defaultRepo().ghRepo,
+          head_sha: pr.headSha,
+          rules: names,
+          changes: ruleEval.applied.flatMap((r) => r.changes),
+          results: ruleEval.applied
+            .filter((r) => r.result || r.unavailable)
+            .map((r) => ({
+              name: ruleKey(r),
+              ...r.result,
+              ...(r.unavailable ? { unavailable: r.unavailable } : {}),
+            })),
+          original: ruleEval.original,
+          final: ruleEval.final,
+        });
+      }
+    }
+    const effectiveRisk = ruleEval?.final.risk ?? risk?.risk;
+
     // A leaked credential blocks regardless of what the model concluded: the
     // verdict drops to request_changes and confidence caps at 2/5. (Not counted
     // as a "blocking finding" for the auto-fix gate — rotation is human work a
@@ -874,16 +983,19 @@ export async function runReview(
       testOnBaseSection(tob) + secretScanSection(secrets),
       publicReview,
       risk,
+      ruleEval,
     );
 
+    const rulesApplied = ruleEval?.applied.map(ruleKey);
     const outcome: ReviewResult = {
       verdict: parsed?.verdict,
       confidence: parsed?.confidence,
-      risk: risk?.risk,
+      risk: effectiveRisk,
       recovery: risk?.recovery,
       riskFactors: risk?.factors.map((f) => f.factor),
       findings: parsed?.findings?.length || 0,
       blocking: reviewBlockingCount(parsed),
+      ...(rulesApplied?.length ? { rulesApplied } : {}),
       ...(publicReview ? { publicReview: true as const } : {}),
       error: reviewError,
     };
@@ -901,6 +1013,7 @@ export async function runReview(
         risk_factors: outcome.riskFactors,
         findings: outcome.findings,
         blocking: outcome.blocking,
+        rules_applied: outcome.rulesApplied,
         is_update: isUpdate,
         public_review: publicReview,
         isolation: publicReview
@@ -925,6 +1038,7 @@ export async function runReview(
           risk: outcome.risk,
           recovery: outcome.recovery,
           riskFactors: outcome.riskFactors,
+          ...(outcome.rulesApplied ? { rules: outcome.rulesApplied } : {}),
           findings: outcome.findings,
           blocking: outcome.blocking,
           sha: pr.headSha,
@@ -960,6 +1074,31 @@ export async function runReview(
   }
 }
 
+/**
+ * What `.os-review.json` rules can see about a PR before the model's result:
+ * the changed paths of the head being reviewed (deleted files included),
+ * falling back to the PR's file list when the diff is unavailable or stale.
+ */
+export async function reviewRuleContext(
+  pr: PrRef,
+  details: PrAutomationDetails,
+): Promise<Omit<ReviewRuleContext, "verdict" | "confidence" | "risk">> {
+  const diff = await getPrDiff(String(pr.number), pr.ghRepo || undefined).catch(
+    () => null,
+  );
+  const files =
+    diff && (!pr.headSha || diff.headRefOid === pr.headSha)
+      ? diffFilePaths(diff.patch)
+      : details.files.map((f) => f.path);
+  return {
+    files,
+    additions: details.additions,
+    deletions: details.deletions,
+    labels: details.labels || [],
+    baseBranch: details.baseRefName,
+  };
+}
+
 /** Render one finding as an inline comment: severity badge + title, body, optional suggestion block. */
 function composeInlineBody(f: Finding): string {
   const sev = (f.severity || "").toUpperCase();
@@ -988,6 +1127,7 @@ async function postReview(
   extraSummary = "",
   publicReview = false,
   mergeRisk: MergeRiskResult | null = null,
+  rules: ReviewRuleEvaluation | null = null,
 ): Promise<void> {
   const knownCommentId = getOrInitPrState(
     pr.number,
@@ -1004,9 +1144,10 @@ async function postReview(
   if (mermaid && mermaid.length <= 4000) {
     summaryBody += `\n\n<details><summary>📈 Change diagram</summary>\n\n\`\`\`mermaid\n${mermaid}\n\`\`\`\n\n</details>`;
   }
-  // The merge-risk pass, then deterministic checks (test-on-base, secret
-  // scan), append below the model's assessment.
-  summaryBody += mergeRiskSection(mergeRisk) + extraSummary;
+  // The merge-risk pass, the repo's rules, then deterministic checks
+  // (test-on-base, secret scan), append below the model's assessment.
+  summaryBody +=
+    mergeRiskSection(mergeRisk) + reviewRulesSection(rules) + extraSummary;
   // Before anything posts, findings pass the repo/config/feedback filter chain:
   // ignored paths, the per-repo severity floor, giant-PR P0/P1-only mode, and
   // the learned feedback filter (recurring-nit suppression — never P0/P1).
@@ -1040,14 +1181,18 @@ async function postReview(
     });
   }
 
+  // Header scores are the final (rule-adjusted) values; when a rule changed
+  // one, the model's original follows in parentheses so the override is visible.
+  const suffix = ruleScoreSuffixes(rules);
   const verdict = parsed?.verdict
-    ? ` · **${parsed.verdict.replace(/_/g, " ")}**`
+    ? ` · **${parsed.verdict.replace(/_/g, " ")}**${suffix.verdict}`
     : "";
   const confidence =
     typeof parsed?.confidence === "number"
-      ? ` · quality ${parsed.confidence}/5`
+      ? ` · quality ${parsed.confidence}/5${suffix.confidence}`
       : "";
-  const risk = mergeRiskBadge(mergeRisk);
+  const riskLevel = rules?.final.risk ?? mergeRisk?.risk;
+  const risk = riskLevel ? ` · risk ${riskLevel}${suffix.risk}` : "";
   const findingCount = findings.length;
   // One footer line: provenance, then the action labels. Earlier comments
   // already announce themselves as outdated, so that is not repeated here.

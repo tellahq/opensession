@@ -44,7 +44,7 @@ export function createScheduleMcpServer(ctx: ScheduleToolContext) {
   const tools = [
     tool(
       "schedule_prompt",
-      'Schedule a prompt to be sent to THIS session at a future time, then end your turn. Use it to check back on something that takes a while (a release workflow, CI, a deploy, a long job) instead of polling or sleeping. The prompt arrives as a normal message in this conversation, so write it to your future self with everything needed to pick the work up: what to run, what "done" looks like, what to do on failure. Fires once; survives restarts. Do not use harness built-ins like CronCreate or ScheduleWakeup here; they do not exist in this session.',
+      'Schedule a prompt to be sent to THIS session at a future time, then end your turn. Use it to check back on something that takes a while (a release workflow, CI, a deploy, a long job) instead of polling or sleeping. The prompt arrives in this conversation marked as a scheduled check-back, so write it to your future self with everything needed to pick the work up: what to run, what "done" looks like, what to do on failure. Fires once; survives restarts. Do not use harness built-ins like CronCreate or ScheduleWakeup here; they do not exist in this session.',
       {
         at: z
           .string()

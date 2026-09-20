@@ -165,3 +165,51 @@ test("archived polling stays lazy", async () => {
   expect(archivedPolls).toBe(1);
   stop();
 });
+
+test("a reconnect resync reads the live list while hidden", () => {
+  const runs: string[] = [];
+  const lifecycle: EffectLifecycle<string> = {
+    run(key: string, _effect: Effect.Effect<void>) {
+      runs.push(key);
+    },
+    // The invalidation debounce fires at once so the test stays synchronous.
+    sleep(_key: string, _ms: number, action: () => void) {
+      action();
+    },
+    cancel() {},
+    repeat() {},
+    stream<A>(
+      _key: string,
+      _source: Stream.Stream<A>,
+      _action: (value: A) => void,
+    ) {},
+    acquire() {},
+    stop() {},
+  };
+  const runtime = makeSessionListRuntime({
+    streams: quietStreams,
+    isVisible: () => false,
+    makeLifecycle: () => lifecycle,
+  });
+  runtime.configure({
+    pollInterval: 60_000,
+    loadArchived: false,
+    loading: false,
+    pollLive: async () => {},
+    pollArchived: async () => {},
+  });
+  runtime.start();
+  expect(runs).toEqual([]);
+
+  // An ordinary invalidation waits for the next visibility change.
+  runtime.invalidate();
+  expect(runs).toEqual([]);
+
+  // A reconnect has no replay of the row frames it missed: read now.
+  runtime.invalidate({ whileHidden: true });
+  expect(runs).toEqual(["live-request"]);
+
+  // The archived index still waits for the Archived surface.
+  runtime.invalidate({ whileHidden: true, refreshArchived: true });
+  expect(runs).toEqual(["live-request", "live-request"]);
+});

@@ -288,6 +288,9 @@ async function removeTemplate(
       const { deleteDaytonaTemplateArtifact } =
         await import("./adapters/daytona");
       await deleteDaytonaTemplateArtifact(previous.artifactId);
+    } else if (provider === "tart") {
+      const { deleteTartTemplateArtifact } = await import("./adapters/tart");
+      await deleteTartTemplateArtifact(previous.artifactId);
     } else {
       const { deleteBoxTemplateArtifact } = await import("./adapters/box");
       await deleteBoxTemplateArtifact(previous.artifactId);

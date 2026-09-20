@@ -1,3 +1,7 @@
+import { useSessionVoice } from "../../hooks/useSessionVoice";
+import { SessionVoiceStatus } from "../SessionVoiceStatus";
+import { SESSION_VOICE_STATUS } from "../../lib/session-voice-client";
+import type { useSessionModelWorkflowController } from "../../hooks/useSessionModelWorkflowController";
 import type {
   ComponentProps,
   CSSProperties,
@@ -87,6 +91,7 @@ import {
   VIEWER_SUMMARY_STEP,
 } from "../../lib/session-viewer-classes";
 import type { UnifiedSession, SessionNote } from "../../lib/types";
+import type { TypingPresence } from "../../lib/typing";
 import type { SessionViewerProps } from "../../lib/session-viewer-bindings";
 import type { QueueReceipt } from "../../lib/session-queue";
 import type { FileAttachment } from "../../lib/images";
@@ -254,7 +259,7 @@ interface TranscriptInteraction {
   tailActionNeedsLayoutScrollRef: RefObject<boolean>;
   fileDragActive: boolean;
   canForkSession: boolean;
-  typingUsers: ComponentProps<typeof TypingIndicator>["users"];
+  typingPresence: TypingPresence;
   setQuote: Dispatch<SetStateAction<Quote | null>>;
   focusComposerForQuote: () => HTMLTextAreaElement | null;
 }
@@ -309,6 +314,7 @@ interface ComposerState {
   files: FileAttachment[];
   uploadStaging: ComposerProps["config"]["staging"];
   focused: boolean;
+  voiceReady: boolean;
   quote: Quote | null;
   promoting: boolean;
   isAsk: boolean;
@@ -327,8 +333,9 @@ interface ComposerConfiguration {
   models: ComposerProps["config"]["models"];
   defaultModel: string;
   model: string;
-  effort: ComposerProps["config"]["effort"];
-  fastMode: boolean;
+  runPreferences: ReturnType<
+    typeof useSessionModelWorkflowController
+  >["model"]["runPreferences"];
   accounts: NonNullable<ComposerProps["config"]["accounts"]>;
   accountId: string;
   standing: ComposerStanding;
@@ -356,8 +363,6 @@ interface ComposerActions {
   setNoteMode: ComposerProps["actions"]["onNoteModeChange"];
   handleCancel: ComposerProps["actions"]["onStop"];
   handleModelChange: ComposerProps["actions"]["onModelChange"];
-  setEffort: ComposerProps["actions"]["onEffortChange"];
-  setFastMode: ComposerProps["actions"]["onFastModeChange"];
 }
 
 interface ComposerMoreActions {
@@ -528,7 +533,7 @@ export function SessionViewerMainRegion({
     tailActionNeedsLayoutScrollRef,
     fileDragActive,
     canForkSession,
-    typingUsers,
+    typingPresence,
     setQuote,
     focusComposerForQuote,
   } = transcript.interaction;
@@ -584,8 +589,7 @@ export function SessionViewerMainRegion({
     models,
     defaultModel,
     model,
-    effort,
-    fastMode,
+    runPreferences,
     accounts,
     accountId,
     standing,
@@ -594,6 +598,14 @@ export function SessionViewerMainRegion({
     noteMode,
     attachedComposer,
   } = composer.configuration;
+  const {
+    effort,
+    setEffort,
+    fastMode,
+    setFastMode,
+    autoFallback,
+    changeAutoFallback,
+  } = runPreferences;
   const {
     setTyping,
     setForkFrom,
@@ -608,8 +620,6 @@ export function SessionViewerMainRegion({
     setNoteMode,
     handleCancel,
     handleModelChange,
-    setEffort,
-    setFastMode,
   } = composer.actions;
   const { handleAccountChange, handleSetGoal, handlePstackModeChange } =
     composer.moreActions;
@@ -622,6 +632,35 @@ export function SessionViewerMainRegion({
     setViewerInput,
     leaveLatest,
   } = layout;
+
+  const voiceAvailable =
+    !noEngine &&
+    !noteMode &&
+    !forkFrom &&
+    !session.archived &&
+    (session.source === "opensession" || session.source === "slack");
+  const chatVisible =
+    !showPortal &&
+    !showDesktop &&
+    !showStaging &&
+    !showAssets &&
+    !subagentOpen &&
+    !(showConversation && conversationThreadId) &&
+    !showReview &&
+    !showVideo &&
+    !showTerminal;
+  const voice = useSessionVoice({
+    sessionId: session.id,
+    title: session.title,
+    enabled:
+      voiceAvailable &&
+      focused &&
+      composer.state.voiceReady &&
+      !safety &&
+      chatVisible,
+    busy: isBusy,
+    entries,
+  });
 
   return (
     <div
@@ -1248,7 +1287,7 @@ export function SessionViewerMainRegion({
                   </div>
                 )}
                 <TypingIndicator
-                  users={typingUsers}
+                  presence={typingPresence}
                   className="mx-auto mb-1 w-full max-w-[calc(var(--session-col)+40px)] px-5"
                 />
                 <Composer
@@ -1256,9 +1295,17 @@ export function SessionViewerMainRegion({
                   // per session via draftKey). Remount on the tab-bar +
                   // after its persisted draft has been cleared.
                   key={composerResetSeq ?? 0}
-                  onTyping={(active) => setTyping(session.id, active)}
+                  onTyping={(active, text) =>
+                    setTyping(session.id, active, text)
+                  }
                   config={{
                     draftKey,
+                    call: voiceAvailable
+                      ? {
+                          active: voice.active,
+                          status: SESSION_VOICE_STATUS[voice.state],
+                        }
+                      : undefined,
                     images,
                     files,
                     staging: uploadStaging,
@@ -1311,6 +1358,7 @@ export function SessionViewerMainRegion({
                         ? "Switch the model for this session"
                         : "Set the model from the owning agent (its session file is agent-owned)",
                     effort,
+                    autoFallback,
                     fastMode,
                     // Account pinning is a backstage-session affordance. The
                     // picker filters the combined pool by the active model.
@@ -1324,6 +1372,7 @@ export function SessionViewerMainRegion({
                   }}
                   actions={{
                     onSend: handleSend,
+                    onToggleCall: voiceAvailable ? voice.toggle : undefined,
                     onImagesChange: setImages,
                     onFilesChange: setFiles,
                     onAddAttachments: addSessionAttachments,
@@ -1338,6 +1387,7 @@ export function SessionViewerMainRegion({
                     onStop: handleCancel,
                     onModelChange: handleModelChange,
                     onEffortChange: setEffort,
+                    onAutoFallbackChange: changeAutoFallback,
                     onFastModeChange: setFastMode,
                     onAccountChange:
                       session.source === "opensession"
@@ -1401,7 +1451,22 @@ export function SessionViewerMainRegion({
                       )}
                     </>
                   )}
-                  attached={attachedComposer}
+                  attached={
+                    voice.active || voice.error ? (
+                      <>
+                        <SessionVoiceStatus
+                          state={voice.state}
+                          levels={voice.levels}
+                          error={voice.error}
+                          onTogglePause={voice.togglePause}
+                          onDismiss={voice.dismissError}
+                        />
+                        {attachedComposer}
+                      </>
+                    ) : (
+                      attachedComposer
+                    )
+                  }
                   attachedAction={
                     nextAction ? (
                       <NextUnreadButton key={session.id} phone={isPhone} />

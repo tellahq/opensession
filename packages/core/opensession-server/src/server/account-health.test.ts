@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -7,9 +8,12 @@ import { selectedGithubCredentialIssues } from "./account-health";
 const originalConfig = process.env.OPENSESSION_CONFIG;
 const originalFetch = globalThis.fetch;
 
-afterEach(() => {
+afterEach(async () => {
   if (originalConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = originalConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = originalConfig;
+    await getConfigAsync();
+  }
   globalThis.fetch = originalFetch;
 });
 
@@ -20,6 +24,7 @@ describe("GitHub account health credential selection", () => {
       const config = join(dir, "config.json");
       writeFileSync(config, JSON.stringify({ integrations: { github: {} } }));
       process.env.OPENSESSION_CONFIG = config;
+      await getConfigAsync();
       let requests = 0;
       globalThis.fetch = (async () => {
         requests += 1;

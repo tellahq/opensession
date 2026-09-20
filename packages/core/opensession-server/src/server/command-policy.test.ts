@@ -5,6 +5,7 @@ import {
   EXEC_WRAPPER_NAMES,
   orgFloorPolicy,
   mergeGuardDenyReason,
+  privateTermsDenyReason,
   publicationPolicyDenyReason,
   scannableCommand,
   type CommandPolicy,
@@ -435,6 +436,55 @@ describe("evasion corpus", () => {
     };
     expect(evaluateCommand("git status", policy).decision).toBe("allow");
     expect(evaluateCommand("git push", policy).decision).toBe("deny");
+  });
+});
+
+describe("private terms guard for public repositories", () => {
+  const guard = { terms: ["intranet.acme.test", "Acme-Build-Node", "ok"] };
+
+  test("refuses publishing commands that carry a private term, in any body form", () => {
+    for (const command of [
+      "gh pr create --title t --body 'Tested on intranet.acme.test'",
+      "gh pr create --title t --body \"$(cat <<'EOF'\n## Summary\nRan on acme-build-node.\nEOF\n)\"",
+      "gh pr edit 12 --body 'see INTRANET.ACME.TEST'",
+      "gh pr comment 12 --body 'acme-build-node is down'",
+      "gh pr review 12 --comment --body 'verified on acme-build-node'",
+      "gh issue create --title 'intranet.acme.test outage'",
+      "gh api repos/o/r/issues -f title='acme-build-node'",
+      "git commit -m 'Fix build on acme-build-node'",
+      "git commit -am 'Point at intranet.acme.test' && git push",
+      "git tag -a v1 -m 'cut on acme-build-node'",
+      "git checkout -b fix/acme-build-node",
+      "git push -u origin HEAD:refs/heads/acme-build-node-fix",
+      "cd /tmp/x && gh pr create --fill --body 'intranet.acme.test'",
+    ]) {
+      const reason = privateTermsDenyReason(command, guard);
+      expect(reason, command).toMatch(/private term "[^"]+"/);
+      expect(reason).toContain("policy.privateTerms");
+    }
+  });
+
+  test("lets reads and clean publishing commands through", () => {
+    for (const command of [
+      "git log --grep acme-build-node",
+      "gh pr view 12 --json body | grep intranet.acme.test",
+      "gh pr list --search acme-build-node",
+      "grep -rn intranet.acme.test src/",
+      "cat notes.md",
+      "gh pr create --title 'Fix build' --body 'Retries the flaky step.'",
+      "git commit -m 'Retry the flaky build step'",
+      "git push -u origin HEAD:refs/heads/fix/flaky-build",
+    ])
+      expect(privateTermsDenyReason(command, guard), command).toBeUndefined();
+  });
+
+  test("ignores terms too short to mean anything", () => {
+    expect(
+      privateTermsDenyReason("git commit -m 'ok'", { terms: ["ok"] }),
+    ).toBeUndefined();
+    expect(
+      privateTermsDenyReason("git commit -m 'ok'", { terms: [] }),
+    ).toBeUndefined();
   });
 });
 

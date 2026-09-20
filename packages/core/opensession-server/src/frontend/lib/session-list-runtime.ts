@@ -20,12 +20,22 @@ export interface SessionListRuntimeOptions {
   readonly pollArchived: (signal: AbortSignal) => Promise<void>;
 }
 
+export interface SessionListInvalidation {
+  readonly refreshArchived?: boolean;
+  /** Read the live list even while the document is hidden. Reserved for a
+   * socket reconnect: the row subscription has no replay, so whatever changed
+   * between the old socket dying and the new one subscribing is recovered
+   * only by a full read, and a background tab or occluded window that waited
+   * for its next visibility change showed a stale sidebar until then. */
+  readonly whileHidden?: boolean;
+}
+
 export interface SessionListRuntime {
   readonly configure: (options: SessionListRuntimeOptions) => void;
   readonly start: () => () => void;
   readonly refresh: () => void;
   readonly refreshArchived: () => void;
-  readonly invalidate: (options?: { refreshArchived?: boolean }) => void;
+  readonly invalidate: (options?: SessionListInvalidation) => void;
 }
 
 const NO_OPTIONS: SessionListRuntimeOptions = {
@@ -52,9 +62,9 @@ export function makeSessionListRuntime({
   let lifecycleId = 0;
 
   const visible = isVisible;
-  const runLive = () => {
+  const runLive = (whileHidden = false) => {
     const active = lifecycle;
-    if (!active || !visible()) return;
+    if (!active || (!whileHidden && !visible())) return;
     const current = lifecycleId;
     active.run(
       "live-request",
@@ -101,10 +111,10 @@ export function makeSessionListRuntime({
       ),
     );
   };
-  const refresh = () => {
+  const refresh = (whileHidden = false) => {
     lifecycle?.cancel("live-fallback");
     lifecycle?.cancel("archived-fallback");
-    runLive();
+    runLive(whileHidden);
     runArchived();
   };
 
@@ -156,14 +166,14 @@ export function makeSessionListRuntime({
         active.stop();
       };
     },
-    refresh,
+    refresh: () => refresh(),
     refreshArchived() {
       lifecycle?.cancel("archived-fallback");
       runArchived(true);
     },
     invalidate(invalidationOptions = {}) {
       lifecycle?.sleep("invalidation-debounce", 250, () => {
-        refresh();
+        refresh(invalidationOptions.whileHidden);
         if (invalidationOptions.refreshArchived && !options.loadArchived)
           runArchived(true);
       });

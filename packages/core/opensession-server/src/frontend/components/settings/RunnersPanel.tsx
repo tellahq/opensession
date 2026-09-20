@@ -481,6 +481,11 @@ function RunnerRow({
                     {runner.migration.namespace} / {runner.migration.workload}
                   </div>
                 )}
+                {runner.aws && (
+                  <div className="truncate" title={runner.aws.roleArn}>
+                    AWS role · {runner.aws.roleArn}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -541,12 +546,17 @@ function RunnerDetails({
   const [inferenceEnabled, setInferenceEnabled] = useState(
     Boolean(runner.localInferencePolicy?.enabled),
   );
+  const [awsRoleArn, setAwsRoleArn] = useState(runner.aws?.roleArn || "");
+  const [awsExternalId, setAwsExternalId] = useState(
+    runner.aws?.externalId || "",
+  );
   const inference = Boolean(runner.resources?.localInference?.length);
   // Every field commits on Save, the switches included: a dialog with its own
   // Save button that also applies two of its controls the moment they move
   // leaves Cancel meaning different things in one form.
   const save = async (event: FormEvent) => {
     event.preventDefault();
+    const roleArn = awsRoleArn.trim();
     const patch: Parameters<typeof updateRunner>[1] = {
       label: label.trim() || undefined,
       capabilities: { tags: list(tags) },
@@ -554,6 +564,10 @@ function RunnerDetails({
       allowedRepos: list(repos),
       maintenance,
       permissions: { commands },
+      // An emptied ARN removes the role; the server validates the ARN shape.
+      aws: roleArn
+        ? { roleArn, externalId: awsExternalId.trim() || undefined }
+        : null,
     };
     if (inference) {
       patch.localInferencePolicy = {
@@ -647,6 +661,37 @@ function RunnerDetails({
               />
             </Field>
           ) : null}
+        </div>
+        {/* What runs on the Runner may reach in AWS. The host assumes this
+		    role and hands the Runner the role session only, so blank means
+		    no AWS credentials from Open Session at all. */}
+        <div className="flex flex-col gap-3">
+          <Field
+            label="AWS role ARN"
+            title="Runs on this Runner get a session for this IAM role, assumed by the Open Session host. Blank means no AWS credentials."
+          >
+            <Input
+              value={awsRoleArn}
+              onChange={(event) => setAwsRoleArn(event.target.value)}
+              placeholder="arn:aws:iam::123456789012:role/name"
+              autoCapitalize="none"
+              spellCheck={false}
+              className="font-mono text-xs"
+            />
+          </Field>
+          <Field
+            label="AWS external ID"
+            title="Optional. Sent with the AssumeRole call when the role's trust policy requires one."
+          >
+            <Input
+              value={awsExternalId}
+              onChange={(event) => setAwsExternalId(event.target.value)}
+              placeholder="None"
+              autoCapitalize="none"
+              spellCheck={false}
+              disabled={!awsRoleArn.trim()}
+            />
+          </Field>
         </div>
         {/* Label left, control right: the shape every toggle in settings
 			    already has, so two of them read as a list rather than as pairs

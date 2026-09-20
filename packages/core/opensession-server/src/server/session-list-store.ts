@@ -371,6 +371,25 @@ export function indexedLiveSessionsByBranch(
   return callIndex("listLiveByBranchCovered", branches).then(shared);
 }
 
+/** Catalog-only PR ownership lookup. No full-list or filesystem fallback. */
+export async function indexedLiveSessionsByRepoBranch(
+  repo: string,
+  branch: string,
+  defaultRepoId: string,
+): Promise<UnifiedSession[]> {
+  const rows = await callIndex(
+    "listLiveByRepoBranchCovered",
+    repo,
+    branch,
+    defaultRepoId,
+  );
+  if (rows === null)
+    throw new SessionListIndexError("Session branch index is not ready");
+  // Ownership consumers need committed metadata, not UI PR enrichment (which
+  // can resolve legacy defaults synchronously). Keep the gateway side I/O-free.
+  return rows;
+}
+
 export function indexedWorkspaceMembers(
   workspaceId: string,
 ): Promise<UnifiedSession[]> {

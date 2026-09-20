@@ -52,7 +52,15 @@ import {
   workspaceName,
   type Workspace,
 } from "./workspaces";
-import { getRepo, isSharedCheckoutDir } from "./worktree";
+import { isSharedCheckoutDir } from "./worktree";
+import {
+  configuredRepos,
+  defaultRepo,
+  getConfigAsync,
+  type Repo,
+} from "./config";
+import { statePath } from "./paths";
+import { catalogWorktreeOwnership } from "./session-branch-ownership";
 import type { UnifiedSession } from "./types";
 
 /**
@@ -89,10 +97,10 @@ export function ownedWorktree(dir: string | null | undefined): string | null {
  */
 async function workspaceForBranch(
   session: UnifiedSession,
+  repo: Repo | undefined,
 ): Promise<Workspace | null> {
-  if (!session.branch || !ownedWorktree(session.worktreeDir)) return null;
+  if (!session.branch || !repo) return null;
   try {
-    const repo = getRepo(session.repo || undefined);
     if (session.branch === repo.defaultBranch) return null;
     return await findWorkspaceByBranch(repo.id, session.branch);
   } catch {
@@ -238,10 +246,20 @@ export async function ensureSessionWorkspaces(
   }
   if (fresh.length === 0) return;
 
-  // One workspace per owned worktree; every other session is its own workspace.
+  // The rows already carry checkout locations. Do not rediscover ownership
+  // with isSharedCheckoutDir/realpath for every orphan in a cold rebuild.
+  const config = await getConfigAsync();
+  const repos = configuredRepos(config);
+  const owns = catalogWorktreeOwnership(
+    repos,
+    process.env.OPENSESSION_WORKTREES_DIR ||
+      config.paths?.worktreesDir ||
+      statePath(".opensession/worktrees"),
+  );
+  // One workspace per known owned worktree; unknown/shared locations stay separate.
   const groups = new Map<string, UnifiedSession[]>();
   for (const session of fresh) {
-    const dir = ownedWorktree(session.worktreeDir);
+    const dir = owns(session.worktreeDir);
     const key = dir ? `wt:${dir}` : `session:${session.id}`;
     const list = groups.get(key);
     if (list) list.push(session);
@@ -257,7 +275,12 @@ export async function ensureSessionWorkspaces(
       // (a sibling session may be filed there already).
       const workspace =
         (dir ? await findWorkspaceByWorktree(dir) : null) ??
-        (await workspaceForBranch(group[0])) ??
+        (dir
+          ? await workspaceForBranch(
+              group[0],
+              group[0].repo ? repos[group[0].repo] : defaultRepo(repos),
+            )
+          : null) ??
         (await createWorkspace({
           name: nameFor(group, !!dir),
           repo: group[0].repo,

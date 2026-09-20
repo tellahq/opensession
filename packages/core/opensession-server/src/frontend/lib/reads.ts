@@ -12,6 +12,7 @@ import { z } from "zod";
 import { fetchReads, saveReadsApi } from "./api";
 import { getCurrentUser } from "../components/UserPicker";
 import { whenCurrentUserReady } from "./auth-ready";
+import { registerUserMapResync } from "./user-map";
 
 const KEY_PREFIX = "opensession-reads:";
 const LEGACY_KEY = "opensession-reads";
@@ -83,6 +84,7 @@ const pendingIntents = new Map<string, ReadMap>();
 const saveChains = new Map<string, Promise<unknown>>();
 
 function syncToServer(user: string, map: ReadMap): void {
+  ++hydrationVersion;
   const next = saveChains.get(user) ?? Promise.resolve();
   saveChains.set(
     user,
@@ -121,7 +123,7 @@ export function mergeReadMaps(
   return cap({ ...merged, ...intents });
 }
 
-async function hydrate(user: string): Promise<void> {
+async function hydrate(user: string, authoritative = false): Promise<void> {
   const version = ++hydrationVersion;
   let server: ReadMap;
   try {
@@ -129,13 +131,13 @@ async function hydrate(user: string): Promise<void> {
   } catch {
     clearTimeout(hydrationRetry);
     hydrationRetry = setTimeout(() => {
-      if (getCurrentUser() === user && hydratedFor !== user) void hydrate(user);
+      if (getCurrentUser() === user) void hydrate(user, authoritative);
     }, 5_000);
     return;
   }
   if (version !== hydrationVersion || getCurrentUser() !== user) return;
   const intents = pendingIntents.get(user) ?? {};
-  const next = mergeReadMaps(server, read(user), intents);
+  const next = mergeReadMaps(server, authoritative ? {} : read(user), intents);
   clearTimeout(hydrationRetry);
   hydrationRetry = undefined;
   write(user, next);
@@ -201,6 +203,13 @@ export function onReadsChanged(handler: () => void): () => void {
     window.removeEventListener("storage", handler);
   };
 }
+
+registerUserMapResync("reads", async (user) => {
+  const me = getCurrentUser();
+  if (user.trim().toLowerCase() !== me.trim().toLowerCase()) return;
+  await saveChains.get(me);
+  if (getCurrentUser() === me) await hydrate(me, true);
+});
 
 if (globalThis.window?.addEventListener) {
   whenCurrentUserReady((user) => void hydrate(user));

@@ -4,6 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   getConfig,
+  getConfigAsync,
   configuredRepos,
   configuredPaths,
   configuredServer,
@@ -18,8 +19,7 @@ import {
 } from "./config";
 import { reviewTeamDirectory } from "./people";
 
-// Each case writes its config to a fresh path (the loader caches by
-// path+mtime) and points OPENSESSION_CONFIG at it.
+// Each case writes a fresh config namespace and awaits its snapshot.
 const ENV_KEYS = [
   "OPENSESSION_CONFIG",
   "OPENSESSION_WORKTREES_DIR",
@@ -34,12 +34,13 @@ const saved: Record<string, string | undefined> = {};
 for (const k of ENV_KEYS) saved[k] = process.env[k];
 
 const dirs: string[] = [];
-function withConfig(contents: string | null): void {
+async function withConfig(contents: string | null): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "bks-config-test-"));
   dirs.push(dir);
   const path = join(dir, "config.json");
   if (contents !== null) writeFileSync(path, contents);
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
 }
 
 afterEach(() => {
@@ -52,8 +53,28 @@ afterEach(() => {
 });
 
 describe("config loader", () => {
-  test("supports one canonical public ingress origin", () => {
-    withConfig(
+  test("async snapshots preserve defaults and observe config replacement", async () => {
+    await withConfig(
+      JSON.stringify({ repos: { alpha: { repo: "/alpha", default: true } } }),
+    );
+    expect(defaultRepo(configuredRepos(await getConfigAsync())).id).toBe(
+      "alpha",
+    );
+    await withConfig(
+      JSON.stringify({ repos: { beta: { repo: "/beta", default: true } } }),
+    );
+    expect(defaultRepo(configuredRepos(await getConfigAsync())).id).toBe(
+      "beta",
+    );
+    await withConfig(null);
+    expect(await getConfigAsync()).toEqual({});
+    expect(defaultRepo(configuredRepos(await getConfigAsync())).id).toBe(
+      "opensession",
+    );
+  });
+
+  test("supports one canonical public ingress origin", async () => {
+    await withConfig(
       JSON.stringify({
         server: { publicBaseUrl: "https://ui.example.test" },
         ingress: {
@@ -76,8 +97,8 @@ describe("config loader", () => {
     );
   });
 
-  test("keeps an unconfigured ingress distinct while setup remains portable", () => {
-    withConfig(
+  test("keeps an unconfigured ingress distinct while setup remains portable", async () => {
+    await withConfig(
       JSON.stringify({ server: { publicBaseUrl: "https://ui.example.test" } }),
     );
     delete process.env.OPENSESSION_UI_BASE;
@@ -86,8 +107,8 @@ describe("config loader", () => {
     expect(configuredServer().webhookBaseUrl).toBe("https://ui.example.test");
   });
 
-  test("defaults preview portals to the public UI hostname", () => {
-    withConfig(
+  test("defaults preview portals to the public UI hostname", async () => {
+    await withConfig(
       JSON.stringify({ server: { publicBaseUrl: "https://os.example.test" } }),
     );
     delete process.env.OPENSESSION_UI_BASE;
@@ -95,8 +116,8 @@ describe("config loader", () => {
     expect(configuredServer().previewHost).toBe("os.example.test");
   });
 
-  test("no file → portable self-repo defaults", () => {
-    withConfig(null); // path exists as a dir entry that was never written
+  test("no file → portable self-repo defaults", async () => {
+    await withConfig(null); // path exists as a dir entry that was never written
     for (const k of ENV_KEYS.slice(1)) delete process.env[k];
 
     expect(getConfig()).toEqual({});
@@ -131,8 +152,8 @@ describe("config loader", () => {
     expect(configuredServer().caddyAdmin).toBe("http://localhost:2019");
   });
 
-  test("repos section is authoritative and applies id-derived defaults", () => {
-    withConfig(
+  test("repos section is authoritative and applies id-derived defaults", async () => {
+    await withConfig(
       JSON.stringify({
         paths: { worktreesDir: "/srv/worktrees" },
         repos: {
@@ -167,8 +188,8 @@ describe("config loader", () => {
     expect(configuredPaths().worktreesDir).toBe("/srv/worktrees");
   });
 
-  test("publication mode is per repo and independent of checkout isolation", () => {
-    withConfig(
+  test("publication mode is per repo and independent of checkout isolation", async () => {
+    await withConfig(
       JSON.stringify({
         selfDev: "worktree",
         repos: {
@@ -191,8 +212,8 @@ describe("config loader", () => {
     expect(repos.invalid.publicationMode).toBeUndefined();
   });
 
-  test("unsafe default branch text falls back before reaching prompts", () => {
-    withConfig(
+  test("unsafe default branch text falls back before reaching prompts", async () => {
+    await withConfig(
       JSON.stringify({
         repos: {
           app: {
@@ -206,28 +227,28 @@ describe("config loader", () => {
     expect(configuredRepos().app.defaultBranch).toBe("main");
   });
 
-  test("repo entry without a checkout path is ignored", () => {
-    withConfig(
+  test("repo entry without a checkout path is ignored", async () => {
+    await withConfig(
       JSON.stringify({ repos: { phantom: { ghRepo: "acme/phantom" } } }),
     );
     expect(configuredRepos()["phantom"]).toBeUndefined();
   });
 
-  test("malformed file → defaults", () => {
-    withConfig("{ this is not json");
+  test("malformed file → defaults", async () => {
+    await withConfig("{ this is not json");
     for (const k of ENV_KEYS.slice(1)) delete process.env[k];
     expect(getConfig()).toEqual({});
     expect(defaultRepo().id).toBe("opensession");
     expect(configuredIdentity().team).toEqual([]);
   });
 
-  test("non-object JSON → defaults", () => {
-    withConfig(JSON.stringify(["not", "an", "object"]));
+  test("non-object JSON → defaults", async () => {
+    await withConfig(JSON.stringify(["not", "an", "object"]));
     expect(getConfig()).toEqual({});
   });
 
-  test("env vars beat config.json per key", () => {
-    withConfig(
+  test("env vars beat config.json per key", async () => {
+    await withConfig(
       JSON.stringify({
         paths: {
           worktreesDir: "/from-config/worktrees",
@@ -249,22 +270,22 @@ describe("config loader", () => {
     expect(configuredRepos().app.repo).toBe("/from-config/app");
   });
 
-  test("identity: section present with empty team → empty tables, no throws", () => {
-    withConfig(JSON.stringify({ identity: { team: [] } }));
+  test("identity: section present with empty team → empty tables, no throws", async () => {
+    await withConfig(JSON.stringify({ identity: { team: [] } }));
     const identity = configuredIdentity();
     expect(identity.team).toEqual([]);
     expect(identity.slackNames).toEqual({});
   });
 
-  test("persona/branding: defaults with no config file", () => {
-    withConfig(null);
+  test("persona/branding: defaults with no config file", async () => {
+    await withConfig(null);
     expect(personaName()).toBe("Assistant");
     expect(productName()).toBe("Open Session");
     expect(productMark()).toBe("Open Session");
   });
 
-  test("persona/branding: config overrides apply", () => {
-    withConfig(
+  test("persona/branding: config overrides apply", async () => {
+    await withConfig(
       JSON.stringify({
         persona: { name: "Ava" },
         branding: { productName: "OpenSession", productMark: "OS" },
@@ -275,11 +296,13 @@ describe("config loader", () => {
     expect(productMark()).toBe("OS");
   });
 
-  test("branding: productMark falls back to productName", () => {
-    withConfig(JSON.stringify({ branding: { productName: "OpenSession" } }));
+  test("branding: productMark falls back to productName", async () => {
+    await withConfig(
+      JSON.stringify({ branding: { productName: "OpenSession" } }),
+    );
     expect(productMark()).toBe("OpenSession");
     // Empty/whitespace strings are treated as unset, not honored.
-    withConfig(
+    await withConfig(
       JSON.stringify({
         persona: { name: "  " },
         branding: { productName: "" },
@@ -289,16 +312,18 @@ describe("config loader", () => {
     expect(productName()).toBe("Open Session");
   });
 
-  test("organization: name falls back to the product name", () => {
-    withConfig(JSON.stringify({ branding: { productName: "OpenSession" } }));
+  test("organization: name falls back to the product name", async () => {
+    await withConfig(
+      JSON.stringify({ branding: { productName: "OpenSession" } }),
+    );
     expect(organizationName()).toBe("OpenSession");
 
-    withConfig(JSON.stringify({ organization: { name: "Acme" } }));
+    await withConfig(JSON.stringify({ organization: { name: "Acme" } }));
     expect(organizationName()).toBe("Acme");
   });
 
-  test("identity: custom roster is parsed and validated", () => {
-    withConfig(
+  test("identity: custom roster is parsed and validated", async () => {
+    await withConfig(
       JSON.stringify({
         identity: {
           team: [
@@ -350,8 +375,8 @@ describe("config loader", () => {
     expect(identity.slackNames).toEqual({ U222: "Bot" });
   });
 
-  test("updateIdentityConfig: writes names, preserves unknown keys, empty resets", () => {
-    withConfig(
+  test("updateIdentityConfig: writes names, preserves unknown keys, empty resets", async () => {
+    await withConfig(
       JSON.stringify({
         server: { port: 4000 },
         persona: { name: "Old", company: "Acme" },
@@ -376,12 +401,12 @@ describe("config loader", () => {
     ).toBeUndefined();
   });
 
-  test("updateIdentityConfig: creates a missing file, refuses a corrupt one", () => {
-    withConfig(null);
+  test("updateIdentityConfig: creates a missing file, refuses a corrupt one", async () => {
+    await withConfig(null);
     updateIdentityConfig({ productName: "Fresh" });
     expect(productName()).toBe("Fresh");
 
-    withConfig("{ not json");
+    await withConfig("{ not json");
     expect(() => updateIdentityConfig({ personaName: "X" })).toThrow();
     // The broken hand-edited file is left untouched.
     expect(readFileSync(configPath(), "utf-8")).toBe("{ not json");

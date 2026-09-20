@@ -74,6 +74,19 @@ export type RunnerMigration =
       workload: string;
     };
 
+/**
+ * IAM role that runs on this Runner receive AWS credentials for. The Open
+ * Session host assumes it with its own instance role (sts:AssumeRole) and
+ * vends the role's short-lived session to the Runner's run hosts, so the
+ * host's instance credentials never leave the host. Absent: runs on the
+ * Runner get no AWS credentials from Open Session.
+ */
+export type RunnerAwsRole = {
+  roleArn: string;
+  /** Optional confused-deputy guard the role's trust policy may require. */
+  externalId?: string;
+};
+
 export type RunnerInferenceTask = "chat" | "embedding" | "image" | "video";
 /** Local inference is opt-in. Presence of Ollama/vLLM on a Runner never
  * authorizes model traffic until an admin enables a narrow policy. */
@@ -109,6 +122,7 @@ export type Runner = {
   workspaceRetention?: "retain" | "delete";
   migration?: RunnerMigration;
   localInferencePolicy?: RunnerLocalInferencePolicy;
+  aws?: RunnerAwsRole;
   maintenance?: boolean;
   reservation?: RunnerReservation;
   workload?: { sessionId?: string; operation?: string; startedAt?: string };
@@ -186,6 +200,28 @@ function normalizeInferencePolicy(
     allowedUsers: cleanStrings(raw.allowedUsers),
     allowedModels: cleanStrings(raw.allowedModels, 160),
     allowedTasks,
+  };
+}
+
+// IAM role ARNs: `arn:<partition>:iam::<account>:role/<path><name>`. The
+// name segment allows the characters IAM allows and nothing else, so a
+// pasted shell fragment or a trailing quote is rejected here rather than by
+// a confusing AccessDenied at run time.
+const ROLE_ARN = /^arn:aws(?:-[a-z]+)*:iam::\d{12}:role\/[\w+=,.@/-]{1,512}$/;
+// sts:AssumeRole ExternalId: 2-1224 characters from this exact set.
+const EXTERNAL_ID = /^[\w+=,.@:/-]{2,1224}$/;
+
+export function normalizeAwsRole(value: unknown): RunnerAwsRole | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
+  const raw = value as Record<string, unknown>;
+  const roleArn = typeof raw.roleArn === "string" ? raw.roleArn.trim() : "";
+  if (!ROLE_ARN.test(roleArn)) return undefined;
+  const externalId =
+    typeof raw.externalId === "string" ? raw.externalId.trim() : "";
+  return {
+    roleArn,
+    ...(externalId && EXTERNAL_ID.test(externalId) ? { externalId } : {}),
   };
 }
 
@@ -297,8 +333,13 @@ function normalizeRunner(value: Runner): Runner {
     : value.workload
       ? [value.workload]
       : [];
+  // A patch clears the role with `aws: null`; the stored record never keeps
+  // the null (or a rejected ARN) around, it simply has no role.
+  const { aws: rawAws, ...rest } = value;
+  const aws = normalizeAwsRole(rawAws);
   return {
-    ...value,
+    ...rest,
+    ...(aws ? { aws } : {}),
     platform,
     capabilities: {
       platform,
@@ -463,6 +504,7 @@ export function registerRunner(
     workspaceRoots: existing?.workspaceRoots ?? [],
     migration: pairing.migration ?? existing?.migration,
     localInferencePolicy: existing?.localInferencePolicy,
+    aws: existing?.aws,
     maintenance: existing?.maintenance,
   });
   if (existingIndex >= 0) store.runners[existingIndex] = runner;
@@ -501,6 +543,8 @@ export type RunnerPatch = Partial<
   workspaceRetention?: "retain" | "delete";
   permissions?: Partial<RunnerExecutionPermissions>;
   capabilities?: Partial<RunnerCapabilities>;
+  /** `null` removes the role. */
+  aws?: RunnerAwsRole | null;
 };
 
 export function updateRunner(
@@ -514,6 +558,7 @@ export function updateRunner(
   store.runners[index] = normalizeRunner({
     ...current,
     ...patch,
+    aws: patch.aws === undefined ? current.aws : (patch.aws ?? undefined),
     workspaceRetention:
       patch.workspaceRetention === "delete"
         ? "delete"

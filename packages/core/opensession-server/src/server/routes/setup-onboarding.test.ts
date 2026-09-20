@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,9 +33,12 @@ function request(
   };
 }
 
-afterEach(() => {
+afterEach(async () => {
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = savedConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = savedConfig;
+    await getConfigAsync();
+  }
   if (savedGithubStore === undefined)
     delete process.env.OPENSESSION_GITHUB_AUTH_STORE;
   else process.env.OPENSESSION_GITHUB_AUTH_STORE = savedGithubStore;
@@ -47,6 +51,7 @@ describe("instance onboarding flag", () => {
     const dir = mkdtempSync(join(tmpdir(), "opensession-onboarding-legacy-"));
     dirs.push(dir);
     process.env.OPENSESSION_CONFIG = join(dir, "config.json");
+    await getConfigAsync();
 
     const response = await handleSetupRoutes(request("GET"));
     expect(await response?.json()).toEqual({ completed: true });
@@ -58,6 +63,7 @@ describe("instance onboarding flag", () => {
     const config = join(dir, "config.json");
     writeFileSync(config, JSON.stringify({ onboardingCompleted: false }));
     process.env.OPENSESSION_CONFIG = config;
+    await getConfigAsync();
     process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
 
     const before = await handleSetupRoutes(request("GET"));
@@ -89,6 +95,7 @@ describe("instance onboarding flag", () => {
     const config = join(dir, "config.json");
     writeFileSync(config, JSON.stringify({ onboardingCompleted: false }));
     process.env.OPENSESSION_CONFIG = config;
+    await getConfigAsync();
     process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
 
     const completed = await handleSetupRoutes(
@@ -113,6 +120,7 @@ describe("instance onboarding flag", () => {
       }),
     );
     process.env.OPENSESSION_CONFIG = config;
+    await getConfigAsync();
 
     await handleSetupRoutes(request("PUT", { completed: true }, null));
     expect(JSON.parse(readFileSync(config, "utf8")).identity.team).toEqual([

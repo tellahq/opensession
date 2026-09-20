@@ -149,13 +149,19 @@ type RuntimeState = {
   drainScheduled?: ReturnType<typeof setTimeout>;
 };
 
-const globalRuntime = globalThis as typeof globalThis & {
-  __opensessionSessionKernelRuntime?: RuntimeState;
-};
-const runtime: RuntimeState =
-  (globalRuntime.__opensessionSessionKernelRuntime ??= {
+// Timer modules register through this module's import cycle. In a compiled
+// bundle they can call the hoisted registration function before this module's
+// top-level bindings initialize. Allocate only the inert registry on demand;
+// timers and effect execution still start through the explicit boot functions.
+function runtimeState(): RuntimeState {
+  const globalRuntime = globalThis as typeof globalThis & {
+    __opensessionSessionKernelRuntime?: RuntimeState;
+  };
+  return (globalRuntime.__opensessionSessionKernelRuntime ??= {
     timerHandlers: new Map(),
   });
+}
+const runtime = runtimeState();
 runtime.startedAt ??= Date.now();
 
 // Maintenance is catalog-only and is not a readiness prerequisite. Keep it
@@ -176,10 +182,10 @@ export function registerSessionTimerHandler(
   kind: string,
   handler: TimerHandler,
 ): () => void {
-  runtime.timerHandlers.set(kind, handler);
+  const handlers = runtimeState().timerHandlers;
+  handlers.set(kind, handler);
   return () => {
-    if (runtime.timerHandlers.get(kind) === handler)
-      runtime.timerHandlers.delete(kind);
+    if (handlers.get(kind) === handler) handlers.delete(kind);
   };
 }
 

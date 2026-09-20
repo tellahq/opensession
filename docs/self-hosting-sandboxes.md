@@ -1,8 +1,9 @@
 # Self-hosting sandboxes
 
 How to run Open Session sessions inside their own machines. A **Sandbox** is a
-Linux VM in your Daytona or Boat account with the repository checked out, its
-`.agents/setup` already run, and a durable disk. It sleeps between turns,
+Linux VM in your Daytona or Boat account, or a macOS VM on a Mac you pair as
+a Runner, with the repository checked out, its `.agents/setup` already run,
+and a durable disk. It sleeps between turns,
 wakes when the next message arrives, and comes back with files, running
 Portals, and the conversation intact. Companion to
 [`deploy/sandbox/README.md`](../deploy/sandbox/README.md) (runner payload) and
@@ -32,11 +33,13 @@ for GPT in a Sandbox.
    webhooks, Sandbox callbacks, and workload identity; the private app on
    `:3850` is never part of it.
 2. **Connect a provider.** In **Workspace → Sandboxes**, connect Daytona or
-   Boat with an API key. Credentials are written once to the server-side
-   workspace secret store and never returned to the browser or placed in a
-   Sandbox. Connecting runs a qualification: ingress is verified, a disposable
-   sandbox is created, a snapshot restore is proven, and everything is cleaned
-   up. Only a **Ready** connection is offered to sessions.
+   Boat with an API key, or **Mac VM** with a paired macOS Runner (no
+   credential; see [Mac VM](#mac-vm-tart-on-a-mac-runner) below). Credentials
+   are written once to the server-side workspace secret store and never
+   returned to the browser or placed in a Sandbox. Connecting runs a
+   qualification: ingress is verified, a disposable sandbox is created, a
+   snapshot restore is proven, and everything is cleaned up. Only a **Ready**
+   connection is offered to sessions.
 3. **Pick the default.** Still in Workspace → Sandboxes, set **New sessions
    run in** to the provider you connected. With one Ready connection this is
    also what an explicit per-session "Sandbox" choice resolves to.
@@ -311,7 +314,7 @@ settings below. Read fresh per call, no restart needed except where noted.
 | Key                                             | Meaning                                                                                                                                                                                                                         |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `connections`                                   | Provider connections and their qualification state. Managed by Workspace → Sandboxes.                                                                                                                                           |
-| `sessionDefault`                                | `"daytona"`, `"box"`, or `"none"`: where new sessions run when nobody chose.                                                                                                                                                    |
+| `sessionDefault`                                | `"daytona"`, `"box"`, `"tart"`, or `"none"`: where new sessions run when nobody chose.                                                                                                                                          |
 | `provider`, `perRepo.<id>.provider`             | Legacy default and per-repo override for API creates that pass `sandbox: true`.                                                                                                                                                 |
 | `perRepo.<id>.sessionDefault`                   | `"daytona"`, `"box"`, or `"none"`: where new sessions on that repo run, ahead of the workspace and personal defaults. Managed by Workspace → Sandboxes → Projects.                                                              |
 | `idleStopMinutes`                               | Sleep after this much idle time (default 30).                                                                                                                                                                                   |
@@ -340,9 +343,10 @@ fails clearly rather than silently running on the host.
 
 ## Certification
 
-Both providers passed the live conformance matrix (Daytona 2026-08-11, Boat
-2026-08-13, then called Box): engine round trip, exec semantics, in-sandbox workspace git,
-Portal relay, sleep/wake, snapshot restore with credential scrub, and cleanup.
+All providers passed the live conformance matrix (Daytona 2026-08-11, Boat
+2026-08-13, then called Box; Mac VM 2026-09-20 on the office Mac mini): engine
+round trip, exec semantics, in-sandbox workspace git, Portal relay,
+sleep/wake, snapshot restore with credential scrub, and cleanup.
 Re-run it with `bun run deploy/sandbox/conformance.ts [daytona] [box]`; it
 uses scratch state and never touches live sessions. The certification dates in
 `src/server/sandbox/config.ts` gate which providers can be selected.
@@ -384,6 +388,56 @@ retained); wake is `resume`, after which the workspace is re-hydrated in the
 background. Project snapshots are named snapshots. Boat serializes command
 admission per VM, so concurrent control-plane calls queue. Destroy archives
 the sandbox; your dashboard retains it.
+
+### Mac VM (Tart on a Mac Runner)
+
+Provider id `tart`. Each session gets a macOS virtual machine on a Mac you
+already paired as a Runner (Apple silicon, macOS 13 or later, the Runner's
+user logged in to a desktop session). On macOS 15 and later the Runner
+process also needs the **Local Network** privacy permission so the Mac can
+reach its guests: accept the "bun would like to find and connect to devices
+on your local network" dialog, or turn `bun` (the Open Session Runner) on
+under System Settings → Privacy & Security → Local Network, then restart
+the Runner service so the running process picks the decision up. macOS
+records the decision per binary path, so a Homebrew upgrade of `bun` asks
+again. The qualification reads the recorded decision and says which of
+these is missing. Guest VMs run as launchd jobs on the Mac, so a Runner
+restart or upgrade does not stop them. Nothing dials into the Mac: Open
+Session drives [Tart](https://tart.run) through the Runner's authenticated
+command channel and reaches each guest over SSH from the Mac itself, so the
+guests need no address of their own. The Runner stays a trusted machine; the
+VMs are the isolation boundary.
+
+**Connect** picks the Runner, the image, the VM shape (default 4 CPUs, 6 GB),
+and **Max VMs** (default 2; Apple allows two macOS guests per host, and the
+host shares its memory with them). The qualification installs the pinned
+Tart release under `~/.opensession-tart` on the Mac, generates a host-local
+SSH key, pulls the image (the default
+`ghcr.io/cirruslabs/macos-tahoe-xcode:26.5` is about 70 GB on disk; plan
+100 GB free and an hour for the first pull), prepares `opensession-base` (key
+installed, sleep disabled, `cliclick` for desktop control), and then proves
+a disposable VM: exec semantics, file upload, stop/start persistence, and a
+distinct clone. Later connects are seconds.
+
+Session VMs are APFS clone-on-write clones of the base (`sbx-<session>`), so
+creating one costs no space up front and takes seconds; the runner payload
+bootstrap on first use takes a few minutes as on other providers, and
+project snapshots (`tpl-<repo>-<hash>`, local clones) remove that. The
+guest user is `admin` with home `/Users/admin`; the workspace lives under
+`/Users/admin/worktrees`. Sleep is `tart stop` (disk kept, processes gone);
+wake boots the VM again and runs `.agents/resume`. Idle VMs are stopped
+after `idleStopMinutes` by the server, since Tart has no idle timer of its
+own. Destroy deletes the VM. A full host refuses to start another VM and
+says which sessions hold the slots.
+
+Portals ride the outbound relay like every remote provider. The agent's
+`opensession-desktop` tools work (`screencapture` and `cliclick` inside the
+guest); a person-facing desktop view and Terminal tabs are not available
+yet. Automations never run here: the guest network is not policy-enforced.
+
+More capacity is more Macs: pair another Mac (a Mac mini, or an EC2 Mac
+instance running the Runner client) and point the connection at it. One
+host per connection today.
 
 ## Security posture
 

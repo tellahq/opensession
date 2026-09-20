@@ -22,7 +22,10 @@ import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir } from "../paths";
 import { writeJsonAtomic } from "../shared/atomic-write";
 import { workspaceSecretExists } from "../workspace-secrets";
-import { sandboxAdapterSignatureCurrent } from "./adapter-signature";
+import {
+  sandboxAdapterSignatureCurrent,
+  sandboxProviderNeedsCredential,
+} from "./adapter-signature";
 import type { SandboxProviderId, SandboxProviderUsability } from "./provider";
 
 // Env-overridable so the verify suite (and unit tests) can point a scratch
@@ -162,7 +165,7 @@ export interface SandboxConfig {
   runnerSha?: string;
 }
 
-const PROVIDER_IDS = new Set<string>(["local", "daytona", "box"]);
+const PROVIDER_IDS = new Set<string>(["local", "daytona", "box", "tart"]);
 
 function asProviderId(v: unknown): SandboxProviderId | undefined {
   return typeof v === "string" && PROVIDER_IDS.has(v)
@@ -372,7 +375,7 @@ export function sandboxAutomationAvailability(): SandboxAutomationAvailability {
 // ── Provider capability status (per-session provider picker) ────────────────
 
 /** The providers a session can explicitly pick ("local" = no sandbox). */
-export const RUNNABLE_SANDBOX_PROVIDERS = ["daytona", "box"] as const;
+export const RUNNABLE_SANDBOX_PROVIDERS = ["daytona", "box", "tart"] as const;
 export type RunnableSandboxProviderId =
   (typeof RUNNABLE_SANDBOX_PROVIDERS)[number];
 
@@ -432,6 +435,11 @@ export const SANDBOX_PROVIDER_CERTIFICATIONS: Record<
     behavioralPassedAt: "2026-08-13",
     warmRestorePassedAt: "2026-08-13",
     note: "live remote-run, lifecycle, and named-snapshot restore matrix passed; Box serializes concurrent command admission per VM",
+  }),
+  tart: certification({
+    behavioralPassedAt: "2026-09-20",
+    warmRestorePassedAt: "2026-09-20",
+    note: "macOS VM on a paired Mac Runner: live remote run, lifecycle, and clone restore passed on the office Mac mini",
   }),
 };
 
@@ -703,7 +711,9 @@ function normalizedConnectionSelection(
       sandboxAdapterSignatureCurrent(
         id,
         connection.qualification?.adapterSignature,
-      ) && Boolean(credentialRef && workspaceSecretExists(credentialRef));
+      ) &&
+      (!sandboxProviderNeedsCredential(id) ||
+        Boolean(credentialRef && workspaceSecretExists(credentialRef)));
     return {
       enabled: connection.enabled !== false,
       current,
@@ -838,7 +848,7 @@ function sandboxProviderSelectionError(
     }
     return `Sandbox provider "${id}" is not currently available.`;
   }
-  return `Sandbox provider "${id}" is not configured: connect ${id === "box" ? "Boat" : "Daytona"} in Workspace > Sandboxes.`;
+  return `Sandbox provider "${id}" is not configured: connect ${id === "box" ? "Boat" : id === "tart" ? "a Mac VM host" : "Daytona"} in Workspace > Sandboxes.`;
 }
 
 /** Whether the provider has enabled connection configuration. */

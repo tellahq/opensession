@@ -381,6 +381,83 @@ export function publicationPolicyDenyReason(
   return undefined;
 }
 
+export interface PrivateTermsGuard {
+  /** Private organization terms (config `policy.privateTerms`) that must never
+   *  reach a public repository. Matched case-insensitively as substrings. */
+  terms: string[];
+}
+
+const PUBLISHING_GIT_SUBCOMMANDS = new Set([
+  "commit",
+  "tag",
+  "merge",
+  "revert",
+  "notes",
+  "push",
+  "branch",
+  "checkout",
+  "switch",
+]);
+const PUBLISHING_GH_WORDS = new Set([
+  "create",
+  "edit",
+  "comment",
+  "review",
+  "close",
+  "reopen",
+  "ready",
+  "upload",
+  "api",
+  "gist",
+]);
+
+/**
+ * Tripwire for runs whose primary repository is public: a command that
+ * publishes text (a commit message, tag, branch name, PR or issue body,
+ * comment, review, or a raw GitHub API call) may not contain any configured
+ * private organization term. The prompt already says not to; this turns a
+ * slip into a refusal before the text leaves the machine. Terms are matched
+ * against the raw command so heredoc and quoted bodies count, and only
+ * publishing commands are checked so reads such as `git log --grep` and
+ * `gh pr view` stay usable.
+ */
+export function privateTermsDenyReason(
+  command: string,
+  guard: PrivateTermsGuard,
+): string | undefined {
+  const terms = guard.terms
+    .map((term) => term.trim().toLowerCase())
+    .filter((term) => term.length >= 3);
+  if (terms.length === 0) return undefined;
+  const scan = scannableCommand(command);
+  const publishes =
+    scanShell(scan).commands.some((words) => {
+      const git = gitInvocation(words);
+      if (git?.subcommand && PUBLISHING_GIT_SUBCOMMANDS.has(git.subcommand))
+        return true;
+      const ghIndex = words.indexOf("gh");
+      return (
+        ghIndex >= 0 &&
+        words.slice(ghIndex + 1).some((word) => PUBLISHING_GH_WORDS.has(word))
+      );
+    }) ||
+    // Raw-text fallbacks for shapes the scanner does not split.
+    /\bgit\s+(?:-\S+\s+)*(?:commit|tag|merge|revert|notes|push|branch|checkout|switch)\b/.test(
+      scan,
+    ) ||
+    /\bgh\s+[^\n]*\b(?:create|edit|comment|review|close|reopen|ready|upload|api|gist)\b/.test(
+      scan,
+    );
+  if (!publishes) return undefined;
+  const lower = command.toLowerCase();
+  const hit = terms.find((term) => lower.includes(term));
+  if (hit === undefined) return undefined;
+  return (
+    `the primary repository is public and this command would publish the private term ` +
+    `"${hit}" (policy.privateTerms); rewrite it without private organization information`
+  );
+}
+
 export interface CommandEvaluation {
   decision: CommandDecision;
   reason?: string;

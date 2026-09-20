@@ -19,7 +19,7 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir, statePath } from "../paths";
-import { configPath } from "../config";
+import { configPath, publishConfigSnapshot } from "../config";
 import {
   DEMO_BRANCH,
   DEMO_COMMITTED_CHANGE,
@@ -190,7 +190,7 @@ function registerDemoRepo(repoDir: string, worktreesDir: string): void {
   } catch {}
   const repos = (config.repos as Record<string, unknown>) || {};
   const paths = (config.paths as Record<string, unknown>) || {};
-  writeJson(path, {
+  const next = {
     ...config,
     repos: {
       ...repos,
@@ -208,7 +208,9 @@ function registerDemoRepo(repoDir: string, worktreesDir: string): void {
       },
     },
     paths: { ...paths, worktreesDir },
-  });
+  };
+  writeJson(path, next);
+  publishConfigSnapshot(path, JSON.stringify(next));
 }
 
 export function generateDemoData(

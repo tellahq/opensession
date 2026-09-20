@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { afterEach, describe, expect, test } from "bun:test";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -10,6 +11,7 @@ import {
   githubAppRepositoryToken,
   githubRepositoryMatchesInstallation,
   githubServiceReadOnlyEnv,
+  githubServiceReadReposEnv,
   githubToken,
   listGithubAppInstallations,
   updateGithubAppWebhook,
@@ -20,9 +22,12 @@ const savedClientId = process.env.OPENSESSION_GITHUB_CLIENT_ID;
 const originalFetch = globalThis.fetch;
 const dirs: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = savedConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = savedConfig;
+    await getConfigAsync();
+  }
   if (savedClientId === undefined)
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
   else process.env.OPENSESSION_GITHUB_CLIENT_ID = savedClientId;
@@ -55,6 +60,7 @@ describe("GitHub App webhook", () => {
       }),
     );
     process.env.OPENSESSION_CONFIG = config;
+    await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
     __setGithubAppKeyPathForTest(keyPath);
     globalThis.fetch = (async (input, init) => {
@@ -81,7 +87,10 @@ describe("GitHub App webhook", () => {
   });
 });
 
-function writeAppIdentity(prefix: string, clientId: string): void {
+async function writeAppIdentity(
+  prefix: string,
+  clientId: string,
+): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   dirs.push(dir);
   const config = join(dir, "config.json");
@@ -95,13 +104,14 @@ function writeAppIdentity(prefix: string, clientId: string): void {
     }),
   );
   process.env.OPENSESSION_CONFIG = config;
+  await getConfigAsync();
   delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
   __setGithubAppKeyPathForTest(keyPath);
 }
 
 describe("App installation directory", () => {
   test("lists every account the App is installed on", async () => {
-    writeAppIdentity(
+    await writeAppIdentity(
       "opensession-github-installations-",
       "Iv-installations-test",
     );
@@ -136,7 +146,7 @@ describe("App installation directory", () => {
   });
 
   test("answers null rather than none when GitHub cannot be reached", async () => {
-    writeAppIdentity(
+    await writeAppIdentity(
       "opensession-github-installations-",
       "Iv-installations-down",
     );
@@ -219,6 +229,7 @@ describe("repository-scoped App installation identity", () => {
     writeFileSync(keyPath, privateKey.export({ format: "pem", type: "pkcs8" }));
     writeOwnerConfig(config, "owner-b");
     process.env.OPENSESSION_CONFIG = config;
+    await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
     __setGithubAppKeyPathForTest(keyPath);
     (globalThis as any).__ghAppTokenCache = new Map([
@@ -240,6 +251,7 @@ describe("repository-scoped App installation identity", () => {
     const changedConfig = join(dir, "config-owner-c.json");
     writeOwnerConfig(changedConfig, "owner-c");
     process.env.OPENSESSION_CONFIG = changedConfig;
+    await getConfigAsync();
     expect(githubAppCredentialHealth()).toBe("unchecked");
     expect(requests).toEqual([
       "GET https://api.github.com/app/installations?per_page=100&page=1",
@@ -256,6 +268,7 @@ describe("repository-scoped App installation identity", () => {
     writeFileSync(keyPath, privateKey.export({ format: "pem", type: "pkcs8" }));
     writeOwnerConfig(config, "owner-a");
     process.env.OPENSESSION_CONFIG = config;
+    await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
     __setGithubAppKeyPathForTest(keyPath);
     const requests: string[] = [];
@@ -313,6 +326,7 @@ describe("repository-scoped App installation identity", () => {
     // while repository calls still resolve their own installation.
     writeOwnerConfig(config);
     process.env.OPENSESSION_CONFIG = config;
+    await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
     __setGithubAppKeyPathForTest(keyPath);
     globalThis.fetch = twoInstallationFetch([]);
@@ -331,6 +345,7 @@ describe("repository-scoped App installation identity", () => {
     writeFileSync(keyPath, privateKey.export({ format: "pem", type: "pkcs8" }));
     writeOwnerConfig(config, "owner-a");
     process.env.OPENSESSION_CONFIG = config;
+    await getConfigAsync();
     delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
     __setGithubAppKeyPathForTest(keyPath);
     const bodies: Array<{
@@ -365,5 +380,77 @@ describe("repository-scoped App installation identity", () => {
     const env = await githubServiceReadOnlyEnv("owner-a/tool");
     expect(env.GH_TOKEN).toBe("ghs_1_repo:tool");
     expect(Object.keys(env).some((k) => /PUSH_TOKEN/.test(k))).toBe(false);
+  });
+
+  test("a sibling-repository read token is a second, read-only mint", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-github-readrepos-"));
+    dirs.push(dir);
+    const config = join(dir, "config.json");
+    const keyPath = join(dir, "github-app.pem");
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    writeFileSync(keyPath, privateKey.export({ format: "pem", type: "pkcs8" }));
+    writeOwnerConfig(config, "owner-a");
+    process.env.OPENSESSION_CONFIG = config;
+    await getConfigAsync();
+    delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
+    __setGithubAppKeyPathForTest(keyPath);
+    const bodies: Array<{
+      repositories?: string[];
+      permissions: Record<string, string>;
+    }> = [];
+    let refuse = false;
+    const base = twoInstallationFetch([]);
+    globalThis.fetch = (async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      if (/access_tokens$/.test(String(input))) {
+        bodies.push(JSON.parse(String(init?.body)));
+        // GitHub refuses the whole mint when the installation cannot see
+        // one of the listed repositories.
+        if (refuse)
+          return Response.json(
+            { message: "Resource not accessible by integration" },
+            { status: 422 },
+          );
+      }
+      return base(input as string, init);
+    }) as typeof fetch;
+
+    const env = await githubServiceReadReposEnv("owner-a/tool", [
+      "owner-a/api",
+      "owner-a/web",
+    ]);
+    expect(env).toEqual({ GH_READ_TOKEN: "ghs_1_repo:tool,api,web" });
+    expect(bodies).toHaveLength(1);
+    // Own repo plus the siblings, every scope read: the second token must
+    // not be able to write anywhere, and never mints without `repositories`.
+    expect(bodies[0].repositories).toEqual(["tool", "api", "web"]);
+    expect(
+      Object.values(bodies[0].permissions).every((v) => v === "read"),
+    ).toBe(true);
+    // The overlay carries only the read token: the primary GH_TOKEN and the
+    // git credential wiring come from the run's own credential env.
+    expect(Object.keys(env)).toEqual(["GH_READ_TOKEN"]);
+
+    // Nothing listed: no mint, no var.
+    expect(await githubServiceReadReposEnv("owner-a/tool", [])).toEqual({});
+    expect(bodies).toHaveLength(1);
+
+    // A refused mint (App not installed on one repo) fails closed to no
+    // token rather than retrying wider.
+    refuse = true;
+    expect(
+      await githubServiceReadReposEnv("owner-a/tool", ["owner-a/private"]),
+    ).toEqual({});
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1].repositories).toEqual(["tool", "private"]);
+
+    // A foreign owner never reaches GitHub: one installation, one owner.
+    refuse = false;
+    expect(
+      await githubServiceReadReposEnv("owner-a/tool", ["owner-b/app"]),
+    ).toEqual({});
+    expect(bodies).toHaveLength(2);
   });
 });

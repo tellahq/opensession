@@ -112,6 +112,8 @@ export interface PrDetails {
   changedFiles: number;
   reviewDecision: string;
   author: string;
+  /** Label names on the PR. Only populated by the REST automation lookup. */
+  labels?: string[];
   body: string;
   checks: PrCheck[];
   comments: PrComment[];

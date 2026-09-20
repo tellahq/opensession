@@ -185,9 +185,10 @@ describe("makeUserMap", () => {
     h.resolveSave();
     await Promise.resolve();
     await Promise.resolve();
+    h.serves({ remote: "mine" });
     h.respond({ ws: "someday" });
     await staleGet;
-    expect(h.store.get()).toEqual({});
+    expect(h.store.get()).toEqual({ remote: "mine" });
   });
 
   test("serializes writes so a later value cannot reach the server first", async () => {

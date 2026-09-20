@@ -16,7 +16,7 @@ import {
   fetchWorktreeFile,
   saveWorktreeFile,
 } from "../lib/api";
-import { CommentableDiff } from "./CommentableDiff";
+import { CommentableDiff, PrFileTree } from "./DeferredDiff";
 import type { CommentTarget } from "../lib/commentable-diff";
 import { getCurrentUser } from "./UserPicker";
 import { Segmented, SegmentedOption } from "../ui/segmented";
@@ -39,7 +39,6 @@ import {
   useCodeDisplaySettings,
   useCodeOrganizationSettings,
 } from "../hooks/useCodeDisplaySettings";
-import { PrFileTree } from "./pr/PrFileTree";
 import { errorMessage } from "../lib/error-message";
 
 /* The +/− counts. Kept as constants because CommentableDiff carries the same

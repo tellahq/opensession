@@ -106,6 +106,8 @@ export interface CreateSessionOpts {
   model?: string;
   /** Reasoning effort persisted on the session and enforced per run. */
   effort?: string;
+  /** Automatic model switching on exhaustion; defaults to true. */
+  autoFallback?: boolean;
   /** OpenAI fast-mode flag persisted on the session. */
   fastMode?: boolean;
   /** Pstack mode persisted on the session: the pstack skill family loads for its runs. */

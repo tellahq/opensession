@@ -16,6 +16,7 @@ import { describe, expect, test } from "bun:test";
 import { platform } from "os";
 import {
   bootstrapLaunchAgent,
+  bunPath,
   envFileWriteProblem,
   LAUNCHD_LABEL,
   LAUNCHD_LAUNCHER,
@@ -26,6 +27,7 @@ import {
   renderPlist,
   renderSocketUnit,
   renderUnit,
+  seedSessionCatalogs,
   serviceWorkdir,
 } from "./service";
 import { ENV_PATH, HOME, SHIM_PATH } from "./paths";
@@ -35,6 +37,91 @@ import { ENV_PATH, HOME, SHIM_PATH } from "./paths";
 // manager exists there, so skip rather than loosen assertions that catch a
 // real regression on the platforms that install them.
 const onServiceHost = platform() !== "win32";
+
+describe("session catalog seed", () => {
+  type Call = { cmd: string[]; cwd?: string; env?: Record<string, string> };
+  const record = (calls: Call[], code = 0) => {
+    return async (
+      cmd: string[],
+      cwd?: string,
+      env?: Record<string, string>,
+    ) => {
+      calls.push({ cmd, cwd, env });
+      return code;
+    };
+  };
+
+  test("runs the operator script from the service checkout with the kernel credential file", async () => {
+    const calls: Call[] = [];
+    const code = await seedSessionCatalogs({
+      credential: { tokenFile: "/tmp/session-kernel-token" },
+      compiled: false,
+      runCommand: record(calls),
+    });
+    expect(code).toBe(0);
+    expect(calls).toHaveLength(1);
+    const [call] = calls;
+    // The engine the units exec, wherever the host keeps it (bun.exe on
+    // Windows).
+    expect(call.cmd[0]).toBe(bunPath());
+    expect(call.cmd.slice(1)).toEqual([
+      "scripts/seed-session-metadata-catalog.ts",
+    ]);
+    expect(call.cwd).toBe(serviceWorkdir());
+    // The seed resolves the same store as the units it runs between.
+    expect(call.env?.HOME).toBe(HOME);
+    expect(call.env?.OPENSESSION_SESSION_KERNEL_TOKEN_FILE).toBe(
+      "/tmp/session-kernel-token",
+    );
+    expect(call.env?.OPENSESSION_SESSION_KERNEL_TOKEN).toBeUndefined();
+  });
+
+  test("a compiled binary seeds through its own subcommand", async () => {
+    const calls: Call[] = [];
+    await seedSessionCatalogs({
+      credential: { tokenFile: "/tmp/session-kernel-token" },
+      compiled: true,
+      runCommand: record(calls),
+    });
+    expect(calls[0].cmd).toEqual([SHIM_PATH, "seed-session-catalogs"]);
+    // The subcommand has to exist where the binary dispatches it.
+    const main = await Bun.file(
+      new URL(
+        "../../packages/core/opensession-server/src/main.ts",
+        import.meta.url,
+      ),
+    ).text();
+    expect(main).toContain('sub === "seed-session-catalogs"');
+  });
+
+  test("an inline token travels in the environment, never in argv", async () => {
+    const calls: Call[] = [];
+    await seedSessionCatalogs({
+      credential: { token: "kernel-secret" },
+      compiled: false,
+      cwd: "/srv/checkout",
+      env: { EXTRA: "1" },
+      runCommand: record(calls),
+    });
+    const [call] = calls;
+    expect(call.cmd.join(" ")).not.toContain("kernel-secret");
+    expect(call.env?.OPENSESSION_SESSION_KERNEL_TOKEN).toBe("kernel-secret");
+    expect(call.env?.OPENSESSION_SESSION_KERNEL_TOKEN_FILE).toBeUndefined();
+    expect(call.env?.EXTRA).toBe("1");
+    expect(call.cwd).toBe("/srv/checkout");
+  });
+
+  test("reports the seed's failure so the install stops before the gateway", async () => {
+    const calls: Call[] = [];
+    expect(
+      await seedSessionCatalogs({
+        credential: { tokenFile: "/tmp/session-kernel-token" },
+        compiled: false,
+        runCommand: record(calls, 1),
+      }),
+    ).toBe(1);
+  });
+});
 
 describe("launchd bootstrap", () => {
   test("retries transient EIO after bootout", async () => {

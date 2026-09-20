@@ -70,7 +70,11 @@ async function activateWorker() {
  * before, so the cache can never pin a stale build on a working connection.
  * The cached shell is served only when the network fails, or stalls past
  * NAV_STALL_MS (the "VPN is up but the tailnet is unreachable" white-screen
- * case). Bundle assets are content-hashed (App-<hash>.js, global-<hash>.css)
+ * case, and the phone whose VPN is still waking up behind the launch splash).
+ * When the stall guard painted a shell that the late network answer then
+ * proves stale, the page is told (os1-shell-updated) and shows its ordinary
+ * update nudge, so the stale build never outlives the launch that got it.
+ * Bundle assets are content-hashed (App-<hash>.js, global-<hash>.css)
  * and served immutable, so those are CACHE-FIRST: a cached entry can never be
  * stale, a new build simply asks for new names.
  */
@@ -81,7 +85,10 @@ const HTML_CACHE = "os1-shell-html-v2";
 const ASSET_CACHE = "os1-shell-assets-v1";
 // One shell entry per prefix (both registrations share the origin's caches).
 const SHELL_KEY = PREFIX + "/__app-shell__";
-const NAV_STALL_MS = 5000;
+// A healthy tailnet answers the shell well inside this; what runs past it is
+// a VPN reconnecting or a dead route, and the person is staring at the launch
+// splash the whole time. The late answer still refreshes the cache below.
+const NAV_STALL_MS = 1500;
 // Hashed js/css at the root or a legacy prefix: <name>-<hash>.js|css. Never
 // matches sw.js itself (no dash) or icons/splash (not js/css).
 const ASSET_RE = /^\/(?:opensession\/|backstage\/)?[\w.]+-\w+\.(?:js|css)$/;
@@ -131,7 +138,7 @@ self.addEventListener("fetch", (event) => {
     !API_RE.test(url.pathname) &&
     !REDIRECT_RE.test(url.pathname)
   ) {
-    event.respondWith(shellNavigate(req));
+    event.respondWith(shellNavigate(req, event));
   } else if (ASSET_RE.test(url.pathname)) {
     event.respondWith(hashedAsset(req));
   } else if (GATE_RE.test(url.pathname)) {
@@ -164,7 +171,7 @@ async function gateAsset(req, event) {
   return hit;
 }
 
-async function shellNavigate(req) {
+async function shellNavigate(req, event) {
   const cache = await caches.open(HTML_CACHE);
   const cached = await cache.match(SHELL_KEY);
   // Bypass WebKit's HTTP cache. The worker's own shell cache is the only
@@ -178,13 +185,60 @@ async function shellNavigate(req) {
     return res;
   });
   if (!cached) return network;
-  return Promise.race([
+  let answered = false;
+  // Set when the stall guard wins: a copy of what the page is about to run,
+  // taken before the navigation consumes the body of `cached` itself.
+  let stale = null;
+  const response = await Promise.race([
     network.catch(() => cached),
     // Stall guard: a black-holed connection hangs for 60s+; after NAV_STALL_MS
     // paint the cached shell (the network fetch still completes above and
     // refreshes the cache for the next load).
-    new Promise((r) => setTimeout(r, NAV_STALL_MS)).then(() => cached),
+    new Promise((r) => setTimeout(r, NAV_STALL_MS)).then(() => {
+      if (!answered) stale = cached.clone();
+      return cached;
+    }),
   ]);
+  answered = true;
+  // The page got the cached shell and may be running an older bundle than
+  // the one the server answers with. Let the late answer finish, and nudge
+  // the page when it names a different build.
+  if (stale)
+    event.waitUntil(
+      network
+        .then(async (res) => {
+          const type = res.headers.get("content-type") || "";
+          if (!res.ok || !type.includes("text/html")) return;
+          const [fresh, served] = await Promise.all([
+            res.clone().text(),
+            stale.text(),
+          ]);
+          if (shellEntry(fresh) !== shellEntry(served))
+            await notifyShellUpdated();
+        })
+        .catch(() => {}),
+    );
+  return response;
+}
+
+// The hashed entry script index.html points at: what distinguishes one build
+// of the shell from the next. Instance text (name, icons) can change without
+// a new bundle, and is not worth a nudge.
+function shellEntry(html) {
+  const match = /<script[^>]*type="module"[^>]*src="([^"]+)"/.exec(html);
+  return match ? match[1] : html;
+}
+
+async function notifyShellUpdated() {
+  const windows = await self.clients.matchAll({
+    type: "window",
+    includeUncontrolled: true,
+  });
+  for (const client of windows) {
+    try {
+      client.postMessage({ type: "os1-shell-updated" });
+    } catch {}
+  }
 }
 
 async function hashedAsset(req) {

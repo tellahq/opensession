@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import {
   mkdtempSync,
@@ -76,6 +77,7 @@ beforeAll(async () => {
     }),
   );
   process.env.OPENSESSION_CONFIG = join(root, "config.json");
+  await getConfigAsync();
   process.env.OPENSESSION_WORKTREES_DIR = join(root, "worktrees");
 });
 

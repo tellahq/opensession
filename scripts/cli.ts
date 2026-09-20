@@ -200,6 +200,14 @@ async function start(): Promise<number> {
       stderr: "inherit",
     });
     try {
+      // The gateway boots from the catalogs; a fresh state root seeds in
+      // one empty run (scripts/lib/service.ts seedSessionCatalogs).
+      const seeded = await service.seedSessionCatalogs({
+        credential: { token },
+        cwd: REPO_ROOT,
+        env: sharedEnv,
+      });
+      if (seeded !== 0) return seeded;
       return await runInherit(command, REPO_ROOT, sharedEnv);
     } finally {
       kernel.kill("SIGTERM");

@@ -6,6 +6,81 @@ import {
 import type { NativeSessionFile } from "./types";
 
 describe("Plain archive sweep", () => {
+  test("a matching thread cannot open an unbounded set of actor writers", async () => {
+    let writes = 0;
+    const sessions = Array.from({ length: 1000 }, (_, i) => ({
+      data: {
+        id: `candidate-${i}`,
+        plainThreadId: "thread",
+      } as NativeSessionFile,
+    }));
+    const archived = await archivePlainSessionCandidates(
+      "thread",
+      sessions,
+      async (_id, _operation, mutate) => {
+        writes++;
+        return undefined as Awaited<ReturnType<typeof mutate>>;
+      },
+      () => {},
+      () => {},
+    );
+    expect(writes).toBe(40);
+    expect(archived).toBe(40);
+  });
+
+  test("a retargeted or already archived session cannot be archived from a stale candidate", async () => {
+    const {
+      SessionKernelStore,
+      __setSessionKernelStoreForTest,
+      sessionMetadata,
+    } = await import("./session-kernel");
+    const store = new SessionKernelStore(":memory:");
+    const prior = __setSessionKernelStoreForTest(store);
+    try {
+      const current = { id: "os-archive-race", plainThreadId: "new-ticket" };
+      await sessionMetadata({
+        op: "put",
+        sessionId: current.id,
+        expectedRev: null,
+        rev: 1,
+        requestId: "seed",
+        doc: JSON.stringify(current),
+        archived: false,
+        lastActivityMs: 0,
+      });
+      const failures: unknown[] = [];
+      const result = await archivePlainSessionCandidates(
+        "old-ticket",
+        [
+          {
+            data: {
+              ...current,
+              plainThreadId: "old-ticket",
+            } as NativeSessionFile,
+          },
+        ],
+        async (_id, _op, mutate) => await mutate(),
+        (_id, error) => failures.push(error),
+        () => {
+          throw new Error("Must not release a retargeted session lease");
+        },
+      );
+      expect(result).toBe(0);
+      expect(String(failures[0])).toContain(
+        "changed since candidate selection",
+      );
+      expect(
+        JSON.parse(
+          (await sessionMetadata({ op: "catalog_get", sessionId: current.id }))!
+            .doc,
+        ),
+      ).toEqual(current);
+    } finally {
+      __setSessionKernelStoreForTest(prior);
+      store.close();
+    }
+  });
+
   test("continues after one session projection is quarantined", async () => {
     const projected: string[] = [];
     const released: string[] = [];

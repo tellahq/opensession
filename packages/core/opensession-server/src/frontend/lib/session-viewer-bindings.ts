@@ -6,7 +6,7 @@ import type { PortalTarget } from "./portals";
 import type { UnifiedSession } from "./types";
 
 export interface ComposerBinding {
-  setTyping: (sessionId: string, active: boolean) => void;
+  setTyping: (sessionId: string, active: boolean, text?: string) => void;
   /** Bumped to clear the draft and return the session to the live edge. */
   resetSeq?: number;
   /** Focus the composer when the session opens. Ignored on phones. */

@@ -1,4 +1,9 @@
-import type { CSSProperties, RefObject } from "react";
+import {
+  useSyncExternalStore,
+  type CSSProperties,
+  type RefObject,
+} from "react";
+import { sessionVoice } from "../../lib/session-voice-runtime";
 import { motion } from "motion/react";
 import { composerMorph } from "../../ui/motion";
 import { cn } from "../../ui/cn";
@@ -33,6 +38,10 @@ export function VoiceControl({
   onActiveChange,
   disabled,
 }: VoiceControlProps) {
+  const callActive = useSyncExternalStore(
+    sessionVoice.subscribe,
+    sessionVoice.isActive,
+  );
   return (
     <motion.div
       layout="position"
@@ -65,7 +74,7 @@ export function VoiceControl({
             ? "rounded-[999px] phone:pl-2 phone:pr-0.5 phone:pb-1"
             : "rounded-[var(--composer-radius)]"
         }
-        disabled={disabled}
+        disabled={disabled || callActive}
       />
     </motion.div>
   );

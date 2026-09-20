@@ -370,6 +370,7 @@ type NewSessionRequest = {
   mode?: "share" | "stack" | "ask";
   clientSessionId?: string;
   duplicate?: true;
+  messageId?: string;
 };
 
 /**
@@ -400,11 +401,15 @@ export async function newSessionApi(
   mode?: "share" | "stack" | "ask",
   clientSessionId?: string,
   duplicate = false,
+  messageId?: string,
 ): Promise<{ id: string; session: UnifiedSession | null }> {
   const requestBody: NewSessionRequest = { user };
   if (mode) requestBody.mode = mode;
   if (clientSessionId) requestBody.clientSessionId = clientSessionId;
-  if (duplicate) requestBody.duplicate = true;
+  if (duplicate) {
+    requestBody.duplicate = true;
+    if (messageId) requestBody.messageId = messageId;
+  }
   const body = await request<{ id: string; session?: UnifiedSession }>(
     `/sessions/${encodeURIComponent(sourceId)}/new-session`,
     {

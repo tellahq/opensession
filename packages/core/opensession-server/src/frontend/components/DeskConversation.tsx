@@ -25,7 +25,7 @@ import { LiveTurnStore } from "../lib/live-turn-store";
 import { getLiveTypingPref } from "../lib/live-typing-pref";
 import { randomUUID } from "../lib/random-uuid";
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
-import { otherTypingUsers } from "../lib/typing";
+import { NO_TYPING, otherTyping, type TypingPresence } from "../lib/typing";
 import { cn } from "../ui/cn";
 import { msgBubbleUser, msgOwnTurn, msgRow } from "../lib/msg-classes";
 import { SessionTranscript } from "./SessionTranscript";
@@ -96,7 +96,8 @@ export function DeskConversation({
     return () => navigation.dispose();
   }, [sessionId]);
   const [entries, setEntries] = useState<TranscriptEntry[]>([]);
-  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [typingPresence, setTypingPresence] =
+    useState<TypingPresence>(NO_TYPING);
   const [isRunning, setIsRunning] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [hasLiveText, setHasLiveText] = useState(false);
@@ -338,7 +339,7 @@ export function DeskConversation({
           setIsRunning(msg.isRunning);
           break;
         case "typing":
-          setTypingUsers(otherTypingUsers(msg.users, getCurrentUser()));
+          setTypingPresence(otherTyping(msg, getCurrentUser()));
           break;
         case "stream_start":
           setIsRunning(true);
@@ -685,7 +686,7 @@ export function DeskConversation({
           </AnimatePresence>
         </div>
 
-        <TypingIndicator users={typingUsers} className="mb-1 px-5" />
+        <TypingIndicator presence={typingPresence} className="mb-1 px-5" />
         {/* The open Desk owns the app-wide drop over the session underneath. */}
         <div
           ref={globalFileComposerRef}
@@ -695,7 +696,7 @@ export function DeskConversation({
           }
         >
           <Composer
-            onTyping={(active) => setTyping(sessionId, active)}
+            onTyping={(active, text) => setTyping(sessionId, active, text)}
             onDictationActive={handleDictationActive}
             config={{
               draftKey: `desk:${sessionId}`,

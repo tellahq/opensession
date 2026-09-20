@@ -13,7 +13,7 @@
  */
 
 import { chmodSync, copyFileSync, existsSync, readFileSync } from "fs";
-import { configPath, configuredRepos } from "./config";
+import { configPath, configuredRepos, publishConfigSnapshot } from "./config";
 import { writeJsonAtomic } from "./shared/atomic-write";
 
 const mutationState: { chain: Promise<unknown> } = ((
@@ -61,6 +61,7 @@ export function persistRawConfig(config: Record<string, unknown>): void {
   const path = configPath();
   backupFile(path);
   writeJsonAtomic(path, config);
+  publishConfigSnapshot(path, JSON.stringify(config));
   try {
     chmodSync(path, 0o600);
   } catch {}

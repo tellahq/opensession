@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 // When the GitHub PR agent posts on the App installation token, its comments
 // are authored by "<app-slug>[bot]". The agent must recognise that identity
 // as ours from either the config slug or the env slug, alongside policy aliases
@@ -15,13 +16,14 @@ const saved = {
 };
 const dirs: string[] = [];
 
-// The loader caches by path+mtime, so each case gets a fresh path.
-function withConfig(obj: unknown): void {
+// Each case gets a fresh, explicitly loaded configuration snapshot.
+async function withConfig(obj: unknown): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "gh-bot-login-test-"));
   dirs.push(dir);
   const path = join(dir, "config.json");
   writeFileSync(path, JSON.stringify(obj));
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
   delete process.env.OPENSESSION_GITHUB_APP_SLUG;
 }
 
@@ -34,33 +36,35 @@ afterEach(() => {
 });
 
 describe("githubBotLogins with a GitHub App", () => {
-  test("recognises the App's <slug>[bot] author as ours (lowercased)", () => {
-    withConfig({ integrations: { github: { appSlug: "Open-Session-v6a6" } } });
+  test("recognises the App's <slug>[bot] author as ours (lowercased)", async () => {
+    await withConfig({
+      integrations: { github: { appSlug: "Open-Session-v6a6" } },
+    });
     expect(githubBotLogins()).toContain("open-session-v6a6[bot]");
   });
 
-  test("resolves the slug from the env with precedence over config", () => {
-    withConfig({ integrations: { github: { appSlug: "config-slug" } } });
+  test("resolves the slug from the env with precedence over config", async () => {
+    await withConfig({ integrations: { github: { appSlug: "config-slug" } } });
     process.env.OPENSESSION_GITHUB_APP_SLUG = "env-slug";
     expect(githubBotLogins()).toContain("env-slug[bot]");
     expect(githubBotLogins()).not.toContain("config-slug[bot]");
   });
 
-  test("resolves the slug from the env even with no config slug", () => {
-    withConfig({ integrations: { github: {} } });
+  test("resolves the slug from the env even with no config slug", async () => {
+    await withConfig({ integrations: { github: {} } });
     process.env.OPENSESSION_GITHUB_APP_SLUG = "env-only";
     expect(githubBotLogins()).toContain("env-only[bot]");
   });
 
-  test("no App slug configured contributes no App bot login", () => {
-    withConfig({ integrations: { github: {} } });
+  test("no App slug configured contributes no App bot login", async () => {
+    await withConfig({ integrations: { github: {} } });
     expect(githubBotLogins()).toEqual([]);
   });
 });
 
 describe("isGithubBotLogin", () => {
-  test("matches any of our bot logins, not just the first", () => {
-    withConfig({
+  test("matches any of our bot logins, not just the first", async () => {
+    await withConfig({
       policy: { githubBotLogins: ["acme-automation"] },
       integrations: { github: { appSlug: "open-session-v6a6" } },
     });

@@ -434,3 +434,29 @@ describe("fake engine through runAgent", () => {
     expect(events.at(-1)!.content).toContain("script exhausted");
   });
 });
+
+test.each(["pi/anthropic/claude-fable-5-1", "codex-best-available"])(
+  "explicit fallback opt-out stops %s after quota exhaustion",
+  async (model) => {
+    const fake = makeFakeEngine([
+      { kind: "usage_exhausted" },
+      { kind: "clean", text: ["must not run"] },
+    ]);
+    __setEngineForTest(fake.engine);
+    const events = await collect(
+      runAgent({
+        prompt: "p",
+        cwd: "/tmp",
+        mcpServers: [],
+        model,
+        fallbackModel: "none",
+      }),
+    );
+    expect(fake.calls).toHaveLength(1);
+    expect(events.some((event) => event.type === "model_switch")).toBe(false);
+    expect(events.at(-1)).toMatchObject({
+      type: "done",
+      usageLimitExhausted: true,
+    });
+  },
+);

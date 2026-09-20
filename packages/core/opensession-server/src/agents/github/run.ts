@@ -142,8 +142,9 @@ export function bksIdFor(
   prNumber: number,
   kind: GithubRunKind,
   ghRepo?: string,
+  repos?: Parameters<typeof prKey>[2],
 ): string {
-  return `bks-ghpr-${prKey(prNumber, ghRepo)}-${kind}`;
+  return `bks-ghpr-${prKey(prNumber, ghRepo, repos)}-${kind}`;
 }
 
 const UI_BASE =

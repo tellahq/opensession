@@ -8,7 +8,8 @@
  * Generation is a one-shot Haiku call (see generateSessionTitle), fired in the
  * background at session creation so it never blocks the create path.
  */
-import { readFileSync, existsSync, readdirSync, statSync } from "fs";
+import { catalogNativeSessions } from "./session-catalog-read";
+import { readFileSync, existsSync, statSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { oneShot } from "./one-shot";
@@ -164,29 +165,15 @@ const SWEEP_BATCH = 10; // one-shots serialize on a shared server; stay polite
  * manual rename, and never a title carrying the " · " prefix convention that
  * marks a deliberately-composed name.
  */
-function sweepCandidates(): Array<{ id: string; title: string }> {
+export async function sweepCandidates(): Promise<
+  Array<{ id: string; title: string }>
+> {
   const cutoff = Date.now() - SWEEP_MAX_AGE_MS;
   const out: Array<{ id: string; title: string; created: number }> = [];
-  let files: string[] = [];
-  try {
-    files = readdirSync(OPENSESSION_SESSIONS_DIR);
-  } catch {
-    return [];
-  }
-  for (const f of files) {
-    // Both id prefixes: `os-` is what every session minted since the rename
-    // carries, `bks-` what the older ones kept. Matching only `bks-` left the
-    // retry net dead for every new session.
-    if (!f.endsWith(".json") || !/^(os|bks)-[0-9a-f]{8}-/.test(f)) continue;
-    const id = f.slice(0, -5);
+  for (const d of await catalogNativeSessions()) {
+    const id = d.id;
+    if (!/^(os|bks)-[0-9a-f]{8}-/.test(id)) continue;
     if (getGeneratedTitle(id) || getTitleOverride(id)) continue;
-    let d: any;
-    try {
-      d = JSON.parse(readFileSync(`${OPENSESSION_SESSIONS_DIR}/${f}`, "utf-8"));
-    } catch {
-      continue;
-    }
-    if (!d || typeof d !== "object") continue;
     if (d.desk || d.goalId || d.automationId) continue;
     const title = typeof d.title === "string" ? d.title.trim() : "";
     if (!title || title === "New session" || title.includes(" · ")) continue;
@@ -208,7 +195,7 @@ export function startGeneratedTitleSweep(
   if (sweepTimer) return;
 
   const sweep = async () => {
-    const candidates = sweepCandidates();
+    const candidates = await sweepCandidates();
     if (!candidates.length) return;
     let filled = 0;
     for (const { id, title } of candidates) {
@@ -226,7 +213,19 @@ export function startGeneratedTitleSweep(
       console.log(`[generated-titles] back-filled ${filled} title(s)`);
   };
 
-  sweepTimer = setInterval(() => void sweep(), SWEEP_INTERVAL_MS);
-  setTimeout(() => void sweep(), SWEEP_FIRST_DELAY_MS);
+  let running = false;
+  const run = () => {
+    if (running) return;
+    running = true;
+    void sweep()
+      .catch((error) =>
+        console.error("[generated-titles] catalog sweep deferred:", error),
+      )
+      .finally(() => {
+        running = false;
+      });
+  };
+  sweepTimer = setInterval(run, SWEEP_INTERVAL_MS);
+  setTimeout(run, SWEEP_FIRST_DELAY_MS);
   console.log("[generated-titles] back-fill sweep started (10m interval)");
 }

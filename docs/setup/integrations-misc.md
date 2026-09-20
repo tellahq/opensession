@@ -160,6 +160,101 @@ The endpoint accepts at most 25 MiB per clip. Providers are optional: if no
 hosted key works and the local binary or model is unavailable, dictation
 returns an error and the rest of the app is unaffected.
 
+### Session voice calls (web)
+
+Open a normal session and press the handset beside the dictation microphone.
+Allow microphone access, then ask about the thread: what happened, why something
+changed, or what an answer means. GPT Realtime answers directly from a bounded
+recent transcript excerpt, including assistant replies and tool results. The
+voice conversation stays separate: ordinary discussion is not posted to the
+thread and does not run the coding agent. Explicit tasks and messages you ask
+to send are handed to the agent directly. It remembers the voice discussion
+for this call. Starting a new call starts a fresh discussion.
+
+The call stays pinned to the thread it started in. Switching to another session
+or panel does not end it: a floating call panel shows a circular waveform driven
+by the real microphone and speaker levels, with **Return to thread** and
+**End call** controls. The companion keeps discussing the original thread, not
+whatever is on screen. The audio-reactive orb uses a theme-aware shader with a
+lightweight fallback and respects reduced motion. User and AI speech use the
+same balanced swelling and surface motion: purple for the microphone, and the
+accent color (or blue when needed for contrast) for AI playback. Its padded,
+transparent canvas keeps the glow round without square clipping. During setup,
+a neutral connecting pulse appears before audio is available.
+
+**Pause** mutes the microphone and spoken replies without ending the call.
+**Resume** continues the same voice conversation. No new requests are accepted
+while paused; work already queued or started continues. Paused calls
+skip the three-minute idle cutoff but still have the thirty-minute maximum.
+
+**Reasoning helpers.** When a question needs more thinking than the realtime
+model can do well while speaking, the companion consults a helper on its own,
+choosing the tier by difficulty; it does not ask permission for this. `luna`
+(`gpt-5.6-luna`) handles quick transcript reasoning, `terra` (`gpt-5.6-terra`)
+deeper analysis, and `conversation` runs the hardest questions on the thread's
+own effective main model: the session's stored model, or the instance
+interactive default when none is set, with a preset's pinned effort applied
+exactly as a normal agent turn would. Every helper is tool-less and bounded to
+the same transcript excerpt plus the spoken question. Helpers cannot read new
+repository state, run commands, edit files, change the session model, or post
+to the thread. The companion says it is checking, keeps talking, and explains
+the answer when it arrives. A failed helper is reported plainly and never
+handed to the session agent instead.
+
+**Agent work.** Only genuinely new investigation, tool use, or repository work,
+or an explicit wish to send the question to the thread, goes to the session
+agent. An explicit request goes straight to the agent, without an extra approval
+question. The message contains only the task details and constraints, not a
+"Please propose a task for the agent" preamble. Ambiguous intent gets a short
+clarification; ordinary discussion and unsolicited suggestions do not start work.
+You can send more tasks while earlier ones are running. Each uses the normal
+durable steering path, reaching an active agent at its next supported boundary
+rather than waiting for the previous task to finish. Idle agents start normally;
+normal delivery recovery still applies when steering is unavailable. The
+companion acknowledges briefly without restating your request, and reports
+results when they arrive. Unsent composer text, quotes, and attachments stay
+untouched.
+
+Calls use the same instance-wide OpenAI API key configured in
+**Settings → Preferences → Desk voice**. You do not need to enable Desk's voice
+mode. A signed-in web identity and a browser with microphone/WebRTC support are
+required. OpenAI API usage for the realtime call and the Luna/Terra helpers is
+billed separately from the session agent; the `conversation` helper uses the
+session model's own provider account like any tool-less one-shot.
+
+`gpt-realtime` handles the transcript discussion itself. Its work tool,
+`request_voice_help`, names a target: `luna`, `terra`, `conversation`, or
+`session_agent`. There is no direct tool execution or transcript writer, and it
+cannot change the session model, permissions, or MCP inventory. The server
+exchanges SDP at `/api/sessions/:id/voice` and supplies a bounded public transcript
+excerpt, excluding reasoning and hidden engine context. Helper questions post to
+`/api/sessions/:id/voice/helper` with `{ model: "luna" | "terra" | "conversation", prompt }`;
+the route requires a signed-in web identity, accepts exactly those three targets
+(`session_agent` and raw model ids are rejected), runs one bounded, tool-less
+call over the same excerpt, and answers `{ text, model, engineModel }` without
+writing anything. Luna and Terra are stateless low-effort Responses calls;
+`conversation` is a throwaway one-shot Pi session with no local or MCP tools and
+no Open Session transcript. One helper runs per person per session at a time.
+The permanent API key never reaches the browser. User-requested agent tasks use the
+existing authenticated, durable outbox, so normal session safety and automation
+restrictions still apply. No native iOS or Chrome extension behavior changes.
+
+Turn detection uses semantic VAD at high eagerness, so a reply starts soon
+after you stop speaking; speaking over a reply interrupts it. Desk voice keeps
+its own longer-waiting setting.
+
+Press the handset or the floating panel's **End call** to end the call. A clear
+spoken farewell, such as "bye" or "doei", also closes it automatically through
+`end_voice_call`, without another confirmation. Quoted farewells, questions
+about the word "bye", and "don't hang up" are not closing requests. Closing
+releases audio, not the agent's work. Speaking
+over a reply stops narration, not the agent's work. Hiding the browser tab,
+closing the page, losing the voice connection, or starting another call also
+releases the microphone. Calls end after three idle minutes (not while paused
+or while a helper or agent request is pending) or thirty minutes total. Dictation is unavailable while a
+call is active. Use the chat's existing controls for approval questions and
+stopping agent work.
+
 ### Desk voice calls
 
 The Desk overlay's voice mode (Settings → Desk voice) uses its own OpenAI
@@ -232,12 +327,13 @@ to protect, set `OPENSESSION_ALLOW_IMDS=1` to skip that installer check.
 **Off by default.** The mint is EC2-specific and needs passwordless sudo, so it
 only runs when you turn it on:
 
-| Setting                                             | Meaning                                                                                                                                                   |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AGENT_AWS_CREDS`                                   | Only the literal `true` enables, any other value disables. Checked first, so it is also the off switch on a host that pins a region.                      |
-| `integrations.aws.enabled`                          | Used when `AGENT_AWS_CREDS` is unset.                                                                                                                     |
-| `AGENT_AWS_REGION` / `integrations.aws.region`      | With neither of the above set, pinning a region for agent runs enables the mint.                                                                          |
-| `AGENT_AWS_MINT_USER` / `integrations.aws.mintUser` | The unprivileged account the transient unit runs as. Defaults to the account the server runs as. This selects the unit's UID/GID; it does not grant sudo. |
+| Setting                                                       | Meaning                                                                                                                                                                            |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AGENT_AWS_CREDS`                                             | Only the literal `true` enables, any other value disables. Checked first, so it is also the off switch on a host that pins a region.                                               |
+| `integrations.aws.enabled`                                    | Used when `AGENT_AWS_CREDS` is unset.                                                                                                                                              |
+| `AGENT_AWS_REGION` / `integrations.aws.region`                | With neither of the above set, pinning a region for agent runs enables the mint.                                                                                                   |
+| `AGENT_AWS_MINT_USER` / `integrations.aws.mintUser`           | The unprivileged account the transient unit runs as. Defaults to the account the server runs as. This selects the unit's UID/GID; it does not grant sudo.                          |
+| `AGENT_AWS_UNTRUSTED_RUNS` / `integrations.aws.untrustedRuns` | Off by default. `true` also vends the credentials to automation runs and Plain discussion sessions, which hold untrusted ticket text. Turn on only with a read-only instance role. |
 
 The service installer's fixed run-host helper permission does not grant the
 separate `sudo -n systemd-run` access this mint needs. Provision a narrowly
@@ -249,6 +345,14 @@ or a separate unprivileged mint user that is not covered by the rule.
 A bare `AWS_REGION` does not enable anything: it names the region for a run
 that already has credentials, and it is set on plenty of machines with no
 instance role to mint.
+
+**Runners.** The instance-role session never leaves the host. A Runner's run
+hosts instead ask the server for credentials
+(`GET /run-hosts/<hostId>/aws-credentials`, authenticated with the run's
+dial-back token), and the server answers only when an administrator gave that
+Runner an IAM role in Settings → Runners: it assumes the role with the minted
+instance session and vends the role session. See
+[runners.md](../runners.md#aws-access-from-a-runner) for the trust policy.
 
 With the mint off, `getAgentAwsEnv` / `ensureAgentAwsCredsFile` return `{}`
 without spawning anything, and runs proceed without AWS. That is the expected

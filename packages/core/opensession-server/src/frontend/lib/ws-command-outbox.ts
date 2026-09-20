@@ -149,6 +149,7 @@ const mutationMessageSchema = z.discriminatedUnion("type", [
       effort: z
         .enum(["none", "low", "medium", "high", "xhigh", "max"])
         .optional(),
+      autoFallback: z.boolean().optional(),
       fastMode: z.boolean().optional(),
       pstackMode: z.boolean().optional(),
       accountId: z.string().optional(),

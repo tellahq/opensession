@@ -91,6 +91,7 @@ import { paletteIconBtn, paletteIconBtnRound } from "../lib/palette-classes";
 import { askSurface, noteSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
+import { Button } from "../ui/button";
 import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
 import {
   effectiveSendKey,
@@ -139,8 +140,9 @@ interface Props {
    */
   value?: string;
   onChange?: (value: string) => void;
-  /** Composer activity for the session's live typing indicator. */
-  onTyping?: (active: boolean) => void;
+  /** Composer activity for the session's live typing indicator. `text` is
+   * the current draft, which co-viewers may preview while it is active. */
+  onTyping?: (active: boolean, text: string) => void;
   /** Reports when dictation owns the input so a host can coordinate nearby UI. */
   onDictationActive?: (active: boolean) => void;
   config: ComposerConfig;
@@ -188,6 +190,7 @@ export function Composer({
     modelPillDisabled,
     modelTitle,
     effort,
+    autoFallback,
     fastMode,
     accounts,
     accountId,
@@ -213,6 +216,7 @@ export function Composer({
     onStop,
     onModelChange,
     onEffortChange,
+    onAutoFallbackChange,
     onFastModeChange,
     onAccountChange,
     onSetGoal,
@@ -391,7 +395,7 @@ export function Composer({
       pastedTexts.map((attachment) => attachment.id),
     );
     const consume = () => {
-      onTyping?.(false);
+      onTyping?.(false, "");
       if (!isControlled) {
         // Clear the store before React commits the empty field. On iOS the send
         // button can blur the textarea first; a pending remote draft would then
@@ -1597,7 +1601,10 @@ export function Composer({
               // effect, which is both later and more reliable than a microtask
               // queued from here (see useFileMentions).
               sessionNames.handleChange(e);
-              onTyping?.(e.currentTarget.value.length > 0);
+              onTyping?.(
+                e.currentTarget.value.length > 0,
+                e.currentTarget.value,
+              );
             }}
             onKeyDown={handleKeyDown}
             onKeyUp={syncMentions}
@@ -1617,7 +1624,7 @@ export function Composer({
             onFocus={() => setFocused(true)}
             onBlur={() => {
               setFocused(false);
-              onTyping?.(false);
+              onTyping?.(false, "");
               const remote = pendingRemoteText.current;
               pendingRemoteText.current = null;
               if (
@@ -1758,6 +1765,8 @@ export function Composer({
             modelTitle={modelTitle}
             effort={effort}
             onEffortChange={onEffortChange}
+            autoFallback={autoFallback}
+            onAutoFallbackChange={onAutoFallbackChange}
             fastMode={fastMode}
             onFastModeChange={onFastModeChange}
             accounts={accounts}
@@ -1784,7 +1793,7 @@ export function Composer({
             overlayTargetRef={voiceOverlayRef}
             overlayStyle={dictationSurfaceStyle}
             onActiveChange={handleDictationActive}
-            disabled={disabled}
+            disabled={disabled || call?.active}
           />
 
           {onToggleCall && (
@@ -1805,20 +1814,25 @@ export function Composer({
                     : "Start a voice call"
                 }
               >
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className={cn(
                     composerIconButtonClass,
+                    // The composer owns the inset ::before wash; suppress
+                    // Button's full-size ghost wash, including the open
+                    // tooltip state, so hover paints once like dictation.
+                    "hover:bg-transparent data-[popup-open]:bg-transparent phone:min-h-11 phone:min-w-11",
                     // A live call reads as the universal red handset.
                     call?.active && "text-red hover:text-red",
                   )}
                   onClick={onToggleCall}
-                  disabled={disabled}
+                  disabled={dictating || (disabled && !call?.active)}
                   aria-pressed={!!call?.active}
                   aria-label={call?.active ? "End call" : "Start a voice call"}
                 >
                   <IconCall size={22} />
-                </button>
+                </Button>
               </Tooltip>
             </motion.div>
           )}

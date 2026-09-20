@@ -43,6 +43,63 @@ describe("review options", () => {
     expect(normalizeReviewOptions({ mergeRisk: "no" }).mergeRisk).toBe(true);
   });
 
+  it("parses custom rules and drops malformed entries", () => {
+    expect(REVIEW_OPTION_DEFAULTS.rules).toEqual([]);
+    expect(normalizeReviewOptions({ rules: "nope" }).rules).toEqual([]);
+    const o = normalizeReviewOptions({
+      rules: [
+        {
+          name: "marketing-only",
+          when: { allFilesMatch: ["apps/marketing/**"] },
+          then: { confidence: 5, verdict: "approve", note: "Marketing" },
+        },
+        { name: "broken", when: {}, then: { confidence: 5 } },
+      ],
+    });
+    expect(o.rules).toEqual([
+      {
+        name: "marketing-only",
+        when: { allFilesMatch: ["apps/marketing/**"] },
+        then: { confidence: 5, verdict: "approve", note: "Marketing" },
+      },
+    ]);
+  });
+
+  it("appends grouped rules after flat ones, tagged with their group", () => {
+    const o = normalizeReviewOptions({
+      rules: [{ name: "flat", when: { minFiles: 1 }, then: { note: "n" } }],
+      groups: [
+        {
+          name: "Design",
+          rules: [
+            {
+              name: "CSS only",
+              when: { allFilesMatch: ["**/*.css"] },
+              then: { result: { verdict: "approve" } },
+            },
+            { name: "Tone", prompt: "Does new copy sound like us?" },
+          ],
+        },
+      ],
+    });
+    expect(o.rules).toEqual([
+      { name: "flat", when: { minFiles: 1 }, then: { note: "n" } },
+      {
+        name: "CSS only",
+        group: "Design",
+        when: { allFilesMatch: ["**/*.css"] },
+        then: { result: { verdict: "approve" } },
+      },
+      {
+        name: "Tone",
+        group: "Design",
+        when: {},
+        prompt: "Does new copy sound like us?",
+      },
+    ]);
+    expect(normalizeReviewOptions({ groups: "nope" }).rules).toEqual([]);
+  });
+
   it("ranks severities with unknowns as least severe", () => {
     expect(severityRank("P0")).toBe(0);
     expect(severityRank("high")).toBe(0);

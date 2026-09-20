@@ -11,12 +11,15 @@
  * session) keep the configured review model. Kill switch:
  * OPENSESSION_REVIEW_INVERSION=0.
  */
-import { readFileSync } from "fs";
-import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
-import { defaultRepo } from "../../server/config";
+import {
+  configuredRepos,
+  defaultRepo,
+  getConfigAsync,
+} from "../../server/config";
+import { indexedSession } from "../../server/session-list-store";
 import { tryGetSessionControl } from "../../server/session-control";
 import { matchSessions, workspaceIdForRepo } from "./session-notify";
-import { readPrState } from "./state";
+import { readPrStateAsync } from "./state";
 import { bksIdFor } from "./run";
 import type { PrRef } from "./review";
 
@@ -40,54 +43,68 @@ export function familyOf(model?: string): ModelFamily | null {
   return null;
 }
 
-function sessionFileModel(bksId: string): string | undefined {
-  try {
-    const parsed = JSON.parse(
-      readFileSync(`${OPENSESSION_SESSIONS_DIR}/${bksId}.json`, "utf-8"),
-    );
-    return typeof parsed?.model === "string" ? parsed.model : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 /** Which model family authored the PR's current head, and how we know. */
-export function authorFamilyFor(
+export async function authorFamilyFor(
   pr: PrRef,
-): { family: ModelFamily; source: string } | null {
-  // 1. A live session owns the branch — its model wrote the code. Same
-  //    resolution as the review handoff (handoff.ts), so the model that gets
-  //    the findings is also the one whose reviewer is inverted.
-  const control = tryGetSessionControl();
-  if (control) {
-    const workspaceId = workspaceIdForRepo(pr.ghRepo || defaultRepo().ghRepo);
-    if (workspaceId) {
-      const owners = matchSessions(control, workspaceId, pr.headRef)
-        .filter((s) => !s.id.startsWith("bks-ghpr-"))
-        .sort(
-          (a, b) =>
-            Date.parse(b.lastActivity || "0") -
-            Date.parse(a.lastActivity || "0"),
-        );
-      for (const s of owners) {
-        const family = familyOf(s.model);
-        if (family) return { family, source: `owning session ${s.id}` };
+): Promise<{ family: ModelFamily; source: string } | null> {
+  try {
+    // 1. A live session owns the branch — its model wrote the code. Same
+    //    resolution as the review handoff (handoff.ts), so the model that gets
+    //    the findings is also the one whose reviewer is inverted.
+    const control = tryGetSessionControl();
+    if (control) {
+      const workspaceId = await workspaceIdForRepo(
+        pr.ghRepo ||
+          defaultRepo(configuredRepos(await getConfigAsync())).ghRepo,
+      );
+      if (workspaceId) {
+        const owners = (await matchSessions(workspaceId, pr.headRef))
+          .filter((s) => !s.id.startsWith("bks-ghpr-"))
+          .sort(
+            (a, b) =>
+              Date.parse(b.lastActivity || "0") -
+              Date.parse(a.lastActivity || "0"),
+          );
+        for (const s of owners) {
+          const family = familyOf(s.model);
+          if (family) return { family, source: `owning session ${s.id}` };
+        }
       }
     }
+    // 2. The PR's auto-fix loop pushed the current head — the fixer session's
+    //    model authored it (this is the reviewGate case, where inversion matters
+    //    most: the gate must not share the fixer's blind spots).
+    const state = await readPrStateAsync(pr.number, pr.ghRepo);
+    if (
+      state?.autoFix?.lastPushedSha &&
+      state.autoFix.lastPushedSha === pr.headSha
+    ) {
+      const model = (
+        await indexedSession(
+          bksIdFor(
+            pr.number,
+            "autofix",
+            pr.ghRepo,
+            configuredRepos(await getConfigAsync()),
+          ),
+        )
+      )?.model;
+      // The fix pool defaults to Anthropic when the session never recorded a model.
+      return {
+        family: familyOf(model) || "anthropic",
+        source: "auto-fix loop",
+      };
+    }
+    return null; // human-authored / unknown — keep the configured reviewer
+  } catch (error) {
+    // Ownership is optional review context. Catalog trouble must not stop a
+    // review or lead to a filesystem fallback; keep the configured reviewer.
+    console.warn(
+      `[github] review author lookup unavailable for PR ${pr.number}:`,
+      error,
+    );
+    return null;
   }
-  // 2. The PR's auto-fix loop pushed the current head — the fixer session's
-  //    model authored it (this is the reviewGate case, where inversion matters
-  //    most: the gate must not share the fixer's blind spots).
-  const state = readPrState(pr.number, pr.ghRepo);
-  if (
-    state?.autoFix?.lastPushedSha &&
-    state.autoFix.lastPushedSha === pr.headSha
-  ) {
-    const model = sessionFileModel(bksIdFor(pr.number, "autofix", pr.ghRepo));
-    // The fix pool defaults to Anthropic when the session never recorded a model.
-    return { family: familyOf(model) || "anthropic", source: "auto-fix loop" };
-  }
-  return null; // human-authored / unknown — keep the configured reviewer
 }
 
 /**
@@ -96,11 +113,10 @@ export function authorFamilyFor(
  * author's family.
  */
 export function inverseReviewModel(
-  pr: PrRef,
+  author: Awaited<ReturnType<typeof authorFamilyFor>>,
   configured?: string,
 ): { model: string; family: ModelFamily; source: string } | null {
   if (!inversionEnabled()) return null;
-  const author = authorFamilyFor(pr);
   if (!author) return null;
   // Unset config runs on the Anthropic pool (session-file/runner default).
   const reviewerFamily = familyOf(configured) || "anthropic";

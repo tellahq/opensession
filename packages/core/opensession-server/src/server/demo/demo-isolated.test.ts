@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 /**
  * Demo dataset generator tests — CHILD HALF. Runs ONLY inside the isolated
  * child process demo.test.ts spawns (OS_DEMO_TEST_CHILD=1, scratch HOME set
@@ -36,6 +37,7 @@ beforeAll(async () => {
   // Point the config at a nonexistent scratch path so configuredRepos()
   // serves the built-in defaults regardless of the host's real config.
   process.env.OPENSESSION_CONFIG = join(home, "config.json");
+  await getConfigAsync();
   // stateDir()/statePath() cache per (HOME, name) — forget resolutions made
   // for the real HOME by other test files.
   const paths = await import("../paths");
@@ -53,7 +55,10 @@ afterAll(async () => {
   if (priorHome === undefined) delete process.env.HOME;
   else process.env.HOME = priorHome;
   if (priorConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = priorConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = priorConfig;
+    await getConfigAsync();
+  }
   if (priorGhBackoff !== undefined) {
     (await import("../github-limit")).__setGhBackoffForTest(priorGhBackoff);
   }

@@ -194,6 +194,138 @@ const REMOTE_PATH = `${REMOTE_HOME}/.bun/bin:${REMOTE_HOME}/.local/bin:/usr/loca
 const RUNS_BASE = `${OPENSESSION_SESSIONS_DIR}/sandbox-runs`;
 const STATE_DIR = `${OPENSESSION_SESSIONS_DIR}/sandboxes`;
 
+// ── Guest layout ─────────────────────────────────────────────────────────────
+//
+// Every remote adapter used to share one fixed guest layout (/home/ubuntu,
+// Linux tool paths). A macOS guest (the tart adapter) cannot host /home at
+// all (autofs owns it), so the layout is now a value chosen by the driver's
+// guest OS. Linux keeps the byte-identical legacy paths above; every guest
+// path a bootstrap, launch, lifecycle hook, or Portal touches goes through it.
+
+export type RemoteGuestOs = "linux" | "darwin";
+
+export interface RemoteLayout {
+  os: RemoteGuestOs;
+  /** The runner user's home inside the guest. */
+  home: string;
+  bun: string;
+  bunx: string;
+  mcpConfig: string;
+  /** Runner payload checkout. */
+  repo: string;
+  runnerBinary: string;
+  bootstrapMarker: string;
+  openaiSeedDir: string;
+  piConfig: string;
+  modelProvidersConfig: string;
+  /** PATH every guest command and run host receives. */
+  path: string;
+  warmBase: string;
+  lifecycleDir: string;
+  /** Guest-side base of per-run directories. Linux mirrors the host's
+   *  RUNS_BASE exactly; other guests map RUNS_BASE onto their own home. */
+  runsBase: string;
+  /** Uncompiled run-host entry inside `repo` (fallback when the compiled
+   *  runner binary is missing). */
+  hostEntry: string;
+  /** Per-session scratch root as the guest's `$OPENSESSION_SCRATCH` sees it. */
+  sessionScratchRoot: string;
+}
+
+function buildLayout(
+  os: RemoteGuestOs,
+  home: string,
+  extra: Pick<RemoteLayout, "path" | "runsBase" | "hostEntry">,
+): RemoteLayout {
+  const repo = `${home}/projects/opensession`;
+  return {
+    os,
+    home,
+    bun: `${home}/.bun/bin/bun`,
+    bunx: `${home}/.bun/bin/bunx`,
+    mcpConfig: `${home}/.opensession-mcp-config.json`,
+    repo,
+    runnerBinary: `${home}/.local/bin/opensession-runner`,
+    bootstrapMarker: `${home}/.bks-bootstrapped`,
+    openaiSeedDir: `${home}/.opensession-openai-seeds`,
+    piConfig: `${home}/.opensession-pi.json`,
+    modelProvidersConfig: `${home}/.opensession-model-providers.json`,
+    warmBase: `${home}/.bks-warm`,
+    lifecycleDir: `${home}/.opensession/lifecycle`,
+    sessionScratchRoot: `${home}/.opensession/session-scratch`,
+    ...extra,
+  };
+}
+
+const LINUX_LAYOUT: RemoteLayout = buildLayout("linux", REMOTE_HOME, {
+  path: REMOTE_PATH,
+  runsBase: RUNS_BASE,
+  hostEntry: HOST_ENTRY,
+});
+
+/** macOS guests (tart): the image's `admin` user, Homebrew on the PATH, and
+ *  run dirs under that home because /home is not writable on macOS. */
+export const DARWIN_GUEST_HOME = "/Users/admin";
+const DARWIN_LAYOUT: RemoteLayout = buildLayout("darwin", DARWIN_GUEST_HOME, {
+  path:
+    `${DARWIN_GUEST_HOME}/.bun/bin:${DARWIN_GUEST_HOME}/.local/bin:` +
+    "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+  runsBase: `${DARWIN_GUEST_HOME}/.opensession-sessions/sandbox-runs`,
+  hostEntry: `${DARWIN_GUEST_HOME}/projects/opensession/packages/core/opensession-server/src/runner-host/host.ts`,
+});
+
+export function remoteLayout(os: RemoteGuestOs = "linux"): RemoteLayout {
+  return os === "darwin" ? DARWIN_LAYOUT : LINUX_LAYOUT;
+}
+
+/** The guest OS a provider's sandboxes run. Only tart hosts macOS guests. */
+export function remoteGuestOsForProvider(
+  provider: string | undefined | null,
+): RemoteGuestOs {
+  return provider === "tart" ? "darwin" : "linux";
+}
+
+export function remoteLayoutForProvider(
+  provider: string | undefined | null,
+): RemoteLayout {
+  return remoteLayout(remoteGuestOsForProvider(provider));
+}
+
+function layoutFor(driver: { os?: RemoteGuestOs }): RemoteLayout {
+  return remoteLayout(driver.os);
+}
+
+/** The guest-side path of a host run dir (RUNS_BASE/<session>/<host>). */
+export function guestRunDir(L: RemoteLayout, hostDir: string): string {
+  if (L.runsBase === RUNS_BASE || !hostDir.startsWith(RUNS_BASE))
+    return hostDir;
+  return `${L.runsBase}${hostDir.slice(RUNS_BASE.length)}`;
+}
+
+/** Shell that installs the sandbox-only `opensession` command surface
+ *  (workload identity minting) under ~/.local/bin. Linux symlinks the
+ *  committed wrapper, whose bun/repo paths are the Linux layout; other guests
+ *  get a generated wrapper naming their own layout. */
+function workloadIdentityClientInstallCommand(L: RemoteLayout): string {
+  const target = `${L.home}/.local/bin/opensession`;
+  if (L.os === "linux") {
+    return (
+      `mkdir -p ${L.home}/.local/bin && ` +
+      `chmod 755 ${L.repo}/deploy/sandbox/opensession && ` +
+      `ln -sf ${L.repo}/deploy/sandbox/opensession ${target} && ` +
+      `test -x ${target}`
+    );
+  }
+  const wrapper =
+    "#!/bin/sh\n" +
+    `exec ${L.bun} ${L.repo}/scripts/workload-identity-client.ts "$@"\n`;
+  return (
+    `mkdir -p ${L.home}/.local/bin && ` +
+    `printf %s ${shellQuoteWord(wrapper)} > ${shellQuoteWord(target)} && ` +
+    `chmod 755 ${shellQuoteWord(target)} && test -x ${target}`
+  );
+}
+
 // ── The wire each adapter implements ─────────────────────────────────────────
 
 export interface RemoteExecOpts {
@@ -215,6 +347,8 @@ export interface RemoteDriver {
   writeFile(path: string, content: string): Promise<void>;
   /** Wake a stopped/paused sandbox — control-plane ops only, never reads. */
   ensureStarted(): Promise<void>;
+  /** Guest operating system; absent = linux (the legacy layout). */
+  os?: RemoteGuestOs;
 }
 
 // ── Small shell helpers ───────────────────────────────────────────────────────
@@ -1118,28 +1252,159 @@ function runnerLockfileOid(runnerSha: string): string {
   return runnerSha;
 }
 
-function remoteRunnerInstallCommand(force = false): string {
-  const temporary = `${REMOTE_RUNNER_BINARY}.tmp`;
+function remoteRunnerInstallCommand(
+  force = false,
+  L: RemoteLayout = LINUX_LAYOUT,
+): string {
+  const temporary = `${L.runnerBinary}.tmp`;
   return (
-    `${force ? `rm -f ${shellQuoteWord(REMOTE_RUNNER_BINARY)} && ` : ""}` +
-    `test -x ${shellQuoteWord(REMOTE_RUNNER_BINARY)} || { ` +
-    `cd ${shellQuoteWord(REMOTE_REPO)} && rm -f ${shellQuoteWord(temporary)} && ` +
-    `HOME=${REMOTE_HOME} ${REMOTE_BUN} build --compile ` +
+    `${force ? `rm -f ${shellQuoteWord(L.runnerBinary)} && ` : ""}` +
+    `test -x ${shellQuoteWord(L.runnerBinary)} || { ` +
+    `cd ${shellQuoteWord(L.repo)} && rm -f ${shellQuoteWord(temporary)} && ` +
+    `HOME=${L.home} ${L.bun} build --compile ` +
     `packages/core/opensession-server/src/main.ts --outfile ${shellQuoteWord(temporary)} ` +
     // Runner/MCP processes never serve the gateway UI. Treat its HTML import
     // as external, as worker sidecars do, rather than bundling the web app.
     `--external ${shellQuoteWord("*.html")} --external oxc-transform-react ` +
     `--external sharp --external ${shellQuoteWord("@img/*")} && ` +
-    `chmod 755 ${shellQuoteWord(temporary)} && mv ${shellQuoteWord(temporary)} ${shellQuoteWord(REMOTE_RUNNER_BINARY)}; }`
+    `chmod 755 ${shellQuoteWord(temporary)} && mv ${shellQuoteWord(temporary)} ${shellQuoteWord(L.runnerBinary)}; }`
   );
 }
 
-export function remoteRunnerHostCommand(specPath: string): string {
+export function remoteRunnerHostCommand(
+  specPath: string,
+  L: RemoteLayout = LINUX_LAYOUT,
+): string {
   return (
-    `if [ -x ${shellQuoteWord(REMOTE_RUNNER_BINARY)} ]; then ` +
-    `exec ${shellQuoteWord(REMOTE_RUNNER_BINARY)} runner-host ${shellQuoteWord(specPath)}; ` +
-    `else exec ${REMOTE_BUN} run ${shellQuoteWord(HOST_ENTRY)} ${shellQuoteWord(specPath)}; fi`
+    `if [ -x ${shellQuoteWord(L.runnerBinary)} ]; then ` +
+    `exec ${shellQuoteWord(L.runnerBinary)} runner-host ${shellQuoteWord(specPath)}; ` +
+    `else exec ${L.bun} run ${shellQuoteWord(L.hostEntry)} ${shellQuoteWord(specPath)}; fi`
   );
+}
+
+/**
+ * macOS guest (tart) counterpart of the Linux base runtime: the image ships
+ * Xcode's command line tools and Homebrew, so only the pinned Node, just, gh,
+ * and bun releases plus the two Homebrew utilities the lifecycle contract
+ * needs are installed. The same versions as Linux, so bootstrapSignature
+ * stays one string for every guest.
+ */
+async function bootstrapDarwinBaseRuntime(
+  driver: RemoteDriver,
+  L: RemoteLayout,
+  log: (msg: string) => void,
+): Promise<void> {
+  need(
+    await driver.exec(`test -w ${L.home} && test "$(uname -s)" = Darwin`),
+    `writable ${L.home} on a Darwin guest`,
+  );
+  need(
+    await driver.exec("sudo -n true"),
+    "passwordless sudo for the guest admin user (the tart image contract)",
+  );
+  const tools = await driver.exec(
+    `env PATH=${shellQuoteWord(L.path)} sh -c 'for c in git curl unzip rg sed nl wc base64 python3 make g++ direnv lsof; do command -v "$c" >/dev/null 2>&1 || echo "$c"; done'`,
+  );
+  const missing = tools.stdout.trim().split(/\s+/).filter(Boolean);
+  const brewable: Record<string, string> = { rg: "ripgrep", direnv: "direnv" };
+  const formulae = [
+    ...new Set(missing.map((c) => brewable[c]).filter(Boolean)),
+  ];
+  if (formulae.length) {
+    log(`installing workspace tools (${formulae.join(", ")})…`);
+    need(
+      await driver.exec(
+        `env PATH=${shellQuoteWord(L.path)} HOMEBREW_NO_AUTO_UPDATE=1 brew install ${formulae.map(shellQuoteWord).join(" ")}`,
+        { timeoutMs: 600_000 },
+      ),
+      "workspace tools install (brew)",
+    );
+  }
+  need(
+    await driver.exec(
+      `env PATH=${shellQuoteWord(L.path)} sh -c 'for c in git curl unzip rg sed nl wc base64 python3 make g++ direnv lsof; do command -v "$c" >/dev/null 2>&1 || { echo "missing $c" >&2; exit 1; }; done'`,
+    ),
+    "workspace tools check",
+  );
+
+  const node = await driver.exec(
+    `/usr/local/bin/node -p 'process.versions.node' 2>/dev/null || true`,
+  );
+  if (node.stdout.trim() !== REMOTE_NODE_VERSION) {
+    log(`installing Node ${REMOTE_NODE_VERSION}…`);
+    need(
+      await driver.exec(
+        `version=${REMOTE_NODE_VERSION}; archive=node-v$version-darwin-arm64.tar.gz; tmp=$(mktemp -d); ` +
+          `trap 'rm -rf "$tmp"' EXIT; ` +
+          `curl -fsSL https://nodejs.org/download/release/v$version/$archive -o "$tmp/$archive" && ` +
+          `curl -fsSL https://nodejs.org/download/release/v$version/SHASUMS256.txt -o "$tmp/SHASUMS256.txt" && ` +
+          `(cd "$tmp" && grep "  $archive$" SHASUMS256.txt | shasum -a 256 -c -) && ` +
+          `sudo -n mkdir -p /usr/local && sudo -n tar -xzf "$tmp/$archive" --strip-components=1 -C /usr/local`,
+        { timeoutMs: 300_000 },
+      ),
+      `Node ${REMOTE_NODE_VERSION} install`,
+    );
+  }
+  need(
+    await driver.exec(
+      `explicit=$(/usr/local/bin/node -p 'process.versions.node' 2>/dev/null || true); ` +
+        `resolved=$(env PATH=${shellQuoteWord(L.path)} node -p 'process.versions.node' 2>/dev/null || true); ` +
+        `[ "$explicit" = "${REMOTE_NODE_VERSION}" ] && [ "$resolved" = "${REMOTE_NODE_VERSION}" ] || ` +
+        `{ echo "explicit=$explicit resolved=$resolved expected=${REMOTE_NODE_VERSION}" >&2; exit 1; }`,
+    ),
+    `Node ${REMOTE_NODE_VERSION} check`,
+  );
+
+  const remoteJust = "/usr/local/bin/just";
+  log(`ensuring just ${REMOTE_JUST_VERSION}…`);
+  need(
+    await driver.exec(
+      `test -x ${remoteJust} && test "$(${remoteJust} --version | awk '{print $2}')" = "${REMOTE_JUST_VERSION}" || ` +
+        `{ curl -fsSL https://just.systems/install.sh | sudo -n bash -s -- --tag ${REMOTE_JUST_VERSION} --to ${dirname(remoteJust)}; }`,
+      { timeoutMs: 120_000 },
+    ),
+    `just ${REMOTE_JUST_VERSION} install`,
+  );
+  need(
+    await driver.exec(
+      `test "$(${remoteJust} --version | awk '{print $2}')" = "${REMOTE_JUST_VERSION}"`,
+    ),
+    `just ${REMOTE_JUST_VERSION} check`,
+  );
+
+  const remoteGh = "/usr/local/bin/gh";
+  log(`ensuring gh ${REMOTE_GH_VERSION}…`);
+  need(
+    await driver.exec(
+      `test -x ${remoteGh} && test "$(${remoteGh} --version | head -n1 | awk '{print $3}')" = "${REMOTE_GH_VERSION}" || ` +
+        `{ dist=gh_${REMOTE_GH_VERSION}_macOS_arm64; tmp=$(mktemp -d); ` +
+        `trap 'rm -rf "$tmp"' EXIT; ` +
+        `curl -fsSL https://github.com/cli/cli/releases/download/v${REMOTE_GH_VERSION}/$dist.zip -o "$tmp/$dist.zip" && ` +
+        `curl -fsSL https://github.com/cli/cli/releases/download/v${REMOTE_GH_VERSION}/gh_${REMOTE_GH_VERSION}_checksums.txt -o "$tmp/checksums.txt" && ` +
+        `expected=$(grep "  $dist.zip$" "$tmp/checksums.txt") && test -n "$expected" && ` +
+        `printf '%s\\n' "$expected" | (cd "$tmp" && shasum -a 256 -c -) && ` +
+        `unzip -q "$tmp/$dist.zip" -d "$tmp" && ` +
+        `sudo -n install -m 0755 "$tmp/$dist/bin/gh" ${remoteGh}; }`,
+      { timeoutMs: 120_000 },
+    ),
+    `gh ${REMOTE_GH_VERSION} install`,
+  );
+  need(
+    await driver.exec(
+      `test "$(${remoteGh} --version | head -n1 | awk '{print $3}')" = "${REMOTE_GH_VERSION}"`,
+    ),
+    `gh ${REMOTE_GH_VERSION} check`,
+  );
+
+  log("ensuring bun…");
+  need(
+    await driver.exec(
+      `test -x ${L.bun} || curl -fsSL https://bun.sh/install | HOME=${L.home} bash`,
+      { timeoutMs: 300_000 },
+    ),
+    "bun install",
+  );
+  await ensureRemoteBunxShim(driver, L, log);
 }
 
 /** Install the portable base tools needed before the full runner payload. */
@@ -1147,14 +1412,19 @@ async function bootstrapRemoteBaseRuntime(
   driver: RemoteDriver,
   label: string,
 ): Promise<void> {
+  const L = layoutFor(driver);
   const log = (msg: string) =>
     console.log(`[sandbox:${label}] base runtime: ${msg}`);
+  if (L.os === "darwin") {
+    await bootstrapDarwinBaseRuntime(driver, L, log);
+    return;
+  }
 
   need(
     await driver.exec(
-      `test -w ${REMOTE_HOME} || (sudo -n mkdir -p ${REMOTE_HOME} && sudo -n chown $(id -u):$(id -g) ${REMOTE_HOME})`,
+      `test -w ${L.home} || (sudo -n mkdir -p ${L.home} && sudo -n chown $(id -u):$(id -g) ${L.home})`,
     ),
-    `writable ${REMOTE_HOME} (image needs passwordless sudo or a prebaked /home/ubuntu)`,
+    `writable ${L.home} (image needs passwordless sudo or a prebaked /home/ubuntu)`,
   );
 
   // Provider base images vary. Install the same workspace/preview contract as
@@ -1222,7 +1492,7 @@ async function bootstrapRemoteBaseRuntime(
   need(
     await driver.exec(
       `explicit=$(/usr/local/bin/node -p 'process.versions.node' 2>/dev/null || true); ` +
-        `resolved=$(env PATH=${shellQuoteWord(REMOTE_PATH)} node -p 'process.versions.node' 2>/dev/null || true); ` +
+        `resolved=$(env PATH=${shellQuoteWord(L.path)} node -p 'process.versions.node' 2>/dev/null || true); ` +
         `[ "$explicit" = "${REMOTE_NODE_VERSION}" ] && [ "$resolved" = "${REMOTE_NODE_VERSION}" ] || ` +
         `{ echo "explicit=$explicit resolved=$resolved expected=${REMOTE_NODE_VERSION}" >&2; exit 1; }`,
     ),
@@ -1285,7 +1555,7 @@ async function bootstrapRemoteBaseRuntime(
   log("ensuring bun…");
   need(
     await driver.exec(
-      `test -x ${REMOTE_BUN} || curl -fsSL https://bun.sh/install | HOME=${REMOTE_HOME} bash`,
+      `test -x ${L.bun} || curl -fsSL https://bun.sh/install | HOME=${L.home} bash`,
       { timeoutMs: 300_000 },
     ),
     "bun install",
@@ -1293,10 +1563,16 @@ async function bootstrapRemoteBaseRuntime(
   // Some provider images prebake only the `bun` binary. Bun's standard
   // installer also exposes `bunx` as a same-binary shim, and repo tooling
   // commonly invokes that name directly (a repo's own watcher scripts).
+  await ensureRemoteBunxShim(driver, L, log);
+}
+
+async function ensureRemoteBunxShim(
+  driver: RemoteDriver,
+  L: RemoteLayout,
+  log: (msg: string) => void,
+): Promise<void> {
   need(
-    await driver.exec(
-      `test -x ${REMOTE_BUNX} || ln -sf ${REMOTE_BUN} ${REMOTE_BUNX}`,
-    ),
+    await driver.exec(`test -x ${L.bunx} || ln -sf ${L.bun} ${L.bunx}`),
     "bunx shim",
   );
   log("ready");
@@ -1311,8 +1587,9 @@ export async function bootstrapRemoteSandbox(
   driver: RemoteDriver,
   label: string,
 ): Promise<void> {
+  const L = layoutFor(driver);
   const signature = bootstrapSignature();
-  const marker = await driver.exec(`cat ${BOOTSTRAP_MARKER} 2>/dev/null`);
+  const marker = await driver.exec(`cat ${L.bootstrapMarker} 2>/dev/null`);
   if (marker.exitCode === 0 && marker.stdout.trim() === signature) {
     // Box archive/resume reconstructs parts of the filesystem from Git and can
     // drop an operator-applied executable bit even though the durable bootstrap
@@ -1320,11 +1597,8 @@ export async function bootstrapRemoteSandbox(
     // adoption instead of rerunning the full runtime install.
     need(
       await driver.exec(
-        `mkdir -p ${REMOTE_HOME}/.local/bin && ` +
-          `chmod 755 ${REMOTE_REPO}/deploy/sandbox/opensession && ` +
-          `ln -sf ${REMOTE_REPO}/deploy/sandbox/opensession ${REMOTE_HOME}/.local/bin/opensession && ` +
-          `test -x ${REMOTE_HOME}/.local/bin/opensession && ` +
-          `(${remoteRunnerInstallCommand()})`,
+        `${workloadIdentityClientInstallCommand(L)} && ` +
+          `(${remoteRunnerInstallCommand(false, L)})`,
       ),
       "workload identity client repair",
     );
@@ -1351,13 +1625,13 @@ export async function bootstrapRemoteSandbox(
           : " at its default branch (unpinned)"),
     );
   }
-  const hasRepo = await driver.exec(`test -f ${REMOTE_REPO}/package.json`);
+  const hasRepo = await driver.exec(`test -f ${L.repo}/package.json`);
   if (hasRepo.exitCode !== 0) {
     if (payload.bundleUrl) {
       log(`fetching runner bundle from ${redactUrl(payload.bundleUrl)}…`);
       need(
         await driver.exec(
-          `mkdir -p ${REMOTE_REPO} && curl -fsSL ${shellQuoteWord(payload.bundleUrl)} | tar -xz --strip-components=1 -C ${REMOTE_REPO}`,
+          `mkdir -p ${L.repo} && curl -fsSL ${shellQuoteWord(payload.bundleUrl)} | tar -xz --strip-components=1 -C ${L.repo}`,
           { timeoutMs: 600_000 },
         ),
         "runner bundle download",
@@ -1366,7 +1640,7 @@ export async function bootstrapRemoteSandbox(
       log(`cloning runner repo ${redactUrl(runnerCloneUrl!)}…`);
       need(
         await driver.exec(
-          `mkdir -p ${dirname(REMOTE_REPO)} && git clone -- ${shellQuoteWord(runnerCloneUrl!)} ${REMOTE_REPO}`,
+          `mkdir -p ${dirname(L.repo)} && git clone -- ${shellQuoteWord(runnerCloneUrl!)} ${L.repo}`,
           { timeoutMs: 600_000 },
         ),
         "runner repo clone",
@@ -1382,23 +1656,21 @@ export async function bootstrapRemoteSandbox(
   // only written after the checkout verifiably matches the pin.
   if (payload.pin) {
     const runnerSha = payload.pin;
-    const isGit = await driver.exec(`test -d ${REMOTE_REPO}/.git`);
+    const isGit = await driver.exec(`test -d ${L.repo}/.git`);
     if (isGit.exitCode !== 0) {
       // Tarball payload (runnerBundleUrl) — no git history to reconcile; the
       // signature marker keys on the sha, so a bump with a stale bundle keeps
       // re-running bootstrap loudly instead of pretending it applied.
       log(
-        `runnerSha ${runnerSha} pinned but ${REMOTE_REPO} is not a git checkout — skipping reconcile`,
+        `runnerSha ${runnerSha} pinned but ${L.repo} is not a git checkout — skipping reconcile`,
       );
     } else {
       const head = async () =>
-        (
-          await driver.exec(`git -C ${REMOTE_REPO} rev-parse HEAD`)
-        ).stdout.trim();
+        (await driver.exec(`git -C ${L.repo} rev-parse HEAD`)).stdout.trim();
       const resolvePin = async () =>
         (
           await driver.exec(
-            `git -C ${REMOTE_REPO} rev-parse --verify --quiet ${shellQuoteWord(`${runnerSha}^{commit}`)}`,
+            `git -C ${L.repo} rev-parse --verify --quiet ${shellQuoteWord(`${runnerSha}^{commit}`)}`,
           )
         ).stdout.trim();
       let pin = await resolvePin();
@@ -1411,7 +1683,7 @@ export async function bootstrapRemoteSandbox(
           : shellQuoteWord(runnerSha);
         need(
           await driver.exec(
-            `git -C ${REMOTE_REPO} fetch --depth 1 ${shellQuoteWord(runnerCloneUrl!)} ${fetchRef} && git -C ${REMOTE_REPO} checkout --detach ${shellQuoteWord(runnerSha)}`,
+            `git -C ${L.repo} fetch --depth 1 ${shellQuoteWord(runnerCloneUrl!)} ${fetchRef} && git -C ${L.repo} checkout --detach ${shellQuoteWord(runnerSha)}`,
             { timeoutMs: 300_000 },
           ),
           `checkout of pinned runnerSha ${runnerSha}`,
@@ -1430,7 +1702,7 @@ export async function bootstrapRemoteSandbox(
   if (runnerCloneUrl) {
     need(
       await driver.exec(
-        `git -C ${REMOTE_REPO} remote set-url origin ${shellQuoteWord(credentialFreeHttpsUrl(runnerCloneUrl))}`,
+        `git -C ${L.repo} remote set-url origin ${shellQuoteWord(credentialFreeHttpsUrl(runnerCloneUrl))}`,
       ),
       "runner repo credential scrub",
     );
@@ -1439,7 +1711,7 @@ export async function bootstrapRemoteSandbox(
   log("bun install (this is the slow part — several minutes cold)…");
   need(
     await driver.exec(
-      `cd ${REMOTE_REPO} && HOME=${REMOTE_HOME} ${REMOTE_BUN} install --frozen-lockfile`,
+      `cd ${L.repo} && HOME=${L.home} ${L.bun} install --frozen-lockfile`,
       {
         timeoutMs: 900_000,
       },
@@ -1447,24 +1719,22 @@ export async function bootstrapRemoteSandbox(
     "bun install of the runner bundle",
   );
   need(
-    await driver.exec(
-      `mkdir -p ${REMOTE_HOME}/.local/bin && ` +
-        `ln -sf ${REMOTE_REPO}/deploy/sandbox/opensession ${REMOTE_HOME}/.local/bin/opensession && ` +
-        `chmod 755 ${REMOTE_REPO}/deploy/sandbox/opensession ${REMOTE_HOME}/.local/bin/opensession`,
-    ),
+    await driver.exec(workloadIdentityClientInstallCommand(L)),
     "workload identity client install",
   );
   log("compiling the single-file runner host…");
   need(
-    await driver.exec(remoteRunnerInstallCommand(true), { timeoutMs: 600_000 }),
+    await driver.exec(remoteRunnerInstallCommand(true, L), {
+      timeoutMs: 600_000,
+    }),
     "compiled runner host install",
   );
 
   log("ensuring claude CLI…");
   need(
     await driver.exec(
-      `env PATH=${shellQuoteWord(REMOTE_PATH)} sh -c 'command -v claude >/dev/null 2>&1' || ` +
-        `HOME=${REMOTE_HOME} BUN_INSTALL=${REMOTE_HOME}/.bun ${REMOTE_BUN} add -g @anthropic-ai/claude-code`,
+      `env PATH=${shellQuoteWord(L.path)} sh -c 'command -v claude >/dev/null 2>&1' || ` +
+        `HOME=${L.home} BUN_INSTALL=${L.home}/.bun ${L.bun} add -g @anthropic-ai/claude-code`,
       { timeoutMs: 300_000 },
     ),
     "claude CLI install",
@@ -1472,7 +1742,7 @@ export async function bootstrapRemoteSandbox(
 
   need(
     await driver.exec(
-      `mkdir -p ${REMOTE_HOME}/.claude && { test -s ${REMOTE_HOME}/.claude/settings.json || printf '{}' > ${REMOTE_HOME}/.claude/settings.json; }`,
+      `mkdir -p ${L.home}/.claude && { test -s ${L.home}/.claude/settings.json || printf '{}' > ${L.home}/.claude/settings.json; }`,
     ),
     "~/.claude seed",
   );
@@ -1485,7 +1755,7 @@ export async function bootstrapRemoteSandbox(
 
   need(
     await driver.exec(
-      `printf '%s' ${shellQuoteWord(signature)} > ${BOOTSTRAP_MARKER}`,
+      `printf '%s' ${shellQuoteWord(signature)} > ${L.bootstrapMarker}`,
     ),
     "bootstrap marker",
   );
@@ -1494,9 +1764,8 @@ export async function bootstrapRemoteSandbox(
 
 // ── Workspace (always volume-style: cloned inside the sandbox) ───────────────
 
-/** Where prewarmed workspace clones live in-sandbox until a session adopts
- *  them (warmRemoteWorkspace → setupRemoteWorkspace's mv). */
-const REMOTE_WARM_BASE = `${REMOTE_HOME}/.bks-warm`;
+// Prewarmed workspace clones live under the layout's warmBase in-sandbox
+// until a session adopts them (warmRemoteWorkspace → setupRemoteWorkspace).
 
 const REMOTE_SEED_MANIFEST = ".agents/environment.json";
 const MAX_REMOTE_SEED_FILE_BYTES = 1024 * 1024;
@@ -1660,8 +1929,11 @@ async function materializeRemoteWorkspaceSeedFiles(
   }
 }
 
-export function remoteWarmWorkspaceDir(repoId: string): string {
-  return `${REMOTE_WARM_BASE}/${sanitizeName(repoId)}`;
+export function remoteWarmWorkspaceDir(
+  repoId: string,
+  os: RemoteGuestOs = "linux",
+): string {
+  return `${remoteLayout(os).warmBase}/${sanitizeName(repoId)}`;
 }
 
 /**
@@ -1688,7 +1960,8 @@ export async function warmRemoteWorkspace(
     identity?: Omit<WorkloadIdentityContext, "lifecycle">;
   },
 ): Promise<boolean> {
-  const dir = remoteWarmWorkspaceDir(repo.id);
+  const L = layoutFor(driver);
+  const dir = remoteWarmWorkspaceDir(repo.id, L.os);
   const log = (msg: string) =>
     console.log(`[sandbox:${label}] warm workspace: ${msg}`);
   const has = await driver.exec(`test -d ${shellQuoteWord(dir)}/.git`);
@@ -1726,10 +1999,10 @@ export async function warmRemoteWorkspace(
   }
   // Deps: same convention as worktree.ts's installWorktreeDeps, expressed
   // in-sandbox (config depsInstall → root install when package.json exists).
-  const bunEnv = `HOME=${REMOTE_HOME} PATH=${shellQuoteWord(REMOTE_PATH)}`;
+  const bunEnv = `HOME=${L.home} PATH=${shellQuoteWord(L.path)}`;
   const deps = repo.depsInstall
     ? `cd ${shellQuoteWord(dir)} && ${bunEnv} sh -c ${shellQuoteWord(repo.depsInstall)}`
-    : `cd ${shellQuoteWord(dir)} && ${bunEnv} sh -c 'if [ -f package.json ]; then ${REMOTE_BUN} install --frozen-lockfile; fi'`;
+    : `cd ${shellQuoteWord(dir)} && ${bunEnv} sh -c 'if [ -f package.json ]; then ${L.bun} install --frozen-lockfile; fi'`;
   log("installing deps…");
   const r = await driver.exec(deps, { timeoutMs: 900_000 });
   if (r.exitCode !== 0) {
@@ -1749,7 +2022,7 @@ export async function warmRemoteWorkspace(
 export async function scrubRemoteWarmWorkspaceAuthority(
   driver: RemoteDriver,
   repo: { id: string; ghRepo?: string },
-  dir = remoteWarmWorkspaceDir(repo.id),
+  dir = remoteWarmWorkspaceDir(repo.id, driver.os),
 ): Promise<void> {
   const safeOrigin = repo.ghRepo
     ? `https://github.com/${repo.ghRepo}.git`
@@ -1800,12 +2073,13 @@ export async function setupRemoteWorkspace(
     restoreCheckpoint?: { ref: string; commit: string; branch: string };
   } = {},
 ): Promise<void> {
+  const L = layoutFor(driver);
   const startedAt = Date.now();
   const mark = (stage: string) =>
     console.log(
       `[sandbox-remote] workspace ${repoId || cwd}: ${stage} (+${Date.now() - startedAt}ms)`,
     );
-  const warmDir = repoId ? remoteWarmWorkspaceDir(repoId) : undefined;
+  const warmDir = repoId ? remoteWarmWorkspaceDir(repoId, L.os) : undefined;
   const probe = warmDir
     ? `if test -d ${shellQuoteWord(cwd)}/.git; then echo cwd; ` +
       `elif test -d ${shellQuoteWord(warmDir)}/.git; then echo warm; else echo none; fi`
@@ -2008,8 +2282,6 @@ export function checkpointRestoreScript(
   ].join(" && ");
 }
 
-const REMOTE_LIFECYCLE_DIR = `${REMOTE_HOME}/.opensession/lifecycle`;
-
 function remoteLifecycleKey(cwd: string): string {
   return cwd
     .replace(/[^A-Za-z0-9_.-]+/g, "-")
@@ -2024,8 +2296,9 @@ export async function resetRemoteSetupLifecycleStamp(
   driver: RemoteDriver,
   scopeKey: string,
 ): Promise<void> {
+  const L = layoutFor(driver);
   const key = remoteLifecycleKey(scopeKey) || "workspace";
-  const stamp = `${REMOTE_LIFECYCLE_DIR}/${key}-setup.done`;
+  const stamp = `${L.lifecycleDir}/${key}-setup.done`;
   const cleared = await driver.exec(`rm -f ${shellQuoteWord(stamp)}`);
   if (cleared.exitCode !== 0) {
     throw new Error(
@@ -2047,10 +2320,11 @@ export async function runRemoteLifecycleHook(
   scopeKey?: string,
   identity?: Omit<WorkloadIdentityContext, "lifecycle">,
 ): Promise<{ ran: boolean; log: string }> {
+  const L = layoutFor(driver);
   const script = `${cwd}/.agents/${hook}`;
   const key = remoteLifecycleKey(scopeKey || cwd) || "workspace";
-  const log = `${REMOTE_LIFECYCLE_DIR}/${key}-${hook}.log`;
-  const stamp = `${REMOTE_LIFECYCLE_DIR}/${key}-setup.done`;
+  const log = `${L.lifecycleDir}/${key}-${hook}.log`;
+  const stamp = `${L.lifecycleDir}/${key}-setup.done`;
   const inspectCommand =
     hook === "setup"
       ? `if [ -f ${shellQuoteWord(stamp)} ]; then echo stamped; elif [ -e ${shellQuoteWord(script)} ]; then echo present; else echo absent; fi`
@@ -2094,19 +2368,18 @@ export async function runRemoteLifecycleHook(
   // Keep this guard scoped to setup so ordinary agent/developer Bun behavior
   // is unchanged, and use a PATH shim rather than requiring every repository
   // to learn an Open Session-specific flag.
-  const setupBin = `${REMOTE_LIFECYCLE_DIR}/setup-bin`;
-  const bunShim = `#!/bin/sh\nif [ "$1" = install ]; then shift; exec ${REMOTE_BUN} install --frozen-lockfile "$@"; fi\nexec ${REMOTE_BUN} "$@"\n`;
+  const setupBin = `${L.lifecycleDir}/setup-bin`;
+  const bunShim = `#!/bin/sh\nif [ "$1" = install ]; then shift; exec ${L.bun} install --frozen-lockfile "$@"; fi\nexec ${L.bun} "$@"\n`;
   const setupGuard =
     hook === "setup"
       ? `mkdir -p ${shellQuoteWord(setupBin)} && printf %s ${shellQuoteWord(bunShim)} > ${shellQuoteWord(`${setupBin}/bun`)} && chmod 755 ${shellQuoteWord(`${setupBin}/bun`)} && `
       : "";
-  const lifecyclePath =
-    hook === "setup" ? `${setupBin}:${REMOTE_PATH}` : REMOTE_PATH;
+  const lifecyclePath = hook === "setup" ? `${setupBin}:${L.path}` : L.path;
   const command =
-    `mkdir -p ${shellQuoteWord(REMOTE_LIFECYCLE_DIR)} && ` +
+    `mkdir -p ${shellQuoteWord(L.lifecycleDir)} && ` +
     setupGuard +
     `: > ${shellQuoteWord(log)} && ` +
-    `env HOME=${REMOTE_HOME} PATH=${shellQuoteWord(lifecyclePath)} ${identityArgs} ` +
+    `env HOME=${L.home} PATH=${shellQuoteWord(lifecyclePath)} ${identityArgs} ` +
     `OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ${shellQuoteWord(script)} ` +
     `>> ${shellQuoteWord(log)} 2>&1` +
     (hook === "setup" ? ` && touch ${shellQuoteWord(stamp)}` : "");
@@ -2192,10 +2465,14 @@ function makeRemoteLauncher(
   provider: SandboxProviderId,
   callbackBaseUrl = remoteSandboxCallbackBaseUrl(),
 ): HostLauncher {
+  const L = layoutFor(driver);
+  // Host-side run dirs live under RUNS_BASE; the guest sees them at the
+  // layout's runsBase (identical on Linux, remapped on other guests).
+  const guest = (hostDir: string) => guestRunDir(L, hostDir);
   return {
     async alive(dir) {
       const meta = await driver.exec(
-        `cat ${shellQuoteWord(`${dir}/meta.json`)} 2>/dev/null`,
+        `cat ${shellQuoteWord(`${guest(dir)}/meta.json`)} 2>/dev/null`,
       );
       if (meta.exitCode !== 0) return false;
       let pid = 0;
@@ -2212,13 +2489,13 @@ function makeRemoteLauncher(
     async writeSpec(dir, spec) {
       mkdirSync(dir, { recursive: true });
       writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, spec, true, 0o600); // host mirror (resume)
-      const mk = await driver.exec(`mkdir -p ${shellQuoteWord(dir)}`);
+      const mk = await driver.exec(`mkdir -p ${shellQuoteWord(guest(dir))}`);
       if (mk.exitCode !== 0) {
         throw new Error(
           `remote run dir create failed: ${mk.stderr.trim().slice(0, 300)}`,
         );
       }
-      const guestSpecPath = `${dir}/${HOST_SPEC_NAME}`;
+      const guestSpecPath = `${guest(dir)}/${HOST_SPEC_NAME}`;
       await driver.writeFile(guestSpecPath, JSON.stringify(spec));
       const secured = await driver.exec(
         `chmod 600 ${shellQuoteWord(guestSpecPath)}`,
@@ -2292,18 +2569,18 @@ function makeRemoteLauncher(
         spec.user,
         [spec.mcpGrantUser, spec.user],
       );
-      const claudeAccountsPath = `${REMOTE_HOME}/.opensession-claude-accounts.json`;
+      const claudeAccountsPath = `${L.home}/.opensession-claude-accounts.json`;
       await Promise.all([
         driver.writeFile(
           claudeAccountsPath,
           JSON.stringify({ accounts }, null, 2) + "\n",
         ),
         driver.writeFile(
-          REMOTE_MCP_CONFIG,
+          L.mcpConfig,
           JSON.stringify({ mcpServers: projectedMcp }, null, 2) + "\n",
         ),
       ]);
-      secureFiles.push(claudeAccountsPath, REMOTE_MCP_CONFIG);
+      secureFiles.push(claudeAccountsPath, L.mcpConfig);
 
       // GitHub credentials are projected through a private, run-scoped file,
       // never spec.json, argv, or the persisted origin. A code run a connected
@@ -2336,9 +2613,24 @@ function makeRemoteLauncher(
             spec.mode === "code"
               ? await githubServiceCredentialEnv(registeredRepo.ghRepo)
               : await githubServiceReadOnlyEnv(registeredRepo.ghRepo);
+          // An automation listing sibling repositories to read gets the
+          // read-only GH_READ_TOKEN beside its primary token (same private
+          // file; projectedGithubRunEnv lifts it into the shell). A refused
+          // mint leaves it out rather than widening anything.
+          if (githubAuth.GH_TOKEN && automationProfile && spec.readRepos) {
+            const { githubServiceReadReposEnv } =
+              await import("../../github-app");
+            githubAuth = {
+              ...githubAuth,
+              ...(await githubServiceReadReposEnv(
+                registeredRepo.ghRepo,
+                spec.readRepos,
+              )),
+            };
+          }
         }
       }
-      const githubAuthPath = `${dir}/github-auth.json`;
+      const githubAuthPath = `${guest(dir)}/github-auth.json`;
       if (githubAuth.GH_TOKEN) {
         await driver.writeFile(githubAuthPath, JSON.stringify(githubAuth));
         secureFiles.push(githubAuthPath);
@@ -2376,15 +2668,10 @@ function makeRemoteLauncher(
           spec.fallbackModel,
         );
         settingsProviderIds = projected.settingsProviderIds;
-        await driver.writeFile(
-          REMOTE_MODEL_PROVIDERS_CONFIG,
-          projected.content,
-        );
-        secureFiles.push(REMOTE_MODEL_PROVIDERS_CONFIG);
+        await driver.writeFile(L.modelProvidersConfig, projected.content);
+        secureFiles.push(L.modelProvidersConfig);
       } else {
-        await driver.exec(
-          `rm -f ${shellQuoteWord(REMOTE_MODEL_PROVIDERS_CONFIG)}`,
-        );
+        await driver.exec(`rm -f ${shellQuoteWord(L.modelProvidersConfig)}`);
       }
 
       // Pi stays architecturally in-process: the guest runner-host imports the
@@ -2393,10 +2680,10 @@ function makeRemoteLauncher(
       // uploaded alongside this file.
       const piContent = projectRemotePiConfig(readPiEngineConfig());
       if (piContent) {
-        await driver.writeFile(REMOTE_PI_CONFIG, piContent);
-        secureFiles.push(REMOTE_PI_CONFIG);
+        await driver.writeFile(L.piConfig, piContent);
+        secureFiles.push(L.piConfig);
       } else {
-        await driver.exec(`rm -f ${shellQuoteWord(REMOTE_PI_CONFIG)}`);
+        await driver.exec(`rm -f ${shellQuoteWord(L.piConfig)}`);
       }
 
       // OpenAI/ChatGPT-subscription material for pi/openai/* dispatched
@@ -2440,7 +2727,7 @@ function makeRemoteLauncher(
           `[sandbox-remote] openai seed for ${maskOpenaiAccount(account)} skipped: ${reason}`,
         );
       }
-      const codexStorePath = `${REMOTE_HOME}/.opensession-codex-accounts.json`;
+      const codexStorePath = `${L.home}/.opensession-codex-accounts.json`;
       if (openaiUpload.accounts.length) {
         await driver.writeFile(
           codexStorePath,
@@ -2452,15 +2739,15 @@ function makeRemoteLauncher(
         // material in one final chmod. This avoids serial command admission on
         // Box without ever launching the host before permissions settle.
         const seeds = openaiUpload.seeds.map((seed) => ({
-          path: openaiSeedAuthPath(REMOTE_OPENAI_SEED_DIR, seed.accountId),
+          path: openaiSeedAuthPath(L.openaiSeedDir, seed.accountId),
           content: seed.content,
         }));
         const seedDirectories = [
-          REMOTE_OPENAI_SEED_DIR,
+          L.openaiSeedDir,
           ...seeds.map((seed) => dirname(seed.path)),
         ];
         await driver.exec(
-          `rm -rf ${shellQuoteWord(REMOTE_OPENAI_SEED_DIR)} && mkdir -p ${seedDirectories.map(shellQuoteWord).join(" ")}`,
+          `rm -rf ${shellQuoteWord(L.openaiSeedDir)} && mkdir -p ${seedDirectories.map(shellQuoteWord).join(" ")}`,
         );
         await Promise.all(
           seeds.map((seed) => driver.writeFile(seed.path, seed.content)),
@@ -2483,7 +2770,7 @@ function makeRemoteLauncher(
         });
       } else {
         await driver.exec(
-          `rm -f ${codexStorePath} && rm -rf ${shellQuoteWord(REMOTE_OPENAI_SEED_DIR)}`,
+          `rm -f ${codexStorePath} && rm -rf ${shellQuoteWord(L.openaiSeedDir)}`,
         );
       }
       // SuperGrok material for pi/xai-oauth/* dispatched IN-SANDBOX: a scoped
@@ -2514,7 +2801,7 @@ function makeRemoteLauncher(
           `[sandbox-remote] xai upload for ${maskXaiAccount(account)} skipped: ${reason}`,
         );
       }
-      const xaiStorePath = `${REMOTE_HOME}/.opensession-xai-accounts.json`;
+      const xaiStorePath = `${L.home}/.opensession-xai-accounts.json`;
       if (xaiUpload.accounts.length) {
         await driver.writeFile(
           xaiStorePath,
@@ -2559,11 +2846,11 @@ function makeRemoteLauncher(
       registerRunWsHost(hostId, spec.wsToken);
       try {
         const env: Record<string, string> = {
-          HOME: REMOTE_HOME,
-          PATH: REMOTE_PATH,
+          HOME: L.home,
+          PATH: L.path,
           NODE_ENV: "production",
-          OPENSESSION_MCP_CONFIG: REMOTE_MCP_CONFIG,
-          OPENSESSION_RUN_JOURNAL: `${dir}/journal.json`,
+          OPENSESSION_MCP_CONFIG: L.mcpConfig,
+          OPENSESSION_RUN_JOURNAL: `${guest(dir)}/journal.json`,
           // Lets the engine tell the model it is inside a Sandbox
           // (run-instructions.ts): one boolean, never a per-session fact.
           OPENSESSION_SANDBOX: "1",
@@ -2571,7 +2858,7 @@ function makeRemoteLauncher(
           // seeds (only set when something was uploaded this launch).
           ...(openaiUpload.seeds.length
             ? {
-                OPENSESSION_OPENAI_SEED_DIR: REMOTE_OPENAI_SEED_DIR,
+                OPENSESSION_OPENAI_SEED_DIR: L.openaiSeedDir,
               }
             : {}),
           // Dial-back on the primary prefix — the ingress/main serve accept
@@ -2604,7 +2891,7 @@ function makeRemoteLauncher(
         dispatchAttempted = true;
         onDispatching?.();
         const bg = driver.execBackground(
-          `${envPrefix(env)}sh -c ${shellQuoteWord(remoteRunnerHostCommand(`${dir}/${HOST_SPEC_NAME}`))} >> ${dir}/host.log 2>&1`,
+          `${envPrefix(env)}sh -c ${shellQuoteWord(remoteRunnerHostCommand(`${guest(dir)}/${HOST_SPEC_NAME}`, L))} >> ${guest(dir)}/host.log 2>&1`,
         );
         const bgTimeout = new Promise<"timeout">((r) =>
           setTimeout(() => r("timeout"), 30_000),
@@ -2627,12 +2914,13 @@ function makeRemoteLauncher(
       }
     },
     async evidence(dir) {
+      const guestDir = guest(dir);
       const [metaResult, journalResult] = await Promise.all([
         driver.exec(
-          `cat ${shellQuoteWord(`${dir}/${HOST_META_NAME}`)} 2>/dev/null`,
+          `cat ${shellQuoteWord(`${guestDir}/${HOST_META_NAME}`)} 2>/dev/null`,
         ),
         driver.exec(
-          `cat ${shellQuoteWord(`${dir}/${HOST_JOURNAL_NAME}`)} 2>/dev/null`,
+          `cat ${shellQuoteWord(`${guestDir}/${HOST_JOURNAL_NAME}`)} 2>/dev/null`,
         ),
       ]);
       let meta: RunHostMeta | undefined;
@@ -2652,7 +2940,8 @@ function makeRemoteLauncher(
         ...(meta?.done ? { done: meta.done } : {}),
       };
     },
-    async stop(hostId, dir) {
+    async stop(hostId, hostDir) {
+      const dir = guest(hostDir);
       await driver.writeFile(`${dir}/cancelled`, "cancelled\n");
       const [metaResult, startupResult] = await Promise.all([
         driver.exec(
@@ -2672,9 +2961,13 @@ function makeRemoteLauncher(
       if (pid) {
         const specPath = `${dir}/${HOST_SPEC_NAME}`;
         const quotedSpec = shellQuoteWord(specPath);
+        const isHost =
+          L.os === "darwin"
+            ? `is_host() { ps -o command= -p ${pid} 2>/dev/null | grep -Fq -- ${quotedSpec}; }; `
+            : `is_host() { [ -r /proc/${pid}/cmdline ] && ` +
+              `tr '\\0' '\\n' < /proc/${pid}/cmdline | grep -Fqx -- ${quotedSpec}; }; `;
         const script =
-          `is_host() { [ -r /proc/${pid}/cmdline ] && ` +
-          `tr '\\0' '\\n' < /proc/${pid}/cmdline | grep -Fqx -- ${quotedSpec}; }; ` +
+          isHost +
           `is_host && kill -TERM ${pid} 2>/dev/null || true; sleep 1; ` +
           `is_host && kill -KILL ${pid} 2>/dev/null || true; sleep 0.2; ! is_host`;
         const result = await driver.exec(script);
@@ -2986,17 +3279,19 @@ export async function resumeRemoteSandboxRun(
   const parts = remoteParts.get(sandbox);
   if (!parts) return null;
   const { driver, launcher } = parts;
+  const L = layoutFor(driver);
   // Remote providers may preserve processes while suspended. Wake the sandbox
   // before checking meta/aliveness so restart recovery never duplicates a run.
   await driver.ensureStarted();
 
   const oldDir = launcher.newRunDir(run.runKey);
+  const oldGuestDir = guestRunDir(L, oldDir);
   const oldSpec = readJsonSafe<RunHostSpec>(`${oldDir}/${HOST_SPEC_NAME}`);
   const metaResult = await driver.exec(
-    `cat ${shellQuoteWord(`${oldDir}/${HOST_META_NAME}`)} 2>/dev/null`,
+    `cat ${shellQuoteWord(`${oldGuestDir}/${HOST_META_NAME}`)} 2>/dev/null`,
   );
   const journalResult = await driver.exec(
-    `cat ${shellQuoteWord(`${oldDir}/${HOST_JOURNAL_NAME}`)} 2>/dev/null`,
+    `cat ${shellQuoteWord(`${oldGuestDir}/${HOST_JOURNAL_NAME}`)} 2>/dev/null`,
   );
   let remoteMeta: RunHostMeta | undefined;
   let privateRun: ActiveRunRecord | undefined;

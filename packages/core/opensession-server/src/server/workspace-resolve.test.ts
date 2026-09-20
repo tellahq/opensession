@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import {
   afterAll,
   afterEach,
@@ -31,6 +32,7 @@ writeFileSync(
 );
 process.env.OPENSESSION_STATE_DIR = scratch;
 process.env.OPENSESSION_CONFIG = configPath;
+await getConfigAsync();
 
 const { SessionListStore } = await import("./session-list-sqlite");
 const { __setSessionListStoreForTest } = await import("./session-list-store");
@@ -47,9 +49,10 @@ let store: InstanceType<typeof SessionKernelStore>;
 let index: InstanceType<typeof SessionListStore>;
 let previousIndex: InstanceType<typeof SessionListStore> | undefined;
 let previousStore: InstanceType<typeof SessionKernelStore> | undefined;
-beforeEach(() => {
+beforeEach(async () => {
   process.env.OPENSESSION_STATE_DIR = scratch;
   process.env.OPENSESSION_CONFIG = configPath;
+  await getConfigAsync();
   store = new SessionKernelStore(":memory:");
   previousStore = __setSessionKernelStoreForTest(store);
   // Workspace resolution reads the session list to adopt matching siblings.
@@ -71,11 +74,14 @@ afterEach(() => {
   __resetWorkspaceProjectionForTest();
 });
 
-afterAll(() => {
+afterAll(async () => {
   if (previousState === undefined) delete process.env.OPENSESSION_STATE_DIR;
   else process.env.OPENSESSION_STATE_DIR = previousState;
   if (previousConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = previousConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = previousConfig;
+    await getConfigAsync();
+  }
   rmSync(scratch, { recursive: true, force: true });
 });
 

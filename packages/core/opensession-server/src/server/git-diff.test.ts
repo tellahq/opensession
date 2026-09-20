@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync, linkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { getSessionDiff } from "./git-diff";
+import { getSessionDiff, MAX_UNTRACKED_FILES } from "./git-diff";
 
 const dirs: string[] = [];
 
@@ -183,5 +183,177 @@ describe("getSessionDiff", () => {
     );
     expect(replacement).not.toBe(first);
     await replacement;
+  });
+  test("bounds binary-tree scans and lets the event loop run during local reads", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "opensession-diff-media-"));
+    dirs.push(dir);
+    const source = join(dir, "source");
+    writeFileSync(source, "\0" + "x".repeat(127));
+    const names = Array.from(
+      { length: MAX_UNTRACKED_FILES + 5 },
+      (_, i) => `fragment-${i}.m4s`,
+    );
+    for (const name of names) linkSync(source, join(dir, name));
+    let heartbeat = false;
+    const exec = Object.assign(
+      async (cmd: string[]) => {
+        if (cmd.includes("ls-files")) {
+          setTimeout(() => {
+            heartbeat = true;
+          }, 0);
+          return { exitCode: 0, stdout: names.join("\0") + "\0", stderr: "" };
+        }
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+      { sandboxed: false, remote: false } as const,
+    );
+    const result = await getSessionDiff(dir, "main", exec);
+    expect(heartbeat).toBe(true);
+    expect(result.files).toHaveLength(MAX_UNTRACKED_FILES);
+    expect(result.files.every((file) => file.binary)).toBe(true);
+    expect(result.rawPatch).toBe("");
+    expect(result.truncated).toBe(true);
+  });
+
+  test("honors a small patch budget before reading the rest of an untracked tree", async () => {
+    let reads = 0;
+    const exec = Object.assign(
+      async (cmd: string[]) => {
+        const stdout = cmd.includes("ls-files")
+          ? "first.txt\0second.txt\0"
+          : cmd[0] === "stat"
+            ? "100"
+            : cmd[0] === "head"
+              ? (++reads, "x".repeat(100))
+              : "";
+        return { exitCode: 0, stdout, stderr: "" };
+      },
+      { sandboxed: true, remote: true } as const,
+    );
+    const result = await getSessionDiff(
+      "/virtual/patch-budget",
+      "main",
+      exec,
+      false,
+      120,
+    );
+    expect(reads).toBe(1);
+    expect(result.rawPatch.length).toBeLessThanOrEqual(120);
+    expect(result.truncated).toBe(true);
+  });
+
+  test("bounds cumulative content reads even when binary files add no patch", async () => {
+    let reads = 0;
+    const exec = Object.assign(
+      async (cmd: string[]) => {
+        const stdout = cmd.includes("ls-files")
+          ? Array.from({ length: 100 }, (_, i) => `media-${i}`).join("\0") +
+            "\0"
+          : cmd[0] === "stat"
+            ? "60000"
+            : cmd[0] === "head"
+              ? (++reads, "\0".repeat(60000))
+              : "";
+        return { exitCode: 0, stdout, stderr: "" };
+      },
+      { sandboxed: true, remote: true } as const,
+    );
+    const result = await getSessionDiff("/virtual/scan-budget", "main", exec);
+    expect(reads).toBeLessThan(35);
+    expect(result.truncated).toBe(true);
+  });
+
+  test("drops an incomplete path from a byte-capped untracked listing", async () => {
+    const statPaths: string[] = [];
+    const exec = Object.assign(
+      async (cmd: string[]) => {
+        let stdout = "";
+        if (cmd.includes("ls-files"))
+          stdout = "whole.txt\0" + "partial".repeat(150_000);
+        if (cmd[0] === "stat") {
+          statPaths.push(cmd.at(-1)!);
+          stdout = "3";
+        }
+        if (cmd[0] === "head") stdout = "hi\n";
+        return { exitCode: 0, stdout, stderr: "" };
+      },
+      { sandboxed: true, remote: true } as const,
+    );
+    const result = await getSessionDiff("/virtual/list-budget", "main", exec);
+    expect(statPaths).toEqual(["whole.txt"]);
+    expect(result.files.map((file) => file.path)).toEqual(["whole.txt"]);
+    expect(result.truncated).toBe(true);
+  });
+
+  test("caps remote metadata calls even when every file is oversized", async () => {
+    let stats = 0;
+    const exec = Object.assign(
+      async (cmd: string[]) => {
+        let stdout = "";
+        if (cmd.includes("ls-files"))
+          stdout =
+            Array.from(
+              { length: MAX_UNTRACKED_FILES + 10 },
+              (_, i) => `large-${i}`,
+            ).join("\0") + "\0";
+        if (cmd[0] === "stat") {
+          stats++;
+          stdout = "1000000";
+        }
+        expect(cmd[0]).not.toBe("head");
+        return { exitCode: 0, stdout, stderr: "" };
+      },
+      { sandboxed: true, remote: true } as const,
+    );
+    const result = await getSessionDiff("/virtual/count-budget", "main", exec);
+    expect(stats).toBe(MAX_UNTRACKED_FILES);
+    expect(result.files).toHaveLength(MAX_UNTRACKED_FILES);
+    expect(result.truncated).toBe(true);
+  });
+
+  test("a timed-out untracked scan does not continue issuing filesystem commands", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const commands: string[][] = [];
+    const exec = Object.assign(
+      async (cmd: string[]) => {
+        commands.push(cmd);
+        if (cmd[0] === "stat") await gate;
+        return {
+          exitCode: 0,
+          stdout: cmd.includes("ls-files")
+            ? "first\0second\0"
+            : cmd[0] === "stat"
+              ? "5"
+              : "",
+          stderr: "",
+        };
+      },
+      { sandboxed: true, remote: true } as const,
+    );
+    const diff = getSessionDiff(
+      "/virtual/cancel-scan",
+      "main",
+      exec,
+      false,
+      undefined,
+      undefined,
+      10,
+    );
+    await expect(diff).rejects.toThrow("Git diff timed out");
+    const count = commands.length;
+    expect(commands.at(-1)?.[0]).toBe("stat");
+    release();
+    await Bun.sleep(0);
+    expect(commands).toHaveLength(count);
+  });
+
+  test("diff filesystem reads and discard never use synchronous I/O", async () => {
+    const source = await Bun.file(
+      new URL("./git-diff.ts", import.meta.url),
+    ).text();
+    expect(source).not.toMatch(/\b(?:readFile|read|stat|rm|open)Sync\b/);
   });
 });

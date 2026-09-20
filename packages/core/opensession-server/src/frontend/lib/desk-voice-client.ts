@@ -171,6 +171,11 @@ export class DeskVoiceClient {
   private delegations = 0;
   private lastError: string | null = null;
 
+  private onOtherCall = () => {
+    this.closeReason = "another call";
+    this.onPageHide();
+  };
+
   private onVisibilityChange = () => {
     if (document.hidden) this.onPageHide();
   };
@@ -213,6 +218,8 @@ export class DeskVoiceClient {
   async start(): Promise<void> {
     if (this.connected || this.starting || this.aborted) return;
     this.starting = true;
+    window.dispatchEvent(new Event("opensession-voice-call-start"));
+    window.addEventListener("opensession-voice-call-start", this.onOtherCall);
     window.addEventListener("pagehide", this.onPageHide);
     try {
       await this.connect();
@@ -404,6 +411,10 @@ export class DeskVoiceClient {
     }
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
     window.removeEventListener("pagehide", this.onPageHide);
+    window.removeEventListener(
+      "opensession-voice-call-start",
+      this.onOtherCall,
+    );
     if (this.dc) {
       this.dc.onmessage = null;
       this.dc.onclose = null;

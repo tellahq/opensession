@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -12,10 +13,11 @@ const realFetch = globalThis.fetch;
 let dir = "";
 let savedGraphqlBackoff = 0;
 
-beforeEach(() => {
+beforeEach(async () => {
   savedGraphqlBackoff = __setGhBackoffForTest(0, "graphql");
   dir = mkdtempSync(join(tmpdir(), "os-pr-viewed-test-"));
   process.env.OPENSESSION_CONFIG = join(dir, "config.json");
+  await getConfigAsync();
   process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
   writeFileSync(
     process.env.OPENSESSION_CONFIG,
@@ -36,12 +38,15 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => {
+afterEach(async () => {
   __setGhBackoffForTest(savedGraphqlBackoff, "graphql");
   globalThis.fetch = realFetch;
   rmSync(dir, { recursive: true, force: true });
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = savedConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = savedConfig;
+    await getConfigAsync();
+  }
   if (savedStore === undefined)
     delete process.env.OPENSESSION_GITHUB_AUTH_STORE;
   else process.env.OPENSESSION_GITHUB_AUTH_STORE = savedStore;

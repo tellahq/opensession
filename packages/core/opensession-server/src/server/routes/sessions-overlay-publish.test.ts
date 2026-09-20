@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 /**
  * List readers serve the registry overlays (rename, manual lane, review
  * request) stored on the index row instead of re-reading the registries per
@@ -93,6 +94,7 @@ beforeAll(async () => {
   process.env.HOME = home;
   process.env.OPENSESSION_STATE_DIR = home;
   process.env.OPENSESSION_CONFIG = join(home, "config.json");
+  await getConfigAsync();
   priorGhBackoff = (await import("../github-limit")).__setGhBackoffForTest(
     Date.now() + 60 * 60 * 1000,
   );

@@ -242,6 +242,12 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe(
               "Reviewer to request on PRs this automation opens — a GitHub login, an 'org/team' slug, or a comma-separated list. Without one the PR reaches nobody's review queue. The target must be a collaborator on the repo.",
             ),
+          readRepos: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Sibling GitHub repositories (owner/repo, same owner as the automation's repo) its runs may READ through a second read-only token, GH_READ_TOKEN. The App must be installed on each; otherwise the run gets no read token. GH_TOKEN stays scoped to the automation's own repo.",
+            ),
           owner: z
             .string()
             .optional()
@@ -268,6 +274,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           accountStrict?: boolean;
           usageCredits?: boolean;
           prReviewer?: string;
+          readRepos?: string[];
           owner?: string;
           workspaceId?: string;
         }) => {
@@ -285,6 +292,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             accountStrict: args.accountStrict,
             usageCredits: args.usageCredits,
             prReviewer: args.prReviewer,
+            readRepos: args.readRepos,
             owner: args.owner,
             workspaceId: args.workspaceId,
           });
@@ -370,6 +378,12 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe(
               "Reviewer to request on PRs this automation opens — a GitHub login, an 'org/team' slug, or a comma-separated list; '' clears it.",
             ),
+          readRepos: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Sibling GitHub repositories (owner/repo, same owner as the automation's repo) its runs may READ through GH_READ_TOKEN; [] clears the list. The App must be installed on each one.",
+            ),
           owner: z
             .string()
             .optional()
@@ -399,6 +413,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           accountStrict?: boolean;
           usageCredits?: boolean;
           prReviewer?: string;
+          readRepos?: string[];
           owner?: string;
           workspaceId?: string;
         }) => {

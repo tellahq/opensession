@@ -97,6 +97,66 @@ the first-run screen offers with `opensession.defaultServer` in `package.json`
 (or `OS1_CLOUD_URL`); a profile that already worked keeps using it and is never
 asked.
 
+## Single-item macOS Keychain access
+
+Agents can request **one generic-password item for one HTTPS API call** through
+`opensession-keychain.request_mac_keychain`. This uses Apple's Security framework
+(`SecKeychainFindGenericPassword`), not 1Password, the `op` CLI, or a custom
+credential-authorization dialog. It does not read 1Password vaults, Apple
+Passwords/iCloud items, internet-password items, certificates, or SSH keys.
+
+1. Sign in to Open Session in the Mac app. Verified web sign-in is required;
+   name-picker identities and machine browsers cannot authorize requests.
+2. Give the agent the exact **service** and **account** identifiers of an existing
+   generic-password item in your macOS Keychain, never its value. A display label
+   alone may not be the service identifier. No item enumeration is exposed.
+3. View the requesting session and choose **OS → Keychain requests…**. The native
+   menu shows the item identifiers, purpose and complete HTTP destination/body.
+   Select **Use once…** only if you trust that destination with the credential.
+4. macOS applies the item's existing access controls. If authorization is needed,
+   its native Keychain prompt offers **Allow / Always Allow / Deny**. Choose
+   **Allow** for this access only. Existing permissions, including an earlier
+   **Always Allow**, may permit access without another prompt. The app never
+   changes an item's ACL or silently unlocks a keychain.
+
+There is no CLI installation or 1Password integration to configure. The packaged,
+signed `OS Keychain` helper looks up one exact service/account pair, returns the
+value through a private pipe to Electron's main process, and exits. The main
+process injects it into the approved HTTPS request. The value is never returned
+to a renderer, Open Session server, agent environment, or model. Nothing caches
+or writes the value to disk. Only the numeric HTTP status returns; response bodies
+and headers are discarded, even for redirects and errors. This version cannot
+retrieve API response data for the agent.
+
+Each request can execute once, expires after ten minutes or a server restart,
+and is visible only to the teammate who prompted the agent. Claims are atomic
+across Macs, and failure never retries automatically. Canceling the menu declines
+without accessing Keychain. The requesting session and organization are checked
+again before execution. Each use requires a new native menu action even if macOS
+already trusts the helper. The Keychain helper has a two-minute deadline for the
+native prompt; the API request has a thirty-second deadline.
+
+Only public HTTPS destinations on port 443 are supported. Private, loopback and
+tailnet DNS addresses, browser cookies and redirects are refused. Supported
+headers are `Authorization: Bearer` and `x-api-key`; an optional JSON request body
+is limited to 512 characters. Raw secret export and shell/environment injection
+are not supported. Native iOS and Chrome clients do not expose this Mac-only flow.
+
+Verification: `bun test ./packages/clients/mac/src/` plus the server
+`mac-keychain-requests` and route tests. On macOS, the following compiles and tests
+against a newly created disposable keychain, with interaction disabled and no
+changes to the default search list:
+
+```sh
+xcrun swiftc -DKEYCHAIN_TESTING native/KeychainHelper.swift native/KeychainHelperTests.swift \
+  -parse-as-library -framework Security -o /tmp/os-keychain-tests
+/tmp/os-keychain-tests
+```
+
+The release workflow also runs these tests and checks the packaged helper's
+signature. A live **Allow / Always Allow / Deny** prompt still needs verification
+in a signed app on an interactive Mac, using a disposable item.
+
 ## Local Tailscale profiles
 
 **OS → Organizations → Tailscale profiles…** binds an organization to a saved

@@ -592,9 +592,31 @@ export function demoSessions(opts: {
           iso(t0 + 60_000),
         ),
         transcriptLineAssistantText(
-          "Renamed to `retryBackoffMs` and documented it in the README options table alongside `retries`.",
+          "Renamed to `retryBackoffMs` and documented it in the README options table alongside `retries`. Pushed; CI takes a few minutes, so I scheduled a check-back instead of polling.",
           "demo-steered-a1",
           iso(t0 + 120_000),
+          MODEL_SONNET,
+        ),
+        // A schedule_prompt check-back: delivered by the kernel timer in the
+        // owner's name with the scheduled-prompt sentinel (scheduled-prompts.ts),
+        // so the viewer shows it as the agent's own reminder, not Sam's words.
+        transcriptLineUser(
+          "[Sam (scheduled)] <!--os:scheduled-prompt:sched-demo-steered-1-->\nCheck-back on CI for the `retryBackoffMs` push. Run `gh pr checks --repo acme/acme-todo` for this branch. If everything passed, tell Sam in one line that the option is in and CI is green. If a check failed, read its log and fix the test, do not re-push blindly.",
+          "demo-steered-u3",
+          iso(t0 + 10 * min),
+        ),
+        ...tool(
+          "steered",
+          2,
+          "Bash",
+          { command: "gh pr checks --repo acme/acme-todo" },
+          "6 pass\n0 pending\n0 fail",
+          t0 + 10 * min + 15_000,
+        ),
+        transcriptLineAssistantText(
+          "`retryBackoffMs` is in and CI is green (6 checks).",
+          "demo-steered-a2",
+          iso(t0 + 10 * min + 40_000),
           MODEL_SONNET,
         ),
       ],

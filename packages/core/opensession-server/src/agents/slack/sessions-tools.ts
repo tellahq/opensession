@@ -21,6 +21,7 @@ import {
   cancelAgentWait,
   getAgentWait,
   registerPrChecksAgentWait,
+  registerSessionTurnAgentWait,
   registerTimerAgentWait,
 } from "../../server/agent-waits";
 import {
@@ -778,7 +779,7 @@ export function createSessionsMcpServer(
     // isAdmin, and a Slack reader gets the same link in the result text.
     tool(
       "suggest_task",
-      `Propose a well-scoped follow-up for a person to start in a new ${productName()} session, without starting it. Use it when you notice a self-contained piece of work that is worth doing but outside the current request: a bug spotted on the way, a refactor the change makes possible, a missing test, a docs gap. The suggestion renders as a card in this session with a "Start session" button that creates a new session from your instructions, so the person decides; nothing runs until they press it. Write instructions a fresh session can act on with no access to this conversation: goal, relevant files, constraints, acceptance criteria, what to report. In your reply mention the suggestion in one line and do not repeat its instructions. Do not use this for the work you were asked to do, and do not start the task yourself (spawn_task, create_session) unless asked.`,
+      `Propose a drive-by finding for a person to start in a new ${productName()} session, without starting it. Use it rarely: only for a self-contained piece of work unrelated to the current request that this session will not pick up, such as a bug spotted on the way in another area, a missing test elsewhere, or a docs gap you passed. Do not use it for the work you were asked to do, for follow-ups or next steps of that work, or for anything the person is likely to ask this session to do next; those belong in your reply as a plain suggestion so the person decides. Suggest each task at most once. The suggestion renders as a card in this session with a "Start session" button that creates a new session from your instructions; nothing runs until they press it. Write instructions a fresh session can act on with no access to this conversation: goal, relevant files, constraints, acceptance criteria, what to report. In your reply mention the suggestion in one line and do not repeat its instructions. Do not start the task yourself (spawn_task, create_session) unless asked.`,
       {
         title: z
           .string()
@@ -859,12 +860,18 @@ export function createSessionsMcpServer(
       // ---------------------------------------------------------------------
       tool(
         "wait_for",
-        "End this turn cleanly and wake this same session later without sleeping in a tool call. Register the wait, then write the human a normal status/final message and STOP the turn. A timer wakes after the requested delay. A pr_checks wait polls durably outside the model turn, waits for the check set to remain settled, then starts a new turn with the result; it also wakes on PR close/merge or timeout. One wait may be active per session, and a new one replaces it. Never call sleep after this tool succeeds.",
+        "End this turn cleanly and wake this same session later without sleeping in a tool call. Register the wait, then write the human a normal status/final message and STOP the turn. A timer wakes after the requested delay. A pr_checks wait polls durably outside the model turn, waits for the check set to remain settled, then starts a new turn with the result; it also wakes on PR close/merge or timeout. A session_turn wait wakes when ANOTHER session's turn ends (it goes idle, stops on a question for a human, fails, or is cancelled); the wake-up carries that session's final state and last assistant message, so use it after send_to_session instead of guessing a delay. An already idle target wakes you right away. One wait may be active per session, and a new one replaces it. Never call sleep after this tool succeeds.",
         {
           kind: z
-            .enum(["timer", "pr_checks"])
+            .enum(["timer", "pr_checks", "session_turn"])
             .describe(
-              "timer for a one-shot delay, or pr_checks to wake when this branch's PR checks settle.",
+              "timer for a one-shot delay, pr_checks to wake when this branch's PR checks settle, or session_turn to wake when another session finishes its current turn.",
+            ),
+          session_id: z
+            .string()
+            .optional()
+            .describe(
+              "The session to watch, required for kind=session_turn. Must be visible to this session (same rules as get_session).",
             ),
           seconds: z
             .number()
@@ -888,7 +895,7 @@ export function createSessionsMcpServer(
             .number()
             .optional()
             .describe(
-              "Maximum PR wait before waking anyway. Defaults to 2 hours, maximum 24 hours.",
+              "Maximum wait before waking anyway, for kind=pr_checks and kind=session_turn. Defaults to 2 hours, maximum 24 hours.",
             ),
           prompt: z
             .string()
@@ -899,7 +906,8 @@ export function createSessionsMcpServer(
         },
         async (
           args: {
-            kind: "timer" | "pr_checks";
+            kind: "timer" | "pr_checks" | "session_turn";
+            session_id?: string;
             seconds?: number;
             repo?: string;
             branch?: string;
@@ -924,15 +932,24 @@ export function createSessionsMcpServer(
                   prompt: args.prompt,
                   waitId,
                 })
-              : await registerPrChecksAgentWait({
-                  sessionId,
-                  user: ctx.createdBy,
-                  repo: args.repo || current?.repo || "",
-                  branch: args.branch || current?.branch || "",
-                  timeoutSeconds: args.timeout_seconds,
-                  prompt: args.prompt,
-                  waitId,
-                });
+              : args.kind === "session_turn"
+                ? await registerSessionTurnAgentWait({
+                    sessionId,
+                    user: ctx.createdBy,
+                    targetSessionId: args.session_id || "",
+                    timeoutSeconds: args.timeout_seconds,
+                    prompt: args.prompt,
+                    waitId,
+                  })
+                : await registerPrChecksAgentWait({
+                    sessionId,
+                    user: ctx.createdBy,
+                    repo: args.repo || current?.repo || "",
+                    branch: args.branch || current?.branch || "",
+                    timeoutSeconds: args.timeout_seconds,
+                    prompt: args.prompt,
+                    waitId,
+                  });
           if (!result.ok) return text(result.error);
           audit({
             msg: "agent_wait_registered",
@@ -944,7 +961,11 @@ export function createSessionsMcpServer(
           const when =
             result.wait.kind === "timer"
               ? new Date(result.wait.dueAt).toISOString()
-              : `when ${result.wait.repo}/${result.wait.branch} checks settle (timeout ${new Date(result.wait.deadlineAt).toISOString()})`;
+              : result.wait.kind === "session_turn"
+                ? result.wait.observedEndAt != null
+                  ? `right away: session ${result.wait.targetSessionId} is not running`
+                  : `when session ${result.wait.targetSessionId} finishes its turn (timeout ${new Date(result.wait.deadlineAt).toISOString()})`
+                : `when ${result.wait.repo}/${result.wait.branch} checks settle (timeout ${new Date(result.wait.deadlineAt).toISOString()})`;
           return text(
             `Background wait \`${result.wait.id}\` registered for ${when}. ` +
               `${result.replaced ? "It replaced the previous wait. " : ""}` +
@@ -965,6 +986,10 @@ export function createSessionsMcpServer(
           if (wait.kind === "timer")
             return text(
               `Timer wait \`${wait.id}\` wakes at ${new Date(wait.dueAt).toISOString()}.`,
+            );
+          if (wait.kind === "session_turn")
+            return text(
+              `Session turn wait \`${wait.id}\` watches session ${wait.targetSessionId}; timeout ${new Date(wait.deadlineAt).toISOString()}.`,
             );
           return text(
             `PR wait \`${wait.id}\` watches ${wait.repo}/${wait.branch}; timeout ${new Date(wait.deadlineAt).toISOString()}.`,
@@ -1024,7 +1049,7 @@ export function createSessionsMcpServer(
       ),
       tool(
         "send_to_session",
-        "Send a message to another session. If it's mid-run it's folded into the current turn (picked up at the next stopping point); if it's idle it starts a new turn; external runs (CLI/tmux) get the message queued. Use this to redirect or follow up on a session without opening it. Slash commands are handled by opensession itself instead of being delivered as prompt text: `/loop <interval> <prompt>` sets a recurring self-prompt on the TARGET session (fires only while it is idle; min 5m), `/loop status` / `/loop stop` inspect or clear it — works on your own session id too, so a monitor session can stop its own loop when the work is done.",
+        "Send a message to another session. If it's mid-run it's folded into the current turn (picked up at the next stopping point); if it's idle it starts a new turn; external runs (CLI/tmux) get the message queued. Use this to redirect or follow up on a session without opening it. To wait for the reply, register wait_for kind=session_turn with that session's id and end your turn; do not schedule a timer and guess. Slash commands are handled by opensession itself instead of being delivered as prompt text: `/loop <interval> <prompt>` sets a recurring self-prompt on the TARGET session (fires only while it is idle; min 5m), `/loop status` / `/loop stop` inspect or clear it — works on your own session id too, so a monitor session can stop its own loop when the work is done.",
         {
           id: z.string().describe("The target session's id."),
           message: z.string().describe("The message to deliver."),
@@ -1238,7 +1263,7 @@ export function createSessionsMcpServer(
       ),
       tool(
         "create_session",
-        `Spin up a visible ${productName()} session and start it on a prompt. Use this as the sub-session primitive: workers can delegate focused tasks and report back to this parent session. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A worker targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. Pass isolatedWorktree true to instead give the worker its own worktree and branch (child/report-back linkage is kept) — use it when fanning work out across separate workspaces. \`branch\` is only used when there is nothing to share — a standalone worker, or a worker targeting a repo the parent does not carry — and is generated from the prompt when omitted. Repo defaults to the parent session's repo (${defaultRepo().id} when standalone); pass another registered repo id to override. For workers that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures. When called from a session, the worker defaults to the same workspace and is instructed to report back here; set standalone true or reportBack false to opt out. When a HUMAN asks for "a new session" ("create a new session for X", "spin one up on Y"), this tool is what they mean — a detached session that appears in their sidebar and outlives the current run — never an in-process subagent or task agent; reply with the new session's URL.`,
+        `Spin up a visible ${productName()} session and start it on a prompt. When a PERSON asks for a new session ("start a new session", "open a new session", "kick off a session for X", "spin one up on Y"), they mean a new TOP-LEVEL session: call this tool with standalone true. That creates a detached session with no parent link and no report-back that appears in their sidebar and outlives the current run; never an in-process subagent or task agent. Reply with the new session's URL. Only create a child session (standalone omitted) when YOU are delegating for yourself, such as fanning out focused sub-tasks whose results this session will consume, or when the person explicitly asks for a worker, child, or sub-session. A child defaults to this session as its parent, shares its workspace, and is instructed to report back here. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A child targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. Pass isolatedWorktree true to instead give the child its own worktree and branch (child/report-back linkage is kept); use it when fanning work out across separate workspaces. \`branch\` is only used when there is nothing to share, a standalone session or a child targeting a repo the parent does not carry, and is generated from the prompt when omitted. Repo defaults to the parent session's repo (${defaultRepo().id} when standalone); pass another registered repo id to override. For sessions that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures.`,
         {
           prompt: z
             .string()
@@ -1277,19 +1302,19 @@ export function createSessionsMcpServer(
             .string()
             .optional()
             .describe(
-              "Session id this worker should report back to. Defaults to the current session when available.",
+              "Session id the child should report back to. Defaults to the current session when available. Ignored when standalone is true.",
             ),
           reportBack: z
             .boolean()
             .optional()
             .describe(
-              "Whether to append report-back instructions to the worker prompt. Defaults true when a parent session id is available.",
+              "Whether to append report-back instructions to the child's prompt. Defaults true when a parent session id is available. Ignored when standalone is true.",
             ),
           standalone: z
             .boolean()
             .optional()
             .describe(
-              "Create an unrelated standalone session instead of a child of the current session.",
+              "Create a new top-level session with no parent link and no report-back instead of a child of the current session. This is the answer when the person asked for a new session. parentSessionId and reportBack are ignored when set.",
             ),
           isolatedWorktree: z
             .boolean()
@@ -1345,7 +1370,10 @@ export function createSessionsMcpServer(
           const parentSessionId = args.standalone
             ? undefined
             : args.parentSessionId || ctx.currentSessionId;
-          const shouldReportBack = args.reportBack ?? Boolean(parentSessionId);
+          // No parent means nothing to report back to: standalone ignores an
+          // explicit reportBack the same way it ignores parentSessionId.
+          const shouldReportBack =
+            Boolean(parentSessionId) && (args.reportBack ?? true);
           const prompt = parentSessionId
             ? buildChildSessionPrompt({
                 prompt: args.prompt,
@@ -1383,7 +1411,9 @@ export function createSessionsMcpServer(
               `Started session \`${id}\` (${args.mode === "code" ? (branch ? `code on ${branch}` : "code session") : "ask"}). Metadata: createdBy=${JSON.stringify(createdBy)} · createdAt=${createdAt}. It'll appear in list_sessions as it boots.`,
               parentSessionId && shouldReportBack
                 ? `It is linked to \`${parentSessionId}\` and has instructions to report back there.`
-                : "",
+                : parentSessionId
+                  ? `It is linked to \`${parentSessionId}\` without report-back instructions.`
+                  : "It is a top-level session with no parent link.",
             ]
               .filter(Boolean)
               .join(" "),
@@ -1442,11 +1472,11 @@ export function createSessionsMcpServer(
     tools.push(
       tool(
         "spawn_task",
-        "Delegate a self-contained task to a child session and return IMMEDIATELY with {taskId, url} — the lightweight alternative to create_session + send_to_session choreography when you just want work done and a handle to poll. The child is created through the same code path as create_session (it shares this session's worktree in code mode when repos match, inherits your user, is linked as a child, and is told to report back here); poll it with task_status and stop it with cancel_task. Mode defaults to 'code' (pass a branch, or isolatedWorktree true for a generated one, unless the child can share this session's code worktree); use 'ask' for read-only investigation. Loop guard: spawned children may delegate one further level, then spawn_task refuses (depth ≥ 2)." +
+        "Delegate a self-contained task to a child session and return IMMEDIATELY with {taskId, url} — the lightweight alternative to create_session + send_to_session choreography when you just want work done and a handle to poll. The child is created through the same code path as create_session (it shares this session's worktree in code mode when repos match, inherits your user, is linked as a child, and is told to report back here); poll it with task_status and stop it with cancel_task. Mode defaults to 'code' (pass a branch, or isolatedWorktree true for a generated one, unless the child can share this session's code worktree); use 'ask' for read-only investigation. Loop guard: spawned children may delegate one further level, then spawn_task refuses (depth ≥ 2). This tool ALWAYS creates a child of this session, so it is not the tool for a person's \"start a new session\" request; that means a top-level session, which is create_session with standalone true wherever create_session is offered." +
           (ctx.automationSelf
             ? " Children may edit code and open PRs but NEVER merge — a human reviews every PR."
             : ctx.humanResume
-              ? ` The child is created for ${ctx.createdBy}, the person prompting this session, and appears in their sidebar; reply with its URL. When they ask for "a new session", this tool is what they mean.`
+              ? ` Exception: create_session is not offered in this session, so when ${ctx.createdBy}, the person prompting this session, asks for "a new session", this is the only way to start it. The child is created for them and appears in their sidebar; reply with its URL.`
               : " Not available from automation sessions."),
         {
           prompt: z

@@ -16,6 +16,7 @@ import {
   type PrAutomationDetails,
 } from "../../server/pr-info";
 import { ghBackoffUntil } from "../../server/github-limit";
+import { audit } from "../../server/audit";
 import { isTrustedGithubLogin } from "../../server/shared/user-mappings";
 import {
   PR_EVENT_KEY,
@@ -31,11 +32,13 @@ import {
   labelMatches,
 } from "./constants";
 import {
+  reviewRuleContext,
   runReview,
   type PrRef,
   type ReviewConfig,
   type ReviewResult,
 } from "./review";
+import { preflightSkipRule } from "./review-rules";
 import { clearHandoff, isHandoffActive, maybeHandoffFindings } from "./handoff";
 import {
   isLockHeld,
@@ -432,11 +435,61 @@ export function skipBotSynchronize(input: {
   );
 }
 
+/**
+ * `.os-review.json` skip rules gate only the automatic path, like the title
+ * skip keyword: a label-forced or manual review still runs. Read from the
+ * repo's main checkout (no PR worktree exists yet); fails open so a GitHub
+ * hiccup never silently drops a review.
+ */
+async function reviewSkippedByRule(
+  ref: PrRef,
+  preflightDetails?: PrAutomationDetails,
+): Promise<boolean> {
+  const repo = ref.ghRepo ? repoForFullName(ref.ghRepo) : null;
+  const rules = loadReviewOptions(repo?.repo || defaultRepo().repo).rules;
+  if (!rules.some((r) => r.then?.skipReview)) return false;
+  try {
+    const details =
+      preflightDetails?.number === ref.number &&
+      (!ref.headSha || preflightDetails.headRefOid === ref.headSha)
+        ? preflightDetails
+        : await getPrAutomationDetails(
+            String(ref.number),
+            ref.ghRepo || undefined,
+          );
+    if (!details) return false;
+    const rule = preflightSkipRule(
+      rules,
+      await reviewRuleContext(ref, details),
+    );
+    if (!rule) return false;
+    console.log(
+      `[github] PR #${ref.number} @ ${ref.headSha.slice(0, 7)} skipped by review rule "${rule.name}"`,
+    );
+    audit({
+      msg: "review_skipped_by_rule",
+      pr_number: ref.number,
+      repo: ref.ghRepo || defaultRepo().ghRepo,
+      head_sha: ref.headSha,
+      rule: rule.name,
+    });
+    return true;
+  } catch (e) {
+    console.warn(
+      `[github] review rule preflight failed for PR #${ref.number}; reviewing anyway:`,
+      e,
+    );
+    return false;
+  }
+}
+
 export async function fireReview(
   ref: PrRef,
-  _byLabel: boolean,
+  byLabel: boolean,
   preflightDetails?: PrAutomationDetails,
 ): Promise<ReviewResult | null> {
+  if (!byLabel && (await reviewSkippedByRule(ref, preflightDetails)))
+    return null;
   const { config } = await resolveReviewConfig();
   const result = await runReview(
     ref,

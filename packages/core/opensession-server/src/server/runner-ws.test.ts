@@ -1,4 +1,5 @@
-import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, spyOn, test } from "bun:test";
+import * as commandAws from "./runner-command-aws";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -139,5 +140,132 @@ describe("Runner WebSocket policy", () => {
     ).rejects.toThrow("not permitted");
     expect(sent).toEqual([]);
     runnerWsClose(ws);
+  });
+});
+
+describe("Runner command AWS dispatch", () => {
+  async function withRunner(
+    execAws: boolean,
+    run: (id: string, sent: any[], ws: any) => Promise<void>,
+  ) {
+    const { code } = createRunnerPairing("tester");
+    const registered = registerRunner({
+      code,
+      name: "aws-runner",
+      platform: "win32",
+      arch: "x64",
+      address: "100.101.102.103",
+    });
+    if (!registered.ok) throw new Error(registered.error);
+    const id = registered.runner.id;
+    updateRunner(id, {
+      aws: { roleArn: "arn:aws:iam::123456789012:role/os-runner" },
+    });
+    const sent: any[] = [];
+    const ws = {
+      data: { kind: "runner", runnerId: id },
+      close() {},
+      send(frame: string) {
+        const message = JSON.parse(frame);
+        sent.push(message);
+        if (message.t === "exec")
+          queueMicrotask(() =>
+            runnerWsMessage(
+              ws,
+              JSON.stringify({
+                t: "exit",
+                id: message.id,
+                operationToken: message.operationToken,
+                code: 0,
+              }),
+            ),
+          );
+      },
+    };
+    runnerWsOpen(ws);
+    runnerWsMessage(ws, JSON.stringify({ t: "hello", version: 1, execAws }));
+    try {
+      await run(id, sent, ws);
+    } finally {
+      runnerWsClose(ws);
+    }
+  }
+  test("interactive grant forwards credentials separately from command text", async () => {
+    const mint = spyOn(commandAws, "runnerCommandAwsEnv").mockResolvedValue({
+      AWS_ACCESS_KEY_ID: "role-key",
+    });
+    try {
+      await withRunner(true, async (id, sent) => {
+        await execOnRunner(id, "aws sts get-caller-identity", { aws: true });
+        expect(mint).toHaveBeenCalledTimes(1);
+        expect(sent[0].awsEnv).toEqual({ AWS_ACCESS_KEY_ID: "role-key" });
+        expect(sent[0].command).toBe("aws sts get-caller-identity");
+      });
+    } finally {
+      mint.mockRestore();
+    }
+  });
+  test("internal calls without the grant do not mint, even with a configured role", async () => {
+    const mint = spyOn(commandAws, "runnerCommandAwsEnv").mockRejectedValue(
+      new Error("must not mint"),
+    );
+    try {
+      await withRunner(false, async (id, sent) => {
+        await execOnRunner(id, "echo probe");
+        expect(mint).not.toHaveBeenCalled();
+        expect(sent[0].awsEnv).toBeUndefined();
+      });
+    } finally {
+      mint.mockRestore();
+    }
+  });
+  test("old clients are rejected before minting or dispatch", async () => {
+    const mint = spyOn(commandAws, "runnerCommandAwsEnv").mockRejectedValue(
+      new Error("must not mint"),
+    );
+    try {
+      await withRunner(false, async (id, sent) => {
+        await expect(
+          execOnRunner(id, "aws sts get-caller-identity", { aws: true }),
+        ).rejects.toThrow("Update Runner");
+        expect(mint).not.toHaveBeenCalled();
+        expect(sent).toEqual([]);
+      });
+    } finally {
+      mint.mockRestore();
+    }
+  });
+  test("mint failure prevents dispatch", async () => {
+    const mint = spyOn(commandAws, "runnerCommandAwsEnv").mockRejectedValue(
+      new Error("STS refused"),
+    );
+    try {
+      await withRunner(true, async (id, sent) => {
+        await expect(
+          execOnRunner(id, "aws sts get-caller-identity", { aws: true }),
+        ).rejects.toThrow("STS refused");
+        expect(sent).toEqual([]);
+      });
+    } finally {
+      mint.mockRestore();
+    }
+  });
+  test("permission revocation during mint prevents dispatch", async () => {
+    const mint = spyOn(commandAws, "runnerCommandAwsEnv").mockImplementation(
+      async (runner) => {
+        updateRunner(runner.id, { maintenance: true });
+        return { AWS_ACCESS_KEY_ID: "role-key" };
+      },
+    );
+    try {
+      await withRunner(true, async (id, sent) => {
+        await expect(
+          execOnRunner(id, "aws sts get-caller-identity", { aws: true }),
+        ).rejects.toThrow("permissions changed");
+        expect(sent).toEqual([]);
+      });
+    } finally {
+      mint.mockRestore();
+    }
   });
 });

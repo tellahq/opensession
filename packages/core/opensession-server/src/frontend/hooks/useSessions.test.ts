@@ -38,8 +38,13 @@ describe("session feed socket ownership", () => {
     expect(hookSource).toContain(
       "const onInvalidated = useEffectEvent(() => refreshInvalidated())",
     );
+    // A reconnect resyncs even while hidden; an invalidation waits for the
+    // next visibility change.
     expect(hookSource).toContain(
-      "const onConnected = useEffectEvent(() => refreshInvalidated())",
+      "const onConnected = useEffectEvent(() =>\n    runtime.invalidate({\n      refreshArchived: archivedIndex !== null,\n      whileHidden: true,\n    }),\n  );",
+    );
+    expect(hookSource).toContain(
+      'if (document.visibilityState === "hidden") return;\n    runtime.invalidate({ refreshArchived: archivedIndex !== null });',
     );
     expect(hookSource).toContain("if (socketConnected) onConnected()");
     expect(hookSource).not.toContain("webSocketConnectedOnceRef");

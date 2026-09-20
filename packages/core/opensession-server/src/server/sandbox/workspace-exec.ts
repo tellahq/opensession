@@ -41,6 +41,9 @@ export type WorkspaceExec = ((
   /** The workspace exists ONLY inside the sandbox (volume mode / remote
    *  provider) — host fs reads of workspace files won't work. */
   readonly remote: boolean;
+  /** Absolute path of `bun` inside the sandbox, for surfaces that run a
+   *  script there (guest layouts differ per provider). */
+  readonly guestBun?: string;
 };
 
 /** The minimal session shape the routing decision needs (UnifiedSession and
@@ -174,9 +177,14 @@ export async function workspaceExecFor(
       }
       if (!sandbox || (await sandbox.status()) !== "running")
         return unavailableRemote;
+      const { remoteLayoutForProvider } = await import("./adapters/bootstrap");
       return Object.assign(
         (cmd: string[], opts?: ExecOpts) => sandbox.exec(cmd, opts),
-        { sandboxed: true, remote: true } as const,
+        {
+          sandboxed: true,
+          remote: true,
+          guestBun: remoteLayoutForProvider(sb.provider).bun,
+        } as const,
       );
     }
     // A retired provider's workspace only ever existed inside that sandbox.

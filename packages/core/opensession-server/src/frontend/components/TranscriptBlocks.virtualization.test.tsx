@@ -69,6 +69,57 @@ describe("TranscriptBlocks indexed ranges", () => {
     ...extra,
   });
 
+  test.each([false, true])(
+    "keeps the user gap non-collapsing across indexed confirmation (settled=%s)",
+    (settled) => {
+      const previous: TranscriptEntry = {
+        id: "indexed-1",
+        seq: 1,
+        changeSeq: 1,
+        type: "assistant",
+        content: "Previous answer",
+        timestamp: "2026-08-12T12:00:01Z",
+      };
+      const prompt: TranscriptEntry = {
+        id: settled ? "indexed-2" : "outbox-client-prompt",
+        type: "user",
+        content: "Keep this row still",
+        timestamp: "2026-08-12T12:00:02Z",
+      };
+      const html = renderToStaticMarkup(
+        <TranscriptBlocks
+          transcriptIndex={[
+            indexRow(1, "assistant"),
+            ...(settled ? [indexRow(2, "user")] : []),
+          ]}
+          entries={
+            settled
+              ? [
+                  previous,
+                  {
+                    ...prompt,
+                    seq: 2,
+                    changeSeq: 2,
+                    sourceMessageIds: ["client-prompt"],
+                  },
+                ]
+              : [previous]
+          }
+          optimisticEntries={
+            settled ? [] : [{ ...prompt, optimisticAfterEntryId: previous.id }]
+          }
+        />,
+      );
+      const classes = html
+        .match(/class="([^"]*\bmsg-user\b[^"]*)"/)?.[1]
+        ?.split(" ");
+      // Margin collapsed against the previous answer only while this prompt
+      // shared its range. Padding keeps the same 4px gap in both shapes.
+      expect(classes).toContain("pt-1");
+      expect(classes).not.toContain("mt-1");
+    },
+  );
+
   test("keeps unloaded history out of the transcript until it hydrates", () => {
     const html = renderToStaticMarkup(
       <TranscriptBlocks

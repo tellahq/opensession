@@ -16,15 +16,16 @@ import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import {
   tryGetSessionControl,
   type SessionControl,
-  type SessionSummary,
 } from "../../server/session-control";
 import { audit } from "../../server/audit";
+import { configuredRepos, getConfigAsync } from "../../server/config";
+import { SESSION_BRANCH_MATCH_LIMIT } from "../../server/session-list-protocol";
 import {
-  isSharedCheckoutDir,
-  REPOS,
-  worktreeHeadBranch,
-} from "../../server/worktree";
-import { defaultRepo } from "../../server/config";
+  matchSessions,
+  workspaceIdForRepo,
+  SessionOwnershipOverflowError,
+} from "./session-matching";
+export { matchSessions, workspaceIdForRepo } from "./session-matching";
 
 const PENDING_PATH = `${stateDir("github")}/pending-deploys.json`;
 const DEPLOY_WORKFLOW_PATH = ".github/workflows/deploy.yml";
@@ -32,7 +33,7 @@ const DEPLOY_WORKFLOW_PATH = ".github/workflows/deploy.yml";
 const PENDING_TTL_MS = 48 * 60 * 60 * 1000;
 /** A branch-linked event should normally target one session. Refuse an
  * implausible broadcast before it can start a fleet of agent turns. */
-export const MAX_SESSION_NOTIFICATION_FANOUT = 25;
+export const MAX_SESSION_NOTIFICATION_FANOUT = SESSION_BRANCH_MATCH_LIMIT;
 
 interface PendingDeploy {
   prNumber: number;
@@ -59,43 +60,6 @@ function readPending(): PendingDeploys {
   } catch {
     return {};
   }
-}
-
-/** Registry project id for a GitHub owner/name, or null if unconfigured. */
-export function workspaceIdForRepo(fullName: string): string | null {
-  for (const repo of Object.values(REPOS)) {
-    if (repo.ghRepo === fullName) return repo.id;
-  }
-  return null;
-}
-
-/** Live (non-archived) sessions working on `branch` of `workspaceId`, primary or attached.
- *  Also used by handoff.ts to find the session that owns a PR's branch. */
-export function matchSessions(
-  control: SessionControl,
-  workspaceId: string,
-  branch: string,
-): SessionSummary[] {
-  return control.listSessions().filter((s) => {
-    if (s.state === "archived") return false;
-    if ((s.repo || defaultRepo().id) === workspaceId) {
-      if (s.branch === branch) return true;
-      // The agent may have switched branches inside its worktree (automations
-      // renaming their auto-generated branch before opening the PR) while the
-      // session record keeps the original name — match the actual HEAD too.
-      // A shared checkout's HEAD belongs to the whole instance, not to this
-      // session. Treating it as session identity caused PR #5593's branch to
-      // match 645 unrelated sessions that all pointed at the same checkout.
-      if (
-        !isSharedCheckoutDir(s.worktreeDir) &&
-        worktreeHeadBranch(s.worktreeDir) === branch
-      )
-        return true;
-    }
-    return (s.attachedRepos || []).some(
-      (r) => r.repo === workspaceId && r.branch === branch,
-    );
-  });
 }
 
 /** Deduplicate ordinary multi-session matches and fail closed on an
@@ -154,12 +118,30 @@ async function deliver(
 export async function notifyMergedPrSessions(payload: any): Promise<void> {
   const pr = payload?.pull_request;
   const headRef: string = pr?.head?.ref || "";
-  const workspaceId = workspaceIdForRepo(payload?.repository?.full_name || "");
+  const workspaceId = await workspaceIdForRepo(
+    payload?.repository?.full_name || "",
+  );
   if (!pr || !headRef || !workspaceId) return;
   const control = tryGetSessionControl();
   if (!control) return;
 
-  const sessions = matchSessions(control, workspaceId, headRef);
+  let sessions: Awaited<ReturnType<typeof matchSessions>>;
+  try {
+    sessions = await matchSessions(workspaceId, headRef);
+  } catch (error) {
+    if (!(error instanceof SessionOwnershipOverflowError)) throw error;
+    audit({
+      msg: "github_session_notification_fuse",
+      event: "pr_merged",
+      matched_sessions_at_least: error.minimumMatches,
+      max_sessions: MAX_SESSION_NOTIFICATION_FANOUT,
+      pr_number: pr.number,
+      workspace_id: workspaceId,
+      head_ref: headRef,
+    });
+    console.error(`[github] ${error.message}`);
+    return;
+  }
   if (!sessions.length) return;
 
   const prNumber: number = pr.number;
@@ -167,7 +149,7 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
   const mergedBy: string =
     pr.merged_by?.login || payload?.sender?.login || "someone";
   const base: string = pr.base?.ref || "main";
-  const repo = REPOS[workspaceId];
+  const repo = configuredRepos(await getConfigAsync())[workspaceId];
   const trackDeploy =
     repo?.deploymentTracking === true &&
     base === repo.defaultBranch &&

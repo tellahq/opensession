@@ -27,10 +27,7 @@ fi
 
 printf 'Running %d unit-test files in isolated processes (%d at a time)\n' \
   "$test_count" "$jobs"
-# A developer's service shell may carry runtime bypasses used by previews or
-# snapshot fixtures. Unit files that test the default executor and run-host
-# policy must not inherit those process-wide overrides.
-find_tests | xargs -0 -n 1 -P "$jobs" env \
-  -u OPENSESSION_EXECUTOR \
-  -u OPENSESSION_TEST_IN_PROCESS_RUNS \
-  bun test --no-orphans --reporter dots
+# Each child also gets a private HOME/config/tmp tree and a minimal environment.
+# Repointing the fixture sessions dir must not leave its index on the live HOME.
+readonly runner="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/test-isolated.ts"
+find_tests | xargs -0 -n 1 -P "$jobs" bun "$runner"

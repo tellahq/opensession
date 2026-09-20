@@ -254,6 +254,22 @@ test("new workspace tabs create an idle sibling session", async () => {
     clientSessionId,
     duplicate: true,
   });
+
+  await newSessionApi(
+    "bks-source",
+    "Kent",
+    "share",
+    clientSessionId,
+    true,
+    "message-one",
+  );
+  expect(JSON.parse(String(init?.body))).toEqual({
+    user: "Kent",
+    mode: "share",
+    clientSessionId,
+    duplicate: true,
+    messageId: "message-one",
+  });
 });
 
 test("workspace projection explicitly includes the selected workspace", async () => {

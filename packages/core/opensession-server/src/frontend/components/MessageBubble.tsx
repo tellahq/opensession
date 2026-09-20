@@ -413,6 +413,13 @@ const NOTICE_ICON_PATHS = new Map<NoticeIconName, React.ReactNode>([
     </>,
   ],
   ["done", <path d="M20 6 9 17l-5-5" />],
+  [
+    "clock",
+    <>
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M12 7v5l3 2" />
+    </>,
+  ],
 ]);
 
 /** Triangle-alert glyph for a toned notice; inherits the pill's colour. */
@@ -888,6 +895,7 @@ export const MessageBubble = function MessageBubble({
   }
 
   // Operational events remain notices; agent correspondence is conversation.
+  // A scheduled check-back is one of them: collapsed system line, not a turn.
   if (e.notice)
     return (
       <NoticeRow

@@ -31,12 +31,20 @@ export function repoForFullName(
  * with every existing state file, `bks-ghpr-N-*` session, and `ghpr-N`
  * workspace — while other repos prefix their registry id.
  */
-export function prKey(prNumber: number, ghRepo?: string | null): string {
-  if (!ghRepo || ghRepo.toLowerCase() === defaultRepo().ghRepo.toLowerCase()) {
+export function prKey(
+  prNumber: number,
+  ghRepo?: string | null,
+  repos?: Record<string, Repo>,
+): string {
+  if (!ghRepo) return String(prNumber);
+  repos ??= configuredRepos();
+  if (ghRepo.toLowerCase() === defaultRepo(repos).ghRepo.toLowerCase()) {
     return String(prNumber);
   }
   const id =
-    repoForFullName(ghRepo)?.id || ghRepo.replace(/[^A-Za-z0-9._-]/g, "_");
+    Object.values(repos).find(
+      (repo) => repo.ghRepo.toLowerCase() === ghRepo.trim().toLowerCase(),
+    )?.id || ghRepo.replace(/[^A-Za-z0-9._-]/g, "_");
   return `${id}-${prNumber}`;
 }
 

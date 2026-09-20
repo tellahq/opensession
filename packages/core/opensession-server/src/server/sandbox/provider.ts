@@ -22,8 +22,9 @@ import type { RunHostSpec } from "../../runner-host/protocol";
 
 /** The provider ids the registry knows (all implemented — see index.ts).
  *  Persisted sessions may still carry a retired id (docker, modal, e2b,
- *  microvm, lambda-microvm); those fail explicitly at dispatch. */
-export type SandboxProviderId = "local" | "daytona" | "box";
+ *  microvm, lambda-microvm); those fail explicitly at dispatch. `tart` is a
+ *  macOS VM on a paired Mac Runner (adapters/tart.ts). */
+export type SandboxProviderId = "local" | "daytona" | "box" | "tart";
 
 /** Selection authority for starting new work on a configured provider. */
 export type SandboxProviderUsability =

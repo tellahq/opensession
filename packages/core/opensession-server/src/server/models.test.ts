@@ -278,3 +278,23 @@ describe("Pi-only model routing", () => {
     ).toHaveLength(1);
   });
 });
+
+test("interactive fallback is on by default and a session can opt out", () => {
+  const model = "pi/anthropic/claude-fable-5-1";
+  expect(interactiveFallbackModel(model)).toBe(automaticFallbackModel(model));
+  expect(interactiveFallbackModel(model, true)).toBe(
+    automaticFallbackModel(model),
+  );
+  for (const primary of [
+    model,
+    "dial/high",
+    "orchestrator/fable",
+    "codex-best-available",
+    undefined,
+  ]) {
+    expect(interactiveFallbackModel(primary, false)).toBe("none");
+    expect(
+      fallbackPlan(primary, interactiveFallbackModel(primary, false)),
+    ).toEqual([]);
+  }
+});

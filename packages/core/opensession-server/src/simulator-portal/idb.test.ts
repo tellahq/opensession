@@ -942,3 +942,110 @@ test("clear cannot free a capacity record whose device set was not verified stop
   expect(await Bun.file(join(slot, "owner.json")).exists()).toBe(true);
   expect(fake.commands.some((args) => args.includes("delete"))).toBe(false);
 });
+
+test("global capacity recovers dead leases from a different instance root", async () => {
+  const fixtures = await Promise.all([createApp(), createApp()]);
+  const first = fakeDependencies(fixtures[0]!.capacityRoot);
+  const oldSets: string[] = [];
+  for (const [index, fixture] of fixtures.entries()) {
+    await openIdbSimulator(
+      {
+        sessionId: `old-${index}`,
+        workspaceDir: fixture.workspaceDir,
+        appPath: fixture.appPath,
+      },
+      first.dependencies,
+    );
+    const slotPath = join(
+      fixtures[0]!.capacityRoot,
+      `slot-${index}`,
+      "owner.json",
+    );
+    const owner = await Bun.file(slotPath).json();
+    owner.pid = 99999999;
+    oldSets.push(owner.deviceSet);
+    await writeFile(slotPath, JSON.stringify(owner));
+    await writeFile(
+      join(owner.repositoryRoot, "active", "owner.json"),
+      JSON.stringify(owner),
+    );
+  }
+  const next = fakeDependencies(fixtures[0]!.capacityRoot);
+  next.dependencies.durableRoot = join(
+    fixtures[0]!.capacityRoot,
+    "another-instance",
+  );
+  const run = next.dependencies.runner.run;
+  next.dependencies.runner.run = async (args, options) =>
+    args[0] === "/bin/kill" && args[2] === "99999999"
+      ? { exitCode: 1, stdout: "", stderr: "no process" }
+      : run(args, options);
+  const active = [];
+  try {
+    for (const [index, fixture] of fixtures.entries()) {
+      active.push(
+        await openIdbSimulator(
+          {
+            sessionId: `new-${index}`,
+            workspaceDir: fixture.workspaceDir,
+            appPath: fixture.appPath,
+          },
+          next.dependencies,
+        ),
+      );
+    }
+    for (const deviceSet of oldSets)
+      expect(next.commands).toContainEqual([
+        "/usr/bin/simctl",
+        "--set",
+        deviceSet,
+        "shutdown",
+        "all",
+      ]);
+    expect(next.commands.some((args) => args.includes("delete"))).toBe(false);
+  } finally {
+    for (const simulator of active) await simulator.close();
+  }
+});
+
+test.each(["missing", "dangling symlink", "stored device"])(
+  "clear handles a pre-device profile with %s set",
+  async (state) => {
+    const fixture = await createApp();
+    const fake = fakeDependencies(fixture.capacityRoot);
+    const simulator = await openIdbSimulator(
+      {
+        sessionId: "metadata-only",
+        workspaceDir: fixture.workspaceDir,
+        appPath: fixture.appPath,
+      },
+      fake.dependencies,
+    );
+    const owner = await Bun.file(
+      join(fixture.capacityRoot, "slot-0", "owner.json"),
+    ).json();
+    await simulator.close();
+    const metadataPath = join(owner.deviceSet, "..", "profile.json");
+    const metadata = await Bun.file(metadataPath).json();
+    if (state !== "stored device") delete metadata.udid;
+    await writeFile(metadataPath, JSON.stringify(metadata));
+    await rm(owner.deviceSet, { recursive: true });
+    if (state === "dangling symlink")
+      await symlink(join(fixture.workspaceDir, "absent"), owner.deviceSet);
+    const before = fake.commands.length;
+    const clear = clearIdbSimulatorStorage(
+      { workspaceDir: fixture.workspaceDir },
+      fake.dependencies,
+    );
+    if (state === "missing") {
+      await clear;
+      expect(await Bun.file(metadataPath).exists()).toBe(false);
+    } else {
+      await expect(clear).rejects.toThrow();
+      expect(await Bun.file(metadataPath).exists()).toBe(true);
+    }
+    expect(
+      fake.commands.slice(before).some((args) => args[0] === "/usr/bin/simctl"),
+    ).toBe(false);
+  },
+);

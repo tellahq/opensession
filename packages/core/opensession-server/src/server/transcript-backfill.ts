@@ -96,10 +96,12 @@ export async function runTranscriptBackfill(
   // Dynamic imports: keep run-rpc.ts out of this module's static graph (see
   // module doc). In the live process these resolve to the already-loaded
   // modules instantly.
-  const { getAllSessions, mergedSessionTranscriptAsync } =
-    await import("./sessions");
+  const { mergedSessionTranscriptAsync } = await import("./sessions");
+  const { getSessionListSnapshotAsync } = await import("./session-cache");
 
-  let sessions = getAllSessions()
+  // The list projection, never a scan of the session directories: this runs
+  // inside the gateway on an admin request.
+  let sessions = (await getSessionListSnapshotAsync("include"))
     .slice()
     .sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
   if (opts.limit && opts.limit > 0) sessions = sessions.slice(0, opts.limit);

@@ -225,6 +225,12 @@ export type BundleMeta = {
   twName: string | null;
   /** Every servable file compileAssets wrote (entry, chunks, sheets). */
   assets: string[];
+  /**
+   * The chunks the entry imports statically, transitively. index.html
+   * preloads them so the whole first paint downloads at once; absent on a
+   * dist compiled before this field existed, which just loses the preload.
+   */
+  preload?: string[];
   bunVersion?: string;
   builtAt?: string;
 };
@@ -351,6 +357,7 @@ export async function compileAssets(): Promise<BundleMeta> {
   if (!entry) throw new Error("frontend build produced no entry point");
   const entryName = entry.path.split("/").pop()!;
   const outputNames = result.outputs.map((o) => o.path.split("/").pop()!);
+  const preload = staticImportClosure(entryName, new Set(outputNames));
 
   // Bun 1.3.14's CSS minifier strips the space after var(...) and breaks the
   // .panel-overlay / .sidebar-overlay inset (and a few color-mix percentages),
@@ -447,6 +454,7 @@ export async function compileAssets(): Promise<BundleMeta> {
     cssName,
     twName,
     assets: [...outputNames, cssName, ...(twName ? [twName] : [])],
+    preload,
     bunVersion: Bun.version,
     builtAt: new Date().toISOString(),
   };
@@ -456,6 +464,38 @@ export async function compileAssets(): Promise<BundleMeta> {
   );
   pruneFrontendDist(meta.assets);
   return meta;
+}
+
+// Splitting leaves the entry importing its shared chunks by absolute path
+// (publicPath "/"), e.g. `import{a}from"/App-<hash>.js"`. The browser only
+// learns about each layer after it has downloaded and parsed the one above:
+// a 3 MB entry before it can ask for the 1 MB chunk holding Base UI and
+// Motion, which every first paint needs. Walk the closure at build time so
+// index.html can preload all of it alongside the entry. Static imports only:
+// `import("/x.js")` has the parenthesis and never matches.
+const STATIC_IMPORT_RE = /(?:from|import)\s*"\/([\w.-]+\.js)"/g;
+
+export function staticImportClosure(
+  entryName: string,
+  outputNames: Set<string>,
+  dist: string = FRONTEND_DIST,
+): string[] {
+  const seen = new Set<string>();
+  const queue = [entryName];
+  while (queue.length) {
+    const name = queue.shift()!;
+    if (seen.has(name) || !outputNames.has(name)) continue;
+    seen.add(name);
+    let source: string;
+    try {
+      source = readFileSync(join(dist, name), "utf8");
+    } catch {
+      continue;
+    }
+    for (const match of source.matchAll(STATIC_IMPORT_RE)) queue.push(match[1]);
+  }
+  seen.delete(entryName);
+  return [...seen];
 }
 
 /** Changes whenever the entry or a stylesheet hash changes, so clients know to refresh. */
@@ -524,13 +564,18 @@ export function renderIndexHtml(
   const twLink = meta.twName
     ? `\n  <link rel="stylesheet" href="/${meta.twName}">`
     : "";
+  // Every chunk of the first paint, requested in parallel with the entry
+  // instead of one import layer at a time (see staticImportClosure).
+  const preloadLinks = (meta.preload ?? [])
+    .map((name) => `\n  <link rel="modulepreload" href="/${name}">`)
+    .join("");
   // Inject before the LAST head close: the first "</head>" in the source can
   // legitimately appear inside inline-script comment text (2026-08-05: a
   // comment literal ate the stylesheet links and broke the boot script).
   const headClose = indexHtml.lastIndexOf("</head>");
   return (
     indexHtml.slice(0, headClose) +
-    `  <link rel="stylesheet" href="/${meta.cssName}">${twLink}\n` +
+    `  <link rel="stylesheet" href="/${meta.cssName}">${twLink}${preloadLinks}\n` +
     indexHtml.slice(headClose)
   );
 }

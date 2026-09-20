@@ -43,6 +43,28 @@ export function SandboxProviderLogo({
 }: {
   provider: SandboxProvider;
 }) {
+  if (provider === "tart") {
+    // A Mac VM: a rounded display with a smaller window inside it.
+    return (
+      <SandboxProviderTile className="bg-surface text-fg">
+        <svg
+          viewBox="0 0 32 32"
+          className="size-7"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <rect x="4" y="6" width="24" height="16" rx="3" />
+          <path d="M12 26h8M16 22v4" />
+          <rect x="10" y="10" width="12" height="8" rx="1.5" />
+        </svg>
+      </SandboxProviderTile>
+    );
+  }
+
   if (provider === "box") {
     return (
       <SandboxProviderTile className="bg-white text-[#111]">

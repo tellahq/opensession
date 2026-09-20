@@ -16,6 +16,9 @@ const navigateMessageSchema = z.object({
   type: z.literal("os1-navigate"),
   url: z.string(),
 });
+const shellUpdatedMessageSchema = z.object({
+  type: z.literal("os1-shell-updated"),
+});
 const vapidKeySchema = z.object({ publicKey: z.string() });
 
 function supported(): boolean {
@@ -38,9 +41,44 @@ function supported(): boolean {
 export function registerServiceWorker(): void {
   if (typeof window === "undefined" || !window.isSecureContext) return;
   if (!("serviceWorker" in navigator)) return;
+  listenForShellUpdates();
   navigator.serviceWorker
     .register(SW_URL, { scope: `${BASE_PATH}/` })
     .catch(() => {});
+}
+
+/*
+ * sw.js paints the cached shell when the server is slow to answer a launch,
+ * and posts os1-shell-updated once the late answer turns out to name a newer
+ * bundle. That can land seconds after boot, before the update nudge has
+ * mounted, so the flag is kept here and handed to whoever subscribes later.
+ */
+let shellUpdated = false;
+let shellListening = false;
+const shellUpdateSubscribers = new Set<() => void>();
+
+function listenForShellUpdates(): void {
+  if (shellListening) return;
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator))
+    return;
+  shellListening = true;
+  navigator.serviceWorker.addEventListener("message", (event: MessageEvent) => {
+    if (!shellUpdatedMessageSchema.safeParse(event.data).success) return;
+    shellUpdated = true;
+    for (const notify of shellUpdateSubscribers) notify();
+  });
+  navigator.serviceWorker.startMessages?.();
+}
+
+/** Subscribe to "this launch painted a shell the server has since replaced".
+ *  Fires at once when that already happened. Returns an unsubscribe. */
+export function onShellUpdated(handler: () => void): () => void {
+  listenForShellUpdates();
+  shellUpdateSubscribers.add(handler);
+  if (shellUpdated) handler();
+  return () => {
+    shellUpdateSubscribers.delete(handler);
+  };
 }
 
 /**

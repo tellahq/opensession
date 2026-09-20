@@ -5,6 +5,7 @@ import {
   resolveWindowsSchtasks,
   resolveWindowsShell,
   runnerExecCommand,
+  runnerCommandAwsEnvironment,
   runnerLaunchdPlist,
   runnerScheduledTaskXml,
   scheduledTaskStartBoundary,
@@ -255,5 +256,38 @@ describe("Runner service definitions", () => {
     expect(parseRunnerPortalRegistry(text)).toEqual([
       { ...record, key: "PORTAL_API_PORT" },
     ]);
+  });
+});
+
+describe("Runner command AWS environment", () => {
+  test("is absent on ordinary commands and rejects malformed credentials", () => {
+    expect(runnerCommandAwsEnvironment(undefined)).toEqual({});
+    for (const input of [
+      null,
+      false,
+      "secret",
+      {},
+      { AWS_ACCESS_KEY_ID: "key" },
+    ])
+      expect(() => runnerCommandAwsEnvironment(input)).toThrow();
+  });
+  test("only accepts AWS credentials and does not mutate the process environment", () => {
+    const before = { ...process.env };
+    const credentials = {
+      AWS_ACCESS_KEY_ID: "key",
+      AWS_SECRET_ACCESS_KEY: "secret",
+      AWS_SESSION_TOKEN: "token",
+      AWS_REGION: "eu-west-1",
+      AWS_DEFAULT_REGION: "eu-west-1",
+    };
+    expect(
+      runnerCommandAwsEnvironment({
+        ...credentials,
+        PATH: "/evil",
+        NODE_OPTIONS: "--require evil",
+        AWS_PROFILE: "personal",
+      }),
+    ).toEqual({ ...credentials, AWS_EC2_METADATA_DISABLED: "true" });
+    expect(process.env).toEqual(before);
   });
 });

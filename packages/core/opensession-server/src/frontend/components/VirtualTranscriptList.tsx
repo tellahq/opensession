@@ -122,6 +122,16 @@ interface ReaderAnchor {
   top: number;
 }
 
+/** Content offsets of mounted entries by id: distance from the scroller's
+ * content origin, so a reader's scroll movement does not show up in them. */
+export type EntryLayout = ReadonlyMap<string, number>;
+
+/** Every mounted entry's offset, and the subset in view. */
+export interface EntryLayoutSnapshot {
+  mounted: EntryLayout;
+  inView: EntryLayout;
+}
+
 /** How long the scroller must be quiet after touch activity before an anchor
  * correction is safe. Writing scrollTop sooner cancels the native fling. */
 const TOUCH_SETTLE_MS = 150;
@@ -163,7 +173,13 @@ class TranscriptVirtualizer extends React.Component<
   private readerInputContainer: HTMLDivElement | null = null;
   private touching = false;
   private lastTouchActivityAt = Number.NEGATIVE_INFINITY;
-  private deferredDelta = 0;
+  /** Where each entry in view stood when it came into view, while touch
+   * owns the scroller and corrections wait; what the flush measures against
+   * (nextDeferredLedger). */
+  private deferredLayout: Map<string, number> | null = null;
+  /** Entry positions captured before the current commit changes the DOM,
+   * while touch owns the scroller. */
+  private preCommitLayout: EntryLayout | null = null;
   private deferredFlushTimer: number | undefined;
   private topApproachContainer: HTMLDivElement | null = null;
   private topApproachCallback: (() => boolean) | undefined;
@@ -223,6 +239,17 @@ class TranscriptVirtualizer extends React.Component<
       })
     )
       this.heldAnchor = this.captureReaderAnchor();
+    // While touch owns the scroller this commit's correction waits, and the
+    // reader may have flung to any of these entries by the time it lands.
+    // Their positions before the DOM changes are what each one is measured
+    // against then. Kept across a nested virtualizer commit for the same
+    // reason as the held anchor.
+    if (
+      this.preCommitLayout === null &&
+      !this.props.shouldMaintainEnd?.() &&
+      this.touchOwnsScroller()
+    )
+      this.preCommitLayout = this.captureEntryLayout();
     return null;
   }
 
@@ -464,24 +491,61 @@ class TranscriptVirtualizer extends React.Component<
     return pickReaderAnchor(root, container.getBoundingClientRect().top);
   }
 
+  private captureEntryLayout(): EntryLayout | null {
+    const container = this.scrollContainer();
+    const root = this.root;
+    if (!container || !root) return null;
+    return captureEntryLayout(root, container).mounted;
+  }
+
+  private touchOwnsScroller() {
+    return shouldDeferReaderCorrection({
+      touching: this.touching,
+      sinceTouchActivity: performance.now() - this.lastTouchActivityAt,
+    });
+  }
+
   /** History prepends above the reader, grouped rows change internally,
    * estimates resolve to measurements, and a partial row can grow at its
    * start. Whatever moved, the entry the reader was looking at goes back where
    * it was before this commit, as a delta on the current scroll position: the
    * snapshot was taken synchronously before the DOM changed, so no reader
-   * movement can hide inside it. */
+   * movement can hide inside it.
+   *
+   * While touch owns the scroller the write waits (it would cancel the fling)
+   * and the anchor is not enough: by the time the write is safe, the reader
+   * has flung on, and a fling into history runs straight through the rows
+   * whose measurements displaced the anchor. Entries above those rows never
+   * moved, so putting the old anchor back would throw such a reader toward
+   * the live edge by the whole growth (measured: 5692px after one fling). So
+   * the deferral keeps a ledger of where each entry in view stood when it
+   * came into view, and the flush moves the scroller by how far the entry
+   * then under the reader has travelled since: only movement the reader was
+   * shown (see nextDeferredLedger). */
   private settleReaderAnchor() {
     // A virtualizer scroll write raised a nested render. Until it commits,
     // scrollTop and the row transforms describe different layouts, so hold
     // the anchor and measure after that commit instead.
     if (this.renderAfterCommit) return;
     const anchor = this.heldAnchor;
+    const before = this.preCommitLayout;
     this.heldAnchor = undefined;
+    this.preCommitLayout = null;
     this.virtualizerWrote = false;
-    if (!anchor) return;
     const container = this.scrollContainer();
     const root = this.root;
     if (!container || !root || this.props.shouldMaintainEnd?.()) return;
+    if (this.touchOwnsScroller()) {
+      this.deferredLayout = nextDeferredLedger(
+        this.deferredLayout,
+        before ??
+          (anchor && new Map([[anchor.id, container.scrollTop + anchor.top]])),
+        captureEntryLayout(root, container),
+      );
+      this.scheduleDeferredFlush();
+      return;
+    }
+    if (!anchor) return;
     const node = anchor.node.isConnected
       ? anchor.node
       : findTranscriptEntry(root, anchor.id);
@@ -491,21 +555,6 @@ class TranscriptVirtualizer extends React.Component<
       container.getBoundingClientRect().top -
       anchor.top;
     if (Math.abs(delta) <= 0.5) return;
-    this.correctReader(container, delta);
-  }
-
-  private correctReader(container: HTMLDivElement, delta: number) {
-    const now = performance.now();
-    if (
-      shouldDeferReaderCorrection({
-        touching: this.touching,
-        sinceTouchActivity: now - this.lastTouchActivityAt,
-      })
-    ) {
-      this.deferredDelta += delta;
-      this.scheduleDeferredFlush();
-      return;
-    }
     container.scrollTop += delta;
     this.syncVirtualizerOffset(container);
   }
@@ -516,19 +565,26 @@ class TranscriptVirtualizer extends React.Component<
     this.deferredFlushTimer = window.setTimeout(() => {
       this.deferredFlushTimer = undefined;
       const container = this.readerInputContainer;
-      const delta = this.deferredDelta;
-      if (!container || delta === 0) return;
-      const now = performance.now();
-      if (
-        shouldDeferReaderCorrection({
-          touching: this.touching,
-          sinceTouchActivity: now - this.lastTouchActivityAt,
-        })
-      ) {
+      const root = this.root;
+      const ledger = this.deferredLayout;
+      if (!container || !root || !ledger) return;
+      if (this.touchOwnsScroller()) {
         this.scheduleDeferredFlush();
         return;
       }
-      this.deferredDelta = 0;
+      this.deferredLayout = null;
+      const reader = pickReaderAnchor(
+        root,
+        container.getBoundingClientRect().top,
+      );
+      const delta = deferredReaderCorrection(
+        ledger,
+        reader && {
+          id: reader.id,
+          contentTop: container.scrollTop + reader.top,
+        },
+      );
+      if (Math.abs(delta) <= 0.5) return;
       container.scrollTop += delta;
       this.syncVirtualizerOffset(container);
     }, TOUCH_SETTLE_MS);
@@ -542,7 +598,7 @@ class TranscriptVirtualizer extends React.Component<
   private onReaderTouchEnd = () => {
     this.touching = false;
     this.lastTouchActivityAt = performance.now();
-    if (this.deferredDelta !== 0) this.scheduleDeferredFlush();
+    if (this.deferredLayout) this.scheduleDeferredFlush();
   };
 
   private onReaderScroll = () => {
@@ -552,7 +608,7 @@ class TranscriptVirtualizer extends React.Component<
     // is still producing scroll events; that correction must wait as well.
     if (this.touching || now - this.lastTouchActivityAt < TOUCH_SETTLE_MS)
       this.lastTouchActivityAt = now;
-    if (this.deferredDelta !== 0) this.scheduleDeferredFlush();
+    if (this.deferredLayout) this.scheduleDeferredFlush();
   };
 
   private clearReaderInput() {
@@ -566,7 +622,8 @@ class TranscriptVirtualizer extends React.Component<
     if (this.deferredFlushTimer !== undefined)
       window.clearTimeout(this.deferredFlushTimer);
     this.deferredFlushTimer = undefined;
-    this.deferredDelta = 0;
+    this.deferredLayout = null;
+    this.preCommitLayout = null;
     this.touching = false;
     this.lastTouchActivityAt = Number.NEGATIVE_INFINITY;
     this.readerInputContainer = null;
@@ -873,13 +930,7 @@ class TranscriptVirtualizer extends React.Component<
       // reader who had since left for history by that sum. The host re-pins
       // the live edge on layout; a parked reader's displacement is measured
       // from the DOM by the anchor of the commit that moves the rows.
-      if (
-        shouldDeferReaderCorrection({
-          touching: this.touching,
-          sinceTouchActivity: performance.now() - this.lastTouchActivityAt,
-        }) ||
-        (isIOSWebKit && instance.isScrolling)
-      )
+      if (this.touchOwnsScroller() || (isIOSWebKit && instance.isScrolling))
         return false;
       const liveEdgeDelta = this.props.shouldMaintainEnd?.()
         ? delta
@@ -1036,6 +1087,61 @@ export function pickReaderAnchor(
     return anchor;
   }
   return undefined;
+}
+
+/** Every mounted entry's content offset, and the subset in view. Rows and
+ * the entries inside them both carry `data-eid`, so whichever one
+ * `pickReaderAnchor` later picks has a record. */
+export function captureEntryLayout(
+  root: HTMLElement,
+  container: HTMLElement,
+): EntryLayoutSnapshot {
+  const viewport = container.getBoundingClientRect();
+  const origin = viewport.top - container.scrollTop;
+  const mounted = new Map<string, number>();
+  const inView = new Map<string, number>();
+  for (const node of root.querySelectorAll<HTMLElement>("[data-eid]")) {
+    const id = node.dataset.eid;
+    if (!id || mounted.has(id)) continue;
+    const rect = node.getBoundingClientRect();
+    const top = rect.top - origin;
+    mounted.set(id, top);
+    if (rect.bottom > viewport.top && rect.top < viewport.bottom)
+      inView.set(id, top);
+  }
+  return { mounted, inView };
+}
+
+/** The ledger after a commit whose correction is deferred: every entry now
+ * in view, at the position it had when it came into view. An entry already
+ * in the ledger keeps its position, so two commits that each move it add up
+ * to one displacement. An entry entering the view in this commit takes its
+ * position from before the commit if it was mounted then (a growth above
+ * that pushed it into view is movement the reader saw), else where it
+ * first appeared. Entries that left the view are dropped: what moves them
+ * while they are out of view was never shown, and if the reader flings back
+ * to one, they arrive at wherever it is now. */
+export function nextDeferredLedger(
+  ledger: EntryLayout | null,
+  before: EntryLayout | null | undefined,
+  after: EntryLayoutSnapshot,
+): Map<string, number> {
+  const next = new Map<string, number>();
+  for (const [id, top] of after.inView)
+    next.set(id, ledger?.get(id) ?? before?.get(id) ?? top);
+  return next;
+}
+
+/** How far the entry now under the reader has moved since it came into view.
+ * Only that entry's movement is the reader's: an entry the ledger does not
+ * hold was not in view when anything last moved. */
+export function deferredReaderCorrection(
+  ledger: EntryLayout,
+  reader: { id: string; contentTop: number } | undefined,
+): number {
+  if (!reader) return 0;
+  const seen = ledger.get(reader.id);
+  return seen === undefined ? 0 : reader.contentTop - seen;
 }
 
 function findTranscriptEntry(

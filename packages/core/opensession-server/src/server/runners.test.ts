@@ -125,6 +125,62 @@ describe("Runner registry security", () => {
   });
 });
 
+describe("Runner AWS role", () => {
+  test("stores a validated IAM role, keeps it across re-pairing, and clears it on null", () => {
+    const { runner } = register() as { runner: { id: string } };
+    expect(
+      updateRunner(runner.id, {
+        aws: { roleArn: " arn:aws:iam::123456789012:role/opensession/ci " },
+      })?.aws,
+    ).toEqual({ roleArn: "arn:aws:iam::123456789012:role/opensession/ci" });
+    expect(
+      updateRunner(runner.id, {
+        aws: {
+          roleArn: "arn:aws:iam::123456789012:role/ci",
+          externalId: "team-42",
+        },
+      })?.aws,
+    ).toEqual({
+      roleArn: "arn:aws:iam::123456789012:role/ci",
+      externalId: "team-42",
+    });
+    // An unrelated patch leaves the role alone.
+    expect(updateRunner(runner.id, { label: "Bill" })?.aws?.roleArn).toBe(
+      "arn:aws:iam::123456789012:role/ci",
+    );
+    // Re-pairing rotates the credential but keeps operator policy.
+    const again = register() as { runner: { id: string; aws?: unknown } };
+    expect(again.runner.id).toBe(runner.id);
+    expect(again.runner.aws).toEqual({
+      roleArn: "arn:aws:iam::123456789012:role/ci",
+      externalId: "team-42",
+    });
+    expect(updateRunner(runner.id, { aws: null })?.aws).toBeUndefined();
+    expect("aws" in (listRunners()[0] as object)).toBe(false);
+  });
+
+  test("rejects anything that is not an IAM role ARN", () => {
+    const { runner } = register() as { runner: { id: string } };
+    for (const roleArn of [
+      "",
+      "arn:aws:iam::123456789012:user/alice",
+      "arn:aws:iam::12345:role/short-account",
+      "arn:aws:iam::123456789012:role/ci; rm -rf /",
+      'arn:aws:iam::123456789012:role/ci"',
+      "AROAEXAMPLE",
+    ])
+      expect(
+        updateRunner(runner.id, { aws: { roleArn } })?.aws,
+      ).toBeUndefined();
+    // A bad external id is dropped, the role stays.
+    expect(
+      updateRunner(runner.id, {
+        aws: { roleArn: "arn:aws:iam::123456789012:role/ci", externalId: "x" },
+      })?.aws,
+    ).toEqual({ roleArn: "arn:aws:iam::123456789012:role/ci" });
+  });
+});
+
 describe("Runner policy and reservations", () => {
   test("enforces explicit user, repository, and execution permission policy", () => {
     const result = register();

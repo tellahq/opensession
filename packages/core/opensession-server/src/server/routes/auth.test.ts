@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,9 +10,12 @@ const savedConfig = process.env.OPENSESSION_CONFIG;
 const savedStateDir = process.env.OPENSESSION_STATE_DIR;
 const dirs: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = savedConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = savedConfig;
+    await getConfigAsync();
+  }
   if (savedStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
   else process.env.OPENSESSION_STATE_DIR = savedStateDir;
   for (const dir of dirs.splice(0))
@@ -24,6 +28,7 @@ test("auth status names the server before sign-in", async () => {
   const config = join(dir, "config.json");
   writeFileSync(config, JSON.stringify({ organization: { name: "Acme" } }));
   process.env.OPENSESSION_CONFIG = config;
+  await getConfigAsync();
 
   const url = new URL("http://localhost/api/auth/status");
   const context: RouteContext = {
@@ -48,6 +53,7 @@ test("auth status carries the organization icon when one is configured", async (
   const config = join(dir, "config.json");
   writeFileSync(config, JSON.stringify({ organization: { name: "Acme" } }));
   process.env.OPENSESSION_CONFIG = config;
+  await getConfigAsync();
   // The icon lives in the state dir (organizationIconPath), not beside the
   // config, so this test isolates that too.
   process.env.OPENSESSION_STATE_DIR = dir;

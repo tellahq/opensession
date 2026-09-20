@@ -1,6 +1,10 @@
 /**
  * Linear agent session lifecycle and the headless agent runner.
  */
+import {
+  completeAgentSessionCatalogSources,
+  agentSessionSourceDirectory,
+} from "../../server/agent-session-catalog";
 import { STRIPE_CONFIRM_TOOLS } from "../../server/runner-shared";
 import { shouldPersistModelSwitch } from "../../server/run-events";
 import { runAgent, cancelAgentRun } from "../../server/agent-runner";
@@ -12,6 +16,7 @@ import {
 } from "../../server/config";
 import { getDefaultModel, toPiModel } from "../../server/models";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { publishSessionChange } from "../../server/session-cache";
 import {
   createWorktree as createRepoWorktree,
   removeWorktree,
@@ -26,7 +31,7 @@ import { createAgentActivity } from "./api";
 import type { LinearTokens } from "./oauth";
 import { getValidToken } from "./oauth";
 
-const SESSION_DIR = `${process.env.HOME}/.linear-sessions`;
+const SESSION_DIR = agentSessionSourceDirectory("linear");
 
 /** Sessions with no activity for this long aren't restored on startup. */
 const STALE_SESSION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -261,6 +266,9 @@ export async function saveSessionInfo(
     updatedAt: new Date().toISOString(),
   };
   writeJsonAtomic(`${SESSION_DIR}/${branch}.json`, data);
+  // The list index and the catalog projection learn this file only from a
+  // targeted publish; the gateway never lists the directory.
+  await publishSessionChange(`linear-${branch}`);
 }
 
 export async function loadSessionInfo(
@@ -277,13 +285,14 @@ export async function loadSessionInfo(
   }
 }
 
-export function deleteSessionFile(branch: string): void {
+export async function deleteSessionFile(branch: string): Promise<void> {
   try {
     unlinkSync(`${SESSION_DIR}/${branch}.json`);
     console.log(`[linear] Deleted session file: ${SESSION_DIR}/${branch}.json`);
   } catch {
     // File might not exist
   }
+  await publishSessionChange(`linear-${branch}`);
 }
 
 export function deleteWorktree(branch: string): void {
@@ -614,11 +623,10 @@ ${participantsLine ? `\n${participantsLine}\n` : ""}
 export async function loadActiveSessionsOnStartup(
   tokens: LinearTokens,
 ): Promise<void> {
-  console.log("[linear] Loading active sessions from disk...");
+  console.log("[linear] Loading active sessions from catalog...");
 
   try {
-    const { readdirSync } = await import("fs");
-    const files = readdirSync(SESSION_DIR).filter((f) => f.endsWith(".json"));
+    const sources = await completeAgentSessionCatalogSources("linear");
 
     // Single-workspace install: every session belongs to the one authorized org.
     const orgId = Object.keys(tokens)[0];
@@ -627,10 +635,10 @@ export async function loadActiveSessionsOnStartup(
     if (!accessToken) return;
 
     let skippedStale = 0;
-    for (const file of files) {
+    for (const { file, data } of sources) {
       try {
         const branch = file.replace(".json", "");
-        const stored = await loadSessionInfo(branch);
+        const stored = storedFromFile(branch, data);
 
         if (
           stored &&
@@ -671,7 +679,11 @@ export async function loadActiveSessionsOnStartup(
         `[linear] Skipped ${skippedStale} stale session file(s) (idle > 7 days)`,
       );
     }
-  } catch {
-    console.log("[linear] No active sessions to load");
+  } catch (error) {
+    console.error(
+      "[linear] Session catalog unavailable; restoration deferred:",
+      error,
+    );
+    throw error;
   }
 }

@@ -4,7 +4,19 @@
  * sandbox/connections.ts (the connection store) both need it and must not
  * import each other.
  */
-export type WorkspaceSandboxProvider = "daytona" | "box";
+export type WorkspaceSandboxProvider = "daytona" | "box" | "tart";
+
+/** Providers whose connection is a paired Runner rather than an account
+ *  credential: nothing is stored in the workspace secret store for them. */
+export const CREDENTIAL_FREE_SANDBOX_PROVIDERS: ReadonlySet<string> = new Set([
+  "tart",
+]);
+
+export function sandboxProviderNeedsCredential(
+  provider: WorkspaceSandboxProvider,
+): boolean {
+  return !CREDENTIAL_FREE_SANDBOX_PROVIDERS.has(provider);
+}
 
 export function sandboxAdapterSignature(
   provider: WorkspaceSandboxProvider,

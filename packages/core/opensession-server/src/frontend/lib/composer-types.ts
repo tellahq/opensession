@@ -50,6 +50,7 @@ export interface ComposerConfig {
    * consumed server-side. When omitted, the effort pill is hidden.
    */
   effort?: string;
+  autoFallback?: boolean;
   fastMode?: boolean;
   /** Pinnable provider accounts plus the current pin for the model pill's
    * account submenu. Empty or omitted hides it. */
@@ -148,6 +149,7 @@ export interface ComposerActions {
   onStop?: () => void;
   onModelChange: (model: string) => void;
   onEffortChange?: (effort: string) => void;
+  onAutoFallbackChange?: (enabled: boolean) => void;
   onFastModeChange?: (fastMode: boolean) => void;
   onAccountChange?: (accountId: string) => void;
   /** Sets or clears the session goal from the inline target control. */

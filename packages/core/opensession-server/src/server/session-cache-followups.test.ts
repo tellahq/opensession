@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { afterAll, afterEach, beforeAll, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
@@ -45,6 +46,7 @@ beforeAll(async () => {
   process.env.HOME = home;
   process.env.OPENSESSION_STATE_DIR = home;
   process.env.OPENSESSION_CONFIG = join(home, "config.json");
+  await getConfigAsync();
   priorSessionsDir = (await import("./paths")).__setSessionsDirForTest(
     sessionsDir,
   );

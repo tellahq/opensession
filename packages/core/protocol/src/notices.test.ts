@@ -5,6 +5,8 @@ import {
   parseAttribution,
   parseRecoveryNotice,
   parseReviewHandoff,
+  parseScheduledPrompt,
+  scheduledPromptMessage,
   parseReviewSettled,
   parseSessionNotice,
   parseWorkerReport,
@@ -212,6 +214,43 @@ describe("service restart recovery detection", () => {
         "Can we collapse this?\n\nThis session was interrupted by an Ada service restart mid-run.",
       ),
     ).toBeNull();
+  });
+});
+
+describe("scheduled prompt detection", () => {
+  const id = "sched-01a0af3c-4f6d-709d-bab4-4e721cfeda16";
+  const prompt =
+    "Check-back on the rollout. Call deploy_status and confirm the pin.";
+
+  it("detects the sentinel through the scheduled attribution it's delivered under", () => {
+    const parsed = parseScheduledPrompt(
+      `[Michiel (scheduled)] ${scheduledPromptMessage(id, prompt)}`,
+    );
+    expect(parsed).toEqual({ id, body: prompt });
+  });
+
+  it("classifies the turn as a check-back notice with the prompt as its body", () => {
+    const entry: TranscriptEntry = {
+      id: "e1",
+      type: "user",
+      content: `[Michiel (scheduled)] ${scheduledPromptMessage(id, prompt)}`,
+      timestamp: "2026-09-17T12:03:01.000Z",
+    };
+    const classified = classifyEntry(entry);
+    expect(classified.content).toBe(prompt);
+    expect(classified.sender).toBeUndefined();
+    expect(classified.notice).toEqual({
+      kind: "scheduled-prompt",
+      title: "Scheduled check-back",
+      tone: "info",
+      icon: "clock",
+      body: "collapsed",
+    });
+  });
+
+  it("has no phrasing fallback: an unmarked prompt stays the person's turn", () => {
+    expect(parseScheduledPrompt(`[Michiel] ${prompt}`)).toBeNull();
+    expect(parseScheduledPrompt(prompt)).toBeNull();
   });
 });
 

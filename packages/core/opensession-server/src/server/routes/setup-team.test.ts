@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
@@ -21,7 +22,7 @@ function context(): RouteContext {
   };
 }
 
-function writeConfig(): string {
+async function writeConfig(): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), "opensession-setup-team-"));
   dirs.push(dir);
   const path = join(dir, "config.json");
@@ -37,6 +38,7 @@ function writeConfig(): string {
     }),
   );
   process.env.OPENSESSION_CONFIG = path;
+  await getConfigAsync();
   const store = join(dir, "github-auth.json");
   writeFileSync(
     store,
@@ -55,10 +57,13 @@ function writeConfig(): string {
   return path;
 }
 
-afterEach(() => {
+afterEach(async () => {
   globalThis.fetch = originalFetch;
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = savedConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = savedConfig;
+    await getConfigAsync();
+  }
   if (savedStore === undefined)
     delete process.env.OPENSESSION_GITHUB_AUTH_STORE;
   else process.env.OPENSESSION_GITHUB_AUTH_STORE = savedStore;
@@ -68,7 +73,7 @@ afterEach(() => {
 
 describe("GitHub organization member import", () => {
   test("adds every missing GitHub login once and preserves existing profiles", async () => {
-    const configPath = writeConfig();
+    const configPath = await writeConfig();
     let fetches = 0;
     globalThis.fetch = (async (input: string | URL | Request) => {
       fetches++;

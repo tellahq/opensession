@@ -4,13 +4,15 @@
  * `getSandboxProvider()` resolves the provider for a run: an explicit spec
  * wins, otherwise the config file (~/.opensession/sandbox.json) decides, and
  * the kill-switch file (<sessions-dir>/disable-sandboxes) forces "local".
- * Two Sandbox backends are implemented, Daytona and Box; a retired or unknown
- * id throws at dispatch instead of silently running unsandboxed.
+ * Three Sandbox backends are implemented, Daytona, Box, and Tart (macOS VMs
+ * on a Mac Runner); a retired or unknown id throws at dispatch instead of
+ * silently running unsandboxed.
  */
 
 import { LocalProvider } from "./local";
 import { DaytonaProvider } from "./adapters/daytona";
 import { BoxProvider } from "./adapters/box";
+import { TartProvider } from "./adapters/tart";
 import { effectiveSandboxProvider, isRetiredSandboxProvider } from "./config";
 import type { SandboxProvider, SandboxProviderId } from "./provider";
 
@@ -47,6 +49,7 @@ export { LocalProvider } from "./local";
 const localProvider = new LocalProvider();
 const daytonaProvider = new DaytonaProvider();
 const boxProvider = new BoxProvider();
+const tartProvider = new TartProvider();
 
 /**
  * Resolve a SandboxProvider. `spec` (a provider id, e.g. from a session file's
@@ -65,6 +68,8 @@ export function getSandboxProvider(
       return daytonaProvider;
     case "box":
       return boxProvider;
+    case "tart":
+      return tartProvider;
     default:
       if (isRetiredSandboxProvider(id))
         throw new Error(

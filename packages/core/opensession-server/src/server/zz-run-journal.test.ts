@@ -902,6 +902,7 @@ describe("run journal", () => {
         accountStrict: true,
         usageCredits: false,
         prReviewer: "tellahq/platform",
+        readRepos: ["tellahq/api"],
       },
       {
         runKey: "policy",
@@ -915,6 +916,7 @@ describe("run journal", () => {
       accountStrict: true,
       usageCredits: false,
       prReviewer: "tellahq/platform",
+      readRepos: ["tellahq/api"],
     });
   });
 

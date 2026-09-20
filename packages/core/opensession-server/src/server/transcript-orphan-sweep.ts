@@ -1,59 +1,14 @@
-/**
- * Orphan transcript sweep — rows in transcripts.db that no session owns.
- *
- * The store is written by anything that dispatches a run, a test harness
- * driving `runAgent` included: a run records its standing context whether or
- * not the caller ever made a session. Before the per-pid scratch database
- * landed (transcript-store.ts) that meant 45 fixture sessions — `probe-*`,
- * `starved-*`, `bks-2`, `busy-loser-*` — had each written a row into the
- * operator's live database. They are inert, nothing references them, but they
- * are junk in a production store; and invariant 8 says transcripts.db has
- * exactly one writer, so no standalone script may delete them. This is that
- * deletion, in-process.
- *
- * ## What it deletes
- *
- * A stored session with ALL of:
- *
- * - **No session behind it.** Not in the durable session-list projection (the
- *   native, linear and slack scanners, plus every alias id a dedupe folded
- *   away) and no session file of its own in the sessions dir. Both, because
- *   either source alone has a way of missing a real session.
- * - **A transcript made entirely of context-log records** (`isContextInjection`).
- *   This is the provable part: a session whose whole stored history is the
- *   harness's own bookkeeping never held a conversation, so there is nothing
- *   to lose. An orphan holding a user line is the last copy of something a
- *   person said — a pruned Slack thread, a session file someone deleted — and
- *   this sweep will not be the thing that destroys it.
- * - **A last write older than `MIN_AGE_MS`.** A session being created has its
- *   file written within seconds of its first transcript row, but the window
- *   exists, and an hour of slack costs nothing. Unknown age (no `last_ts`)
- *   counts as too new.
- *
- * Everything else is counted and logged, never touched. On this instance that
- * was 92 orphans holding ~9,500 entries at the time of writing, mostly Slack
- * threads whose session file is long gone; deleting those is a human's call
- * and wants a different tool.
- *
- * ## Guards
- *
- * The two ways this could go wrong are both silent and destructive, so both
- * refuse the whole sweep rather than handle it: a known-session set that came
- * back implausibly small (a scanner that threw, a state dir not mounted yet)
- * would make every stored session an orphan, and a candidate list past
- * `MAX_DELETE` means the rule matched something other than what it was built
- * for.
- *
- * Idempotent by construction, so it runs on every boot rather than once ever:
- * a second pass finds nothing, and anything that lands again is cleaned next
- * time. No marker file to reason about.
+/** Bounded operator diagnostic for orphan transcripts.
+ * No online placement enumeration or actor fanout. Production calls must name
+ * at most 100 candidates and are dry-run only: missing metadata is not proof
+ * that a transcript is disposable. Deletion requires a separate, fenced
+ * offline repair after provenance review. Tests exercise the legacy classifier
+ * against an explicitly supplied in-memory store, never the live actor store.
  */
-
-import { readdirSync } from "fs";
+import { catalogSessionDocuments } from "./session-catalog-read";
 import { isContextInjection } from "@tellahq/opensession-protocol/notices";
 import { audit } from "./audit";
-import { OPENSESSION_SESSIONS_DIR } from "./paths";
-import { transcript } from "./actor-transcript";
+import { sessionTranscript } from "./session-kernel";
 import type { TranscriptEntry } from "./types";
 
 interface OrphanStore {
@@ -74,28 +29,28 @@ interface OrphanStore {
   deleteSessionTranscript(sessionId: string): void | Promise<void>;
 }
 
-const actorOrphanStore: OrphanStore = {
-  async listStoredSessions() {
-    const rows: Array<{
-      sessionId: string;
-      lastTs: number | null;
-      seqHighWater: number;
-    }> = [];
-    let after = "";
-    for (;;) {
-      const ids = await transcript.sessionIds(200, after);
-      for (const sessionId of ids) {
-        const summary = await transcript.summary(sessionId);
+function actorOrphanStore(candidateSessionIds: string[]): OrphanStore {
+  return {
+    async listStoredSessions() {
+      const rows: Array<{
+        sessionId: string;
+        lastTs: number | null;
+        seqHighWater: number;
+      }> = [];
+      for (const sessionId of candidateSessionIds) {
+        const summary = await sessionTranscript({ op: "summary", sessionId });
         if (summary) rows.push({ sessionId, ...summary });
       }
-      if (ids.length < 200) return rows;
-      after = ids.at(-1)!;
-    }
-  },
-  countEvents: transcript.countEvents,
-  readTail: transcript.readTail,
-  deleteSessionTranscript: transcript.deleteSessionTranscript,
-};
+      return rows;
+    },
+    countEvents: (sessionId) => sessionTranscript({ op: "count", sessionId }),
+    readTail: (sessionId, limit) =>
+      sessionTranscript({ op: "tail", sessionId, limit }),
+    deleteSessionTranscript: async () => {
+      throw new Error("Live orphan transcript deletion is forbidden");
+    },
+  };
+}
 
 /** A stored session younger than this is never a candidate, whatever it holds. */
 const MIN_AGE_MS = 60 * 60_000;
@@ -133,22 +88,12 @@ function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/**
- * Every session id that has something behind it. Two sources on purpose: the
- * sessions dir is the native store and a file there means a session exists
- * whatever a scanner made of it, while the session-list projection is where
- * the slack and linear families live — along with the alias ids of sessions
- * its dedupe folded into another, which are exactly the ids that still own
- * transcript rows.
- */
-async function knownSessionIdsFromDisk(): Promise<Set<string>> {
+/** Complete metadata plus the all-sessions projection, including deduped aliases.
+ * Missing catalog coverage aborts diagnosis; it never means nobody owns data. */
+async function knownSessionIdsFromCatalog(): Promise<Set<string>> {
   const known = new Set<string>();
-  for (const name of readdirSync(OPENSESSION_SESSIONS_DIR)) {
-    if (name.endsWith(".json")) known.add(name.slice(0, -5));
-  }
-  // Dynamic import: session-cache.ts reaches run-rpc.ts, and this module must stay
-  // importable from a test (or any script) without binding the live socket.
-  // In the live process it resolves to the already-loaded module.
+  for await (const { sessionId } of catalogSessionDocuments())
+    known.add(sessionId);
   const { getSessionListSnapshotAsync } = await import("./session-cache");
   for (const session of await getSessionListSnapshotAsync()) {
     known.add(session.id);
@@ -177,6 +122,8 @@ async function onlyContextRecords(
 export async function sweepOrphanTranscripts(
   opts: {
     dryRun?: boolean;
+    /** Explicit operator-selected ids, never a cursor over actor placements. */
+    candidateSessionIds?: string[];
     /** Test seams: which store to sweep, who counts as known, what time it is. */
     store?: OrphanStore;
     knownSessionIds?: () => Set<string> | Promise<Set<string>>;
@@ -185,7 +132,8 @@ export async function sweepOrphanTranscripts(
 ): Promise<OrphanSweepSummary> {
   const started = Date.now();
   const now = opts.now ?? started;
-  const store = opts.store ?? actorOrphanStore;
+  const ids = [...new Set(opts.candidateSessionIds ?? [])];
+  const store = opts.store ?? actorOrphanStore(ids);
   const summary: OrphanSweepSummary = {
     stored: 0,
     known: 0,
@@ -216,11 +164,21 @@ export async function sweepOrphanTranscripts(
     return summary;
   };
 
+  if (!opts.store && (!opts.dryRun || ids.length === 0 || ids.length > 100)) {
+    summary.refused =
+      "Live diagnosis requires dryRun and 1..100 explicit candidate session ids; fleet sweeps and live deletion are forbidden";
+    return finish();
+  }
+  if (opts.store && process.env.NODE_ENV !== "test") {
+    summary.refused = "Custom orphan stores are test-only";
+    return finish();
+  }
+
   let known: Set<string>;
   try {
     known = await (opts.knownSessionIds
       ? opts.knownSessionIds()
-      : knownSessionIdsFromDisk());
+      : knownSessionIdsFromCatalog());
   } catch (e) {
     summary.refused = `could not enumerate sessions: ${message(e)}`;
     return finish();
@@ -292,22 +250,4 @@ export async function sweepOrphanTranscripts(
   }
 
   return finish();
-}
-
-/**
- * Boot kick: run the sweep in the background, once per process at a time. The
- * latch lives on globalThis so a `bun --hot` reload can't stack a second pass
- * on the first, and clears when the run ends so a later boot retries.
- */
-export function kickOrphanTranscriptSweep(): void {
-  const g = globalThis as typeof globalThis & {
-    __osOrphanSweepRunning?: boolean;
-  };
-  if (g.__osOrphanSweepRunning) return;
-  g.__osOrphanSweepRunning = true;
-  void sweepOrphanTranscripts()
-    .catch((e) => console.error("[transcript-orphan-sweep] failed:", e))
-    .finally(() => {
-      g.__osOrphanSweepRunning = false;
-    });
 }

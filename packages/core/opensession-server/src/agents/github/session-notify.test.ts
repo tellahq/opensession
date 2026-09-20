@@ -1,80 +1,167 @@
-import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
-import { defaultRepo } from "../../server/config";
-import type {
-  SessionControl,
-  SessionSummary,
-} from "../../server/session-control";
+import { getConfigAsync } from "../../server/config";
 import {
-  boundedSessionNotificationIds,
-  matchSessions,
-  MAX_SESSION_NOTIFICATION_FANOUT,
-} from "./session-notify";
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  spyOn,
+  test,
+} from "bun:test";
+import * as fs from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { matchSessions, workspaceIdForRepo } from "./session-matching";
+import { __setSessionListStoreForTest } from "../../server/session-list-store";
+import { SessionListStore } from "../../server/session-list-sqlite";
+import type { UnifiedSession } from "../../server/types";
 
-const scratch: string[] = [];
+const root = fs.mkdtempSync(join(tmpdir(), "github-session-matching-"));
+const priorConfig = process.env.OPENSESSION_CONFIG;
+const config = join(root, "config.json");
+fs.writeFileSync(
+  config,
+  JSON.stringify({
+    repos: {
+      alpha: { repo: join(root, "alpha"), ghRepo: "org/alpha", default: true },
+      beta: { repo: join(root, "beta"), ghRepo: "org/beta" },
+    },
+  }),
+);
+let store: SessionListStore;
+let priorStore: SessionListStore | undefined;
 
+beforeEach(async () => {
+  process.env.OPENSESSION_CONFIG = config;
+  await getConfigAsync();
+  store = new SessionListStore(":memory:");
+  store.markCovered("include");
+  priorStore = __setSessionListStoreForTest(store);
+});
 afterEach(() => {
-  for (const dir of scratch.splice(0))
-    rmSync(dir, { recursive: true, force: true });
+  __setSessionListStoreForTest(priorStore);
+  store.close();
+});
+afterAll(async () => {
+  if (priorConfig === undefined) delete process.env.OPENSESSION_CONFIG;
+  else {
+    process.env.OPENSESSION_CONFIG = priorConfig;
+    await getConfigAsync();
+  }
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
-function controlWith(sessions: SessionSummary[]): SessionControl {
-  return { listSessions: () => sessions } as SessionControl;
-}
-
-function summary(
-  input: Partial<SessionSummary> & Pick<SessionSummary, "id">,
-): SessionSummary {
+function row(id: string, patch: Partial<UnifiedSession> = {}): UnifiedSession {
   return {
-    state: "idle",
-    repo: defaultRepo().id,
-    branch: "some-other-branch",
-    worktreeDir: defaultRepo().repo,
-    ...input,
-  } as SessionSummary;
+    id,
+    source: "opensession",
+    repo: "alpha",
+    branch: "feature",
+    title: id,
+    worktreeDir: join(root, "checkout"),
+    createdAt: "2026-09-17T00:00:00Z",
+    lastActivity: "2026-09-17T00:00:00Z",
+    isRunning: false,
+    transcriptPath: null,
+    ...patch,
+  } as UnifiedSession;
 }
 
-describe("GitHub session notification matching", () => {
-  test("does not treat a shared checkout HEAD as every session's branch", () => {
-    const shared = summary({ id: "shared-session", branch: "recorded-branch" });
+describe("catalog-only GitHub session matching", () => {
+  test("matches only live primary and attached repo ownership", async () => {
+    store.upsertMany([
+      row("primary", {
+        attachedRepos: [{ repo: "alpha", branch: "feature", dir: "/unused" }],
+      }),
+      row("archived", { archived: true }),
+      row("foreign", { repo: "beta" }),
+      row("legacy", { repo: undefined }),
+      row("no-repo", { repo: undefined, repoLess: true }),
+      row("attached", {
+        repo: "beta",
+        branch: "other",
+        attachedRepos: [{ repo: "alpha", branch: "feature", dir: "/unused" }],
+      }),
+    ]);
     expect(
-      matchSessions(
-        controlWith([shared]),
-        defaultRepo().id,
-        "shared-checkout-head",
-      ),
-    ).toEqual([]);
+      (await matchSessions("alpha", "feature")).map((s) => s.id).sort(),
+    ).toEqual(["attached", "legacy", "primary"]);
+    expect((await matchSessions("beta", "feature")).map((s) => s.id)).toEqual([
+      "foreign",
+    ]);
+    expect(await workspaceIdForRepo("org/alpha")).toBe("alpha");
   });
 
-  test("still follows actual HEAD for an isolated worktree", () => {
-    const dir = mkdtempSync(join(tmpdir(), "session-notify-worktree-"));
-    scratch.push(dir);
-    mkdirSync(join(dir, ".git"));
-    writeFileSync(
-      join(dir, ".git", "HEAD"),
-      "ref: refs/heads/renamed-by-agent\n",
+  test("does no synchronous I/O or checkout discovery at fleet scale", async () => {
+    store.upsertMany(
+      Array.from({ length: 10_000 }, (_, i) =>
+        row(`unrelated-${i}`, { branch: `other-${i}` }),
+      ),
     );
-    const isolated = summary({ id: "isolated-session", worktreeDir: dir });
-    expect(
-      matchSessions(
-        controlWith([isolated]),
-        defaultRepo().id,
-        "renamed-by-agent",
-      ),
-    ).toEqual([isolated]);
+    store.upsertMany([
+      row("wanted", { workspaceId: "shared", prNumber: 1 }),
+      row("legacy-wanted", {
+        workspaceId: "shared",
+        prNumber: 1,
+        repo: undefined,
+      }),
+    ]);
+    const probes = [
+      spyOn(fs, "readdirSync"),
+      spyOn(fs, "readFileSync"),
+      spyOn(fs, "statSync"),
+      spyOn(fs, "realpathSync"),
+      spyOn(Bun, "which"),
+    ];
+    const deny = () => {
+      throw new Error("Synchronous gateway I/O");
+    };
+    for (const probe of probes)
+      probe.mockImplementation(Object.assign(deny, { native: deny }));
+    try {
+      expect(
+        (await matchSessions("alpha", "feature")).map((s) => s.id).sort(),
+      ).toEqual(["legacy-wanted", "wanted"]);
+      for (const probe of probes) expect(probe).not.toHaveBeenCalled();
+    } finally {
+      for (const probe of probes) probe.mockRestore();
+    }
   });
 
-  test("deduplicates normal matches and refuses an implausible fan-out", () => {
-    expect(boundedSessionNotificationIds(["a", "a", "b"])).toEqual(["a", "b"]);
-    expect(
-      boundedSessionNotificationIds(
-        Array.from(
-          { length: MAX_SESSION_NOTIFICATION_FANOUT + 1 },
-          (_, i) => `session-${i}`,
-        ),
-      ),
-    ).toBeNull();
+  test("never guesses session ownership from shared or isolated checkout HEAD", async () => {
+    const dir = join(root, "checkout");
+    fs.mkdirSync(join(dir, ".git"), { recursive: true });
+    fs.writeFileSync(join(dir, ".git", "HEAD"), "ref: refs/heads/unrecorded\n");
+    store.upsert(row("owned"));
+    expect(await matchSessions("alpha", "unrecorded")).toEqual([]);
+    // The targeted turn-boundary writer updates ownership, not a webhook scan.
+    store.upsert(row("owned", { branch: "renamed" }));
+    expect(await matchSessions("alpha", "feature")).toEqual([]);
+    expect((await matchSessions("alpha", "renamed")).map((s) => s.id)).toEqual([
+      "owned",
+    ]);
+  });
+
+  test("missing coverage and worker failures fail closed, never scan", async () => {
+    const empty = new SessionListStore(":memory:");
+    __setSessionListStoreForTest(empty);
+    try {
+      await expect(matchSessions("alpha", "feature")).rejects.toThrow(
+        "not ready",
+      );
+      empty.close();
+      await expect(matchSessions("alpha", "feature")).rejects.toThrow();
+    } finally {
+      __setSessionListStoreForTest(store);
+    }
+  });
+
+  test("refuses overflow rather than silently truncating or notifying a fleet", async () => {
+    store.upsertMany(Array.from({ length: 26 }, (_, i) => row(`owner-${i}`)));
+    await expect(matchSessions("alpha", "feature")).rejects.toThrow(
+      "more than 25",
+    );
+    store.remove("owner-25");
+    expect(await matchSessions("alpha", "feature")).toHaveLength(25);
   });
 });

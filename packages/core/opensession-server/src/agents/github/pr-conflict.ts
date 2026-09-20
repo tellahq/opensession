@@ -22,6 +22,7 @@
  * Delivery goes to exactly ONE session, and only tells it what happened. The
  * session decides when (and whether) to resolve. Nothing here touches git.
  */
+import type { UnifiedSession } from "../../server/types";
 import type { PrInfo } from "../../server/pr-cache";
 import { stateDir } from "../../server/paths";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
@@ -178,13 +179,14 @@ export async function notifyConflictedPrSession(
     const control = tryGetSessionControl();
     if (!control) return;
 
-    let target = event.sessionRef
+    const referenced = event.sessionRef
       ? control.getSession(event.sessionRef)
       : undefined;
-    if (target?.state === "archived") target = undefined;
+    let target: UnifiedSession | undefined =
+      referenced?.state === "archived" ? undefined : referenced;
     if (!target) {
       const { matchSessions } = await import("./session-notify");
-      target = [...matchSessions(control, event.repoId, event.branch)].sort(
+      target = (await matchSessions(event.repoId, event.branch)).sort(
         (a, b) =>
           (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0),
       )[0];

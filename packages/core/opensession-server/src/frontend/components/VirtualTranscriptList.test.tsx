@@ -3,8 +3,10 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   committedTranscriptMeasureKeys,
+  deferredReaderCorrection,
   didScrollTranscriptTowardHistory,
   measureTranscriptElement,
+  nextDeferredLedger,
   VirtualTranscriptList,
   shouldAdjustTranscriptScroll,
   shouldCaptureReaderAnchor,
@@ -114,6 +116,120 @@ describe("VirtualTranscriptList", () => {
         sinceTouchActivity: 400,
       }),
     ).toBe(false);
+  });
+
+  test("a deferred correction moves the reader by the entry they are on, not by the anchor they left", () => {
+    // Rows p, a, b, c stacked at 0, 500, 1000, 2000; c and d in view when
+    // touch takes the scroller. Row a then measures 800px taller.
+    const before = new Map([
+      ["p", 0],
+      ["a", 500],
+      ["b", 1000],
+      ["c", 2000],
+      ["d", 2600],
+    ]);
+    const after = {
+      mounted: new Map([
+        ["p", 0],
+        ["a", 500],
+        ["b", 1800],
+        ["c", 2800],
+        ["d", 3400],
+      ]),
+      inView: new Map([
+        ["c", 2800],
+        ["d", 3400],
+      ]),
+    };
+    const ledger = nextDeferredLedger(null, before, after);
+    // Still on c: put c back under them.
+    expect(
+      deferredReaderCorrection(ledger, { id: "c", contentTop: 2800 }),
+    ).toBe(800);
+    // Flung on to b or p after that commit with no commit since: b moved
+    // while out of view and p never moved; the reader arrived at both where
+    // they are now. The banked anchor delta would have thrown them 800px
+    // toward the live edge here.
+    expect(
+      deferredReaderCorrection(ledger, { id: "b", contentTop: 1800 }),
+    ).toBe(0);
+    expect(deferredReaderCorrection(ledger, { id: "p", contentTop: 0 })).toBe(
+      0,
+    );
+    expect(deferredReaderCorrection(ledger, undefined)).toBe(0);
+  });
+
+  test("the ledger adds up movement in view and drops what happened out of view", () => {
+    // c in view, displaced 800 by one commit and 300 more by the next.
+    let ledger = nextDeferredLedger(null, new Map([["c", 2000]]), {
+      mounted: new Map([["c", 2800]]),
+      inView: new Map([["c", 2800]]),
+    });
+    ledger = nextDeferredLedger(ledger, new Map([["c", 2800]]), {
+      mounted: new Map([["c", 3100]]),
+      inView: new Map([["c", 3100]]),
+    });
+    expect(
+      deferredReaderCorrection(ledger, { id: "c", contentTop: 3100 }),
+    ).toBe(1100);
+    // The reader flings to b; a commit then measures rows above b while b is
+    // in view: b came into view at 1800 before that commit, so the growth
+    // since counts, but nothing that moved b earlier does.
+    ledger = nextDeferredLedger(
+      ledger,
+      new Map([
+        ["b", 1800],
+        ["c", 3100],
+      ]),
+      {
+        mounted: new Map([
+          ["b", 2300],
+          ["c", 3600],
+        ]),
+        inView: new Map([["b", 2300]]),
+      },
+    );
+    expect(
+      deferredReaderCorrection(ledger, { id: "b", contentTop: 2300 }),
+    ).toBe(500);
+    // c left the view and is out of the ledger: flinging back to it later
+    // lands wherever it is by then.
+    expect(
+      deferredReaderCorrection(ledger, { id: "c", contentTop: 3600 }),
+    ).toBe(0);
+  });
+
+  test("a growth that pushes the whole view away still keeps the reader's place", () => {
+    // Only c is in view; 3000px of history mounts above it in one commit,
+    // so afterwards the view shows a, which was mounted above but out of
+    // view. a's position before the commit is the reference: the reader
+    // watched it slide down into view.
+    const ledger = nextDeferredLedger(
+      null,
+      new Map([
+        ["a", 500],
+        ["c", 2000],
+      ]),
+      {
+        mounted: new Map([
+          ["a", 3500],
+          ["c", 5000],
+        ]),
+        inView: new Map([["a", 3500]]),
+      },
+    );
+    expect(
+      deferredReaderCorrection(ledger, { id: "a", contentTop: 3500 }),
+    ).toBe(3000);
+    // An entry mounted by this commit has no earlier position: it is where
+    // it first appeared.
+    const fresh = nextDeferredLedger(null, new Map(), {
+      mounted: new Map([["n", 400]]),
+      inView: new Map([["n", 400]]),
+    });
+    expect(deferredReaderCorrection(fresh, { id: "n", contentTop: 400 })).toBe(
+      0,
+    );
   });
 
   test("keeps TanStack's ordinary measurement anchoring semantics", () => {

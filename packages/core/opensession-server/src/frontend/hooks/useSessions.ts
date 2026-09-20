@@ -368,7 +368,13 @@ export function useSessions({
       else if (message.type === "session_row_removed") onRowRemoved(message.id);
       // Lanes, snoozes and hides shape the server-side sidebar projection, so
       // a write from another device changes which rows this list carries.
-      else if (message.type === "user_map_changed") onInvalidated();
+      else if (
+        message.type === "pins_changed" ||
+        message.type === "workspaces_changed" ||
+        (message.type === "user_map_changed" &&
+          ["lanes", "hides", "snoozes"].includes(message.map))
+      )
+        onInvalidated();
     });
   }, [addHandler]);
 
@@ -382,11 +388,24 @@ export function useSessions({
     send({ type: "sessions_subscribe", query: liveQuery });
   }, [socketConnected, send, liveQuery]);
 
-  // A disconnected socket may miss list invalidations. Refresh on every
-  // connection, including the first: the initial list request may have read an
-  // older snapshot before the socket handler was ready. The keyed request fiber
-  // interrupts that older snapshot before reading the newer server state.
-  const onConnected = useEffectEvent(() => refreshInvalidated());
+  // A disconnected socket misses list invalidations and row frames, and the
+  // subscription has no replay: whatever changed between the old socket dying
+  // and the new one subscribing is recovered only by a full read. Refresh on
+  // every connection, including the first: the initial list request may have
+  // read an older snapshot before the socket handler was ready. The keyed
+  // request fiber interrupts that older snapshot before reading the newer
+  // server state. Unlike an invalidation, this read runs while hidden too. A
+  // background tab or occluded window reconnects after a server restart
+  // without being looked at, and waiting for its next visibility change left
+  // it showing a sidebar without the session created in another window in
+  // the meantime. One ETagged read per reconnect answers 304 when nothing
+  // changed.
+  const onConnected = useEffectEvent(() =>
+    runtime.invalidate({
+      refreshArchived: archivedIndex !== null,
+      whileHidden: true,
+    }),
+  );
   useEffect(() => {
     if (socketConnected) onConnected();
     // Refresh only when connectivity changes. Changes to the current list or

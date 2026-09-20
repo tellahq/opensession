@@ -1,3 +1,4 @@
+import { getConfigAsync } from "../config";
 import {
   afterAll,
   afterEach,
@@ -20,6 +21,7 @@ const previous = {
   auth: process.env.OPENSESSION_GITHUB_WEB_AUTH,
 };
 process.env.OPENSESSION_CONFIG = configFile;
+await getConfigAsync();
 process.env.OPENSESSION_STATE_DIR = root;
 
 afterAll(() => {
@@ -52,7 +54,7 @@ afterEach(() => {
   store.close();
 });
 
-function seedRoster(): void {
+async function seedRoster(): Promise<void> {
   writeFileSync(
     configFile,
     JSON.stringify({
@@ -75,6 +77,7 @@ function seedRoster(): void {
       },
     }),
   );
+  await getConfigAsync();
 }
 
 function context(
@@ -100,17 +103,16 @@ function context(
   };
 }
 
-/** The config cache keys on path + mtime + size, so rewriting the file is
- *  enough to make the loader re-read it. */
-function reload(): void {
-  seedRoster();
+/** Direct fixture writes explicitly refresh the configuration snapshot. */
+async function reload(): Promise<void> {
+  await seedRoster();
 }
 
 const ADA = { login: "adalovelace", name: "Ada Lovelace" };
 
 describe("your own profile", () => {
-  beforeEach(() => {
-    reload();
+  beforeEach(async () => {
+    await reload();
   });
 
   test("reads the signed-in person's own row", async () => {

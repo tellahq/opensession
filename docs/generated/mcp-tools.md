@@ -47,7 +47,7 @@ touches an in-process tool:
 | [`opensession-search`](#opensession-search) | 2 | interactive | – |
 | [`opensession-self-deploy`](#opensession-self-deploy) | 2 | interactive | Withheld from dev instances (isDevInstance()) — the script targets the production service and state. |
 | [`opensession-humans`](#opensession-humans) | 3 | interactive, Slack loop, goal wake | Interactive runs need a session id (the answer routes back to it). |
-| [`opensession-keychain`](#opensession-keychain) | 3 | interactive | Needs a session id. |
+| [`opensession-keychain`](#opensession-keychain) | 5 | interactive | Needs a session id. |
 | [`opensession-publish`](#opensession-publish) | 4 | interactive | Needs a session id. |
 | [`opensession-repos`](#opensession-repos) | 6 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 9 | interactive | Needs a session id. |
@@ -73,7 +73,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-32 servers, 146 tools.
+32 servers, 148 tools.
 
 ## opensession-sessions
 
@@ -101,13 +101,13 @@ Get detail on one session by id, including explicit createdBy and createdAt meta
 
 `mcp__opensession-sessions__suggest_task` · input: `title` (string, required), `description` (string, required), `instructions` (string, required), `repo` (string), `mode` ("ask" | "code"), `branch` (string)
 
-Propose a well-scoped follow-up for a person to start in a new Open Session session, without starting it. Use it when you notice a self-contained piece of work that is worth doing but outside the current request: a bug spotted on the way, a refactor the change makes possible, a missing test, a docs gap. The suggestion renders as a card in this session with a "Start session" button that creates a new session from your instructions, so the person decides; nothing runs until they press it. Write instructions a fresh session can act on with no access to this conversation: goal, relevant files, constraints, acceptance criteria, what to report. In your reply mention the suggestion in one line and do not repeat its instructions. Do not use this for the work you were asked to do, and do not start the task yourself (spawn_task, create_session) unless asked.
+Propose a drive-by finding for a person to start in a new Open Session session, without starting it. Use it rarely: only for a self-contained piece of work unrelated to the current request that this session will not pick up, such as a bug spotted on the way in another area, a missing test elsewhere, or a docs gap you passed. Do not use it for the work you were asked to do, for follow-ups or next steps of that work, or for anything the person is likely to ask this session to do next; those belong in your reply as a plain suggestion so the person decides. Suggest each task at most once. The suggestion renders as a card in this session with a "Start session" button that creates a new session from your instructions; nothing runs until they press it. Write instructions a fresh session can act on with no access to this conversation: goal, relevant files, constraints, acceptance criteria, what to report. In your reply mention the suggestion in one line and do not repeat its instructions. Do not start the task yourself (spawn_task, create_session) unless asked.
 
 ### `wait_for`
 
-`mcp__opensession-sessions__wait_for` · input: `kind` ("timer" | "pr_checks", required), `seconds` (number), `repo` (string), `branch` (string), `timeout_seconds` (number), `prompt` (string)
+`mcp__opensession-sessions__wait_for` · input: `kind` ("timer" | "pr_checks" | "session_turn", required), `session_id` (string), `seconds` (number), `repo` (string), `branch` (string), `timeout_seconds` (number), `prompt` (string)
 
-End this turn cleanly and wake this same session later without sleeping in a tool call. Register the wait, then write the human a normal status/final message and STOP the turn. A timer wakes after the requested delay. A pr_checks wait polls durably outside the model turn, waits for the check set to remain settled, then starts a new turn with the result; it also wakes on PR close/merge or timeout. One wait may be active per session, and a new one replaces it. Never call sleep after this tool succeeds.
+End this turn cleanly and wake this same session later without sleeping in a tool call. Register the wait, then write the human a normal status/final message and STOP the turn. A timer wakes after the requested delay. A pr_checks wait polls durably outside the model turn, waits for the check set to remain settled, then starts a new turn with the result; it also wakes on PR close/merge or timeout. A session_turn wait wakes when ANOTHER session's turn ends (it goes idle, stops on a question for a human, fails, or is cancelled); the wake-up carries that session's final state and last assistant message, so use it after send_to_session instead of guessing a delay. An already idle target wakes you right away. One wait may be active per session, and a new one replaces it. Never call sleep after this tool succeeds.
 
 ### `wait_status`
 
@@ -131,7 +131,7 @@ Answer a session that's paused on a question (state 'waiting_question'). Provide
 
 `mcp__opensession-sessions__send_to_session` · input: `id` (string, required), `message` (string, required), `delivery_id` (string)
 
-Send a message to another session. If it's mid-run it's folded into the current turn (picked up at the next stopping point); if it's idle it starts a new turn; external runs (CLI/tmux) get the message queued. Use this to redirect or follow up on a session without opening it. Slash commands are handled by opensession itself instead of being delivered as prompt text: `/loop <interval> <prompt>` sets a recurring self-prompt on the TARGET session (fires only while it is idle; min 5m), `/loop status` / `/loop stop` inspect or clear it — works on your own session id too, so a monitor session can stop its own loop when the work is done.
+Send a message to another session. If it's mid-run it's folded into the current turn (picked up at the next stopping point); if it's idle it starts a new turn; external runs (CLI/tmux) get the message queued. Use this to redirect or follow up on a session without opening it. To wait for the reply, register wait_for kind=session_turn with that session's id and end your turn; do not schedule a timer and guess. Slash commands are handled by opensession itself instead of being delivered as prompt text: `/loop <interval> <prompt>` sets a recurring self-prompt on the TARGET session (fires only while it is idle; min 5m), `/loop status` / `/loop stop` inspect or clear it — works on your own session id too, so a monitor session can stop its own loop when the work is done.
 
 ### `send_file_to_session`
 
@@ -155,7 +155,7 @@ Change a native Open Session session's parent/orchestrator link, or detach it by
 
 `mcp__opensession-sessions__create_session` · input: `prompt` (string, required), `repo` (string), `mode` ("ask" | "code"), `branch` (string), `model` (string), `mcpServers` (string[]), `parentSessionId` (string), `reportBack` (boolean), `standalone` (boolean), `isolatedWorktree` (boolean), `sandbox` (boolean | "daytona" | "box"), `accountId` (string), `forkFrom` (object)
 
-Spin up a visible Open Session session and start it on a prompt. Use this as the sub-session primitive: workers can delegate focused tasks and report back to this parent session. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A worker targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. Pass isolatedWorktree true to instead give the worker its own worktree and branch (child/report-back linkage is kept) — use it when fanning work out across separate workspaces. `branch` is only used when there is nothing to share — a standalone worker, or a worker targeting a repo the parent does not carry — and is generated from the prompt when omitted. Repo defaults to the parent session's repo (example when standalone); pass another registered repo id to override. For workers that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures. When called from a session, the worker defaults to the same workspace and is instructed to report back here; set standalone true or reportBack false to opt out. When a HUMAN asks for "a new session" ("create a new session for X", "spin one up on Y"), this tool is what they mean — a detached session that appears in their sidebar and outlives the current run — never an in-process subagent or task agent; reply with the new session's URL.
+Spin up a visible Open Session session and start it on a prompt. When a PERSON asks for a new session ("start a new session", "open a new session", "kick off a session for X", "spin one up on Y"), they mean a new TOP-LEVEL session: call this tool with standalone true. That creates a detached session with no parent link and no report-back that appears in their sidebar and outlives the current run; never an in-process subagent or task agent. Reply with the new session's URL. Only create a child session (standalone omitted) when YOU are delegating for yourself, such as fanning out focused sub-tasks whose results this session will consume, or when the person explicitly asks for a worker, child, or sub-session. A child defaults to this session as its parent, shares its workspace, and is instructed to report back here. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A child targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. Pass isolatedWorktree true to instead give the child its own worktree and branch (child/report-back linkage is kept); use it when fanning work out across separate workspaces. `branch` is only used when there is nothing to share, a standalone session or a child targeting a repo the parent does not carry, and is generated from the prompt when omitted. Repo defaults to the parent session's repo (example when standalone); pass another registered repo id to override. For sessions that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures.
 
 ### `migrate_session_engine`
 
@@ -167,7 +167,7 @@ Migrate an existing session onto the Pi engine by flipping its model to a pi/* i
 
 `mcp__opensession-sessions__spawn_task` · input: `prompt` (string, required), `repo` (string), `branch` (string), `isolatedWorktree` (boolean), `model` (string), `mode` ("ask" | "code" | "scratch"), `sandbox` (boolean | "daytona" | "box")
 
-Delegate a self-contained task to a child session and return IMMEDIATELY with {taskId, url} — the lightweight alternative to create_session + send_to_session choreography when you just want work done and a handle to poll. The child is created through the same code path as create_session (it shares this session's worktree in code mode when repos match, inherits your user, is linked as a child, and is told to report back here); poll it with task_status and stop it with cancel_task. Mode defaults to 'code' (pass a branch, or isolatedWorktree true for a generated one, unless the child can share this session's code worktree); use 'ask' for read-only investigation. Loop guard: spawned children may delegate one further level, then spawn_task refuses (depth ≥ 2). Not available from automation sessions.
+Delegate a self-contained task to a child session and return IMMEDIATELY with {taskId, url} — the lightweight alternative to create_session + send_to_session choreography when you just want work done and a handle to poll. The child is created through the same code path as create_session (it shares this session's worktree in code mode when repos match, inherits your user, is linked as a child, and is told to report back here); poll it with task_status and stop it with cancel_task. Mode defaults to 'code' (pass a branch, or isolatedWorktree true for a generated one, unless the child can share this session's code worktree); use 'ask' for read-only investigation. Loop guard: spawned children may delegate one further level, then spawn_task refuses (depth ≥ 2). This tool ALWAYS creates a child of this session, so it is not the tool for a person's "start a new session" request; that means a top-level session, which is create_session with standalone true wherever create_session is offered. Not available from automation sessions.
 
 ### `task_status`
 
@@ -220,13 +220,13 @@ List all of Assistant's automations (routines): scheduled, event- and webhook-tr
 
 ### `create_automation`
 
-`mcp__opensession-admin__create_automation` · input: `name` (string, required), `prompt` (string, required), `schedule` (string), `mode` ("ask" | "code"), `repo` (string), `mcpServers` (string[]), `sandbox` (boolean), `model` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `owner` (string), `workspaceId` (string)
+`mcp__opensession-admin__create_automation` · input: `name` (string, required), `prompt` (string, required), `schedule` (string), `mode` ("ask" | "code"), `repo` (string), `mcpServers` (string[]), `sandbox` (boolean), `model` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `readRepos` (string[]), `owner` (string), `workspaceId` (string)
 
 Create a new automation (routine). Provide a clear prompt describing the task. Set `repo` to the repository it works in, or it runs against the instance default. Use a 5-field UTC cron `schedule` for recurring jobs (omit for manual/webhook only). Pick mode 'ask' for read-only or 'code' if it must edit and commit files. Ordinary automations receive no GitHub credential, so code mode alone cannot push or open a GitHub PR. Set sandbox true to use a fresh disposable Executor. Sandboxed automations require an explicit mcpServers list, a pinned accountId, a supported model, and a configured qualified provider.
 
 ### `update_automation`
 
-`mcp__opensession-admin__update_automation` · input: `id` (string, required), `name` (string), `prompt` (string), `schedule` (string), `mode` ("ask" | "code"), `enabled` (boolean), `repo` (string), `mcpServers` (string[]), `sandbox` (boolean), `model` (string), `fallbackModel` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `owner` (string), `workspaceId` (string)
+`mcp__opensession-admin__update_automation` · input: `id` (string, required), `name` (string), `prompt` (string), `schedule` (string), `mode` ("ask" | "code"), `enabled` (boolean), `repo` (string), `mcpServers` (string[]), `sandbox` (boolean), `model` (string), `fallbackModel` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `readRepos` (string[]), `owner` (string), `workspaceId` (string)
 
 Update an existing automation by id. Only provided fields change. Use enabled to pause/resume.
 
@@ -449,6 +449,18 @@ Borrow a teammate's credential for a stated purpose, with their approval.
 - **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
 - **Runs** interactive
 - **Condition** Needs a session id.
+
+### `request_mac_keychain`
+
+`mcp__opensession-keychain__request_mac_keychain` · input: `service` (string, required), `account` (string, required), `purpose` (string, required), `url` (string, required), `method` ("GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE", required), `injection` ("bearer" | "x-api-key", required), `body` (string)
+
+Request ONE generic-password item from the prompting teammate's macOS Keychain for ONE exact HTTPS API call. Supply the item's exact service and account identifiers, never its value. This uses Apple's Keychain access prompt, not 1Password and not a vault-wide grant. No listing, shell commands, ACL changes, or raw secret export. The human opens this session in the Mac app, chooses OS → Keychain requests…, inspects the destination and selects Use once. macOS controls whether access needs Allow / Always Allow / Deny; recommend Allow, never Always Allow. Existing item permissions may allow access without another prompt. Requests expire after 10 minutes and can execute only once. Only HTTP status returns; no response data, headers or secret values enter model context. Do not use a model-provider endpoint as the destination. After a decline/failure do not retry without the human's go-ahead.
+
+### `mac_keychain_request_status`
+
+`mcp__opensession-keychain__mac_keychain_request_status` · input: `requestId` (string, required)
+
+Check this session's macOS Keychain request. Returns only pending/claimed/completed/declined/failed and an HTTP status when completed. No secrets, response bodies, headers or helper errors are available. Missing requests expired or were revoked by a server restart.
 
 ### `list_credentials`
 
@@ -989,7 +1001,7 @@ Schedule a prompt for this session at a future time.
 
 `mcp__opensession-schedule__schedule_prompt` · input: `at` (string, required), `prompt` (string, required)
 
-Schedule a prompt to be sent to THIS session at a future time, then end your turn. Use it to check back on something that takes a while (a release workflow, CI, a deploy, a long job) instead of polling or sleeping. The prompt arrives as a normal message in this conversation, so write it to your future self with everything needed to pick the work up: what to run, what "done" looks like, what to do on failure. Fires once; survives restarts. Do not use harness built-ins like CronCreate or ScheduleWakeup here; they do not exist in this session.
+Schedule a prompt to be sent to THIS session at a future time, then end your turn. Use it to check back on something that takes a while (a release workflow, CI, a deploy, a long job) instead of polling or sleeping. The prompt arrives in this conversation marked as a scheduled check-back, so write it to your future self with everything needed to pick the work up: what to run, what "done" looks like, what to do on failure. Fires once; survives restarts. Do not use harness built-ins like CronCreate or ScheduleWakeup here; they do not exist in this session.
 
 ### `list_scheduled_prompts`
 

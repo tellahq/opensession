@@ -59,6 +59,7 @@ import {
   worktreeHeadBranch,
 } from "./worktree";
 import { engineSessionPatch } from "./sessions";
+import { githubRepoOwner } from "./github-app";
 import { recordRunOutcome, updateSessionFile } from "./session-cache";
 import { sessionKernel } from "./session-kernel";
 import { resolvePlainWorkspace } from "./workspace-resolve";
@@ -208,6 +209,19 @@ export interface Automation {
    * request (422), so a team needs repo access before it works here.
    */
   prReviewer?: string;
+  /**
+   * Sibling GitHub repositories (`owner/name`) this automation's runs may
+   * READ in addition to their own. The run's `GH_TOKEN` stays the
+   * one-repository code set; these are covered by a second, read-only
+   * installation token in `GH_READ_TOKEN` (github-app.ts
+   * githubServiceReadReposEnv), so a script can run
+   * `GH_TOKEN=$GH_READ_TOKEN gh pr list --repo owner/name`. Every entry must
+   * share the owner of the automation's own repo (one installation mints
+   * one token) and the App must be installed on each of them, or the mint
+   * is refused and the run gets no read token at all: it never falls back
+   * to a wider one. Validated by {@link sanitizeReadRepos}.
+   */
+  readRepos?: string[];
   /**
    * The person accountable for this automation. A person key in the same
    * space as a session's `startedBy` (a display name or a verified login), so
@@ -661,6 +675,68 @@ function sanitizePrReviewer(
   return entries.length ? entries.join(",") : undefined;
 }
 
+/** The accepted shapes of a `readRepos` write: a list, or one of the clear
+ * representations (absent, null, or ""). Anything else is rejected rather
+ * than treated as a clear. */
+function readReposShape(
+  value: unknown,
+): unknown[] | { error: string } | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (!Array.isArray(value))
+    return { error: "readRepos must be a list of owner/repo names" };
+  return value;
+}
+
+const GITHUB_REPO_NAME_RE =
+  /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\/[A-Za-z0-9_.](?:[A-Za-z0-9._-]*)?$/;
+
+/**
+ * Normalize the sibling repositories an automation may read: `owner/name`
+ * entries, deduped case-insensitively, each under the same owner as the
+ * automation's own GitHub repo (`ownGhRepo`), which is dropped from the list
+ * because the read token always covers it. A malformed name or a foreign
+ * owner fails at config time rather than as a refused mint on every run. An
+ * empty list (or `[]`) clears the field.
+ */
+export function sanitizeReadRepos(
+  input: unknown,
+  ownGhRepo: string | undefined,
+): string[] | { error: string } | undefined {
+  const shaped = readReposShape(input);
+  if (shaped === undefined || isFieldError(shaped)) return shaped;
+  const list = shaped;
+  const owner = githubRepoOwner(ownGhRepo);
+  const entries: string[] = [];
+  for (const raw of list) {
+    // A non-string member is a malformed write, not noise to skip: silently
+    // dropping it would clear or narrow an existing allowlist.
+    if (typeof raw !== "string")
+      return { error: "readRepos must be a list of owner/repo names" };
+    const entry = raw.trim();
+    if (!entry) continue;
+    if (!GITHUB_REPO_NAME_RE.test(entry)) {
+      return {
+        error: `Invalid read repo "${entry}" — use a GitHub owner/repo name`,
+      };
+    }
+    if (!owner) {
+      return {
+        error:
+          "readRepos needs the automation's repo to be a GitHub repository",
+      };
+    }
+    if (githubRepoOwner(entry)!.toLowerCase() !== owner.toLowerCase()) {
+      return {
+        error: `Read repo "${entry}" is not under ${owner}; one installation token covers one owner`,
+      };
+    }
+    if (entry.toLowerCase() === ownGhRepo!.toLowerCase()) continue;
+    if (!entries.some((e) => e.toLowerCase() === entry.toLowerCase()))
+      entries.push(entry);
+  }
+  return entries.length ? entries : undefined;
+}
+
 /**
  * Who owns an automation. Unset means nobody has taken it, rather than its
  * creator: `createdBy` records who typed it, which for many existing records
@@ -747,6 +823,11 @@ const AUTOMATION_FIELDS: Record<string, AutomationFieldValidator> = {
   mcpServers: (v) => sanitizeMcpList(v),
   repo: (v) => sanitizeRepo(v),
   prReviewer: (v) => sanitizePrReviewer(v),
+  // Shape only; the owner rule needs the (possibly just-changed) repo, so
+  // normalizeAutomation re-validates against the record being written. A
+  // non-list is an error, not a clear: the HTTP routes pass raw JSON here,
+  // and a mistyped value must not silently drop an existing allowlist.
+  readRepos: (v) => readReposShape(v),
   owner: (v) => sanitizeOwner(v),
   workspaceId: (v) => sanitizeAutomationWorkspace(v),
   selfImprove: (v) => v === true || undefined,
@@ -788,6 +869,18 @@ function normalizeAutomation(
     } else {
       next.schedule = "";
     }
+  }
+  if (next.readRepos !== undefined) {
+    const ownGhRepo = (() => {
+      try {
+        return getRepo(next.repo).ghRepo;
+      } catch {
+        return undefined;
+      }
+    })();
+    const readRepos = sanitizeReadRepos(next.readRepos, ownGhRepo);
+    if (isFieldError(readRepos)) return readRepos;
+    next.readRepos = readRepos;
   }
   const sandboxValidation = validateSandboxAutomation(next);
   if (sandboxValidation) return sandboxValidation;
@@ -850,6 +943,7 @@ export async function createAutomation(input: {
   mcpServers?: string[];
   repo?: string;
   prReviewer?: string;
+  readRepos?: string[];
   owner?: string;
   workspaceId?: string;
   selfImprove?: boolean;
@@ -951,6 +1045,7 @@ export async function updateAutomation(
       | "mcpServers"
       | "repo"
       | "prReviewer"
+      | "readRepos"
       | "owner"
       | "workspaceId"
       | "selfImprove"
@@ -2161,6 +2256,7 @@ export async function runAutomation(
         // PRs opened from the sandboxed run carry the automation's review
         // policy, same as the in-process runAgent call below.
         prReviewer: automation.prReviewer,
+        readRepos: automation.readRepos,
         journalKind: "automation",
         trustProfile: "automation",
       };
@@ -2187,6 +2283,9 @@ export async function runAutomation(
         usageCredits: automation.usageCredits,
         fallbackModel,
         prReviewer: automation.prReviewer,
+        // Sibling repositories the run may read through GH_READ_TOKEN
+        // (pi-runner runGithubEnv); the write token stays one-repository.
+        readRepos: automation.readRepos,
         // The automation is the commit author. Nobody sent this prompt, so the
         // instance identity would otherwise collapse every routine into one.
         author: labelIdentity(automation.name),

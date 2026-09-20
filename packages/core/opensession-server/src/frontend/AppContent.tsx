@@ -6,43 +6,47 @@ import {
   useRef,
   useState,
 } from "react";
-import { Analytics } from "./components/Analytics";
 import { AppMobileHeader } from "./components/AppMobileHeader";
 import { AppSessionPane } from "./components/AppSessionPane";
 import { AppShell } from "./components/AppShell";
 import { AppSidebar } from "./components/AppSidebar";
-import { Archived } from "./components/Archived";
-import { Automations } from "./components/Automations";
-import { CatchUpDeck } from "./components/CatchUpDeck";
 import { ChipHoverCards } from "./components/ChipHoverCard";
 import { CommandMenuHost } from "./components/CommandMenuHost";
 import { DeferredSettings as Settings } from "./components/DeferredSettings";
+import {
+  Analytics,
+  Archived,
+  Automations,
+  CatchUpDeck,
+  Databases,
+  Feed,
+  FirstMile,
+  Goals,
+  Issues,
+  Prs,
+  Reports,
+  Reviews,
+  Security,
+  SupportInbox,
+  SupportPreview,
+  SupportTinder,
+  Tasks,
+  WorkspacePane,
+} from "./components/DeferredPanes";
 import { DeskOverlay } from "./components/DeskOverlay";
+import { SessionVoiceHost } from "./components/SessionVoiceHost";
 import { DesktopLinkToast } from "./components/DesktopLinkToast";
-import { Feed } from "./components/Feed";
 import { refWebPanel } from "./components/FeedWebPane";
-import { FirstMile } from "./components/FirstMile";
-import { Goals } from "./components/Goals";
 import { IconDesk, IconSidebarLeft } from "./components/icons";
 import { BlockExpandHost } from "./components/BlockExpandDialog";
 import { MediaLightboxHost } from "./components/MediaLightbox";
 import { NavigationProvider } from "./components/NavigationProvider";
 import { NewSession } from "./components/NewSession";
 import { PrQueuePreview } from "./components/PrQueuePreview";
-import { Prs } from "./components/Prs";
-import { Issues } from "./components/Issues";
-import { Reports } from "./components/Reports";
-import { Databases } from "./components/Databases";
 import { RestartOverlay } from "./components/RestartOverlay";
-import { Reviews } from "./components/Reviews";
 import { RunningCloseDialog } from "./components/RunningCloseDialog";
-import { Security } from "./components/Security";
 import { SessionSplit } from "./components/SessionSplit";
 import { ShortcutCheatSheet } from "./components/ShortcutCheatSheet";
-import { SupportInbox } from "./components/SupportInbox";
-import { SupportPreview } from "./components/SupportPreview";
-import { SupportTinder } from "./components/SupportTinder";
-import { Tasks } from "./components/Tasks";
 import { UpdatePill } from "./components/UpdatePill";
 import {
   UserGate,
@@ -50,7 +54,6 @@ import {
   useAuthStatus,
   useCurrentUser,
 } from "./components/UserPicker";
-import { WorkspacePane } from "./components/WorkspacePane";
 import { useActiveSession } from "./hooks/useActiveSession";
 import { useAppDocumentInteractions } from "./hooks/useAppDocumentInteractions";
 import { useAppGlobalHotkeys } from "./hooks/useAppGlobalHotkeys";
@@ -113,7 +116,7 @@ import {
   receivePins,
   unpin,
 } from "./lib/pins";
-import { resyncUserMap } from "./lib/user-map";
+import { resyncUserMap, resyncUserMaps } from "./lib/user-map";
 import { ARCHIVED_PAGE_COLUMN } from "./lib/archived-classes";
 import { PR_PAGE_COLUMN } from "./lib/pr-list-classes";
 import { repoLabel } from "./lib/repo-label";
@@ -515,6 +518,13 @@ export function AppContent({
     setLaunchComplete,
   });
 
+  const resyncSidebar = useEffectEvent(() => {
+    void resyncUserMaps(getCurrentUser());
+    void refreshWorkspaces();
+  });
+  useEffect(() => {
+    if (connected) resyncSidebar();
+  }, [connected]);
   // When a session is created from the New Session form or Ask box, jump straight into it
   // The handler reads `inject`/`navigate` through effect events, so the
   // subscription doesn't re-arm just because their closures moved.
@@ -560,6 +570,10 @@ export function AppContent({
           }
           return;
         }
+      }
+      if (msg.type === "workspaces_changed") {
+        refreshWorkspaces();
+        return;
       }
       if (msg.type === "pins_changed") {
         receivePins(msg.user, msg.pins);
@@ -1209,7 +1223,8 @@ export function AppContent({
     openDraft,
     openNewSessionInWorkspace: (mode, origin) =>
       handleNewSession(mode, null, origin),
-    duplicateSession: () => handleNewSession("share", null, undefined, true),
+    duplicateSession: (messageId) =>
+      handleNewSession("share", null, undefined, true, messageId),
     startNewChat: (session, prompt) =>
       openNewSessionInWorkspace(session, "share", prompt),
     openPrefilledSession,
@@ -1910,6 +1925,10 @@ export function AppContent({
                 </button>
               </Tooltip>
             )}
+
+            <SessionVoiceHost
+              onOpenSession={(id) => navigate({ view: "session", id })}
+            />
 
             {/* ⌘J Desk overlay — standing concierge session. */}
             <DeskOverlay

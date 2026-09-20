@@ -48,6 +48,13 @@ See `.agents/skills/show-me/SKILL.md` for when to reach for each and
 `docs/generated/mcp-tools.md` for `opensession-charts.make_chart`, which
 validates a Vega-Lite spec and offloads large data into a session asset.
 
+Mermaid reads label punctuation as syntax: `A[foo (bar)]` opens a shape
+inside a shape and `-->|@mention|` starts an edge id, so the whole diagram
+fails to parse. Quoted labels (`A["foo (bar)"]`, `-->|"@mention"|`) are the
+fix. A flowchart that fails as written gets one retry with every unquoted
+node and edge label quoted (`lib/mermaid-repair.ts`); source that still does
+not parse keeps the plain fence.
+
 ### Media in place
 
 `OPENSESSION_IMAGE: /abs/path.png` and `OPENSESSION_VIDEO: /abs/path.mp4`

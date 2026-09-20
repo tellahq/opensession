@@ -356,6 +356,7 @@ export function ModelEffortSelect({
     modelDisabled,
     modelTitle,
     effort,
+    autoFallback = true,
     fastMode,
     accounts,
     accountId,
@@ -373,6 +374,7 @@ export function ModelEffortSelect({
     changeModel: onModelChange,
     setAsDefault: onSetAsDefault,
     changeEffort: onEffortChange,
+    changeAutoFallback: onAutoFallbackChange,
     changeFastMode: onFastModeChange,
     changeAccount: onAccountChange,
     changeOpen: onOpenChange,
@@ -514,10 +516,12 @@ export function ModelEffortSelect({
     (modelDisabled || model === "" || model === defaultModel) &&
     (!hasEffort || !defaultEffort || effectiveEffort === defaultEffort) &&
     (!hasFastMode || !effectiveFastMode) &&
-    (!hasAccount || !accountId);
+    (!hasAccount || !accountId) &&
+    (!onAutoFallbackChange || autoFallback);
   const resetToDefault = () => {
     if (!modelDisabled) onModelChange("");
     if (onEffortChange && defaultEffort) onEffortChange(defaultEffort);
+    onAutoFallbackChange?.(true);
     if (onFastModeChange) onFastModeChange(false);
     if (onAccountChange) onAccountChange("");
   };
@@ -1128,6 +1132,22 @@ export function ModelEffortSelect({
               })}
             </Menu.Popup>
           </Menu.SubmenuRoot>
+        )}
+        {onAutoFallbackChange && (
+          <Menu.CheckboxItem
+            checked={autoFallback}
+            onCheckedChange={onAutoFallbackChange}
+            closeOnClick={false}
+            className="justify-between gap-3 phone:min-h-11"
+          >
+            <span className="flex min-w-0 flex-col">
+              <span>Auto-fallback</span>
+              <span className="text-supporting text-faint">
+                Switch models when quota runs out
+              </span>
+            </span>
+            <Menu.Check on={autoFallback} className="text-dim" />
+          </Menu.CheckboxItem>
         )}
         {hasAccount && (
           <Menu.SubmenuRoot>

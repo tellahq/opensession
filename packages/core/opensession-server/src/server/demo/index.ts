@@ -40,7 +40,11 @@ interface DemoState {
   askRearmTimer: ReturnType<typeof setTimeout> | null;
 }
 
-const g = globalThis as { __osDemoState?: DemoState };
+const g = globalThis as {
+  __osDemoState?: DemoState;
+  /** Set once the dataset files are projected into the catalogs. */
+  __osDemoSeeded?: boolean;
+};
 
 function offerDemoAsk(state: DemoState): void {
   const sessionId = DEMO_ASK_SESSION_ID;
@@ -77,6 +81,34 @@ function offerDemoAsk(state: DemoState): void {
 }
 
 /**
+ * Boot hook (OPENSESSION_DEMO=1), before the session list is primed:
+ * generate the dataset if its marker is missing and project the files into
+ * the catalogs the gateway lists from, the way an operator seeds a live
+ * store (the scanner permits the isolated demo instance). Idempotent: the
+ * marker skips generation and the seed leaves existing rows alone. Never
+ * throws; startDemo reports a missing state root.
+ */
+export async function seedDemoDataset(): Promise<void> {
+  if (!process.env.OPENSESSION_STATE_DIR) return;
+  try {
+    const result = generateDemoData();
+    console.log(
+      result.created
+        ? `[demo] dataset generated into ${result.sessionsDir} (${result.sessionIds.length} sessions)`
+        : `[demo] dataset already present in ${result.sessionsDir} (marker found)`,
+    );
+    const { seedSessionCatalogsFromFiles } =
+      await import("../session-source-scan");
+    await seedSessionCatalogsFromFiles({
+      log: (line) => console.log(`[demo] ${line}`),
+    });
+    g.__osDemoSeeded = true;
+  } catch (e) {
+    console.error("[demo] dataset generation failed:", e);
+  }
+}
+
+/**
  * Boot hook (OPENSESSION_DEMO=1): generate-if-unseeded, register the ask
  * card, start the replayer. Idempotent per process; never throws.
  */
@@ -105,15 +137,20 @@ export async function startDemo(): Promise<void> {
   if (state.started) return;
   state.started = true;
 
-  try {
-    const result = generateDemoData();
-    console.log(
-      result.created
-        ? `[demo] dataset generated into ${result.sessionsDir} (${result.sessionIds.length} sessions)`
-        : `[demo] dataset already present in ${result.sessionsDir} (marker found)`,
-    );
-  } catch (e) {
-    console.error("[demo] dataset generation failed:", e);
+  // Boot seeds before the list is primed; a late start (a manual call)
+  // seeds now and rebuilds the list that was primed without the dataset.
+  if (!g.__osDemoSeeded) {
+    await seedDemoDataset();
+    if (g.__osDemoSeeded) {
+      try {
+        const { rebuildSessionListFromCatalogsNow } =
+          await import("../session-cache");
+        const listed = await rebuildSessionListFromCatalogsNow();
+        console.log(`[demo] session list rebuilt: ${listed.length} session(s)`);
+      } catch (e) {
+        console.error("[demo] session list rebuild failed:", e);
+      }
+    }
   }
 
   // The PR snapshot caches are seeded on disk by the generator, but both

@@ -103,6 +103,23 @@ jobs:
           )
           env "${common_env[@]}" "$binary" session-kernel-service > "$kernel_log" 2>&1 &
           kernel_pid=$!
+          pid=""
+          cleanup() {
+            status=$?
+            kill ${pid:+"$pid"} "$kernel_pid" 2>/dev/null || true
+            if [ -n "$pid" ]; then wait "$pid" 2>/dev/null || true; fi
+            wait "$kernel_pid" 2>/dev/null || true
+            if [ "$status" -ne 0 ]; then
+              cat "$kernel_log"
+              test ! -f "$log" || cat "$log"
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          # The gateway deliberately refuses an unseeded catalog. Initialize the
+          # fresh smoke fixture via the supported offline importer, not a live
+          # gateway filesystem scan or a weakened readiness check.
+          env "${common_env[@]}" bun scripts/seed-session-metadata-catalog.ts
           env "${common_env[@]}" \
             OPENSESSION_MCP_HTTP_PORT=43852 \
             HOST=127.0.0.1 \
@@ -110,18 +127,6 @@ jobs:
             OPENSESSION_PUBLIC_URL=http://127.0.0.1:43850 \
             "$binary" server > "$log" 2>&1 &
           pid=$!
-          cleanup() {
-            status=$?
-            kill "$pid" "$kernel_pid" 2>/dev/null || true
-            wait "$pid" 2>/dev/null || true
-            wait "$kernel_pid" 2>/dev/null || true
-            if [ "$status" -ne 0 ]; then
-              cat "$kernel_log"
-              cat "$log"
-            fi
-            exit "$status"
-          }
-          trap cleanup EXIT
           curl --fail --silent --show-error --retry 20 --retry-delay 1 --retry-connrefused \
             http://127.0.0.1:43850/api/health > "$root/health.json"
           grep -Fq 'Frontend served from embedded assets' "$log"

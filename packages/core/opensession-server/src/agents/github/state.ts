@@ -9,8 +9,10 @@
  */
 import { stateDir } from "../../server/paths";
 import { prKey } from "./constants";
+import { configuredRepos, getConfigAsync } from "../../server/config";
 import type { HandoffState } from "./handoff-gates";
 import { mkdirSync, readFileSync, existsSync, readdirSync } from "fs";
+import { readFile } from "node:fs/promises";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 
 const STATE_DIR = stateDir("github");
@@ -44,6 +46,8 @@ export interface LastReviewState {
   /** Time to recover every user if the change is wrong. */
   recovery?: "minutes" | "hours" | "days" | "irreversible";
   riskFactors?: string[];
+  /** Names of the `.os-review.json` rules that changed this verdict or its scores. */
+  rules?: string[];
   findings: number;
   /** P0/P1 findings (request_changes counts as a floor of 1). */
   blocking: number;
@@ -190,6 +194,25 @@ export function readPrState(
   if (!existsSync(path)) return null;
   try {
     return JSON.parse(readFileSync(path, "utf-8")) as GithubPrState;
+  } catch {
+    return null;
+  }
+}
+
+/** Targeted asynchronous read for gateway-side review ownership resolution. */
+export async function readPrStateAsync(
+  prNumber: number,
+  ghRepo?: string,
+): Promise<GithubPrState | null> {
+  try {
+    const key = prKey(
+      prNumber,
+      ghRepo,
+      configuredRepos(await getConfigAsync()),
+    );
+    return JSON.parse(
+      await readFile(`${STATE_DIR}/${key}.json`, "utf-8"),
+    ) as GithubPrState;
   } catch {
     return null;
   }

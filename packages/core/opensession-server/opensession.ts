@@ -49,7 +49,11 @@ import {
   sharedCheckoutEditors,
   spaEntry,
 } from "./src/server/frontend-build";
-import { configuredIntegration, configuredServer } from "./src/server/config";
+import {
+  configuredIntegration,
+  configuredServer,
+  getConfigAsync,
+} from "./src/server/config";
 import { portalSignInRedirect } from "./src/server/portal-sign-in";
 import { initHumanAsks } from "./src/server/human-asks";
 import { interactiveMcpServers } from "./src/server/interactive-mcp";
@@ -84,6 +88,10 @@ import {
   timerPoisonRequestCheck,
 } from "./src/server/run-ws";
 import {
+  handleRunHostAwsRoute,
+  isRunHostAwsRoute,
+} from "./src/server/routes/run-host-aws";
+import {
   githubReconnectRequired,
   startGithubTokenRefresher,
 } from "./src/server/github-auth";
@@ -117,7 +125,6 @@ import {
   crossSiteViolation,
   ensureAutomationWebSession,
   keypadBearerAuthorized,
-  migrateSessionsToGithubUser,
   resolveWebAuth,
   type WebIdentity,
   webAuthRequired,
@@ -281,9 +288,13 @@ if (!g.__opensessionBooted) {
   await warmWorkspacesAsync();
 }
 // The first list read fills the list index. With the actor up it can come
-// from the metadata catalog; before this point it would have to read every
-// session file. Prime it here so no later boot step or route pays that scan,
-// then build the Slack thread index from the same snapshot.
+// from the metadata catalog. An unavailable or unseeded catalog cannot fall
+// back to filesystem discovery. Prime the index before any list reader, then
+// build the Slack thread index from the same snapshot.
+// The demo instance lists a generated dataset: its files are projected into
+// the catalogs first, because the list is primed from the catalogs alone.
+if (!g.__opensessionBooted && process.env.OPENSESSION_DEMO === "1")
+  await (await import("./src/server/demo")).seedDemoDataset();
 if (!g.__opensessionBooted) await primeSessionListIndex();
 void ensureSlackLinkIndex();
 
@@ -426,8 +437,6 @@ const server: import("bun").Server<WSClientData> = hotServe({
     // confirmed poisoning self-restarts the process (run-ws.ts tripwire).
     timerPoisonRequestCheck();
     const url = new URL(req.url);
-    const workloadIdentity = await handleWorkloadIdentityRequest(req);
-    if (workloadIdentity) return workloadIdentity;
     // The bare domain root is the ONLY public URL form (os.tella.dev,
     // 2026-07-10 — prefixes dropped) and handlers below match bare
     // paths. Historical prefixes (/opensession, then the pre-rename
@@ -455,6 +464,18 @@ const server: import("bun").Server<WSClientData> = hotServe({
         return Response.redirect(path + url.search, 301);
       }
     }
+
+    // Refresh identity/policy before admission. Liveness must not wait for
+    // configuration storage; nested getters otherwise share this snapshot.
+    if (
+      !(
+        req.method === "GET" &&
+        ["/api/health", "/live", "/ready"].includes(path)
+      )
+    )
+      await getConfigAsync();
+    const workloadIdentity = await handleWorkloadIdentityRequest(req);
+    if (workloadIdentity) return workloadIdentity;
 
     // Cross-site rejection (web-auth.ts crossSiteViolation): browser
     // cross-site mutations and cross-site UI-WS upgrades are refused
@@ -653,6 +674,11 @@ const server: import("bun").Server<WSClientData> = hotServe({
     if (path.startsWith("/run-ws/") || path === "/rpc-ws") {
       return handleSandboxWsUpgrade(req, server, path);
     }
+    // A Runner run host fetching its AWS role session: same per-launch
+    // wsToken gate as the dial-backs above, plain HTTP instead of an upgrade.
+    if (isRunHostAwsRoute(path)) {
+      return handleRunHostAwsRoute(req, path);
+    }
 
     // SPA fallback: any unmatched non-API GET serves the app shell, so
     // client-side routes deep-link correctly even when they're missing
@@ -772,6 +798,10 @@ if (!g.__opensessionBooted) {
         const { startSandboxEnvironmentMaintenance } =
           await import("./src/server/sandbox/environments");
         startSandboxEnvironmentMaintenance();
+        // Mac VMs have no provider-side idle timer; stop idle ones here.
+        const { startTartIdleSweep } =
+          await import("./src/server/sandbox/adapters/tart");
+        startTartIdleSweep();
         await poolStartup;
       })
       .catch((e) => console.error("[sandbox-prewarm] startup failed:", e));
@@ -1375,19 +1405,14 @@ if (!g.__opensessionBooted) {
     }
   }
 
-  // One-time (marker-guarded): when GitHub web sign-in is active, backfill
-  // createdByLogin on pre-existing sessions so they belong to the same
-  // verified person after the identity switch. No-op while the feature is
-  // off — flipping it on in config takes effect at the next boot. Dev
-  // instances skip it: a differently-configured dev boot must never
-  // re-decide the migration over its (or worse, shared) session files.
+  // Historical identity backfill is an explicit, bounded operator migration
+  // (scripts/migrate-session-github-users.ts), never a boot-time fleet writer.
   try {
     if (!devInstance) {
       ensureAutomationWebSession();
-      migrateSessionsToGithubUser();
     }
   } catch (e) {
-    console.error("[web-auth] session migration failed:", e);
+    console.error("[web-auth] automation identity initialization failed:", e);
   }
 
   // Demo dataset hook: seeds synthetic sessions/state in-process (live asks

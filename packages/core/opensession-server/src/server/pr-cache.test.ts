@@ -1,3 +1,4 @@
+import { getConfigAsync } from "./config";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,7 +13,7 @@ let priorConfig: string | undefined;
 // live on globalThis and are shared with every other test file in the process.
 const GH_REPO = "tellahq/pr-cache-merge-test";
 
-beforeAll(() => {
+beforeAll(async () => {
   stateRoot = join(
     tmpdir(),
     `opensession-pr-cache-test-${crypto.randomUUID()}`,
@@ -35,13 +36,17 @@ beforeAll(() => {
   );
   priorConfig = process.env.OPENSESSION_CONFIG;
   process.env.OPENSESSION_CONFIG = join(stateRoot, "config.json");
+  await getConfigAsync();
   priorStateDir = process.env.OPENSESSION_STATE_DIR;
   process.env.OPENSESSION_STATE_DIR = stateRoot;
 });
 
-afterAll(() => {
+afterAll(async () => {
   if (priorConfig === undefined) delete process.env.OPENSESSION_CONFIG;
-  else process.env.OPENSESSION_CONFIG = priorConfig;
+  else {
+    process.env.OPENSESSION_CONFIG = priorConfig;
+    await getConfigAsync();
+  }
   if (priorStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
   else process.env.OPENSESSION_STATE_DIR = priorStateDir;
   // Tombstones are parked on globalThis — drop this file's before another
