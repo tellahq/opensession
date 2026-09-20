@@ -367,12 +367,9 @@ export async function startMcpOauthFlow(
   url.searchParams.set("code_challenge", challenge);
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("state", state);
-  // Scope to what the resource advertises when it does (strict ASes like
-  // Cognito reject unknown scopes); the permissive default otherwise.
-  url.searchParams.set(
-    "scope",
-    auth.scopes?.join(" ") || "openid profile email offline_access",
-  );
+  // Request only advertised scopes. MCP authorization is not necessarily
+  // OpenID Connect; when scopes are absent, let the server use its defaults.
+  if (auth.scopes?.length) url.searchParams.set("scope", auth.scopes.join(" "));
   url.searchParams.set("prompt", "consent");
   if (auth.resource) url.searchParams.set("resource", auth.resource);
   return { url: url.toString() };

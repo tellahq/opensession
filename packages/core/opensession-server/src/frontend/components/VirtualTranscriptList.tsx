@@ -177,6 +177,14 @@ class TranscriptVirtualizer extends React.Component<
    * owns the scroller and corrections wait; what the flush measures against
    * (nextDeferredLedger). */
   private deferredLayout: Map<string, number> | null = null;
+  /** A prepend can push the reader's entry completely out of view without
+   * any scrolling. Keep that entry until the reader actually moves, rather
+   * than mistaking the replacement under the viewport for their new place. */
+  private deferredReader: {
+    id: string;
+    contentTop: number;
+    scrollTop: number;
+  } | null = null;
   /** Entry positions captured before the current commit changes the DOM,
    * while touch owns the scroller. */
   private preCommitLayout: EntryLayout | null = null;
@@ -512,9 +520,10 @@ class TranscriptVirtualizer extends React.Component<
    * snapshot was taken synchronously before the DOM changed, so no reader
    * movement can hide inside it.
    *
-   * While touch owns the scroller the write waits (it would cancel the fling)
-   * and the anchor is not enough: by the time the write is safe, the reader
-   * has flung on, and a fling into history runs straight through the rows
+   * While touch owns the scroller the write waits (it would cancel the fling).
+   * With no scroll movement, retain the original entry even if the prepend
+   * pushes it offscreen. Once the reader moves, that anchor is not enough:
+   * by the time the write is safe, they may have flung through the rows
    * whose measurements displaced the anchor. Entries above those rows never
    * moved, so putting the old anchor back would throw such a reader toward
    * the live edge by the whole growth (measured: 5692px after one fling). So
@@ -536,6 +545,14 @@ class TranscriptVirtualizer extends React.Component<
     const root = this.root;
     if (!container || !root || this.props.shouldMaintainEnd?.()) return;
     if (this.touchOwnsScroller()) {
+      if (!this.deferredReader && anchor)
+        this.deferredReader = {
+          id: anchor.id,
+          contentTop:
+            this.deferredLayout?.get(anchor.id) ??
+            container.scrollTop + anchor.top,
+          scrollTop: container.scrollTop,
+        };
       this.deferredLayout = nextDeferredLedger(
         this.deferredLayout,
         before ??
@@ -573,17 +590,29 @@ class TranscriptVirtualizer extends React.Component<
         return;
       }
       this.deferredLayout = null;
-      const reader = pickReaderAnchor(
-        root,
-        container.getBoundingClientRect().top,
-      );
-      const delta = deferredReaderCorrection(
-        ledger,
-        reader && {
-          id: reader.id,
-          contentTop: container.scrollTop + reader.top,
-        },
-      );
+      const retained = this.deferredReader;
+      this.deferredReader = null;
+      const retainedNode =
+        retained && Math.abs(container.scrollTop - retained.scrollTop) <= 0.5
+          ? findTranscriptEntry(root, retained.id)
+          : null;
+      const viewportTop = container.getBoundingClientRect().top;
+      const reader = retainedNode
+        ? undefined
+        : pickReaderAnchor(root, viewportTop);
+      const delta =
+        retained && retainedNode
+          ? retainedNode.getBoundingClientRect().top -
+            viewportTop +
+            container.scrollTop -
+            retained.contentTop
+          : deferredReaderCorrection(
+              ledger,
+              reader && {
+                id: reader.id,
+                contentTop: container.scrollTop + reader.top,
+              },
+            );
       if (Math.abs(delta) <= 0.5) return;
       container.scrollTop += delta;
       this.syncVirtualizerOffset(container);
@@ -602,6 +631,13 @@ class TranscriptVirtualizer extends React.Component<
   };
 
   private onReaderScroll = () => {
+    const container = this.readerInputContainer;
+    if (
+      container &&
+      this.deferredReader &&
+      Math.abs(container.scrollTop - this.deferredReader.scrollTop) > 0.5
+    )
+      this.deferredReader = null;
     const now = performance.now();
     // Keep following the scroll-event chain started by the touch. A network
     // response can change row geometry long after touchend but while momentum
@@ -623,6 +659,7 @@ class TranscriptVirtualizer extends React.Component<
       window.clearTimeout(this.deferredFlushTimer);
     this.deferredFlushTimer = undefined;
     this.deferredLayout = null;
+    this.deferredReader = null;
     this.preCommitLayout = null;
     this.touching = false;
     this.lastTouchActivityAt = Number.NEGATIVE_INFINITY;

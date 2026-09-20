@@ -66,6 +66,7 @@ type ViewportResult = {
   growthInRowAbove: number;
   tailGrowth: number;
   maxAnchorDrift: number;
+  heldPrepend: { growth: number; anchorDrift: number } | null;
   fling: { travel: number; growth: number; correction: number } | null;
 };
 
@@ -196,6 +197,19 @@ try {
       socket.onerror = () => reject(new Error("CDP connection failed"));
     });
     const send = cdpSender(socket);
+    const proofName = `${viewport.width}-${viewport.userAgent ? "ios" : "chrome"}${reducedMotion ? "-reduced" : ""}`;
+    const captureProof = async (suffix = "") => {
+      if (!proofDir) return;
+      await mkdir(proofDir, { recursive: true });
+      const screenshot = await send("Page.captureScreenshot", {
+        format: "png",
+      });
+      await Bun.write(
+        join(proofDir, `${proofName}${suffix}.png`),
+        Buffer.from(screenshot.data, "base64"),
+      );
+    };
+
     const evaluate = async <T>(expression: string): Promise<T> => {
       const response = await send("Runtime.evaluate", {
         expression,
@@ -424,6 +438,7 @@ try {
       expectQuietFrames(leave, "leave");
 
       let maxAnchorDrift = 0;
+      let heldPrepend: ViewportResult["heldPrepend"] = null;
       let prependGrowth = 0;
       let readerSteps = 0;
       // Phone: the first keyed prepend lands under a held finger. It brings
@@ -452,6 +467,7 @@ try {
         await settle();
         const held = await snapshot();
         assert(held.anchorId, "no reader anchor under the held finger");
+        await captureProof("-hold-before");
         await step(held.anchorId);
         await Bun.sleep(300);
         const premature = findPrematureTouchWrites(await probe.take());
@@ -468,6 +484,12 @@ try {
         current = await snapshot(held.anchorId);
         prependGrowth += Math.max(0, current.scrollHeight - held.scrollHeight);
         readerSteps++;
+        heldPrepend = {
+          growth: current.scrollHeight - held.scrollHeight,
+          anchorDrift: drift(held, current),
+        };
+        maxAnchorDrift = Math.max(maxAnchorDrift, heldPrepend.anchorDrift);
+        await captureProof("-hold-after");
         assert(
           held.anchorId === current.anchorId && drift(held, current) <= 1.5,
           `hold: the reader moved ${drift(held, current).toFixed(1)}px once the finger lifted:\n${describeWrites(unscriptedWrites(await probe.take()))}\n${JSON.stringify({ held, after: current })}`,
@@ -721,18 +743,10 @@ try {
       }
 
       if (proofDir) {
-        await mkdir(proofDir, { recursive: true });
-        const name = `${viewport.width}-${viewport.userAgent ? "ios" : "chrome"}${reducedMotion ? "-reduced" : ""}`;
-        const screenshot = await send("Page.captureScreenshot", {
-          format: "png",
-        });
-        await Bun.write(
-          join(proofDir, `${name}.png`),
-          Buffer.from(screenshot.data, "base64"),
-        );
+        await captureProof();
         const accessibility = await send("Accessibility.getFullAXTree");
         await Bun.write(
-          join(proofDir, `${name}.aria.json`),
+          join(proofDir, `${proofName}.aria.json`),
           JSON.stringify(accessibility, null, 2),
         );
       }
@@ -749,6 +763,7 @@ try {
         growthInRowAbove,
         tailGrowth,
         maxAnchorDrift,
+        heldPrepend,
         fling,
       });
     } finally {
