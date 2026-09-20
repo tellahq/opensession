@@ -192,6 +192,9 @@ async function matchingNode() {
 }
 
 async function nodeCenter(node) {
+  await send("DOM.scrollIntoViewIfNeeded", {
+    backendNodeId: node.backendDOMNodeId,
+  });
   const model = await send("DOM.getBoxModel", {
     backendNodeId: node.backendDOMNodeId,
   });
