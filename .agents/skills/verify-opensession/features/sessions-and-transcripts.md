@@ -8,6 +8,7 @@ Sessions are conversations with an agent. Users open them from a workspace or di
 - `session-transcript` renders user messages, assistant text, tool calls, run notices, and failure states.
 - `session-workspace` switches among conversation, review, changes, and other available workspace panes.
 - `session-new` opens the new-session composer from the global button, keyboard shortcut, or a workspace.
+- `session-empty` creates a workspace and empty chat, then accepts its first message.
 - `session-phone` keeps the transcript and composer operable at phone width.
 
 ## How to get to it (user POV)
@@ -28,6 +29,7 @@ Preconditions:
 - **Inspect transcript semantics.** Run `verify-opensession browser "$RUN_ID" snapshot`. The tree contains the upload retry prompt and transcript controls. Capture a screenshot after expanding any collapsed tool call through its visible button.
 - **Inspect a failure.** Open `/session/bks-demo-failed`. The page identifies `Investigate memory spike in export worker` and shows its run failure instead of presenting the transcript as complete.
 - **Open the global composer.** Open `/new`, then wait for `group` named `New session`. The textbox placeholder is `What do you want to work on?`. Choose `Ask mode` and verify the placeholder changes to `What do you want to find out?`.
+- **Create without a prompt.** Open `/new` with an empty composer and choose `Create empty session` (the send arrow on phone). The session opens with `Start a conversation`, no user or assistant message, and an enabled composer. Confirm a `New session` row and workspace through `/api/sessions`. Repeat from `/new` and confirm the unscoped create gets a different workspace and branch. Fill the chat composer and verify `Send message` enables; submitting the first message must persist that message exactly once. The demo proves intake, not an engine reply or model-generated title. Title generation, task-change refresh, and manual-title preservation are covered by the generated-title unit tests with a controlled one-shot adapter.
 - **Check phone layout.** Reopen `/session/bks-demo-pr` at 390x844. Capture the transcript, then focus the composer and verify its controls remain reachable without horizontal scrolling.
 - **Proof.** Save before and after accessibility snapshots and screenshots. If the check creates a session, confirm its new ID through `/api/sessions` and reopen it from the sidebar before reporting persistence.
 

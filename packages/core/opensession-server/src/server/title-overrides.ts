@@ -6,6 +6,7 @@
  * the derived title in getAllSessions — exactly like the archive registry.
  */
 import { readFileSync, existsSync } from "fs";
+import { readFile } from "fs/promises";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 
@@ -33,6 +34,17 @@ function save(registry: Record<string, string>): void {
 
 export function getTitleOverride(id: string): string | undefined {
   return load()[id];
+}
+
+/** Non-blocking read for background title generation, including other writers. */
+export async function getTitleOverrideAsync(
+  id: string,
+): Promise<string | undefined> {
+  try {
+    return JSON.parse(await readFile(REGISTRY_PATH, "utf-8"))[id];
+  } catch {
+    return cache?.[id];
+  }
 }
 
 /** Set (non-empty) or clear (empty/null) the manual title for a session id. */

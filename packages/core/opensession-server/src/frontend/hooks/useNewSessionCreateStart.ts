@@ -6,6 +6,7 @@ import { saveActiveViewTab, type ActiveViewTab } from "../lib/active-view-tab";
 import { routePath } from "../lib/app-route";
 import type { PendingCreateDraft } from "../lib/app-types";
 import { stripBasePath } from "../lib/base";
+import { hasNewSessionOpeningInput } from "../lib/new-session-input";
 import type { UnifiedSession } from "../lib/types";
 import type { useAppRoute } from "./useAppRoute";
 import type { useNewSessionPalette } from "./useNewSessionPalette";
@@ -68,6 +69,7 @@ export function useNewSessionCreateStart({
     };
     pendingCreateDraftRef.current = draft;
 
+    const isRunning = hasNewSessionOpeningInput(started);
     const shell: UnifiedSession = {
       id: started.id,
       claudeSessionId: null,
@@ -75,11 +77,11 @@ export function useNewSessionCreateStart({
       branch: started.branch,
       worktreeDir: null,
       startedBy: user,
-      title: started.workspaceId ? "New session" : "New workspace",
+      title: "New session",
       lastActivity: startedAt,
       createdAt: startedAt,
-      isRunning: true,
-      runStartedAt: startedAt,
+      isRunning,
+      runStartedAt: isRunning ? startedAt : undefined,
       transcriptPath: null,
       mode: started.mode,
       repo: started.repo,

@@ -133,7 +133,11 @@ import {
   resolveWorkspaceModelPreset,
 } from "./workspace-model-presets";
 import { getTitleOverride } from "./title-overrides";
-import { ensureGeneratedTitle } from "./generated-titles";
+import {
+  ensureGeneratedTitle,
+  getGeneratedTitleAsync,
+  refreshGeneratedTitle,
+} from "./generated-titles";
 import { nameKnownSessionReferencesForTitle } from "./session-reference-title";
 import {
   clearReplySuggestions,
@@ -3111,8 +3115,12 @@ async function runSessionPromptInner(
   // failed (e.g. account exhaustion), which otherwise wear the raw first
   // line of the prompt forever. Retries summarize the stored provisional
   // title (the opening prompt's first line), not this turn's message, so a
-  // mid-conversation "yes, do it" never becomes the title source. Automation
-  // and goal sessions carry deliberate titles; a manual rename wins anyway.
+  // mid-conversation "yes, do it" never becomes the title source. Once a
+  // session HAS a generated title, each later human prompt is judged against
+  // it and only a clearly different task replaces it (refreshGeneratedTitle
+  // keeps follow-ups, machine prompts and renamed sessions as they are).
+  // Automation and goal sessions carry deliberate titles; a manual rename
+  // wins anyway.
   if (
     session.source === "opensession" &&
     !isAutomationSession &&
@@ -3120,20 +3128,37 @@ async function runSessionPromptInner(
     !getTitleOverride(session.id)
   ) {
     const provisional = !session.title || session.title === "New session";
-    const titleSource = await nameKnownSessionReferencesForTitle(
-      provisional ? content : session.title,
-    );
-    const firstLine = titleSource.trim().split("\n")[0].slice(0, 80);
-    if (provisional && firstLine)
-      touchNativeSession(session.id, { title: firstLine });
-    void ensureGeneratedTitle(
-      session.id,
-      titleSource,
-      user || session.startedBy || undefined,
-      session.model || undefined,
-    ).then((t) => {
-      if (t) publishSessionChange(session.id);
-    });
+    const titleUser = user || session.startedBy || undefined;
+    if (provisional || !(await getGeneratedTitleAsync(session.id))) {
+      const titleSource = await nameKnownSessionReferencesForTitle(
+        provisional ? content : session.title,
+      );
+      const firstLine = titleSource.trim().split("\n")[0].slice(0, 80);
+      if (provisional && firstLine)
+        touchNativeSession(session.id, { title: firstLine });
+      void ensureGeneratedTitle(
+        session.id,
+        titleSource,
+        titleUser,
+        session.model || undefined,
+      )
+        .then((t) => {
+          if (t) return publishSessionChange(session.id);
+        })
+        .catch(() => {});
+    } else {
+      void nameKnownSessionReferencesForTitle(content)
+        .then((source) =>
+          refreshGeneratedTitle(session.id, source, {
+            user: titleUser,
+            session,
+          }),
+        )
+        .then((t) => {
+          if (t) return publishSessionChange(session.id);
+        })
+        .catch(() => {});
+    }
   }
 
   // The last turn's quick-reply chips offered a choice that this prompt just

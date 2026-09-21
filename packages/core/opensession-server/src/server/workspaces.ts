@@ -754,8 +754,11 @@ export function updateWorkspace(
       | "modelSettings"
     >
   > & { draft?: WorkspaceDraft | null },
+  expectedName?: string,
 ): Promise<Workspace | null> {
   return mutateWorkspace(id, (cur) => {
+    // Auto-naming must compare inside the catalog CAS, not before a human rename.
+    if (expectedName !== undefined && cur.name !== expectedName) return cur;
     const manualRename = patch.name !== undefined;
 
     let nextDraft: WorkspaceDraft | undefined = cur.draft;

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { hasNewSessionOpeningInput } from "../lib/new-session-input";
 
 test("a long phone prompt scrolls without moving the title bar or send button", async () => {
   const source = await Bun.file(
@@ -327,4 +328,44 @@ test("workspace composers offer repository creation and release the old source o
   expect(source).toContain(
     "!selectedPullRequest && !sourceWorkspaceId && !forceRepo",
   );
+});
+
+test("empty creation is enabled without bypassing upload and connection guards", async () => {
+  const source = await Bun.file(
+    new URL("./NewSession.tsx", import.meta.url),
+  ).text();
+  const gate = source.slice(
+    source.indexOf("const canCreate ="),
+    source.indexOf("const createLabel ="),
+  );
+  expect(gate).toContain("!busy");
+  expect(gate).toContain("!isStaging(staging)");
+  expect(gate).toContain("connected");
+  expect(gate).toContain("!!repo");
+  expect(gate).toContain("!sandboxModelWarning");
+  expect(gate).not.toContain("hasPromptText");
+  expect(source).toContain('"Create empty session"');
+  // A shared placeholder branch would adopt the previous empty workspace.
+  expect(source).toContain("`session-${clientSessionId.slice(-12)}`");
+  expect(source).toContain("aria-label={createLabel}");
+});
+
+test("empty creates are idle but any opening input starts a turn", () => {
+  expect(hasNewSessionOpeningInput({ prompt: "  \n " })).toBe(false);
+  expect(hasNewSessionOpeningInput({ prompt: "Fix uploads" })).toBe(true);
+  expect(
+    hasNewSessionOpeningInput({
+      prompt: "",
+      images: ["data:image/png;base64,AA=="],
+    }),
+  ).toBe(true);
+  expect(
+    hasNewSessionOpeningInput({
+      prompt: "",
+      files: [{ name: "notes.txt", type: "text/plain" }],
+    }),
+  ).toBe(true);
+  expect(
+    hasNewSessionOpeningInput({ prompt: "", pastedTexts: ["Task notes"] }),
+  ).toBe(true);
 });

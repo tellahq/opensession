@@ -106,6 +106,7 @@ import {
   shouldOpenCreatedSession,
 } from "./lib/new-session-navigation";
 import { consumeNewSessionWorkspaceDraft } from "./lib/new-session-workspace-draft";
+import { hasNewSessionOpeningInput } from "./lib/new-session-input";
 import { PERSISTENT_NOTICE_SHELF } from "./lib/notification-classes";
 import {
   getPinNewSessions,
@@ -656,6 +657,7 @@ export function AppContent({
           const now = new Date().toISOString();
           const user = draft?.user || getCurrentUser();
           const createdAt = draft?.startedAt || now;
+          const isRunning = draft ? hasNewSessionOpeningInput(draft) : true;
           socketInject(
             {
               id: msg.id,
@@ -664,15 +666,11 @@ export function AppContent({
               branch: draft?.branch ?? null,
               worktreeDir: null,
               startedBy: user,
-              title: msg.newWorkspace
-                ? "New workspace"
-                : draft?.workspaceId
-                  ? "New session"
-                  : "New session",
+              title: "New session",
               lastActivity: now,
               createdAt,
-              isRunning: true,
-              runStartedAt: now,
+              isRunning,
+              runStartedAt: isRunning ? now : undefined,
               transcriptPath: null,
               mode: draft?.mode,
               repo: draft?.repo,

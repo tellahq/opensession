@@ -363,6 +363,8 @@ export interface ResolvedCreate {
   displayPrompt: string;
   /** The fully assembled opening prompt (uploads note, contexts, handoffs). */
   openingPrompt: string;
+  /** Prepare the session only; its first real message uses the normal prompt path. */
+  deferOpening?: boolean;
   user?: string;
   createdBy: string;
   createdAt: string;
@@ -719,6 +721,14 @@ function createdSessionFileDefaults(spec: ResolvedCreate): NativeSessionFile {
     ...(spec.createdByLogin ? { createdByLogin: spec.createdByLogin } : {}),
     createdAt: spec.createdAt,
     title: spec.title,
+    ...(spec.deferOpening && spec.autoNameWorkspace
+      ? {
+          pendingWorkspaceTitle: {
+            id: spec.autoNameWorkspace.id,
+            name: spec.autoNameWorkspace.name,
+          },
+        }
+      : {}),
     mode: spec.mode,
     ...(spec.stackedOn && spec.stackedOn.branch !== spec.persistBranch
       ? { stackedOn: spec.stackedOn }
@@ -753,7 +763,7 @@ function createdSessionFileDefaults(spec: ResolvedCreate): NativeSessionFile {
       ? {
           sandbox: {
             provider: spec.sandboxProvider,
-            lifecycle: "preparing",
+            ...(spec.deferOpening ? {} : { lifecycle: "preparing" as const }),
             // Volume intent is recorded up front so the prompt
             // paths know the workspace never exists host-side
             // (hasRemoteWorkspace) even before the first ensure.
@@ -770,7 +780,7 @@ function createdSessionFileDefaults(spec: ResolvedCreate): NativeSessionFile {
             id: spec.runnerTarget.id,
             name: spec.runnerTarget.name,
             workspacePath: spec.runnerTarget.workspacePath,
-            lifecycle: "preparing" as const,
+            ...(spec.deferOpening ? {} : { lifecycle: "preparing" as const }),
           },
         }
       : {}),
@@ -784,8 +794,7 @@ function creationPreparesEnvironment(spec: ResolvedCreate): boolean {
   return (
     spec.needsWorktree ||
     !!spec.attachRepos?.repos.length ||
-    !!spec.sandboxProvider ||
-    !!spec.runnerTarget
+    (!spec.deferOpening && (!!spec.sandboxProvider || !!spec.runnerTarget))
   );
 }
 
@@ -1437,6 +1446,61 @@ export function assertAutomationDescendantOpeningIsolation(
     );
 }
 
+/** Complete durable setup without admitting an engine turn or adding a message. */
+async function openEmptyCreatedSession(
+  spec: ResolvedCreate,
+  io: CreateSessionIO,
+  identity: string,
+  effectId?: string,
+): Promise<void> {
+  let ready = false;
+  try {
+    await updateSessionFile(spec.id, (data) => ({
+      ...createdSessionFileDefaults(spec),
+      ...data,
+    }));
+    io.announce({
+      id: spec.id,
+      workspaceId: spec.announceWorkspaceId,
+      newWorkspace: !!spec.createdWorkspaceNow,
+      preparingWorkspace: creationPreparesEnvironment(spec),
+      createdBy: spec.createdBy,
+      createdAt: spec.createdAt,
+    });
+    if (spec.needsWorktree && spec.materializeWorktree)
+      await spec.materializeWorktree();
+    if (spec.attachRepos?.repos.length)
+      await attachCreateRepos(spec.id, spec.attachRepos, io, spec.gitEnv);
+    if (spec.workspaceId) {
+      const workspace = await getWorkspace(spec.workspaceId);
+      if (workspace?.draft)
+        await updateWorkspace(workspace.id, { draft: null });
+    }
+    await settleCreationSucceeded(spec.id, identity, undefined, effectId);
+    ready = true;
+    await acknowledgePromptDispatch(spec.id, spec.openingPromptEntryId);
+  } catch (error) {
+    // A failed acknowledgement retries the completed effect, not creation.
+    if (ready) throw error;
+    await reportSetupFailure(
+      spec.id,
+      io,
+      error instanceof Error ? error.message : String(error),
+    );
+    await settleCreationFailed(spec.id, identity, error, undefined, effectId);
+    await acknowledgePromptDispatch(spec.id, spec.openingPromptEntryId);
+  } finally {
+    preparingWorkspaces.delete(spec.id);
+    releasePendingOpening(spec.id);
+    io.emit({ type: "workspace_status", ready: true });
+    io.emit({ type: "stream_done" });
+    io.emit({ type: "session_status", isRunning: false });
+  }
+  // A first message sent while the checkout was being prepared must not be
+  // stranded behind the now-completed create dispatch.
+  if (ready && promptQueues.get(spec.id)?.length) await drainQueue(spec.id);
+}
+
 export async function openCreatedSession(
   spec: ResolvedCreate,
   io: CreateSessionIO,
@@ -1445,6 +1509,10 @@ export async function openCreatedSession(
   openingRun?: { runId: string; generation: number },
 ): Promise<void> {
   assertAutomationDescendantOpeningIsolation(spec);
+  if (spec.deferOpening) {
+    await openEmptyCreatedSession(spec, io, creationIdentity, creationEffectId);
+    return;
+  }
   const bksId = spec.id;
   const pstackMode = specPstackMode(spec);
   const pendingAttach = spec.attachRepos?.repos.length
@@ -2997,7 +3065,15 @@ export async function handleCreateSessionMessage(
       });
     const computedSpec: ResolvedCreate = {
       id: bksId,
-      title,
+      title: title || "New session",
+      // Internal context is not a user message. Attachments and forks still
+      // take the normal opening path even without typed text.
+      deferOpening:
+        !prompt.trim() &&
+        !images?.length &&
+        !openingAttachments.length &&
+        !pastedTextsFromWire(msg.pastedTexts)?.length &&
+        !fork,
       titlePrompt,
       displayPrompt: prompt,
       openingPrompt,
@@ -3181,7 +3257,7 @@ export async function handleCreateSessionMessage(
         sendCreateFrame(attempt, createResponse);
         finishCreate();
         announcedId = info.id;
-        emit({ type: "stream_start" });
+        if (!spec.deferOpening) emit({ type: "stream_start" });
         releaseAdmission();
       },
       emit,

@@ -597,6 +597,8 @@ export interface NativeSessionFile {
   createdAt: string;
   lastActivity: string;
   title?: string;
+  /** Empty-created workspace awaiting its first prompt's generated name. */
+  pendingWorkspaceTitle?: { id: string; name: string };
   mode?: "ask" | "code" | "scratch";
   repo?: string; // which registered repo this session works in
   /** Deliberately repo-less (scratch, or Ask with the repo turned off). See

@@ -1000,11 +1000,15 @@ export function NewSession({
     if (!canCreate) return;
     const prompt = promptText.current.trim();
     const createRepo = repo;
+    const clientSessionId = newClientSessionId();
     const branch =
       startPoint.kind === "pull-request"
         ? startPoint.pullRequest.branch
         : startPoint.kind === "new"
-          ? newBranch.trim() || fallbackBranchName(prompt)
+          ? newBranch.trim() ||
+            (prompt
+              ? fallbackBranchName(prompt)
+              : `session-${clientSessionId.slice(-12)}`)
           : startPoint.branch;
     const attachRepos = extraRepos.filter((id) => id !== createRepo);
     const createMode = mode;
@@ -1038,7 +1042,6 @@ export function NewSession({
         : startPoint.kind === "new"
           ? "stack"
           : "share";
-    const clientSessionId = newClientSessionId();
     // The server applies `defaultModel` when no personal override is sent. Carry
     // that known choice into the optimistic shell so the phone title bar does
     // not wait for its own catalog fetch before naming the model.
@@ -1169,11 +1172,16 @@ export function NewSession({
     // Unsupported model × environment combo: the server would reject the
     // create with the same message (resolveRequestedSandbox). Block here
     // so the wall is discovered before submit, not after.
-    !sandboxModelWarning &&
-    (hasPromptText ||
-      images.length > 0 ||
-      files.length > 0 ||
-      pastedTexts.length > 0);
+    !sandboxModelWarning;
+
+  const createLabel =
+    !hasPromptText &&
+    !images.length &&
+    !files.length &&
+    !pastedTexts.length &&
+    createAction === "open"
+      ? "Create empty session"
+      : CREATE_LABELS[createAction];
 
   /** The latest `handleCreate`, for a caller that has to wait a render before
    *  it can create. The dictation bar's ↑ is the one: it writes the transcript
@@ -1475,7 +1483,7 @@ export function NewSession({
             className={cn(PHONE_SEND, dictating && "invisible")}
             onClick={handleCreate}
             disabled={!canCreate}
-            aria-label={CREATE_LABELS[createAction]}
+            aria-label={createLabel}
           >
             <IconArrowUp size={22} />
           </button>
@@ -1969,7 +1977,7 @@ export function NewSession({
                         ? "Creating…"
                         : isStaging(staging)
                           ? "Attaching…"
-                          : CREATE_LABELS[createAction]}
+                          : createLabel}
                     {/* The hint has to match the preference — a bare ↩ next to a
                     field that only creates on ⌘↩ is what made Enter look
                     broken in the first place. */}

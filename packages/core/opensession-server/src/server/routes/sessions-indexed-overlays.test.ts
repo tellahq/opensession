@@ -29,6 +29,9 @@ mock.module("../generated-titles", () => ({
     return undefined;
   },
   ensureGeneratedTitle: async () => null,
+  getGeneratedTitleAsync: async () => undefined,
+  refreshGeneratedTitle: async () => null,
+  applyPendingWorkspaceTitle: async () => false,
   startGeneratedTitleSweep: () => {},
 }));
 mock.module("../title-overrides", () => ({

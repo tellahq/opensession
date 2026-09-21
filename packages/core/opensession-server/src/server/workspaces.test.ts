@@ -643,3 +643,15 @@ describe("workspace draft", () => {
     });
   });
 });
+
+test("conditional auto-naming preserves a manually renamed workspace", async () => {
+  const workspace = await createWorkspace({
+    name: "Workspace",
+    createdBy: "Alex",
+  });
+  await updateWorkspace(workspace.id, { name: "Chosen name" });
+  await updateWorkspace(workspace.id, { name: "Generated title" }, "Workspace");
+  expect((await getWorkspace(workspace.id))?.name).toBe("Chosen name");
+  await updateWorkspace(workspace.id, { name: "Next title" }, "Chosen name");
+  expect((await getWorkspace(workspace.id))?.name).toBe("Next title");
+});
