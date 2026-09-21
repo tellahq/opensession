@@ -40,4 +40,6 @@ Each feature file uses the same four H2 sections. `Sub-features` names the behav
 - [Automations](./automations.md) covers the automation list, detail view, enabled state, authoring, and saved configuration.
 - [Goals](./goals.md) covers list and detail views, creating a goal, and confirming persistence.
 - [Archived sessions](./archived-sessions.md) covers the archived index, search, filters, restoration, and empty results.
+- [Issues](./issues.md) covers the open-issue list, search, repository filtering, previews, and linked session actions.
+- [Databases](./databases.md) covers the database list, creation, details, rows, read-only queries, management, and phone navigation.
 - [Settings](./settings.md) covers direct section routes, settings navigation, search, and persisted preferences or instance configuration.
