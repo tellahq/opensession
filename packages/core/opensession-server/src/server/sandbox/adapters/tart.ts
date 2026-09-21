@@ -20,31 +20,45 @@
  *  - Sleep is `tart stop` (disk kept, processes gone, matching Daytona);
  *    wake is `tart run` again. Destroy is `tart delete`.
  *  - Capacity: Apple allows two macOS guests per host, and the Mac mini's
- *    memory is shared with the host. `maxVms` (default 2) is enforced before
- *    a VM starts; a full host refuses clearly instead of thrashing.
+ *    memory is shared with the host. Each host's `maxVms` (default 2) is
+ *    enforced before a VM starts; a full host refuses clearly instead of
+ *    thrashing.
+ *  - Hosts: a connection lists one or more paired Macs (Mac minis, EC2 Mac
+ *    instances running the Runner client). A new VM is placed on the host
+ *    with the most free slots, preferring one that already holds the repo's
+ *    template; the chosen Runner id is recorded in the VM's state file so
+ *    sleep, wake, desktop, and terminals return to the same Mac. Each host
+ *    prepares its own base VM. More capacity is one more paired Mac.
  *  - Portals ride the same outbound relay as every remote provider (the
  *    in-guest agent dials back), so a guest-only network is enough.
- *  - Desktop control is the macOS control (screencapture + cliclick) over
- *    exec; a person-facing desktop URL is not exposed yet.
- *
- * Adding hosts later: the connection names one Runner today. The same adapter
- * works for any paired Mac (an EC2 Mac running the Runner client included);
- * a per-session host choice is the only piece to add.
+ *  - Desktop: the agent drives it with the macOS control (screencapture +
+ *    cliclick) over exec. A person watches and takes over through Tart's
+ *    own VNC server on the Mac's loopback, relayed frame by frame over the
+ *    Runner channel to the viewer in the Desktop tab (../../vm-display.ts).
+ *  - Terminal tabs are Runner PTYs that SSH into the guest with the same
+ *    host-local key; the Runner resolves the guest address from the VM name.
  */
 
 import { basename, dirname } from "path";
 import { getRepo, worktreePathFor } from "../../worktree";
-import { getSandboxConnection } from "../connections";
+import {
+  getSandboxConnection,
+  sandboxHostSettings,
+  type SandboxConnectionSettings,
+} from "../connections";
 import type {
   ExecResult,
   PortMap,
   Sandbox,
+  SandboxDesktop,
   SandboxDesktopControl,
   SandboxProvider,
   SandboxSessionSpec,
   SandboxStatus,
 } from "../provider";
 import { macDesktopControl } from "../macos-desktop";
+import type { RunnerVmTerminal } from "../../runner-ws";
+import { vmDisplayStreamPath } from "../../vm-display";
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
@@ -73,7 +87,6 @@ import {
   type SandboxMachineSettings,
 } from "../prewarm";
 import {
-  invalidateRemoteRepoTemplate,
   readRemoteRepoTemplate,
   remoteRepoTemplateName,
   sealRemoteRepoTemplate,
@@ -114,35 +127,44 @@ const AUDIT_HEAD_CHARS = 520;
 
 const L = remoteLayout("darwin");
 
-export interface TartHost {
-  runnerId: string;
-  runnerName: string;
-}
-
-export interface TartSettings {
-  /** Runner id or name of the Mac host. */
+/** A configured Mac: which Runner, and how many guests it may run. */
+export interface TartHostSpec {
+  /** Runner id or name. */
   runner: string;
-  image: string;
-  cpu: number;
-  memoryMb: number;
   maxVms: number;
 }
 
+/** A configured Mac that is paired, macOS, and connected right now. */
+export interface TartHost {
+  runnerId: string;
+  runnerName: string;
+  maxVms: number;
+}
+
+export interface TartSettings {
+  hosts: TartHostSpec[];
+  image: string;
+  cpu: number;
+  memoryMb: number;
+}
+
 export function tartSettings(
-  raw: Record<string, unknown> | undefined = getSandboxConnection("tart")
-    ?.settings as Record<string, unknown> | undefined,
+  raw: SandboxConnectionSettings | undefined = getSandboxConnection("tart")
+    ?.settings,
 ): TartSettings {
   const num = (v: unknown, fallback: number) =>
     typeof v === "number" && Number.isFinite(v) && v > 0 ? v : fallback;
   return {
-    runner: typeof raw?.runner === "string" ? raw.runner.trim() : "",
+    hosts: sandboxHostSettings(raw).map((host) => ({
+      runner: host.runner.trim(),
+      maxVms: Math.round(num(host.maxVms, DEFAULT_TART_MAX_VMS)),
+    })),
     image:
       typeof raw?.image === "string" && raw.image.trim()
         ? raw.image.trim()
         : DEFAULT_TART_IMAGE,
     cpu: Math.round(num(raw?.cpu, DEFAULT_TART_CPU)),
     memoryMb: Math.round(num(raw?.memoryMb, DEFAULT_TART_MEMORY_MB)),
-    maxVms: Math.round(num(raw?.maxVms, DEFAULT_TART_MAX_VMS)),
   };
 }
 
@@ -174,24 +196,19 @@ function b64(text: string): string {
   return Buffer.from(text, "utf-8").toString("base64");
 }
 
-// ── Host control plane (the Mac Runner) ─────────────────────────────────────
+// ── Hosts (the Mac Runners) ─────────────────────────────────────────────────
 
-export async function resolveTartHost(
-  settings: TartSettings = tartSettings(),
-): Promise<TartHost> {
-  if (!settings.runner)
-    throw new Error(
-      "No Mac host is configured: choose a paired macOS Runner in Workspace > Sandboxes > Mac VM",
-    );
+/** One configured Mac as a usable host, or why it is not one right now. */
+export async function resolveTartHost(spec: TartHostSpec): Promise<TartHost> {
   const { listRunners } = await import("../../runners");
   const { isRunnerConnected } = await import("../../runner-ws");
   const runner = listRunners().find(
     (candidate) =>
-      candidate.id === settings.runner || candidate.name === settings.runner,
+      candidate.id === spec.runner || candidate.name === spec.runner,
   );
   if (!runner)
     throw new Error(
-      `Mac host "${settings.runner}" is not a paired Runner (Settings > Runners)`,
+      `Mac host "${spec.runner}" is not a paired Runner (Settings > Runners)`,
     );
   if (runner.platform !== "darwin")
     throw new Error(
@@ -199,7 +216,160 @@ export async function resolveTartHost(
     );
   if (!isRunnerConnected(runner.id))
     throw new Error(`Mac host ${runner.name} is offline`);
-  return { runnerId: runner.id, runnerName: runner.name };
+  return { runnerId: runner.id, runnerName: runner.name, maxVms: spec.maxVms };
+}
+
+export interface TartHostRoster {
+  online: TartHost[];
+  /** Configured hosts that cannot take work now, with the reason. */
+  unavailable: Array<{ runner: string; reason: string }>;
+}
+
+/** Every configured Mac, split into the ones that can take work now. */
+export async function resolveTartHosts(
+  settings: TartSettings = tartSettings(),
+): Promise<TartHostRoster> {
+  if (!settings.hosts.length)
+    throw new Error(
+      "No Mac host is configured: add a paired macOS Runner in Workspace > Sandboxes > Mac VM",
+    );
+  const roster: TartHostRoster = { online: [], unavailable: [] };
+  for (const spec of settings.hosts) {
+    try {
+      roster.online.push(await resolveTartHost(spec));
+    } catch (error) {
+      roster.unavailable.push({
+        runner: spec.runner,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return roster;
+}
+
+/** Hosts that can take work now; every configured Mac being unavailable is
+ *  an error that names each one. */
+async function onlineTartHosts(
+  settings: TartSettings = tartSettings(),
+): Promise<TartHost[]> {
+  const roster = await resolveTartHosts(settings);
+  if (!roster.online.length)
+    throw new Error(
+      roster.unavailable.length === 1
+        ? roster.unavailable[0]!.reason
+        : `No Mac host is available: ${roster.unavailable
+            .map((host) => `${host.runner} (${host.reason})`)
+            .join("; ")}`,
+    );
+  return roster.online;
+}
+
+export interface TartPlacementCandidate {
+  host: TartHost;
+  vms: TartVm[];
+}
+
+/** Where a new VM goes: the host with the most free slots, preferring one
+ *  that holds `preferVm` (the repo's template, so the clone is warm). Ties
+ *  keep the configured order. Null when every host is full. */
+export function chooseTartHost(
+  candidates: TartPlacementCandidate[],
+  preferVm?: string,
+): TartPlacementCandidate | null {
+  const scored = candidates
+    .map((candidate, index) => ({
+      candidate,
+      index,
+      free: candidate.host.maxVms - runningLocalVms(candidate.vms).length,
+      warm:
+        !!preferVm &&
+        candidate.vms.some((vm) => vm.source !== "oci" && vm.name === preferVm),
+    }))
+    .filter((entry) => entry.free > 0)
+    .sort(
+      (a, b) =>
+        Number(b.warm) - Number(a.warm) || b.free - a.free || a.index - b.index,
+    );
+  return scored[0]?.candidate ?? null;
+}
+
+/** Pick the Mac a new VM is created on. */
+async function pickTartHost(
+  settings: TartSettings,
+  opts: { preferVm?: string; sessionId?: string } = {},
+): Promise<TartPlacementCandidate> {
+  const roster = await resolveTartHosts(settings);
+  const candidates: TartPlacementCandidate[] = [];
+  for (const host of roster.online) {
+    try {
+      candidates.push({ host, vms: await listVms(host) });
+    } catch (error) {
+      roster.unavailable.push({
+        runner: host.runnerName,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  const chosen = chooseTartHost(candidates, opts.preferVm);
+  if (chosen) return chosen;
+  const full = candidates.map(
+    ({ host, vms }) =>
+      `${host.runnerName} ${runningLocalVms(vms).length}/${host.maxVms} (${
+        runningLocalVms(vms)
+          .map((vm) => vm.name)
+          .join(", ") || "none"
+      })`,
+  );
+  const down = roster.unavailable.map(
+    (host) => `${host.runner}: ${host.reason}`,
+  );
+  throw new Error(
+    `${candidates.length ? "Every Mac host is full" : "No Mac host is available"}: ${[
+      ...full,
+      ...down,
+    ].join(
+      "; ",
+    )}. Sleep or delete another Mac Sandbox, raise a host's "Max VMs", or add another Mac in Workspace > Sandboxes.`,
+  );
+}
+
+/** VM name -> Runner id, for VMs whose state file predates host tracking
+ *  (and prewarms, which have none). Parked on globalThis for --hot. */
+const vmHosts: Map<string, string> = ((globalThis as any).__osTartVmHosts ??=
+  new Map());
+
+/** The Mac that holds an existing VM. State files record it; older ones and
+ *  prewarms are located by asking each online host once. */
+export async function tartHostForVm(
+  vmName: string,
+  settings: TartSettings = tartSettings(),
+): Promise<TartHost> {
+  const state = readRemoteState("tart", vmName);
+  const recorded = state?.host || vmHosts.get(vmName);
+  const hosts = await onlineTartHosts(settings);
+  if (recorded) {
+    const known = hosts.find((host) => host.runnerId === recorded);
+    if (known) return known;
+    // Configured but not usable right now: say which, not "unknown VM".
+    const { listRunners } = await import("../../runners");
+    const runner = listRunners().find((r) => r.id === recorded);
+    const spec = settings.hosts.find(
+      (h) => h.runner === recorded || h.runner === runner?.name,
+    );
+    if (spec) return resolveTartHost(spec);
+    throw new Error(
+      `Mac VM ${vmName} lives on ${runner?.name || recorded}, which is no longer a Mac host of this workspace; add it back under Workspace > Sandboxes > Mac VM`,
+    );
+  }
+  for (const host of hosts) {
+    if ((await vmState(host, vmName)) !== "gone") {
+      vmHosts.set(vmName, host.runnerId);
+      if (state && !state.host)
+        writeRemoteState({ ...state, host: host.runnerId });
+      return host;
+    }
+  }
+  throw new Error(`Unknown Mac VM ${vmName}`);
 }
 
 interface HostExecOpts {
@@ -306,7 +476,7 @@ export function assertTartCapacity(
         .map((vm) => vm.name)
         .join(
           ", ",
-        )}). Sleep or delete another Mac Sandbox first, or raise "Max VMs" in Workspace > Sandboxes.`,
+        )}). Sleep or delete another Mac Sandbox first, raise "Max VMs", or add another Mac in Workspace > Sandboxes.`,
     );
   }
 }
@@ -335,13 +505,13 @@ async function launchVm(
   host: TartHost,
   name: string,
   machine: { cpu: number; memoryMb: number },
-  opts: { sessionId?: string; maxVms: number },
+  opts: { sessionId?: string } = {},
 ): Promise<string> {
   const vms = await listVms(host);
   const vm = vms.find((c) => c.source !== "oci" && c.name === name);
   if (!vm) throw new Error(`Mac VM ${name} does not exist`);
   if (!vm.running) {
-    assertTartCapacity(vms, name, opts.maxVms, host.runnerName);
+    assertTartCapacity(vms, name, host.maxVms, host.runnerName);
     await tartHostExec(
       host,
       `${TART} set ${q(name)} --cpu ${machine.cpu} --memory ${machine.memoryMb}`,
@@ -595,7 +765,6 @@ export function guestScript(cmd: string, opts?: RemoteExecOpts): string {
 
 export interface TartDriverOptions {
   machine: { cpu: number; memoryMb: number };
-  maxVms: number;
   sessionId?: string;
 }
 
@@ -688,7 +857,6 @@ export function tartDriver(
       if (state === "running" && ip) return;
       ip = await launchVm(host, vmName, options.machine, {
         sessionId: options.sessionId,
-        maxVms: options.maxVms,
       });
       await waitForSsh(driver, vmName);
     },
@@ -859,12 +1027,7 @@ export async function ensureTartBaseVm(
   );
   if (base) await deleteVm(host, TART_BASE_VM);
   await cloneVm(host, settings.image, TART_BASE_VM);
-  const ip = await launchVm(
-    host,
-    TART_BASE_VM,
-    { cpu: 2, memoryMb: 4096 },
-    { maxVms: settings.maxVms },
-  );
+  const ip = await launchVm(host, TART_BASE_VM, { cpu: 2, memoryMb: 4096 });
   try {
     progress("Installing the host key in the base VM", 70);
     hostNeed(
@@ -880,7 +1043,6 @@ export async function ensureTartBaseVm(
     );
     const driver = tartDriver(host, TART_BASE_VM, {
       machine: { cpu: 2, memoryMb: 4096 },
-      maxVms: settings.maxVms,
     });
     await waitForSsh(driver, TART_BASE_VM);
     progress("Configuring the base VM", 80);
@@ -967,7 +1129,6 @@ export class TartProvider implements SandboxProvider {
         "Mac VM sandboxes do not enforce an outbound network policy; automations stay on Daytona",
       );
     const settings = tartSettings();
-    const host = await resolveTartHost(settings);
     const prevState = findRemoteStateBySession(this.id, spec.sessionId);
     const trust = resolveTrustPolicy(spec, prevState);
     const repo = getRepo(spec.repo || prevState?.repoId);
@@ -979,44 +1140,60 @@ export class TartProvider implements SandboxProvider {
       sandboxEnvironmentSettings(repo.id, "tart"),
     );
 
+    // The VM's Mac: the one that holds the session's VM, a prewarm's, or
+    // the host with room for a new one.
+    let host: TartHost | null = null;
     let vmName: string | null = null;
-    if (prevState && (await vmState(host, prevState.sandboxId)) !== "gone")
-      vmName = prevState.sandboxId;
+    if (prevState) {
+      host = await locateVm(prevState.sandboxId, settings);
+      if (host) vmName = prevState.sandboxId;
+    }
     let resuming = false;
-    if (vmName) {
+    if (vmName && host) {
       resuming = (await vmState(host, vmName)) !== "running";
     } else {
       const claim = await claimPrewarmOrWait(this.id, repo.id, spec.sessionId);
       if (claim) {
-        if ((await vmState(host, claim.sandboxId)) !== "gone") {
+        host = await locateVm(claim.sandboxId, settings);
+        if (host) {
           vmName = claim.sandboxId;
           console.log(
-            `[sandbox:tart] adopted prewarmed VM ${vmName} for ${spec.sessionId}`,
+            `[sandbox:tart] adopted prewarmed VM ${vmName} on ${host.runnerName} for ${spec.sessionId}`,
           );
         } else discardClaimedPrewarm(this.id, claim.sandboxId);
       }
     }
     let bootMode: "fresh" | "snapshot-restore" = "fresh";
-    if (!vmName) {
+    if (!vmName || !host) {
+      const template = readRemoteRepoTemplate("tart", repo.id);
+      const placed = await pickTartHost(settings, {
+        preferVm: template?.artifactId,
+        sessionId: spec.sessionId,
+      });
+      host = placed.host;
       await ensureTartBaseVm(host, settings);
       vmName = tartVmName(spec.sessionId);
       if ((await vmState(host, vmName)) !== "gone") {
         // A VM from an earlier life of this session whose state file is gone.
         await deleteVm(host, vmName, { sessionId: spec.sessionId });
       }
-      const template = readRemoteRepoTemplate("tart", repo.id);
+      // Templates live on the Mac that sealed them; another host clones the
+      // base instead, and the template stays valid where it is.
       let from = TART_BASE_VM;
-      if (template) {
-        const exists = (await listVms(host)).some(
+      if (
+        template &&
+        placed.vms.some(
           (vm) => vm.source !== "oci" && vm.name === template.artifactId,
-        );
-        if (exists) {
-          from = template.artifactId;
-          bootMode = "snapshot-restore";
-        } else invalidateRemoteRepoTemplate("tart", repo.id);
+        )
+      ) {
+        from = template.artifactId;
+        bootMode = "snapshot-restore";
       }
-      console.log(`[sandbox:tart] cloning ${from} to ${vmName}`);
+      console.log(
+        `[sandbox:tart] cloning ${from} to ${vmName} on ${host.runnerName}`,
+      );
       await cloneVm(host, from, vmName, { sessionId: spec.sessionId });
+      vmHosts.set(vmName, host.runnerId);
       mark("VM cloned");
     }
 
@@ -1024,6 +1201,7 @@ export class TartProvider implements SandboxProvider {
       sandboxId: vmName,
       provider: this.id,
       sessionId: spec.sessionId,
+      host: host.runnerId,
       cwd,
       repoId: repo.id,
       branch,
@@ -1034,7 +1212,6 @@ export class TartProvider implements SandboxProvider {
     writeRemoteState(state);
     const driver = tartDriver(host, vmName, {
       machine,
-      maxVms: settings.maxVms,
       sessionId: spec.sessionId,
     });
     await driver.ensureStarted();
@@ -1073,25 +1250,20 @@ export class TartProvider implements SandboxProvider {
     }
     writeRemoteState({ ...state, lastActivityAt: new Date().toISOString() });
     return Object.assign(
-      this.makeHandle(host, settings, vmName, spec.sessionId, cwd, machine),
+      this.makeHandle(host, vmName, spec.sessionId, cwd, machine),
       { wokeFromSleep: resuming, bootMode },
     );
   }
 
   private makeHandle(
     host: TartHost,
-    settings: TartSettings,
     vmName: string,
     sessionId: string,
     cwd: string,
     machine: { cpu: number; memoryMb: number },
   ): Sandbox {
     const providerId = this.id;
-    const driver = tartDriver(host, vmName, {
-      machine,
-      maxVms: settings.maxVms,
-      sessionId,
-    });
+    const driver = tartDriver(host, vmName, { machine, sessionId });
     return makeRemoteSandbox({
       providerId,
       sandboxId: vmName,
@@ -1112,8 +1284,8 @@ export class TartProvider implements SandboxProvider {
     const state = readRemoteState(this.id, sandboxId);
     if (!state) return null;
     const settings = tartSettings();
-    const host = await resolveTartHost(settings);
-    if ((await vmState(host, sandboxId)) === "gone") return null;
+    const host = await locateVm(sandboxId, settings);
+    if (!host) return null;
     const { sandboxEnvironmentSettings } = await import("../environments");
     const machine = machineFor(
       settings,
@@ -1123,7 +1295,6 @@ export class TartProvider implements SandboxProvider {
     );
     return this.makeHandle(
       host,
-      settings,
       sandboxId,
       state.sessionId,
       state.cwd,
@@ -1141,16 +1312,35 @@ export class TartProvider implements SandboxProvider {
   }
 
   async desktopControl(sandboxId: string): Promise<SandboxDesktopControl> {
-    const host = await resolveTartHost();
-    if ((await vmState(host, sandboxId)) !== "running")
-      throw new Error("Wake the sandbox first");
+    await runningVm(sandboxId);
     const sandbox = await this.get(sandboxId);
     if (!sandbox) throw new Error("Wake the sandbox first");
     return macDesktopControl((cmd, opts) => sandbox.exec(cmd, opts));
   }
 
+  /** The person's view: Tart's VNC server for this VM (the Mac's loopback),
+   *  streamed through the Runner channel. The password is minted by Tart per
+   *  boot and lives in the VM's log on the Mac. */
+  async desktop(sandboxId: string): Promise<SandboxDesktop> {
+    const { host, state } = await runningVm(sandboxId);
+    const line = await tartHostExec(
+      host,
+      `grep -o 'vnc://[^ ]*' ${HOST_DIR}/vms/${q(`${sandboxId}.log`)} 2>/dev/null | tail -1`,
+      { label: `desktop ${sandboxId}`, sessionId: state.sessionId },
+    );
+    const endpoint = parseTartVncUrl(line.stdout);
+    if (!endpoint)
+      throw new Error("The VM has not published its display yet; try again");
+    return {
+      vnc: {
+        streamPath: vmDisplayStreamPath(state.sessionId),
+        password: endpoint.password,
+      },
+    };
+  }
+
   async pause(sandboxId: string): Promise<void> {
-    const host = await resolveTartHost();
+    const host = await tartHostForVm(sandboxId);
     const state = readRemoteState(this.id, sandboxId);
     await stopVm(host, sandboxId, { sessionId: state?.sessionId });
   }
@@ -1159,10 +1349,9 @@ export class TartProvider implements SandboxProvider {
     const state = readRemoteState(this.id, sandboxId);
     if (!state) return null;
     const settings = tartSettings();
-    const host = await resolveTartHost(settings);
-    const current = await vmState(host, sandboxId);
-    if (current === "gone") return null;
-    const woke = current !== "running";
+    const host = await locateVm(sandboxId, settings);
+    if (!host) return null;
+    const woke = (await vmState(host, sandboxId)) !== "running";
     const { sandboxEnvironmentSettings } = await import("../environments");
     const machine = machineFor(
       settings,
@@ -1172,20 +1361,12 @@ export class TartProvider implements SandboxProvider {
     );
     const driver = tartDriver(host, sandboxId, {
       machine,
-      maxVms: settings.maxVms,
       sessionId: state.sessionId,
     });
     await driver.ensureStarted();
     if (woke) await runResumeHook(driver, this.id, sandboxId, state);
     return Object.assign(
-      this.makeHandle(
-        host,
-        settings,
-        sandboxId,
-        state.sessionId,
-        state.cwd,
-        machine,
-      ),
+      this.makeHandle(host, sandboxId, state.sessionId, state.cwd, machine),
       { wokeFromSleep: woke },
     );
   }
@@ -1196,26 +1377,101 @@ export class TartProvider implements SandboxProvider {
   ): Promise<void> {
     const state = readRemoteState(this.id, sandboxId);
     try {
-      const host = await resolveTartHost();
+      const host = await tartHostForVm(sandboxId);
       await deleteVm(host, sandboxId, { sessionId: state?.sessionId });
       if (options.strict && (await vmState(host, sandboxId)) !== "gone")
         throw new Error(`Mac VM ${sandboxId} still exists after deletion`);
+      vmHosts.delete(sandboxId);
       removeRemoteState(this.id, sandboxId);
     } catch (error) {
       if (options.strict) throw error;
       console.warn(`[sandbox:tart] destroy(${sandboxId}):`, error);
+      vmHosts.delete(sandboxId);
       removeRemoteState(this.id, sandboxId);
     }
   }
+}
+
+/** The Mac holding a VM, or null when no host has it (deleted, or the VM
+ *  was never created). Host outages still throw: a VM on an offline Mac is
+ *  not gone. */
+async function locateVm(
+  vmName: string,
+  settings: TartSettings,
+): Promise<TartHost | null> {
+  let host: TartHost;
+  try {
+    host = await tartHostForVm(vmName, settings);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Unknown Mac VM"))
+      return null;
+    throw error;
+  }
+  return (await vmState(host, vmName)) === "gone" ? null : host;
 }
 
 // ── Idle sleep ───────────────────────────────────────────────────────────────
 
 /** Tart has no provider-side idle timer. Stop session VMs whose last
  *  activity is older than idleStopMinutes; the next turn wakes them. */
+/** Tart prints `VNC server is running at vnc://:<password>@127.0.0.1:<port>`
+ *  once the guest's display is up; the last line wins after a reboot. */
+export function parseTartVncUrl(
+  text: string,
+): { port: number; password: string } | null {
+  const matches = [
+    ...text.matchAll(/vnc:\/\/(?:[^:@\s]*):([^@\s]*)@127\.0\.0\.1:(\d+)/g),
+  ];
+  const last = matches.at(-1);
+  if (!last) return null;
+  const port = Number(last[2]);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) return null;
+  return { port, password: decodeURIComponent(last[1]!) };
+}
+
+async function runningVm(sandboxId: string) {
+  const state = readRemoteState("tart", sandboxId);
+  if (!state) throw new Error(`Unknown Mac VM ${sandboxId}`);
+  const host = await tartHostForVm(sandboxId);
+  if ((await vmState(host, sandboxId)) !== "running")
+    throw new Error("Wake the sandbox first");
+  return { host, state };
+}
+
+/** The Runner and VM a viewer's display stream attaches to. */
+export async function tartDisplayHost(
+  sandboxId: string,
+): Promise<{ runnerId: string; vm: string }> {
+  const { host } = await runningVm(sandboxId);
+  return { runnerId: host.runnerId, vm: sandboxId };
+}
+
+/** A Terminal tab inside the guest: the Runner opens the PTY and SSHes in
+ *  with its host-local key (../../terminals.ts). A stopped VM is woken, as a
+ *  terminal is an interactive gesture. */
+export async function tartTerminalTarget(sandboxId: string): Promise<{
+  runnerId: string;
+  sessionId: string;
+  vm: RunnerVmTerminal;
+}> {
+  const state = readRemoteState("tart", sandboxId);
+  if (!state) throw new Error(`Unknown Mac VM ${sandboxId}`);
+  const host = await tartHostForVm(sandboxId);
+  if ((await vmState(host, sandboxId)) !== "running") {
+    const { getSandboxProvider } = await import("../index");
+    const woken = await getSandboxProvider("tart").resume?.(sandboxId);
+    if (!woken) throw new Error("The Mac VM could not be woken");
+  }
+  return {
+    runnerId: host.runnerId,
+    sessionId: state.sessionId,
+    vm: { name: sandboxId, user: GUEST_USER, cwd: state.cwd },
+  };
+}
+
 export async function sweepIdleTartVms(now = Date.now()): Promise<string[]> {
   const settings = tartSettings();
-  if (!settings.runner) return [];
+  if (!settings.hosts.length) return [];
   const idleMs =
     (sandboxConfig().idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000;
   const stale = listRemoteStates("tart").filter(
@@ -1223,26 +1479,36 @@ export async function sweepIdleTartVms(now = Date.now()): Promise<string[]> {
       now - Date.parse(state.lastActivityAt || state.createdAt) > idleMs,
   );
   if (!stale.length) return [];
-  let host: TartHost;
+  let hosts: TartHost[];
   try {
-    host = await resolveTartHost(settings);
+    hosts = (await resolveTartHosts(settings)).online;
   } catch {
     return [];
   }
-  const vms = await listVms(host);
+  // One `tart list` per host, then stop each stale VM where it runs.
+  const running = new Map<string, TartHost>();
+  for (const host of hosts) {
+    try {
+      for (const vm of runningLocalVms(await listVms(host)))
+        running.set(vm.name, host);
+    } catch (error) {
+      console.warn(
+        `[sandbox:tart] idle sweep could not list ${host.runnerName}:`,
+        error,
+      );
+    }
+  }
   const stopped: string[] = [];
   for (const state of stale) {
-    const vm = vms.find(
-      (c) => c.source !== "oci" && c.name === state.sandboxId,
-    );
-    if (!vm?.running) continue;
+    const host = running.get(state.sandboxId);
+    if (!host) continue;
     const { hostRunBusy } = await import("../../host-registry");
     if (hostRunBusy(state.sessionId)) continue;
     try {
       await stopVm(host, state.sandboxId, { sessionId: state.sessionId });
       stopped.push(state.sandboxId);
       console.log(
-        `[sandbox:tart] stopped idle VM ${state.sandboxId} (${state.sessionId})`,
+        `[sandbox:tart] stopped idle VM ${state.sandboxId} on ${host.runnerName} (${state.sessionId})`,
       );
     } catch (error) {
       console.warn(
@@ -1274,12 +1540,16 @@ function templateVmName(repoId: string): string {
   return tartTemplateVmName(repoId, remoteRepoTemplateName("tart", repoId));
 }
 
+/** A template may have been sealed on more than one Mac over time; delete
+ *  it everywhere it exists. */
 export async function deleteTartTemplateArtifact(
   artifactId: string,
 ): Promise<void> {
   if (!artifactId.startsWith(TEMPLATE_PREFIX)) return;
-  const host = await resolveTartHost();
-  await deleteVm(host, artifactId);
+  for (const host of await onlineTartHosts()) {
+    if ((await vmState(host, artifactId)) === "gone") continue;
+    await deleteVm(host, artifactId);
+  }
 }
 
 async function writeLabels(
@@ -1304,26 +1574,29 @@ export const tartPrewarmAdapter: PrewarmAdapter = {
     if (!repoId)
       throw new Error(`invalid tart prewarm key: ${key || "(missing)"}`);
     const settings = tartSettings();
-    const host = await resolveTartHost(settings);
-    await ensureTartBaseVm(host, settings);
     const template = readRemoteRepoTemplate("tart", repoId);
+    const placed = await pickTartHost(settings, {
+      preferVm: template?.artifactId,
+    });
+    const host = placed.host;
+    await ensureTartBaseVm(host, settings);
     let from = TART_BASE_VM;
     let restoredFromTemplate = false;
-    if (template) {
-      const exists = (await listVms(host)).some(
+    if (
+      template &&
+      placed.vms.some(
         (vm) => vm.source !== "oci" && vm.name === template.artifactId,
-      );
-      if (exists) {
-        from = template.artifactId;
-        restoredFromTemplate = true;
-      } else invalidateRemoteRepoTemplate("tart", repoId);
+      )
+    ) {
+      from = template.artifactId;
+      restoredFromTemplate = true;
     }
     const name = `${PREWARM_PREFIX}${Bun.randomUUIDv7().slice(-12)}`;
     await cloneVm(host, from, name);
+    vmHosts.set(name, host.runnerId);
     await writeLabels(host, name, labels);
     const driver = tartDriver(host, name, {
       machine: machineFor(settings, opts.resources),
-      maxVms: settings.maxVms,
     });
     await driver.ensureStarted();
     return { sandboxId: name, driver, restoredFromTemplate };
@@ -1331,10 +1604,9 @@ export const tartPrewarmAdapter: PrewarmAdapter = {
 
   async publishTemplate(sandboxId, repo, _label, options) {
     const settings = tartSettings();
-    const host = await resolveTartHost(settings);
+    const host = await tartHostForVm(sandboxId, settings);
     const driver = tartDriver(host, sandboxId, {
       machine: machineFor(settings),
-      maxVms: settings.maxVms,
     });
     await driver.ensureStarted();
     await sealRemoteRepoTemplate(driver, "tart", repo);
@@ -1346,37 +1618,42 @@ export const tartPrewarmAdapter: PrewarmAdapter = {
     if (exists && options?.replace) await deleteVm(host, name);
     if (!exists || options?.replace) await cloneVm(host, sandboxId, name);
     writeRemoteRepoTemplate("tart", repo.id, name);
-    console.log(`[sandbox:tart] published post-setup repo template ${name}`);
+    console.log(
+      `[sandbox:tart] published post-setup repo template ${name} on ${host.runnerName}`,
+    );
   },
 
   async park(sandboxId) {
-    const host = await resolveTartHost();
+    const host = await tartHostForVm(sandboxId);
     await stopVm(host, sandboxId);
   },
 
   async destroy(sandboxId) {
-    const host = await resolveTartHost();
+    const host = await tartHostForVm(sandboxId);
     await deleteVm(host, sandboxId);
+    vmHosts.delete(sandboxId);
   },
 
   async listPrewarmed() {
-    const host = await resolveTartHost();
-    const vms = await listVms(host);
     const out: Array<{ id: string; key: string }> = [];
-    for (const vm of vms) {
-      if (vm.source === "oci" || !vm.name.startsWith(PREWARM_PREFIX)) continue;
-      const labels = await tartHostExec(
-        host,
-        `cat ${HOST_DIR}/vms/${q(`${vm.name}.labels.json`)} 2>/dev/null`,
-        { label: `labels ${vm.name}` },
-      );
-      let key = "";
-      try {
-        key = String(
-          JSON.parse(labels.stdout || "{}")[PREWARM_KEY_LABEL] || "",
+    for (const host of await onlineTartHosts()) {
+      for (const vm of await listVms(host)) {
+        if (vm.source === "oci" || !vm.name.startsWith(PREWARM_PREFIX))
+          continue;
+        vmHosts.set(vm.name, host.runnerId);
+        const labels = await tartHostExec(
+          host,
+          `cat ${HOST_DIR}/vms/${q(`${vm.name}.labels.json`)} 2>/dev/null`,
+          { label: `labels ${vm.name}` },
         );
-      } catch {}
-      out.push({ id: vm.name, key });
+        let key = "";
+        try {
+          key = String(
+            JSON.parse(labels.stdout || "{}")[PREWARM_KEY_LABEL] || "",
+          );
+        } catch {}
+        out.push({ id: vm.name, key });
+      }
     }
     return out;
   },
@@ -1384,28 +1661,53 @@ export const tartPrewarmAdapter: PrewarmAdapter = {
 
 // ── Qualification ────────────────────────────────────────────────────────────
 
-/** Prove the host end to end: Runner, tart, image, base VM, then a disposable
- *  VM's exec semantics, file upload, stop/start persistence, and a distinct
- *  clone (the project-snapshot mechanism). Everything created is deleted. */
+/** Prove every host end to end: Runner, tart, image, base VM, then a
+ *  disposable VM's exec semantics, file upload, stop/start persistence, and
+ *  a distinct clone (the project-snapshot mechanism). Everything created is
+ *  deleted. Hosts are proven one after another; the first failure names its
+ *  Mac, and every configured Mac must pass. */
 export async function qualifyTartConnection(
   update: (stage: string, progress?: number) => void = () => undefined,
 ): Promise<void> {
-  try {
-    await qualifyTartConnectionInner(update);
-  } catch (error) {
-    // Surface the host's own message: the generic classifier keys on words
-    // like "image" and would otherwise report a snapshot problem.
-    const message = error instanceof Error ? error.message : String(error);
-    throw Object.assign(new Error(message), { code: "QUALIFICATION_FAILED" });
+  const settings = tartSettings();
+  if (!settings.hosts.length)
+    throw Object.assign(
+      new Error(
+        "No Mac host is configured: add a paired macOS Runner in Workspace > Sandboxes > Mac VM",
+      ),
+      { code: "QUALIFICATION_FAILED" },
+    );
+  const many = settings.hosts.length > 1;
+  for (const [index, spec] of settings.hosts.entries()) {
+    // Each host owns an equal slice of the progress bar.
+    const scoped = (stage: string, progress?: number) =>
+      update(
+        many ? `${spec.runner}: ${stage}` : stage,
+        progress === undefined
+          ? undefined
+          : Math.round((index * 100 + progress) / settings.hosts.length),
+      );
+    try {
+      await qualifyTartHost(spec, settings, scoped);
+    } catch (error) {
+      // Surface the host's own message: the generic classifier keys on words
+      // like "image" and would otherwise report a snapshot problem.
+      const message = error instanceof Error ? error.message : String(error);
+      throw Object.assign(
+        new Error(many ? `${spec.runner}: ${message}` : message),
+        { code: "QUALIFICATION_FAILED" },
+      );
+    }
   }
 }
 
-async function qualifyTartConnectionInner(
+async function qualifyTartHost(
+  spec: TartHostSpec,
+  settings: TartSettings,
   update: (stage: string, progress?: number) => void,
 ): Promise<void> {
-  const settings = tartSettings();
   update("Checking the Mac host", 3);
-  const host = await resolveTartHost(settings);
+  const host = await resolveTartHost(spec);
   const arch = await tartHostExec(host, "uname -m; sw_vers -productVersion", {
     label: "qualify host",
   });
@@ -1420,10 +1722,7 @@ async function qualifyTartConnectionInner(
   try {
     update("Starting a disposable VM", 86);
     await cloneVm(host, TART_BASE_VM, source);
-    const driver = tartDriver(host, source, {
-      machine: machineFor(settings),
-      maxVms: settings.maxVms,
-    });
+    const driver = tartDriver(host, source, { machine: machineFor(settings) });
     await driver.ensureStarted();
     const probe = await driver.exec(
       "set -eu; uname -s; sudo -n true; printf opensession-qualified > ~/.opensession-qualification",
@@ -1464,7 +1763,6 @@ async function qualifyTartConnectionInner(
     await cloneVm(host, source, restored);
     const restoredDriver = tartDriver(host, restored, {
       machine: machineFor(settings),
-      maxVms: settings.maxVms,
     });
     await restoredDriver.ensureStarted();
     const restoreProbe = await restoredDriver.exec(

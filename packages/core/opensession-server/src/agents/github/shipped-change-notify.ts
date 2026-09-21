@@ -26,6 +26,7 @@ import {
   slackPermalink,
   slackUploadTs,
 } from "../slack/slack-api";
+import { resolveSlackChannel } from "../slack/channel-directory";
 import { shippedChangesChannel } from "./constants";
 
 export interface ShippedVisualChange {
@@ -254,8 +255,12 @@ export async function shareShippedVisualChange(opts: {
   pr: { number: number; title: string; url: string };
   repoFullName: string;
   requestedBy?: string;
+  /** A channel id or `#name`: one of the configured channels, or any the
+   *  caller's own grant can reach. */
   channel?: string;
   message?: string;
+  /** Whose grant `slackToken` is; keys their channel directory. */
+  caller?: string;
   slackToken?: string;
   screenshots?: string[];
 }): Promise<{
@@ -266,17 +271,20 @@ export async function shareShippedVisualChange(opts: {
   ts?: string;
   announcementKey?: string;
 }> {
-  const channels = shippedChangeChannels();
-  const channel = opts.channel || shippedChangesChannel();
-  if (!channel) throw new Error("Shipped changes channel is not configured");
-  if (!channels.some((candidate) => candidate.id === channel)) {
-    throw new Error("Choose a configured Slack channel");
-  }
   if (!opts.slackToken) {
     throw new Error(
       "Connect your Slack account in Settings → Account to post as yourself",
     );
   }
+  const wanted = opts.channel || shippedChangesChannel();
+  if (!wanted) throw new Error("Shipped changes channel is not configured");
+  const target = await resolveSlackChannel(
+    wanted,
+    shippedChangeChannels(),
+    opts.caller ? { caller: opts.caller, token: opts.slackToken } : undefined,
+  );
+  if (!target) throw new Error("Choose a Slack channel you can post to");
+  const channel = target.id;
   const visual = selectShippedVisualChange(
     opts.session,
     validWalkthroughScreenshot,
@@ -351,7 +359,7 @@ export async function shareShippedVisualChange(opts: {
   );
   return {
     status: "shared",
-    channel: channels.find((candidate) => candidate.id === channel),
+    channel: target,
     permalink,
     ts,
     announcementKey,

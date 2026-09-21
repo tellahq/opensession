@@ -7,7 +7,7 @@ import { imageFilesFromPaste, uploadFile } from "../lib/images";
 import { noAutofill } from "../lib/composer-autofill";
 import { Button } from "../ui/button";
 import { OverlayAction } from "../ui/overlay-action";
-import { OptionSelect } from "../ui/select";
+import { SearchSelect } from "../ui/combobox";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { BrandMark } from "./BrandMark";
@@ -109,6 +109,9 @@ export interface ShippedChangeComposerProps {
   defaultChannel?: string;
   /** The pending composer to update while the human edits it. */
   draftId?: string;
+  /** A better first draft is still being written; `defaultMessage` will
+   *  change once it lands, unless the person has started editing. */
+  drafting?: boolean;
   nextMessage?: string;
   sent?: SlackSent;
   /** Offered on the receipt while the message is still deletable in Slack. */
@@ -128,6 +131,7 @@ export function ShippedChangeComposer({
   loadChannels,
   defaultChannel,
   draftId,
+  drafting = false,
   nextMessage,
   sent,
   onUndo,
@@ -154,13 +158,15 @@ export function ShippedChangeComposer({
     : "";
 
   useEffect(() => {
-    if (!draftId || !draftDirtyRef.current) {
+    const sessionChanged = sessionRef.current !== sessionId;
+    if (sessionChanged) draftDirtyRef.current = false;
+    // A new default (the written draft arriving after the title fallback, a
+    // walkthrough landing) replaces the text only while it is still ours;
+    // once the person has typed, their words stay.
+    if (!draftDirtyRef.current) {
       setMessage(defaultMessage);
     }
-    if (
-      sessionRef.current !== sessionId ||
-      (draftId && !draftDirtyRef.current)
-    ) {
+    if (sessionChanged || (draftId && !draftDirtyRef.current)) {
       sessionRef.current = sessionId;
       setScreenshots(
         [...(screenshot ? [screenshot] : []), ...(initialScreenshots || [])]
@@ -342,6 +348,16 @@ export function ShippedChangeComposer({
       <div className="mb-2 flex items-center gap-1.5 px-1 text-label leading-5 text-dim">
         <BrandMark name="slack" size={12} />
         <span className="font-semibold">Send to Slack</span>
+        {drafting && (
+          <>
+            <span aria-hidden className="text-faint">
+              ·
+            </span>
+            <span className="text-faint" role="status">
+              Drafting…
+            </span>
+          </>
+        )}
         {onCancel && (
           <Tooltip label="Close" side="bottom">
             <Button
@@ -453,22 +469,21 @@ export function ShippedChangeComposer({
             {uploading ? <Spinner size="md" /> : <IconPlus size={20} />}
           </button>
           <div className="flex-1" />
-          {/* The app's own select. This was the native one with
-					    `appearance-none`, a hand-placed chevron and a wrapper to
-					    position it, which is the primitive rebuilt by hand around a
-					    control it exists to replace. */}
-          <OptionSelect
+          {/* Searchable: the list is every channel the person is in, with
+					    the configured ones first, so it runs to hundreds of rows. */}
+          <SearchSelect
             label="Slack channel"
-            className="w-28 phone:w-32"
+            className="w-32 phone:w-36"
             value={channel}
-            options={
-              channels.length === 0
-                ? [{ value: "", label: "No channels available" }]
-                : channels.map((candidate) => ({
-                    value: candidate.id,
-                    label: `#${candidate.name}`,
-                  }))
+            options={channels.map((candidate) => ({
+              value: candidate.id,
+              label: `#${candidate.name}`,
+            }))}
+            placeholder={
+              channels.length === 0 ? "No channels" : "Choose a channel"
             }
+            searchPlaceholder="Search channels"
+            emptyText="No channels match"
             onChange={(nextChannel) => {
               draftDirtyRef.current = true;
               setChannel(nextChannel);

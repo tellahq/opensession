@@ -21,22 +21,25 @@ import {
   defaultSlackChannel,
   slackChannelsPayload,
 } from "./slack-channels";
+import {
+  isSlackChannelId,
+  resolveSlackChannel,
+} from "../../agents/slack/channel-directory";
 import type { RouteContext } from "./context";
 
-function targetChannel(value: unknown) {
+/** The channel to post to: any the caller can reach, with the configured
+ *  default when the composer sent none. */
+async function targetChannel(
+  value: unknown,
+  auth?: { caller: string; token: string },
+) {
   const channels = configuredSlackChannels();
-  const wanted =
-    typeof value === "string" ? value.trim().replace(/^#/, "") : "";
-  return (
-    channels.find(
-      (channel) =>
-        channel.id === wanted ||
-        channel.name.toLowerCase() === wanted.toLowerCase(),
-    ) ||
-    (!wanted
-      ? channels.find((channel) => channel.id === defaultSlackChannel(channels))
-      : undefined)
-  );
+  if (typeof value !== "string" || !value.trim()) {
+    return channels.find(
+      (channel) => channel.id === defaultSlackChannel(channels),
+    );
+  }
+  return resolveSlackChannel(value, channels, auth);
 }
 
 export async function handleSlackComposeRoutes(
@@ -80,9 +83,14 @@ export async function handleSlackComposeRoutes(
       );
     }
     const body = await ctx.req.json().catch(() => ({}));
-    const channel = targetChannel(body?.channel);
+    // Deleting needs only the id, and Slack itself refuses anything that
+    // isn't the caller's own message, so the id does not have to be listed.
+    const channelId =
+      typeof body?.channel === "string" && isSlackChannelId(body.channel.trim())
+        ? body.channel.trim()
+        : "";
     const ts = typeof body?.ts === "string" ? body.ts : "";
-    if (!channel || !ts) {
+    if (!channelId || !ts) {
       return Response.json(
         { error: "That message can no longer be undone" },
         { status: 409 },
@@ -97,7 +105,7 @@ export async function handleSlackComposeRoutes(
       );
     }
     try {
-      await deleteSlackMessage(channel.id, ts, slackToken);
+      await deleteSlackMessage(channelId, ts, slackToken);
     } catch (error: any) {
       return Response.json(
         { error: error?.message || "Couldn't undo the Slack message" },
@@ -111,7 +119,9 @@ export async function handleSlackComposeRoutes(
     return;
   const sessionId = decodeURIComponent(match[1]);
   if (ctx.req.method === "GET")
-    return Response.json(await slackChannelsPayload(ctx));
+    return Response.json(
+      await slackChannelsPayload(ctx, { everyChannel: true }),
+    );
   const body = await ctx.req.json().catch(() => ({}));
   const caller = ctx.authUser?.login || ctx.authUser?.name;
   if (!caller) {
@@ -177,10 +187,15 @@ export async function handleSlackComposeRoutes(
     return Response.json(request);
   }
 
-  const channel = targetChannel(body?.channel);
+  const { mcpUserGrantToken } = await import("../mcp-oauth");
+  const slackToken = mcpUserGrantToken("slack", caller);
+  const channel = await targetChannel(
+    body?.channel,
+    slackToken ? { caller, token: slackToken } : undefined,
+  );
   if (!channel)
     return Response.json(
-      { error: "Choose a configured Slack channel" },
+      { error: "Choose a Slack channel you can post to" },
       { status: 400 },
     );
   const message = typeof body?.message === "string" ? body.message.trim() : "";
@@ -196,8 +211,6 @@ export async function handleSlackComposeRoutes(
     );
   }
 
-  const { mcpUserGrantToken } = await import("../mcp-oauth");
-  const slackToken = mcpUserGrantToken("slack", caller);
   if (!slackToken) {
     return Response.json(
       {

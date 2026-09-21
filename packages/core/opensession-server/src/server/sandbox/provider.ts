@@ -204,8 +204,13 @@ export interface Sandbox {
 }
 
 export interface SandboxDesktop {
-  /** Opens straight into the live desktop; treat it like a password. */
-  url: string;
+  /** Opens straight into the live desktop; treat it like a password. Absent
+   *  when the desktop streams through `vnc` instead. */
+  url?: string;
+  /** A VNC stream relayed by this server: the browser's viewer connects to
+   *  `streamPath` on the app origin and authenticates with `password`. Treat
+   *  both like a password. */
+  vnc?: { streamPath: string; password: string };
   /** Epoch ms after which the URL stops working, when the provider says. */
   expiresAt?: number;
 }

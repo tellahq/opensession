@@ -9,6 +9,7 @@ import { errorMessage } from "../lib/error-message";
 import { Button } from "../ui/button";
 import { PageLoader } from "../ui/page-loader";
 import { IconArrowUpRight, IconBox, IconRestore } from "./icons";
+import { VncDesktop } from "./VncDesktop";
 
 /** Re-mint this long before a signed desktop URL expires (Daytona: 1h). */
 const REMINT_LEAD_MS = 60_000;
@@ -80,12 +81,14 @@ export function SandboxDesktopPane({ sessionId }: { sessionId: string }) {
   }
 
   const url = state.phase === "ready" ? state.link.url : null;
+  const vnc = state.phase === "ready" ? state.link.vnc : null;
+  const live = Boolean(url || vnc);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-panel">
       <div className="flex min-h-11 items-center gap-2 border-b border-divider px-3 py-1.5">
         <span
-          className={`h-2 w-2 shrink-0 rounded-full ${url ? "bg-green" : "bg-line-strong"}`}
+          className={`h-2 w-2 shrink-0 rounded-full ${live ? "bg-green" : "bg-line-strong"}`}
           aria-hidden="true"
         />
         <div className="flex min-w-0 flex-1 items-center gap-2 text-supporting text-dim">
@@ -104,17 +107,19 @@ export function SandboxDesktopPane({ sessionId }: { sessionId: string }) {
           aria-label="Reload the desktop"
           title="Reload"
         />
-        <Button
-          variant="ghost"
-          size="md"
-          icon={<IconArrowUpRight size={16} />}
-          disabled={!url}
-          onClick={() => {
-            if (url) window.open(url, `desktop-${sessionId}`, "noopener");
-          }}
-          aria-label="Open the desktop in a separate browser window"
-          title="Open in browser"
-        />
+        {vnc ? null : (
+          <Button
+            variant="ghost"
+            size="md"
+            icon={<IconArrowUpRight size={16} />}
+            disabled={!url}
+            onClick={() => {
+              if (url) window.open(url, `desktop-${sessionId}`, "noopener");
+            }}
+            aria-label="Open the desktop in a separate browser window"
+            title="Open in browser"
+          />
+        )}
       </div>
       <div className="relative min-h-0 flex-1 bg-surface">
         {state.phase === "loading" || (url && frameLoading) ? (
@@ -150,6 +155,13 @@ export function SandboxDesktopPane({ sessionId }: { sessionId: string }) {
                 Try again
               </Button>
             }
+          />
+        ) : vnc ? (
+          <VncDesktop
+            key={`${vnc.streamPath}#${attempt}`}
+            streamPath={vnc.streamPath}
+            password={vnc.password}
+            onRetry={reload}
           />
         ) : url ? (
           <iframe

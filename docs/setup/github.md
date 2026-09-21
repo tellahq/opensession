@@ -339,8 +339,10 @@ or new label commands without webhook delivery.
 - `integrations.github.shippedChangesChannel` sets the default Slack channel in
   the post-merge **Share to Slack** composer. It is not an enable switch. A
   teammate with a personal Slack connection deliberately posts either prose or
-  selected screenshots; channel choices come from
-  `integrations.slack.channelNames`.
+  selected screenshots. The channel picker lists
+  `integrations.slack.channelNames` first as suggestions, then every channel
+  the sender is a member of (read with their own Slack grant), and it can be
+  searched.
 - Mention replies are always on while the agent is loaded.
 - The agent itself is off unless enabled: `integrations.github.enabled: true`
   in config, or the `ENABLE_GITHUB_AGENT` env flag (which wins when set; see

@@ -641,6 +641,10 @@ export interface RemoteSandboxState extends SandboxTrustPolicy {
   provider: SandboxProviderId;
   sessionId: string;
   cwd: string;
+  /** Which of a provider's hosts holds the sandbox, when the provider spans
+   *  several (tart: the Runner id of the Mac). Sleep, wake, desktop, and
+   *  terminals go back to that host. */
+  host?: string;
   repoId?: string;
   resources?: { cpu?: number; memoryMb?: number; diskGb?: number };
   branch?: string;

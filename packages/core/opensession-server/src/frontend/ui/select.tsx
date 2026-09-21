@@ -2,7 +2,7 @@ import * as React from "react";
 import { Select as BaseSelect } from "@base-ui/react/select";
 import { IconCheck, IconChevronDown } from "../components/icons";
 import { cn } from "./cn";
-import { fieldClasses } from "./input";
+import { selectTriggerClasses } from "./select-classes";
 import {
   FLOATING_OVERLAY_LAYER,
   POPUP_HOOK,
@@ -125,23 +125,7 @@ function Trigger(triggerProps: TriggerProps) {
   return (
     <BaseSelect.Trigger
       {...props}
-      className={cn(
-        fieldClasses(
-          size,
-          // The chevron sits in flow in its own grid column, so the
-          // field's own padding is what separates it from the edge.
-          cn(
-            "inline-grid cursor-pointer items-center gap-2 pr-2 text-left",
-            iconSlot
-              ? "grid-cols-[auto_minmax(0,1fr)_auto]"
-              : "grid-cols-[minmax(0,1fr)_auto]",
-          ),
-        ),
-        // A select lifts slightly under the pointer; opening still reads like
-        // focus, with the border carrying that state as on every other field.
-        "transition-[border-color,box-shadow] hover:border-line-strong enabled:hover:smooth-shadow-xs data-[popup-open]:border-accent",
-        className,
-      )}
+      className={selectTriggerClasses(size, iconSlot, className)}
     >
       {iconSlot && (
         <span className="col-start-1 row-start-1 flex size-4 shrink-0 items-center justify-center text-dim">

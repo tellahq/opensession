@@ -42,10 +42,39 @@ export interface SandboxConnectionSettings {
   endpoint?: string;
   cloud?: string;
   publicPreviews?: boolean;
-  /** tart: the paired macOS Runner (id or name) that hosts the VMs. */
+  /** tart: the paired macOS Runner (id or name) that hosts the VMs. Older
+   *  single-host form; `hosts` supersedes it. */
   runner?: string;
-  /** tart: how many VMs may run on that host at once. */
+  /** tart: how many VMs may run on that host at once (single-host form). */
   maxVms?: number;
+  /** tart: the Macs that host VMs. Sessions are placed on whichever has a
+   *  free slot. */
+  hosts?: SandboxHostSetting[];
+}
+
+export interface SandboxHostSetting {
+  /** Paired macOS Runner, by id or name. */
+  runner: string;
+  /** How many VMs may run on this Mac at once. */
+  maxVms?: number;
+}
+
+const MAX_SANDBOX_HOSTS = 16;
+
+/** The host list a tart connection describes, with the older single-host
+ *  fields folded in. Empty when no Mac is named. */
+export function sandboxHostSettings(
+  settings: SandboxConnectionSettings | undefined,
+): SandboxHostSetting[] {
+  if (settings?.hosts?.length) return settings.hosts;
+  const runner = string(settings?.runner);
+  if (!runner) return [];
+  return [
+    {
+      runner,
+      ...(number(settings?.maxVms) ? { maxVms: settings!.maxVms } : {}),
+    },
+  ];
 }
 
 export interface SandboxConnectionQualification {
@@ -147,7 +176,43 @@ function settings(value: unknown): SandboxConnectionSettings {
       : {}),
     ...(string(raw.runner) ? { runner: string(raw.runner) } : {}),
     ...(number(raw.maxVms) ? { maxVms: Math.round(number(raw.maxVms)!) } : {}),
+    ...(Array.isArray(raw.hosts) ? { hosts: hosts(raw.hosts) } : {}),
   };
+}
+
+/** One entry per Runner, in the order given; malformed entries are dropped. */
+function hosts(value: unknown[]): SandboxHostSetting[] {
+  const out: SandboxHostSetting[] = [];
+  for (const entry of value) {
+    const raw =
+      entry && typeof entry === "object"
+        ? (entry as Record<string, unknown>)
+        : null;
+    const runner = string(raw?.runner);
+    if (!runner || out.some((host) => host.runner === runner)) continue;
+    out.push({
+      runner,
+      ...(number(raw?.maxVms)
+        ? { maxVms: Math.round(number(raw?.maxVms)!) }
+        : {}),
+    });
+    if (out.length >= MAX_SANDBOX_HOSTS) break;
+  }
+  return out;
+}
+
+/** A host list replaces the single-host fields it supersedes, so a Mac
+ *  removed from the list does not linger as `runner`. */
+function mergeSettings(
+  previous: SandboxConnectionSettings | undefined,
+  next: SandboxConnectionSettings,
+): SandboxConnectionSettings {
+  const merged = { ...previous, ...next };
+  if (next.hosts) {
+    delete merged.runner;
+    delete merged.maxVms;
+  }
+  return merged;
 }
 
 function qualification(
@@ -296,12 +361,12 @@ export function connectSandboxProvider(
       `${provider === "box" ? "Boat" : "Daytona"} API key is required`,
     );
   }
-  if (
-    provider === "tart" &&
-    !string(input.settings?.runner) &&
-    !previous?.settings.runner
-  ) {
-    throw new Error("Choose the paired macOS Runner that hosts the Mac VMs");
+  const nextSettings = mergeSettings(
+    previous?.settings,
+    settings(input.settings),
+  );
+  if (provider === "tart" && !sandboxHostSettings(nextSettings).length) {
+    throw new Error("Choose at least one paired macOS Runner to host Mac VMs");
   }
   const now = new Date().toISOString();
   const connection: SandboxConnection = {
@@ -309,7 +374,7 @@ export function connectSandboxProvider(
     provider,
     enabled: true,
     ...(credentialRef ? { credentialRef } : {}),
-    settings: { ...previous?.settings, ...settings(input.settings) },
+    settings: nextSettings,
     qualification: {
       status: "checking",
       adapterSignature: sandboxAdapterSignature(provider),
@@ -341,7 +406,7 @@ export function updateSandboxConnection(
   const next: SandboxConnection = {
     ...previous,
     enabled: patch.enabled ?? previous.enabled,
-    settings: { ...previous.settings, ...settings(patch.settings) },
+    settings: mergeSettings(previous.settings, settings(patch.settings)),
     updatedAt: new Date().toISOString(),
   };
   const raw = readRaw();

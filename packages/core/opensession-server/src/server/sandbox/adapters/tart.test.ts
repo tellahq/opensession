@@ -2,45 +2,100 @@ import { describe, expect, test } from "bun:test";
 import {
   assertTartCapacity,
   baseSignature,
+  chooseTartHost,
   DEFAULT_TART_IMAGE,
   guestRemoteArg,
   guestScript,
   launchdPlist,
   localNetworkHintFor,
   parseTartList,
+  parseTartVncUrl,
   tartSettings,
   tartTemplateVmName,
   tartVmName,
 } from "./tart";
 
 describe("tart settings", () => {
-  test("defaults every shape field and keeps the runner as given", () => {
+  test("defaults every shape field and folds the single-host form into a host list", () => {
     const settings = tartSettings({ runner: " cubes-mac-mini " });
-    expect(settings.runner).toBe("cubes-mac-mini");
+    expect(settings.hosts).toEqual([{ runner: "cubes-mac-mini", maxVms: 2 }]);
     expect(settings.image).toBe(DEFAULT_TART_IMAGE);
     expect(settings.cpu).toBe(4);
     expect(settings.memoryMb).toBe(6144);
-    expect(settings.maxVms).toBe(2);
+    expect(tartSettings(undefined).hosts).toEqual([]);
   });
 
   test("honors explicit shape settings and ignores garbage", () => {
     const settings = tartSettings({
-      runner: "r1",
+      hosts: [{ runner: "mini-1" }, { runner: "ec2-mac-1", maxVms: 1 }],
       image: "ghcr.io/example/macos:1",
       cpu: 6,
       memoryMb: 8192,
-      maxVms: 1,
     });
     expect(settings).toEqual({
-      runner: "r1",
+      hosts: [
+        { runner: "mini-1", maxVms: 2 },
+        { runner: "ec2-mac-1", maxVms: 1 },
+      ],
       image: "ghcr.io/example/macos:1",
       cpu: 6,
       memoryMb: 8192,
-      maxVms: 1,
     });
+    expect(tartSettings({ cpu: -1 }).cpu).toBe(4);
+  });
+
+  test("a host list wins over the single-host fields", () => {
     expect(
-      tartSettings({ cpu: -1, maxVms: "x" as unknown as number }).cpu,
-    ).toBe(4);
+      tartSettings({ runner: "old", maxVms: 1, hosts: [{ runner: "new" }] })
+        .hosts,
+    ).toEqual([{ runner: "new", maxVms: 2 }]);
+  });
+});
+
+describe("tart placement", () => {
+  const host = (runnerName: string, maxVms = 2) => ({
+    runnerId: `id-${runnerName}`,
+    runnerName,
+    maxVms,
+  });
+  const vm = (name: string, running: boolean, source = "local") => ({
+    name,
+    source,
+    running,
+  });
+
+  test("prefers the host with the most free slots, in configured order on ties", () => {
+    const chosen = chooseTartHost([
+      { host: host("a"), vms: [vm("sbx-1", true)] },
+      { host: host("b"), vms: [] },
+      { host: host("c"), vms: [] },
+    ]);
+    expect(chosen?.host.runnerName).toBe("b");
+  });
+
+  test("a warm template beats a freer host", () => {
+    const chosen = chooseTartHost(
+      [
+        { host: host("a"), vms: [vm("sbx-1", true), vm("tpl-repo", false)] },
+        { host: host("b"), vms: [] },
+      ],
+      "tpl-repo",
+    );
+    expect(chosen?.host.runnerName).toBe("a");
+  });
+
+  test("full hosts are skipped; stopped VMs and OCI images do not count", () => {
+    const chosen = chooseTartHost([
+      { host: host("a"), vms: [vm("sbx-1", true), vm("sbx-2", true)] },
+      {
+        host: host("b", 1),
+        vms: [vm("sbx-3", false), vm("img", false, "oci")],
+      },
+    ]);
+    expect(chosen?.host.runnerName).toBe("b");
+    expect(
+      chooseTartHost([{ host: host("a", 1), vms: [vm("sbx-1", true)] }]),
+    ).toBeNull();
   });
 });
 
@@ -132,6 +187,25 @@ describe("tart guest commands", () => {
   test("the base signature changes with the image", () => {
     expect(baseSignature("a")).not.toBe(baseSignature("b"));
     expect(baseSignature("a")).toContain("tart@");
+  });
+});
+
+describe("tart display", () => {
+  test("reads the password and port of the latest VNC line", () => {
+    const log = [
+      "VNC server is running at vnc://:old-word@127.0.0.1:61790",
+      "Stopping VM...",
+      "VNC server is running at vnc://:calm-hazard-later-chest@127.0.0.1:61792",
+    ].join("\n");
+    expect(parseTartVncUrl(log)).toEqual({
+      port: 61792,
+      password: "calm-hazard-later-chest",
+    });
+  });
+
+  test("reports no display while the guest is still booting", () => {
+    expect(parseTartVncUrl("")).toBeNull();
+    expect(parseTartVncUrl("vnc://:pw@10.0.0.5:5900")).toBeNull();
   });
 });
 

@@ -311,7 +311,7 @@ function ShellView({
         else if (msg.type === "term_ready" && msg.target !== "host")
           // Remote sessions run their shell in the selected workspace.
           term.write(
-            `\x1b[2m[shell inside ${msg.target === "runner" ? "Runner" : `${msg.target} sandbox`} · ${msg.cwd || ""}]\x1b[0m\r\n`,
+            `\x1b[2m[shell inside ${msg.target === "runner" ? "Runner" : msg.target === "tart" ? "Mac VM" : `${msg.target} sandbox`} · ${msg.cwd || ""}]\x1b[0m\r\n`,
           );
         else if (msg.type === "term_notice")
           term.write(`\x1b[2m[${msg.message}]\x1b[0m\r\n`);

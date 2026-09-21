@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   parseRunnerPortalRegistry,
+  parseVmDisplayEndpoint,
   repairWindowsPath,
   resolveWindowsSchtasks,
   resolveWindowsShell,
@@ -11,6 +12,8 @@ import {
   scheduledTaskStartBoundary,
   runnerSystemdUnit,
   serializeRunnerPortalRegistry,
+  vmTerminalArgv,
+  vmTerminalRequest,
   windowsPowerShellPath,
   windowsRunnerEnvironment,
   windowsSystem32,
@@ -289,5 +292,63 @@ describe("Runner command AWS environment", () => {
       }),
     ).toEqual({ ...credentials, AWS_EC2_METADATA_DISABLED: "true" });
     expect(process.env).toEqual(before);
+  });
+});
+
+describe("Mac VM streams", () => {
+  test("a VM terminal request names only a VM, a guest user, and a directory", () => {
+    expect(
+      vmTerminalRequest({
+        name: "sbx-bks-1",
+        user: "admin",
+        cwd: "/home/ubuntu/worktrees/app",
+      }),
+    ).toEqual({
+      name: "sbx-bks-1",
+      user: "admin",
+      cwd: "/home/ubuntu/worktrees/app",
+    });
+    for (const bad of [
+      { name: "opensession-base", user: "admin", cwd: "/x" },
+      { name: "sbx-1; rm -rf /", user: "admin", cwd: "/x" },
+      { name: "sbx-1", user: "root user", cwd: "/x" },
+      { name: "sbx-1", user: "admin", cwd: "relative" },
+      { name: "sbx-1", user: "admin", cwd: "/x\nrm" },
+      null,
+    ])
+      expect(() => vmTerminalRequest(bad)).toThrow(/Invalid Mac VM terminal/);
+  });
+
+  test("the guest shell is ssh with the host-local key into the workspace", () => {
+    const argv = vmTerminalArgv(
+      { name: "sbx-bks-1", user: "admin", cwd: "/home/ubuntu/it's here" },
+      "192.168.64.3",
+      "/Users/runner",
+    );
+    expect(argv.slice(0, 4)).toEqual([
+      "ssh",
+      "-tt",
+      "-i",
+      "/Users/runner/.opensession-tart/id_ed25519",
+    ]);
+    expect(argv).toContain("BatchMode=yes");
+    expect(argv).toContain("admin@192.168.64.3");
+    expect(argv.at(-1)).toBe(
+      "cd '/home/ubuntu/it'\\''s here' 2>/dev/null; if command -v zsh >/dev/null 2>&1; then exec zsh -il; else exec bash -il; fi",
+    );
+  });
+
+  test("the display endpoint is the latest loopback VNC line of the VM log", () => {
+    const log = [
+      "VNC server is running at vnc://:first-boot@127.0.0.1:61790",
+      "Stopping VM...",
+      "VNC server is running at vnc://:second-boot@127.0.0.1:61792",
+    ].join("\n");
+    expect(parseVmDisplayEndpoint(log)).toEqual({
+      port: 61792,
+      password: "second-boot",
+    });
+    expect(parseVmDisplayEndpoint("booting")).toBeNull();
+    expect(parseVmDisplayEndpoint("vnc://:pw@192.168.64.1:5900")).toBeNull();
   });
 });

@@ -90,6 +90,7 @@ import {
   sandboxPortalRelayMessage,
   sandboxPortalRelayOpen,
 } from "./sandbox-portal-relay";
+import { vmDisplayClose, vmDisplayMessage, vmDisplayOpen } from "./vm-display";
 import { type Sandbox } from "./sandbox";
 import {
   findSessionAsync,
@@ -569,6 +570,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
     // Runner channels are not UI clients either (runner-ws.ts).
     if (runnerWsOpen(ws)) return;
     if (sandboxPortalRelayOpen(ws)) return;
+    // A Mac VM display viewer is a byte stream, not a UI client (vm-display.ts).
+    if (vmDisplayOpen(ws)) return;
     allClients.add(ws);
     // Hello frame: hands the client this process's bootId so a reconnect
     // can tell a real restart (bootId changed → "restarted" toast) from a
@@ -603,6 +606,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
     if (sandboxWsMessage(ws, message as any)) return;
     if (runnerWsMessage(ws, message as any)) return;
     if (sandboxPortalRelayMessage(ws, message as any)) return;
+    if (vmDisplayMessage(ws, message as any)) return;
     let msg: any;
     try {
       msg = JSON.parse(String(message));
@@ -1902,6 +1906,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
     if (sandboxWsClose(ws)) return;
     if (runnerWsClose(ws)) return;
     if (sandboxPortalRelayClose(ws)) return;
+    if (vmDisplayClose(ws)) return;
     ws.data.watchRequest = (ws.data.watchRequest ?? 0) + 1;
     allClients.delete(ws);
     stopAllWatchesForClient(ws);

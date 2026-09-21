@@ -101,6 +101,10 @@ import { startEventLoopLagMonitor } from "./src/server/system-stats";
 import { ensureWarmTemplateScheduler } from "./src/server/warm-template";
 import { handleRunnerWsUpgrade } from "./src/server/runner-ws";
 import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-relay";
+import {
+  handleVmDisplayUpgrade,
+  isVmDisplayRoute,
+} from "./src/server/vm-display";
 import { handleWorkloadIdentityRequest } from "./src/server/workload-identity";
 import {
   enrichSessionRuntime,
@@ -669,6 +673,11 @@ const server: import("bun").Server<WSClientData> = hotServe({
     }
     if (path === "/sandbox-portal-ws") {
       return handleSandboxPortalRelayUpgrade(req, server, path);
+    }
+    // A signed-in viewer of a Mac VM's display (the Desktop tab): the API
+    // sign-in gate above already ran, the bridge resolves the VM's host.
+    if (isVmDisplayRoute(path)) {
+      return handleVmDisplayUpgrade(req, server, path);
     }
 
     if (path.startsWith("/run-ws/") || path === "/rpc-ws") {

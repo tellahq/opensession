@@ -806,6 +806,7 @@ export async function runnerRun(): Promise<number> {
       const persistent = new Map<string, ReturnType<typeof Bun.spawn>>();
       const portalSockets = new Map<string, WebSocket>();
       const terminals = new Map<string, RunnerTerminalProcess>();
+      const displays = new Map<string, VmDisplaySocket>();
 
       socket.addEventListener("open", async () => {
         attempt = 0;
@@ -924,6 +925,15 @@ export async function runnerRun(): Promise<number> {
           await handleRunnerTerminal(socket, terminals, msg);
           return;
         }
+        if (
+          ["vm_display_open", "vm_display_send", "vm_display_close"].includes(
+            msg?.t,
+          ) &&
+          msg.version === 1
+        ) {
+          handleVmDisplay(socket, displays, msg);
+          return;
+        }
         if (msg?.t !== "exec" || msg.version !== 1 || !msg.operationToken)
           return;
 
@@ -1017,6 +1027,12 @@ export async function runnerRun(): Promise<number> {
             proc.kill();
           } catch {}
         }
+        for (const display of displays.values()) {
+          try {
+            display.end();
+          } catch {}
+        }
+        displays.clear();
         resolve();
       });
 
@@ -2013,22 +2029,34 @@ async function handleRunnerTerminal(
   }
   const operationToken = String(msg.operationToken || "");
   try {
-    const workspacePath =
-      typeof msg.workspacePath === "string" ? msg.workspacePath : "";
-    if (
-      !workspacePath ||
-      workspacePath.includes("\0") ||
-      !existsSync(workspacePath)
-    )
-      throw new Error("Invalid Runner terminal workspace.");
     if (terminals.has(id)) throw new Error("Runner terminal already exists.");
-    const shell =
-      platform() === "win32"
-        ? resolveWindowsShell()
-        : process.env.SHELL || "/bin/bash";
-    const argv = platform() === "win32" ? [shell, "-NoLogo"] : [shell, "-il"];
+    // A shell inside a Mac VM this Runner hosts: the PTY runs ssh on this
+    // machine, into the guest, with the host-local key the VM preparation
+    // installed. The workspace then lives in the guest, not on this disk.
+    const vm = msg.vm ? vmTerminalRequest(msg.vm) : null;
+    let argv: string[];
+    let cwd: string;
+    if (vm) {
+      argv = vmTerminalArgv(vm, await tartGuestAddress(vm.name));
+      cwd = process.env.HOME || "/tmp";
+    } else {
+      const workspacePath =
+        typeof msg.workspacePath === "string" ? msg.workspacePath : "";
+      if (
+        !workspacePath ||
+        workspacePath.includes("\0") ||
+        !existsSync(workspacePath)
+      )
+        throw new Error("Invalid Runner terminal workspace.");
+      const shell =
+        platform() === "win32"
+          ? resolveWindowsShell()
+          : process.env.SHELL || "/bin/bash";
+      argv = platform() === "win32" ? [shell, "-NoLogo"] : [shell, "-il"];
+      cwd = workspacePath;
+    }
     const proc = Bun.spawn(argv, {
-      cwd: workspacePath,
+      cwd,
       env: { ...runnerEnvironment(), TERM: "xterm-256color" },
       terminal: {
         cols: terminalSize(msg.cols, 100, 20, 500),
@@ -2058,7 +2086,7 @@ async function handleRunnerTerminal(
         t: "terminal_ready",
         id,
         operationToken,
-        cwd: workspacePath,
+        cwd: vm ? vm.cwd : cwd,
       }),
     );
   } catch (error) {
@@ -2073,6 +2101,207 @@ async function handleRunnerTerminal(
       );
     } catch {}
   }
+}
+
+// ── Mac VMs this Runner hosts (Tart; see the server's sandbox/adapters/tart) ──
+
+/** Where the server's Tart provider installs Tart, the guest key, and the
+ * per-VM launchd logs on this machine. */
+const TART_HOME = join(process.env.HOME || "/tmp", ".opensession-tart");
+const TART_BIN = join(TART_HOME, "tart.app", "Contents", "MacOS", "tart");
+const VM_NAME = /^sbx-[A-Za-z0-9][A-Za-z0-9._-]{0,120}$/;
+
+export interface VmTerminalRequest {
+  name: string;
+  user: string;
+  cwd: string;
+}
+
+/** The server names a VM, a guest user, and a directory; nothing else. */
+export function vmTerminalRequest(raw: unknown): VmTerminalRequest {
+  const vm =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const name =
+    typeof vm.name === "string" && VM_NAME.test(vm.name) ? vm.name : "";
+  const user =
+    typeof vm.user === "string" && /^[a-z_][a-z0-9_-]{0,31}$/.test(vm.user)
+      ? vm.user
+      : "";
+  const cwd =
+    typeof vm.cwd === "string" &&
+    vm.cwd.startsWith("/") &&
+    vm.cwd.length <= 1024 &&
+    !/[\0\r\n]/.test(vm.cwd)
+      ? vm.cwd
+      : "";
+  if (!name || !user || !cwd) throw new Error("Invalid Mac VM terminal.");
+  return { name, user, cwd };
+}
+
+function posixQuote(word: string): string {
+  return `'${word.replace(/'/g, `'\\''`)}'`;
+}
+
+/** ssh into the guest with the host-local key, landing in the workspace. */
+export function vmTerminalArgv(
+  vm: VmTerminalRequest,
+  address: string,
+  home = process.env.HOME || "/tmp",
+): string[] {
+  return [
+    "ssh",
+    "-tt",
+    "-i",
+    join(home, ".opensession-tart", "id_ed25519"),
+    "-o",
+    "IdentitiesOnly=yes",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "StrictHostKeyChecking=no",
+    "-o",
+    "UserKnownHostsFile=/dev/null",
+    "-o",
+    "LogLevel=ERROR",
+    "-o",
+    "ConnectTimeout=20",
+    "-o",
+    "ServerAliveInterval=30",
+    `${vm.user}@${address}`,
+    `cd ${posixQuote(vm.cwd)} 2>/dev/null; if command -v zsh >/dev/null 2>&1; then exec zsh -il; else exec bash -il; fi`,
+  ];
+}
+
+async function tartGuestAddress(name: string): Promise<string> {
+  if (!existsSync(TART_BIN))
+    throw new Error("Tart is not installed on this Runner.");
+  const proc = Bun.spawn([TART_BIN, "ip", name, "--wait", "20"], {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: runnerEnvironment(),
+  });
+  const out = await new Response(proc.stdout).text();
+  await proc.exited;
+  const address = out.trim().match(/^\d+\.\d+\.\d+\.\d+$/)?.[0];
+  if (!address) throw new Error(`Mac VM ${name} has no address.`);
+  return address;
+}
+
+/** Tart logs `VNC server is running at vnc://:<password>@127.0.0.1:<port>`
+ * when the guest's display is up; after a reboot the last line is current. */
+export function parseVmDisplayEndpoint(
+  log: string,
+): { port: number; password: string } | null {
+  const matches = [
+    ...log.matchAll(/vnc:\/\/(?:[^:@\s]*):([^@\s]*)@127\.0\.0\.1:(\d+)/g),
+  ];
+  const last = matches.at(-1);
+  if (!last) return null;
+  const port = Number(last[2]);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) return null;
+  return { port, password: decodeURIComponent(last[1]!) };
+}
+
+type VmDisplaySocket = { end(): void; write(data: Uint8Array): number };
+
+/** One viewer of a VM's display: a loopback TCP connection to the VNC port
+ * Tart opened for that VM, relayed as base64 frames. The server names only
+ * the VM; the port comes from the VM's own log on this machine. */
+function handleVmDisplay(
+  socket: WebSocket,
+  displays: Map<string, VmDisplaySocket>,
+  msg: any,
+): void {
+  const connectionId =
+    typeof msg.connectionId === "string" &&
+    /^[A-Za-z0-9_-]{8,128}$/.test(msg.connectionId)
+      ? msg.connectionId
+      : "";
+  if (!connectionId) return;
+  if (msg.t === "vm_display_close") {
+    const display = displays.get(connectionId);
+    displays.delete(connectionId);
+    try {
+      display?.end();
+    } catch {}
+    return;
+  }
+  if (msg.t === "vm_display_send") {
+    const display = displays.get(connectionId);
+    if (display && typeof msg.data === "string") {
+      try {
+        display.write(Buffer.from(msg.data, "base64"));
+      } catch {}
+    }
+    return;
+  }
+  if (msg.t !== "vm_display_open" || displays.has(connectionId)) return;
+  let finished = false;
+  const closed = (error?: string) => {
+    if (finished) return;
+    finished = true;
+    if (displays.get(connectionId)) displays.delete(connectionId);
+    try {
+      socket.send(
+        JSON.stringify({
+          t: "vm_display_closed",
+          connectionId,
+          ...(error ? { error } : {}),
+        }),
+      );
+    } catch {}
+  };
+  const name = typeof msg.vm === "string" && VM_NAME.test(msg.vm) ? msg.vm : "";
+  if (!name) {
+    closed("Invalid Mac VM name.");
+    return;
+  }
+  void (async () => {
+    try {
+      const log = join(TART_HOME, "vms", `${name}.log`);
+      if (!existsSync(log))
+        throw new Error(`Mac VM ${name} is not running on this Runner.`);
+      const endpoint = parseVmDisplayEndpoint(await Bun.file(log).text());
+      if (!endpoint)
+        throw new Error(`Mac VM ${name} has not published its display yet.`);
+      await Bun.connect({
+        hostname: "127.0.0.1",
+        port: endpoint.port,
+        socket: {
+          open(tcp) {
+            displays.set(connectionId, tcp);
+            try {
+              socket.send(
+                JSON.stringify({ t: "vm_display_opened", connectionId }),
+              );
+            } catch {}
+          },
+          data(_tcp, data) {
+            try {
+              socket.send(
+                JSON.stringify({
+                  t: "vm_display_event",
+                  connectionId,
+                  data: Buffer.from(data).toString("base64"),
+                }),
+              );
+            } catch {}
+          },
+          close() {
+            closed();
+          },
+          error(_tcp, error) {
+            closed(error instanceof Error ? error.message : String(error));
+          },
+          connectError(_tcp, error) {
+            closed(error instanceof Error ? error.message : String(error));
+          },
+        },
+      });
+    } catch (error) {
+      closed(error instanceof Error ? error.message : String(error));
+    }
+  })();
 }
 
 async function startRunHost(

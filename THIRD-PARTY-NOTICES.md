@@ -34,3 +34,10 @@ The builder also downloads, verifies, and places the complete corresponding
 `busybox-1.35.0.tar.bz2` source archive in the generated image at
 `/usr/share/opensession/source/`. This source archive is the upstream source
 for the unmodified BusyBox binary installed at `/opt/bks/busybox`.
+
+## noVNC
+
+The web frontend draws Mac VM desktops with the noVNC core library.
+Copyright (C) 2022 The noVNC authors. noVNC's core library is licensed under
+the Mozilla Public License 2.0, used unmodified from the npm package. See
+`THIRD-PARTY-LICENSES/MPL-2.0.txt`.

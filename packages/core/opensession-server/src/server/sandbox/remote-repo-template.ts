@@ -341,7 +341,9 @@ export function remoteRepoTemplateSignature(
     provider === "daytona"
       ? { baseSnapshot: settings.snapshot || "default" }
       : provider === "tart"
-        ? { image: settings.image || "default", runner: settings.runner || "" }
+        ? // Template VMs live on whichever Mac sealed them; the name stays the
+          // same across hosts so a host list edit does not orphan them.
+          { image: settings.image || "default" }
         : { machineProfile: settings.profile || "default" };
   return createHash("sha256")
     .update(

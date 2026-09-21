@@ -10,11 +10,13 @@
  */
 import type { RouteContext } from "./context";
 import { configuredIntegration } from "../config";
+import {
+  mergeSlackChannels,
+  slackChannelsForUser,
+  type SlackChannelOption,
+} from "../../agents/slack/channel-directory";
 
-export interface SlackChannelOption {
-  id: string;
-  name: string;
-}
+export type { SlackChannelOption };
 
 export function configuredSlackChannels(): SlackChannelOption[] {
   const names = configuredIntegration("slack").channelNames;
@@ -38,10 +40,38 @@ export function defaultSlackChannel(
   );
 }
 
+/** The isolated demo instance has no Slack grant, so the composer would
+ *  offer nothing to search. A short synthetic directory stands in. */
+function demoSlackChannels(): SlackChannelOption[] {
+  return [
+    "announcements",
+    "design",
+    "engineering",
+    "general",
+    "help-center",
+    "launches",
+    "proj-onboarding",
+    "proj-search",
+    "random",
+    "support",
+  ].map((name, index) => ({
+    id: `CDEMO${String(index + 1).padStart(4, "0")}`,
+    name,
+  }));
+}
+
 export async function slackChannelsPayload(
   ctx: Pick<RouteContext, "authUser">,
+  opts: {
+    /** Add every channel the caller is a member of after the configured
+     *  ones. The composer wants this; memory scopes want only the curated
+     *  list. */
+    everyChannel?: boolean;
+    /** Preferred channel, when the feature has its own setting for one. */
+    defaultChannel?: string;
+  } = {},
 ) {
-  const channels = configuredSlackChannels();
+  const configured = configuredSlackChannels();
   const caller = ctx.authUser?.login || ctx.authUser?.name || undefined;
   const { mcpUserGrantToken } = await import("../mcp-oauth");
   const grantToken = caller ? mcpUserGrantToken("slack", caller) : undefined;
@@ -58,9 +88,22 @@ export async function slackChannelsPayload(
         .includes("files:write");
     } catch {}
   }
+  const directory = !opts.everyChannel
+    ? []
+    : process.env.OPENSESSION_DEMO === "1"
+      ? demoSlackChannels()
+      : caller && grantToken
+        ? await slackChannelsForUser(caller, grantToken)
+        : [];
+  const channels = mergeSlackChannels(configured, directory);
+  const preferred =
+    opts.defaultChannel &&
+    channels.some((channel) => channel.id === opts.defaultChannel)
+      ? opts.defaultChannel
+      : defaultSlackChannel(configured) || channels[0]?.id;
   return {
     channels,
-    defaultChannel: defaultSlackChannel(channels),
+    defaultChannel: preferred,
     canUploadImages,
   };
 }

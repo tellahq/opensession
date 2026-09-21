@@ -1,10 +1,11 @@
 import {
   forgetShippedChangeAnnouncement,
   shareShippedVisualChange,
-  shippedChangeChannels,
 } from "../../agents/github/shipped-change-notify";
+import { slackChannelsPayload } from "./slack-channels";
 import { deleteSlackMessage } from "../../agents/slack/slack-api";
 import { shippedChangesChannel } from "../../agents/github/constants";
+import { suggestShippedChangeMessage } from "../shipped-change-suggestion";
 import { findSessionAsync, updateSessionFile } from "../session-cache";
 import type { SessionSlackShare } from "../types";
 import { resolvePrTarget } from "../session-repos";
@@ -15,8 +16,10 @@ import { requestUser, type RouteContext } from "./context";
 export async function handleShippedChangeRoutes(
   ctx: RouteContext,
 ): Promise<Response | undefined> {
-  const { req, path } = ctx;
-  const match = path.match(/^\/api\/sessions\/([^/]+)\/share-shipped-change$/);
+  const { req, path, url } = ctx;
+  const match = path.match(
+    /^\/api\/sessions\/([^/]+)\/share-shipped-change(\/suggestion)?$/,
+  );
   if (
     !match ||
     (req.method !== "GET" && req.method !== "POST" && req.method !== "PUT")
@@ -25,28 +28,43 @@ export async function handleShippedChangeRoutes(
   const session = await findSessionAsync(decodeURIComponent(match[1]));
   if (!session)
     return Response.json({ error: "Session not found" }, { status: 404 });
-  if (req.method === "GET") {
-    const caller = ctx.authUser?.login || ctx.authUser?.name;
-    const { mcpUserGrantToken } = await import("../mcp-oauth");
-    const slackToken = caller ? mcpUserGrantToken("slack", caller) : undefined;
-    let canUploadImages = false;
-    if (slackToken) {
-      try {
-        const response = await fetch("https://slack.com/api/auth.test", {
-          headers: { Authorization: `Bearer ${slackToken}` },
-          signal: AbortSignal.timeout(5_000),
-        });
-        canUploadImages = (response.headers.get("x-oauth-scopes") || "")
-          .split(",")
-          .map((scope) => scope.trim())
-          .includes("files:write");
-      } catch {}
-    }
-    return Response.json({
-      channels: shippedChangeChannels(),
-      defaultChannel: shippedChangesChannel(),
-      canUploadImages,
+  // The card's first draft, written from the whole session rather than the
+  // PR title. Null tells the card to keep its title-based fallback.
+  if (match[2]) {
+    if (req.method !== "GET") return;
+    const target = resolvePrTarget(
+      session,
+      url.searchParams.get("repo"),
+      url.searchParams.get("branch"),
+    );
+    if (!target)
+      return Response.json(
+        { error: "Pull request target not found" },
+        { status: 404 },
+      );
+    const pr = await prHostFor(getRepo(target.repoId)).getPrDetails(
+      target.branch,
+      target.ghRepo,
+    );
+    if (!pr)
+      return Response.json(
+        { error: "Pull request not found" },
+        { status: 404 },
+      );
+    const message = await suggestShippedChangeMessage({
+      session,
+      pr: { number: pr.number, title: pr.title, body: pr.body },
+      user: ctx.authUser?.login || ctx.authUser?.name || requestUser(ctx),
     });
+    return Response.json({ message });
+  }
+  if (req.method === "GET") {
+    return Response.json(
+      await slackChannelsPayload(ctx, {
+        everyChannel: true,
+        defaultChannel: shippedChangesChannel(),
+      }),
+    );
   }
   const body = await req.json().catch(() => ({}));
   const caller =
@@ -110,6 +128,7 @@ export async function handleShippedChangeRoutes(
       requestedBy: requestUser(ctx, body?.user),
       channel: body?.channel,
       message: body?.message,
+      caller,
       slackToken,
       screenshots: Array.isArray(body?.screenshots)
         ? body.screenshots.filter(

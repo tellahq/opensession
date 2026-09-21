@@ -66,9 +66,10 @@ describe("TranscriptBlocks shipped change action", () => {
     expect(html).toContain('aria-label="Add images"');
     expect(html).toContain('aria-label="Slack channel"');
     expect(html).toContain("border-line bg-surface");
-    // The channel picker is the app's own select (ui/select), not a bare
-    // <select> with an overlaid chevron.
-    expect(html).toContain('role="combobox"');
+    // The channel picker is the app's own searchable select (ui/combobox),
+    // not a bare <select> with an overlaid chevron.
+    expect(html).toContain("aria-haspopup=");
+    expect(html).not.toContain("<select");
     expect(html).toContain("rounded-[var(--composer-radius)]");
     expect(html).toContain("smooth-shadow-ring-soft");
     expect(html).not.toContain("rounded-xl bg-panel p-4");

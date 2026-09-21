@@ -176,13 +176,13 @@ does not exist.
 No destination channel or user is compiled into the agent. Optional destinations
 and display metadata live in `~/.opensession/config.json`:
 
-| Setting                                     | Used for                                                                                                                                                                 |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `integrations.slack.workspaceId`            | Building `app.slack.com` deep links when Slack channel references are rendered in transcripts                                                                            |
-| `integrations.slack.channelNames`           | Mapping `C…` channel IDs to names in transcripts and providing the configured Slack-channel list for feed and composer UI                                                |
-| `integrations.github.docsSyncChannel`       | Channel scanned after a docs-sync PR merges so Open Session can find its existing bot announcement and add a check reaction; this setting does not post the announcement |
-| `integrations.github.shippedChangesChannel` | Default channel for sharing merged visual changes; it must also appear in `integrations.slack.channelNames`                                                              |
-| `grafanaPoll.slackChannel`                  | Destination on each Grafana-poll automation; see [Grafana poller](integrations-misc.md#grafana-poller)                                                                   |
+| Setting                                     | Used for                                                                                                                                                                  |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `integrations.slack.workspaceId`            | Building `app.slack.com` deep links when Slack channel references are rendered in transcripts                                                                             |
+| `integrations.slack.channelNames`           | Mapping `C…` channel IDs to names in transcripts, the Slack-channel list for feed UI, and the suggested channels at the top of the Slack composer's picker                |
+| `integrations.github.docsSyncChannel`       | Channel scanned after a docs-sync PR merges so Open Session can find its existing bot announcement and add a check reaction; this setting does not post the announcement  |
+| `integrations.github.shippedChangesChannel` | Default channel for sharing merged visual changes; it must also appear in `integrations.slack.channelNames`. The picker also searches every channel the sender belongs to |
+| `grafanaPoll.slackChannel`                  | Destination on each Grafana-poll automation; see [Grafana poller](integrations-misc.md#grafana-poller)                                                                    |
 
 Slack IDs map to people through `identity.team[].slackId`; extra display-only
 mappings can go in `identity.slackNames`. Without a roster, only exact raw-ID

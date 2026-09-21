@@ -13,10 +13,14 @@ import {
 import {
   execOnRunner,
   launchRunnerHost,
+  openRunnerTerminal,
   prepareRunnerWorkspace,
+  resizeRunnerTerminal,
   runnerWsClose,
   runnerWsMessage,
   runnerWsOpen,
+  stopRunnerTerminal,
+  writeRunnerTerminal,
 } from "./runner-ws";
 
 const HOME = mkdtempSync(join(tmpdir(), "os-runner-ws-test-"));
@@ -109,6 +113,91 @@ describe("Runner WebSocket policy", () => {
       }),
     );
     await launching;
+    runnerWsClose(ws);
+  });
+
+  test("a Mac VM terminal rides the commands permission, not workspace roots", async () => {
+    const { code } = createRunnerPairing("tester");
+    const registered = registerRunner({
+      code,
+      name: "mac-mini",
+      platform: "darwin",
+      arch: "arm64",
+      address: "100.101.102.105",
+    });
+    if (!registered.ok) throw new Error(registered.error);
+    updateRunner(registered.runner.id, {
+      workspaceRoots: [],
+      permissions: { terminals: false, commands: true },
+    });
+    const sent: string[] = [];
+    const ws = {
+      data: { kind: "runner", runnerId: registered.runner.id },
+      send: (frame: string) => sent.push(frame),
+      close: () => {},
+    };
+    runnerWsOpen(ws);
+    runnerWsMessage(ws, JSON.stringify({ t: "hello", version: 1 }));
+
+    // Without a VM this is a Runner shell, which the permission refuses.
+    await expect(
+      openRunnerTerminal({
+        runnerId: registered.runner.id,
+        sessionId: "s1",
+        repo: "renderer",
+        workspacePath: "/anywhere/sessions/s1",
+      }),
+    ).rejects.toThrow(/not permitted for terminals/);
+
+    const opening = openRunnerTerminal({
+      runnerId: registered.runner.id,
+      sessionId: "s1",
+      repo: "renderer",
+      workspacePath: "/home/ubuntu/worktrees/renderer-s1",
+      vm: {
+        name: "sbx-s1",
+        user: "admin",
+        cwd: "/home/ubuntu/worktrees/renderer-s1",
+      },
+      cols: 120,
+      rows: 40,
+    });
+    const frame = JSON.parse(sent.shift()!);
+    expect(frame).toMatchObject({
+      t: "terminal_start",
+      version: 1,
+      sessionId: "s1",
+      vm: {
+        name: "sbx-s1",
+        user: "admin",
+        cwd: "/home/ubuntu/worktrees/renderer-s1",
+      },
+      cols: 120,
+      rows: 40,
+    });
+    runnerWsMessage(
+      ws,
+      JSON.stringify({
+        t: "terminal_ready",
+        id: frame.id,
+        operationToken: frame.operationToken,
+        cwd: "/home/ubuntu/worktrees/renderer-s1",
+      }),
+    );
+    expect(await opening).toEqual({
+      terminalId: frame.id,
+      cwd: "/home/ubuntu/worktrees/renderer-s1",
+    });
+
+    // Every later frame carries the protocol version, or the Runner drops it.
+    writeRunnerTerminal(registered.runner.id, frame.id, "bHM K");
+    resizeRunnerTerminal(registered.runner.id, frame.id, 80, 24);
+    stopRunnerTerminal(registered.runner.id, frame.id);
+    expect(sent.map((raw) => JSON.parse(raw))).toEqual([
+      { t: "terminal_input", id: frame.id, data: "bHM K", version: 1 },
+      { t: "terminal_resize", id: frame.id, cols: 80, rows: 24, version: 1 },
+      { t: "terminal_stop", id: frame.id, version: 1 },
+    ]);
     runnerWsClose(ws);
   });
 

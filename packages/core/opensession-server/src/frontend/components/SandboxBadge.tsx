@@ -219,6 +219,8 @@ export function SandboxBadge({
     setError(null);
     await (async () => {
       const desktop = await openSandboxDesktop(sessionId);
+      if (!desktop.url)
+        throw new Error("Open the session to watch this desktop");
       if (tab) {
         tab.opener = null;
         tab.location.href = desktop.url;

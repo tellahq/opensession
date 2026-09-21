@@ -28,6 +28,7 @@ import type {
 } from "../lib/types";
 import { modelIsCodex } from "../components/session-viewer/model-labels";
 import { suggestedShippedChangeMessage } from "../lib/shipped-change-copy";
+import { fetchShippedChangeSuggestion } from "../lib/api/shipped-changes";
 import {
   cancelComposedSlackMessageAction,
   reconnectShippedSlackAction,
@@ -87,7 +88,12 @@ export function sessionConversationAvailability({
 
 interface ShippedPresentationIdentity {
   session: UnifiedSession;
-  mergedPr?: { number?: number; title?: string };
+  mergedPr?: {
+    number?: number;
+    title?: string;
+    repo?: string;
+    branch?: string;
+  };
   shippedShare: SessionSlackShare | null;
   shareDismissed: boolean;
   shippedScreenshot?: string;
@@ -153,15 +159,61 @@ export function useShippedChangePresentation({
       ts: sentTs,
     };
   }, [shippedSentKey, sentChannelName, sentPermalink, sentAt, sentTs]);
+  // The card's draft. The title heuristic shows at once; the server writes a
+  // better one from the whole session (PR description, walkthrough, the
+  // agent's closing message) and replaces it when it lands, unless the person
+  // already started typing. Fetched only while the card is actually up: not
+  // once it is dismissed or the update has been sent.
+  const mergedPrNumber = mergedPr?.number;
+  const mergedPrRepo = mergedPr?.repo;
+  const mergedPrBranch = mergedPr?.branch;
+  const suggestionKey =
+    mergedPrNumber !== undefined && !shareDismissed && !shippedSent
+      ? `${session.id}#${mergedPrNumber}`
+      : "";
+  const [suggested, setSuggested] = useState<{
+    key: string;
+    message: string;
+  } | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  useEffect(() => {
+    if (!suggestionKey) return;
+    const controller = new AbortController();
+    setDrafting(true);
+    fetchShippedChangeSuggestion(
+      session.id,
+      { repo: mergedPrRepo, branch: mergedPrBranch },
+      controller.signal,
+    )
+      .then((result) => {
+        if (controller.signal.aborted || !result.message) return;
+        setSuggested({ key: suggestionKey, message: result.message });
+      })
+      .catch(() => {
+        // The title fallback is already on screen; nothing to report.
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDrafting(false);
+      });
+    return () => {
+      controller.abort();
+      setDrafting(false);
+    };
+  }, [suggestionKey, session.id, mergedPrRepo, mergedPrBranch]);
+  const suggestedMessage =
+    suggested && suggested.key === suggestionKey ? suggested.message : "";
   const shippedChangeShare = useMemo(() => {
     if (mergedPr?.number === undefined || shareDismissed) return undefined;
     const share: ShippedChangeShare = {
       prNumber: mergedPr.number,
       sessionId: session.id,
-      defaultMessage: suggestedShippedChangeMessage(
-        mergedPr.title || "an update",
-        session.walkthrough?.summary,
-      ),
+      defaultMessage:
+        suggestedMessage ||
+        suggestedShippedChangeMessage(
+          mergedPr.title || "an update",
+          session.walkthrough?.summary,
+        ),
+      drafting: drafting && !suggestedMessage,
       screenshot: shippedScreenshot,
       reconnectRequired,
       status,
@@ -193,6 +245,8 @@ export function useShippedChangePresentation({
     status,
     shippedSent,
     latestAssistantMessage,
+    suggestedMessage,
+    drafting,
   ]);
   return { shippedSent, shippedChangeShare };
 }

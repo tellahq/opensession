@@ -29,6 +29,10 @@
  *    echo, a dead-looking tab (bit us 2026-07-09). No published port, no
  *    extra HTTPS surface — the SDK socket terminates at opensession and the
  *    browser only ever speaks the existing tailnet-gated session WS.
+ *  - Mac VM (tart) sandbox: a Runner PTY on the Mac host that SSHes into the
+ *    guest with the host-local key (a typed `terminal_start` with `vm`; the
+ *    Runner resolves the guest address itself). The guest is reachable only
+ *    from its Mac, so the shell rides the Runner channel like a Runner shell.
  *  - Box sandbox: Box's authenticated SSH-key API installs a dedicated
  *    Open Session public key, then the host opens a normal SSH PTY. The
  *    private key remains local and is never exposed to the browser or Box.
@@ -46,6 +50,7 @@
 import { homeDir } from "./paths";
 import { existsSync } from "fs";
 import type { RemotePtyHandle, RemotePtyIo } from "./sandbox/adapters/daytona";
+import type { RunnerVmTerminal } from "./runner-ws";
 
 /** Live transport for one shell — how input/resize/teardown reach the PTY,
  *  whether it's a host process or a remote (in-sandbox) socket. */
@@ -115,7 +120,13 @@ export interface TerminalOpts {
   send: (msg: object) => void;
 }
 
-type TermTargetKind = "host" | "daytona" | "box" | "microvm" | "runner";
+type TermTargetKind =
+  | "host"
+  | "daytona"
+  | "box"
+  | "tart"
+  | "microvm"
+  | "runner";
 
 /** A shell realized as a host process wrapped in a Bun PTY (host, docker, or
  * an SSH transport such as Box). */
@@ -216,51 +227,13 @@ async function resolveTarget(
 ): Promise<TermTarget> {
   if (session?.runner && session.id && session.repo) {
     const runner = session.runner;
-    const {
-      openRunnerTerminal,
-      registerRunnerTerminalHandler,
-      resizeRunnerTerminal,
-      stopRunnerTerminal,
-      writeRunnerTerminal,
-    } = await import("./runner-ws");
-    return {
-      kind: "remote",
-      target: "runner",
-      displayCwd: runner.workspacePath,
-      connect: async (io) => {
-        const opened = await openRunnerTerminal({
-          runnerId: runner.id,
-          sessionId: session.id!,
-          repo: session.repo!,
-          workspacePath: runner.workspacePath,
-          user: session.createdBy || undefined,
-          cols: io.cols,
-          rows: io.rows,
-        });
-        const detach = registerRunnerTerminalHandler((runnerId, message) => {
-          if (runnerId !== runner.id || message.id !== opened.terminalId)
-            return;
-          if (message.t === "terminal_data" && typeof message.data === "string")
-            io.onData(Buffer.from(message.data, "base64"));
-          else if (message.t === "terminal_exit")
-            io.onExit(typeof message.code === "number" ? message.code : 0);
-        });
-        return {
-          write: (data) =>
-            writeRunnerTerminal(
-              runner.id,
-              opened.terminalId,
-              Buffer.from(data).toString("base64"),
-            ),
-          resize: (cols, rows) =>
-            resizeRunnerTerminal(runner.id, opened.terminalId, cols, rows),
-          close: async () => {
-            detach();
-            stopRunnerTerminal(runner.id, opened.terminalId);
-          },
-        };
-      },
-    };
+    return runnerPtyTarget("runner", {
+      runnerId: runner.id,
+      sessionId: session.id,
+      repo: session.repo,
+      workspacePath: runner.workspacePath,
+      user: session.createdBy || undefined,
+    });
   }
   const sb = session?.sandbox;
   if (!sb?.sandboxId || !sb.provider || sb.provider === "local") {
@@ -284,9 +257,18 @@ async function resolveTarget(
     }
 
     if (sb.provider === "tart") {
-      // The guest is reachable only from its Mac host; a relayed PTY is not
-      // built yet, so say so instead of silently opening a host shell.
-      throw new Error("Mac VM terminals are not available yet");
+      if (!session?.id || !session.repo)
+        throw new Error("Mac VM terminals need a session with a repository");
+      const { tartTerminalTarget } = await import("./sandbox/adapters/tart");
+      const guest = await tartTerminalTarget(sb.sandboxId);
+      return runnerPtyTarget("tart", {
+        runnerId: guest.runnerId,
+        sessionId: session.id,
+        repo: session.repo,
+        workspacePath: guest.vm.cwd,
+        user: session.createdBy || undefined,
+        vm: guest.vm,
+      });
     }
 
     if (sb.provider === "box" && sandboxProviderConfigured("box")) {
@@ -321,6 +303,62 @@ async function resolveTarget(
     );
   }
   return hostShellTarget(session);
+}
+
+/** A PTY the Runner owns: in its managed session workspace, or (with `vm`)
+ * inside a Mac VM it hosts. Frames ride the Runner channel both ways. */
+function runnerPtyTarget(
+  target: "runner" | "tart",
+  input: {
+    runnerId: string;
+    sessionId: string;
+    repo: string;
+    workspacePath: string;
+    user?: string;
+    vm?: RunnerVmTerminal;
+  },
+): RemoteTarget {
+  return {
+    kind: "remote",
+    target,
+    displayCwd: input.workspacePath,
+    connect: async (io) => {
+      const {
+        openRunnerTerminal,
+        registerRunnerTerminalHandler,
+        resizeRunnerTerminal,
+        stopRunnerTerminal,
+        writeRunnerTerminal,
+      } = await import("./runner-ws");
+      const opened = await openRunnerTerminal({
+        ...input,
+        cols: io.cols,
+        rows: io.rows,
+      });
+      const detach = registerRunnerTerminalHandler((runnerId, message) => {
+        if (runnerId !== input.runnerId || message.id !== opened.terminalId)
+          return;
+        if (message.t === "terminal_data" && typeof message.data === "string")
+          io.onData(Buffer.from(message.data, "base64"));
+        else if (message.t === "terminal_exit")
+          io.onExit(typeof message.code === "number" ? message.code : 0);
+      });
+      return {
+        write: (data) =>
+          writeRunnerTerminal(
+            input.runnerId,
+            opened.terminalId,
+            Buffer.from(data).toString("base64"),
+          ),
+        resize: (cols, rows) =>
+          resizeRunnerTerminal(input.runnerId, opened.terminalId, cols, rows),
+        close: async () => {
+          detach();
+          stopRunnerTerminal(input.runnerId, opened.terminalId);
+        },
+      };
+    },
+  };
 }
 
 /**

@@ -3,7 +3,11 @@
  *
  * The server never dials a Runner.  Every command carries a one-use operation
  * token and is bounded in time/output; the channel is deliberately HTTP/agent
- * control only and is not a generic network tunnel.
+ * control only and is not a generic network tunnel. The two byte streams it
+ * does carry are narrow and typed: a PTY the Runner opens itself (in a managed
+ * workspace, or inside a Mac VM it hosts) and the display of such a VM, which
+ * the Runner reaches on its own loopback. Neither lets the server name a host
+ * or a port.
  */
 
 import { randomBytes } from "crypto";
@@ -64,6 +68,13 @@ type RunnerTerminalFrameHandler = (
 const terminalFrameHandlers: Set<RunnerTerminalFrameHandler> =
   (g.__opensessionRunnerTerminalFrameHandlers ??=
     new Set()) as Set<RunnerTerminalFrameHandler>;
+type RunnerDisplayFrameHandler = (
+  runnerId: string,
+  message: Record<string, unknown>,
+) => void;
+const displayFrameHandlers: Set<RunnerDisplayFrameHandler> =
+  (g.__opensessionRunnerDisplayFrameHandlers ??=
+    new Set()) as Set<RunnerDisplayFrameHandler>;
 let executionCounter = 0;
 
 export type RunnerExecResult = {
@@ -105,6 +116,9 @@ function publishRunnerTerminalFrame(
   }
 }
 
+/** Input, resize, and stop for an open terminal. The Runner accepts a
+ * terminal frame only when it carries the protocol version, like every other
+ * frame the server sends. */
 function sendRunnerTerminalFrame(
   runnerId: string,
   message: Record<string, unknown>,
@@ -112,12 +126,66 @@ function sendRunnerTerminalFrame(
   const connection = connections.get(runnerId);
   if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) return;
   try {
-    connection.ws.send(JSON.stringify(message));
+    connection.ws.send(
+      JSON.stringify({ ...message, version: PROTOCOL_VERSION }),
+    );
   } catch {}
 }
 
-/** Open an interactive PTY in the exact session workspace. This is a typed
- * control-channel operation, not an SSH fallback or generic remote shell. */
+/** The display of a Mac VM the Runner hosts, relayed frame by frame. The
+ * Runner resolves the VM's own loopback VNC port from the VM's name; the
+ * server never names an address. Connection ids are random and scoped to one
+ * browser socket (vm-display.ts). */
+export function registerRunnerDisplayFrameHandler(
+  handler: RunnerDisplayFrameHandler,
+): () => void {
+  displayFrameHandlers.add(handler);
+  return () => displayFrameHandlers.delete(handler);
+}
+
+export function sendRunnerDisplayFrame(
+  runnerId: string,
+  message: Record<string, unknown>,
+): boolean {
+  const connection = connections.get(runnerId);
+  if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
+    return false;
+  try {
+    connection.ws.send(
+      JSON.stringify({ ...message, version: PROTOCOL_VERSION }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function publishRunnerDisplayFrame(
+  runnerId: string,
+  message: Record<string, unknown>,
+): void {
+  for (const handler of displayFrameHandlers) {
+    try {
+      handler(runnerId, message);
+    } catch (error) {
+      console.warn("[runners] Display frame handler failed:", error);
+    }
+  }
+}
+
+/** A shell inside a Mac VM the Runner hosts (Tart). The Runner resolves the
+ * guest address from the VM name and connects with its own host-local key. */
+export interface RunnerVmTerminal {
+  name: string;
+  user: string;
+  cwd: string;
+}
+
+/** Open an interactive PTY in the exact session workspace, or inside a Mac VM
+ * the Runner hosts (`vm`; the workspace then lives in the guest, and the
+ * operation rides the same `commands` permission the VM itself needs). This
+ * is a typed control-channel operation, not an SSH fallback or generic remote
+ * shell. */
 export async function openRunnerTerminal(input: {
   runnerId: string;
   sessionId: string;
@@ -126,6 +194,7 @@ export async function openRunnerTerminal(input: {
   user?: string;
   cols?: number;
   rows?: number;
+  vm?: RunnerVmTerminal;
 }): Promise<{ terminalId: string; cwd: string }> {
   const connection = connections.get(input.runnerId);
   if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
@@ -136,13 +205,16 @@ export async function openRunnerTerminal(input: {
     !runnerAllowed(runner, {
       user: input.user,
       repo: input.repo,
-      permission: "terminals",
+      permission: input.vm ? "commands" : "terminals",
     })
   )
     throw new Error(
       `Runner ${runner?.name ?? input.runnerId} is not permitted for terminals`,
     );
-  if (!runnerOwnsWorkspace(runner, input.workspacePath, input.sessionId))
+  if (
+    !input.vm &&
+    !runnerOwnsWorkspace(runner, input.workspacePath, input.sessionId)
+  )
     throw new Error("Runner terminal workspace is outside its managed roots");
   const id = `rt${++executionCounter}-${randomBytes(12).toString("base64url")}`;
   const operationToken = randomBytes(18).toString("base64url");
@@ -152,6 +224,7 @@ export async function openRunnerTerminal(input: {
     session_id: input.sessionId,
     repo: input.repo,
     operation_id: id,
+    ...(input.vm ? { vm: input.vm.name } : {}),
   });
   const result = await new Promise<RunnerExecResult>((resolve) => {
     const timer = setTimeout(() => {
@@ -182,6 +255,7 @@ export async function openRunnerTerminal(input: {
           workspacePath: input.workspacePath,
           cols: input.cols,
           rows: input.rows,
+          ...(input.vm ? { vm: input.vm } : {}),
         }),
       );
     } catch (error) {
@@ -905,6 +979,11 @@ export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
     case "terminal_data":
     case "terminal_exit":
       publishRunnerTerminalFrame(runnerId, message as Record<string, unknown>);
+      return true;
+    case "vm_display_opened":
+    case "vm_display_event":
+    case "vm_display_closed":
+      publishRunnerDisplayFrame(runnerId, message as Record<string, unknown>);
       return true;
   }
   return true;

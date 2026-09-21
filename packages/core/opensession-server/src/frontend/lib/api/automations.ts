@@ -385,11 +385,32 @@ export type SandboxConnectionState =
   | "needs_attention"
   | "disabled";
 
+/** A Mac that hosts Mac VM Sandboxes: a paired macOS Runner and its VM
+ *  budget. */
+export interface SandboxHostSetting {
+  runner: string;
+  maxVms?: number;
+}
+
+export interface SandboxConnectionSettings {
+  region?: string;
+  snapshot?: string;
+  cpu?: number;
+  memoryMb?: number;
+  image?: string;
+  /** Mac VM: the older single-host form; `hosts` supersedes it. */
+  runner?: string;
+  maxVms?: number;
+  /** Mac VM: every Mac the connection may place a VM on. */
+  hosts?: SandboxHostSetting[];
+  [key: string]: string | number | boolean | SandboxHostSetting[] | undefined;
+}
+
 export interface SandboxConnectionInfo {
   id: string;
   provider: "daytona" | "box" | "tart";
   enabled: boolean;
-  settings: Record<string, string | number | boolean | undefined>;
+  settings: SandboxConnectionSettings;
   qualification?: {
     status: "checking" | "ready" | "failed";
     adapterSignature: string;

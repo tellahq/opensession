@@ -49,6 +49,26 @@ export function fetchShippedChangeChannels(sessionId: string): Promise<{
   );
 }
 
+/**
+ * The card's first draft, written from the whole session (PR description,
+ * walkthrough, the agent's closing message) rather than the PR title. A null
+ * message means the caller keeps its title-based fallback.
+ */
+export function fetchShippedChangeSuggestion(
+  sessionId: string,
+  target: { repo?: string; branch?: string },
+  signal?: AbortSignal,
+): Promise<{ message: string | null }> {
+  const query = new URLSearchParams();
+  if (target.repo) query.set("repo", target.repo);
+  if (target.branch) query.set("branch", target.branch);
+  const suffix = query.size ? `?${query}` : "";
+  return request(
+    `/sessions/${encodeURIComponent(sessionId)}/share-shipped-change/suggestion${suffix}`,
+    { signal, label: "Couldn't draft the Slack message" },
+  );
+}
+
 export async function reconnectSlack(): Promise<void> {
   const popup = window.open("about:blank", "_blank");
   const result = await request<{ url: string }>(
