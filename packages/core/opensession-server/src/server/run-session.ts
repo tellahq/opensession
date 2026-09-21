@@ -134,6 +134,7 @@ import {
 } from "./workspace-model-presets";
 import { getTitleOverride } from "./title-overrides";
 import {
+  applyPendingWorkspaceTitle,
   ensureGeneratedTitle,
   getGeneratedTitleAsync,
   refreshGeneratedTitle,
@@ -3129,7 +3130,12 @@ async function runSessionPromptInner(
   ) {
     const provisional = !session.title || session.title === "New session";
     const titleUser = user || session.startedBy || undefined;
-    if (provisional || !(await getGeneratedTitleAsync(session.id))) {
+    const generatedTitle = await getGeneratedTitleAsync(session.id);
+    if (generatedTitle)
+      void applyPendingWorkspaceTitle(session.id, generatedTitle).catch(
+        () => {},
+      );
+    if (provisional || !generatedTitle) {
       const titleSource = await nameKnownSessionReferencesForTitle(
         provisional ? content : session.title,
       );

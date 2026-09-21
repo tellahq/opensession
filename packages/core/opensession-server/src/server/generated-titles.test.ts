@@ -6,7 +6,7 @@
  * once. The registry path is pinned at module load, so the scratch store env
  * is set before the import.
  */
-import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, expect, spyOn, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -418,10 +418,12 @@ test("the pending workspace marker names the workspace once, only while it wears
   let workspaceName = "New workspace";
   const renames: string[] = [];
   const io = {
-    async claimMarker() {
-      const claimed = marker;
-      marker = null;
-      return claimed;
+    async readMarker() {
+      return marker;
+    },
+    async clearMarker(_id: string, expected: { id: string; name: string }) {
+      if (marker?.id === expected.id && marker.name === expected.name)
+        marker = null;
     },
     async getWorkspace() {
       return { name: workspaceName };
@@ -459,6 +461,11 @@ test("the pending workspace marker names the workspace once, only while it wears
       },
     }),
   ).toBe(false);
+  expect(marker).toEqual({ id: "ws-1", name: "Chosen by hand" });
+  expect(
+    await titles.applyPendingWorkspaceTitle(id, "Add onboarding flow", io),
+  ).toBe(true);
+  expect(marker).toBeNull();
 });
 
 test("revisiting an earlier task after another task can refresh its title again", async () => {
@@ -473,4 +480,128 @@ test("revisiting an earlier task after another task can refresh its title again"
   expect(
     await titles.refreshGeneratedTitle(id, "Fix login tests", { session }),
   ).toBe("Fix login tests");
+});
+
+test("a persisted title retries failed workspace naming through the catalog sweep without another model call", async () => {
+  const {
+    SessionKernelStore,
+    __setSessionKernelStoreForTest,
+    sessionMetadata,
+  } = await import("./session-kernel");
+  const { SessionListStore, __setSessionListStoreForTest } =
+    await import("./session-list-store");
+  const { updateSessionFile } = await import("./session-cache");
+  const workspaces = await import("./workspaces");
+  const store = new SessionKernelStore(":memory:");
+  const previous = __setSessionKernelStoreForTest(store);
+  const index = new SessionListStore(":memory:");
+  const previousIndex = __setSessionListStoreForTest(index);
+  let restoreRename: (() => void) | undefined;
+  try {
+    const id = sessionId();
+    const workspace = await workspaces.createWorkspace({
+      name: "Workspace",
+      createdBy: "Alex",
+    });
+    await updateSessionFile(id, () => ({
+      id,
+      claudeSessionId: "",
+      branch: "",
+      worktreeDir: sessionsDir,
+      createdBy: "Alex",
+      createdAt: "2000-01-01T00:00:00.000Z",
+      lastActivity: "2000-01-01T00:00:00.000Z",
+      title: "Add onboarding flow",
+      workspaceId: workspace.id,
+      pendingWorkspaceTitle: { id: workspace.id, name: workspace.name },
+    }));
+    await sessionMetadata({ op: "mark_catalog_complete" });
+    const rename = spyOn(workspaces, "updateWorkspace").mockRejectedValue(
+      new Error("catalog temporarily unavailable"),
+    );
+    restoreRename = () => rename.mockRestore();
+    answer = async () => "Add onboarding flow";
+    expect(await titles.ensureGeneratedTitle(id, "Please add onboarding")).toBe(
+      "Add onboarding flow",
+    );
+    expect(titles.getGeneratedTitle(id)).toBe("Add onboarding flow");
+    const doc = () =>
+      readFile(join(sessionsDir, `${id}.json`), "utf8").then(JSON.parse);
+    expect((await doc()).pendingWorkspaceTitle).toEqual({
+      id: workspace.id,
+      name: "Workspace",
+    });
+    expect((await workspaces.getWorkspace(workspace.id))?.name).toBe(
+      "Workspace",
+    );
+    // Existing titles, even outside the normal three-day window, remain retryable.
+    expect(await titles.sweepCandidates()).toContainEqual({
+      id,
+      title: "Add onboarding flow",
+    });
+    restoreRename();
+    restoreRename = undefined;
+    await titles.ensureGeneratedTitle(id, "Please add onboarding");
+    expect(calls).toHaveLength(1);
+    expect((await workspaces.getWorkspace(workspace.id))?.name).toBe(
+      "Add onboarding flow",
+    );
+    expect((await doc()).pendingWorkspaceTitle).toBeUndefined();
+    expect(await titles.sweepCandidates()).not.toContainEqual({
+      id,
+      title: "Add onboarding flow",
+    });
+  } finally {
+    restoreRename?.();
+    __setSessionKernelStoreForTest(previous);
+    __setSessionListStoreForTest(previousIndex);
+    workspaces.__resetWorkspaceProjectionForTest();
+    store.close();
+    index.close();
+  }
+});
+
+test("workspace read and marker-clear failures retain retry intent without renaming twice", async () => {
+  const id = sessionId();
+  let marker: { id: string; name: string } | null = {
+    id: "ws-retry",
+    name: "Workspace",
+  };
+  let workspaceName = "Workspace";
+  let failRead = true;
+  let failClear = true;
+  let renames = 0;
+  const io = {
+    async readMarker() {
+      return marker;
+    },
+    async clearMarker() {
+      if (failClear) throw new Error("metadata unavailable");
+      marker = null;
+    },
+    async getWorkspace() {
+      if (failRead) throw new Error("catalog unavailable");
+      return { name: workspaceName };
+    },
+    async renameWorkspace(_id: string, name: string, expected: string) {
+      if (workspaceName !== expected) return false;
+      workspaceName = name;
+      renames++;
+      return true;
+    },
+  };
+  expect(
+    await titles.applyPendingWorkspaceTitle(id, "Add onboarding flow", io),
+  ).toBe(false);
+  expect(marker).not.toBeNull();
+  failRead = false;
+  expect(
+    await titles.applyPendingWorkspaceTitle(id, "Add onboarding flow", io),
+  ).toBe(false);
+  expect(marker).not.toBeNull();
+  expect(workspaceName).toBe("Add onboarding flow");
+  failClear = false;
+  await titles.applyPendingWorkspaceTitle(id, "Add onboarding flow", io);
+  expect(marker).toBeNull();
+  expect(renames).toBe(1);
 });

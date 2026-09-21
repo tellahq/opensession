@@ -16,8 +16,8 @@
  */
 import { catalogNativeSessions } from "./session-catalog-read";
 import { readFileSync, existsSync, statSync } from "fs";
-import { readFile, stat } from "fs/promises";
-import { writeJsonAtomicAsync } from "./shared/atomic-write";
+import { readFile } from "fs/promises";
+import { writeGeneratedTitleRegistry } from "./generated-title-registry";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { oneShot as runOneShot, type OneShotOpts } from "./one-shot";
 import { getTitleOverride, getTitleOverrideAsync } from "./title-overrides";
@@ -84,21 +84,14 @@ export async function getGeneratedTitleAsync(
 
 let writeChain: Promise<void> = Promise.resolve();
 
-/** Merge one title into the whole-map registry. Writes are chained; entries
- * on disk win over the cache (a sibling process may have written since we
- * last read) and the cache follows only a write that landed. */
+/** Bound local writers and serialize all gateway generations on the same lock. */
 function setGeneratedTitle(id: string, title: string): Promise<void> {
   const write = writeChain.then(async () => {
-    let onDisk: Record<string, string> = {};
-    try {
-      onDisk = JSON.parse(await readFile(REGISTRY_PATH, "utf-8"));
-    } catch {}
-    const next = { ...cache, ...onDisk, [id]: title };
-    await writeJsonAtomicAsync(REGISTRY_PATH, next);
-    cache = next;
-    try {
-      cacheMtimeMs = (await stat(REGISTRY_PATH)).mtimeMs;
-    } catch {}
+    await writeGeneratedTitleRegistry(REGISTRY_PATH, id, title);
+    // Another process may have merged more titles too. Reload rather than
+    // installing a snapshot from before the cross-process write.
+    cache = null;
+    lastStatAt = 0;
   });
   writeChain = write.catch(() => {});
   return write;
@@ -176,8 +169,12 @@ export async function ensureGeneratedTitle(
   if (!source) return null;
   return scheduleTitleJob(id, async () => {
     // A parked duplicate (sweep + prompt) or a rename since the request.
-    if ((await getGeneratedTitleAsync(id)) || (await getTitleOverrideAsync(id)))
+    const existing = await getGeneratedTitleAsync(id);
+    if (existing) {
+      await applyPendingWorkspaceTitle(id, existing);
       return null;
+    }
+    if (await getTitleOverrideAsync(id)) return null;
     // Desk sessions keep their fixed title (direct file read — importing the
     // sessions cache here would be an import cycle).
     if ((await readSessionDoc(id))?.desk) return null;
@@ -335,8 +332,11 @@ export async function refreshGeneratedTitle(
 export type PendingWorkspaceTitle = { id: string; name: string };
 
 export type PendingWorkspaceTitleIO = {
-  /** Atomically read and clear the marker on the session document. */
-  claimMarker(sessionId: string): Promise<PendingWorkspaceTitle | null>;
+  readMarker(sessionId: string): Promise<PendingWorkspaceTitle | null>;
+  clearMarker(
+    sessionId: string,
+    expected: PendingWorkspaceTitle,
+  ): Promise<void>;
   getWorkspace(id: string): Promise<{ name: string } | null>;
   renameWorkspace(
     id: string,
@@ -348,18 +348,18 @@ export type PendingWorkspaceTitleIO = {
 function defaultPendingWorkspaceTitleIO(): PendingWorkspaceTitleIO {
   // Dynamic imports: a static import of the session cache would be a cycle.
   return {
-    async claimMarker(sessionId) {
-      // Most sessions carry no marker: check the file before paying a write.
-      if (!(await readSessionDoc(sessionId))?.pendingWorkspaceTitle)
-        return null;
+    async readMarker(sessionId) {
+      return (await readSessionDoc(sessionId))?.pendingWorkspaceTitle ?? null;
+    },
+    async clearMarker(sessionId, expected) {
       const { updateSessionFile } = await import("./session-cache");
-      let marker: PendingWorkspaceTitle | null = null;
       await updateSessionFile(sessionId, (data) => {
         const { pendingWorkspaceTitle, ...rest } = data;
-        marker = pendingWorkspaceTitle ?? null;
-        return pendingWorkspaceTitle ? rest : data;
+        return pendingWorkspaceTitle?.id === expected.id &&
+          pendingWorkspaceTitle.name === expected.name
+          ? rest
+          : data;
       });
-      return marker;
     },
     async getWorkspace(id) {
       const { getWorkspace } = await import("./workspaces");
@@ -373,20 +373,29 @@ function defaultPendingWorkspaceTitleIO(): PendingWorkspaceTitleIO {
   };
 }
 
-/** Name the marked workspace after the session's first generated title. The
- * marker is claimed (cleared) first so two results can never rename twice.
- * Fail-soft: resolves true only when the workspace was renamed. */
+/** Keep retry intent until the conditional rename lands or a manual name wins.
+ * Replays after a successful rename are harmless: the expected name no longer
+ * matches. Fail-soft: catalog errors leave the marker for a prompt or sweep. */
 export async function applyPendingWorkspaceTitle(
   sessionId: string,
   title: string,
   io: PendingWorkspaceTitleIO = defaultPendingWorkspaceTitleIO(),
 ): Promise<boolean> {
   try {
-    const marker = await io.claimMarker(sessionId);
+    const marker = await io.readMarker(sessionId);
     if (!marker?.id || typeof marker.name !== "string") return false;
     const current = await io.getWorkspace(marker.id);
-    if (!current || current.name !== marker.name) return false;
-    return await io.renameWorkspace(marker.id, title, marker.name);
+    if (!current) return false;
+    if (current.name !== marker.name) {
+      await io.clearMarker(sessionId, marker);
+      return false;
+    }
+    const renamed = await io.renameWorkspace(marker.id, title, marker.name);
+    // A lost CAS can mean a human renamed the workspace between read and write.
+    const after = renamed ? null : await io.getWorkspace(marker.id);
+    if (renamed || (after && after.name !== marker.name))
+      await io.clearMarker(sessionId, marker);
+    return renamed;
   } catch (e) {
     console.warn(
       `[generated-titles] could not name workspace for ${sessionId}:`,
@@ -435,8 +444,19 @@ export async function sweepCandidates(): Promise<
   for (const d of await catalogNativeSessions()) {
     const id = d.id;
     if (!/^(os|bks)-[0-9a-f]{8}-/.test(id)) continue;
-    if (getGeneratedTitle(id) || getTitleOverride(id)) continue;
     if (d.desk || d.goalId || d.automationId) continue;
+    const generated = getGeneratedTitle(id);
+    if (generated && d.pendingWorkspaceTitle) {
+      // A title can land before its workspace rename. Retry that durable marker
+      // even after the ordinary title-generation age window has elapsed.
+      out.push({
+        id,
+        title: generated,
+        created: Date.parse(d.createdAt ?? "") || 0,
+      });
+      continue;
+    }
+    if (generated || getTitleOverride(id)) continue;
     const title = typeof d.title === "string" ? d.title.trim() : "";
     if (!title || title === "New session" || title.includes(" · ")) continue;
     const created = Date.parse(d.createdAt ?? "");
