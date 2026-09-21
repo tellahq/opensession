@@ -204,6 +204,39 @@ async function nodeCenter(node) {
   };
 }
 
+async function stableNodeCenter(node) {
+  const objectId = await resolveNode(node);
+  await send("Runtime.callFunctionOn", {
+    objectId,
+    functionDeclaration:
+      "function () { this.scrollIntoView({ block: 'center', inline: 'center' }); }",
+  });
+
+  const deadline = Date.now() + timeout;
+  let previous;
+  while (Date.now() <= deadline) {
+    const center = await nodeCenter(node);
+    if (
+      previous &&
+      Math.abs(center.x - previous.x) < 0.5 &&
+      Math.abs(center.y - previous.y) < 0.5
+    ) {
+      const hit = await send("Runtime.callFunctionOn", {
+        objectId,
+        functionDeclaration:
+          "function (x, y) { const hit = document.elementFromPoint(x, y); return hit === this || this.contains(hit); }",
+        arguments: [{ value: center.x }, { value: center.y }],
+        returnByValue: true,
+      });
+      if (hit?.result?.value === true) return center;
+      fail("target is not exposed at its clickable point");
+    }
+    previous = center;
+    await Bun.sleep(100);
+  }
+  fail("target did not stop moving before the click timeout");
+}
+
 /** Move the mouse over the node without pressing: opens hover-only UI such
  * as tooltips. */
 async function hoverNode(node) {
@@ -212,7 +245,7 @@ async function hoverNode(node) {
 }
 
 async function clickNode(node) {
-  const { x, y } = await nodeCenter(node);
+  const { x, y } = await stableNodeCenter(node);
   await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
   await send("Input.dispatchMouseEvent", {
     type: "mousePressed",
