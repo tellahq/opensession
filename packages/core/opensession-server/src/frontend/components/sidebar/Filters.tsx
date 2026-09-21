@@ -1,3 +1,9 @@
+import { mobileFilterBtn } from "../../lib/app-header-classes";
+import {
+  SIDEBAR_HEADER_BTN,
+  SIDEBAR_HEADER_BTN_DESKTOP,
+  SIDEBAR_HOVER_LAYER,
+} from "../../lib/sidebar-classes";
 import type { FilterState } from "../../lib/sidebar-filter";
 import {
   DENSITY_OPTIONS,
@@ -26,8 +32,9 @@ import {
 } from "../../ui/setting-row";
 import { SwitchIndicator } from "../../ui/switch";
 import { cn } from "../../ui/cn";
+import { Tooltip } from "../../ui/tooltip";
 import { RepoTile, repoLabel } from "../RepoTile";
-import { IconChevronRight, IconRepo } from "../icons";
+import { IconChevronRight, IconFilter, IconRepo } from "../icons";
 import {
   GROUP_BY_OPTIONS,
   LAST_USED_TIME_OPTIONS,
@@ -100,6 +107,67 @@ function FilterSubmenu<Value extends string>({
   );
 }
 
+export function SidebarFilterControl({
+  variant,
+  filter,
+  repos,
+  people,
+  currentUser,
+  onChange,
+}: {
+  variant: "desktop" | "phone";
+  filter: FilterState;
+  repos: string[];
+  people: Array<{ key: string; label: string }>;
+  currentUser: string;
+  onChange: (patch: Partial<FilterState>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
+  const button = (
+    <button
+      ref={setAnchor}
+      className={
+        variant === "phone"
+          ? mobileFilterBtn(open)
+          : cn(
+              SIDEBAR_HEADER_BTN,
+              SIDEBAR_HEADER_BTN_DESKTOP,
+              "inline-flex items-center justify-center",
+              SIDEBAR_HOVER_LAYER,
+              open && "border-line-strong bg-pressed",
+              open ? "text-fg" : "text-dim hover:text-fg",
+            )
+      }
+      aria-label="Group, filter & sort"
+      onClick={() => setOpen((current) => !current)}
+    >
+      <IconFilter size={22} />
+    </button>
+  );
+
+  return (
+    <>
+      {variant === "desktop" ? (
+        <Tooltip label="Group, filter & sort">{button}</Tooltip>
+      ) : (
+        button
+      )}
+      {open && (
+        <FilterPopover
+          anchor={anchor}
+          filter={filter}
+          repos={repos}
+          people={people}
+          currentUser={currentUser}
+          onChange={onChange}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
+  );
+}
+
 export function FilterPopover({
   anchor,
   filter,
@@ -116,7 +184,6 @@ export function FilterPopover({
   currentUser: string;
   onChange: (patch: Partial<FilterState>) => void;
   onClose: () => void;
-  onCustomize: () => void;
 }) {
   // Density and last used time belong to this list, but they are stored display
   // preferences rather than part of FilterState. Keep them live here so the

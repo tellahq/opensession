@@ -7,7 +7,6 @@ import {
   SIDEBAR_HEADER_BTN,
   SIDEBAR_HEADER_BTN_DESKTOP,
   SIDEBAR_HEADER_BTN_PHONE,
-  SIDEBAR_HOVER_LAYER,
   SIDEBAR_NAV_X,
   SIDEBAR_STICKY_BAND,
   SIDEBAR_STICKY_BAND_ROW,
@@ -24,13 +23,7 @@ import { cn } from "../../ui/cn";
 import { Tooltip } from "../../ui/tooltip";
 import { useTeamPresence } from "../TeamPresence";
 import { UserAvatar } from "../UserAvatar";
-import {
-  IconChevronDown,
-  IconFilter,
-  IconPeople,
-  IconPlus,
-  IconX,
-} from "../icons";
+import { IconChevronDown, IconPeople, IconPlus, IconX } from "../icons";
 import { RepoFilterChip } from "./Filters";
 import type { SidebarToolsNavItem } from "./SidebarToolsNav";
 import { SidebarToolsNav } from "./SidebarToolsNav";
@@ -42,7 +35,6 @@ interface SidebarChromeState {
   borrowedLens: boolean;
   workspacesOpen: boolean;
   repoInline: boolean;
-  filterOpen: boolean;
   newSessionKeys: string[] | null;
 }
 
@@ -67,15 +59,12 @@ interface SidebarChromeRefs {
   titleRef: React.RefObject<HTMLElement | null>;
   actionsRef: React.RefObject<HTMLDivElement | null>;
   probeRef: React.RefObject<HTMLSpanElement | null>;
-  setFilterButton: React.Dispatch<
-    React.SetStateAction<HTMLButtonElement | null>
-  >;
 }
 
 interface SidebarChromeActions {
   navigation: NavigationActions;
-  setFilterOpen: React.Dispatch<React.SetStateAction<boolean>>;
   onToggleWorkspaces: () => void;
+  filterControl: React.ReactNode;
 }
 
 interface SidebarChromeProps {
@@ -94,7 +83,6 @@ export function SidebarChrome({
     borrowedLens,
     workspacesOpen,
     repoInline,
-    filterOpen,
     newSessionKeys,
   },
   tools: {
@@ -104,8 +92,8 @@ export function SidebarChrome({
     onSetToolVisible: setToolVisible,
   },
   identity: { filter, currentUser, personLensName, repos },
-  refs: { headRef, titleRef, actionsRef, probeRef, setFilterButton },
-  actions: { navigation, setFilterOpen, onToggleWorkspaces },
+  refs: { headRef, titleRef, actionsRef, probeRef },
+  actions: { navigation, onToggleWorkspaces, filterControl },
 }: SidebarChromeProps) {
   return (
     <div
@@ -308,41 +296,7 @@ export function SidebarChrome({
             )}
             ref={actionsRef}
           >
-            <Tooltip label="Group, filter & sort">
-              <button
-                ref={setFilterButton}
-                className={cn(
-                  SIDEBAR_HEADER_BTN,
-                  isPhone
-                    ? cn(SIDEBAR_HEADER_BTN_PHONE, "min-h-[38px] min-w-[38px]")
-                    : SIDEBAR_HEADER_BTN_DESKTOP,
-                  "inline-flex items-center justify-center",
-                  // The open state paints the stronger wash and the hover now
-                  // layers OVER it (SIDEBAR_HOVER_LAYER), so the button no
-                  // longer has to withhold its hover to keep from washing
-                  // itself back out while open.
-                  SIDEBAR_HOVER_LAYER,
-                  filterOpen && "border-line-strong bg-pressed",
-                  // A set filter is already spelled out in the header (the repo
-                  // chip) and in the popover itself, so the button stays a plain
-                  // glyph: full contrast under the pointer or while open.
-                  filterOpen ? "text-fg" : "text-dim hover:text-fg",
-                )}
-                // A Base UI tooltip is a DESCRIPTION, not a name, so an
-                // icon-only trigger still needs one of its own. The phone twin
-                // below always carried this; the desktop button did not.
-                aria-label="Group, filter & sort"
-                onClick={() => setFilterOpen((o) => !o)}
-              >
-                {/* 22, the scale's standalone step: these are section-header
-              actions, not the primary buttons or window chrome that take
-              24. At 24 the plus drew a 16px span against the 15.5 of the
-              search glyph in the titlebar row right above, and the filter
-              is filled bars, so the pair read a step larger than the row
-              they sit under. */}
-                <IconFilter size={22} />
-              </button>
-            </Tooltip>
+            {filterControl}
             {/* ⌘S, not the ⌘⌥N this used to advertise: that chord opens a
             sibling session inside the workspace you have open, while
             this button (onNewSession → the palette) starts one in a new
