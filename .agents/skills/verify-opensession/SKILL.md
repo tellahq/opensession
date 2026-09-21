@@ -19,9 +19,9 @@ export RUN_ID="verify-$(date +%Y%m%d-%H%M%S)-$$"
 ./.agents/skills/verify-opensession/bin/verify-opensession launch "$RUN_ID"
 ```
 
-The command prints `APP_URL`, `STATE_DIR`, and `EVIDENCE_DIR`. It starts the real Bun gateway and SessionKernel with a shared scratch credential, `OPENSESSION_DEV=1`, `OPENSESSION_DEMO=1`, and a disposable `OPENSESSION_STATE_DIR` under `/tmp`. The demo seed supplies sessions, transcripts, a repository, pull request state, automations, and a paused goal. External agents, schedulers, webhooks, executor work, and live credentials stay off.
+The command prints `APP_URL`, `STATE_DIR`, and `EVIDENCE_DIR`. It starts the real Bun gateway and SessionKernel with a shared scratch credential, `OPENSESSION_DEV=1`, `OPENSESSION_DEMO=1`, and a disposable `OPENSESSION_STATE_DIR` under `/tmp`. The demo seed supplies sessions, transcripts, a repository, pull request state, and a paused goal. It intends to supply automations too, but they do not reach the reader the app lists from, so the automations list starts empty (see `features/automations.md`). External agents, schedulers, webhooks, executor work, and live credentials stay off.
 
-The instance is ready when launch returns successfully. Its log remains at `/tmp/opensession-verify-$RUN_ID/server.log` until cleanup.
+The instance is ready when launch returns successfully. A cold checkout spends minutes transpiling the server and generating the demo dataset before the first health probe answers, so let launch run to completion. Its logs remain at `/tmp/opensession-verify-$RUN_ID/server.log` and `session-kernel.log` until cleanup; launch prints both tails when a boot fails.
 
 Teardown what this run started:
 
@@ -67,7 +67,7 @@ Common actions:
 ./.agents/skills/verify-opensession/bin/verify-opensession browser "$RUN_ID" url
 ```
 
-`wait`, `click`, and `fill` require one exact accessible match. Add `--index 1` only when the UI intentionally exposes duplicate names. A lookup failure prints nearby names for that role. Use `snapshot` to inspect the current tree instead of guessing selectors:
+`wait`, `click`, and `fill` require one exact accessible match. Add `--index 1` only when the UI intentionally exposes duplicate names. A lookup failure prints nearby names for that role. `click` and `hover` scroll their target into view first, and fail loudly when it still sits outside the viewport, so a control below the fold of a long form or dialog is driven rather than missed. Use `snapshot` to inspect the current tree instead of guessing selectors:
 
 ```bash
 ./.agents/skills/verify-opensession/bin/verify-opensession browser "$RUN_ID" snapshot
