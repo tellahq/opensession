@@ -107,13 +107,14 @@ async function waitForChecks(
       details = await getPrDetailsFresh(headRef, ghRepo || undefined);
     } catch {
       // Rate-limited — wait out the backoff (or at least one poll interval) and retry.
+      const backoff = await ghBackoffUntil("graphql", {
+        repo: ghRepo || undefined,
+      });
       await new Promise((r) =>
         setTimeout(
           r,
-          Math.min(
-            deadline,
-            Math.max(ghBackoffUntil(), Date.now() + CHECK_POLL_MS),
-          ) - Date.now(),
+          Math.min(deadline, Math.max(backoff, Date.now() + CHECK_POLL_MS)) -
+            Date.now(),
         ),
       );
       continue;
@@ -163,12 +164,15 @@ async function waitForMergeability(
       details = await getPrDetailsFresh(headRef, ghRepo || undefined);
     } catch {
       // Rate-limited — wait out the backoff (or at least one poll interval) and retry.
+      const backoff = await ghBackoffUntil("graphql", {
+        repo: ghRepo || undefined,
+      });
       await new Promise((r) =>
         setTimeout(
           r,
           Math.min(
             deadline,
-            Math.max(ghBackoffUntil(), Date.now() + MERGEABILITY_POLL_MS),
+            Math.max(backoff, Date.now() + MERGEABILITY_POLL_MS),
           ) - Date.now(),
         ),
       );

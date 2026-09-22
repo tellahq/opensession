@@ -8,11 +8,15 @@
  * semantics: a file changed after being viewed comes back DIRTY, which we
  * treat as not viewed (same as github.com's file list).
  */
+import {
+  githubInstallationCredential,
+  type GithubInstallationCredential,
+} from "./github-app";
 
 import type { RouteContext } from "./routes/context";
 import { githubCredentialForLogin, githubUserLoginForRun } from "./github-auth";
 import {
-  botGhToken,
+  ghCredentialScope,
   ghRateLimited,
   isGhRateLimitMsg,
   noteGhRateLimited,
@@ -29,40 +33,42 @@ export interface PrViewedFiles {
 }
 
 /** The requester's App user token, else the workspace installation token. */
-async function viewerToken(
+async function viewerCredential(
   ctx: RouteContext,
   ghRepo: string,
   claimedUser?: string | null,
-): Promise<string | null> {
+): Promise<GithubInstallationCredential | null> {
   // Use the same request-scoped resolver as the other human-triggered PR
   // actions. In simple mode this selects the sole connected account; with
   // sign-in enabled it selects only the verified requester's account.
   const requestCredential = githubMutationCredential(ctx);
-  if (requestCredential?.env.GH_TOKEN) return requestCredential.env.GH_TOKEN;
+  if (requestCredential?.env.GH_TOKEN)
+    return ghCredentialScope(requestCredential);
 
   // Preserve the older identity-table lookup for deployments that still send
   // a claimed user without web sign-in, then use the workspace App fallback.
   const login = ctx.authUser?.login ?? githubUserLoginForRun(claimedUser);
   if (login) {
     const credential = githubCredentialForLogin(login);
-    if (credential?.env.GH_TOKEN) return credential.env.GH_TOKEN;
+    if (credential?.env.GH_TOKEN) return ghCredentialScope(credential);
   }
-  return botGhToken({ write: true, repo: ghRepo });
+  return githubInstallationCredential({ write: true, repo: ghRepo });
 }
 
 async function graphql(
-  token: string,
+  credential: GithubInstallationCredential,
   query: string,
   variables: Record<string, unknown>,
 ): Promise<any> {
-  if (ghRateLimited()) throw new Error("GitHub GraphQL is rate-limited");
+  if (await ghRateLimited("graphql", credential))
+    throw new Error("GitHub GraphQL is rate-limited");
   const started = Date.now();
   const res = await fetchWithTimeout(
     "https://api.github.com/graphql",
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${credential.token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ query, variables }),
@@ -77,7 +83,8 @@ async function graphql(
       data?.errors?.[0]?.message ||
       data?.message ||
       `GitHub HTTP ${res.status}`;
-    if (isGhRateLimitMsg(message)) noteGhRateLimited("pr-viewed");
+    if (isGhRateLimitMsg(message))
+      await noteGhRateLimited("pr-viewed", undefined, "graphql", credential);
     throw new Error(message);
   }
   return data.data;
@@ -103,15 +110,15 @@ export async function getPrViewedFiles(
   ghRepo: string,
   number: number,
 ): Promise<PrViewedFiles> {
-  const token = await viewerToken(ctx, ghRepo, claimedUser);
-  if (!token) throw new Error("No GitHub credential available");
+  const credential = await viewerCredential(ctx, ghRepo, claimedUser);
+  if (!credential) throw new Error("No GitHub credential available");
   const [owner, name] = ghRepo.split("/");
   const viewed: string[] = [];
   let prId = "";
   let cursor: string | null = null;
   // 100 files/page; 30 pages ≈ GitHub's own 3000-file diff display cap.
   for (let page = 0; page < 30; page++) {
-    const data = await graphql(token, VIEWED_QUERY, {
+    const data = await graphql(credential, VIEWED_QUERY, {
       owner,
       name,
       number,
@@ -138,10 +145,10 @@ export async function setPrFileViewed(
   filePath: string,
   viewed: boolean,
 ): Promise<void> {
-  const token = await viewerToken(ctx, ghRepo, claimedUser);
-  if (!token) throw new Error("No GitHub credential available");
+  const credential = await viewerCredential(ctx, ghRepo, claimedUser);
+  if (!credential) throw new Error("No GitHub credential available");
   const mutation = viewed
     ? `mutation($id: ID!, $path: String!) { markFileAsViewed(input: { pullRequestId: $id, path: $path }) { clientMutationId } }`
     : `mutation($id: ID!, $path: String!) { unmarkFileAsViewed(input: { pullRequestId: $id, path: $path }) { clientMutationId } }`;
-  await graphql(token, mutation, { id: prId, path: filePath });
+  await graphql(credential, mutation, { id: prId, path: filePath });
 }

@@ -273,9 +273,22 @@ async function selectInstallation(
  * that repository owner; without it the configured default installation
  * serves. Callers treat null as a closed credential boundary.
  */
+export interface GithubInstallationCredential {
+  token: string;
+  /** Stable across token refresh and permission sets; never contains a token. */
+  rateLimitKey: string;
+}
+
 export async function githubAppInstallationToken(
   opts: { write?: boolean; owner?: string } = {},
 ): Promise<string | null> {
+  return (await installationCredential(opts))?.token ?? null;
+}
+
+async function installationCredential(opts: {
+  write?: boolean;
+  owner?: string;
+}): Promise<GithubInstallationCredential | null> {
   const { clientId } = githubUserAuthSettings();
   const selector = installationSelector(opts.owner);
   const identity = `${clientId || ""}:${selector}`;
@@ -293,11 +306,12 @@ export async function githubAppInstallationToken(
   }
   try {
     const installation = await selectInstallation(opts.owner, headers);
+    const rateLimitKey = `installation:${clientId}:${installation.id}`;
     const cacheKey = `${clientId}:${installation.id}:${opts.write ? "write" : "read"}`;
     const cached = tokenCache().get(cacheKey);
     if (cached && cached.expiresAt - Date.now() > 5 * 60_000) {
       noteHealth(true);
-      return cached.token;
+      return { token: cached.token, rateLimitKey };
     }
     const tok = await mintInstallationToken(installation.id, headers, {
       permissions: opts.write ? WRITE_PERMISSIONS : READ_PERMISSIONS,
@@ -310,7 +324,7 @@ export async function githubAppInstallationToken(
     });
     g.__ghAppTokenWarned?.delete(selector);
     noteHealth(true);
-    return tok.token;
+    return { token: tok.token, rateLimitKey };
   } catch (e) {
     noteHealth(false);
     const warned = (g.__ghAppTokenWarned ??= new Set());
@@ -378,10 +392,18 @@ async function mintInstallationToken(
 export async function githubToken(
   opts: { write?: boolean; repo?: string; owner?: string } = {},
 ): Promise<string | null> {
+  return (await githubInstallationCredential(opts))?.token ?? null;
+}
+
+/** Return the token together with the identity selected for its mint. */
+export async function githubInstallationCredential(
+  opts: { write?: boolean; repo?: string; owner?: string } = {},
+): Promise<GithubInstallationCredential | null> {
   if (!githubConfiguredCredential()) return null;
-  const owner = opts.repo ? githubRepoOwner(opts.repo) : opts.owner || null;
-  if (opts.repo && !owner) return null;
-  return githubAppInstallationToken({
+  const owner =
+    opts.repo !== undefined ? githubRepoOwner(opts.repo) : opts.owner || null;
+  if (opts.repo !== undefined && !owner) return null;
+  return installationCredential({
     ...(opts.write ? { write: true } : {}),
     ...(owner ? { owner } : {}),
   });

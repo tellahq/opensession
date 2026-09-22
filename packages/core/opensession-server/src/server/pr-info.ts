@@ -27,7 +27,7 @@ import {
   serviceGithubCredential,
   type GithubCredential,
 } from "./github-auth";
-import { githubToken } from "./github-app";
+import { githubToken, githubInstallationCredential } from "./github-app";
 import { reviewRequestRemovalSpecs } from "./github-review-requests";
 import { noteGithubGraphqlCall } from "./github-budget";
 import { getPrStack, unmergedLayersBelow } from "./pr-stack";
@@ -73,10 +73,11 @@ export async function getPrAutomationDetails(
   selector: string,
   repo: string = DEFAULT_REPO(),
 ): Promise<PrAutomationDetails | null> {
-  if (ghRateLimited("rest")) throw new Error(GH_REST_RATE_LIMIT_MESSAGE);
-  const token = await githubToken({ repo });
-  if (!token)
+  const credential = await githubInstallationCredential({ repo });
+  if (!credential)
     throw new Error("The selected GitHub bot credential is unavailable");
+  if (await ghRateLimited("rest", credential))
+    throw new Error(GH_REST_RATE_LIMIT_MESSAGE);
   const numeric = /^\d+$/.test(selector);
   const path = numeric
     ? `/repos/${repo}/pulls/${selector}`
@@ -84,7 +85,7 @@ export async function getPrAutomationDetails(
   const started = Date.now();
   const response = await fetch(`https://api.github.com${path}`, {
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${credential.token}`,
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       "User-Agent": "opensession",
@@ -104,10 +105,11 @@ export async function getPrAutomationDetails(
         isGhRateLimitMsg(message))
     ) {
       const reset = Number(response.headers.get("x-ratelimit-reset")) * 1000;
-      noteGhRateLimited(
+      await noteGhRateLimited(
         "pr-automation",
         Number.isFinite(reset) ? reset : undefined,
         "rest",
+        credential,
       );
     }
     throw new Error(prApiErrorMessage(message));
@@ -728,18 +730,22 @@ export async function getPrDiff(
   if (running) return running;
   // Known backoff window: stale answer if we have one, fast friendly failure
   // if we don't — never a doomed gh spawn.
-  if (ghRateLimited("rest")) {
+  const credential = await githubInstallationCredential({ repo });
+  if (credential && (await ghRateLimited("rest", credential))) {
     if (hit) return hit.data;
     throw new Error(GH_REST_RATE_LIMIT_MESSAGE);
   }
 
+  // Credential resolution and persisted gates yield; another caller may now
+  // own the refresh. Keep the existing single-flight boundary.
+  const pending = diffInflight.get(inflightKey);
+  if (pending) return pending;
   const refresh = (async () => {
     try {
-      const token = await githubToken({ repo });
-      if (!token)
+      if (!credential)
         throw new Error("The selected GitHub bot credential is unavailable");
       const headers = {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${credential.token}`,
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "opensession",
       };
@@ -854,8 +860,8 @@ export async function getPrDiff(
     } catch (e: any) {
       const msg = String(e?.stderr || e?.message || e).slice(0, 300);
       if (!isNoPrError(msg)) {
-        if (isGhRateLimitMsg(msg))
-          noteGhRateLimited("pr-diff", undefined, "rest");
+        if (credential && isGhRateLimitMsg(msg))
+          await noteGhRateLimited("pr-diff", undefined, "rest", credential);
         console.warn(`[pr-info] gh pr diff ${branch} (${repo}) failed: ${msg}`);
         if (hit) return hit.data; // stale beats an error
         throw new Error(prApiErrorMessage(msg));
@@ -1349,7 +1355,7 @@ export async function getPrDetails(
   if (hit && !shouldRefreshPrDetails(hit.ts)) return hit.data;
   // Known backoff window: serve any cached answer, and with nothing cached
   // fail fast with the friendly message rather than spawning a doomed gh call.
-  if (ghRateLimited()) {
+  if (await ghRateLimited("graphql", { repo })) {
     if (hit) return hit.data;
     throw new Error(GH_RATE_LIMIT_MESSAGE);
   }
@@ -1382,7 +1388,8 @@ export async function getPrDetailsFresh(
 ): Promise<PrDetails | null> {
   // A completion gate must not act on stale data, so during a rate-limit
   // window it fails fast with the friendly message instead of burning a call.
-  if (ghRateLimited()) throw new Error(GH_RATE_LIMIT_MESSAGE);
+  if (await ghRateLimited("graphql", { repo }))
+    throw new Error(GH_RATE_LIMIT_MESSAGE);
   const data = await fetchPrDetails(branch, repo);
   cache.set(cacheKey(repo, branch), { data, ts: Date.now() });
   schedulePersist();
@@ -1473,13 +1480,22 @@ async function fetchPrDetails(
   repo: string,
 ): Promise<PrDetails | null> {
   let data: PrDetails | null = null;
+  const credential = await githubInstallationCredential({ repo });
   try {
+    if (!credential)
+      throw new Error("The selected GitHub bot credential is unavailable");
+    if (await ghRateLimited("graphql", credential))
+      throw new Error(GH_RATE_LIMIT_MESSAGE);
     // Under load GitHub sporadically aborts the GraphQL response mid-stream
     // ("stream error: … CANCEL; received from peer") — that's transient, and
     // treating it as "no PR" broke PR actions (PR #4910). Retry transient
     // failures; a genuine "no pull requests found" stays a fast null.
     let pr: any;
-    const env = { ...process.env, ...(await selectedGhEnv(repo)) };
+    const env = {
+      ...process.env,
+      GH_TOKEN: credential.token,
+      GITHUB_TOKEN: credential.token,
+    };
     // A memoized number is trusted once: should the PR it names head another
     // branch, the memo is dropped and the branch resolved afresh.
     let trustCached = true;
@@ -1585,7 +1601,8 @@ async function fetchPrDetails(
   } catch (e: any) {
     const msg = String(e?.stderr || e?.message || e).slice(0, 300);
     if (!isNoPrError(msg)) {
-      if (isGhRateLimitMsg(msg)) noteGhRateLimited("pr-info");
+      if (credential && isGhRateLimitMsg(msg))
+        await noteGhRateLimited("pr-info", undefined, "graphql", credential);
       console.warn(`[pr-info] gh pr view ${branch} (${repo}) failed: ${msg}`);
       throw new Error(prApiErrorMessage(msg));
     }

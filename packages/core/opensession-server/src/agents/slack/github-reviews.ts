@@ -24,16 +24,16 @@ const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 // ---------------------------------------------------------------------------
 
 export async function githubApi(path: string): Promise<any> {
-  const { githubRepoFromApiPath, githubToken } =
+  const { githubRepoFromApiPath, githubInstallationCredential } =
     await import("../../server/github-app");
   // A /repos/{owner}/{name} path mints against that owner's installation.
   const repo = githubRepoFromApiPath(path);
-  const token = await githubToken(repo ? { repo } : {});
-  if (!token) return null;
+  const credential = await githubInstallationCredential(repo ? { repo } : {});
+  if (!credential || (await ghRateLimited("rest", credential))) return null;
   try {
     const resp = await fetchWithTimeout(`https://api.github.com${path}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${credential.token}`,
         Accept: "application/vnd.github+json",
       },
     });
@@ -45,8 +45,19 @@ export async function githubApi(path: string): Promise<any> {
       ) {
         const resetHeader = resp.headers.get("x-ratelimit-reset");
         if (resetHeader)
-          noteGhRateLimited("slack-github", Number(resetHeader) * 1000, "rest");
-        else noteGhRateLimited("slack-github", undefined, "rest");
+          await noteGhRateLimited(
+            "slack-github",
+            Number(resetHeader) * 1000,
+            "rest",
+            credential,
+          );
+        else
+          await noteGhRateLimited(
+            "slack-github",
+            undefined,
+            "rest",
+            credential,
+          );
       }
       return null;
     }
@@ -71,7 +82,7 @@ export async function pollForVercelPreview(
 
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise((r) => setTimeout(r, interval));
-    if (ghRateLimited("rest")) return; // best-effort nicety — abandon rather than burn the backoff window
+    if (await ghRateLimited("rest", { repo: GITHUB_REPO })) return; // best-effort nicety — abandon rather than burn the backoff window
     try {
       // Get the PR's head commit SHA
       const pr = await githubApi(`/repos/${GITHUB_REPO}/pulls/${prNumber}`);

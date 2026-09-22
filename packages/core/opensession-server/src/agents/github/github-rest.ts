@@ -17,7 +17,7 @@ import {
 import {
   githubConfiguredCredential,
   githubRepoFromApiPath,
-  githubToken,
+  githubInstallationCredential,
 } from "../../server/github-app";
 import {
   ghRateLimited,
@@ -79,13 +79,23 @@ export async function githubRequest<T = any>(
 ): Promise<GithubResult<T>> {
   // A /repos/{owner}/{name} path mints against that owner's installation.
   const repo = githubRepoFromApiPath(path);
-  const token = await githubToken({ write: true, ...(repo ? { repo } : {}) });
-  if (!token)
+  const credential = await githubInstallationCredential({
+    write: true,
+    ...(repo ? { repo } : {}),
+  });
+  if (!credential)
     return {
       ok: false,
       status: 0,
       data: null,
       error: "GitHub App credential unavailable",
+    };
+  if (await ghRateLimited("rest", credential))
+    return {
+      ok: false,
+      status: 429,
+      data: null,
+      error: "GitHub REST is rate-limited",
     };
   try {
     // Timeout matters here: these calls run while holding a per-PR lock with
@@ -93,7 +103,7 @@ export async function githubRequest<T = any>(
     const resp = await fetchWithTimeout(`https://api.github.com${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${credential.token}`,
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         ...(body ? { "Content-Type": "application/json" } : {}),
@@ -120,8 +130,14 @@ export async function githubRequest<T = any>(
       ) {
         const resetHeader = resp.headers.get("x-ratelimit-reset");
         if (resetHeader)
-          noteGhRateLimited("github-rest", Number(resetHeader) * 1000, "rest");
-        else noteGhRateLimited("github-rest", undefined, "rest");
+          await noteGhRateLimited(
+            "github-rest",
+            Number(resetHeader) * 1000,
+            "rest",
+            credential,
+          );
+        else
+          await noteGhRateLimited("github-rest", undefined, "rest", credential);
       }
       return { ok: false, status: resp.status, data, error };
     }
@@ -141,18 +157,18 @@ async function githubGraphQL<T = any>(
   variables?: Record<string, unknown>,
   ghRepo?: string,
 ): Promise<T | null> {
-  const token = await githubToken({
+  const credential = await githubInstallationCredential({
     write: true,
     ...(ghRepo ? { repo: ghRepo } : {}),
   });
-  if (!token) return null;
-  if (ghRateLimited()) return null;
+  if (!credential) return null;
+  if (await ghRateLimited("graphql", credential)) return null;
   const started = Date.now();
   try {
     const resp = await fetchWithTimeout("https://api.github.com/graphql", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${credential.token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ query, variables: variables || {} }),
@@ -172,7 +188,12 @@ async function githubGraphQL<T = any>(
         json?.errors?.some((e: any) => e.type === "RATE_LIMITED") ||
         isGhRateLimitMsg(msg)
       ) {
-        noteGhRateLimited("github-graphql");
+        await noteGhRateLimited(
+          "github-graphql",
+          undefined,
+          "graphql",
+          credential,
+        );
       }
       return null;
     }

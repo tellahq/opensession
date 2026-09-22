@@ -39,7 +39,7 @@ export interface DesiredReviewDependencies {
     details: PrAutomationDetails,
   ) => Promise<ReviewResult | null>;
   isReviewLocked: (prNumber: number, ghRepo?: string) => boolean;
-  restBackoffUntil: () => number;
+  restBackoffUntil: (ghRepo?: string) => number | Promise<number>;
   setTimer?: typeof setTimeout;
   clearTimer?: typeof clearTimeout;
   now?: () => number;
@@ -364,7 +364,7 @@ export class DesiredReviewScheduler {
       this.arm(ref, marker, this.now() + this.options.retryBaseMs);
       return;
     }
-    const knownBackoff = this.deps.restBackoffUntil();
+    const knownBackoff = await this.deps.restBackoffUntil(ref.ghRepo);
     if (knownBackoff > this.now()) {
       this.defer(ref, generation, "GitHub REST is rate limited", knownBackoff);
       return;
@@ -378,7 +378,12 @@ export class DesiredReviewScheduler {
     try {
       details = await this.deps.resolvePr(ref.number, ref.ghRepo);
     } catch (error) {
-      this.defer(ref, generation, error, this.deps.restBackoffUntil());
+      this.defer(
+        ref,
+        generation,
+        error,
+        await this.deps.restBackoffUntil(ref.ghRepo),
+      );
       return;
     }
     if (

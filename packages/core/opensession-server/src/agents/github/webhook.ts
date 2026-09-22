@@ -526,7 +526,7 @@ const desiredReviews = new DesiredReviewScheduler(
     runReview: (ref, details) => fireReview(ref, false, details),
     isReviewLocked: (prNumber, ghRepo) =>
       isLockHeld("review", prNumber, ghRepo),
-    restBackoffUntil: () => ghBackoffUntil("rest"),
+    restBackoffUntil: (ghRepo) => ghBackoffUntil("rest", { repo: ghRepo }),
   },
   {
     debounceMs: nonNegativeEnvMs("OPENSESSION_REVIEW_DEBOUNCE_MS", 240_000),

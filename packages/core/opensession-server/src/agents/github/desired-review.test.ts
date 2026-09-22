@@ -35,6 +35,8 @@ function harness() {
   let now = 1_000;
   let generation = 0;
   let restBackoffUntil = 0;
+  let backoffRepo: string | undefined;
+  const backoffLookups: Array<string | undefined> = [];
   let details = prDetails({
     number: 42,
     headRef: "feature",
@@ -94,7 +96,10 @@ function harness() {
       },
       runReview: (ref) => runReview(ref),
       isReviewLocked: () => false,
-      restBackoffUntil: () => restBackoffUntil,
+      restBackoffUntil: async (repo) => {
+        backoffLookups.push(repo);
+        return !backoffRepo || backoffRepo === repo ? restBackoffUntil : 0;
+      },
       setTimer,
       clearTimer,
       now: () => now,
@@ -139,8 +144,10 @@ function harness() {
     setDetails(value: PrAutomationDetails) {
       details = value;
     },
-    setRestBackoff(value: number) {
+    backoffLookups,
+    setRestBackoff(value: number, repo?: string) {
       restBackoffUntil = value;
+      backoffRepo = repo;
     },
     setRunReview(value: typeof runReview) {
       runReview = value;
@@ -234,7 +241,7 @@ describe("DesiredReviewScheduler", () => {
     expect(h.state.pendingReview?.headSha).toBe("head-b");
   });
 
-  test("waits out the shared REST backoff without spending an attempt", async () => {
+  test("waits out the selected REST backoff without spending an attempt", async () => {
     const h = harness();
     h.setRestBackoff(20_000);
     h.scheduler.admit(HEAD_A);
@@ -246,5 +253,14 @@ describe("DesiredReviewScheduler", () => {
       attempts: 0,
     });
     expect(Date.parse(h.state.pendingReview!.dueAt)).toBe(20_000);
+  });
+  test("asks for the pending review's repo, not another installation's backoff", async () => {
+    const h = harness();
+    h.setRestBackoff(20_000, "acme/app");
+    h.scheduler.admit({ ...HEAD_A, ghRepo: "other/app" });
+    await h.runNextTimer();
+    expect(h.backoffLookups).toEqual(["other/app"]);
+    expect(h.resolveCalls).toBe(1);
+    expect(h.reviewCalls).toBe(1);
   });
 });
