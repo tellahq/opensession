@@ -4,6 +4,7 @@ import {
   newSessionDefaultRepo,
   refreshedNewSessionRepo,
   newSessionWorkspaceScope,
+  newSessionWorkspaceDestination,
 } from "./new-session-repo";
 
 describe("newSessionDefaultRepo", () => {
@@ -92,5 +93,58 @@ describe("workspace composer project scope", () => {
       workspaceId: "scratch",
       forceBranch: undefined,
     });
+  });
+});
+
+describe("create destination after palette changes", () => {
+  const workspaces = [
+    {
+      id: "ws-app",
+      repo: "acme-app",
+      branch: "feature",
+      worktreeDir: "/tmp/acme-app-feature",
+    },
+  ];
+
+  test("scoped repo changes and dropping the repo release both destination and branch", () => {
+    const scope = {
+      repo: "acme-app",
+      workspaceId: "ws-app",
+      forceBranch: "feature",
+    };
+    for (const repo of ["acme-docs", NO_REPO]) {
+      expect(newSessionWorkspaceScope(repo, scope)).toEqual({});
+      expect(
+        newSessionWorkspaceDestination(
+          workspaces,
+          scope.workspaceId,
+          repo,
+          "ask",
+        ),
+      ).toBeUndefined();
+    }
+    expect(
+      newSessionWorkspaceScope("acme-app", { workspaceId: "ws-scratch" }),
+    ).toEqual({});
+  });
+
+  test("same-repo Ask releases a code workspace but Code retains it", () => {
+    expect(
+      newSessionWorkspaceDestination(workspaces, "ws-app", "acme-app", "ask"),
+    ).toBeUndefined();
+    expect(
+      newSessionWorkspaceDestination(workspaces, "ws-app", "acme-app", "code"),
+    ).toBe("ws-app");
+    expect(
+      newSessionWorkspaceDestination(workspaces, "ws-app", "acme-app", "ask", {
+        branch: "feature",
+      }),
+    ).toBe("ws-app");
+  });
+
+  test("missing workspace metadata cannot authorize optimistic adoption", () => {
+    expect(
+      newSessionWorkspaceDestination([], "ws-app", "acme-app", "code"),
+    ).toBeUndefined();
   });
 });

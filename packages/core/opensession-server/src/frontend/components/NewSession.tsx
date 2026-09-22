@@ -69,6 +69,7 @@ import {
   newSessionDefaultRepo,
   refreshedNewSessionRepo,
   newSessionWorkspaceScope,
+  newSessionWorkspaceDestination,
 } from "../lib/new-session-repo";
 import { NewSessionPrompt } from "./NewSessionPrompt";
 import type { NewSessionPromptHandle } from "../lib/new-session-prompt-types";
@@ -938,7 +939,7 @@ export function NewSession({
       const parkedId =
         sourceWorkspaceId || forceRepo
           ? null
-          : getParkedNewSessionWorkspaceId();
+          : getParkedNewSessionWorkspaceId(repo);
       const workspace = workspaceId
         ? // Scoped to an existing workspace: update its draft, never rename it.
           await updateWorkspaceApi(workspaceId, { draft })
@@ -968,7 +969,7 @@ export function NewSession({
           await deleteWorkspaceApi(workspace.id);
         }
       } else {
-        if (!workspaceId) rememberParkedNewSessionWorkspace(workspace.id);
+        if (!workspaceId) rememberParkedNewSessionWorkspace(workspace.id, repo);
         // Attachments live in this browser's draft store, not on the server
         // record, so hand them to the workspace composer directly.
         const staged = loadDraft(DRAFT_KEY);
@@ -1030,12 +1031,19 @@ export function NewSession({
       : undefined;
     // A PR source owns its workspace identity too. Prefer its known lane over a
     // parked generic draft; without one, ask the server to mint a PR-named lane.
-    const createWorkspaceId =
+    const candidateWorkspaceId =
       workspaceId ||
       prWorkspaceId ||
       (!selectedPullRequest && !sourceWorkspaceId && !forceRepo
-        ? getParkedNewSessionWorkspaceId() || undefined
+        ? getParkedNewSessionWorkspaceId(repo) || undefined
         : undefined);
+    const createWorkspaceId = newSessionWorkspaceDestination(
+      workspaces,
+      candidateWorkspaceId,
+      createRepo,
+      createMode,
+      selectedPullRequest,
+    );
     const worktreeMode =
       createMode === "ask"
         ? "ask"

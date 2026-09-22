@@ -1,3 +1,4 @@
+import { canJoinCreateWorkspace } from "../../shared/session-create-workspace";
 import { NO_REPO } from "./session-repo";
 
 /** Pick the real repository shown by a fresh composer. */
@@ -34,7 +35,32 @@ export function newSessionWorkspaceScope(
   repo: string,
   scope: { repo?: string; workspaceId?: string; forceBranch?: string },
 ): { workspaceId?: string; forceBranch?: string } {
-  return !scope.repo || scope.repo === repo
+  return (scope.repo || NO_REPO) === repo
     ? { workspaceId: scope.workspaceId, forceBranch: scope.forceBranch }
     : {};
+}
+
+/** Ignore stale, missing, or incompatible destinations before optimistic navigation. */
+export function newSessionWorkspaceDestination(
+  workspaces: ReadonlyArray<{
+    id: string;
+    repo?: string;
+    worktreeDir?: string;
+    branch?: string;
+  }>,
+  workspaceId: string | undefined,
+  repo: string,
+  mode: "code" | "ask" | "scratch",
+  pullRequest?: { branch: string } | null,
+): string | undefined {
+  const workspace = workspaces.find((item) => item.id === workspaceId);
+  return workspace &&
+    canJoinCreateWorkspace(workspace, {
+      repo: repo === NO_REPO ? undefined : repo,
+      mode,
+      fromPr: !!pullRequest,
+      branch: pullRequest?.branch,
+    })
+    ? workspace.id
+    : undefined;
 }

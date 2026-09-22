@@ -1,3 +1,4 @@
+import { canJoinCreateWorkspace } from "../shared/session-create-workspace";
 /**
  * Wires the SessionControl registry (src/server/session-control.ts) — the
  * surface behind the opensession-sessions MCP — into the same in-process state and
@@ -839,9 +840,7 @@ registerSessionControl({
     // this path's equivalent of the web tab strip's "+"). An unknown id is a
     // hard error: falling back to a standalone create would silently mint the
     // duplicate sidebar row the caller asked to avoid.
-    const joinedWorkspace = workspaceId
-      ? await getWorkspace(workspaceId)
-      : null;
+    let joinedWorkspace = workspaceId ? await getWorkspace(workspaceId) : null;
     if (workspaceId && !joinedWorkspace) {
       throw new Error(`No such workspace: ${workspaceId}`);
     }
@@ -861,6 +860,19 @@ registerSessionControl({
         parentRepoContext?.repo ||
         parentSession?.repo,
     );
+    // Interactive/native joins obey the same destination boundary as the web
+    // palette. Child reviewers and forks retain their source checkout context.
+    if (
+      joinedWorkspace &&
+      !parentSession &&
+      !fork &&
+      !completedCreate &&
+      !canJoinCreateWorkspace(joinedWorkspace, {
+        repo: isRepoLess ? undefined : repo.id,
+        mode: isScratch ? "scratch" : isAsk ? "ask" : "code",
+      })
+    )
+      joinedWorkspace = null;
     const requestedRunnerId =
       typeof runnerInput === "string" && runnerInput.trim()
         ? runnerInput.trim()

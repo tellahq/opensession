@@ -1,3 +1,4 @@
+import { canJoinCreateWorkspace } from "../shared/session-create-workspace";
 /**
  * Session creation — the ONE create path shared by the web UI and the
  * opensession-sessions MCP (session-control-wiring.ts).
@@ -2638,6 +2639,21 @@ export async function handleCreateSessionMessage(
     : typeof msg.workspaceId === "string" && msg.workspaceId
       ? await getWorkspace(msg.workspaceId)
       : null;
+  // Never trust a client's destination after its repo or mode changed. Recovery
+  // and forks retain their already-owned membership; fresh creates resolve a
+  // compatible workspace or mint one below, never persist the rejected raw id.
+  if (
+    workspace &&
+    !recoveringSession &&
+    !forkSource &&
+    !canJoinCreateWorkspace(workspace, {
+      repo: isRepoLess ? undefined : repo.id,
+      mode: isScratch ? "scratch" : isAsk ? "ask" : "code",
+      fromPr,
+      branch,
+    })
+  )
+    workspace = null;
   // A ticket-linked create always lands in the ticket's ONE workspace
   // (adopt-don't-duplicate, workspace-resolve.ts) — even when the
   // client asked for a fresh workspace, a second workspace for the
@@ -2921,11 +2937,7 @@ export async function handleCreateSessionMessage(
     // workspace minted on this path can be auto-named from the
     // generated title below.
     let mintedForSession = false;
-    if (
-      !workspace &&
-      !forkSource?.workspaceId &&
-      !(typeof msg.workspaceId === "string" && msg.workspaceId)
-    ) {
+    if (!workspace && !forkSource?.workspaceId) {
       const plannedWorkspaceId =
         createPlan.workspaceId || createPlanWorkspaceId(bksId);
       if (!createPlan.workspaceId)
@@ -3108,9 +3120,7 @@ export async function handleCreateSessionMessage(
         : forkSource?.workspaceId
           ? // A fork lands next to its source in the same workspace.
             forkSource.workspaceId
-          : typeof msg.workspaceId === "string" && msg.workspaceId
-            ? msg.workspaceId
-            : undefined,
+          : undefined,
       announceWorkspaceId: workspace?.id,
       createdWorkspaceNow,
       autoNameWorkspace: wsAutoNamed ? workspace : null,
