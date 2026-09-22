@@ -1174,15 +1174,6 @@ export function NewSession({
     // so the wall is discovered before submit, not after.
     !sandboxModelWarning;
 
-  const createLabel =
-    !hasPromptText &&
-    !images.length &&
-    !files.length &&
-    !pastedTexts.length &&
-    createAction === "open"
-      ? "Create empty session"
-      : CREATE_LABELS[createAction];
-
   /** The latest `handleCreate`, for a caller that has to wait a render before
    *  it can create. The dictation bar's ↑ is the one: it writes the transcript
    *  through the prompt's own state, so a closure captured at the moment of
@@ -1483,7 +1474,7 @@ export function NewSession({
             className={cn(PHONE_SEND, dictating && "invisible")}
             onClick={handleCreate}
             disabled={!canCreate}
-            aria-label={createLabel}
+            aria-label={CREATE_LABELS[createAction]}
           >
             <IconArrowUp size={22} />
           </button>
@@ -1977,7 +1968,7 @@ export function NewSession({
                         ? "Creating…"
                         : isStaging(staging)
                           ? "Attaching…"
-                          : createLabel}
+                          : CREATE_LABELS[createAction]}
                     {/* The hint has to match the preference — a bare ↩ next to a
                     field that only creates on ⌘↩ is what made Enter look
                     broken in the first place. */}

@@ -336,7 +336,7 @@ test("empty creation is enabled without bypassing upload and connection guards",
   ).text();
   const gate = source.slice(
     source.indexOf("const canCreate ="),
-    source.indexOf("const createLabel ="),
+    source.indexOf("const createRef ="),
   );
   expect(gate).toContain("!busy");
   expect(gate).toContain("!isStaging(staging)");
@@ -344,10 +344,11 @@ test("empty creation is enabled without bypassing upload and connection guards",
   expect(gate).toContain("!!repo");
   expect(gate).toContain("!sandboxModelWarning");
   expect(gate).not.toContain("hasPromptText");
-  expect(source).toContain('"Create empty session"');
+  // The label stays "Create" whether or not the composer has text.
+  expect(source).not.toContain("Create empty session");
   // A shared placeholder branch would adopt the previous empty workspace.
   expect(source).toContain("`session-${clientSessionId.slice(-12)}`");
-  expect(source).toContain("aria-label={createLabel}");
+  expect(source).toContain("aria-label={CREATE_LABELS[createAction]}");
 });
 
 test("empty creates are idle but any opening input starts a turn", () => {
