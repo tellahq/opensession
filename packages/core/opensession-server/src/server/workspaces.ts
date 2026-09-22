@@ -452,9 +452,8 @@ export function workspaceName(id: string): string | null {
 
 /**
  * A workspace from the memory projection, or null. For the sync readers that
- * cannot await (the session-list assembly, model preset resolution, the
- * mention note): no I/O, and only this process's own writes until the
- * projection is warm. Everything that can await reads getWorkspace instead.
+ * cannot await (the session-list assembly and the mention note): no I/O, and
+ * only this process's own writes until the projection is warm. Everything that can await reads getWorkspace instead.
  */
 export function peekWorkspace(id: string): Workspace | null {
   if (!safeId(id)) return null;

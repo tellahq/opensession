@@ -98,33 +98,39 @@ test("helper rejects incomplete provider replies rather than claiming a complete
   ).rejects.toThrow("did not finish");
 });
 
-test("conversation target resolves the session's stored model and effort like dispatch", () => {
-  expect(sessionConversationModel(session)).toEqual({
+test("conversation target resolves the session's stored model and effort like dispatch", async () => {
+  expect(await sessionConversationModel(session)).toEqual({
     model: "pi/anthropic/claude-opus-5-5",
     effort: "high",
   });
   expect(
-    sessionConversationModel({ model: "pi/openai/gpt-6-sol", effort: "" }),
+    await sessionConversationModel({
+      model: "pi/openai/gpt-6-sol",
+      effort: "",
+    }),
   ).toEqual({ model: "pi/openai/gpt-6-sol" });
   // Unknown effort strings never reach the one-shot options.
   expect(
-    sessionConversationModel({ model: "claude-opus-5-5", effort: "turbo" }),
+    await sessionConversationModel({
+      model: "claude-opus-5-5",
+      effort: "turbo",
+    }),
   ).toEqual({ model: "pi/anthropic/claude-opus-5-5" });
 });
 
-test("conversation target uses a preset's pinned effort and lead model", () => {
-  expect(sessionConversationModel({ model: "dial/ultra" })).toEqual({
+test("conversation target uses a preset's pinned effort and lead model", async () => {
+  expect(await sessionConversationModel({ model: "dial/ultra" })).toEqual({
     model: "pi/anthropic/claude-fable-5-1",
     effort: "high",
   });
 });
 
-test("conversation target falls back to the instance interactive default, never a client model", () => {
-  const expected = sessionConversationModel({
+test("conversation target falls back to the instance interactive default, never a client model", async () => {
+  const expected = await sessionConversationModel({
     model: interactiveDefaultModel(),
   });
-  expect(sessionConversationModel({})).toEqual(expected);
-  expect(sessionConversationModel({ model: "   " })).toEqual(expected);
+  expect(await sessionConversationModel({})).toEqual(expected);
+  expect(await sessionConversationModel({ model: "   " })).toEqual(expected);
 });
 
 test("conversation target runs one tool-less one-shot on the session model without a transcript", async () => {

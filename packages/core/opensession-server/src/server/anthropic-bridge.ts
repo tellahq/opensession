@@ -27,7 +27,7 @@
  *
  * Containment (all enforced here, not in prompts):
  *  - Never starts unless an engine that uses it is enabled (Pi's
- *    ~/.opensession-model-providers.json or pi's ~/.opensession-pi.json) and at
+ *    ~/.opensession/model-providers.json or pi's ~/.opensession/pi.json) and at
  *    least one Claude account exists to serve on.
  *  - Account pick per request (pickBridgeAccount): when Pi's
  *    `bridgeAccountIds` designates accounts, ONLY those serve (legacy
@@ -44,7 +44,7 @@
  *    key — so local probing/hammering always leaves a trail.
  *  - Request hygiene: bodies over 10MB are refused (413), and a per-boot
  *    rolling per-account counter caps requests/hour (`bridgeMaxRequestsPerHour`
- *    in ~/.opensession-model-providers.json, default 300 → 429 past it; estimated
+ *    in ~/.opensession/model-providers.json, default 300 → 429 past it; estimated
  *    tokens are tracked alongside for the audit trail). Account selection stops
  *    at plan limits by default. A run may continue on paid credits only when it
  *    explicitly enables `usageCredits` and the account has credit headroom.
@@ -89,8 +89,9 @@ import {
   bridgePort,
   bridgeMaxRequestsPerHour,
   readModelProviderConfig,
+  configPath as modelProvidersConfigPath,
 } from "./model-providers";
-import { readPiEngineConfig } from "./pi-config";
+import { readPiEngineConfig, piConfigPath } from "./pi-config";
 import { mkdirSync } from "fs";
 
 const HOME = homeDir();
@@ -140,8 +141,8 @@ export function bridgeDesignationError(): string | null {
   const piCfg = readPiEngineConfig();
   if (!cfg?.enabled && !piCfg?.enabled) {
     return (
-      "The Anthropic bridge is disabled. Enable it in ~/.opensession-model-providers.json " +
-      '({"enabled": true}) or, for pi/anthropic/* models, in ~/.opensession-pi.json ' +
+      `The Anthropic bridge is disabled. Enable it in ${modelProvidersConfigPath()} ` +
+      `({"enabled": true}) or, for pi/anthropic/* models, in ${piConfigPath()} ` +
       '({"enabled": true}) — or use an API-key provider configured via `Pi auth login` instead.'
     );
   }
@@ -149,7 +150,7 @@ export function bridgeDesignationError(): string | null {
   if (ocIds.length || hasAccounts()) return null;
   return (
     "The Anthropic bridge has no accounts to serve on: add a Claude account in " +
-    "Settings → Providers (or designate bridgeAccountIds in ~/.opensession-model-providers.json)."
+    `Settings → Providers (or designate bridgeAccountIds in ${modelProvidersConfigPath()}).`
   );
 }
 

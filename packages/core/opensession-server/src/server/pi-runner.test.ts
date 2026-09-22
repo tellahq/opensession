@@ -31,6 +31,7 @@ import {
   makeGuardedToolOps,
   makePiBashTool,
   parsePiModel,
+  piModelResolutionError,
   piBashHomeEnv,
   piAssistantTranscriptEntries,
   PI_STATE_DIR,
@@ -285,22 +286,40 @@ describe("parsePiModel", () => {
 });
 
 describe("resolvePiRoutedModel", () => {
-  test("routes plain models and both preset families to their concrete Pi model", () => {
-    expect(resolvePiRoutedModel("pi/anthropic/claude-opus-5-5")).toMatchObject({
+  test("resolution errors distinguish missing presets from malformed ids", () => {
+    expect(
+      piModelResolutionError("pi/workspace-preset/ws-acme/missing"),
+    ).toContain("Cannot resolve workspace model preset");
+    expect(piModelResolutionError("pi/dial/missing")).toContain(
+      "Cannot resolve built-in model preset",
+    );
+    expect(piModelResolutionError("pi/orchestrator/missing")).toContain(
+      "Cannot resolve built-in model preset",
+    );
+    expect(piModelResolutionError("not-a-model")).toContain(
+      "Not a pi model id",
+    );
+  });
+  test("routes plain models and both preset families to their concrete Pi model", async () => {
+    expect(
+      await resolvePiRoutedModel("pi/anthropic/claude-opus-5-5"),
+    ).toMatchObject({
       providerID: "anthropic",
       modelID: "claude-opus-5-5",
     });
-    expect(resolvePiRoutedModel("pi/dial/opus-fable")).toMatchObject({
+    expect(await resolvePiRoutedModel("pi/dial/opus-fable")).toMatchObject({
       providerID: "anthropic",
       modelID: "claude-opus-5-5",
       dial: { id: "dial/opus-fable" },
     });
-    expect(resolvePiRoutedModel("pi/orchestrator/sol")).toMatchObject({
+    expect(await resolvePiRoutedModel("pi/orchestrator/sol")).toMatchObject({
       providerID: "openai",
       modelID: "gpt-6-sol",
       orchestrator: { id: "orchestrator/sol" },
     });
-    expect(resolvePiRoutedModel("pi/orchestrator/fable-sol")).toMatchObject({
+    expect(
+      await resolvePiRoutedModel("pi/orchestrator/fable-sol"),
+    ).toMatchObject({
       providerID: "anthropic",
       modelID: "claude-fable-5-1",
       orchestrator: {
@@ -311,21 +330,21 @@ describe("resolvePiRoutedModel", () => {
     });
   });
 
-  test("rejects unknown preset ids", () => {
-    expect(resolvePiRoutedModel("pi/dial/nope")).toBeNull();
-    expect(resolvePiRoutedModel("pi/orchestrator/nope")).toBeNull();
+  test("rejects unknown preset ids", async () => {
+    expect(await resolvePiRoutedModel("pi/dial/nope")).toBeNull();
+    expect(await resolvePiRoutedModel("pi/orchestrator/nope")).toBeNull();
     // A workspace preset id with no live workspace behind it resolves to
     // nothing rather than minting a bogus "workspace-preset" provider.
     expect(
-      resolvePiRoutedModel("pi/workspace-preset/ws-not-a-workspace/nope"),
+      await resolvePiRoutedModel("pi/workspace-preset/ws-not-a-workspace/nope"),
     ).toBeNull();
   });
 
-  test("preset wiring on the STORED id survives dispatch of the concrete lead", () => {
+  test("preset wiring on the STORED id survives dispatch of the concrete lead", async () => {
     // agent-runner dispatches presets as their concrete model; the stored
     // session id is where the preset (and its oracle/effort) still lives.
     expect(
-      resolvePiRoutedModel("pi/anthropic/claude-fable-5-1", "dial/ultra"),
+      await resolvePiRoutedModel("pi/anthropic/claude-fable-5-1", "dial/ultra"),
     ).toMatchObject({
       providerID: "anthropic",
       modelID: "claude-fable-5-1",
@@ -333,7 +352,7 @@ describe("resolvePiRoutedModel", () => {
       effort: "high",
     });
     expect(
-      resolvePiRoutedModel("pi/openai/gpt-6-sol", "pi/orchestrator/sol"),
+      await resolvePiRoutedModel("pi/openai/gpt-6-sol", "pi/orchestrator/sol"),
     ).toMatchObject({
       providerID: "openai",
       modelID: "gpt-6-sol",
@@ -341,7 +360,7 @@ describe("resolvePiRoutedModel", () => {
       effort: "xhigh",
     });
     // A non-preset stored id attaches nothing.
-    const plain = resolvePiRoutedModel(
+    const plain = await resolvePiRoutedModel(
       "pi/anthropic/claude-opus-5-5",
       "pi/anthropic/claude-opus-5-5",
     );
@@ -579,15 +598,17 @@ describe("buildPiThirdPartyProviderPlan", () => {
 });
 
 describe("resolvePiDialModel", () => {
-  test("keeps regular Pi models unchanged", () => {
-    expect(resolvePiDialModel("pi/anthropic/claude-opus-5-5")).toMatchObject({
+  test("keeps regular Pi models unchanged", async () => {
+    expect(
+      await resolvePiDialModel("pi/anthropic/claude-opus-5-5"),
+    ).toMatchObject({
       providerID: "anthropic",
       modelID: "claude-opus-5-5",
     });
   });
 
-  test("routes a Pi Dial preset to its main model while retaining the preset", () => {
-    const resolved = resolvePiDialModel("pi/dial/ultra");
+  test("routes a Pi Dial preset to its main model while retaining the preset", async () => {
+    const resolved = await resolvePiDialModel("pi/dial/ultra");
     expect(resolved).toMatchObject({
       providerID: "anthropic",
       modelID: "claude-fable-5-1",
@@ -595,8 +616,8 @@ describe("resolvePiDialModel", () => {
     });
   });
 
-  test("rejects unknown Pi preset ids", () => {
-    expect(resolvePiDialModel("pi/dial/not-real")).toBeNull();
+  test("rejects unknown Pi preset ids", async () => {
+    expect(await resolvePiDialModel("pi/dial/not-real")).toBeNull();
   });
 });
 
@@ -1845,6 +1866,8 @@ describe("runPiSmokeTurn with the engine disabled", () => {
       expect(res.dryRun).toBe(true);
       expect(res.eventTypes).toEqual(["error"]);
       expect(res.error || "").toContain("not enabled");
+      expect(res.error).toContain(process.env.OPENSESSION_PI_CONFIG!);
+      expect(res.reason).toContain(process.env.OPENSESSION_PI_CONFIG!);
       expect(res.reason || "").toContain("disabled");
       expect(res.storeRows).toBe(0);
       expect(res.timedOut).toBe(false);

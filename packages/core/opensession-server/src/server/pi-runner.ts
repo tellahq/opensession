@@ -138,7 +138,11 @@ import {
 } from "./github-auth";
 import { ensureAgentAwsCredsFile } from "./aws-creds";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
-import { piAnthropicTransport, piEngineEnabled } from "./pi-config";
+import {
+  piAnthropicTransport,
+  piEngineEnabled,
+  piConfigPath,
+} from "./pi-config";
 import { assistantProseFields } from "./transcript-media";
 import { buildPiAnthropicProvider } from "./pi-anthropic-provider";
 import {
@@ -435,15 +439,26 @@ export function parsePiModel(
  * oracle/worker wiring and the preset's pinned effort — survives only on the
  * stored id. Resolving over both ids is the codex-direct recipe
  * (resolveCodexDirectPreset). */
-export function resolvePiRoutedModel(
+export async function resolvePiRoutedModel(
   model: string,
   storedModel?: string | null,
-): PiResolvedModel | null {
+): Promise<PiResolvedModel | null> {
   const ids = [model, storedModel || ""].filter(Boolean);
-  const ws = ids
-    .map((id) => resolveWorkspaceModelPreset(id))
-    .find((hit): hit is ResolvedWorkspaceModelPreset => !!hit);
+  let ws: ResolvedWorkspaceModelPreset | undefined;
+  for (const id of ids) {
+    ws = await resolveWorkspaceModelPreset(id);
+    if (ws) break;
+  }
   return resolvePiPresetWiring(model, ws, ids);
+}
+
+/** Distinguish unavailable preset records from malformed model ids. */
+export function piModelResolutionError(model: string): string {
+  if (/^pi\/workspace-preset\/[^/]+\/[A-Za-z0-9_-]{1,64}$/.test(model))
+    return `Cannot resolve workspace model preset "${model}". The workspace or preset is missing, or its lead model is unavailable. Check the workspace model settings.`;
+  if (/^pi\/(?:dial|orchestrator)\/[^/]+$/.test(model))
+    return `Cannot resolve built-in model preset "${model}". Choose an available preset from the model picker.`;
+  return `Not a pi model id: "${model}" (expected pi/<provider>/<model>, pi/dial/<preset>, pi/orchestrator/<preset>, or pi/workspace-preset/<workspace>/<preset>)`;
 }
 
 export interface PiResolvedModel {
@@ -1899,8 +1914,7 @@ async function* runPiAttempt(
   if (!piEngineEnabled()) {
     yield {
       type: "error",
-      content:
-        'The Pi engine is not enabled (~/.opensession-pi.json). Set {"enabled": true} there to turn it on.',
+      content: `The Pi engine is not enabled (${piConfigPath()}). Set {"enabled": true} there to turn it on.`,
       provider: PROVIDER,
       model,
     };
@@ -1919,17 +1933,14 @@ async function* runPiAttempt(
   }
   // The routed id plus the session's stored id: a workspace preset's wiring
   // (enginePresetId oracle, pinned effort) survives only on the stored one.
-  const resolved = resolvePiRoutedModel(model, opts.model);
+  const resolved = await resolvePiRoutedModel(model, opts.model);
   const parsed = resolved
     ? { providerID: resolved.providerID, modelID: resolved.modelID }
     : null;
   if (!parsed) {
     yield {
       type: "error",
-      content:
-        `Not a pi model id: "${model}" ` +
-        "(expected pi/<provider>/<model>, pi/dial/<preset>, pi/orchestrator/<preset>, " +
-        "or pi/workspace-preset/<workspace>/<preset>)",
+      content: piModelResolutionError(model),
       provider: PROVIDER,
       model,
     };
@@ -3704,7 +3715,7 @@ export async function runPiSmokeTurn(
     enabled,
     dryRun: !enabled,
     reason: !enabled
-      ? "The Pi engine is disabled (~/.opensession-pi.json missing or enabled:false). The gate error below is the expected dry-run result; no bridge or SDK use happened"
+      ? `The Pi engine is disabled (${piConfigPath()} missing or enabled:false). The gate error below is the expected dry-run result; no bridge or SDK use happened`
       : timedOut
         ? `smoke turn exceeded the ${timeoutMs}ms wall cap and was cancelled`
         : undefined,

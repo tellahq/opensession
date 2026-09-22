@@ -1,6 +1,6 @@
 /**
  * API-key model providers and subscription account preferences shared by Pi.
- * Stored in ~/.opensession-model-providers.json with mode 0600. Reads are
+ * Stored in ~/.opensession/model-providers.json with mode 0600. Reads are
  * fresh per call; Settings writes preserve unknown fields.
  */
 

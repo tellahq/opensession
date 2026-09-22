@@ -76,10 +76,8 @@ export async function handleModelsRoutes(
       .filter((model) =>
         modelFitsConfiguredProviders(model.id, configuredProviders),
       );
-    // A workspace's editable presets replace the global ones. A request with
-    // no workspace (the /new composer) gets the global Dial and, when opted
-    // in, Orchestrator presets instead — the entries resolveModel already
-    // serves — so the instance default (`dial/…`) always has a picker row.
+    // Workspace presets are editable copies, not replacements for the built-ins.
+    // Keep both identities reachable, including when a built-in is the default.
     const presetComposition = (models: Array<string | undefined>) =>
       models.flatMap((model) => {
         if (!model) return [];
@@ -92,14 +90,14 @@ export async function handleModelsRoutes(
     ) => ({
       id: `pi/${p.id}`,
       provider: "pi" as const,
-      label: p.label,
+      label: workspace ? `${p.label} (built-in)` : p.label,
       aliases: [] as string[],
       group,
       description: p.description,
       fixedEffort: p.effort,
       composition,
     });
-    const presetModels = workspace
+    const workspacePresetModels = workspace
       ? (settings.presets || [])
           .filter(
             (preset) =>
@@ -124,86 +122,68 @@ export async function handleModelsRoutes(
               ...(preset.supporting || []).map((model) => model.model),
             ]),
           }))
-      : engineConfigured
-        ? [
-            ...DIAL_PRESETS.filter((p) =>
-              presetFitsConfiguredProviders(
-                {
-                  group: "dial",
-                  lead: { model: p.model },
-                },
-                configuredProviders,
-              ),
-            ).map((p) =>
-              globalPresetEntry(
-                p,
-                "dial",
-                presetComposition([
-                  p.model,
-                  DIAL_ORACLE_AGENTS[p.oracleAgent]?.model,
-                ]),
-              ),
+      : [];
+    const builtinPresetModels = engineConfigured
+      ? [
+          ...DIAL_PRESETS.filter((p) =>
+            presetFitsConfiguredProviders(
+              {
+                group: "dial",
+                lead: { model: p.model },
+              },
+              configuredProviders,
             ),
-            ...(orchestratorEnabled()
-              ? ORCHESTRATOR_PRESETS.map((preset) => ({
-                  preset,
-                  workers: orchestratorWorkerModels(
-                    preset,
+          ).map((p) =>
+            globalPresetEntry(
+              p,
+              "dial",
+              presetComposition([
+                p.model,
+                DIAL_ORACLE_AGENTS[p.oracleAgent]?.model,
+              ]),
+            ),
+          ),
+          ...(orchestratorEnabled()
+            ? ORCHESTRATOR_PRESETS.map((preset) => ({
+                preset,
+                workers: orchestratorWorkerModels(preset, configuredProviders),
+              }))
+                .filter(({ preset, workers }) =>
+                  presetFitsConfiguredProviders(
+                    {
+                      group: "orchestrator",
+                      lead: { model: preset.model },
+                      supporting: workers.map((model) => ({ model })),
+                    },
                     configuredProviders,
                   ),
-                }))
-                  .filter(({ preset, workers }) =>
-                    presetFitsConfiguredProviders(
-                      {
-                        group: "orchestrator",
-                        lead: { model: preset.model },
-                        supporting: workers.map((model) => ({ model })),
-                      },
-                      configuredProviders,
-                    ),
-                  )
-                  .map(({ preset, workers }) =>
-                    globalPresetEntry(
-                      preset,
-                      "orchestrator",
-                      presetComposition([preset.model, ...workers]),
-                    ),
-                  )
-              : []),
-          ]
-        : [];
+                )
+                .map(({ preset, workers }) =>
+                  globalPresetEntry(
+                    preset,
+                    "orchestrator",
+                    presetComposition([preset.model, ...workers]),
+                  ),
+                )
+            : []),
+        ]
+      : [];
     const interactiveDefault = engineConfigured
       ? configuredInteractiveDefaultModel(configuredProviders)
       : getDefaultModel();
-    // Older installations may still have a Dial/Orchestrator id as their
-    // interactive default. In a workspace that id now means the matching
-    // editable preset record, so the picker and the created session agree.
-    const defaultForWorkspace = (() => {
-      if (!workspace) return interactiveDefault;
-      const pi = interactiveDefault.startsWith("pi/");
-      const legacyId = (
-        pi ? interactiveDefault.slice(3) : interactiveDefault
-      ).toLowerCase();
-      const presetId =
-        legacyId === "dial/opus-fable"
-          ? "opus-fable"
-          : legacyId.replace(/\//g, "-");
-      const preset = settings.presets?.find(
-        (item) => item.id.toLowerCase() === presetId,
-      );
-      return preset
-        ? `${pi ? "pi/" : ""}workspace-preset/${workspace.id}/${preset.id}`
-        : interactiveDefault;
-    })();
     // One provider config read for the whole catalog, not one per model.
     const providers = modelProviders();
-    const catalogModels = [...presetModels, ...visibleModels].map((model) => ({
+    const catalogModels = [
+      ...workspacePresetModels,
+      ...builtinPresetModels,
+      ...visibleModels,
+    ].map((model) => ({
       ...model,
       efforts: modelEfforts(model.id, providers),
       accountProvider: accountProviderForModel(model.id),
       fastModeSupported: supportsOpenaiFastMode(toPiModel(model.id)),
     }));
-    const routedDefault = pickerModelId(defaultForWorkspace);
+    const routedDefault = pickerModelId(interactiveDefault);
     const catalogDefault = catalogModels.some(
       (model) => model.id === routedDefault,
     )

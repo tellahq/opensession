@@ -2507,7 +2507,7 @@ export async function handleCreateSessionMessage(
   // disengage the dial (the preset id must be what the session stores).
   const workspacePreset = forkSource
     ? undefined
-    : resolveWorkspaceModelPreset(
+    : await resolveWorkspaceModelPreset(
         msg.model,
         msg.workspaceId ?? msg.modelWorkspaceId,
       );

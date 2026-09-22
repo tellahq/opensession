@@ -30,11 +30,11 @@ import type { UnifiedSession } from "./types";
  * Open Session-native slash commands. Returns a notice string when the message
  * was consumed as a command, or null to send it to Claude as a normal prompt.
  */
-export function handleSlashCommand(
+export async function handleSlashCommand(
   session: UnifiedSession,
   text: string,
   user?: string,
-): string | null {
+): Promise<string | null> {
   const fallbackCommand = text === "/fallback" || text.startsWith("/fallback ");
   const accountCommand =
     text === "/account" ||
@@ -144,7 +144,7 @@ export function handleSlashCommand(
     // fallback write in run-session.ts now only lands while the stored model
     // is still what the run started on, so it cannot revert this choice.
     const input = text.slice("/model ".length).trim();
-    const workspacePreset = resolveWorkspaceModelPreset(
+    const workspacePreset = await resolveWorkspaceModelPreset(
       input,
       session.workspaceId,
     );
@@ -159,7 +159,7 @@ export function handleSlashCommand(
     }
     const prevModel = session.model || getDefaultModel();
     const prevEffectiveModel =
-      resolveWorkspaceModelPreset(prevModel)?.model || prevModel;
+      (await resolveWorkspaceModelPreset(prevModel))?.model || prevModel;
     const effectiveResolvedModel = workspacePreset?.model || resolved.id;
     if (session.source === "slack") {
       if (prevModel === resolved.id) {
@@ -229,7 +229,7 @@ export function handleSlashCommand(
     ? text.replace(/^\/(?:account|sub)\s*/, "").trim()
     : "";
   const accountProvider = accountProviderForModel(
-    resolveWorkspaceModelPreset(session.model)?.model || session.model,
+    (await resolveWorkspaceModelPreset(session.model))?.model || session.model,
   );
   if (accountCommand && !accountProvider) {
     return `${modelLabel(session.model)} does not use a managed Claude, Codex or SuperGrok account pool.`;

@@ -592,7 +592,7 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
   if (wasCancelled()) return;
   // Workspace presets stay as their picker id on the session. Resolve their
   // lead only for dispatch, so the session never loses its preset identity.
-  const workspacePreset = resolveWorkspaceModelPreset(opts.model);
+  const workspacePreset = await resolveWorkspaceModelPreset(opts.model);
   const requestedModel = resolveModel(
     workspacePreset?.model || opts.model || getDefaultModel(),
   );

@@ -2213,7 +2213,7 @@ export async function maybeLaunchSandboxedRun(
     // the picker-only workspace preset before crossing that boundary. A preset
     // matching built-in Dial/Orchestrator wiring keeps that portable id, while
     // an ordinary custom preset carries its concrete lead model.
-    const workspacePreset = resolveWorkspaceModelPreset(session.model);
+    const workspacePreset = await resolveWorkspaceModelPreset(session.model);
     const portablePreset = workspacePreset
       ? portableWorkspacePresetRun(workspacePreset)
       : undefined;

@@ -4,7 +4,7 @@ import {
   resolveModel,
   toPiModel,
 } from "./models";
-import { peekWorkspace, workspaceModelSettings } from "./workspaces";
+import { getWorkspace, workspaceModelSettings } from "./workspaces";
 
 export interface ResolvedWorkspaceModelPreset {
   /** The picker id retained on the session, so the UI and history keep the preset name. */
@@ -58,21 +58,19 @@ function matchingDialPreset(preset: {
 }
 
 /** Resolve a picker preset into the model and stable instructions it represents. */
-export function resolveWorkspaceModelPreset(
+export async function resolveWorkspaceModelPreset(
   requested: unknown,
   workspaceId?: unknown,
-): ResolvedWorkspaceModelPreset | undefined {
+): Promise<ResolvedWorkspaceModelPreset | undefined> {
   if (typeof requested !== "string") return undefined;
   const pi = requested.startsWith("pi/");
   const id = (pi ? requested.slice(3) : requested).trim();
   const match = id.match(/^workspace-preset\/([^/]+)\/([A-Za-z0-9_-]{1,64})$/);
   if (!match || (typeof workspaceId === "string" && match[1] !== workspaceId))
     return undefined;
-  // Resolve through workspaceModelSettings so the default presets stay
-  // selectable in workspaces that never saved their own copy. Preset
-  // resolution is sync all the way up (runner dispatch, slash commands, the
-  // effective-config view), so it reads the memory projection.
-  const workspace = peekWorkspace(match[1]);
+  // A run host may never have served a session list. Read the owning
+  // workspace through the worker-owned catalog, not a process-local projection.
+  const workspace = await getWorkspace(match[1]);
   const preset = workspace
     ? workspaceModelSettings(workspace).presets?.find(
         (item) => item.id === match[2],
