@@ -146,9 +146,9 @@ export const DEFAULT_WORKSPACE_MODEL_SETTINGS: WorkspaceModelSettings = {
     },
     {
       id: "opus-fable",
-      label: "Opus 5 + Fable oracle",
+      label: "Opus 5.5 + Fable oracle",
       group: "custom",
-      lead: { model: "pi/anthropic/claude-opus-5", effort: "xhigh" },
+      lead: { model: "pi/anthropic/claude-opus-5-5", effort: "xhigh" },
       supporting: [
         {
           model: "pi/anthropic/claude-fable-5-1",

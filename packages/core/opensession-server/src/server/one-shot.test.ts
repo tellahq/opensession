@@ -15,8 +15,8 @@ describe("oneShot", () => {
     expect(oneShotModel("pi/openai/gpt-5.6-luna")).toBe(
       "pi/openai/gpt-5.6-luna",
     );
-    expect(oneShotModel("pi/anthropic/claude-opus-5")).toBe(
-      "pi/anthropic/claude-opus-5",
+    expect(oneShotModel("pi/anthropic/claude-opus-5-5")).toBe(
+      "pi/anthropic/claude-opus-5-5",
     );
   });
 
@@ -85,14 +85,14 @@ describe("oneShot", () => {
       oneShotFallbackModels("pi/openai/gpt-6-astra", "usage limit reached", [
         "gpt-6-astra",
         "gpt-5.6-sol",
-        "claude-opus-5",
+        "claude-opus-5-5",
       ]),
-    ).toEqual(["pi/anthropic/claude-opus-5"]);
+    ).toEqual(["pi/anthropic/claude-opus-5-5"]);
     expect(
       oneShotFallbackModels(
         "pi/anthropic/claude-fable-5-1",
         "usage limit reached",
-        ["claude-opus-5", "gpt-6-astra", "gpt-6-astra"],
+        ["claude-opus-5-5", "gpt-6-astra", "gpt-6-astra"],
       ),
     ).toEqual(["pi/openai/gpt-6-astra"]);
   });

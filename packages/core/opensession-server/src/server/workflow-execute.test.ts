@@ -491,7 +491,7 @@ describe("workflowExecutor", () => {
       { prompt: "b", opts: {}, seq: 1 },
       makeCtx({ defaultModel: "gpt-5.5" }),
     );
-    expect(calls[0].model).toBe("claude-opus-4-8");
+    expect(calls[0].model).toBe("claude-opus-5-5");
     expect(calls[1].model).toBe("gpt-5.6-sol");
   });
 

@@ -790,6 +790,19 @@ describe("buildPiAnthropicModels", () => {
     });
   });
 
+  test("registers Opus 5.5 with its published limits and pricing", () => {
+    const [opus] = buildPiAnthropicModels([], "claude-opus-5-5");
+    expect(opus).toMatchObject({
+      id: "claude-opus-5-5",
+      name: "Claude Opus 5.5",
+      reasoning: true,
+      contextWindow: 1_000_000,
+      maxTokens: 128_000,
+      cost: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
+    });
+    expect(buildPiAnthropicModels([opus!], "claude-opus-5-5")).toHaveLength(1);
+  });
+
   test("does not duplicate a model the catalog already has", () => {
     expect(buildPiAnthropicModels([model], "claude-sonnet-5")).toHaveLength(1);
   });

@@ -1,3 +1,4 @@
+import { buildPiAnthropicModels } from "./pi-anthropic-models";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { CodexAccount } from "./codex-accounts";
 import type { SeededOpenaiAuth } from "./openai-auth";
@@ -331,17 +332,10 @@ export async function createPiRuntimeBinding(
       runtime.registerProvider("anthropic", {
         baseUrl: bridge.url,
         headers,
-        models: [
-          {
-            id: input.modelID,
-            name: input.modelID,
-            reasoning: true,
-            input: ["text", "image"],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            contextWindow: 200_000,
-            maxTokens: 32_000,
-          },
-        ],
+        models: buildPiAnthropicModels([], input.modelID).map((model) => ({
+          ...model,
+          baseUrl: bridge.url,
+        })),
       });
       model = runtime.getModel("anthropic", input.modelID);
     }

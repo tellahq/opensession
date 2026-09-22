@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   accountProviderForModel,
+  contextWindowFor,
+  fallbackTier,
   automaticFallbackModel,
   explicitEngineFor,
   fallbackPlan,
@@ -47,9 +49,36 @@ afterEach(() => {
 
 describe("Pi-only model routing", () => {
   test("maps native model ids to Pi", () => {
-    expect(toPiModel("claude-opus-5")).toBe("pi/anthropic/claude-opus-5");
+    expect(toPiModel("claude-opus-5-5")).toBe("pi/anthropic/claude-opus-5-5");
     expect(toPiModel("gpt-6-astra")).toBe("pi/openai/gpt-6-astra");
     expect(toPiModel("gpt-5.6-sol")).toBe("pi/openai/gpt-5.6-sol");
+  });
+
+  test("upgrades old Opus selections without changing historical labels", () => {
+    for (const old of ["claude-opus-5", "claude-opus-4-8"]) {
+      for (const prefix of [
+        "",
+        "anthropic/",
+        "pi/anthropic/",
+        "claude/anthropic/",
+      ]) {
+        expect(toPiModel(prefix + old)).toBe("pi/anthropic/claude-opus-5-5");
+      }
+    }
+    for (const alias of ["opus", "opus5", "opus5.5"]) {
+      expect(resolveModel(alias)?.id).toBe("claude-opus-5-5");
+    }
+    expect(modelLabel("claude-opus-5")).toBe("Claude Opus 5");
+    expect(modelLabel("claude-opus-5-5")).toBe("Claude Opus 5.5");
+    expect(modelEfforts("pi/anthropic/claude-opus-5-5")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+    expect(contextWindowFor("pi/anthropic/claude-opus-5-5")).toBe(1_000_000);
+    expect(fallbackTier("pi/anthropic/claude-opus-5-5")).toBe(3);
   });
 
   test("preserves explicit Pi ids and case-sensitive model suffixes", () => {
@@ -93,7 +122,7 @@ describe("Pi-only model routing", () => {
   });
 
   test("resolves provider paths and Pi ids", () => {
-    expect(resolveModel("pi/anthropic/claude-opus-5")?.provider).toBe("pi");
+    expect(resolveModel("pi/anthropic/claude-opus-5-5")?.provider).toBe("pi");
     expect(resolveModel("wafer/glm-5.2")?.id).toBe("pi/wafer/glm-5.2");
   });
 
@@ -137,7 +166,7 @@ describe("Pi-only model routing", () => {
   });
 
   test("selects the account pool from Pi's upstream provider", () => {
-    expect(accountProviderForModel("pi/anthropic/claude-opus-5")).toBe(
+    expect(accountProviderForModel("pi/anthropic/claude-opus-5-5")).toBe(
       "claude",
     );
     expect(accountProviderForModel("pi/openai/gpt-5.6-sol")).toBe("codex");
@@ -145,7 +174,9 @@ describe("Pi-only model routing", () => {
   });
 
   test("keeps engine keys provider-neutral", () => {
-    expect(modelEngineKey("pi/anthropic/claude-opus-5")).toBe("claude-opus-5");
+    expect(modelEngineKey("pi/anthropic/claude-opus-5-5")).toBe(
+      "claude-opus-5-5",
+    );
     expect(modelEngineKey("pi/dial/opus-fable")).toBe("dial/opus-fable");
   });
 
@@ -179,7 +210,7 @@ describe("Pi-only model routing", () => {
       "claude-fable-5-1",
       "pi/anthropic/claude-fable-5-1",
     ]) {
-      for (const preferred of ["pi/openai/gpt-5.6-sol", "claude-opus-5"]) {
+      for (const preferred of ["pi/openai/gpt-5.6-sol", "claude-opus-5-5"]) {
         expect(nextFallbackModel(primary, new Set(), preferred)).toEqual({
           id: "pi/openai/gpt-6-astra",
           mode: "auto",
@@ -197,7 +228,7 @@ describe("Pi-only model routing", () => {
       nextFallbackModel(
         "pi/anthropic/claude-fable-5-1",
         new Set(["pi/openai/gpt-6-astra"]),
-        "claude-opus-5",
+        "claude-opus-5-5",
       ),
     ).toEqual({ id: "pi/openai/gpt-5.6-sol", mode: "auto" });
   });
@@ -266,7 +297,11 @@ describe("Pi-only model routing", () => {
       path,
       JSON.stringify({
         enabled: true,
-        pickerModels: ["pi/openai/gpt-5.6-sol"],
+        pickerModels: [
+          "pi/openai/gpt-5.6-sol",
+          "pi/anthropic/claude-opus-5",
+          "pi/anthropic/claude-opus-4-8",
+        ],
       }),
     );
     process.env.OPENSESSION_PI_CONFIG = path;
@@ -276,6 +311,17 @@ describe("Pi-only model routing", () => {
     expect(
       KNOWN_MODELS.filter((model) => model.id === "pi/openai/gpt-5.6-sol"),
     ).toHaveLength(1);
+    expect(
+      KNOWN_MODELS.filter(
+        (model) => model.id === "pi/anthropic/claude-opus-5-5",
+      ),
+    ).toHaveLength(1);
+    expect(
+      KNOWN_MODELS.some((model) => model.id === "pi/anthropic/claude-opus-5"),
+    ).toBe(false);
+    expect(
+      KNOWN_MODELS.some((model) => model.id === "pi/anthropic/claude-opus-4-8"),
+    ).toBe(false);
   });
 });
 

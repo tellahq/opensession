@@ -108,20 +108,20 @@ describe("migrateSessionEngine", async () => {
     // gate at run time.
     const pi = await migrateSessionEngine(
       "bks-mig-ok",
-      "pi/anthropic/claude-opus-5",
+      "pi/anthropic/claude-opus-5-5",
     );
     expect(pi.ok).toBe(true);
-    if (pi.ok) expect(pi.to).toBe("pi/anthropic/claude-opus-5");
+    if (pi.ok) expect(pi.to).toBe("pi/anthropic/claude-opus-5-5");
 
     // A legacy direct-engine id normalizes onto pi (the engines are
     // removed), so the flip lands the session on a runnable engine rather
     // than failing or bricking it.
     const legacy = await migrateSessionEngine(
       "bks-mig-ok",
-      "claude/anthropic/claude-opus-5",
+      "claude/anthropic/claude-opus-5-5",
     );
     expect(legacy.ok).toBe(true);
-    if (legacy.ok) expect(legacy.to).toBe("pi/anthropic/claude-opus-5");
+    if (legacy.ok) expect(legacy.to).toBe("pi/anthropic/claude-opus-5-5");
     // Leave the session where the other tests expect it.
     await migrateSessionEngine("bks-mig-ok", "pi/anthropic/claude-haiku-4-5");
   });

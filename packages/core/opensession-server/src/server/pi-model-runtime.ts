@@ -38,6 +38,8 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { stateDir } from "./paths";
+import { buildPiAnthropicModels } from "./pi-anthropic-models";
+export { buildPiAnthropicModels } from "./pi-anthropic-models";
 import { audit, summarizeText } from "./audit";
 import {
   DISALLOWED_BUILTINS,
@@ -661,38 +663,6 @@ export function rememberSdkTurn(
   );
   for (const [k] of byAge.slice(0, store.size - MAX_PI_SDK_SESSIONS))
     store.delete(k);
-}
-
-// ── Model catalog ────────────────────────────────────────────────────────────
-
-/**
- * The native provider's catalog: pi's builtin anthropic models passed through
- * untouched (ids, cost tables, context windows, compat — registerNativeProvider
- * REPLACES the builtin provider, so the catalog must ride along), plus a
- * zero-cost fallback entry when the run's model id is newer than the installed
- * catalog (subscription-billed; safe Anthropic defaults — the same fallback
- * registration the bridge path used). Exported for tests.
- */
-export function buildPiAnthropicModels(
-  builtin: readonly PiCatalogModel[],
-  ensureModelId?: string,
-): PiCatalogModel[] {
-  const models = builtin.map((m) => ({ ...m }));
-  if (ensureModelId && !models.some((m) => m.id === ensureModelId)) {
-    models.push({
-      id: ensureModelId,
-      name: ensureModelId,
-      api: "anthropic-messages",
-      provider: "anthropic",
-      baseUrl: "https://api.anthropic.com",
-      reasoning: true,
-      input: ["text", "image"],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 200_000,
-      maxTokens: 32_000,
-    } as PiCatalogModel);
-  }
-  return models;
 }
 
 // ── Usage / cost ─────────────────────────────────────────────────────────────

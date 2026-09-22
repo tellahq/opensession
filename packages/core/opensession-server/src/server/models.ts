@@ -155,6 +155,8 @@ export function normalizeModelEffort(
 /** Retired Claude slugs upgrade persisted sessions to the current release. */
 const RETIRED_CLAUDE_REROUTE: Record<string, string> = {
   "claude-fable-5": "claude-fable-5-1",
+  "claude-opus-5": "claude-opus-5-5",
+  "claude-opus-4-8": "claude-opus-5-5",
 };
 
 function rerouteRetiredClaudeModel(model: string): string {
@@ -168,7 +170,7 @@ function rerouteRetiredClaudeModel(model: string): string {
 
 export const DEFAULT_BRIDGE_PICKER_MODELS = [
   "claude-fable-5-1",
-  "claude-opus-5",
+  "claude-opus-5-5",
   "claude-sonnet-5",
   "claude-haiku-4-5",
   "gpt-6-astra",
@@ -193,16 +195,18 @@ export const KNOWN_MODELS: ModelInfo[] = [
     aliases: ["fable5"],
   },
   {
+    id: "claude-opus-5-5",
+    provider: "claude",
+    label: "Claude Opus 5.5",
+    aliases: ["opus", "opus5.5"],
+  },
+  {
     id: "claude-opus-5",
     provider: "claude",
     label: "Claude Opus 5",
-    aliases: ["opus", "opus5"],
+    aliases: ["opus5"],
   },
-  // Kept resolvable for old sessions' labels/pricing, but the Meridian bridge
-  // collapses every *opus* id to ONE canonical version (the
-  // ANTHROPIC_DEFAULT_OPUS_MODEL pin in meridianAccountEnv, now Opus 5), so a
-  // 4.8 selection is served as Opus 5 — it's out of the picker config for that
-  // reason.
+  // Keep retired Opus ids for historical labels; dispatch upgrades them.
   {
     id: "claude-opus-4-8",
     provider: "claude",
@@ -362,11 +366,11 @@ export const DIAL_ORACLE_AGENTS: Record<
       "Read-only advisor.",
   },
   "oracle-opus": {
-    model: "anthropic/claude-opus-5",
+    model: "anthropic/claude-opus-5-5",
     variant: "high",
-    label: "Claude Opus 5",
+    label: "Claude Opus 5.5",
     description:
-      "Oracle: senior-engineer second opinion on Claude Opus 5 — plan review, " +
+      "Oracle: senior-engineer second opinion on Claude Opus 5.5 — plan review, " +
       "architecture decisions, deep debugging, reviewing significant work. Read-only advisor.",
   },
 };
@@ -447,10 +451,10 @@ export const DIAL_PRESETS: DialPreset[] = [
   },
   {
     id: "dial/opus-fable",
-    label: "Opus 5 + Fable oracle",
+    label: "Opus 5.5 + Fable oracle",
     description:
-      "Custom combo — Opus 5 at extra-high effort with a Fable 5.1-high oracle",
-    model: "claude-opus-5",
+      "Custom combo — Opus 5.5 at extra-high effort with a Fable 5.1-high oracle",
+    model: "claude-opus-5-5",
     effort: "xhigh",
     oracleAgent: "oracle-fable",
     group: "custom",
@@ -832,6 +836,7 @@ const FALLBACK_TIER: Record<string, number> = {
   "claude-fable-5-1": 3,
   "gpt-6-astra": 3,
   "gpt-5.6-sol": 3,
+  "claude-opus-5-5": 3,
   "claude-opus-5": 3,
   "gpt-5.6-terra": 3,
   "gpt-5.6-luna": 3,
@@ -858,7 +863,7 @@ const FALLBACK_DESTINATIONS = [
   "gpt-6-astra",
   "gpt-5.6-sol",
   // Prefer Opus before the cheaper 5.6 siblings once Sol is unavailable.
-  "claude-opus-5",
+  "claude-opus-5-5",
   // Terra/Luna remain automatic top-tier fallbacks after Opus.
   "gpt-5.6-terra",
   "gpt-5.6-luna",
@@ -997,7 +1002,7 @@ export function setInteractiveDefaultModel(input: string | null): string {
 export const DEFAULT_FALLBACK_MODEL: string | undefined = (() => {
   const v = (process.env.OPENSESSION_FALLBACK_MODEL || "").trim().toLowerCase();
   if (v === "none") return undefined;
-  return v || "claude-opus-5";
+  return v || "claude-opus-5-5";
 })();
 
 /** Haiku is primarily used for fast/cheap work. When its Claude pool is dry,
@@ -1442,6 +1447,7 @@ export function modelLabel(model?: string | null): string {
 
 const CONTEXT_WINDOWS: Record<string, number> = {
   "claude-fable-5-1": 1_000_000,
+  "claude-opus-5-5": 1_000_000,
   "claude-opus-5": 1_000_000,
   "claude-opus-4-8": 1_000_000,
   "claude-opus-4-7": 1_000_000,
@@ -1465,7 +1471,7 @@ function pricingKey(model?: string | null): string {
 /** Context-window token ceiling for a model (0 if unknown → gauge hidden). */
 export function contextWindowFor(model?: string | null): number {
   const id = pricingKey(model || getDefaultModel());
-  return CONTEXT_WINDOWS[id] ?? 0;
+  return CONTEXT_WINDOWS[modelEngineKey(id)] ?? 0;
 }
 
 /** Human list for /model help output. */

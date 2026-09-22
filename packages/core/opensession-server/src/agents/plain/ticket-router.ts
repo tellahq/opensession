@@ -36,7 +36,7 @@ export interface RouteVerdict {
   reason: string;
 }
 
-export const DEFAULT_BASIC_MODEL = "claude-opus-5";
+export const DEFAULT_BASIC_MODEL = "claude-opus-5-5";
 
 export const DEFAULT_ROUTER_PROMPT = `You are the triage router for ${personaCompany()}'s customer support inbox for ${personaProduct()}.
 

@@ -37,7 +37,7 @@ function mockKey() {
 
 const session = {
   id: "session",
-  model: "claude-opus-5",
+  model: "claude-opus-5-5",
   effort: "high",
   startedBy: "alice",
 };
@@ -100,7 +100,7 @@ test("helper rejects incomplete provider replies rather than claiming a complete
 
 test("conversation target resolves the session's stored model and effort like dispatch", () => {
   expect(sessionConversationModel(session)).toEqual({
-    model: "pi/anthropic/claude-opus-5",
+    model: "pi/anthropic/claude-opus-5-5",
     effort: "high",
   });
   expect(
@@ -108,8 +108,8 @@ test("conversation target resolves the session's stored model and effort like di
   ).toEqual({ model: "pi/openai/gpt-5.6-sol" });
   // Unknown effort strings never reach the one-shot options.
   expect(
-    sessionConversationModel({ model: "claude-opus-5", effort: "turbo" }),
-  ).toEqual({ model: "pi/anthropic/claude-opus-5" });
+    sessionConversationModel({ model: "claude-opus-5-5", effort: "turbo" }),
+  ).toEqual({ model: "pi/anthropic/claude-opus-5-5" });
 });
 
 test("conversation target uses a preset's pinned effort and lead model", () => {
@@ -137,7 +137,7 @@ test("conversation target runs one tool-less one-shot on the session model witho
       return {
         text: "The change bounds retries.",
         error: null,
-        model: "pi/anthropic/claude-opus-5",
+        model: "pi/anthropic/claude-opus-5-5",
       };
     },
   );
@@ -151,11 +151,11 @@ test("conversation target runs one tool-less one-shot on the session model witho
     ),
   ).toEqual({
     text: "The change bounds retries.",
-    model: "pi/anthropic/claude-opus-5",
+    model: "pi/anthropic/claude-opus-5-5",
   });
   expect(prompt).toContain("Why was the retry bounded?");
   expect(prompt).toContain("Thread excerpt");
-  expect(opts?.model).toBe("pi/anthropic/claude-opus-5");
+  expect(opts?.model).toBe("pi/anthropic/claude-opus-5-5");
   expect(opts?.effort).toBe("high");
   expect(opts?.user).toBe("bob");
   expect(opts?.label).toBe("session-voice-conversation");

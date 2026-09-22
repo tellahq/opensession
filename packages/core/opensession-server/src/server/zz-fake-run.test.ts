@@ -582,7 +582,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 
     const data = sessionJson(sid);
     expect(data.model).toBe("dial/medium");
-    expect(data.lastEngineModel).toBe("pi/anthropic/claude-opus-5");
+    expect(data.lastEngineModel).toBe("pi/anthropic/claude-opus-5-5");
     expect(data.modelHistory).toBeUndefined();
   });
 

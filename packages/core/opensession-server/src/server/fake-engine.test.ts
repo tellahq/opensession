@@ -312,7 +312,7 @@ describe("fake engine through runAgent", () => {
         cwd: "/tmp",
         mcpServers: [],
         model: "claude-sonnet-5",
-        fallbackModel: "claude-opus-5",
+        fallbackModel: "claude-opus-5-5",
         journal: { osSessionId: "bks-test-claude-terminal", kind: "prompt" },
       }),
     );
@@ -347,7 +347,7 @@ describe("fake engine through runAgent", () => {
         cwd: "/tmp",
         mcpServers: [],
         model: "gpt-5.6-sol",
-        fallbackModel: "claude-opus-5",
+        fallbackModel: "claude-opus-5-5",
       }),
     );
     expect(fake.calls).toHaveLength(1);
@@ -372,7 +372,7 @@ describe("fake engine through runAgent", () => {
         cwd: "/tmp",
         mcpServers: [],
         model: "dial/medium",
-        fallbackModel: "claude-opus-5",
+        fallbackModel: "claude-opus-5-5",
         journal: { osSessionId: "bks-test-transient-journal", kind: "prompt" },
       }),
     );
@@ -409,13 +409,13 @@ describe("fake engine through runAgent", () => {
         prompt: "pi turn",
         cwd: "/tmp",
         mcpServers: [],
-        model: "pi/anthropic/claude-opus-5",
+        model: "pi/anthropic/claude-opus-5-5",
         fallbackModel: "none",
       }),
     );
     expect(types(events)).toEqual(["init", "text_chunk", "done"]);
     expect(fake.calls).toHaveLength(1);
-    expect(fake.calls[0].model).toBe("pi/anthropic/claude-opus-5");
+    expect(fake.calls[0].model).toBe("pi/anthropic/claude-opus-5-5");
   });
 
   test("script exhaustion fails loud instead of hanging", async () => {

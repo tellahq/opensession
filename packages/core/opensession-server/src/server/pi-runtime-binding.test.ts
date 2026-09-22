@@ -207,6 +207,23 @@ describe("createPiRuntimeBinding", () => {
     ]);
   });
 
+  test("registers Opus 5.5 metadata on the HTTP bridge without bypassing it", async () => {
+    const h = harness({ transport: "bridge" });
+    await createPiRuntimeBinding(input("anthropic", "claude-opus-5-5", h));
+    const registration = h.calls.find(
+      ([name, , config]) => name === "registerProvider" && config.models,
+    );
+    expect(registration?.[2].models).toEqual([
+      expect.objectContaining({
+        id: "claude-opus-5-5",
+        baseUrl: "http://bridge",
+        contextWindow: 1_000_000,
+        maxTokens: 128_000,
+        cost: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
+      }),
+    ]);
+  });
+
   test("binds a configured third-party provider plan then its key", async () => {
     const h = harness();
     await createPiRuntimeBinding(

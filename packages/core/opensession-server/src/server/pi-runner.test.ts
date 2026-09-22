@@ -262,9 +262,9 @@ describe("assistant transcript output", () => {
 
 describe("parsePiModel", () => {
   test("splits pi/<provider>/<model>", () => {
-    expect(parsePiModel("pi/anthropic/claude-opus-5")).toEqual({
+    expect(parsePiModel("pi/anthropic/claude-opus-5-5")).toEqual({
       providerID: "anthropic",
-      modelID: "claude-opus-5",
+      modelID: "claude-opus-5-5",
     });
   });
 
@@ -276,23 +276,23 @@ describe("parsePiModel", () => {
   });
 
   test("rejects non-pi ids and malformed remainders", () => {
-    expect(parsePiModel("anthropic/claude-opus-5")).toBeNull();
-    expect(parsePiModel("claude-opus-5")).toBeNull();
+    expect(parsePiModel("anthropic/claude-opus-5-5")).toBeNull();
+    expect(parsePiModel("claude-opus-5-5")).toBeNull();
     expect(parsePiModel("pi/anthropic")).toBeNull();
     expect(parsePiModel("pi/anthropic/")).toBeNull();
-    expect(parsePiModel("pi//claude-opus-5")).toBeNull();
+    expect(parsePiModel("pi//claude-opus-5-5")).toBeNull();
   });
 });
 
 describe("resolvePiRoutedModel", () => {
   test("routes plain models and both preset families to their concrete Pi model", () => {
-    expect(resolvePiRoutedModel("pi/anthropic/claude-opus-5")).toMatchObject({
+    expect(resolvePiRoutedModel("pi/anthropic/claude-opus-5-5")).toMatchObject({
       providerID: "anthropic",
-      modelID: "claude-opus-5",
+      modelID: "claude-opus-5-5",
     });
     expect(resolvePiRoutedModel("pi/dial/opus-fable")).toMatchObject({
       providerID: "anthropic",
-      modelID: "claude-opus-5",
+      modelID: "claude-opus-5-5",
       dial: { id: "dial/opus-fable" },
     });
     expect(resolvePiRoutedModel("pi/orchestrator/sol")).toMatchObject({
@@ -342,8 +342,8 @@ describe("resolvePiRoutedModel", () => {
     });
     // A non-preset stored id attaches nothing.
     const plain = resolvePiRoutedModel(
-      "pi/anthropic/claude-opus-5",
-      "pi/anthropic/claude-opus-5",
+      "pi/anthropic/claude-opus-5-5",
+      "pi/anthropic/claude-opus-5-5",
     );
     expect(plain?.dial).toBeUndefined();
     expect(plain?.orchestrator).toBeUndefined();
@@ -358,14 +358,14 @@ const WS_PRESETS: Record<string, ResolvedWorkspaceModelPreset> = {
   opus: {
     id: "pi/workspace-preset/ws-test/opus",
     label: "Opus, my way",
-    model: "pi/anthropic/claude-opus-5",
+    model: "pi/anthropic/claude-opus-5-5",
     effort: "xhigh",
     note: "## Workspace model preset · Opus, my way",
   },
   opusFable: {
     id: "pi/workspace-preset/ws-test/opus-fable",
     label: "Opus + Fable oracle",
-    model: "pi/anthropic/claude-opus-5",
+    model: "pi/anthropic/claude-opus-5-5",
     effort: "xhigh",
     enginePresetId: "dial/opus-fable",
     note: "## Workspace model preset · Opus + Fable oracle",
@@ -388,7 +388,7 @@ describe("resolvePiPresetWiring (workspace presets)", () => {
     );
     expect(out).toMatchObject({
       providerID: "anthropic",
-      modelID: "claude-opus-5",
+      modelID: "claude-opus-5-5",
       workspacePreset: { id: "pi/workspace-preset/ws-test/opus" },
       effort: "xhigh",
     });
@@ -401,7 +401,7 @@ describe("resolvePiPresetWiring (workspace presets)", () => {
       WS_PRESETS.opusFable,
     );
     expect(out).toMatchObject({
-      modelID: "claude-opus-5",
+      modelID: "claude-opus-5-5",
       dial: { id: "dial/opus-fable", oracleAgent: "oracle-fable" },
       // The workspace preset's own pin outranks the built-in tier's.
       effort: "xhigh",
@@ -423,12 +423,12 @@ describe("resolvePiPresetWiring (workspace presets)", () => {
   test("wiring rides the stored id while the routed id is the concrete lead", () => {
     // The agent-runner path: dispatch got the lead, opts.model kept the preset.
     const out = resolvePiPresetWiring(
-      "pi/anthropic/claude-opus-5",
+      "pi/anthropic/claude-opus-5-5",
       WS_PRESETS.opusFable,
-      ["pi/anthropic/claude-opus-5", WS_PRESETS.opusFable.id],
+      ["pi/anthropic/claude-opus-5-5", WS_PRESETS.opusFable.id],
     );
     expect(out).toMatchObject({
-      modelID: "claude-opus-5",
+      modelID: "claude-opus-5-5",
       dial: { id: "dial/opus-fable" },
       effort: "xhigh",
     });
@@ -440,7 +440,7 @@ describe("resolvePiPresetWiring (workspace presets)", () => {
       enginePresetId: "dial/not-real",
     });
     expect(out?.dial).toBeUndefined();
-    expect(out?.modelID).toBe("claude-opus-5");
+    expect(out?.modelID).toBe("claude-opus-5-5");
   });
 });
 
@@ -580,9 +580,9 @@ describe("buildPiThirdPartyProviderPlan", () => {
 
 describe("resolvePiDialModel", () => {
   test("keeps regular Pi models unchanged", () => {
-    expect(resolvePiDialModel("pi/anthropic/claude-opus-5")).toMatchObject({
+    expect(resolvePiDialModel("pi/anthropic/claude-opus-5-5")).toMatchObject({
       providerID: "anthropic",
-      modelID: "claude-opus-5",
+      modelID: "claude-opus-5-5",
     });
   });
 

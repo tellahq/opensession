@@ -52,7 +52,7 @@ import type {
  * cost only a tie-breaker (CLAUDE.md's priority rule). A script can still route
  * per agent via opts.model when it has a reason to.
  */
-export const WORKFLOW_DEFAULT_MODEL = "pi/anthropic/claude-opus-5";
+export const WORKFLOW_DEFAULT_MODEL = "pi/anthropic/claude-opus-5-5";
 
 export interface WorkflowsToolContext {
   sessionId: string;
