@@ -884,7 +884,9 @@ export function WorkspacePane({
         className={cn(
           VIEW_MAIN,
           "h-full min-h-0 bg-surface",
-          isPhone && "phone:pt-[env(safe-area-inset-top,0px)]",
+          isPhone &&
+            !tabStripVisible &&
+            "phone:pt-[env(safe-area-inset-top,0px)]",
         )}
       >
         <PrPanel
