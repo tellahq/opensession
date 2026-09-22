@@ -138,23 +138,13 @@ export function TeamSection({
       <SettingsGroupLabel
         className={title ? undefined : "mt-0"}
         actions={
-          githubAuth ? (
+          <>
             <Button
               size="sm"
               variant="default"
-              className="phone:min-h-11"
-              icon={
-                inviteCopied ? <IconCheck size={16} /> : <IconLink size={16} />
+              className={
+                onboarding || githubAuth ? "phone:min-h-11" : undefined
               }
-              onClick={copyInviteLink}
-            >
-              {inviteCopied ? "Invite link copied" : "Copy invite link"}
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="default"
-              className={onboarding ? "phone:min-h-11" : undefined}
               icon={<IconPlus size={16} />}
               onClick={() => {
                 setEditing(null);
@@ -163,7 +153,24 @@ export function TeamSection({
             >
               {addLabel}
             </Button>
-          )
+            {githubAuth && (
+              <Button
+                size="sm"
+                variant="default"
+                className="phone:min-h-11"
+                icon={
+                  inviteCopied ? (
+                    <IconCheck size={16} />
+                  ) : (
+                    <IconLink size={16} />
+                  )
+                }
+                onClick={copyInviteLink}
+              >
+                {inviteCopied ? "Invite link copied" : "Copy invite link"}
+              </Button>
+            )}
+          </>
         }
       >
         {showCount && members
@@ -195,7 +202,7 @@ export function TeamSection({
           ) : members.length === 0 ? (
             <EmptyState placement="row">
               {githubAuth
-                ? "No teammates yet. Share the invite link so they can sign in with GitHub."
+                ? "No teammates yet. Add a member with their GitHub login before sharing the invite link."
                 : "No teammates yet. Add everyone who uses this instance so commits and sessions attribute to real people."}
             </EmptyState>
           ) : (
@@ -216,7 +223,7 @@ export function TeamSection({
       )}
       <SettingsHint>
         {githubAuth
-          ? "Share the invite link. Teammates are added when they sign in with GitHub."
+          ? "Add each teammate with their GitHub login, then share the invite link. Only listed GitHub accounts can sign in."
           : githubOrganization
             ? `Members were imported from the ${githubOrganization} GitHub organization. Only a name is required when you add someone manually.`
             : "Only a name is required. Add a GitHub login or other identities when sign-in and attribution should resolve to this member."}
@@ -225,6 +232,7 @@ export function TeamSection({
         open={dialogOpen}
         member={editing}
         addLabel={addLabel}
+        githubAuth={githubAuth}
         onOpenChange={setDialogOpen}
         onSaved={async () => {
           setDialogOpen(false);
@@ -480,6 +488,7 @@ function MemberDialog({
   open,
   member,
   addLabel,
+  githubAuth,
   onOpenChange,
   onSaved,
 }: {
@@ -487,6 +496,7 @@ function MemberDialog({
   /** null → add; a member → edit that member. */
   member: TeamMember | null;
   addLabel: string;
+  githubAuth: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void | Promise<void>;
 }) {
@@ -585,7 +595,11 @@ function MemberDialog({
       <Modal.Content initialFocus={nameRef}>
         <Modal.Header
           title={member ? `Edit ${member.name}` : addLabel}
-          description="Commits, sessions, and access grants resolve through this person."
+          description={
+            githubAuth
+              ? "Add their GitHub login to allow sign-in. A name alone is only an identity mapping."
+              : "Commits, sessions, and access grants resolve through this person."
+          }
         />
         <form className="flex flex-col gap-3" onSubmit={submit}>
           <Field label="Full name">

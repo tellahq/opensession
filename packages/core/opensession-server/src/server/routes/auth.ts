@@ -139,7 +139,7 @@ export async function handleAuthRoutes(
       removeGithubAccount(result.login);
       return Response.json({
         status: "error",
-        error: `GitHub account @${result.login} is not a workspace member. Add it in Settings > Members before enabling sign-in.`,
+        error: `GitHub account @${result.login} is not a workspace member. Ask a workspace administrator to add your GitHub login in Settings > Members, then try signing in again.`,
       });
     }
     const session = createWebSession(result.login);
