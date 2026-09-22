@@ -1993,6 +1993,7 @@ export async function openCreatedSession(
               mcpServers: openingTrust.mcpServers,
               proxyMcpServers: Object.keys(openingMcp),
               reposNote: openingReposNote,
+              reposNoteHasPreset: !automationChild && !!spec.presetNote,
               images: spec.images,
               ...(spec.fork
                 ? {

@@ -232,6 +232,8 @@ export interface HostedRunOpts {
    *  fail-closed automation-bar set for automation-owned sessions. */
   proxyMcpServers?: string[];
   reposNote?: string;
+  /** reposNote already carries the session's captured workspace preset note. */
+  reposNoteHasPreset?: boolean;
   deniedTools?: Record<string, string>;
   publicationPolicy?: { repo: string; branch: string; headBranch: string };
   confirmTools?: Record<string, string>;
@@ -293,7 +295,11 @@ export async function resolveHostedRunOptions(
   return {
     ...opts,
     ...portableWorkspacePresetRun(preset),
-    reposNote: [preset.note, opts.reposNote].filter(Boolean).join("\n\n"),
+    // Interactive callers already put the session's captured preset note in
+    // reposNote. Keep that snapshot, even after the workspace is edited.
+    reposNote: opts.reposNoteHasPreset
+      ? opts.reposNote
+      : [preset.note, opts.reposNote].filter(Boolean).join("\n\n"),
   };
 }
 

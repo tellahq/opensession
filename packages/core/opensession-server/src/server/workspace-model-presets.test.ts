@@ -230,6 +230,59 @@ describe("workspace preset catalog resolution", () => {
     }
   });
 
+  test("hosted turns keep captured instructions once, including after workspace edits", async () => {
+    const workspace = {
+      id: "ws-acme",
+      name: "Acme",
+      modelSettings: {
+        presets: [
+          {
+            id: "custom",
+            label: "Acme lead",
+            lead: { model: "pi/openai/gpt-6-sol" },
+            instructions: "Keep the captured review plan.",
+          },
+        ],
+      },
+    };
+    await catalogDocuments("workspaces").set(workspace.id, workspace);
+    const model = "pi/workspace-preset/ws-acme/custom";
+    const captured = (await resolveWorkspaceModelPreset(model))!.note;
+    const reposNote = `${captured}\n\nAcme repository instructions`;
+    for (const instructions of [
+      "Keep the captured review plan.",
+      "Use the new review plan.",
+    ]) {
+      workspace.modelSettings.presets[0].instructions = instructions;
+      await catalogDocuments("workspaces").set(workspace.id, workspace);
+      const opts = await resolveHostedRunOptions({
+        osSessionId: "acme-session",
+        prompt: "Acme task",
+        cwd: ".",
+        model,
+        reposNote,
+        reposNoteHasPreset: true,
+      });
+      expect(opts.reposNote).toBe(reposNote);
+      expect(opts.reposNote?.match(/## Workspace model preset/g)).toHaveLength(
+        1,
+      );
+      expect(opts.reposNote).not.toContain("Use the new review plan.");
+    }
+    const uncaptured = await resolveHostedRunOptions({
+      osSessionId: "acme-session",
+      prompt: "Acme task",
+      cwd: ".",
+      model,
+      reposNote: "Acme repository instructions",
+    });
+    expect(
+      uncaptured.reposNote?.match(/## Workspace model preset/g),
+    ).toHaveLength(1);
+    expect(uncaptured.reposNote).toContain("Use the new review plan.");
+    expect(uncaptured.reposNote).toContain("Acme repository instructions");
+  });
+
   test("the gateway rejects missing workspace presets before local-host dispatch", async () => {
     await expect(
       resolveHostedRunOptions({

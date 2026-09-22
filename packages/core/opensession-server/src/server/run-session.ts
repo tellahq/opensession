@@ -3371,6 +3371,7 @@ async function runSessionPromptInner(
           reposNote: isAutomationSession
             ? undefined
             : await buildSessionNote(session, user),
+          reposNoteHasPreset: !isAutomationSession && !!session.presetNote,
           deniedTools,
           publicationPolicy: session.automationDescendantPolicy
             ? {
