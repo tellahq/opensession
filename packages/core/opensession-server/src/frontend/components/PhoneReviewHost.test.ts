@@ -10,7 +10,7 @@ const session = await Bun.file(
   new URL("./session-viewer/SessionViewerMainRegion.tsx", import.meta.url),
 ).text();
 
-test("focused phone Review replaces app chrome without changing desktop navigation", () => {
+test("focused phone Review replaces the title chrome but keeps workspace tabs", () => {
   const condition = app.slice(
     app.indexOf("const focusedPhoneReview ="),
     app.indexOf("const content ="),
@@ -25,8 +25,13 @@ test("focused phone Review replaces app chrome without changing desktop navigati
   expect(app).toContain('focusedPhoneReview && "phone:hidden"');
   expect(condition).toContain("routeWorkspace.branch || reviewFocusPr?.branch");
   expect(app).toContain("{!focusedPhoneReview && (");
-  expect(app).toContain("!activeTabSplit &&");
-  expect(app).toContain("{!focusedPhoneReview && renderTabBar(side)}");
+  expect(app).toContain("!activeTabSplit && tabStripVisible && (");
+  expect(app).toContain("{renderTabBar(null)}");
+  expect(app).toContain("{renderTabBar(side)}");
+  expect(app).not.toContain("{!focusedPhoneReview && renderTabBar(side)}");
+  expect(app).toMatch(
+    /focusedPhoneReview &&\s*"phone:pt-\[env\(safe-area-inset-top,0px\)\]"/,
+  );
   expect(app).toContain("onBack={() => setActiveViewTab(null)}");
 });
 
@@ -35,7 +40,9 @@ test("both Review hosts supply a visible workspace exit and preserve safe-area c
     expect(source).toContain("phoneNavigation={");
     expect(source).toContain("<PhoneTopBarAction");
     expect(source).toContain('aria-label="Back to workspace"');
-    expect(source).toContain("phone:pt-[env(safe-area-inset-top,0px)]");
+    expect(source).toMatch(
+      /isPhone &&\s*!tabStripVisible &&\s*"phone:pt-\[env\(safe-area-inset-top,0px\)\]"/,
+    );
   }
   expect(workspace).toContain("onClick={onBack}");
   expect(session).toContain("onClick={openCurrentWorkspace}");
