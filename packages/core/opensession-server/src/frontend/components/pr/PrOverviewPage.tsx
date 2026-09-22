@@ -9,6 +9,7 @@ import type {
 } from "../../lib/types";
 import { SelectionToSession } from "../SelectionToSession";
 import { WalkthroughCard } from "../WalkthroughCard";
+import { PrStateIcon } from "./PrStateIcon";
 import { ConversationView } from "./PrViews";
 
 interface Props {
@@ -58,8 +59,25 @@ export function PrOverviewPage({
           <div
             className={`mx-auto w-full max-w-[1120px] px-6 py-6 phone:px-3 ${railStacked ? "flex flex-col gap-6" : "flex gap-8"}`}
           >
-            {railStacked && rail}
             <div className="flex min-w-0 flex-1 flex-col gap-5">
+              <header className="hidden space-y-2 phone:block">
+                <h1 className="m-0 break-words text-lg font-semibold leading-snug text-fg">
+                  {pr.title}
+                </h1>
+                <div className="flex items-center gap-2 text-xs text-dim">
+                  <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
+                  <span>
+                    {pr.isDraft
+                      ? "Draft"
+                      : pr.state === "OPEN"
+                        ? "Open"
+                        : pr.state === "MERGED"
+                          ? "Merged"
+                          : "Closed"}
+                  </span>
+                  <span>#{pr.number}</span>
+                </div>
+              </header>
               {walkthrough && <WalkthroughCard walkthrough={walkthrough} />}
               <ConversationView
                 author={pr.author}
@@ -71,6 +89,7 @@ export function PrOverviewPage({
                 pr={pr}
               />
             </div>
+            {railStacked && <div className="desktop:order-first">{rail}</div>}
             {!railStacked && !hideWideOverviewRail && rail}
           </div>
         </SelectionToSession>

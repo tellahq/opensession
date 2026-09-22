@@ -104,11 +104,6 @@ test("workspace Overview keeps the implementation summary beside the PR canvas",
 });
 
 test("reviews with and without a PR share the review toolbar", () => {
-  const reviewBar = prPanelSource.slice(
-    prPanelSource.indexOf("const reviewBar"),
-    prPanelSource.indexOf("const reviewBar") + 500,
-  );
-
   expect(prPanelSource.match(/<ReviewToolbar/g)?.length).toBe(2);
   expect(prPanelSource).toMatch(
     /<ReviewToolbar\s+compact=\{compactToolbar\}\s*>\s*<div className=\{PR_NO_PR_BAR\}>/,
@@ -123,10 +118,9 @@ test("reviews with and without a PR share the review toolbar", () => {
   expect(reviewToolbarSource).toContain("desktop:rounded-lg");
   expect(reviewToolbarSource).toContain("desktop:smooth-shadow-ring-sm");
   expect(reviewToolbarSource).not.toContain("desktop:border");
-  expect(reviewBar).toContain("h-11");
-  expect(reviewBar).toContain("bg-surface");
-  expect(reviewBar).toContain("desktop:hidden");
-  expect(reviewBar).not.toContain("desktop:absolute");
+  expect(prPanelSource).toContain("{phoneLayout ? (");
+  expect(prPanelSource).toContain("<PhoneReviewHeader");
+  expect(prPanelSource).not.toContain("const reviewBar");
   expect(prPanelSource).toContain('["files", "Files",');
   expect(prPanelSource).toContain('label="Code view"');
   expect(prPanelSource).toContain(
@@ -283,9 +277,10 @@ test("wide Review keeps page navigation in the identity bar", () => {
   expect(prPanelSource).toContain("sessionActionTarget === undefined");
   expect(prPanelSource).toContain('label="Pull request pages"');
   expect(prPanelSource).toContain('className="shrink-0 phone:hidden"');
-  expect(prPanelSource).toContain('className="flex h-11');
-  expect(prPanelSource).toContain("desktop:hidden");
-  expect(prPanelSource).toContain("{phoneLayout && fileControls}");
+  expect(prPanelSource).toContain("<PhoneReviewHeader");
+  expect(prPanelSource).toContain('aria-label="Back to overview"');
+  expect(prPanelSource).toContain("phoneNavigation");
+  expect(prPanelSource).not.toContain("phonePageTabs");
   expect(prPanelSource).toContain(
     "{(compactToolbar || !phoneLayout) && fileControls}",
   );
@@ -350,12 +345,17 @@ test("a lone Review hides the tab strip, closes the toolbar gap, and keeps New t
 
 test("the PR top bar leaves merge to the summary and actions menu", () => {
   const headerStart = prPanelSource.indexOf('<TopBar as="header"');
-  const menuStart = prPanelSource.indexOf("<Menu.Root>", headerStart);
+  const menuStart = prPanelSource.indexOf(
+    "<Menu.Root>",
+    prPanelSource.indexOf("const prActions"),
+  );
   const menuEnd = prPanelSource.indexOf("</Menu.Root>", menuStart);
 
   expect(headerStart).toBeGreaterThan(-1);
-  expect(menuStart).toBeGreaterThan(headerStart);
-  expect(prPanelSource.slice(headerStart, menuStart)).not.toContain(
+  expect(menuStart).toBeGreaterThan(-1);
+  const headerEnd = prPanelSource.indexOf("</TopBar>", headerStart);
+  expect(prPanelSource.slice(headerStart, headerEnd)).toContain("{prActions}");
+  expect(prPanelSource.slice(headerStart, headerEnd)).not.toContain(
     "Squash and merge",
   );
   expect(prPanelSource.slice(menuStart, menuEnd)).toContain("Squash and merge");

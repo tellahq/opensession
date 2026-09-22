@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { useIsPhone } from "../../hooks/useIsPhone";
+import { Button } from "../../ui/button";
+import { cn } from "../../ui/cn";
 import { renderPrCommentMarkdown } from "../../lib/markdown";
 import { formatPrCommentPrompt, stripHtmlComments } from "../../lib/pr-prompts";
 import { avatarUrl, type Provider } from "../../lib/provider";
@@ -37,6 +40,28 @@ function PrDescriptionCard({
   descriptionHtml: string;
   provider: Provider;
 }) {
+  const isPhone = useIsPhone();
+  const bodyId = useId();
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    const preview = previewRef.current;
+    if (!isPhone || !body || !preview) return;
+    const measure = () => {
+      // Keep measuring the full markdown, not a truncated HTML/string preview.
+      if (!expanded) setOverflows(body.scrollHeight > preview.clientHeight);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(body);
+    observer.observe(preview);
+    return () => observer.disconnect();
+  }, [isPhone, descriptionHtml, expanded]);
+
   if (!descriptionHtml)
     return (
       <div className="rounded-xl border border-dashed border-line px-4 py-10 text-center text-xs text-faint">
@@ -44,7 +69,7 @@ function PrDescriptionCard({
       </div>
     );
   return (
-    <article className="min-w-0 rounded-xl border border-line/60 bg-surface smooth-shadow-sm">
+    <article className="min-w-0 rounded-xl border border-line/60 bg-surface smooth-shadow-sm phone:border-0 phone:bg-panel phone:shadow-none">
       <div className="flex items-center gap-2 border-b border-divider px-4 py-3">
         <PrAvatar login={author} provider={provider} />
         <div>
@@ -53,9 +78,31 @@ function PrDescriptionCard({
         </div>
       </div>
       <div
-        className="markdown px-4 py-4 text-body leading-relaxed text-dim"
-        dangerouslySetInnerHTML={{ __html: descriptionHtml }}
-      />
+        id={bodyId}
+        ref={previewRef}
+        className={cn(!expanded && "phone:max-h-80 phone:overflow-hidden")}
+        // A keyboard user reaching a link below the preview must see it.
+        onFocusCapture={() => setExpanded(true)}
+      >
+        <div
+          ref={bodyRef}
+          className="markdown px-4 py-4 text-body leading-relaxed text-dim"
+          dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+        />
+      </div>
+      {isPhone && overflows && (
+        <div className="px-4 pb-3">
+          <Button
+            variant="ghost"
+            className="min-h-11"
+            aria-controls={bodyId}
+            aria-expanded={expanded}
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? "Show less" : "Read more"}
+          </Button>
+        </div>
+      )}
     </article>
   );
 }
@@ -92,6 +139,7 @@ export function ConversationView({
        that a phone can't fit. */
     <div className="mx-auto flex w-full min-w-0 max-w-[760px] flex-col gap-4">
       <PrDescriptionCard
+        key={pr?.url}
         author={author}
         descriptionHtml={descriptionHtml}
         provider={provider}

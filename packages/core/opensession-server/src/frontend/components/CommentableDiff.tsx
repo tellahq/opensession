@@ -53,6 +53,8 @@ import { useStickyEdges } from "../hooks/useStickyEdges";
 import { UserAvatar } from "./UserAvatar";
 import { ExtBadge, fileExt } from "./lang-marks";
 import { cn } from "../ui/cn";
+import { useIsPhone } from "../hooks/useIsPhone";
+import { PhoneDiffCommentComposer } from "./PhoneDiffCommentComposer";
 
 /* The +/− counts. DiffPanel's summary strip carries the same pair, and the two
    must read alike. */
@@ -64,7 +66,8 @@ const DIFF_DEL = "font-semibold text-red";
 const FILE_ROW = "min-w-0 max-w-full";
 const FILE_HEADER =
   "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 overflow-clip rounded-md px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
-const FILE_BODY = "relative z-0 mt-1.5 max-w-full overflow-clip rounded-lg";
+const FILE_BODY =
+  "relative z-0 mt-1.5 max-w-full overflow-clip rounded-lg phone:rounded-none";
 // Sidebar Changes still pins filenames. Its canvas fill masks passing code;
 // the filename row draws its own edge only while pinned.
 const STICKY_FILE_HEADER =
@@ -267,6 +270,7 @@ export function CommentableDiff({ patch, options }: Props) {
     onToggleViewed,
     editFile,
   } = options;
+  const isPhone = useIsPhone();
   const resolvedTheme = useResolvedTheme();
   const theme = codeTheme === "system" ? resolvedTheme : codeTheme;
   const files = parseFileDiffs(patch, visibleFileOrder);
@@ -662,16 +666,18 @@ export function CommentableDiff({ patch, options }: Props) {
     const dir = slash >= 0 ? file.name.slice(0, slash) : "";
     const base = slash >= 0 ? file.name.slice(slash + 1) : file.name;
     const fileUrl = fileActions?.url(file) ?? null;
-    const annotations: DiffLineAnnotation<Meta>[] = isDraftFile
-      ? [
-          ...pend,
-          {
-            side: draft!.range.side === "deletions" ? "deletions" : "additions",
-            lineNumber: Math.max(draft!.range.start, draft!.range.end),
-            metadata: { kind: "draft" as const },
-          },
-        ]
-      : pend;
+    const annotations: DiffLineAnnotation<Meta>[] =
+      isDraftFile && !isPhone
+        ? [
+            ...pend,
+            {
+              side:
+                draft!.range.side === "deletions" ? "deletions" : "additions",
+              lineNumber: Math.max(draft!.range.start, draft!.range.end),
+              metadata: { kind: "draft" as const },
+            },
+          ]
+        : pend;
 
     return (
       <div
@@ -719,18 +725,12 @@ export function CommentableDiff({ patch, options }: Props) {
                   <IconFile size={17} />
                 )}
               </span>
-              <span className="flex min-w-0 items-center gap-2 overflow-hidden text-label">
-                <span className="shrink-0 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-fg">
-                  {base}
-                </span>
-                {dir && (
-                  <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-faint">
-                    {dir}
-                  </span>
-                )}
+              <span className="flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap text-label">
+                <span className="shrink-0 font-semibold text-fg">{base}</span>
+                {dir && <span className="shrink-0 text-faint">{dir}</span>}
               </span>
             </button>
-            {editable && !isEditing && (
+            {editable && !isEditing && !(isPhone && fileActions) && (
               <Tooltip label="Edit file in place">
                 <button
                   type="button"
@@ -844,7 +844,7 @@ export function CommentableDiff({ patch, options }: Props) {
             )}
             {viewedEnabled && (
               <label
-                className={`inline-flex shrink-0 cursor-pointer items-center gap-[5px] pl-1 font-sans text-label select-none ${
+                className={`inline-flex shrink-0 cursor-pointer items-center gap-[5px] pl-1 font-sans text-label select-none phone:size-11 phone:justify-center phone:pl-0 ${
                   isViewed ? "text-dim" : "text-faint"
                 }`}
                 onClick={(e) => e.stopPropagation()}
@@ -853,7 +853,7 @@ export function CommentableDiff({ patch, options }: Props) {
                   checked={isViewed}
                   onCheckedChange={() => toggleViewed(file, i)}
                 />
-                Reviewed
+                <span className="phone:sr-only">Reviewed</span>
               </label>
             )}
             {fileActions && (
@@ -864,6 +864,7 @@ export function CommentableDiff({ patch, options }: Props) {
                       <Button
                         variant="ghost"
                         size="sm"
+                        className="phone:size-11"
                         aria-label={`File actions for ${file.name}`}
                         icon={<IconDotsHorizontal size={18} />}
                       />
@@ -871,6 +872,12 @@ export function CommentableDiff({ patch, options }: Props) {
                   />
                 </Tooltip>
                 <Menu.Popup align="end" className="min-w-[230px]">
+                  {isPhone && editable && !isEditing && (
+                    <Menu.Item onClick={() => void startEdit(file, i)}>
+                      <IconPencil size={18} className={MENU_ICON} />
+                      Edit file in place
+                    </Menu.Item>
+                  )}
                   {fileUrl && (
                     <>
                       <Menu.Item
@@ -1019,6 +1026,20 @@ export function CommentableDiff({ patch, options }: Props) {
       ref={setStickyRoot}
       className={cn("flex flex-col", stickyFileHeaders ? "gap-2.5" : "gap-4")}
     >
+      {isPhone && draft && files[draft.fileIndex] && (
+        <PhoneDiffCommentComposer
+          draft={draft}
+          file={files[draft.fileIndex]}
+          textStore={draftText}
+          placeholder={placeholder}
+          submitLabel={submitLabel}
+          disabled={disabled}
+          disabledHint={disabledHint}
+          repo={commentRepo}
+          onCancel={closeDraft}
+          onSubmit={submitDraft}
+        />
+      )}
       {confirmation && (
         <div className="rounded-md bg-green-soft px-3 py-1.5 text-label font-semibold text-green">
           {confirmation}

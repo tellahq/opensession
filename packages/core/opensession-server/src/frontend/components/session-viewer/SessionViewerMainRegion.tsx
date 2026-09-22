@@ -40,6 +40,8 @@ import {
   WorkspaceWaiting,
 } from "./busy-indicators";
 import { Button } from "../../ui/button";
+import { PhoneTopBarAction } from "../../ui/top-bar";
+import { IconChevronLeft } from "../icons";
 import { NextUnreadButton } from "../NextUnreadButton";
 import { TranscriptView } from "../session/TranscriptView";
 import { SessionSafetyNotice } from "../SessionSafetyNotice";
@@ -752,7 +754,12 @@ export function SessionViewerMainRegion({
           </div>
         ) : null
       ) : showReview && hasWorkspace ? (
-        <div className={VIEWER_REVIEW_MAIN}>
+        <div
+          className={cn(
+            VIEWER_REVIEW_MAIN,
+            isPhone && "phone:pt-[env(safe-area-inset-top,0px)]",
+          )}
+        >
           <PrPanel
             onOpenPr={openPr}
             sessionId={session.id}
@@ -780,6 +787,15 @@ export function SessionViewerMainRegion({
             onPageChange={setReviewPage}
             compactToolbar={reviewPage !== "files" && summaryVisible}
             flushToolbarTop={!tabStripVisible}
+            phoneNavigation={
+              openCurrentWorkspace ? (
+                <PhoneTopBarAction
+                  onClick={openCurrentWorkspace}
+                  aria-label="Back to workspace"
+                  icon={<IconChevronLeft size={22} />}
+                />
+              ) : undefined
+            }
           />
         </div>
       ) : (

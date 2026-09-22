@@ -1,19 +1,22 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { PrFileTree } from "./PrFileTree";
 
 describe("PrFileTree", () => {
-  test("shortens long file names from the center", () => {
-    const entry = Bun.resolveSync("@pierre/trees", import.meta.dir);
-    const source = readFileSync(
-      join(dirname(entry), "render/FileTreeView.js"),
-      "utf8",
+  test("keeps long flat filenames intact in a horizontal scrollport", () => {
+    const name = "Script__PreviewExternalRecordingConfiguration.ts";
+    const html = renderToStaticMarkup(
+      <PrFileTree
+        files={[{ path: `src/${name}`, additions: 1, deletions: 0 }]}
+        mode="flat"
+        showFileStats={false}
+        onOpenFile={() => {}}
+      />,
     );
-
-    expect(source).toContain('split: "center"');
-    expect(source).not.toContain('split: "extension"');
+    expect(html).toContain(name);
+    expect(html).toContain("overflow-auto");
+    expect(html).toContain("w-max");
+    expect(html).not.toContain("truncate font-medium text-fg");
   });
 
   test("renders an accessible resize separator", () => {

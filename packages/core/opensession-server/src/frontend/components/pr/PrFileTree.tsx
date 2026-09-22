@@ -15,6 +15,7 @@ import {
 } from "../../lib/pr-file-navigator";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
+import { REVIEW_TREE_CSS } from "../../lib/pr-file-tree-styles";
 import { cn } from "../../ui/cn";
 
 const WIDTH_KEY = "opensession-pr-file-tree-width";
@@ -98,6 +99,7 @@ export function PrFileTree({
     paths,
     initialExpandedPaths: allDirectories(paths),
     flattenEmptyDirectories: true,
+    unsafeCSS: REVIEW_TREE_CSS,
     itemHeight: layout === "sheet" ? 44 : undefined,
     renderRowDecoration: ({ item }) =>
       item.kind === "file"
@@ -261,7 +263,7 @@ export function PrFileTree({
           Unreviewed
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1.5">
+      <div className="min-h-0 flex-1 overflow-auto px-1 py-1.5">
         {files.length === 0 ? (
           <p className="m-0 px-2 py-3 text-label text-faint">
             No files to review
@@ -278,7 +280,7 @@ export function PrFileTree({
             className="block h-full [color-scheme:dark] [--trees-accent-override:var(--accent)] [--trees-bg-override:transparent] [--trees-border-color-override:var(--divider)] [--trees-fg-muted-override:var(--text-faint)] [--trees-fg-override:var(--text-dim)] [--trees-focus-ring-color-override:var(--accent)] [--trees-selected-bg-override:var(--selected)] [--trees-selected-fg-override:var(--text)]"
           />
         ) : (
-          <div className="flex flex-col gap-0.5">
+          <div className="flex min-w-full w-max flex-col gap-0.5">
             {visibleFiles.map((file) => {
               const slash = file.path.lastIndexOf("/");
               const dir = slash >= 0 ? file.path.slice(0, slash + 1) : "";
@@ -299,15 +301,9 @@ export function PrFileTree({
                   title={file.path}
                   onClick={() => onOpenFile(file.path)}
                 >
-                  <span className="flex min-w-0 flex-1 overflow-hidden">
-                    <span className="min-w-0 truncate font-medium text-fg">
-                      {base}
-                    </span>
-                    {dir && (
-                      <span className="ml-1 min-w-0 truncate text-faint">
-                        {dir}
-                      </span>
-                    )}
+                  <span className="flex flex-1 whitespace-nowrap">
+                    <span className="font-medium text-fg">{base}</span>
+                    {dir && <span className="ml-1 text-faint">{dir}</span>}
                   </span>
                   {decoration && (
                     <span

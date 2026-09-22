@@ -41,3 +41,33 @@ test("providers without profile images retain initial avatars", () => {
   expect(html).toContain(">K</span>");
   expect(html).toContain(">M</span>");
 });
+
+test("description previews retain complete markdown and links", () => {
+  const body = `<p>${"A detailed summary. ".repeat(100)}</p><p><a href="https://example.test/details">Details</a></p>`;
+  const html = renderToStaticMarkup(
+    <ConversationView
+      author="acme"
+      descriptionHtml={body}
+      comments={[]}
+      provider={providerFromUrl("https://github.com/acme/project/pull/1")}
+    />,
+  );
+
+  expect(html).toContain(body);
+  expect(html).toContain("phone:max-h-80 phone:overflow-hidden");
+  expect(html).not.toContain("line-clamp");
+});
+
+test("empty descriptions keep their explicit empty state", () => {
+  const html = renderToStaticMarkup(
+    <ConversationView
+      author="acme"
+      descriptionHtml=""
+      comments={[]}
+      provider={providerFromUrl("https://github.com/acme/project/pull/1")}
+    />,
+  );
+
+  expect(html).toContain("This pull request has no description.");
+  expect(html).not.toContain("Read more");
+});

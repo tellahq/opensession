@@ -19,6 +19,7 @@ import type {
 } from "../lib/types";
 import { WalkthroughCard } from "./WalkthroughCard";
 import { PrOverviewPage } from "./pr/PrOverviewPage";
+import { PhoneReviewHeader } from "./pr/PhoneReviewHeader";
 import { PrFilesPage } from "./pr/PrFilesPage";
 import { FinishReviewDialog, type ReviewEvent } from "./pr/FinishReviewDialog";
 import { DiffPanel } from "./DiffPanel";
@@ -62,6 +63,7 @@ import {
   IconBranches,
   IconCheck,
   IconChevronRight,
+  IconChevronLeft,
   IconCopy,
   IconDotsHorizontal,
   IconGitMerge,
@@ -74,7 +76,7 @@ import {
 } from "./icons";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
-import { TopBar } from "../ui/top-bar";
+import { TopBar, PhoneTopBarAction } from "../ui/top-bar";
 import { Popover } from "../ui/popover";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { SettingRow } from "../ui/setting-row";
@@ -125,6 +127,7 @@ const NOOP_SEND = () => {};
 
 interface Props {
   sessionId: string;
+  phoneNavigation?: React.ReactNode;
   /** When provided, the review action bar offers "Open workspace" (Reviews view). */
   onOpenSession?: () => void;
   /** Append PR/check/comment context to this session's composer draft. */
@@ -212,6 +215,7 @@ const NO_LINKED_PRS: LinkedPrEntry[] = [];
 
 export function PrPanel({
   sessionId,
+  phoneNavigation,
   onOpenSession,
   onAddToInput,
   repos,
@@ -967,7 +971,7 @@ export function PrPanel({
     disabledHint: !caps.reviewComments
       ? `Inline review comments aren't supported on ${provider.name}`
       : "This pull request is no longer open.",
-    submitLabel: "Add comment",
+    submitLabel: "Add to review",
     placeholder: `Comment on #${diff.number}, added to your pending review…`,
     pendingComments: pending,
     onRemovePending: handleRemovePending,
@@ -1070,6 +1074,11 @@ export function PrPanel({
   if (loading)
     return (
       <div className="flex min-h-0 flex-1 flex-col">
+        {phoneLayout && phoneNavigation && (
+          <div className="flex min-h-16 items-center px-3">
+            {phoneNavigation}
+          </div>
+        )}
         {switcher}
         <LoadingState className={`${reviewStateClass} -translate-y-5`}>
           <span className="text-control-label font-medium text-fg">
@@ -1082,6 +1091,11 @@ export function PrPanel({
   if (loadError && !pr)
     return (
       <div className="flex min-h-0 flex-1 flex-col">
+        {phoneLayout && phoneNavigation && (
+          <div className="flex min-h-16 items-center px-3">
+            {phoneNavigation}
+          </div>
+        )}
         {switcher}
         <EmptyState
           className={reviewStateClass}
@@ -1124,6 +1138,7 @@ export function PrPanel({
       >
         <ReviewToolbar compact={compactToolbar}>
           <div className={PR_NO_PR_BAR}>
+            {phoneLayout && phoneNavigation}
             {targetPicker}
             {/* Opening the PR is what this state is for, so its action leads
                 before the shared diff controls. */}
@@ -1262,7 +1277,7 @@ export function PrPanel({
             <Button
               variant="ghost"
               size="sm"
-              className="desktop:-mr-1.5"
+              className="desktop:-mr-1.5 phone:size-11 phone:rounded-full phone:bg-panel"
               aria-label="Code view settings"
               icon={<IconSliders size={18} />}
             />
@@ -1277,8 +1292,29 @@ export function PrPanel({
         side="bottom"
         align="end"
         initialFocus
-        className="flex w-[340px] flex-col gap-0.5 p-3"
+        className="flex w-[340px] max-w-[calc(100vw-24px)] max-h-[75dvh] overflow-y-auto flex-col gap-0.5 p-3"
       >
+        {phoneLayout && (
+          <div className="flex flex-wrap items-center gap-2 pb-2">
+            <div
+              ref={
+                diffSource === "worktree"
+                  ? setWorktreeToolbarTarget
+                  : setDiffControlsTarget
+              }
+              className="flex items-center gap-2"
+            />
+            {handEdited.length > 0 && send && (
+              <Button
+                variant="soft"
+                className="min-h-11"
+                onClick={tellAgentAboutEdits}
+              >
+                Tell {AGENT_NAME} about edits
+              </Button>
+            )}
+          </div>
+        )}
         {worktreeAvailable && (
           <>
             <DiffSourceSetting
@@ -1334,8 +1370,7 @@ export function PrPanel({
     ["files", "Files", files.length || undefined],
   ] as const;
 
-  // Page navigation shares the identity bar on desktop, preserving the code
-  // canvas' vertical space. Phone keeps the full-width row and larger targets.
+  // Desktop switches pages in the identity bar. Phone opens Files from Overview.
   const titlePageSwitcher = (
     <Segmented
       label="Pull request pages"
@@ -1356,29 +1391,6 @@ export function PrPanel({
       ))}
     </Segmented>
   );
-
-  const phonePageTabs = pageOptions.map(([key, label, count]) => (
-    <button
-      key={key}
-      role="tab"
-      aria-selected={page === key}
-      className={`flex h-11 shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-control-label font-medium transition-colors ${
-        page === key ? "text-fg" : "text-dim hover:text-fg"
-      }`}
-      onClick={() => setPage(key)}
-    >
-      {label}
-      {count !== undefined && (
-        <span
-          className={`min-w-5 rounded-full px-[7px] py-px text-center text-meta font-semibold tabular-nums ${
-            page === key ? "bg-accent-soft text-accent" : "bg-active text-dim"
-          }`}
-        >
-          {count}
-        </span>
-      )}
-    </button>
-  ));
 
   const fileControls = page === "files" && (
     <div
@@ -1412,18 +1424,101 @@ export function PrPanel({
     </div>
   );
 
-  const reviewBar = (
-    <div className="flex h-11 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-surface px-2 [scrollbar-width:none] desktop:hidden [&::-webkit-scrollbar]:hidden">
-      <div
-        className="flex shrink-0 items-center gap-0.5 self-stretch"
-        role="tablist"
-        aria-orientation="horizontal"
-        aria-label="Pull request pages"
-      >
-        {phonePageTabs}
-      </div>
-      {phoneLayout && fileControls}
-    </div>
+  const prActions = (
+    <Menu.Root>
+      <Tooltip label="Pull request actions">
+        <Menu.Trigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              className="desktop:-mr-1.5 phone:size-11 phone:rounded-full phone:bg-panel"
+              aria-label="Pull request actions"
+              icon={<IconDotsHorizontal size={18} />}
+            />
+          }
+        />
+      </Tooltip>
+      <Menu.Popup align="end">
+        {phoneLayout && page === "files" && (
+          <Menu.Item onClick={() => setPage("overview")}>Overview</Menu.Item>
+        )}
+        {phoneLayout && (targets.length > 1 || linkable) && (
+          <div className="px-2 py-1">{targetPicker}</div>
+        )}
+
+        {onOpenSession && (
+          <Menu.Item onClick={onOpenSession}>
+            <IconBranches size={18} className={MENU_ICON} />
+            Open workspace
+          </Menu.Item>
+        )}
+        {onStartSession &&
+          sessionActionTarget === undefined &&
+          headerCompact && (
+            <Menu.Item onClick={onStartSession}>
+              <IconPlus size={18} className={MENU_ICON} />
+              <span className="min-w-0 flex-1 truncate">
+                {sessionActionLabel}
+              </span>
+            </Menu.Item>
+          )}
+        <Menu.Item render={<a href={pr.url} target="_blank" rel="noopener" />}>
+          <BrandMark name={provider.key} size={16} className={MENU_ICON} />
+          <span className="min-w-0 flex-1 truncate">
+            Open on {provider.name}
+          </span>
+        </Menu.Item>
+        {pr.staging?.url && (
+          <Menu.Item
+            render={<a href={pr.staging.url} target="_blank" rel="noopener" />}
+          >
+            <IconGlobe size={18} className={MENU_ICON} />
+            <span className="min-w-0 flex-1 truncate">Open preview</span>
+          </Menu.Item>
+        )}
+        <Menu.Item
+          onClick={() =>
+            copyPrLink(pr.url, { toast: "Pull request link copied" })
+          }
+        >
+          <IconCopy size={18} className={MENU_ICON} />
+          <span className="min-w-0 flex-1 truncate">Copy PR link</span>
+        </Menu.Item>
+        {pr.state === "OPEN" && (
+          <>
+            <Menu.Separator />
+            {canMergeAfterReview && (
+              <Menu.Item onClick={handleMerge} disabled={merging}>
+                {mergeScheduled ? (
+                  <IconUndo size={18} className={MENU_ICON} />
+                ) : (
+                  <IconGitMerge size={18} className={MENU_ICON} />
+                )}
+                {merging
+                  ? "Merging…"
+                  : mergeScheduled
+                    ? "Undo"
+                    : "Squash and merge"}
+              </Menu.Item>
+            )}
+            <Menu.Item
+              className="text-red data-[highlighted]:bg-red-soft"
+              onClick={handleClose}
+              closeOnClick={confirmClose}
+              disabled={closing}
+            >
+              <IconX size={18} className={MENU_ICON} />
+              {closing
+                ? "Closing…"
+                : confirmClose
+                  ? "Confirm close pull request"
+                  : "Close pull request"}
+            </Menu.Item>
+          </>
+        )}
+      </Menu.Popup>
+    </Menu.Root>
   );
 
   return (
@@ -1435,208 +1530,155 @@ export function PrPanel({
       {sessionActionTarget && sessionActionButton
         ? createPortal(sessionActionButton, sessionActionTarget)
         : null}
-      {/* Desktop keeps page navigation and file controls in the identity row.
-          Phone keeps one edge-to-edge navigation and controls row below it. */}
+      {/* Phone dedicates one row to the current page; secondary controls stay in menus. */}
       <ReviewToolbar compact={compactToolbar}>
-        <TopBar as="header" className="h-10 shrink-0 gap-2.5 px-4 phone:px-3">
-          {/* State, in the app's own PR language, filled rather than drawn: the
+        {phoneLayout ? (
+          <PhoneReviewHeader
+            title={
+              page === "files"
+                ? diffSource === "worktree"
+                  ? "Worktree changes"
+                  : "Files changed"
+                : pr.title
+            }
+            subtitle={
+              page === "files" && diffSource === "pull-request" ? (
+                <span className="tabular-nums">
+                  <span className="text-green">
+                    +{files.reduce((sum, file) => sum + file.additions, 0)}
+                  </span>{" "}
+                  <span className="text-red">
+                    −{files.reduce((sum, file) => sum + file.deletions, 0)}
+                  </span>
+                </span>
+              ) : (
+                `${active?.repo ? repoLabel(active.repo) + " · " : ""}#${pr.number}`
+              )
+            }
+            navigation={
+              page === "files" ? (
+                <PhoneTopBarAction
+                  aria-label="Back to overview"
+                  onClick={() => setPage("overview")}
+                  icon={<IconChevronLeft size={22} />}
+                />
+              ) : (
+                phoneNavigation
+              )
+            }
+            actions={
+              <>
+                {page === "files" && codeSettings}
+                {prActions}
+              </>
+            }
+          />
+        ) : (
+          <TopBar as="header" className="h-10 shrink-0 gap-2.5 px-4">
+            {/* State, in the app's own PR language, filled rather than drawn: the
             tone washes the whole chip and the glyph and word share its ink.
             It is its own object, so it gets more air than the pieces of the
             identity line it precedes. */}
-          <Tooltip label={statusMark.label}>
-            <span
-              className={`mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`}
-            >
-              <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
-              {!headerCompact && (
-                <span className="text-label font-medium">{stateLabel}</span>
-              )}
-            </span>
-          </Tooltip>
-          {targetPicker}
-          {/* Author and title in the session header's own breadcrumb shape: a
+            <Tooltip label={statusMark.label}>
+              <span
+                className={`mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`}
+              >
+                <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
+                {!headerCompact && (
+                  <span className="text-label font-medium">{stateLabel}</span>
+                )}
+              </span>
+            </Tooltip>
+            {targetPicker}
+            {/* Author and title in the session header's own breadcrumb shape: a
             tight picture-and-name pill, a chevron, then the name of the thing
             you are looking at. Same spacing and weights as RepoBar's
             `[icon] repo › title`, so the two headers read as one bar. */}
-          {!headerCompact && (
-            <>
-              <span className="flex shrink-0 items-center gap-[7px] text-item-title font-medium text-fg">
-                <UserAvatar
-                  name={pr.author}
-                  login={provider.key === "github" ? pr.author : null}
-                  size={18}
-                  edge={false}
-                  title={pr.author}
-                />
-                <span className="max-w-[180px] truncate">{pr.author}</span>
-              </span>
-              <IconChevronRight size={18} className="shrink-0 text-faint" />
-            </>
-          )}
-          {/* Title only. Counts, commits and the sessions on this PR are the
+            {!headerCompact && (
+              <>
+                <span className="flex shrink-0 items-center gap-[7px] text-item-title font-medium text-fg">
+                  <UserAvatar
+                    name={pr.author}
+                    login={provider.key === "github" ? pr.author : null}
+                    size={18}
+                    edge={false}
+                    title={pr.author}
+                  />
+                  <span className="max-w-[180px] truncate">{pr.author}</span>
+                </span>
+                <IconChevronRight size={18} className="shrink-0 text-faint" />
+              </>
+            )}
+            {/* Title only. Counts, commits and the sessions on this PR are the
             rail's job, so the bar stays one line of identity.
 
             The title is the name of the page you are already on, so it is
             inert. The outbound jump rides the number, which is the reference
             everywhere else in the app. */}
-          <h1
-            className="flex min-w-0 flex-1 items-baseline gap-1 text-item-title font-medium leading-[1.2] text-fg"
-            title={`${pr.title} #${pr.number}`}
-          >
-            <span className="truncate">{pr.title}</span>
-            <Tooltip label={`Open on ${provider.name}`}>
-              <a
-                className="shrink-0 font-normal text-faint no-underline hover:text-link"
-                href={pr.url}
-                target="_blank"
-                rel="noopener"
-              >
-                #{pr.number}
-              </a>
-            </Tooltip>
-          </h1>
-          {titlePageSwitcher}
-          {(compactToolbar || !phoneLayout) && fileControls}
-          {/* A stack is secondary navigation, not page content. Keep its compact
+            <h1
+              className="flex min-w-0 flex-1 items-baseline gap-1 text-item-title font-medium leading-[1.2] text-fg"
+              title={`${pr.title} #${pr.number}`}
+            >
+              <span className="truncate">{pr.title}</span>
+              <Tooltip label={`Open on ${provider.name}`}>
+                <a
+                  className="shrink-0 font-normal text-faint no-underline hover:text-link"
+                  href={pr.url}
+                  target="_blank"
+                  rel="noopener"
+                >
+                  #{pr.number}
+                </a>
+              </Tooltip>
+            </h1>
+            {titlePageSwitcher}
+            {(compactToolbar || !phoneLayout) && fileControls}
+            {/* A stack is secondary navigation, not page content. Keep its compact
             position/size chip in the identity bar and reveal the full rail in
             the shared popover instead of spending permanent canvas height. */}
-          {caps.stacks && pr.stack && (
-            <PrStackChip
-              pr={pr}
-              tone={statusMark.tone}
-              size="bar"
-              headline={statusMark.label}
-              repo={active?.repo}
-              onOpenPr={onOpenPr}
-            />
-          )}
-          {pr.staging?.url && !headerCompact && (
-            <Tooltip label="Open the preview environment">
-              <a
-                /* An icon-only control carries its glyph ~6px inside its box,
+            {caps.stacks && pr.stack && (
+              <PrStackChip
+                pr={pr}
+                tone={statusMark.tone}
+                size="bar"
+                headline={statusMark.label}
+                repo={active?.repo}
+                onOpenPr={onOpenPr}
+              />
+            )}
+            {pr.staging?.url && !headerCompact && (
+              <Tooltip label="Open the preview environment">
+                <a
+                  /* An icon-only control carries its glyph ~6px inside its box,
                  so the last one in the row is outdented to put that glyph on
                  the row's content edge — where the view control below it
                  sits, since a bordered control is flush with its own box. */
-                className={`ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg ${pr.state === "OPEN" ? "" : "-mr-1.5"}`}
-                href={pr.staging.url}
-                target="_blank"
-                rel="noopener"
-                aria-label="Open the preview environment"
-              >
-                <IconGlobe size={19} />
-              </a>
-            </Tooltip>
-          )}
-          {canCommentOnReview(pr.state, caps.reviewComments) && (
-            <Button
-              variant="primary"
-              size="sm"
-              className="shrink-0 phone:min-h-11"
-              onClick={() => setReviewOpen(true)}
-            >
-              Finish review{pending.length > 0 ? ` (${pending.length})` : ""}
-            </Button>
-          )}
-          {sessionActionTarget === undefined &&
-            !headerCompact &&
-            sessionActionButton}
-          <Menu.Root>
-            <Tooltip label="Pull request actions">
-              <Menu.Trigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="-mr-1.5"
-                    aria-label="Pull request actions"
-                    icon={<IconDotsHorizontal size={18} />}
-                  />
-                }
-              />
-            </Tooltip>
-            <Menu.Popup align="end">
-              {onOpenSession && (
-                <Menu.Item onClick={onOpenSession}>
-                  <IconBranches size={18} className={MENU_ICON} />
-                  Open workspace
-                </Menu.Item>
-              )}
-              {onStartSession &&
-                sessionActionTarget === undefined &&
-                headerCompact && (
-                  <Menu.Item onClick={onStartSession}>
-                    <IconPlus size={18} className={MENU_ICON} />
-                    <span className="min-w-0 flex-1 truncate">
-                      {sessionActionLabel}
-                    </span>
-                  </Menu.Item>
-                )}
-              <Menu.Item
-                render={<a href={pr.url} target="_blank" rel="noopener" />}
-              >
-                <BrandMark
-                  name={provider.key}
-                  size={16}
-                  className={MENU_ICON}
-                />
-                <span className="min-w-0 flex-1 truncate">
-                  Open on {provider.name}
-                </span>
-              </Menu.Item>
-              {pr.staging?.url && (
-                <Menu.Item
-                  render={
-                    <a href={pr.staging.url} target="_blank" rel="noopener" />
-                  }
+                  className={`ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg ${pr.state === "OPEN" ? "" : "-mr-1.5"}`}
+                  href={pr.staging.url}
+                  target="_blank"
+                  rel="noopener"
+                  aria-label="Open the preview environment"
                 >
-                  <IconGlobe size={18} className={MENU_ICON} />
-                  <span className="min-w-0 flex-1 truncate">Open preview</span>
-                </Menu.Item>
-              )}
-              <Menu.Item
-                onClick={() =>
-                  copyPrLink(pr.url, { toast: "Pull request link copied" })
-                }
+                  <IconGlobe size={19} />
+                </a>
+              </Tooltip>
+            )}
+            {canCommentOnReview(pr.state, caps.reviewComments) && (
+              <Button
+                variant="primary"
+                size="sm"
+                className="shrink-0 phone:min-h-11"
+                onClick={() => setReviewOpen(true)}
               >
-                <IconCopy size={18} className={MENU_ICON} />
-                <span className="min-w-0 flex-1 truncate">Copy PR link</span>
-              </Menu.Item>
-              {pr.state === "OPEN" && (
-                <>
-                  <Menu.Separator />
-                  {canMergeAfterReview && (
-                    <Menu.Item onClick={handleMerge} disabled={merging}>
-                      {mergeScheduled ? (
-                        <IconUndo size={18} className={MENU_ICON} />
-                      ) : (
-                        <IconGitMerge size={18} className={MENU_ICON} />
-                      )}
-                      {merging
-                        ? "Merging…"
-                        : mergeScheduled
-                          ? "Undo"
-                          : "Squash and merge"}
-                    </Menu.Item>
-                  )}
-                  <Menu.Item
-                    className="text-red data-[highlighted]:bg-red-soft"
-                    onClick={handleClose}
-                    closeOnClick={confirmClose}
-                    disabled={closing}
-                  >
-                    <IconX size={18} className={MENU_ICON} />
-                    {closing
-                      ? "Closing…"
-                      : confirmClose
-                        ? "Confirm close pull request"
-                        : "Close pull request"}
-                  </Menu.Item>
-                </>
-              )}
-            </Menu.Popup>
-          </Menu.Root>
-        </TopBar>
-        {reviewBar}
+                Finish review{pending.length > 0 ? ` (${pending.length})` : ""}
+              </Button>
+            )}
+            {sessionActionTarget === undefined &&
+              !headerCompact &&
+              sessionActionButton}
+            {prActions}
+          </TopBar>
+        )}
       </ReviewToolbar>
 
       {caps.stacks && !pr.stack && (
@@ -1666,6 +1708,7 @@ export function PrPanel({
           files={files}
           reviewedFiles={reviewedFiles}
           pendingCount={pending.length}
+          onFinishReview={() => setReviewOpen(true)}
           reviewProvider={
             canCommentOnReview(pr.state, caps.reviewComments)
               ? provider.name
@@ -1703,6 +1746,27 @@ export function PrPanel({
           diffGroups={diffGroups}
           diffGroupsLoading={diffGroupsLoading}
         />
+      )}
+
+      {phoneLayout && page === "overview" && (
+        <div className="flex shrink-0 items-center gap-2 bg-surface px-3 pt-2 pb-[max(8px,env(safe-area-inset-bottom))]">
+          <Button
+            variant="soft"
+            className="min-h-11 flex-1"
+            onClick={() => setPage("files")}
+          >
+            View {files.length} files
+          </Button>
+          {canCommentOnReview(pr.state, caps.reviewComments) && (
+            <Button
+              variant="primary"
+              className="min-h-11 flex-1"
+              onClick={() => setReviewOpen(true)}
+            >
+              Finish review{pending.length ? ` (${pending.length})` : ""}
+            </Button>
+          )}
+        </div>
       )}
 
       {closeError && (

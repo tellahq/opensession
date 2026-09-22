@@ -38,7 +38,8 @@ test("PR session actions open the workspace composer instead of a modal", () => 
   expect(viewer).toContain('() => void openNewSession("share")');
 
   expect(queuePreview).toContain("onStartSession={onStartSession}");
-  expect(appContent).toContain(
+  expect(appContent).toContain("<PrRoutePreview");
+  expect(queuePreview).toContain(
     'navigate({ view: "workspace", id: workspaceId })',
   );
 });

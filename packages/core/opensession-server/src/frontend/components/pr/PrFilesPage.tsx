@@ -16,7 +16,13 @@ import {
 import { Button } from "../../ui/button";
 import { Tooltip } from "../../ui/tooltip";
 import { ResponsiveDialog } from "../../ui/sheet";
-import { IconChevronLeft, IconChevronRight, IconFile, IconX } from "../icons";
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconFile,
+  IconX,
+  IconArrowDown,
+} from "../icons";
 import { CodeFlow } from "../CodeFlow";
 import { CommentableDiff } from "../DeferredDiff";
 import { DiffPanel } from "../DiffPanel";
@@ -34,6 +40,7 @@ interface Props {
   reviewedFiles?: ReadonlySet<string>;
   pendingCount: number;
   reviewProvider?: string;
+  onFinishReview: () => void;
   reviewFiles: NonNullable<PrDetails["files"]>;
   showFileStats: boolean;
   onOpenFile: (path: string) => void;
@@ -73,6 +80,7 @@ export function PrFilesPage({
   reviewedFiles,
   pendingCount,
   reviewProvider,
+  onFinishReview,
   reviewFiles,
   showFileStats,
   onOpenFile,
@@ -174,7 +182,7 @@ export function PrFilesPage({
         navigate(path);
       }}
     >
-      {diffSource === "pull-request" && (
+      {diffSource === "pull-request" && !isPhone && (
         <div
           className="flex shrink-0 flex-wrap items-center gap-2 px-3 pb-2 phone:gap-1"
           aria-label="Review navigation"
@@ -276,6 +284,33 @@ export function PrFilesPage({
                 onClick={() => setFilesOpen(false)}
               />
             </div>
+            <div className="flex shrink-0 items-center gap-2 px-3 pb-2">
+              <span className="mr-auto text-supporting text-dim" role="status">
+                {reviewedFiles
+                  ? `${reviewedCount}/${files.length} reviewed`
+                  : `${files.length} files`}
+              </span>
+              {codeView !== "flow" && (
+                <>
+                  <Button
+                    variant="ghost"
+                    className="size-11"
+                    aria-label="Previous file"
+                    disabled={!previous}
+                    onClick={() => navigate(previous)}
+                    icon={<IconChevronLeft size={18} />}
+                  />
+                  <Button
+                    variant="ghost"
+                    className="size-11"
+                    aria-label="Next file"
+                    disabled={!next}
+                    onClick={() => navigate(next)}
+                    icon={<IconChevronRight size={18} />}
+                  />
+                </>
+              )}
+            </div>
             {navigator}
           </ResponsiveDialog>
         )}
@@ -284,7 +319,7 @@ export function PrFilesPage({
           className="min-w-0 min-h-0 flex-1 overflow-y-auto bg-surface pb-4"
           aria-label="File changes"
         >
-          <div className="px-2 pb-2 phone:px-1">
+          <div className="px-2 pb-2 phone:px-0">
             {diffSource === "worktree" ? (
               <DiffPanel
                 sessionId={sessionId}
@@ -405,6 +440,47 @@ export function PrFilesPage({
           </div>
         </main>
       </div>
+      {isPhone && diffSource === "pull-request" && (
+        <div
+          aria-label="Review actions"
+          className="flex shrink-0 items-center gap-2 bg-surface px-3 pt-2 pb-[max(8px,env(safe-area-inset-bottom))]"
+        >
+          <Button
+            variant="soft"
+            className="min-h-11"
+            aria-label="Files"
+            icon={<IconFile size={20} />}
+            onClick={() => setFilesOpen(true)}
+          >
+            <span className="tabular-nums">
+              {reviewedFiles
+                ? `${reviewedCount}/${files.length}`
+                : files.length}
+            </span>
+          </Button>
+          {reviewProvider && (
+            <Button
+              variant="primary"
+              className="min-h-11 flex-1"
+              onClick={onFinishReview}
+            >
+              Finish review{pendingCount > 0 ? ` (${pendingCount})` : ""}
+            </Button>
+          )}
+          {codeView !== "flow" && reviewedFiles && (
+            <Tooltip label="Next unreviewed file">
+              <Button
+                variant="soft"
+                className="size-11"
+                aria-label="Next unreviewed"
+                disabled={!unreviewed}
+                onClick={() => navigate(unreviewed)}
+                icon={<IconArrowDown size={20} />}
+              />
+            </Tooltip>
+          )}
+        </div>
+      )}
     </div>
   );
 }
