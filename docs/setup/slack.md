@@ -7,14 +7,49 @@ actions and link unfurls, and supplies watched-channel events to automations.
 
 ## Transport
 
-The server supports **HTTP Events API intake only**. `SlackAgent.getRoutes()`
-always registers `/slack/events` and `/slack/actions`, and its health response
-always reports `transport: "http"`. There is no Socket Mode client, so the
-setup dialog and generated manifest only describe an HTTP app: public ingress
-is required and `SLACK_SIGNING_SECRET` is always required. A leftover
-`SLACK_APP_TOKEN` in `~/.opensession.env` is ignored.
+The server supports HTTP Events API intake (the default) and opt-in outbound
+**Socket Mode**. Socket Mode needs no public callback URL, tunnel or inbound
+port. Both transports use the same event routing, admission checks and durable
+DM/mention inbox.
 
-## Set up the app
+`SlackAgent.getRoutes()` always registers `/slack/events` and `/slack/actions`.
+Both require valid signatures even when Socket Mode is enabled; without
+`SLACK_SIGNING_SECRET`, every HTTP request is rejected with 401. Socket
+messages are authenticated by TLS to Slack using a single-use ticket minted
+with the app token, not an HTTP signature.
+
+### Socket Mode (manual setup)
+
+The setup dialog and generated manifest still configure **HTTP**, not Socket
+Mode. For an outbound-only installation:
+
+1. Create a Slack app with the bot scopes and event subscriptions listed below,
+   enable interactivity, and turn on **Socket Mode** in Slack's app settings.
+   No event or interactivity request URL is needed.
+2. Under **Basic Information → App-Level Tokens**, generate an `xapp-…` token
+   with `connections:write`. Install the app and copy its `xoxb-…` bot token.
+3. Set `ENABLE_SLACK_AGENT=true`, `SLACK_SOCKET_MODE=true`, `SLACK_APP_TOKEN`,
+   `SLACK_BOT_TOKEN` and `ALLOWED_SLACK_USER_ID` in `~/.opensession.env`.
+   The app token and bot token must belong to the same app.
+4. Restart Open Session. Health reports `transport: "socket"` and
+   `socketMode: { state: "connected", connected: true }` after Slack's hello.
+   Invite the bot to channels as needed, then test a DM, mention and button.
+
+Only the literal `SLACK_SOCKET_MODE=true` opts in. An app token alone does not
+activate the transport, so obsolete credentials left by older installations
+remain inert. To return to HTTP, disable Socket Mode in Slack, unset the flag,
+configure the two public request URLs and signing secret, then restart.
+
+Events API envelopes are acknowledged only after dispatch returns; a persistence
+or dispatch failure leaves them unacknowledged for Slack to redeliver. Interactive
+envelopes are acknowledged **before** dispatch so slow API calls do not replay
+button presses. Existing event deduplication applies across both transports.
+Connection failures retry with capped, full-jitter exponential backoff. Rotation
+opens the replacement and waits for Slack's hello before closing the old socket.
+`link_disabled` stops all connections and retries until restart; re-enable Socket
+Mode in Slack first. Shutdown cancels pending requests, handshakes and retries.
+
+## Set up the HTTP app
 
 1. Configure an HTTPS origin under **Settings → Domains and ingress → Public callbacks**. It must route
    to the fail-closed gateway on `127.0.0.1:3860`; see
@@ -49,14 +84,16 @@ literal value `true` enables it; see
 | ---------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ENABLE_SLACK_AGENT`         | to enable by environment | Only the literal `true` enables Slack. When absent, `integrations.slack.enabled` decides                                                                                   |
 | `SLACK_BOT_TOKEN`            | yes                      | Bot user token (`xoxb-…`) for the agent's Slack Web API calls. Missing or invalid credentials produce warnings and failed Slack operations rather than stopping the server |
-| `SLACK_SIGNING_SECRET`       | yes                      | Verifies both HTTP endpoints. Missing or invalid signatures fail closed with 401; request timestamps must be within five minutes                                           |
+| `SLACK_SIGNING_SECRET`       | HTTP only                | Verifies both HTTP endpoints. Missing or invalid signatures fail closed with 401; request timestamps must be within five minutes                                           |
+| `SLACK_SOCKET_MODE`          | for Socket Mode          | Only the literal `true` enables outbound Socket Mode                                                                                                                       |
+| `SLACK_APP_TOKEN`            | for Socket Mode          | App-level token (`xapp-…`) with `connections:write`; never a bot token                                                                                                     |
 | `ALLOWED_SLACK_USER_ID`      | strongly recommended     | Restricts ordinary DMs and mentions and sets the `isAdmin` gate for admin, session-control and human-ask tools. Unset means every sender admitted by routing is an admin   |
 | `WORKTREE_HOOK_SECRET`       | only for worktree hooks  | Value callers send as `x-worktree-secret` to the two `/worktree/*` routes. Missing means every hook request is rejected with 403                                           |
 | `SLACK_MENTION_INTENT_MODEL` | no                       | Mention intent classifier; default `claude-haiku-4-5`                                                                                                                      |
 | `SCHEDULE_WHEN_MODEL`        | no                       | Natural-language parser used by one-off scheduling tools; default `claude-haiku-4-5`                                                                                       |
 
 The setup dialog manages the bot token, signing secret, allowed user and
-worktree-hook secret. It does not expose the two model overrides. Set those
+worktree-hook secret. It does not expose Socket Mode or the two model overrides. Set those
 directly in `~/.opensession.env` and restart.
 
 ## HTTP intake and routes

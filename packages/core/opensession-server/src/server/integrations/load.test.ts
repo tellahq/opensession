@@ -95,16 +95,16 @@ describe("activeIntegrations", () => {
 describe("slack credentials", () => {
   const slack = findIntegration("slack")!;
 
-  test("the signing secret is unconditionally required", () => {
-    // The runtime only implements HTTP intake and verifySlackSignature fails
-    // closed on an empty secret, so nothing may make this optional.
+  test("HTTP setup requires the signing secret", () => {
+    // The setup dialog configures HTTP. Manual Socket Mode configuration
+    // does not make an unsigned HTTP request acceptable.
     const signingSecret = slack.env.find(
       (e) => e.name === "SLACK_SIGNING_SECRET",
     );
     expect(signingSecret?.required).toBe(true);
   });
 
-  test("no Socket Mode app token is offered", () => {
+  test("the HTTP setup dialog does not offer a Socket Mode app token", () => {
     expect(slack.env.map((e) => e.name)).not.toContain("SLACK_APP_TOKEN");
   });
 });
