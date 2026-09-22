@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import { useState, type ComponentProps } from "react";
 import type { CommentableDiffOptions } from "../../lib/commentable-diff";
 import type {
   DiffFileGroup,
@@ -7,7 +7,16 @@ import type {
   ReviewGuideData,
 } from "../../lib/types";
 import type { sectionsWithPatches } from "../../lib/pr-review-guide";
-import { WS_SUMMARY_REVIEW_CANVAS_CLEARANCE } from "../../lib/workspace-summary-classes";
+import { useIsPhone } from "../../hooks/useIsPhone";
+import { useActiveReviewFile } from "../../hooks/useActiveReviewFile";
+import {
+  adjacentReviewFile,
+  nextUnreviewedFile,
+} from "../../lib/review-navigation";
+import { Button } from "../../ui/button";
+import { Tooltip } from "../../ui/tooltip";
+import { ResponsiveDialog } from "../../ui/sheet";
+import { IconChevronLeft, IconChevronRight, IconFile, IconX } from "../icons";
 import { CodeFlow } from "../CodeFlow";
 import { CommentableDiff } from "../DeferredDiff";
 import { DiffPanel } from "../DiffPanel";
@@ -19,11 +28,12 @@ type FileTreeMode = ComponentProps<typeof PrFileTree>["mode"];
 type GuideSections = ReturnType<typeof sectionsWithPatches>;
 
 interface Props {
-  compactToolbar: boolean;
-  reviewing: boolean;
   diffSource: DiffSource;
   fileListMode: FileTreeMode | "hidden";
   files: NonNullable<PrDetails["files"]>;
+  reviewedFiles?: ReadonlySet<string>;
+  pendingCount: number;
+  reviewProvider?: string;
   reviewFiles: NonNullable<PrDetails["files"]>;
   showFileStats: boolean;
   onOpenFile: (path: string) => void;
@@ -57,11 +67,12 @@ interface Props {
 
 /** The changed-files page, including worktree, guide, and code-flow lenses. */
 export function PrFilesPage({
-  compactToolbar,
-  reviewing,
   diffSource,
   fileListMode,
   files,
+  reviewedFiles,
+  pendingCount,
+  reviewProvider,
   reviewFiles,
   showFileStats,
   onOpenFile,
@@ -92,153 +103,308 @@ export function PrFilesPage({
   diffGroups,
   diffGroupsLoading,
 }: Props) {
+  const isPhone = useIsPhone();
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [scroller, setScroller] = useState<HTMLElement | null>(null);
+  const { activeFile, selectFile } = useActiveReviewFile(scroller);
+  const paths = reviewFiles.map((file) => file.path);
+  const previous = adjacentReviewFile(paths, activeFile, -1);
+  const next = adjacentReviewFile(paths, activeFile, 1);
+  const unreviewed = reviewedFiles
+    ? nextUnreviewedFile(paths, activeFile, reviewedFiles)
+    : null;
+  const reviewedCount = files.filter((file) =>
+    reviewedFiles?.has(file.path),
+  ).length;
+  const navigate = (path: string | null) => {
+    if (!path) return;
+    onOpenFile(path);
+    selectFile(path);
+    setFilesOpen(false);
+  };
+  const navigator = (
+    <PrFileTree
+      files={reviewFiles}
+      mode={fileListMode === "hidden" ? "tree" : fileListMode}
+      showFileStats={showFileStats}
+      layout={filesOpen ? "sheet" : "sidebar"}
+      activeFile={activeFile}
+      reviewedFiles={reviewedFiles}
+      onOpenFile={navigate}
+    />
+  );
+
   return (
     <div
-      className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:flex-none desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:60px]` : ""}`}
+      className="flex min-h-0 flex-1 flex-col"
+      onKeyDown={(event) => {
+        if (
+          diffSource !== "pull-request" ||
+          codeView === "flow" ||
+          event.defaultPrevented ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.shiftKey
+        )
+          return;
+        if (
+          event.nativeEvent
+            .composedPath()
+            .some(
+              (target) =>
+                target instanceof HTMLElement &&
+                (target.matches(
+                  "input, textarea, select, [role=tree], [role=treeitem], [role=dialog]",
+                ) ||
+                  target.isContentEditable),
+            )
+        )
+          return;
+        const path =
+          event.key === "j"
+            ? next
+            : event.key === "k"
+              ? previous
+              : event.key === "n"
+                ? unreviewed
+                : null;
+        if (!path) return;
+        event.preventDefault();
+        navigate(path);
+      }}
     >
-      {diffSource === "pull-request" &&
-        fileListMode !== "hidden" &&
-        files.length > 0 && (
-          <PrFileTree
-            files={reviewFiles}
-            mode={fileListMode}
-            showFileStats={showFileStats}
-            onOpenFile={onOpenFile}
-          />
-        )}
-
-      <main
-        // Wide review scrolls the toolbar and canvas in one container. File
-        // cards stay in that flow and pass beneath the sticky toolbar.
-        className={`min-w-0 flex-1 bg-surface ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
-      >
-        {/* Keep the review canvas close to the viewport edge. The file
-            section's own border now carries the shape instead of a wide
-            gray gutter around it. */}
+      {diffSource === "pull-request" && (
         <div
-          className={`mx-auto max-w-[1500px] px-2 pb-2 phone:px-1 ${compactToolbar ? "pt-0" : "pt-2"}`}
+          className="flex shrink-0 flex-wrap items-center gap-2 px-3 pb-2 phone:gap-1"
+          aria-label="Review navigation"
         >
-          {diffSource === "worktree" ? (
-            <DiffPanel
-              sessionId={sessionId}
-              isRunning={sessionRunning}
-              canSend={canSend}
-              send={send}
-              repo={activeRepoId}
-              toolbarTarget={worktreeToolbarTarget}
-              source="worktree"
-              onSourceChange={onDiffSourceChange}
-            />
-          ) : codeView === "flow" ? (
-            <CodeFlow
-              data={codeFlowData}
-              loading={codeFlowLoading}
-              error={codeFlowError}
-              onRetry={onRetryCodeFlow}
-              onOpenLocation={onOpenFile}
-            />
-          ) : !diff?.patch || !diffOptions ? (
-            <div className="py-12 text-center text-sm text-faint">
-              {diffError ? (
+          {(isPhone || fileListMode === "hidden") && (
+            <Button
+              variant="soft"
+              size="sm"
+              className="phone:min-h-11"
+              icon={<IconFile size={18} />}
+              onClick={() => setFilesOpen(true)}
+            >
+              Files
+            </Button>
+          )}
+          <span
+            className="mr-auto text-supporting tabular-nums text-dim"
+            role="status"
+          >
+            {reviewedFiles
+              ? `${reviewedCount}/${files.length} reviewed`
+              : `${files.length} files`}
+          </span>
+          {codeView !== "flow" && (
+            <>
+              <Tooltip label="Previous file (K)">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="phone:size-11"
+                  aria-label="Previous file"
+                  aria-keyshortcuts="k"
+                  disabled={!previous}
+                  onClick={() => navigate(previous)}
+                  icon={<IconChevronLeft size={18} />}
+                />
+              </Tooltip>
+              <Tooltip label="Next file (J)">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="phone:size-11"
+                  aria-label="Next file"
+                  aria-keyshortcuts="j"
+                  disabled={!next}
+                  onClick={() => navigate(next)}
+                  icon={<IconChevronRight size={18} />}
+                />
+              </Tooltip>
+              {reviewedFiles && (
+                <Tooltip label="Next unreviewed file (N)">
+                  <Button
+                    variant="soft"
+                    size="sm"
+                    className="phone:order-2 phone:min-h-11"
+                    aria-keyshortcuts="n"
+                    disabled={!unreviewed}
+                    onClick={() => navigate(unreviewed)}
+                  >
+                    Next unreviewed
+                  </Button>
+                </Tooltip>
+              )}
+            </>
+          )}
+          {reviewProvider && (
+            <span className="text-supporting text-faint phone:order-1 phone:min-w-[50%] phone:flex-1">
+              {pendingCount > 0
+                ? `${pendingCount} pending comment${pendingCount === 1 ? "" : "s"} · `
+                : ""}
+              Sent to {reviewProvider} on finish
+            </span>
+          )}
+        </div>
+      )}
+      <div className="flex min-h-0 flex-1">
+        {diffSource === "pull-request" &&
+          !isPhone &&
+          !filesOpen &&
+          fileListMode !== "hidden" &&
+          files.length > 0 &&
+          navigator}
+        {filesOpen && (
+          <ResponsiveDialog
+            open={filesOpen}
+            phone={isPhone}
+            onClose={() => setFilesOpen(false)}
+            label="Changed files"
+            sheetClassName="h-[75dvh]"
+            modalClassName="h-[70dvh] w-[420px]"
+          >
+            <div className="flex items-center justify-between px-3 pt-2">
+              <h2 className="text-item-title font-medium">Changed files</h2>
+              <Button
+                variant="ghost"
+                className="size-11"
+                aria-label="Close files"
+                icon={<IconX size={20} />}
+                onClick={() => setFilesOpen(false)}
+              />
+            </div>
+            {navigator}
+          </ResponsiveDialog>
+        )}
+        <main
+          ref={setScroller}
+          className="min-w-0 min-h-0 flex-1 overflow-y-auto bg-surface pb-4"
+          aria-label="File changes"
+        >
+          <div className="px-2 pb-2 phone:px-1">
+            {diffSource === "worktree" ? (
+              <DiffPanel
+                sessionId={sessionId}
+                isRunning={sessionRunning}
+                canSend={canSend}
+                send={send}
+                repo={activeRepoId}
+                toolbarTarget={worktreeToolbarTarget}
+                source="worktree"
+                onSourceChange={onDiffSourceChange}
+              />
+            ) : codeView === "flow" ? (
+              <CodeFlow
+                data={codeFlowData}
+                loading={codeFlowLoading}
+                error={codeFlowError}
+                onRetry={onRetryCodeFlow}
+                onOpenLocation={onOpenFile}
+              />
+            ) : !diff?.patch || !diffOptions ? (
+              <div className="py-12 text-center text-sm text-faint">
+                {diffError ? (
+                  <>
+                    <span className="text-red">{diffError}</span>
+                    <button
+                      className="ml-2 border-0 bg-transparent text-link"
+                      onClick={onRetryDiff}
+                    >
+                      Retry
+                    </button>
+                  </>
+                ) : diffLoading ? (
+                  "Loading pull request changes…"
+                ) : diffOutOfDate ? (
+                  "The pull request changed while loading. It will refresh automatically."
+                ) : (
+                  "No text diff is available for this pull request."
+                )}
+              </div>
+            ) : codeView === "guide" ? (
+              guideLoading || (!currentGuide && !guideFailed) ? (
                 <>
-                  <span className="text-red">{diffError}</span>
+                  <div className="mb-4 rounded-sm border border-line bg-panel px-3 py-2 text-xs text-faint">
+                    Writing the review guide… You can review the file diff while
+                    it groups the change by intent.
+                  </div>
+                  <CommentableDiff patch={diff.patch} options={diffOptions} />
+                </>
+              ) : guideFailed ? (
+                <div className="py-12 text-center text-sm text-faint">
+                  Couldn't generate a guide for this PR.
                   <button
                     className="ml-2 border-0 bg-transparent text-link"
-                    onClick={onRetryDiff}
+                    onClick={onRetryGuide}
                   >
                     Retry
                   </button>
-                </>
-              ) : diffLoading ? (
-                "Loading pull request changes…"
-              ) : diffOutOfDate ? (
-                "The pull request changed while loading. It will refresh automatically."
-              ) : (
-                "No text diff is available for this pull request."
-              )}
-            </div>
-          ) : codeView === "guide" ? (
-            guideLoading || (!currentGuide && !guideFailed) ? (
-              <>
-                <div className="mb-4 rounded-sm border border-line bg-panel px-3 py-2 text-xs text-faint">
-                  Writing the review guide… You can review the file diff while
-                  it groups the change by intent.
                 </div>
-                <CommentableDiff patch={diff.patch} options={diffOptions} />
-              </>
-            ) : guideFailed ? (
-              <div className="py-12 text-center text-sm text-faint">
-                Couldn't generate a guide for this PR.
-                <button
-                  className="ml-2 border-0 bg-transparent text-link"
-                  onClick={onRetryGuide}
-                >
-                  Retry
-                </button>
-              </div>
-            ) : currentGuide ? (
-              <>
-                <div className="mb-7 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
-                  <div className="text-meta font-medium leading-relaxed text-faint">
-                    Review guide
-                  </div>
-                  <div>
-                    <h2 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">
-                      {currentGuide.sections.length} focused review step
-                      {currentGuide.sections.length === 1 ? "" : "s"}
-                    </h2>
-                    <p className="mt-1 max-w-[680px] text-xs leading-relaxed text-dim">
-                      {reviewing
-                        ? "Review the change by intent rather than alphabetically. Comments stay pending until you finish the review."
-                        : "Read the change by intent rather than alphabetically."}
-                    </p>
-                  </div>
-                </div>
-                {guideSections.map((section, index, all) => (
-                  <section
-                    id={`review-guide-${index}`}
-                    className="mb-8 scroll-mt-[64px]"
-                    key={`${section.title}-${index}`}
-                  >
-                    <div className="mb-3 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
-                      <div className="text-meta text-faint">
-                        {String(index + 1).padStart(2, "0")} /{" "}
-                        {String(all.length).padStart(2, "0")}
-                      </div>
-                      <div>
-                        <div className="text-item-title font-semibold text-fg">
-                          {section.title}
-                        </div>
-                        <div className="mt-1 text-supporting leading-relaxed text-dim">
-                          {section.explanation}
-                        </div>
-                      </div>
+              ) : currentGuide ? (
+                <>
+                  <div className="mb-7 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
+                    <div className="text-meta font-medium leading-relaxed text-faint">
+                      Review guide
                     </div>
-                    {section.patch && (
-                      <CommentableDiff
-                        patch={section.patch}
-                        options={diffOptions}
-                      />
-                    )}
-                  </section>
-                ))}
-              </>
-            ) : null
-          ) : (
-            <CommentableDiff
-              patch={diff.patch}
-              options={{
-                ...diffOptions,
-                groups:
-                  grouping === "ai" && diffGroups?.oid === diff.headRefOid
-                    ? diffGroups.groups || undefined
-                    : undefined,
-                groupsLoading: grouping === "ai" && diffGroupsLoading,
-              }}
-            />
-          )}
-        </div>
-      </main>
+                    <div>
+                      <h2 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">
+                        {currentGuide.sections.length} focused review step
+                        {currentGuide.sections.length === 1 ? "" : "s"}
+                      </h2>
+                      <p className="mt-1 max-w-[680px] text-xs leading-relaxed text-dim">
+                        Read the change by intent rather than alphabetically.
+                      </p>
+                    </div>
+                  </div>
+                  {guideSections.map((section, index, all) => (
+                    <section
+                      id={`review-guide-${index}`}
+                      className="mb-8 scroll-mt-[64px]"
+                      key={`${section.title}-${index}`}
+                    >
+                      <div className="mb-3 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
+                        <div className="text-meta text-faint">
+                          {String(index + 1).padStart(2, "0")} /{" "}
+                          {String(all.length).padStart(2, "0")}
+                        </div>
+                        <div>
+                          <div className="text-item-title font-semibold text-fg">
+                            {section.title}
+                          </div>
+                          <div className="mt-1 text-supporting leading-relaxed text-dim">
+                            {section.explanation}
+                          </div>
+                        </div>
+                      </div>
+                      {section.patch && (
+                        <CommentableDiff
+                          patch={section.patch}
+                          options={diffOptions}
+                        />
+                      )}
+                    </section>
+                  ))}
+                </>
+              ) : null
+            ) : (
+              <CommentableDiff
+                patch={diff.patch}
+                options={{
+                  ...diffOptions,
+                  groups:
+                    grouping === "ai" && diffGroups?.oid === diff.headRefOid
+                      ? diffGroups.groups || undefined
+                      : undefined,
+                  groupsLoading: grouping === "ai" && diffGroupsLoading,
+                }}
+              />
+            )}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

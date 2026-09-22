@@ -66,7 +66,6 @@ import {
   IconDotsHorizontal,
   IconGitMerge,
   IconGlobe,
-  IconMessage,
   IconPlus,
   IconPullRequest,
   IconSliders,
@@ -103,6 +102,8 @@ import { GitStatusRows } from "./pr/GitStatus";
 import { ReviewToolbar } from "./pr/ReviewToolbar";
 import { EmptyState, LoadingState } from "../ui/state";
 import { revealDiffFile } from "../lib/diff-navigation";
+import { canCommentOnReview } from "../lib/review-navigation";
+import { useIsPhone } from "../hooks/useIsPhone";
 import { BrandMark } from "./BrandTile";
 import { useCopy } from "../ui/copy";
 import { useDeferredMergePhase } from "../hooks/useDeferredMerge";
@@ -300,7 +301,6 @@ export function PrPanel({
   const contextRepo = useMarkdownRepo();
   const markdownRepo = previewTarget?.repo || active?.repo || contextRepo;
   const [pending, setPending] = useState<PendingComment[]>([]);
-  const [reviewing, setReviewing] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewEvent, setReviewEvent] = useState<ReviewEvent>("APPROVE");
   // Only the dialog's opening value and what it hands back on close. The live
@@ -309,7 +309,6 @@ export function PrPanel({
   const [summaryDraft, setSummaryDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const [reviewDone, setReviewDone] = useState<string | null>(null);
   const [mergeError, setMergeError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -372,7 +371,7 @@ export function PrPanel({
   }, [focusTarget?.seq, targets]);
   /** A file picked on Overview, waiting for the code page to have its diff. */
   const [pendingReveal, setPendingReveal] = useState<string | null>(null);
-  const phoneLayout = window.matchMedia("(max-width: 720px)").matches;
+  const phoneLayout = useIsPhone();
   // Rendering preferences are shared with sidebar Changes, so choosing wrap,
   // split view, highlighting or a theme in either viewer updates the other.
   const codeDisplaySettings = useCodeDisplaySettings(
@@ -385,7 +384,7 @@ export function PrPanel({
     showFileStats,
     codeTheme,
   } = codeDisplaySettings;
-  const organizationSettings = useCodeOrganizationSettings();
+  const organizationSettings = useCodeOrganizationSettings("tree");
   const { grouping, fileListMode, fileOrder, sortDirection, hideReviewed } =
     organizationSettings;
   // GitHub's per-viewer "Viewed" file state for the shown PR (review canvas
@@ -477,7 +476,6 @@ export function PrPanel({
     onCodeViewChange: setCodeView,
     onTargetReset: () => {
       setPending([]);
-      setReviewing(false);
       setReviewOpen(false);
       setPrViewed(null);
     },
@@ -493,7 +491,6 @@ export function PrPanel({
   // identity here re-renders the whole diff.
   const handleAddPending = async (target: CommentTarget, text: string) => {
     setPending((prev) => [...prev, { ...target, text, id: randomUUID() }]);
-    setReviewDone(null);
   };
 
   const handleRemovePending = (id: string) => {
@@ -542,13 +539,13 @@ export function PrPanel({
           side: comment.side === "deletions" ? "LEFT" : "RIGHT",
         })),
       } satisfies Parameters<typeof submitPrReviewApi>[1];
-      const result = previewTarget
-        ? await submitPrPreviewReviewApi(
+      await (previewTarget
+        ? submitPrPreviewReviewApi(
             previewTarget.repo,
             previewTarget.branch,
             payload,
           )
-        : await submitPrReviewApi(sessionId, payload);
+        : submitPrReviewApi(sessionId, payload));
       let merged = false;
       if (reviewEvent === "APPROVE" && mergeAfterReview) {
         try {
@@ -574,12 +571,7 @@ export function PrPanel({
         setReviewOpen(false);
         setReviewEvent("APPROVE");
         setMergeAfterReview(false);
-        setReviewDone(merged ? "merged" : result.url || "submitted");
-        setTimeout(() => {
-          if (actionTargetKey !== activeLoadTargetRef.current) return;
-          setReviewDone(null);
-          setReviewing(false);
-        }, 6000);
+        toast(merged ? "Approved and merged" : "Review submitted");
         await load(true);
       }
     } catch (error) {
@@ -966,20 +958,18 @@ export function PrPanel({
     showFileStats,
     codeTheme,
     visibleFileOrder,
-    // PR file cards scroll beneath the sticky toolbar as one surface. Sidebar
-    // Changes opts into pinned file headers separately.
-    stickyFileHeaders: false,
+    stickyFileHeaders: true,
     defaultExpandedFiles: diffLoadPolicy.defaultExpandedFiles,
     allowExpandAll: diffLoadPolicy.allowExpandAll,
     viewedFiles: prViewed?.key === viewedKey ? prViewed.viewed : undefined,
     onToggleViewed: handleToggleViewed,
-    disabled: !reviewing || !caps.reviewComments,
+    disabled: !canCommentOnReview(pr?.state, caps.reviewComments),
     disabledHint: !caps.reviewComments
       ? `Inline review comments aren't supported on ${provider.name}`
-      : "Start a review to add inline comments.",
+      : "This pull request is no longer open.",
     submitLabel: "Add comment",
     placeholder: `Comment on #${diff.number}, added to your pending review…`,
-    pendingComments: reviewing ? pending : undefined,
+    pendingComments: pending,
     onRemovePending: handleRemovePending,
     reviewThreads:
       reviewThreads?.key === loadTargetKey ? reviewThreads.threads : undefined,
@@ -1537,27 +1527,16 @@ export function PrPanel({
               </a>
             </Tooltip>
           )}
-          {pr.state === "OPEN" &&
-            !pr.isDraft &&
-            caps.reviewComments &&
-            !reviewing &&
-            !headerCompact && (
-              /* The one call to action on a wide canvas, so it takes the accent
-               plate. Compact canvases move it into the actions menu instead
-               of squeezing the repository and pull request identity. */
-              <Button
-                variant="primary"
-                size="sm"
-                className={pr.staging?.url ? undefined : "ml-auto"}
-                onClick={() => {
-                  setDiffSource("pull-request");
-                  setReviewing(true);
-                  setPage("files");
-                }}
-              >
-                Review
-              </Button>
-            )}
+          {canCommentOnReview(pr.state, caps.reviewComments) && (
+            <Button
+              variant="primary"
+              size="sm"
+              className="shrink-0 phone:min-h-11"
+              onClick={() => setReviewOpen(true)}
+            >
+              Finish review{pending.length > 0 ? ` (${pending.length})` : ""}
+            </Button>
+          )}
           {sessionActionTarget === undefined &&
             !headerCompact &&
             sessionActionButton}
@@ -1576,24 +1555,12 @@ export function PrPanel({
               />
             </Tooltip>
             <Menu.Popup align="end">
-              {headerCompact &&
-                pr.state === "OPEN" &&
-                !pr.isDraft &&
-                caps.reviewComments &&
-                !reviewing && (
-                  <Menu.Item
-                    onClick={() => {
-                      setDiffSource("pull-request");
-                      setReviewing(true);
-                      setPage("files");
-                    }}
-                  >
-                    <IconMessage size={18} className={MENU_ICON} />
-                    <span className="min-w-0 flex-1 truncate">
-                      Start review
-                    </span>
-                  </Menu.Item>
-                )}
+              {onOpenSession && (
+                <Menu.Item onClick={onOpenSession}>
+                  <IconBranches size={18} className={MENU_ICON} />
+                  Open workspace
+                </Menu.Item>
+              )}
               {onStartSession &&
                 sessionActionTarget === undefined &&
                 headerCompact && (
@@ -1679,7 +1646,6 @@ export function PrPanel({
       {page === "overview" ? (
         <PrOverviewPage
           compactToolbar={compactToolbar}
-          reviewing={reviewing}
           sessionId={sessionId}
           provider={provider}
           pr={pr}
@@ -1695,11 +1661,16 @@ export function PrPanel({
         />
       ) : (
         <PrFilesPage
-          compactToolbar={compactToolbar}
-          reviewing={reviewing}
           diffSource={diffSource}
           fileListMode={fileListMode}
           files={files}
+          reviewedFiles={reviewedFiles}
+          pendingCount={pending.length}
+          reviewProvider={
+            canCommentOnReview(pr.state, caps.reviewComments)
+              ? provider.name
+              : undefined
+          }
           reviewFiles={reviewFiles}
           showFileStats={showFileStats}
           onOpenFile={scrollToFile}
@@ -1734,60 +1705,15 @@ export function PrPanel({
         />
       )}
 
-      {/* Review controls only exist while the person is actively reviewing.
-          Passive PR browsing should not imply that a review is in progress. */}
-      {reviewing && (
-        <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-10 flex min-h-[54px] items-center gap-3 rounded-md border border-line-strong bg-panel/95 px-3 py-2 smooth-shadow-soft backdrop-blur phone:flex-col phone:items-stretch phone:gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium text-fg">
-              {reviewDone === "merged"
-                ? "Approved and merged"
-                : reviewDone
-                  ? "Review submitted"
-                  : !caps.reviewComments
-                    ? "Review"
-                    : pending.length > 0
-                      ? `${pending.length} pending comment${pending.length === 1 ? "" : "s"}`
-                      : "No pending comments"}
-            </div>
-            <div
-              className={`mt-0.5 truncate text-supporting ${closeError ? "text-red" : "text-faint"}`}
-              title={closeError || undefined}
-            >
-              {closeError ||
-                (caps.reviewComments
-                  ? "Comments are sent together when you finish the review"
-                  : `${provider.name} has no reviews. Merge or close when you're done.`)}
-            </div>
-          </div>
-          <div className="pointer-events-auto flex shrink-0 flex-wrap justify-end gap-2">
-            {onOpenSession && (
-              <Button
-                variant="soft"
-                className="text-xs"
-                onClick={onOpenSession}
-              >
-                Open workspace
-              </Button>
-            )}
-            <Button
-              variant="soft"
-              className="text-xs"
-              onClick={() => setReviewing(false)}
-            >
-              Exit review
-            </Button>
-            {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && (
-              <Button
-                variant="success"
-                className="text-xs"
-                onClick={() => setReviewOpen(true)}
-              >
-                Finish review
-              </Button>
-            )}
-          </div>
-        </div>
+      {closeError && (
+        <p role="alert" className="px-4 text-supporting text-red">
+          {closeError}
+        </p>
+      )}
+      {mergeError && !reviewOpen && (
+        <p role="alert" className="px-4 text-supporting text-red">
+          {mergeError}
+        </p>
       )}
 
       {reviewOpen && (

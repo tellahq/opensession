@@ -778,7 +778,7 @@ export function SessionViewerMainRegion({
             walkthrough={session.walkthrough}
             page={reviewPage}
             onPageChange={setReviewPage}
-            compactToolbar={summaryVisible}
+            compactToolbar={reviewPage !== "files" && summaryVisible}
             flushToolbarTop={!tabStripVisible}
           />
         </div>

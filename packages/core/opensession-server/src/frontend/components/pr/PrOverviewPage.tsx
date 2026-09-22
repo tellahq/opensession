@@ -13,7 +13,6 @@ import { ConversationView } from "./PrViews";
 
 interface Props {
   compactToolbar: boolean;
-  reviewing: boolean;
   sessionId: string;
   provider: Provider;
   pr: PrDetails;
@@ -31,7 +30,6 @@ interface Props {
 /** The conversation and metadata page of a pull request review. */
 export function PrOverviewPage({
   compactToolbar,
-  reviewing,
   sessionId,
   provider,
   pr,
@@ -50,7 +48,7 @@ export function PrOverviewPage({
       className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:flex-none desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:60px]` : ""}`}
     >
       <main
-        className={`min-w-0 flex-1 bg-surface ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
+        className={`min-w-0 flex-1 bg-surface ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"} pb-4`}
       >
         <SelectionToSession
           sessionId={sessionId}

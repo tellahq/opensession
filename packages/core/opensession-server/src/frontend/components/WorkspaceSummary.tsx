@@ -202,6 +202,8 @@ interface Props {
   reviewMode?: boolean;
   /** Keep a pinned card visible while its Changes side panel is open. */
   forceOpen?: boolean;
+  /** Open only on request, without changing the standing-card preference. */
+  forcePopover?: boolean;
   /** Render the same quiet rows inside the phone Workspace page. */
   embedded?: boolean;
   /** Media already visible in the live transcript, before the overview catches up. */
@@ -370,6 +372,7 @@ export function WorkspaceSummary({
   tabStripVisible,
   reviewMode = false,
   forceOpen = false,
+  forcePopover = false,
   hasRoom = true,
   ...body
 }: Props) {
@@ -384,9 +387,9 @@ export function WorkspaceSummary({
    *  every wider window inherits, and dismissing it does not un-pin the card
    *  set there. */
   const [transient, setTransient] = useState(false);
-  // Room is the only thing that decides this. Review is not a special case:
-  // it is wide, so it keeps the standing card like any other pane.
-  const canStand = forceOpen || workspaceSummaryCanStand(hasRoom);
+  // Files needs the whole canvas, even when there is room for a standing card.
+  const canStand =
+    !forcePopover && (forceOpen || workspaceSummaryCanStand(hasRoom));
   // Mode decides which of the two answers at render rather than in an effect.
   // An effect would paint one frame of a card the pane should not hold.
   const open = canStand ? pinned : transient;
@@ -456,12 +459,13 @@ export function WorkspaceSummary({
       onOpenChange={(nextOpen, details) => {
         // This is a pinned workspace view, not a transient menu. Keep it open
         // while the person works elsewhere in the pane or changes workspace.
-        // Escape belongs to the surface behind the card, never to the card itself.
+        // Escape belongs to the surface behind a pinned card, but dismisses
+        // the explicitly requested Files popover.
         // Only while the pane can hold it: overlaying a narrow one, it behaves
         // like any other popup and leaves on the first click outside.
         if (
           !nextOpen &&
-          (details.reason === "escape-key" ||
+          ((details.reason === "escape-key" && !forcePopover) ||
             (canStand &&
               (details.reason === "outside-press" ||
                 details.reason === "focus-out")))

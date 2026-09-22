@@ -1565,7 +1565,7 @@ export function SessionViewer({
           setDesktopPanelPage,
           setSummaryOpen,
           gitRefreshTick,
-          showReview,
+          reviewPage: showReview ? reviewPage : null,
         }}
         model={{
           models,

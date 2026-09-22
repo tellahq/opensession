@@ -78,4 +78,40 @@ describe("PrFileTree", () => {
     expect(html).not.toContain("+3");
     expect(html).not.toContain("−1");
   });
+  test("exposes search, unreviewed filtering, current file and review markers", () => {
+    const html = renderToStaticMarkup(
+      <PrFileTree
+        files={[{ path: "src/index.ts", additions: 3, deletions: 1 }]}
+        mode="flat"
+        showFileStats={false}
+        activeFile="src/index.ts"
+        reviewedFiles={new Set(["src/index.ts"])}
+        onOpenFile={() => {
+          throw new Error("Rendering must not navigate");
+        }}
+      />,
+    );
+    expect(html).toContain('aria-label="Search filenames or paths"');
+    expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain("Unreviewed");
+    expect(html).toContain('aria-current="location"');
+    expect(html).toContain('aria-label="Reviewed"');
+  });
+
+  test("sheet layout fills its parent and has no desktop resize handle", () => {
+    const html = renderToStaticMarkup(
+      <PrFileTree
+        files={[]}
+        mode="tree"
+        showFileStats={false}
+        layout="sheet"
+        onOpenFile={() => {}}
+      />,
+    );
+    expect(html).not.toContain('role="separator"');
+    expect(html).not.toContain("max-width:");
+    expect(html).toContain("h-full w-full");
+    expect(html).toContain("No files to review");
+    expect(html).toContain("phone:min-h-11");
+  });
 });

@@ -85,7 +85,7 @@ test("the first workspace session receives its draft attachments", () => {
   expect(source).toContain("dropStagingAttachments(draftKey)");
 });
 
-test("workspace Review keeps the implementation summary beside the PR canvas", () => {
+test("workspace Overview keeps the implementation summary beside the PR canvas", () => {
   expect(source).toContain("sessionCarriesPr(s, reviewTarget)");
   expect(source).toContain("s.workspaceId === workspace.id");
   expect(source).toContain("fetchWorkspaceOverview(workspace.id)");
@@ -94,9 +94,11 @@ test("workspace Review keeps the implementation summary beside the PR canvas", (
   expect(source).toContain("onOpenChange={setReviewSummaryOpen}");
   expect(source).toContain("compactToolbar={reviewSummaryVisible}");
   expect(source).toMatch(
-    /const reviewSummaryVisible =\s*tab === "review" &&\s*!!presentationSession &&/,
+    /const reviewSummaryVisible =\s*tab === "review" &&\s*reviewPage !== "files" &&\s*!!presentationSession &&/,
   );
-  expect(viewerSource).toContain("compactToolbar={summaryVisible}");
+  expect(viewerSource).toContain(
+    'compactToolbar={reviewPage !== "files" && summaryVisible}',
+  );
   expect(viewerSource).not.toContain("WS_SUMMARY_REVIEW_CLEARANCE");
   expect(source).toContain("walkthrough={presentationSession?.walkthrough}");
 });
@@ -299,20 +301,15 @@ test("wide Review keeps page navigation in the identity bar", () => {
   expect(reviewToolbarSource).toContain("desktop:pb-2");
   expect(reviewToolbarSource).not.toContain("-mb-2.5");
   expect(reviewToolbarSource).toContain("WS_SUMMARY_REVIEW_BAR_CLEARANCE");
-  expect(prFilesPageSource).toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
+  expect(prFilesPageSource).not.toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
   expect(prOverviewPageSource).toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
-  expect(prFilesPageSource).toContain(
-    "desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:60px]",
-  );
-  expect(prFilesPageSource).toContain(
-    'compactToolbar ? "overflow-y-visible" : "overflow-y-auto"',
-  );
+  expect(prFilesPageSource).toContain("overflow-y-auto");
   expect(prOverviewPageSource).toContain(
     'compactToolbar ? "overflow-y-visible" : "overflow-y-auto"',
   );
-  expect(prPanelSource).toContain("stickyFileHeaders: false");
+  expect(prPanelSource).toContain("stickyFileHeaders: true");
   expect(prPanelSource).not.toContain("--review-file-header-top");
-  expect(prFilesPageSource).toContain('${compactToolbar ? "pt-0" : "pt-2"}');
+  expect(prFilesPageSource).not.toContain("max-w-[1500px]");
 });
 
 test("Review data and pages keep their extracted ownership", () => {
@@ -362,4 +359,15 @@ test("the PR top bar leaves merge to the summary and actions menu", () => {
     "Squash and merge",
   );
   expect(prPanelSource.slice(menuStart, menuEnd)).toContain("Squash and merge");
+});
+
+test("Files uses the full workspace canvas with summary available on request", () => {
+  expect(source).toContain('forcePopover={reviewPage === "files"}');
+  expect(source).toContain('reviewPage !== "files" &&');
+  expect(summarySource).toContain(
+    "!forcePopover && (forceOpen || workspaceSummaryCanStand(hasRoom))",
+  );
+  expect(summarySource).toContain(
+    '(details.reason === "escape-key" && !forcePopover)',
+  );
 });

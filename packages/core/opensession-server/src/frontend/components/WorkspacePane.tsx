@@ -624,6 +624,7 @@ export function WorkspacePane({
   const reviewSummaryHasRoom = headerW === 0 || headerW >= WS_SUMMARY_ROOM_W;
   const reviewSummaryVisible =
     tab === "review" &&
+    reviewPage !== "files" &&
     !!presentationSession &&
     reviewSummaryOpen &&
     reviewSummaryHasRoom &&
@@ -838,14 +839,15 @@ export function WorkspacePane({
             session={presentationSession}
             anchor={headerActionsRef}
             onOpenPanelTab={() => setPanelOpen(true)}
-            onOpenPr={() => {}}
+            onOpenPr={() => setReviewPage("overview")}
             onOpenStackPr={onOpenPr}
-            onOpenChecks={() => {}}
+            onOpenChecks={() => setReviewPage("overview")}
             onOpenSession={onOpenSession}
             send={connected && !presentationSession.archived ? send : undefined}
             onOpenChange={setReviewSummaryOpen}
             tabStripVisible={tabStripVisible}
             reviewMode
+            forcePopover={reviewPage === "files"}
             hasRoom={reviewSummaryHasRoom}
           />
         )}

@@ -33,6 +33,7 @@ import { ArchivedSessionItems } from "../ArchivedSessionItems";
 import { ModelMenuRow } from "../ModelMenuRow";
 import { PortalsPage } from "../PortalsPanel";
 import { PrStatusBar } from "../PrStatusBar";
+import type { PrReviewPage } from "../PrPanel";
 import { RepoBar } from "../RepoBar";
 import { RepoTile } from "../RepoTile";
 import { SandboxBadge } from "../SandboxBadge";
@@ -214,7 +215,7 @@ interface ChromeWorkspaceActions {
   setDesktopPanelPage: (page: SidePanelPage) => void;
   setSummaryOpen: Dispatch<SetStateAction<boolean>>;
   gitRefreshTick: number;
-  showReview: boolean;
+  reviewPage: PrReviewPage | null;
 }
 interface ChromeModel {
   models: ModelOption[];
@@ -394,8 +395,9 @@ export function SessionViewerChrome({
     setDesktopPanelPage,
     setSummaryOpen,
     gitRefreshTick,
-    showReview,
+    reviewPage,
   } = workspaceActions;
+  const showReview = reviewPage !== null;
   const {
     models,
     model,
@@ -1161,6 +1163,7 @@ export function SessionViewerChrome({
                       onOpenChange={setSummaryOpen}
                       tabStripVisible={tabStripVisible}
                       reviewMode={showReview}
+                      forcePopover={showReview && reviewPage === "files"}
                       // Too narrow for both, and the card gets out of the way
                       // until someone asks for it from the same button.
                       hasRoom={summaryHasRoom}

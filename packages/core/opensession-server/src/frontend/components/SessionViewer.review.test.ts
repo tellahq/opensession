@@ -32,7 +32,12 @@ test("session Review keeps PR navigation below workspace actions", () => {
   expect(panelStart).toBeGreaterThan(-1);
   expect(panel).toContain("page={reviewPage}");
   expect(panel).toContain("onPageChange={setReviewPage}");
-  expect(panel).toContain("compactToolbar={summaryVisible}");
+  expect(panel).toContain(
+    'compactToolbar={reviewPage !== "files" && summaryVisible}',
+  );
+  expect(summary).toContain(
+    'forcePopover={showReview && reviewPage === "files"}',
+  );
   expect(panel).toContain("sessionActionTarget={");
   expect(source).toContain("menuTrailing={");
   expect(source).toContain("ref={setReviewSessionActionTarget}");

@@ -78,7 +78,9 @@ export function useStoredCodeSetting<T extends string>(
 }
 
 /** File organization preferences shared by Review and sidebar Changes. */
-export function useCodeOrganizationSettings(): CodeOrganizationSettingsState {
+export function useCodeOrganizationSettings(
+  defaultFileListMode: CodeOrganizationSettingsState["fileListMode"] = "hidden",
+): CodeOrganizationSettingsState {
   const [grouping, changeGrouping] = useStoredCodeSetting(
     "opensession-pr-grouping",
     ["none", "ai"] as const,
@@ -87,7 +89,7 @@ export function useCodeOrganizationSettings(): CodeOrganizationSettingsState {
   const [fileListMode, changeFileListMode] = useStoredCodeSetting(
     "opensession-pr-file-list",
     ["flat", "tree", "hidden"] as const,
-    "hidden",
+    defaultFileListMode,
   );
   const [fileOrder, changeFileOrder] = useStoredCodeSetting(
     "opensession-pr-file-order",

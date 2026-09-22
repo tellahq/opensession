@@ -24,7 +24,8 @@ export function revealDiffFile(
     }
     return;
   }
-  file.scrollIntoView({ behavior: "smooth", block: "start" });
+  // Direct file navigation should land immediately, not sweep across other files.
+  file.scrollIntoView({ behavior: "instant", block: "start" });
   const header = file.querySelector<HTMLElement>(".diff-file-header");
   if (header?.getAttribute("aria-expanded") === "false") header.click();
   header?.focus({ preventScroll: true });
