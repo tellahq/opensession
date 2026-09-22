@@ -120,8 +120,6 @@ deploy/sandbox/microvm/.cache-busybox-source.tar.bz2
 !.agents/skills/effect-ts/**
 !.agents/skills/show-me/
 !.agents/skills/show-me/**
-!.agents/skills/auto-capture/
-!.agents/skills/auto-capture/**
 .claude/skills
 skills-lock.json
 
