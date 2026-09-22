@@ -36,6 +36,7 @@ mcp-config.json.bak
 node_modules/@openai/codex-linux-x64/
 node_modules/.bin/codex
 .frontend-dist/
+.simulator-viewer-dist/
 .website-dist/
 .website-dist-stage/
 packages/clients/website/.demo-tailwind.css

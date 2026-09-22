@@ -4,7 +4,13 @@ import { buildSimulatorViewer } from "./assets";
 import { openIdbSimulator } from "./idb";
 import { startSimulatorViewer } from "./server";
 
-async function main() {
+/**
+ * The supervised viewer process behind a simulator Portal. Source installs run
+ * this file directly under `bun`; the compiled binary reaches it through the
+ * `opensession simulator-portal` subcommand (src/main.ts), which splices the
+ * subcommand out so the flags below land at the same argv positions.
+ */
+export async function runSimulatorPortal() {
   const { values } = parseArgs({
     options: {
       session: { type: "string" },
@@ -60,7 +66,7 @@ async function main() {
 }
 
 if (import.meta.main) {
-  await main().catch((error) => {
+  await runSimulatorPortal().catch((error) => {
     console.error(error);
     process.exitCode = 1;
   });

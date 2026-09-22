@@ -7,8 +7,9 @@
  *   - as a single `bun build --compile` executable, where `process.execPath` is
  *     the executable itself (not `bun`) and there is no `.ts` tree to `run`.
  *     The same executable re-invokes itself with a subcommand instead, such as
- *     `opensession runner-host <spec>`, `opensession mcp-proxy`, or
- *     `opensession transcript-search-worker`. src/main.ts is the front
+ *     `opensession runner-host <spec>`, `opensession mcp-proxy`,
+ *     `opensession transcript-search-worker`, or
+ *     `opensession simulator-portal <flags>`. src/main.ts is the front
  *     controller that dispatches those subcommands.
  *
  * The spawn sites build their argv through the helpers here so one detection
@@ -69,6 +70,18 @@ export function transcriptSearchWorkerArgv(
 ): string[] {
   return isCompiledBinary()
     ? [process.execPath, "transcript-search-worker"]
+    : [bun, entry];
+}
+
+/**
+ * argv prefix to launch the simulator Portal viewer process; the caller appends
+ * its `--session`/`--workspace`/`--app` flags. Compiled mode re-execs this
+ * binary as `<exe> simulator-portal`, which src/main.ts splices back out so
+ * the flags land where `bun <entry.ts>` puts them in source mode.
+ */
+export function simulatorPortalArgv(bun: string, entry: string): string[] {
+  return isCompiledBinary()
+    ? [process.execPath, "simulator-portal"]
     : [bun, entry];
 }
 

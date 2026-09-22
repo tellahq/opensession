@@ -26,9 +26,11 @@
  *       `bun build --compile --target=bun-<os>-<arch>` cross-compiles from any
  *       host, so one runner builds every target.
  *
- * Steps: build the prod frontend into `.frontend-dist`, generate the
- * `embedded-frontend.ts` `import … with { type: "file" }` module so Bun embeds
- * every asset, compile, then restore the stub so the working tree stays clean.
+ * Steps: build the prod frontend into `.frontend-dist` and the simulator
+ * Portal viewer into `.simulator-viewer-dist`, generate the
+ * `embedded-frontend.ts` and `embedded-viewer.ts` `import … with { type:
+ * "file" }` modules so Bun embeds every asset, compile, then restore both
+ * stubs (also on failure) so the working tree stays clean.
  */
 
 import {
@@ -44,6 +46,11 @@ import {
 } from "fs";
 import { dirname, join, relative, resolve } from "path";
 import { generateReleaseMetadata } from "./generate-release-metadata";
+import {
+  generateSimulatorViewerEmbedModule,
+  withGeneratedModules,
+  writeSimulatorViewerDist,
+} from "./lib/compile-embeds";
 import { RELEASE_SERVICE_TEMPLATES } from "./lib/release-artefact";
 
 const REPO_ROOT = resolve(import.meta.dir, "..");
@@ -56,6 +63,16 @@ const EMBED_MODULE = join(
   "server",
   "embedded-frontend.ts",
 );
+const VIEWER_EMBED_MODULE = join(
+  REPO_ROOT,
+  "packages",
+  "core",
+  "opensession-server",
+  "src",
+  "simulator-portal",
+  "embedded-viewer.ts",
+);
+const VIEWER_DIST = join(REPO_ROOT, ".simulator-viewer-dist");
 
 function arg(name: string, fallback?: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -178,6 +195,25 @@ async function buildFrontendDist(): Promise<{
   return { version, distDir: fb.FRONTEND_DIST, metaPath, shellPath };
 }
 
+/**
+ * Build the simulator Portal viewer from source into a clean dist so the
+ * compiled binary serves it without a frontend tree or Tailwind CLI on disk.
+ */
+async function buildSimulatorViewerDist(): Promise<string> {
+  const { buildSimulatorViewerFromSource } =
+    await import("../packages/core/opensession-server/src/simulator-portal/assets");
+  rmSync(VIEWER_DIST, { recursive: true, force: true });
+  console.log(
+    "[compile] building simulator viewer -> .simulator-viewer-dist ...",
+  );
+  const names = await writeSimulatorViewerDist(
+    await buildSimulatorViewerFromSource(),
+    VIEWER_DIST,
+  );
+  console.log(`[compile] simulator viewer: ${names.join(", ")}`);
+  return VIEWER_DIST;
+}
+
 function generateEmbedModule(
   distDir: string,
   version: string,
@@ -242,23 +278,33 @@ function generateEmbedModule(
   return lines.join("\n");
 }
 
-/** Compile src/main.ts to `outfile` for the target, embedding the built SPA. */
+/** Compile src/main.ts to `outfile` for the target, embedding the built SPA
+ * and the simulator Portal viewer. */
 async function compileBinary(
   outfile: string,
   version: string,
   distDir: string,
   metaPath: string,
   shellPath: string,
+  viewerDist: string,
 ): Promise<void> {
-  const stub = await Bun.file(EMBED_MODULE).text();
   mkdirSync(dirname(outfile), { recursive: true });
   // `bun build --compile` appends to an existing outfile, so remove any prior.
   rmSync(outfile, { force: true });
-  writeFileSync(
-    EMBED_MODULE,
-    generateEmbedModule(distDir, version, metaPath, shellPath),
-  );
-  try {
+  const generated = [
+    {
+      path: EMBED_MODULE,
+      content: generateEmbedModule(distDir, version, metaPath, shellPath),
+    },
+    {
+      path: VIEWER_EMBED_MODULE,
+      content: generateSimulatorViewerEmbedModule(
+        viewerDist,
+        VIEWER_EMBED_MODULE,
+      ),
+    },
+  ];
+  await withGeneratedModules(generated, async () => {
     const cmd = [
       "bun",
       "build",
@@ -292,9 +338,7 @@ async function compileBinary(
     });
     if ((await proc.exited) !== 0)
       throw new Error("bun build --compile failed");
-  } finally {
-    writeFileSync(EMBED_MODULE, stub);
-  }
+  });
   if (!existsSync(outfile)) throw new Error(`expected binary at ${outfile}`);
 }
 
@@ -415,12 +459,20 @@ async function main(): Promise<void> {
     metaPath,
     shellPath,
   } = await buildFrontendDist();
+  const viewerDist = await buildSimulatorViewerDist();
 
   // Bare-binary mode: --outfile with no artefact assembly (local testing).
   const bareOut = arg("outfile");
   if (bareOut && !has("out") && !has("os") && !has("arch")) {
     const outfile = resolve(bareOut);
-    await compileBinary(outfile, fver, distDir, metaPath, shellPath);
+    await compileBinary(
+      outfile,
+      fver,
+      distDir,
+      metaPath,
+      shellPath,
+      viewerDist,
+    );
     await buildWorkerSidecars(dirname(outfile));
     const mb = (statSync(outfile).size / 1e6).toFixed(1);
     console.log(`\n[compile] built ${outfile} (${mb} MB, v=${fver})`);
@@ -451,6 +503,7 @@ async function main(): Promise<void> {
     distDir,
     metaPath,
     shellPath,
+    viewerDist,
   );
   // System scope is optional, but it must be fully installable from the same
   // binary artifact. These root-owned policy files are inputs to the installer,
