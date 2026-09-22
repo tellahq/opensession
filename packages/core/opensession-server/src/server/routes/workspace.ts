@@ -62,6 +62,7 @@ import { sanitizeBranchSlug } from "../suggest-branch";
 import { type NativeSessionFile, type StackedOn } from "../types";
 import {
   DEFAULT_WORKSPACE_MODEL_SETTINGS,
+  WorkspaceRepoConflictError,
   type Workspace,
   type WorkspaceDraft,
   type WorkspaceModelSettings,
@@ -643,7 +644,7 @@ export async function handleWorkspaceRoutes(
         { error: "Choose a repository before updating the workspace" },
         { status: 400 },
       );
-    const { draft: rawDraft, ...rest } = body;
+    const { draft: rawDraft } = body;
     let draft: WorkspaceDraft | null | undefined;
     if (rawDraft !== undefined) {
       const parsed = parseWorkspaceDraft(rawDraft);
@@ -651,10 +652,21 @@ export async function handleWorkspaceRoutes(
         return Response.json({ error: "invalid draft" }, { status: 400 });
       draft = parsed;
     }
-    const workspace = await updateWorkspace(id, {
-      ...rest,
-      ...(rawDraft !== undefined ? { draft } : {}),
-    });
+    let workspace;
+    try {
+      workspace = await updateWorkspace(id, {
+        name: body.name,
+        repo: body.repo,
+        color: body.color,
+        order: body.order,
+        modelSettings: body.modelSettings,
+        ...(rawDraft !== undefined ? { draft } : {}),
+      });
+    } catch (error) {
+      if (error instanceof WorkspaceRepoConflictError)
+        return Response.json({ error: error.message }, { status: 409 });
+      throw error;
+    }
     if (!workspace)
       return Response.json({ error: "Workspace not found" }, { status: 404 });
     return Response.json({ workspace });

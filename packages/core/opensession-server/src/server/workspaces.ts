@@ -41,6 +41,7 @@ import { randomUUID } from "crypto";
 import { catalogDocuments } from "./catalog-documents";
 import { canonicalRepoId, defaultRepo } from "./config";
 import { stateDir } from "./paths";
+import { workspaceCheckoutProvesRepo } from "./workspace-repo";
 import type { AttachedRepo, ExternalRef } from "./types";
 import type { SessionEffort } from "./models";
 
@@ -659,6 +660,59 @@ export async function findOrCreateWorkspaceByKey(
   );
 }
 
+/** Stamp all checkout identity fields together from the first code create's
+ * resolved destination. The CAS protects against competing first creates.
+ * Replay on the same destination is harmless; it never reassigns a real owner.
+ */
+export function materializeWorkspaceWorktree(
+  id: string,
+  next: { repo: string; worktreeDir: string; branch?: string },
+): Promise<Workspace | null> {
+  return mutateWorkspace(id, (cur) => {
+    if (cur.worktreeDir) {
+      if (cur.worktreeDir !== next.worktreeDir || cur.repo !== next.repo)
+        throw new Error("Workspace already owns another checkout");
+      return cur;
+    }
+    return {
+      ...cur,
+      repo: next.repo,
+      worktreeDir: next.worktreeDir,
+      ...(cur.prNumber != null && cur.branch
+        ? {}
+        : next.branch
+          ? { branch: next.branch }
+          : {}),
+    };
+  });
+}
+
+/** Evidence is tied to the record read before the asynchronous Git probes.
+ * The CAS must see the same repo and checkout before applying it.
+ */
+async function repoCorrectionEvidence(id: string, repo: string | undefined) {
+  if (!repo) return null;
+  const cur = await getWorkspace(id);
+  if (!cur?.worktreeDir || cur.repo === repo) return null;
+  return (await workspaceCheckoutProvesRepo(cur.worktreeDir, cur.repo, repo))
+    ? cur
+    : null;
+}
+
+function matchesRepoEvidence(cur: Workspace, evidence: Workspace | null) {
+  return (
+    !!evidence &&
+    cur.repo === evidence.repo &&
+    cur.worktreeDir === evidence.worktreeDir
+  );
+}
+
+export class WorkspaceRepoConflictError extends Error {
+  constructor() {
+    super("Repository change does not match the workspace's owned checkout");
+  }
+}
+
 /**
  * Stamp identity fields (dedupe key + PR/ticket linkage) onto an adopted
  * workspace. Deliberately separate from updateWorkspace so identity stays
@@ -667,7 +721,7 @@ export async function findOrCreateWorkspaceByKey(
  * permanent provenance; resolution falls back to session matching for any
  * additional PRs a workspace accrues.
  */
-export function stampWorkspaceIdentity(
+export async function stampWorkspaceIdentity(
   id: string,
   patch: {
     key?: string;
@@ -678,19 +732,17 @@ export function stampWorkspaceIdentity(
     externalRef?: ExternalRef;
   },
 ): Promise<Workspace | null> {
+  const evidence = await repoCorrectionEvidence(id, patch.repo);
   return mutateWorkspace(id, (cur) => {
-    if (cur.key && patch.key && cur.key !== patch.key) return cur;
-    // The adopted workspace may have been minted by a session in ANOTHER repo:
-    // a session working in repo A can open a PR in repo B through an attached
-    // repo, and that is how a workspace ended up filed under `opensession` while
-    // its branch and PR belonged to another repo. A repo that disagrees with
-    // the branch beside it is worse than none: sessionPrBranch refuses to
-    // inherit a branch across repos, the sidebar cannot match the PR row to the
-    // workspace, and a new session here resolves the branch in the wrong repo.
-    // Only when the workspace has not materialized a worktree of its own, which
-    // is the point where its repo stops being a guess.
+    const repairRepo = matchesRepoEvidence(cur, evidence);
+    // Durable creation keys remain provenance, but must not block a proven
+    // checkout correction when a later PR stamp supplies a different key.
+    if (cur.key && patch.key && cur.key !== patch.key)
+      return repairRepo ? { ...cur, repo: patch.repo } : cur;
     const adoptRepo =
-      patch.repo && !cur.branch && !cur.worktreeDir && cur.repo !== patch.repo;
+      patch.repo &&
+      cur.repo !== patch.repo &&
+      ((!cur.branch && !cur.worktreeDir) || repairRepo);
     // A PR workspace materialized by its review checkout carries the derived
     // `<head>-os-review` branch; the PR resolve names the real head, so take it.
     const repairBranch =
@@ -739,7 +791,7 @@ export function stampWorkspaceIdentity(
  *   exists, permanently demotes it to `autoName: false`, stopping the follow
  *   for life.
  */
-export function updateWorkspace(
+export async function updateWorkspace(
   id: string,
   patch: Partial<
     Pick<
@@ -756,9 +808,18 @@ export function updateWorkspace(
   > & { draft?: WorkspaceDraft | null },
   expectedName?: string,
 ): Promise<Workspace | null> {
+  const repo = patch.repo === "auto" ? defaultRepo().id : patch.repo;
+  const evidence = await repoCorrectionEvidence(id, repo);
   return mutateWorkspace(id, (cur) => {
     // Auto-naming must compare inside the catalog CAS, not before a human rename.
     if (expectedName !== undefined && cur.name !== expectedName) return cur;
+    if (
+      repo !== undefined &&
+      repo !== cur.repo &&
+      cur.worktreeDir &&
+      !matchesRepoEvidence(cur, evidence)
+    )
+      throw new WorkspaceRepoConflictError();
     const manualRename = patch.name !== undefined;
 
     let nextDraft: WorkspaceDraft | undefined = cur.draft;
