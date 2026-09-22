@@ -18,11 +18,13 @@
  * (lazy kick + 2-min ticker parked on globalThis, refresh-on-first-use).
  *
  * Discovery follows the MCP auth spec: RFC 9728 protected-resource metadata
- * on the server origin → authorization server → RFC 8414 AS metadata →
+ * for the server resource → authorization server → RFC 8414 AS metadata →
  * dynamic client registration (RFC 7591, token_endpoint_auth_method "none").
  */
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { randomBytes, createHash } from "crypto";
+import { readFile, writeFile } from "node:fs/promises";
+import { discoverMcpOauth } from "./mcp-oauth-discovery";
 import { configuredServer, productName } from "./config";
 import { statePath } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
@@ -167,54 +169,6 @@ function callbackUrl(): string {
   return `${configuredServer().publicBaseUrl}/api/connections/mcp-oauth/callback`;
 }
 
-/** RFC 9728 → RFC 8414 discovery for an MCP server URL. */
-async function discover(serverUrl: string): Promise<{
-  resource?: string;
-  scopes?: string[];
-  endpoints: OauthEndpoints;
-}> {
-  const origin = new URL(serverUrl).origin;
-  let asBase = origin;
-  let resource: string | undefined;
-  let scopes: string[] | undefined;
-  try {
-    const pr = (await (
-      await fetch(`${origin}/.well-known/oauth-protected-resource`, {
-        signal: AbortSignal.timeout(10_000),
-      })
-    ).json()) as {
-      resource?: string;
-      authorization_servers?: string[];
-      scopes_supported?: string[];
-    };
-    if (pr.authorization_servers?.[0]) asBase = pr.authorization_servers[0];
-    resource = pr.resource;
-    if (Array.isArray(pr.scopes_supported) && pr.scopes_supported.length)
-      scopes = pr.scopes_supported;
-  } catch {}
-  for (const wk of [
-    `${asBase.replace(/\/$/, "")}/.well-known/oauth-authorization-server`,
-    `${asBase.replace(/\/$/, "")}/.well-known/openid-configuration`,
-  ]) {
-    try {
-      const meta = (await (
-        await fetch(wk, { signal: AbortSignal.timeout(10_000) })
-      ).json()) as Record<string, string>;
-      if (meta.authorization_endpoint && meta.token_endpoint)
-        return {
-          resource,
-          scopes,
-          endpoints: {
-            authorize: meta.authorization_endpoint,
-            token: meta.token_endpoint,
-            register: meta.registration_endpoint,
-          },
-        };
-    } catch {}
-  }
-  throw new Error(`No OAuth authorization-server metadata for ${serverUrl}`);
-}
-
 /** Ensure a registered public client for this server (cached in the store). */
 async function ensureServerAuth(
   name: string,
@@ -223,13 +177,14 @@ async function ensureServerAuth(
   const store = readStore();
   const cur = store[name];
   if (cur?.clientInfo?.clientId && cur.serverUrl === serverUrl) return cur;
-  const { resource, scopes, endpoints } = await discover(serverUrl);
+  const { resource, scopes, endpoints } = await discoverMcpOauth(serverUrl);
   if (!endpoints.register)
     throw new Error(
       `${name}: authorization server offers no dynamic client registration`,
     );
   const registrationUrl = new URL(endpoints.register);
   const registrationResponse = await fetch(endpoints.register, {
+    redirect: "error",
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -618,21 +573,21 @@ export function mcpOauthStatus(name: string): {
 }
 
 // OAuth-capability probe (RFC 9728 protected-resource metadata on the
-// server origin) — drives "Connect my account" visibility for servers that
+// server resource) — drives "Connect my account" visibility for servers that
 // run on a static workspace key today (e.g. posthog).
 //
 // The answer is kept on disk, not only in memory, because it decides
 // MEMBERSHIP of the My accounts list rather than one row's state: a cold
 // process cannot say which tools belong on that list at all, so the panel
 // would have to wait on a probe per configured server before it could draw a
-// single row. Whether an origin publishes OAuth metadata is a stable fact
+// single row. Whether a resource publishes OAuth metadata is a stable fact
 // about that service, so the last answer is a good one to show while a fresh
 // probe runs behind it.
 //
 // A probe that never got an answer is remembered in memory only, and briefly:
 // a network blip must not persist "this tool has no personal sign-in" and drop
 // the row from everyone's list for an hour.
-const CAPABLE_PATH = statePath(".opensession-mcp-capable.json");
+const CAPABLE_PATH = statePath(".opensession-mcp-capable-v2.json");
 const CAPABLE_TTL_MS = 60 * 60_000;
 const CAPABLE_ERROR_TTL_MS = 60_000;
 
@@ -644,90 +599,85 @@ interface Capability {
   soft?: boolean;
 }
 
-let capableCache: Map<string, Capability> | null = null;
+const capableCache = new Map<string, Capability>();
 const capableInflight = new Map<string, Promise<boolean>>();
+let capabilityLoad: Promise<void> | undefined;
+let capabilityWrite = Promise.resolve();
 
-function capabilities(): Map<string, Capability> {
-  if (capableCache) return capableCache;
-  capableCache = new Map();
-  try {
-    const raw = JSON.parse(readFileSync(CAPABLE_PATH, "utf8")) as Record<
-      string,
-      Capability
-    >;
-    for (const [origin, e] of Object.entries(raw))
-      if (typeof e?.capable === "boolean" && typeof e?.ts === "number")
-        capableCache.set(origin, { capable: e.capable, ts: e.ts });
-  } catch {}
-  return capableCache;
+function loadCapabilities(): Promise<void> {
+  return (capabilityLoad ??= (async () => {
+    try {
+      const raw = JSON.parse(await readFile(CAPABLE_PATH, "utf8")) as Record<
+        string,
+        Capability
+      >;
+      for (const [url, e] of Object.entries(raw))
+        if (typeof e?.capable === "boolean" && typeof e?.ts === "number")
+          capableCache.set(url, { capable: e.capable, ts: e.ts });
+    } catch {}
+  })());
 }
 
 function capabilityFresh(e: Capability): boolean {
   return Date.now() - e.ts < (e.soft ? CAPABLE_ERROR_TTL_MS : CAPABLE_TTL_MS);
 }
 
-function originOf(serverUrl: string): string | undefined {
+function resourceKey(serverUrl: string): string | undefined {
   try {
-    return new URL(serverUrl).origin;
+    return new URL(serverUrl).href;
   } catch {
     return undefined;
   }
 }
 
-function probeCapable(origin: string): Promise<boolean> {
-  const running = capableInflight.get(origin);
+function probeCapable(resource: string): Promise<boolean> {
+  const running = capableInflight.get(resource);
   if (running) return running;
   const p = (async () => {
+    await loadCapabilities();
+    const hit = capableCache.get(resource);
+    if (hit && capabilityFresh(hit)) return hit.capable;
     let capable = false;
-    let answered = false;
     try {
-      const res = await fetch(
-        `${origin}/.well-known/oauth-protected-resource`,
-        { signal: AbortSignal.timeout(6_000) },
-      );
-      capable = res.ok;
-      answered = true;
+      await discoverMcpOauth(resource);
+      capable = true;
     } catch {}
-    capabilities().set(origin, {
-      capable,
-      ts: Date.now(),
-      ...(answered ? {} : { soft: true }),
-    });
-    if (answered) persistCapabilities();
+    // Failed discovery may be a transient provider error. Never persist it.
+    capableCache.set(resource, { capable, ts: Date.now(), soft: !capable });
+    if (capable) await persistCapabilities();
     return capable;
-  })().finally(() => capableInflight.delete(origin));
-  capableInflight.set(origin, p);
+  })().finally(() => capableInflight.delete(resource));
+  capableInflight.set(resource, p);
   return p;
 }
 
-function persistCapabilities(): void {
-  const out: Record<string, Capability> = {};
-  for (const [origin, e] of capabilities()) if (!e.soft) out[origin] = e;
-  try {
-    writeFileSync(CAPABLE_PATH, JSON.stringify(out, null, 2) + "\n");
-  } catch {}
+function persistCapabilities(): Promise<void> {
+  capabilityWrite = capabilityWrite
+    .then(async () => {
+      const out: Record<string, Capability> = {};
+      for (const [url, e] of capableCache) if (!e.soft) out[url] = e;
+      await writeFile(CAPABLE_PATH, JSON.stringify(out, null, 2) + "\n", {
+        mode: 0o600,
+      });
+    })
+    .catch(() => {});
+  return capabilityWrite;
 }
 
-/**
- * The last known capability answer, refreshing a stale one in the background.
- * `undefined` means no probe has ever finished for this origin, which the
- * caller should report as still checking rather than as "no personal sign-in
- * here" — the two look identical to a reader and only one of them is true.
- */
+/** Last known answer for this exact resource, refreshed in the background.
+ * Undefined means discovery (including loading the persisted cache) is pending. */
 export function cachedOauthCapable(serverUrl: string): boolean | undefined {
-  const origin = originOf(serverUrl);
-  if (!origin) return false;
-  const hit = capabilities().get(origin);
-  if (!hit || !capabilityFresh(hit)) probeCapable(origin).catch(() => {});
+  const resource = resourceKey(serverUrl);
+  if (!resource) return false;
+  const hit = capableCache.get(resource);
+  if (!hit || !capabilityFresh(hit)) probeCapable(resource).catch(() => {});
   return hit?.capable;
 }
 
 export async function isOauthCapable(serverUrl: string): Promise<boolean> {
-  const origin = originOf(serverUrl);
-  if (!origin) return false;
-  const hit = capabilities().get(origin);
-  if (hit && capabilityFresh(hit)) return hit.capable;
-  return probeCapable(origin);
+  const resource = resourceKey(serverUrl);
+  if (!resource) return false;
+  return probeCapable(resource);
 }
 
 /** Raw grant token (no "Bearer " prefix) — stdio env injection. */
