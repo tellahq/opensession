@@ -379,7 +379,11 @@ install_package() {
   # Homebrew installs as the invoking user — no sudo, and asking for it is
   # actively wrong on macOS.
   if [ "$OS" = "Darwin" ]; then
-    command -v brew >/dev/null 2>&1 || return 1
+    if ! command -v brew >/dev/null 2>&1; then
+      warn "Homebrew is required to install $pkg automatically on macOS"
+      muted "install Homebrew from https://brew.sh, then re-run the installer"
+      return 1
+    fi
     brew install --quiet "$pkg" >/dev/null 2>&1
     return $?
   fi
@@ -759,36 +763,39 @@ if [ "$WITH_CADDY" = "1" ]; then
 
   # Private custom domains cannot use HTTP-01 because they terminate on a
   # Tailscale address. lego handles Let's Encrypt DNS-01 and renewal while
-  # stock Caddy continues to serve the resulting certificate. On Linux, use
-  # lego's official build rather than a distro package: Ubuntu's older build
-  # advertises Cloudflare in `dnshelp` but rejects it when issuing a certificate.
+  # stock Caddy continues to serve the resulting certificate. Use the official
+  # pinned v4 build on both platforms: distro builds may omit DNS providers,
+  # and lego 5 has an incompatible CLI.
+  case "$OS" in
+    Darwin) lego_os="darwin" ;;
+    *) lego_os="linux" ;;
+  esac
+  case "$(uname -m)" in
+    x86_64|amd64) lego_arch="amd64" ;;
+    aarch64|arm64) lego_arch="arm64" ;;
+    *) lego_arch="" ;;
+  esac
+  lego_version="${LEGO_VERSION:-4.26.0}"
+  case "$lego_version" in
+    4.*)
+      lego_tmp="$(mktemp -d)"
+      mkdir -p "$HOME/.local/bin"
+      if [ -n "$lego_arch" ] \
+        && curl -fsSL "https://github.com/go-acme/lego/releases/download/v${lego_version}/lego_v${lego_version}_${lego_os}_${lego_arch}.tar.gz" -o "$lego_tmp/lego.tar.gz" \
+        && tar -xzf "$lego_tmp/lego.tar.gz" -C "$lego_tmp" lego \
+        && install -m 0755 "$lego_tmp/lego" "$HOME/.local/bin/lego"; then
+        export PATH="$HOME/.local/bin:$PATH"
+        good "lego $(lego --version 2>/dev/null | head -1 || echo installed)"
+      else
+        warn "could not install the official lego build automatically"
+        muted "install lego 4.x from https://go-acme.github.io/lego/installation/"
+      fi
+      rm -rf "$lego_tmp"
+      ;;
+    *) warn "LEGO_VERSION must select lego 4.x; automatic setup does not support lego 5" ;;
+  esac
   if [ "$OS" = "Darwin" ]; then
-    if command -v lego >/dev/null 2>&1 || { install_package lego && command -v lego >/dev/null 2>&1; }; then
-      good "lego $(lego --version 2>/dev/null | head -1 || echo installed)"
-    else
-      warn "could not install lego automatically"
-      muted "install it with: brew install lego"
-    fi
-  else
-    case "$(uname -m)" in
-      x86_64|amd64) lego_arch="amd64" ;;
-      aarch64|arm64) lego_arch="arm64" ;;
-      *) lego_arch="" ;;
-    esac
-    lego_version="${LEGO_VERSION:-4.26.0}"
-    lego_tmp="$(mktemp -d)"
-    mkdir -p "$HOME/.local/bin"
-    if [ -n "$lego_arch" ] \
-      && curl -fsSL "https://github.com/go-acme/lego/releases/download/v${lego_version}/lego_v${lego_version}_linux_${lego_arch}.tar.gz" -o "$lego_tmp/lego.tar.gz" \
-      && tar -xzf "$lego_tmp/lego.tar.gz" -C "$lego_tmp" lego \
-      && install -m 0755 "$lego_tmp/lego" "$HOME/.local/bin/lego"; then
-      export PATH="$HOME/.local/bin:$PATH"
-      good "lego $(lego --version 2>/dev/null | head -1 || echo installed)"
-    else
-      warn "could not install the official lego build automatically"
-      muted "install it from https://go-acme.github.io/lego/installation/"
-    fi
-    rm -rf "$lego_tmp"
+    muted "Automatic private-domain setup requires Linux with systemd; on macOS, manage the certificate and reverse proxy externally."
   fi
 fi
 

@@ -181,6 +181,12 @@ reach it. The name is not the security boundary. Private network reachability is
 
 ### Managed setup with Cloudflare or Vercel DNS
 
+Automatic setup and certificate renewal require **Linux with systemd**, Caddy,
+and passwordless sudo. macOS and other platforms must manage their certificate
+and reverse proxy externally; automatic setup rejects them before changing DNS
+or requesting a certificate. Do not replace a tailnet-only bind with an
+unrestricted listener: private DNS alone does not prevent public access.
+
 This built-in friendly-domain flow uses Tailscale as its private network.
 Cloudflare and Vercel authorize DNS-01 certificate issuance; they do not expose
 or carry app traffic. For a private Cloudflare Tunnel, keep Open Session on
@@ -214,6 +220,11 @@ curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh
   | bash -s -- --caddy --no-onboard
 ```
 
+The installer uses the official lego 4.26.0 build on Linux and macOS rather
+than an unpinned package-manager version. Automatic setup requires lego 4.x;
+lego 5's CLI is not supported. If another lego is found first, ensure
+`~/.local/bin` precedes it on the Open Session service's `PATH`.
+
 ### Externally managed certificate
 
 Expand **Use an externally managed certificate** only when existing
@@ -230,6 +241,10 @@ Store the resulting files at:
 /etc/opensession/tls/os.company.dev.crt
 /etc/opensession/tls/os.company.dev.key
 ```
+
+The following Caddy example targets Linux. On macOS, use a separately managed
+reverse proxy with verified tailnet-only access and certificate renewal; these
+Linux paths and low-port binding instructions are not a macOS recipe.
 
 Keep Open Session on `127.0.0.1:3850` and bind Caddy only to the Tailscale
 address:
