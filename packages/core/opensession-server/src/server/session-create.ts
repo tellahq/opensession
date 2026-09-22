@@ -1057,7 +1057,7 @@ export function actorWorktreeMaterializer(input: {
         project: input.project,
         branch: input.branch,
         worktreePath: input.worktreePath,
-        baseBranch: input.baseBranch || getRepo(input.project).defaultBranch,
+        baseBranch: input.baseBranch,
         isolated: input.isolated,
         existingBranch: input.existingBranch,
         credentialPrincipal: input.credentialPrincipal,
