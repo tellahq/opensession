@@ -756,7 +756,9 @@ export function SessionViewerMainRegion({
         <div
           className={cn(
             VIEWER_REVIEW_MAIN,
-            isPhone && "phone:pt-[env(safe-area-inset-top,0px)]",
+            isPhone &&
+              !tabStripVisible &&
+              "phone:pt-[env(safe-area-inset-top,0px)]",
           )}
         >
           <PrPanel
