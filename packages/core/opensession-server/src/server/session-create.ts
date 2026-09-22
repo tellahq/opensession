@@ -2639,6 +2639,7 @@ export async function handleCreateSessionMessage(
     : typeof msg.workspaceId === "string" && msg.workspaceId
       ? await getWorkspace(msg.workspaceId)
       : null;
+  const sourceWorkspace = workspace;
   // Never trust a client's destination after its repo or mode changed. Recovery
   // and forks retain their already-owned membership; fresh creates resolve a
   // compatible workspace or mint one below, never persist the rejected raw id.
@@ -3025,7 +3026,8 @@ export async function handleCreateSessionMessage(
     // inherits the workspace's externalRefs — that's what keeps the
     // Video tab on its sessions and joins the sidebar feed row to the
     // session — and gets the item named in its opening context.
-    const inheritedRefs = workspace?.externalRefs;
+    const openingContextWorkspace = sourceWorkspace ?? workspace;
+    const inheritedRefs = openingContextWorkspace?.externalRefs;
     // Least privilege for feed-workspace sessions: unless the creator
     // explicitly picked servers, the session's MCP allowlist is the
     // feed's declared list (e.g. posthog → ["posthog"]) — never the full
@@ -3046,7 +3048,8 @@ export async function handleCreateSessionMessage(
       if (refsContext)
         openingPrompt += `\n\n${wrapContext(refsContext, "external-refs")}`;
     }
-    const plainThreadId = msgPlainThreadId || workspace?.plainThreadId;
+    const plainThreadId =
+      msgPlainThreadId || openingContextWorkspace?.plainThreadId;
     if (plainThreadId) {
       try {
         const { getThreadWithMessages, formatThreadContext } =

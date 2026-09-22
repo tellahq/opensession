@@ -5,6 +5,14 @@ import { clearDraft, workspaceDraftKey } from "./drafts";
 // outlives the palette component so reopening can update/adopt the same draft.
 let parkedWorkspace: { id: string; repo: string } | null = null;
 
+/** The previous copy, including across repo changes, for retiring a re-parked draft. */
+export function getParkedNewSessionWorkspace(): Readonly<{
+  id: string;
+  repo: string;
+}> | null {
+  return parkedWorkspace;
+}
+
 export function getParkedNewSessionWorkspaceId(repo: string): string | null {
   return parkedWorkspace?.repo === repo ? parkedWorkspace.id : null;
 }

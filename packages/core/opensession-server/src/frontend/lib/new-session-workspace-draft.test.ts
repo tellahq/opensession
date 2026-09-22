@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   forgetParkedNewSessionWorkspace,
   getParkedNewSessionWorkspaceId,
+  getParkedNewSessionWorkspace,
   rememberParkedNewSessionWorkspace,
 } from "./new-session-workspace-draft";
 
@@ -51,4 +52,15 @@ test("a parked draft is neither adopted nor updated by another repository", () =
   forgetParkedNewSessionWorkspace("ws-app");
   expect(getParkedNewSessionWorkspaceId("acme-docs")).toBe("ws-docs");
   forgetParkedNewSessionWorkspace("ws-docs");
+});
+
+test("a cross-repo re-park can retire the previous draft without adopting it", () => {
+  rememberParkedNewSessionWorkspace("ws-app", "acme-app");
+  const previous = getParkedNewSessionWorkspace();
+  expect(previous).toEqual({ id: "ws-app", repo: "acme-app" });
+  expect(getParkedNewSessionWorkspaceId("none")).toBeNull();
+  rememberParkedNewSessionWorkspace("ws-ask", "none");
+  forgetParkedNewSessionWorkspace(previous!.id);
+  expect(getParkedNewSessionWorkspaceId("none")).toBe("ws-ask");
+  forgetParkedNewSessionWorkspace("ws-ask");
 });

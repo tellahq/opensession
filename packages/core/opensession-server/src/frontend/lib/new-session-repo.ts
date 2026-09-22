@@ -40,7 +40,7 @@ export function newSessionWorkspaceScope(
     : {};
 }
 
-/** Ignore stale, missing, or incompatible destinations before optimistic navigation. */
+/** Reject known-incompatible destinations; the active list is not exhaustive. */
 export function newSessionWorkspaceDestination(
   workspaces: ReadonlyArray<{
     id: string;
@@ -54,13 +54,13 @@ export function newSessionWorkspaceDestination(
   pullRequest?: { branch: string } | null,
 ): string | undefined {
   const workspace = workspaces.find((item) => item.id === workspaceId);
-  return workspace &&
-    canJoinCreateWorkspace(workspace, {
-      repo: repo === NO_REPO ? undefined : repo,
-      mode,
-      fromPr: !!pullRequest,
-      branch: pullRequest?.branch,
-    })
+  if (!workspace) return workspaceId;
+  return canJoinCreateWorkspace(workspace, {
+    repo: repo === NO_REPO ? undefined : repo,
+    mode,
+    fromPr: !!pullRequest,
+    branch: pullRequest?.branch,
+  })
     ? workspace.id
     : undefined;
 }

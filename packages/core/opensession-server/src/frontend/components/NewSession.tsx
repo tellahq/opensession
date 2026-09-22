@@ -98,6 +98,7 @@ import {
   consumeNewSessionWorkspaceDraft,
   forgetParkedNewSessionWorkspace,
   getParkedNewSessionWorkspaceId,
+  getParkedNewSessionWorkspace,
   rememberParkedNewSessionWorkspace,
 } from "../lib/new-session-workspace-draft";
 import { VoiceInput } from "./VoiceInput";
@@ -936,10 +937,9 @@ export function NewSession({
         if (repo && repo !== NO_REPO) input.repo = repo;
         return createWorkspaceApi(input);
       };
-      const parkedId =
-        sourceWorkspaceId || forceRepo
-          ? null
-          : getParkedNewSessionWorkspaceId(repo);
+      const previousPark =
+        sourceWorkspaceId || forceRepo ? null : getParkedNewSessionWorkspace();
+      const parkedId = previousPark?.repo === repo ? previousPark.id : null;
       const workspace = workspaceId
         ? // Scoped to an existing workspace: update its draft, never rename it.
           await updateWorkspaceApi(workspaceId, { draft })
@@ -958,6 +958,17 @@ export function NewSession({
               throw e;
             })
           : await createWorkspace();
+      if (previousPark && previousPark.id !== workspace.id) {
+        // The composer moved its draft to another repo. Retire only the old
+        // draft, never delete its workspace (another client may have joined it)
+        // or change the repository under any sessions it now contains.
+        await updateWorkspaceApi(previousPark.id, { draft: null }).catch(
+          (e) => {
+            if (!(e instanceof ApiError && e.status === 404)) throw e;
+          },
+        );
+        consumeNewSessionWorkspaceDraft(previousPark.id);
+      }
       if (operation.consumed) {
         // The same prompt started while this request was in flight. A create
         // that adopted this workspace only needs its late draft cleared. When
@@ -1110,6 +1121,11 @@ export function NewSession({
           }
         : {};
     }
+    // Keep a same-repo source on the wire even when Ask needs a fresh checkout.
+    // The server validates membership and retains the source's ticket/feed
+    // context separately. It must not appear in the optimistic destination.
+    if (candidateWorkspaceId && !createWorkspaceId)
+      createMessage.workspaceId = candidateWorkspaceId;
     if (modelWorkspaceId) createMessage.modelWorkspaceId = modelWorkspaceId;
     // This assignment replaces `selectedPullRequest ? { fromPr: true } : {}`.
     if (selectedPullRequest) createMessage.fromPr = true;

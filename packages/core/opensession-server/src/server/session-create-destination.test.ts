@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test, spyOn } from "bun:test";
 import { mkdtemp, mkdir, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -26,6 +26,9 @@ import { handleCreateSessionMessage } from "./session-create";
 import { waitForCreationStateChange } from "./session-kernel/wakes";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import type { WSClientData } from "./ws-hub";
+import { promptDispatches } from "./queue-state";
+import * as plainApi from "../agents/plain/api";
+import * as feeds from "./feeds";
 
 let root: string;
 let store: SessionKernelStore;
@@ -117,9 +120,15 @@ async function create(
   createWorkspace?: { name: string },
 ) {
   const frames: Record<string, unknown>[] = [];
+  let openingPrompt: string | undefined;
   const socket = {
     data: {},
-    send: (text: string) => frames.push(JSON.parse(text)),
+    send: (text: string) => {
+      const frame = JSON.parse(text);
+      frames.push(frame);
+      if (frame.type === "session_created")
+        openingPrompt = promptDispatches.get(frame.id)?.items[0]?.content;
+    },
   } as unknown as ServerWebSocket<WSClientData>;
   const response = await handleCreateSessionMessage(socket, {
     prompt: "",
@@ -152,6 +161,7 @@ async function create(
   return {
     response: response!,
     session,
+    openingPrompt,
     workspace: await getWorkspace(session.workspaceId),
   };
 }
@@ -240,4 +250,48 @@ test("repo-less siblings retain their shared scratch directory", async () => {
   const second = await create("scratch", first.workspace!.id);
   expect(second.workspace?.id).toBe(first.workspace?.id);
   expect(second.session.worktreeDir).toBe(first.session.worktreeDir);
+});
+
+test("Ask keeps its ticket and feed context when its source code workspace cannot be joined", async () => {
+  const thread = spyOn(plainApi, "getThreadWithMessages").mockResolvedValue({
+    id: "ticket-acme",
+  });
+  const format = spyOn(plainApi, "formatThreadContext").mockReturnValue(
+    "Acme ticket conversation",
+  );
+  const refs = spyOn(feeds, "externalRefsOpeningContext").mockResolvedValue(
+    "Acme linked item",
+  );
+  const scope = spyOn(feeds, "feedMcpServersForRefs").mockResolvedValue([
+    "acme-feed",
+  ]);
+  try {
+    const externalRefs = [{ kind: "acme-item", id: "item-1" }];
+    const original = await createWorkspace({
+      name: "Acme ticket",
+      repo: "acme-docs",
+      createdBy: "Acme",
+      branch: "feature",
+      worktreeDir: join(root, "docs-feature"),
+      plainThreadId: "ticket-acme",
+      externalRefs,
+    });
+    // The palette sends both: the source supplies context, not membership.
+    const result = await create("ask", original.id, {
+      name: "Ask about the ticket",
+    });
+    expect(result.workspace?.id).not.toBe(original.id);
+    expect(result.session.plainThreadId).toBe("ticket-acme");
+    expect(result.session.externalRefs).toEqual(externalRefs);
+    expect(result.session.mcpServers).toEqual(["acme-feed"]);
+    expect(result.openingPrompt).toContain("Acme ticket conversation");
+    expect(result.openingPrompt).toContain("Acme linked item");
+    expect(thread).toHaveBeenCalledWith("ticket-acme");
+    expect(await getWorkspace(original.id)).toEqual(original);
+  } finally {
+    thread.mockRestore();
+    format.mockRestore();
+    refs.mockRestore();
+    scope.mockRestore();
+  }
 });

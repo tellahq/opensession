@@ -142,9 +142,15 @@ describe("create destination after palette changes", () => {
     ).toBe("ws-app");
   });
 
-  test("missing workspace metadata cannot authorize optimistic adoption", () => {
+  test("archived or newly parked workspaces absent from the active list still reach server validation", () => {
     expect(
       newSessionWorkspaceDestination([], "ws-app", "acme-app", "code"),
+    ).toBe("ws-app");
+    expect(
+      newSessionWorkspaceDestination([], "ws-draft", "acme-app", "ask"),
+    ).toBe("ws-draft");
+    expect(
+      newSessionWorkspaceDestination([], undefined, "acme-app", "code"),
     ).toBeUndefined();
   });
 });
