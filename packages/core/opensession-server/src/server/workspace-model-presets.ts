@@ -68,8 +68,8 @@ export async function resolveWorkspaceModelPreset(
   const match = id.match(/^workspace-preset\/([^/]+)\/([A-Za-z0-9_-]{1,64})$/);
   if (!match || (typeof workspaceId === "string" && match[1] !== workspaceId))
     return undefined;
-  // A run host may never have served a session list. Read the owning
-  // workspace through the worker-owned catalog, not a process-local projection.
+  // Gateway callers read the worker-owned catalog, not a process-local
+  // projection. Detached hosts receive portable selections before launch.
   const workspace = await getWorkspace(match[1]);
   const preset = workspace
     ? workspaceModelSettings(workspace).presets?.find(

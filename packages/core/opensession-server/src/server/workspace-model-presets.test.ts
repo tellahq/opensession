@@ -7,6 +7,7 @@ import {
 import {
   SessionKernelStore,
   __setSessionKernelStoreForTest,
+  installSessionKernelActor,
 } from "./session-kernel";
 import { catalogDocuments } from "./catalog-documents";
 import {
@@ -16,6 +17,7 @@ import {
 } from "./workspaces";
 import { resolvePiRoutedModel, runPi } from "./pi-runner";
 import * as piConfig from "./pi-config";
+import { resolveHostedRunOptions } from "./host-client";
 
 function preset(
   overrides: Partial<ResolvedWorkspaceModelPreset> = {},
@@ -185,5 +187,57 @@ describe("workspace preset catalog resolution", () => {
     } finally {
       enabled.mockRestore();
     }
+  });
+
+  test("the local-host boundary carries a portable model, identity, effort, and instructions without a host actor", async () => {
+    await catalogDocuments("workspaces").set("ws-acme", {
+      id: "ws-acme",
+      name: "Acme",
+    });
+    for (const presetId of ["opus-fable", "orchestrator-fable", "ultracode"]) {
+      const model = `pi/workspace-preset/ws-acme/${presetId}`;
+      const opts = await resolveHostedRunOptions({
+        osSessionId: "acme-session",
+        prompt: "Acme task",
+        cwd: ".",
+        model,
+        effort: "low",
+        reposNote: "Acme repository instructions",
+      });
+      expect(opts.selectedModel).toBe(model);
+      expect(opts.model).not.toContain("workspace-preset/");
+      expect(opts.effort).not.toBe("low");
+      expect(opts.reposNote).toContain("Workspace model preset");
+      expect(opts.reposNote).toContain("Acme repository instructions");
+      const previousActor = installSessionKernelActor(undefined);
+      const env = process.env as Record<string, string | undefined>;
+      const previousEnv = env.NODE_ENV;
+      delete env.NODE_ENV;
+      try {
+        // A real detached host must never attempt the workspace catalog read.
+        await expect(resolveWorkspaceModelPreset(model)).rejects.toThrow(
+          "requires the authoritative actor",
+        );
+        const resolved = await resolvePiRoutedModel(opts.model!, opts.model);
+        expect(resolved).toMatchObject({ providerID: "anthropic" });
+        if (presetId === "opus-fable")
+          expect(resolved?.dial?.id).toBe("dial/opus-fable");
+      } finally {
+        if (previousEnv === undefined) delete env.NODE_ENV;
+        else env.NODE_ENV = previousEnv;
+        installSessionKernelActor(previousActor);
+      }
+    }
+  });
+
+  test("the gateway rejects missing workspace presets before local-host dispatch", async () => {
+    await expect(
+      resolveHostedRunOptions({
+        osSessionId: "acme-session",
+        prompt: "Acme task",
+        cwd: ".",
+        model: "pi/workspace-preset/ws-missing/custom",
+      }),
+    ).rejects.toThrow("Cannot resolve workspace model preset");
   });
 });
