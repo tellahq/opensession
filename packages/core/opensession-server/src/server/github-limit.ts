@@ -151,7 +151,14 @@ export class GithubRateLimits {
       log();
     })().finally(() => this.probes.delete(probeKey));
     this.probes.set(probeKey, probe);
-    await probe;
+    // The fallback is already active. Do not hold the rejected request (or
+    // its PR lock) while the advisory reset probe waits on GitHub.
+    void probe;
+  }
+
+  /** Tests can drain detached probes before restoring fetch or deleting state. */
+  async waitForProbesForTest(): Promise<void> {
+    await Promise.all(this.probes.values());
   }
 }
 
@@ -195,6 +202,10 @@ export function __setGhBackoffForTest(
   const prev = testBackoff[resource];
   testBackoff[resource] = untilEpochMs;
   return prev;
+}
+
+export async function __waitForGhProbesForTest(): Promise<void> {
+  await state.waitForProbesForTest();
 }
 
 export function isGhRateLimitMsg(msg: string): boolean {

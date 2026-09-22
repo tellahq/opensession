@@ -19,6 +19,7 @@ beforeEach(async () => {
   }) as unknown as typeof fetch;
 });
 afterEach(async () => {
+  await limits.waitForProbesForTest();
   globalThis.fetch = originalFetch;
   await rm(dir, { recursive: true, force: true });
 });
@@ -60,7 +61,7 @@ describe("GitHub rate-limit identity", () => {
     expect(await restarted.backoff("graphql", b)).toBe(0);
   });
 
-  test("probes the rejected credential and resource, once per bucket", async () => {
+  test("returns before slow probes finish, deduplicated per credential and resource", async () => {
     const resetA = Math.floor(Date.now() / 1000) + 60;
     const resetB = resetA + 60;
     let release!: () => void;
@@ -90,12 +91,14 @@ describe("GitHub rate-limit identity", () => {
     }) as unknown as typeof fetch;
     const first = limits.note("test", undefined, "graphql", a);
     const second = limits.note("test", undefined, "rest", b);
+    // Both rejected callers must return while their probes are still held.
+    await Promise.all([first, second]);
     await bothStarted;
     await limits.note("duplicate", undefined, "graphql", a);
     expect(await limits.backoff("graphql", a)).toBeGreaterThan(Date.now());
     expect(await limits.backoff("rest", a)).toBe(0);
     release();
-    await Promise.all([first, second]);
+    await limits.waitForProbesForTest();
     expect(calls.sort()).toEqual(["Bearer fake-a-read", "Bearer fake-b-read"]);
     expect(await limits.backoff("graphql", a)).toBe(resetA * 1000 + 30_000);
     expect(await limits.backoff("rest", b)).toBe(resetB * 1000 + 30_000);
@@ -116,18 +119,19 @@ describe("GitHub rate-limit identity", () => {
         resources: { core: { reset: Math.floor(Date.now() / 1000) + 60 } },
       });
     }) as unknown as typeof fetch;
-    const probe = limits.note("test", undefined, "rest", a);
+    await limits.note("test", undefined, "rest", a);
     await began;
     const reset = Date.now() + 3600_000;
     await limits.note("header", reset, "rest", a);
     release();
-    await probe;
+    await limits.waitForProbesForTest();
     expect(await limits.backoff("rest", a)).toBe(reset + 30_000);
   });
 
   test("probe failure keeps a bounded fallback only for the rejected bucket", async () => {
     const start = Date.now();
     await limits.note("test", undefined, "rest", a);
+    await limits.waitForProbesForTest();
     expect(await limits.backoff("rest", a)).toBeGreaterThanOrEqual(
       start + 15 * 60_000,
     );

@@ -9,6 +9,7 @@ import {
   githubInstallationCredential,
 } from "./github-app";
 import {
+  __waitForGhProbesForTest,
   ghBackoffUntil,
   ghRateLimited,
   noteGhRateLimited,
@@ -103,6 +104,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await __waitForGhProbesForTest();
   globalThis.fetch = originalFetch;
   __setGithubAppKeyPathForTest(undefined);
   if (savedClient === undefined)
@@ -138,6 +140,32 @@ test("real credential selection, API callers, and sweeps isolate two installatio
     403,
   );
   expect(await ghRateLimited("rest")).toBe(true);
+  // Writes retain their pre-existing attempt-and-record behavior even with a
+  // known REST backoff. A local synthetic 429 would skip this successful POST.
+  const fixtureFetch = globalThis.fetch;
+  let attemptedWrite = false;
+  globalThis.fetch = (async (input, init) => {
+    if (
+      String(input).endsWith("/repos/acme/app/issues/1/comments") &&
+      init?.method === "POST"
+    ) {
+      attemptedWrite = true;
+      return Response.json({ id: 1 });
+    }
+    return fixtureFetch(input, init);
+  }) as typeof fetch;
+  try {
+    expect(
+      (
+        await githubRequest("POST", "/repos/acme/app/issues/1/comments", {
+          body: "Example comment",
+        })
+      ).ok,
+    ).toBe(true);
+    expect(attemptedWrite).toBe(true);
+  } finally {
+    globalThis.fetch = fixtureFetch;
+  }
   expect(await ghRateLimited("rest", { repo: "ACME/another" })).toBe(true);
   expect(await ghRateLimited("rest", { repo: "other/app" })).toBe(false);
   expect((await githubRequest("GET", "/repos/other/app/pulls")).ok).toBe(true);
@@ -156,6 +184,7 @@ test("real credential selection, API callers, and sweeps isolate two installatio
 
   // A headerless rejection must probe the token supplied, not the default.
   await noteGhRateLimited("fixture", undefined, "graphql", second!);
+  await __waitForGhProbesForTest();
   expect(calls.find((c) => c.url.endsWith("/rate_limit"))?.auth).toBe(
     "Bearer fake-9202",
   );

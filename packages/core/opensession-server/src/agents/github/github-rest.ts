@@ -90,13 +90,8 @@ export async function githubRequest<T = any>(
       data: null,
       error: "GitHub App credential unavailable",
     };
-  if (await ghRateLimited("rest", credential))
-    return {
-      ok: false,
-      status: 429,
-      data: null,
-      error: "GitHub REST is rate-limited",
-    };
+  // Record REST rejections below, but preserve write attempts: a secondary
+  // limit need not last until the primary quota's reset deadline.
   try {
     // Timeout matters here: these calls run while holding a per-PR lock with
     // no TTL — a hung fetch would block that PR until the next restart.
