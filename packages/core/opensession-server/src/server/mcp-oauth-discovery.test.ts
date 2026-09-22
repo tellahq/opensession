@@ -3,7 +3,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { statePath } from "./paths";
 import * as dns from "node:dns/promises";
-import { discoverMcpOauth } from "./mcp-oauth-discovery";
+import { discoverMcpOauth, OauthDiscoveryError } from "./mcp-oauth-discovery";
 import {
   cachedOauthCapable,
   isOauthCapable,
@@ -33,9 +33,14 @@ const realFetch = globalThis.fetch;
 let requests: Request[];
 let options: RequestInit[];
 let responses: Map<string, () => Response>;
+const previousMcpConfig = process.env.OPENSESSION_MCP_CONFIG;
+let fixture = 0;
 let lookup: ReturnType<typeof spyOn<typeof dns, "lookup">>;
 
 beforeEach(async () => {
+  process.env.OPENSESSION_MCP_CONFIG = statePath(
+    `oauth-discovery-mcp-${fixture++}.json`,
+  );
   await mkdir(dirname(statePath(".opensession-mcp-oauth.json")), {
     recursive: true,
   });
@@ -61,6 +66,9 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  if (previousMcpConfig === undefined)
+    delete process.env.OPENSESSION_MCP_CONFIG;
+  else process.env.OPENSESSION_MCP_CONFIG = previousMcpConfig;
   await rm(statePath(".opensession-mcp-oauth.json"), { force: true });
   globalThis.fetch = realFetch;
   lookup.mockRestore();
@@ -123,6 +131,39 @@ describe("MCP OAuth resource discovery", () => {
     expect(urls().at(-1)).toBe(url);
     expect(new Set(urls()).size).toBe(requests.length);
     expect(requests.length).toBeLessThanOrEqual(7);
+  });
+
+  test.each(["https://root.example.test", "https://root.example.test/"])(
+    "discovers and connects root resources configured as %s",
+    async (serverUrl) => {
+      const identifier = "https://root.example.test";
+      responses.set(`${identifier}/.well-known/oauth-protected-resource`, () =>
+        Response.json({ ...pr, resource: identifier }),
+      );
+      responses.set(`${issuer}/register`, () =>
+        Response.json({ client_id: "acme-root-client" }),
+      );
+      expect((await discoverMcpOauth(serverUrl)).resource).toBe(identifier);
+      const { url } = await startMcpOauthFlow("root-resource", serverUrl);
+      expect(new URL(url).searchParams.get("resource")).toBe(identifier);
+      expect(await isOauthCapable(serverUrl)).toBe(true);
+      addMcpServerEntry("acme-root", { type: "http", url: serverUrl });
+      expect(
+        (await getConnections(true)).find((c) => c.name === "acme-root")
+          ?.status,
+      ).toBe("needs-auth");
+    },
+  );
+
+  test("accepts a trailing root slash in the guessed legacy issuer", async () => {
+    responses.delete(inserted);
+    responses.set(
+      "https://mcp.example.test/.well-known/oauth-authorization-server",
+      () => Response.json({ ...as, issuer: "https://mcp.example.test/" }),
+    );
+    expect((await discoverMcpOauth(resource)).endpoints.token).toBe(
+      as.token_endpoint,
+    );
   });
 
   test.each(["/mcp/tools", "/mcp/", "/mcp?tenant=acme"])(
@@ -223,6 +264,99 @@ describe("MCP OAuth resource discovery", () => {
     );
   });
 
+  test.each([200, 404])(
+    "persists definitive HTTP %i negatives for an hour",
+    async (status) => {
+      const url = `https://negative-${status}.example.test/mcp`;
+      globalThis.fetch = (async () => {
+        requests.push(new Request(url));
+        return new Response("not OAuth metadata", { status });
+      }) as unknown as typeof fetch;
+      const now = Date.now();
+      const clock = spyOn(Date, "now").mockReturnValue(now);
+      try {
+        expect(await isOauthCapable(url)).toBe(false);
+        const count = requests.length;
+        expect(count).toBeGreaterThan(0);
+        const saved = await Bun.file(
+          statePath(".opensession-mcp-capable-v2.json"),
+        ).json();
+        expect(saved[url]).toEqual({ capable: false, ts: now, soft: false });
+        clock.mockReturnValue(now + 61_000);
+        expect(await isOauthCapable(url)).toBe(false);
+        expect(requests.length).toBe(count);
+        clock.mockReturnValue(now + 60 * 60_000 + 1);
+        expect(await isOauthCapable(url)).toBe(false);
+        expect(requests.length).toBeGreaterThan(count);
+      } finally {
+        clock.mockRestore();
+      }
+      // A fresh module instance models a process restart: disk negatives suppress
+      // discovery just like positives, instead of returning to a minute-long retry.
+      const reloaded = (await import(
+        `./mcp-oauth.ts?negative-cache=${status}`
+      )) as typeof import("./mcp-oauth");
+      const count = requests.length;
+      expect(await reloaded.isOauthCapable(url)).toBe(false);
+      expect(requests.length).toBe(count);
+    },
+  );
+
+  test.each(["network", "DNS", "body", "429", "503"])(
+    "keeps %s failures transient and retries after a minute",
+    async (failure) => {
+      const url = `https://transient-${failure.toLowerCase()}.example.test/mcp`;
+      responses.set(
+        `https://transient-${failure.toLowerCase()}.example.test/.well-known/oauth-protected-resource/mcp`,
+        () => Response.json({ ...pr, resource: url }),
+      );
+      if (failure === "DNS") {
+        lookup.mockRejectedValue(
+          Object.assign(new Error("DNS unavailable"), { code: "EAI_AGAIN" }),
+        );
+      } else if (failure === "body") {
+        responses.set(
+          asInserted,
+          () =>
+            new Response(
+              new ReadableStream({
+                start(controller) {
+                  controller.error(new Error("body disconnected"));
+                },
+              }),
+            ),
+        );
+      } else {
+        globalThis.fetch = (async () => {
+          requests.push(new Request(url));
+          if (failure === "network") throw new TypeError("connection failed");
+          return new Response(null, { status: Number(failure) });
+        }) as unknown as typeof fetch;
+      }
+      await expect(discoverMcpOauth(url)).rejects.toMatchObject({
+        transient: true,
+      });
+      const now = Date.now();
+      const clock = spyOn(Date, "now").mockReturnValue(now);
+      try {
+        expect(await isOauthCapable(url)).toBe(false);
+        const count = requests.length;
+        const saved = await Bun.file(
+          statePath(".opensession-mcp-capable-v2.json"),
+        ).json();
+        expect(saved[url]).toBeUndefined();
+        clock.mockReturnValue(now + 59_000);
+        expect(await isOauthCapable(url)).toBe(false);
+        expect(requests.length).toBe(count);
+        clock.mockReturnValue(now + 61_000);
+        expect(await isOauthCapable(url)).toBe(false);
+        expect(requests.length).toBeGreaterThan(count);
+      } finally {
+        clock.mockRestore();
+      }
+    },
+  );
+
   test.each([
     "http://auth.example.test/metadata",
     "https://user:secret@auth.example.test/metadata",
@@ -265,6 +399,9 @@ describe("MCP OAuth resource discovery", () => {
 
   test.each([
     { ...pr, resource: "https://mcp.example.test/other" },
+    { ...pr, resource: `${resource}/` },
+    { ...pr, resource: `${resource}?tenant=other` },
+    { ...pr, resource: "https://other.example.test/mcp" },
     { ...pr, authorization_servers: "https://auth.example.test" },
     { ...pr, authorization_servers: ["https://127.0.0.1"] },
     { ...pr, scopes_supported: [42] },
@@ -278,6 +415,7 @@ describe("MCP OAuth resource discovery", () => {
 
   test.each([
     { ...as, issuer: "https://auth.example.test/wrong" },
+    { ...as, issuer: `${issuer}/` },
     { ...as, issuer: undefined },
     { ...as, authorization_endpoint: "javascript:alert(1)" },
     { ...as, token_endpoint: "https://127.0.0.1/token" },
@@ -328,7 +466,9 @@ describe("MCP OAuth resource discovery", () => {
             return new Promise(() => {});
           }) as unknown as typeof fetch;
         }
-        await expect(discoverMcpOauth(resource)).rejects.toThrow();
+        await expect(discoverMcpOauth(resource)).rejects.toMatchObject(
+          new OauthDiscoveryError(true),
+        );
         expect(timeout).toHaveBeenCalledTimes(1);
         expect(timeout).toHaveBeenCalledWith(10_000);
         expect(requests.length).toBeLessThanOrEqual(2);

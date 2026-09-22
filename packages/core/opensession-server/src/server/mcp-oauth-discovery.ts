@@ -6,6 +6,13 @@ export interface OauthDiscovery {
   endpoints: { authorize: string; token: string; register?: string };
 }
 
+/** A definitive absence can be cached; transport failures must be retried soon. */
+export class OauthDiscoveryError extends Error {
+  constructor(readonly transient: boolean) {
+    super("No valid OAuth authorization-server metadata for this MCP resource");
+  }
+}
+
 const MAX_METADATA_BYTES = 64 * 1024;
 const DISCOVERY_TIMEOUT_MS = 10_000;
 
@@ -23,7 +30,16 @@ async function discoveryUrl(raw: unknown, resource: URL): Promise<URL> {
     (url.origin !== resource.origin && url.protocol !== "https:")
   )
     throw new Error("Unsafe OAuth metadata URL");
-  if (url.origin !== resource.origin) await assertFetchableUrl(url.href);
+  if (url.origin !== resource.origin) {
+    try {
+      await assertFetchableUrl(url.href);
+    } catch (error) {
+      // DNS lookup errors carry a code; policy rejections do not.
+      if (error instanceof Error && "code" in error)
+        throw new OauthDiscoveryError(true);
+      throw error;
+    }
+  }
   return url;
 }
 
@@ -53,7 +69,9 @@ async function metadata(
   let size = 0;
   try {
     while (true) {
-      const { done, value } = await bounded(reader.read(), signal);
+      const { done, value } = await bounded(reader.read(), signal).catch(() => {
+        throw new OauthDiscoveryError(true);
+      });
       if (done) break;
       size += value.length;
       if (size > MAX_METADATA_BYTES)
@@ -108,10 +126,16 @@ export async function discoverMcpOauth(
 ): Promise<OauthDiscovery> {
   const resourceUrl = new URL(serverUrl);
   const signal = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
+  let transient = false;
+  const noteFailure = (error: unknown) => {
+    transient ||=
+      signal.aborted ||
+      (error instanceof OauthDiscoveryError && error.transient);
+  };
   const request = async (raw: string) => {
     signal.throwIfAborted();
     const url = await bounded(discoveryUrl(raw, resourceUrl), signal);
-    return bounded(
+    const response = await bounded(
       fetch(url.href, {
         headers: { Accept: "application/json" },
         redirect: "error",
@@ -119,7 +143,16 @@ export async function discoverMcpOauth(
         signal,
       }),
       signal,
-    );
+    ).catch(() => {
+      throw new OauthDiscoveryError(true);
+    });
+    if (
+      response.status === 408 ||
+      response.status === 429 ||
+      response.status >= 500
+    )
+      transient = true;
+    return response;
   };
   // Validate the configured target too (notably userinfo, fragments and schemes).
   await bounded(discoveryUrl(serverUrl, resourceUrl), signal);
@@ -131,7 +164,9 @@ export async function discoverMcpOauth(
         response.headers.get("www-authenticate") ?? "",
       );
     void response.body?.cancel().catch(() => {});
-  } catch {}
+  } catch (error) {
+    noteFailure(error);
+  }
 
   const path = resourceUrl.pathname === "/" ? "" : resourceUrl.pathname;
   const candidates = new Set([
@@ -146,7 +181,11 @@ export async function discoverMcpOauth(
     try {
       const pr = await metadata(await request(candidate), signal);
       // RFC 9728 binds the document to the requested resource, not a sibling path.
-      if (pr.resource !== resourceUrl.href) continue;
+      if (
+        typeof pr.resource !== "string" ||
+        new URL(pr.resource).href !== resourceUrl.href
+      )
+        continue;
       if (
         !Array.isArray(pr.authorization_servers) ||
         !pr.authorization_servers.length
@@ -167,7 +206,9 @@ export async function discoverMcpOauth(
       scopes = pr.scopes_supported as string[] | undefined;
       issuer = pr.authorization_servers[0] as string;
       break;
-    } catch {}
+    } catch (error) {
+      noteFailure(error);
+    }
   }
   // Keep legacy origin-only AS discovery for servers without RFC 9728 metadata.
   const asCandidates = new Set([
@@ -178,7 +219,15 @@ export async function discoverMcpOauth(
   for (const candidate of asCandidates) {
     try {
       const as = await metadata(await request(candidate), signal);
-      if (as.issuer !== issuer) continue;
+      // Advertised issuers must match exactly. For the legacy origin guess,
+      // accept the root slash that URL serialization inserts on our behalf.
+      if (
+        typeof as.issuer !== "string" ||
+        (resource
+          ? as.issuer !== issuer
+          : new URL(as.issuer).href !== new URL(issuer).href)
+      )
+        continue;
       const authorize = await bounded(
         discoveryUrl(as.authorization_endpoint, resourceUrl),
         signal,
@@ -203,9 +252,9 @@ export async function discoverMcpOauth(
           register: register?.href,
         },
       };
-    } catch {}
+    } catch (error) {
+      noteFailure(error);
+    }
   }
-  throw new Error(
-    "No valid OAuth authorization-server metadata for this MCP resource",
-  );
+  throw new OauthDiscoveryError(transient);
 }

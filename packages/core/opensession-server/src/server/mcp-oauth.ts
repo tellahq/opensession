@@ -24,7 +24,7 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { randomBytes, createHash } from "crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { discoverMcpOauth } from "./mcp-oauth-discovery";
+import { discoverMcpOauth, OauthDiscoveryError } from "./mcp-oauth-discovery";
 import { configuredServer, productName } from "./config";
 import { statePath } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
@@ -638,13 +638,16 @@ function probeCapable(resource: string): Promise<boolean> {
     const hit = capableCache.get(resource);
     if (hit && capabilityFresh(hit)) return hit.capable;
     let capable = false;
+    let soft = false;
     try {
       await discoverMcpOauth(resource);
       capable = true;
-    } catch {}
-    // Failed discovery may be a transient provider error. Never persist it.
-    capableCache.set(resource, { capable, ts: Date.now(), soft: !capable });
-    if (capable) await persistCapabilities();
+    } catch (error) {
+      soft = !(error instanceof OauthDiscoveryError) || error.transient;
+    }
+    // Persist definitive negatives too; only transport/provider outages are soft.
+    capableCache.set(resource, { capable, ts: Date.now(), soft });
+    if (!soft) await persistCapabilities();
     return capable;
   })().finally(() => capableInflight.delete(resource));
   capableInflight.set(resource, p);
