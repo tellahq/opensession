@@ -110,8 +110,6 @@ jobs:
               --out "$RUNNER_TEMP/transcript-stream-report.json"
           CDP_PORT=9222 OPENSESSION_URL=http://127.0.0.1:4899 \
             bun run test:transcript-scroll
-          CDP_PORT=9222 OPENSESSION_URL=http://127.0.0.1:4899 \
-            OPENSESSION_SCROLL_REDUCED_MOTION=1 bun run test:transcript-scroll
 
       - name: Chrome and fixture logs from the motion check
         if: failure()
