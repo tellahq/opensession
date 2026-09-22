@@ -435,6 +435,10 @@ async function main(): Promise<number> {
       return 1;
 
     case "update":
+      if (flags.has("--help") || flags.has("-h")) {
+        usage();
+        return 0;
+      }
       return await update({
         channel: flagValue("--channel"),
         check: flags.has("--check"),

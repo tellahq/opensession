@@ -202,9 +202,100 @@ function domain(): string {
 
 type CommandResult = Awaited<ReturnType<typeof run>>;
 
+type LaunchdOptions = {
+  domain?: string;
+  runCommand?: typeof run;
+  pause?: (ms: number) => Promise<void>;
+  now?: () => number;
+  unloadTimeoutMs?: number;
+};
+
+/** bootout acknowledges removal before the old process has finished draining. */
+export async function bootoutLaunchAgent(
+  label: string,
+  options: LaunchdOptions = {},
+): Promise<CommandResult> {
+  const target = `${options.domain ?? domain()}/${label}`;
+  const runCommand = options.runCommand ?? run;
+  const pause = options.pause ?? Bun.sleep;
+  const now = options.now ?? Date.now;
+  // Allow minute-long in-flight drains plus resource cleanup, not just the
+  // nominal launchd exit timeout. A stuck job still fails with a deadline.
+  const timeoutMs = options.unloadTimeoutMs ?? 180_000;
+  const deadline = now() + timeoutMs;
+  const stopped = await runCommand(["launchctl", "bootout", target]);
+  while (true) {
+    const state = await runCommand(["launchctl", "print", target], {
+      quiet: true,
+    });
+    // 113 is launchctl's "Could not find service". Other failures (for
+    // example permissions) are not evidence that it is safe to bootstrap.
+    if (state.code === 113) return { code: 0, stdout: "", stderr: "" };
+    if (state.code !== 0) return state;
+    if (now() >= deadline) {
+      return {
+        code: 1,
+        stdout: "",
+        stderr:
+          `Timed out after ${timeoutMs}ms waiting for ${target} to unload. ${stopped.stderr}`.trim(),
+      };
+    }
+    await pause(Math.min(250, deadline - now()));
+  }
+}
+
+/** Keep the gateway down while restarting its kernel; never bootstrap a
+ * replacement until launchd has actually unregistered the previous job. */
+export async function controlLaunchd(
+  action: "start" | "stop" | "restart",
+  options: LaunchdOptions & {
+    gateway?: { label: string; plist: string };
+    kernel?: { label: string; plist: string };
+  } = {},
+): Promise<CommandResult> {
+  const gateway = options.gateway ?? {
+    label: LAUNCHD_LABEL,
+    plist: LAUNCHD_PLIST,
+  };
+  const kernel = options.kernel ?? {
+    label: LAUNCHD_SESSION_KERNEL_LABEL,
+    plist: LAUNCHD_SESSION_KERNEL_PLIST,
+  };
+  const runCommand = options.runCommand ?? run;
+  const launchdDomain = options.domain ?? domain();
+  const start = async (job: typeof gateway, restart = false) => {
+    const target = `${launchdDomain}/${job.label}`;
+    const state = await runCommand(["launchctl", "print", target], {
+      quiet: true,
+    });
+    if (state.code === 0)
+      return await runCommand([
+        "launchctl",
+        "kickstart",
+        ...(restart ? ["-k"] : []),
+        target,
+      ]);
+    if (state.code !== 113) return state;
+    return await bootstrapLaunchAgent(job.label, job.plist, options);
+  };
+  if (action !== "start") {
+    const stopped = await bootoutLaunchAgent(gateway.label, options);
+    if (stopped.code !== 0) return stopped;
+    if (action === "stop")
+      return await bootoutLaunchAgent(kernel.label, options);
+  }
+  const actor = await start(kernel, action === "restart");
+  if (actor.code !== 0) return actor;
+  return action === "restart"
+    ? await bootstrapLaunchAgent(gateway.label, gateway.plist, options)
+    : await start(gateway);
+}
+
 /**
  * launchd can return EIO briefly after bootout while it finishes unregistering
  * the old job. A deploy must not leave both services unloaded in that window.
+ * Replacing callers must await bootoutLaunchAgent first: a registered job
+ * alone does not prove that the old draining process has been replaced.
  */
 export async function bootstrapLaunchAgent(
   label: string,
@@ -1331,12 +1422,13 @@ export async function install(
       chmodSync(LAUNCHD_SESSION_KERNEL_LAUNCHER, 0o755);
       await Bun.write(LAUNCHD_PLIST, renderPlist());
       await Bun.write(LAUNCHD_SESSION_KERNEL_PLIST, renderSessionKernelPlist());
-      await run(["launchctl", "bootout", `${domain()}/${LAUNCHD_LABEL}`]);
-      await run([
-        "launchctl",
-        "bootout",
-        `${domain()}/${LAUNCHD_SESSION_KERNEL_LABEL}`,
-      ]);
+      for (const label of [LAUNCHD_LABEL, LAUNCHD_SESSION_KERNEL_LABEL]) {
+        const stopped = await bootoutLaunchAgent(label);
+        if (stopped.code !== 0) {
+          warn(`launchctl bootout failed: ${stopped.stderr}`);
+          return false;
+        }
+      }
       const kernel = await bootstrapLaunchAgent(
         LAUNCHD_SESSION_KERNEL_LABEL,
         LAUNCHD_SESSION_KERNEL_PLIST,
@@ -1396,55 +1488,9 @@ export async function control(
   }
 
   if (supervisor() === "launchd") {
-    const label = `${domain()}/${LAUNCHD_LABEL}`;
-    const kernel = `${domain()}/${LAUNCHD_SESSION_KERNEL_LABEL}`;
-    switch (action) {
-      case "start": {
-        const actorLoaded =
-          (await run(["launchctl", "print", kernel], { quiet: true })).code ===
-          0;
-        const actor = await runInherit(
-          actorLoaded
-            ? ["launchctl", "kickstart", kernel]
-            : [
-                "launchctl",
-                "bootstrap",
-                domain(),
-                LAUNCHD_SESSION_KERNEL_PLIST,
-              ],
-        );
-        if (actor !== 0) return actor;
-        const gatewayLoaded =
-          (await run(["launchctl", "print", label], { quiet: true })).code ===
-          0;
-        return await runInherit(
-          gatewayLoaded
-            ? ["launchctl", "kickstart", label]
-            : ["launchctl", "bootstrap", domain(), LAUNCHD_PLIST],
-        );
-      }
-      case "stop": {
-        const gateway = await runInherit(["launchctl", "bootout", label]);
-        const actor = await runInherit(["launchctl", "bootout", kernel]);
-        return gateway || actor;
-      }
-      case "restart": {
-        await runInherit(["launchctl", "bootout", label]);
-        const actor = await runInherit([
-          "launchctl",
-          "kickstart",
-          "-k",
-          kernel,
-        ]);
-        if (actor !== 0) return actor;
-        return await runInherit([
-          "launchctl",
-          "bootstrap",
-          domain(),
-          LAUNCHD_PLIST,
-        ]);
-      }
-    }
+    const result = await controlLaunchd(action);
+    if (result.code !== 0) warn(`launchctl ${action} failed: ${result.stderr}`);
+    return result.code;
   }
 
   const scope = installedScope() ?? "user";

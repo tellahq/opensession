@@ -1,5 +1,13 @@
-import { describe, expect, test } from "bun:test";
-import { classifyTopology, parseRemotes, parseSha256Checksum } from "./update";
+import { describe, expect, spyOn, test } from "bun:test";
+import {
+  classifyTopology,
+  parseRemotes,
+  parseSha256Checksum,
+  restartReleaseWithRollback,
+} from "./update";
+import { mkdtempSync, readlinkSync, rmSync, symlinkSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 const UPSTREAM_HTTPS = "https://github.com/tellahq/opensession.git";
 const UPSTREAM_SSH = "git@github.com:tellahq/opensession.git";
@@ -93,3 +101,73 @@ describe("classifyTopology", () => {
     expect(classifyTopology([])).toEqual({ source: "origin", kind: "origin" });
   });
 });
+
+describe.each(["restart", "health"])(
+  "release rollback after %s failure",
+  (failure) => {
+    test.each(["healthy", "restart fails", "health fails"])(
+      "rollback: %s",
+      async (outcome) => {
+        const dir = mkdtempSync(join(tmpdir(), "opensession-rollback-test-"));
+        const src = join(dir, "src");
+        const previous = join(dir, "previous");
+        symlinkSync(join(dir, "candidate"), src);
+        const messages: string[] = [];
+        const log = spyOn(console, "log").mockImplementation((message) => {
+          messages.push(String(message));
+        });
+        const calls: string[] = [];
+        let restarts = 0;
+        try {
+          const code = await restartReleaseWithRollback(
+            src,
+            previous,
+            {},
+            {
+              healthBaseUrl: async () => "http://127.0.0.1:3850",
+              service: {
+                isInstalled: async () => true,
+                restartExecutor: async () => {
+                  calls.push("executor");
+                  return 0;
+                },
+                control: async () => {
+                  calls.push("restart");
+                  restarts++;
+                  if (restarts === 2) expect(readlinkSync(src)).toBe(previous);
+                  if (restarts === 1) return failure === "restart" ? 1 : 0;
+                  return outcome === "restart fails" ? 1 : 0;
+                },
+                waitHealthy: async () => {
+                  calls.push("health");
+                  return restarts === 2 && outcome === "healthy";
+                },
+              },
+            },
+          );
+          expect(code).toBe(1); // An unsuccessful update still fails after recovery.
+          expect(readlinkSync(src)).toBe(previous);
+          const output = messages.join("\n");
+          if (outcome === "healthy")
+            expect(output).toContain("verified healthy");
+          else {
+            expect(output).toContain("rollback did not come back healthy");
+            expect(output).toContain("opensession restart");
+            expect(output).not.toContain("verified healthy");
+          }
+          expect(calls).toEqual([
+            "executor",
+            "restart",
+            ...(failure === "health" ? ["health"] : []),
+            "executor",
+            "restart",
+            ...(outcome === "restart fails" ? [] : ["health"]),
+          ]);
+        } finally {
+          log.mockRestore();
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+    );
+  },
+);
