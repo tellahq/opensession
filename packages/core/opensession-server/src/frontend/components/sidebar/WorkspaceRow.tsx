@@ -11,6 +11,7 @@ import {
   SIDEBAR_SWIPE_ACTION_STAR,
   SIDEBAR_SWIPE_ACTION_STAR_ON,
   SIDEBAR_SWIPE_ACTION_TRANSITION,
+  SIDEBAR_SWIPE_ACTION_UNSNOOZE,
   SIDEBAR_SWIPE_ROW,
   SIDEBAR_WS_ACTION,
   SIDEBAR_WS_ACTIONS,
@@ -290,7 +291,30 @@ export function WorkspaceRow({
           <span>Delete</span>
         </button>
       )}
-      {isPhone && (
+      {/* The leading edge pins, except on a snoozed row, where it wakes the
+            row instead: Pinned leaves snoozed rows out, so a pin there would
+            swipe to nothing, and waking is the one thing a parked row wants. */}
+      {isPhone && snoozed && (
+        <button
+          className={cn(
+            SIDEBAR_SWIPE_ACTION,
+            SIDEBAR_SWIPE_ACTION_UNSNOOZE,
+            swipeSide === "star" && SIDEBAR_SWIPE_ACTION_OPEN,
+            draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
+          )}
+          data-swipe-action="unsnooze"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCloseSwipe();
+            onToggleSnooze();
+          }}
+          title="Unsnooze workspace"
+        >
+          <IconMoon size={22} />
+          <span>Unsnooze</span>
+        </button>
+      )}
+      {isPhone && !snoozed && (
         <button
           className={cn(
             SIDEBAR_SWIPE_ACTION,
