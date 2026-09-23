@@ -886,8 +886,8 @@ export function NewSession({
     // while the app is still loading survives this palette closing before
     // its upload lands. Adopt the store rather than the result: it is the
     // one place that has both these files and anything else that arrived.
-    const results = await uploads.upload(picked, (file, signal) =>
-      attachToDraft(DRAFT_KEY, [file], signal),
+    const results = await uploads.upload(picked, (file, signal, onProgress) =>
+      attachToDraft(DRAFT_KEY, [file], signal, onProgress),
     );
     adoptDraftAttachments();
     const rejected = results.flatMap((result) => result.rejected);

@@ -361,8 +361,8 @@ export function WorkspacePane({
 
   const addWorkspaceAttachments = useCallback(
     async (picked: FileList | File[]) => {
-      const results = await uploads.upload(picked, (file, signal) =>
-        attachToDraft(draftKey, [file], signal),
+      const results = await uploads.upload(picked, (file, signal, onProgress) =>
+        attachToDraft(draftKey, [file], signal, onProgress),
       );
       if (results.some((result) => result.applied)) {
         const stored = loadDraft(draftKey);

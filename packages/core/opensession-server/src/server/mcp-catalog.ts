@@ -48,6 +48,7 @@ import { createSearchMcpServer } from "../agents/slack/search-tools";
 import { createSelfImproveMcpServer } from "../agents/slack/self-improve-tools";
 import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
 import { createSlackComposeMcpServer } from "../agents/slack/slack-compose-tools";
+import { createLocalFilesMcpServer } from "../agents/slack/local-files-tools";
 import { createPlainDiscussionMcpServer } from "../agents/plain/discussion-tools";
 import { createTodosMcpServer } from "../agents/slack/todos-tools";
 import { createTurnMcpServer } from "../agents/slack/turn-tools";
@@ -354,6 +355,16 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     runClasses: ["interactive"],
     condition: "Needs a session id.",
     build: () => createSlackComposeMcpServer({ sessionId: SESSION_ID }),
+  },
+  {
+    name: "opensession-local-files",
+    summary: INTERNAL_MCP_CAPABILITIES["opensession-local-files"].summary,
+    source:
+      "packages/core/opensession-server/src/agents/slack/local-files-tools.ts",
+    wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts"],
+    runClasses: ["interactive"],
+    condition: "Needs a session id.",
+    build: () => createLocalFilesMcpServer({ sessionId: SESSION_ID }),
   },
   {
     name: "opensession-plain-discussion",

@@ -493,8 +493,8 @@ export function useSessionAttachmentDrop({
     const accepted = noteMode
       ? selected.filter((file) => noteImageTypes.has(file.type))
       : selected;
-    const results = await uploads.upload(accepted, (file, signal) =>
-      attachToDraft(draftKey, [file], signal),
+    const results = await uploads.upload(accepted, (file, signal, onProgress) =>
+      attachToDraft(draftKey, [file], signal, onProgress),
     );
     if (results.some((result) => result.applied)) {
       const stored = loadDraft(draftKey);

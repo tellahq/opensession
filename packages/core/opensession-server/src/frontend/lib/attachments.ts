@@ -22,7 +22,11 @@
  */
 import { MAX_PROMPT_IMAGES } from "@tellahq/opensession-protocol/session";
 import { loadDraft, saveDraft } from "./drafts";
-import { splitAttachments, type FileAttachment } from "./images";
+import {
+  splitAttachments,
+  type FileAttachment,
+  type UploadProgress,
+} from "./images";
 import { createPastedTextAttachment } from "./pasted-text";
 
 /** Why an image past the per-message cap was left out of the draft. */
@@ -38,6 +42,15 @@ const generations = new Map<string, number>();
 export interface StagingCount {
   images: number;
   files: number;
+  /** One entry per pending file, in order: its name and how much of it has
+   *  reached the server (null until the first chunk lands). Only large
+   *  uploads report progress, and only where the caller tracks it. */
+  fileProgress?: PendingFileProgress[];
+}
+
+export interface PendingFileProgress {
+  name: string;
+  fraction: number | null;
 }
 
 export const NOTHING_STAGING: StagingCount = { images: 0, files: 0 };
@@ -114,9 +127,14 @@ export async function attachToDraft(
   key: string,
   picked: FileList | File[],
   signal?: AbortSignal,
+  onProgress?: UploadProgress,
 ): Promise<AttachResult> {
   const generation = generations.get(key) ?? 0;
-  const { images, files, rejected } = await splitAttachments(picked, signal);
+  const { images, files, rejected } = await splitAttachments(
+    picked,
+    signal,
+    onProgress,
+  );
   if (signal?.aborted || (generations.get(key) ?? 0) !== generation) {
     return { rejected, applied: false };
   }

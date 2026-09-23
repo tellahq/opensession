@@ -36,6 +36,21 @@ import type { ImageInput, PromptFile } from "./run-events";
 /** Cap so a single upload can't OOM the process. The HTTP path streams, but
  *  the inline base64/WS path buffers, so keep it modest. */
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+export function envBytes(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+/**
+ * Largest non-image attachment that reaches the agent by path. Those files are
+ * streamed to disk in chunks (chunked-uploads.ts) and never held in memory,
+ * so the only real limit is disk. Images and the inline base64 path keep
+ * MAX_UPLOAD_BYTES, because they are read whole.
+ */
+export const MAX_FILE_UPLOAD_BYTES = envBytes(
+  "OPENSESSION_MAX_FILE_UPLOAD_BYTES",
+  20 * 1024 * 1024 * 1024,
+);
 /**
  * How much attachment payload one turn ships inline to a remote host. The
  * spec travels as one JSON document through the Runner's WebSocket frame or

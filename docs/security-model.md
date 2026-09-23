@@ -198,6 +198,25 @@ vault access, item enumeration, raw export, Apple Passwords/iCloud access, or
 Keychain mutation. Native tests use a new disposable keychain with interaction
 disabled, never the default search list or real user credentials.
 
+## Local file requests
+
+The interactive-only `opensession-local-files` server lets an agent ask the
+person watching a session for files from their own computer. The agent supplies
+only a purpose and an optional hint. It never names, lists, or reads a path on
+that computer: the person chooses files in their own file picker (the native
+panel in the Mac app), and the browser uploads them. There is no pairing, no
+background service, and no connection from the server to the person's machine,
+which is what separates this from a Runner.
+
+Uploads use the chunked upload routes (`/api/uploads`), which write to a sparse
+file on disk, never buffer a whole file, check each chunk's size and optional
+SHA-256, refuse an upload that would leave less than 5 GB free, and prune
+unfinished uploads after a day. Answering a request (`/api/local-files`) moves
+only files from the staged uploads directory into the session's own uploads
+folder; any other path is rejected. Automation identities and cross-origin
+requests cannot answer. File contents are untrusted input to the agent, like
+any attachment.
+
 ## Per-user MCP servers (`allowedUsers`)
 
 An MCP server in `mcp-config.json` can carry an optional

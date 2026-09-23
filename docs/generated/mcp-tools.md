@@ -56,6 +56,7 @@ touches an in-process tool:
 | [`opensession-desktop`](#opensession-desktop) | 8 | interactive | Needs a sandboxed session. |
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | Needs a session id. |
 | [`opensession-slack`](#opensession-slack) | 1 | interactive | Needs a session id. |
+| [`opensession-local-files`](#opensession-local-files) | 1 | interactive | Needs a session id. |
 | [`opensession-plain-discussion`](#opensession-plain-discussion) | 2 | interactive | Only a session that answers a Plain discussion (plainDiscussionId): an Ask Sidekick session carries this server alone instead of the interactive set; an auto-triage session that reports into a discussion carries it beside the automation-bar set on its later turns. |
 | [`opensession-ask`](#opensession-ask) | 1 | interactive, Slack loop | Needs a session id. |
 | [`opensession-workflows`](#opensession-workflows) | 8 | interactive, automation | Automation runs get it ONLY with the human-set `workflows` flag. |
@@ -73,7 +74,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-32 servers, 147 tools.
+33 servers, 148 tools.
 
 ## opensession-sessions
 
@@ -798,6 +799,21 @@ Open an editable Slack composer. The human still presses Send.
 `mcp__opensession-slack__compose_message` · input: `message` (string), `channel` (string), `images` (string[])
 
 Open an editable Slack composer in this Open Session and wait for the signed-in person to send or cancel it. Use this when a useful update is ready to share but the human should review the message, channel, and images first. This tool never posts by itself: the person must press Send in the UI.
+
+## opensession-local-files
+
+Ask the person watching for files from their own computer, including large video.
+
+- **Source** `packages/core/opensession-server/src/agents/slack/local-files-tools.ts`
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
+- **Runs** interactive
+- **Condition** Needs a session id.
+
+### `request_local_files`
+
+`mcp__opensession-local-files__request_local_files` · input: `purpose` (string, required), `hint` (string), `multiple` (boolean)
+
+Ask the person watching this session to send files from their own computer, and wait until they do. A card appears in the session; they choose the files in their own file picker and the upload streams to this session's machine, so large files (multi-gigabyte video) are fine. You never choose or see paths on their computer. Returns the uploaded files' paths here, or says they declined. Use it when the work needs a file only they have; do not use it for files already in the repo, the web, or earlier attachments. One request at a time; after a decline, do not ask again without their go-ahead.
 
 ## opensession-plain-discussion
 

@@ -23,15 +23,201 @@ export interface FileAttachment {
   dataUrl?: string;
 }
 
-// Mirror of the server's MAX_UPLOAD_BYTES (opensession.ts). Enforced client-side too
-// so an oversized file fails loudly at pick time instead of silently vanishing.
+// Mirror of the server's MAX_UPLOAD_BYTES (prompt-attachments.ts): the cap for
+// images, which the server reads whole. Enforced client-side too so an
+// oversized file fails loudly at pick time instead of silently vanishing.
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+// Mirror of the server's default MAX_FILE_UPLOAD_BYTES: other files stream to
+// disk in chunks, so the cap is about disk, not memory.
+export const MAX_FILE_UPLOAD_BYTES = 20 * 1024 * 1024 * 1024;
+// Below this a file goes up in one request; above it, in parallel chunks.
+const SINGLE_REQUEST_BYTES = 8 * 1024 * 1024;
+const PARALLEL_CHUNKS = 4;
+const CHUNK_ATTEMPTS = 6;
 
-/** Stream one file to the server upload endpoint; resolves to its staged path. */
+/** Fraction of a file's bytes the server has acknowledged, 0 to 1. */
+export type UploadProgress = (fraction: number) => void;
+
+function sizeLabel(bytes: number): string {
+  return bytes >= 1024 * 1024 * 1024
+    ? `${Math.floor(bytes / (1024 * 1024 * 1024))} GB`
+    : `${Math.floor(bytes / (1024 * 1024))} MB`;
+}
+
+/** What the chunked upload routes answer (server: routes/uploads.ts). */
+interface UploadReply {
+  id?: string;
+  chunkSize?: number;
+  chunks?: number;
+  name?: string;
+  path?: string;
+  error?: string;
+  missing?: number[];
+}
+
+class UploadRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly missing: number[] = [],
+  ) {
+    super(message);
+  }
+}
+
+async function uploadJson(
+  path: string,
+  init: RequestInit,
+): Promise<UploadReply> {
+  const res = await fetch(`${BASE_PATH}${path}`, init);
+  const body: UploadReply = await res.json().catch(() => ({}));
+  if (!res.ok)
+    throw new UploadRequestError(
+      body.error || `Upload failed (${res.status})`,
+      res.status,
+      Array.isArray(body.missing) ? body.missing : [],
+    );
+  return body;
+}
+
+function abortable(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
+  });
+}
+
+async function chunkDigest(bytes: ArrayBuffer): Promise<string | null> {
+  // crypto.subtle only exists in a secure context; a plain-HTTP tailnet
+  // address still uploads, just without the per-chunk checksum.
+  if (!globalThis.crypto?.subtle) return null;
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+/**
+ * Upload a large file in parallel chunks (server: chunked-uploads.ts). Each
+ * chunk is read from disk only when it is sent, so a multi-gigabyte video
+ * never sits in memory, and a failed chunk is retried on its own instead of
+ * restarting the whole file.
+ */
+async function uploadChunked(
+  file: File,
+  signal?: AbortSignal,
+  onProgress?: UploadProgress,
+): Promise<{ name: string; path: string }> {
+  const created = await uploadJson("/api/uploads", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: file.name, size: file.size }),
+    signal,
+  });
+  const { id, chunkSize, chunks } = created;
+  if (!id || !chunkSize || !chunks) throw new Error("Upload failed");
+  const cancel = () => {
+    void fetch(`${BASE_PATH}/api/uploads/${id}`, { method: "DELETE" }).catch(
+      () => {},
+    );
+  };
+  signal?.addEventListener("abort", cancel, { once: true });
+  let sent = 0;
+  const sendChunk = async (index: number) => {
+    const start = index * chunkSize;
+    const bytes = await file
+      .slice(start, Math.min(file.size, start + chunkSize))
+      .arrayBuffer();
+    const headers = new Headers({ "content-type": "application/octet-stream" });
+    const digest = await chunkDigest(bytes);
+    if (digest) headers.set("x-chunk-sha256", digest);
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await uploadJson(`/api/uploads/${id}/chunks/${index}`, {
+          method: "PUT",
+          headers,
+          body: bytes,
+          signal,
+        });
+        break;
+      } catch (error) {
+        // A network failure has no status and is worth retrying too.
+        const status =
+          error instanceof UploadRequestError ? error.status : undefined;
+        const retryable =
+          !status || status >= 500 || status === 408 || status === 429;
+        if (signal?.aborted || !retryable || attempt >= CHUNK_ATTEMPTS)
+          throw error;
+        await abortable(Math.min(8000, 500 * 2 ** attempt), signal);
+      }
+    }
+    sent += bytes.byteLength;
+    onProgress?.(sent / file.size);
+  };
+  const sendAll = async (indexes: number[]) => {
+    const queue = [...indexes];
+    await Promise.all(
+      Array.from(
+        { length: Math.min(PARALLEL_CHUNKS, queue.length) },
+        async () => {
+          for (
+            let next = queue.shift();
+            next !== undefined;
+            next = queue.shift()
+          )
+            await sendChunk(next);
+        },
+      ),
+    );
+  };
+  try {
+    await sendAll(Array.from({ length: chunks }, (_, i) => i));
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const done = await uploadJson(`/api/uploads/${id}/complete`, {
+          method: "POST",
+          signal,
+        });
+        if (!done.path) throw new Error("Upload failed");
+        signal?.removeEventListener("abort", cancel);
+        return { name: done.name || file.name, path: done.path };
+      } catch (error) {
+        // A chunk the server never recorded (a gateway handoff mid-upload):
+        // send just those again.
+        if (
+          !(error instanceof UploadRequestError) ||
+          error.status !== 409 ||
+          !error.missing.length ||
+          attempt > 2
+        )
+          throw error;
+        const missing = error.missing;
+        sent -= missing.length * chunkSize;
+        await sendAll(missing);
+      }
+    }
+  } catch (error) {
+    signal?.removeEventListener("abort", cancel);
+    if (!signal?.aborted) cancel();
+    throw error;
+  }
+}
+
+/** Upload one file to the server; resolves to its staged path. */
 export async function uploadFile(
   file: File,
   signal?: AbortSignal,
+  onProgress?: UploadProgress,
 ): Promise<{ name: string; path: string }> {
+  if (file.size > SINGLE_REQUEST_BYTES)
+    return uploadChunked(file, signal, onProgress);
   const res = await fetch(`${BASE_PATH}/api/upload`, {
     method: "POST",
     headers: {
@@ -45,6 +231,7 @@ export async function uploadFile(
   if (!res.ok || !body?.ok || !body?.path) {
     throw new Error(body?.error || `Upload failed (${res.status})`);
   }
+  onProgress?.(1);
   return { name: body.name || file.name, path: body.path };
 }
 
@@ -204,6 +391,7 @@ async function stageImage(
 export async function splitAttachments(
   files: FileList | File[],
   signal?: AbortSignal,
+  onProgress?: UploadProgress,
 ): Promise<{ images: string[]; files: FileAttachment[]; rejected: string[] }> {
   const all = Array.from(files);
   const imageFiles = all.filter((f) => f.type.startsWith("image/"));
@@ -216,14 +404,14 @@ export async function splitAttachments(
 
   const uploaded = await Promise.all(
     otherFiles.map(async (f): Promise<FileAttachment | null> => {
-      if (f.size > MAX_UPLOAD_BYTES) {
+      if (f.size > MAX_FILE_UPLOAD_BYTES) {
         rejected.push(
-          `${f.name} (too large, max ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))} MB)`,
+          `${f.name} (too large, max ${sizeLabel(MAX_FILE_UPLOAD_BYTES)})`,
         );
         return null;
       }
       try {
-        const { name, path } = await uploadFile(f, signal);
+        const { name, path } = await uploadFile(f, signal, onProgress);
         return { name, type: f.type, path };
       } catch (e) {
         if (signal?.aborted) return null;
