@@ -31,7 +31,13 @@ Use `apple_mobile_doctor` and `apple_mobile_inspect_project` before any build.
    can pin it beside the conversation. A listening viewer may still be booting
    its simulator; verify the screen before claiming the app works. Use the
    returned name with `restart_portal` after rebuilding or `stop_portal` to
-   release it. Restart creates a fresh device. This does not enable hot reload.
+   shut it down. New helpers retain simulator storage per repository across
+   stop/restart and idle shutdown. Linked worktrees share that storage and only
+   one helper may use a repository at a time; device/runtime profiles stay
+   separate. To erase it, stop the repository's simulator Portals, then call
+   `clear_simulator_storage` with `confirm: true`, only after the person explicitly
+   requests permanent deletion. Legacy temporary devices are not migrated.
+   This does not enable hot reload.
    See `docs/simulator-portals.md` in the Open Session repository.
 
 ## Ad-hoc or TestFlight

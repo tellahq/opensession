@@ -1,7 +1,7 @@
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { buildSimulatorViewer } from "./assets";
-import { openIdbSimulator } from "./idb";
+import { clearIdbSimulatorStorage, openIdbSimulator } from "./idb";
 import { startSimulatorViewer } from "./server";
 
 async function main() {
@@ -12,9 +12,28 @@ async function main() {
       app: { type: "string" },
       "device-type": { type: "string" },
       runtime: { type: "string" },
+      "storage-root": { type: "string" },
+      "clear-storage": { type: "boolean" },
+      confirm: { type: "boolean" },
     },
     strict: true,
   });
+  if (values["clear-storage"]) {
+    const input = z
+      .object({
+        workspace: z.string().min(1),
+        confirm: z.literal(true),
+        "storage-root": z.string().min(1).optional(),
+      })
+      .parse(values);
+    await clearIdbSimulatorStorage({
+      workspaceDir: input.workspace,
+      storageRoot: input["storage-root"],
+    });
+    console.log("Cleared retained iOS simulator storage for this repository.");
+    return;
+  }
+  if (values.confirm) throw new Error("--confirm requires --clear-storage");
   const input = z
     .object({
       session: z.string().min(1),
@@ -22,6 +41,7 @@ async function main() {
       app: z.string().min(1),
       "device-type": z.string().optional(),
       runtime: z.string().optional(),
+      "storage-root": z.string().min(1).optional(),
     })
     .parse(values);
   const port = z.coerce
@@ -43,6 +63,7 @@ async function main() {
         appPath: input.app,
         deviceType: input["device-type"],
         runtime: input.runtime,
+        storageRoot: input["storage-root"],
       }),
   });
   const stop = () => {

@@ -38,6 +38,7 @@ import { getRepo } from "./worktree";
 import {
   simulatorPortalCommand,
   simulatorPortalInput,
+  clearSimulatorPortalStorage,
 } from "./simulator-portal-command";
 
 const verifiedEditorFixtureSchema = z.object({
@@ -385,7 +386,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
     tools: [
       tool(
         "start_simulator_portal",
-        "Start this session's interactive iOS Simulator Portal on the local Mac. Requires full Xcode, an iOS Simulator runtime, idb and idb_companion on PATH, and an already-built simulator .app inside the workspace. Creates a private simulator, streams its screen and forwards taps, swipes and typing. Returns the authenticated viewer URL; the viewer reports boot or dependency errors. Repeated calls reuse the Portal. Use stop_portal/restart_portal with the returned name. Not available in Sandboxes or remote Runner workspaces. Does not build, sign, release, or enable hot reload.",
+        "Start this session's interactive iOS Simulator Portal on the local Mac. Requires full Xcode, an iOS Simulator runtime, idb and idb_companion on PATH, and an already-built simulator .app inside the workspace. Reuses private repository-owned simulator storage across stops and restarts, streams its screen and forwards taps, swipes and typing. Only one simulator Portal may use a repository at a time, including its linked worktrees. Returns the authenticated viewer URL; the viewer reports boot or dependency errors. Repeated calls reuse the Portal. Use stop_portal/restart_portal with the returned name. Not available in Sandboxes or remote Runner workspaces. Does not build, sign, release, or enable hot reload.",
         simulatorPortalInput,
         async (args) => {
           const deadline = portalToolDeadline(ctx);
@@ -411,6 +412,34 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
           } catch (error) {
             return result(
               `Could not start simulator Portal: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        },
+      ),
+      tool(
+        "clear_simulator_storage",
+        "Permanently clear all retained iOS Simulator storage for this session's repository, including its linked worktrees and all device/runtime profiles. Deletes installed apps, app data, keychain and simulator settings. Requires all simulator Portals for the repository to be stopped and explicit confirm=true. Only use after the person asks to erase this data; never as an automatic recovery step. Local Mac only; no migration of legacy temporary simulators.",
+        {
+          confirm: z
+            .literal(true)
+            .describe(
+              "Explicitly confirm permanent deletion of this repository's retained simulator data.",
+            ),
+        },
+        async () => {
+          const dir = workspace(ctx);
+          if (dir instanceof Error) return result(dir.message);
+          if (ctx.hasSandbox() || ctx.runner()?.runner)
+            return result(
+              "Simulator storage cleanup requires a local Mac workspace, not a Sandbox or remote Runner.",
+            );
+          if (process.platform !== "darwin")
+            return result("Simulator storage cleanup requires macOS.");
+          try {
+            return result(await clearSimulatorPortalStorage(dir));
+          } catch (error) {
+            return result(
+              `Could not clear simulator storage: ${error instanceof Error ? error.message : String(error)}`,
             );
           }
         },

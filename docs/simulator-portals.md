@@ -72,16 +72,54 @@ ScreenCaptureKit. It does not request Screen Recording or Accessibility access.
    field and **Send**, which also works on phones. **Home** presses the simulated
    Home button. Tab retains normal browser focus navigation.
 5. After rebuilding the app, use `restart_portal` with the returned name to
-   install the updated bundle. Use `stop_portal` to release the simulator.
+   install the updated bundle without erasing its app data. Use `stop_portal` to
+   shut down the simulator and release its running capacity, keeping storage.
 
 Repeated identical starts reuse the same Portal. Its name includes a session
 hash so sessions sharing a checkout do not select the same viewer. Changing
 start arguments requires stopping it and starting it with the new arguments.
 
+## Retained storage and clearing
+
+Simulator storage belongs to a local repository, not a session or Portal process.
+The canonical Git common directory identifies the repository, so linked worktrees
+share storage; separate clones do not. Non-Git workspaces use their canonical
+workspace path. Storage lives under
+`$OPENSESSION_STATE_DIR/simulator-storage`, or `~/.opensession/simulator-storage`
+when no state directory is configured, not under `/tmp` or inside the checkout.
+
+Each device-type/runtime combination retains its own private simulator. Restart
+reinstalls the app without uninstalling it, preserving its data, keychain and
+simulator settings. Changing runtime or device type selects another profile, not
+an in-place migration; the old profile remains retained. Stored simulators consume
+disk space but do not occupy running capacity after shutdown. There is no
+automatic eviction or storage-size cap: monitor the host's free disk space and
+explicitly clear repositories you no longer need.
+
+To deliberately start fresh, stop **all simulator Portals for the repository**,
+including ones started from its other sessions/worktrees, then call
+`opensession-portals.clear_simulator_storage` with:
+
+```json
+{ "confirm": true }
+```
+
+This permanently deletes every retained simulator profile for that repository,
+including installed apps, app data, keychain and settings. It refuses while the
+repository is in use. It does not remove source code, app builds or another
+repository's storage. Only clear storage when the person explicitly requests it,
+not as automatic error recovery. The next start creates an empty simulator. If
+clearing is interrupted, repeat the confirmed clear to finish it before starting
+that profile again.
+
+This applies to newly started helpers. Legacy temporary simulators are not
+migrated; their old cleanup behavior is unchanged.
+
 ## Ownership and limits
 
-- Each viewer process creates its own CoreSimulator device set and device. No
-  command accepts an existing device UDID, including the global `booted` target.
+- Each repository owns private CoreSimulator device sets. No command accepts an
+  existing device UDID, including the global `booted` target. Only one simulator
+  helper may use a repository at a time, even across linked worktrees.
 - An owned idb companion listens on a private Unix socket, never a public gRPC
   port. Every input command addresses that companion explicitly.
 - At most two simulator leases run on a Mac. Durable capacity records permit
@@ -89,11 +127,13 @@ start arguments requires stopping it and starting it with the new arguments.
   never enumerates another session's devices or databases. Invalid metadata or
   an interrupted recovery lock fails closed and needs operator inspection under
   `/tmp/opensession-idb-simulator-capacity`; never delete a slot until its owned
-  device set is stopped and removed.
-- Capture runs only while viewers are connected. The helper exits and deletes
+  device set is proven stopped and no helper is using that repository. Do not
+  delete retained device sets as part of capacity recovery.
+- Capture runs only while viewers are connected. The helper exits and shuts down
   its device after ten minutes without a viewer. Stop/restart and normal Portal
-  cleanup also release the device. Restart creates a fresh simulator and loses
-  installed app data. Forced termination can defer cleanup until the next start.
+  cleanup release running capacity without deleting storage. Failed shutdown or
+  uncertain ownership fails closed rather than erasing data or admitting another
+  helper. Forced termination can defer recovery until the next start.
 - Up to four viewers share one screen stream and a bounded input queue. New
   viewers acknowledge decoded frames, allowing at most one frame in flight per
   viewer; the next delivery uses the newest capture, not queued old frames.
@@ -113,9 +153,11 @@ start arguments requires stopping it and starting it with the new arguments.
 
 ## Verification
 
-Unit tests replace the executable boundary to test device isolation, cleanup,
-capacity, paths and setup CLI arguments. Unix-socket HTTP/2 tests exercise the
-persistent input and capture RPCs. Real HTTP/WebSocket tests exercise the viewer
+Unit tests replace the executable boundary to test repository identity, retained
+profiles, exclusive ownership, restart, explicit clearing, crash recovery,
+capacity, paths and setup CLI arguments. MCP and CLI tests require confirmation
+and reject missing or remote workspaces for storage clearing. Unix-socket HTTP/2
+tests exercise the persistent input and capture RPCs. Real HTTP/WebSocket tests exercise the viewer
 transport, origin/token checks, input ownership, movement coalescing, disconnect
 release and frame acknowledgements.
 

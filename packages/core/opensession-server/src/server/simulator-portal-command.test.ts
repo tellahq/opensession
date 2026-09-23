@@ -1,8 +1,12 @@
+import { simulatorStorageRoot } from "../simulator-portal/storage-root";
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { simulatorPortalCommand } from "./simulator-portal-command";
+import {
+  simulatorPortalCommand,
+  simulatorStorageClearCommand,
+} from "./simulator-portal-command";
 import { portalHostCommand, spawnPortalHost } from "./portal-host-process";
 import { open } from "node:fs/promises";
 
@@ -17,6 +21,23 @@ async function workspace() {
   await mkdir(join(root, "App's build.app"));
   return root;
 }
+
+test("storage reset uses explicit confirmation and a canonical workspace without a shell", async () => {
+  const workspaceDir = await workspace();
+  const argv = await simulatorStorageClearCommand(workspaceDir);
+  expect(argv[0]).toBe(process.execPath);
+  expect(argv[1]).toEndWith("/simulator-portal/main.ts");
+  expect(argv.slice(2)).toEqual([
+    "--storage-root",
+    simulatorStorageRoot(),
+    "--workspace",
+    await realpath(workspaceDir),
+    "--clear-storage",
+    "--confirm",
+  ]);
+  expect(argv).not.toContain("--app");
+  expect(argv).not.toContain("--udid");
+});
 
 test("agent command quotes paths and isolates the portal name by session", async () => {
   const workspaceDir = await workspace();
@@ -99,4 +120,24 @@ test("Mac listener discovery normalizes IPv4, IPv6 and wildcard ports without su
     listenerLinesForPort(rows, 4000).every((line) => line.includes("pid=12")),
   ).toBe(true);
   expect(listenerLinesForPort(rows, 14000)).toHaveLength(1);
+});
+
+test("start and clear pin the same configured storage root despite host environment stripping", async () => {
+  const previous = process.env.OPENSESSION_STATE_DIR;
+  const workspaceDir = await workspace();
+  try {
+    process.env.OPENSESSION_STATE_DIR = join(workspaceDir, "instance state");
+    const clear = await simulatorStorageClearCommand(workspaceDir);
+    const start = await simulatorPortalCommand({
+      sessionId: "a",
+      workspaceDir,
+      appPath: "App's build.app",
+    });
+    const root = join(workspaceDir, "instance state", "simulator-storage");
+    expect(clear[clear.indexOf("--storage-root") + 1]).toBe(root);
+    expect(start.command).toContain(`--storage-root '${root}'`);
+  } finally {
+    if (previous === undefined) delete process.env.OPENSESSION_STATE_DIR;
+    else process.env.OPENSESSION_STATE_DIR = previous;
+  }
 });
