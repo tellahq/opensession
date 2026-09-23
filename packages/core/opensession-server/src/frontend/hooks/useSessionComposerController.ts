@@ -10,7 +10,10 @@ import {
 } from "react";
 import { useAttachmentUploads } from "./useAttachmentUploads";
 import { clearDraft, loadDraft, saveDraft } from "../lib/drafts";
-import { dropStagingAttachments } from "../lib/attachments";
+import {
+  dropStagingAttachments,
+  landedDraftAttachments,
+} from "../lib/attachments";
 import { attachToDraft, sameFiles, sameImages } from "../lib/attachments";
 import { foregroundFileComposerOpen, hasDraggedFiles } from "../lib/file-drag";
 import { cropImageRegionFile } from "../lib/image-region-comment";
@@ -64,10 +67,20 @@ export function useSessionComposerDraft({
   const [files, setFiles] = useState<FileAttachment[]>(
     () => loadDraft(draftKey).files,
   );
-  const uploads = useAttachmentUploads();
+  const uploads = useAttachmentUploads(draftKey);
   useEffect(() => {
     saveDraft(draftKey, { images, files });
   }, [draftKey, images, files]);
+  // After the save above (same commit, declared after it): each finished
+  // upload changes the pending count, and may have landed in the draft while
+  // an earlier mount of this view was the one waiting for it.
+  const pendingUploads = uploads.staging.images + uploads.staging.files;
+  const adoptLandedUploads = useEffectEvent(() => {
+    const landed = landedDraftAttachments(draftKey, images, files);
+    if (landed.images !== images) setImages(landed.images);
+    if (landed.files !== files) setFiles(landed.files);
+  });
+  useEffect(() => adoptLandedUploads(), [draftKey, pendingUploads]);
   const [forkFrom, setForkFrom] = useState<SessionForkTarget>(null);
   useEffect(() => {
     const messageId = takePendingSessionFork(sessionId);

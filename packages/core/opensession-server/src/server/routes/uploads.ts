@@ -26,22 +26,15 @@ import {
 const reply = (data: object, status = 200) =>
   Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 
-function crossOrigin(ctx: RouteContext): boolean {
-  const origin = ctx.req.headers.get("origin");
-  return (
-    (!!origin && origin !== ctx.url.origin) ||
-    ctx.req.headers.get("sec-fetch-site") === "cross-site"
-  );
-}
-
 export async function handleUploadRoutes(
   ctx: RouteContext,
 ): Promise<Response | undefined> {
   const { path, req } = ctx;
   if (path !== "/api/uploads" && !path.startsWith("/api/uploads/"))
     return undefined;
-  if (req.method !== "GET" && crossOrigin(ctx))
-    return reply({ error: "Cross-origin uploads are not allowed" }, 403);
+  // Cross-site writes are refused for every /api/ mutation before routing
+  // (web-auth.ts crossSiteViolation). Do not compare Origin with ctx.url here:
+  // behind the gateway proxy ctx.url is the internal backend address.
   try {
     if (path === "/api/uploads" && req.method === "POST") {
       const input = JSON.parse(await readRequestTextWithinLimit(req, 4096));

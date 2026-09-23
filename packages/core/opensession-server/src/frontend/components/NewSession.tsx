@@ -377,7 +377,7 @@ export function NewSession({
   const [pastedTexts, setPastedTexts] = useState<PastedTextAttachment[]>(
     () => loadDraft(DRAFT_KEY).pastedTexts,
   );
-  const uploads = useAttachmentUploads();
+  const uploads = useAttachmentUploads(DRAFT_KEY);
   const staging = uploads.staging;
   const [fileDragActive, setFileDragActive] = useState(false);
   const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ASK_CARD_SHELL } from "../lib/ask-card-classes";
 import { BASE_PATH } from "../lib/base";
 import { AGENT_NAME } from "../lib/brand";
-import { MAX_FILE_UPLOAD_BYTES, uploadFile } from "../lib/images";
+import { MAX_FILE_UPLOAD_BYTES, formatBytes, uploadFile } from "../lib/images";
 import type { WSServerMessage } from "../lib/types";
 import { useSessionSocket } from "../hooks/useSessionSocket";
 import { Button } from "../ui/button";
@@ -12,17 +12,6 @@ type FileRequest = NonNullable<
 >;
 
 type Picked = { name: string; size: number; fraction: number };
-
-export function formatBytes(bytes: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  return `${value.toFixed(unit < 2 ? 0 : 1)} ${units[unit]}`;
-}
 
 /** Upload the picked files, then answer the request with their staged paths.
  *  Outside the component so its throws stay out of React Compiler's way. */

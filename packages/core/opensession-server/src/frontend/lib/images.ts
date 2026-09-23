@@ -35,6 +35,18 @@ const SINGLE_REQUEST_BYTES = 8 * 1024 * 1024;
 const PARALLEL_CHUNKS = 4;
 const CHUNK_ATTEMPTS = 6;
 
+/** A size for people: "840 KB", "1.2 GB". */
+export function formatBytes(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${value.toFixed(unit < 2 ? 0 : 1)} ${units[unit]}`;
+}
+
 /** Fraction of a file's bytes the server has acknowledged, 0 to 1. */
 export type UploadProgress = (fraction: number) => void;
 

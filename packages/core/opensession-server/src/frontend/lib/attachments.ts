@@ -42,15 +42,16 @@ const generations = new Map<string, number>();
 export interface StagingCount {
   images: number;
   files: number;
-  /** One entry per pending file, in order: its name and how much of it has
-   *  reached the server (null until the first chunk lands). Only large
-   *  uploads report progress, and only where the caller tracks it. */
+  /** One entry per pending file, in order: its name, size and how much of
+   *  it has reached the server. Absent where the caller does not track it. */
   fileProgress?: PendingFileProgress[];
 }
 
 export interface PendingFileProgress {
   name: string;
-  fraction: number | null;
+  size: number;
+  /** 0 to 1. A small file goes up in one request and jumps from 0 to 1. */
+  fraction: number;
 }
 
 export const NOTHING_STAGING: StagingCount = { images: 0, files: 0 };
@@ -152,6 +153,29 @@ export async function attachToDraft(
     });
   }
   return { rejected, applied: true };
+}
+
+export interface DraftAttachments {
+  images: string[];
+  files: FileAttachment[];
+}
+
+/**
+ * Pull attachments that landed in the draft store while this view was not the
+ * one that asked for them: an upload started, you switched sessions, and it
+ * finished after the view remounted. Returns the same arrays when nothing
+ * moved, so a caller can keep its state untouched.
+ */
+export function landedDraftAttachments(
+  key: string,
+  images: string[],
+  files: FileAttachment[],
+): DraftAttachments {
+  const stored = loadDraft(key);
+  return {
+    images: sameImages(images, stored.images) ? images : stored.images,
+    files: sameFiles(files, stored.files) ? files : stored.files,
+  };
 }
 
 /** Drop one of the key's staged images, keeping the store authoritative. */

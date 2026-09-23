@@ -33,12 +33,8 @@ export async function handleLocalFilesRoutes(
   const identity = ctx.authUser as { automation?: boolean } | null | undefined;
   if (identity?.automation === true)
     return reply({ error: "Only a person can send files" }, 403);
-  const origin = req.headers.get("origin");
-  if (
-    (origin && origin !== ctx.url.origin) ||
-    req.headers.get("sec-fetch-site") === "cross-site"
-  )
-    return reply({ error: "Cross-origin answers are not allowed" }, 403);
+  // Cross-site answers are refused before routing (web-auth.ts
+  // crossSiteViolation); ctx.url is the internal backend address.
   const match = path.match(/^\/api\/local-files\/([a-f0-9-]{36})(\/decline)?$/);
   if (!match || req.method !== "POST")
     return reply({ error: "Not found" }, 404);
