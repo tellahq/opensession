@@ -206,8 +206,9 @@ export function buildRunInstructions(input: {
   if (tools) parts.push(tools);
   if (input.sandboxed) {
     parts.push(
-      "## Sandbox\nThis session runs in its own Sandbox: a Linux machine with the " +
-        "repository checked out, its `.agents/setup` already run, and a durable disk. It " +
+      "## Sandbox\nThis session's workspace is its own Sandbox: a machine with the " +
+        "repository checked out, its `.agents/setup` already run, and a durable disk. Your " +
+        "file and shell tools act there. It " +
         "sleeps between turns and wakes with files and Portals intact. Install what you need " +
         "with apt, bun, or the repository's own tooling; nothing here touches another " +
         "session. Push your branch before ending: only pushed work leaves the Sandbox.",

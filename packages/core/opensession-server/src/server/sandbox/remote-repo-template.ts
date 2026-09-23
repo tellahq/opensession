@@ -19,7 +19,7 @@ import {
   REMOTE_HOME,
   remoteLayoutForProvider,
   remoteWarmWorkspaceDir,
-  runnerToolchainSignature,
+  baseRuntimeSignature,
   shellQuoteWord,
   type RemoteDriver,
 } from "./adapters/bootstrap";
@@ -328,10 +328,9 @@ function file(provider: RemoteTemplateProvider, repoId: string): string {
 
 /** Includes every create-time input whose change makes an artifact unsafe to
  * reuse. Source freshness is handled by adoption's fetch; dependency/setup
- * freshness is handled separately by projectPreparationSignature; a runner
- * commit pin bump is deliberately NOT here — adoption's bootstrap reconciles
- * the pin inside the restored filesystem (see runnerToolchainSignature), so
- * templates survive ordinary deploys instead of rebuilding on every one. */
+ * freshness is handled separately by projectPreparationSignature. The only
+ * runtime a Sandbox carries is the base runtime, which names no Open Session
+ * commit, so templates survive every ordinary deploy. */
 export function remoteRepoTemplateSignature(
   provider: RemoteTemplateProvider,
 ): string {
@@ -350,7 +349,7 @@ export function remoteRepoTemplateSignature(
           : { machineProfile: settings.profile || "default" };
   return createHash("sha256")
     .update(
-      `repo-template-v3|${runnerToolchainSignature()}|${JSON.stringify(shape)}`,
+      `repo-template-v4|${baseRuntimeSignature()}|${JSON.stringify(shape)}`,
     )
     .digest("hex");
 }

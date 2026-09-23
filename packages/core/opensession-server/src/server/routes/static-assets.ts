@@ -166,10 +166,17 @@ export async function handleStaticAssetsRoutes(
 
   // PWA installs use the workspace artwork; the native Mac download stays
   // on its bundled icon. Real, correctly sized PNGs also work before sign-in.
+  // Safari's installer and link previews probe several declarations (the
+  // touch icon, its -precomposed twin, the favicon, og:image) and each iOS
+  // release prefers a different one, so every declaration serves the same
+  // artwork.
   const pwaSize = {
     "/apple-touch-icon.png": 180,
+    "/apple-touch-icon-precomposed.png": 180,
     "/icon-192.png": 192,
     "/icon.png": 512,
+    "/favicon.png": 192,
+    "/favicon.ico": 192,
   }[path];
   if (pwaSize) {
     const bytes = await organizationPwaIcon(pwaSize);
@@ -183,14 +190,18 @@ export async function handleStaticAssetsRoutes(
     }
   }
   // Without workspace artwork, retain the shipped Open Session icons.
+  const macAppIcon = {
+    name: "mac-app-icon.png",
+    sourcePath: `${REPO_ROOT}/packages/clients/mac/build/icon-512.png`,
+  };
   const iconFiles: Record<string, { name: string; sourcePath?: string }> = {
     "/apple-touch-icon.png": { name: "apple-touch-icon.png" }, // 180×180
+    "/apple-touch-icon-precomposed.png": { name: "apple-touch-icon.png" },
     "/icon-192.png": { name: "icon-192.png" },
     "/icon.png": { name: "icon.png" }, // 512×512
-    "/mac-app-icon.png": {
-      name: "mac-app-icon.png",
-      sourcePath: `${REPO_ROOT}/packages/clients/mac/build/icon-512.png`,
-    },
+    "/favicon.png": macAppIcon,
+    "/favicon.ico": macAppIcon,
+    "/mac-app-icon.png": macAppIcon,
   };
   const iconAsset = iconFiles[path];
   if (iconAsset) {

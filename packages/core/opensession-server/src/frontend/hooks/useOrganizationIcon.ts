@@ -33,14 +33,14 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-/** Refresh Safari's install artwork after a load, upload, or removal. */
+/** Refresh the favicon and Safari's install artwork after a load, upload, or removal. */
 function refreshInstallIcons(revision: string | null) {
   if (typeof document === "undefined") return;
-  for (const rel of ["apple-touch-icon", "manifest"]) {
+  for (const rel of ["icon", "apple-touch-icon", "manifest"]) {
     const link = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
     if (!link) continue;
     const url = new URL(link.href);
-    url.searchParams.set("v", revision || "6");
+    url.searchParams.set("v", revision || (rel === "icon" ? "7" : "6"));
     if (link.href !== url.href) link.href = url.href;
   }
 }

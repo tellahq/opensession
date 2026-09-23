@@ -52,6 +52,7 @@ import {
   usageFromSdkResult,
   type PiCatalogModel,
   type PiWireMessage,
+  sdkThinkingDisabled,
 } from "./pi-anthropic-provider";
 import {
   createEarlyStopTracker,
@@ -1386,5 +1387,16 @@ describe("captureUnforwardedToolUses", () => {
     expect(captured).toEqual([]);
     // Idempotent on a replayed envelope.
     expect(captureUnforwardedToolUses(tracker, message, captured)).toBe(0);
+  });
+});
+
+describe("sdkThinkingDisabled", () => {
+  test("turns thinking off only when Pi sends no reasoning level for a reasoning model", () => {
+    expect(sdkThinkingDisabled({ reasoning: true }, {})).toBe(true);
+    expect(sdkThinkingDisabled({ reasoning: true }, undefined)).toBe(true);
+    expect(
+      sdkThinkingDisabled({ reasoning: true }, { reasoning: "medium" }),
+    ).toBe(false);
+    expect(sdkThinkingDisabled({ reasoning: false }, {})).toBe(false);
   });
 });
