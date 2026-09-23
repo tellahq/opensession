@@ -42,6 +42,26 @@ import type { TranscriptEntry } from "./session";
  */
 export type McpScope = "all" | string[];
 
+/**
+ * The workspace a run's file and shell tools act on when it is not on the
+ * machine hosting the engine: a Sandbox. The engine and its loop stay on the
+ * server; every tool call becomes a command in the Sandbox, sent through the
+ * server's run-rpc (`/workspace/exec`, authenticated by the run's rpcToken).
+ */
+export interface RemoteWorkspaceSpec {
+  /** Sandbox provider id (daytona, box, tart, usecomputer). */
+  provider: string;
+  sandboxId: string;
+  /** The checkout inside the Sandbox. */
+  cwd: string;
+  /** Session scratch inside the Sandbox ($OPENSESSION_SCRATCH, attachments). */
+  scratchDir: string;
+  /** Guest operating system; absent = linux. */
+  os?: "linux" | "darwin";
+  /** Registered repository id of the checkout. */
+  repo?: string;
+}
+
 /** Everything a host needs to drive one run — a serializable RunAgentOpts. */
 export interface RunHostSpec {
   hostId: string;
@@ -92,6 +112,9 @@ export interface RunHostSpec {
   proxyMcpServers?: string[];
   /** Per-run bearer for the RPC socket; maps to {sessionId, user} on the server side. */
   rpcToken?: string;
+  /** Present when the run's tools act on a Sandbox instead of this machine.
+   *  The host then requires rpcToken and never touches a local workspace. */
+  remoteWorkspace?: RemoteWorkspaceSpec;
   /**
    * Per-run bearer for the WS transport (Phase 3). Present = this run's host
    * dials the server's run-ws WS route (/run-ws/<hostId>) instead of serving a

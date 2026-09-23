@@ -139,8 +139,12 @@ describe("instance general settings", () => {
     await seed();
     const paths = [
       ["/apple-touch-icon.png", 180],
+      ["/apple-touch-icon-precomposed.png", 180],
       ["/icon-192.png", 192],
       ["/icon.png", 512],
+      // The favicon and link-preview image agree with the install icons.
+      ["/favicon.png", 192],
+      ["/favicon.ico", 192],
     ] as const;
     const bundled = new Map<string, ArrayBuffer>();
     for (const [path] of paths) {

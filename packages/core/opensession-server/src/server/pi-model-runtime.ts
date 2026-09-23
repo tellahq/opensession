@@ -787,12 +787,26 @@ export function buildPiAnthropicProvider(
     },
     getModels: () => models,
     stream,
-    // pi's agent loop calls streamSimple (reasoning level rides the options);
-    // the SDK exposes no thinking-budget control, so both entry points map to
-    // the same run (bridge parity — thinking level was ignored there too).
+    // pi's agent loop calls streamSimple (reasoning level rides the options).
+    // The SDK has no budget control, so both entry points map to the same
+    // run; only thinking "off" is honored (sdkThinkingDisabled).
     streamSimple: stream,
   };
   return provider as unknown as PiNativeProvider;
+}
+
+/**
+ * Whether to start the SDK query with extended thinking off. Pi's agent loop
+ * sends no `reasoning` for a reasoning-capable model only when its thinking
+ * level is "off" (effort "none"); every other level keeps the SDK's default
+ * thinking, as before. Without this a two-sentence one-shot spends tens of
+ * seconds reasoning.
+ */
+export function sdkThinkingDisabled(
+  model: { reasoning?: boolean },
+  options: { [key: string]: unknown } | undefined,
+): boolean {
+  return model.reasoning === true && !options?.reasoning;
 }
 
 const MAX_LIVE_SDK_CONVERSATIONS = 24;
@@ -855,6 +869,8 @@ interface LiveSdkConversation {
   lastUsedAt: number;
   inUse: boolean;
   disposed: boolean;
+  /** Started with extended thinking off; fixed for the query's lifetime. */
+  thinkingDisabled: boolean;
 }
 
 function liveSdkConversations(): Map<string, LiveSdkConversation> {
@@ -1135,6 +1151,7 @@ function createLiveSdkConversation(input: {
   system: string;
   tools: readonly PiToolShape[];
   plan: PiSdkTurnPlan;
+  thinkingDisabled: boolean;
 }): LiveSdkConversation {
   const prompt = new SdkInputQueue();
   const controller = new AbortController();
@@ -1177,6 +1194,9 @@ function createLiveSdkConversation(input: {
         : {}),
       abortController: controller,
       includePartialMessages: true,
+      ...(input.thinkingDisabled
+        ? { thinking: { type: "disabled" as const } }
+        : {}),
       systemPrompt: input.system || " ",
       settingSources: [],
       mcpServers: mcpServers as any,
@@ -1210,6 +1230,7 @@ function createLiveSdkConversation(input: {
     lastUsedAt: Date.now(),
     inUse: false,
     disposed: false,
+    thinkingDisabled: input.thinkingDisabled,
   };
   liveSdkConversations().set(input.key, live);
   prompt.push(inputForPlan(input.plan));
@@ -1223,6 +1244,7 @@ function acquireLiveSdkQuery(input: {
   system: string;
   tools: readonly PiToolShape[];
   plan: PiSdkTurnPlan;
+  thinkingDisabled: boolean;
 }): LiveQueryFacade {
   pruneLiveSdkConversations();
   let live = liveSdkConversations().get(input.key);
@@ -1235,6 +1257,10 @@ function acquireLiveSdkQuery(input: {
   }
   if (live && !input.plan.continuation) {
     disposeLiveSdkConversation(live, "conversation diverged");
+    live = undefined;
+  }
+  if (live && live.thinkingDisabled !== input.thinkingDisabled) {
+    disposeLiveSdkConversation(live, "thinking setting changed");
     live = undefined;
   }
   if (!live) return queryFacade(createLiveSdkConversation(input));
@@ -1456,6 +1482,7 @@ async function* runSdkAttempt(
       system,
       tools: requestTools,
       plan,
+      thinkingDisabled: sdkThinkingDisabled(model, options),
     });
     const controller = q.live.controller;
     q.live.inUse = true;

@@ -98,16 +98,21 @@ configuration for the run.
   follow the repository's publication workflow; automation descendants retain
   their server-enforced publication policy. Every other scope still applies: MCP allowlist, denied
   writes, IMDS blocking, and the explicit environment.
-- A sandboxed automation runs in a fresh disposable Daytona Executor. Open
-  Session admits it only after Daytona has passed qualification, including a
-  live domain-allowlist check. The provider applies that allowlist before
-  runner bootstrap, repository setup hooks, private workspace seeds, or model
-  credentials enter the guest. Each run requires one hard-pinned Anthropic or
-  OpenAI subscription account, no fallback model, no nested CLI credentials,
-  and an explicit MCP allowlist. The launcher adds only the callback, clone,
-  runner bootstrap, model API, configured MCP, and operator-approved domains.
-  It probes one allowed and one blocked destination before continuing, and
-  strictly deletes the Executor after the run. There is no host fallback.
+- A sandboxed automation's workspace is a fresh disposable Daytona Executor.
+  Its agent loop, model credentials and MCP connections stay on this server;
+  only its file and shell tools run in the Executor, over the run's own
+  run-rpc token (docs/self-hosting-sandboxes.md, "Where the agent runs").
+  Open Session admits it only after Daytona has passed qualification,
+  including a live domain-allowlist check. The provider applies that
+  allowlist before the base runtime, repository setup hooks, or private
+  workspace seeds enter the guest. Each run requires one hard-pinned
+  Anthropic or OpenAI subscription account, no fallback model, no nested CLI
+  credentials, and an explicit MCP allowlist. The allowlist adds only the
+  callback, clone, base runtime, and operator-approved domains: model APIs
+  and MCP servers are reached from this server, never from the Executor. It
+  probes one allowed and one blocked destination before continuing, and
+  strictly deletes the Executor after the run. There is no host fallback: a
+  tool call that cannot reach the Executor fails.
 - When adding an automation, scope it: pick ask mode unless it must write, and
   name only the MCP servers it uses.
 - Interactive sessions may publish an existing workspace file through
@@ -222,8 +227,7 @@ addresses, GitHub logins, and Slack ids resolve to the configured person.
   machine sender (the automation's own tick, a review handoff, auto-continue)
   resolves to no account user and stays pool-only. `accountUser` never feeds
   the MCP gate, GitHub credentials, or the trust profile. It is journaled
-  with the run so restart recovery keeps the same routing. In a remote
-  sandbox the same identity scopes which subscriptions are uploaded. On every
+  with the run so restart recovery keeps the same routing. On every
   launch path (host, detached pi host, Runner, sandbox) a person's takeover
   turn carries no automation pin (`runAccountSpec`, `remoteRunAccountPolicy`),
   because account selection tries a pin before personal accounts; the
@@ -275,7 +279,7 @@ GitHub Actions or placing contributor code in a host worktree:
 2. A fresh disposable Daytona Executor anonymously fetches
    `refs/pull/<number>/head` plus the immutable base SHA, verifies both commits
    and checks out the head with Git hooks disabled. The source-verification
-   profile refuses prewarmed and project-template resources and skips runner
+   profile refuses prewarmed and project-template resources and skips runtime
    bootstrap, dial-back, private workspace seed files, and repository
    setup/resume hooks. Any mismatch fails closed. Provider deletion must be
    confirmed before model inference.
@@ -372,8 +376,8 @@ Enabling `userPrAuth` activates both halves below:
   _device flow_ (Connections UI card, or implicitly by signing in). Tokens
   live per-login in `~/.opensession/github-auth.json` (0600, never returned
   by any API). A code turn a connected person started holds their token in
-  its shell (pi-runner `runGithubEnv`, the sandbox launcher's projected auth
-  file), so its pushes and any PR it opens are theirs; the gateway uses the
+  its shell (pi-runner `runGithubEnv`, also for a Sandbox workspace, where
+  each shell command receives it in its environment), so its pushes and any PR it opens are theirs; the gateway uses the
   same token for the UI's PR routes (merge, close, review, comment). Agents
   use `gh` directly rather than dedicated PR MCP tools. Ask runs, unattended
   runs, and machine senders hold an App token and never a person's

@@ -1234,7 +1234,7 @@ export function AppContent({
     openCurrentWorkspace: () => setActiveViewTab(null),
   } satisfies NavigationActions;
 
-  // Review owns the phone header. Its back action restores workspace tabs.
+  // Review owns the phone header, but workspace tabs remain available.
   const focusedPhoneReview =
     isPhone &&
     ((route.view === "pr" && route.branch !== undefined) ||
@@ -1431,9 +1431,7 @@ export function AppContent({
                       {panelIcon}
                     </button>
                   </Tooltip>
-                  {/* Top bar: session name + actions (portaled in by SessionViewer)
-						    on session routes, a plain title otherwise. Sits above the tab
-						    strip so the session identity reads first, tabs below it. */}
+                  {/* Session/workspace identity sits above the shared tab strip. */}
                   <TopBar
                     className={cn(
                       DETAIL_TOPBAR,
@@ -1475,10 +1473,17 @@ export function AppContent({
                         </TopBarTitle>
                       )}
                   </TopBar>
-                  {!focusedPhoneReview &&
-                    !activeTabSplit &&
-                    tabStripVisible &&
-                    renderTabBar(null)}
+                  {!activeTabSplit && tabStripVisible && (
+                    <div
+                      className={cn(
+                        "shrink-0",
+                        focusedPhoneReview &&
+                          "phone:relative phone:[--pane-header-h:env(safe-area-inset-top,0px)] phone:pt-[env(safe-area-inset-top,0px)]",
+                      )}
+                    >
+                      {renderTabBar(null)}
+                    </div>
+                  )}
                   {splitDropSide && (
                     <div
                       className={tabSplitDropPreviewClass(splitDropSide)}
@@ -1699,7 +1704,7 @@ export function AppContent({
                               ) ?? currentSession;
                             return (
                               <>
-                                {!focusedPhoneReview && renderTabBar(side)}
+                                {renderTabBar(side)}
                                 {renderSessionPane(
                                   session,
                                   socket,

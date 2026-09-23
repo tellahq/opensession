@@ -28,12 +28,6 @@ export const AUTOMATION_BASELINE_EGRESS_DOMAINS = [
 /** Daytona's documented ceiling for `domainAllowList`. */
 export const DAYTONA_DOMAIN_ALLOWLIST_MAX = 20;
 
-export function automationModelEgressDestinations(model: string): string[] {
-  if (/^pi\/anthropic\//.test(model)) return ["api.anthropic.com"];
-  if (/^pi\/openai\//.test(model)) return ["api.openai.com", "chatgpt.com"];
-  throw new Error(`unsupported sandbox automation model: ${model}`);
-}
-
 const HOSTNAME_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/i;
 
 function looksLikeIp(host: string): boolean {
@@ -91,25 +85,6 @@ export function parseAutomationEgressDomain(value: string): string {
     throw new Error(`invalid automation egress destination: ${value}`);
   }
   return wildcard ? `*.${host}` : host;
-}
-
-/** Hosts a run's projected MCP configuration will contact. */
-export function mcpEgressDestinations(
-  projected: Record<string, unknown>,
-): string[] {
-  const destinations = new Set<string>();
-  for (const config of Object.values(projected)) {
-    if (!config || typeof config !== "object") continue;
-    const entry = config as Record<string, unknown>;
-    if (typeof entry.url === "string") destinations.add(entry.url);
-    if (entry.env && typeof entry.env === "object") {
-      for (const value of Object.values(entry.env as Record<string, unknown>)) {
-        if (typeof value === "string" && /^(?:https?|wss?):\/\//i.test(value))
-          destinations.add(value);
-      }
-    }
-  }
-  return [...destinations];
 }
 
 /**

@@ -4,6 +4,7 @@
  * the Portal routes. The run-path launch lives in run-session.ts.
  */
 
+import { forgetWorkspaceSandbox } from "./sandbox/workspace-rpc";
 import { getSandboxProvider, type Sandbox } from "./sandbox";
 import {
   isRemoteSandboxProvider,
@@ -125,6 +126,8 @@ export async function teardownSandbox(
   sandboxId: string,
 ): Promise<void> {
   revokeWorkloadIdentityForSandbox(sandboxId);
+  // No run's tool call may reach the machine from here on.
+  forgetWorkspaceSandbox(sandboxId);
   await dropSandboxPreviewRoutes(sandboxId);
   await getSandboxProvider(provider).destroy(sandboxId);
 }
