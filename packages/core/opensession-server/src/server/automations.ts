@@ -92,12 +92,10 @@ import {
   sandboxAutomationAvailability,
   sandboxAutomationConfig,
 } from "./sandbox/config";
-import {
-  automationModelEgressDestinations,
-  mcpEgressDestinations,
-} from "./sandbox/automation-egress";
 import { disposeAutomationSandbox } from "./sandbox/automation-disposal";
-import type { RunHostSpec } from "../runner-host/protocol";
+import { remoteGuestOsForProvider } from "./sandbox/adapters/bootstrap";
+import { primeWorkspaceSandbox } from "./sandbox/workspace-rpc";
+import { sandboxSessionScratchDir } from "./session-scratch";
 import { configuredIntegration, personaName } from "./config";
 import { shouldPersistModelSwitch, type StreamEvent } from "./run-events";
 import {
@@ -1852,7 +1850,6 @@ export async function runAutomation(
   const startedAt = new Date(acceptedAt);
   const stamp = startedAt.toISOString().slice(0, 16).replace("T", " ");
   automationPreparations.add(bksId);
-  let sandboxRpcToken: string | undefined;
   // The disposable Executor this run owns, destroyed once the run settles.
   let disposableSandbox:
     | { provider: ReturnType<typeof getSandboxProvider>; id: string }
@@ -1936,13 +1933,10 @@ export async function runAutomation(
         branch,
         mode: automation.mode,
         trustProfile: "automation",
-        egressAllowlist: [
-          ...(automationSandbox.egressAllowlist || []),
-          ...automationModelEgressDestinations(runModel || ""),
-          ...mcpEgressDestinations(
-            filterMcpServers(automation.mcpServers || [], undefined, []),
-          ),
-        ],
+        // The agent loop, its model traffic and its MCP connections stay on
+        // this server; the Sandbox only runs the workspace commands, so it
+        // needs neither model nor MCP endpoints in its egress allowlist.
+        egressAllowlist: [...(automationSandbox.egressAllowlist || [])],
       });
       disposableSandbox = { provider, id: sandbox.id };
       cwd = sandbox.cwd;
@@ -2231,39 +2225,42 @@ export async function runAutomation(
       );
     let events: AsyncGenerator<StreamEvent>;
     if (sandbox) {
-      sandboxRpcToken = crypto.randomUUID();
-      registerRunToken(sandboxRpcToken, { sessionId: bksId });
-      const spec: RunHostSpec = {
-        hostId: automationRunKey,
+      // The loop runs here like any automation; its tools act in the
+      // disposable Sandbox (remote-workspace.ts), which receives no model
+      // credential and no MCP configuration.
+      primeWorkspaceSandbox(bksId, sandbox);
+      events = runAgentHosted({
         osSessionId: bksId,
         prompt,
+        startToken: automationRunKey,
         cwd,
+        remoteWorkspace: {
+          provider: sandbox.provider,
+          sandboxId: sandbox.id,
+          cwd: sandbox.cwd,
+          scratchDir: sandboxSessionScratchDir(bksId, sandbox.provider),
+          os: remoteGuestOsForProvider(sandbox.provider),
+          repo: repo.id,
+        },
         mode: automation.mode,
         model: runModel,
-        selectedModel: runModel,
         mcpServers: automation.mcpServers || [],
         proxyMcpServers: Object.keys(inProcessMcp),
-        rpcToken: sandboxRpcToken,
         deniedTools: AUTOMATION_DENIED_TOOLS,
         confirmTools: STRIPE_CONFIRM_TOOLS,
         aws: false,
-        claudeCliEnv: !!automation.claudeCliEnv,
-        codexCliEnv: !!automation.codexCliEnv,
         fallbackModel,
         accountId: automation.accountId,
         accountStrict: true,
         usageCredits: automation.usageCredits,
         // PRs opened from the sandboxed run carry the automation's review
-        // policy, same as the in-process runAgent call below.
+        // policy, same as the host runs below.
         prReviewer: automation.prReviewer,
         readRepos: automation.readRepos,
+        author: labelIdentity(automation.name),
         journalKind: "automation",
         trustProfile: "automation",
-      };
-      const handle = sandbox.launchRunEager
-        ? await sandbox.launchRunEager(spec)
-        : sandbox.launchRun(spec);
-      events = handle.events();
+      });
     } else {
       const common = {
         prompt,
@@ -2481,7 +2478,6 @@ export async function runAutomation(
     forgetPlainDiscussionRun(automationRunKey);
     automationPreparations.delete(bksId);
     activeAutomationIntentSessions.delete(bksId);
-    unregisterRunToken(sandboxRpcToken);
     unregisterSessionMcpServers(bksId);
     if (disposableSandbox) {
       // Retain the provider selection but not the destroyed Executor id. A

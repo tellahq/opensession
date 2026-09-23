@@ -1478,7 +1478,7 @@ export function AppContent({
                       className={cn(
                         "shrink-0",
                         focusedPhoneReview &&
-                          "phone:pt-[env(safe-area-inset-top,0px)]",
+                          "phone:relative phone:[--pane-header-h:env(safe-area-inset-top,0px)] phone:pt-[env(safe-area-inset-top,0px)]",
                       )}
                     >
                       {renderTabBar(null)}

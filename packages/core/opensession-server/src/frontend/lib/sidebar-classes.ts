@@ -910,15 +910,17 @@ export const SIDEBAR_SWIPE_ACTION_TRANSITION =
 /** Destructive, and on the trailing edge because the swipe travels left. */
 export const SIDEBAR_SWIPE_ACTION_ARCHIVE = "right-0 bg-red text-white";
 
-/** Reversible snooze filing on the trailing edge. Quieter than Archive. */
-export const SIDEBAR_SWIPE_ACTION_SNOOZE = "right-0 bg-active text-fg";
-
 /** Pin, on the leading edge. Dark ink: the yellow is too light for white. */
 export const SIDEBAR_SWIPE_ACTION_STAR = "left-0 bg-yellow text-[#17130a]";
 
 /** Already pinned — the same action in the accent, so the swipe reads as a
  *  toggle rather than as a second way to pin. */
 export const SIDEBAR_SWIPE_ACTION_STAR_ON = "left-0 bg-accent text-on-accent";
+
+/** A snoozed row's leading edge wakes it instead of pinning it: a pin on a
+ *  snoozed row changes nothing visible (Pinned leaves snoozed rows out), so
+ *  the one swipe that side has goes to the action the row can actually take. */
+export const SIDEBAR_SWIPE_ACTION_UNSNOOZE = "left-0 bg-accent text-on-accent";
 
 export const SIDEBAR_STATUS_DOT = {
   /** Yellow to match the "In progress" lane — green means "In review". */

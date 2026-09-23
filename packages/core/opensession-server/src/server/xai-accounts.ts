@@ -15,11 +15,9 @@
  * the token is re-read immediately before a refresh and a failed refresh
  * re-reads once more before giving up, in case the other side rotated first.
  *
- * Sandboxes only ever hold a copy that cannot rotate the grant: Docker mounts
- * this store read-only and remote hosts receive buildXaiRemoteUpload's
- * access-token-only projection. Either copy refuses to refresh and fails
- * loudly at expiry, while the host keeps its tokens ahead of expiry with a
- * periodic upkeep tick so those copies always find a live one.
+ * No Sandbox holds a copy: every agent loop runs on this server. A read-only
+ * copy refuses to refresh and fails loudly at expiry, while the host keeps
+ * its tokens ahead of expiry with a periodic upkeep tick.
  */
 
 import { accessSync, chmodSync, constants, existsSync, readFileSync } from "fs";
@@ -559,75 +557,6 @@ export async function refreshXaiTokensAhead(): Promise<void> {
       () => undefined,
     );
   }
-}
-
-export interface XaiRemoteUpload {
-  accounts: XaiAccount[];
-  skipped: Array<{ account: XaiAccount; reason: string }>;
-}
-
-/**
- * The scoped, rotation-proof store a remote sandbox receives, the sibling of
- * Claude's accountsForRemoteUpload and Codex's buildOpenaiRemoteSeedUpload.
- * An explicit pin narrows the set to that one account when this run may use
- * it (a missing or foreign pin falls back to the scoped set, never wider);
- * otherwise the run user's own and the shared accounts, limited to the
- * designated ids. Every record is rebuilt field by field with a freshly
- * refreshed access token and the placeholder refresh, so neither the grant
- * nor an unknown future host field crosses the trust boundary.
- */
-export async function buildXaiRemoteUpload(input: {
-  user?: string;
-  accountId?: string;
-  restrictIds?: string[];
-}): Promise<XaiRemoteUpload> {
-  const allowedOwner = (account: XaiAccount) =>
-    !account.owner ||
-    (!!input.user && userMatchesAny(input.user, [account.owner]));
-  const all = readStore();
-  const designated = input.restrictIds?.length
-    ? input.restrictIds
-        .map((id) => all.find((account) => account.id === id))
-        .filter((account): account is XaiAccount => !!account)
-    : all;
-  const pinned = input.accountId
-    ? designated.find((account) => account.id === input.accountId)
-    : undefined;
-  const eligible =
-    pinned && allowedOwner(pinned) ? [pinned] : designated.filter(allowedOwner);
-  const accounts: XaiAccount[] = [];
-  const skipped: XaiRemoteUpload["skipped"] = [];
-  for (const account of eligible) {
-    if (refreshErrors.get(account.id)?.reloginRequired) {
-      skipped.push({ account, reason: "needs a fresh sign-in" });
-      continue;
-    }
-    let fresh: XaiAccount;
-    try {
-      fresh = await ensureFreshXaiAccount(account, REMOTE_UPLOAD_AHEAD_MS);
-    } catch (error) {
-      skipped.push({
-        account,
-        reason: error instanceof Error ? error.message : String(error),
-      });
-      continue;
-    }
-    if (fresh.expires <= Date.now()) {
-      skipped.push({ account, reason: "access token has expired" });
-      continue;
-    }
-    accounts.push({
-      id: fresh.id,
-      name: fresh.name,
-      ...(fresh.email ? { email: fresh.email } : {}),
-      ...(fresh.owner ? { owner: fresh.owner } : {}),
-      createdAt: fresh.createdAt,
-      access: fresh.access,
-      refresh: XAI_REMOTE_SEED_REFRESH,
-      expires: fresh.expires,
-    });
-  }
-  return { accounts, skipped };
 }
 
 /** Accounts whose last refresh failed, for the health sweep. */

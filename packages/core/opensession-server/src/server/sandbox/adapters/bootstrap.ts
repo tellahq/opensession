@@ -1,56 +1,28 @@
 /**
- * bootstrap — shared runtime for the REMOTE sandbox adapters (Daytona, E2B;
- * docs/self-hosting-sandboxes.md). Everything here is provider-agnostic:
- * the adapters implement the small `RemoteDriver` wire (shell exec, detached
- * exec, file write, wake) and get, in return:
+ * bootstrap — shared runtime for the remote Sandbox adapters (Daytona, Boat,
+ * Mac VM, use.computer; docs/self-hosting-sandboxes.md). Everything here is
+ * provider-agnostic: the adapters implement the small `RemoteDriver` wire
+ * (shell exec, detached exec, file write, wake) and get, in return:
  *
- *  - `bootstrapRemoteSandbox`: remote sandboxes don't run our prebaked
- *    opensession-runner image, so first ensure installs the runner payload
- *    in-sandbox — bun, the opensession repo bundle (config `runnerBundleUrl`
- *    tarball, or a git clone of `runnerRepoUrl`/this checkout's origin at
- *    `runnerSha`; a release install with no checkout clones the public
- *    tellahq/opensession repo at its release tag, see resolveRunnerPayload),
- *    `bun install`, and the Claude Code CLI — all under
- *    /home/ubuntu so the runner's hardcoded absolute paths (claude CLI, repo
- *    bundle, HOST_ENTRY) resolve exactly like they do on the host and in the
- *    docker image (path parity is the contract; see deploy/sandbox/README.md).
- *    COLD-START COST: several minutes on the first ensure of a fresh sandbox
- *    (bun install pulls the full dep tree incl. the ~223MB vendored codex
- *    binary). The fast path — Daytona snapshots / E2B custom templates with
- *    the payload prebaked — is a documented follow-up, not built here; a
- *    `.bks-bootstrapped` marker makes every later ensure a no-op.
- *  - `setupRemoteWorkspace`: remote workspaces are ALWAYS volume-style — the
- *    repo is cloned INSIDE the sandbox from its https origin (never a host
- *    mount). Auth comes from config `cloneCredential` ({type:"none"} public /
- *    {type:"https-token", token} injected into the URL) — host git/ssh creds
- *    are never uploaded. Destroying the sandbox destroys the workspace: push
- *    your work (same contract as docker volume mode).
- *  - `makeRemoteSandbox` / `makeRemoteLauncher`: the Sandbox handle whose
- *    launchRun starts HOST_ENTRY in-sandbox with the WS-transport env — the
- *    sandbox dials back to `callbackBaseUrl`'s /run-ws route (there
- *    is no socket option remotely), and the opensession-* MCP proxies dial
- *    /rpc-ws. Run dirs use the SAME absolute path host-side and
- *    in-sandbox: spec.json is mirrored host-side (so restart-resume can
- *    re-register tokens), while meta/journal/log live only in the sandbox.
- *  - `resumeRemoteSandboxRun`: restart-resume mirroring the docker path —
- *    reattach to a still-alive in-sandbox host via its WS redial, or relaunch
- *    a continuation. One gap vs docker: meta.json isn't host-visible, so a
- *    run that ENDED while opensession was down is resumed as a continuation
- *    (engine session preserved) instead of having its terminal event
- *    consumed.
+ *  - `bootstrapRemoteSandbox`: the base runtime every Sandbox carries (the
+ *    workspace tools, pinned Node, just, gh and bun, and the `opensession`
+ *    identity command). The agent loop runs on this server, so nothing else
+ *    is installed, and nothing in it names an Open Session commit: a deploy
+ *    never makes a Sandbox reinstall anything. A marker makes every later
+ *    call one command.
+ *  - `setupRemoteWorkspace`: remote workspaces are volume-style: the repo is
+ *    cloned INSIDE the sandbox from its https origin (never a host mount),
+ *    with the clone credential used for the bounded clone/fetch only and a
+ *    credential-free origin left behind. Destroying the sandbox destroys the
+ *    workspace; checkpoints (checkpoint.ts) are the durable copy.
+ *  - `makeRemoteSandbox`: the Sandbox handle. `exec` is the one primitive
+ *    Portals, checkpoints, lifecycle hooks and a run's file and shell tools
+ *    (remote-workspace.ts via sandbox/workspace-rpc.ts) all use.
  *
- * Credential trust note: a SCOPED slice of `~/.opensession-claude-accounts.json`
- * (Claude OAuth pool) is uploaded into the sandbox per LAUNCH (not at
- * bootstrap): only the run's pinned account when spec.accountId is set, else
- * the shared pool accounts plus the account user's own personal accounts
- * (the person who pressed send, remoteRunAccountPolicy) — never another
- * user's personal subscription (accountsForRemoteUpload, claude-accounts.ts).
- * That's deliberately narrower than the docker
- * provider's ro mount of the full store, because this is third-party compute;
- * a self-hoster who doesn't accept even the scoped upload runs these adapters
- * against their OWN Daytona/E2B deployment (both are self-hostable).
- * Automation launches use `trustProfile: "automation"`: one hard-pinned model
- * account, an explicit projected MCP allowlist, and no instance-wide config.
+ * Nothing here uploads a model credential: the agent loop never runs in a
+ * Sandbox. What enters one is the clone credential during the clone, a run's
+ * GitHub token inside each of its shell commands' environment, and
+ * short-lived workload identity leases.
  */
 
 import {
@@ -59,175 +31,69 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
-  realpathSync,
   rmSync,
   unlinkSync,
 } from "fs";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "path";
-import { OPENSESSION_SESSIONS_DIR, homeDir, stateDir } from "../../paths";
-import {
-  journalSet,
-  journalClear,
-  journalClearIfLineage,
-  journalRecordAbnormalCompletion,
-  type ActiveRunRecord,
-} from "../../run-journal";
-import { shouldPersistModelSwitch, type StreamEvent } from "../../run-events";
-import { recoveryKind, restartContinuationPrompt } from "../../agent-runner";
-import {
-  accountsForRemoteUpload,
-  type ClaudeAccount,
-} from "../../claude-accounts";
-import { audit } from "../../audit";
+import { OPENSESSION_SESSIONS_DIR } from "../../paths";
 import { authedRemoteUrl } from "../../codestorage/auth";
 import { parseCsRemote } from "../../codestorage/remote";
 import { redactUrl } from "../../shared/redact";
-import { listCodexAccounts } from "../../codex-accounts";
-import {
-  normalizeModelProviderConfig,
-  readModelProviderConfig,
-} from "../../model-providers";
-import { normalizePiConfig, readPiEngineConfig } from "../../pi-config";
-import {
-  buildOpenaiRemoteSeedUpload,
-  maskOpenaiAccount,
-  openaiSeedAuthPath,
-} from "../../openai-auth";
-import { buildXaiRemoteUpload, maskXaiAccount } from "../../xai-accounts";
-import { XAI_OAUTH_PROVIDER } from "../../xai-provider-id";
-import {
-  fallbackPlan,
-  modelSupportsSteer,
-  providerFor,
-  toPiModel,
-} from "../../models";
-import { filterMcpServers } from "../../runner-shared";
-import { githubCredentialUser } from "../../auto-continue";
-import {
-  GITHUB_RUN_AUTH_FILE_ENV,
-  githubUserAuthProjection,
-} from "../../github-auth";
-import { isMachineActor, providerAccountUser } from "../../session-actors";
-import {
-  appendTranscriptEntries,
-  recordEngineSessionOwner,
-  transcriptLineUser,
-  transcriptLineRunnerNotice,
-  transcriptLineAssistantText,
-  transcriptLineToolUse,
-  transcriptLineToolResult,
-} from "../../transcript-persistence";
-import { hostSteer, hostInterruptSteer, hostCancel } from "../../host-registry";
-import { registerRunToken, unregisterRunToken } from "../../run-rpc";
-import {
-  registerRunWsHost,
-  unregisterRunWsHost,
-  runWsConnector,
-} from "../../run-ws";
 import { writeJsonAtomic } from "../../shared/atomic-write";
 import {
   createWorkloadIdentityEnv,
   type WorkloadIdentityContext,
 } from "../../workload-identity";
-import {
-  HostHandle,
-  HostLaunchNotDispatchedError,
-  reconcileUncertainHostEvents,
-  type HandleCallbacks,
-  type HostLauncher,
-} from "../../host-client";
-import {
-  HOST_SPEC_NAME,
-  HOST_META_NAME,
-  HOST_JOURNAL_NAME,
-  HOST_ENTRY,
-  REPO_ROOT,
-  isCompiledBinary,
-  type RunHostMeta,
-  type RunHostSpec,
-} from "../../../runner-host/protocol";
+import { REPO_ROOT } from "../../../runner-host/protocol";
 import { sandboxConfig, remoteSandboxCallbackBaseUrl } from "../config";
-import { decideSandboxHostRecovery } from "../recovery";
 import type {
   ExecOpts,
   ExecResult,
   PortMap,
-  RunHandle,
-  RunHandleCallbacks,
   Sandbox,
   SandboxProviderId,
   SandboxSessionSpec,
   SandboxStatus,
 } from "../provider";
 
-/** Absolute paths INSIDE the sandbox — kept byte-identical to the host/docker
- *  layout so the runner's hardcoded paths resolve (do not "tidy" these). */
+/** The Linux guest user's home. Workspaces keep the host's worktree layout
+ *  under it, so a session's checkout path is the same string everywhere. */
 export const REMOTE_HOME = "/home/ubuntu";
-const REMOTE_BUN = `${REMOTE_HOME}/.bun/bin/bun`;
-const REMOTE_BUNX = `${REMOTE_HOME}/.bun/bin/bunx`;
-const REMOTE_MCP_CONFIG = `${REMOTE_HOME}/.opensession-mcp-config.json`;
-/** Same pin as deploy/sandbox/Dockerfile's PI_VERSION (host runs this
- *  too) — bump BOTH together. Part of bootstrapSignature, so a bump
- *  invalidates existing sandboxes/prewarms and re-bootstraps them. */
-/** Keep these aligned with deploy/sandbox/Dockerfile. The runtime revision is
- * part of bootstrapSignature, so changing this contract invalidates old
- * prewarms and provider templates instead of calling them Ready. */
+/** The base runtime's pins (deploy/sandbox/README.md). They and the runtime
+ * revision are part of baseRuntimeSignature, so changing this contract
+ * invalidates old prewarms and provider templates instead of calling them
+ * Ready. */
 const REMOTE_NODE_VERSION = "24.18.1";
-const REMOTE_NODE_MAJOR = Number(REMOTE_NODE_VERSION.split(".")[0]);
 const REMOTE_JUST_VERSION = "1.43.1";
 const REMOTE_GH_VERSION = "2.83.1";
 const REMOTE_RUNTIME_REVISION = "workspace-runtime-v8";
-// This path exists inside every remote sandbox. It must not inherit the host
-// service's checkout path (for example a dedicated production release tree).
-export const REMOTE_REPO = `${REMOTE_HOME}/projects/opensession`;
-export const REMOTE_RUNNER_BINARY = `${REMOTE_HOME}/.local/bin/opensession-runner`;
-const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
-/** Where per-launch openai seed material lands in-sandbox — threaded to the
- *  run host via the OPENSESSION_OPENAI_SEED_DIR env (openaiRemoteSeedDir()),
- *  never derived independently on the two sides. */
-export const REMOTE_OPENAI_SEED_DIR = `${REMOTE_HOME}/.opensession-openai-seeds`;
-export const REMOTE_PI_CONFIG = `${REMOTE_HOME}/.opensession-pi.json`;
-export const REMOTE_MODEL_PROVIDERS_CONFIG = `${REMOTE_HOME}/.opensession-model-providers.json`;
 const REMOTE_PATH = `${REMOTE_HOME}/.bun/bin:${REMOTE_HOME}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
 
+/** Where the retired in-Sandbox runner kept its host-side run mirrors; only
+ *  cleaned up now. */
 const RUNS_BASE = `${OPENSESSION_SESSIONS_DIR}/sandbox-runs`;
 const STATE_DIR = `${OPENSESSION_SESSIONS_DIR}/sandboxes`;
 
 // ── Guest layout ─────────────────────────────────────────────────────────────
 //
-// Every remote adapter used to share one fixed guest layout (/home/ubuntu,
-// Linux tool paths). A macOS guest (the tart adapter) cannot host /home at
-// all (autofs owns it), so the layout is now a value chosen by the driver's
-// guest OS. Linux keeps the byte-identical legacy paths above; every guest
-// path a bootstrap, launch, lifecycle hook, or Portal touches goes through it.
+// A macOS guest (Mac VM, use.computer) cannot host /home at all (autofs owns
+// it), so the layout is a value chosen by the driver's guest OS. Every guest
+// path a bootstrap, lifecycle hook, Portal, or workspace command touches goes
+// through it.
 
 export type RemoteGuestOs = "linux" | "darwin";
 
 export interface RemoteLayout {
   os: RemoteGuestOs;
-  /** The runner user's home inside the guest. */
+  /** The guest user's home. */
   home: string;
   bun: string;
   bunx: string;
-  mcpConfig: string;
-  /** Runner payload checkout. */
-  repo: string;
-  runnerBinary: string;
-  bootstrapMarker: string;
-  openaiSeedDir: string;
-  piConfig: string;
-  modelProvidersConfig: string;
-  /** PATH every guest command and run host receives. */
+  /** PATH every guest command receives. */
   path: string;
   warmBase: string;
   lifecycleDir: string;
-  /** Guest-side base of per-run directories. Linux mirrors the host's
-   *  RUNS_BASE exactly; other guests map RUNS_BASE onto their own home. */
-  runsBase: string;
-  /** Uncompiled run-host entry inside `repo` (fallback when the compiled
-   *  runner binary is missing). */
-  hostEntry: string;
   /** Per-session scratch root as the guest's `$OPENSESSION_SCRATCH` sees it. */
   sessionScratchRoot: string;
 }
@@ -235,37 +101,28 @@ export interface RemoteLayout {
 function buildLayout(
   os: RemoteGuestOs,
   home: string,
-  extra: Pick<RemoteLayout, "path" | "runsBase" | "hostEntry">,
+  path: string,
 ): RemoteLayout {
-  const repo = `${home}/projects/opensession`;
   return {
     os,
     home,
     bun: `${home}/.bun/bin/bun`,
     bunx: `${home}/.bun/bin/bunx`,
-    mcpConfig: `${home}/.opensession-mcp-config.json`,
-    repo,
-    runnerBinary: `${home}/.local/bin/opensession-runner`,
-    bootstrapMarker: `${home}/.bks-bootstrapped`,
-    openaiSeedDir: `${home}/.opensession-openai-seeds`,
-    piConfig: `${home}/.opensession-pi.json`,
-    modelProvidersConfig: `${home}/.opensession-model-providers.json`,
+    path,
     warmBase: `${home}/.bks-warm`,
     lifecycleDir: `${home}/.opensession/lifecycle`,
     sessionScratchRoot: `${home}/.opensession/session-scratch`,
-    ...extra,
   };
 }
 
-const LINUX_LAYOUT: RemoteLayout = buildLayout("linux", REMOTE_HOME, {
-  path: REMOTE_PATH,
-  runsBase: RUNS_BASE,
-  hostEntry: HOST_ENTRY,
-});
+const LINUX_LAYOUT: RemoteLayout = buildLayout(
+  "linux",
+  REMOTE_HOME,
+  REMOTE_PATH,
+);
 
-/** macOS guests: the image's user (tart's `admin`, use.computer's `lume`),
- *  Homebrew on the PATH, and run dirs under that home because /home is not
- *  writable on macOS. */
+/** macOS guests: the image's user (tart's `admin`, use.computer's `lume`)
+ *  and Homebrew on the PATH. */
 export const DARWIN_GUEST_HOME = "/Users/admin";
 export const USE_COMPUTER_GUEST_HOME = "/Users/lume";
 const darwinLayouts = new Map<string, RemoteLayout>();
@@ -273,16 +130,14 @@ const darwinLayouts = new Map<string, RemoteLayout>();
 function darwinLayout(home: string): RemoteLayout {
   let layout = darwinLayouts.get(home);
   if (!layout) {
-    layout = buildLayout("darwin", home, {
-      // Pinned tools land in /usr/local/bin and must shadow whatever the
-      // image's Homebrew ships (its `node` is newer than the one the runner
-      // expects).
-      path:
-        `${home}/.bun/bin:${home}/.local/bin:` +
+    // Pinned tools land in /usr/local/bin and must shadow whatever the
+    // image's Homebrew ships (its `node` is newer than the pinned one).
+    layout = buildLayout(
+      "darwin",
+      home,
+      `${home}/.bun/bin:${home}/.local/bin:` +
         "/usr/local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin",
-      runsBase: `${home}/.opensession-sessions/sandbox-runs`,
-      hostEntry: `${home}/projects/opensession/packages/core/opensession-server/src/runner-host/host.ts`,
-    });
+    );
     darwinLayouts.set(home, layout);
   }
   return layout;
@@ -332,34 +187,30 @@ function layoutFor(driver: {
   return remoteLayout(driver.os, driver.home);
 }
 
-/** The guest-side path of a host run dir (RUNS_BASE/<session>/<host>). */
-export function guestRunDir(L: RemoteLayout, hostDir: string): string {
-  if (L.runsBase === RUNS_BASE || !hostDir.startsWith(RUNS_BASE))
-    return hostDir;
-  return `${L.runsBase}${hostDir.slice(RUNS_BASE.length)}`;
+/** The self-contained workload identity client every Sandbox carries. It is
+ *  uploaded as one file, so the base runtime never depends on the runner
+ *  payload (and a deploy never invalidates it). */
+const WORKLOAD_IDENTITY_CLIENT_SOURCE = `${REPO_ROOT}/scripts/workload-identity-client.ts`;
+
+function workloadIdentityClientPath(L: RemoteLayout): string {
+  return `${L.home}/.local/share/opensession/workload-identity-client.ts`;
 }
 
 /** Shell that installs the sandbox-only `opensession` command surface
- *  (workload identity minting) under ~/.local/bin. Linux symlinks the
- *  committed wrapper, whose bun/repo paths are the Linux layout; other guests
- *  get a generated wrapper naming their own layout. */
-function workloadIdentityClientInstallCommand(L: RemoteLayout): string {
+ *  (workload identity minting) under ~/.local/bin, as a wrapper around the
+ *  uploaded client. Idempotent. */
+export function workloadIdentityClientInstallCommand(L: RemoteLayout): string {
   const target = `${L.home}/.local/bin/opensession`;
-  if (L.os === "linux") {
-    return (
-      `mkdir -p ${L.home}/.local/bin && ` +
-      `chmod 755 ${L.repo}/deploy/sandbox/opensession && ` +
-      `ln -sf ${L.repo}/deploy/sandbox/opensession ${target} && ` +
-      `test -x ${target}`
-    );
-  }
   const wrapper =
     "#!/bin/sh\n" +
-    `exec ${L.bun} ${L.repo}/scripts/workload-identity-client.ts "$@"\n`;
+    "# Sandbox-only Open Session command surface: workload identity minting.\n" +
+    `exec ${L.bun} ${workloadIdentityClientPath(L)} "$@"\n`;
   return (
     `mkdir -p ${L.home}/.local/bin && ` +
+    `rm -f ${shellQuoteWord(target)} && ` +
     `printf %s ${shellQuoteWord(wrapper)} > ${shellQuoteWord(target)} && ` +
-    `chmod 755 ${shellQuoteWord(target)} && test -x ${target}`
+    `chmod 755 ${shellQuoteWord(target)} && test -x ${shellQuoteWord(target)} && ` +
+    `test -s ${shellQuoteWord(workloadIdentityClientPath(L))}`
   );
 }
 
@@ -405,257 +256,9 @@ export function shellQuote(argv: string[]): string {
   return argv.map(shellQuoteWord).join(" ");
 }
 
-function envPrefix(env: Record<string, string>): string {
-  const parts = Object.entries(env).map(
-    ([k, v]) => `${k}=${shellQuoteWord(v)}`,
-  );
-  return parts.length ? `env ${parts.join(" ")} ` : "";
-}
-
 // Re-exported for the existing importers of this module's URL redaction; the
 // implementation moved to the shared util so non-sandbox code can use it too.
 export { redactUrl };
-
-// ── Per-launch engine config projection ──────────────────────────────────────
-
-type JsonRecord = Record<string, unknown>;
-
-function jsonRecord(value: unknown): JsonRecord | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as JsonRecord)
-    : null;
-}
-
-/** The third-party provider selected by an pi/<provider>/<model> id.
- * Anthropic/OpenAI use subscription material, never native auth. */
-export function remoteModelProviderId(
-  model: string | undefined,
-): string | null {
-  const match = String(model || "").match(/^pi\/([^/]+)\//);
-  const provider = match?.[1];
-  return provider && provider !== "anthropic" && provider !== "openai"
-    ? provider
-    : null;
-}
-
-/** Allowlisted Pi config for a guest. Unknown future host fields must not
- * silently cross the sandbox trust boundary. */
-export function projectRemotePiConfig(raw: unknown): string | null {
-  const cfg = normalizePiConfig(raw);
-  if (!cfg.enabled) return null;
-  return (
-    JSON.stringify(
-      {
-        enabled: true,
-        pickerModels: cfg.pickerModels,
-        ...(cfg.anthropicTransport === "bridge"
-          ? { anthropicTransport: "bridge" }
-          : {}),
-      },
-      null,
-      2,
-    ) + "\n"
-  );
-}
-
-function remoteReachableModels(
-  model: string | undefined,
-  fallbackModel?: string,
-): string[] {
-  const primary = toPiModel(model) || model;
-  return [
-    primary,
-    ...fallbackPlan(primary, fallbackModel).map(
-      (hop) => toPiModel(hop.id) || hop.id,
-    ),
-  ].filter(
-    (candidate): candidate is string =>
-      typeof candidate === "string" && !!candidate,
-  );
-}
-
-export function remoteRunNeedsOpenai(
-  model: string | undefined,
-  fallbackModel?: string,
-): boolean {
-  return remoteReachableModels(model, fallbackModel).some((candidate) =>
-    /^pi\/openai\//.test(candidate),
-  );
-}
-
-export function remoteRunNeedsAnthropic(
-  model: string | undefined,
-  fallbackModel?: string,
-): boolean {
-  return remoteReachableModels(model, fallbackModel).some((candidate) =>
-    /^pi\/anthropic\//.test(candidate),
-  );
-}
-
-export function remoteRunNeedsXai(
-  model: string | undefined,
-  fallbackModel?: string,
-): boolean {
-  const prefix = `pi/${XAI_OAUTH_PROVIDER}/`;
-  return remoteReachableModels(model, fallbackModel).some((candidate) =>
-    candidate.startsWith(prefix),
-  );
-}
-
-function remoteSettingsProviderIds(
-  model: string | undefined,
-  fallbackModel?: string,
-): Set<string> {
-  return new Set(
-    remoteReachableModels(model, fallbackModel)
-      .map(remoteModelProviderId)
-      .filter((id): id is string => !!id),
-  );
-}
-
-/**
- * Account identity and pin policy for one remote run. `accountUser` is the
- * person whose personal subscriptions may be uploaded: the takeover identity
- * when the trusted host set one, else the run user, else the session creator
- * (providerAccountUser drops machine actors). An automation's own turn names
- * no person, so it must run on its pinned account and never rotates off it.
- * A person who took the session over pays with their own subscription,
- * personal accounts first and the shared pool as backup, so their turn
- * carries no pin. MCP and GitHub policy keep reading spec.user, so the
- * automation's restrictions still apply to that turn.
- */
-export function remoteRunAccountPolicy(
-  spec: Pick<
-    RunHostSpec,
-    "trustProfile" | "user" | "accountUser" | "mcpGrantUser"
-  >,
-): { accountUser: string | undefined; pinnedAutomationTurn: boolean } {
-  const accountUser = providerAccountUser(
-    spec.accountUser ?? spec.user,
-    spec.mcpGrantUser,
-  );
-  return {
-    accountUser,
-    pinnedAutomationTurn: spec.trustProfile === "automation" && !accountUser,
-  };
-}
-
-/** Strip host-only and unknown account fields before writing Claude tokens to a guest. */
-export function projectRemoteClaudeAccounts(
-  accounts: ClaudeAccount[],
-): ClaudeAccount[] {
-  return accounts.map((account) => ({
-    id: account.id,
-    name: account.name,
-    token: account.token,
-    createdAt: account.createdAt,
-    ...(account.owner ? { owner: account.owner } : {}),
-  }));
-}
-
-/**
- * Project host Pi settings into fields consumed by an in-guest runner.
- * Third-party API keys are included only for providers reachable by this
- * launch's primary and fallback walk. Unreachable configured keys stay host-side.
- */
-export function projectRemoteModelProviderConfig(
-  raw: unknown,
-  model: string | undefined,
-  trustProfile: "interactive" | "automation" = "interactive",
-  pinnedAccountId?: string,
-  fallbackModel?: string,
-): { content: string; settingsProviderIds: string[] } {
-  const source = jsonRecord(raw);
-  if (!source) throw new Error("Pi config must be a JSON object");
-
-  const out: JsonRecord = {};
-  if (typeof source.enabled === "boolean") out.enabled = source.enabled;
-  if (typeof source.port === "number") out.port = source.port;
-  if (typeof source.turnTimeoutMinutes === "number")
-    out.turnTimeoutMinutes = source.turnTimeoutMinutes;
-  if (typeof source.bridgeMaxRequestsPerHour === "number")
-    out.bridgeMaxRequestsPerHour = source.bridgeMaxRequestsPerHour;
-  if (typeof source.orchestrator === "boolean")
-    out.orchestrator = source.orchestrator;
-  if (Array.isArray(source.pickerModels))
-    out.pickerModels = source.pickerModels.filter(
-      (value): value is string => typeof value === "string",
-    );
-  if (trustProfile === "automation" && pinnedAccountId) {
-    out.bridgeAccountIds = [pinnedAccountId];
-  } else if (Array.isArray(source.bridgeAccountIds)) {
-    out.bridgeAccountIds = source.bridgeAccountIds.filter(
-      (value): value is string => typeof value === "string",
-    );
-  }
-
-  const bridge = jsonRecord(source.bridge);
-  if (bridge) {
-    const projectedBridge: JsonRecord = {};
-    if (["meridian", "native", "off"].includes(String(bridge.mode)))
-      projectedBridge.mode = bridge.mode;
-    if (trustProfile === "automation" && pinnedAccountId) {
-      projectedBridge.accounts = [pinnedAccountId];
-      projectedBridge.openaiAccounts = [pinnedAccountId];
-      projectedBridge.xaiAccounts = [pinnedAccountId];
-    } else {
-      if (Array.isArray(bridge.accounts))
-        projectedBridge.accounts = bridge.accounts.filter(
-          (value): value is string => typeof value === "string",
-        );
-      if (Array.isArray(bridge.openaiAccounts))
-        projectedBridge.openaiAccounts = bridge.openaiAccounts.filter(
-          (value): value is string => typeof value === "string",
-        );
-      if (Array.isArray(bridge.xaiAccounts))
-        projectedBridge.xaiAccounts = bridge.xaiAccounts.filter(
-          (value): value is string => typeof value === "string",
-        );
-    }
-    if (Object.keys(projectedBridge).length) out.bridge = projectedBridge;
-  }
-
-  const settingsProviders: JsonRecord = {};
-  const reachableSettingsProviders = remoteSettingsProviderIds(
-    model,
-    fallbackModel,
-  );
-  if (reachableSettingsProviders.size) {
-    // The normalized read merges `catalogFile` and `discovered` rows into one
-    // `catalog` per provider; the guest gets that merged table, never the
-    // host path.
-    const normalizedProviders =
-      normalizeModelProviderConfig(source)?.providers || {};
-    for (const [id, value] of Object.entries(
-      jsonRecord(source.providers) || {},
-    )) {
-      if (id === "anthropic" || id === "openai") continue;
-      if (!reachableSettingsProviders.has(id)) continue;
-      const provider = jsonRecord(value);
-      if (!provider) continue;
-      const projected: JsonRecord = {};
-      if (typeof provider.apiKey === "string" && provider.apiKey)
-        projected.apiKey = provider.apiKey;
-      if (typeof provider.baseURL === "string" && provider.baseURL)
-        projected.baseURL = provider.baseURL;
-      // A custom OpenAI-compatible gateway needs its protocol and catalog in
-      // the guest too.
-      if (typeof provider.api === "string" && provider.api)
-        projected.api = provider.api;
-      if (typeof provider.name === "string" && provider.name)
-        projected.name = provider.name;
-      const catalog = normalizedProviders[id]?.catalog;
-      if (catalog && Object.keys(catalog).length) projected.catalog = catalog;
-      if (Object.keys(projected).length) settingsProviders[id] = projected;
-    }
-  }
-  if (Object.keys(settingsProviders).length) out.providers = settingsProviders;
-
-  return {
-    content: JSON.stringify(out, null, 2) + "\n",
-    settingsProviderIds: Object.keys(settingsProviders).sort(),
-  };
-}
 
 // ── Provider state files (mirror docker's, namespaced per provider) ──────────
 
@@ -1022,178 +625,6 @@ export async function remoteCloneUrl(
     : await injectCloneCredential(https);
 }
 
-// ── Runner payload resolution ─────────────────────────────────────────────────
-
-/** Public clone URL of the Open Session repo: the runner payload a release
- *  install (no git checkout, so no origin) bootstraps remote sandboxes from. */
-export const DEFAULT_RUNNER_REPO_URL =
-  "https://github.com/tellahq/opensession.git";
-
-/** What a remote sandbox installs as its Open Session runner. */
-export interface RunnerPayload {
-  /** Tarball URL (`runnerBundleUrl`): extracted, never cloned. */
-  bundleUrl?: string;
-  /** Credential-free https clone URL when there is no bundle. */
-  repoUrl?: string;
-  /** Sha/ref the checkout is reconciled to; undefined = default branch. */
-  pin?: string;
-  /** `pin` names a tag: fetched as `tag <pin>` so the name resolves after a
-   *  shallow fetch into an already-cloned sandbox. */
-  pinIsTag?: boolean;
-  /** Where the payload came from, for the bootstrap log. */
-  source: "bundle" | "config" | "origin" | "release";
-}
-
-export interface RunnerPayloadInputs {
-  runnerBundleUrl?: string;
-  runnerRepoUrl?: string;
-  runnerSha?: string;
-  /** `git remote get-url origin` of the host source tree, "" when none. */
-  origin: string;
-  /** `git rev-parse HEAD` of the host source tree, undefined when unknown. */
-  head?: string;
-  /** `release.json` of a release install, null for a source checkout. */
-  release: { version?: string; commit?: string } | null;
-}
-
-/** `v<version>` for a published release version (`0.4.55`); undefined for an
- *  ad-hoc build (`0.1.0+abc1234`) that no tag was pushed for. */
-export function releaseTag(version: string | undefined): string | undefined {
-  if (!version || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version))
-    return undefined;
-  return `v${version}`;
-}
-
-/**
- * Resolve the runner payload: `runnerBundleUrl`, then `runnerRepoUrl`, then
- * the host checkout's origin (a contributor install), then the public
- * tellahq/opensession repo pinned at the installed release's tag (a stock
- * `install.sh` release install, which is not a git checkout and has no
- * origin). Pure so the fallback order is unit-testable without a git tree.
- */
-export function resolveRunnerPayload(
-  input: RunnerPayloadInputs,
-): RunnerPayload {
-  const pin = input.runnerSha || undefined;
-  if (input.runnerBundleUrl) {
-    return { bundleUrl: input.runnerBundleUrl, pin, source: "bundle" };
-  }
-  const configured = input.runnerRepoUrl && toHttpsUrl(input.runnerRepoUrl);
-  if (configured) {
-    return {
-      repoUrl: credentialFreeHttpsUrl(configured),
-      pin,
-      source: "config",
-    };
-  }
-  const origin = input.origin && toHttpsUrl(input.origin);
-  if (origin) {
-    // A source install runs its sandboxes at the commit it runs itself, so
-    // every deploy carries the runner along. An explicit runnerSha still
-    // wins for a deliberate hold or rollback.
-    return {
-      repoUrl: credentialFreeHttpsUrl(origin),
-      pin: pin || input.head || undefined,
-      source: "origin",
-    };
-  }
-  if (input.release) {
-    const tag = pin ? undefined : releaseTag(input.release.version);
-    return {
-      repoUrl: DEFAULT_RUNNER_REPO_URL,
-      pin: pin || tag,
-      pinIsTag: Boolean(tag),
-      source: "release",
-    };
-  }
-  throw new Error(
-    `runner repo has no https-reachable origin (origin="${redactUrl(input.origin) || "none"}") and this is not a release install — remote sandboxes clone the runner over https; set runnerRepoUrl or runnerBundleUrl in sandbox.json`,
-  );
-}
-
-/** Root of the install this server runs from. In the compiled binary,
- *  REPO_ROOT is a virtual in-bundle path; the release dir is where the
- *  executable lives (following the shim symlink). */
-function installRoot(): string {
-  if (!isCompiledBinary()) return REPO_ROOT;
-  try {
-    return dirname(realpathSync(process.execPath));
-  } catch {
-    return dirname(process.execPath);
-  }
-}
-
-let hostRunnerSourceCache:
-  | {
-      origin: string;
-      head?: string;
-      release: RunnerPayloadInputs["release"];
-    }
-  | undefined;
-
-/** Origin and release manifest of the host install. Neither changes while
- *  the process lives (a release tree is immutable, and a checkout's origin is
- *  not something the server edits), so read once. */
-function hostRunnerSource(): {
-  origin: string;
-  head?: string;
-  release: RunnerPayloadInputs["release"];
-} {
-  if (hostRunnerSourceCache) return hostRunnerSourceCache;
-  let release: RunnerPayloadInputs["release"] = null;
-  try {
-    const parsed = JSON.parse(
-      readFileSync(resolve(installRoot(), "release.json"), "utf8"),
-    );
-    if (parsed && typeof parsed === "object") {
-      release = {
-        version:
-          typeof parsed.version === "string" ? parsed.version : undefined,
-        commit: typeof parsed.commit === "string" ? parsed.commit : undefined,
-      };
-    }
-  } catch {}
-  let origin = "";
-  let head: string | undefined;
-  if (!isCompiledBinary()) {
-    const git = (...args: string[]) => {
-      const proc = Bun.spawnSync({
-        cmd: ["git", "-C", REPO_ROOT, ...args],
-        stdout: "pipe",
-        stderr: "ignore",
-      });
-      return proc.exitCode === 0 ? proc.stdout.toString().trim() : "";
-    };
-    origin = git("remote", "get-url", "origin");
-    head = /^[0-9a-f]{40}$/.test(git("rev-parse", "HEAD"))
-      ? git("rev-parse", "HEAD")
-      : undefined;
-  }
-  hostRunnerSourceCache = { origin, head, release };
-  return hostRunnerSourceCache;
-}
-
-/** The runner payload for this host and the current sandbox config. */
-export function hostRunnerPayload(): RunnerPayload {
-  const cfg = sandboxConfig();
-  return resolveRunnerPayload({
-    runnerBundleUrl: cfg.runnerBundleUrl,
-    runnerRepoUrl: cfg.runnerRepoUrl,
-    runnerSha: cfg.runnerSha,
-    ...hostRunnerSource(),
-  });
-}
-
-/** Same, but never throws: signatures are computed off the hot path where an
- *  unresolvable payload must degrade to "unpinned", not crash the caller. */
-function hostRunnerPayloadOrNull(): RunnerPayload | null {
-  try {
-    return hostRunnerPayload();
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Fast dial-back preflight for remote sandboxes: before the multi-second
  * (cold: multi-minute) bootstrap, prove the sandbox can reach the URL runs
@@ -1237,97 +668,6 @@ function need(r: ExecResult, what: string): void {
       `remote sandbox bootstrap failed (${what}, exit ${r.exitCode}): ${redactUrl((r.stderr.trim() || r.stdout.trim() || "no command output").slice(0, 500))}`,
     );
   }
-}
-
-/** What the bootstrap marker records — a prewarmed sandbox is only adoptable
- *  while its recorded signature still matches this (prewarm.ts claim check).
- *  The pi pin is part of it so sandboxes bootstrapped before pi
- *  was in the payload (or on an older pin) re-bootstrap instead of failing
- *  every pi/* run with a missing binary. */
-export function bootstrapSignature(): string {
-  const payload = hostRunnerPayloadOrNull();
-  const base = payload?.pin || payload?.bundleUrl || "unpinned";
-  return (
-    `${base}+node@${REMOTE_NODE_VERSION}+just@${REMOTE_JUST_VERSION}` +
-    `+gh@${REMOTE_GH_VERSION}+${REMOTE_RUNTIME_REVISION}`
-  );
-}
-
-/** Toolchain identity for DURABLE repo templates: everything bootstrap
- * installs that a restored sandbox cannot cheaply reconcile in place.
- * Deliberately excludes the runnerSha commit pin itself: on adoption,
- * bootstrapRemoteSandbox already reconciles a stale checkout with a shallow
- * fetch + detached checkout of the pin, an incremental frozen-lockfile
- * install, and a forced runner recompile — seconds to a minute inside the
- * restored filesystem. Keying templates on the pin instead threw away every
- * provider artifact (full re-clone + project setup + re-snapshot) on every
- * deploy. The runner repo's committed lockfile stands in for the dependency
- * payload: templates survive code-only runner bumps and still rotate when
- * the dependency set actually moves. */
-export function runnerToolchainSignature(): string {
-  const payload = hostRunnerPayloadOrNull();
-  const base = payload?.pin
-    ? runnerLockfileOid(payload.pin)
-    : payload?.bundleUrl || "unpinned";
-  return (
-    `${base}+node@${REMOTE_NODE_VERSION}+just@${REMOTE_JUST_VERSION}` +
-    `+gh@${REMOTE_GH_VERSION}+${REMOTE_RUNTIME_REVISION}`
-  );
-}
-
-/** bun.lock blob oid at the pinned runner commit — falling back to the local
- * checkout's HEAD when the pin isn't resolvable here, then to the pin itself
- * so an unreadable repo degrades to per-deploy invalidation, never to silent
- * reuse across an unknown dependency change. */
-function runnerLockfileOid(runnerSha: string): string {
-  for (const rev of [runnerSha, "HEAD"]) {
-    const proc = Bun.spawnSync({
-      cmd: [
-        "git",
-        "-C",
-        REPO_ROOT,
-        "rev-parse",
-        "--verify",
-        "--quiet",
-        `${rev}:bun.lock`,
-      ],
-      stdout: "pipe",
-      stderr: "ignore",
-    });
-    const oid = proc.exitCode === 0 ? proc.stdout.toString().trim() : "";
-    if (oid) return `lock:${oid}`;
-  }
-  return runnerSha;
-}
-
-function remoteRunnerInstallCommand(
-  force = false,
-  L: RemoteLayout = LINUX_LAYOUT,
-): string {
-  const temporary = `${L.runnerBinary}.tmp`;
-  return (
-    `${force ? `rm -f ${shellQuoteWord(L.runnerBinary)} && ` : ""}` +
-    `test -x ${shellQuoteWord(L.runnerBinary)} || { ` +
-    `cd ${shellQuoteWord(L.repo)} && rm -f ${shellQuoteWord(temporary)} && ` +
-    `HOME=${L.home} ${L.bun} build --compile ` +
-    `packages/core/opensession-server/src/main.ts --outfile ${shellQuoteWord(temporary)} ` +
-    // Runner/MCP processes never serve the gateway UI. Treat its HTML import
-    // as external, as worker sidecars do, rather than bundling the web app.
-    `--external ${shellQuoteWord("*.html")} --external oxc-transform-react ` +
-    `--external sharp --external ${shellQuoteWord("@img/*")} && ` +
-    `chmod 755 ${shellQuoteWord(temporary)} && mv ${shellQuoteWord(temporary)} ${shellQuoteWord(L.runnerBinary)}; }`
-  );
-}
-
-export function remoteRunnerHostCommand(
-  specPath: string,
-  L: RemoteLayout = LINUX_LAYOUT,
-): string {
-  return (
-    `if [ -x ${shellQuoteWord(L.runnerBinary)} ]; then ` +
-    `exec ${shellQuoteWord(L.runnerBinary)} runner-host ${shellQuoteWord(specPath)}; ` +
-    `else exec ${L.bun} run ${shellQuoteWord(L.hostEntry)} ${shellQuoteWord(specPath)}; fi`
-  );
 }
 
 /**
@@ -1475,9 +815,9 @@ async function bootstrapRemoteBaseRuntime(
     `writable ${L.home} (image needs passwordless sudo or a prebaked /home/ubuntu)`,
   );
 
-  // Provider base images vary. Install the same workspace/preview contract as
-  // deploy/sandbox/Dockerfile: native build tools for dependency installs,
-  // direnv/lsof for lifecycle scripts, and the generic runner utilities.
+  // Provider base images vary. Install the same workspace contract on each:
+  // native build tools for dependency installs, direnv/lsof for lifecycle
+  // scripts, and the generic shell utilities the workspace tools use.
   const tools = await driver.exec(
     'for c in git curl unzip rg sed nl wc base64 python3 make g++ direnv lsof; do command -v "$c" >/dev/null 2>&1 || echo "$c"; done',
   );
@@ -1568,10 +908,9 @@ async function bootstrapRemoteBaseRuntime(
     `just ${REMOTE_JUST_VERSION} check`,
   );
 
-  // gh: the Docker sandbox image (deploy/sandbox/Dockerfile) ships it, and
-  // agent runs rely on it for GitHub interactions such as PRs, checks, and API calls.
-  // Remote provider base images (Daytona and friends) don't carry it, so
-  // install the pinned official release, checksum-verified, into /usr/local/bin.
+  // gh: agent shell commands rely on it for GitHub work such as PRs, checks,
+  // and API calls. Provider base images don't carry it, so install the pinned
+  // official release, checksum-verified, into /usr/local/bin.
   const remoteGh = "/usr/local/bin/gh";
   log(`ensuring gh ${REMOTE_GH_VERSION}…`);
   need(
@@ -1626,188 +965,83 @@ async function ensureRemoteBunxShim(
   log("ready");
 }
 
+/** What the base runtime marker records: the toolchain every Sandbox gets
+ *  (workspace tools, Node, just, gh, bun, the workload identity client). It
+ *  names no runner commit, so a deploy leaves prepared Sandboxes alone. */
+export function baseRuntimeSignature(): string {
+  return (
+    `base+node@${REMOTE_NODE_VERSION}+just@${REMOTE_JUST_VERSION}` +
+    `+gh@${REMOTE_GH_VERSION}+${REMOTE_RUNTIME_REVISION}+${BASE_RUNTIME_REVISION}`
+  );
+}
+
+/** Bump when the base runtime contract (not a pinned version) changes. */
+const BASE_RUNTIME_REVISION = "base-runtime-v1";
+
+function baseRuntimeMarker(L: RemoteLayout): string {
+  return `${L.home}/.opensession-base-runtime`;
+}
+
+async function installWorkloadIdentityClient(
+  driver: RemoteDriver,
+  L: RemoteLayout,
+): Promise<void> {
+  const source = await readFile(WORKLOAD_IDENTITY_CLIENT_SOURCE, "utf8");
+  need(
+    await driver.exec(
+      `mkdir -p ${shellQuoteWord(dirname(workloadIdentityClientPath(L)))}`,
+    ),
+    "workload identity client directory",
+  );
+  await driver.writeFile(workloadIdentityClientPath(L), source);
+  need(
+    await driver.exec(workloadIdentityClientInstallCommand(L)),
+    "workload identity client install",
+  );
+}
+
 /**
- * Install the runner payload in a fresh remote sandbox (idempotent — a marker
- * file short-circuits every later call). See the module header for what/why
- * and the cold-start cost.
+ * The runtime every Sandbox needs, whatever runs in it: workspace tools,
+ * pinned Node/just/gh, bun (lifecycle hooks and the Portal relay), and the
+ * `opensession` identity command. Idempotent: a matching marker costs one
+ * command, which also repairs the identity command (Box archive/resume can
+ * drop an executable bit even though the marker survives).
+ */
+export async function ensureRemoteBaseRuntime(
+  driver: RemoteDriver,
+  label: string,
+): Promise<void> {
+  const L = layoutFor(driver);
+  const signature = baseRuntimeSignature();
+  const marker = await driver.exec(
+    `cat ${shellQuoteWord(baseRuntimeMarker(L))} 2>/dev/null`,
+  );
+  if (marker.exitCode === 0 && marker.stdout.trim() === signature) {
+    const repaired = await driver.exec(workloadIdentityClientInstallCommand(L));
+    if (repaired.exitCode === 0) return;
+    await installWorkloadIdentityClient(driver, L);
+    return;
+  }
+  await bootstrapRemoteBaseRuntime(driver, label);
+  await installWorkloadIdentityClient(driver, L);
+  need(
+    await driver.exec(
+      `printf '%s' ${shellQuoteWord(signature)} > ${shellQuoteWord(baseRuntimeMarker(L))}`,
+    ),
+    "base runtime marker",
+  );
+}
+
+/**
+ * Prepare a remote sandbox for a session: the base runtime (idempotent; a
+ * marker short-circuits every later call). The agent loop runs on this
+ * server, so nothing else is installed.
  */
 export async function bootstrapRemoteSandbox(
   driver: RemoteDriver,
   label: string,
 ): Promise<void> {
-  const L = layoutFor(driver);
-  const signature = bootstrapSignature();
-  const marker = await driver.exec(`cat ${L.bootstrapMarker} 2>/dev/null`);
-  if (marker.exitCode === 0 && marker.stdout.trim() === signature) {
-    // Box archive/resume reconstructs parts of the filesystem from Git and can
-    // drop an operator-applied executable bit even though the durable bootstrap
-    // marker survives. Repair the tiny workload-identity entrypoint on every
-    // adoption instead of rerunning the full runtime install.
-    need(
-      await driver.exec(
-        `${workloadIdentityClientInstallCommand(L)} && ` +
-          `(${remoteRunnerInstallCommand(false, L)})`,
-      ),
-      "workload identity client repair",
-    );
-    return;
-  }
-  const log = (msg: string) =>
-    console.log(`[sandbox:${label}] bootstrap: ${msg}`);
-
-  await bootstrapRemoteBaseRuntime(driver, label);
-
-  // Runner bundle: tarball if configured, else git clone at the pinned sha
-  // (see resolveRunnerPayload for the fallback order). Resolve the
-  // authenticated runner URL per bootstrap, use it only for the bounded
-  // clone/fetch commands, then leave a credential-free origin behind.
-  const payload = hostRunnerPayload();
-  const runnerCloneUrl = payload.repoUrl
-    ? await injectCloneCredential(payload.repoUrl)
-    : undefined;
-  if (payload.source === "release") {
-    log(
-      `release install without a git origin — runner payload is ${redactUrl(payload.repoUrl!)}` +
-        (payload.pin
-          ? ` at ${payload.pin}`
-          : " at its default branch (unpinned)"),
-    );
-  }
-  const hasRepo = await driver.exec(`test -f ${L.repo}/package.json`);
-  if (hasRepo.exitCode !== 0) {
-    if (payload.bundleUrl) {
-      log(`fetching runner bundle from ${redactUrl(payload.bundleUrl)}…`);
-      need(
-        await driver.exec(
-          `mkdir -p ${L.repo} && curl -fsSL ${shellQuoteWord(payload.bundleUrl)} | tar -xz --strip-components=1 -C ${L.repo}`,
-          { timeoutMs: 600_000 },
-        ),
-        "runner bundle download",
-      );
-    } else {
-      log(`cloning runner repo ${redactUrl(runnerCloneUrl!)}…`);
-      need(
-        await driver.exec(
-          `mkdir -p ${dirname(L.repo)} && git clone -- ${shellQuoteWord(runnerCloneUrl!)} ${L.repo}`,
-          { timeoutMs: 600_000 },
-        ),
-        "runner repo clone",
-      );
-    }
-  }
-
-  // Reconcile the checkout with the pinned runnerSha — OUTSIDE the clone block,
-  // so it also runs when the repo already exists. (A runnerSha bump used to be
-  // silently skipped on an already-bootstrapped sandbox: the `test -f
-  // package.json` guard short-circuited the fetch/checkout, yet the signature
-  // marker below was rewritten, freezing the old code forever.) The marker is
-  // only written after the checkout verifiably matches the pin.
-  if (payload.pin) {
-    const runnerSha = payload.pin;
-    const isGit = await driver.exec(`test -d ${L.repo}/.git`);
-    if (isGit.exitCode !== 0) {
-      // Tarball payload (runnerBundleUrl) — no git history to reconcile; the
-      // signature marker keys on the sha, so a bump with a stale bundle keeps
-      // re-running bootstrap loudly instead of pretending it applied.
-      log(
-        `runnerSha ${runnerSha} pinned but ${L.repo} is not a git checkout — skipping reconcile`,
-      );
-    } else {
-      const head = async () =>
-        (await driver.exec(`git -C ${L.repo} rev-parse HEAD`)).stdout.trim();
-      const resolvePin = async () =>
-        (
-          await driver.exec(
-            `git -C ${L.repo} rev-parse --verify --quiet ${shellQuoteWord(`${runnerSha}^{commit}`)}`,
-          )
-        ).stdout.trim();
-      let pin = await resolvePin();
-      if (!pin || (await head()) !== pin) {
-        log(`checking out pinned runnerSha ${runnerSha}…`);
-        // A shallow fetch of a bare tag name lands only in FETCH_HEAD; `tag
-        // <name>` fetches it into refs/tags so the checkout below resolves it.
-        const fetchRef = payload.pinIsTag
-          ? `tag ${shellQuoteWord(runnerSha)}`
-          : shellQuoteWord(runnerSha);
-        need(
-          await driver.exec(
-            `git -C ${L.repo} fetch --depth 1 ${shellQuoteWord(runnerCloneUrl!)} ${fetchRef} && git -C ${L.repo} checkout --detach ${shellQuoteWord(runnerSha)}`,
-            { timeoutMs: 300_000 },
-          ),
-          `checkout of pinned runnerSha ${runnerSha}`,
-        );
-        pin = await resolvePin();
-        const now = await head();
-        if (!pin || now !== pin) {
-          throw new Error(
-            `remote sandbox bootstrap failed: checkout landed on ${now || "unknown"}, not pinned runnerSha ${runnerSha}`,
-          );
-        }
-      }
-    }
-  }
-
-  if (runnerCloneUrl) {
-    need(
-      await driver.exec(
-        `git -C ${L.repo} remote set-url origin ${shellQuoteWord(credentialFreeHttpsUrl(runnerCloneUrl))}`,
-      ),
-      "runner repo credential scrub",
-    );
-  }
-
-  log("bun install (this is the slow part — several minutes cold)…");
-  need(
-    await driver.exec(
-      `cd ${L.repo} && HOME=${L.home} ${L.bun} install --frozen-lockfile`,
-      {
-        timeoutMs: 900_000,
-      },
-    ),
-    "bun install of the runner bundle",
-  );
-  need(
-    await driver.exec(workloadIdentityClientInstallCommand(L)),
-    "workload identity client install",
-  );
-  log("compiling the single-file runner host…");
-  need(
-    await driver.exec(remoteRunnerInstallCommand(true, L), {
-      timeoutMs: 600_000,
-    }),
-    "compiled runner host install",
-  );
-
-  log("ensuring claude CLI…");
-  need(
-    await driver.exec(
-      `env PATH=${shellQuoteWord(L.path)} sh -c 'command -v claude >/dev/null 2>&1' || ` +
-        `HOME=${L.home} BUN_INSTALL=${L.home}/.bun ${L.bun} add -g @anthropic-ai/claude-code`,
-      { timeoutMs: 300_000 },
-    ),
-    "claude CLI install",
-  );
-
-  need(
-    await driver.exec(
-      `mkdir -p ${L.home}/.claude && { test -s ${L.home}/.claude/settings.json || printf '{}' > ${L.home}/.claude/settings.json; }`,
-    ),
-    "~/.claude seed",
-  );
-
-  // NOTE: the Claude account pool is NOT uploaded here. Bootstrap is per
-  // sandbox and knows nothing about the run, so it used to ship the FULL
-  // store — including other users' personal subscriptions — to third-party
-  // compute. The scoped upload now happens per launch in makeRemoteLauncher
-  // (see the module header's credential note).
-
-  need(
-    await driver.exec(
-      `printf '%s' ${shellQuoteWord(signature)} > ${L.bootstrapMarker}`,
-    ),
-    "bootstrap marker",
-  );
-  log("done");
+  await ensureRemoteBaseRuntime(driver, label);
 }
 
 // ── Workspace (always volume-style: cloned inside the sandbox) ───────────────
@@ -2155,16 +1389,28 @@ export async function setupRemoteWorkspace(
     // provider round trip. If anything after attach fails, remove the mount or
     // symlink before the cold-clone fallback. Otherwise a transient warm fetch
     // failure poisons the fallback with an already-existing destination.
+    // A checkpoint restore right after needs only the branch name: it
+    // fetches the checkpoint (which carries its own history) and moves the
+    // branch onto it. Fetching the branch and the default branch first costs
+    // two negotiations over a freshly restored, lazily loaded disk (about 40s
+    // on a large repository) for refs the restore then replaces.
+    const restoresCheckpoint =
+      options.restoreCheckpoint?.branch === branch &&
+      !!options.restoreCheckpoint;
+    const branchStep = restoresCheckpoint
+      ? `git -C ${shellQuoteWord(cwd)} update-ref ${shellQuoteWord(`refs/heads/${branch}`)} HEAD && ` +
+        `git -C ${shellQuoteWord(cwd)} symbolic-ref HEAD ${shellQuoteWord(`refs/heads/${branch}`)}`
+      : `(if ${fetchRef(branch)}; then __start=${shellQuoteWord(`origin/${branch}`)}; else ` +
+        `${fetchRef(defaultBranch)} && __start=${shellQuoteWord(`origin/${defaultBranch}`)}; fi; ` +
+        `if [ "$(git -C ${shellQuoteWord(cwd)} rev-parse HEAD)" = "$(git -C ${shellQuoteWord(cwd)} rev-parse "$__start")" ]; then ` +
+        `git -C ${shellQuoteWord(cwd)} update-ref ${shellQuoteWord(`refs/heads/${branch}`)} "$__start" && ` +
+        `git -C ${shellQuoteWord(cwd)} symbolic-ref HEAD ${shellQuoteWord(`refs/heads/${branch}`)}; else ` +
+        `git -C ${shellQuoteWord(cwd)} checkout -B ${shellQuoteWord(branch)} "$__start"; fi)`;
     const prepare =
       `{ if [ -f ${shellQuoteWord(owner)} ] && [ "$(cat ${shellQuoteWord(owner)})" != ${shellQuoteWord(cwd)} ]; then exit 73; fi; } && ` +
       `__rc=0; { (${attach}) && ` +
       `git -C ${shellQuoteWord(cwd)} remote set-url origin ${shellQuoteWord(cloneUrl)} && ` +
-      `(if ${fetchRef(branch)}; then __start=${shellQuoteWord(`origin/${branch}`)}; else ` +
-      `${fetchRef(defaultBranch)} && __start=${shellQuoteWord(`origin/${defaultBranch}`)}; fi; ` +
-      `if [ "$(git -C ${shellQuoteWord(cwd)} rev-parse HEAD)" = "$(git -C ${shellQuoteWord(cwd)} rev-parse "$__start")" ]; then ` +
-      `git -C ${shellQuoteWord(cwd)} update-ref ${shellQuoteWord(`refs/heads/${branch}`)} "$__start" && ` +
-      `git -C ${shellQuoteWord(cwd)} symbolic-ref HEAD ${shellQuoteWord(`refs/heads/${branch}`)}; else ` +
-      `git -C ${shellQuoteWord(cwd)} checkout -B ${shellQuoteWord(branch)} "$__start"; fi) && ` +
+      `${branchStep} && ` +
       `printf '%s\\n' ${shellQuoteWord(cwd)} > ${shellQuoteWord(owner)}; } || __rc=$?; ` +
       `if [ "$__rc" -ne 0 ]; then ${cleanup}; fi; exit "$__rc"`;
     const adopted = await driver.exec(prepare, { timeoutMs: 180_000 });
@@ -2489,628 +1735,6 @@ export async function runResumeHook(
   }
 }
 
-// ── Run launching (WS transport only — there is no socket option remotely) ───
-
-function sessionRunsDir(sessionId: string): string {
-  return `${RUNS_BASE}/${sanitizeName(sessionId)}`;
-}
-
-function readJsonSafe<T>(path: string): T | null {
-  try {
-    if (!existsSync(path)) return null;
-    return JSON.parse(readFileSync(path, "utf-8")) as T;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * HostLauncher over a RemoteDriver. Run-dir paths are identical host-side and
- * in-sandbox: spec.json exists in BOTH (host mirror feeds restart-resume;
- * the in-sandbox copy feeds HOST_ENTRY), meta/journal/log are sandbox-only.
- */
-function makeRemoteLauncher(
-  driver: RemoteDriver,
-  sessionId: string,
-  sandboxId: string,
-  provider: SandboxProviderId,
-  callbackBaseUrl = remoteSandboxCallbackBaseUrl(),
-): HostLauncher {
-  const L = layoutFor(driver);
-  // Host-side run dirs live under RUNS_BASE; the guest sees them at the
-  // layout's runsBase (identical on Linux, remapped on other guests).
-  const guest = (hostDir: string) => guestRunDir(L, hostDir);
-  return {
-    async alive(dir) {
-      const meta = await driver.exec(
-        `cat ${shellQuoteWord(`${guest(dir)}/meta.json`)} 2>/dev/null`,
-      );
-      if (meta.exitCode !== 0) return false;
-      let pid = 0;
-      try {
-        pid = Number(JSON.parse(meta.stdout)?.pid) || 0;
-      } catch {}
-      if (!pid) return false;
-      return (await driver.exec(`kill -0 ${pid}`)).exitCode === 0;
-    },
-    newRunDir: (hostId) =>
-      `${sessionRunsDir(sessionId)}/${sanitizeName(hostId)}`,
-    connector: (_dir, spec) =>
-      spec.wsToken ? runWsConnector(spec.hostId) : undefined,
-    async writeSpec(dir, spec) {
-      mkdirSync(dir, { recursive: true });
-      writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, spec, true, 0o600); // host mirror (resume)
-      const mk = await driver.exec(`mkdir -p ${shellQuoteWord(guest(dir))}`);
-      if (mk.exitCode !== 0) {
-        throw new Error(
-          `remote run dir create failed: ${mk.stderr.trim().slice(0, 300)}`,
-        );
-      }
-      const guestSpecPath = `${guest(dir)}/${HOST_SPEC_NAME}`;
-      await driver.writeFile(guestSpecPath, JSON.stringify(spec));
-      const secured = await driver.exec(
-        `chmod 600 ${shellQuoteWord(guestSpecPath)}`,
-      );
-      if (secured.exitCode !== 0) {
-        throw new Error(
-          `remote run spec chmod failed: ${secured.stderr.trim().slice(0, 300)}`,
-        );
-      }
-    },
-    async launch(hostId, dir, onDispatching) {
-      let dispatchAttempted = false;
-      const spec = readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`);
-      if (!spec?.wsToken) {
-        throw new Error(
-          `remote launch of ${hostId}: spec.json (with wsToken) missing from ${dir}`,
-        );
-      }
-      // Per-step timing marks: when a provider SDK call stalls (see the
-      // bounded execBackground below), the last mark names the culprit.
-      const t0 = Date.now();
-      const mark = (step: string) =>
-        console.log(
-          `[sandbox-remote] launch ${hostId.slice(0, 11)}: ${step} (+${Date.now() - t0}ms)`,
-        );
-      await driver.ensureStarted();
-      mark("sandbox started");
-      const secureFiles: string[] = [];
-      const secureDirectories: string[] = [];
-      const automationProfile = spec.trustProfile === "automation";
-      const { accountUser, pinnedAutomationTurn } =
-        remoteRunAccountPolicy(spec);
-      if (pinnedAutomationTurn && !spec.accountId) {
-        throw new Error(
-          "automation sandbox runs require a pinned model account",
-        );
-      }
-      // Scoped Claude account upload. A run whose reachable model walk never
-      // enters Anthropic receives no Claude token. Otherwise an explicit pin
-      // narrows every trust profile, and the guest record drops host-only and
-      // unknown fields before serialization.
-      const usesAnthropic = remoteRunNeedsAnthropic(
-        spec.model,
-        spec.fallbackModel,
-      );
-      const accounts = usesAnthropic
-        ? projectRemoteClaudeAccounts(
-            accountsForRemoteUpload(accountUser, spec.accountId),
-          )
-        : [];
-      if (
-        pinnedAutomationTurn &&
-        usesAnthropic &&
-        !accounts.some((account) => account.id === spec.accountId)
-      ) {
-        throw new Error(
-          "the pinned automation account is not an eligible Claude account",
-        );
-      }
-      // Resolve the run's MCP allowlist and dynamic credentials on the trusted
-      // host, then project only those entries. Remote guests never receive the
-      // instance-wide mcp-config.json. Automation specs are required to carry
-      // an explicit array (including [] for no external connectors).
-      if (automationProfile && spec.mcpServers === "all") {
-        throw new Error(
-          "automation sandbox runs require an explicit MCP allowlist",
-        );
-      }
-      const projectedMcp = filterMcpServers(
-        spec.mcpServers ?? "all",
-        spec.user,
-        [spec.mcpGrantUser, spec.user],
-      );
-      const claudeAccountsPath = `${L.home}/.opensession-claude-accounts.json`;
-      await Promise.all([
-        driver.writeFile(
-          claudeAccountsPath,
-          JSON.stringify({ accounts }, null, 2) + "\n",
-        ),
-        driver.writeFile(
-          L.mcpConfig,
-          JSON.stringify({ mcpServers: projectedMcp }, null, 2) + "\n",
-        ),
-      ]);
-      secureFiles.push(claudeAccountsPath, L.mcpConfig);
-
-      // GitHub credentials are projected through a private, run-scoped file,
-      // never spec.json, argv, or the persisted origin. A code run a connected
-      // person started acts as them (same gate as pi-runner's runGithubEnv:
-      // trusted profile, code mode, a human sender). Every other run receives
-      // a freshly minted repository-scoped App token: the code set for code
-      // mode, the read set for ask mode (the review workflows chew on
-      // untrusted PR content and can print their environment). Automations
-      // and machine senders never receive a person's token. A person's
-      // projection also names their login (non-secret) so the guest applies
-      // the merge guard the way a host run would; App tokens carry no login.
-      const githubPerson = githubCredentialUser(spec.user, spec.author?.name);
-      let githubAuth: Record<string, string> =
-        !automationProfile &&
-        spec.mode === "code" &&
-        !isMachineActor(githubPerson)
-          ? githubUserAuthProjection(githubPerson)
-          : {};
-      if (!githubAuth.GH_TOKEN) {
-        // The sandbox origin is mutable by repository setup code. Bind service
-        // authority only to the server-owned repo id recorded at ensure time.
-        const repoId = readRemoteState(provider, sandboxId)?.repoId;
-        const registeredRepo = repoId
-          ? (await import("../../worktree")).getRepo(repoId)
-          : undefined;
-        if (registeredRepo?.host !== "codestorage" && registeredRepo?.ghRepo) {
-          const { githubServiceCredentialEnv, githubServiceReadOnlyEnv } =
-            await import("../../github-app");
-          githubAuth =
-            spec.mode === "code"
-              ? await githubServiceCredentialEnv(registeredRepo.ghRepo)
-              : await githubServiceReadOnlyEnv(registeredRepo.ghRepo);
-          // An automation listing sibling repositories to read gets the
-          // read-only GH_READ_TOKEN beside its primary token (same private
-          // file; projectedGithubRunEnv lifts it into the shell). A refused
-          // mint leaves it out rather than widening anything.
-          if (githubAuth.GH_TOKEN && automationProfile && spec.readRepos) {
-            const { githubServiceReadReposEnv } =
-              await import("../../github-app");
-            githubAuth = {
-              ...githubAuth,
-              ...(await githubServiceReadReposEnv(
-                registeredRepo.ghRepo,
-                spec.readRepos,
-              )),
-            };
-          }
-        }
-      }
-      const githubAuthPath = `${guest(dir)}/github-auth.json`;
-      if (githubAuth.GH_TOKEN) {
-        await driver.writeFile(githubAuthPath, JSON.stringify(githubAuth));
-        secureFiles.push(githubAuthPath);
-      } else {
-        await driver.exec(`rm -f ${shellQuoteWord(githubAuthPath)}`);
-      }
-      // Pi policy + provider config, projected at the sandbox boundary.
-      // The source CAN contain third-party API keys under providers.*.apiKey;
-      // never copy it wholesale. Anthropic/OpenAI/Pi launches receive only the
-      // bridge/runtime fields. Pi-other receives the configured
-      // third-party provider scope because its fallback walk can switch within
-      // one runner-host launch. Rewritten/removed every launch so stale wider
-      // authority cannot linger on a reused sandbox.
-      const ocCfgSrc =
-        process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG ||
-        // Dual-read the host path (a new-name-only host has no
-        // ~/.opensession-pi.json); the remote destination below stays the
-        // legacy name the in-sandbox build dual-reads.
-        stateDir("model-providers.json");
-      let settingsProviderIds: string[] = [];
-      if (existsSync(ocCfgSrc)) {
-        let raw: unknown;
-        try {
-          raw = JSON.parse(readFileSync(ocCfgSrc, "utf-8"));
-        } catch (error) {
-          throw new Error(
-            `Cannot project sandbox Pi config ${ocCfgSrc}: ${error}`,
-          );
-        }
-        const projected = projectRemoteModelProviderConfig(
-          raw,
-          spec.model,
-          spec.trustProfile,
-          spec.accountId,
-          spec.fallbackModel,
-        );
-        settingsProviderIds = projected.settingsProviderIds;
-        await driver.writeFile(L.modelProvidersConfig, projected.content);
-        secureFiles.push(L.modelProvidersConfig);
-      } else {
-        await driver.exec(`rm -f ${shellQuoteWord(L.modelProvidersConfig)}`);
-      }
-
-      // Pi stays architecturally in-process: the guest runner-host imports the
-      // normal runAgent/runPi path. Materialize only the current Pi gate and
-      // transport policy; its credentials are the scoped Claude/Codex stores
-      // uploaded alongside this file.
-      const piContent = projectRemotePiConfig(readPiEngineConfig());
-      if (piContent) {
-        await driver.writeFile(L.piConfig, piContent);
-        secureFiles.push(L.piConfig);
-      } else {
-        await driver.exec(`rm -f ${shellQuoteWord(L.piConfig)}`);
-      }
-
-      // OpenAI/ChatGPT-subscription material for pi/openai/* dispatched
-      // IN-SANDBOX. The raw CODEX_HOME/auth.json is NEVER uploaded — its
-      // refresh token is the one rotating family shared with the host codex
-      // CLI, and an in-sandbox refresh would rotate (= kill) the host copy.
-      // Instead: (a) a scoped codex-accounts store so pickOpenaiAccount
-      // in-sandbox applies the same pool/openaiAccounts rules, and (b) a raw
-      // key only for a selected API-key account, or the rotation-proof SEEDED
-      // artifact per home account (access-token-only plus an invalid placeholder
-      // refresh, built by buildOpenaiRemoteSeedUpload). Upload it
-      // only when the selected model or its configured fallback can use
-      // OpenAI. The fallback walk runs inside this same host, so waiting until
-      // that hop would leave it without credentials.
-      // Rewritten (or removed) per launch so restriction changes apply and a
-      // previously-uploaded wider set never lingers. Destination filenames
-      // stay the legacy .opensession-* names the (dual-reading) in-sandbox
-      // build resolves — same convention as the bridge config above.
-      const usesOpenai = remoteRunNeedsOpenai(spec.model, spec.fallbackModel);
-      const openaiUpload: ReturnType<typeof buildOpenaiRemoteSeedUpload> =
-        usesOpenai
-          ? buildOpenaiRemoteSeedUpload(
-              listCodexAccounts(),
-              spec.accountId
-                ? [spec.accountId]
-                : readModelProviderConfig()?.openaiAccounts,
-              accountUser,
-            )
-          : { accounts: [], seeds: [], skipped: [] };
-      if (
-        pinnedAutomationTurn &&
-        usesOpenai &&
-        !openaiUpload.accounts.some((account) => account.id === spec.accountId)
-      ) {
-        throw new Error(
-          "the pinned automation account is not an eligible OpenAI account",
-        );
-      }
-      for (const { account, reason } of openaiUpload.skipped) {
-        console.warn(
-          `[sandbox-remote] openai seed for ${maskOpenaiAccount(account)} skipped: ${reason}`,
-        );
-      }
-      const codexStorePath = `${L.home}/.opensession-codex-accounts.json`;
-      if (openaiUpload.accounts.length) {
-        await driver.writeFile(
-          codexStorePath,
-          JSON.stringify({ accounts: openaiUpload.accounts }, null, 2) + "\n",
-        );
-        secureFiles.push(codexStorePath);
-        // Fresh seed dir per launch. Create every parent in one command, then
-        // use providers' native file lanes concurrently and secure all launch
-        // material in one final chmod. This avoids serial command admission on
-        // Box without ever launching the host before permissions settle.
-        const seeds = openaiUpload.seeds.map((seed) => ({
-          path: openaiSeedAuthPath(L.openaiSeedDir, seed.accountId),
-          content: seed.content,
-        }));
-        const seedDirectories = [
-          L.openaiSeedDir,
-          ...seeds.map((seed) => dirname(seed.path)),
-        ];
-        await driver.exec(
-          `rm -rf ${shellQuoteWord(L.openaiSeedDir)} && mkdir -p ${seedDirectories.map(shellQuoteWord).join(" ")}`,
-        );
-        await Promise.all(
-          seeds.map((seed) => driver.writeFile(seed.path, seed.content)),
-        );
-        secureFiles.push(...seeds.map((seed) => seed.path));
-        secureDirectories.push(...seedDirectories);
-        audit({
-          msg: "sandbox_openai_seed_upload",
-          host_id: spec.hostId,
-          session_id: spec.osSessionId,
-          mechanism: "scoped-openai-account-remote",
-          accounts: openaiUpload.accounts.map((a) => maskOpenaiAccount(a)),
-          oauth_seeds: openaiUpload.seeds.length,
-          api_key_accounts: openaiUpload.accounts.filter(
-            (a) => a.kind === "api_key",
-          ).length,
-          skipped: openaiUpload.skipped.map(
-            (s) => `${maskOpenaiAccount(s.account)}: ${s.reason}`,
-          ),
-        });
-      } else {
-        await driver.exec(
-          `rm -f ${codexStorePath} && rm -rf ${shellQuoteWord(L.openaiSeedDir)}`,
-        );
-      }
-      // SuperGrok material for pi/xai-oauth/* dispatched IN-SANDBOX: a scoped
-      // store whose records carry a freshly refreshed access token and the
-      // placeholder refresh (buildXaiRemoteUpload). The guest picks with the
-      // same pool rules and refuses to refresh, so the host's grant is never
-      // rotated from inside a sandbox. Uploaded only when the reachable walk
-      // can enter the pool; rewritten or removed every launch.
-      const usesXai = remoteRunNeedsXai(spec.model, spec.fallbackModel);
-      const xaiUpload = usesXai
-        ? await buildXaiRemoteUpload({
-            user: accountUser,
-            accountId: spec.accountId,
-            restrictIds: readModelProviderConfig()?.xaiAccounts,
-          })
-        : { accounts: [], skipped: [] };
-      if (
-        pinnedAutomationTurn &&
-        usesXai &&
-        !xaiUpload.accounts.some((account) => account.id === spec.accountId)
-      ) {
-        throw new Error(
-          "the pinned automation account is not an eligible SuperGrok account",
-        );
-      }
-      for (const { account, reason } of xaiUpload.skipped) {
-        console.warn(
-          `[sandbox-remote] xai upload for ${maskXaiAccount(account)} skipped: ${reason}`,
-        );
-      }
-      const xaiStorePath = `${L.home}/.opensession-xai-accounts.json`;
-      if (xaiUpload.accounts.length) {
-        await driver.writeFile(
-          xaiStorePath,
-          JSON.stringify({ accounts: xaiUpload.accounts }, null, 2) + "\n",
-        );
-        secureFiles.push(xaiStorePath);
-        audit({
-          msg: "sandbox_xai_seed_upload",
-          host_id: spec.hostId,
-          session_id: spec.osSessionId,
-          mechanism: "scoped-xai-account-remote",
-          accounts: xaiUpload.accounts.map((a) => maskXaiAccount(a)),
-          skipped: xaiUpload.skipped.map(
-            (s) => `${maskXaiAccount(s.account)}: ${s.reason}`,
-          ),
-        });
-      } else {
-        await driver.exec(`rm -f ${shellQuoteWord(xaiStorePath)}`);
-      }
-      const secured = await driver.exec(
-        [
-          secureDirectories.length
-            ? `chmod 700 ${[...new Set(secureDirectories)].map(shellQuoteWord).join(" ")}`
-            : "",
-          secureFiles.length
-            ? `chmod 600 ${[...new Set(secureFiles)].map(shellQuoteWord).join(" ")}`
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" && "),
-      );
-      if (secured.exitCode !== 0) {
-        throw new Error(
-          `could not secure remote launch material: ${secured.stderr.trim().slice(0, 300)}`,
-        );
-      }
-      mark("accounts uploaded");
-      // Remote sandboxes default to the public ingress when it is enabled.
-      // Local providers can override this with their internal/tailnet base so
-      // runs do not hairpin through the internet-facing ingress.
-      const base = callbackBaseUrl.replace(/\/+$/, "");
-      registerRunWsHost(hostId, spec.wsToken);
-      try {
-        const env: Record<string, string> = {
-          HOME: L.home,
-          PATH: L.path,
-          NODE_ENV: "production",
-          OPENSESSION_MCP_CONFIG: L.mcpConfig,
-          OPENSESSION_RUN_JOURNAL: `${guest(dir)}/journal.json`,
-          // Lets the engine tell the model it is inside a Sandbox
-          // (run-instructions.ts): one boolean, never a per-session fact.
-          OPENSESSION_SANDBOX: "1",
-          // Where bindOpenaiAccount finds the uploaded rotation-proof openai
-          // seeds (only set when something was uploaded this launch).
-          ...(openaiUpload.seeds.length
-            ? {
-                OPENSESSION_OPENAI_SEED_DIR: L.openaiSeedDir,
-              }
-            : {}),
-          // Dial-back on the primary prefix — the ingress/main serve accept
-          // both, and URLs already baked into live sandboxes stay valid.
-          OPENSESSION_RUN_WS_URL: `${base}/run-ws/${hostId}`,
-          OPENSESSION_RUN_WS_TOKEN: spec.wsToken,
-          OPENSESSION_RPC_WS_URL: `${base}/rpc-ws`,
-          ...(githubAuth.GH_TOKEN
-            ? { [GITHUB_RUN_AUTH_FILE_ENV]: githubAuthPath }
-            : {}),
-          ...createWorkloadIdentityEnv({
-            sandboxId,
-            provider,
-            lifecycle: "run",
-            sessionId: spec.osSessionId,
-            trustProfile: spec.trustProfile,
-          }),
-          ...(process.env.OPENSESSION_MODEL
-            ? { OPENSESSION_MODEL: process.env.OPENSESSION_MODEL! }
-            : {}),
-        };
-        // BOUNDED await: provider SDK calls have stalled indefinitely here in
-        // the wild (2026-07-09: a Daytona executeSessionCommand response never
-        // resolved even though the command RAN — the host started, dialed
-        // back, streamed its whole run, and every frame sat parked because
-        // this await never returned, so connectWithWait never started). The
-        // detached command's delivery is verified by the dial-back
-        // (connectWithWait) anyway — after the bound, proceed and let that
-        // decide.
-        dispatchAttempted = true;
-        onDispatching?.();
-        const bg = driver.execBackground(
-          `${envPrefix(env)}sh -c ${shellQuoteWord(remoteRunnerHostCommand(`${guest(dir)}/${HOST_SPEC_NAME}`, L))} >> ${guest(dir)}/host.log 2>&1`,
-        );
-        const bgTimeout = new Promise<"timeout">((r) =>
-          setTimeout(() => r("timeout"), 30_000),
-        );
-        const raced = await Promise.race([
-          bg.then(() => "ok" as const),
-          bgTimeout,
-        ]);
-        if (raced === "timeout") {
-          console.warn(
-            `[sandbox-remote] execBackground for ${hostId.slice(0, 11)} still pending after 30s — ` +
-              "proceeding to the dial-back wait (the launch command may have been delivered anyway)",
-          );
-          bg.catch(() => {}); // don't let the eventual settle become an unhandled rejection
-        }
-        mark("host exec dispatched");
-      } catch (e) {
-        if (!dispatchAttempted) unregisterRunWsHost(hostId);
-        throw e;
-      }
-    },
-    async evidence(dir) {
-      const guestDir = guest(dir);
-      const [metaResult, journalResult] = await Promise.all([
-        driver.exec(
-          `cat ${shellQuoteWord(`${guestDir}/${HOST_META_NAME}`)} 2>/dev/null`,
-        ),
-        driver.exec(
-          `cat ${shellQuoteWord(`${guestDir}/${HOST_JOURNAL_NAME}`)} 2>/dev/null`,
-        ),
-      ]);
-      let meta: RunHostMeta | undefined;
-      let journal: Record<string, ActiveRunRecord> | undefined;
-      try {
-        if (metaResult.exitCode === 0) meta = JSON.parse(metaResult.stdout);
-      } catch {}
-      try {
-        if (journalResult.exitCode === 0)
-          journal = JSON.parse(journalResult.stdout);
-      } catch {}
-      return {
-        started: !!meta?.pid || !!journal,
-        ...(meta?.engineSessionId
-          ? { engineSessionId: meta.engineSessionId }
-          : {}),
-        ...(meta?.done ? { done: meta.done } : {}),
-      };
-    },
-    async stop(hostId, hostDir) {
-      const dir = guest(hostDir);
-      await driver.writeFile(`${dir}/cancelled`, "cancelled\n");
-      const [metaResult, startupResult] = await Promise.all([
-        driver.exec(
-          `cat ${shellQuoteWord(`${dir}/${HOST_META_NAME}`)} 2>/dev/null`,
-        ),
-        driver.exec(`cat ${shellQuoteWord(`${dir}/startup.json`)} 2>/dev/null`),
-      ]);
-      let pid = 0;
-      try {
-        if (metaResult.exitCode === 0)
-          pid = Number(JSON.parse(metaResult.stdout)?.pid) || 0;
-      } catch {}
-      try {
-        if (!pid && startupResult.exitCode === 0)
-          pid = Number(JSON.parse(startupResult.stdout)?.pid) || 0;
-      } catch {}
-      if (pid) {
-        const specPath = `${dir}/${HOST_SPEC_NAME}`;
-        const quotedSpec = shellQuoteWord(specPath);
-        const isHost =
-          L.os === "darwin"
-            ? `is_host() { ps -o command= -p ${pid} 2>/dev/null | grep -Fq -- ${quotedSpec}; }; `
-            : `is_host() { [ -r /proc/${pid}/cmdline ] && ` +
-              `tr '\\0' '\\n' < /proc/${pid}/cmdline | grep -Fqx -- ${quotedSpec}; }; `;
-        const script =
-          isHost +
-          `is_host && kill -TERM ${pid} 2>/dev/null || true; sleep 1; ` +
-          `is_host && kill -KILL ${pid} 2>/dev/null || true; sleep 0.2; ! is_host`;
-        const result = await driver.exec(script);
-        if (result.exitCode !== 0)
-          throw new Error(
-            `Could not prove remote sandbox host ${hostId} absent`,
-          );
-      }
-      unregisterRunWsHost(hostId);
-    },
-  };
-}
-
-// ── Journal bookkeeping (opensession side; mirrors docker's) ────────────────────
-
-function recordForSpec(
-  spec: RunHostSpec,
-  sandboxId: string,
-  provider: SandboxProviderId,
-): ActiveRunRecord {
-  return {
-    runKey: spec.hostId,
-    osSessionId: spec.osSessionId,
-    claudeSessionId: spec.engineSessionId,
-    prompt: spec.prompt,
-    promptEntryId: spec.promptEntryId,
-    cwd: spec.cwd,
-    mode: spec.mode,
-    mcpServers: spec.mcpServers,
-    user: spec.user,
-    accountUser: spec.accountUser,
-    deniedTools: spec.deniedTools,
-    confirmTools: spec.confirmTools,
-    aws: spec.aws,
-    model: spec.model,
-    selectedModel: spec.selectedModel ?? spec.model,
-    transientFallback: spec.transientFallback,
-    effort: spec.effort,
-    fastMode: spec.fastMode,
-    pstackMode: spec.pstackMode,
-    accountId: spec.accountId,
-    accountStrict: spec.accountStrict,
-    usageCredits: spec.usageCredits,
-    fallbackModel: spec.fallbackModel,
-    sandboxId,
-    sandboxProvider: provider,
-    launchPhase: "prepared",
-    trustProfile: spec.trustProfile,
-    kind: spec.journalKind || "prompt",
-    firstJournaledAt: spec.firstJournaledAt,
-    resumeAttempts: spec.resumeAttempts,
-    lastResumeAt: spec.lastResumeAt,
-    startedAt: new Date().toISOString(),
-  };
-}
-
-async function* withRunJournal(
-  events: AsyncGenerator<StreamEvent>,
-  record: ActiveRunRecord,
-  touch: () => void,
-): AsyncGenerator<StreamEvent> {
-  await journalSet(record);
-  touch();
-  let sourceCompleted = false;
-  let sawTerminal = false;
-  try {
-    for await (const ev of events) {
-      if (
-        ev.type === "init" &&
-        ev.sessionId &&
-        ev.sessionId !== record.claudeSessionId
-      ) {
-        record.claudeSessionId = ev.sessionId;
-        await journalSet(record);
-      }
-      if (ev.type === "model_switch" && ev.toModel) {
-        record.model = ev.toModel;
-        record.transientFallback = ev.temporaryFallback === true;
-        if (shouldPersistModelSwitch(ev)) record.selectedModel = ev.toModel;
-        await journalSet(record);
-      }
-      if (ev.type === "done" || ev.type === "error") sawTerminal = true;
-      yield ev;
-    }
-    sourceCompleted = true;
-  } finally {
-    if (sourceCompleted && sawTerminal) journalClear(record.runKey);
-    else if (sourceCompleted) await journalRecordAbnormalCompletion(record);
-    touch();
-  }
-}
-
 // ── The Sandbox handle ────────────────────────────────────────────────────────
 
 export interface RemoteSandboxParts {
@@ -3119,35 +1743,28 @@ export interface RemoteSandboxParts {
   sessionId: string;
   cwd: string;
   driver: RemoteDriver;
-  /** Override the public-ingress default for providers that can reach the
-   *  server over a private/local route (notably local Firecracker). */
-  callbackBaseUrl?: string;
   ports(requestedPorts?: number[]): Promise<PortMap>;
   status(): Promise<SandboxStatus>;
-  /** Activity ping (state file + provider-native keepalive, e.g. E2B's
-   *  countdown extension). Called at run start/end. */
+  /** Activity ping (state file + provider-native keepalive). */
   touchActivity(): void | Promise<void>;
 }
 
-/** Internal accessor resume uses to reach a handle's driver/launcher. */
-const remoteParts = new WeakMap<
-  object,
-  { driver: RemoteDriver; launcher: HostLauncher }
->();
+/** stderr of a provider exec whose machine or command plane is not there. */
+const TRANSPORT_FAILURE =
+  /not running|not started|stopped|archived|timed out|ECONN|socket|HTTP 5\d\d|did not accept commands|machine_not_running/i;
 
 export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
-  const launcher = makeRemoteLauncher(
-    parts.driver,
-    parts.sessionId,
-    parts.sandboxId,
-    parts.providerId,
-    parts.callbackBaseUrl,
-  );
+  let touchedAt = 0;
+  let startedAt = 0;
   const touch = () => {
+    touchedAt = Date.now();
     try {
       void parts.touchActivity();
     } catch {}
   };
+  /** A burst caller (assumeStarted) re-checks the machine and refreshes its
+   *  keepalive at most once a minute; everyone else on every call. */
+  const RECHECK_MS = 60_000;
   const sandboxHandle: Sandbox = {
     id: parts.sandboxId,
     provider: parts.providerId,
@@ -3155,17 +1772,23 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
     workspace: "volume",
 
     async exec(cmd: string[], opts?: ExecOpts): Promise<ExecResult> {
-      await parts.driver.ensureStarted();
-      touch();
+      const burst = opts?.assumeStarted === true;
+      if (!burst || Date.now() - startedAt > RECHECK_MS) {
+        await parts.driver.ensureStarted();
+        startedAt = Date.now();
+      }
+      if (!burst || Date.now() - touchedAt > RECHECK_MS) touch();
       const remoteOptions = {
         cwd: parts.cwd,
         env: {
-          ...createWorkloadIdentityEnv({
-            sandboxId: parts.sandboxId,
-            provider: parts.providerId,
-            lifecycle: "run" as const,
-            sessionId: parts.sessionId,
-          }),
+          ...(opts?.workloadIdentity === false
+            ? {}
+            : createWorkloadIdentityEnv({
+                sandboxId: parts.sandboxId,
+                provider: parts.providerId,
+                lifecycle: "run" as const,
+                sessionId: parts.sessionId,
+              })),
           ...opts?.env,
         },
         timeoutMs: opts?.timeoutMs,
@@ -3184,317 +1807,16 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
         }
       }
       const result = await parts.driver.exec(shellQuote(cmd), remoteOptions);
-      touch();
+      if (!burst) touch();
+      // A burst skips the wake check; after an answer that looks like the
+      // machine or its command plane went away, the next call makes it.
+      else if (result.exitCode !== 0 && TRANSPORT_FAILURE.test(result.stderr))
+        startedAt = 0;
       return result;
-    },
-
-    async launchRunEager(
-      spec: RunHostSpec,
-      cb?: RunHandleCallbacks,
-    ): Promise<RunHandle> {
-      const dir = launcher.newRunDir(spec.hostId);
-      const callbacks: HandleCallbacks = {
-        onAskUser: cb?.onAskUser,
-        onSteerFailed: cb?.onSteerFailed,
-      };
-      spec.wsToken ??= crypto.randomUUID(); // remote runs are always WS
-      const record = recordForSpec(spec, parts.sandboxId, parts.providerId);
-      let handle: HostHandle | undefined;
-      let uncertainLaunch = false;
-      const t0 = Date.now();
-      const mark = (step: string) =>
-        console.log(
-          `[sandbox-remote] launch ${spec.hostId.slice(0, 11)}: ${step} (+${Date.now() - t0}ms)`,
-        );
-      try {
-        await launcher.writeSpec!(dir, spec);
-        mark("spec written");
-        // A crash after journal admission must recover from the full spec.
-        await journalSet(record);
-        // Construct (and register) the control BEFORE dispatch so exact-token
-        // Stop reaches the launching host: cancelAgentRunTokenAndWait sees
-        // hostRunBusy(token) during the launch await, and cancelHost's stop
-        // backstop plus the cancelled startup marker fence the dispatch race.
-        handle = new HostHandle(dir, spec, callbacks, launcher);
-        await launcher.launch(spec.hostId, dir, async () => {
-          record.launchPhase = "launching";
-          await journalSet(record);
-        });
-        record.launchPhase = "started";
-        await journalSet(record);
-        if (handle.cancelled)
-          throw new HostLaunchNotDispatchedError(
-            `${spec.hostId} was cancelled while launching`,
-          );
-        await handle.connectWithWait(45_000);
-        mark("host attached");
-      } catch (error) {
-        // A cancelled launch is provably absent (startup marker or stop
-        // backstop), exactly like a never-dispatched one: retire it instead
-        // of handing an ended handle to uncertain-launch reconciliation.
-        if (
-          record.launchPhase === "prepared" ||
-          error instanceof HostLaunchNotDispatchedError ||
-          // A stop backstop that proved absence during the launch/connect
-          // await already finished this handle: retire it like a
-          // never-dispatched launch instead of reconciling an ended owner.
-          handle?.ended === true
-        ) {
-          journalClearIfLineage(record);
-          handle?.abandon();
-          unregisterRunToken(spec.rpcToken);
-          unregisterRunWsHost(spec.hostId);
-          try {
-            rmSync(dir, { recursive: true, force: true });
-          } catch {}
-          throw error;
-        }
-        // execBackground may have delivered the command. Transfer the
-        // retained artifacts to a live owner that keeps reconciling now.
-        uncertainLaunch = true;
-        handle ??= new HostHandle(dir, spec, callbacks, launcher);
-        console.warn(
-          `[sandbox-remote] ${spec.hostId}: launch outcome uncertain; waiting for host attachment`,
-          error,
-        );
-      }
-      const ownedHandle = handle!;
-      const rawEvents = uncertainLaunch
-        ? reconcileUncertainHostEvents(ownedHandle, "Remote sandbox host")
-        : ownedHandle.events();
-      const gen = withRunJournal(rawEvents, record, touch);
-      // Steers fold into the running turn in-sandbox, so they never come back
-      // as dial-back user frames — mirror DELIVERED steers into the current
-      // engine-session file (same reconcile contract as the dispatch prompt).
-      return {
-        events: () => gen,
-        steerable: modelSupportsSteer(spec.model),
-        steer: (text, images) => hostSteer(spec.osSessionId, text, images),
-        interruptSteer: (text, images) =>
-          hostInterruptSteer(spec.osSessionId, text, images),
-        cancel: () => hostCancel(spec.osSessionId),
-      };
-    },
-
-    launchRun(spec: RunHostSpec, cb?: RunHandleCallbacks): RunHandle {
-      const gen = (async function* (): AsyncGenerator<StreamEvent> {
-        let eager: RunHandle;
-        try {
-          eager = await sandboxHandle.launchRunEager!(spec, cb);
-        } catch (e: any) {
-          yield {
-            type: "error",
-            content: `Sandbox run failed to start: ${e?.message || e}`,
-          };
-          return;
-        }
-        yield* eager.events();
-      })();
-      return {
-        events: () => gen,
-        steerable: modelSupportsSteer(spec.model),
-        steer: (text, images) => hostSteer(spec.osSessionId, text, images),
-        interruptSteer: (text, images) =>
-          hostInterruptSteer(spec.osSessionId, text, images),
-        cancel: () => hostCancel(spec.osSessionId),
-      };
     },
 
     ports: (requestedPorts) => parts.ports(requestedPorts),
     status: () => parts.status(),
   };
-  remoteParts.set(sandboxHandle, { driver: parts.driver, launcher });
   return sandboxHandle;
-}
-
-// ── Restart-resume (mirrors resumeDockerSandboxRun; see module header for
-//    the meta.json gap) ────────────────────────────────────────────────────────
-
-export async function resumeRemoteSandboxRun(
-  run: ActiveRunRecord,
-  cb: HandleCallbacks,
-): Promise<AsyncGenerator<StreamEvent> | null> {
-  if (!run.sandboxId || !run.osSessionId || !run.sandboxProvider) return null;
-  // Lazy to avoid a static import cycle (index → adapters → bootstrap).
-  const { getSandboxProvider } = await import("../index");
-  let sandbox: Sandbox | null = null;
-  try {
-    sandbox = await getSandboxProvider(run.sandboxProvider).get(run.sandboxId);
-  } catch (e) {
-    console.warn(
-      `[sandbox-remote] resume: provider.get(${run.sandboxId}) failed:`,
-      e,
-    );
-  }
-  if (!sandbox) return null;
-  const parts = remoteParts.get(sandbox);
-  if (!parts) return null;
-  const { driver, launcher } = parts;
-  const L = layoutFor(driver);
-  // Remote providers may preserve processes while suspended. Wake the sandbox
-  // before checking meta/aliveness so restart recovery never duplicates a run.
-  await driver.ensureStarted();
-
-  const oldDir = launcher.newRunDir(run.runKey);
-  const oldGuestDir = guestRunDir(L, oldDir);
-  const oldSpec = readJsonSafe<RunHostSpec>(`${oldDir}/${HOST_SPEC_NAME}`);
-  const metaResult = await driver.exec(
-    `cat ${shellQuoteWord(`${oldGuestDir}/${HOST_META_NAME}`)} 2>/dev/null`,
-  );
-  const journalResult = await driver.exec(
-    `cat ${shellQuoteWord(`${oldGuestDir}/${HOST_JOURNAL_NAME}`)} 2>/dev/null`,
-  );
-  let remoteMeta: RunHostMeta | undefined;
-  let privateRun: ActiveRunRecord | undefined;
-  try {
-    if (metaResult.exitCode === 0) remoteMeta = JSON.parse(metaResult.stdout);
-  } catch {}
-  try {
-    if (journalResult.exitCode === 0) {
-      const journal = JSON.parse(journalResult.stdout) as Record<
-        string,
-        ActiveRunRecord
-      >;
-      privateRun = Object.values(journal)[0];
-    }
-  } catch {}
-  if (oldSpec?.wsToken) {
-    let done: StreamEvent | undefined = remoteMeta?.done;
-    let selectedModel: string | undefined = remoteMeta?.selectedModel;
-    if (done) {
-      try {
-        rmSync(oldDir, { recursive: true, force: true });
-      } catch {}
-      const terminal = done;
-      const initialModel = oldSpec.selectedModel ?? oldSpec.model;
-      return (async function* () {
-        if (selectedModel && selectedModel !== initialModel) {
-          yield {
-            type: "model_switch",
-            fromModel: initialModel,
-            toModel: selectedModel,
-            switchReason: "out of credits",
-            temporaryFallback: false,
-          } satisfies StreamEvent;
-        }
-        yield terminal;
-      })();
-    }
-    if (await launcher.alive(oldDir, null)) {
-      if (oldSpec.rpcToken) {
-        registerRunToken(oldSpec.rpcToken, {
-          sessionId: oldSpec.osSessionId,
-          user: oldSpec.user,
-          humanPrompter: oldSpec.accountUser,
-        });
-      }
-      registerRunWsHost(oldSpec.hostId, oldSpec.wsToken);
-      console.log(
-        `[sandbox-remote] reattaching to live run ${run.runKey} in ${run.sandboxId}`,
-      );
-      const handle = new HostHandle(oldDir, oldSpec, cb, launcher, run.runKey);
-      try {
-        // The host redials with ≤5s backoff once its token is re-registered.
-        await handle.connectWithWait(20_000);
-      } catch (e) {
-        handle.abandon();
-        throw e;
-      }
-      return withRunJournal(
-        handle.events(),
-        { ...run, startedAt: run.startedAt },
-        () => {},
-      );
-    }
-  }
-
-  // Host died with (or before) the restart — relaunch a continuation in the
-  // same sandbox so the engine session's in-sandbox state is reused.
-  const recovery = decideSandboxHostRecovery({
-    run,
-    meta: remoteMeta,
-    privateRun,
-    hasCompleteSpec: !!oldSpec,
-  });
-  if (recovery.kind === "uncertain")
-    throw new Error(
-      `Remote sandbox run ${run.runKey} has execution evidence but no resumable engine session`,
-    );
-  const effectiveEngineSessionId =
-    recovery.kind === "resume" ? recovery.engineSessionId : undefined;
-  const prompt = effectiveEngineSessionId
-    ? restartContinuationPrompt(run.prompt)
-    : run.prompt;
-  if (!prompt) return null;
-  const rpcToken = oldSpec?.proxyMcpServers?.length
-    ? crypto.randomUUID()
-    : undefined;
-  if (rpcToken)
-    registerRunToken(rpcToken, {
-      sessionId: run.osSessionId,
-      user: run.user,
-      humanPrompter: run.accountUser,
-    });
-  const hostId = `rh-${Bun.randomUUIDv7()}`;
-  const spec: RunHostSpec =
-    recovery.kind === "replay"
-      ? {
-          ...(oldSpec as RunHostSpec),
-          hostId,
-          rpcToken,
-          ...((oldSpec as RunHostSpec).wsToken
-            ? { wsToken: crypto.randomUUID() }
-            : {}),
-          journalKind: recoveryKind(run.kind, "resume"),
-          firstJournaledAt: run.firstJournaledAt,
-          resumeAttempts: run.resumeAttempts,
-          lastResumeAt: run.lastResumeAt,
-        }
-      : {
-          hostId,
-          osSessionId: run.osSessionId,
-          prompt,
-          promptEntryId: effectiveEngineSessionId
-            ? undefined
-            : run.promptEntryId,
-          engineSessionId: effectiveEngineSessionId,
-          cwd: run.cwd,
-          mode: run.mode,
-          model: run.model,
-          selectedModel: run.selectedModel ?? run.model,
-          transientFallback: run.transientFallback,
-          mcpServers: run.mcpServers,
-          proxyMcpServers: oldSpec?.proxyMcpServers,
-          rpcToken,
-          reposNote: oldSpec?.reposNote,
-          deniedTools: run.deniedTools,
-          confirmTools: run.confirmTools,
-          aws: run.aws,
-          author: oldSpec?.author,
-          user: run.user,
-          accountUser: run.accountUser,
-          fallbackModel: run.fallbackModel,
-          effort: run.effort,
-          fastMode: run.fastMode,
-          pstackMode: run.pstackMode,
-          accountId: run.accountId,
-          accountStrict: run.accountStrict,
-          usageCredits: run.usageCredits,
-          trustProfile: oldSpec?.trustProfile ?? run.trustProfile,
-          journalKind: recoveryKind(run.kind, "resume"),
-          firstJournaledAt: run.firstJournaledAt,
-          resumeAttempts: run.resumeAttempts,
-          lastResumeAt: run.lastResumeAt,
-        };
-  console.log(
-    `[sandbox-remote] relaunching interrupted run ${run.runKey} in ${run.sandboxId} as ${spec.hostId}`,
-  );
-  const replacement = sandbox.launchRunEager
-    ? await sandbox.launchRunEager(spec, { onAskUser: cb.onAskUser })
-    : sandbox.launchRun(spec, { onAskUser: cb.onAskUser });
-  try {
-    if (oldDir && existsSync(oldDir))
-      rmSync(oldDir, { recursive: true, force: true });
-  } catch {}
-  return replacement.events();
 }
