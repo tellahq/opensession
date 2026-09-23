@@ -531,8 +531,10 @@ below without enabling the sign-in gate.
 
    Before setting `userPrAuth` directly, put at least your own exact GitHub
    login in `identity.team[].github` (and make it an admin when the roster uses
-   explicit admin roles), or every sign-in will be rejected. The Settings UI
-   prevents this lockout when it enables the gate. The private key is stored
+   explicit admin roles), so you retain administrative access. New GitHub
+   sign-ins enroll automatically as non-admins; they cannot bootstrap an
+   administrator. The Settings UI preserves an administrator when it enables
+   the gate. The private key is stored
    separately as described above. Environment `OPENSESSION_GITHUB_*` values
    win over config. Signing in needs the client id; the secret renews user
    tokens; the key mints bot installation tokens.
@@ -544,15 +546,25 @@ below without enabling the sign-in gate.
 What turns on (`packages/core/opensession-server/src/server/github-auth.ts`, `web-auth.ts`, `routes/auth.ts`):
 
 - **Sign-in required**: the UI shows "Continue with GitHub", which starts the
-  device flow, the one sign-in every client uses; only logins on
-  `identity.team[].github` may sign in. Ordinary `/api/*` calls and the UI
-  WebSocket are 401-gated on the HttpOnly session cookie; non-browser callers
+  device flow, the one sign-in every client uses. Any verified GitHub account
+  that can reach the instance may sign in. Missing accounts join `identity.team`
+  automatically as non-admins, without an organization, invite, or roster
+  admission check. Existing names and roles are preserved. Ordinary `/api/*`
+  calls and the UI WebSocket are 401-gated on the HttpOnly session cookie; non-browser callers
   use `Authorization: Bearer <token>` with a token from
   `~/.opensession/web-sessions.json`. Auth routes, `/api/health`, `/live`,
   `/ready`, client update feeds, and machine routes protected by their own
   credentials are exceptions. The verified identity overrides client-claimed
   user names (WS and HTTP), stamps `createdByLogin` on new sessions, and a
   one-time boot migration backfills it onto existing ones.
+- **Membership lifecycle**: automatic enrollment uses the verified GitHub
+  login, not a mutable profile name/email or client-supplied identity. Roster
+  writes are serialized and atomic before session issuance. Removing a member
+  revokes existing sessions, including those still open when the account
+  rejoins, but is not a permanent sign-in ban. A new verified sign-in can join
+  again as a non-admin. Network access controls belong outside this enrollment
+  flow; roster membership also grants normal member capabilities such as
+  trusted GitHub webhook commands.
 - **Organization members imported**: after a repository identifies the GitHub
   organization, opening the onboarding People step imports up to 10,000
   organization members into `identity.team`. Existing profile details are

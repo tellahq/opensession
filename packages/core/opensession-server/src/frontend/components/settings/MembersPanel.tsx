@@ -13,8 +13,7 @@ export function MembersPanel() {
         title="Members"
         description={
           <>
-            Members identify who sessions act as. Configure who can sign in
-            under{" "}
+            Members identify who sessions act as. Configure GitHub sign-in under{" "}
             <a
               href={`${BASE_PATH}/settings/authentication`}
               className="text-link hover:underline"

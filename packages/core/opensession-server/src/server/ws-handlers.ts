@@ -630,6 +630,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
         const identity = refreshWebIdentity({
           login: ws.data.authLogin,
           name: ws.data.authUser || ws.data.authLogin,
+          authGeneration: ws.data.authGeneration,
           ...(ws.data.authAutomation ? { automation: true } : {}),
         });
         if (

@@ -266,8 +266,10 @@ entry points fail closed before starting an agent run or steering a session:
 - startup recovery revalidates persisted requesters, so a previously accepted
   public event cannot bypass the boundary after a restart.
 
-Keep every trusted GitHub login in the identity roster. An empty roster disables
-human GitHub commands rather than making the integration public.
+GitHub webhook trust follows the identity roster. With GitHub web sign-in
+active, successful sign-ins automatically join that roster as ordinary members.
+Control access to the instance accordingly. An empty roster disables human
+GitHub commands rather than making the webhook integration public.
 
 ### Isolated public PR reviews
 
@@ -410,7 +412,21 @@ Enabling `userPrAuth` activates both halves below:
   a browser navigation without a session is redirected to the app's own
   origin with a same-host `return` URL and sent back after sign-in
   (portal-sign-in.ts), never to another host.
-  Only logins on identity.team may sign in. The verified identity OVERRIDES
+  Any GitHub account that can reach this instance and complete its device
+  flow may sign in. Missing accounts are automatically added to `identity.team`
+  with `admin: false`; there is no organization, invite, or roster admission
+  gate. This grants normal member capabilities, including roster-based GitHub
+  webhook trust, not administrator access. Network access must be controlled
+  separately. Existing members and roles are preserved; legacy implicit
+  administrators retain their privileges when the roster becomes role-aware.
+  Enrollment matches only the verified GitHub login, never a profile name or
+  email. New display names use the login with a collision-safe suffix/prefix;
+  no claimed profile fields are copied into identity mappings. Roster persistence
+  must succeed before a session is issued. A membership incarnation prevents
+  old sessions and sockets from becoming valid again after automatic rejoining.
+  Removing a member revokes their existing sessions but is not a permanent
+  sign-in ban: another verified sign-in can create a new non-admin membership.
+  The verified identity OVERRIDES
   client-claimed `user` on every WS message and stamps `createdByLogin` on
   new sessions; a one-time boot migration backfills `createdByLogin` onto
   existing sessions from `createdBy` (marker:

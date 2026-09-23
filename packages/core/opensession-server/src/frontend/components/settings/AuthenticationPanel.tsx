@@ -69,7 +69,8 @@ function AuthenticationMethod({
               Sign-in method
             </div>
             <div className="mt-0.5 text-supporting leading-relaxed text-dim">
-              Require GitHub sign-in, or leave this workspace open.
+              Anyone who can reach this server can join with GitHub as a
+              non-admin.
             </div>
           </div>
           <Segmented

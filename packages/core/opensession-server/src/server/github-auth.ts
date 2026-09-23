@@ -47,6 +47,7 @@
 import { stateDir } from "./paths";
 import { isDevInstance } from "./dev-mode";
 import { chmodSync, readFileSync, statSync } from "fs";
+import { readFile } from "node:fs/promises";
 import { audit } from "./audit";
 import { configuredIdentity, getConfig } from "./config";
 import { writeJsonAtomic } from "./shared/atomic-write";
@@ -398,7 +399,7 @@ export async function pollGithubDeviceFlow(
     },
   );
   const body: any = await res.json().catch(() => null);
-  if (!body)
+  if (!body || !res.ok)
     return {
       status: "error",
       error: `GitHub token endpoint failed (${res.status})`,
@@ -414,7 +415,7 @@ export async function pollGithubDeviceFlow(
     return { status: "error", error: body.error_description || body.error };
   }
   const token: string | undefined = body.access_token;
-  if (!token)
+  if (typeof token !== "string" || !token)
     return { status: "error", error: "GitHub returned no access token" };
   return identifyAndStoreToken(token, body, expectedLogin);
 }
@@ -568,7 +569,11 @@ async function identifyAndStoreToken(
   });
   const user: any = await userRes.json().catch(() => null);
   const login: string | undefined = user?.login;
-  if (!userRes.ok || !login) {
+  if (
+    !userRes.ok ||
+    typeof login !== "string" ||
+    !/^[a-z\d][a-z\d_-]{0,255}$/i.test(login)
+  ) {
     return {
       status: "error",
       error: "Token issued but GET /user failed — not stored",
@@ -795,6 +800,25 @@ export function githubReconnectRequired(
 ): boolean {
   if (!login || !githubUserAuthActive()) return false;
   return refreshDeadLogins().has(login.toLowerCase());
+}
+
+/** A cached device-flow success cannot revive a removed, expired or revoked
+ * grant. Unlike an existing session's outage-tolerant gate, issuing a NEW
+ * session fails closed when the credential store cannot be read. */
+export async function githubSignInGrantUsable(login: string): Promise<boolean> {
+  try {
+    const raw = JSON.parse(await readFile(storePath(), "utf8"));
+    const account = raw?.users?.[login.toLowerCase()];
+    return (
+      !!account &&
+      typeof account.login === "string" &&
+      account.login.toLowerCase() === login.toLowerCase() &&
+      !account.refreshFailedAt &&
+      tokenUsable(account)
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function removeGithubAccount(login: string): boolean {

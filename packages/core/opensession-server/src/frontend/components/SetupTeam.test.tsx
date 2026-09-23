@@ -21,13 +21,15 @@ function renderTeam(required: boolean): string {
   return renderToStaticMarkup(<TeamSection onChanged={() => {}} />);
 }
 
-test("GitHub sign-in keeps explicit member admission beside the invite link", () => {
+test("GitHub sign-in describes automatic non-admin enrollment and optional roster editing", () => {
   const markup = renderTeam(true);
   expect(markup).toContain("Add member</span></button>");
   expect(markup).toContain("Copy invite link</span></button>");
-  expect(markup).toContain("Add each teammate with their GitHub login");
-  expect(markup).toContain("Only listed GitHub accounts can sign in.");
-  expect(markup).not.toContain("Teammates are added when they sign in");
+  expect(markup).toContain(
+    "Anyone who can reach this server can join by signing in with GitHub.",
+  );
+  expect(markup).toContain("New members are not administrators.");
+  expect(markup).not.toContain("Only listed GitHub accounts can sign in.");
 });
 
 test("local identity mode still allows name-only members without an invite link", () => {

@@ -641,6 +641,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
           user: authFirst,
           authUser: authFirst,
           authLogin: authUser?.login || null,
+          authGeneration: authUser?.authGeneration,
           authAutomation: authUser?.automation === true,
           // Headful/headless CDP browsers used by agents open the hosted app
           // through loopback and can leave inspection tabs alive for days. They

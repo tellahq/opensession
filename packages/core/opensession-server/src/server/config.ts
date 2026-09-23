@@ -150,6 +150,9 @@ export interface TeamMember {
   slackId?: string;
   /** GitHub login. */
   github?: string;
+  /** Server-issued membership incarnation. Old sessions cannot regain access
+   * when a removed GitHub account automatically joins again. */
+  authGeneration?: string;
   /** Emails their Linear account uses (may differ from the git email). */
   linearEmails?: string[];
   /** IANA timezone, e.g. "Europe/Amsterdam" — used wherever we compute
@@ -440,6 +443,7 @@ export function parseTeamMember(v: unknown): TeamMember | undefined {
       aliases: strArray(o.aliases),
       slackId: str(o.slackId),
       github: str(o.github),
+      authGeneration: str(o.authGeneration),
       linearEmails: strArray(o.linearEmails),
       githubToSlack: bool(o.githubToSlack),
       directory: bool(o.directory),

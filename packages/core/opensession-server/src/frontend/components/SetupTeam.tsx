@@ -202,7 +202,7 @@ export function TeamSection({
           ) : members.length === 0 ? (
             <EmptyState placement="row">
               {githubAuth
-                ? "No teammates yet. Add a member with their GitHub login before sharing the invite link."
+                ? "No teammates yet. Share the invite link so they can sign in with GitHub."
                 : "No teammates yet. Add everyone who uses this instance so commits and sessions attribute to real people."}
             </EmptyState>
           ) : (
@@ -223,7 +223,7 @@ export function TeamSection({
       )}
       <SettingsHint>
         {githubAuth
-          ? "Add each teammate with their GitHub login, then share the invite link. Only listed GitHub accounts can sign in."
+          ? "Anyone who can reach this server can join by signing in with GitHub. New members are not administrators."
           : githubOrganization
             ? `Members were imported from the ${githubOrganization} GitHub organization. Only a name is required when you add someone manually.`
             : "Only a name is required. Add a GitHub login or other identities when sign-in and attribution should resolve to this member."}
@@ -345,7 +345,7 @@ function MemberActions({
         <Modal.Content initialFocus={cancelRef}>
           <Modal.Header
             title={`Remove ${member.name}?`}
-            description="This removes their identity mapping from Open Session."
+            description="This removes their identity mapping and revokes existing sessions. It does not block future GitHub sign-in."
           />
           <Modal.Footer>
             <Button
@@ -597,7 +597,7 @@ function MemberDialog({
           title={member ? `Edit ${member.name}` : addLabel}
           description={
             githubAuth
-              ? "Add their GitHub login to allow sign-in. A name alone is only an identity mapping."
+              ? "GitHub sign-in adds members automatically. Add or edit identity details here for attribution."
               : "Commits, sessions, and access grants resolve through this person."
           }
         />
