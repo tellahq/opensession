@@ -293,7 +293,8 @@ export function OrganizationProfileSection({
                   <SettingRowText>
                     <SettingRowTitle>Upload icon</SettingRowTitle>
                     <SettingRowDescription>
-                      Also used for the installed web app on your Home Screen.
+                      Also the browser tab icon and the installed web app icon
+                      on your Home Screen.
                     </SettingRowDescription>
                   </SettingRowText>
                   <SettingRowControl className="flex flex-wrap items-center justify-end gap-2">

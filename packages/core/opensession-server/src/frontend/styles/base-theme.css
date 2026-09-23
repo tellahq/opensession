@@ -874,13 +874,26 @@ html[data-accent="green"] {
    The exceptions restate their durations literally rather than trying to undo
    the blanket with `revert` — `revert` rolls back to the *origin* below the
    author one, i.e. the UA's `0s`, which would freeze exactly the indicators we
-   are trying to keep alive. */
+   are trying to keep alive.
+
+   Transitions are removed outright, not shortened. `transition-property`
+   defaults to `all`, so a duration-only override (the usual `0.01ms`) does
+   not merely shorten declared transitions: it gives every element a
+   transition on every animatable property, heights and transforms included.
+   A height written in a React commit then lands one frame after the DOM
+   write, and everything that measures synchronously in a layout effect reads
+   the old geometry. The transcript's live-edge glue wrote scrollTop against
+   the old scrollHeight (clamped, a no-op), the virtualizer measured rows at
+   their previous size, and a following reader was stranded above the live
+   edge by the whole prepend (measured: 626px on desktop, 204px behind a
+   phone keyboard), with reduced motion on and nowhere else. Animations need
+   no such care: `animation-name` defaults to `none`, so a duration alone
+   starts nothing. Nothing here waits on `transitionend` without a timer. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    transition-duration: 0.01ms !important;
-    transition-delay: 0ms !important;
+    transition: none !important;
     animation-duration: 0.01ms !important;
     animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;

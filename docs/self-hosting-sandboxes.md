@@ -6,7 +6,7 @@ a Runner, with the repository checked out, its `.agents/setup` already run,
 and a durable disk. It sleeps between turns,
 wakes when the next message arrives, and comes back with files, running
 Portals, and the conversation intact. Companion to
-[`deploy/sandbox/README.md`](../deploy/sandbox/README.md) (runner payload) and
+[`deploy/sandbox/README.md`](../deploy/sandbox/README.md) (the base runtime) and
 [repo-lifecycle.md](repo-lifecycle.md) (what a repository commits).
 
 **Default = This machine.** The new-session menu offers one choice, **Run in:
@@ -19,9 +19,8 @@ repository's app always runs in a Sandbox Portal rather than on this server.
 Precedence is project, then personal, then workspace; a per-session choice
 always wins.
 
-Claude and Pi-family models run in a Sandbox. Native Codex cannot: its
-writable, rotating `CODEX_HOME` stays host-only. Choose a `pi/openai/*` model
-for GPT in a Sandbox.
+Every model works with a Sandbox: the agent loop runs on this server, and
+only the workspace is in the Sandbox (see [Where the agent runs](#where-the-agent-runs)).
 
 ## Setup
 
@@ -60,14 +59,15 @@ or another provider.
 Every Sandbox session gets its own machine. Open Session:
 
 - creates the VM (from the project's snapshot when one exists, else from the
-  provider's base image), installs the runner payload, and clones the
+  provider's base image), installs the base runtime, and clones the
   repository inside it. The workspace lives in the Sandbox; after every clean
   turn its state is checkpointed to origin (see below), so a lost or replaced
   machine continues from the last checkpoint;
 - runs the repository's `.agents/setup` once per disk, and `.agents/resume`
   on every wake;
-- runs the agent inside the VM. The engine dials back to this server over the
-  public ingress for run streaming and MCP;
+- runs the agent loop on this server, like any other session, with the
+  Sandbox as its workspace: every file read, edit, search and shell command
+  the agent makes runs in the VM (see [Where the agent runs](#where-the-agent-runs));
 - exposes services as **Portals**: authenticated HTTPS routes on this host
   that relay to the Sandbox. The browser never sees a provider URL;
 - lets the Sandbox sleep after the provider's idle interval (30 minutes by
@@ -78,6 +78,37 @@ Every Sandbox session gets its own machine. Open Session:
 The session's **Sandbox** badge shows Preparing, Awake, Sleeping, Waking, or
 Needs attention, with manual sleep, wake, checkpoint, and rebuild, plus the
 `setup` and `resume` logs and the age of the last checkpoint.
+
+## Where the agent runs
+
+The agent loop, its model credentials, the conversation, MCP connections and
+permission checks stay on this server. Each Sandbox turn runs in an ordinary
+detached run host here, exactly like a session on this machine; only its
+workspace tools are remote. `read`, `write`, `edit`, `ls`, `find`, `grep` and
+`bash` each become one command in the Sandbox, sent over the server's run-rpc
+socket (`/workspace/exec`) with the run's own token. The server resolves the
+token to the session's recorded Sandbox, so a run can reach its own machine
+and nothing else, and a session without a Sandbox is refused rather than run
+here.
+
+So a Sandbox needs only the base runtime: the workspace tools, the pinned
+Node, just, gh and bun, and the `opensession` identity command. No model
+credential, runner payload or conversation history is placed in it, and a
+deploy of Open Session changes nothing inside it. A Sandbox that crashes or
+fills its disk fails the tool call; the turn, its history and the session
+survive, and the next turn continues on a rebuilt machine.
+
+Shell commands run in their own process group with output going to a file,
+so a Stop or a timeout reaches everything a command started, and a server it
+left in the background does not hold the call open. The command receives the
+run's GitHub and git identity; this server's paths and file-based
+credentials (AWS, Claude or Codex CLI pools) are never passed. The skills
+this server ships are read from here; the checkout's own AGENTS.md and
+skills are read from the Sandbox at the start of each turn.
+
+A tool call costs one provider round trip: about 25 to 110 ms on Boat over
+its SSH lane and 120 to 300 ms on Daytona. `deploy/sandbox/verify-remote-workspace.ts`
+measures it against a live provider.
 
 ## Checkpoints
 
@@ -140,8 +171,8 @@ when the Sandbox cannot be reached at all.
 A code session can move between this machine and any ready Sandbox provider,
 in every direction, from its ⋯ menu (_Move to Sandbox_ on this machine,
 _Move session_ in a Sandbox). The agent must be idle. From the next message
-on it runs on the destination; a fresh engine is seeded from the stored
-transcript, so the conversation carries over.
+on its tools act on the destination. The agent loop and its conversation
+stay on this server, so nothing about the conversation moves.
 
 - **This machine → Sandbox** (`POST /api/sessions/<id>/sandbox/attach`): the
   worktree is checkpointed first, so uncommitted work travels along. Portals
@@ -205,6 +236,11 @@ started, by the person from the Portals panel or by the agent through
   turn that finished while the machine came up is on it too;
 - starts the Portal there and relays it as usual. The Portals panel says so,
   with the machine's state while it prepares, sleeps, or needs attention.
+
+A Portal Sandbox carries only the base runtime: the workspace tools, the
+pinned Node, just, gh and bun, and the `opensession` identity command. The
+agent runs on this machine, so none of the runner payload is installed there,
+and deploying Open Session does not make the machine reinstall anything.
 
 After every clean turn the worktree is checkpointed again and the Portal
 Sandbox's checkout is landed on it (whatever branch it was on), so the app
@@ -298,8 +334,7 @@ A Sandbox never receives long-lived cloud credentials. Lifecycle hooks and
 Portals receive a short-lived workload identity lease that they exchange for
 scoped cloud roles (`OPENSESSION_WORKLOAD_IDENTITY_*`); see
 [repo-lifecycle.md](repo-lifecycle.md#workload-identity-from-a-sandbox).
-Model credentials are uploaded per launch, scoped to the run's account, and
-never land in a snapshot.
+Model credentials never enter a Sandbox: the agent loop runs on this server.
 
 ## Automations
 
@@ -313,23 +348,25 @@ never adopt a prewarm or project snapshot. See
 Workspace → Sandboxes writes this file; hand-edit only for the operator
 settings below. Read fresh per call, no restart needed except where noted.
 
-| Key                                             | Meaning                                                                                                                                                                                                                         |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `connections`                                   | Provider connections and their qualification state. Managed by Workspace → Sandboxes.                                                                                                                                           |
-| `sessionDefault`                                | `"daytona"`, `"box"`, `"tart"`, or `"none"`: where new sessions run when nobody chose.                                                                                                                                          |
-| `provider`, `perRepo.<id>.provider`             | Legacy default and per-repo override for API creates that pass `sandbox: true`.                                                                                                                                                 |
-| `perRepo.<id>.sessionDefault`                   | `"daytona"`, `"box"`, or `"none"`: where new sessions on that repo run, ahead of the workspace and personal defaults. Managed by Workspace → Sandboxes → Projects.                                                              |
-| `idleStopMinutes`                               | Sleep after this much idle time (default 30).                                                                                                                                                                                   |
-| `callbackBaseUrl`                               | Dial-back URL when the public ingress origin should not be used (tailnet setups).                                                                                                                                               |
-| `publicIngress`                                 | Advanced bind override for the `:3860` listener. Needs a restart.                                                                                                                                                               |
-| `daytona.snapshot`                              | Org snapshot new Daytona sandboxes start from when no project snapshot exists (sizing lives in it).                                                                                                                             |
-| `cloneCredential`                               | `{type: "none"}` or `{type: "https-token", token}` for repository clones inside Sandboxes. The live GitHub App wins.                                                                                                            |
-| `prewarm`                                       | `enabled`, `ttlMinutes`, `maxLive` for the warm-on-typing pool; `keepReady` lists `{provider, repoId}` targets kept prepared (Keep one ready in Workspace → Sandboxes).                                                         |
-| `runnerBundleUrl`, `runnerRepoUrl`, `runnerSha` | Where Sandboxes fetch the Open Session runner payload. Unset, a source install runs the runner at its own deployed commit, so every deploy carries it along; set `runnerSha` only to hold or roll back the runner deliberately. |
-| `automation.egressAllowlist`                    | Extra hosts unattended runs may reach.                                                                                                                                                                                          |
+| Key                                 | Meaning                                                                                                                                                                 |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `connections`                       | Provider connections and their qualification state. Managed by Workspace → Sandboxes.                                                                                   |
+| `sessionDefault`                    | `"daytona"`, `"box"`, `"tart"`, or `"none"`: where new sessions run when nobody chose.                                                                                  |
+| `provider`, `perRepo.<id>.provider` | Legacy default and per-repo override for API creates that pass `sandbox: true`.                                                                                         |
+| `perRepo.<id>.sessionDefault`       | `"daytona"`, `"box"`, or `"none"`: where new sessions on that repo run, ahead of the workspace and personal defaults. Managed by Workspace → Sandboxes → Projects.      |
+| `idleStopMinutes`                   | Sleep after this much idle time (default 30).                                                                                                                           |
+| `callbackBaseUrl`                   | Dial-back URL when the public ingress origin should not be used (tailnet setups).                                                                                       |
+| `publicIngress`                     | Advanced bind override for the `:3860` listener. Needs a restart.                                                                                                       |
+| `daytona.snapshot`                  | Org snapshot new Daytona sandboxes start from when no project snapshot exists (sizing lives in it).                                                                     |
+| `cloneCredential`                   | `{type: "none"}` or `{type: "https-token", token}` for repository clones inside Sandboxes. The live GitHub App wins.                                                    |
+| `prewarm`                           | `enabled`, `ttlMinutes`, `maxLive` for the warm-on-typing pool; `keepReady` lists `{provider, repoId}` targets kept prepared (Keep one ready in Workspace → Sandboxes). |
+| `automation.egressAllowlist`        | Extra hosts unattended runs may reach.                                                                                                                                  |
 
 Retired keys (`image`, `workspace`, `transport`, `previewPorts`, `snapshots`,
-`e2b`, `modal`, `awsLambdaMicrovm`) are ignored. Sessions that recorded a
+`e2b`, `modal`, `awsLambdaMicrovm`, and the runner payload's
+`runnerBundleUrl`, `runnerRepoUrl`, `runnerSha`) are ignored. A turn that was
+running on the retired in-Sandbox runner when this release was deployed ends
+with a note to send the prompt again; the Sandbox and its files are kept. Sessions that recorded a
 retired provider (`docker`, `modal`, `e2b`, `lambda-microvm`) keep their
 transcript but their Sandbox can no longer be woken; start a new session.
 
@@ -347,7 +384,7 @@ fails clearly rather than silently running on the host.
 
 All providers passed the live conformance matrix (Daytona 2026-08-11, Boat
 2026-08-13, then called Box; Mac VM 2026-09-20 on the office Mac mini;
-use.computer 2026-09-21 on a reserved Mac): engine round trip, exec
+use.computer 2026-09-21 on a reserved Mac): workspace tool round trip, exec
 semantics, in-sandbox workspace git, Portal relay, sleep/wake, snapshot
 restore with credential scrub, and cleanup.
 Re-run it with `bun run deploy/sandbox/conformance.ts [daytona] [box]`; it
@@ -439,9 +476,9 @@ sealed them; a session placed on another Mac clones the base instead, and
 the snapshot stays valid where it is.
 
 Session VMs are APFS clone-on-write clones of the base (`sbx-<session>`), so
-creating one costs no space up front and takes seconds; the runner payload
-bootstrap on first use takes a few minutes as on other providers, and
-project snapshots (`tpl-<repo>-<hash>`, local clones) remove that. The
+creating one costs no space up front and takes seconds; the base runtime
+install on first use takes a few minutes, and project snapshots
+(`tpl-<repo>-<hash>`, local clones) remove that. The
 guest user is `admin` with home `/Users/admin`; the workspace lives under
 `/Users/admin/worktrees`. Sleep is `tart stop` (disk kept, processes gone);
 wake boots the VM again and runs `.agents/resume`. Idle VMs are stopped
@@ -486,9 +523,9 @@ everything. It takes about six minutes; the snapshot dominates.
 
 The guest user is `lume` with home `/Users/lume`; the workspace lives under
 `/Users/lume/worktrees`, and guest preparation aliases `/home/ubuntu` to that
-home so the session's canonical path resolves. The runner payload bootstrap on
-first use takes a few minutes as on other providers; project snapshots (service
-snapshots, restored on any reserved Mac) remove that, and prewarms adopt as on
+home so the session's canonical path resolves. The base runtime install on
+first use takes a few minutes; project snapshots (service snapshots, restored
+on any reserved Mac) remove that, and prewarms adopt as on
 Daytona. Prewarms are never parked, since a stopped VM would still hold one of
 the reservation's slots: they are adopted or destroyed.
 
@@ -515,8 +552,8 @@ policy-enforced.
 
 A Sandbox isolates the agent's filesystem, processes, and network from this
 host and from other sessions. It is third-party compute: the repository clone
-credential, a scoped model credential, and short-lived workload identity
-leases enter it; the instance config, other users' credentials, and the
-session store do not. Portal routes forward-authenticate every request
+credential, the run's GitHub token inside each shell command's environment,
+and short-lived workload identity leases enter it; model credentials, the
+instance config, other users' credentials, and the session store do not. Portal routes forward-authenticate every request
 against Open Session before proxying. Portals inherit the instance's team
 boundary; there is no narrower per-session ACL yet.

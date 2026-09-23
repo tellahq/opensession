@@ -75,8 +75,13 @@ export function registerRunToken(token: string, ctx: RunTokenContext): void {
 export function unregisterRunToken(token: string | undefined): void {
   if (!token) return;
   const existing = tokens.get(token);
-  if (!existing || existing.refs <= 1) tokens.delete(token);
-  else existing.refs -= 1;
+  if (!existing || existing.refs <= 1) {
+    tokens.delete(token);
+    // The run's cached Sandbox handle (sandbox/workspace-rpc.ts) goes too.
+    (
+      g.__opensessionWorkspaceRpcHandles as Map<string, unknown> | undefined
+    )?.delete(token);
+  } else existing.refs -= 1;
 }
 
 /** Constant-time string compare (length mismatch short-circuits — the length
@@ -170,6 +175,20 @@ export async function dispatchRunRpc(
   const token = String(body?.token || "");
   let ctx: RunTokenContext | undefined = tokens.get(token);
   if (!ctx) return imm(403, { error: "unauthorized (unknown run token)" });
+
+  // A remote workspace's file and shell operations (remote-workspace.ts).
+  // The token's session decides which Sandbox; the body cannot name one.
+  if (path === "/workspace/exec") {
+    const sessionId = ctx.sessionId;
+    const done = import("./sandbox/workspace-rpc")
+      .then(({ dispatchWorkspaceExec }) =>
+        dispatchWorkspaceExec({ sessionId }, token, body ?? {}),
+      )
+      .catch((e: unknown) => ({
+        error: e instanceof Error ? e.message : String(e),
+      }));
+    return { kind: "call", done };
+  }
 
   const builder: InteractiveMcpBuilder | undefined = g.__runRpcMcpBuilder;
   if (!builder) return imm(503, { error: "MCP builder not registered yet" });

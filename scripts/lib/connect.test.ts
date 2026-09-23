@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import {
   parseRunnerPortalRegistry,
   parseVmDisplayEndpoint,
@@ -329,7 +330,9 @@ describe("Mac VM streams", () => {
       "ssh",
       "-tt",
       "-i",
-      "/Users/runner/.opensession-tart/id_ed25519",
+      // The key is local to the Runner, so its separator follows the host.
+      // The guest command below must keep POSIX quoting on every host.
+      join("/Users/runner", ".opensession-tart", "id_ed25519"),
     ]);
     expect(argv).toContain("BatchMode=yes");
     expect(argv).toContain("admin@192.168.64.3");

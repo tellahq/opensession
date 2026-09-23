@@ -686,7 +686,10 @@ export function useSidebarWorkspaceController({
             if (isDraftWsRow(row)) deleteDraftWsRow(row);
             else archiveWorkspaceWithNext(row, rowEl);
           } else {
-            workspacePinState(row).toggle();
+            // The leading edge wakes a snoozed row and pins any other, the
+            // same split the revealed slot in WorkspaceRow makes.
+            if (rowIsSnoozed(row)) toggleWorkspaceSnooze(row);
+            else workspacePinState(row).toggle();
             setWsSwipe({ key: row.key, offset: 0, action });
             window.setTimeout(() => setWsSwipe(null), SWIPE_COMMIT_MS);
           }

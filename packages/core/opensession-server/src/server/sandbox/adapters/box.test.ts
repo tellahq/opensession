@@ -4,9 +4,11 @@ import {
   boxDesktopUrl,
   BOX_PREVIEW_URL_PATTERN,
   BOX_RUNTIME_HOME_COMMAND,
+  BOX_HOME_GUARD,
   BOX_RUNTIME_HOME_LAZY_MARKER,
   boxCommandPlaneUnavailable,
   boxComposeShell,
+  boxReadRetryable,
   boxKnownHostsKey,
   boxMachineIpSshEndpoint,
   boxMachineType,
@@ -162,12 +164,33 @@ describe("Box command readiness", () => {
     expect(boxResumePrimeCommand("/home/ubuntu/worktrees/app")).toContain(
       "test -d /home/ubuntu/worktrees/app/.git",
     );
+    // The binaries the Portal relay and dev servers start on come first.
+    expect(boxResumePrimeCommand("/home/ubuntu/worktrees/app")).toStartWith(
+      '{ cat /home/ubuntu/.bun/bin/bun "$(command -v node)"',
+    );
+    expect(boxResumePrimeCommand("/home/ubuntu/worktrees/app")).toContain(
+      "/objects/pack/*.idx",
+    );
   });
 
   test("keeps command temporary files inside the bind-mounted home", () => {
     expect(boxComposeShell("printf ok")).toStartWith(
-      "mkdir -p /home/ubuntu/.tmp && export TMPDIR=/home/ubuntu/.tmp && ",
+      `${BOX_HOME_GUARD} && mkdir -p /home/ubuntu/.tmp && export TMPDIR=/home/ubuntu/.tmp && `,
     );
+  });
+
+  test("restores the /home/ubuntu bind mount before a workspace command", async () => {
+    // A Box the provider restarted on its own lost the mount; a cwd under
+    // /home/ubuntu must still resolve.
+    expect(BOX_HOME_GUARD).toStartWith("{ mountpoint -q /home/ubuntu || {");
+    expect(BOX_HOME_GUARD).toContain(BOX_RUNTIME_HOME_COMMAND);
+    const composed = boxComposeShell("git status", {
+      cwd: "/home/ubuntu/worktrees/acme-feature",
+    });
+    expect(composed.indexOf(BOX_HOME_GUARD)).toBe(0);
+    expect(
+      composed.indexOf("cd /home/ubuntu/worktrees/acme-feature"),
+    ).toBeGreaterThan(BOX_HOME_GUARD.length);
   });
 
   test("only retries explicit no-command 409 states", () => {
@@ -226,5 +249,24 @@ describe("Box desktop", () => {
   test("refuses a missing or non-https desktop URL", () => {
     expect(() => boxDesktopUrl({})).toThrow(/did not return a desktop URL/);
     expect(() => boxDesktopUrl({ desktopUrl: "http://x" })).toThrow();
+  });
+});
+
+describe("Box read retries", () => {
+  test("retries gateway errors and lost requests, never a timeout or a refusal", () => {
+    const status = (code: number) =>
+      Object.assign(new Error(`HTTP ${code}`), { status: code });
+    expect(boxReadRetryable(status(502))).toBe(true);
+    expect(boxReadRetryable(status(503))).toBe(true);
+    expect(boxReadRetryable(status(504))).toBe(true);
+    expect(boxReadRetryable(new Error("socket hang up"))).toBe(true);
+    expect(boxReadRetryable(status(404))).toBe(false);
+    expect(boxReadRetryable(status(409))).toBe(false);
+    expect(boxReadRetryable(status(500))).toBe(false);
+    expect(
+      boxReadRetryable(
+        new Error("box API GET /sandboxes/bx_1 timed out after 30s"),
+      ),
+    ).toBe(false);
   });
 });
