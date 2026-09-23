@@ -59,4 +59,13 @@ describe("suggestedShippedChangeMessage", () => {
       "All 40 built-in video backgrounds now use their real macOS release names and variants.",
     );
   });
+
+  test("skips commit bookkeeping and falls back to the title", () => {
+    expect(
+      suggestedShippedChangeMessage(
+        "Add a snake border style",
+        "Updated in 6c3dc4c14b and cf95c3283d at the reviewer's request.",
+      ),
+    ).toBe("A snake border style is now available.");
+  });
 });

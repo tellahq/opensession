@@ -5,10 +5,9 @@
  *   bun run deploy/sandbox/conformance.ts [daytona] [box]
  *
  * (no args = both). Per entry: ensure/reuse, exec argv+stderr semantics,
- * in-sandbox volume-style workspace git, ports() shape, a real launchRun
- * round-trip + steer + cancel (cheapest Claude model, only when an account
- * pool exists and the sandbox can actually reach this host's dial-back
- * listener), get() reattach, destroy.
+ * in-sandbox volume-style workspace git, ports() shape, a remote workspace
+ * round trip (the agent's file and shell tools through the server handler),
+ * get() reattach, destroy.
  *
  * - daytona / box run ONLY when credentials are configured — the suite
  *   reads workspace-owned Daytona/Box credentials through their opaque secret
@@ -57,11 +56,7 @@ const { boxApiBaseUrl } =
   await import("../../packages/core/opensession-server/src/server/sandbox/adapters/box");
 const runWs =
   await import("../../packages/core/opensession-server/src/server/run-ws");
-const { hostRunBusy } =
-  await import("../../packages/core/opensession-server/src/server/host-registry");
 const { OPENSESSION_SESSIONS_DIR } =
-  await import("../../packages/core/opensession-server/src/server/paths");
-const { statePath } =
   await import("../../packages/core/opensession-server/src/server/paths");
 const {
   invalidateRemoteRepoTemplate,
@@ -69,8 +64,6 @@ const {
   remoteRepoTemplateProofPath,
 } =
   await import("../../packages/core/opensession-server/src/server/sandbox/remote-repo-template");
-type RunHostSpec =
-  import("../../packages/core/opensession-server/src/runner-host/protocol").RunHostSpec;
 type Sandbox =
   import("../../packages/core/opensession-server/src/server/sandbox/provider").Sandbox;
 type PortMap =
@@ -155,20 +148,6 @@ const boxKey: string =
 const boxApiUrl: string = boxApiBaseUrl(
   liveConnection("box")?.settings?.apiUrl,
 );
-
-// ── account pool gate (real model runs) ───────────────────────────────────────
-
-let hasAccounts = false;
-try {
-  const store = JSON.parse(
-    readFileSync(
-      process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH ||
-        statePath(".opensession-claude-accounts.json"),
-      "utf-8",
-    ),
-  );
-  hasAccounts = Array.isArray(store.accounts) && store.accounts.length > 0;
-} catch {}
 
 // ── scratch repos ─────────────────────────────────────────────────────────────
 // A public GitHub repo registration for remote volume-style clones.
@@ -790,204 +769,61 @@ async function runEntry(entry: Entry): Promise<void> {
       console.log("  (no public IP/base — skipping reachability probe)");
     }
 
-    // 6. launchRun round-trip + steer + cancel (cheapest model; gated)
-    const wsTransport = entry.remote || entry.config.transport === "ws";
-    if (!hasAccounts) {
-      console.log("  (dry-run: no account pool — skipping launchRun checks)");
-    } else if (wsTransport && !reachable) {
-      console.log(
-        "  (skipping launchRun: sandbox cannot reach the dial-back listener)",
+    // 6. The agent loop runs on this server and reaches the Sandbox through
+    //    its workspace tools: a read, a write, and a shell command, each
+    //    through the same server handler a run's tool calls take.
+    {
+      const { dispatchWorkspaceExec, primeWorkspaceSandbox } =
+        await import("../../packages/core/opensession-server/src/server/sandbox/workspace-rpc");
+      const remote =
+        await import("../../packages/core/opensession-server/src/server/remote-workspace");
+      primeWorkspaceSandbox(sessionId, sandbox);
+      const token = crypto.randomUUID();
+      const ws = new remote.RemoteWorkspace(
+        {
+          provider: entry.providerId,
+          sandboxId: sandbox.id,
+          cwd: sandbox.cwd,
+          scratchDir: `/tmp/sbxtest-scratch-${RUN_TS}`,
+        },
+        async (body) => {
+          const reply = await dispatchWorkspaceExec({ sessionId }, token, body);
+          if (typeof reply.error === "string") throw new Error(reply.error);
+          return reply as unknown as {
+            exitCode: number;
+            stdout: string;
+            stderr: string;
+          };
+        },
       );
-      // Runner-payload smoke: prove the bootstrapped payload actually RUNS —
-      // HOST_ENTRY loads its full module graph (agent-runner and friends from
-      // the in-sandbox bun install) and reaches its "dialing" state. This
-      // certifies everything about launchRun except the provider's egress
-      // (e.g. Daytona Tier-1/2 sandboxes cannot reach arbitrary hosts).
-      if (entry.remote) {
-        const { HOST_ENTRY, HOST_SPEC_NAME } =
-          await import("../../packages/core/opensession-server/src/runner-host/protocol");
-        const smokeDir = `/home/ubuntu/.bks-runs/smoke-${RUN_TS}`;
-        const smokeSpec = {
-          hostId: `rh-smoke-${RUN_TS}`,
-          osSessionId: sessionId,
-          prompt: "smoke",
-          // Deliberately nonexistent: the run itself must die instantly (no
-          // model call happens without a valid workspace) — the check only
-          // cares that the payload BOOTS and reaches the transport.
-          cwd: "/nonexistent-bks-smoke",
-        };
-        const boot = await sandbox.exec([
-          "sh",
-          "-c",
-          `mkdir -p ${smokeDir} && cat > ${smokeDir}/${HOST_SPEC_NAME} <<'EOF'\n${JSON.stringify(smokeSpec)}\nEOF\n` +
-            `env HOME=/home/ubuntu OPENSESSION_RUN_WS_URL=ws://127.0.0.1:9/dead OPENSESSION_RUN_WS_TOKEN=smoke ` +
-            `OPENSESSION_RUN_JOURNAL=${smokeDir}/journal.json nohup /home/ubuntu/.bun/bin/bun run ${HOST_ENTRY} ` +
-            `${smokeDir}/${HOST_SPEC_NAME} > ${smokeDir}/host.log 2>&1 & echo started`,
-        ]);
-        let smokeLog = "";
-        const smokeDeadline = Date.now() + 90_000;
-        while (Date.now() < smokeDeadline && !/dialing/.test(smokeLog)) {
-          await new Promise((r) => setTimeout(r, 3000));
-          smokeLog = (await sandbox.exec(["cat", `${smokeDir}/host.log`]))
-            .stdout;
-        }
-        ok(
-          "runner payload boots in-sandbox (HOST_ENTRY reaches its dialing state)",
-          boot.exitCode === 0 && /dialing ws:/.test(smokeLog),
-          smokeLog.split("\n").slice(-2).join(" | ").slice(0, 160),
-        );
-        await sandbox.exec([
-          "sh",
-          "-c",
-          "pkill -f runner-host/host.ts || true",
-        ]);
-      }
-    } else {
-      const runSpec: RunHostSpec = {
-        hostId: `rh-conf-${entry.name}-${RUN_TS}`,
-        osSessionId: sessionId,
-        prompt: "Reply with exactly: OK",
-        cwd: sandbox.cwd,
-        mode: "ask",
-        model: "claude-haiku-4-5",
-        mcpServers: [],
-        // Exercise the same interactive policy lane a real session uses. The
-        // runner gate is intentionally deny-by-default on unknown journal kinds.
-        journalKind: "prompt",
-      };
-      // REGRESSION (2026-07-09 launch→attach stalls, bks-019f46e9/bks-019f4729):
-      // the launch's attach chain must never wait behind another long-running
-      // exec on the provider — start one concurrently (same client instance +
-      // HTTP lanes as a prewarm bootstrap's `bun install`; a second paid
-      // sandbox is not created for cost discipline) and require the EAGER
-      // launch (spec write → host exec → dial-back → consumer attach) to
-      // finish inside 10s. The long exec is abandoned; the remote process
-      // dies with the destroy below.
-      let longExec: Promise<unknown> | null = null;
-      if (entry.remote) {
-        longExec = sandbox
-          .exec(["sh", "-c", "sleep 90; echo long-exec-done"], {
-            background: true,
-          })
-          .catch(() => {});
-      }
-      const t2 = Date.now();
-      let handle: import("../../packages/core/opensession-server/src/server/sandbox/provider").RunHandle;
-      try {
-        handle = sandbox.launchRunEager
-          ? await sandbox.launchRunEager(runSpec, {})
-          : sandbox.launchRun(runSpec, {});
-      } catch (e) {
-        ok("launch attached (eager)", false, String(e).slice(0, 160));
-        throw e;
-      }
-      if (entry.remote) {
-        const attachMs = Date.now() - t2;
-        const attachBoundMs = entry.concurrentAttachMaxMs || 10_000;
-        ok(
-          `launch attaches during a concurrent long exec (<${attachBoundMs / 1000}s)`,
-          !!sandbox.launchRunEager && attachMs < attachBoundMs,
-          `${attachMs}ms`,
-        );
-        void longExec;
-      }
-      const events: string[] = [];
-      let text = "";
-      let sawInit = false;
-      const consume = (async () => {
-        for await (const ev of handle.events()) {
-          events.push(ev.type);
-          if (ev.type === "init") sawInit = true;
-          if (ev.type === "text_chunk") text += ev.text || "";
-          if (ev.type === "done" || ev.type === "error") return ev;
-        }
-        return null;
-      })();
-      const result = await Promise.race([
-        consume,
-        new Promise<null>((r) => setTimeout(() => r(null), 240_000)),
+      const ops = remote.makeRemoteToolOps(ws);
+      const probe = `${sandbox.cwd}/.sbxtest-workspace-probe`;
+      await ops.write.writeFile(probe, "probe\n");
+      ok(
+        "workspace tools: write then read",
+        (await ops.read.readFile(probe)).toString() === "probe\n",
+      );
+      const shell = await remote.runRemoteCommand(ws, {
+        command: "git rev-parse --is-inside-work-tree",
+        timeoutS: 60,
+        outputCap: 1_000,
+        env: remote.remoteCommandEnv({}, ws, `conf-${RUN_TS}`, false),
+        signals: [],
+      });
+      ok(
+        "workspace tools: shell command in the checkout",
+        shell.exitCode === 0 && shell.output.includes("true"),
+        shell.output.trim().slice(0, 80),
+      );
+      const nothingInstalled = await sandbox.exec([
+        "sh",
+        "-c",
+        "test ! -e ~/.bks-bootstrapped && test ! -e ~/.opensession-claude-accounts.json && echo clean",
       ]);
-      if (!result) handle.cancel();
-      ok("launchRun streamed init", sawInit, events.slice(0, 6).join(","));
       ok(
-        "launchRun finished with done",
-        result?.type === "done",
-        result
-          ? `${result.type}: ${String(result.result || result.content || "").slice(0, 120)} (${((Date.now() - t2) / 1000).toFixed(1)}s)`
-          : "timed out after 240s",
+        "no runner payload or model credential in the Sandbox",
+        nothingInstalled.stdout.includes("clean"),
       );
-      ok(
-        "model replied",
-        /\bOK\b/i.test(text) || /\bOK\b/i.test(String(result?.result || "")),
-        JSON.stringify(text.slice(0, 60)),
-      );
-
-      // steer + cancel on a second short run
-      const cancelSpec: RunHostSpec = {
-        ...runSpec,
-        hostId: `rh-conf-cancel-${entry.name}-${RUN_TS}`,
-        prompt: "Count from 1 to 400, one number per line. Do not stop early.",
-      };
-      const cHandle = sandbox.launchRun(cancelSpec, {});
-      let cInit = false;
-      const cConsume = (async () => {
-        for await (const ev of cHandle.events()) {
-          if (ev.type === "init") cInit = true;
-        }
-      })();
-      const cDeadline = Date.now() + 90_000;
-      while (!cInit && Date.now() < cDeadline)
-        await new Promise((r) => setTimeout(r, 500));
-      ok("second run started (for steer/cancel)", cInit);
-
-      // A provider/account-capacity failure to initialize the second model
-      // run is one failure, not four misleading transport failures. The first
-      // run above still certifies launch + streaming; reconnect/steer/cancel
-      // need a live run to exercise.
-      if (!cInit) {
-        cHandle.cancel();
-        await Promise.race([
-          cConsume,
-          new Promise<void>((r) => setTimeout(r, 5_000)),
-        ]);
-      } else {
-        // WS transport resilience: kill the dialed-in connection server-side
-        // mid-run. The host must redial (≤5s backoff), replay the disconnect
-        // window (seq/ack — ws-buffer.ts), and the handle must reattach so
-        // steer/cancel below still land. Replay-exactly-once semantics are
-        // unit-tested in src/server/zz-run-ws.test.ts; this proves the live
-        // wiring end-to-end on a real run.
-        if (wsTransport) {
-          ok(
-            "ws connection dropped server-side (mid-run)",
-            runWs.dropRunWsConnection(cancelSpec.hostId),
-          );
-          let redialed = false;
-          const wsDeadline = Date.now() + 30_000;
-          while (!redialed && Date.now() < wsDeadline) {
-            await new Promise((r) => setTimeout(r, 500));
-            redialed = runWs.hasLiveRunWsConnection(cancelSpec.hostId);
-          }
-          ok("host redialed after the drop", redialed);
-        }
-
-        // The handle reconnects on its own cadence (2s polls) after a ws drop —
-        // retry the steer until it lands instead of asserting the first attempt.
-        let steered = cHandle.steer("Nudge: you may stop early.");
-        const steerDeadline = Date.now() + 30_000;
-        while (!steered && Date.now() < steerDeadline) {
-          await new Promise((r) => setTimeout(r, 1000));
-          steered = cHandle.steer("Nudge: you may stop early.");
-        }
-        ok("steer delivered", steered);
-        ok("cancel delivered", cHandle.cancel());
-        const cEnded = await Promise.race([
-          cConsume.then(() => true),
-          new Promise<false>((r) => setTimeout(() => r(false), 90_000)),
-        ]);
-        ok("cancelled run's stream terminated", cEnded === true);
-        ok("session not busy after cancel", !hostRunBusy(sessionId));
-      }
     }
 
     // 7. get() reattach

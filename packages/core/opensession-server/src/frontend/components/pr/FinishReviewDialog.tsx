@@ -4,12 +4,13 @@ import { Checkbox } from "../../ui/checkbox";
 import { Textarea } from "../../ui/input";
 import { Modal, useEnterOnMount } from "../../ui/modal";
 
-export type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+import { REVIEW_VERDICTS, type ReviewEvent } from "../../lib/review-verdicts";
 
 interface Props {
   prNumber: number;
   pendingCount: number;
   event: ReviewEvent;
+  canGiveVerdict: boolean;
   onEventChange: (event: ReviewEvent) => void;
   defaultSummary: string;
   canMerge: boolean;
@@ -41,6 +42,7 @@ export function FinishReviewDialog({
   pendingCount,
   event,
   onEventChange,
+  canGiveVerdict,
   defaultSummary,
   canMerge,
   onFixChecks,
@@ -58,19 +60,9 @@ export function FinishReviewDialog({
   // close. A focus ring on the ✕ is the wrong first read for a dialog you
   // opened in order to write in it.
   const summaryRef = useRef<HTMLTextAreaElement>(null);
-  const verdicts: Array<{ event: ReviewEvent; label: string; hint: string }> = [
-    { event: "APPROVE", label: "Approve", hint: "Sign off on these changes" },
-    {
-      event: "COMMENT",
-      label: "Comment",
-      hint: "Leave feedback without a verdict",
-    },
-    {
-      event: "REQUEST_CHANGES",
-      label: "Request changes",
-      hint: "Ask for another pass before merging",
-    },
-  ];
+  const verdicts = REVIEW_VERDICTS.filter(
+    (verdict) => canGiveVerdict || verdict.event === "COMMENT",
+  );
   return (
     <Modal.Root open={open} onOpenChange={(next) => !next && onClose(summary)}>
       <Modal.Content

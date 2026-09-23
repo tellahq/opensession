@@ -11,6 +11,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
@@ -133,6 +134,22 @@ describe("checkpointLandScript", () => {
       .quiet()
       .nothrow();
     expect(wrong.exitCode).not.toBe(0);
+
+    // A git that crashed during an earlier landing left its lock behind.
+    // (Aged, since other gits may be running on the machine this test runs
+    // on; inside a Portal Sandbox no running git also clears it.)
+    const lock = join(mirror, ".git", "index.lock");
+    writeFileSync(lock, "");
+    const old = new Date(Date.now() - 10 * 60_000);
+    utimesSync(lock, old, old);
+    const relanded = await git(
+      mirror,
+    )`bash -c ${checkpointLandScript(ref, commit!, "feature", [".ports.conf"])}`
+      .quiet()
+      .nothrow();
+    expect(relanded.stderr.toString()).toBe("");
+    expect(relanded.exitCode).toBe(0);
+    expect(existsSync(lock)).toBe(false);
   });
 });
 
@@ -290,6 +307,41 @@ describe("checkpoint script", () => {
       .split("\n")
       .sort();
     expect(files).toEqual([".gitignore", "README.md", "new.txt"]);
+  });
+
+  test("captures the working tree, not what happens to be staged", async () => {
+    const before = readFileSync(join(work, "README.md"), "utf-8");
+    // Starting from the checkout's own index must not freeze a stale stage.
+    writeFileSync(join(work, "README.md"), "staged version\n");
+    await git(work)`git add README.md`;
+    writeFileSync(join(work, "README.md"), "working version\n");
+    const result = await runCheckpoint({});
+    expect(result.exitCode).toBe(0);
+    expect((await git(origin)`git show ${ref}:README.md`.text()).trim()).toBe(
+      "working version",
+    );
+    // The checkout's real index is untouched.
+    expect((await git(work)`git show :README.md`.text()).trim()).toBe(
+      "staged version",
+    );
+    await git(work)`git reset -q README.md`;
+    writeFileSync(join(work, "README.md"), before);
+  });
+
+  test("an assume-unchanged file is still captured", async () => {
+    const before = readFileSync(join(work, "README.md"), "utf-8");
+    await git(work)`git update-index --assume-unchanged README.md`;
+    try {
+      writeFileSync(join(work, "README.md"), "hidden from git status\n");
+      const result = await runCheckpoint({});
+      expect(result.exitCode).toBe(0);
+      expect((await git(origin)`git show ${ref}:README.md`.text()).trim()).toBe(
+        "hidden from git status",
+      );
+    } finally {
+      await git(work)`git update-index --no-assume-unchanged README.md`;
+      writeFileSync(join(work, "README.md"), before);
+    }
   });
 
   test("reports unchanged when the last checkpoint already holds this state", async () => {

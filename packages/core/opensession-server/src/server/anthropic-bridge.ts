@@ -569,6 +569,10 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
   }
   const model: string = typeof body?.model === "string" ? body.model : "";
   const wantsStream = body?.stream === true;
+  // Honor an explicit "no thinking" request. Without it the SDK applies its
+  // own default thinking, and a two-sentence one-shot spends tens of seconds
+  // reasoning. Other thinking settings keep the SDK default, as before.
+  const thinkingDisabled = body?.thinking?.type === "disabled";
   const requestTools: Array<{
     name: string;
     description?: string;
@@ -680,6 +684,9 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
         // stop). Models that keep going anyway are handled at the result:
         // error_max_turns with captured calls returns them as tool_use.
         maxTurns: 2,
+        ...(thinkingDisabled
+          ? { thinking: { type: "disabled" as const } }
+          : {}),
         systemPrompt: system || " ",
         settingSources: [],
         mcpServers: mcpServers as any,

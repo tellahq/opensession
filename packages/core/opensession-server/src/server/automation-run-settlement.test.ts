@@ -609,9 +609,9 @@ describe("automation run settlement", () => {
       "utf8",
     );
     expect(source).toContain("const automationRunKey = `rh-${randomUUIDv7()}`");
-    // Sandboxed runs journal spec.hostId; both gateway paths journal startToken.
-    expect(source).toContain("hostId: automationRunKey");
-    expect(source.match(/startToken: automationRunKey/g)).toHaveLength(2);
+    // Every path journals its startToken: the sandboxed run (a hosted run
+    // whose workspace is the Sandbox) and both host paths.
+    expect(source.match(/startToken: automationRunKey/g)).toHaveLength(3);
     // All three paths carry the same key: terminal event, post-loop safety
     // net, and definitive launch failure.
     expect(source).toContain("await settleAutomationLaunchFailure(");

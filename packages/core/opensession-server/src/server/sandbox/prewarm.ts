@@ -24,9 +24,9 @@
  * Claiming is atomic: the in-process Map flip is synchronous (single-threaded
  * — no await between check and set) and the state file is renameSync'd to
  * `*.claimed` as the on-disk arbiter, so two simultaneous session creates
- * can never adopt the same sandbox. A claim whose bootstrap signature
- * (runnerSha/runnerBundleUrl) no longer matches the current config is
- * refused and the stale sandbox destroyed — the caller cold-creates.
+ * can never adopt the same sandbox. A claim whose base runtime signature
+ * no longer matches this release's is refused and the stale sandbox
+ * destroyed — the caller cold-creates.
  */
 
 import {
@@ -59,7 +59,7 @@ import { projectPreparationSignature } from "./remote-repo-template";
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
-  bootstrapSignature,
+  baseRuntimeSignature,
   listRemoteStates,
   remoteCloneUrl,
   remoteWarmWorkspaceDir,
@@ -247,7 +247,7 @@ function removeFile(entry: Pick<PrewarmEntry, "provider" | "repoId">): void {
 }
 
 /** What must match between prewarm time and claim time for adoption to be
- *  safe: the runner-payload pin (bootstrapSignature) PLUS the provider's
+ *  safe: the base runtime (baseRuntimeSignature) PLUS the provider's
  *  create-shape — daytona's org snapshot decides the sandbox's cpu/mem/disk,
  *  not changeable after create. */
 function prewarmSignature(
@@ -262,7 +262,7 @@ function prewarmSignature(
         : provider === "usecomputer"
           ? "snapshot"
           : "";
-  return `${bootstrapSignature()}|${shape}|${JSON.stringify(resources || {})}`;
+  return `${baseRuntimeSignature()}|${shape}|${JSON.stringify(resources || {})}`;
 }
 
 // 429 is intentionally excluded: a blind 0.5–1s retry cannot clear provider

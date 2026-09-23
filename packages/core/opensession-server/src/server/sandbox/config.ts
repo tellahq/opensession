@@ -153,16 +153,6 @@ export interface SandboxConfig {
   /** Warm-on-typing prewarm pool. Absent = defaults, with `enabled` true
    *  whenever a provider connection is configured. */
   prewarm?: Partial<SandboxPrewarmConfig>;
-  /** Tarball URL of the opensession runner bundle for remote bootstrap (takes
-   *  precedence over the git-clone fallback). */
-  runnerBundleUrl?: string;
-  /** Git URL of the opensession repo for remote bootstrap (default: this
-   *  checkout's origin; a release install with no checkout falls back to the
-   *  public tellahq/opensession repo). */
-  runnerRepoUrl?: string;
-  /** Pinned sha/ref the remote bootstrap checks out (default: origin default
-   *  branch, or the installed release's tag for a release install). */
-  runnerSha?: string;
 }
 
 const PROVIDER_IDS = new Set<string>([
@@ -303,9 +293,6 @@ export function sandboxConfig(): SandboxConfig {
                   : undefined,
               }
             : undefined,
-        runnerBundleUrl: str(raw?.runnerBundleUrl),
-        runnerRepoUrl: str(raw?.runnerRepoUrl),
-        runnerSha: str(raw?.runnerSha),
       };
     }
   } catch {}
