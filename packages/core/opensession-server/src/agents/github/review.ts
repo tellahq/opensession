@@ -68,6 +68,12 @@ import {
   type RiskFactor,
 } from "./merge-risk";
 import {
+  isEmptyPlan,
+  monitoringPlanSection,
+  runMonitoringPlan,
+  type MonitoringPlanResult,
+} from "./monitoring-plan";
+import {
   applyReviewRules,
   diffFilePaths,
   matchingPromptRules,
@@ -630,11 +636,37 @@ export async function runReview(
             return new Map<string, PromptRuleOutcome>();
           })
         : Promise.resolve(new Map<string, PromptRuleOutcome>());
+    // "How we'll know" monitoring plan: same contract as the merge-risk
+    // scorer (tool-less, diff-only, best-effort), opt-in per repo.
+    const planMonitoring = (
+      patch: string | undefined,
+    ): Promise<MonitoringPlanResult | null> =>
+      patch
+        ? runMonitoringPlan({
+            pr: details,
+            patch,
+            model: reviewModel,
+            instructions: reviewOpts.monitoringPlanInstructions,
+            prNumber: pr.number,
+            ghRepo: pr.ghRepo,
+          }).catch((e) => {
+            console.warn(
+              `[github] monitoring plan failed for PR #${pr.number}:`,
+              e,
+            );
+            return null;
+          })
+        : Promise.resolve(null);
     let mergeRisk: Promise<MergeRiskResult | null> = Promise.resolve(null);
+    let monitoringPlan: Promise<MonitoringPlanResult | null> =
+      Promise.resolve(null);
     let earlyPromptOutcomes: Promise<Map<string, PromptRuleOutcome>> =
       Promise.resolve(new Map());
     let scorerPatch: Promise<string | undefined> = Promise.resolve(undefined);
-    if (!publicReview && (reviewOpts.mergeRisk || hasPromptRules)) {
+    if (
+      !publicReview &&
+      (reviewOpts.mergeRisk || reviewOpts.monitoringPlan || hasPromptRules)
+    ) {
       scorerPatch = getPrDiff(String(pr.number), pr.ghRepo || undefined)
         .catch(() => null)
         // A patch for a different head would score code we are not reviewing.
@@ -644,6 +676,8 @@ export async function runReview(
             : diff?.patch,
         );
       if (reviewOpts.mergeRisk) mergeRisk = scorerPatch.then(scoreMergeRisk);
+      if (reviewOpts.monitoringPlan)
+        monitoringPlan = scorerPatch.then(planMonitoring);
       if (hasPromptRules && baseRuleCtx)
         earlyPromptOutcomes = scorerPatch.then((patch) =>
           scorePromptRules(
@@ -772,6 +806,8 @@ export async function runReview(
           };
         }
         if (reviewOpts.mergeRisk) mergeRisk = scoreMergeRisk(diff.patch);
+        if (reviewOpts.monitoringPlan)
+          monitoringPlan = planMonitoring(diff.patch);
         scorerPatch = Promise.resolve(diff.patch);
         if (hasPromptRules && baseRuleCtx)
           earlyPromptOutcomes = scorePromptRules(
@@ -873,6 +909,7 @@ export async function runReview(
     const tob = await testOnBase;
     const secrets = await secretScan;
     const risk = await mergeRisk;
+    const plan = await monitoringPlan;
     if (cancellationRequested())
       return finishCancelled(placeholderId || undefined);
 
@@ -980,7 +1017,9 @@ export async function runReview(
       finalResult.model,
       reviewOpts,
       summaryOnly,
-      testOnBaseSection(tob) + secretScanSection(secrets),
+      monitoringPlanSection(plan) +
+        testOnBaseSection(tob) +
+        secretScanSection(secrets),
       publicReview,
       risk,
       ruleEval,
@@ -1046,6 +1085,21 @@ export async function runReview(
         },
         pr.ghRepo,
       );
+      if (plan && !isEmptyPlan(plan)) {
+        const { model: _model, ...stored } = plan;
+        updatePrState(
+          pr.number,
+          pr.headRef,
+          (s) => {
+            s.monitoringPlan = {
+              ...stored,
+              sha: pr.headSha,
+              at: new Date().toISOString(),
+            };
+          },
+          pr.ghRepo,
+        );
+      }
     }
 
     return outcome;

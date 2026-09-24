@@ -11,6 +11,7 @@ import { stateDir } from "../../server/paths";
 import { prKey } from "./constants";
 import { configuredRepos, getConfigAsync } from "../../server/config";
 import type { HandoffState } from "./handoff-gates";
+import type { StoredMonitoringPlan } from "./monitoring-plan";
 import { mkdirSync, readFileSync, existsSync, readdirSync } from "fs";
 import { readFile } from "node:fs/promises";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
@@ -96,6 +97,10 @@ export interface GithubPrState {
   lastReviewedSha?: string;
   /** The last review's conclusion (verdict/confidence), for the UI. */
   lastReview?: LastReviewState;
+  /** The latest non-empty "How we'll know" plan (monitoring-plan.ts), kept
+   *  for the post-deploy prompt. A later head that fails to produce a plan
+   *  leaves the previous one; `sha` says which head it describes. */
+  monitoringPlan?: StoredMonitoringPlan;
   autoFix?: AutoFixState;
   /** A label-triggered request persisted before its async run starts. If the
    *  process exits during dispatch, reconcile can still attribute the run to
