@@ -1,11 +1,17 @@
 import {
   forgetShippedChangeAnnouncement,
   shareShippedVisualChange,
+  shippedChangeChannels,
 } from "../../agents/github/shipped-change-notify";
 import { slackChannelsPayload } from "./slack-channels";
 import { deleteSlackMessage } from "../../agents/slack/slack-api";
 import { shippedChangesChannel } from "../../agents/github/constants";
 import { suggestShippedChangeMessage } from "../shipped-change-suggestion";
+import {
+  channelsUsedForRepo,
+  recentChannelUses,
+  recordChannelUse,
+} from "../shipped-change-channel-history";
 import { findSessionAsync, updateSessionFile } from "../session-cache";
 import type { SessionSlackShare } from "../types";
 import { resolvePrTarget } from "../session-repos";
@@ -51,12 +57,33 @@ export async function handleShippedChangeRoutes(
         { error: "Pull request not found" },
         { status: 404 },
       );
-    const message = await suggestShippedChangeMessage({
+    // Candidates: the configured channels, plus any this repository's
+    // updates went to before. The person's full channel directory runs to
+    // hundreds and is theirs to search; the pick only has to start well.
+    const [recentChannels, examples] = await Promise.all([
+      channelsUsedForRepo(target.ghRepo),
+      recentChannelUses(),
+    ]);
+    const channels = [...shippedChangeChannels()];
+    for (const channel of [
+      ...recentChannels,
+      ...examples.map((use) => ({ id: use.channelId, name: use.channelName })),
+    ])
+      if (!channels.some((known) => known.id === channel.id))
+        channels.push({ id: channel.id, name: channel.name });
+    const suggestion = await suggestShippedChangeMessage({
       session,
       pr: { number: pr.number, title: pr.title, body: pr.body },
+      repo: target.ghRepo,
+      channels,
+      recentChannels,
+      examples,
       user: ctx.authUser?.login || ctx.authUser?.name || requestUser(ctx),
     });
-    return Response.json({ message });
+    return Response.json({
+      message: suggestion?.message ?? null,
+      channel: suggestion?.channel ?? null,
+    });
   }
   if (req.method === "GET") {
     return Response.json(
@@ -151,6 +178,12 @@ export async function handleShippedChangeRoutes(
         : {}),
     };
     if (share) {
+      await recordChannelUse(target.ghRepo, {
+        channelId: share.channelId,
+        channelName: share.channelName,
+        at: share.at,
+        summary: typeof body?.message === "string" ? body.message : undefined,
+      });
       await updateSessionFile(session.id, (data) => ({
         ...data,
         slackShares: [...(data.slackShares || []), share].slice(-20),

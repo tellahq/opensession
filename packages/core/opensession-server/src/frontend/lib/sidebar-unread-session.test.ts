@@ -71,6 +71,20 @@ describe("pickUnreadWorkspaceSession", () => {
     ).toBe(parent.id);
   });
 
+  test("waits for the turn to finish before a tab reads as unread", () => {
+    // Sending a prompt or streaming output moves lastActivity past the read
+    // mark while the run is still going. That is not unread yet.
+    const running = session({ id: "older", isRunning: true });
+    expect(pickUnreadWorkspaceSession([running], null, READS)).toBeUndefined();
+    expect(
+      pickUnreadWorkspaceSession(
+        [{ ...running, isRunning: false }],
+        null,
+        READS,
+      )?.id,
+    ).toBe("older");
+  });
+
   test("uses a worker when the workspace has no parent tab", () => {
     const worker = session({ id: "worker", parentSessionId: "missing" });
     expect(pickUnreadWorkspaceSession([worker], null, READS)?.id).toBe(

@@ -638,11 +638,7 @@ export class DaytonaProvider implements SandboxProvider {
         ? automationEgressDomains({
             callbackBaseUrl: remoteSandboxCallbackBaseUrl(),
             cloneUrl,
-            extra: [
-              ...trust.egressAllowlist,
-              ...(cfg.runnerBundleUrl ? [cfg.runnerBundleUrl] : []),
-              ...(cfg.runnerRepoUrl ? [cfg.runnerRepoUrl] : []),
-            ],
+            extra: trust.egressAllowlist,
           })
         : undefined;
     const verificationKey = spec.sessionId.replace(/[^A-Za-z0-9_.-]+/g, "-");

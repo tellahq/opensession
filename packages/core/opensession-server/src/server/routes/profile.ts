@@ -1,14 +1,11 @@
 /**
  * Your own profile: what Settings > Personal > Account reads and writes.
  *
- * AUTHZ, and the reason this is a route family of its own rather than a
- * relaxation of /api/setup/team: every /api/setup/* path is workspace-admin
- * only (routes/setup.ts), which is right for editing the roster, and wrong for
- * editing your own row in it. These routes take NO member identifier. The row
- * is resolved from the caller's verified identity, so "you may only patch
- * yourself" is not a check that can be forgotten or bypassed by a body field,
- * it is the only row the route can address. Admins editing other people keep
- * using Settings > Members.
+ * AUTHZ: these routes take NO member identifier. The row is resolved from the
+ * caller's verified identity, so "you may only patch yourself" is not a check
+ * that can be forgotten or bypassed by a body field, it is the only row the
+ * route can address. Editing other people stays on Settings > Members
+ * (/api/setup/team).
  *
  * When web sign-in is off there is no verified identity, so the caller's
  * claimed `?user=` is trusted, exactly as every other per-user surface in that
@@ -19,10 +16,9 @@
  * The editable set is an allowlist, and it is smaller than the roster row:
  *
  * - `github` is excluded because it is the sign-in key (web-auth.ts resolves a
- *   browser session by login) AND the admin-role match key (workspace-auth.ts).
- *   Editing it could lock someone out of their own instance, or hand the
- *   `admin: true` flag on their row to a different account.
- * - `slackId`, `admin`, `directory`, `githubToSlack` and `linearEmails` are
+ *   browser session by login). Editing it could lock someone out of their own
+ *   instance.
+ * - `slackId`, `directory`, `githubToSlack` and `linearEmails` are
  *   workspace wiring rather than profile, and misrouting notifications is a
  *   silent failure. They stay on the Members page.
  */
@@ -147,7 +143,7 @@ export async function handleProfileRoutes(
       return Response.json(
         {
           error:
-            "You are not on this instance's team roster yet, so there is no profile to edit. Ask an admin to add you on Settings > Members.",
+            "You are not on this instance's team roster yet, so there is no profile to edit. Ask a teammate to add you on Settings > Members.",
         },
         { status: 404 },
       );

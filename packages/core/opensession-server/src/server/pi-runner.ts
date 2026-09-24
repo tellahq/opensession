@@ -167,8 +167,19 @@ import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import {
   expandSkillCommand,
   gatePstackSkills,
+  SHIPPED_SKILLS_DIR,
   skillSearchPaths,
 } from "./skill-paths";
+import {
+  makeRemoteGrepExecute,
+  makeRemoteToolOps,
+  remoteAttachmentWriter,
+  mirrorRemoteContext,
+  remoteCommandEnv,
+  remoteWorkspaceForRun,
+  runRemoteCommand,
+  type RemoteWorkspace,
+} from "./remote-workspace";
 import type { ResolvedWorkspaceModelPreset } from "./workspace-model-presets";
 import type { TranscriptEntry } from "./types";
 import type { RunAgentOpts } from "./agent-runner";
@@ -1294,6 +1305,16 @@ export function makeGuardedToolOps(cwd: string) {
   };
 }
 
+/** The skills this server ships, which a Sandbox run may read from here
+ *  (they exist nowhere else; remote-workspace.ts). */
+function shippedSkillRoots(): string[] {
+  const roots = [resolve(SHIPPED_SKILLS_DIR)];
+  try {
+    roots.push(realpathSync(SHIPPED_SKILLS_DIR));
+  } catch {}
+  return [...new Set(roots)];
+}
+
 const GREP_DEFAULT_LIMIT = 100;
 const GREP_OUTPUT_CAP = 50 * 1024;
 
@@ -1569,6 +1590,8 @@ export function piBashHomeEnv(input: {
 export function makePiBashTool(input: {
   cwd: string;
   env: Record<string, string>;
+  /** Run commands in this Sandbox workspace instead of on this machine. */
+  remote?: RemoteWorkspace;
   gated: boolean;
   /** Ask mode: every command must pass the read-only allowlist
    *  (askBashDenyReason over ASK_BASH_PERMISSIONS, runner-shared.ts). */
@@ -1652,6 +1675,61 @@ export function makePiBashTool(input: {
       const commandAudit = summarizeBashAuditCommand(command);
       const commandStartedAt = Date.now();
       input.onAudit?.({ phase: "start", ...commandAudit, timeout_s: timeoutS });
+      if (input.remote) {
+        let exitCode: number | null = null;
+        let timedOut = false;
+        try {
+          const result = await runRemoteCommand(input.remote, {
+            command,
+            timeoutS,
+            outputCap: BASH_OUTPUT_CAP,
+            env: input.env,
+            signals: [signal, input.runSignal].filter(
+              (candidate): candidate is AbortSignal => !!candidate,
+            ),
+          });
+          exitCode = result.exitCode;
+          timedOut = result.timedOut;
+          const text =
+            (result.droppedChars > 0
+              ? `[output truncated: first ${result.droppedChars} characters dropped]\n`
+              : "") + result.output;
+          if (aborted() || result.cancelled) throw new Error("Command aborted");
+          if (timedOut)
+            throw new Error(
+              `${text}\nCommand timed out after ${timeoutS}s`.trim(),
+            );
+          if (exitCode !== 0)
+            throw new Error(
+              `${text}\nCommand exited with code ${exitCode}`.trim(),
+            );
+          return {
+            content: [{ type: "text", text: text || "(no output)" }],
+            details: {
+              exitCode,
+              truncatedChars: result.droppedChars || undefined,
+            },
+          };
+        } finally {
+          const cancelled = aborted();
+          input.onAudit?.({
+            phase: "finish",
+            ...commandAudit,
+            timeout_s: timeoutS,
+            duration_ms: Date.now() - commandStartedAt,
+            exit_code: exitCode,
+            timed_out: timedOut,
+            cancelled,
+            outcome: cancelled
+              ? "cancelled"
+              : timedOut
+                ? "timed_out"
+                : exitCode === 0
+                  ? "ok"
+                  : "failed",
+          });
+        }
+      }
       // setsid makes bash a process-group leader, so kill(-pid) reaches the
       // grandchildren a plain proc.kill() misses (bash may already be gone
       // when the timeout fires). Absent setsid (macOS), degrade to the
@@ -1970,6 +2048,12 @@ async function* runPiAttempt(
   );
   const isAsk = mode === "ask";
   const isScratch = mode === "scratch";
+  // A Sandbox session: this loop runs here, its tools act in the Sandbox
+  // (remote-workspace.ts). Resolved before anything touches a workspace, and
+  // it throws without the run's token rather than fall back to this machine.
+  const remote = opts.remoteWorkspace
+    ? remoteWorkspaceForRun(opts.remoteWorkspace)
+    : undefined;
 
   // The start token is the immutable physical dispatch identity. Engine and
   // Open Session ids are reusable aliases, so they must never fence a delayed
@@ -2213,7 +2297,17 @@ async function* runPiAttempt(
     // module-init cycle through "./worktree".
     const { cwdRepo, sharedCheckout } = await (async () => {
       try {
-        const { repoForPathOrNull, canonicalPath } = await import("./worktree");
+        const { getRepo, repoForPathOrNull, canonicalPath } =
+          await import("./worktree");
+        // A Sandbox checkout's path means nothing on this machine: the
+        // launcher names its repository instead.
+        if (remote)
+          return {
+            cwdRepo: opts.remoteWorkspace?.repo
+              ? getRepo(opts.remoteWorkspace.repo)
+              : undefined,
+            sharedCheckout: false,
+          };
         const cwdRepo = repoForPathOrNull(cwd);
         return {
           cwdRepo,
@@ -2259,7 +2353,9 @@ async function* runPiAttempt(
       user: githubUser,
       githubKindRun,
       launcherEnv: opts.githubEnv,
-      cwd,
+      // Credentials are looked up by checkout; a Sandbox run's repository is
+      // found through its registered checkout on this machine.
+      cwd: remote ? cwdRepo?.repo || "" : cwd,
       readRepos: opts.readRepos,
     });
     const agentGitEnv = await agentGitIdentityEnv(author);
@@ -2334,7 +2430,8 @@ async function* runPiAttempt(
     // deepsec's Claude Agent SDK and Codex CLI workers). These are explicit
     // additions to the minimal environment, never inherited server secrets.
     const cliEnv: Record<string, string> = {};
-    if (opts.claudeCliEnv) {
+    // Pool credentials never go into a Sandbox command.
+    if (opts.claudeCliEnv && !remote) {
       const cliAccount = pickClaudeAccount(
         undefined,
         accountUser,
@@ -2360,7 +2457,7 @@ async function* runPiAttempt(
         );
       }
     }
-    if (opts.codexCliEnv) {
+    if (opts.codexCliEnv && !remote) {
       const cfg = readModelProviderConfig();
       const picked = pickOpenaiAccount(
         "",
@@ -2393,16 +2490,17 @@ async function* runPiAttempt(
 
     // Minimal bash env, the security invariant this engine hangs on. The
     // server env is NEVER inherited; every entry is explicit.
-    const awsEnv = opts.aws ? await ensureAgentAwsCredsFile() : {};
+    // The AWS session file lives on this machine; a Sandbox never gets one.
+    const awsEnv = opts.aws && !remote ? await ensureAgentAwsCredsFile() : {};
     const homeEnv = piBashHomeEnv({
       runKey,
       scratchDir: opts.scratchDir,
       isolated: Boolean(opts.publicationPolicy),
       hostHome: process.env.HOME,
     });
-    if (opts.publicationPolicy && homeEnv.HOME)
+    if (!remote && opts.publicationPolicy && homeEnv.HOME)
       mkdirSync(homeEnv.HOME, { recursive: true, mode: 0o700 });
-    if (homeEnv.GH_CONFIG_DIR)
+    if (!remote && homeEnv.GH_CONFIG_DIR)
       mkdirSync(homeEnv.GH_CONFIG_DIR, { recursive: true, mode: 0o700 });
     const bashEnv: Record<string, string> = {
       ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
@@ -2459,7 +2557,17 @@ async function* runPiAttempt(
     // Every enabled name is derived from a custom definition below. Pi falls
     // back to its in-process built-ins for a name without an override, so a
     // separately maintained enabled-name list would be a containment escape.
-    const guardedOps = makeGuardedToolOps(cwd);
+    const guardedOps = remote
+      ? makeRemoteToolOps(remote, shippedSkillRoots())
+      : makeGuardedToolOps(cwd);
+    const commandEnv = remote
+      ? remoteCommandEnv(
+          bashEnv,
+          remote,
+          runKey,
+          Boolean(opts.publicationPolicy),
+        )
+      : bashEnv;
     let steeringBoundaryPending = false;
     const baseCustomTools: ToolDefinition<any, any, any>[] = [
       ...mcpBridge.discoveryTools,
@@ -2478,7 +2586,9 @@ async function* runPiAttempt(
           const base = sdk.createGrepToolDefinition(cwd);
           baseCustomTools.push({
             ...base,
-            execute: makeGuardedGrepExecute(cwd, bashEnv, guardedOps.guard),
+            execute: remote
+              ? makeRemoteGrepExecute(remote)
+              : makeGuardedGrepExecute(cwd, bashEnv, guardedOps.guard),
           } as ToolDefinition<any, any, any>);
           break;
         }
@@ -2514,7 +2624,8 @@ async function* runPiAttempt(
           baseCustomTools.push(
             makePiBashTool({
               cwd,
-              env: bashEnv,
+              env: commandEnv,
+              remote,
               gated: bashGated,
               askReadOnly: isAsk,
               unattended: policy.unattended,
@@ -2544,6 +2655,15 @@ async function* runPiAttempt(
       () => steeringBoundaryPending,
     );
 
+    // What the loop reads from the checkout itself (AGENTS.md, local
+    // instructions, the checkout's skills). A Sandbox checkout is mirrored
+    // here first, and every path the model sees maps back to the Sandbox.
+    const context = remote
+      ? await mirrorRemoteContext(
+          remote,
+          `${PI_STATE_DIR}/remote-context/${sanitizeId(unifiedSessionId || runKey)}`,
+        )
+      : { dir: cwd, toRemote: (path: string) => path };
     const instructions = buildRunInstructions({
       isAsk,
       isScratch,
@@ -2557,9 +2677,9 @@ async function* runPiAttempt(
       // push-the-branch instructions instead of `gh pr create`.
       repoHost: isScratch ? undefined : cwdRepo?.host,
       publicRepo,
-      localInstructions: readLocalInstructions(cwd),
+      localInstructions: readLocalInstructions(context.dir),
       inProcessMcp: opts.inProcessMcp,
-      sandboxed: process.env.OPENSESSION_SANDBOX === "1",
+      sandboxed: !!remote || process.env.OPENSESSION_SANDBOX === "1",
       hasSession: !!journal?.osSessionId,
       dialOracle:
         resolved?.dial && dialOracleAgent
@@ -2657,9 +2777,9 @@ async function* runPiAttempt(
     const settingsManager = sdk.SettingsManager.inMemory(
       binding.usesOpenaiOAuth ? { transport: "sse" } : {},
     );
-    const workspaceRoot = resolve(cwd);
+    const workspaceRoot = resolve(context.dir);
     const loader = new sdk.DefaultResourceLoader({
-      cwd,
+      cwd: context.dir,
       agentDir,
       settingsManager,
       noExtensions: true,
@@ -2670,12 +2790,29 @@ async function* runPiAttempt(
       // with no additionalSkillPaths loaded nothing at all, which left every
       // shipped skill dead in the product.
       noSkills: true,
-      additionalSkillPaths: skillSearchPaths(cwd),
+      additionalSkillPaths: skillSearchPaths(context.dir),
       // The pstack family stays loaded but invisible to the model until the
-      // session turns pstack mode on (composer toggle or /pstack).
+      // session turns pstack mode on (composer toggle or /pstack). A mirrored
+      // Sandbox skill is presented at its Sandbox path; its local copy only
+      // serves a "/name" expansion (mirrorPath).
       skillsOverride: (base) => ({
         ...base,
-        skills: gatePstackSkills(base.skills, opts.pstackMode),
+        skills: gatePstackSkills(
+          remote
+            ? base.skills.map((skill) => {
+                const filePath = context.toRemote(skill.filePath);
+                return filePath === skill.filePath
+                  ? skill
+                  : {
+                      ...skill,
+                      filePath,
+                      baseDir: context.toRemote(skill.baseDir),
+                      mirrorPath: skill.filePath,
+                    };
+              })
+            : base.skills,
+          opts.pstackMode,
+        ),
       }),
       noPromptTemplates: true,
       noThemes: true,
@@ -2684,10 +2821,12 @@ async function* runPiAttempt(
       // would silently join every pi system prompt on the box. Bound it to
       // the workspace: keep only cwd-level files (previous runner parity).
       agentsFilesOverride: ({ agentsFiles }) => ({
-        agentsFiles: agentsFiles.filter((f) => {
-          const p = resolve(f.path);
-          return p === workspaceRoot || p.startsWith(workspaceRoot + sep);
-        }),
+        agentsFiles: agentsFiles
+          .filter((f) => {
+            const p = resolve(f.path);
+            return p === workspaceRoot || p.startsWith(workspaceRoot + sep);
+          })
+          .map((f) => ({ ...f, path: context.toRemote(f.path) })),
       }),
       systemPromptOverride: (base) =>
         assembleRunSystemPrompt({ base, cwd, instructions }),
@@ -2763,10 +2902,14 @@ async function* runPiAttempt(
     // Preset effort override (workspace preset's pin first, then the built-in
     // preset's) falls back to the session's own effort.
     const selectedEffort = resolved?.effort ?? opts.effort;
+    // "none" means no reasoning at all. Left unset, Pi falls back to its
+    // default thinking level, which costs a small one-shot tens of seconds.
     const thinkingLevel =
-      selectedEffort && THINKING_LEVELS.has(selectedEffort)
-        ? (selectedEffort as "low" | "medium" | "high" | "xhigh" | "max")
-        : undefined;
+      selectedEffort === "none"
+        ? ("off" as const)
+        : selectedEffort && THINKING_LEVELS.has(selectedEffort)
+          ? (selectedEffort as "low" | "medium" | "high" | "xhigh" | "max")
+          : undefined;
 
     const created = await sdk.createAgentSession({
       cwd,
@@ -2920,7 +3063,11 @@ async function* runPiAttempt(
         // a retraction replays it verbatim.
         entry.text = withImagesNote(
           entry.text,
-          await stagePromptImages(opts.scratchDir, images),
+          await stagePromptImages(
+            opts.scratchDir,
+            images,
+            remote ? remoteAttachmentWriter(remote) : undefined,
+          ),
         );
         if (!pendingSteers.includes(entry)) return; // retracted meanwhile
         await liveSession.steer(entry.text, piImages(images));

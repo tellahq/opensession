@@ -40,6 +40,8 @@ import {
   type SessionEffort,
 } from "./models";
 import { createWorktree, getRepo, removeWorktree } from "./worktree";
+import { findSession } from "./session-cache";
+import { remoteWorkspaceForSession } from "./sandbox/workspace-rpc";
 import { gitIdentityEnv, gitIdentityFor } from "./shared/user-mappings";
 import {
   WORKFLOW_LIMITS,
@@ -522,12 +524,21 @@ function detachedWorkflowRunner(
   ctx: WorkflowExecCtx,
   signal: AbortSignal,
 ): RunAgentFn {
-  return (opts, onEngineSession) =>
-    runAuxiliaryAgentHosted({
+  return (opts, onEngineSession) => {
+    // A worker reading a Sandbox session's checkout acts in that Sandbox,
+    // like the session's own turns. A write agent's worktree is on this
+    // machine (cut above), and its tools act there.
+    const parent = findSession(ctx.sessionId);
+    const remoteWorkspace =
+      parent && opts.cwd === ctx.cwd
+        ? remoteWorkspaceForSession(parent, opts.cwd)
+        : undefined;
+    return runAuxiliaryAgentHosted({
       osSessionId: ctx.sessionId,
       prompt: opts.prompt,
       sessionId: opts.sessionId,
       cwd: opts.cwd,
+      remoteWorkspace,
       mode: opts.mode,
       mcpGrantUser: opts.mcpGrantUser,
       model: opts.model,
@@ -560,6 +571,7 @@ function detachedWorkflowRunner(
       signal,
       onEngineSession,
     });
+  };
 }
 
 export const workflowExecutor: WorkflowExecutor = {

@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import React, { type ReactElement, type ReactNode } from "react";
-import { SIDEBAR_SWIPE_ROW, SIDEBAR_WS_ROW } from "../../lib/sidebar-classes";
+import {
+  SIDEBAR_SWIPE_ACTION_UNSNOOZE,
+  SIDEBAR_SWIPE_ROW,
+  SIDEBAR_WS_ROW,
+} from "../../lib/sidebar-classes";
 import type { WsRow } from "../../lib/sidebar-types";
 
 Object.assign(globalThis, {
@@ -151,5 +155,93 @@ test("renders workspace row state and wires row and swipe actions", () => {
     deleted: 1,
     pinned: 1,
     stopped: 2,
+  });
+});
+
+test("a snoozed row's leading swipe wakes it instead of pinning", () => {
+  const row: WsRow = {
+    key: "workspace:parked",
+    workspace: null,
+    name: "Parked workspace",
+    sessions: [],
+    status: "pending",
+    lastActivity: "2026-09-01T08:00:00.000Z",
+    createdAt: "2026-09-01T08:00:00.000Z",
+    unread: false,
+    running: false,
+    owner: "jaap",
+  };
+  let closedSwipe = 0;
+  let pinned = 0;
+  let unsnoozed = 0;
+
+  const rendered = WorkspaceRow({
+    row,
+    presentation: {
+      inbox: true,
+      active: false,
+      isPhone: true,
+      isDraft: false,
+      hasSectionHeading: true,
+      groupsByRepo: false,
+      repoName: "opensession",
+      runStartSeenMs: null,
+      snoozed: true,
+      snoozeIso: "someday",
+      timePreference: "off",
+      shipsDirectlyToMain: false,
+      pinned: false,
+    },
+    context: {
+      editing: null,
+      currentUser: "Jaap",
+      mePersonKey: "jaap",
+      teamViewing: [],
+    },
+    swipe: { offset: 72, action: "star", dragging: false, dragSide: null },
+    shortcuts: { pinShortcutKeys: ["⌘", "P"] },
+    events: {
+      onActivate: () => {},
+      onMouseEnter: () => {},
+      onMouseLeave: () => {},
+      onMouseDown: () => {},
+      onTouchStart: () => {},
+      onTouchMove: () => {},
+      onTouchEnd: () => {},
+      onTouchCancel: () => {},
+      onContextMenu: () => {},
+    },
+    actions: {
+      onCloseSwipe: () => closedSwipe++,
+      onTogglePin: () => pinned++,
+      onToggleSnooze: () => unsnoozed++,
+      onArchive: () => {},
+      onDeleteDraft: () => {},
+      onConfirmDeleteDraft: (onConfirm) => onConfirm(),
+      onOpenMention: () => {},
+      onStartWorkspaceRename: () => {},
+      onStartSessionRename: () => {},
+      onKeepInSidebar: () => {},
+    },
+  });
+  if (!React.isValidElement<TreeProps>(rendered))
+    throw new Error("WorkspaceRow did not return a React element");
+
+  const elements: ReactElement<TreeProps>[] = [rendered];
+  collectElements(rendered.props.children, elements);
+  const wakeAction = elements.find(
+    (element) => element.props["data-swipe-action"] === "unsnooze",
+  );
+  const pinAction = elements.find(
+    (element) => element.props["data-swipe-action"] === "star",
+  );
+
+  expect(pinAction).toBeUndefined();
+  expect(wakeAction?.props.className).toContain(SIDEBAR_SWIPE_ACTION_UNSNOOZE);
+  wakeAction?.props.onClick?.({ stopPropagation: () => {} });
+  expect({ closedSwipe, pinned, unsnoozed }).toEqual({
+    closedSwipe: 1,
+    pinned: 0,
+    unsnoozed: 1,
   });
 });

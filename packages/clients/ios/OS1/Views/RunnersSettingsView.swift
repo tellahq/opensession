@@ -3,7 +3,7 @@ import SwiftUI
 /// The machines this instance trusts to run sessions, read-only.
 ///
 /// Connecting a Runner, changing what it may do, and revoking one are
-/// deliberately absent: they are workspace administration, they need a pairing
+/// deliberately absent: they are workspace setup, they need a pairing
 /// command typed on the machine itself, and none of that is what you open a
 /// phone for. What you open a phone for is "is my Mac still connected, and
 /// where does it keep its workspaces" — so that is what this shows.

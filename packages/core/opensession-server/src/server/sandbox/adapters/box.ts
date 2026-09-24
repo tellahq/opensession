@@ -68,6 +68,7 @@ import {
   readRemoteState,
   runResumeHook,
   remoteCloneUrl,
+  remoteWarmWorkspaceDir,
   removeRemoteState,
   resolveTrustPolicy,
   setupRemoteWorkspace,
@@ -193,7 +194,40 @@ function boxClientConfig(): BoxClientConfig {
   };
 }
 
+/** Delays before re-sending an idempotent read the Boat API answered with a
+ *  gateway error, or that never reached it. A lookup on the wake path that
+ *  failed on one 502 used to fail the Portal Sandbox's refresh outright. */
+const BOX_READ_RETRY_DELAYS_MS = [500, 1_500];
+
+export function boxReadRetryable(error: unknown): boolean {
+  const status = (error as { status?: number })?.status;
+  if (status === undefined)
+    return !/timed out after/.test(
+      error instanceof Error ? error.message : String(error),
+    );
+  return status === 502 || status === 503 || status === 504;
+}
+
 async function boxApi<T>(
+  cfg: BoxClientConfig,
+  method: string,
+  path: string,
+  body?: unknown,
+  timeoutMs = 30_000,
+): Promise<T> {
+  if (method !== "GET") return boxApiOnce(cfg, method, path, body, timeoutMs);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await boxApiOnce<T>(cfg, method, path, body, timeoutMs);
+    } catch (error) {
+      const delay = BOX_READ_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined || !boxReadRetryable(error)) throw error;
+      await sleep(delay);
+    }
+  }
+}
+
+async function boxApiOnce<T>(
   cfg: BoxClientConfig,
   method: string,
   path: string,
@@ -415,7 +449,7 @@ export function boxComposeShell(cmd: string, opts?: RemoteExecOpts): string {
     s = `env ${pairs} sh -c ${shellQuoteWord(s)}`;
   }
   if (opts?.cwd) s = `cd ${shellQuoteWord(opts.cwd)} && { ${s}\n}`;
-  return `mkdir -p /home/ubuntu/.tmp && export TMPDIR=/home/ubuntu/.tmp && ${s}`;
+  return `${BOX_HOME_GUARD} && mkdir -p /home/ubuntu/.tmp && export TMPDIR=/home/ubuntu/.tmp && ${s}`;
 }
 
 export function boxNativeFilePath(path: string): string {
@@ -426,11 +460,20 @@ export function boxNativeFilePath(path: string): string {
   return path;
 }
 
+/**
+ * Box restores an archived home lazily: every file is fetched on first
+ * read. Warm what a woken or adopted workspace touches first, in the
+ * background: the bun and node binaries (the Portal relay and the app's
+ * dev server start on them; bun alone is ~80 MB), git's pack indexes, and
+ * every tracked file's metadata.
+ */
 export function boxResumePrimeCommand(cwd: string): string {
   return (
+    `{ cat /home/ubuntu/.bun/bin/bun "$(command -v node)" >/dev/null 2>&1 & } ; ` +
     `if test -d ${shellQuoteWord(cwd)}/.git; then cd ${shellQuoteWord(cwd)} && ` +
-    `{ git ls-files -z | xargs -0 -r -n 64 -P 16 stat -c '%n' -- >/dev/null 2>&1; ` +
-    `GIT_OPTIONAL_LOCKS=0 git status --porcelain >/dev/null 2>&1; }; fi`
+    `{ cat "$(git rev-parse --git-common-dir)"/objects/pack/*.idx >/dev/null 2>&1; ` +
+    `git ls-files -z | xargs -0 -r -n 64 -P 16 stat -c '%n' -- >/dev/null 2>&1; ` +
+    `GIT_OPTIONAL_LOCKS=0 git status --porcelain >/dev/null 2>&1; }; fi; wait`
   );
 }
 
@@ -467,6 +510,14 @@ export const BOX_RUNTIME_HOME_COMMAND =
   "elif [ -e /home/ubuntu ]; then echo 'cannot replace non-empty /home/ubuntu' >&2; exit 1; fi; " +
   "sudo -n mkdir -p /home/ubuntu && sudo -n mount --bind /home/user /home/ubuntu; " +
   "fi && test ! -L /home/ubuntu && mountpoint -q /home/ubuntu && test -w /home/ubuntu";
+
+/** Prefix of every composed Box command. When Box restarts a VM on its own
+ *  (an archive and resume, host maintenance), the bind mount at /home/ubuntu
+ *  is gone while this process still holds a driver that already set it up
+ *  once, and every command with a workspace cwd then fails with "No such
+ *  file or directory". Re-establish it in the same command: one `mountpoint`
+ *  check when it is in place. */
+export const BOX_HOME_GUARD = `{ mountpoint -q /home/ubuntu || { ${BOX_RUNTIME_HOME_COMMAND}; } >/dev/null; }`;
 
 function boxSshTargets(): Map<string, BoxSshTarget> {
   const global = globalThis as typeof globalThis & {
@@ -1199,15 +1250,21 @@ export class BoxProvider implements SandboxProvider {
     const resumingExistingWorkspace = Boolean(
       prevState && prevState.sandboxId === box.id && stateOf(box) !== "running",
     );
+    // A parked standby (a prewarm or a kept-ready Box) comes back with the
+    // same lazily restored disk; its warm clone is what the workspace step
+    // and the app are about to read.
+    const adoptingParked = lifecycleRefreshed && stateOf(box) !== "running";
     await driver.ensureStarted();
     mark("box started");
     if (resumingExistingWorkspace) primeBoxWorkspaceAfterResume(driver, cwd);
+    else if (adoptingParked)
+      primeBoxWorkspaceAfterResume(driver, remoteWarmWorkspaceDir(repo.id));
     // Cheap dial-back probe BEFORE the expensive bootstrap — same rationale
     // as daytona: a box that can't reach our callback URL can never run.
     await assertDialbackReachable(driver, "box");
     mark("dial-back verified");
     await bootstrapRemoteSandbox(driver, "box");
-    mark("runner ready");
+    mark("runtime ready");
     await setupRemoteWorkspace(
       driver,
       cwd,

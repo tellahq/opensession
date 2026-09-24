@@ -79,7 +79,7 @@ async function enableOperatorMode(): Promise<void> {
   await getConfigAsync();
 }
 
-async function enableRoleAwareConnections(): Promise<string> {
+async function enableSignInConnections(): Promise<string> {
   const mcpConfig = join(dir, "mcp-config.json");
   writeFileSync(
     mcpConfig,
@@ -109,7 +109,7 @@ async function enableRoleAwareConnections(): Promise<string> {
   );
   const config = join(
     dir,
-    `role-aware-${Math.random().toString(36).slice(2)}.json`,
+    `sign-in-${Math.random().toString(36).slice(2)}.json`,
   );
   writeFileSync(
     config,
@@ -119,8 +119,8 @@ async function enableRoleAwareConnections(): Promise<string> {
       },
       identity: {
         team: [
-          { name: "Admin", github: "admin", admin: true },
-          { name: "Member", github: "member", admin: false },
+          { name: "Admin", github: "admin" },
+          { name: "Member", github: "member" },
         ],
       },
       paths: { mcpConfig },
@@ -162,74 +162,10 @@ function context(
 const DEVICE = "/api/connections/github/device";
 
 const MEMBER = { login: "member", name: "Member" };
-const ADMIN = { login: "admin", name: "Admin" };
 
-describe("Apple release connection authorization", () => {
-  test("rejects a non-admin self-add through Apple mobile setup", async () => {
-    const mcpConfig = await enableRoleAwareConnections();
-
-    const response = await handleConnectionsRoutes(
-      context("/api/connections/apple-mobile", "PUT", MEMBER, {
-        buildEnabled: true,
-        releaseEnabled: true,
-        teamId: "TEAM123456",
-        allowedUsers: ["member"],
-      }),
-    );
-
-    expect(response?.status).toBe(403);
-    expect(await response?.json()).toEqual({
-      error: "Workspace administrator access is required",
-    });
-    expect(storedMcpServers(mcpConfig)["apple-release"]).toMatchObject({
-      env: { APPLE_ASC_KEY_ID: "KEY1234567" },
-      allowedUsers: ["admin"],
-    });
-  });
-
-  test("rejects non-admin generic Apple release mutations", async () => {
-    const mcpConfig = await enableRoleAwareConnections();
-
-    for (const path of [
-      "/api/connections/mcp/apple-release",
-      "/api/connections/mcp/APPLE-RELEASE",
-      "/api/connections/mcp/%20apple-release%20",
-    ]) {
-      for (const [method, body] of [
-        ["PUT", { allowedUsers: ["member"] }],
-        ["DELETE", undefined],
-      ] as const) {
-        const response = await handleConnectionsRoutes(
-          context(path, method, MEMBER, body),
-        );
-        expect(response?.status).toBe(403);
-      }
-    }
-
-    for (const name of [
-      "apple-release",
-      "APPLE-RELEASE",
-      "  apple-release  ",
-    ]) {
-      const create = await handleConnectionsRoutes(
-        context("/api/connections/mcp", "POST", MEMBER, {
-          name,
-          transport: "stdio",
-          command: "malicious-release",
-          allowedUsers: ["member"],
-        }),
-      );
-      expect(create?.status).toBe(403);
-    }
-    expect(storedMcpServers(mcpConfig)["apple-release"]).toMatchObject({
-      command: "opensession",
-      env: { APPLE_ASC_KEY_ID: "KEY1234567" },
-      allowedUsers: ["admin"],
-    });
-  });
-
-  test("keeps ordinary MCP mutations available to non-admin teammates", async () => {
-    const mcpConfig = await enableRoleAwareConnections();
+describe("connection mutations with sign-in on", () => {
+  test("any teammate can change an ordinary MCP connection", async () => {
+    const mcpConfig = await enableSignInConnections();
 
     const update = await handleConnectionsRoutes(
       context("/api/connections/mcp/ordinary", "PUT", MEMBER, {
@@ -248,11 +184,11 @@ describe("Apple release connection authorization", () => {
     expect(storedMcpServers(mcpConfig).ordinary).toBeUndefined();
   });
 
-  test("allows admins to update, remove, and reconfigure Apple release", async () => {
-    const mcpConfig = await enableRoleAwareConnections();
+  test("any teammate can update, remove, and reconfigure Apple release", async () => {
+    const mcpConfig = await enableSignInConnections();
 
     const update = await handleConnectionsRoutes(
-      context("/api/connections/mcp/apple-release", "PUT", ADMIN, {
+      context("/api/connections/mcp/apple-release", "PUT", MEMBER, {
         allowedUsers: ["member"],
       }),
     );
@@ -263,14 +199,14 @@ describe("Apple release connection authorization", () => {
     });
 
     const remove = await handleConnectionsRoutes(
-      context("/api/connections/mcp/apple-release", "DELETE", ADMIN),
+      context("/api/connections/mcp/apple-release", "DELETE", MEMBER),
     );
     expect(remove?.status).toBe(200);
     expect(storedMcpServers(mcpConfig)["apple-release"]).toBeUndefined();
 
-    await enableRoleAwareConnections();
+    await enableSignInConnections();
     const setup = await handleConnectionsRoutes(
-      context("/api/connections/apple-mobile", "PUT", ADMIN, {
+      context("/api/connections/apple-mobile", "PUT", MEMBER, {
         buildEnabled: false,
         releaseEnabled: false,
       }),
@@ -278,38 +214,6 @@ describe("Apple release connection authorization", () => {
     expect(setup?.status).toBe(200);
     expect(storedMcpServers(mcpConfig)["apple-build"]).toBeUndefined();
     expect(storedMcpServers(mcpConfig)["apple-release"]).toBeUndefined();
-  });
-});
-
-describe("Model provider authorization", () => {
-  test("rejects non-admin provider mutations and discovery", async () => {
-    await enableRoleAwareConnections();
-    const providerConfig = join(dir, "model-providers.json");
-    const original = JSON.stringify({
-      providers: {
-        gateway: {
-          apiKey: "stored-secret",
-          baseURL: "https://gateway.test/v1",
-          api: "openai-completions",
-        },
-      },
-    });
-    writeFileSync(providerConfig, original);
-    process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = providerConfig;
-
-    const requests = [
-      context("/api/settings/model-providers/gateway/discover", "POST", MEMBER),
-      context("/api/settings/model-providers/gateway", "PUT", MEMBER, {
-        baseURL: "https://attacker.test/v1",
-        discoverModels: true,
-      }),
-      context("/api/settings/model-providers/gateway", "DELETE", MEMBER),
-    ];
-    for (const request of requests) {
-      const response = await handleConnectionsRoutes(request);
-      expect(response?.status).toBe(403);
-    }
-    expect(readFileSync(providerConfig, "utf-8")).toBe(original);
   });
 });
 
@@ -633,7 +537,7 @@ describe("GitHub App config (simple mode)", () => {
 
 // ── The connect-time auth bootstrap (authOnConnect) ──────────────────────────
 // Simple-mode connect turning the workspace into operator mode in one request:
-// the just-authorized GitHub login is rostered as the first admin BEFORE
+// the just-authorized GitHub login is rostered as the first member BEFORE
 // userPrAuth is flipped (single atomic write), a session cookie is set on the
 // response, and the intent is cleared. This is auth-critical — a wrong ordering
 // would leave the gate on with nobody able to sign in. GitHub is stubbed; the
@@ -702,23 +606,17 @@ describe("connect-time auth bootstrap", () => {
       expect(body.status).toBe("ok");
       expect(body.login).toBe("octocat");
       expect(body.authEnabled).toBe(true);
-      expect(body.admin).toBe(true);
       // The browser is signed in on this very response.
       expect(res?.headers.get("set-cookie") || "").toContain(
         "opensession_auth=",
       );
 
       const written = JSON.parse(readFileSync(cfg, "utf-8"));
-      // Rostered admin AND the flip live in the SAME persisted file — a single
-      // atomic write, so no readable state ever had the gate on without the
-      // admin present (the no-locked-out-window property).
-      const admin = written.identity.team.find(
-        (m: any) => m.github?.toLowerCase() === "octocat",
-      );
-      expect(admin.admin).toBe(true);
-      expect(admin.name).toBe("Octo Cat");
+      // Rostered member AND the flip live in the SAME persisted file — a
+      // single atomic write, so no readable state ever had the gate on without
+      // the member present (the no-locked-out-window property).
       expect(written.identity.team).toEqual([
-        { name: "Octo Cat", github: "octocat", admin: true },
+        { name: "Octo Cat", github: "octocat" },
       ]);
       expect(written.integrations.github.userPrAuth).toBe(true);
       // Intent consumed; the personal App learns its verified installation owner.
@@ -740,7 +638,7 @@ describe("connect-time auth bootstrap", () => {
   test("refuses to flip when a concurrent connect replaced the stored account", async () => {
     // The finding: token storage happens before this lock. If a racing poll
     // authorized a different account, the simple-mode store now holds Bob, so
-    // enabling sign-in for Alice would roster an admin whose token is gone
+    // enabling sign-in for Alice would roster a member whose token is gone
     // (githubCredentialForLogin("alice") is null). The in-lock revalidation must
     // refuse and leave the gate + intent untouched.
     const cfg = await writeGithubConfig({
@@ -788,7 +686,6 @@ describe("connect-time auth bootstrap", () => {
       expect(body.login).toBe("octocat");
       // None of the bootstrap fired.
       expect(body.authEnabled).toBeUndefined();
-      expect(body.admin).toBeUndefined();
       expect(res?.headers.get("set-cookie")).toBeNull();
 
       const written = JSON.parse(readFileSync(cfg, "utf-8"));
@@ -805,7 +702,7 @@ describe("connect-time auth bootstrap", () => {
       appOrg: "acme-inc",
       authOnConnect: true,
     });
-    // An empty login can't become a sign-in-capable admin, so the preflight
+    // An empty login can't become a sign-in-capable member, so the preflight
     // fails closed: nothing is persisted, the gate stays off, intent intact.
     const result = await bootstrapUserAuthOnConnect("", undefined);
     expect("error" in result).toBe(true);
@@ -845,13 +742,13 @@ describe("connect-time auth bootstrap", () => {
       const first = await bootstrapUserAuthOnConnect("alice", "Alice");
       expect("error" in first).toBe(false);
       // A second poll that also passed the pre-lock check must be refused INSIDE
-      // the lock, or it would roster @bob as a second admin and mint a session.
+      // the lock, or it would roster @bob as a second member and mint a session.
       const second = await bootstrapUserAuthOnConnect("bob", "Bob");
       expect("error" in second).toBe(true);
       const written = JSON.parse(readFileSync(cfg, "utf-8"));
-      const admins = written.identity.team.filter((m: any) => m.admin === true);
-      expect(admins.length).toBe(1); // @bob was never rostered
-      expect(admins[0].github.toLowerCase()).toBe("alice");
+      const members = written.identity.team;
+      expect(members.length).toBe(1); // @bob was never rostered
+      expect(members[0].github.toLowerCase()).toBe("alice");
       expect(written.integrations.github.authOnConnect).toBeUndefined();
     } finally {
       delete process.env.OPENSESSION_GITHUB_AUTH_STORE;

@@ -1,4 +1,4 @@
-import { useState, type ComponentProps } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import type { CommentableDiffOptions } from "../../lib/commentable-diff";
 import type {
   DiffFileGroup,
@@ -41,6 +41,7 @@ interface Props {
   pendingCount: number;
   reviewProvider?: string;
   onFinishReview: () => void;
+  mergeAction: ReactNode;
   reviewFiles: NonNullable<PrDetails["files"]>;
   showFileStats: boolean;
   onOpenFile: (path: string) => void;
@@ -81,6 +82,7 @@ export function PrFilesPage({
   pendingCount,
   reviewProvider,
   onFinishReview,
+  mergeAction,
   reviewFiles,
   showFileStats,
   onOpenFile,
@@ -442,6 +444,7 @@ export function PrFilesPage({
           aria-label="Review actions"
           className="flex shrink-0 items-center gap-2 bg-surface px-3 pt-2 pb-[max(8px,env(safe-area-inset-bottom))]"
         >
+          {mergeAction}
           <Button
             variant="soft"
             className="min-h-11"
@@ -458,7 +461,7 @@ export function PrFilesPage({
           {reviewProvider && (
             <Button
               variant="primary"
-              className="min-h-11 flex-1"
+              className="min-h-11 min-w-0 flex-1 whitespace-normal"
               onClick={onFinishReview}
             >
               Finish review{pendingCount > 0 ? ` (${pendingCount})` : ""}
@@ -468,7 +471,7 @@ export function PrFilesPage({
             <Tooltip label="Next unreviewed file">
               <Button
                 variant="soft"
-                className="size-11"
+                className="size-11 shrink-0"
                 aria-label="Next unreviewed"
                 disabled={!unreviewed}
                 onClick={() => navigate(unreviewed)}

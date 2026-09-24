@@ -37,13 +37,15 @@ afterEach(() => {
 function context(path: string, init?: RequestInit): RouteContext {
   const url = new URL(`http://localhost${path}`);
   const team = configuredIdentity().team;
-  const admin = team.find((member) => member.admin === true) || team[0];
+  const member = team[0];
   return {
     req: new Request(url, init),
     url,
     path: url.pathname,
     publicPrefix: "",
-    authUser: admin?.github ? { login: admin.github, name: admin.name } : null,
+    authUser: member?.github
+      ? { login: member.github, name: member.name }
+      : null,
   };
 }
 

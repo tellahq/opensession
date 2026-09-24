@@ -866,24 +866,6 @@ export function githubCredentialLogin(
     : null;
 }
 
-/** What a trusted launcher projects for a code turn a connected person
- * started: githubAuthEnv plus, as a non-secret marker, the login of the
- * credential the host selected for the run, so the guest can answer "does
- * this run act as a connected person?" without the person store
- * (githubRunOwnerLogin). Empty when nobody resolves. An App-token projection
- * is written elsewhere and never carries a login, so it stays guarded. */
-export function githubUserAuthProjection(
-  user?: string | null,
-): Record<string, string> {
-  const credential = githubCredentialForRun(user);
-  const token = credential?.env.GH_TOKEN;
-  if (!token) return {};
-  const login = githubCredentialLogin(credential);
-  return login
-    ? { GH_TOKEN: token, GITHUB_TOKEN: token, login }
-    : { GH_TOKEN: token, GITHUB_TOKEN: token };
-}
-
 /** A remote sandbox cannot read the server's per-user grant store. Its trusted
  * launcher writes only this run's access token to a private file and points the
  * host at it. The token never enters the persisted RunHostSpec or launch command. */

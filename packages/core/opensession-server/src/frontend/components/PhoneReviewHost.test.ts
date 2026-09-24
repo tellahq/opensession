@@ -30,7 +30,7 @@ test("focused phone Review replaces the title chrome but keeps workspace tabs", 
   expect(app).toContain("{renderTabBar(side)}");
   expect(app).not.toContain("{!focusedPhoneReview && renderTabBar(side)}");
   expect(app).toMatch(
-    /focusedPhoneReview &&\s*"phone:pt-\[env\(safe-area-inset-top,0px\)\]"/,
+    /focusedPhoneReview &&\s*"phone:relative phone:\[--pane-header-h:env\(safe-area-inset-top,0px\)\] phone:pt-\[env\(safe-area-inset-top,0px\)\]"/,
   );
   expect(app).toContain("onBack={() => setActiveViewTab(null)}");
 });
@@ -70,4 +70,16 @@ test("PR route adapter keeps unresolved links outside the review canvas", async 
   expect(preview).toContain("key={`${route.repo}:${route.branch}`}");
   expect(preview).toContain("await refreshWorkspaces()");
   expect(preview).toContain('navigate({ view: "workspace", id: workspaceId })');
+});
+
+// Padding alone cannot move the absolutely positioned phone tabs. The review
+// wrapper must own their containing block and header offset as well as reserve
+// space before the content's existing tab-strip clearance.
+test("phone Review anchors docked tabs below the status bar", async () => {
+  const { TAB_STRIP } = await import("../lib/session-tab-classes");
+  expect(TAB_STRIP).toContain("phone:absolute");
+  expect(TAB_STRIP).toContain("phone:top-[var(--pane-header-h)]");
+  expect(app).toContain(
+    "phone:relative phone:[--pane-header-h:env(safe-area-inset-top,0px)] phone:pt-[env(safe-area-inset-top,0px)]",
+  );
 });

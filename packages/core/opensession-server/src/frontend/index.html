@@ -18,17 +18,19 @@
        short_name (routes/static-assets.ts) follows branding.productMark; this
        file is built, so it carries the default. -->
     <meta name="apple-mobile-web-app-title" content="OS" />
-    <link rel="icon" type="image/png" href="/mac-app-icon.png?v=7" />
+    <!-- The favicon (added by the runtime script below) and the link-preview
+       image follow the workspace artwork (routes/static-assets.ts), falling
+       back to the Open Session mark. Safari's installer probes these alongside
+       the touch icon, so they must agree. -->
     <title>Open Session</title>
-    <!-- OpenGraph / Twitter link-preview image — the new Open Session mark, same asset as
-       the favicon, splash and mobile header. Root-relative so it resolves at
+    <!-- OpenGraph / Twitter link-preview image. Root-relative so it resolves at
        the bare domain root and under the /backstage & /opensession prefixes. -->
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Open Session" />
-    <meta property="og:image" content="/mac-app-icon.png?v=7" />
+    <meta property="og:image" content="/favicon.png?v=7" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="Open Session" />
-    <meta name="twitter:image" content="/mac-app-icon.png?v=7" />
+    <meta name="twitter:image" content="/favicon.png?v=7" />
     <!-- Replaced by the production builder. Dev/source builds keep generic defaults. -->
     <script>
       window.__OPENSESSION_INSTANCE__ = window.__OPENSESSION_INSTANCE__ || {};
@@ -100,13 +102,19 @@
             : p.indexOf("/opensession") === 0
               ? "/opensession"
               : "";
-        var add = function (rel, href) {
+        var add = function (rel, href, sizes) {
           var l = document.createElement("link");
           l.rel = rel;
           l.href = href;
+          if (sizes) l.setAttribute("sizes", sizes);
           document.head.appendChild(l);
         };
-        add("apple-touch-icon", prefix + "/apple-touch-icon.png?v=6");
+        add("icon", prefix + "/favicon.png?v=7");
+        add(
+          "apple-touch-icon",
+          prefix + "/apple-touch-icon.png?v=6",
+          "180x180",
+        );
         add("manifest", prefix + "/manifest.webmanifest");
 
         // Tailwind utilities. The production builder appends its own hashed

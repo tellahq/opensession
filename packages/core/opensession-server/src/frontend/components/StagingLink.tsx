@@ -1,4 +1,7 @@
+import { use } from "react";
 import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
+import { NavigationContext } from "../hooks/useNavigation";
+import { isApple } from "../lib/platform";
 import { useSessionPrResource } from "../hooks/useApiResources";
 import type { PrCheck, UnifiedSession } from "../lib/types";
 import { worstPrRef } from "../lib/pr-refs";
@@ -129,6 +132,9 @@ export function StagingLink({
   // renders and not others: the render where the URL lands would add a hook the
   // previous render didn't have, and React tears the whole tree down over it.
   const openChord = useShortcutLabel("open-preview");
+  // Optional so the link still renders (as a plain external link) outside
+  // the app shell, e.g. in isolated component tests.
+  const navigation = use(NavigationContext);
 
   // A merged/closed PR's alias no longer points at this change. The link is a
   // pre-merge testing affordance. Repos without deployment metadata simply
@@ -255,10 +261,10 @@ export function StagingLink({
   // opens the feature under test, not the app root.
   const href = withPreviewPath(staging.url, session.previewPath);
 
-  // A click opens the preview, including ⌘-click, which keeps the browser's own
-  // open-in-a-new-tab meaning. Copying moved to the right-click menu below: a
-  // modifier that quietly replaces a link's normal behaviour can only be
-  // discovered by reading a tooltip, and it cost the control its click.
+  // A plain click opens the preview in the workspace's in-app Preview tab, so
+  // testing the change stays next to the session. ⌘/Ctrl-click, shift-click
+  // and middle-click keep the anchor's native meaning and open it in the
+  // browser. Copying lives in the right-click menu below.
   const onClick = (e: React.MouseEvent) => {
     // Before the first deploy goes Ready the alias 404s, so swallow a plain
     // click — but never silently (an unexplained dead link reads as a bug).
@@ -267,8 +273,23 @@ export function StagingLink({
       toast(
         `Preview environment is ${staging.status.toLowerCase()}. The link goes live once the first deploy finishes.`,
       );
+      return;
     }
+    if (
+      !navigation ||
+      e.button !== 0 ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.shiftKey ||
+      e.altKey
+    )
+      return;
+    e.preventDefault();
+    navigation.openStaging();
   };
+  const browserHint = navigation
+    ? `${isApple ? "⌘" : "Ctrl"}-click opens in browser`
+    : "";
 
   // The globe carries a spinning ring while any deploy is in flight — first
   // build (link dead until it lands) and rebuild (link opens the previous
@@ -305,7 +326,7 @@ export function StagingLink({
 	   the phone grid cell has no right-click, so it passes none and must not end
 	   up with a dangling "( )". */
   const tooltip = (copyHint: string) => {
-    const hints = [openChord, copyHint].filter(Boolean).join("; ");
+    const hints = [openChord, browserHint, copyHint].filter(Boolean).join("; ");
     const aside = hints ? ` (${hints})` : "";
     if (copied) return "Link copied";
     if (building)
@@ -341,7 +362,7 @@ export function StagingLink({
           }
         >
           <IconArrowUpRight size={20} className={MENU_ICON} />
-          <span className="grow">Open preview</span>
+          <span className="grow">Open in browser</span>
         </ContextMenu.Item>
         {/* Keeps the popup open so the checkmark lands where it was clicked,
 				    matching the PR menu's copy rows. */}

@@ -5,6 +5,7 @@
  * through these functions.
  */
 import type { McpScope } from "./runner-shared";
+import type { RemoteWorkspaceSpec } from "@tellahq/opensession-protocol/runner";
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {} from "./paths";
@@ -120,6 +121,10 @@ export interface ActiveRunRecord {
    *  REATTACH to the live host (resumeLocalHostRun) instead of re-prompting.
    *  Never set together with sandboxId/runnerId. */
   hostId?: string;
+  /** A local detached host whose tools act on a Sandbox (the engine runs
+   *  here). Recovery must relaunch with it or not at all: without it a
+   *  continuation would run the Sandbox session's tools on this machine. */
+  remoteWorkspace?: RemoteWorkspaceSpec;
   /** Provider owning sandboxId, so resume-after-restart can reattach via provider.get() */
   sandboxProvider?: string;
   /** Credential/network boundary for a sandbox run, preserved on relaunch. */
@@ -192,6 +197,7 @@ export function buildRunJournalRecord(
     usageCredits?: boolean;
     prReviewer?: string;
     readRepos?: string[];
+    remoteWorkspace?: RemoteWorkspaceSpec & { rpcToken?: string };
     journal?: {
       firstJournaledAt?: string;
       resumeAttempts?: number;
@@ -224,6 +230,9 @@ export function buildRunJournalRecord(
     usageCredits: site.usageCredits ?? opts.usageCredits,
     prReviewer: site.prReviewer ?? opts.prReviewer,
     readRepos: site.readRepos ?? opts.readRepos,
+    // A Sandbox run's recovery must act on the same Sandbox (never on this
+    // machine). The bearer is per process and is not journaled.
+    remoteWorkspace: site.remoteWorkspace ?? withoutToken(opts.remoteWorkspace),
     deniedTools: opts.deniedTools,
     publicationPolicy: opts.publicationPolicy,
     aws: !!opts.aws,
@@ -239,6 +248,14 @@ export function buildRunJournalRecord(
     lastResumeAt: opts.journal?.lastResumeAt,
     startedAt,
   };
+}
+
+function withoutToken(
+  workspace: (RemoteWorkspaceSpec & { rpcToken?: string }) | undefined,
+): RemoteWorkspaceSpec | undefined {
+  if (!workspace) return undefined;
+  const { rpcToken: _token, ...spec } = workspace;
+  return spec;
 }
 
 type JournalRunStateTransition = (
