@@ -1,24 +1,14 @@
 /**
- * Sandbox seam (docs/self-hosting-sandboxes.md): the interfaces every execution
- * backend implements. A "sandbox" is where a session's work happens — a git
- * worktree on this host (LocalProvider, src/server/sandbox/local.ts) or a
- * remote Daytona/Box sandbox, all behind these two interfaces.
+ * Sandbox seam (docs/self-hosting-sandboxes.md): the interfaces every
+ * workspace backend implements. A "sandbox" is where a session's workspace
+ * lives: a git worktree on this host (LocalProvider, local.ts) or a remote
+ * machine (Daytona, Boat, a Mac VM, use.computer).
  *
- * Deliberately small, mirroring the existing run-host layer's idioms:
- *  - `launchRun` takes the same serializable `RunHostSpec` the detached
- *    run-host processes consume (src/runner-host/protocol.ts) and yields the
- *    same `StreamEvent` generator shape as runAgent / runAgentHosted.
- *  - `RunHandle`'s control surface mirrors host-registry's `HostRunControl`
- *    (steer / interruptSteer / cancel returning booleans, `steerable` flag).
- *
- * Sessions opt in at create time; run-session.ts's maybeRunSandboxed routes
- * their prompts through the provider registry, and sessions without a
- * `sandbox` field keep the unchanged in-process host path.
+ * The agent loop never runs in a Sandbox. It runs on this server, and its
+ * file and shell tools reach a remote workspace through `exec`
+ * (remote-workspace.ts, sandbox/workspace-rpc.ts). Portals, checkpoints,
+ * lifecycle hooks and the Desktop tab use the same handle.
  */
-
-import type { StreamEvent, ImageInput } from "../run-events";
-import type { RunAgentOpts } from "../agent-runner";
-import type { RunHostSpec } from "../../runner-host/protocol";
 
 /** The provider ids the registry knows (all implemented — see index.ts).
  *  Persisted sessions may still carry a retired id (docker, modal, e2b,
@@ -95,6 +85,15 @@ export interface ExecOpts {
    * sandbox.
    */
   background?: boolean;
+  /**
+   * The caller is issuing a burst of commands against a Sandbox it already
+   * woke (a run's tool calls): skip the provider's wake check and keepalive
+   * unless a minute has passed since the last one.
+   */
+  assumeStarted?: boolean;
+  /** Give the command a workload identity lease (default true). A run's
+   *  file operations skip it; its shell commands keep it. */
+  workloadIdentity?: boolean;
 }
 
 export interface ExecResult {
@@ -127,44 +126,6 @@ export type PortMap = Record<number, number | PortEntry>;
 export type SandboxStatus = "running" | "stopped" | "gone";
 
 /**
- * Callbacks a caller attaches to a launched run — the non-serializable
- * counterpart of RunHostSpec, matching host-client's HandleCallbacks /
- * HostedRunOpts split (asks are proxied back to whoever can answer them).
- */
-export interface RunHandleCallbacks {
-  onAskUser?: RunAgentOpts["onAskUser"];
-  /**
-   * Builds the in-process SDK MCP servers (opensession-sessions/-admin/…) for
-   * runs executing inside this process. Hosted/containerized runs ignore it —
-   * they reach the same tools via the stdio→RPC proxy path
-   * (RunHostSpec.proxyMcpServers + rpcToken).
-   */
-  inProcessMcp?: () => Record<string, unknown> | undefined;
-  /**
-   * A steer reached the run too late (already finishing) or the backend can't
-   * steer — the caller should queue the text for delivery after the run
-   * instead of dropping it. Mirrors host-client's HandleCallbacks. Only fires
-   * for out-of-process runs; in-process steers report failure synchronously.
-   */
-  onSteerFailed?: (text: string) => void;
-}
-
-/**
- * A long-lived agent run inside a sandbox. `events()` is the same
- * AsyncGenerator<StreamEvent> shape every runner entry point yields — consume
- * it exactly once. The control methods mirror HostRunControl and return false
- * when the run can't honor the request (caller queues instead).
- */
-export interface RunHandle {
-  events(): AsyncGenerator<StreamEvent>;
-  /** Whether the run's backend supports mid-run steering (claude yes, exec-codex no). */
-  steerable: boolean;
-  steer(text: string, images?: ImageInput[]): boolean;
-  interruptSteer(text: string, images?: ImageInput[]): boolean;
-  cancel(): boolean;
-}
-
-/**
  * One session's execution environment. `id` is journaled on ActiveRunRecord
  * (`sandboxId`) and the session file so a restarted opensession can reattach via
  * `SandboxProvider.get()`.
@@ -188,20 +149,6 @@ export interface Sandbox {
   /** One-shot commands in the workspace (git status, ls-files, …). Never throws
    *  on non-zero exit — inspect `exitCode`. */
   exec(cmd: string[], opts?: ExecOpts): Promise<ExecResult>;
-  /** Start a long-lived agent run (NDJSON-stream semantics; see RunHandle). */
-  launchRun(spec: RunHostSpec, cb?: RunHandleCallbacks): RunHandle;
-  /**
-   * Like `launchRun`, but the sandbox-side setup (container exec, socket
-   * connect) is awaited HERE and a failure THROWS instead of surfacing as an
-   * error event on the stream — so a caller with a fallback path (e.g. run on
-   * the host instead) can catch it before committing to the sandbox. Optional:
-   * only backends whose launch can fail out-of-process implement it; the local
-   * provider's in-process launch has nothing to await.
-   */
-  launchRunEager?(
-    spec: RunHostSpec,
-    cb?: RunHandleCallbacks,
-  ): Promise<RunHandle>;
   /** Preview ports (sandbox port → host port). `requestedPorts` lets providers
    *  with dynamic tunnels publish services a session added to .ports.conf. */
   ports(requestedPorts?: number[]): Promise<PortMap>;

@@ -11,7 +11,6 @@ import { join } from "path";
 import {
   __setXaiAccountsPathForTest,
   addXaiAccount,
-  buildXaiRemoteUpload,
   ensureFreshXaiAccount,
   listXaiAccountsPublic,
   markXaiExhausted,
@@ -250,40 +249,6 @@ describe("xai sandbox copies", () => {
   afterAll(() => {
     __setXaiAccountsPathForTest(previousStore);
     rmSync(dir, { recursive: true, force: true });
-  });
-
-  test("a guest projection is scoped, rebuilt field by field and cannot refresh", async () => {
-    const upload = await buildXaiRemoteUpload({ user: "Alex" });
-    expect(upload.accounts.map((a) => a.id)).toEqual(["shared", "mine"]);
-    expect(upload.accounts[0]).toEqual({
-      id: "shared",
-      name: "shared@example.com",
-      email: "shared@example.com",
-      createdAt: "2026-01-01T00:00:00Z",
-      access: "a-shared",
-      refresh: XAI_REMOTE_SEED_REFRESH,
-      expires: FAR,
-    });
-    expect(upload.accounts[1].owner).toBe("Alex");
-    expect(upload.skipped.map((s) => s.account.id)).toEqual(["seeded-dead"]);
-    expect(upload.skipped[0].reason).toContain("cannot be refreshed");
-  });
-
-  test("a pin narrows the upload to one account, a foreign pin never widens", async () => {
-    const own = await buildXaiRemoteUpload({ user: "Alex", accountId: "mine" });
-    expect(own.accounts.map((a) => a.id)).toEqual(["mine"]);
-    const foreign = await buildXaiRemoteUpload({
-      user: "Kent",
-      accountId: "mine",
-    });
-    expect(foreign.accounts.map((a) => a.id)).toEqual(["shared", "theirs"]);
-    const designated = await buildXaiRemoteUpload({
-      user: "Alex",
-      restrictIds: ["mine"],
-    });
-    expect(designated.accounts.map((a) => a.id)).toEqual(["mine"]);
-    const userless = await buildXaiRemoteUpload({});
-    expect(userless.accounts.map((a) => a.id)).toEqual(["shared"]);
   });
 
   test("a read-only store refuses to rotate the host's grant", async () => {

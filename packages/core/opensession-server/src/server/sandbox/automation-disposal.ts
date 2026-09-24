@@ -1,3 +1,4 @@
+import { forgetWorkspaceSandbox } from "./workspace-rpc";
 import { audit } from "../audit";
 import { updateSessionFile } from "../session-cache";
 import type { SandboxProvider } from "./provider";
@@ -13,6 +14,8 @@ export async function disposeAutomationSandbox(args: {
   sessionId: string;
 }): Promise<void> {
   const { provider, sandboxId, sessionId } = args;
+  // No run's tool call may reach the Executor from here on.
+  forgetWorkspaceSandbox(sandboxId);
   try {
     await provider.destroy(sandboxId, { strict: true });
     await updateSessionFile(sessionId, (data) => {

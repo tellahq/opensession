@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useScrollEdge } from "../hooks/useScrollEdge";
 import { cn } from "../ui/cn";
-import { useAuthStatus } from "./UserPicker";
 import {
   SETTINGS_BACK,
   SETTINGS_CONTENT,
@@ -282,12 +281,6 @@ export function Settings({
   children?: React.ReactNode;
 }) {
   const isPhone = useIsPhone();
-  const auth = useAuthStatus();
-  const visibleSection =
-    auth?.admin === false &&
-    SECTIONS.some((item) => item.key === section && item.adminOnly)
-      ? undefined
-      : section;
 
   // No page-level Esc handler: Esc belongs to whatever is focused (cancelling
   // an inline edit, closing a menu), not to the settings page itself — losing
@@ -303,7 +296,6 @@ export function Settings({
   // Group the nav entries under their group label (order preserved).
   const groups: SectionGroup[] = [];
   for (const s of SECTIONS) {
-    if (s.adminOnly && auth?.admin === false) continue;
     let g = groups.find((x) => x.group === s.group);
     if (!g) groups.push((g = { group: s.group, items: [] }));
     g.items.push(s);
@@ -313,7 +305,7 @@ export function Settings({
     return (
       <MobileSettings
         groups={groups}
-        section={visibleSection}
+        section={section}
         onSelect={onSelect}
         onShowRoot={onShowRoot}
         onBack={onBack}
@@ -326,7 +318,7 @@ export function Settings({
 
   // A bare /settings lands on Account, the first personal section, on desktop.
   // Keep the section out of the URL so phones can stay at the nav root.
-  const active = visibleSection ?? "myAccounts";
+  const active = section ?? "myAccounts";
   const shown = filterGroups(groups, query);
   const firstHit = shown[0]?.hits[0]?.item;
 

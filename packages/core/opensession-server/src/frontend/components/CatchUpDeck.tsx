@@ -149,7 +149,7 @@ export function CatchUpDeck({
         !s.parentSessionId &&
         !!s.startedBy &&
         s.startedBy.toLowerCase() === me &&
-        isUnread(s.id, s.lastActivity, reads),
+        isUnread(s, reads),
     );
     const groups = new Map<string, UnifiedSession[]>();
     const order: string[] = [];

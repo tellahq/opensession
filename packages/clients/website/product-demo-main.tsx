@@ -915,7 +915,6 @@ const responseFor = (url: URL, method: string): Response => {
   if (path === "/api/onboarding/status")
     return json({
       hasOwnSessions: true,
-      admin: false,
       preparedRepo: {
         id: demoRepo,
         label: sessionsShot ? "tella-fusion" : "Open Session",

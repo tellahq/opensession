@@ -2,6 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { normalizeModelProviderConfig } from "./model-providers";
 
 describe("model provider config", () => {
+  test("ignores the retired hourly request limit in existing configs", () => {
+    expect(
+      normalizeModelProviderConfig({
+        enabled: true,
+        bridgeMaxRequestsPerHour: 1,
+      }),
+    ).toEqual(normalizeModelProviderConfig({ enabled: true }));
+  });
+
   test("normalizes keys, picker models, and account restrictions", () => {
     expect(
       normalizeModelProviderConfig({

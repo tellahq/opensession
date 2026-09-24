@@ -49,7 +49,11 @@ import {
   registerActiveRunProbe,
   type ActiveRunRecord,
 } from "./run-journal";
-import { shouldPersistModelSwitch, type ImageInput } from "./run-events";
+import {
+  shouldPersistModelSwitch,
+  type ImageInput,
+  type PromptFile,
+} from "./run-events";
 import type { TranscriptEntry } from "./types";
 import {
   appendTranscriptEntries,
@@ -77,6 +81,7 @@ import {
   HOST_SPEC_NAME,
   HOST_META_NAME,
   HOST_JOURNAL_NAME,
+  type RemoteWorkspaceSpec,
   type RunHostSpec,
   type RunHostMeta,
   type HostToClientMsg,
@@ -226,6 +231,11 @@ export interface HostedRunOpts {
    *  resolve through the run-rpc builder: the interactive set, or the
    *  fail-closed automation-bar set for automation-owned sessions. */
   proxyMcpServers?: string[];
+  /** The run's tools act on this Sandbox; the engine still runs here. */
+  remoteWorkspace?: RemoteWorkspaceSpec;
+  /** Attachment bytes for a remote workspace, which cannot read this
+   *  machine's upload paths (see RunHostSpec.files). */
+  files?: PromptFile[];
   reposNote?: string;
   deniedTools?: Record<string, string>;
   publicationPolicy?: { repo: string; branch: string; headBranch: string };
@@ -417,51 +427,70 @@ async function* runAgentInProcess(
   opts: HostedRunOpts,
   lifecycle: "session" | "auxiliary" = "session",
 ): AsyncGenerator<StreamEvent> {
-  yield* runAgent({
-    prompt: opts.prompt,
-    promptEntryId: opts.promptEntryId,
-    startToken: opts.startToken,
-    seedTranscriptEntries: opts.seedTranscriptEntries,
-    sessionId: opts.sessionId,
-    cwd: opts.cwd,
-    mode: opts.mode,
-    mcpGrantUser: opts.mcpGrantUser,
-    model: opts.model,
-    images: opts.images,
-    forkSession: opts.forkSession,
-    resumeSessionAt: opts.resumeSessionAt,
-    mcpServers: opts.mcpServers ?? "all",
-    inProcessMcp: await opts.fallbackInProcessMcp?.(),
-    reposNote: opts.reposNote,
-    deniedTools: opts.deniedTools,
-    publicationPolicy: opts.publicationPolicy,
-    confirmTools: opts.confirmTools,
-    aws: opts.aws,
-    claudeCliEnv: opts.claudeCliEnv,
-    codexCliEnv: opts.codexCliEnv,
-    author: opts.author,
-    user: opts.user,
-    accountUser: opts.accountUser,
-    fallbackModel: opts.fallbackModel,
-    accountAffinityKey: opts.accountAffinityKey,
-    effort: opts.effort,
-    fastMode: opts.fastMode,
-    pstackMode: opts.pstackMode,
-    accountId: opts.accountId,
-    accountStrict: opts.accountStrict,
-    usageCredits: opts.usageCredits,
-    prReviewer: opts.prReviewer,
-    readRepos: opts.readRepos,
-    journal: {
-      ...(lifecycle === "auxiliary" ? {} : { osSessionId: opts.osSessionId }),
-      kind: opts.journalKind || "prompt",
-      firstJournaledAt: opts.firstJournaledAt,
-      resumeAttempts: opts.resumeAttempts,
-      lastResumeAt: opts.lastResumeAt,
-    },
-    onAskUser: opts.onAskUser,
-    shouldCancel: opts.shouldCancel,
-  });
+  // Without a detached host, a remote workspace still reaches its Sandbox
+  // through the run-rpc socket, under a token minted for this run.
+  const workspaceToken = opts.remoteWorkspace ? crypto.randomUUID() : undefined;
+  if (workspaceToken)
+    registerRunToken(workspaceToken, {
+      sessionId: opts.osSessionId,
+      user: opts.user,
+      humanPrompter: opts.accountUser,
+      promptEntryId: opts.promptEntryId,
+    });
+  try {
+    yield* runAgent({
+      prompt: opts.prompt,
+      promptEntryId: opts.promptEntryId,
+      startToken: opts.startToken,
+      seedTranscriptEntries: opts.seedTranscriptEntries,
+      sessionId: opts.sessionId,
+      cwd: opts.cwd,
+      remoteWorkspace:
+        opts.remoteWorkspace && workspaceToken
+          ? { ...opts.remoteWorkspace, rpcToken: workspaceToken }
+          : undefined,
+      files: opts.remoteWorkspace ? opts.files : undefined,
+      mode: opts.mode,
+      mcpGrantUser: opts.mcpGrantUser,
+      model: opts.model,
+      images: opts.images,
+      forkSession: opts.forkSession,
+      resumeSessionAt: opts.resumeSessionAt,
+      mcpServers: opts.mcpServers ?? "all",
+      inProcessMcp: await opts.fallbackInProcessMcp?.(),
+      reposNote: opts.reposNote,
+      deniedTools: opts.deniedTools,
+      publicationPolicy: opts.publicationPolicy,
+      confirmTools: opts.confirmTools,
+      aws: opts.aws,
+      claudeCliEnv: opts.claudeCliEnv,
+      codexCliEnv: opts.codexCliEnv,
+      author: opts.author,
+      user: opts.user,
+      accountUser: opts.accountUser,
+      fallbackModel: opts.fallbackModel,
+      accountAffinityKey: opts.accountAffinityKey,
+      effort: opts.effort,
+      fastMode: opts.fastMode,
+      pstackMode: opts.pstackMode,
+      accountId: opts.accountId,
+      accountStrict: opts.accountStrict,
+      usageCredits: opts.usageCredits,
+      prReviewer: opts.prReviewer,
+      readRepos: opts.readRepos,
+      journal: {
+        ...(lifecycle === "auxiliary" ? {} : { osSessionId: opts.osSessionId }),
+        kind: opts.journalKind || "prompt",
+        firstJournaledAt: opts.firstJournaledAt,
+        resumeAttempts: opts.resumeAttempts,
+        lastResumeAt: opts.lastResumeAt,
+      },
+      onAskUser: opts.onAskUser,
+      shouldCancel: opts.shouldCancel,
+    });
+  } finally {
+    unregisterRunToken(workspaceToken);
+  }
 }
 
 /**
@@ -566,6 +595,7 @@ function hostedRunRecord(spec: RunHostSpec): ActiveRunRecord {
     prompt: spec.prompt,
     promptEntryId: spec.promptEntryId,
     cwd: spec.cwd,
+    remoteWorkspace: spec.remoteWorkspace,
     mode: spec.mode,
     mcpServers: spec.mcpServers,
     user: spec.user,
@@ -615,9 +645,12 @@ async function spawnHostRun(
     throw error;
   }
 
-  const rpcToken = opts.proxyMcpServers?.length
-    ? crypto.randomUUID()
-    : undefined;
+  // A remote workspace reaches its Sandbox through the same authenticated
+  // socket, so it needs a token even when no in-process server is proxied.
+  const rpcToken =
+    opts.proxyMcpServers?.length || opts.remoteWorkspace
+      ? crypto.randomUUID()
+      : undefined;
   const spec: RunHostSpec = {
     hostId,
     osSessionId: opts.osSessionId,
@@ -631,11 +664,13 @@ async function spawnHostRun(
     mcpGrantUser: opts.mcpGrantUser,
     model: opts.model,
     images: opts.images,
+    files: opts.files,
     forkSession: opts.forkSession,
     resumeSessionAt: opts.resumeSessionAt,
     mcpServers: opts.mcpServers ?? "all",
     proxyMcpServers: opts.proxyMcpServers,
     rpcToken,
+    remoteWorkspace: opts.remoteWorkspace,
     reposNote: opts.reposNote,
     deniedTools: opts.deniedTools,
     publicationPolicy: opts.publicationPolicy,

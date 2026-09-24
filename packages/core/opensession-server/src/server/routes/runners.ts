@@ -20,10 +20,6 @@ import {
 } from "../runners";
 import { requestUser, type RouteContext } from "./context";
 import {
-  requireWorkspaceAdmin,
-  workspaceAdminAuthorized,
-} from "../workspace-auth";
-import {
   bootstrapKubernetesRunner,
   bootstrapSshRunner,
   configuredRunnerBootstrapTargets,
@@ -46,24 +42,10 @@ function peerAddress(ctx: RouteContext): string {
   return direct;
 }
 
-function publicView(ctx: RouteContext) {
-  const user = requestUser(ctx) || undefined;
-  const admin = workspaceAdminAuthorized(ctx);
-  return listRunners()
-    .filter((runner) => admin || runnerAllowedForView(runner, user))
-    .map((runner) => publicRunner(runner, isRunnerConnected(runner.id)));
-}
-
-function runnerAllowedForView(
-  runner: ReturnType<typeof listRunners>[number],
-  user?: string,
-): boolean {
-  if (
-    runner.allowedUsers.length &&
-    (!user || !runner.allowedUsers.includes(user))
-  )
-    return false;
-  return runner.permissions.commands;
+function publicView() {
+  return listRunners().map((runner) =>
+    publicRunner(runner, isRunnerConnected(runner.id)),
+  );
 }
 
 export async function handleRunnersRoutes(
@@ -71,13 +53,8 @@ export async function handleRunnersRoutes(
 ): Promise<Response | undefined> {
   const { path, req } = ctx;
   if (path === "/api/runners" && req.method === "GET")
-    return Response.json({
-      runners: publicView(ctx),
-      admin: workspaceAdminAuthorized(ctx),
-    });
+    return Response.json({ runners: publicView() });
   if (path === "/api/runners/bootstrap" && req.method === "GET") {
-    const denied = requireWorkspaceAdmin(ctx);
-    if (denied) return denied;
     const targets = configuredRunnerBootstrapTargets();
     return Response.json({
       ssh: targets.ssh.map(({ id, label, host, user, port, fingerprint }) => ({
@@ -101,8 +78,6 @@ export async function handleRunnersRoutes(
   }
   const bootstrap = path.match(/^\/api\/runners\/bootstrap\/(ssh|kubernetes)$/);
   if (bootstrap && req.method === "POST") {
-    const denied = requireWorkspaceAdmin(ctx);
-    if (denied) return denied;
     const body = (await req.json().catch(() => null)) as Record<
       string,
       unknown
@@ -145,8 +120,6 @@ export async function handleRunnersRoutes(
     }
   }
   if (path === "/api/runners/pair" && req.method === "POST") {
-    const denied = requireWorkspaceAdmin(ctx);
-    if (denied) return denied;
     const pairing = createRunnerPairing(requestUser(ctx) || undefined);
     audit({
       msg: "runner_pairing_created",
@@ -230,8 +203,6 @@ export async function handleRunnersRoutes(
   if (!match) return undefined;
   const [, id, action] = match;
   if (!action && req.method === "PATCH") {
-    const denied = requireWorkspaceAdmin(ctx);
-    if (denied) return denied;
     const body = (await req.json().catch(() => null)) as Record<
       string,
       unknown
@@ -246,8 +217,6 @@ export async function handleRunnersRoutes(
     });
   }
   if (!action && req.method === "DELETE") {
-    const denied = requireWorkspaceAdmin(ctx);
-    if (denied) return denied;
     if (!removeRunner(id))
       return Response.json({ error: "Runner not found" }, { status: 404 });
     await dropRunnerPortalsForRunner(id);

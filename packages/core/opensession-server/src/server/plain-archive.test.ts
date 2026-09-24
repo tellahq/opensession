@@ -8,6 +8,7 @@ import type { NativeSessionFile } from "./types";
 describe("Plain archive sweep", () => {
   test("a matching thread cannot open an unbounded set of actor writers", async () => {
     let writes = 0;
+    const stopped: string[] = [];
     const sessions = Array.from({ length: 1000 }, (_, i) => ({
       data: {
         id: `candidate-${i}`,
@@ -23,9 +24,14 @@ describe("Plain archive sweep", () => {
       },
       () => {},
       () => {},
+      undefined,
+      async (id) => {
+        stopped.push(id);
+      },
     );
     expect(writes).toBe(40);
     expect(archived).toBe(40);
+    expect(stopped).toEqual(sessions.slice(0, 40).map(({ data }) => data.id));
   });
 
   test("a retargeted or already archived session cannot be archived from a stale candidate", async () => {
@@ -49,6 +55,7 @@ describe("Plain archive sweep", () => {
         lastActivityMs: 0,
       });
       const failures: unknown[] = [];
+      const stopped: string[] = [];
       const result = await archivePlainSessionCandidates(
         "old-ticket",
         [
@@ -64,8 +71,13 @@ describe("Plain archive sweep", () => {
         () => {
           throw new Error("Must not release a retargeted session lease");
         },
+        undefined,
+        async (id) => {
+          stopped.push(id);
+        },
       );
       expect(result).toBe(0);
+      expect(stopped).toEqual([]);
       expect(String(failures[0])).toContain(
         "changed since candidate selection",
       );
@@ -84,6 +96,7 @@ describe("Plain archive sweep", () => {
   test("continues after one session projection is quarantined", async () => {
     const projected: string[] = [];
     const released: string[] = [];
+    const stopped: string[] = [];
     const failures: Array<[string, unknown]> = [];
     const sessions = ["quarantined", "healthy"].map((id) => ({
       data: { id, plainThreadId: "thread-1" } as NativeSessionFile,
@@ -99,11 +112,16 @@ describe("Plain archive sweep", () => {
       },
       (sessionId, error) => failures.push([sessionId, error]),
       (sessionId) => released.push(sessionId),
+      undefined,
+      async (id) => {
+        stopped.push(id);
+      },
     );
 
     expect(archived).toBe(1);
     expect(projected).toEqual(["quarantined", "healthy"]);
     expect(released).toEqual(["healthy"]);
+    expect(stopped).toEqual(["healthy"]);
     expect(failures).toHaveLength(1);
     expect(failures[0]?.[0]).toBe("quarantined");
   });
@@ -136,18 +154,24 @@ describe("Plain archive sweep", () => {
       async (discussionId) => {
         events.push(`resolve:${discussionId}`);
       },
+      async (id) => {
+        events.push(`stop:${id}`);
+      },
     );
 
     expect(archived).toBe(2);
     expect(events).toEqual([
       "resolve:thd_a",
       "archive:with-discussion",
+      "stop:with-discussion",
       "archive:note-only",
+      "stop:note-only",
     ]);
   });
 
   test("keeps a session unarchived when its discussion cannot be resolved, so the sweep retries it", async () => {
     const projected: string[] = [];
+    const stopped: string[] = [];
     const failures: Array<[string, unknown]> = [];
     const sessions = [
       {
@@ -171,12 +195,95 @@ describe("Plain archive sweep", () => {
         if (discussionId === "thd_a")
           throw new Error("Plain API responded 503");
       },
+      async (id) => {
+        stopped.push(id);
+      },
     );
 
     expect(archived).toBe(1);
     expect(projected).toEqual(["healthy"]);
+    expect(stopped).toEqual(["healthy"]);
     expect(failures).toHaveLength(1);
     expect(failures[0]?.[0]).toBe("plain-down");
+  });
+
+  test("stops Portals only after the archived metadata is committed", async () => {
+    const {
+      SessionKernelStore,
+      __setSessionKernelStoreForTest,
+      sessionMetadata,
+    } = await import("./session-kernel");
+    const store = new SessionKernelStore(":memory:");
+    const prior = __setSessionKernelStoreForTest(store);
+    try {
+      const data = {
+        id: "os-plain-portal",
+        plainThreadId: "thread-1",
+      } as NativeSessionFile;
+      await sessionMetadata({
+        op: "put",
+        sessionId: data.id,
+        expectedRev: null,
+        rev: 1,
+        requestId: "seed",
+        doc: JSON.stringify(data),
+        archived: false,
+        lastActivityMs: 0,
+      });
+      const stopped: Array<{ id: string; archived: boolean }> = [];
+      const failures: unknown[] = [];
+      const result = await archivePlainSessionCandidates(
+        "thread-1",
+        [{ data }],
+        async (_id, _op, mutate) => await mutate(),
+        (_id, error) => failures.push(error),
+        () => {},
+        undefined,
+        async (id) => {
+          const row = await sessionMetadata({
+            op: "catalog_get",
+            sessionId: id,
+          });
+          stopped.push({ id, archived: JSON.parse(row!.doc).archived });
+        },
+      );
+      expect(failures).toEqual([]);
+      expect(result).toBe(1);
+      expect(stopped).toEqual([{ id: data.id, archived: true }]);
+    } finally {
+      __setSessionKernelStoreForTest(prior);
+      store.close();
+    }
+  });
+
+  test("cleanup failures neither undo archives nor skip remaining Portal cleanup", async () => {
+    const stopped: string[] = [];
+    const failures: Array<[string, unknown]> = [];
+    const leaseError = new Error("lease cleanup failed");
+    const portalError = new Error("Portal cleanup failed");
+    const result = await archivePlainSessionCandidates(
+      "thread-1",
+      ["lease-failure", "portal-failure", "healthy"].map((id) => ({
+        data: { id, plainThreadId: "thread-1" } as NativeSessionFile,
+      })),
+      async (_id, _op, mutate) =>
+        undefined as Awaited<ReturnType<typeof mutate>>,
+      (id, error) => failures.push([id, error]),
+      (id) => {
+        if (id === "lease-failure") throw leaseError;
+      },
+      undefined,
+      async (id) => {
+        stopped.push(id);
+        if (id === "portal-failure") throw portalError;
+      },
+    );
+    expect(result).toBe(3);
+    expect(stopped).toEqual(["lease-failure", "portal-failure", "healthy"]);
+    expect(failures).toEqual([
+      ["lease-failure", leaseError],
+      ["portal-failure", portalError],
+    ]);
   });
 
   test("treats a missing agent key as a resolution failure instead of archiving past the discussion", async () => {

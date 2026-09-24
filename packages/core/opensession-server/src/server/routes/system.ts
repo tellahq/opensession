@@ -39,7 +39,6 @@ import {
   sessionKernelHealth,
   sessionKernelReadinessSnapshot,
 } from "../session-kernel";
-import { requireWorkspaceAdmin } from "../workspace-auth";
 import { audit } from "../audit";
 import { serviceReadiness } from "../service-readiness";
 import { runtimeGeneration } from "../runtime-generation";
@@ -114,8 +113,6 @@ export async function handleSystemRoutes(
   }
 
   if (path === "/api/system/session-kernel/dead-letters") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     if (req.method === "GET") {
       const limit = Math.max(
         1,

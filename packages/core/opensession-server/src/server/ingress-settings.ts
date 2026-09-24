@@ -61,7 +61,6 @@ function ingressStartedAt(exposure: IngressExposure | null): number {
 }
 
 export interface IngressStatus {
-  canManage: boolean;
   publicBaseUrl: string;
   exposure: IngressExposure | null;
   health:
@@ -414,7 +413,6 @@ export function displayedServerAddresses(
 }
 
 export async function publicIngressStatus(
-  canManage: boolean,
   options: { appBaseUrl?: string } = {},
 ): Promise<IngressStatus> {
   const configured = configuredPublicIngress();
@@ -455,7 +453,6 @@ export async function publicIngressStatus(
   );
   const tunnelId = configured.cloudflareTunnelId;
   return {
-    canManage,
     publicBaseUrl: configured.publicBaseUrl,
     exposure: configured.exposure,
     health,

@@ -3,7 +3,8 @@ import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import {
-  bootstrapSignature,
+  baseRuntimeSignature,
+  bunCacheDamaged,
   loadRemoteWorkspaceSeedFiles,
   runRemoteLifecycleHook,
   setupRemoteWorkspace,
@@ -48,10 +49,10 @@ function driver(
 
 describe("remote repo lifecycle", () => {
   test("bootstrap identity includes the preview runtime contract", () => {
-    expect(bootstrapSignature()).toContain("node@24.18.1");
-    expect(bootstrapSignature()).toContain("just@1.43.1");
-    expect(bootstrapSignature()).toContain("gh@2.83.1");
-    expect(bootstrapSignature()).toContain("workspace-runtime-v8");
+    expect(baseRuntimeSignature()).toContain("node@24.18.1");
+    expect(baseRuntimeSignature()).toContain("just@1.43.1");
+    expect(baseRuntimeSignature()).toContain("gh@2.83.1");
+    expect(baseRuntimeSignature()).toContain("workspace-runtime-v8");
   });
 
   test("setup is skipped after its durable stamp", async () => {
@@ -172,6 +173,45 @@ describe("remote repo lifecycle", () => {
     expect(
       d.commands.some(({ command }) => command === "git branch --show-current"),
     ).toBe(false);
+  });
+
+  test("a warm clone about to restore a checkpoint skips the branch fetches", async () => {
+    const d = driver([
+      { exitCode: 0, stdout: "warm\n" },
+      { exitCode: 0 },
+      { exitCode: 0 },
+      { exitCode: 0 },
+      { exitCode: 0, stdout: "absent\n" },
+    ]);
+    await setupRemoteWorkspace(
+      d.value,
+      "/work/feature",
+      "https://token@example.test/repo.git",
+      "feature/new-ui",
+      "main",
+      "opensession",
+      { sandboxId: "sbx-test", provider: "daytona", repoId: "opensession" },
+      {
+        restoreCheckpoint: {
+          ref: "refs/opensession/checkpoints/s1",
+          commit: "c0ffee",
+          branch: "feature/new-ui",
+        },
+      },
+    );
+    const adoption = d.commands[1]!;
+    expect(adoption.command).toContain("ln -s");
+    expect(adoption.command).not.toContain(
+      "fetch --no-tags origin +refs/heads",
+    );
+    expect(adoption.command).toContain(
+      "update-ref refs/heads/feature/new-ui HEAD",
+    );
+    expect(adoption.command).toContain(
+      "symbolic-ref HEAD refs/heads/feature/new-ui",
+    );
+    // The restore itself fetches the checkpoint and lands the branch on it.
+    expect(d.commands[2]!.command).toContain("refs/opensession/checkpoints/s1");
   });
 
   test("cold-clones instead of taking over another workspace's warm clone", async () => {
@@ -369,5 +409,21 @@ describe("remote workspace private seed files", () => {
     expect(() =>
       loadRemoteWorkspaceSeedFiles({ id: "app", repo: root }),
     ).toThrow("regular file");
+  });
+});
+
+describe("damaged Bun cache", () => {
+  test("recognizes the install failures a damaged cache produces, nothing else", () => {
+    expect(
+      bunCacheDamaged(
+        "error: failed to install zod: the downloaded package was not found in the cache",
+      ),
+    ).toBe(true);
+    expect(
+      bunCacheDamaged(
+        "ENOENT: failed copying files from cache to destination for package eve",
+      ),
+    ).toBe(true);
+    expect(bunCacheDamaged("error: ReScript build failed")).toBe(false);
   });
 });

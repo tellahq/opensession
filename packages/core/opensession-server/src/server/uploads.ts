@@ -12,6 +12,7 @@
 import { createHash } from "crypto";
 import {
   existsSync,
+  linkSync,
   mkdirSync,
   readFileSync,
   realpathSync,
@@ -20,16 +21,17 @@ import {
   unlinkSync,
   writeFileSync,
 } from "fs";
-import { readFile } from "fs/promises";
+import { readFile, stat } from "fs/promises";
 import { MAX_PROMPT_IMAGES } from "@tellahq/opensession-protocol/session";
 import {
   INLINE_IMAGE_EXTENSIONS,
+  MAX_FILE_UPLOAD_BYTES,
   MAX_SHIPPED_ATTACHMENT_BYTES,
   MAX_UPLOAD_BYTES,
   sanitizeAttachmentName as sanitizeFilename,
   type StagedAttachment,
 } from "./prompt-attachments";
-export { MAX_UPLOAD_BYTES };
+export { MAX_FILE_UPLOAD_BYTES, MAX_UPLOAD_BYTES };
 import type { ImageInput, PromptFile } from "./run-events";
 import { SESSIONS_DIR } from "./session-cache";
 
@@ -334,6 +336,20 @@ function uploadDigest(bytes: Buffer): string {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
+/**
+ * A digest of a staged file's identity rather than its bytes, for files too
+ * large to read whole (a multi-gigabyte video). Staged uploads are written
+ * once and never modified, and the destination is a hard link to the same
+ * inode, so device, inode, size and mtime pin the exact bytes without reading
+ * them. Same `sha256:` shape as a content digest, which the kernel requires.
+ */
+function identityDigest(path: string): string {
+  const s = statSync(path);
+  return `sha256:${createHash("sha256")
+    .update(`file\0${s.dev}\0${s.ino}\0${s.size}\0${s.mtimeMs}`)
+    .digest("hex")}`;
+}
+
 function sourceRefForPath(path: string): string {
   if (!isWithinUploads(path))
     throw new Error("Attachment source is outside uploads");
@@ -392,6 +408,24 @@ export function prepareCreationAttachmentSources(
         throw new Error(
           `Creation attachment source is unavailable: ${upload.name}`,
         );
+      const size = statSync(upload.path).size;
+      if (size > MAX_UPLOAD_BYTES) {
+        // Too large to read here: fence it by identity and hard-link it.
+        if (size > MAX_FILE_UPLOAD_BYTES)
+          throw new Error(
+            `Creation attachment has invalid size: ${upload.name}`,
+          );
+        const digest = identityDigest(upload.path);
+        return {
+          attachmentId: createHash("sha256")
+            .update(`${sessionId}\0${index}\0${upload.name}\0${digest}`)
+            .digest("hex")
+            .slice(0, 32),
+          name: upload.name || "file",
+          sourceRef: sourceRefForPath(upload.path),
+          digest,
+        };
+      }
       bytes = readFileSync(upload.path);
       sourcePath = upload.path;
     } else {
@@ -439,6 +473,18 @@ export function stageCreationAttachment(
     source.name,
   );
   mkdirSync(path.slice(0, path.lastIndexOf("/")), { recursive: true });
+  const large = existsSync(path)
+    ? statSync(path).size > MAX_UPLOAD_BYTES
+    : (() => {
+        try {
+          return (
+            statSync(pathForSourceRef(source.sourceRef)).size > MAX_UPLOAD_BYTES
+          );
+        } catch {
+          return false;
+        }
+      })();
+  if (large) return stageLargeCreationAttachment(path, source);
   if (existsSync(path)) {
     if (uploadDigest(readFileSync(path)) !== source.digest)
       throw new Error(
@@ -464,6 +510,36 @@ export function stageCreationAttachment(
     try {
       unlinkSync(temp);
     } catch {}
+  }
+  return { name: source.name, path };
+}
+
+/** A file past MAX_UPLOAD_BYTES is hard-linked, never read or copied: a
+ *  multi-gigabyte video would otherwise be buffered whole. */
+function stageLargeCreationAttachment(
+  path: string,
+  source: CreationAttachmentSource,
+): { name: string; path: string } {
+  if (existsSync(path)) {
+    if (identityDigest(path) !== source.digest)
+      throw new Error(
+        `Creation attachment ${source.attachmentId} destination changed`,
+      );
+    return { name: source.name, path };
+  }
+  const sourcePath = pathForSourceRef(source.sourceRef);
+  if (statSync(sourcePath).size > MAX_FILE_UPLOAD_BYTES)
+    throw new Error(
+      `Creation attachment ${source.attachmentId} has invalid size`,
+    );
+  if (identityDigest(sourcePath) !== source.digest)
+    throw new Error(
+      `Creation attachment ${source.attachmentId} digest changed`,
+    );
+  try {
+    linkSync(sourcePath, path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== "EEXIST") throw error;
   }
   return { name: source.name, path };
 }
@@ -496,7 +572,7 @@ function stageUploads(
       } catch {
         continue;
       }
-      if (sz === 0 || sz > MAX_UPLOAD_BYTES) {
+      if (sz === 0 || sz > MAX_FILE_UPLOAD_BYTES) {
         console.warn(`[uploads] Skipping ${up.name || up.path} — ${sz} bytes`);
         continue;
       }
@@ -548,6 +624,16 @@ export async function readPromptFiles(
   for (const { name, path } of staged) {
     let bytes: Buffer;
     try {
+      // Size first: a multi-gigabyte upload must never be read whole just to
+      // find out it does not fit the payload.
+      const { size } = await stat(path);
+      if (total + size > MAX_SHIPPED_ATTACHMENT_BYTES) {
+        console.warn(
+          `[uploads] ${name} (${size} bytes) stays host-only: remote payload cap reached`,
+        );
+        files.push({ name });
+        continue;
+      }
       bytes = await readFile(path);
     } catch (error) {
       console.warn(

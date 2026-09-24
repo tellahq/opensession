@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { ServerResourceSample } from "../../shared/server-resources";
 import { useServerResources } from "../hooks/useServerResources";
 import {
@@ -13,6 +14,10 @@ import { cn } from "../ui/cn";
 import { Popover } from "../ui/popover";
 import { IconServer, IconX } from "./icons";
 import { FrontendFpsCounter } from "./FrontendFpsCounter";
+import {
+  getServerHealthMonitorPref,
+  onServerHealthMonitorChanged,
+} from "../lib/server-health-pref";
 
 function ResourceGraph({
   samples,
@@ -51,8 +56,21 @@ function ResourceGraph({
   );
 }
 
-/** Desktop sidebar only. Phones keep the top bar clear of host metrics. */
+/** Desktop sidebar only. Phones keep the top bar clear of host metrics.
+ * Hidden unless enabled in Preferences > Debug; unmounting also stops polling. */
 export function ServerHealthMonitor() {
+  const [enabled, setEnabled] = useState(getServerHealthMonitorPref);
+  useEffect(
+    () =>
+      onServerHealthMonitorChanged(() =>
+        setEnabled(getServerHealthMonitorPref()),
+      ),
+    [],
+  );
+  return enabled ? <ServerHealthPopover /> : null;
+}
+
+function ServerHealthPopover() {
   const state = useServerResources();
   const samples = state.kind === "ready" ? state.data.samples : [];
   const latest = samples.at(-1);

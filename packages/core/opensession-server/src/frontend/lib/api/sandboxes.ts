@@ -115,7 +115,6 @@ export function detachSandbox(
 }
 
 export interface SandboxConnectionsResponse {
-  canManage: boolean;
   connections: SandboxConnectionInfo[];
   operations: SandboxOperationInfo[];
   ingress: SandboxIngressInfo;
