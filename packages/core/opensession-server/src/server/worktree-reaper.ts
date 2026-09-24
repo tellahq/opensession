@@ -612,6 +612,18 @@ export async function sweepWorktreeReaper(
   );
   const openWorktrees = openSessionWorktrees(opts.sessions ?? []);
   const openBranches = openSessionBranches(opts.sessions ?? []);
+  // An open session's checkout can be owned through its branch alone (a
+  // revived checkout whose stored path is stale), which the path-keyed idle
+  // set never sees. Date those by every owner, path or branch, instead.
+  const idleCutoffMs = nowMs - IDLE_DAYS * DAY;
+  const recentWorktrees = activeSessionWorktrees(
+    opts.sessions ?? [],
+    idleCutoffMs,
+  );
+  const recentBranches = activeSessionBranches(
+    opts.sessions ?? [],
+    idleCutoffMs,
+  );
 
   const inUse = worktreesWithProcesses(root);
   if (!inUse) {
@@ -720,7 +732,13 @@ export async function sweepWorktreeReaper(
         .nothrow();
     if (ancestor.exitCode === 0) reason = `tip in origin/${repo.defaultBranch}`;
     else reason = await closedPrReason(repo, branch);
-    const idle = idleWorktrees.has(canonicalPath(dir));
+    const openOwned =
+      openWorktrees.has(canonicalPath(dir)) ||
+      !!openBranches.get(repo.id)?.has(branch);
+    const idle = openOwned
+      ? !recentWorktrees.has(canonicalPath(dir)) &&
+        !recentBranches.get(repo.id)?.has(branch)
+      : idleWorktrees.has(canonicalPath(dir));
     if (!reason && idle)
       reason = `session idle>${IDLE_DAYS}d (checkout parked; branch retained)`;
     if (!reason) continue;
@@ -746,11 +764,7 @@ export async function sweepWorktreeReaper(
     // A done-signal never reaps an open interactive session's checkout: the
     // person may still return to it, and reviving from the branch restores
     // none of its gitignored state. Only the idle horizon parks it.
-    if (
-      !idle &&
-      (openWorktrees.has(canonicalPath(dir)) ||
-        openBranches.get(repo.id)?.has(branch))
-    ) {
+    if (openOwned && !idle) {
       result.skipped.sessionOpen++;
       if (debug)
         console.log(
@@ -770,8 +784,12 @@ export async function sweepWorktreeReaper(
       .text()
       .trim();
 
+    // An open session's checkout is only ever parked, never reaped: keep its
+    // Slack channel and tmux session even when its branch reads as done.
     const parking =
-      idle && !reason.startsWith("tip in ") && !reason.startsWith("PR #");
+      idle &&
+      (openOwned ||
+        (!reason.startsWith("tip in ") && !reason.startsWith("PR #")));
     const verb = parking ? "park" : "reap";
     if (opts.dryRun) {
       if (dirty || unpushed) {

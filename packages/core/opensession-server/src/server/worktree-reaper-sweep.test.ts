@@ -126,5 +126,42 @@ describe("sweepWorktreeReaper", () => {
       "acme-archived-session",
       "acme-automation-run",
     ]);
+    expect(result.parked).toEqual([]);
+  });
+
+  it("parks, never reaps, an open session's done checkout past the idle horizon", async () => {
+    const { sweepWorktreeReaper } = await import("./worktree-reaper");
+    const open = await addDoneWorktree("idle-open-session");
+    const renamed = await addDoneWorktree("idle-renamed-branch");
+    const stale = new Date(NOW - 8 * 24 * HOUR).toISOString();
+
+    const result = await sweepWorktreeReaper({
+      nowMs: NOW,
+      sessions: [
+        {
+          worktreeDir: open,
+          branch: "idle-open-session",
+          repo: "acme",
+          lastActivity: stale,
+          isRunning: false,
+        },
+        {
+          // Only the branch ties this session to its revived checkout.
+          worktreeDir: join(worktrees, "acme-idle-original-name"),
+          branch: "idle-renamed-branch",
+          repo: "acme",
+          lastActivity: stale,
+          isRunning: false,
+        },
+      ],
+    });
+
+    expect(existsSync(open)).toBe(false);
+    expect(existsSync(renamed)).toBe(false);
+    // Parked (Slack channel and tmux kept), not reaped as done work.
+    expect(result.parked.sort()).toEqual([
+      "acme-idle-open-session",
+      "acme-idle-renamed-branch",
+    ]);
   });
 });
