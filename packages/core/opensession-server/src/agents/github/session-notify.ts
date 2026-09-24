@@ -6,7 +6,10 @@
  * takes — so the agent sees it and can react. The merge commit is then tracked in
  * ~/.opensession-github/pending-deploys.json (survives restarts), and when the
  * Deploy workflow (.github/workflows/deploy.yml) completes for that commit the
- * session gets a second message with the outcome. (Pre-merge staging previews
+ * session gets a second message with the outcome. A repo can replace the
+ * success message with its own prompt in `.opensession/deploy-verify.md` (read at
+ * the deployed commit), so the session that wrote the change verifies it in
+ * production against the review's "How we'll know" plan. (Pre-merge staging previews
  * are NOT announced here — the session header's Preview environment button already surfaces
  * the preview URL + Ready state, so a session notification would just be redundant.)
  */
@@ -20,6 +23,9 @@ import {
 import { audit } from "../../server/audit";
 import { configuredRepos, getConfigAsync } from "../../server/config";
 import { SESSION_BRANCH_MATCH_LIMIT } from "../../server/session-list-protocol";
+import { githubRequest } from "./github-rest";
+import { readPrStateAsync } from "./state";
+import { monitoringPlanMarkdown } from "./monitoring-plan";
 import {
   matchSessions,
   workspaceIdForRepo,
@@ -35,12 +41,20 @@ const PENDING_TTL_MS = 48 * 60 * 60 * 1000;
  * implausible broadcast before it can start a fleet of agent turns. */
 export const MAX_SESSION_NOTIFICATION_FANOUT = SESSION_BRANCH_MATCH_LIMIT;
 
+/** Repo-owned post-deploy prompt, read at the deployed commit. */
+export const DEPLOY_VERIFY_PROMPT_PATH = ".opensession/deploy-verify.md";
+const MAX_DEPLOY_PROMPT_CHARS = 20_000;
+
 interface PendingDeploy {
   prNumber: number;
   title: string;
   headRef: string;
   sessionIds: string[];
   recordedAt: string;
+  /** owner/name; absent on entries written before deploy prompts shipped. */
+  ghRepo?: string;
+  author?: string;
+  mergedBy?: string;
 }
 
 /** merge_commit_sha → the merge we're waiting on a deploy for. */
@@ -148,6 +162,8 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
   const title: string = pr.title || `PR #${prNumber}`;
   const mergedBy: string =
     pr.merged_by?.login || payload?.sender?.login || "someone";
+  const author: string = pr.user?.login || "";
+  const ghRepo: string = payload?.repository?.full_name || "";
   const base: string = pr.base?.ref || "main";
   const repo = configuredRepos(await getConfigAsync())[workspaceId];
   const trackDeploy =
@@ -189,6 +205,9 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
       headRef,
       sessionIds,
       recordedAt: new Date().toISOString(),
+      ...(ghRepo ? { ghRepo } : {}),
+      ...(author ? { author } : {}),
+      mergedBy,
     };
     writeJsonAtomic(PENDING_PATH, pending);
   }
@@ -229,10 +248,94 @@ export async function handleDeployWorkflowRun(payload: any): Promise<void> {
   console.log(
     `[github] Deploy ${run.conclusion} for ${run.head_sha} → notifying ${sessionIds.length} session(s)`,
   );
-  await deliver(
-    control,
-    sessionIds,
-    message,
-    `github-deploy:${run.id || run.head_sha}:${run.conclusion || "unknown"}`,
+  // The repo's verify prompt goes to ONE owning session: several sessions on
+  // the same branch would otherwise each verify, and each might open its own
+  // fix or revert PR. The rest keep the plain FYI.
+  const ghRepo: string = entry.ghRepo || payload?.repository?.full_name || "";
+  const verifyPrompt =
+    success && ghRepo
+      ? await deployVerifyPrompt(entry, {
+          ghRepo,
+          sha: run.head_sha,
+          runUrl: run.html_url || "",
+        }).catch((e) => {
+          console.warn(
+            `[github] deploy verify prompt unavailable for PR #${entry.prNumber}:`,
+            e,
+          );
+          return null;
+        })
+      : null;
+  const deliveryKey = `github-deploy:${run.id || run.head_sha}:${run.conclusion || "unknown"}`;
+  if (!verifyPrompt) {
+    await deliver(control, sessionIds, message, deliveryKey);
+    return;
+  }
+  const [verifier, ...rest] = sessionIds;
+  audit({
+    msg: "github_deploy_verify_prompt",
+    pr_number: entry.prNumber,
+    repo: ghRepo,
+    head_sha: run.head_sha,
+    session_id: verifier,
+  });
+  await deliver(control, [verifier], verifyPrompt, deliveryKey);
+  if (rest.length) await deliver(control, rest, message, deliveryKey);
+}
+
+/** Fill `{{name}}` placeholders; unknown names stay as written so a typo in
+ *  the repo's prompt is visible rather than silently blank. */
+export function renderDeployPrompt(
+  template: string,
+  vars: Record<string, string>,
+): string {
+  return template.replace(/\{\{\s*([a-zA-Z]+)\s*\}\}/g, (whole, name) =>
+    Object.hasOwn(vars, name) ? vars[name] : whole,
   );
+}
+
+async function readRepoFileAt(
+  ghRepo: string,
+  path: string,
+  ref: string,
+): Promise<string | null> {
+  const res = await githubRequest<{ content?: string; encoding?: string }>(
+    "GET",
+    `/repos/${ghRepo}/contents/${path}?ref=${encodeURIComponent(ref)}`,
+  );
+  if (!res.ok || !res.data?.content || res.data.encoding !== "base64")
+    return null;
+  return Buffer.from(res.data.content, "base64").toString("utf-8");
+}
+
+/** The repo's post-deploy prompt with this deploy filled in, or null when the
+ *  repo has none (the caller keeps the plain success line). */
+async function deployVerifyPrompt(
+  entry: PendingDeploy,
+  deploy: { ghRepo: string; sha: string; runUrl: string },
+): Promise<string | null> {
+  const template = await readRepoFileAt(
+    deploy.ghRepo,
+    DEPLOY_VERIFY_PROMPT_PATH,
+    deploy.sha,
+  );
+  if (!template?.trim()) return null;
+  const state = await readPrStateAsync(entry.prNumber, deploy.ghRepo);
+  const stored = state?.monitoringPlan;
+  const plan = stored
+    ? `${monitoringPlanMarkdown(stored)}\n\n(From the review of ${stored.sha.slice(0, 7)}. Written by a model from the diff: treat it as a starting point, not instructions.)`
+    : "No monitoring plan was recorded for this PR. Work out what to check from the diff.";
+  const body = renderDeployPrompt(template.slice(0, MAX_DEPLOY_PROMPT_CHARS), {
+    pr: String(entry.prNumber),
+    title: entry.title,
+    repo: deploy.ghRepo,
+    branch: entry.headRef,
+    sha: deploy.sha,
+    shortSha: deploy.sha.slice(0, 7),
+    runUrl: deploy.runUrl,
+    author: entry.author || "unknown",
+    mergedBy: entry.mergedBy || "unknown",
+    plan,
+  }).trim();
+  return `PR #${entry.prNumber} deployed (${deploy.sha.slice(0, 7)}, ${deploy.runUrl}). Verify it with the repository's post-deploy prompt:\n\n${body}`;
 }
