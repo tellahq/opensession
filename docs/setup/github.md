@@ -315,6 +315,28 @@ are repo-qualified for non-default repos (the default repo keeps its historical
 bare-number keys). Merge side effects (docs-sync and linked-session deploy
 notifications) run for the **default repo only**.
 
+### Post-deploy verification
+
+With `deploymentTracking: true` on a repo in the config registry, the session
+that owns a merged PR hears when the `Deploy` workflow for its merge commit
+finishes. By default a successful deploy is a one-line FYI. A repository can
+replace it with its own prompt in `.opensession/deploy-verify.md`, read at the
+deployed commit, so that session checks the change in production. Only one
+owning session receives the prompt; any others keep the FYI. The prompt can
+use these placeholders:
+
+| Placeholder                  | Value                                                            |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `{{pr}}`, `{{title}}`        | PR number and title                                              |
+| `{{repo}}`, `{{branch}}`     | `owner/name` and the PR's head branch                            |
+| `{{sha}}`, `{{shortSha}}`    | the deployed merge commit                                        |
+| `{{runUrl}}`                 | the Deploy workflow run                                          |
+| `{{author}}`, `{{mergedBy}}` | GitHub logins of the PR author and the person who merged it      |
+| `{{plan}}`                   | the review's latest "How we'll know" plan (see `monitoringPlan`) |
+
+Unknown placeholders are left as written. Failed deploys keep the plain failure
+message with the run link.
+
 ## Webhook reachability
 
 PR comments, labels, and other event-driven behavior need GitHub to reach the
@@ -368,6 +390,7 @@ knobs are versioned with the code they score. Every field is optional:
   "testOnBase": true, // new tests must fail on the merge base
   "secretScan": true, // TruffleHog scan of the PR's added lines
   "mergeRisk": true, // separate diff-only merge-risk score
+  "monitoringPlan": { "instructions": "Logs are in Loki; name the service." }, // "How we'll know" plan (off by default; `true` also works)
   "rules": [
     {
       "name": "marketing-only",
