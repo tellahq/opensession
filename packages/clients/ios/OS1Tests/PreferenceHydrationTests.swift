@@ -150,6 +150,20 @@ final class PreferenceHydrationTests: XCTestCase {
         XCTAssertTrue(store.isUnread(session))
     }
 
+    func testRunningSessionIsNotUnreadUntilTurnFinishes() {
+        let store = ReadsStore()
+        var session = Session(
+            id: "bks-1",
+            lastActivity: "2026-08-11T12:00:00.000Z"
+        )
+        session.isRunning = true
+        store.applyHydrated(["bks-1": "2026-08-11T11:00:00.000Z"], persist: false)
+
+        XCTAssertFalse(store.isUnread(session))
+        session.isRunning = false
+        XCTAssertTrue(store.isUnread(session))
+    }
+
     func testSpawnedWorkerDoesNotMakeWorkspaceUnread() {
         let store = ReadsStore()
         let parent = Session(id: "parent")

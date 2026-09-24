@@ -675,12 +675,10 @@ function ConnectionCard({
   connection,
   operations,
   onChanged,
-  canManage,
 }: {
   connection: SandboxConnectionInfo;
   operations: SandboxOperationInfo[];
   onChanged: (response: SandboxConnectionsResponse) => void;
-  canManage: boolean;
 }) {
   const provider = PROVIDERS.find(
     (candidate) => candidate.id === connection.provider,
@@ -783,7 +781,7 @@ function ConnectionCard({
                 size="sm"
                 variant="primary"
                 onClick={() => setDialogOpen(true)}
-                disabled={!canManage || checking}
+                disabled={checking}
               >
                 Connect
               </Button>
@@ -791,7 +789,7 @@ function ConnectionCard({
               <Switch
                 aria-label={`${connection.enabled ? "Disable" : "Enable"} ${provider.label}`}
                 checked={connection.enabled}
-                disabled={!canManage || busy || checking}
+                disabled={busy || checking}
                 onCheckedChange={(checked) => void toggle(checked)}
               />
             )}
@@ -830,7 +828,7 @@ function ConnectionCard({
                       size="sm"
                       icon={<IconCheck size={17} />}
                       onClick={() => void testAgain()}
-                      disabled={!canManage || busy}
+                      disabled={busy}
                     >
                       Test again
                     </Button>
@@ -838,7 +836,7 @@ function ConnectionCard({
                   <Button
                     size="sm"
                     onClick={() => setDialogOpen(true)}
-                    disabled={!canManage || checking}
+                    disabled={checking}
                   >
                     Configure
                   </Button>
@@ -1060,7 +1058,6 @@ export function SandboxesPanel() {
   const [environments, setEnvironments] = useState<SandboxEnvironmentInfo[]>(
     [],
   );
-  const [canManage, setCanManage] = useState(false);
   const [loading, setLoading] = useState(true);
   const [connectionsError, setConnectionsError] = useState<string | null>(null);
   const [environmentsError, setEnvironmentsError] = useState<string | null>(
@@ -1090,7 +1087,6 @@ export function SandboxesPanel() {
   function apply(response: SandboxConnectionsResponse) {
     setConnections(response.connections);
     setOperations(response.operations);
-    setCanManage(response.canManage);
   }
 
   const hasRunningValue = operations.some(
@@ -1179,16 +1175,10 @@ export function SandboxesPanel() {
         title="Sandboxes"
         description="Connect compute you already pay for. Each session gets an isolated sandbox; project snapshots make new sandboxes start faster."
       />
-      <WorkspaceSandboxDefaults canManage={canManage} />
+      <WorkspaceSandboxDefaults />
       {connectionsError && <InlineAlert>{connectionsError}</InlineAlert>}
       {environmentsError && <InlineAlert>{environmentsError}</InlineAlert>}
       <SettingsGroupLabel>Connections</SettingsGroupLabel>
-      {!canManage && (
-        <SettingsHint>
-          You can use Ready connections, but only a workspace administrator can
-          configure them.
-        </SettingsHint>
-      )}
       <div className="grid gap-3">
         {loading && (
           <SettingCardSkeleton
@@ -1203,7 +1193,6 @@ export function SandboxesPanel() {
             connection={connection}
             operations={operations}
             onChanged={apply}
-            canManage={canManage}
           />
         ))}
       </div>
@@ -1219,7 +1208,6 @@ export function SandboxesPanel() {
                 <Button
                   size="sm"
                   icon={<IconPlus size={16} />}
-                  disabled={!canManage}
                   onClick={() => {
                     setEnvironmentTarget(undefined);
                     setEnvironmentDialogOpen(true);
@@ -1294,9 +1282,8 @@ export function SandboxesPanel() {
                               size="sm"
                               checked={Boolean(environment.keepReady)}
                               disabled={
-                                !canManage ||
                                 keepReadySaving ===
-                                  `${environment.repo}:${environment.provider}`
+                                `${environment.repo}:${environment.provider}`
                               }
                               onCheckedChange={(checked) =>
                                 void toggleKeepReady(environment, checked)
@@ -1363,7 +1350,7 @@ export function SandboxesPanel() {
                       <Button
                         className="ml-auto shrink-0"
                         size="sm"
-                        disabled={!canManage || running}
+                        disabled={running}
                         onClick={() => {
                           setEnvironmentTarget(environment);
                           setEnvironmentDialogOpen(true);

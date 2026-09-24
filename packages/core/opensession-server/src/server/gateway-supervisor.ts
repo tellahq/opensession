@@ -58,6 +58,12 @@ const FAST_HANDOFF_EXIT_TIMEOUT_MS = 2_500;
 // so a tight budget converts a slow boot into a cold restart. Traffic already
 // routes to the candidate while it recovers; waiting costs nothing extra.
 const READY_TIMEOUT_MS = 240_000;
+// A preloaded candidate is still booting when activation starts its liveness
+// wait: it is spawned at prepare time, and the peer restarts in between can
+// finish before its backend binds. On a loaded host that boot took 8 to 11 s,
+// so a 10 s budget failed deploys that were healthy a few seconds later. The
+// rollback it triggers boots the previous release under the same load.
+const LIVE_TIMEOUT_MS = 45_000;
 // A coordinated handoff waits for the deploy controller between phases: for
 // the peer restarts while parked, for the external health gate while
 // active-uncommitted, and for peer restoration while rollback-parked. This
@@ -293,7 +299,7 @@ export class GatewaySupervisor {
       pending.candidate.activate!(pending.nonce);
       await timeout(
         this.waitLive(pending.candidate),
-        10_000,
+        LIVE_TIMEOUT_MS,
         "candidate gateway did not become live in time",
       );
       this.setRouteToActive(true);
@@ -371,7 +377,7 @@ export class GatewaySupervisor {
     try {
       await timeout(
         this.waitLive(rollback),
-        10_000,
+        LIVE_TIMEOUT_MS,
         "rollback gateway did not become live",
       );
       this.setRouteToActive(true);
@@ -701,7 +707,7 @@ export class GatewaySupervisor {
       this.selectActive(candidate);
       await timeout(
         this.waitLive(candidate),
-        10_000,
+        LIVE_TIMEOUT_MS,
         "candidate gateway did not become live in time",
       );
       this.setRouteToActive(true);
@@ -744,7 +750,7 @@ export class GatewaySupervisor {
       try {
         await timeout(
           this.waitLive(rollback),
-          10_000,
+          LIVE_TIMEOUT_MS,
           "rollback gateway did not become live",
         );
         this.setRouteToActive(true);

@@ -88,7 +88,7 @@ export function buildWorkspacePaneTabs({
   if (stagingOpen.has(workspaceKey)) {
     tabs.push({
       id: `staging:${workspaceKey}`,
-      label: "Preview environment",
+      label: "Browser",
       active: activeViewTab === "staging",
       dotClass: null,
       icon: "globe",

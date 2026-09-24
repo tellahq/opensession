@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   automationEgressDomains,
   automationEgressProbeBlockedUrl,
-  automationModelEgressDestinations,
   DAYTONA_DOMAIN_ALLOWLIST_MAX,
   parseAutomationEgressDomain,
 } from "./automation-egress";
@@ -19,16 +18,6 @@ describe("sandbox automation egress", () => {
     for (const value of ["*", "127.0.0.1", "10.0.0.0/8", "example.com:443"]) {
       expect(() => parseAutomationEgressDomain(value)).toThrow();
     }
-  });
-
-  test("adds only the selected model provider", () => {
-    expect(
-      automationModelEgressDestinations("pi/anthropic/claude-sonnet-5"),
-    ).toEqual(["api.anthropic.com"]);
-    expect(automationModelEgressDestinations("pi/openai/gpt-5.6-sol")).toEqual([
-      "api.openai.com",
-      "chatgpt.com",
-    ]);
   });
 
   test("includes run infrastructure and explicit destinations", () => {

@@ -100,6 +100,8 @@ export interface LoadedSkill {
   name: string;
   filePath: string;
   baseDir: string;
+  /** Local copy of a skill whose filePath is in a Sandbox. */
+  mirrorPath?: string;
 }
 
 /**
@@ -131,7 +133,9 @@ export function expandSkillCommand(
   const skill = skills.find((s) => s.name === requested);
   if (!skill) return text;
   try {
-    const body = readFileSync(skill.filePath, "utf8")
+    // A Sandbox skill is presented at its Sandbox path and read from its
+    // local mirror (pi-runner, remote-workspace.ts).
+    const body = readFileSync(skill.mirrorPath ?? skill.filePath, "utf8")
       .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "")
       .trim();
     const block =

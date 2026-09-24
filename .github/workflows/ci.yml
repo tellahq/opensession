@@ -134,7 +134,7 @@ jobs:
           packages/core/opensession-server/src/executor
           packages/core/opensession-server/src/server/executor-client.test.ts
           packages/core/opensession-server/src/server/host-client.test.ts
-          packages/core/opensession-server/src/server/sandbox/recovery.test.ts
+          packages/core/opensession-server/src/server/remote-workspace-recovery.test.ts
           packages/core/opensession-server/src/server/queue-state-restart.test.ts
           packages/core/opensession-server/src/server/asks-restart.test.ts
           packages/core/opensession-server/src/server/session-create-plan.test.ts

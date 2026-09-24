@@ -21,6 +21,7 @@
   },
   "include": [
     "next-env.d.ts",
+    "../../core/opensession-server/src/frontend/lib/novnc.d.ts",
     ".next/types/**/*.ts",
     "**/*.ts",
     "**/*.tsx",

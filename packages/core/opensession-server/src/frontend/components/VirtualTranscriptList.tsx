@@ -180,6 +180,10 @@ class TranscriptVirtualizer extends React.Component<
   /** Entry positions captured before the current commit changes the DOM,
    * while touch owns the scroller. */
   private preCommitLayout: EntryLayout | null = null;
+  // Keep the original reader while a finger is stationary. Hydration can
+  // replace every visible entry, so the in-view ledger alone loses it.
+  private stationaryReader: { anchor: ReaderAnchor; scrollTop: number } | null =
+    null;
   private deferredFlushTimer: number | undefined;
   private topApproachContainer: HTMLDivElement | null = null;
   private topApproachCallback: (() => boolean) | undefined;
@@ -536,6 +540,8 @@ class TranscriptVirtualizer extends React.Component<
     const root = this.root;
     if (!container || !root || this.props.shouldMaintainEnd?.()) return;
     if (this.touchOwnsScroller()) {
+      if (!this.stationaryReader && anchor)
+        this.stationaryReader = { anchor, scrollTop: container.scrollTop };
       this.deferredLayout = nextDeferredLedger(
         this.deferredLayout,
         before ??
@@ -573,17 +579,28 @@ class TranscriptVirtualizer extends React.Component<
         return;
       }
       this.deferredLayout = null;
+      const stationary = this.stationaryReader;
+      this.stationaryReader = null;
+      const stationaryNode =
+        stationary && findTranscriptEntry(root, stationary.anchor.id);
       const reader = pickReaderAnchor(
         root,
         container.getBoundingClientRect().top,
       );
-      const delta = deferredReaderCorrection(
-        ledger,
-        reader && {
-          id: reader.id,
-          contentTop: container.scrollTop + reader.top,
-        },
-      );
+      const delta =
+        stationary &&
+        stationaryNode &&
+        container.scrollTop === stationary.scrollTop
+          ? stationaryNode.getBoundingClientRect().top -
+            container.getBoundingClientRect().top -
+            stationary.anchor.top
+          : deferredReaderCorrection(
+              ledger,
+              reader && {
+                id: reader.id,
+                contentTop: container.scrollTop + reader.top,
+              },
+            );
       if (Math.abs(delta) <= 0.5) return;
       container.scrollTop += delta;
       this.syncVirtualizerOffset(container);
@@ -602,6 +619,11 @@ class TranscriptVirtualizer extends React.Component<
   };
 
   private onReaderScroll = () => {
+    if (
+      this.stationaryReader &&
+      this.readerInputContainer?.scrollTop !== this.stationaryReader.scrollTop
+    )
+      this.stationaryReader = null;
     const now = performance.now();
     // Keep following the scroll-event chain started by the touch. A network
     // response can change row geometry long after touchend but while momentum
@@ -623,6 +645,7 @@ class TranscriptVirtualizer extends React.Component<
       window.clearTimeout(this.deferredFlushTimer);
     this.deferredFlushTimer = undefined;
     this.deferredLayout = null;
+    this.stationaryReader = null;
     this.preCommitLayout = null;
     this.touching = false;
     this.lastTouchActivityAt = Number.NEGATIVE_INFINITY;

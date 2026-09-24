@@ -1,69 +1,47 @@
-# `opensession-runner` image
+# Sandbox runtime and live checks
 
-The reference runner environment: the tool versions and absolute paths every
-Sandbox reproduces. Sandboxes (Daytona, Box; operator guide:
-`docs/self-hosting-sandboxes.md`) do not run this image directly. Their
-bootstrap (`src/server/sandbox/adapters/bootstrap.ts`) installs the same
-payload into the provider's base VM and keeps its pins aligned with the
-Dockerfile, so a run behaves identically on the host, in the published image,
-and inside a Sandbox.
+A Sandbox is a workspace, not a place where Open Session runs. The agent loop,
+model credentials, conversation history and MCP connections stay on the
+server; the agent's file and shell tools reach the Sandbox as commands
+(`packages/core/opensession-server/src/server/remote-workspace.ts`, served by
+`src/server/sandbox/workspace-rpc.ts`). Operator guide:
+[`docs/self-hosting-sandboxes.md`](../../docs/self-hosting-sandboxes.md).
 
-## What it contains
+## The base runtime
 
-| Component                         | Purpose                                                                                                                                                                                        | Pin                                               |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `bun`                             | runs the runner bundle + Bun `$` exec                                                                                                                                                          | `1.4.0` (host)                                    |
-| Node.js LTS                       | native-dep builds, tooling                                                                                                                                                                     | `24.x`                                            |
-| `git`, `gh`                       | clone / status / diff / push / PR                                                                                                                                                              | apt latest                                        |
-| `ripgrep`                         | @-mention file search                                                                                                                                                                          | apt                                               |
-| `python3`, `build-essential`      | workspace `bun install` native deps                                                                                                                                                            | apt                                               |
-| `just`, `direnv`, `lsof`          | common repo dev-server bring-up chains (Portals)                                                                                                                                               | apt / pinned release                              |
-| Claude Code CLI                   | baked at the identical host CLI path for session-resume parity                                                                                                                                 | `2.1.280` (host); build FAILS on version mismatch |
-| runner bundle                     | `/home/ubuntu/projects/opensession`: root manifests, lockfile, patches and `tsconfig.json`; copied protocol and server packages; `scripts/workload-identity-client.ts`; installed dependencies | from lockfile                                     |
-| minimal `~/.claude/settings.json` | so `settingSources:["user"]` doesn't error                                                                                                                                                     | `{}`                                              |
+`src/server/sandbox/adapters/bootstrap.ts` installs the same small runtime on
+every provider's base machine, pinned and checksum-verified where the upstream
+publishes checksums:
 
-Runs as uid **1000** user `ubuntu` (matches the host uid). Default `CMD` is
-`sleep infinity`; there is no baked ENTRYPOINT.
+| Component                                                                | Purpose                                                    |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `git`, `curl`, `ripgrep`, `python3`, a C/C++ toolchain, `direnv`, `lsof` | clone, search, native dependency builds, lifecycle scripts |
+| Node.js                                                                  | repository tooling                                         |
+| `just`, `gh`                                                             | common dev-server chains and GitHub work in shell commands |
+| `bun`                                                                    | lifecycle hooks, the Portal relay, repository tooling      |
+| `~/.local/bin/opensession`                                               | workload identity minting (`opensession sandbox id-token`) |
 
-## Why path parity matters
+It names no Open Session commit, so deploying Open Session never makes a
+Sandbox reinstall anything. A marker file records the runtime signature;
+changing a pin or `BASE_RUNTIME_REVISION` re-bootstraps prewarms and project
+snapshots instead of calling them Ready.
 
-The runner config points at host absolute paths: the claude CLI at
-`/home/ubuntu/.local/bin/claude` and the runner bundle at
-`/home/ubuntu/projects/opensession`. The image and the Sandbox bootstrap
-reproduce every one of those absolute paths exactly. If any drifts, the
-in-sandbox runner can't find the CLI or its dependencies. Do not "tidy" these
-paths.
+## Live checks
 
-## Build
+`deploy/sandbox/verify-remote-workspace.ts` prepares one Sandbox on a live
+provider, drives every tool operation through the server handler a run uses,
+prints each round trip, and destroys the machine:
 
 ```sh
-deploy/sandbox/build.sh
+bun run deploy/sandbox/verify-remote-workspace.ts box
 ```
 
-Tags `opensession-runner:latest` and `opensession-runner:<git-sha>` from the
-repo root context. Override the name with `IMAGE=... deploy/sandbox/build.sh`.
-`.github/workflows/sandbox-release.yml` publishes and signs the release image.
-
-Version pins are Dockerfile `ARG`s: `BUN_VERSION`, `CLAUDE_VERSION`,
-`NODE_MAJOR`, and `JUST_VERSION`. Keep them aligned with
-`bootstrap.ts`'s pins; the remote bootstrap treats a pin change as a reason to
-re-bootstrap every Sandbox.
-
-## Verification
-
-`deploy/sandbox/conformance.ts` is the live provider certification matrix:
+`deploy/sandbox/conformance.ts` is the provider certification matrix:
 
 ```sh
 bun run deploy/sandbox/conformance.ts [daytona] [box]
 ```
 
-It redirects every store to a scratch directory before importing server code,
-creates sbxtest-labeled sandboxes, proves ensure/reuse, exec semantics,
-in-sandbox workspace git, Portal exposure, a real engine round trip, snapshot
-publication and adoption, sleep/wake, and destroy, then audits the provider
-account for leftovers. Credentials are read from the live connection store
-and only ever written to the scratch config.
-
-`deploy/sandbox/opensession` is the in-sandbox CLI shim installed at
-`~/.local/bin/opensession`; today it exposes `sandbox id-token` for workload
-identity exchange.
+Both redirect every store to a scratch directory before importing server
+code and read credentials from the live connection store without logging
+them.

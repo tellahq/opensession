@@ -284,29 +284,41 @@ function parseStaging(
   for (const c of comments || []) {
     if (!c.body?.includes(marker)) continue;
     const m = c.body.match(row);
-    if (m) return { status: m[1], url: m[2], embeddable: embeddableFor(m[2]) };
+    if (m) return { status: m[1], url: m[2] };
   }
   return null;
 }
 
-// Whether a preview environment opts into being embedded in the review iframe.
-// Probed out-of-band — a plain GET of the deploy,
-// reading the CSP header — and cached, so the PR fetch never blocks on it and a
-// deploy that predates the fusion change simply reads back false (the UI then
-// shows the launch panel, exactly as before). Best-effort: any failure → false.
+// Whether a preview environment opts into being embedded in the review iframe:
+// a plain GET of the deploy, reading its CSP frame-ancestors. A deploy that does
+// not name this app reads back false and the UI shows the launch panel instead.
+// Best-effort: any failure → false.
+//
+// The answer is attached when details are served, never stored in them. The
+// details cache lives for minutes and is persisted across restarts, so a
+// "false" computed before the first probe finished used to stick to the PR
+// long after the probe knew better.
 const EMBED_TTL = 300_000;
+const EMBED_PROBE_TIMEOUT_MS = 3000;
 const embedCache = new Map<string, { ok: boolean; ts: number }>();
-const embedInflight = new Set<string>();
+const embedInflight = new Map<string, Promise<void>>();
 
-async function probeEmbeddable(url: string): Promise<void> {
-  if (embedInflight.has(url)) return;
-  embedInflight.add(url);
+function probeEmbeddable(url: string): Promise<void> {
+  let probe = embedInflight.get(url);
+  if (!probe) {
+    probe = runEmbedProbe(url).finally(() => embedInflight.delete(url));
+    embedInflight.set(url, probe);
+  }
+  return probe;
+}
+
+async function runEmbedProbe(url: string): Promise<void> {
   try {
     const res = await fetch(url, {
       method: "GET",
       redirect: "manual",
       headers: { "user-agent": "os1-embed-probe" },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(EMBED_PROBE_TIMEOUT_MS),
     });
     const csp = res.headers.get("content-security-policy") || "";
     const uiHost = new URL(configuredServer().publicBaseUrl).hostname;
@@ -317,16 +329,29 @@ async function probeEmbeddable(url: string): Promise<void> {
     embedCache.set(url, { ok, ts: Date.now() });
   } catch {
     embedCache.set(url, { ok: false, ts: Date.now() });
-  } finally {
-    embedInflight.delete(url);
   }
 }
 
-/** Sync read of the embed-probe cache; kicks a background refresh when stale. */
-function embeddableFor(url: string): boolean {
-  const hit = embedCache.get(url);
-  if (!hit || Date.now() - hit.ts >= EMBED_TTL) void probeEmbeddable(url);
-  return hit?.ok ?? false;
+/**
+ * Attach the current embed answer to served details. A URL never probed waits
+ * for its first (bounded) probe so the Preview tab gets the right answer on
+ * first open; a stale answer is served while a background probe refreshes it.
+ */
+async function withEmbeddable(
+  data: PrDetails | null,
+): Promise<PrDetails | null> {
+  const staging = data?.staging;
+  if (!data || !staging) return data;
+  let hit = embedCache.get(staging.url);
+  if (!hit) {
+    await probeEmbeddable(staging.url);
+    hit = embedCache.get(staging.url);
+  } else if (Date.now() - hit.ts >= EMBED_TTL) {
+    void probeEmbeddable(staging.url);
+  }
+  const embeddable = hit?.ok ?? false;
+  if (staging.embeddable === embeddable) return data;
+  return { ...data, staging: { ...staging, embeddable } };
 }
 
 /** Changed files, biggest churn first, so the panel leads with the meat. */
@@ -1344,6 +1369,13 @@ export async function getPrDetails(
   branch: string,
   repo: string = DEFAULT_REPO(),
 ): Promise<PrDetails | null> {
+  return withEmbeddable(await getCachedPrDetails(branch, repo));
+}
+
+async function getCachedPrDetails(
+  branch: string,
+  repo: string,
+): Promise<PrDetails | null> {
   const key = cacheKey(repo, branch);
   const hit = cache.get(key);
   if (hit && !shouldRefreshPrDetails(hit.ts)) return hit.data;
@@ -1386,7 +1418,7 @@ export async function getPrDetailsFresh(
   const data = await fetchPrDetails(branch, repo);
   cache.set(cacheKey(repo, branch), { data, ts: Date.now() });
   schedulePersist();
-  return data;
+  return withEmbeddable(data);
 }
 
 /** True for "this branch/number has no PR" — a real answer, not a failure. */

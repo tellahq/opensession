@@ -2,7 +2,8 @@
 // activity (WhatsApp/iMessage-style). We store, per session id, the
 // `lastActivity` timestamp the session had the last time it was open in the
 // viewer. A session counts as unread when its current `lastActivity` is newer
-// than that mark — i.e. something happened after you last looked.
+// than that mark — i.e. something happened after you last looked — and its
+// turn has finished, so a session is never unread while it is still running.
 //
 // Only sessions you've actually opened get a mark, so sessions you've never
 // looked at (other people's, automations you don't follow) don't all light up
@@ -184,15 +185,20 @@ export function markUnread(id: string): void {
   if (hydratedFor === user) syncToServer(user, map);
 }
 
-/** True when the session has activity newer than the last read mark. */
+/**
+ * True when the session finished a turn with activity newer than the last read
+ * mark. A running session is never unread: your own prompt and the agent's
+ * streaming output move `lastActivity`, but there is nothing to read until the
+ * turn completes.
+ */
 export function isUnread(
-  id: string,
-  lastActivity: string,
+  session: { id: string; lastActivity: string; isRunning: boolean },
   reads: ReadMap,
 ): boolean {
-  const mark = reads[id];
+  if (session.isRunning) return false;
+  const mark = reads[session.id];
   if (!mark) return false;
-  return new Date(lastActivity).getTime() > new Date(mark).getTime();
+  return new Date(session.lastActivity).getTime() > new Date(mark).getTime();
 }
 
 export function onReadsChanged(handler: () => void): () => void {

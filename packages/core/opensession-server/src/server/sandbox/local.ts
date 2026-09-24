@@ -3,7 +3,8 @@
  * (docs/self-hosting-sandboxes.md). The "sandbox" is just the host: `ensure` resolves a
  * workspace exactly the way the existing session paths do (delegating to
  * worktree.ts — never duplicating its git logic), `exec` runs on the host via
- * Bun's `$`, and `launchRun` is the current in-process `runAgent` path.
+ * Bun's `$`. Runs never launch through a Sandbox handle: every session's
+ * agent loop runs on this server (run-session.ts).
  *
  * Identical to the plain host path by construction:
  *  - `ensure` only *reuses* the resolution helpers the create/prompt paths
@@ -16,13 +17,7 @@
 
 import { $ } from "bun";
 import { existsSync } from "fs";
-import {
-  runAgent,
-  steerAgentRun,
-  interruptAndSteerAgentRun,
-  cancelAgentRun,
-} from "../agent-runner";
-import { modelSupportsSteer, providerFor } from "../models";
+import { providerFor } from "../models";
 import {
   getRepo,
   repoForPath,
@@ -31,13 +26,10 @@ import {
   reviveWorktree,
   sharedCheckoutForNewSessions,
 } from "../worktree";
-import type { RunHostSpec } from "../../runner-host/protocol";
 import type {
   ExecOpts,
   ExecResult,
   PortMap,
-  RunHandle,
-  RunHandleCallbacks,
   Sandbox,
   SandboxProvider,
   SandboxSessionSpec,
@@ -74,56 +66,6 @@ function makeLocalSandbox(cwd: string): Sandbox {
         exitCode: r.exitCode,
         stdout: r.stdout.toString(),
         stderr: r.stderr.toString(),
-      };
-    },
-
-    // The existing in-process runner path, mapped from the serializable spec
-    // exactly like host-client's in-process fallback (runAgentHosted).
-    launchRun(spec: RunHostSpec, cb?: RunHandleCallbacks): RunHandle {
-      const gen = runAgent({
-        prompt: spec.prompt,
-        sessionId: spec.engineSessionId,
-        cwd,
-        mode: spec.mode,
-        model: spec.model,
-        images: spec.images,
-        // spec.files is deliberately not threaded: this run executes on the
-        // host, where the uploads note's paths are readable as written.
-        forkSession: spec.forkSession,
-        resumeSessionAt: spec.resumeSessionAt,
-        mcpServers: spec.mcpServers ?? "all",
-        inProcessMcp: cb?.inProcessMcp?.(),
-        reposNote: spec.reposNote,
-        deniedTools: spec.deniedTools,
-        publicationPolicy: spec.publicationPolicy,
-        confirmTools: spec.confirmTools,
-        aws: spec.aws,
-        author: spec.author,
-        user: spec.user,
-        fallbackModel: spec.fallbackModel,
-        journal: {
-          osSessionId: spec.osSessionId,
-          kind: spec.journalKind || "prompt",
-        },
-        // spec.hostId is the admitted run token (see maybeLaunchSandboxedRun);
-        // carrying it keeps exact-token Stop latching working in-process.
-        startToken: spec.hostId,
-        onAskUser: cb?.onAskUser,
-      });
-      // In-process runs register their own control handles keyed by session
-      // ids — steer/cancel route through the same agent-runner helpers the WS
-      // handlers use, so behavior matches a directly-started run.
-      const ids = [spec.osSessionId, spec.engineSessionId];
-      return {
-        events: () => gen,
-        steerable: modelSupportsSteer(spec.model),
-        steer: (text, images) => steerAgentRun(ids, text, images),
-        interruptSteer: (text, images) =>
-          interruptAndSteerAgentRun(ids, text, images),
-        cancel: () => {
-          void cancelAgentRun(...ids);
-          return true;
-        },
       };
     },
 

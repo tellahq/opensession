@@ -1,6 +1,8 @@
 import type { ComponentProps } from "react";
 import { VIEWER_REVIEW_MAIN } from "../../lib/session-viewer-classes";
 import { IconArrowUpRight, IconCopy, IconGlobe } from "../icons";
+import { Button } from "../../ui/button";
+import { BrowserPane } from "../BrowserPane";
 import { PortalPane } from "../PortalPane";
 
 interface StagingDeployment {
@@ -70,44 +72,29 @@ function SessionStagingPane({
     // then come back.
     return (
       <div className={VIEWER_REVIEW_MAIN}>
-        <div className="flex h-full flex-col">
-          <div className="flex items-center gap-2 border-b border-divider bg-panel px-3 py-1.5 text-xs text-dim">
-            <IconGlobe size={14} />
-            <span className="truncate">
-              Preview environment
-              {deployment.status !== "Ready"
-                ? ` · ${deployment.status.toLowerCase()}…`
-                : ""}
-            </span>
-            <div className="ml-auto flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => shareLink(url, { toast: "Link copied" })}
-                className="inline-flex items-center gap-1 transition-colors hover:text-fg"
-              >
-                <IconCopy size={13} />
-                Copy link
-              </button>
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener"
-                title="Open first-party in a new tab. Needed if the frame is blank because you aren't logged in to the preview environment yet."
-                className="inline-flex items-center gap-1 transition-colors hover:text-fg"
-              >
-                Open
-                <IconArrowUpRight size={13} />
-              </a>
-            </div>
-          </div>
-          <iframe
-            key={url}
-            src={url}
-            title="Preview environment"
-            className="min-h-0 flex-1 border-0 bg-surface"
-            allow="camera; microphone; display-capture; fullscreen; autoplay; clipboard-write"
-          />
-        </div>
+        <BrowserPane
+          url={url}
+          name="Preview environment"
+          frameTitle="Preview environment"
+          allow="camera; microphone; display-capture; fullscreen; autoplay; clipboard-write"
+          leading={
+            deployment.status !== "Ready" ? (
+              <span className="mr-1 shrink-0 text-xs text-dim">
+                {deployment.status}…
+              </span>
+            ) : undefined
+          }
+          actions={
+            <Button
+              variant="ghost"
+              size="md"
+              icon={<IconCopy size={16} />}
+              onClick={() => shareLink(url, { toast: "Link copied" })}
+              aria-label="Copy preview link"
+              title="Copy link"
+            />
+          }
+        />
       </div>
     );
   }

@@ -6,8 +6,10 @@ import { loadIntegrations } from "./src/server/integrations/load";
 import {
   activeAgentRunCount,
   activeDetachedAgentRunCount,
+  registerSandboxSessionPredicate,
   resumeInterruptedRuns,
 } from "./src/server/agent-runner";
+import { isRunnableSandboxProvider } from "./src/server/sandbox/config";
 import { startAccountHealthMonitor } from "./src/server/account-health";
 import { startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
@@ -261,6 +263,11 @@ process.env.OPENSESSION_GATEWAY_ROLE = "active";
 // picks up new code without rebinding.
 startRunRpcServer();
 startMcpHttpServer();
+// A Sandbox session's run must carry its remote workspace; a recovery or
+// fallback path that lost it is refused instead of acting on this machine.
+registerSandboxSessionPredicate((sessionId) =>
+  isRunnableSandboxProvider(findSession(sessionId)?.sandbox?.provider),
+);
 // Same reasoning for the timer-poison heartbeat: re-checked on every
 // evaluation, which is exactly when a hot reload may have killed the timers.
 startTimerPoisonHeartbeat();
