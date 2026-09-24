@@ -4,7 +4,7 @@ A Runner is a persistent computer your workspace explicitly trusts for work
 that needs a particular platform, toolchain, or GPU. It is not an isolated
 Sandbox.
 
-Workspace administrators pair a Runner from **Settings → Runners**. The
+Any teammate can pair a Runner from **Settings → Runners**. The
 pairing code is one-time and expires after ten minutes. On a new macOS or Linux
 Runner, install the command without onboarding a server or model engine:
 
@@ -39,7 +39,7 @@ and, for preparing a Mac mini or an EC2 Mac instance as a host,
 
 Runs on a Runner do not inherit the Open Session host's AWS credentials, and
 the host never sends its instance-role session to a Runner. Instead a
-workspace administrator can give a Runner an IAM role under **Settings →
+teammate can give a Runner an IAM role under **Settings →
 Runners → Configure → AWS role ARN** (with an optional external ID). When set:
 
 1. The Open Session host mints its own instance-role session as usual
@@ -299,9 +299,9 @@ The target must already contain a compatible Open Session Runner client.
 install or upgrade it, and the Kubernetes manifest must provide it in the
 selected container.
 
-Workspace administrators can also migrate a named SSH machine or a named
+Teammates can also migrate a named SSH machine or a named
 Kubernetes Runner workload from Settings. The SSH and Kubernetes choices are
-always shown to workspace administrators, but targets are available only when
+always shown, but targets are available only when
 the operator has configured `integrations.runnersBootstrap` in the protected
 instance configuration. Otherwise the selected path reports that no targets
 are configured. SSH entries require both a pinned `SHA256:` host fingerprint

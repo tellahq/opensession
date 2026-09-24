@@ -117,6 +117,22 @@ test("compiled writers persist initial and refreshed titles without re-executing
       code: 0,
       error: "",
     });
+    if (process.platform === "darwin") {
+      // Refresh the ad-hoc signature after Bun embeds the compiled payload.
+      // macOS rejects an invalid signature before the test program can start.
+      const sign = Bun.spawn(
+        ["/usr/bin/codesign", "--force", "--sign", "-", executable],
+        { stdout: "ignore", stderr: "pipe" },
+      );
+      const [code, stderr] = await Promise.all([
+        sign.exited,
+        new Response(sign.stderr).text(),
+      ]);
+      expect({ code, error: code ? stderr : "" }).toEqual({
+        code: 0,
+        error: "",
+      });
+    }
     await rm(entry);
     const write = async (id: string, title: string) => {
       const child = Bun.spawn([executable, "write-title", path, id, title], {

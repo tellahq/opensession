@@ -113,6 +113,10 @@ export async function archivePlainSessionCandidates(
     ),
   releaseLease: (sessionId: string) => void = releasePreviewPathLease,
   resolveSessionDiscussion: DiscussionResolver = resolvePlainDiscussion,
+  stopPortals: (sessionId: string) => Promise<void> = async (sessionId) => {
+    const { stopArchivedSessionPortals } = await import("./portal-supervisor");
+    await stopArchivedSessionPortals(sessionId);
+  },
 ): Promise<number> {
   let archived = 0;
   for (const { data } of sessions
@@ -142,6 +146,13 @@ export async function archivePlainSessionCandidates(
       try {
         releaseLease(data.id);
       } catch (error) {
+        reportFailure(data.id, error);
+      }
+      try {
+        await stopPortals(data.id);
+      } catch (error) {
+        // The archive is committed. The Portal reaper retries cleanup from
+        // the catalog's archived flag, including after a gateway restart.
         reportFailure(data.id, error);
       }
       archived++;

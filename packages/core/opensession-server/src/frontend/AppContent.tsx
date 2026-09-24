@@ -51,7 +51,6 @@ import { UpdatePill } from "./components/UpdatePill";
 import {
   UserGate,
   getCurrentUser,
-  useAuthStatus,
   useCurrentUser,
 } from "./components/UserPicker";
 import { useActiveSession } from "./hooks/useActiveSession";
@@ -214,7 +213,6 @@ export function AppContent({
   // a transcript renders `opensession#128` as plain text and relinks a beat later.
   const [registeredRepoInfo, setRegisteredRepoInfo] = useState(cachedRepos);
   const onboarding = useOnboarding();
-  const auth = useAuthStatus();
   const githubConnectionState = useGithubConnectionState(route.view);
   const sessionsRef = useRef(sessions);
   useLayoutEffect(() => {
@@ -975,7 +973,6 @@ export function AppContent({
   };
   const currentTheme = effectiveTheme();
   const commandActions = buildAppCommandActions({
-    auth,
     currentSession,
     currentTheme,
     copyLinkPath,
@@ -1110,7 +1107,6 @@ export function AppContent({
       }}
       pending={{
         route,
-        auth,
         nextChatAvailable,
         pendingSessionId,
         pendingNewWorkspace,

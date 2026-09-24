@@ -89,7 +89,7 @@ afterEach(async () => {
 });
 
 describe("enabling GitHub sign-in", () => {
-  test("rosters the sole connected account as admin on a personal install", async () => {
+  test("rosters the sole connected account on a personal install", async () => {
     const config = await setupFiles({ login: "jasmoony", name: "Jas Moony" });
 
     const response = await handleSetupRoutes(
@@ -101,7 +101,7 @@ describe("enabling GitHub sign-in", () => {
       userPrAuth: true,
     });
     expect(written.identity.team).toEqual([
-      { name: "Jas Moony", github: "jasmoony", admin: true },
+      { name: "Jas Moony", github: "jasmoony" },
     ]);
   });
 

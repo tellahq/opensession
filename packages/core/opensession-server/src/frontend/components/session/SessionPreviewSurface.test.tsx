@@ -5,7 +5,7 @@ import { SessionPreviewSurface } from "./SessionPreviewSurface";
 const STAGING_URL = "https://preview.example.test/path?record=1";
 const shareLink = () => {};
 
-test("an embeddable staging deployment keeps its framed preview controls", () => {
+test("an embeddable staging deployment renders in a browser pane", () => {
   const html = renderToStaticMarkup(
     <SessionPreviewSurface
       surface={{
@@ -17,13 +17,18 @@ test("an embeddable staging deployment keeps its framed preview controls", () =>
     />,
   );
 
-  expect(html).toContain("Preview environment · building…");
-  expect(html).toContain(`<iframe src="${STAGING_URL.replace("&", "&amp;")}"`);
+  expect(html).toContain("Building…");
+  expect(html).toContain('aria-label="Preview environment address"');
+  expect(html).toContain(`value="${STAGING_URL.replace("&", "&amp;")}"`);
+  expect(html).toContain(`src="${STAGING_URL.replace("&", "&amp;")}"`);
   expect(html).toContain(
     'allow="camera; microphone; display-capture; fullscreen; autoplay; clipboard-write"',
   );
-  expect(html).toContain("Copy link");
-  expect(html).toContain(">Open<");
+  expect(html).toContain('aria-label="Copy preview link"');
+  expect(html).toContain('aria-label="Reload Preview environment"');
+  expect(html).toContain(
+    'aria-label="Open Preview environment in a new browser tab"',
+  );
 });
 
 test("a non-embeddable deployment keeps the first-party fallback", () => {

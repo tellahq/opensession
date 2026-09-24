@@ -112,6 +112,11 @@ import {
   onViewportReadoutChanged,
   setViewportReadoutPref,
 } from "../../lib/viewport-readout";
+import {
+  getServerHealthMonitorPref,
+  onServerHealthMonitorChanged,
+  setServerHealthMonitorPref,
+} from "../../lib/server-health-pref";
 import { Input, Textarea } from "../../ui/input";
 import { Button } from "../../ui/button";
 import {
@@ -335,6 +340,14 @@ function DebugSection() {
       ),
     [],
   );
+  const [serverHealth, setServerHealth] = useState(getServerHealthMonitorPref);
+  useEffect(
+    () =>
+      onServerHealthMonitorChanged(() =>
+        setServerHealth(getServerHealthMonitorPref()),
+      ),
+    [],
+  );
 
   return (
     <>
@@ -361,6 +374,17 @@ function DebugSection() {
               aria-label="Viewport readout"
               checked={viewportReadout}
               onCheckedChange={setViewportReadoutPref}
+            />
+          }
+        />
+        <SettingRow
+          title="Server health"
+          desc="Show server CPU, RAM, disk, and frame rate in the sidebar on desktop. Only this device."
+          control={
+            <Switch
+              aria-label="Server health"
+              checked={serverHealth}
+              onCheckedChange={setServerHealthMonitorPref}
             />
           }
         />

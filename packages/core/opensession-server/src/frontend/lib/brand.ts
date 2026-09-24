@@ -57,7 +57,7 @@ export const GITHUB_BOT_LOGINS = new Set(
 );
 /** Primary GitHub bot login (first policy.githubBotLogins entry) for display
  *  fallbacks; empty string when the instance has no bot. */
-export const GITHUB_BOT_NAME = (INSTANCE.githubBotLogins || [])[0] || "";
+export const GITHUB_BOT_NAME = INSTANCE.githubBotLogins?.[0] || "";
 export const DEFAULT_REPO_ID = INSTANCE.defaultRepoId || "opensession";
 
 /** Plain workspace id for deep links into app.plain.com (server:

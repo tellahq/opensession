@@ -480,7 +480,6 @@ export function SessionTabs({
                   <div
                     role="tab"
                     aria-selected={v.active}
-                    aria-label={v.icon ? v.label : undefined}
                     className={`session-tab-view group/tab ${tabClass({ active: v.active, waiting: false, colored: false })}`}
                     onClick={() => onSelectView(v.id)}
                     title={v.label}
@@ -488,19 +487,12 @@ export function SessionTabs({
                     {v.dotClass && (
                       <span className={`${PANEL_TAB_DOT} ${v.dotClass}`} />
                     )}
-                    {v.icon ? (
-                      <span
-                        className={cn(
-                          TAB_VICON,
-                          v.closable !== false && "desktop:mr-3.5",
-                        )}
-                        aria-hidden="true"
-                      >
+                    {v.icon && (
+                      <span className={TAB_VICON} aria-hidden="true">
                         {v.icon}
                       </span>
-                    ) : (
-                      <TabTitle>{v.label}</TabTitle>
                     )}
+                    <TabTitle>{v.label}</TabTitle>
                     {v.closable !== false && (
                       <button
                         type="button"

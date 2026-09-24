@@ -4,6 +4,7 @@ import { tmpdir } from "os";
 import { dirname, join } from "path";
 import {
   baseRuntimeSignature,
+  bunCacheDamaged,
   loadRemoteWorkspaceSeedFiles,
   runRemoteLifecycleHook,
   setupRemoteWorkspace,
@@ -408,5 +409,21 @@ describe("remote workspace private seed files", () => {
     expect(() =>
       loadRemoteWorkspaceSeedFiles({ id: "app", repo: root }),
     ).toThrow("regular file");
+  });
+});
+
+describe("damaged Bun cache", () => {
+  test("recognizes the install failures a damaged cache produces, nothing else", () => {
+    expect(
+      bunCacheDamaged(
+        "error: failed to install zod: the downloaded package was not found in the cache",
+      ),
+    ).toBe(true);
+    expect(
+      bunCacheDamaged(
+        "ENOENT: failed copying files from cache to destination for package eve",
+      ),
+    ).toBe(true);
+    expect(bunCacheDamaged("error: ReScript build failed")).toBe(false);
   });
 });
