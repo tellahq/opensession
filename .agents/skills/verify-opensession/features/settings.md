@@ -7,7 +7,7 @@ Settings controls personal preferences and instance configuration. Users navigat
 - `settings-navigation` opens Account, Preferences, Setup, Providers, Connections, and other allowed sections.
 - `settings-search` finds a section or control from the settings search field.
 - `settings-personal` persists browser or user-scoped preferences such as composer and appearance behavior.
-- `settings-instance` persists admin configuration such as repositories, providers, members, ingress, and integrations.
+- `settings-instance` persists workspace configuration such as repositories, providers, members, ingress, and integrations.
 - `settings-phone` uses a section list and back navigation at phone width.
 
 ## How to get to it (user POV)

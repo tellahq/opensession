@@ -11,7 +11,7 @@
  * OVERRIDES any client-claimed `user` on the WebSocket (ws-handlers.ts), so
  * attribution/gating stop trusting self-declared names.
  *
- * A verified GitHub sign-in creates a missing roster entry as a non-admin.
+ * A verified GitHub sign-in creates a missing roster entry automatically.
  * This is not a network-access gate or an organization-membership check.
  * Removing a roster entry revokes its sessions, not future verified sign-ins.
  *
