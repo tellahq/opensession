@@ -49,7 +49,6 @@ import {
   setPiEnabled,
   setPiPickerModels,
 } from "../pi-config";
-import { requireWorkspaceAdmin } from "../workspace-auth";
 
 /** The client-facing shape of a configured provider: the key masked, plus the
  *  fields Settings edits and a summary of the catalog it cannot edit. */
@@ -104,7 +103,7 @@ function githubIntegrationSection(
  * Turn a simple-mode device connect into operator mode, inside the ONE request,
  * when the install or app-setup recorded that intent
  * (integrations.github.authOnConnect). Ordering is the whole safety property:
- * the just-authorized GitHub login is rostered as the first admin BEFORE
+ * the just-authorized GitHub login is rostered as the first member BEFORE
  * userPrAuth is flipped, and both land in a single atomic config write, so no
  * persisted state ever has the sign-in gate on with nobody able to pass it. A
  * web session for that login is then minted and returned as the auth cookie
@@ -136,9 +135,9 @@ export async function bootstrapUserAuthOnConnect(
       const config = rawConfig();
       // (a) Re-check the intent INSIDE the lock. The route checked
       // githubAuthOnConnect() before acquiring it, but a concurrent device
-      // poll may have already consumed authOnConnect (rostered its own admin,
+      // poll may have already consumed authOnConnect (rostered its own member,
       // flipped the gate). Without this the queued second poll would roster a
-      // second admin and mint a session against an already-enabled instance.
+      // second member and mint a session against an already-enabled instance.
       const github = githubIntegrationSection(config, true)!;
       if (github.authOnConnect !== true)
         return {
@@ -147,7 +146,7 @@ export async function bootstrapUserAuthOnConnect(
       // The token was stored by pollGithubDeviceFlow BEFORE this lock, and
       // simple mode keeps only one account. A concurrent poll that authorized
       // a DIFFERENT account would have replaced the store, so flipping sign-in
-      // for `login` now would roster an admin whose token is gone
+      // for `login` now would roster a member whose token is gone
       // (githubCredentialForLogin(login) would be null). Confirm the stored
       // sole identity still matches before enabling the gate.
       const { soleGithubLogin } = await import("../github-auth");
@@ -163,36 +162,34 @@ export async function bootstrapUserAuthOnConnect(
       for (let index = team.length - 1; index >= 0; index--) {
         if (isDisposableLocalMember(team[index]!)) team.splice(index, 1);
       }
-      // (b) roster-upsert the login as admin, matched by github login.
+      // (b) roster-upsert the login as a member, matched by github login.
       const existing = team.find(
         (m) => typeof m.github === "string" && m.github.toLowerCase() === key,
       );
       if (existing) {
         existing.github = login;
-        existing.admin = true;
         if (typeof existing.name !== "string" || !existing.name.trim())
           existing.name = name?.trim() || login;
       } else {
-        team.push({ name: name?.trim() || login, github: login, admin: true });
+        team.push({ name: name?.trim() || login, github: login });
       }
       (config.identity as Record<string, unknown>).team = team;
-      // Preflight: refuse to flip the gate unless a rostered admin github
-      // login now exists. Ground-truth login is non-empty so this should
-      // always hold — it is the guarantee that step (c) never runs without
-      // step (b) having produced a sign-in-capable admin, and it fails closed
+      // Preflight: refuse to flip the gate unless the github login is now
+      // rostered. Ground-truth login is non-empty so this should always
+      // hold — it is the guarantee that step (c) never runs without step (b)
+      // having produced a sign-in-capable member, and it fails closed
       // (no persist) on an empty/unusable login rather than gating the app
       // on a member nobody can sign in as.
       const rostered =
         !!key &&
         team.some(
           (m) =>
-            m.admin === true &&
             typeof m.github === "string" &&
             m.github.trim().toLowerCase() === key,
         );
       if (!rostered)
         return {
-          error: "Could not roster the connected GitHub account as admin",
+          error: "Could not roster the connected GitHub account",
         };
       // (c) flip the sign-in gate — atomically with the roster write above.
       github.userPrAuth = true;
@@ -240,8 +237,6 @@ export async function handleConnectionsRoutes(
   }
 
   if (path === "/api/connections/apple-mobile" && req.method === "PUT") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
       return Response.json({ error: "Invalid JSON" }, { status: 400 });
@@ -322,8 +317,6 @@ export async function handleConnectionsRoutes(
     const body = await req.json().catch(() => null);
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
     if (typeof body.name === "string" && requiresAllowedUsers(body.name)) {
-      const forbidden = requireWorkspaceAdmin(ctx);
-      if (forbidden) return forbidden;
     }
     const result = addMcpServer(body);
     if ("error" in result) return Response.json(result, { status: 400 });
@@ -538,8 +531,6 @@ export async function handleConnectionsRoutes(
   if (mcpDelMatch && (req.method === "DELETE" || req.method === "PUT")) {
     const name = decodeURIComponent(mcpDelMatch[1]);
     if (requiresAllowedUsers(name)) {
-      const forbidden = requireWorkspaceAdmin(ctx);
-      if (forbidden) return forbidden;
     }
 
     if (req.method === "DELETE") {
@@ -581,9 +572,7 @@ export async function handleConnectionsRoutes(
   );
   if (discoverMatch && req.method === "POST") {
     // Discovery sends the stored key to whatever base URL is configured, so
-    // it is a shared-configuration mutation and stays admin-only.
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
+    // it is a shared-configuration mutation.
     const id = decodeURIComponent(discoverMatch[1]);
     if (!modelProviders()[id]) {
       return Response.json({ error: "Not found" }, { status: 404 });
@@ -608,8 +597,6 @@ export async function handleConnectionsRoutes(
     /^\/api\/settings\/model-providers\/([^/]+)$/,
   );
   if (modelProviderMatch && req.method === "PUT") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const id = decodeURIComponent(modelProviderMatch[1]);
     if (!PROVIDER_ID_RE.test(id)) {
       return Response.json(
@@ -710,8 +697,6 @@ export async function handleConnectionsRoutes(
   }
 
   if (modelProviderMatch && req.method === "DELETE") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const id = decodeURIComponent(modelProviderMatch[1]);
     try {
       const removed = removeModelProvider(id);
@@ -913,7 +898,7 @@ export async function handleConnectionsRoutes(
     );
     // The auth bootstrap: a simple-mode connect the install/app-setup marked
     // as also turning on sign-in (authOnConnect). This is the first moment a
-    // real GitHub login exists to become the admin and hold a session, so it
+    // real GitHub login exists to join the roster and hold a session, so it
     // is the only safe moment to flip the gate — never at install, where doing
     // so would lock the operator out. webAuthRequired() is still false here
     // (userPrAuth not yet set); once this runs, later connects are operator
@@ -951,7 +936,6 @@ export async function handleConnectionsRoutes(
             // The workspace is now behind sign-in and the browser holds the
             // session cookie; the client reloads to reflect operator mode.
             authEnabled: true,
-            admin: true,
             ...(native ? { token: boot.token } : {}),
           },
           { headers: { "Set-Cookie": boot.cookie } },

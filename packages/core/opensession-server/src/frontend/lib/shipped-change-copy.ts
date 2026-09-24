@@ -31,7 +31,10 @@ export function shippedChangeOutcome(
       value.length < 20 ||
       /^(done|pushed|merged|commit|tests?|verified|pr\s*#|updated and live)\b/i.test(
         value,
-      )
+      ) ||
+      // Commit bookkeeping ("Updated in 6c3dc4c14b and cf95c3283d") says
+      // nothing about the change.
+      /\b(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b/i.test(value)
     )
       continue;
     const first = value.split(/(?<=[.!?])\s+/)[0];

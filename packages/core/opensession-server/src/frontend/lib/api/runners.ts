@@ -69,7 +69,6 @@ export type RunnerInfo = {
 
 export async function fetchRunners(): Promise<{
   runners: RunnerInfo[];
-  admin: boolean;
 }> {
   return request("/runners", { label: "Failed to load Runners" });
 }

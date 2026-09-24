@@ -1,5 +1,5 @@
 /**
- * Privileged, admin-only migration helpers for persistent Runners.
+ * Privileged migration helpers for persistent Runners.
  *
  * SSH and Kubernetes are deliberately bootstrap transports, never session
  * transports. Configuration is operator-owned under

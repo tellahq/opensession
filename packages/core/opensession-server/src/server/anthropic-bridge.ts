@@ -24,6 +24,9 @@
  *    NEW tail (tool results flattened to plain text — the model reads them as
  *    the natural outcome of its forwarded call). A diverged/edited history
  *    starts a fresh SDK session with a full flat-text replay.
+ *  - Images: only the current user turn's image blocks reach the SDK, as
+ *    structured SDKUserMessage content. Earlier turns' images replay as a
+ *    "[image previously attached]" placeholder and are never re-sent.
  *
  * Containment (all enforced here, not in prompts):
  *  - Never starts unless an engine that uses it is enabled (Pi's
@@ -39,13 +42,10 @@
  *    local process can't quietly burn subscription capacity through it.
  *  - Every request lands in the audit log (audit.ts): accepted ones with
  *    session attribution (`anthropic_bridge_request` in/out), rejected ones
- *    (bad key, malformed body, size cap, rate limit, no usable account) as
+ *    (bad key, malformed body, size cap, no usable account) as
  *    `anthropic_bridge_rejected` with status + reason — never the presented
  *    key — so local probing/hammering always leaves a trail.
- *  - Request hygiene: bodies over 10MB are refused (413), and a per-boot
- *    rolling per-account counter caps requests/hour (`bridgeMaxRequestsPerHour`
- *    in ~/.opensession/model-providers.json, default 300 → 429 past it; estimated
- *    tokens are tracked alongside for the audit trail). Account selection stops
+ *  - Request hygiene: bodies over 10MB are refused (413). Account selection stops
  *    at plan limits by default. A run may continue on paid credits only when it
  *    explicitly enables `usageCredits` and the account has credit headroom.
  *
@@ -65,7 +65,7 @@
  * The pi engine's in-process sibling (pi-anthropic-provider.ts) reimplements
  * this same SDK mapping without the HTTP hop; it imports the exported helpers
  * here (flatten/replay, schema conversion, account pick, designation check,
- * DISALLOWED_BUILTINS, the rolling admit counter) so the two stay one
+ * DISALLOWED_BUILTINS) so the two stay one
  * implementation of the trick. HTTP concerns (bridge key, SSE synthesis,
  * body caps) remain bridge-only.
  */
@@ -76,6 +76,7 @@ import {
   query,
   createSdkMcpServer,
   tool,
+  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { audit, summarizeText } from "./audit";
@@ -87,7 +88,6 @@ import {
 import { CLAUDE_CODE_BIN } from "./runner-shared";
 import {
   bridgePort,
-  bridgeMaxRequestsPerHour,
   readModelProviderConfig,
   configPath as modelProvidersConfigPath,
 } from "./model-providers";
@@ -293,11 +293,31 @@ export interface AnthropicMessage {
   content: string | ContentBlock[];
 }
 
+/** What a replay leaves where an earlier turn carried an image. The SDK sees
+ *  an image only as a content block, so history's images are never re-sent:
+ *  a fresh replay that lifted them onto the new turn made one old screenshot
+ *  look attached to every later message, and re-uploaded it each time. */
+export const PRIOR_IMAGE_PLACEHOLDER = "[image previously attached]";
+
+/** Text for a current turn whose only content is an image: an empty prompt
+ *  reads to the SDK as an empty turn. */
+export const IMAGE_ONLY_PROMPT = "(see the attached image)";
+
+/** Per-turn image ceiling, newest kept. */
+export const MAX_TURN_IMAGES = 8;
+
+export interface FlattenOptions {
+  /** Replace image blocks with PRIOR_IMAGE_PLACEHOLDER (history only). */
+  markImages?: boolean;
+}
+
 /** Flatten one message to plain text for replay/continuation (tool_results
  *  unwrap to their raw output so the model reads a natural outcome, not
- *  `[tool_result toolu_x]` noise — same choice the reference makes). */
+ *  `[tool_result toolu_x]` noise — same choice the reference makes). Image
+ *  blocks never survive as text; with `markImages` they leave a placeholder. */
 export function flattenMessageText(
   content: AnthropicMessage["content"],
+  options: FlattenOptions = {},
 ): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return String(content ?? "");
@@ -305,7 +325,9 @@ export function flattenMessageText(
   for (const block of content) {
     if (!block || typeof block !== "object") continue;
     if (block.type === "text" && block.text) parts.push(block.text);
-    else if (block.type === "tool_use") {
+    else if (block.type === "image") {
+      if (options.markImages) parts.push(PRIOR_IMAGE_PLACEHOLDER);
+    } else if (block.type === "tool_use") {
       parts.push(
         `[called tool ${block.name} with ${JSON.stringify(block.input ?? {})}]`,
       );
@@ -313,8 +335,11 @@ export function flattenMessageText(
       const inner = block.content;
       if (typeof inner === "string") parts.push(inner);
       else if (Array.isArray(inner)) {
-        for (const ib of inner)
+        for (const ib of inner) {
           if (ib?.type === "text" && ib.text) parts.push(ib.text);
+          else if (ib?.type === "image" && options.markImages)
+            parts.push(PRIOR_IMAGE_PLACEHOLDER);
+        }
       }
     }
   }
@@ -322,16 +347,91 @@ export function flattenMessageText(
 }
 
 /** Flat-text replay of a whole conversation (fresh-session path). */
-export function replayConversation(messages: AnthropicMessage[]): string {
+export function replayConversation(
+  messages: AnthropicMessage[],
+  options: FlattenOptions = {},
+): string {
   const turns: string[] = [];
   for (const m of messages) {
-    const text = flattenMessageText(m.content).trim();
+    const text = flattenMessageText(m.content, options).trim();
     if (!text) continue;
     turns.push(
       m.role === "assistant" ? `[Your previous reply]\n${text}` : text,
     );
   }
   return turns.join("\n\n");
+}
+
+/** Where the current user turn starts: just after the last assistant message.
+ *  Only this tail may carry images to the model. */
+export function currentTurnStart(messages: AnthropicMessage[]): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "assistant") return i + 1;
+  }
+  return 0;
+}
+
+/** Image blocks in user messages (tool_result images included), oldest
+ *  first, newest kept past MAX_TURN_IMAGES. */
+export function turnImages(messages: AnthropicMessage[]): ContentBlock[] {
+  const images: ContentBlock[] = [];
+  for (const m of messages) {
+    if (m.role !== "user" || !Array.isArray(m.content)) continue;
+    for (const b of m.content) {
+      if (b?.type === "image") images.push(b);
+      else if (b?.type === "tool_result" && Array.isArray(b.content)) {
+        for (const ib of b.content) if (ib?.type === "image") images.push(ib);
+      }
+    }
+  }
+  return images.length > MAX_TURN_IMAGES
+    ? images.slice(-MAX_TURN_IMAGES)
+    : images;
+}
+
+/** One SDK turn built from a delivered slice of the conversation. */
+export interface FlatSdkTurn {
+  /** Replayed history before the current turn, images as placeholders. */
+  history: string;
+  /** The current user turn's text. */
+  current: string;
+  /** The current user turn's images, delivered as real content blocks. */
+  images: ContentBlock[];
+}
+
+/** Split a delivered slice into replayed history and the current turn.
+ *  `currentFrom` indexes into `messages`; by default the tail after the last
+ *  assistant message. History images are never re-sent (see
+ *  PRIOR_IMAGE_PLACEHOLDER). Image paths in text need no escaping: the Claude
+ *  Code CLI only attaches paths pasted into its interactive prompt, never ones
+ *  inside SDK prompt text (checked against CLI 2.1.280). */
+export function flatSdkTurn(
+  messages: AnthropicMessage[],
+  currentFrom = currentTurnStart(messages),
+): FlatSdkTurn {
+  const from = Math.max(0, Math.min(messages.length, currentFrom));
+  const current = messages.slice(from);
+  return {
+    history: replayConversation(messages.slice(0, from), { markImages: true }),
+    current: replayConversation(current),
+    images: turnImages(current),
+  };
+}
+
+/** The whole turn as one flat-text prompt. */
+export function flatSdkTurnText(turn: FlatSdkTurn): string {
+  return [turn.history, turn.current].filter(Boolean).join("\n\n");
+}
+
+/** Structured user content for a turn carrying images (history text, then the
+ *  images, then the current text), or null for a plain-text turn. */
+export function flatSdkTurnContent(turn: FlatSdkTurn): ContentBlock[] | null {
+  if (!turn.images.length) return null;
+  return [
+    ...(turn.history ? [{ type: "text", text: turn.history }] : []),
+    ...turn.images,
+    { type: "text", text: turn.current.trim() || IMAGE_ONLY_PROMPT },
+  ];
 }
 
 /** Minimal JSON Schema → zod conversion for client tool registration. The
@@ -447,44 +547,7 @@ function auditReject(
   });
 }
 
-// ── Per-boot rolling rate limit (per designated account) ─────────────────────
-
 const BRIDGE_MAX_BODY_BYTES = 10 * 1024 * 1024;
-const RATE_WINDOW_MS = 60 * 60 * 1000;
-
-interface BridgeUsageEvent {
-  at: number;
-  estTokens: number;
-}
-
-// account id → request events in the trailing hour. Per-boot (parked on
-// globalThis for hot reloads); the extra-usage credit ceiling (module doc) is
-// the durable backstop.
-const bridgeUsage: Map<string, BridgeUsageEvent[]> =
-  (g.__anthropicBridgeUsage ??= new Map());
-
-/** Admit-or-reject under the rolling per-account ceiling; admits record their
- *  estimated input tokens so the audit trail can track spend pressure. */
-export function admitBridgeRequest(
-  accountId: string,
-  estTokens: number,
-  now = Date.now(),
-): { allowed: boolean; requests: number; tokens: number; limit: number } {
-  const cutoff = now - RATE_WINDOW_MS;
-  const events = (bridgeUsage.get(accountId) || []).filter(
-    (e) => e.at > cutoff,
-  );
-  const limit = bridgeMaxRequestsPerHour();
-  const allowed = events.length < limit;
-  if (allowed) events.push({ at: now, estTokens });
-  bridgeUsage.set(accountId, events);
-  return {
-    allowed,
-    requests: events.length,
-    tokens: events.reduce((sum, e) => sum + e.estTokens, 0),
-    limit,
-  };
-}
 
 /** Session key: the reference plugin sends x-opensession-session; otherwise
  *  fingerprint the first message so retries of the same conversation reuse
@@ -494,6 +557,33 @@ function sessionKeyFor(req: Request, messages: AnthropicMessage[]): string {
   if (header) return `oc:${header}`;
   const first = messages[0] ? flattenMessageText(messages[0].content) : "";
   return `fp:${Bun.hash(first).toString(16)}`;
+}
+
+/** The SDK turn for a bridge request: the whole conversation on a fresh
+ *  session, else only what the SDK session has not seen (`seen` messages).
+ *  Either way only the current user turn's images ride as content blocks.
+ *  Exported for the tests. */
+export function bridgeSdkTurn(
+  messages: AnthropicMessage[],
+  seen?: number,
+): FlatSdkTurn {
+  const from = seen ?? 0;
+  return flatSdkTurn(
+    messages.slice(from),
+    Math.max(0, currentTurnStart(messages) - from),
+  );
+}
+
+/** A one-message streaming input: the SDK only takes image content blocks
+ *  through SDKUserMessage, never through a string prompt. */
+async function* singleUserMessage(
+  content: ContentBlock[],
+): AsyncGenerator<SDKUserMessage> {
+  yield {
+    type: "user",
+    message: { role: "user", content } as SDKUserMessage["message"],
+    parent_tool_use_id: null,
+  };
 }
 
 async function handleBridgeRequest(req: Request): Promise<Response> {
@@ -570,6 +660,10 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
   }
   const model: string = typeof body?.model === "string" ? body.model : "";
   const wantsStream = body?.stream === true;
+  // Honor an explicit "no thinking" request. Without it the SDK applies its
+  // own default thinking, and a two-sentence one-shot spends tens of seconds
+  // reasoning. Other thinking settings keep the SDK default, as before.
+  const thinkingDisabled = body?.thinking?.type === "disabled";
   const requestTools: Array<{
     name: string;
     description?: string;
@@ -601,29 +695,12 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
   // session has seen. Anything else (first request, edited/compacted history)
   // gets a fresh SDK session with a full replay.
   const isContinuation = !!stored && messages.length > stored.messageCount;
-  const prompt = isContinuation
-    ? replayConversation(messages.slice(stored.messageCount))
-    : replayConversation(messages);
-
-  // Rolling per-account ceiling (see module doc). Counted at admission — a
-  // request that later fails still spent an SDK attempt.
-  const estTokens = Math.ceil(rawBody.length / 4);
-  const rate = admitBridgeRequest(account.id, estTokens);
-  if (!rate.allowed) {
-    auditReject(requestId, 429, "rate_limited", {
-      engine_session: engineSessionHeader,
-      model,
-      account: account.name,
-      requests_last_hour: rate.requests,
-      est_tokens_last_hour: rate.tokens,
-      limit_per_hour: rate.limit,
-    });
-    return anthropicError(
-      429,
-      "rate_limit_error",
-      `bridge: account "${account.name}" exceeded ${rate.limit} requests/hour (bridgeMaxRequestsPerHour)`,
-    );
-  }
+  const turn = bridgeSdkTurn(
+    messages,
+    isContinuation ? stored.messageCount : undefined,
+  );
+  const prompt = flatSdkTurnText(turn);
+  const promptContent = flatSdkTurnContent(turn);
 
   const captured: CapturedToolUse[] = [];
   const passthroughTools = requestTools.map((t) =>
@@ -658,7 +735,12 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     continuation: isContinuation,
     account: account.name,
   };
-  audit({ ...auditBase, direction: "in", ...summarizeText(prompt) });
+  audit({
+    ...auditBase,
+    direction: "in",
+    images: turn.images.length,
+    ...summarizeText(prompt),
+  });
 
   const run = async () => {
     const contentOut: ContentBlock[] = [];
@@ -671,7 +753,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     let sdkSessionId = isContinuation ? stored!.sdkSessionId : undefined;
 
     const q = query({
-      prompt,
+      prompt: promptContent ? singleUserMessage(promptContent) : prompt,
       options: {
         cwd: ensureAnthropicBridgeCwd(),
         model: model || undefined,
@@ -681,6 +763,9 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
         // stop). Models that keep going anyway are handled at the result:
         // error_max_turns with captured calls returns them as tool_use.
         maxTurns: 2,
+        ...(thinkingDisabled
+          ? { thinking: { type: "disabled" as const } }
+          : {}),
         systemPrompt: system || " ",
         settingSources: [],
         mcpServers: mcpServers as any,

@@ -118,10 +118,11 @@ function sessionStatus(s: UnifiedSession): Status {
 }
 
 // The searchable haystack for a session — title plus every field a person might
-// recall it by (branch, owner, automation, repo, Linear id).
+// recall it by (workspace, branch, owner, automation, repo, Linear id).
 function haystack(s: UnifiedSession): string {
   return [
     s.title,
+    s.workspaceName,
     s.branch,
     s.startedBy,
     s.automation,
@@ -177,6 +178,105 @@ export function sortByRecentActivity(
   return rows.sort((a, b) => at(b) - at(a));
 }
 
+/** Weight of a match that only lands in secondary metadata (branch, repo,
+ *  owner, keywords) against one on the name a person reads in the row. */
+const SECONDARY_WEIGHT = 0.75;
+
+/**
+ * How well `query` matches an item: its best score on a primary field (a
+ * session title, an action label, a PR title), or a discounted score on all
+ * its fields joined, which is what lets a query spanning fields ("composer
+ * michiel") still land. 0 means no match.
+ */
+export function matchScore(
+  query: string,
+  primary: ReadonlyArray<string | null | undefined>,
+  joined: string,
+): number {
+  const direct = fuzzyMatch(query, primary);
+  if (direct >= 100) return direct;
+  return Math.max(
+    direct,
+    Math.round(fuzzyScore(query, joined) * SECONDARY_WEIGHT),
+  );
+}
+
+/** One workspace in the palette: its name and its live sessions. */
+export interface WorkspaceHit {
+  id: string;
+  name: string;
+  /** Most recently active first; the row opens the first. */
+  sessions: UnifiedSession[];
+  score: number;
+}
+
+/**
+ * Workspaces whose name matches `query`, best match first and most recent
+ * activity breaking ties. One row per workspace, however many sessions it
+ * holds, so a workspace name finds the workspace rather than a run of its
+ * sessions. `pool` must already be in most-recent-first order.
+ */
+export function matchWorkspaces(
+  query: string,
+  pool: UnifiedSession[],
+): WorkspaceHit[] {
+  if (!query.trim()) return [];
+  const byId = new Map<string, WorkspaceHit | null>();
+  for (const s of pool) {
+    if (!s.workspaceId || !s.workspaceName) continue;
+    const seen = byId.get(s.workspaceId);
+    if (seen !== undefined) {
+      seen?.sessions.push(s);
+      continue;
+    }
+    const score = fuzzyScore(query, s.workspaceName);
+    byId.set(
+      s.workspaceId,
+      score > 0
+        ? { id: s.workspaceId, name: s.workspaceName, sessions: [s], score }
+        : null,
+    );
+  }
+  // Stable: equal scores keep the pool's recency order.
+  return Array.from(byId.values())
+    .filter((hit): hit is WorkspaceHit => hit !== null)
+    .sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Orders scored sessions best match first, most recent activity breaking
+ * ties. Sorts in place and returns the same array.
+ */
+export function sortByMatch(
+  rows: UnifiedSession[],
+  scores: Map<UnifiedSession, number>,
+  index: SessionSearchIndex,
+): UnifiedSession[] {
+  const at = (s: UnifiedSession) =>
+    index.activityAt.get(s) ?? new Date(s.lastActivity).getTime();
+  return rows.sort(
+    (a, b) => (scores.get(b) ?? 0) - (scores.get(a) ?? 0) || at(b) - at(a),
+  );
+}
+
+/**
+ * Stacks result groups by their best match, so a query naming a session puts
+ * it above a list of loosely matching commands. Groups that tie keep their
+ * given order.
+ */
+export function orderGroupsByScore<T>(
+  groups: ReadonlyArray<ReadonlyArray<{ row: T; score: number }>>,
+): T[] {
+  return groups
+    .map((rows, order) => ({
+      rows,
+      order,
+      best: rows.reduce((max, r) => Math.max(max, r.score), 0),
+    }))
+    .sort((a, b) => b.best - a.best || a.order - b.order)
+    .flatMap((group) => group.rows.map((r) => r.row));
+}
+
 function prStatus(pr: OpenPr): string {
   if (pr.isDraft) return "Draft";
   if (pr.checks.failed > 0)
@@ -191,6 +291,7 @@ function prStatus(pr: OpenPr): string {
 
 type PaletteResult =
   | { type: "action"; category: string; action: CommandPaletteAction }
+  | { type: "workspace"; category: string; workspace: WorkspaceHit }
   | { type: "pr"; category: string; pr: OpenPr }
   | {
       type: "session";
@@ -202,6 +303,7 @@ type PaletteResult =
 function resultKey(result: PaletteResult): string {
   if (result.type === "action") return `action:${result.action.id}`;
   if (result.type === "pr") return `pr:${result.pr.url}`;
+  if (result.type === "workspace") return `workspace:${result.workspace.id}`;
   return `session:${result.session.id}`;
 }
 
@@ -418,59 +520,117 @@ export function SessionSearch({
     const prLimit = hasQuery ? 20 : 8;
     const sessionLimit = hasQuery || hasSessionFilter ? 40 : 12;
     // Typo-tolerant: every term must land in the joined text, exactly or
-    // within a small edit distance, so "relase" still finds "Release".
-    const matches = (values: Array<string | undefined>) =>
-      terms.length === 0 || fuzzyScore(q, values.filter(Boolean).join(" ")) > 0;
-    const actionResults: PaletteResult[] = (hasSessionFilter ? [] : actions)
-      .filter((action) =>
-        matches([
-          action.label,
-          action.description,
-          ...(action.keywords || []),
-          ...(action.shortcut || []),
-        ]),
+    // within a small edit distance, so "relase" still finds "Release". The
+    // name a row shows outranks everything else it can be found by.
+    type Scored = { row: PaletteResult; score: number };
+    const actionResults: Scored[] = (hasSessionFilter ? [] : actions)
+      .map((action) => ({
+        action,
+        score: hasQuery
+          ? matchScore(
+              q,
+              [action.label],
+              [
+                action.label,
+                action.description,
+                ...(action.keywords || []),
+                ...(action.shortcut || []),
+              ]
+                .filter(Boolean)
+                .join(" "),
+            )
+          : 1,
+      }))
+      .filter((r) => r.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, hasQuery ? 12 : 16)
+      .map(({ action, score }) => ({
+        row: { type: "action", category: action.category, action },
+        score,
+      }));
+    const prResults: Scored[] = (hasSessionFilter ? [] : openPrs)
+      .map((pr) => ({
+        pr,
+        score: !hasQuery
+          ? 1
+          : prLinksMatch(q, pr.url)
+            ? 100
+            : matchScore(
+                q,
+                [pr.title, `#${pr.number}`],
+                [
+                  pr.title,
+                  pr.repo,
+                  pr.branch,
+                  pr.author,
+                  `#${pr.number}`,
+                  prStatus(pr),
+                  pr.url,
+                ].join(" "),
+              ),
+      }))
+      .filter((r) => r.score > 0)
+      .sort(
+        (a, b) =>
+          b.score - a.score || b.pr.updatedAt.localeCompare(a.pr.updatedAt),
       )
-      .slice(0, hasQuery ? 24 : 16)
-      .map((action) => ({ type: "action", category: action.category, action }));
-    const prResults: PaletteResult[] = (hasSessionFilter ? [] : openPrs)
-      .filter(
-        (pr) =>
-          prLinksMatch(q, pr.url) ||
-          matches([
-            pr.title,
-            pr.repo,
-            pr.branch,
-            pr.author,
-            `#${pr.number}`,
-            prStatus(pr),
-            pr.url,
-          ]),
-      )
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, prLimit)
-      .map((pr) => ({ type: "pr", category: "Pull requests", pr }));
+      .map(({ pr, score }) => ({
+        row: { type: "pr", category: "Pull requests", pr },
+        score,
+      }));
     // Falls back to deriving the text for a session the index hasn't seen, so
     // a pool and an index that are momentarily out of step still search.
     const hayOf = (s: UnifiedSession) => searchIndex.hay.get(s) ?? haystack(s);
-    let sessionResults = pool.filter((s) => {
-      if (person !== "all" && !sessionHasOwner(s, person, canonical))
-        return false;
-      if (repo !== "all" && sessionRepo(s) !== repo) return false;
-      if (status !== "all" && sessionStatus(s) !== status) return false;
+    const filtered = sortByRecentActivity(
+      pool.filter((s) => {
+        if (person !== "all" && !sessionHasOwner(s, person, canonical))
+          return false;
+        if (repo !== "all" && sessionRepo(s) !== repo) return false;
+        if (status !== "all" && sessionStatus(s) !== status) return false;
+        return true;
+      }),
+      searchIndex,
+    );
+    // Workspaces come first: a workspace is what the sidebar names, so its
+    // name is the first thing a person types.
+    const workspaceHits = matchWorkspaces(q, filtered).slice(0, 8);
+    const workspaceRows: PaletteResult[] = workspaceHits.map((workspace) => ({
+      type: "workspace",
+      category: "Workspaces",
+      workspace,
+    }));
+    // A session in a workspace row above is already one Enter away; list it
+    // again only when its own title matches too, and not when that title
+    // just repeats the workspace name.
+    const shownWorkspaces = new Map(
+      workspaceHits.map((hit) => [hit.id, hit.name]),
+    );
+    const scores = new Map<UnifiedSession, number>();
+    let sessionResults = filtered.filter((s) => {
       if (terms.length === 0) return true;
-      // A session shows if its metadata matches every term OR the query turned
-      // up inside its conversation, or the pasted PR link belongs to it.
-      return (
-        fuzzyMatch(q, [hayOf(s)]) > 0 ||
-        sessionUsesPrLink(s, q) ||
-        snippets.has(s.id)
-      );
+      const shownAs = s.workspaceId
+        ? shownWorkspaces.get(s.workspaceId)
+        : undefined;
+      if (
+        shownAs !== undefined &&
+        (shownAs === s.title || fuzzyScore(q, s.title) === 0)
+      )
+        return false;
+      // A session shows if its metadata matches every term, the pasted PR link
+      // belongs to it, or the query turned up inside its conversation. A
+      // conversation-only hit ranks below any match on what the row shows.
+      const score = sessionUsesPrLink(s, q)
+        ? 100
+        : matchScore(q, [s.title], hayOf(s)) || (snippets.has(s.id) ? 10 : 0);
+      scores.set(s, score);
+      return score > 0;
     });
-    sessionResults = sortByRecentActivity(sessionResults, searchIndex);
+    if (hasQuery) sortByMatch(sessionResults, scores, searchIndex);
     if (sessionResults.some((session) => sessionUsesPrLink(session, q))) {
       sessionResults = collapsePrLinkSessions(sessionResults);
     }
-    const sessionRows: PaletteResult[] = sessionResults
+    const sessionRows: Scored[] = sessionResults
       .slice(0, sessionLimit)
       .map((s) => {
         // Show the snippet only when the title/metadata didn't already match —
@@ -479,13 +639,19 @@ export function SessionSearch({
           terms.length > 0 &&
           (terms.every((t) => hayOf(s).includes(t)) || sessionUsesPrLink(s, q));
         return {
-          type: "session",
-          category: "Sessions",
-          session: s,
-          snippet: metaMatch ? undefined : snippets.get(s.id),
+          row: {
+            type: "session",
+            category: "Sessions",
+            session: s,
+            snippet: metaMatch ? undefined : snippets.get(s.id),
+          },
+          score: scores.get(s) ?? 1,
         };
       });
-    return [...actionResults, ...prResults, ...sessionRows];
+    return [
+      ...workspaceRows,
+      ...orderGroupsByScore([actionResults, prResults, sessionRows]),
+    ];
   })();
   const keyedActive = results.findIndex(
     (result) => resultKey(result) === activeKey,
@@ -528,6 +694,8 @@ export function SessionSearch({
     onClose();
     if (result.type === "action") result.action.run();
     else if (result.type === "pr") onSelectPr(result.pr);
+    else if (result.type === "workspace")
+      onSelectSession(result.workspace.sessions[0].id);
     else onSelectSession(result.session.id);
   }
 
@@ -563,7 +731,7 @@ export function SessionSearch({
               setQuery(e.target.value);
               setActiveKey(null);
             }}
-            placeholder="Search actions, pull requests & conversations…"
+            placeholder="Search workspaces, sessions & actions…"
             spellCheck={false}
             role="combobox"
             aria-label="Search commands and conversations"
@@ -692,6 +860,54 @@ export function SessionSearch({
                 </React.Fragment>
               );
             }
+            if (result.type === "workspace") {
+              const ws = result.workspace;
+              const latest = ws.sessions[0];
+              const count = ws.sessions.length;
+              return (
+                <React.Fragment key={`workspace:${ws.id}`}>
+                  {startsGroup && (
+                    <div className="px-3 pb-1.5 pt-2.5 text-meta font-semibold text-faint">
+                      {result.category}
+                    </div>
+                  )}
+                  <button
+                    id={`command-result-${i}`}
+                    data-idx={i}
+                    type="button"
+                    role="option"
+                    aria-selected={i === active}
+                    tabIndex={-1}
+                    className={ITEM}
+                    onMouseMove={() => setActiveKey(resultKey(result))}
+                    onClick={() => selectResult(result)}
+                  >
+                    <span className="inline-flex size-5 shrink-0 items-center justify-center">
+                      <RepoTile name={sessionRepo(latest)} size={18} />
+                    </span>
+                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate text-label font-medium">
+                        {ws.name}
+                      </span>
+                      <span className="flex items-center gap-2 overflow-hidden whitespace-nowrap text-meta text-faint">
+                        <span className="text-dim">
+                          {repoLabel(sessionRepo(latest))}
+                        </span>
+                        <span>
+                          {count} session{count === 1 ? "" : "s"}
+                        </span>
+                        <span className="ml-auto shrink-0">
+                          {relativeTime(latest.lastActivity)}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-meta text-faint max-[560px]:hidden">
+                      {STATUS_META[sessionStatus(latest)].label}
+                    </span>
+                  </button>
+                </React.Fragment>
+              );
+            }
             if (result.type === "pr") {
               const pr = result.pr;
               return (
@@ -776,6 +992,11 @@ export function SessionSearch({
                         </span>
                       ) : (
                         s.startedBy && <span>{s.startedBy}</span>
+                      )}
+                      {s.workspaceName && s.workspaceName !== s.title && (
+                        <span className="max-w-[220px] truncate text-dim">
+                          {s.workspaceName}
+                        </span>
                       )}
                       <span className="text-dim">{sessionRepo(s)}</span>
                       {s.branch && (

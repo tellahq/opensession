@@ -77,7 +77,6 @@ interface SettingsSection {
   label: string;
   group: string;
   icon: React.ReactElement<{ size?: number }>;
-  adminOnly?: boolean;
 }
 
 export const SECTIONS: SettingsSection[] = [
@@ -109,35 +108,30 @@ export const SECTIONS: SettingsSection[] = [
     key: "general",
     label: "General",
     group: "Organization",
-    adminOnly: true,
     icon: <IconHome />,
   },
   {
     key: "setup",
     label: "Setup",
     group: "Organization",
-    adminOnly: true,
     icon: <IconChecklist />,
   },
   {
     key: "repos",
     label: "Repositories",
     group: "Organization",
-    adminOnly: true,
     icon: <IconBranches />,
   },
   {
     key: "members",
     label: "Members",
     group: "Organization",
-    adminOnly: true,
     icon: <IconPeople />,
   },
   {
     key: "authentication",
     label: "Authentication",
     group: "Organization",
-    adminOnly: true,
     icon: <IconShieldCheck />,
   },
   {
@@ -168,7 +162,6 @@ export const SECTIONS: SettingsSection[] = [
     key: "integrations",
     label: "Integrations",
     group: "Organization",
-    adminOnly: true,
     icon: <IconPlug />,
   },
   {
@@ -181,7 +174,6 @@ export const SECTIONS: SettingsSection[] = [
     key: "memory",
     label: "Memories",
     group: "Organization",
-    adminOnly: true,
     icon: <IconDatabase />,
   },
   {
@@ -206,14 +198,12 @@ export const SECTIONS: SettingsSection[] = [
     key: "ingress",
     label: "Domains",
     group: "Infrastructure",
-    adminOnly: true,
     icon: <IconGlobe />,
   },
   {
     key: "storage",
     label: "Storage",
     group: "Infrastructure",
-    adminOnly: true,
     icon: <IconArchive />,
   },
   {
@@ -270,26 +260,19 @@ export type SettingsPaletteAction = {
  * Tool sections are left out: Automations, Goals and Security have their own
  * top-level routes and their own palette entries already, and a second row
  * pointing at the same place is noise.
- *
- * Admin-only sections are dropped for non-admins, mirroring the nav — the
- * Settings surface silently falls back to the default section for a section
- * someone cannot see, so a row offering it would go nowhere.
  */
-export function settingsPaletteActions(opts: {
-  admin: boolean;
-}): SettingsPaletteAction[] {
-  return SECTIONS.filter(
-    (section) =>
-      !TOOL_SECTIONS.has(section.key) && (opts.admin || !section.adminOnly),
-  ).map((section) => ({
-    // Prefixed so these cannot collide with the palette's own ids (several
-    // sections share a name with a tool view or a top-level action).
-    id: `settings-${section.key}`,
-    label: section.label,
-    description: `Settings · ${section.group}`,
-    category: "Navigate" as const,
-    keywords: SETTINGS_KEYWORDS[section.key] ?? [],
-    icon: React.cloneElement(section.icon, { size: PALETTE_ICON_SIZE }),
-    section: section.key,
-  }));
+export function settingsPaletteActions(): SettingsPaletteAction[] {
+  return SECTIONS.filter((section) => !TOOL_SECTIONS.has(section.key)).map(
+    (section) => ({
+      // Prefixed so these cannot collide with the palette's own ids (several
+      // sections share a name with a tool view or a top-level action).
+      id: `settings-${section.key}`,
+      label: section.label,
+      description: `Settings · ${section.group}`,
+      category: "Navigate" as const,
+      keywords: SETTINGS_KEYWORDS[section.key] ?? [],
+      icon: React.cloneElement(section.icon, { size: PALETTE_ICON_SIZE }),
+      section: section.key,
+    }),
+  );
 }

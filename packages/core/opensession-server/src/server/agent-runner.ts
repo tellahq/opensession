@@ -81,6 +81,11 @@ import {
   withFilesNote,
   withImagesNote,
 } from "./prompt-attachments";
+import {
+  remoteAttachmentWriter,
+  remoteWorkspaceForRun,
+  type RemoteWorkspaceRun,
+} from "./remote-workspace";
 import { logInjectedContext, logStandingJson } from "./context-log";
 import {
   beginTurn,
@@ -107,6 +112,11 @@ export interface RunAgentOpts {
   /** Engine session id to resume (claude session id or codex thread id). */
   sessionId?: string;
   cwd: string;
+  /** The workspace is a Sandbox: every file and shell tool acts there, over
+   *  the run-rpc socket this token authenticates (remote-workspace.ts).
+   *  `cwd` is then the Sandbox path, and nothing touches this machine's
+   *  filesystem on the model's behalf. */
+  remoteWorkspace?: RemoteWorkspaceRun;
   mode?: "ask" | "code" | "scratch";
   /** Ephemeral GitHub capability for a narrowly scoped trusted GitHub code run.
    * Never persist this value in a host spec, journal, or session file. */
@@ -451,10 +461,48 @@ export function isInteractiveRun(opts: {
  * the verdict when it ends (src/server/turn-outcome.ts). Only unattended kinds
  * carry a ledger; for everything else this is two branch predictions per run.
  */
+/**
+ * Registered by the gateway at boot: whether a session's workspace is a
+ * Sandbox. Absent in a detached run host, whose spec already decides.
+ */
+export function registerSandboxSessionPredicate(
+  predicate: (sessionId: string) => boolean,
+): void {
+  (globalThis as any).__opensessionSandboxSessionPredicate = predicate;
+}
+
+function sessionWorkspaceIsSandbox(sessionId: string): boolean {
+  const predicate = (globalThis as any).__opensessionSandboxSessionPredicate as
+    | ((sessionId: string) => boolean)
+    | undefined;
+  try {
+    return predicate?.(sessionId) === true;
+  } catch {
+    // Unknown means refuse: a wrong answer here runs tools on this machine.
+    return true;
+  }
+}
+
 export async function* runAgent(
   opts: RunAgentOpts,
 ): AsyncGenerator<StreamEvent> {
   const osSessionId = opts.journal?.osSessionId;
+  // Defense in depth for every path that builds a run from stored inputs
+  // (restart recovery, in-process fallbacks): a Sandbox session's tools act
+  // in its Sandbox or not at all.
+  if (
+    osSessionId &&
+    !opts.remoteWorkspace &&
+    !opts.disableLocalWorkspaceTools &&
+    sessionWorkspaceIsSandbox(osSessionId)
+  ) {
+    yield {
+      type: "error",
+      content:
+        "This session's workspace is its Sandbox, and this run was not connected to it, so it was not started. Send the prompt again.",
+    };
+    return;
+  }
   const runAliases = new Set(
     [osSessionId, opts.transcriptSessionId, opts.sessionId].filter(
       (id): id is string => !!id,
@@ -466,9 +514,16 @@ export async function* runAgent(
       ? pendingStarts.get(osSessionId)?.values().next().value
       : undefined) ||
     crypto.randomUUID();
-  const scratchDir =
-    opts.scratchDir ??
-    (osSessionId ? ensureSessionScratch(osSessionId) : undefined);
+  // A remote workspace's scratch is the Sandbox's: attachments are written
+  // there, where the model's tools can read them.
+  const remote = opts.remoteWorkspace
+    ? remoteWorkspaceForRun(opts.remoteWorkspace)
+    : undefined;
+  const scratchDir = remote
+    ? remote.scratchDir
+    : (opts.scratchDir ??
+      (osSessionId ? ensureSessionScratch(osSessionId) : undefined));
+  const stageWriter = remote ? remoteAttachmentWriter(remote) : undefined;
   const effectiveOpts: RunAgentOpts = {
     ...opts,
     scratchDir,
@@ -480,9 +535,9 @@ export async function* runAgent(
     prompt: withFilesNote(
       withImagesNote(
         opts.prompt,
-        await stagePromptImages(scratchDir, opts.images),
+        await stagePromptImages(scratchDir, opts.images, stageWriter),
       ),
-      await stagePromptFiles(scratchDir, opts.files),
+      await stagePromptFiles(scratchDir, opts.files, stageWriter),
     ),
     journal: opts.journal
       ? {
@@ -1493,6 +1548,44 @@ async function settleDurableCancelForAbsentOwner(
   return true;
 }
 
+/**
+ * Recovery of a run whose tools act on a Sandbox: the continuation keeps
+ * acting there, under a run-rpc token registered for it alone and released
+ * when its stream ends. Without a session to authorize it, the workspace is
+ * passed with no token, which the run refuses rather than act on this
+ * machine.
+ */
+async function recoveryRemoteWorkspace(run: ActiveRunRecord): Promise<{
+  remoteWorkspace?: RemoteWorkspaceRun;
+  wrap: (events: AsyncGenerator<StreamEvent>) => AsyncGenerator<StreamEvent>;
+}> {
+  const passThrough = (events: AsyncGenerator<StreamEvent>) => events;
+  if (!run.remoteWorkspace) return { wrap: passThrough };
+  if (!run.osSessionId)
+    return {
+      remoteWorkspace: { ...run.remoteWorkspace, rpcToken: "" },
+      wrap: passThrough,
+    };
+  const rpc = await import("./run-rpc");
+  const token = crypto.randomUUID();
+  rpc.registerRunToken(token, {
+    sessionId: run.osSessionId,
+    user: run.user,
+    humanPrompter: run.accountUser,
+  });
+  return {
+    remoteWorkspace: { ...run.remoteWorkspace, rpcToken: token },
+    wrap: (events) =>
+      (async function* () {
+        try {
+          yield* events;
+        } finally {
+          rpc.unregisterRunToken(token);
+        }
+      })(),
+  };
+}
+
 export async function resumeInterruptedRuns(
   onResumed?: (
     osSessionId?: string,
@@ -1887,103 +1980,28 @@ export async function resumeInterruptedRuns(
       );
       continue;
     }
-    // Sandboxed runs (docs/self-hosting-sandboxes.md): the sandbox — and
-    // often the in-sandbox run host itself — outlives a opensession restart.
-    // Reattach/relaunch through the provider instead of running in-process;
-    // the sandbox modules are imported lazily so these paths stay completely
-    // out of processes that never touch them.
-    if (
-      run.sandboxId &&
-      (run.sandboxProvider === "daytona" ||
-        run.sandboxProvider === "box" ||
-        run.sandboxProvider === "tart" ||
-        run.sandboxProvider === "usecomputer")
-    ) {
+    // A run from the retired in-Sandbox runner (its record names the
+    // Sandbox, not a local host). Its loop ran inside the machine, and this
+    // release has no launcher for it: say so instead of guessing, and the
+    // next prompt runs with its loop here and the Sandbox as its workspace.
+    if (run.sandboxId) {
       rememberHandledSession(run);
       trackRecovery(run);
       recoveryTasks.push(
-        recoveryTask(run, async (releaseQueueSlot) => {
-          const recoveryStartedAt = Date.now();
-          let recoveryRecorded = false;
-          let terminalSeen = false;
-          const recordRecovery = (
-            outcome: "ok" | "failed",
-            reason?: string,
-          ) => {
-            if (recoveryRecorded) return;
-            recoveryRecorded = true;
-            audit({
-              kind: "sandbox_restart_survival_metric",
-              session_id: run.osSessionId,
-              provider: run.sandboxProvider,
-              sandbox_id: run.sandboxId,
-              recovery_ms: Date.now() - recoveryStartedAt,
-              outcome,
-              ...(reason ? { reason } : {}),
-            });
-          };
-          try {
-            if (await checkpointStoppedRecovery(run)) return;
-            Object.assign(run, journalStartRecovery(run));
-            const resume = (await import("./sandbox/adapters/bootstrap"))
-              .resumeRemoteSandboxRun;
-            if (await checkpointStoppedRecovery(run)) return;
-            const events = await resume(run, {
-              onAskUser: run.osSessionId
-                ? askHandlerFor?.(run.osSessionId)
-                : undefined,
-            });
-            if (await checkpointStoppedRecovery(run)) {
-              cancelRecoveredEngine(run);
-              return;
-            }
-            if (!events) {
-              console.warn(
-                `[runner] Sandbox ${run.sandboxId} for interrupted run ${run.runKey} is gone — the session's next prompt recreates it`,
-              );
-              await reportRecoveryFailure(
-                run,
-                "Restart recovery could not reconnect to the interrupted sandbox. Send the prompt again to continue.",
-              );
-              recordRecovery("failed", "sandbox_unavailable");
-              return;
-            }
-            // The sandbox host is attached. Its model turn can continue while
-            // the boot queue starts the next interrupted session.
-            releaseQueueSlot();
-            for await (const event of events) {
-              if (await checkpointStoppedRecovery(run)) return;
-              markRecoveryProgress(run, event);
-              if (event.type === "done" || event.type === "error") {
-                terminalSeen =
-                  (await settleRecovery(run, event)) || terminalSeen;
-                recordRecovery(
-                  event.type === "done" ? "ok" : "failed",
-                  event.type,
-                );
-              } else await emitRecoveryEvent(run, event);
-            }
-            if (await checkpointStoppedRecovery(run)) return;
-            if (!terminalSeen) {
-              await reportRecoveryFailure(
-                run,
-                "Restart recovery ended before the interrupted sandbox returned a final result. Send the prompt again to continue.",
-              );
-              recordRecovery("failed", "stream_ended_without_terminal_event");
-            }
-          } catch (e) {
-            recordRecovery("failed", "recovery_error");
-            console.error(
-              `[runner] Sandbox resume failed for ${run.runKey}:`,
-              e,
-            );
-            if (await checkpointStoppedRecovery(run)) return;
-            if (!terminalSeen)
-              await reportRecoveryFailure(
-                run,
-                "Restart recovery failed while reconnecting to the interrupted sandbox. Send the prompt again to continue.",
-              );
-          }
+        recoveryTask(run, async () => {
+          if (await checkpointStoppedRecovery(run)) return;
+          audit({
+            kind: "sandbox_restart_survival_metric",
+            session_id: run.osSessionId,
+            provider: run.sandboxProvider,
+            sandbox_id: run.sandboxId,
+            outcome: "failed",
+            reason: "retired_in_sandbox_runner",
+          });
+          await reportRecoveryFailure(
+            run,
+            "This turn ran on the previous Sandbox runner, which an update retired while it was running. Send the prompt again to continue; your files in the Sandbox are unchanged.",
+          );
         }),
       );
       continue;
@@ -2070,50 +2088,54 @@ export async function resumeInterruptedRuns(
               console.log(
                 `[runner] Local run host ${run.hostId} is gone; resuming ${run.osSessionId || run.runKey} in-process`,
               );
-              events = runAgent({
-                prompt: run.claudeSessionId
-                  ? resumeContinuationPrompt(run.prompt || "")
-                  : run.prompt!,
-                promptEntryId: run.claudeSessionId
-                  ? undefined
-                  : run.promptEntryId,
-                startToken: run.runKey,
-                sessionId: run.claudeSessionId || undefined,
-                cwd: run.cwd,
-                mode: run.mode,
-                model: run.model,
-                selectedModel: run.selectedModel,
-                transientFallback: run.transientFallback,
-                effort: run.effort,
-                fastMode: run.fastMode,
-                mcpServers: run.mcpServers ?? "all",
-                inProcessMcp: run.osSessionId
-                  ? await inProcessMcpFor?.(run.osSessionId, run.user)
-                  : undefined,
-                reposNote: run.osSessionId
-                  ? reposNoteFor?.(run.osSessionId)
-                  : undefined,
-                user: run.user,
-                accountUser: run.accountUser,
-                deniedTools: run.deniedTools,
-                publicationPolicy: run.publicationPolicy,
-                confirmTools: run.confirmTools,
-                aws: run.aws,
-                fallbackModel: run.fallbackModel,
-                accountId: run.accountId,
-                accountStrict: run.accountStrict,
-                usageCredits: run.usageCredits,
-                journal: {
-                  osSessionId: run.osSessionId,
-                  kind: recoveryKind(run.kind, "resume"),
-                  firstJournaledAt: run.firstJournaledAt,
-                  resumeAttempts: run.resumeAttempts,
-                  lastResumeAt: run.lastResumeAt,
-                },
-                onAskUser: run.osSessionId
-                  ? askHandlerFor?.(run.osSessionId)
-                  : undefined,
-              });
+              const recovered = await recoveryRemoteWorkspace(run);
+              events = recovered.wrap(
+                runAgent({
+                  prompt: run.claudeSessionId
+                    ? resumeContinuationPrompt(run.prompt || "")
+                    : run.prompt!,
+                  promptEntryId: run.claudeSessionId
+                    ? undefined
+                    : run.promptEntryId,
+                  startToken: run.runKey,
+                  sessionId: run.claudeSessionId || undefined,
+                  cwd: run.cwd,
+                  remoteWorkspace: recovered.remoteWorkspace,
+                  mode: run.mode,
+                  model: run.model,
+                  selectedModel: run.selectedModel,
+                  transientFallback: run.transientFallback,
+                  effort: run.effort,
+                  fastMode: run.fastMode,
+                  mcpServers: run.mcpServers ?? "all",
+                  inProcessMcp: run.osSessionId
+                    ? await inProcessMcpFor?.(run.osSessionId, run.user)
+                    : undefined,
+                  reposNote: run.osSessionId
+                    ? reposNoteFor?.(run.osSessionId)
+                    : undefined,
+                  user: run.user,
+                  accountUser: run.accountUser,
+                  deniedTools: run.deniedTools,
+                  publicationPolicy: run.publicationPolicy,
+                  confirmTools: run.confirmTools,
+                  aws: run.aws,
+                  fallbackModel: run.fallbackModel,
+                  accountId: run.accountId,
+                  accountStrict: run.accountStrict,
+                  usageCredits: run.usageCredits,
+                  journal: {
+                    osSessionId: run.osSessionId,
+                    kind: recoveryKind(run.kind, "resume"),
+                    firstJournaledAt: run.firstJournaledAt,
+                    resumeAttempts: run.resumeAttempts,
+                    lastResumeAt: run.lastResumeAt,
+                  },
+                  onAskUser: run.osSessionId
+                    ? askHandlerFor?.(run.osSessionId)
+                    : undefined,
+                }),
+              );
             }
             for await (const event of events) {
               // A fallback re-prompt is lazy. Its first event proves that the
@@ -2184,49 +2206,53 @@ export async function resumeInterruptedRuns(
             // so the unprotected window is one generator start, not the whole
             // adoption+probe phase the old wipe-on-take left open).
             journalClear(run.runKey);
-            for await (const event of runAgent({
-              prompt: run.prompt!,
-              promptEntryId: run.promptEntryId,
-              startToken: run.runKey,
-              cwd: run.cwd,
-              mode: run.mode,
-              model: run.model,
-              selectedModel: run.selectedModel,
-              transientFallback: run.transientFallback,
-              effort: run.effort,
-              fastMode: run.fastMode,
-              mcpServers: run.mcpServers ?? "all",
-              inProcessMcp: run.osSessionId
-                ? await inProcessMcpFor?.(run.osSessionId, run.user)
-                : undefined,
-              reposNote: run.osSessionId
-                ? reposNoteFor?.(run.osSessionId)
-                : undefined,
-              user: run.user,
-              accountUser: run.accountUser,
-              deniedTools: run.deniedTools,
-              publicationPolicy: run.publicationPolicy,
-              confirmTools: run.confirmTools,
-              aws: run.aws,
-              claudeCliEnv: run.claudeCliEnv,
-              codexCliEnv: run.codexCliEnv,
-              fallbackModel: run.fallbackModel,
-              accountId: run.accountId,
-              accountStrict: run.accountStrict,
-              usageCredits: run.usageCredits,
-              prReviewer: run.prReviewer,
-              readRepos: run.readRepos,
-              journal: {
-                osSessionId: run.osSessionId,
-                kind: recoveryKind(run.kind, "rerun"),
-                firstJournaledAt: run.firstJournaledAt,
-                resumeAttempts: run.resumeAttempts,
-                lastResumeAt: run.lastResumeAt,
-              },
-              onAskUser: run.osSessionId
-                ? askHandlerFor?.(run.osSessionId)
-                : undefined,
-            })) {
+            const recovered = await recoveryRemoteWorkspace(run);
+            for await (const event of recovered.wrap(
+              runAgent({
+                prompt: run.prompt!,
+                promptEntryId: run.promptEntryId,
+                startToken: run.runKey,
+                cwd: run.cwd,
+                remoteWorkspace: recovered.remoteWorkspace,
+                mode: run.mode,
+                model: run.model,
+                selectedModel: run.selectedModel,
+                transientFallback: run.transientFallback,
+                effort: run.effort,
+                fastMode: run.fastMode,
+                mcpServers: run.mcpServers ?? "all",
+                inProcessMcp: run.osSessionId
+                  ? await inProcessMcpFor?.(run.osSessionId, run.user)
+                  : undefined,
+                reposNote: run.osSessionId
+                  ? reposNoteFor?.(run.osSessionId)
+                  : undefined,
+                user: run.user,
+                accountUser: run.accountUser,
+                deniedTools: run.deniedTools,
+                publicationPolicy: run.publicationPolicy,
+                confirmTools: run.confirmTools,
+                aws: run.aws,
+                claudeCliEnv: run.claudeCliEnv,
+                codexCliEnv: run.codexCliEnv,
+                fallbackModel: run.fallbackModel,
+                accountId: run.accountId,
+                accountStrict: run.accountStrict,
+                usageCredits: run.usageCredits,
+                prReviewer: run.prReviewer,
+                readRepos: run.readRepos,
+                journal: {
+                  osSessionId: run.osSessionId,
+                  kind: recoveryKind(run.kind, "rerun"),
+                  firstJournaledAt: run.firstJournaledAt,
+                  resumeAttempts: run.resumeAttempts,
+                  lastResumeAt: run.lastResumeAt,
+                },
+                onAskUser: run.osSessionId
+                  ? askHandlerFor?.(run.osSessionId)
+                  : undefined,
+              }),
+            )) {
               // `runAgent` is lazy. Free the bounded boot slot only after its
               // first event confirms the replacement engine is running.
               releaseQueueSlot();
@@ -2279,54 +2305,58 @@ export async function resumeInterruptedRuns(
           // claimed record only now, AFTER the reattach probe settled: dying
           // mid-probe used to lose the run to the wipe-on-take (2026-07-27).
           journalClear(run.runKey);
-          for await (const event of runAgent({
-            prompt: repairingRecoveredResult
-              ? wrapContext(
-                  recoveredResultContinuationPrompt(run.prompt),
-                  "restart-recovery",
-                )
-              : restartContinuationPrompt(run.prompt),
-            startToken: run.runKey,
-            sessionId: run.claudeSessionId,
-            cwd: run.cwd,
-            mode: run.mode,
-            model: run.model,
-            selectedModel: run.selectedModel,
-            transientFallback: run.transientFallback,
-            effort: run.effort,
-            fastMode: run.fastMode,
-            mcpServers: run.mcpServers ?? "all",
-            inProcessMcp: run.osSessionId
-              ? await inProcessMcpFor?.(run.osSessionId, run.user)
-              : undefined,
-            reposNote: run.osSessionId
-              ? reposNoteFor?.(run.osSessionId)
-              : undefined,
-            user: run.user,
-            accountUser: run.accountUser,
-            deniedTools: run.deniedTools,
-            publicationPolicy: run.publicationPolicy,
-            confirmTools: run.confirmTools,
-            aws: run.aws,
-            claudeCliEnv: run.claudeCliEnv,
-            codexCliEnv: run.codexCliEnv,
-            fallbackModel: run.fallbackModel,
-            accountId: run.accountId,
-            accountStrict: run.accountStrict,
-            usageCredits: run.usageCredits,
-            prReviewer: run.prReviewer,
-            readRepos: run.readRepos,
-            journal: {
-              osSessionId: run.osSessionId,
-              kind: recoveryKind(run.kind, "resume"),
-              firstJournaledAt: run.firstJournaledAt,
-              resumeAttempts: run.resumeAttempts,
-              lastResumeAt: run.lastResumeAt,
-            },
-            onAskUser: run.osSessionId
-              ? askHandlerFor?.(run.osSessionId)
-              : undefined,
-          })) {
+          const recovered = await recoveryRemoteWorkspace(run);
+          for await (const event of recovered.wrap(
+            runAgent({
+              prompt: repairingRecoveredResult
+                ? wrapContext(
+                    recoveredResultContinuationPrompt(run.prompt),
+                    "restart-recovery",
+                  )
+                : restartContinuationPrompt(run.prompt),
+              startToken: run.runKey,
+              sessionId: run.claudeSessionId,
+              cwd: run.cwd,
+              remoteWorkspace: recovered.remoteWorkspace,
+              mode: run.mode,
+              model: run.model,
+              selectedModel: run.selectedModel,
+              transientFallback: run.transientFallback,
+              effort: run.effort,
+              fastMode: run.fastMode,
+              mcpServers: run.mcpServers ?? "all",
+              inProcessMcp: run.osSessionId
+                ? await inProcessMcpFor?.(run.osSessionId, run.user)
+                : undefined,
+              reposNote: run.osSessionId
+                ? reposNoteFor?.(run.osSessionId)
+                : undefined,
+              user: run.user,
+              accountUser: run.accountUser,
+              deniedTools: run.deniedTools,
+              publicationPolicy: run.publicationPolicy,
+              confirmTools: run.confirmTools,
+              aws: run.aws,
+              claudeCliEnv: run.claudeCliEnv,
+              codexCliEnv: run.codexCliEnv,
+              fallbackModel: run.fallbackModel,
+              accountId: run.accountId,
+              accountStrict: run.accountStrict,
+              usageCredits: run.usageCredits,
+              prReviewer: run.prReviewer,
+              readRepos: run.readRepos,
+              journal: {
+                osSessionId: run.osSessionId,
+                kind: recoveryKind(run.kind, "resume"),
+                firstJournaledAt: run.firstJournaledAt,
+                resumeAttempts: run.resumeAttempts,
+                lastResumeAt: run.lastResumeAt,
+              },
+              onAskUser: run.osSessionId
+                ? askHandlerFor?.(run.osSessionId)
+                : undefined,
+            }),
+          )) {
             // A recovery slot guards startup, not the whole agent turn. Once
             // the engine emits, later interrupted sessions may begin recovery.
             releaseQueueSlot();

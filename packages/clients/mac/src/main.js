@@ -381,7 +381,12 @@ function blockServiceWorker() {
         (origin) => origin + "/*sw.js*",
       ),
     },
-    (_details, callback) => callback({ cancel: true }),
+    // The pattern also matches hashed bundles whose name happens to end in
+    // "sw" (App-9y2pqksw.js), so cancel only the worker script itself.
+    (details, callback) =>
+      callback({
+        cancel: new URL(details.url).pathname.split("/").pop() === "sw.js",
+      }),
   );
 }
 

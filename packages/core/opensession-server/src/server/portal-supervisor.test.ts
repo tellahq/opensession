@@ -1051,9 +1051,6 @@ function sandboxFor(cwd: string, port: number): Sandbox {
       ]);
       return { exitCode, stdout, stderr };
     },
-    launchRun: () => {
-      throw new Error("not used");
-    },
     async ports() {
       return { [port]: port };
     },

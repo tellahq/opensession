@@ -255,19 +255,34 @@ describe("workspace preset catalog resolution", () => {
     ]) {
       workspace.modelSettings.presets[0].instructions = instructions;
       await catalogDocuments("workspaces").set(workspace.id, workspace);
-      const opts = await resolveHostedRunOptions({
-        osSessionId: "acme-session",
-        prompt: "Acme task",
-        cwd: ".",
-        model,
-        reposNote,
-        reposNoteHasPreset: true,
-      });
-      expect(opts.reposNote).toBe(reposNote);
-      expect(opts.reposNote?.match(/## Workspace model preset/g)).toHaveLength(
-        1,
-      );
-      expect(opts.reposNote).not.toContain("Use the new review plan.");
+      // Sandbox sessions use the same host-local loop as local sessions.
+      for (const remoteWorkspace of [
+        undefined,
+        {
+          provider: "box",
+          sandboxId: "acme-sandbox",
+          cwd: "/workspace",
+          scratchDir: "/tmp/acme-scratch",
+        },
+      ]) {
+        const opts = await resolveHostedRunOptions({
+          osSessionId: "acme-session",
+          prompt: "Acme task",
+          cwd: remoteWorkspace?.cwd ?? ".",
+          remoteWorkspace,
+          model,
+          reposNote,
+          reposNoteHasPreset: true,
+        });
+        expect(opts.remoteWorkspace).toBe(remoteWorkspace);
+        expect(opts.selectedModel).toBe(model);
+        expect(opts.model).toBe("pi/openai/gpt-6-sol");
+        expect(opts.reposNote).toBe(reposNote);
+        expect(
+          opts.reposNote?.match(/## Workspace model preset/g),
+        ).toHaveLength(1);
+        expect(opts.reposNote).not.toContain("Use the new review plan.");
+      }
     }
     const uncaptured = await resolveHostedRunOptions({
       osSessionId: "acme-session",
@@ -293,4 +308,30 @@ describe("workspace preset catalog resolution", () => {
       }),
     ).rejects.toThrow("Cannot resolve workspace model preset");
   });
+});
+
+// Guard the call-site wiring as well as the behavioral boundary above, without
+// starting a Sandbox, run host, or model turn.
+test("Sandbox hosted continuations mark captured preset instructions", async () => {
+  const source = await Bun.file(
+    new URL("./run-session.ts", import.meta.url),
+  ).text();
+  const start = source.indexOf(
+    "export async function maybeLaunchSandboxedRun(",
+  );
+  expect(start).toBeGreaterThanOrEqual(0);
+  const hostedStart = source.indexOf("const hosted = runAgentHosted({", start);
+  const hostedEnd = source.indexOf(
+    "const events = disposableAutomationResume",
+    hostedStart,
+  );
+  expect(hostedStart).toBeGreaterThan(start);
+  expect(hostedEnd).toBeGreaterThan(hostedStart);
+  const hosted = source.slice(hostedStart, hostedEnd);
+  expect(hosted).toContain("remoteWorkspace,");
+  expect(hosted).toContain("model: session.model,");
+  expect(hosted).toContain("await buildSessionNote(session, opts.user)");
+  expect(hosted).toContain(
+    "reposNoteHasPreset: !opts.isAutomationSession && !!session.presetNote,",
+  );
 });

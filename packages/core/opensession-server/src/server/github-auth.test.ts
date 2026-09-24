@@ -18,7 +18,6 @@ import {
   githubAuthEnv,
   githubCredentialForRun,
   githubRunOwnerLogin,
-  githubUserAuthProjection,
   githubUserRunEnv,
   projectedGithubRunEnv,
   projectedGithubRunLogin,
@@ -298,19 +297,12 @@ describe("token lookups + runner env", () => {
     expect(projectedGithubRunLogin()).toBeNull();
   });
 
-  test("a person's projection names the login of the credential the run holds", async () => {
+  test("a person's run owner is the login of the credential the run holds", async () => {
     seedToken();
     // Simple mode: the sole account is the acting identity for any human
-    // sender, so the projection names it and the guest lifts the guard the
-    // way a host run does (githubRunOwnerLogin below).
-    for (const user of ["Alice", "Some Randomer", null]) {
-      expect(githubUserAuthProjection(user)).toEqual({
-        GH_TOKEN: "gho_test123",
-        GITHUB_TOKEN: "gho_test123",
-        login: "alice",
-      });
+    // sender.
+    for (const user of ["Alice", "Some Randomer", null])
       expect(githubRunOwnerLogin(user)).toBe("alice");
-    }
     // Two connected accounts in simple mode: nobody, so no token and no login.
     writeFileSync(
       process.env.OPENSESSION_GITHUB_AUTH_STORE!,
@@ -321,16 +313,10 @@ describe("token lookups + runner env", () => {
         },
       }),
     );
-    expect(githubUserAuthProjection("Alice")).toEqual({});
     expect(githubRunOwnerLogin("Alice")).toBeNull();
     seedToken();
     await enableFeature();
-    expect(githubUserAuthProjection("Alice")).toEqual({
-      GH_TOKEN: "gho_test123",
-      GITHUB_TOKEN: "gho_test123",
-      login: "alice",
-    });
-    expect(githubUserAuthProjection("Bob")).toEqual({});
+    expect(githubRunOwnerLogin("Alice")).toBe("alice");
     // Operator mode: the login follows the mapped person, nobody else.
     expect(githubRunOwnerLogin("Bob")).toBeNull();
     expect(githubRunOwnerLogin("Some Randomer")).toBeNull();

@@ -184,7 +184,6 @@ describe("your own profile", () => {
     for (const patch of [
       { github: "someoneelse" },
       { slackId: "U0DEADBEEF" },
-      { admin: true },
     ]) {
       const res = await handleProfileRoutes(
         context("/api/profile", "PUT", { authUser: ADA, body: patch }),

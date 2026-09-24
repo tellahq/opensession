@@ -81,7 +81,7 @@ describe("instance onboarding flag", () => {
     expect(JSON.parse(readFileSync(config, "utf8"))).toMatchObject({
       onboardingCompleted: true,
       identity: {
-        team: [{ name: "Admin", github: "admin", admin: true }],
+        team: [{ name: "Admin", github: "admin" }],
       },
     });
 

@@ -16,7 +16,6 @@ import {
 import type { PublicIngressSettings } from "./api/ingress";
 
 const settings = {
-  canManage: true,
   publicBaseUrl: "https://old.example.test",
   exposure: "custom",
   health: "ready",

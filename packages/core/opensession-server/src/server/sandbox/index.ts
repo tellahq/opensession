@@ -26,8 +26,6 @@ export type {
   ExecOpts,
   ExecResult,
   PortMap,
-  RunHandle,
-  RunHandleCallbacks,
 } from "./provider";
 export {
   sandboxConfig,

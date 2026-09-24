@@ -7,16 +7,20 @@
  * ID token, and exposes ordinary OIDC discovery + JWKS documents so a relying
  * service can verify it without an OpenSession-specific SDK.
  *
- * The lease is injected only into OpenSession-managed sandbox commands. It is
- * deliberately memory-only: an OpenSession restart, sandbox destruction, or
- * lease expiry revokes it. Repositories may retain a minted ID token, so keep
- * token TTLs short and make trust policies restrict immutable claims.
+ * The lease is injected only into OpenSession-managed sandbox commands.
+ * Sandbox destruction or lease expiry revokes it. Leases survive an
+ * OpenSession restart: a long-running Portal re-mints its cloud credentials
+ * every few minutes, and a deploy must not cut them off. The server keeps
+ * only a SHA-256 of each lease, beside the signing key in the state
+ * directory. Repositories may retain a minted ID token, so keep token TTLs
+ * short and make trust policies restrict immutable claims.
  */
 
-import { randomUUID, timingSafeEqual } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { existsSync, readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { stateDir } from "./paths";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomic, writeJsonAtomicAsync } from "./shared/atomic-write";
 import { remoteSandboxCallbackBaseUrl } from "./sandbox/config";
 
 const IDENTITY_PATH = "/workload-identity";
@@ -45,9 +49,22 @@ export interface WorkloadIdentityContext {
 }
 
 interface Lease extends WorkloadIdentityContext {
+  createdAt: number;
   expiresAt: number;
   audiences: string[];
 }
+
+/** On disk: leases by the SHA-256 of their token, and each revoked
+ * sandbox's revocation time (leases created before it stay dead). */
+interface StoredLeases {
+  leases: Record<string, Lease>;
+  revoked: Record<string, number>;
+}
+
+/** A lookup that misses re-reads the store at most this often, so a lease
+ * another process (the other side of a gateway handoff) just created is
+ * found, while a stream of bogus tokens cannot turn into a stream of reads. */
+const RELOAD_INTERVAL_MS = 2_000;
 
 interface AudienceGrant {
   repoId?: string;
@@ -64,11 +81,120 @@ interface StoredKey {
 
 const g = globalThis as typeof globalThis & {
   __opensessionWorkloadIdentityLeases?: Map<string, Lease>;
+  __opensessionWorkloadIdentityRevoked?: Map<string, number>;
+  __opensessionWorkloadIdentityStore?: LeaseStoreState;
   __opensessionWorkloadIdentityKey?: Promise<StoredKey>;
 };
 
+interface LeaseStoreState {
+  lastRead: number;
+  reading?: Promise<void>;
+  writing?: Promise<void>;
+  dirty: boolean;
+}
+
 function leases(): Map<string, Lease> {
   return (g.__opensessionWorkloadIdentityLeases ??= new Map());
+}
+
+function revoked(): Map<string, number> {
+  return (g.__opensessionWorkloadIdentityRevoked ??= new Map());
+}
+
+function store(): LeaseStoreState {
+  return (g.__opensessionWorkloadIdentityStore ??= {
+    lastRead: 0,
+    dirty: false,
+  });
+}
+
+function leasesPath(): string {
+  return stateDir("workload-identity-leases.json");
+}
+
+function leaseKey(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function leaseRevoked(lease: Lease): boolean {
+  const at = revoked().get(lease.sandboxId);
+  return at !== undefined && lease.createdAt <= at;
+}
+
+function pruneLeases(now = Date.now()): void {
+  for (const [key, lease] of leases())
+    if (lease.expiresAt <= now || leaseRevoked(lease)) leases().delete(key);
+  for (const [sandboxId, at] of revoked())
+    if (at + LEASE_TTL_MS <= now) revoked().delete(sandboxId);
+  while (leases().size > MAX_LEASES) {
+    const oldest = leases().keys().next().value;
+    if (!oldest) break;
+    leases().delete(oldest);
+  }
+}
+
+/** Fold the stored leases into memory. Memory wins for a key it already
+ * holds; revocations from either side apply to both. */
+async function mergeStoredLeases(): Promise<void> {
+  let stored: StoredLeases | null = null;
+  try {
+    stored = JSON.parse(await readFile(leasesPath(), "utf8")) as StoredLeases;
+  } catch {
+    return;
+  }
+  for (const [sandboxId, at] of Object.entries(stored?.revoked ?? {}))
+    if (typeof at === "number" && at > (revoked().get(sandboxId) ?? 0))
+      revoked().set(sandboxId, at);
+  for (const [key, lease] of Object.entries(stored?.leases ?? {}))
+    if (!leases().has(key) && lease && typeof lease.expiresAt === "number")
+      leases().set(key, lease);
+  pruneLeases();
+}
+
+function reloadLeases(): Promise<void> {
+  const state = store();
+  if (state.reading) return state.reading;
+  if (Date.now() - state.lastRead < RELOAD_INTERVAL_MS)
+    return Promise.resolve();
+  state.lastRead = Date.now();
+  state.reading = mergeStoredLeases().finally(() => {
+    state.reading = undefined;
+  });
+  return state.reading;
+}
+
+/** Write memory back, merged with whatever another process stored since.
+ * One write at a time; changes made meanwhile trigger one more. */
+function persistLeases(): void {
+  const state = store();
+  state.dirty = true;
+  if (state.writing) return;
+  const write = async (): Promise<void> => {
+    while (state.dirty) {
+      state.dirty = false;
+      await mergeStoredLeases();
+      const body: StoredLeases = {
+        leases: Object.fromEntries(leases()),
+        revoked: Object.fromEntries(revoked()),
+      };
+      await writeJsonAtomicAsync(leasesPath(), body, false, 0o600);
+    }
+  };
+  state.writing = write()
+    .catch((error) =>
+      console.warn(
+        "[workload-identity] could not store sandbox leases:",
+        error instanceof Error ? error.message : String(error),
+      ),
+    )
+    .finally(() => {
+      state.writing = undefined;
+    });
+}
+
+/** Resolve once pending lease writes have landed (tests and shutdown). */
+export async function flushWorkloadIdentityLeases(): Promise<void> {
+  while (store().writing) await store().writing;
 }
 
 function base64Url(bytes: ArrayBuffer | Uint8Array | string): string {
@@ -140,12 +266,6 @@ async function loadKey(): Promise<StoredKey> {
 
 async function signingKey(): Promise<StoredKey> {
   return (g.__opensessionWorkloadIdentityKey ??= loadKey());
-}
-
-function constantTimeEqual(left: string, right: string): boolean {
-  const a = Buffer.from(left);
-  const b = Buffer.from(right);
-  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 function validAudience(value: unknown): value is string {
@@ -270,16 +390,14 @@ export function createWorkloadIdentityEnv(
   if (audiences.length === 0) return {};
   const token = randomUUID();
   const now = Date.now();
-  const table = leases();
-  for (const [key, lease] of table) {
-    if (lease.expiresAt <= now) table.delete(key);
-  }
-  while (table.size >= MAX_LEASES) {
-    const oldest = table.keys().next().value;
-    if (!oldest) break;
-    table.delete(oldest);
-  }
-  table.set(token, { ...context, audiences, expiresAt: now + LEASE_TTL_MS });
+  leases().set(leaseKey(token), {
+    ...context,
+    audiences,
+    createdAt: now,
+    expiresAt: now + LEASE_TTL_MS,
+  });
+  pruneLeases(now);
+  persistLeases();
   return {
     OPENSESSION_WORKLOAD_IDENTITY_URL: `${workloadIdentityIssuer()}/token`,
     OPENSESSION_WORKLOAD_IDENTITY_TOKEN: token,
@@ -287,9 +405,9 @@ export function createWorkloadIdentityEnv(
 }
 
 export function revokeWorkloadIdentityForSandbox(sandboxId: string): void {
-  for (const [token, lease] of leases()) {
-    if (lease.sandboxId === sandboxId) leases().delete(token);
-  }
+  revoked().set(sandboxId, Date.now());
+  pruneLeases();
+  persistLeases();
 }
 
 async function discovery(): Promise<Response> {
@@ -325,14 +443,12 @@ async function token(req: Request): Promise<Response> {
   const authorization = req.headers.get("authorization") || "";
   const bearer = authorization.match(/^Bearer (.+)$/i)?.[1];
   if (!bearer) return new Response("Unauthorized", { status: 401 });
-  let lease: Lease | undefined;
-  for (const [candidate, value] of leases()) {
-    if (constantTimeEqual(candidate, bearer)) {
-      lease = value;
-      break;
-    }
-  }
-  if (!lease || lease.expiresAt <= Date.now())
+  // Keyed by a hash of the bearer, so the lookup leaks nothing about
+  // stored tokens through timing.
+  const key = leaseKey(bearer);
+  if (!leases().has(key)) await reloadLeases();
+  const lease = leases().get(key);
+  if (!lease || lease.expiresAt <= Date.now() || leaseRevoked(lease))
     return new Response("Unauthorized", { status: 401 });
   let body: { audience?: unknown; ttl_seconds?: unknown };
   try {
