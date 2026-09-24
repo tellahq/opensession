@@ -26,7 +26,6 @@ import {
   type MemoryScope,
 } from "../session-memory";
 import { REPOS } from "../worktree";
-import { requireWorkspaceAdmin } from "../workspace-auth";
 import { configuredIdentity } from "../config";
 import { webAuthRequired } from "../web-auth";
 
@@ -35,11 +34,6 @@ function canAccessMemoryScope(ctx: RouteContext, scopeKey: string): boolean {
   const team = configuredIdentity().team;
   const login = ctx.authUser?.login?.trim().toLowerCase();
   if (!login) return false;
-  const explicitAdmin = team.some(
-    (member) =>
-      member.admin === true && member.github?.trim().toLowerCase() === login,
-  );
-  if (explicitAdmin) return true;
   if (scopeKey === "workspace" || scopeKey.startsWith("repo-")) return true;
   if (scopeKey.startsWith("user-")) {
     const slackId = scopeKey.slice("user-".length);
@@ -49,8 +43,8 @@ function canAccessMemoryScope(ctx: RouteContext, scopeKey: string): boolean {
         member.slackId === slackId,
     );
   }
-  // Private Slack channel membership is not present in the identity roster.
-  // Only an explicit workspace administrator may inspect those scopes here.
+  // Private Slack channel membership is not present in the identity roster,
+  // so those scopes stay out of the web view.
   return false;
 }
 
@@ -130,8 +124,6 @@ export async function handleMemoryRoutes(
 ): Promise<Response | undefined> {
   const { req, url, path } = ctx;
   if (!path.startsWith("/api/memory")) return undefined;
-  const denied = requireWorkspaceAdmin(ctx);
-  if (denied) return denied;
   if (memoryRolloutMode() !== "v2") return handleLegacyMemoryRoutes(ctx);
 
   try {

@@ -21,7 +21,14 @@ import { WalkthroughCard } from "./WalkthroughCard";
 import { PrOverviewPage } from "./pr/PrOverviewPage";
 import { PhoneReviewHeader } from "./pr/PhoneReviewHeader";
 import { PrFilesPage } from "./pr/PrFilesPage";
-import { FinishReviewDialog, type ReviewEvent } from "./pr/FinishReviewDialog";
+import { FinishReviewDialog } from "./pr/FinishReviewDialog";
+import {
+  allowedReviewEvent,
+  canGiveReviewVerdict,
+  type ReviewEvent,
+} from "../lib/review-verdicts";
+import { usePeople } from "../lib/people";
+import { useConfirm } from "../ui/confirm";
 import { DiffPanel } from "./DiffPanel";
 import {
   API_BASE,
@@ -45,7 +52,7 @@ import { Button } from "../ui/button";
 import { toast } from "../ui/toast";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import type { CommentTarget, PendingComment } from "../lib/commentable-diff";
-import { getCurrentUser } from "./UserPicker";
+import { getCurrentUser, useAuthStatus, useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import { renderPrCommentMarkdown } from "../lib/markdown";
 import { useMarkdownRepo } from "./MarkdownBody";
@@ -306,7 +313,8 @@ export function PrPanel({
   const markdownRepo = previewTarget?.repo || active?.repo || contextRepo;
   const [pending, setPending] = useState<PendingComment[]>([]);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [reviewEvent, setReviewEvent] = useState<ReviewEvent>("APPROVE");
+  const [selectedReviewEvent, setReviewEvent] =
+    useState<ReviewEvent>("APPROVE");
   // Only the dialog's opening value and what it hands back on close. The live
   // field lives in FinishReviewDialog: a keystroke here would re-render every
   // mounted file of the diff behind it.
@@ -484,6 +492,21 @@ export function PrPanel({
       setPrViewed(null);
     },
   });
+  const auth = useAuthStatus();
+  const currentUser = useCurrentUser();
+  const people = usePeople();
+  const viewerLogin =
+    auth?.login ??
+    people.find(
+      (person) => person.name.toLowerCase() === currentUser.toLowerCase(),
+    )?.github;
+  const canGiveVerdict = canGiveReviewVerdict(
+    providerFromUrl(pr?.url).key,
+    pr?.author,
+    viewerLogin,
+  );
+  const reviewEvent = allowedReviewEvent(selectedReviewEvent, canGiveVerdict);
+  const [confirmMerge, mergeConfirmation] = useConfirm();
   const mergeKey = deferredMergeKey(pr?.url);
   const mergePhase = useDeferredMergePhase(mergeKey);
   const merging = mergePhase === "running";
@@ -592,28 +615,42 @@ export function PrPanel({
       cancelDeferredMergeByKey(mergeKey);
       return;
     }
-    if (mergePhase !== "idle") return;
-    setMergeError(null);
+    if (mergePhase !== "idle" || !pr || !canMergeAfterReview) return;
     const actionTargetKey = loadTargetKey;
-    scheduleDeferredMerge(mergeKey, async () => {
-      try {
-        if (previewTarget) {
-          await mergePrPreviewApi(
-            previewTarget.repo,
-            previewTarget.branch,
-            "squash",
-          );
-        } else {
-          await mergePrApi(sessionId, "squash", active?.repo, active?.branch);
-        }
-        if (actionTargetKey === activeLoadTargetRef.current) await load(true);
-      } catch (error) {
-        if (actionTargetKey === activeLoadTargetRef.current) {
-          const message = errorMessage(error, "Merge failed");
-          setMergeError(message);
-          toast(message);
-        }
-      }
+    confirmMerge({
+      title: `Merge #${pr.number}?`,
+      description: `Squash “${pr.title}” into ${pr.baseRefName}.${pending.length ? " Pending review comments will not be submitted." : ""}`,
+      confirmLabel: "Squash and merge",
+      onConfirm: () => {
+        if (actionTargetKey !== activeLoadTargetRef.current) return;
+        setMergeError(null);
+        scheduleDeferredMerge(mergeKey, async () => {
+          try {
+            if (previewTarget) {
+              await mergePrPreviewApi(
+                previewTarget.repo,
+                previewTarget.branch,
+                "squash",
+              );
+            } else {
+              await mergePrApi(
+                sessionId,
+                "squash",
+                active?.repo,
+                active?.branch,
+              );
+            }
+            if (actionTargetKey === activeLoadTargetRef.current)
+              await load(true);
+          } catch (error) {
+            if (actionTargetKey === activeLoadTargetRef.current) {
+              const message = errorMessage(error, "Merge failed");
+              setMergeError(message);
+              toast(message);
+            }
+          }
+        });
+      },
     });
   }
 
@@ -1237,6 +1274,24 @@ export function PrPanel({
     pr.mergeable !== "CONFLICTING" &&
     checkSummary.failed === 0 &&
     checkSummary.pending === 0;
+  const phoneMergeAction =
+    pr.state === "OPEN" ? (
+      <Button
+        variant="soft"
+        className="min-h-11 shrink-0"
+        disabled={merging || (!mergeScheduled && !canMergeAfterReview)}
+        onClick={handleMerge}
+        title={
+          pr.isDraft
+            ? "Mark ready before merging"
+            : !canMergeAfterReview
+              ? "Resolve conflicts and wait for checks before merging"
+              : "Squash and merge"
+        }
+      >
+        {merging ? "Merging…" : mergeScheduled ? "Undo" : "Merge"}
+      </Button>
+    ) : null;
   const reviewSubmitLabel =
     reviewEvent === "APPROVE"
       ? mergeAfterReview && canMergeAfterReview
@@ -1712,6 +1767,7 @@ export function PrPanel({
           reviewedFiles={reviewedFiles}
           pendingCount={pending.length}
           onFinishReview={() => setReviewOpen(true)}
+          mergeAction={phoneMergeAction}
           reviewProvider={
             canCommentOnReview(pr.state, caps.reviewComments)
               ? provider.name
@@ -1752,7 +1808,11 @@ export function PrPanel({
       )}
 
       {phoneLayout && page === "overview" && (
-        <div className="flex shrink-0 items-center gap-2 bg-surface px-3 pt-2 pb-[max(8px,env(safe-area-inset-bottom))]">
+        <div
+          aria-label="Review actions"
+          className="flex shrink-0 items-center gap-2 bg-surface px-3 pt-2 pb-[max(8px,env(safe-area-inset-bottom))]"
+        >
+          {phoneMergeAction}
           <Button
             variant="soft"
             className="min-h-11 flex-1"
@@ -1783,11 +1843,13 @@ export function PrPanel({
         </p>
       )}
 
+      {mergeConfirmation}
       {reviewOpen && (
         <FinishReviewDialog
           prNumber={pr.number}
           pendingCount={pending.length}
           event={reviewEvent}
+          canGiveVerdict={canGiveVerdict}
           onEventChange={setReviewEvent}
           defaultSummary={summaryDraft}
           canMerge={canMergeAfterReview}

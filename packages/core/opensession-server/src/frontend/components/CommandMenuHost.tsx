@@ -1,6 +1,11 @@
-import React, { useEffect, useImperativeHandle, useState } from "react";
+import React, { useEffect, useImperativeHandle, useRef, useState } from "react";
 import { displayName } from "../brand-logos";
-import { fetchToolAccounts, knownToolAccounts, type OpenPr } from "../lib/api";
+import {
+  fetchSessionsSnapshot,
+  fetchToolAccounts,
+  knownToolAccounts,
+  type OpenPr,
+} from "../lib/api";
 import type { UnifiedSession } from "../lib/types";
 import { IconTile } from "./BrandTile";
 import { SessionSearch, type CommandPaletteAction } from "./SessionSearch";
@@ -20,6 +25,19 @@ interface Props {
   onOpenWithMcp: (server: string) => void;
 }
 
+/**
+ * The app's own rows first, since the live poll keeps them freshest, then
+ * every other live session the unscoped list knows about.
+ */
+export function mergeSessionPools(
+  own: UnifiedSession[],
+  everyone: UnifiedSession[],
+): UnifiedSession[] {
+  if (everyone.length === 0) return own;
+  const seen = new Set(own.map((session) => session.id));
+  return [...own, ...everyone.filter((session) => !seen.has(session.id))];
+}
+
 export const CommandMenuHost = React.forwardRef<CommandMenuHandle, Props>(
   function CommandMenuHost(
     { sessions, actions, onSelectSession, onSelectPr, onOpenWithMcp },
@@ -29,6 +47,13 @@ export const CommandMenuHost = React.forwardRef<CommandMenuHandle, Props>(
     const [mcpServers, setMcpServers] = useState<string[]>(() =>
       (knownToolAccounts() || []).map((server) => server.name),
     );
+
+    // The app's list is the sidebar's scope (by default, only your own
+    // sessions), but the palette searches every live workspace and session.
+    // The unscoped live list is a server-cached snapshot; revalidate it by
+    // ETag each time the palette opens.
+    const [everyone, setEveryone] = useState<UnifiedSession[]>([]);
+    const everyoneEtag = useRef<string | null>(null);
 
     useImperativeHandle(ref, () => ({
       open: () => setOpen(true),
@@ -50,6 +75,23 @@ export const CommandMenuHost = React.forwardRef<CommandMenuHandle, Props>(
       };
     }, [open]);
 
+    useEffect(() => {
+      if (!open) return;
+      const ctrl = new AbortController();
+      fetchSessionsSnapshot({
+        etag: everyoneEtag.current,
+        signal: ctrl.signal,
+        query: "?archived=exclude",
+      })
+        .then((snapshot) => {
+          if (snapshot.notModified || snapshot.text === null) return;
+          everyoneEtag.current = snapshot.etag;
+          setEveryone(JSON.parse(snapshot.text));
+        })
+        .catch(() => {});
+      return () => ctrl.abort();
+    }, [open]);
+
     if (!open) return null;
     const mcpActions: CommandPaletteAction[] = mcpServers
       .slice()
@@ -69,7 +111,7 @@ export const CommandMenuHost = React.forwardRef<CommandMenuHandle, Props>(
 
     return (
       <SessionSearch
-        sessions={sessions}
+        sessions={mergeSessionPools(sessions, everyone)}
         actions={[...actions, ...mcpActions]}
         onSelectSession={onSelectSession}
         onSelectPr={onSelectPr}

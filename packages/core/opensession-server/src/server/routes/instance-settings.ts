@@ -32,7 +32,6 @@ import {
   removeOrganizationIcon,
   saveOrganizationIcon,
 } from "../organization-settings";
-import { requireWorkspaceAdmin } from "../workspace-auth";
 import { testS3AssetStorage } from "../session-assets";
 import { githubCredentialForLogin } from "../github-auth";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout";
@@ -299,8 +298,6 @@ export async function handleInstanceSettingsRoutes(
   }
 
   if (path === "/api/settings/worktrees" && req.method === "PUT") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const body = (await req.json().catch(() => null)) as Record<
       string,
       unknown
@@ -327,8 +324,6 @@ export async function handleInstanceSettingsRoutes(
     path === "/api/settings/general/github-organization" &&
     req.method === "GET"
   ) {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const login = new URL(req.url).searchParams.get("login")?.trim() || "";
     if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(login)) {
       return Response.json(
@@ -340,8 +335,6 @@ export async function handleInstanceSettingsRoutes(
   }
 
   if (path === "/api/settings/general" && req.method === "PUT") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const body = (await req.json().catch(() => null)) as Record<
       string,
       unknown
@@ -366,8 +359,6 @@ export async function handleInstanceSettingsRoutes(
   }
 
   if (path === "/api/settings/general/icon" && req.method === "POST") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     try {
       await saveOrganizationIcon(await organizationIconBody(req));
       return Response.json(await generalDto(publicPrefix));
@@ -391,21 +382,15 @@ export async function handleInstanceSettingsRoutes(
   }
 
   if (path === "/api/settings/general/icon" && req.method === "DELETE") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     await removeOrganizationIcon();
     return Response.json(await generalDto(publicPrefix));
   }
 
   if (path === "/api/settings/asset-storage" && req.method === "GET") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     return Response.json(assetStorageDto());
   }
 
   if (path === "/api/settings/asset-storage/test" && req.method === "POST") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const body = (await req.json().catch(() => null)) as Record<
       string,
       unknown
@@ -425,8 +410,6 @@ export async function handleInstanceSettingsRoutes(
   }
 
   if (path === "/api/settings/asset-storage" && req.method === "PUT") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const body = (await req.json().catch(() => null)) as Record<
       string,
       unknown
@@ -451,8 +434,6 @@ export async function handleInstanceSettingsRoutes(
   }
 
   if (path === "/api/settings/identity" && req.method === "PUT") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const body = (await req.json().catch(() => null)) as Record<
       string,
       unknown

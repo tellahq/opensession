@@ -145,8 +145,6 @@ function writeConfig(overrides: Record<string, unknown>): void {
     cfgPath(),
     JSON.stringify({
       provider: "daytona",
-      runnerSha: "sha-A",
-      runnerRepoUrl: "https://github.com/tellahq/opensession.git",
       prewarm: { ttlMinutes: 10, maxLive: 2 },
       ...runtimeOverrides,
     }),
@@ -416,15 +414,44 @@ describe("claimPrewarm (adoption)", () => {
   );
 
   test.skipIf(killSwitch)(
-    "stale runner pin refuses the claim and destroys",
+    "a finished image refresh is adoptable and does not block the next one",
+    async () => {
+      const fake = makeFakeAdapter();
+      await requestPrewarm("daytona", "tella-fusion", "refresh", {
+        refreshTemplate: true,
+      });
+      await until(() => readyEntry()?.state === "ready");
+      expect(readyEntry()?.refreshTemplate).toBeUndefined();
+      // An entry persisted by an older release still carries the flag.
+      readyEntry()!.refreshTemplate = true;
+      expect(
+        (
+          await requestPrewarm("daytona", "tella-fusion", "refresh", {
+            refreshTemplate: true,
+          })
+        ).state,
+      ).toBe("bootstrapping");
+      await until(() => readyEntry()?.state === "ready");
+      expect(fake.created).toHaveLength(2);
+      expect(claimPrewarm("daytona", "tella-fusion", "bks-s")?.sandboxId).toBe(
+        fake.created[1],
+      );
+    },
+  );
+
+  test.skipIf(killSwitch)(
+    "a deploy leaves a ready prewarm adoptable",
     async () => {
       const fake = makeFakeAdapter();
       await requestPrewarm("daytona", "tella-fusion");
       await until(() => readyEntry()?.state === "ready");
-      writeConfig({ runnerSha: "sha-B" }); // runner payload pin moved
-      expect(claimPrewarm("daytona", "tella-fusion", "bks-s")).toBeNull();
-      await until(() => fake.destroyed.includes(fake.created[0]));
-      expect(_prewarmPoolForTest().size).toBe(0);
+      // The retired runner pin used to invalidate every prewarm per deploy;
+      // a Sandbox now carries only the base runtime, which names no commit.
+      writeConfig({ runnerSha: "sha-B" });
+      expect(claimPrewarm("daytona", "tella-fusion", "bks-s")?.sandboxId).toBe(
+        fake.created[0],
+      );
+      expect(fake.destroyed).not.toContain(fake.created[0]);
     },
   );
 

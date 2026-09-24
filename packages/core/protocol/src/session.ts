@@ -690,6 +690,28 @@ export type ProtocolServerMessage =
       /** Message timestamp, so the sender can undo the post. */
       ts?: string;
     }
+  | {
+      /** The agent asked the person for files from their own computer.
+       *  `null` retires the card. Answered over HTTP (/api/local-files).
+       *  Not `request`: the native app decodes that key as a Slack draft. */
+      type: "local_files_request";
+      sessionId: string;
+      fileRequest: {
+        id: string;
+        purpose: string;
+        hint?: string;
+        multiple: boolean;
+        requestedAt: number;
+        expiresAt: number;
+      } | null;
+    }
+  | {
+      type: "local_files_request_resolved";
+      sessionId: string;
+      requestId: string;
+      status: "provided" | "declined" | "expired";
+      files?: { name: string; size: number }[];
+    }
   | { type: "command_ack_result"; sessionId: string; requestId: string }
   | {
       type: "command_result";

@@ -3,7 +3,6 @@ import { request } from "./request";
 export type IngressExposure = "cloudflare" | "custom";
 
 export interface PublicIngressSettings {
-  canManage: boolean;
   publicBaseUrl: string;
   exposure: IngressExposure | null;
   health:

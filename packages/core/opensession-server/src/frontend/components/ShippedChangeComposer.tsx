@@ -153,13 +153,18 @@ export function ShippedChangeComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sessionRef = useRef(sessionId);
   const draftDirtyRef = useRef(false);
+  // A channel the person picked stays picked when a suggested one arrives.
+  const channelPickedRef = useRef(false);
   const sentKey = sent
     ? `${sent.channelName}\0${sent.permalink || ""}\0${sent.receiptKey || ""}`
     : "";
 
   useEffect(() => {
     const sessionChanged = sessionRef.current !== sessionId;
-    if (sessionChanged) draftDirtyRef.current = false;
+    if (sessionChanged) {
+      draftDirtyRef.current = false;
+      channelPickedRef.current = false;
+    }
     // A new default (the written draft arriving after the title fallback, a
     // walkthrough landing) replaces the text only while it is still ours;
     // once the person has typed, their words stay.
@@ -206,8 +211,7 @@ export function ShippedChangeComposer({
             )!.id
           : result.channels[0]?.id || "";
         setChannel((current) =>
-          draftId &&
-          draftDirtyRef.current &&
+          ((draftId && draftDirtyRef.current) || channelPickedRef.current) &&
           result.channels.some((candidate) => candidate.id === current)
             ? current
             : preferredChannel,
@@ -486,6 +490,7 @@ export function ShippedChangeComposer({
             emptyText="No channels match"
             onChange={(nextChannel) => {
               draftDirtyRef.current = true;
+              channelPickedRef.current = true;
               setChannel(nextChannel);
             }}
             disabled={status !== "idle" || channels.length === 0}

@@ -444,7 +444,7 @@ function PrivateAppSetup({
         <SettingsFormActions className="absolute inset-x-0 bottom-0 z-10 m-0 border-t border-line bg-raised px-5 py-4 phone:flex-col-reverse phone:bg-surface phone:px-4">
           <Button
             variant="soft"
-            disabled={busy || !savedDomain || !settings.canManage}
+            disabled={busy || !savedDomain}
             className="phone:min-h-11 phone:w-full phone:justify-center"
             onClick={onVerify}
           >
@@ -457,8 +457,7 @@ function PrivateAppSetup({
               managedInputMissing ||
               !dnsRecord ||
               !settings.custom.caddyInstalled ||
-              !settings.app.domain.legoInstalled ||
-              !settings.canManage
+              !settings.app.domain.legoInstalled
             }
             className="phone:min-h-11 phone:w-full phone:justify-center"
             onClick={onSetup}
@@ -543,8 +542,7 @@ function PrivateAppSetup({
                   !dirty ||
                   !domain.trim() ||
                   !dnsRecord ||
-                  !settings.custom.caddyInstalled ||
-                  !settings.canManage
+                  !settings.custom.caddyInstalled
                 }
                 className="phone:min-h-11 phone:w-full phone:justify-center"
                 onClick={onSaveManual}
@@ -997,14 +995,14 @@ export function IngressPanel({
                           >
                             <SegmentedOption
                               value="custom"
-                              disabled={!!busy || !settings.canManage}
+                              disabled={!!busy}
                               className="flex flex-1 justify-center"
                             >
                               <IconServer size={14} /> Caddy
                             </SegmentedOption>
                             <SegmentedOption
                               value="cloudflare"
-                              disabled={!!busy || !settings.canManage}
+                              disabled={!!busy}
                               className="flex flex-1 justify-center"
                             >
                               <IconGlobe size={14} /> Cloudflare
@@ -1331,7 +1329,6 @@ export function IngressPanel({
                               variant="soft"
                               disabled={
                                 !!busy ||
-                                !settings.canManage ||
                                 settings.exposure !== method ||
                                 !settings.publicBaseUrl
                               }
@@ -1352,12 +1349,7 @@ export function IngressPanel({
                             </Button>
                             <Button
                               variant="primary"
-                              disabled={
-                                !!busy ||
-                                !settings.canManage ||
-                                !!missingTool ||
-                                invalidInput
-                              }
+                              disabled={!!busy || !!missingTool || invalidInput}
                               className="phone:min-h-11 phone:w-full phone:justify-center"
                               onClick={() => void applyMethod()}
                             >

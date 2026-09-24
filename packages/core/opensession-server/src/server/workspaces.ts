@@ -662,7 +662,8 @@ export async function findOrCreateWorkspaceByKey(
 
 /** Stamp all checkout identity fields together from the first code create's
  * resolved destination. The CAS protects against competing first creates.
- * Replay on the same destination is harmless; it never reassigns a real owner.
+ * Same-repo race losers can continue on their own checkout without replacing
+ * the first writer's ownership. Cross-repo destinations remain incompatible.
  */
 export function materializeWorkspaceWorktree(
   id: string,
@@ -670,7 +671,7 @@ export function materializeWorkspaceWorktree(
 ): Promise<Workspace | null> {
   return mutateWorkspace(id, (cur) => {
     if (cur.worktreeDir) {
-      if (cur.worktreeDir !== next.worktreeDir || cur.repo !== next.repo)
+      if (cur.repo !== next.repo)
         throw new Error("Workspace already owns another checkout");
       return cur;
     }

@@ -13,7 +13,6 @@ struct SettingsView: View {
     @State private var checkResult: String?
     @State private var copiedCode = false
     @State private var confirmingSignOut = false
-    @State private var isAdmin = true
 
     private var signIn: GitHubSignIn { .shared }
 
@@ -44,11 +43,6 @@ struct SettingsView: View {
             #endif
             .toolbar { toolbar }
             .onAppear { signIn.nudge() }
-            .task {
-                if let status = try? await OS1API.authStatus() {
-                    isAdmin = status.admin != false
-                }
-            }
             .onChange(of: config.activeId) { _, _ in
                 serverURL = config.baseURLString
                 userName = config.userName
@@ -121,10 +115,8 @@ struct SettingsView: View {
             // Identity is part of General. Members and Integrations stay as
             // dedicated destinations because they each carry their own lists.
             Section("Workspace") {
-                if isAdmin {
-                    settingsLink("General", icon: "building.2") {
-                        GeneralSettingsView()
-                    }
+                settingsLink("General", icon: "building.2") {
+                    GeneralSettingsView()
                 }
                 settingsLink("Setup", icon: "checklist") {
                     SetupSettingsView()

@@ -1268,8 +1268,7 @@ export interface AccountRequest {
  * with the owner gate on EVERY path. A personal subscription (`owner` set)
  * only ever serves runs whose user resolves to that person — including when
  * it is pinned, sticky, or named in `designatedIds` — and runs with no user
- * (automations) only ever see shared pool accounts. Fail closed, the same
- * rule accountsForRemoteUpload applies to off-box uploads.
+ * (automations) only ever see shared pool accounts. Fail closed.
  */
 export function resolveAccount(req: AccountRequest): AccountResolution {
   const { user, model, allowExtraUsage } = req;
@@ -1336,35 +1335,6 @@ export function resolveAccount(req: AccountRequest): AccountResolution {
   return {
     refusal: hasAccounts() ? { kind: "pool-dry" } : { kind: "none-configured" },
   };
-}
-
-/**
- * The subset of the account store a specific run is allowed to see off-box —
- * used by the remote-sandbox launcher (src/server/sandbox/adapters/bootstrap.ts)
- * to upload a SCOPED pool file instead of the whole store: other people's
- * personal subscriptions must never land on third-party compute.
- *
- * Rules (mirrors pickAccount's personal-first/pool-fallback eligibility):
- *  - `accountId` pinned and usable by this run (shared pool account, or the
- *    run user's own personal account) → ONLY that account.
- *  - otherwise → every shared pool (owner-less) account, plus the run user's
- *    own personal accounts. Another user's personal account is never included;
- *    runs with no user (automations — refused sandboxing anyway) get pool only.
- */
-export function accountsForRemoteUpload(
-  user?: string,
-  accountId?: string,
-): ClaudeAccount[] {
-  const allowed = (a: ClaudeAccount) =>
-    !a.owner || (!!user && userMatchesAny(user, [a.owner]));
-  const all = readStore();
-  if (accountId) {
-    const pinned = all.find((a) => a.id === accountId);
-    if (pinned && allowed(pinned)) return [pinned];
-    // Pin missing or not this run's to use — fall through to the scoped set
-    // (fail-closed: never widen to someone else's personal account).
-  }
-  return all.filter(allowed);
 }
 
 /** Test seam: inject a usage snapshot for an account (bun tests only). */

@@ -185,7 +185,53 @@ describe("first code workspace materialization", () => {
   });
 });
 
-test("competing first creates cannot split the repo from the checkout", async () => {
+test("same-repo first creates both continue while the first writer keeps ownership", async () => {
+  const ws = await createWorkspace({
+    name: "Race",
+    createdBy: "Acme",
+    repo: "acme-a",
+  });
+  const first = { repo: "acme-a", worktreeDir: treeA, branch: "feature" };
+  const second = {
+    repo: "acme-a",
+    worktreeDir: join(root, "acme-a-second"),
+    branch: "second",
+  };
+  const results = await Promise.all([
+    materializeWorkspaceWorktree(ws.id, first),
+    materializeWorkspaceWorktree(ws.id, second),
+  ]);
+  const owner = await getWorkspace(ws.id);
+  if (!owner?.worktreeDir) throw new Error("No first-create checkout owner");
+  expect([first.worktreeDir, second.worktreeDir]).toContain(owner.worktreeDir);
+  const winningDestination =
+    owner.worktreeDir === first.worktreeDir ? first : second;
+  expect(owner).toMatchObject(winningDestination);
+  expect(results[0]).toEqual(owner);
+  expect(results[1]).toEqual(owner);
+  expect(peekWorkspace(ws.id)).toEqual(owner);
+});
+
+test("a same-repo late materialization preserves the existing PR head and checkout", async () => {
+  const ws = await createWorkspace({
+    name: "PR",
+    createdBy: "Acme",
+    repo: "acme-a",
+    worktreeDir: treeA,
+    branch: "feature",
+    prNumber: 7,
+  });
+  expect(
+    await materializeWorkspaceWorktree(ws.id, {
+      repo: "acme-a",
+      worktreeDir: join(root, "acme-a-second"),
+      branch: "second",
+    }),
+  ).toEqual(ws);
+  expect(await getWorkspace(ws.id)).toEqual(ws);
+});
+
+test("cross-repo competing first creates cannot split the repo from the checkout", async () => {
   const ws = await createWorkspace({
     name: "Race",
     createdBy: "Acme",

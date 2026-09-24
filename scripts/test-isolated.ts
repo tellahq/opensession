@@ -18,6 +18,9 @@ export function testEnvironment(
     "CI",
     "NO_COLOR",
     "FORCE_COLOR",
+    // `OPENSESSION_SNAPSHOT=record bun run test:snapshots` re-records
+    // (docs/transcript-snapshots.md); without it the switch never arrives.
+    "OPENSESSION_SNAPSHOT",
   ])
     if (parent[key] !== undefined) env[key] = parent[key]!;
   return {

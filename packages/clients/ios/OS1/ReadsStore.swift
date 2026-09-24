@@ -154,9 +154,13 @@ final class ReadsStore {
         save()
     }
 
-    /// True when the session has activity past your read mark.
+    /// True when the session finished a turn with activity past your read
+    /// mark. A running session is never unread: your own prompt and streaming
+    /// output move `lastActivity`, but nothing is ready to read until the turn
+    /// completes.
     func isUnread(_ session: Session) -> Bool {
-        guard hasHydrated, session.id != openSessionId, let mark = reads[session.id] else { return false }
+        guard hasHydrated, session.isRunning != true, session.id != openSessionId,
+              let mark = reads[session.id] else { return false }
         guard let activity = session.lastActivity, activity != mark else { return false }
         guard let read = Session.parseISO(mark),
               let last = Session.parseISO(activity)
