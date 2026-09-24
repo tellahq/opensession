@@ -11,6 +11,7 @@
  *     "skipKeywords": ["[skip-review]"],                // in the PR title → no auto review
  *     "secretScan": true,                               // TruffleHog scan of the PR's added lines
  *     "mergeRisk": true,                                // diff-only merge-risk (recoverability) score
+ *     "monitoringPlan": { "instructions": "..." },      // "How we'll know" plan (true, or with repo guidance)
  *     "rules": [ { "name", "when", "then" } ],          // custom scoring rules (review-rules.ts)
  *     "groups": [ { "name", "rules": [ ... ] } ]         // rules reported together under one name
  *   }
@@ -40,6 +41,11 @@ export interface ReviewOptions {
   secretScan: boolean;
   /** Separate tool-less merge-risk score (merge-risk.ts) next to quality. */
   mergeRisk: boolean;
+  /** Tool-less "How we'll know" production monitoring plan (monitoring-plan.ts).
+   *  Off by default; `true` or `{ "instructions": "..." }` in the file. */
+  monitoringPlan: boolean;
+  /** Repo guidance for the plan: service names, dashboards, log sources. */
+  monitoringPlanInstructions: string;
   /** Custom rules (review-rules.ts): top-level `rules` first, then every
    *  group's rules in file order, each carrying its group name. */
   rules: ReviewRule[];
@@ -53,6 +59,8 @@ export const REVIEW_OPTION_DEFAULTS: ReviewOptions = {
   testOnBase: true,
   secretScan: true,
   mergeRisk: true,
+  monitoringPlan: false,
+  monitoringPlanInstructions: "",
   rules: [],
 };
 
@@ -117,6 +125,18 @@ export function normalizeReviewOptions(raw: any): ReviewOptions {
     secretScan:
       typeof raw.secretScan === "boolean" ? raw.secretScan : d.secretScan,
     mergeRisk: typeof raw.mergeRisk === "boolean" ? raw.mergeRisk : d.mergeRisk,
+    monitoringPlan:
+      typeof raw.monitoringPlan === "boolean"
+        ? raw.monitoringPlan
+        : raw.monitoringPlan && typeof raw.monitoringPlan === "object"
+          ? raw.monitoringPlan.enabled !== false
+          : d.monitoringPlan,
+    monitoringPlanInstructions:
+      raw.monitoringPlan &&
+      typeof raw.monitoringPlan === "object" &&
+      typeof raw.monitoringPlan.instructions === "string"
+        ? raw.monitoringPlan.instructions.trim()
+        : d.monitoringPlanInstructions,
     rules: collectReviewRules(raw).rules,
   };
 }

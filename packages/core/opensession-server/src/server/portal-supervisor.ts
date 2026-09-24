@@ -44,6 +44,7 @@ import {
   shellQuoteWord,
 } from "./sandbox/adapters/bootstrap";
 import { sandboxHttpsPortFor } from "./sandbox/preview-ports";
+import { warmSandboxPortal } from "./sandbox-portal-warm";
 import { cacheSandboxPortalRecords } from "./sandbox-portals";
 import { REPO_ROOT } from "../runner-host/protocol";
 import {
@@ -2008,6 +2009,14 @@ async function startSandboxPortalServiceInner(
     sandbox_id: input.sandbox.id,
     portal: awake.name,
     port: awake.port,
+  });
+  // Compile the first pages before someone opens them. Not awaited: the
+  // Portal is usable now, and a page opened meanwhile shares the compile.
+  void warmSandboxPortal({
+    sandbox: input.sandbox,
+    port: awake.port,
+    logPath: `${sandboxRuntimeDir}/${awake.name}-warm.log`,
+    defaultPath: awake.defaultPath,
   });
   // The Sandbox preview URL is derived per request from the published port,
   // so the record stays url-free the way its callers persist it.
