@@ -37,6 +37,12 @@
  *    reaped hourly for "tip in origin/main" because it had not committed yet,
  *    so it kept losing node_modules between turns). The /proc check does not
  *    cover this: a session sitting between turns holds no cwd.
+ *  - A worktree owned by an open (unarchived, non-automation) session is
+ *    never reaped on a done-signal, however long ago it was last active; only
+ *    the IDLE_DAYS horizon parks it. `git status` ignores gitignored files, so
+ *    neither the dirty check nor banking sees the dependency installs, build
+ *    output and screenshots such a session keeps there, and reviving the
+ *    checkout from its branch restores none of them (2026-09-24).
  *  - A checkout younger than ACTIVE_HOURS is spared on its own evidence, the
  *    `.git` pointer's age, whatever the session snapshot says. The snapshot
  *    is a list projection that can trail a freshly created session
@@ -144,6 +150,8 @@ export interface ReapResult {
   skipped: {
     inUse: number;
     sessionActive: number;
+    /** Done work whose checkout an open interactive session still owns. */
+    sessionOpen: number;
     dirty: number;
     unpushed: number;
     huskWithWork: number;
@@ -159,7 +167,16 @@ export type WorktreeActivitySession = Pick<
   | "automation"
   | "branch"
   | "repo"
+  | "archived"
 >;
+
+/** A session a person can still come back to: not archived and not an
+ *  automation run. Its checkout holds gitignored state (dependency installs,
+ *  build output, screenshots it showed in chat) that no branch or bank can
+ *  restore, so a done-signal on its branch is not enough to reap it. */
+function isOpenInteractiveSession(session: WorktreeActivitySession): boolean {
+  return !session.archived && !session.automation;
+}
 
 /**
  * Newest activity per session-owned worktree dir. `protected` marks a checkout
@@ -218,6 +235,28 @@ export function idleSessionWorktrees(
   return idle;
 }
 
+/** Worktrees owned by an open interactive session, however long ago it was
+ *  last active. A closed or merged PR says the branch is done, not that the
+ *  person is done with the session (2026-09-24: a session whose PR had been
+ *  closed was reaped 6h after its last turn; the next prompt revived the
+ *  checkout from the branch and every gitignored file, including the
+ *  screenshots its transcript displays, was gone). These checkouts are only
+ *  parked by the idle horizon. */
+export function openSessionWorktrees(
+  sessions: readonly WorktreeActivitySession[],
+): Set<string> {
+  const open = new Set<string>();
+  for (const session of sessions) {
+    if (!isOpenInteractiveSession(session)) continue;
+    for (const dir of [
+      session.worktreeDir,
+      ...(session.attachedRepos ?? []).map((repo) => repo.dir),
+    ])
+      if (dir) open.add(canonicalPath(dir));
+  }
+  return open;
+}
+
 /** Session-owned worktrees any owner has touched since `cutoffMs` — still in
  *  use by a live session, whatever git says about the branch. */
 export function activeSessionWorktrees(
@@ -240,6 +279,29 @@ export function activeSessionBranches(
   sessions: readonly WorktreeActivitySession[],
   cutoffMs: number,
 ): Map<string, Set<string>> {
+  return sessionBranches(sessions, (session) => {
+    const lastActivityMs = Date.parse(session.lastActivity);
+    return (
+      !Number.isFinite(lastActivityMs) ||
+      session.isRunning ||
+      lastActivityMs >= cutoffMs
+    );
+  });
+}
+
+/** Branches of open interactive sessions grouped by repo: the repo + branch
+ *  fallback for `openSessionWorktrees`, for the same stale-path reason as
+ *  `activeSessionBranches`. */
+export function openSessionBranches(
+  sessions: readonly WorktreeActivitySession[],
+): Map<string, Set<string>> {
+  return sessionBranches(sessions, isOpenInteractiveSession);
+}
+
+function sessionBranches(
+  sessions: readonly WorktreeActivitySession[],
+  holds: (session: WorktreeActivitySession) => boolean,
+): Map<string, Set<string>> {
   const active = new Map<string, Set<string>>();
   const add = (
     repoId: string | undefined,
@@ -252,13 +314,7 @@ export function activeSessionBranches(
   };
 
   for (const session of sessions) {
-    const lastActivityMs = Date.parse(session.lastActivity);
-    if (
-      Number.isFinite(lastActivityMs) &&
-      !session.isRunning &&
-      lastActivityMs < cutoffMs
-    )
-      continue;
+    if (!holds(session)) continue;
     const primaryRepo =
       session.repo ||
       (session.worktreeDir
@@ -532,6 +588,7 @@ export async function sweepWorktreeReaper(
     skipped: {
       inUse: 0,
       sessionActive: 0,
+      sessionOpen: 0,
       dirty: 0,
       unpushed: 0,
       huskWithWork: 0,
@@ -553,6 +610,8 @@ export async function sweepWorktreeReaper(
     opts.sessions ?? [],
     activeCutoffMs,
   );
+  const openWorktrees = openSessionWorktrees(opts.sessions ?? []);
+  const openBranches = openSessionBranches(opts.sessions ?? []);
 
   const inUse = worktreesWithProcesses(root);
   if (!inUse) {
@@ -684,6 +743,21 @@ export async function sweepWorktreeReaper(
       );
       continue;
     }
+    // A done-signal never reaps an open interactive session's checkout: the
+    // person may still return to it, and reviving from the branch restores
+    // none of its gitignored state. Only the idle horizon parks it.
+    if (
+      !idle &&
+      (openWorktrees.has(canonicalPath(dir)) ||
+        openBranches.get(repo.id)?.has(branch))
+    ) {
+      result.skipped.sessionOpen++;
+      if (debug)
+        console.log(
+          `[worktree-reaper] SKIP ${e.name} (${reason}): session not archived`,
+        );
+      continue;
+    }
 
     const dirty = (await $`git -C ${dir} status --porcelain`.quiet().nothrow())
       .text()
@@ -772,7 +846,7 @@ export async function sweepWorktreeReaper(
       `[worktree-reaper] sweep done: ${result.removed.length} removed ` +
         `(${result.parked.length} idle parked, ${result.banked.length} work-banked), ` +
         `${result.husksSwept.length} husk(s) swept ` +
-        `(skipped: ${result.skipped.inUse} in-use, ${result.skipped.sessionActive} session-active, ${result.skipped.dirty} dirty, ${result.skipped.unpushed} unpushed)`,
+        `(skipped: ${result.skipped.inUse} in-use, ${result.skipped.sessionActive} session-active, ${result.skipped.sessionOpen} session-open, ${result.skipped.dirty} dirty, ${result.skipped.unpushed} unpushed)`,
     );
   }
   return result;
