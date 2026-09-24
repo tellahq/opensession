@@ -193,7 +193,9 @@ EOF
     fi
     BOOT_ID="$(jq -r '.bootId // empty' <<<"$ready")"
     FRONTEND_VERSION="$(jq -r '.frontendVersion // empty' <<<"$ready")"
-    printf 'BOOT_ID=%s\nFRONTEND_VERSION=%s\n' "$BOOT_ID" "$FRONTEND_VERSION" >>"$RUN_FILE"
+    # Quoted: a production bundle version joins asset names with `|`, which
+    # `source "$RUN_FILE"` would otherwise run as a pipeline.
+    printf "BOOT_ID=%s\nFRONTEND_VERSION='%s'\n" "$BOOT_ID" "$FRONTEND_VERSION" >>"$RUN_FILE"
 
     cdp="$(bun scripts/cdp-browser.ts start --owner "verify-$RUN_ID" --state "$RUN_DIR/cdp-worker.json")"
     CDP_PORT="$(jq -r '.port' <<<"$cdp")"

@@ -83,6 +83,7 @@ import {
   workspaceDraftKey,
 } from "../lib/drafts";
 import {
+  landedDraftAttachments,
   attachToDraft,
   dropStagingAttachments,
   isStaging,
@@ -217,7 +218,7 @@ export function WorkspacePane({
   const [files, setFiles] = useState<FileAttachment[]>(
     () => loadDraft(draftKey).files,
   );
-  const uploads = useAttachmentUploads();
+  const uploads = useAttachmentUploads(draftKey);
   const staging = uploads.staging;
   const [fileDragActive, setFileDragActive] = useState(false);
   const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -278,6 +279,15 @@ export function WorkspacePane({
   useEffect(() => {
     saveDraft(draftKey, { text: prompt, images, files });
   }, [draftKey, prompt, images, files]);
+  // After the save above: an upload started before this pane remounted
+  // commits to the draft store, and this is where it appears.
+  const pendingUploads = staging.images + staging.files;
+  const adoptLandedUploads = useEffectEvent(() => {
+    const landed = landedDraftAttachments(draftKey, images, files);
+    if (landed.images !== images) setImages(landed.images);
+    if (landed.files !== files) setFiles(landed.files);
+  });
+  useEffect(() => adoptLandedUploads(), [draftKey, pendingUploads]);
   useEffect(() => {
     if (!parksServerDraft) return;
     clearTimeout(serverDraftTimer.current);
@@ -361,8 +371,8 @@ export function WorkspacePane({
 
   const addWorkspaceAttachments = useCallback(
     async (picked: FileList | File[]) => {
-      const results = await uploads.upload(picked, (file, signal) =>
-        attachToDraft(draftKey, [file], signal),
+      const results = await uploads.upload(picked, (file, signal, onProgress) =>
+        attachToDraft(draftKey, [file], signal, onProgress),
       );
       if (results.some((result) => result.applied)) {
         const stored = loadDraft(draftKey);

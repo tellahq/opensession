@@ -27,11 +27,7 @@ export function pickUnreadWorkspaceSession(
   const candidates = parents.length > 0 ? parents : live;
 
   return candidates
-    .filter(
-      (session) =>
-        session.id !== selectedId &&
-        isUnread(session.id, session.lastActivity, reads),
-    )
+    .filter((session) => session.id !== selectedId && isUnread(session, reads))
     .sort((a, b) =>
       (b.lastActivity || "").localeCompare(a.lastActivity || ""),
     )[0];

@@ -25,7 +25,6 @@ import { audit } from "../audit";
 import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permissions";
 import type { IntegrationSpec } from "../integrations/registry";
 import { setupAccessSnapshot } from "../setup-access";
-import { requireWorkspaceAdmin } from "../workspace-auth";
 import type { RouteContext } from "./context";
 import { handleSetupCodestorageRoutes } from "./setup-codestorage";
 import { handleSetupGithubManifestRoutes } from "./setup-github-manifest";
@@ -231,9 +230,6 @@ export async function handleSetupRoutes(
   const { req, path } = ctx;
   if (!path.startsWith("/api/setup/")) return undefined;
 
-  // This one boolean is safe for every signed-in teammate to read. It must sit
-  // before the admin gate so a completed instance never sends non-admins into
-  // an onboarding flow they cannot configure.
   if (path === "/api/setup/onboarding" && req.method === "GET") {
     // Read the file directly rather than the mtime-cached resolved config: a GET
     // immediately after the completion PUT must observe that write even on a
@@ -251,9 +247,6 @@ export async function handleSetupRoutes(
       return Response.json({ completed: config.onboardingCompleted !== false });
     });
   }
-
-  const forbidden = requireWorkspaceAdmin(ctx);
-  if (forbidden) return forbidden;
 
   const githubManifestResponse = await handleSetupGithubManifestRoutes(ctx);
   if (githubManifestResponse) return githubManifestResponse;
@@ -309,9 +302,7 @@ export async function handleSetupRoutes(
               LOCAL_USER_NAME;
             team.push({
               name,
-              ...(connectedLogin
-                ? { github: connectedLogin, admin: true }
-                : {}),
+              ...(connectedLogin ? { github: connectedLogin } : {}),
             });
           }
           (config.identity as Record<string, unknown>).team = team;
@@ -662,21 +653,18 @@ export async function handleSetupRoutes(
       // nobody who can pass it. Organization onboarding already rosters people
       // before enabling the gate; the Settings toggle also serves single-user
       // installs, where the only identity is the GitHub account they connected.
-      // Promote that sole, verified account to the first workspace admin in the
-      // SAME config write as userPrAuth. If neither a sign-in-capable admin nor a
+      // Roster that sole, verified account as the first member in the SAME
+      // config write as userPrAuth. If neither a sign-in-capable member nor a
       // connected account exists, refuse the flip and leave the instance open.
       if (body.userPrAuth === true && github.userPrAuth !== true) {
         const { isDisposableLocalMember, rawTeam } =
           await import("./setup-team");
         const team = rawTeam(config);
-        const explicitRoles = team.some((member) => member.admin !== undefined);
-        const hasSigninAdmin = team.some(
+        const hasSigninMember = team.some(
           (member) =>
-            typeof member.github === "string" &&
-            !!member.github.trim() &&
-            (!explicitRoles || member.admin === true),
+            typeof member.github === "string" && !!member.github.trim(),
         );
-        if (!hasSigninAdmin) {
+        if (!hasSigninMember) {
           const { connectedGithubAccounts, soleGithubLogin } =
             await import("../github-auth");
           const login = soleGithubLogin();
@@ -709,11 +697,10 @@ export async function handleSetupRoutes(
           );
           if (existing) {
             existing.github = login;
-            existing.admin = true;
             if (typeof existing.name !== "string" || !existing.name.trim())
               existing.name = displayName;
           } else {
-            team.push({ name: displayName, github: login, admin: true });
+            team.push({ name: displayName, github: login });
           }
           (config.identity as Record<string, unknown>).team = team;
         }

@@ -164,8 +164,8 @@ export function DeskConversation({
   }
 
   async function addDeskAttachments(picked: FileList | File[]) {
-    const results = await uploads.upload(picked, (file, signal) =>
-      splitAttachments([file], signal),
+    const results = await uploads.upload(picked, (file, signal, onProgress) =>
+      splitAttachments([file], signal, onProgress),
     );
     const addedImages = results.flatMap((result) => result.images);
     const addedFiles = results.flatMap((result) => result.files);

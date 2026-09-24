@@ -21,29 +21,6 @@ function context(login: string): RouteContext {
   };
 }
 
-async function roleAwareConfig(): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), "opensession-setup-auth-"));
-  dirs.push(dir);
-  const path = join(dir, "config.json");
-  writeFileSync(
-    path,
-    JSON.stringify({
-      integrations: {
-        github: { userPrAuth: true, oauthClientId: "test-client" },
-      },
-      identity: {
-        team: [
-          { name: "Ada", github: "ada", admin: true },
-          { name: "Grace", github: "grace", admin: false },
-        ],
-      },
-    }),
-  );
-  process.env.OPENSESSION_CONFIG = path;
-  await getConfigAsync();
-  process.env.OPENSESSION_GITHUB_CLIENT_ID = "test-client";
-}
-
 afterEach(async () => {
   if (savedConfig === undefined) delete process.env.OPENSESSION_CONFIG;
   else {
@@ -57,33 +34,8 @@ afterEach(async () => {
     rmSync(dir, { recursive: true, force: true });
 });
 
-describe("workspace setup authorization", () => {
-  test("owner discovery and GitHub creation require an administrator", async () => {
-    await roleAwareConfig();
-    for (const [path, method] of [
-      ["/api/setup/github/owners", "GET"],
-      ["/api/setup/repos", "POST"],
-    ]) {
-      const ctx = context("grace");
-      ctx.url = new URL(`http://localhost${path}`);
-      ctx.path = path!;
-      ctx.req = new Request(ctx.url, { method });
-      expect((await handleSetupRoutes(ctx))?.status).toBe(403);
-    }
-  });
-
-  test("rejects configured non-admin teammates", async () => {
-    await roleAwareConfig();
-    const response = await handleSetupRoutes(context("grace"));
-    expect(response?.status).toBe(403);
-    expect(await response?.json()).toEqual({
-      error: "Workspace administrator access is required",
-    });
-  });
-});
-
 /** A simple-mode config carrying the captured org intent (userPrAuth absent, so
- *  sign-in is off and any caller administers the workspace). */
+ *  sign-in is off). */
 async function orgIntentConfig(): Promise<void> {
   const dir = mkdtempSync(join(tmpdir(), "opensession-setup-intent-"));
   dirs.push(dir);

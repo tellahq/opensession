@@ -64,7 +64,6 @@ function pairingCommand(code: string): string {
 
 export function RunnersPanel() {
   const [runners, setRunners] = useState<RunnerInfo[]>([]);
-  const [admin, setAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pairing, setPairing] = useState<{
     code: string;
@@ -84,7 +83,6 @@ export function RunnersPanel() {
     await (async () => {
       const data = await fetchRunners();
       setRunners(data.runners);
-      setAdmin(data.admin);
     })()
       .catch(async (error) => {
         toast(
@@ -208,15 +206,13 @@ export function RunnersPanel() {
         title="Runners"
         description="Computers your workspace explicitly trusts for work that needs their hardware or platform. They are not isolated Sandboxes."
         actions={
-          admin ? (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setConnectChoice("choices")}
-            >
-              Add Runner
-            </Button>
-          ) : undefined
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setConnectChoice("choices")}
+          >
+            Add Runner
+          </Button>
         }
       />
       {connectChoice === "choices" && (
@@ -373,7 +369,6 @@ export function RunnersPanel() {
             <RunnerRow
               key={runner.id}
               runner={runner}
-              admin={admin}
               busy={busyId === runner.id}
               onChange={change}
               onRevoke={revoke}
@@ -414,13 +409,11 @@ function RunnerIcon() {
 
 function RunnerRow({
   runner,
-  admin,
   busy,
   onChange,
   onRevoke,
 }: {
   runner: RunnerInfo;
-  admin: boolean;
   busy: boolean;
   onChange: RunnerChange;
   onRevoke: (runner: RunnerInfo) => void;
@@ -489,32 +482,28 @@ function RunnerRow({
               </div>
             </div>
           </div>
-          {admin && (
-            <div className="col-start-2 row-start-1 flex justify-end self-start">
-              <Button size="sm" onClick={() => setEditing(true)}>
-                Configure
-              </Button>
-            </div>
-          )}
+          <div className="col-start-2 row-start-1 flex justify-end self-start">
+            <Button size="sm" onClick={() => setEditing(true)}>
+              Configure
+            </Button>
+          </div>
         </div>
       </SettingCard>
-      {admin && (
-        <Modal.Root open={editing} onOpenChange={setEditing}>
-          {/* The form is a child so Base UI's portal remounts it on every open,
-			    which re-reads the current runner instead of showing edits staged
-			    against a Runner that has since reported new state. */}
-          <Modal.Content initialFocus={labelRef}>
-            <RunnerDetails
-              runner={runner}
-              busy={busy}
-              labelRef={labelRef}
-              onChange={onChange}
-              onRevoke={onRevoke}
-              onSaved={() => setEditing(false)}
-            />
-          </Modal.Content>
-        </Modal.Root>
-      )}
+      <Modal.Root open={editing} onOpenChange={setEditing}>
+        {/* The form is a child so Base UI's portal remounts it on every open,
+           which re-reads the current runner instead of showing edits staged
+           against a Runner that has since reported new state. */}
+        <Modal.Content initialFocus={labelRef}>
+          <RunnerDetails
+            runner={runner}
+            busy={busy}
+            labelRef={labelRef}
+            onChange={onChange}
+            onRevoke={onRevoke}
+            onSaved={() => setEditing(false)}
+          />
+        </Modal.Content>
+      </Modal.Root>
     </>
   );
 }

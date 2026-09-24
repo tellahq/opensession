@@ -1,5 +1,11 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -186,6 +192,78 @@ describe("sandbox workload identity", () => {
       }),
     );
     expect(revoked?.status).toBe(401);
+  });
+
+  function exchange(env: Record<string, string>) {
+    return identity.handleWorkloadIdentityRequest(
+      new Request(env.OPENSESSION_WORKLOAD_IDENTITY_URL!, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${env.OPENSESSION_WORKLOAD_IDENTITY_TOKEN}`,
+        },
+        body: JSON.stringify({ audience: "urn:test:artifacts" }),
+      }),
+    );
+  }
+
+  /** What a gateway restart does to this module's state. */
+  function forgetInMemoryLeases() {
+    const g = globalThis as Record<string, unknown>;
+    delete g.__opensessionWorkloadIdentityLeases;
+    delete g.__opensessionWorkloadIdentityRevoked;
+    delete g.__opensessionWorkloadIdentityStore;
+  }
+
+  test("a lease outlives a restart; a revocation does too", async () => {
+    const context = {
+      provider: "box",
+      lifecycle: "setup" as const,
+      repoId: "fusion",
+    };
+    const kept = identity.createWorkloadIdentityEnv({
+      ...context,
+      sandboxId: "sbx-kept",
+    });
+    const dropped = identity.createWorkloadIdentityEnv({
+      ...context,
+      sandboxId: "sbx-dropped",
+    });
+    identity.revokeWorkloadIdentityForSandbox("sbx-dropped");
+    await identity.flushWorkloadIdentityLeases();
+    // Only hashes reach the disk.
+    const file = readdirSync(root).find((name) =>
+      name.includes("workload-identity-leases"),
+    );
+    const stored = readFileSync(join(root, file!), "utf8");
+    expect(stored).toContain("sbx-kept");
+    expect(stored).not.toContain(kept.OPENSESSION_WORKLOAD_IDENTITY_TOKEN!);
+    forgetInMemoryLeases();
+    expect((await exchange(kept))?.status).toBe(200);
+    expect((await exchange(dropped))?.status).toBe(401);
+    // A new lease for the revoked sandbox (it woke again) works.
+    const renewed = identity.createWorkloadIdentityEnv({
+      ...context,
+      sandboxId: "sbx-dropped",
+    });
+    await Bun.sleep(2);
+    expect((await exchange(renewed))?.status).toBe(200);
+  });
+
+  test("finds a lease the other process of a handoff just stored", async () => {
+    await identity.flushWorkloadIdentityLeases();
+    forgetInMemoryLeases();
+    const other = identity.createWorkloadIdentityEnv({
+      sandboxId: "sbx-other",
+      provider: "box",
+      lifecycle: "setup",
+      repoId: "fusion",
+    });
+    await identity.flushWorkloadIdentityLeases();
+    // This process never saw it: drop it from memory, keep it on disk.
+    const g = globalThis as Record<string, any>;
+    g.__opensessionWorkloadIdentityLeases.clear();
+    g.__opensessionWorkloadIdentityStore.lastRead = 0;
+    expect((await exchange(other))?.status).toBe(200);
   });
 
   test("does not create a lease without a matching central audience grant", () => {

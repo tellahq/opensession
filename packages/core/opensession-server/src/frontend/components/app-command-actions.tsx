@@ -8,7 +8,6 @@ import { setThemePref, type EffectiveTheme } from "../lib/theme";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import type { UnifiedSession } from "../lib/types";
 import type { CommandPaletteAction } from "./SessionSearch";
-import type { useAuthStatus } from "./UserPicker";
 import {
   IconArchive,
   IconBook,
@@ -34,7 +33,6 @@ import {
 } from "./icons";
 
 interface BuildAppCommandActionsOptions {
-  auth: ReturnType<typeof useAuthStatus>;
   currentSession: UnifiedSession | null;
   currentTheme: EffectiveTheme;
   copyLinkPath: string | null;
@@ -66,7 +64,6 @@ interface BuildAppCommandActionsOptions {
 }
 
 export function buildAppCommandActions({
-  auth,
   currentSession,
   currentTheme,
   copyLinkPath,
@@ -410,11 +407,9 @@ export function buildAppCommandActions({
     // Every Settings section, straight from the nav's own table — the palette
     // used to reach three of them, and only because those three happen to have
     // their own top-level routes.
-    ...settingsPaletteActions({ admin: auth?.admin !== false }).map(
-      ({ section, ...action }) => ({
-        ...action,
-        run: () => navigate({ view: "settings", section }),
-      }),
-    ),
+    ...settingsPaletteActions().map(({ section, ...action }) => ({
+      ...action,
+      run: () => navigate({ view: "settings", section }),
+    })),
   ];
 }

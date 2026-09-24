@@ -739,8 +739,10 @@ export function Composer({
       ? []
       : selected.filter((file) => !allowed(file));
     const accepted = canAttachFiles ? selected : selected.filter(allowed);
-    const results = await localUploads.upload(accepted, (file, signal) =>
-      splitAttachments([file], signal),
+    const results = await localUploads.upload(
+      accepted,
+      (file, signal, onProgress) =>
+        splitAttachments([file], signal, onProgress),
     );
     const newImgs = results.flatMap((result) => result.images);
     const newFls = results.flatMap((result) => result.files);
@@ -1493,6 +1495,7 @@ export function Composer({
         <FileChips
           files={fls}
           pending={activeStaging.files}
+          progress={activeStaging.fileProgress}
           onRemove={removeFile}
           onRemovePending={
             staging ? onRemovePendingFile : localUploads.cancelPendingFile
