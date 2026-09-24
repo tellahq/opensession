@@ -10,10 +10,6 @@ import {
 import { audit } from "../audit";
 import { readEnvFileValues } from "../env-file-edit";
 import { githubAppConfigured, updateGithubAppWebhook } from "../github-app";
-import {
-  requireWorkspaceAdmin,
-  workspaceAdminAuthorized,
-} from "../workspace-auth";
 import type { IngressExposure } from "../config";
 import { refreshIndexHtml } from "../frontend-build";
 import type { RouteContext } from "./context";
@@ -52,7 +48,7 @@ async function syncGithubWebhook(
 }
 
 async function changedIngressResponse(): Promise<Record<string, unknown>> {
-  const settings = await publicIngressStatus(true);
+  const settings = await publicIngressStatus();
   const githubWebhook = settings.publicBaseUrl
     ? await syncGithubWebhook(settings.publicBaseUrl)
     : undefined;
@@ -64,13 +60,9 @@ export async function handleIngressRoutes(
 ): Promise<Response | undefined> {
   const { path, req } = ctx;
   if (path === "/api/ingress" && req.method === "GET") {
-    return Response.json(
-      await publicIngressStatus(workspaceAdminAuthorized(ctx)),
-    );
+    return Response.json(await publicIngressStatus());
   }
   if (path === "/api/ingress/app/setup" && req.method === "POST") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const body = (await req.json().catch(() => null)) as Record<
       string,
       unknown
@@ -96,7 +88,7 @@ export async function handleIngressRoutes(
       });
       refreshIndexHtml("private app domain changed");
       return Response.json({
-        ...(await publicIngressStatus(true, { appBaseUrl })),
+        ...(await publicIngressStatus({ appBaseUrl })),
         restartRequired: true,
       });
     } catch (error) {
@@ -104,8 +96,6 @@ export async function handleIngressRoutes(
     }
   }
   if (path === "/api/ingress/app/test" && req.method === "POST") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     try {
       return Response.json(await verifyPrivateAppDomain());
     } catch (error) {
@@ -113,8 +103,6 @@ export async function handleIngressRoutes(
     }
   }
   if (path === "/api/ingress/app" && req.method === "POST") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const body = (await req.json().catch(() => null)) as Record<
       string,
       unknown
@@ -124,7 +112,7 @@ export async function handleIngressRoutes(
       audit({ kind: "ingress_private_app_update", publicBaseUrl: appBaseUrl });
       refreshIndexHtml("private app domain changed");
       return Response.json({
-        ...(await publicIngressStatus(true, { appBaseUrl })),
+        ...(await publicIngressStatus({ appBaseUrl })),
         restartRequired: true,
       });
     } catch (error) {
@@ -132,8 +120,6 @@ export async function handleIngressRoutes(
     }
   }
   if (path === "/api/ingress" && req.method === "PUT") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const body = (await req.json().catch(() => null)) as Record<
       string,
       unknown
@@ -155,8 +141,6 @@ export async function handleIngressRoutes(
     }
   }
   if (path === "/api/ingress/cloudflare" && req.method === "POST") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const body = (await req.json().catch(() => null)) as Record<
       string,
       unknown
@@ -174,8 +158,6 @@ export async function handleIngressRoutes(
     }
   }
   if (path === "/api/ingress/custom" && req.method === "POST") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const body = (await req.json().catch(() => null)) as Record<
       string,
       unknown
@@ -192,9 +174,7 @@ export async function handleIngressRoutes(
     }
   }
   if (path === "/api/ingress/test" && req.method === "POST") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
-    return Response.json(await publicIngressStatus(true));
+    return Response.json(await publicIngressStatus());
   }
   return undefined;
 }

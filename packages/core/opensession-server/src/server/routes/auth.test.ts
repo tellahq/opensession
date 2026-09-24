@@ -13,7 +13,6 @@ import { handleAuthRoutes } from "./auth";
 import { handleSetupRoutes } from "./setup";
 import { connectedGithubAccounts } from "../github-auth";
 import * as configMutation from "../config-mutation";
-import { workspaceAdminAuthorized } from "../workspace-auth";
 import { refreshWebIdentity, resolveWebAuth } from "../web-auth";
 import type { RouteContext } from "./context";
 
@@ -104,9 +103,11 @@ test("auth status carries the organization icon when one is configured", async (
   );
 });
 
-const admin = { name: "Acme Admin", github: "acme-admin", admin: true };
+const existingMember = { name: "Acme Teammate", github: "acme-teammate" };
 
-async function signInFixture(team: unknown[] = [admin]): Promise<string> {
+async function signInFixture(
+  team: unknown[] = [existingMember],
+): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), "opensession-enrollment-"));
   dirs.push(dir);
   Reflect.deleteProperty(globalThis, "__webAuthSessions");
@@ -157,9 +158,9 @@ function poll(body: Record<string, unknown> = {}) {
 }
 
 // Only GitHub's token exchange and /user are stubbed. All admission, storage,
-// session issuance, and administrator checks use the production implementations.
+// session issuance, and workspace management use the production implementations.
 function githubAnswers(
-  user: unknown = { login: "acme-member", name: "Acme Admin" },
+  user: unknown = { login: "acme-member", name: "Acme Teammate" },
   grant: unknown = { access_token: "synthetic-device-token" },
   userStatus = 200,
   tokenStatus = 200,
@@ -187,18 +188,17 @@ function identityFor(token: string) {
   );
 }
 
-test("any verified GitHub login enrolls as a non-admin before session issuance", async () => {
+test("any verified GitHub login enrolls before session issuance", async () => {
   const dir = await signInFixture();
   githubAnswers({
     login: "AcMe-Member",
-    name: "Acme Admin",
-    email: "admin@example.test",
+    name: "Acme Teammate",
+    email: "teammate@example.test",
   });
   const response = await poll({
-    login: "acme-admin",
-    name: "Acme Admin",
-    email: "admin@example.test",
-    admin: true,
+    login: "acme-teammate",
+    name: "Acme Teammate",
+    email: "teammate@example.test",
   });
   expect(response?.status).toBe(200);
   const body = await response?.json();
@@ -206,15 +206,13 @@ test("any verified GitHub login enrolls as a non-admin before session issuance",
     status: "ok",
     login: "acme-member",
     name: "acme-member",
-    admin: false,
   });
   expect(response?.headers.get("Set-Cookie")).toContain("HttpOnly");
   expect(storedTeam(dir)).toEqual([
-    admin,
+    existingMember,
     {
       name: "acme-member",
       github: "acme-member",
-      admin: false,
       authGeneration: expect.any(String),
     },
   ]);
@@ -226,65 +224,89 @@ test("any verified GitHub login enrolls as a non-admin before session issuance",
   expect(connectedGithubAccounts().map((account) => account.login)).toEqual([
     "AcMe-Member",
   ]);
-  const forbidden = await handleSetupRoutes(
+  const managed = await handleSetupRoutes(
     post(
       "/api/setup/team",
       { name: "Another Member" },
       identityFor(body.token),
     ),
   );
-  expect(forbidden?.status).toBe(403);
+  expect(managed?.status).toBe(201);
+  expect(storedTeam(dir).at(-1).name).toBe("Another Member");
+  expect(body).not.toHaveProperty("admin");
+  expect(body).not.toHaveProperty("canManage");
+  const statusUrl = new URL("http://localhost/api/auth/status");
+  const status = await handleAuthRoutes({
+    req: new Request(statusUrl, {
+      headers: { Authorization: `Bearer ${body.token}` },
+    }),
+    url: statusUrl,
+    path: statusUrl.pathname,
+    publicPrefix: "",
+    authUser: identityFor(body.token),
+  });
+  const statusBody = await status?.json();
+  expect(statusBody.authenticated).toBe(true);
+  expect(statusBody).not.toHaveProperty("admin");
+  expect(statusBody).not.toHaveProperty("canManage");
 });
 
-test("existing administrator and regular member profiles and privileges stay intact", async () => {
+test("existing member profiles stay intact and every member can manage the workspace", async () => {
   const member = {
     name: "Acme Member",
     github: "AcMe-Member",
-    admin: false,
     email: "member@example.test",
     aliases: ["acme"],
   };
-  const dir = await signInFixture([admin, member]);
-  for (const [login, name, isAdmin] of [
-    ["ACME-ADMIN", admin.name, true],
-    ["acme-member", member.name, false],
+  const dir = await signInFixture([existingMember, member]);
+  for (const [login, name] of [
+    ["ACME-TEAMMATE", existingMember.name],
+    ["acme-member", member.name],
   ] as const) {
     githubAnswers({ login, name: "Claimed Different Name" });
     const response = await poll();
-    expect(await response?.json()).toMatchObject({
+    const body = await response?.json();
+    expect(body).toMatchObject({
       status: "ok",
       login: login.toLowerCase(),
       name,
-      admin: isAdmin,
     });
+    expect(body).not.toHaveProperty("admin");
+    expect(body).not.toHaveProperty("canManage");
+    const managed = await handleSetupRoutes(
+      post(
+        "/api/setup/team",
+        { name: `Added by ${login}` },
+        identityFor(body.token),
+      ),
+    );
+    expect(managed?.status).toBe(201);
   }
-  expect(storedTeam(dir)).toEqual([admin, member]);
+  expect(storedTeam(dir).slice(0, 2)).toEqual([existingMember, member]);
+  expect(storedTeam(dir)).toHaveLength(4);
 });
 
-test("first enrollment preserves legacy implicit administrators without making newcomers admin", async () => {
-  const legacy = {
+test("enrollment leaves existing identities unchanged without adding roles", async () => {
+  const existing = {
     name: "Acme Owner",
     github: "acme-owner",
     email: "owner@example.test",
   };
-  const dir = await signInFixture([legacy]);
+  const dir = await signInFixture([existing]);
   githubAnswers();
-  expect((await (await poll())?.json()).admin).toBe(false);
-  expect(storedTeam(dir)[0]).toEqual({ ...legacy, admin: true });
-  expect(
-    workspaceAdminAuthorized({
-      authUser: { login: "acme-owner", name: legacy.name },
-    }),
-  ).toBe(true);
+  expect((await (await poll())?.json()).status).toBe("ok");
+  expect(storedTeam(dir)[0]).toEqual(existing);
+  expect(storedTeam(dir)[1]).not.toHaveProperty("admin");
 });
 
-test("an empty roster does not turn the first automatic member into an administrator", async () => {
-  await signInFixture([]);
+test("an empty roster can enroll its first member without role fields", async () => {
+  const dir = await signInFixture([]);
   githubAnswers();
-  expect(await (await poll())?.json()).toMatchObject({
-    status: "ok",
-    admin: false,
-  });
+  const body = await (await poll())?.json();
+  expect(body.status).toBe("ok");
+  expect(body).not.toHaveProperty("admin");
+  expect(body).not.toHaveProperty("canManage");
+  expect(storedTeam(dir)[0]).not.toHaveProperty("admin");
 });
 
 test("repeated and concurrent first sign-ins create one case-normalized membership", async () => {
@@ -295,12 +317,10 @@ test("repeated and concurrent first sign-ins create one case-normalized membersh
     expect(await response?.json()).toMatchObject({
       status: "ok",
       login: "acme-member",
-      admin: false,
     });
   githubAnswers({ login: "acme-member" });
   expect(await (await poll())?.json()).toMatchObject({
     status: "ok",
-    admin: false,
   });
   expect(storedTeam(dir)).toHaveLength(2);
   expect(
@@ -312,18 +332,17 @@ test("repeated and concurrent first sign-ins create one case-normalized membersh
   ).toBe(1);
 });
 
-test("name, alias and first-name collisions cannot claim another identity or grant admin", async () => {
+test("name, alias and first-name collisions cannot claim another identity", async () => {
   const protectedMember = {
-    ...admin,
+    ...existingMember,
     name: "acme-member",
     aliases: ["github:acme-member"],
-    email: "admin@example.test",
+    email: "teammate@example.test",
   };
   const protectedFirst = {
     name: "github:acme-member:2 Person",
     github: "acme-other",
     email: "other@example.test",
-    admin: true,
   };
   const dir = await signInFixture([protectedMember, protectedFirst]);
   githubAnswers({
@@ -335,7 +354,6 @@ test("name, alias and first-name collisions cannot claim another identity or gra
     status: "ok",
     name: "github:acme-member:3",
     login: "acme-member",
-    admin: false,
   });
   expect(storedTeam(dir).slice(0, 2)).toEqual([
     protectedMember,
@@ -357,10 +375,10 @@ test("unverified, malformed, expired and pending flows never enroll a member", a
     { access_token: 123 },
   ]) {
     githubAnswers(undefined, grant);
-    const response = await poll({ login: "acme-member", admin: true });
+    const response = await poll({ login: "acme-member" });
     expect((await response?.json()).status).not.toBe("ok");
     expect(response?.headers.get("Set-Cookie")).toBeNull();
-    expect(storedTeam(dir)).toEqual([admin]);
+    expect(storedTeam(dir)).toEqual([existingMember]);
   }
   for (const user of [{}, { login: 123 }, { login: "acme-member admin" }]) {
     githubAnswers(user);
@@ -371,7 +389,7 @@ test("unverified, malformed, expired and pending flows never enroll a member", a
   githubAnswers({ login: "acme-member" }, undefined, 200, 500);
   expect(await (await poll())?.json()).toMatchObject({ status: "error" });
   expect((await poll({ deviceCode: "" }))?.status).toBe(400);
-  expect(storedTeam(dir)).toEqual([admin]);
+  expect(storedTeam(dir)).toEqual([existingMember]);
   expect(connectedGithubAccounts()).toEqual([]);
 });
 
@@ -390,15 +408,14 @@ test("failed atomic roster persistence issues no session or in-memory membership
       error: "Could not save sign-in. Please try again.",
     });
     expect(response?.headers.get("Set-Cookie")).toBeNull();
-    expect(storedTeam(dir)).toEqual([admin]);
-    expect(configuredIdentity().team).toEqual([admin]);
+    expect(storedTeam(dir)).toEqual([existingMember]);
+    expect(configuredIdentity().team).toEqual([existingMember]);
     expect(Reflect.get(globalThis, "__webAuthSessions")?.size ?? 0).toBe(0);
   } finally {
     failure.mockRestore();
   }
   expect(await (await poll())?.json()).toMatchObject({
     status: "ok",
-    admin: false,
   });
 });
 
@@ -414,7 +431,6 @@ test("session persistence failure cannot leave an authenticated session in memor
   rmSync(join(dir, "web-sessions.json"), { recursive: true });
   expect(await (await poll())?.json()).toMatchObject({
     status: "ok",
-    admin: false,
   });
 });
 
@@ -427,14 +443,14 @@ test("reenrollment never revives old sessions or sockets, even without a request
     post(
       "/api/setup/team/acme-member/remove",
       {},
-      { login: "acme-admin", name: admin.name },
+      { login: "acme-teammate", name: existingMember.name },
     ),
   );
   expect(removed?.status).toBe(200);
   // Do not resolve the old session between removal and rejoining: its lazy
   // deletion is not sufficient to stop a previously idle client returning.
   const second = await (await poll())?.json();
-  expect(second).toMatchObject({ status: "ok", admin: false });
+  expect(second).toMatchObject({ status: "ok" });
   expect(storedTeam(dir)).toHaveLength(2);
   expect(identityFor(second.token)?.authGeneration).not.toBe(
     oldIdentity.authGeneration,
@@ -446,11 +462,11 @@ test("reenrollment never revives old sessions or sockets, even without a request
   expect(identityFor(second.token)).not.toBeNull();
 });
 
-test("a cached verified flow can rejoin only as non-admin and never revive an old administrator session", async () => {
+test("a cached verified flow can rejoin without reviving an old member session", async () => {
   const dir = await signInFixture();
-  githubAnswers({ login: "acme-admin" });
+  githubAnswers({ login: "acme-teammate" });
   const first = await (await poll())?.json();
-  expect(first.admin).toBe(true);
+  expect(first.status).toBe("ok");
   const config = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
   config.identity.team = [];
   writeFileSync(join(dir, "config.json"), JSON.stringify(config));
@@ -458,8 +474,8 @@ test("a cached verified flow can rejoin only as non-admin and never revive an ol
   const flows = Reflect.get(globalThis, "__osWatchedDeviceFlows");
   flows.set("synthetic-cached-flow", {
     status: "ok",
-    login: "acme-admin",
-    name: "Acme Admin",
+    login: "acme-teammate",
+    name: "Acme Teammate",
     expiresAt: Date.now() + 60_000,
   });
   globalThis.fetch = Object.assign(
@@ -472,7 +488,7 @@ test("a cached verified flow can rejoin only as non-admin and never revive an ol
     const second = await (
       await poll({ deviceCode: "synthetic-cached-flow" })
     )?.json();
-    expect(second).toMatchObject({ status: "ok", admin: false });
+    expect(second).toMatchObject({ status: "ok" });
     expect(identityFor(first.token)).toBeNull();
     expect(identityFor(second.token)).not.toBeNull();
   } finally {
@@ -518,7 +534,7 @@ test("cached success cannot enroll with a revoked, expired or missing GitHub gra
       const response = await poll({ deviceCode: "synthetic-unusable-flow" });
       expect(response?.status).toBe(401);
       expect(response?.headers.get("Set-Cookie")).toBeNull();
-      expect(storedTeam(dir)).toEqual([admin]);
+      expect(storedTeam(dir)).toEqual([existingMember]);
     }
   } finally {
     flows.delete("synthetic-unusable-flow");
@@ -537,7 +553,7 @@ test("expired watched results still require a valid device exchange and cannot e
   expect(
     await (await poll({ deviceCode: "synthetic-expired-flow" }))?.json(),
   ).toEqual({ status: "error", error: "expired_token" });
-  expect(storedTeam(dir)).toEqual([admin]);
+  expect(storedTeam(dir)).toEqual([existingMember]);
   expect(flows.has("synthetic-expired-flow")).toBe(false);
 });
 
@@ -548,6 +564,5 @@ test("verified managed-user logins with underscores can enroll", async () => {
     status: "ok",
     login: "acme_managed",
     name: "acme_managed",
-    admin: false,
   });
 });

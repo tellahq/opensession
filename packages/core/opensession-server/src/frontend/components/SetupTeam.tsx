@@ -223,7 +223,7 @@ export function TeamSection({
       )}
       <SettingsHint>
         {githubAuth
-          ? "Anyone who can reach this server can join by signing in with GitHub. New members are not administrators."
+          ? "Anyone who can reach this server can join by signing in with GitHub. Every member can manage the workspace."
           : githubOrganization
             ? `Members were imported from the ${githubOrganization} GitHub organization. Only a name is required when you add someone manually.`
             : "Only a name is required. Add a GitHub login or other identities when sign-in and attribution should resolve to this member."}

@@ -51,10 +51,7 @@ async function seed(options: { storage?: boolean } = {}): Promise<{
         github: { userPrAuth: true, oauthClientId: "test-client" },
       },
       identity: {
-        team: [
-          { name: "Ada", github: "ada", admin: true },
-          { name: "Grace", github: "grace", admin: false },
-        ],
+        team: [{ name: "Ada", github: "ada" }],
       },
     }),
   );
@@ -265,31 +262,6 @@ describe("instance general settings", () => {
     );
     expect(response?.status).toBe(400);
     expect(JSON.parse(readFileSync(config, "utf-8")).selfDev).toBeUndefined();
-  });
-
-  test("rejects shared-setting writes from non-admin teammates", async () => {
-    const { config } = await seed();
-    for (const path of [
-      "/api/settings/general",
-      "/api/settings/identity",
-      "/api/settings/asset-storage",
-      "/api/settings/worktrees",
-    ]) {
-      const response = await handleInstanceSettingsRoutes(
-        context(path, "PUT", {
-          login: "grace",
-          body: path.endsWith("general")
-            ? { organizationName: "Nope" }
-            : path.endsWith("asset-storage")
-              ? { provider: "local" }
-              : { productName: "Nope" },
-        }),
-      );
-      expect(response?.status).toBe(403);
-    }
-    expect(
-      JSON.parse(readFileSync(config, "utf-8")).organization,
-    ).toBeUndefined();
   });
 
   test("masks the asset secret and retains it when a draft leaves it blank", async () => {

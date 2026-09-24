@@ -17,18 +17,18 @@ function renderTeam(required: boolean): string {
     configurable: true,
     value: new EventTarget(),
   });
-  publishAuthStatus({ required, authenticated: true, admin: true });
+  publishAuthStatus({ required, authenticated: true });
   return renderToStaticMarkup(<TeamSection onChanged={() => {}} />);
 }
 
-test("GitHub sign-in describes automatic non-admin enrollment and optional roster editing", () => {
+test("GitHub sign-in describes automatic enrollment and optional roster editing", () => {
   const markup = renderTeam(true);
   expect(markup).toContain("Add member</span></button>");
   expect(markup).toContain("Copy invite link</span></button>");
   expect(markup).toContain(
     "Anyone who can reach this server can join by signing in with GitHub.",
   );
-  expect(markup).toContain("New members are not administrators.");
+  expect(markup).toContain("Every member can manage the workspace.");
   expect(markup).not.toContain("Only listed GitHub accounts can sign in.");
 });
 

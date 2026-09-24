@@ -69,8 +69,8 @@ function AuthenticationMethod({
               Sign-in method
             </div>
             <div className="mt-0.5 text-supporting leading-relaxed text-dim">
-              Anyone who can reach this server can join with GitHub as a
-              non-admin.
+              Anyone who can reach this server can join with GitHub and manage
+              the workspace.
             </div>
           </div>
           <Segmented

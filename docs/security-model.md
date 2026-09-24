@@ -326,7 +326,7 @@ users, operators must qualify the Daytona provider, enable the review
 automation, and keep fork-origin GitHub Actions disabled or approval-gated. The
 shipped PR workflows additionally skip every job whose head repository differs
 from the base repository. Ordinary App installation tokens exclude repository Administration.
-The App grant includes it for the admin-only private repository creation
+The App grant includes it for the private repository creation
 route, which mints a separate uncached token. Connected-user tokens inherit
 the widened grant intersected with the person's permissions, including in
 interactive code runs; they cannot be narrowed by the installation-token
@@ -433,18 +433,17 @@ Enabling `userPrAuth` activates both halves below:
   (portal-sign-in.ts), never to another host.
   Any GitHub account that can reach this instance and complete its device
   flow may sign in. Missing accounts are automatically added to `identity.team`
-  with `admin: false`; there is no organization, invite, or roster admission
-  gate. This grants normal member capabilities, including roster-based GitHub
-  webhook trust, not administrator access. Network access must be controlled
-  separately. Existing members and roles are preserved; legacy implicit
-  administrators retain their privileges when the roster becomes role-aware.
+  without an organization, invite, or roster admission gate. Every signed-in
+  member can manage the workspace and receives roster-based GitHub webhook
+  trust. Network access must be controlled separately. Existing identity
+  mappings are preserved; enrollment does not assign roles.
   Enrollment matches only the verified GitHub login, never a profile name or
   email. New display names use the login with a collision-safe suffix/prefix;
   no claimed profile fields are copied into identity mappings. Roster persistence
   must succeed before a session is issued. A membership incarnation prevents
   old sessions and sockets from becoming valid again after automatic rejoining.
   Removing a member revokes their existing sessions but is not a permanent
-  sign-in ban: another verified sign-in can create a new non-admin membership.
+  sign-in ban: another verified sign-in can create a new membership.
   The verified identity OVERRIDES
   client-claimed `user` on every WS message and stamps `createdByLogin` on
   new sessions; a one-time boot migration backfills `createdByLogin` onto

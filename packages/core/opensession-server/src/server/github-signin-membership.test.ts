@@ -35,7 +35,7 @@ async function fixture(team: unknown[] = []) {
 
 test("racing different accounts preserve every row and unknown config fields", async () => {
   const { path } = await fixture([
-    { name: "Owner", github: "acme-owner", admin: true, custom: "keep" },
+    { name: "Owner", github: "acme-owner", custom: "keep" },
   ]);
   const names = Array.from({ length: 12 }, (_, i) => `acme-member-${i}`);
   await Promise.all(names.map(enrollGithubSignIn));
@@ -47,11 +47,10 @@ test("racing different accounts preserve every row and unknown config fields", a
   ).toBe(13);
   expect(written.extension).toEqual({ preserve: true });
   expect(written.identity.team[0].custom).toBe("keep");
-  expect(
-    written.identity.team
-      .slice(1)
-      .every((m: { admin: boolean }) => m.admin === false),
-  ).toBe(true);
+  for (const member of written.identity.team) {
+    expect(member).not.toHaveProperty("admin");
+    expect(member).not.toHaveProperty("canManage");
+  }
   const backup = JSON.parse(await readFile(`${path}.bak-1`, "utf8"));
   expect(backup.identity.team).toHaveLength(1);
 });
@@ -59,10 +58,10 @@ test("racing different accounts preserve every row and unknown config fields", a
 test("ambiguous and malformed known accounts are never repaired into a new membership", async () => {
   for (const team of [
     [
-      { name: "First", github: "acme-member", admin: false },
-      { name: "Second", github: "ACME-MEMBER", admin: true },
+      { name: "First", github: "acme-member" },
+      { name: "Second", github: "ACME-MEMBER" },
     ],
-    [{ github: "acme-member", admin: true }],
+    [{ github: "acme-member" }],
   ]) {
     const { path, config } = await fixture(team);
     await expect(enrollGithubSignIn("acme-member")).rejects.toThrow(

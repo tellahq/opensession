@@ -63,7 +63,7 @@ describe("remote repo template index", () => {
     ).toBe("im-1");
   });
 
-  test("preserves Box's daily start quota with a six-hour source refresh", async () => {
+  test("refreshes Box every two hours, within its daily start quota", async () => {
     const mod = await import(
       `./remote-repo-template?box-refresh=${Math.random()}`
     );
@@ -74,11 +74,14 @@ describe("remote repo template index", () => {
       1_000,
     );
     expect(
-      mod.remoteRepoTemplateNeedsRefresh(current, 1_000 + 30 * 60_000),
+      mod.remoteRepoTemplateNeedsRefresh(current, 1_000 + 119 * 60_000),
     ).toBe(false);
     expect(
-      mod.remoteRepoTemplateNeedsRefresh(current, 1_000 + 6 * 60 * 60_000),
+      mod.remoteRepoTemplateNeedsRefresh(current, 1_000 + 2 * 60 * 60_000),
     ).toBe(true);
+    // A parked Box standby does not hold the refresh back; Daytona's does.
+    expect(mod.refreshWaitsForParkedStandby("box")).toBe(false);
+    expect(mod.refreshWaitsForParkedStandby("daytona")).toBe(true);
   });
 
   test("a runner commit pin bump alone keeps the artifact mapping", async () => {

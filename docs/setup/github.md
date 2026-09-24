@@ -529,12 +529,9 @@ below without enabling the sign-in gate.
    }
    ```
 
-   Before setting `userPrAuth` directly, put at least your own exact GitHub
-   login in `identity.team[].github` (and make it an admin when the roster uses
-   explicit admin roles), so you retain administrative access. New GitHub
-   sign-ins enroll automatically as non-admins; they cannot bootstrap an
-   administrator. The Settings UI preserves an administrator when it enables
-   the gate. The private key is stored
+   GitHub sign-ins enroll automatically, including when the roster is empty.
+   Every signed-in member can manage the workspace; there is no administrator
+   role to bootstrap. The private key is stored
    separately as described above. Environment `OPENSESSION_GITHUB_*` values
    win over config. Signing in needs the client id; the secret renews user
    tokens; the key mints bot installation tokens.
@@ -548,8 +545,9 @@ What turns on (`packages/core/opensession-server/src/server/github-auth.ts`, `we
 - **Sign-in required**: the UI shows "Continue with GitHub", which starts the
   device flow, the one sign-in every client uses. Any verified GitHub account
   that can reach the instance may sign in. Missing accounts join `identity.team`
-  automatically as non-admins, without an organization, invite, or roster
-  admission check. Existing names and roles are preserved. Ordinary `/api/*`
+  automatically, without an organization, invite, or roster admission check.
+  Existing identity mappings are preserved. Every signed-in member can manage
+  the workspace. Ordinary `/api/*`
   calls and the UI WebSocket are 401-gated on the HttpOnly session cookie; non-browser callers
   use `Authorization: Bearer <token>` with a token from
   `~/.opensession/web-sessions.json`. Auth routes, `/api/health`, `/live`,
@@ -562,7 +560,7 @@ What turns on (`packages/core/opensession-server/src/server/github-auth.ts`, `we
   writes are serialized and atomic before session issuance. Removing a member
   revokes existing sessions, including those still open when the account
   rejoins, but is not a permanent sign-in ban. A new verified sign-in can join
-  again as a non-admin. Network access controls belong outside this enrollment
+  again. Network access controls belong outside this enrollment
   flow; roster membership also grants normal member capabilities such as
   trusted GitHub webhook commands.
 - **Organization members imported**: after a repository identifies the GitHub
@@ -630,7 +628,7 @@ _same_ key sign-in reads, graduating a team to
 [per-user GitHub auth](#per-user-github-auth-prs-as-the-session-owner) is a
 one-flag change, or automatic for an org-owned app: `install.sh --org <name>`
 (or choosing the Organization owner in the wizard) records the org, and at the
-connect step rosters the connecting account as the first admin and enables
+connect step rosters the connecting account and enables
 sign-in in one locked write. A personal app stays single-user with no gate.
 
 ## Deploy script

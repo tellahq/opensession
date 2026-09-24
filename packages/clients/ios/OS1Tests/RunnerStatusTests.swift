@@ -41,7 +41,7 @@ final class RunnerStatusTests: XCTestCase {
            "capabilities":{"platform":"darwin","toolchains":["xcode","swift"],"tags":[]},
            "resources":{"cpuCores":10,"memoryGb":16,"freeDiskGb":47.2,"gpu":{"kind":"apple","model":"Apple M4","metal":false}},
            "workspaceRoots":[],"lastSeenAt":"2026-08-13T15:35:11.067Z","state":"online"}
-        ],"admin":true}
+        ]}
         """
         let response = try JSONDecoder().decode(
             WorkspaceRunnersResponse.self,
@@ -49,7 +49,6 @@ final class RunnerStatusTests: XCTestCase {
         )
         let runners = try XCTUnwrap(response.runners)
         XCTAssertEqual(runners.count, 2)
-        XCTAssertEqual(response.admin, true)
 
         XCTAssertEqual(runners[0].displayName, "runner-ws-test")
         XCTAssertEqual(runners[0].status, .offline)

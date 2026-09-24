@@ -76,15 +76,9 @@ export async function enrollGithubSignIn(login: string): Promise<TeamMember> {
     const members = team
       .map(parseTeamMember)
       .filter((member): member is TeamMember => !!member);
-    // Legacy rosters made everyone an admin implicitly. Adding admin:false
-    // switches the roster to explicit roles; retain every existing privilege.
-    if (!members.some((member) => member.admin !== undefined)) {
-      for (const row of team) if (parseTeamMember(row)) row.admin = true;
-    }
     const member: TeamMember = {
       name: enrollmentName(key, members),
       github: key,
-      admin: false,
       authGeneration: randomUUID(),
     };
     team.push({ ...member });

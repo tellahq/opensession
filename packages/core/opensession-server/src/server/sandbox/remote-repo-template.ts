@@ -41,11 +41,25 @@ export interface RemoteRepoTemplate {
 
 /** Ramp-style source-image cadence. Compute runs only while replacing an image. */
 export const REMOTE_REPO_TEMPLATE_REFRESH_MS = 30 * 60 * 1_000;
-/** Box counts every create, fork, and resume against a 150 starts/day quota.
- * Since session adoption fetches the current branch anyway, spending 48 of
- * those starts per repo/day only to shorten the git delta harms availability
- * more than it helps latency. Setup-input changes still invalidate instantly. */
-export const BOX_REPO_TEMPLATE_REFRESH_MS = 6 * 60 * 60 * 1_000;
+/** Box counts every create, fork, and resume against a 150 starts/day quota,
+ * so it refreshes less often than the 30-minute cadence. Not much less: the
+ * image carries setup's generated output (for tella-fusion a ReScript build
+ * of ~1,800 modules), and an image a working day behind the branch turns the
+ * first Portal start into a multi-minute rebuild on a lazily restored disk.
+ * Every two hours is 12 refreshes per repository a day. Setup-input changes
+ * still invalidate instantly. */
+export const BOX_REPO_TEMPLATE_REFRESH_MS = 2 * 60 * 60 * 1_000;
+
+/** Whether a due refresh waits for the parked standby to be used first.
+ * Daytona: yes, replacing it seals and restores a large snapshot and leaves
+ * no standby meanwhile. Box: no, a standby is parked nearly all the time, so
+ * waiting would stop the image from ever refreshing; the replacement becomes
+ * the new standby. */
+export function refreshWaitsForParkedStandby(
+  provider: RemoteTemplateProvider,
+): boolean {
+  return provider !== "box";
+}
 /** Provider storage backstop where an API requires a finite snapshot TTL. */
 export const REMOTE_REPO_TEMPLATE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 

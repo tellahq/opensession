@@ -34,7 +34,6 @@ import {
   watchGithubDeviceFlow,
 } from "../github-auth";
 import { enrollGithubSignIn } from "../github-signin-membership";
-import { workspaceAdminAuthorized } from "../workspace-auth";
 
 export async function handleAuthRoutes(
   ctx: RouteContext,
@@ -70,14 +69,6 @@ export async function handleAuthRoutes(
         iconRevision === null
           ? null
           : `${ctx.publicPrefix}/organization-icon.png?v=${iconRevision}`,
-      // When web auth isn't required (a single-user install), there is no
-      // identity to sign in as, but that user administers the workspace —
-      // workspaceAdminAuthorized() says as much. Report it so the admin-only
-      // settings (Repositories, Connections, …) are reachable; falling
-      // through to `false` here would hide them from the only user.
-      admin: signedIn
-        ? workspaceAdminAuthorized({ authUser: identity })
-        : !webAuthRequired(),
       ...(reconnect ? { reconnectRequired: true } : {}),
       // The login rides along even for a reconnect: the card names the
       // account whose authorization lapsed, which is the whole difference
@@ -103,7 +94,7 @@ export async function handleAuthRoutes(
 
   // One poll of the device flow. On success this BOTH connects the person's
   // PR token (github-auth store) and signs the browser in (session cookie) —
-  // one authorize covers both. Missing members are enrolled as non-admins
+  // one authorize covers both. Missing members are enrolled automatically
   // using only the verified GitHub login, before issuing a web session.
   if (path === "/api/auth/device/poll" && req.method === "POST") {
     if (!webAuthRequired())
@@ -173,9 +164,6 @@ export async function handleAuthRoutes(
         status: "ok",
         login: result.login,
         name: session.name,
-        admin: workspaceAdminAuthorized({
-          authUser: { login: result.login, name: session.name },
-        }),
         ...(native ? { token: session.token } : {}),
       },
       { headers: { "Set-Cookie": webAuthSetCookie(session.token) } },

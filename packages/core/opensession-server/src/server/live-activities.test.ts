@@ -81,7 +81,8 @@ describe("liveActivitySnapshot", () => {
       },
     );
 
-    expect(snapshot.unreadCount).toBe(2);
+    // A running session is not unread until its turn finishes.
+    expect(snapshot.unreadCount).toBe(1);
   });
 
   test("verified creator login wins over an ambiguous display name", () => {

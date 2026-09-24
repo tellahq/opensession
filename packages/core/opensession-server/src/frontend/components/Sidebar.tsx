@@ -409,7 +409,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
     for (const s of sessions) {
       if (s.archived || s.automation) continue;
       if (!s.startedBy || s.startedBy.toLowerCase() !== user) continue;
-      if (!isUnread(s.id, s.lastActivity, reads)) continue;
+      if (!isUnread(s, reads)) continue;
       groups.add(s.workspaceId ? `ws:${s.workspaceId}` : `session:${s.id}`);
     }
     return groups.size;
@@ -759,10 +759,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
         key={session.id}
         session={session}
         selected={automationRowSelected(session)}
-        unread={
-          session.id !== selectedId &&
-          isUnread(session.id, session.lastActivity, reads)
-        }
+        unread={session.id !== selectedId && isUnread(session, reads)}
         mention={
           session.id !== selectedId ? mentionFor(session.id)?.by : undefined
         }
@@ -789,10 +786,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
         key={session.id}
         session={session}
         selected={session.id === selectedId}
-        unread={
-          session.id !== selectedId &&
-          isUnread(session.id, session.lastActivity, reads)
-        }
+        unread={session.id !== selectedId && isUnread(session, reads)}
         mention={
           session.id !== selectedId ? mentionFor(session.id)?.by : undefined
         }
@@ -1233,9 +1227,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
           <SidebarItem
             session={s}
             selected={automationRowSelected(s)}
-            unread={
-              s.id !== selectedId && isUnread(s.id, s.lastActivity, reads)
-            }
+            unread={s.id !== selectedId && isUnread(s, reads)}
             mention={s.id !== selectedId ? mentionFor(s.id)?.by : undefined}
             mine={
               !!s.startedBy &&

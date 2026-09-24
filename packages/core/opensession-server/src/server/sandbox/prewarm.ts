@@ -60,6 +60,8 @@ import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
   baseRuntimeSignature,
+  bunCacheDamaged,
+  clearRemoteBunInstall,
   listRemoteStates,
   remoteCloneUrl,
   remoteWarmWorkspaceDir,
@@ -463,7 +465,12 @@ export async function requestPrewarm(
     entry = undefined;
   }
   if (entry && (entry.state === "bootstrapping" || entry.state === "ready")) {
-    if (options.refreshTemplate && !entry.refreshTemplate) {
+    // A ready entry's refresh is over (published, or skipped for a waiter);
+    // a new refresh request is due work, not a duplicate of it.
+    if (
+      options.refreshTemplate &&
+      (!entry.refreshTemplate || entry.state === "ready")
+    ) {
       await invalidatePrewarm(provider, repoId);
       record = undefined;
       entry = undefined;
@@ -639,19 +646,36 @@ async function runPrewarmBootstrap(
         // output. For tella-fusion that turns the user's first Portal start
         // into an 80–100s ReScript rebuild, defeating the prepared image.
         setPrewarmStage(entry, "Rebuilding prepared project image", 76);
-        await resetRemoteSetupLifecycleStamp(driver, repo.id);
-        await runRemoteLifecycleHook(
-          driver,
-          warmDir,
-          "setup",
-          "fresh",
-          repo.id,
-          {
-            sandboxId: entry.sandboxId || `prewarm:${entry.key}`,
-            provider: entry.provider,
-            repoId: repo.id,
-          },
-        );
+        const setup = async () => {
+          await resetRemoteSetupLifecycleStamp(driver, repo.id);
+          await runRemoteLifecycleHook(
+            driver,
+            warmDir,
+            "setup",
+            "fresh",
+            repo.id,
+            {
+              sandboxId: entry.sandboxId || `prewarm:${entry.key}`,
+              provider: entry.provider,
+              repoId: repo.id,
+            },
+          );
+        };
+        try {
+          await setup();
+        } catch (error) {
+          // An image sealed with a damaged Bun cache fails every install
+          // from it, and each refresh would carry the damage forward. Repair
+          // it once: a clean cache and a fresh install.
+          if (!bunCacheDamaged(String((error as Error)?.message || error)))
+            throw error;
+          console.warn(
+            `[sandbox-prewarm] ${entry.key} Bun cache is damaged; clearing it and running setup again`,
+          );
+          setPrewarmStage(entry, "Repairing the package cache", 78);
+          await clearRemoteBunInstall(driver, warmDir);
+          await setup();
+        }
       }
     } else if (adapter.prepare) {
       setPrewarmStage(entry, "Preparing project workspace", 40);
@@ -746,6 +770,10 @@ async function runPrewarmBootstrap(
     entry.stage = "Ready";
     entry.progress = 100;
     entry.lastTouchedAt = new Date().toISOString();
+    // The refresh is done. Left set, the flag made this standby unclaimable
+    // (claimPrewarm skips refresh entries) and answered every later refresh
+    // request with "ready", so the image never moved again.
+    delete entry.refreshTemplate;
     persist(entry);
     console.log(
       releaseToWaiter()

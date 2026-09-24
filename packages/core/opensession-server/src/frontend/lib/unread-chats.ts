@@ -32,8 +32,7 @@ export function unreadChatsInOrder(
           !session.archived &&
           !session.desk &&
           !session.parentSessionId &&
-          !session.isRunning &&
-          isUnread(session.id, session.lastActivity, reads),
+          isUnread(session, reads),
       )
       .sort(
         (a, b) =>

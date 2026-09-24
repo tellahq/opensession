@@ -158,10 +158,6 @@ export interface TeamMember {
   /** IANA timezone, e.g. "Europe/Amsterdam" — used wherever we compute
    * local times for a person (todo reminders). */
   timezone?: string;
-  /** May change workspace-owned settings. When at least one team member sets
-   * this flag, only flagged members are workspace administrators. Omission on
-   * every member preserves the historical all-members-are-admin behavior. */
-  admin?: boolean;
   /**
    * Include in the GitHub→Slack notification map (GITHUB_TO_SLACK). Default
    * true when both `github` and `slackId` are set; set false to keep someone
@@ -448,7 +444,6 @@ export function parseTeamMember(v: unknown): TeamMember | undefined {
       githubToSlack: bool(o.githubToSlack),
       directory: bool(o.directory),
       timezone: str(o.timezone),
-      admin: bool(o.admin),
     }),
   };
 }

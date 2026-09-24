@@ -48,7 +48,7 @@ describe("GitHub integration status", () => {
             installationOwner: "acme",
           },
         },
-        identity: { team: [{ name: "Admin", github: "admin", admin: true }] },
+        identity: { team: [{ name: "Admin", github: "admin" }] },
       }),
     );
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });

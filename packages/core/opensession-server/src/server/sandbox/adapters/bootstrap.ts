@@ -1694,6 +1694,31 @@ export async function runRemoteLifecycleHook(
   return { ran: true, log };
 }
 
+/** A setup failure that comes from a damaged Bun package cache (entries
+ *  whose files are gone after a lazily restored disk was sealed into an
+ *  image) rather than from the repository. */
+export function bunCacheDamaged(message: string): boolean {
+  return /downloaded package was not found in the cache|failed copying files from cache/i.test(
+    message,
+  );
+}
+
+/** Drop the guest's Bun package cache and a workspace's installed packages,
+ *  so the next install downloads and extracts everything again. */
+export async function clearRemoteBunInstall(
+  driver: RemoteDriver,
+  workspace: string,
+): Promise<void> {
+  const L = layoutFor(driver);
+  need(
+    await driver.exec(
+      `rm -rf ${shellQuoteWord(`${L.home}/.bun/install/cache`)} ${shellQuoteWord(`${workspace}/node_modules`)}`,
+      { timeoutMs: 10 * 60_000 },
+    ),
+    "clear Bun install cache",
+  );
+}
+
 /**
  * `.agents/resume` on every real wake. A sandbox that slept keeps its disk but
  * loses every process, so the repository gets one idempotent chance to repair
