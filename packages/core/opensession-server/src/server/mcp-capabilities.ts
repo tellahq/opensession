@@ -116,6 +116,12 @@ export const INTERNAL_MCP_CAPABILITIES = {
     guidance:
       "Open an editable Slack draft when the task needs human-reviewed communication. The human still presses Send.",
   },
+  "opensession-local-files": {
+    summary:
+      "Ask the person watching for files from their own computer, including large video.",
+    guidance:
+      "`request_local_files` asks the person watching for files on their computer (large video is fine) and returns paths here.",
+  },
   "opensession-plain-discussion": {
     summary:
       "Reply to the customer or run a Stripe action from a Plain Ask Sidekick discussion, behind the teammate's Approve/Deny card.",

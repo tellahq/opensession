@@ -159,11 +159,12 @@ export function useShippedChangePresentation({
       ts: sentTs,
     };
   }, [shippedSentKey, sentChannelName, sentPermalink, sentAt, sentTs]);
-  // The card's draft. The title heuristic shows at once; the server writes a
-  // better one from the whole session (PR description, walkthrough, the
-  // agent's closing message) and replaces it when it lands, unless the person
-  // already started typing. Fetched only while the card is actually up: not
-  // once it is dismissed or the update has been sent.
+  // The card's draft. The server writes it from the whole session (PR
+  // description, walkthrough, the agent's closing message). The box stays
+  // empty while it is written: the title heuristic reads well only for simple
+  // PRs, so it is the fallback when drafting fails, not a placeholder. A
+  // person who starts typing first keeps their words. Fetched only while the
+  // card is actually up: not once it is dismissed or the update has been sent.
   const mergedPrNumber = mergedPr?.number;
   const mergedPrRepo = mergedPr?.repo;
   const mergedPrBranch = mergedPr?.branch;
@@ -174,6 +175,7 @@ export function useShippedChangePresentation({
   const [suggested, setSuggested] = useState<{
     key: string;
     message: string;
+    channel?: string;
   } | null>(null);
   const [drafting, setDrafting] = useState(false);
   useEffect(() => {
@@ -187,7 +189,11 @@ export function useShippedChangePresentation({
     )
       .then((result) => {
         if (controller.signal.aborted || !result.message) return;
-        setSuggested({ key: suggestionKey, message: result.message });
+        setSuggested({
+          key: suggestionKey,
+          message: result.message,
+          channel: result.channel || undefined,
+        });
       })
       .catch(() => {
         // The title fallback is already on screen; nothing to report.
@@ -202,6 +208,10 @@ export function useShippedChangePresentation({
   }, [suggestionKey, session.id, mergedPrRepo, mergedPrBranch]);
   const suggestedMessage =
     suggested && suggested.key === suggestionKey ? suggested.message : "";
+  const suggestedChannel =
+    suggested && suggested.key === suggestionKey
+      ? suggested.channel
+      : undefined;
   const shippedChangeShare = useMemo(() => {
     if (mergedPr?.number === undefined || shareDismissed) return undefined;
     const share: ShippedChangeShare = {
@@ -209,11 +219,14 @@ export function useShippedChangePresentation({
       sessionId: session.id,
       defaultMessage:
         suggestedMessage ||
-        suggestedShippedChangeMessage(
-          mergedPr.title || "an update",
-          session.walkthrough?.summary,
-        ),
+        (drafting
+          ? ""
+          : suggestedShippedChangeMessage(
+              mergedPr.title || "an update",
+              session.walkthrough?.summary,
+            )),
       drafting: drafting && !suggestedMessage,
+      defaultChannel: suggestedChannel,
       screenshot: shippedScreenshot,
       reconnectRequired,
       status,
@@ -246,6 +259,7 @@ export function useShippedChangePresentation({
     shippedSent,
     latestAssistantMessage,
     suggestedMessage,
+    suggestedChannel,
     drafting,
   ]);
   return { shippedSent, shippedChangeShare };

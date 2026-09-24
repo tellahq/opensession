@@ -26,13 +26,7 @@ function providerLabel(id: string): string {
   return id;
 }
 
-function SandboxDefaultRow({
-  scope,
-  canManage = true,
-}: {
-  scope: Scope;
-  canManage?: boolean;
-}) {
+function SandboxDefaultRow({ scope }: { scope: Scope }) {
   const user = getCurrentUser();
   const [status, setStatus] = useState<SandboxStatusInfo | null>(null);
   const [saving, setSaving] = useState(false);
@@ -137,7 +131,6 @@ function SandboxDefaultRow({
             value={value}
             options={options}
             onChange={(next) => void save(next)}
-            disabled={scope === "workspace" && !canManage}
           />
         </div>
       }
@@ -154,7 +147,7 @@ export function PersonalSandboxDefaultRow() {
  * there, whatever the workspace or a person chose; only the per-session
  * choice in the new session menu beats it.
  */
-function ProjectSandboxDefaults({ canManage }: { canManage: boolean }) {
+function ProjectSandboxDefaults() {
   const user = getCurrentUser();
   const [status, setStatus] = useState<SandboxStatusInfo | null>(null);
   const [repos, setRepos] = useState<RepoInfo[]>([]);
@@ -250,7 +243,6 @@ function ProjectSandboxDefaults({ canManage }: { canManage: boolean }) {
                         })),
                       ]}
                       onChange={(next) => void save(repo.id, "repo", next)}
-                      disabled={!canManage}
                     />
                   </div>
                 }
@@ -292,7 +284,6 @@ function ProjectSandboxDefaults({ canManage }: { canManage: boolean }) {
                       onChange={(next) =>
                         void save(repo.id, "repo-portals", next)
                       }
-                      disabled={!canManage}
                     />
                   </div>
                 }
@@ -311,24 +302,20 @@ function ProjectSandboxDefaults({ canManage }: { canManage: boolean }) {
   );
 }
 
-export function WorkspaceSandboxDefaults({
-  canManage = true,
-}: {
-  canManage?: boolean;
-}) {
+export function WorkspaceSandboxDefaults() {
   return (
     <>
       <SettingsGroupLabel className="mt-0">
         Session environment
       </SettingsGroupLabel>
       <SettingCard>
-        <SandboxDefaultRow scope="workspace" canManage={canManage} />
+        <SandboxDefaultRow scope="workspace" />
       </SettingCard>
       <SettingsHint>
         This machine runs sessions in a worktree on this server. Only tested
         providers appear here.
       </SettingsHint>
-      <ProjectSandboxDefaults canManage={canManage} />
+      <ProjectSandboxDefaults />
     </>
   );
 }

@@ -83,7 +83,7 @@ function validateMemberFields(
 /** The raw `identity.team` array (unknown keys preserved), plus the raw
  *  config it lives in — mutate the array, then persist the config. Exported so
  *  the connect-time auth bootstrap (routes/connections.ts) upserts the first
- *  admin through the same array the team CRUD uses. */
+ *  member through the same array the team CRUD uses. */
 export function rawTeam(config: Record<string, unknown>): MemberPatch[] {
   const identity =
     config.identity &&

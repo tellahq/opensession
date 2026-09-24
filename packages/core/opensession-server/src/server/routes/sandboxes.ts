@@ -1,10 +1,6 @@
 /** Workspace sandbox connections, defaults, qualification and environments. */
 
 import { requestUser, type RouteContext } from "./context";
-import {
-  requireWorkspaceAdmin,
-  workspaceAdminAuthorized,
-} from "../workspace-auth";
 import { sandboxCapabilityStatus } from "../sandbox/config";
 import { sandboxIngressStatus } from "../sandbox/caddy-ingress";
 import {
@@ -45,7 +41,6 @@ function errorResponse(error: unknown, status = 400): Response {
 
 async function connectionPayload(ctx: Pick<RouteContext, "authUser">) {
   return {
-    canManage: workspaceAdminAuthorized(ctx),
     connections: safeSandboxConnections(),
     operations: listSandboxOperations(),
     ingress: await sandboxIngressStatus(),
@@ -87,8 +82,6 @@ export async function handleSandboxesRoutes(
     /^\/api\/sandbox\/environments\/([^/]+)\/([^/]+)\/keep-ready$/,
   );
   if (keepReadyMatch && req.method === "PUT") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const repo = decodeURIComponent(keepReadyMatch[1]!);
     const provider = decodeURIComponent(keepReadyMatch[2]!);
     if (!isWorkspaceSandboxProvider(provider)) {
@@ -115,8 +108,6 @@ export async function handleSandboxesRoutes(
     /^\/api\/sandbox\/environments\/([^/]+)\/([^/]+)\/rebuild$/,
   );
   if (environmentMatch && req.method === "POST") {
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
     const repo = decodeURIComponent(environmentMatch[1]!);
     const provider = decodeURIComponent(environmentMatch[2]!);
     if (!isWorkspaceSandboxProvider(provider)) {
@@ -148,20 +139,14 @@ export async function handleSandboxesRoutes(
     const user = requestUser(ctx, body.user) || "Anonymous";
     try {
       if (body.scope === "workspace") {
-        const forbidden = requireWorkspaceAdmin(ctx);
-        if (forbidden) return forbidden;
         saveWorkspaceSandboxDefault(body.value);
       } else if (body.scope === "personal") {
         savePersonalSandboxDefault(user, body.value);
       } else if (body.scope === "repo") {
-        const forbidden = requireWorkspaceAdmin(ctx);
-        if (forbidden) return forbidden;
         if (typeof body.repo !== "string" || !(body.repo in REPOS))
           return errorResponse("repo must name a registered repository");
         saveRepoSandboxDefault(body.repo, body.value);
       } else if (body.scope === "repo-portals") {
-        const forbidden = requireWorkspaceAdmin(ctx);
-        if (forbidden) return forbidden;
         if (typeof body.repo !== "string" || !(body.repo in REPOS))
           return errorResponse("repo must name a registered repository");
         saveRepoPortalSandbox(body.repo, body.value);
@@ -193,8 +178,6 @@ export async function handleSandboxesRoutes(
         404,
       );
     }
-    const forbidden = requireWorkspaceAdmin(ctx);
-    if (forbidden) return forbidden;
 
     if (action === "connect" && req.method === "POST") {
       const body = (await req.json().catch(() => ({}))) as Record<

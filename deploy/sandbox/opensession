@@ -1,4 +1,0 @@
-#!/bin/sh
-# Sandbox-only OpenSession command surface. The administrative CLI never ships
-# into a sandbox; this wrapper exposes only workload identity minting.
-exec bun /home/ubuntu/projects/opensession/scripts/workload-identity-client.ts "$@"

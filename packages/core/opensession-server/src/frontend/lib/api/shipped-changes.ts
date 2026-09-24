@@ -51,14 +51,15 @@ export function fetchShippedChangeChannels(sessionId: string): Promise<{
 
 /**
  * The card's first draft, written from the whole session (PR description,
- * walkthrough, the agent's closing message) rather than the PR title. A null
- * message means the caller keeps its title-based fallback.
+ * walkthrough, the agent's closing message) rather than the PR title, and the
+ * channel id it suits. A null message means the caller keeps its title-based
+ * fallback; a null channel keeps the configured default.
  */
 export function fetchShippedChangeSuggestion(
   sessionId: string,
   target: { repo?: string; branch?: string },
   signal?: AbortSignal,
-): Promise<{ message: string | null }> {
+): Promise<{ message: string | null; channel?: string | null }> {
   const query = new URLSearchParams();
   if (target.repo) query.set("repo", target.repo);
   if (target.branch) query.set("branch", target.branch);

@@ -27,7 +27,7 @@ import {
   type ModelOption,
   type SandboxStatusInfo,
 } from "../lib/api";
-import { getCurrentUser, useAuthStatus } from "./UserPicker";
+import { getCurrentUser } from "./UserPicker";
 import { NewRepoDialog } from "./NewRepoDialog";
 import { type FileAttachment } from "../lib/images";
 import { type PastedTextAttachment } from "../lib/pasted-text";
@@ -379,7 +379,7 @@ export function NewSession({
   const [pastedTexts, setPastedTexts] = useState<PastedTextAttachment[]>(
     () => loadDraft(DRAFT_KEY).pastedTexts,
   );
-  const uploads = useAttachmentUploads();
+  const uploads = useAttachmentUploads(DRAFT_KEY);
   const staging = uploads.staging;
   const [fileDragActive, setFileDragActive] = useState(false);
   const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -409,13 +409,9 @@ export function NewSession({
   const [status, setStatus] = useState<CreateStatus>({ kind: "idle" });
   const busy = status.kind === "creating" || status.kind === "reconnecting";
   // "New repository" at the foot of the Project picker: a project that exists
-  // nowhere yet starts here rather than in a scratch dir. It is a setup call,
-  // so it follows the same admin rule Settings uses to show that page.
-  // It is available in workspace composers too: choosing a new project
+  // nowhere yet starts here rather than in a scratch dir. It is available in workspace composers too: choosing a new project
   // releases the original workspace and branch through the scope above.
   const [newRepoOpen, setNewRepoOpen] = useState(false);
-  const admin = useAuthStatus()?.admin;
-  const canCreateRepo = admin !== false;
   function adoptCreatedRepo(created: { id: string; label?: string }) {
     setRepos((current) =>
       current.some((option) => option.id === created.id)
@@ -888,8 +884,8 @@ export function NewSession({
     // while the app is still loading survives this palette closing before
     // its upload lands. Adopt the store rather than the result: it is the
     // one place that has both these files and anything else that arrived.
-    const results = await uploads.upload(picked, (file, signal) =>
-      attachToDraft(DRAFT_KEY, [file], signal),
+    const results = await uploads.upload(picked, (file, signal, onProgress) =>
+      attachToDraft(DRAFT_KEY, [file], signal, onProgress),
     );
     adoptDraftAttachments();
     const rejected = results.flatMap((result) => result.rejected);
@@ -1447,15 +1443,11 @@ export function NewSession({
               repoOptionLabel,
               MULTI_MODIFIER,
             )}
-            action={
-              canCreateRepo
-                ? {
-                    label: "New repository…",
-                    icon: <IconPlus size={20} />,
-                    onSelect: () => setNewRepoOpen(true),
-                  }
-                : undefined
-            }
+            action={{
+              label: "New repository…",
+              icon: <IconPlus size={20} />,
+              onSelect: () => setNewRepoOpen(true),
+            }}
             // A feed workspace is repo-less by construction (its subject is a
             // a feed item, not a checkout), so its create doesn't offer one.
             disabled={busy || forceMode === "scratch"}

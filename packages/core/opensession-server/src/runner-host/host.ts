@@ -575,6 +575,9 @@ try {
     seedTranscriptEntries: spec.seedTranscriptEntries,
     sessionId: spec.engineSessionId || undefined,
     cwd: spec.cwd,
+    remoteWorkspace: spec.remoteWorkspace
+      ? { ...spec.remoteWorkspace, rpcToken: spec.rpcToken || "" }
+      : undefined,
     mode: spec.mode,
     mcpGrantUser: spec.mcpGrantUser,
     model: spec.model,

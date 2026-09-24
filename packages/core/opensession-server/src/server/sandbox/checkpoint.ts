@@ -141,8 +141,15 @@ export function checkpointScript(excluded: string[]): string {
     'if [ "$branch" = "${OS_DEFAULT_BRANCH:-}" ]; then echo "default $branch"; exit 0; fi',
     "head=$(git rev-parse --verify HEAD^{commit})",
     "idx=$(mktemp)",
+    // Start from a copy of the checkout's own index: its stat data lets
+    // `git add -A` rehash only what changed (seconds to milliseconds on a
+    // large checkout; a fresh index hashes every file). Entries marked
+    // assume-unchanged or skip-worktree would hide changes, so a checkout
+    // with any falls back to building the index from HEAD.
+    "real_idx=$(git rev-parse --git-path index)",
+    'if [ -s "$real_idx" ] && ! git ls-files -v | grep -q "^[a-zS]"; then cp "$real_idx" "$idx"; else rm -f "$idx"; fi',
     'export GIT_INDEX_FILE="$idx"',
-    'git read-tree "$head"',
+    'if [ ! -s "$idx" ]; then git read-tree "$head"; fi',
     "git add -A -- .",
     rm.trimEnd(),
     "tree=$(git write-tree)",
@@ -179,6 +186,7 @@ export function checkpointLandScript(
 ): string {
   const exclude = keep.map((path) => `-e ${shellQuoteWord(path)}`).join(" ");
   return [
+    STALE_INDEX_LOCK_CLEANUP,
     `git fetch --no-tags --quiet origin ${shellQuoteWord(`+${ref}:refs/opensession/checkpoint`)}`,
     `test "$(git rev-parse --verify 'refs/opensession/checkpoint^{commit}')" = ${shellQuoteWord(commit)}`,
     "git -c advice.detachedHead=false reset --hard --quiet refs/opensession/checkpoint",
@@ -188,6 +196,19 @@ export function checkpointLandScript(
     "git update-ref -d refs/opensession/checkpoint",
   ].join(" && ");
 }
+
+const LAND_RETRY_DELAY_MS = 2_000;
+
+/** A git that crashed or was killed mid-landing (a timed-out command, a
+ *  segfault under memory pressure) leaves `index.lock` behind, and every
+ *  later landing then fails with "File exists". Nothing else in a Portal
+ *  Sandbox's checkout writes the index, so a lock no running git holds, or
+ *  one older than five minutes, is stale. */
+export const STALE_INDEX_LOCK_CLEANUP =
+  'lock="$(git rev-parse --git-dir)/index.lock" && ' +
+  '{ ! test -e "$lock" || ' +
+  "{ command -v pgrep >/dev/null 2>&1 && pgrep -x git >/dev/null 2>&1 && " +
+  'test -z "$(find "$lock" -mmin +5 2>/dev/null)"; } || rm -f "$lock"; }';
 
 /**
  * Land a checkpoint in a Sandbox whose checkout mirrors the session (a
@@ -203,19 +224,28 @@ export async function landCheckpointInSandbox(
   const repo = getRepo(repoId);
   const env = await checkpointGitEnv(repo);
   if (!env) throw new Error("the workspace has no GitHub credential");
-  const result = await sandbox.exec(
-    [
-      "bash",
-      "-c",
-      checkpointLandScript(
-        checkpoint.ref,
-        checkpoint.commit,
-        checkpoint.branch,
-        excludedPaths(repo),
-      ),
-    ],
-    { env, timeoutMs: CHECKPOINT_TIMEOUT_MS },
-  );
+  const land = () =>
+    sandbox.exec(
+      [
+        "bash",
+        "-c",
+        checkpointLandScript(
+          checkpoint.ref,
+          checkpoint.commit,
+          checkpoint.branch,
+          excludedPaths(repo),
+        ),
+      ],
+      { env, timeoutMs: CHECKPOINT_TIMEOUT_MS },
+    );
+  // The landing is idempotent (fetch, hard reset, clean, branch, mixed
+  // reset), so one retry absorbs a transient failure: a provider command
+  // plane that hiccuped, or a git that crashed and left its lock behind.
+  let result = await land();
+  if (result.exitCode !== 0) {
+    await Bun.sleep(LAND_RETRY_DELAY_MS);
+    result = await land();
+  }
   if (result.exitCode !== 0)
     throw new Error(
       `could not land checkpoint ${checkpoint.commit.slice(0, 12)} in ${sandbox.id}: ` +

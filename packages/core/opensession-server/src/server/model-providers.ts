@@ -313,8 +313,6 @@ export interface ModelProviderSettings {
   port?: number;
   /** Model ids (model provider/<provider>/<model>) to show in the UI picker. */
   pickerModels?: string[];
-  /** Per-account rolling request ceiling on the native bridge (default 300/h). */
-  bridgeMaxRequestsPerHour?: number;
   /** Optional restriction of which codex accounts (codex-accounts.ts ids) serve
    *  model provider/openai/* runs, in preference order (read from bridge.openaiAccounts).
    *  Absent = the normal codex pool pick. Independent of `enabled` (that flag
@@ -568,11 +566,6 @@ export function normalizeModelProviderConfig(
       stringArray(bridge?.accounts) ?? stringArray(r.bridgeAccountIds),
     port: typeof r.port === "number" && r.port > 0 ? r.port : undefined,
     pickerModels: canonicalPickerModels(r.pickerModels),
-    bridgeMaxRequestsPerHour:
-      typeof r.bridgeMaxRequestsPerHour === "number" &&
-      r.bridgeMaxRequestsPerHour > 0
-        ? r.bridgeMaxRequestsPerHour
-        : undefined,
     openaiAccounts: stringArray(bridge?.openaiAccounts),
     xaiAccounts: stringArray(bridge?.xaiAccounts),
     providers: providerMap(r.providers, loadCatalogFile),
@@ -658,16 +651,6 @@ export const DEFAULT_BRIDGE_PORT = 3456;
 
 export function bridgePort(): number {
   return readModelProviderConfig()?.port || DEFAULT_BRIDGE_PORT;
-}
-
-export const DEFAULT_BRIDGE_MAX_REQUESTS_PER_HOUR = 300;
-
-/** Rolling per-account request ceiling for the native Anthropic bridge. */
-export function bridgeMaxRequestsPerHour(): number {
-  return (
-    readModelProviderConfig()?.bridgeMaxRequestsPerHour ||
-    DEFAULT_BRIDGE_MAX_REQUESTS_PER_HOUR
-  );
 }
 
 /** The Orchestrator presets are opt-in (off by default): `"orchestrator": true`

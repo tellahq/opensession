@@ -315,7 +315,6 @@ test("workspace composers offer repository creation and release the old source o
   const source = await Bun.file(
     new URL("./NewSession.tsx", import.meta.url),
   ).text();
-  expect(source).toContain("const canCreateRepo = admin !== false;");
   expect(source).toContain('label: "New repository…"');
   expect(source).toContain(
     "refreshedNewSessionRepo(current, repos, configuredDefaultRepo, forceRepo)",
