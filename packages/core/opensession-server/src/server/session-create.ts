@@ -2639,34 +2639,30 @@ export async function handleCreateSessionMessage(
     : typeof msg.workspaceId === "string" && msg.workspaceId
       ? await getWorkspace(msg.workspaceId)
       : null;
-  const sourceWorkspace = workspace;
+  let sourceWorkspace = workspace;
   // Never trust a client's destination after its repo or mode changed. Recovery
   // and forks retain their already-owned membership; fresh creates resolve a
   // compatible workspace or mint one below, never persist the rejected raw id.
-  if (
-    workspace &&
-    !recoveringSession &&
-    !forkSource &&
-    !canJoinCreateWorkspace(workspace, {
+  const canJoinWorkspace = (candidate: Workspace) =>
+    !!recoveringSession ||
+    !!forkSource ||
+    canJoinCreateWorkspace(candidate, {
       repo: isRepoLess ? undefined : repo.id,
       mode: isScratch ? "scratch" : isAsk ? "ask" : "code",
       fromPr,
       branch,
-    })
-  )
-    workspace = null;
-  // A ticket-linked create always lands in the ticket's ONE workspace
-  // (adopt-don't-duplicate, workspace-resolve.ts) — even when the
-  // client asked for a fresh workspace, a second workspace for the
-  // same ticket is never right. A createWorkspace name doubles as
-  // the ticket-title hint for a first-time resolve.
+    });
+  if (workspace && !canJoinWorkspace(workspace)) workspace = null;
+  // Prefer the ticket's canonical workspace when it is compatible with this
+  // checkout. Otherwise retain its context without adopting its membership.
+  // A createWorkspace name doubles as the title hint for a first-time resolve.
   const msgPlainThreadId =
     typeof msg.plainThreadId === "string" && msg.plainThreadId
       ? msg.plainThreadId
       : undefined;
   if (msgPlainThreadId && !workspace) {
     try {
-      workspace = (
+      const ticketWorkspace = (
         await resolvePlainWorkspace({
           threadId: msgPlainThreadId,
           title:
@@ -2676,6 +2672,8 @@ export async function handleCreateSessionMessage(
           createdBy: user || "Anonymous",
         })
       ).workspace;
+      sourceWorkspace ??= ticketWorkspace;
+      workspace = canJoinWorkspace(ticketWorkspace) ? ticketWorkspace : null;
     } catch {}
   }
   // Whether this create made a brand-new workspace (vs. adding a session

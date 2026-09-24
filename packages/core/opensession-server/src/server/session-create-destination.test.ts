@@ -116,8 +116,9 @@ afterEach(async () => {
 
 async function create(
   mode: "ask" | "code" | "scratch",
-  workspaceId: string,
+  workspaceId: string | undefined,
   createWorkspace?: { name: string },
+  plainThreadId?: string,
 ) {
   const frames: Record<string, unknown>[] = [];
   let openingPrompt: string | undefined;
@@ -139,6 +140,7 @@ async function create(
     branch: "feature",
     workspaceId,
     createWorkspace,
+    plainThreadId,
     sandbox: "local",
   });
   expect(frames.filter((frame) => frame.type === "error")).toEqual([]);
@@ -252,46 +254,97 @@ test("repo-less siblings retain their shared scratch directory", async () => {
   expect(second.session.worktreeDir).toBe(first.session.worktreeDir);
 });
 
-test("Ask keeps its ticket and feed context when its source code workspace cannot be joined", async () => {
-  const thread = spyOn(plainApi, "getThreadWithMessages").mockResolvedValue({
-    id: "ticket-acme",
-  });
-  const format = spyOn(plainApi, "formatThreadContext").mockReturnValue(
-    "Acme ticket conversation",
-  );
-  const refs = spyOn(feeds, "externalRefsOpeningContext").mockResolvedValue(
-    "Acme linked item",
-  );
-  const scope = spyOn(feeds, "feedMcpServersForRefs").mockResolvedValue([
-    "acme-feed",
-  ]);
-  try {
-    const externalRefs = [{ kind: "acme-item", id: "item-1" }];
-    const original = await createWorkspace({
-      name: "Acme ticket",
-      repo: "acme-docs",
-      createdBy: "Acme",
-      branch: "feature",
-      worktreeDir: join(root, "docs-feature"),
-      plainThreadId: "ticket-acme",
-      externalRefs,
+// All cases retain ticket/feed context and the feed's restricted MCP scope.
+// Only destinations compatible with the requested checkout may be adopted.
+test.each([
+  ["inherited Ask context", "ask", "acme-docs", true, true, false],
+  ["explicit Ask context", "ask", "acme-docs", true, true, true],
+  ["foreign Ask destination", "ask", "acme-app", true, true, true],
+  ["SupportPreview materialized ticket", "ask", "acme-docs", true, false, true],
+  ["SupportPreview foreign ticket", "ask", "acme-app", true, false, true],
+  ["foreign Code share destination", "code", "acme-app", true, true, true],
+  ["compatible Code ticket", "code", "acme-docs", true, true, true],
+  ["compatible Ask draft", "ask", "acme-docs", false, true, true],
+  ["SupportPreview compatible draft", "ask", "acme-docs", false, false, true],
+] as const)(
+  "%s preserves compatible membership and source context",
+  async (
+    _name,
+    mode,
+    sourceRepo,
+    materialized,
+    sendWorkspaceId,
+    explicitThread,
+  ) => {
+    const thread = spyOn(plainApi, "getThreadWithMessages").mockResolvedValue({
+      id: "ticket-acme",
     });
-    // The palette sends both: the source supplies context, not membership.
-    const result = await create("ask", original.id, {
-      name: "Ask about the ticket",
-    });
-    expect(result.workspace?.id).not.toBe(original.id);
-    expect(result.session.plainThreadId).toBe("ticket-acme");
-    expect(result.session.externalRefs).toEqual(externalRefs);
-    expect(result.session.mcpServers).toEqual(["acme-feed"]);
-    expect(result.openingPrompt).toContain("Acme ticket conversation");
-    expect(result.openingPrompt).toContain("Acme linked item");
-    expect(thread).toHaveBeenCalledWith("ticket-acme");
-    expect(await getWorkspace(original.id)).toEqual(original);
-  } finally {
-    thread.mockRestore();
-    format.mockRestore();
-    refs.mockRestore();
-    scope.mockRestore();
-  }
-});
+    const format = spyOn(plainApi, "formatThreadContext").mockReturnValue(
+      "Acme ticket conversation",
+    );
+    const refs = spyOn(feeds, "externalRefsOpeningContext").mockResolvedValue(
+      "Acme linked item",
+    );
+    const scope = spyOn(feeds, "feedMcpServersForRefs").mockResolvedValue([
+      "acme-feed",
+    ]);
+    try {
+      const externalRefs = [{ kind: "acme-item", id: "item-1" }];
+      const original = await createWorkspace({
+        name: "Acme ticket",
+        key: "plain-ticket-acme",
+        repo: sourceRepo,
+        createdBy: "Acme",
+        ...(materialized
+          ? {
+              branch: "main",
+              worktreeDir: join(
+                root,
+                sourceRepo === "acme-docs" ? "repo" : "app",
+              ),
+            }
+          : {}),
+        plainThreadId: "ticket-acme",
+        externalRefs,
+      });
+      // The palette inherits the ticket from workspaceId; SupportPreview sends
+      // plainThreadId alone. Explicit wire clients may send both.
+      const result = await create(
+        mode,
+        sendWorkspaceId ? original.id : undefined,
+        { name: "Ticket follow-up" },
+        explicitThread ? "ticket-acme" : undefined,
+      );
+      const compatible =
+        sourceRepo === "acme-docs" && (!materialized || mode === "code");
+      if (compatible) {
+        expect(result.workspace?.id).toBe(original.id);
+        // Resolving the same compatible ticket again must not duplicate it.
+        const sibling = await create(mode, undefined, undefined, "ticket-acme");
+        expect(sibling.workspace?.id).toBe(original.id);
+      } else {
+        expect(result.workspace?.id).not.toBe(original.id);
+        expect(result.workspace?.name).toBe("Ticket follow-up");
+      }
+      expect(result.workspace?.repo).toBe("acme-docs");
+      expect(result.session.repo).toBe("acme-docs");
+      expect(result.session.worktreeDir).toBe(
+        mode === "ask"
+          ? join(root, "worktrees", "docs-ask-checkout")
+          : join(root, "repo"),
+      );
+      expect(result.session.plainThreadId).toBe("ticket-acme");
+      expect(result.session.externalRefs).toEqual(externalRefs);
+      expect(result.session.mcpServers).toEqual(["acme-feed"]);
+      expect(result.openingPrompt).toContain("Acme ticket conversation");
+      expect(result.openingPrompt).toContain("Acme linked item");
+      expect(thread).toHaveBeenCalledWith("ticket-acme");
+      expect(await getWorkspace(original.id)).toEqual(original);
+    } finally {
+      thread.mockRestore();
+      format.mockRestore();
+      refs.mockRestore();
+      scope.mockRestore();
+    }
+  },
+);
