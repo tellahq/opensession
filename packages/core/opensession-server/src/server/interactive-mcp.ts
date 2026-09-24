@@ -29,6 +29,7 @@ import { createDesktopMcpServer } from "./desktop-mcp";
 import { getSandboxProvider } from "./sandbox";
 import { createWalkthroughMcpServer } from "../agents/slack/walkthrough-tools";
 import { createSlackComposeMcpServer } from "../agents/slack/slack-compose-tools";
+import { createLocalFilesMcpServer } from "../agents/slack/local-files-tools";
 import { createPlainDiscussionMcpServer } from "../agents/plain/discussion-tools";
 import { createMemoryMcpServer } from "../agents/slack/memory-tools";
 import {
@@ -387,6 +388,10 @@ export function interactiveMcpServers(
           // Human-gated Slack composition: the tool only opens an editable
           // composer. Posting still requires the signed-in person to press Send.
           "opensession-slack": createSlackComposeMcpServer({ sessionId }),
+          // Ask the person watching for files from their own computer. They
+          // pick the files; the agent never names a path there. Interactive
+          // only: the purpose string is shown to a person as a request.
+          "opensession-local-files": createLocalFilesMcpServer({ sessionId }),
           // AskUserQuestion for engines without a canUseTool hook (Codex):
           // blocks on the same UI question card + Slack escalation as the
           // native Claude tool. claude-runner strips this server so Claude

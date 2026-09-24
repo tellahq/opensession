@@ -165,7 +165,4 @@ struct WorkspaceRunner: Codable, Equatable, Sendable, Identifiable {
 
 struct WorkspaceRunnersResponse: Codable, Sendable {
     let runners: [WorkspaceRunner]?
-    /// True when the person signed in may also change these machines. The app
-    /// never offers that: it is here so the screen can say where to go.
-    let admin: Bool?
 }

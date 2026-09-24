@@ -1168,7 +1168,6 @@ enum OS1API {
         /// Signed out because GitHub ended this person's grant, not because
         /// they never signed in, so `login` is still theirs.
         let reconnectRequired: Bool?
-        let admin: Bool?
         let login: String?
         let name: String?
     }
@@ -1641,10 +1640,10 @@ enum OS1API {
 
     /// `get`, but surfacing the server's own error text.
     ///
-    /// The shared `get` reports the status code alone, which turns setup's two
-    /// most likely answers — "Workspace administrator access is required" and
-    /// a GitHub outage — into "Server returned HTTP 403". Both are things the
-    /// person holding the phone can act on, so both have to arrive as written.
+    /// The shared `get` reports the status code alone, which turns setup's
+    /// most likely failure, a GitHub outage, into a bare "Server returned
+    /// HTTP 5xx". The person holding the phone can act on the server's own
+    /// text, so it has to arrive as written.
     private static func getReportingServerError<T: Decodable & Sendable>(
         _ path: String
     ) async throws -> T {

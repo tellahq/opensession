@@ -820,7 +820,14 @@ export function WsMobileSheet({
               )}
             </div>
             <SheetSeparator />
-            {/* The most urgent contextual action stays first. */}
+            {/* The most urgent contextual action stays first. A parked row's
+                is waking it: nothing else in the list moves it back. */}
+            {snoozeUntil && (
+              <SheetItem tone="accent" onClick={closing(() => onSnooze(null))}>
+                <IconMoon size={22} />
+                Unsnooze
+              </SheetItem>
+            )}
             {row.status === "needsinput" && row.sessions.length > 0 && (
               <SheetItem
                 tone="accent"
@@ -881,12 +888,6 @@ export function WsMobileSheet({
               <IconPin size={22} fill={pinned ? "currentColor" : "none"} />
               {pinned ? "Unpin" : "Pin"}
             </SheetItem>
-            {snoozeUntil && (
-              <SheetItem onClick={closing(() => onSnooze(null))}>
-                <IconMoon size={22} />
-                Unsnooze
-              </SheetItem>
-            )}
             <SheetItem onClick={closing(onRename)}>
               <svg
                 width="20"

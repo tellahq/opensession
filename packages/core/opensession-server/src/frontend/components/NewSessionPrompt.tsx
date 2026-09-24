@@ -521,6 +521,7 @@ export function NewSessionPrompt({
       <FileChips
         files={files}
         pending={staging.files}
+        progress={staging.fileProgress}
         onRemove={onRemoveFile}
         onRemovePending={onRemovePendingFile}
         disabled={disabled}

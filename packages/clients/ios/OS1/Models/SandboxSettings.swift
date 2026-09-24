@@ -58,7 +58,6 @@ struct SandboxSettingsStatus: Codable, Sendable, Equatable {
     var providers: [Provider]?
     var connections: [Connection]?
     var defaults: Defaults?
-    var canManage: Bool?
 
     /// The providers a person may pick as their default, in the server's order.
     /// Same rule the composer uses: once an instance has connections at all,

@@ -225,6 +225,8 @@ export function liveActivitySnapshot(
         !session.desk &&
         !session.spawnedBy &&
         ownsSession(registration, session) &&
+        // Nothing to read until the turn completes.
+        !session.isRunning &&
         isUnread(session.lastActivity, reads[session.id]),
     ).length,
     updatedAt: now / 1000,

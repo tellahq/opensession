@@ -3,6 +3,8 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  statSync,
+  truncateSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -25,7 +27,8 @@ const {
   readPromptFiles,
   stageInlineImages,
 } = await import("./uploads");
-const { MAX_SHIPPED_ATTACHMENT_BYTES } = await import("./prompt-attachments");
+const { MAX_SHIPPED_ATTACHMENT_BYTES, MAX_UPLOAD_BYTES } =
+  await import("./prompt-attachments");
 if (saved === undefined) delete process.env.OPENSESSION_STATE_DIR;
 else process.env.OPENSESSION_STATE_DIR = saved;
 
@@ -65,6 +68,22 @@ describe("actor-owned creation attachments", () => {
       `${UPLOADS_DIR}/${decodeURIComponent(source.sourceRef.slice("uploads:".length))}`,
     );
     expect(stageCreationAttachment("create-session", source)).toEqual(staged);
+  });
+
+  test("hard-links a staged file too large to read whole", () => {
+    const dir = `${UPLOADS_DIR}/staged`;
+    mkdirSync(dir, { recursive: true });
+    const path = `${dir}/huge.mov`;
+    writeFileSync(path, "");
+    // Sparse, so the test stays fast while still crossing the read cap.
+    truncateSync(path, MAX_UPLOAD_BYTES + 1);
+    const [source] = prepareCreationAttachmentSources("large-session", [
+      { name: "huge.mov", path },
+    ]);
+    expect(source.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    const staged = stageCreationAttachment("large-session", source);
+    expect(statSync(staged.path).ino).toBe(statSync(path).ino);
+    expect(stageCreationAttachment("large-session", source)).toEqual(staged);
   });
 
   test("rejects malformed input instead of silently dropping an intent", () => {

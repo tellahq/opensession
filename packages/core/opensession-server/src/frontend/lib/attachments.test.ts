@@ -281,3 +281,21 @@ test("a seventh image is left out of the draft and named", async () => {
   );
   expect(result.rejected).toEqual(["1 image (a message holds up to 6)"]);
 });
+
+test("a remounted view adopts an upload that landed while it was away", async () => {
+  const { landedDraftAttachments } = await import("./attachments");
+  const files = [{ name: "a.txt", type: "text/plain", path: "/staged/a.txt" }];
+  saveDraft(KEY, { images: [], files });
+  const unchanged = landedDraftAttachments(KEY, [], files);
+  expect(unchanged.files).toBe(files);
+  const landed = {
+    name: "clip.mov",
+    type: "video/quicktime",
+    path: "/s/c.mov",
+  };
+  saveDraft(KEY, { files: [...files, landed] });
+  expect(landedDraftAttachments(KEY, [], files).files).toEqual([
+    ...files,
+    landed,
+  ]);
+});

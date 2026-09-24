@@ -51,10 +51,7 @@ async function seed(options: { storage?: boolean } = {}): Promise<{
         github: { userPrAuth: true, oauthClientId: "test-client" },
       },
       identity: {
-        team: [
-          { name: "Ada", github: "ada", admin: true },
-          { name: "Grace", github: "grace", admin: false },
-        ],
+        team: [{ name: "Ada", github: "ada" }],
       },
     }),
   );
@@ -139,8 +136,12 @@ describe("instance general settings", () => {
     await seed();
     const paths = [
       ["/apple-touch-icon.png", 180],
+      ["/apple-touch-icon-precomposed.png", 180],
       ["/icon-192.png", 192],
       ["/icon.png", 512],
+      // The favicon and link-preview image agree with the install icons.
+      ["/favicon.png", 192],
+      ["/favicon.ico", 192],
     ] as const;
     const bundled = new Map<string, ArrayBuffer>();
     for (const [path] of paths) {
@@ -261,31 +262,6 @@ describe("instance general settings", () => {
     );
     expect(response?.status).toBe(400);
     expect(JSON.parse(readFileSync(config, "utf-8")).selfDev).toBeUndefined();
-  });
-
-  test("rejects shared-setting writes from non-admin teammates", async () => {
-    const { config } = await seed();
-    for (const path of [
-      "/api/settings/general",
-      "/api/settings/identity",
-      "/api/settings/asset-storage",
-      "/api/settings/worktrees",
-    ]) {
-      const response = await handleInstanceSettingsRoutes(
-        context(path, "PUT", {
-          login: "grace",
-          body: path.endsWith("general")
-            ? { organizationName: "Nope" }
-            : path.endsWith("asset-storage")
-              ? { provider: "local" }
-              : { productName: "Nope" },
-        }),
-      );
-      expect(response?.status).toBe(403);
-    }
-    expect(
-      JSON.parse(readFileSync(config, "utf-8")).organization,
-    ).toBeUndefined();
   });
 
   test("masks the asset secret and retains it when a draft leaves it blank", async () => {

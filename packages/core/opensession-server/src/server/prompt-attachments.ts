@@ -36,6 +36,21 @@ import type { ImageInput, PromptFile } from "./run-events";
 /** Cap so a single upload can't OOM the process. The HTTP path streams, but
  *  the inline base64/WS path buffers, so keep it modest. */
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+export function envBytes(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+/**
+ * Largest non-image attachment that reaches the agent by path. Those files are
+ * streamed to disk in chunks (chunked-uploads.ts) and never held in memory,
+ * so the only real limit is disk. Images and the inline base64 path keep
+ * MAX_UPLOAD_BYTES, because they are read whole.
+ */
+export const MAX_FILE_UPLOAD_BYTES = envBytes(
+  "OPENSESSION_MAX_FILE_UPLOAD_BYTES",
+  20 * 1024 * 1024 * 1024,
+);
 /**
  * How much attachment payload one turn ships inline to a remote host. The
  * spec travels as one JSON document through the Runner's WebSocket frame or
@@ -52,6 +67,13 @@ export const INLINE_IMAGE_EXTENSIONS: Record<string, string> = {
 };
 
 export type StagedAttachment = { name: string; path: string };
+/** Where staged bytes go when the engine's tools act on another machine (a
+ *  Sandbox): writes `path` there, keeping a file already present, and
+ *  answers whether the file is in place. Absent = this machine's disk. */
+export type AttachmentWriter = (
+  path: string,
+  bytes: Buffer,
+) => Promise<boolean>;
 /** What a remote host made of the turn's shipped files: the copies it wrote,
  *  and the names it received without bytes (or could not write). */
 export type StagedFiles = { staged: StagedAttachment[]; omitted: string[] };
@@ -73,9 +95,11 @@ async function stageBytes(
   scratchDir: string,
   fileName: string,
   bytes: Buffer,
+  writer?: AttachmentWriter,
 ): Promise<string | undefined> {
   const dir = `${scratchDir}/attachments`;
   const path = `${dir}/${fileName}`;
+  if (writer) return (await writer(path, bytes)) ? path : undefined;
   try {
     await mkdir(dir, { recursive: true });
     await writeFile(path, bytes, { flag: "wx", mode: 0o600 });
@@ -104,6 +128,7 @@ async function digestOf(bytes: Buffer): Promise<string> {
 export async function stagePromptImages(
   scratchDir: string | undefined,
   images?: ImageInput[],
+  writer?: AttachmentWriter,
 ): Promise<StagedAttachment[]> {
   if (!scratchDir || !images?.length) return [];
   const staged: StagedAttachment[] = [];
@@ -116,6 +141,7 @@ export async function stagePromptImages(
       scratchDir,
       `image-${await digestOf(bytes)}${extension}`,
       bytes,
+      writer,
     );
     if (path) staged.push({ name: `image-${index + 1}${extension}`, path });
   }
@@ -130,6 +156,7 @@ export async function stagePromptImages(
 export async function stagePromptFiles(
   scratchDir: string | undefined,
   files?: PromptFile[],
+  writer?: AttachmentWriter,
 ): Promise<StagedFiles> {
   const result: StagedFiles = { staged: [], omitted: [] };
   if (!files?.length) return result;
@@ -144,6 +171,7 @@ export async function stagePromptFiles(
             scratchDir,
             `${await digestOf(bytes)}-${name}`,
             bytes,
+            writer,
           )
         : undefined;
     if (path) result.staged.push({ name: shown, path });

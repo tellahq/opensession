@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mergeReadMaps } from "./reads";
+import { isUnread, mergeReadMaps } from "./reads";
 
 test("read hydration merges persisted server and local marks", () => {
   expect(
@@ -38,4 +38,16 @@ test("hydrated read maps retain only the most recent 500 entries", () => {
   expect(Object.keys(reads)).toHaveLength(500);
   expect(reads["session-0"]).toBeUndefined();
   expect(reads["session-500"]).toBe("2026-08-11T10:00:00.000Z");
+});
+
+test("a session is unread only after its turn finishes", () => {
+  const reads = { a: "2026-08-20T10:00:00.000Z" };
+  const session = {
+    id: "a",
+    lastActivity: "2026-08-20T11:00:00.000Z",
+    isRunning: true,
+  };
+  expect(isUnread(session, reads)).toBe(false);
+  expect(isUnread({ ...session, isRunning: false }, reads)).toBe(true);
+  expect(isUnread({ ...session, isRunning: false }, {})).toBe(false);
 });

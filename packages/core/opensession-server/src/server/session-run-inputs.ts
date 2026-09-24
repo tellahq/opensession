@@ -202,9 +202,9 @@ export async function resolveSessionRunInputs(
 
 /**
  * Provider account routing for one turn, shared by every launch path: the
- * in-process runAgent, the detached pi host, a Runner and a sandbox. Account
- * selection tries a pin before personal accounts (resolveAccount), and a
- * remote sandbox uploads only the pinned account (accountsForRemoteUpload), so
+ * in-process runAgent, the detached pi host (also for a Sandbox session) and a
+ * Runner. Account selection tries a pin before personal accounts
+ * (resolveAccount), so
  * a person who takes over an automation-owned session pays with their own
  * subscription only if their turn carries no pin at all: personal accounts
  * first, the shared pool as backup. The automation's own turns keep their

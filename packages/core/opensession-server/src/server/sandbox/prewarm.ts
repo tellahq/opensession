@@ -24,9 +24,9 @@
  * Claiming is atomic: the in-process Map flip is synchronous (single-threaded
  * — no await between check and set) and the state file is renameSync'd to
  * `*.claimed` as the on-disk arbiter, so two simultaneous session creates
- * can never adopt the same sandbox. A claim whose bootstrap signature
- * (runnerSha/runnerBundleUrl) no longer matches the current config is
- * refused and the stale sandbox destroyed — the caller cold-creates.
+ * can never adopt the same sandbox. A claim whose base runtime signature
+ * no longer matches this release's is refused and the stale sandbox
+ * destroyed — the caller cold-creates.
  */
 
 import {
@@ -59,7 +59,9 @@ import { projectPreparationSignature } from "./remote-repo-template";
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
-  bootstrapSignature,
+  baseRuntimeSignature,
+  bunCacheDamaged,
+  clearRemoteBunInstall,
   listRemoteStates,
   remoteCloneUrl,
   remoteWarmWorkspaceDir,
@@ -247,7 +249,7 @@ function removeFile(entry: Pick<PrewarmEntry, "provider" | "repoId">): void {
 }
 
 /** What must match between prewarm time and claim time for adoption to be
- *  safe: the runner-payload pin (bootstrapSignature) PLUS the provider's
+ *  safe: the base runtime (baseRuntimeSignature) PLUS the provider's
  *  create-shape — daytona's org snapshot decides the sandbox's cpu/mem/disk,
  *  not changeable after create. */
 function prewarmSignature(
@@ -262,7 +264,7 @@ function prewarmSignature(
         : provider === "usecomputer"
           ? "snapshot"
           : "";
-  return `${bootstrapSignature()}|${shape}|${JSON.stringify(resources || {})}`;
+  return `${baseRuntimeSignature()}|${shape}|${JSON.stringify(resources || {})}`;
 }
 
 // 429 is intentionally excluded: a blind 0.5–1s retry cannot clear provider
@@ -463,7 +465,12 @@ export async function requestPrewarm(
     entry = undefined;
   }
   if (entry && (entry.state === "bootstrapping" || entry.state === "ready")) {
-    if (options.refreshTemplate && !entry.refreshTemplate) {
+    // A ready entry's refresh is over (published, or skipped for a waiter);
+    // a new refresh request is due work, not a duplicate of it.
+    if (
+      options.refreshTemplate &&
+      (!entry.refreshTemplate || entry.state === "ready")
+    ) {
       await invalidatePrewarm(provider, repoId);
       record = undefined;
       entry = undefined;
@@ -639,19 +646,36 @@ async function runPrewarmBootstrap(
         // output. For tella-fusion that turns the user's first Portal start
         // into an 80–100s ReScript rebuild, defeating the prepared image.
         setPrewarmStage(entry, "Rebuilding prepared project image", 76);
-        await resetRemoteSetupLifecycleStamp(driver, repo.id);
-        await runRemoteLifecycleHook(
-          driver,
-          warmDir,
-          "setup",
-          "fresh",
-          repo.id,
-          {
-            sandboxId: entry.sandboxId || `prewarm:${entry.key}`,
-            provider: entry.provider,
-            repoId: repo.id,
-          },
-        );
+        const setup = async () => {
+          await resetRemoteSetupLifecycleStamp(driver, repo.id);
+          await runRemoteLifecycleHook(
+            driver,
+            warmDir,
+            "setup",
+            "fresh",
+            repo.id,
+            {
+              sandboxId: entry.sandboxId || `prewarm:${entry.key}`,
+              provider: entry.provider,
+              repoId: repo.id,
+            },
+          );
+        };
+        try {
+          await setup();
+        } catch (error) {
+          // An image sealed with a damaged Bun cache fails every install
+          // from it, and each refresh would carry the damage forward. Repair
+          // it once: a clean cache and a fresh install.
+          if (!bunCacheDamaged(String((error as Error)?.message || error)))
+            throw error;
+          console.warn(
+            `[sandbox-prewarm] ${entry.key} Bun cache is damaged; clearing it and running setup again`,
+          );
+          setPrewarmStage(entry, "Repairing the package cache", 78);
+          await clearRemoteBunInstall(driver, warmDir);
+          await setup();
+        }
       }
     } else if (adapter.prepare) {
       setPrewarmStage(entry, "Preparing project workspace", 40);
@@ -746,6 +770,10 @@ async function runPrewarmBootstrap(
     entry.stage = "Ready";
     entry.progress = 100;
     entry.lastTouchedAt = new Date().toISOString();
+    // The refresh is done. Left set, the flag made this standby unclaimable
+    // (claimPrewarm skips refresh entries) and answered every later refresh
+    // request with "ready", so the image never moved again.
+    delete entry.refreshTemplate;
     persist(entry);
     console.log(
       releaseToWaiter()
