@@ -46,39 +46,26 @@ describe("settingsPaletteActions", () => {
     );
   });
 
-  test("covers every non-tool section for an admin", () => {
-    const actions = settingsPaletteActions({ admin: true });
+  test("covers every non-tool section", () => {
+    const actions = settingsPaletteActions();
     expect(actions.map((a) => a.section).sort()).toEqual(
       navSections.map((s) => s.key).sort(),
     );
   });
 
   test("leaves the tool sections to their own palette entries", () => {
-    const sections = settingsPaletteActions({ admin: true }).map(
-      (a) => a.section,
-    );
+    const sections = settingsPaletteActions().map((a) => a.section);
     for (const key of TOOL_SECTIONS) expect(sections).not.toContain(key);
   });
 
-  test("hides admin-only sections from non-admins", () => {
-    const sections = settingsPaletteActions({ admin: false }).map(
-      (a) => a.section,
-    );
-    const adminOnly = navSections.filter((s) => s.adminOnly).map((s) => s.key);
-    expect(adminOnly.length).toBeGreaterThan(0);
-    for (const key of adminOnly) expect(sections).not.toContain(key);
-    for (const s of navSections)
-      if (!s.adminOnly) expect(sections).toContain(s.key);
-  });
-
   test("ids are unique and namespaced so they cannot collide with other actions", () => {
-    const ids = settingsPaletteActions({ admin: true }).map((a) => a.id);
+    const ids = settingsPaletteActions().map((a) => a.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id.startsWith("settings-")).toBe(true);
   });
 
   test("carries the section's label, group and keywords", () => {
-    const actions = settingsPaletteActions({ admin: true });
+    const actions = settingsPaletteActions();
     for (const action of actions) {
       const section = navSections.find((s) => s.key === action.section);
       expect(section).toBeTruthy();

@@ -12,6 +12,7 @@ import { sandboxPrewarmConfig, setKeepReadyTarget } from "./config";
 import {
   invalidateRemoteRepoTemplate,
   readRemoteRepoTemplate,
+  refreshWaitsForParkedStandby,
   remoteRepoTemplateNeedsRefresh,
 } from "./remote-repo-template";
 import { isTransientSandboxStartError } from "./reliability";
@@ -556,6 +557,7 @@ function maintainSandboxEnvironments(): void {
       if (
         (environment.provider === "daytona" ||
           environment.provider === "box") &&
+        refreshWaitsForParkedStandby(environment.provider) &&
         standby?.standby &&
         standby.parked
       ) {

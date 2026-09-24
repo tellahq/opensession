@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { FALLBACK_REPO, sessionRepoOr } from "../lib/session-repo";
 import type { UnifiedSession } from "../lib/types";
-import { sessionSearchIndex, sortByRecentActivity } from "./SessionSearch";
+import {
+  matchScore,
+  matchWorkspaces,
+  orderGroupsByScore,
+  sessionSearchIndex,
+  sortByMatch,
+  sortByRecentActivity,
+} from "./SessionSearch";
+import { mergeSessionPools } from "./CommandMenuHost";
 
 // The palette's own derivations, kept verbatim from before they were hoisted
 // out of the results memo. Precomputing them is only worth having if the text
@@ -10,6 +18,7 @@ import { sessionSearchIndex, sortByRecentActivity } from "./SessionSearch";
 function oldHaystack(s: UnifiedSession): string {
   return [
     s.title,
+    s.workspaceName,
     s.branch,
     s.startedBy,
     s.automation,
@@ -132,5 +141,139 @@ describe("sortByRecentActivity", () => {
     const index = sessionSearchIndex(POOL);
     const rows = POOL.slice();
     expect(sortByRecentActivity(rows, index)).toBe(rows);
+  });
+});
+
+describe("matchWorkspaces", () => {
+  const pool = [
+    session({
+      id: "w1-new",
+      title: "Follow-up",
+      workspaceId: "w1",
+      workspaceName: "Billing revamp",
+      lastActivity: "2026-08-17T10:00:00.000Z",
+    }),
+    session({
+      id: "w2",
+      title: "Other",
+      workspaceId: "w2",
+      workspaceName: "Composer polish",
+      lastActivity: "2026-08-16T10:00:00.000Z",
+    }),
+    session({
+      id: "w1-old",
+      title: "Billing revamp",
+      workspaceId: "w1",
+      workspaceName: "Billing revamp",
+      lastActivity: "2026-08-15T10:00:00.000Z",
+    }),
+    session({ id: "solo", title: "Billing notes" }),
+  ];
+
+  test("returns one row per workspace with its sessions, newest first", () => {
+    const hits = matchWorkspaces("billing", pool);
+    expect(hits.map((h) => h.id)).toEqual(["w1"]);
+    expect(hits[0].sessions.map((s) => s.id)).toEqual(["w1-new", "w1-old"]);
+  });
+
+  test("tolerates typos in the workspace name", () => {
+    expect(matchWorkspaces("compsoer", pool).map((h) => h.id)).toEqual(["w2"]);
+  });
+
+  test("ranks a closer name first", () => {
+    const hits = matchWorkspaces("bil", [
+      session({
+        id: "a",
+        title: "a",
+        workspaceId: "a",
+        workspaceName: "Mobile billing",
+      }),
+      session({
+        id: "b",
+        title: "b",
+        workspaceId: "b",
+        workspaceName: "Billing",
+      }),
+    ]);
+    expect(hits.map((h) => h.id)).toEqual(["b", "a"]);
+  });
+
+  test("an empty query lists no workspaces", () => {
+    expect(matchWorkspaces("  ", pool)).toEqual([]);
+  });
+});
+
+describe("matchScore", () => {
+  test("a name match outranks the same word in secondary metadata", () => {
+    const byName = matchScore("composer", ["Composer fixes"], "composer fixes");
+    const byBranch = matchScore(
+      "composer",
+      ["Nightly"],
+      "nightly fix-composer",
+    );
+    expect(byName).toBeGreaterThan(byBranch);
+    expect(byBranch).toBeGreaterThan(0);
+  });
+
+  test("terms spread across fields still match", () => {
+    expect(
+      matchScore(
+        "composer michiel",
+        ["Fix the Composer"],
+        "fix the composer michiel",
+      ),
+    ).toBeGreaterThan(0);
+  });
+});
+
+describe("sortByMatch", () => {
+  test("orders by score, then recent activity", () => {
+    const index = sessionSearchIndex(POOL);
+    const [a, b, c] = POOL;
+    const scores = new Map([
+      [a, 90],
+      [b, 60],
+      [c, 90],
+    ]);
+    expect(sortByMatch([a, b, c], scores, index).map((s) => s.id)).toEqual([
+      "c",
+      "a",
+      "b",
+    ]);
+  });
+});
+
+describe("orderGroupsByScore", () => {
+  test("puts the group holding the best match first", () => {
+    expect(
+      orderGroupsByScore([
+        [{ row: "action", score: 30 }],
+        [],
+        [{ row: "session", score: 90 }],
+      ]),
+    ).toEqual(["session", "action"]);
+  });
+
+  test("keeps the given order when groups tie", () => {
+    expect(
+      orderGroupsByScore([
+        [{ row: "action", score: 1 }],
+        [{ row: "session", score: 1 }],
+      ]),
+    ).toEqual(["action", "session"]);
+  });
+});
+
+describe("mergeSessionPools", () => {
+  test("keeps the app's rows and adds everyone else's", () => {
+    const mine = session({ id: "a", title: "Mine, fresh" });
+    const merged = mergeSessionPools(
+      [mine],
+      [
+        session({ id: "a", title: "Mine, stale" }),
+        session({ id: "b", title: "Theirs" }),
+      ],
+    );
+    expect(merged.map((s) => s.title)).toEqual(["Mine, fresh", "Theirs"]);
   });
 });

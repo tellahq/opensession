@@ -11,7 +11,6 @@ import { viewTabKind } from "../lib/workspace-pane-tabs";
 import { SessionPaneProviders } from "./SessionPaneProviders";
 import { SessionViewer } from "./SessionViewer";
 import type { SidebarHandle } from "./Sidebar";
-import type { useAuthStatus } from "./UserPicker";
 
 interface AppSessionPaneProps {
   surface: {
@@ -23,7 +22,6 @@ interface AppSessionPaneProps {
   };
   pending: {
     route: Route;
-    auth: ReturnType<typeof useAuthStatus>;
     nextChatAvailable: boolean;
     pendingSessionId: string | null;
     pendingNewWorkspace: boolean;
@@ -116,13 +114,7 @@ interface AppSessionPaneProps {
 
 export function AppSessionPane({
   surface: { viewerSession, socket, focused, splitMode, requestedSurfaceId },
-  pending: {
-    route,
-    auth,
-    nextChatAvailable,
-    pendingSessionId,
-    pendingNewWorkspace,
-  },
+  pending: { route, nextChatAvailable, pendingSessionId, pendingNewWorkspace },
   data: {
     pendingInitialPrompts,
     sidebarRef,
@@ -213,7 +205,7 @@ export function AppSessionPane({
             }),
         }}
         availability={{
-          canRepairSafety: auth?.admin === true,
+          canRepairSafety: true,
           canOpenPr: true,
           canOpenNextChat: focused && nextChatAvailable,
           canStartNewSession: !viewerSession.desk,

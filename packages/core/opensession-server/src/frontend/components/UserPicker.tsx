@@ -70,7 +70,6 @@ export function useCurrentUser(): string {
 export interface AuthStatus {
   required: boolean;
   authenticated: boolean;
-  admin?: boolean;
   /** The server's own name, answered pre-auth so the sign-in card can say
    *  whose server this is (every other source sits behind the gate). */
   organizationName?: string;
@@ -431,7 +430,6 @@ function GithubSignIn({
           onSignedIn({
             required: true,
             authenticated: true,
-            admin: body.admin,
             login: body.login,
             name: body.name,
           });

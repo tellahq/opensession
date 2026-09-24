@@ -20,7 +20,8 @@
  *
  * Token-level text and thinking events pass through unchanged. SDK usage is
  * cumulative inside a tool loop, so each pi step reports only the unreported
- * delta. Images ride as structured content. Unknown SDK tool names are handed
+ * delta. The current turn's images ride as structured content; earlier
+ * turns' images replay as a text placeholder. Unknown SDK tool names are handed
  * to pi, then the live query is discarded so Claude Code cannot continue on
  * its own synthetic error branch.
  *
@@ -46,15 +47,26 @@ import {
   SDK_BUILTIN_TOOLS,
   PASSTHROUGH_MCP,
   PASSTHROUGH_PREFIX,
-  admitBridgeRequest,
   bridgeDesignationError,
   ensureAnthropicBridgeCwd,
+  IMAGE_ONLY_PROMPT,
+  currentTurnStart,
+  flatSdkTurn,
+  flatSdkTurnContent,
+  flatSdkTurnText,
   flattenMessageText,
   jsonSchemaToZodShape,
   pickBridgeAccount,
   replayConversation,
+  turnImages,
   type AnthropicMessage,
   type ContentBlock,
+} from "./anthropic-bridge";
+export {
+  IMAGE_ONLY_PROMPT,
+  MAX_TURN_IMAGES,
+  PRIOR_IMAGE_PLACEHOLDER,
+  turnImages,
 } from "./anthropic-bridge";
 import { markExhausted, type ClaudeAccount } from "./claude-accounts";
 import {
@@ -367,10 +379,10 @@ export function piImageBlockToAnthropic(
  * blocks become tool_use, toolResult messages become user tool_result
  * messages, thinking blocks are dropped (signatures cannot round-trip through
  * a flat-text replay). User images are KEPT: they do not survive the flat
- * replay either, so planSdkTurn lifts them out and rides them to the SDK as
- * real content blocks. Dropping them here was silent data loss — the model
- * answered as if the person had never attached a screenshot, with no error on
- * either side. Exported for the unit tests.
+ * replay either, so planSdkTurn lifts the current turn's images out and rides
+ * them to the SDK as real content blocks. Dropping them here was silent data
+ * loss — the model answered as if the person had never attached a screenshot,
+ * with no error on either side. Exported for the unit tests.
  */
 export function piMessagesToAnthropic(
   messages: readonly PiWireMessage[],
@@ -478,30 +490,16 @@ export interface PiSdkTurnPlan {
   prompt: string;
   /** Structured tool results delivered after resumeSessionAt. */
   toolResults: ContentBlock[] | null;
-  /** Image blocks from the delivered slice, oldest first. Empty = a plain-text
-   *  turn, which rides the SDK's string prompt exactly as it always has. */
+  /** Image blocks from the current user turn, oldest first. Empty = a
+   *  plain-text turn, which rides the SDK's string prompt exactly as it always
+   *  has. Earlier turns' images are never re-sent (PRIOR_IMAGE_PLACEHOLDER). */
   images: ContentBlock[];
+  /** The part of `prompt` replaying history before the current user turn. */
+  history?: string;
   /** Steering that arrived after a complete live tool-result batch. It is
    * queued before parked handlers resume, matching Claude Code's live input. */
   liveFollowUp?: { prompt: string; images: ContentBlock[] };
   continuation: boolean;
-}
-
-/** Per-turn image ceiling. A fresh replay delivers the whole conversation, so
- *  without a cap a session that had traded a dozen screenshots would re-upload
- *  all of them on every divergence. The newest are the ones the turn is about. */
-export const MAX_TURN_IMAGES = 8;
-
-/** The image blocks a delivered slice carries, newest kept. */
-export function turnImages(messages: AnthropicMessage[]): ContentBlock[] {
-  const images: ContentBlock[] = [];
-  for (const m of messages) {
-    if (m.role !== "user" || !Array.isArray(m.content)) continue;
-    for (const b of m.content) if (b?.type === "image") images.push(b);
-  }
-  return images.length > MAX_TURN_IMAGES
-    ? images.slice(-MAX_TURN_IMAGES)
-    : images;
 }
 
 /** Merge an exact resumed tool-result delta into the one structured user
@@ -602,9 +600,13 @@ export function planSdkTurn(
       return {
         resume: stored.sdkSessionId,
         resumeSessionAt: undefined,
-        prompt: replayConversation(delivered),
         toolResults: null,
-        images: turnImages(delivered),
+        ...flatPlanPrompt(
+          flatSdkTurn(
+            delivered,
+            currentTurnStart(messages) - stored.messageCount,
+          ),
+        ),
         continuation: true,
       };
     }
@@ -612,25 +614,33 @@ export function planSdkTurn(
   return {
     resume: undefined,
     resumeSessionAt: undefined,
-    prompt: replayConversation(messages),
     toolResults: null,
-    images: turnImages(messages),
+    ...flatPlanPrompt(flatSdkTurn(messages)),
     continuation: false,
   };
 }
 
-/** Placeholder for a turn whose only content is an image: replayConversation
- *  skips a message with no text, and an empty prompt reads to the SDK as an
- *  empty turn. */
-export const IMAGE_ONLY_PROMPT = "(see the attached image)";
+function flatPlanPrompt(
+  turn: ReturnType<typeof flatSdkTurn>,
+): Pick<PiSdkTurnPlan, "prompt" | "images" | "history"> {
+  return {
+    prompt: flatSdkTurnText(turn),
+    images: turn.images,
+    ...(turn.history ? { history: turn.history } : {}),
+  };
+}
 
 /** The structured user content for a turn carrying images, or null when the
  *  turn is plain text and should keep using the string prompt. */
 export function sdkPromptContent(plan: PiSdkTurnPlan): ContentBlock[] | null {
   if (plan.toolResults) return plan.toolResults;
-  if (!plan.images.length) return null;
-  const text = plan.prompt.trim();
-  return [...plan.images, { type: "text", text: text || IMAGE_ONLY_PROMPT }];
+  const history = plan.history ?? "";
+  return flatSdkTurnContent({
+    history,
+    // prompt = history + "\n\n" + current (flatSdkTurnText).
+    current: history ? plan.prompt.slice(history.length) : plan.prompt,
+    images: plan.images,
+  });
 }
 
 export const MAX_PI_SDK_SESSIONS = 500;
@@ -1333,9 +1343,7 @@ async function* runSdkStream(
     },
   });
 
-  // Accounts this turn has already burned. The sideline alone cannot drive
-  // the walk: the rolling-cap refusal deliberately does not sideline, so
-  // without an explicit exclusion the re-pick hands back the same account.
+  // Never retry the same account twice during this turn's fallback walk.
   const excluded = new Set<string>();
   for (;;) {
     const rotate = { retry: false };
@@ -1443,29 +1451,6 @@ async function* runSdkAttempt(
         ? planLiveSdkTurn(usableStored, wireMessages)
         : null) ?? planSdkTurn(usableStored, wireMessages);
     plannedContinuation = plan.continuation;
-
-    // Rolling per-account hourly cap — the SAME per-boot counter the bridge
-    // admits against, so pi traffic and any residual bridge traffic share one
-    // ceiling per designated account. "429" keeps the refusal
-    // usage-limit-shaped for isPiUsageLimitShape (fallback walk engages), but
-    // the tag keeps the catch from markExhausted-ing the account: the cap is
-    // OUR local admission control, it frees within the hour, and the
-    // exhaustion sideline is shared with the pi bridge — a synthetic
-    // refusal must never bench the account cross-engine until the 5h reset.
-    // ~1.6k tokens is a typical screenshot. The estimate only feeds our local
-    // rolling cap, so rough is the right amount of precision here.
-    const estTokens =
-      Math.ceil((plan.prompt.length + system.length) / 4) +
-      plan.images.length * 1600;
-    const rate = admitBridgeRequest(account.id, estTokens);
-    if (!rate.allowed) {
-      const rateErr = new Error(
-        `pi-anthropic 429: account "${account.name}" exceeded ${rate.limit} requests/hour ` +
-          "(bridgeMaxRequestsPerHour)",
-      );
-      (rateErr as any).piLocalRateCap = true;
-      throw rateErr;
-    }
 
     audit({
       ...auditBase,
@@ -1944,14 +1929,11 @@ async function* runSdkAttempt(
     // A failed continuation may mean the resumed SDK session is dead (config
     // dir swept/wiped): evict the mapping so the next turn replays fresh.
     if (plannedContinuation) piSdkSessionStore().delete(storeKey);
-    const localCap = e?.piLocalRateCap === true;
     const accountUnavailable = isClaudeAccountUnavailable(message, true);
     // Account-level death: sideline the picked designated account before
     // surfacing (claude-direct's markExhausted discipline); the preserved
-    // message is what isPiUsageLimitShape classifies upstream. The local
-    // rolling-cap refusal is exempt (tagged at the throw): it is 429-worded
-    // for the classifier but is not account exhaustion.
-    if (account && !localCap && accountUnavailable) {
+    // message is what isPiUsageLimitShape classifies upstream.
+    if (account && accountUnavailable) {
       // Bench it until the reset the account itself named, when it named one:
       // a weekly limit otherwise came back into the pool in an hour and failed
       // again, every hour, until it genuinely reset.
@@ -1970,11 +1952,7 @@ async function* runSdkAttempt(
     // never ran: multiple accounts were consulted and the reader was shown the
     // last one's sentence, so working rotation read as no rotation at all.
     let poolRefusal: string | undefined;
-    if (
-      account &&
-      (accountUnavailable || localCap) &&
-      partial.content.length === 0
-    ) {
+    if (account && accountUnavailable && partial.content.length === 0) {
       excluded.add(account.id);
       const next = pickBridgeAccount(model.id, {
         accountId: opts.accountId,

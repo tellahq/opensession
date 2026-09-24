@@ -21,13 +21,16 @@ describe("permission-coupled preview portals", () => {
     ) as any;
     expect(config.listen).toEqual([":22001"]);
     const handles = config.routes[0].handle[0].routes[0].handle;
-    expect(handles[0].rewrite).toEqual({
+    // Responses leave compressed: dev servers send uncompressed chunks.
+    expect(handles[0].handler).toBe("encode");
+    expect(Object.keys(handles[0].encodings)).toEqual(["zstd", "gzip"]);
+    expect(handles[1].rewrite).toEqual({
       method: "GET",
       uri: "/api/portal-auth/22001",
     });
-    expect(handles[0].upstreams[0].dial).toMatch(/^127\.0\.0\.1:\d+$/);
-    expect(handles[0].handle_response[0].match.status_code).toEqual([2]);
-    expect(handles[1].upstreams).toEqual([{ dial: "127.0.0.1:23001" }]);
+    expect(handles[1].upstreams[0].dial).toMatch(/^127\.0\.0\.1:\d+$/);
+    expect(handles[1].handle_response[0].match.status_code).toEqual([2]);
+    expect(handles[2].upstreams).toEqual([{ dial: "127.0.0.1:23001" }]);
   });
 
   test("refuses provider or private-network upstreams in Caddy", () => {

@@ -414,6 +414,32 @@ describe("claimPrewarm (adoption)", () => {
   );
 
   test.skipIf(killSwitch)(
+    "a finished image refresh is adoptable and does not block the next one",
+    async () => {
+      const fake = makeFakeAdapter();
+      await requestPrewarm("daytona", "tella-fusion", "refresh", {
+        refreshTemplate: true,
+      });
+      await until(() => readyEntry()?.state === "ready");
+      expect(readyEntry()?.refreshTemplate).toBeUndefined();
+      // An entry persisted by an older release still carries the flag.
+      readyEntry()!.refreshTemplate = true;
+      expect(
+        (
+          await requestPrewarm("daytona", "tella-fusion", "refresh", {
+            refreshTemplate: true,
+          })
+        ).state,
+      ).toBe("bootstrapping");
+      await until(() => readyEntry()?.state === "ready");
+      expect(fake.created).toHaveLength(2);
+      expect(claimPrewarm("daytona", "tella-fusion", "bks-s")?.sandboxId).toBe(
+        fake.created[1],
+      );
+    },
+  );
+
+  test.skipIf(killSwitch)(
     "a deploy leaves a ready prewarm adoptable",
     async () => {
       const fake = makeFakeAdapter();

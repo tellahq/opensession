@@ -485,6 +485,16 @@ export function previewServerConfig(
     handler: "reverse_proxy",
     upstreams: [{ dial: upstream }],
   };
+  // Dev servers behind a Portal serve uncompressed JavaScript (the relay's
+  // fetch decodes whatever the app compressed), and a Next dev page is tens
+  // of megabytes of it. Compress at the edge, where the bytes leave for the
+  // browser. Caddy skips upgrades and already-encoded responses.
+  const compress = {
+    handler: "encode",
+    encodings: { zstd: {}, gzip: {} },
+    prefer: ["zstd", "gzip"],
+    minimum_length: 1024,
+  };
   return {
     listen: [`:${httpsPort}`],
     routes: [
@@ -496,6 +506,7 @@ export function previewServerConfig(
             routes: [
               {
                 handle: [
+                  compress,
                   {
                     handler: "reverse_proxy",
                     upstreams: [{ dial: `127.0.0.1:${authPort}` }],

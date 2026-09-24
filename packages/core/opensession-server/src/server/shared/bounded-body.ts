@@ -29,12 +29,22 @@ export async function readRequestTextWithinLimit(
   req: Request,
   maxBytes: number,
 ): Promise<string> {
+  return new TextDecoder().decode(
+    await readRequestBytesWithinLimit(req, maxBytes),
+  );
+}
+
+/** The raw-bytes form of readRequestTextWithinLimit, with the same limits. */
+export async function readRequestBytesWithinLimit(
+  req: Request,
+  maxBytes: number,
+): Promise<Uint8Array> {
   const declared = declaredContentLength(req.headers);
   if (declared !== null && declared > maxBytes) {
     throw new RequestBodyTooLargeError(maxBytes);
   }
 
-  if (!req.body) return "";
+  if (!req.body) return new Uint8Array();
   const reader = req.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -63,7 +73,7 @@ export async function readRequestTextWithinLimit(
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder().decode(bytes);
+  return bytes;
 }
 
 /** Standard public-provider cap. Individual capability endpoints may use less. */
