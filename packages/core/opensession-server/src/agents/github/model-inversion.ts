@@ -18,7 +18,7 @@ import {
 } from "../../server/config";
 import { indexedSession } from "../../server/session-list-store";
 import { tryGetSessionControl } from "../../server/session-control";
-import { matchReviewOwners, workspaceIdForRepo } from "./session-notify";
+import { matchSessions, workspaceIdForRepo } from "./session-notify";
 import { readPrStateAsync } from "./state";
 import { bksIdFor } from "./run";
 import type { PrRef } from "./review";
@@ -58,7 +58,10 @@ export async function authorFamilyFor(
           defaultRepo(configuredRepos(await getConfigAsync())).ghRepo,
       );
       if (workspaceId) {
-        for (const s of await matchReviewOwners(workspaceId, pr.headRef)) {
+        const owners = (
+          await matchSessions(workspaceId, pr.headRef, { order: "activity" })
+        ).filter((s) => !s.id.startsWith("bks-ghpr-"));
+        for (const s of owners) {
           const family = familyOf(s.model);
           if (family) return { family, source: `owning session ${s.id}` };
         }

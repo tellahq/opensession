@@ -76,12 +76,21 @@ describe("GitHub ownership gateway boundary", () => {
           );
         if (
           ts.isCallExpression(node) &&
-          ["matchSessions", "matchReviewOwners"].includes(
-            node.expression.getText(file),
-          )
+          node.expression.getText(file) === "matchSessions"
         ) {
           expect(ts.isAwaitExpression(node.parent)).toBe(true);
-          expect(node.arguments.length).toBe(2);
+          // repo, branch, and optionally an `{ order }` literal: never a
+          // caller-supplied session list or checkout to probe.
+          expect([2, 3]).toContain(node.arguments.length);
+          const opts = node.arguments[2];
+          if (opts) {
+            expect(ts.isObjectLiteralExpression(opts)).toBe(true);
+            expect(
+              (opts as ts.ObjectLiteralExpression).properties.map((p) =>
+                p.name?.getText(file),
+              ),
+            ).toEqual(["order"]);
+          }
         }
       });
     }

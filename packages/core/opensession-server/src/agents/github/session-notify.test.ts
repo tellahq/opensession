@@ -11,11 +11,7 @@ import {
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  matchReviewOwners,
-  matchSessions,
-  workspaceIdForRepo,
-} from "./session-matching";
+import { matchSessions, workspaceIdForRepo } from "./session-matching";
 import { __setSessionListStoreForTest } from "../../server/session-list-store";
 import { SessionListStore } from "../../server/session-list-sqlite";
 import type { UnifiedSession } from "../../server/types";
@@ -96,6 +92,55 @@ describe("catalog-only GitHub session matching", () => {
     expect(await workspaceIdForRepo("org/alpha")).toBe("alpha");
   });
 
+  test("a linked PR's head branch counts as ownership, ranked after checkouts", async () => {
+    const linked = (id: string, lastActivity: string) =>
+      row(id, {
+        repo: "beta",
+        branch: "own-work",
+        lastActivity,
+        linkedPrs: [{ repo: "alpha", branch: "feature", number: 7 }],
+      });
+    store.upsertMany([
+      linked("linked-newest", "2026-09-20T00:00:00Z"),
+      row("checkout-older", { lastActivity: "2026-09-18T00:00:00Z" }),
+      linked("linked-older", "2026-09-19T00:00:00Z"),
+      row("wrong-repo-link", {
+        repo: "beta",
+        branch: "x",
+        linkedPrs: [{ repo: "beta", branch: "feature" }],
+      }),
+    ]);
+    expect(
+      (await matchSessions("alpha", "feature", { order: "activity" })).map(
+        (s) => s.id,
+      ),
+    ).toEqual(["checkout-older", "linked-newest", "linked-older"]);
+    // Only a linked follower: it is the owner the handoff reaches.
+    store.remove("checkout-older");
+    expect(
+      (await matchSessions("alpha", "feature", { order: "activity" }))[0]?.id,
+    ).toBe("linked-newest");
+    // Unlinking (or archiving) drops the ownership.
+    store.upsert({ ...linked("linked-newest", "x"), linkedPrs: [] });
+    store.setArchived("linked-older", true);
+    expect(await matchSessions("alpha", "feature")).toEqual([]);
+  });
+
+  test("linked followers count toward the ambiguity limit", async () => {
+    store.upsertMany(
+      Array.from({ length: 26 }, (_, i) =>
+        row(`follower-${i}`, {
+          repo: "beta",
+          branch: `own-${i}`,
+          linkedPrs: [{ repo: "alpha", branch: "feature" }],
+        }),
+      ),
+    );
+    await expect(matchSessions("alpha", "feature")).rejects.toThrow(
+      "more than 25",
+    );
+  });
+
   test("does no synchronous I/O or checkout discovery at fleet scale", async () => {
     store.upsertMany(
       Array.from({ length: 10_000 }, (_, i) =>
@@ -167,65 +212,5 @@ describe("catalog-only GitHub session matching", () => {
     );
     store.remove("owner-25");
     expect(await matchSessions("alpha", "feature")).toHaveLength(25);
-  });
-
-  test("review handoff falls back to a session that linked the PR", async () => {
-    const linker = row("linker", {
-      branch: "temp-checkout",
-      worktreeDir: join(root, "temp"),
-      lastActivity: "2026-09-18T00:00:00Z",
-      linkedPrs: [{ repo: "alpha", branch: "feature", number: 7 }],
-    });
-    store.upsertMany([
-      linker,
-      row("bks-ghpr-alpha-7-review"),
-      row("older-linker", {
-        branch: null,
-        linkedPrs: [{ repo: "alpha", branch: "feature" }],
-      }),
-      row("beta-linker", {
-        branch: null,
-        linkedPrs: [{ repo: "beta", branch: "feature" }],
-      }),
-    ]);
-    // Merge and conflict notices keep plain checkout ownership.
-    expect((await matchSessions("alpha", "feature")).map((s) => s.id)).toEqual([
-      "bks-ghpr-alpha-7-review",
-    ]);
-    expect(
-      (await matchReviewOwners("alpha", "feature")).map((s) => s.id),
-    ).toEqual(["linker", "older-linker"]);
-    expect(
-      (await matchReviewOwners("beta", "feature")).map((s) => s.id),
-    ).toEqual(["beta-linker"]);
-
-    // A real branch owner beats any linker.
-    store.upsert(row("owner", { lastActivity: "2026-09-10T00:00:00Z" }));
-    expect(
-      (await matchReviewOwners("alpha", "feature")).map((s) => s.id),
-    ).toEqual(["owner"]);
-    store.remove("owner");
-
-    // Unlinking, archiving, and removal drop the linked relation.
-    store.upsert({ ...linker, linkedPrs: [] });
-    expect(
-      (await matchReviewOwners("alpha", "feature")).map((s) => s.id),
-    ).toEqual(["older-linker"]);
-    store.setArchived("older-linker", true);
-    expect(await matchReviewOwners("alpha", "feature")).toEqual([]);
-  });
-
-  test("linked review owners keep the ambiguity limit", async () => {
-    store.upsertMany(
-      Array.from({ length: 26 }, (_, i) =>
-        row(`linker-${i}`, {
-          branch: null,
-          linkedPrs: [{ repo: "alpha", branch: "feature" }],
-        }),
-      ),
-    );
-    await expect(matchReviewOwners("alpha", "feature")).rejects.toThrow(
-      "more than 25",
-    );
   });
 });

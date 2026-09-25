@@ -30,7 +30,7 @@ import {
   readPrState,
   updatePrState,
 } from "./state";
-import { matchReviewOwners, workspaceIdForRepo } from "./session-notify";
+import { matchSessions, workspaceIdForRepo } from "./session-notify";
 import {
   handoffActive,
   handoffDecision,
@@ -108,9 +108,14 @@ export async function maybeHandoffFindings(
     const workspaceId = await workspaceIdForRepo(repoFull);
     if (!workspaceId) return;
 
-    // A branch owner, else a session that linked this PR; never the PR's own
-    // review/fix runs.
-    const target = (await matchReviewOwners(workspaceId, pr.headRef))[0];
+    // The PR's own review/fix runs also sit on this branch — never hand off to
+    // those; deliver to the most recently active real session.
+    // A session that only linked the PR still owns it, but one with the
+    // branch checked out wins (matchSessions ranks it first).
+    const owners = (
+      await matchSessions(workspaceId, pr.headRef, { order: "activity" })
+    ).filter((s) => !s.id.startsWith("bks-ghpr-"));
+    const target = owners[0];
     if (!target) {
       // No live owning session — the os-auto-fix label remains the path, but
       // say so on the PR instead of silently stopping (each review posts a

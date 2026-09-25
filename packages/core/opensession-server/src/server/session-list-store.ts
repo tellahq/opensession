@@ -25,11 +25,7 @@ import {
   type SessionListWorkerRequest,
   type SessionListWorkerResponse,
 } from "./session-list-protocol";
-import {
-  SessionListStore,
-  type SessionBranchRelation,
-  type SessionListSlice,
-} from "./session-list-sqlite";
+import { SessionListStore, type SessionListSlice } from "./session-list-sqlite";
 import { shareWorkspacePrRefs } from "./session-pr-target";
 import type { UnifiedSession } from "./types";
 
@@ -375,20 +371,17 @@ export function indexedLiveSessionsByBranch(
   return callIndex("listLiveByBranchCovered", branches).then(shared);
 }
 
-/** Catalog-only PR ownership lookup. No full-list or filesystem fallback.
- * `linked` asks for sessions that linked a PR on the branch instead. */
+/** Catalog-only PR ownership lookup. No full-list or filesystem fallback. */
 export async function indexedLiveSessionsByRepoBranch(
   repo: string,
   branch: string,
   defaultRepoId: string,
-  relation: SessionBranchRelation = "owned",
 ): Promise<UnifiedSession[]> {
   const rows = await callIndex(
     "listLiveByRepoBranchCovered",
     repo,
     branch,
     defaultRepoId,
-    relation,
   );
   if (rows === null)
     throw new SessionListIndexError("Session branch index is not ready");
