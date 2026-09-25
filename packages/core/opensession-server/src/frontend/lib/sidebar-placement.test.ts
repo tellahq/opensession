@@ -220,7 +220,7 @@ describe("sidebar row placement", () => {
     ).toBe("snoozed");
   });
 
-  test("moves personally kept work into a teammate's handoff band", () => {
+  test("keeps personally kept work in Active despite a review handoff", () => {
     const handedToMe = row(
       "handed-to-me",
       [
@@ -246,12 +246,16 @@ describe("sidebar row placement", () => {
       }),
     ]);
 
+    expect(classifySidebarPlacement(handedToMe, context)).toBe("needs-review");
+    expect(classifySidebarPlacement(requestedByMe, context)).toBe(
+      "awaiting-review",
+    );
     expect(
       classifySidebarPlacement(handedToMe, { ...context, claimed: true }),
-    ).toBe("needs-review");
+    ).toBe("status");
     expect(
       classifySidebarPlacement(requestedByMe, { ...context, claimed: true }),
-    ).toBe("awaiting-review");
+    ).toBe("status");
   });
 
   test("preserves source order within each placement", () => {

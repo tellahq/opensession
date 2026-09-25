@@ -129,6 +129,34 @@ describe("sweepWorktreeReaper", () => {
     expect(result.parked).toEqual([]);
   });
 
+  it("keeps an archived session's checkout while its PR awaits a deploy", async () => {
+    const { sweepWorktreeReaper } = await import("./worktree-reaper");
+    const waiting = await addDoneWorktree("awaiting-deploy");
+    const quiet = new Date(NOW - 8 * HOUR).toISOString();
+
+    const result = await sweepWorktreeReaper({
+      nowMs: NOW,
+      awaitingDeploy: new Set(["os-waiting"]),
+      sessions: [
+        {
+          id: "os-waiting",
+          worktreeDir: waiting,
+          branch: "awaiting-deploy",
+          repo: "acme",
+          lastActivity: quiet,
+          isRunning: false,
+          archived: true,
+        },
+      ],
+    });
+
+    expect(existsSync(join(waiting, "target", "shots", "after.png"))).toBe(
+      true,
+    );
+    expect(result.skipped.sessionOpen).toBe(1);
+    expect(result.removed).not.toContain("acme-awaiting-deploy");
+  });
+
   it("parks, never reaps, an open session's done checkout past the idle horizon", async () => {
     const { sweepWorktreeReaper } = await import("./worktree-reaper");
     const open = await addDoneWorktree("idle-open-session");

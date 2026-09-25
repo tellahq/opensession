@@ -122,6 +122,86 @@ export function withPortalSandbox(
   };
 }
 
+export class PortalStartError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Start one of a session's declared Portals wherever its Portals run: a
+ * Runner, the workspace Sandbox, a Portal Sandbox (provisioned on the first
+ * start), or this machine. `recipeId` omitted starts the first recipe with a
+ * command. Returns the Portal status afterwards.
+ */
+export async function startSessionPortal(
+  session: UnifiedSession,
+  recipeId?: string,
+  startOptions: { ownTurn?: boolean } = {},
+): Promise<PreviewStatus> {
+  // A project that runs its Portals in a Sandbox of their own gets
+  // that Sandbox provisioned here, on the first start.
+  const sandbox = session.worktreeDir
+    ? await sandboxForPortals(session, {
+        wake: true,
+        provision: true,
+        ownTurn: startOptions.ownTurn,
+      })
+    : null;
+  if (portalsInSandbox(session) && !sandbox)
+    throw new PortalStartError(409, "This session's Sandbox is unavailable");
+  if (!session.worktreeDir)
+    throw new PortalStartError(400, "Session has no Portal workspace");
+  const current = sandbox
+    ? await getSandboxPreviewStatus(sandbox, session.worktreeDir, session.id)
+    : await getPreviewStatus(session.worktreeDir);
+  const recipe = current.portalRecipes.find((candidate) =>
+    recipeId ? candidate.id === recipeId : Boolean(candidate.command),
+  );
+  if (!recipe) throw new PortalStartError(404, "Portal recipe not found");
+  const options = recipeStartOptions(recipe);
+  if (session.runner) {
+    await startRunnerPortal({
+      session,
+      user: session.startedBy || undefined,
+      ...options,
+    });
+    return await runnerPortalPreviewStatus(
+      session,
+      session.startedBy || undefined,
+    );
+  }
+  if (sandbox) {
+    const repo = getRepo(session.repo);
+    const env = createWorkloadIdentityEnv(
+      sandboxPreviewIdentityContext(sandbox, repo.id, "interactive"),
+    );
+    await startSandboxPortalService({
+      sessionId: session.id,
+      sandbox,
+      ...options,
+      env,
+    });
+    return withPortalSandbox(
+      session,
+      await getSandboxPreviewStatus(sandbox, session.worktreeDir, session.id),
+      true,
+    );
+  }
+  if (!existsSync(session.worktreeDir))
+    throw new PortalStartError(400, "Session has no Portal workspace");
+  seedHostEnvFiles(session.worktreeDir);
+  await startPortalService({
+    sessionId: session.id,
+    worktreeDir: session.worktreeDir,
+    ...options,
+  });
+  return await getPreviewStatus(session.worktreeDir);
+}
+
 export async function handlePreviewRoutes(
   ctx: RouteContext,
 ): Promise<Response | undefined> {
@@ -333,89 +413,11 @@ export async function handlePreviewRoutes(
       if (!session)
         return Response.json({ error: "Session not found" }, { status: 404 });
       try {
-        // A project that runs its Portals in a Sandbox of their own gets
-        // that Sandbox provisioned here, on the first start.
-        const sandbox = session.worktreeDir
-          ? await sandboxForPortals(session, { wake: true, provision: true })
-          : null;
-        if (portalsInSandbox(session) && !sandbox)
-          return Response.json(
-            { error: "This session's Sandbox is unavailable" },
-            { status: 409 },
-          );
-        if (!session.worktreeDir)
-          return Response.json(
-            { error: "Session has no Portal workspace" },
-            { status: 400 },
-          );
-        const current = sandbox
-          ? await getSandboxPreviewStatus(
-              sandbox,
-              session.worktreeDir,
-              session.id,
-            )
-          : await getPreviewStatus(session.worktreeDir);
-        const recipe = current.portalRecipes.find(
-          (candidate) => candidate.id === m[2],
-        );
-        if (!recipe)
-          return Response.json(
-            { error: "Portal recipe not found" },
-            { status: 404 },
-          );
-        const options = recipeStartOptions(recipe);
-        if (session.runner) {
-          await startRunnerPortal({
-            session,
-            user: session.startedBy || undefined,
-            ...options,
-          });
-          return Response.json(
-            await runnerPortalPreviewStatus(
-              session,
-              session.startedBy || undefined,
-            ),
-          );
-        }
-        if (sandbox) {
-          const repo = getRepo(session.repo);
-          const env = createWorkloadIdentityEnv(
-            sandboxPreviewIdentityContext(sandbox, repo.id, "interactive"),
-          );
-          await startSandboxPortalService({
-            sessionId: session.id,
-            sandbox,
-            ...options,
-            env,
-          });
-          return Response.json(
-            withPortalSandbox(
-              session,
-              await getSandboxPreviewStatus(
-                sandbox,
-                session.worktreeDir,
-                session.id,
-              ),
-              true,
-            ),
-          );
-        }
-        if (!existsSync(session.worktreeDir))
-          return Response.json(
-            { error: "Session has no Portal workspace" },
-            { status: 400 },
-          );
-        seedHostEnvFiles(session.worktreeDir);
-        await startPortalService({
-          sessionId: session.id,
-          worktreeDir: session.worktreeDir,
-          ...options,
-        });
-        return Response.json(await getPreviewStatus(session.worktreeDir));
+        return Response.json(await startSessionPortal(session, m[2]));
       } catch (error) {
         return Response.json(
           { error: error instanceof Error ? error.message : String(error) },
-          { status: 400 },
+          { status: error instanceof PortalStartError ? error.status : 400 },
         );
       }
     }

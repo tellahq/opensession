@@ -93,6 +93,7 @@ export function startSessionKernelActorWorker(): void {
   ): KernelActorCallResult {
     let store = host.central;
     let requestSessionId: string | undefined;
+    let readOnlyStoreCall = false;
     try {
       let result: unknown;
       if (request.t === "reduce") {
@@ -402,6 +403,7 @@ export function startSessionKernelActorWorker(): void {
         const route = routedStoreCall(request.method, request.args, host);
         const { sessionId } = route;
         requestSessionId = sessionId;
+        readOnlyStoreCall = !route.mutation;
         if (
           route.mutation &&
           sessionId &&
@@ -440,6 +442,10 @@ export function startSessionKernelActorWorker(): void {
           request.t === "reduce" &&
           request.command.kind === "transcript" &&
           request.command.request.op === "ack_wake";
+        // A store read changes nothing, so transient storage pressure (such as
+        // SQLITE_BUSY) leaves no ambiguous state. Quarantining it paused whole
+        // sessions that had nothing to verify.
+        const replaySafeStoreRead = infrastructure && readOnlyStoreCall;
         if (
           !sessionId ||
           isSessionKernelCentralStoreFailure(error) ||
@@ -447,9 +453,9 @@ export function startSessionKernelActorWorker(): void {
         ) {
           failStop = true;
           responseCode = "actor_fatal";
-        } else if (replaySafeWakeAck) {
-          // This monotonic acknowledgement is safe to retry after transient
-          // storage pressure. Quarantining would incorrectly fence an active
+        } else if (replaySafeWakeAck || replaySafeStoreRead) {
+          // A read or monotonic acknowledgement is safe to retry after
+          // transient storage pressure. Quarantining would incorrectly fence an active
           // run even though no lifecycle state became ambiguous.
           responseCode = "retryable";
         } else {

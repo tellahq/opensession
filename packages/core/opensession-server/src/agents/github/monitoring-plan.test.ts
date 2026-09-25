@@ -7,7 +7,7 @@ import {
   parseMonitoringPlanOutput,
 } from "./monitoring-plan";
 import { normalizeReviewOptions } from "./review-options";
-import { renderDeployPrompt } from "./session-notify";
+import { deployVerifierSession, renderDeployPrompt } from "./session-notify";
 
 const PR = {
   number: 42,
@@ -114,5 +114,15 @@ describe("deploy verify prompt", () => {
     ).toBe(
       "PR #7 at abc1234.\n**Should happen**\n- A\n**Could go wrong**\n- B\n{{nope}} {{constructor}}",
     );
+  });
+});
+
+describe("deploy verifier", () => {
+  it("skips the PR agent's own sessions", () => {
+    expect(
+      deployVerifierSession(["bks-ghpr-7-review", "os-author", "os-other"]),
+    ).toBe("os-author");
+    expect(deployVerifierSession(["bks-ghpr-7-review"])).toBeNull();
+    expect(deployVerifierSession([])).toBeNull();
   });
 });

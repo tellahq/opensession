@@ -242,8 +242,8 @@ EOF
       errors=$((errors + 1))
     fi
     auth="$(curl -fsS "$APP_URL/api/auth/status" 2>/dev/null || true)"
-    if ! jq -e '.admin == true and ((.required == false) or (.authenticated == true))' >/dev/null 2>&1 <<<"$auth"; then
-      echo "FAIL browser authentication is unusable or lacks demo admin access" >&2
+    if ! jq -e '(.required == false) or (.authenticated == true)' >/dev/null 2>&1 <<<"$auth"; then
+      echo "FAIL browser authentication is unusable" >&2
       errors=$((errors + 1))
     fi
     if ! curl -fsS "http://127.0.0.1:$CDP_PORT/json/version" >/dev/null 2>&1; then

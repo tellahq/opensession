@@ -441,6 +441,8 @@ export type ProtocolClientMessage =
       fastMode?: boolean;
       /** Start in pstack mode: the pstack skill family loads for every turn. */
       pstackMode?: boolean;
+      /** Start the repository's first Portal once the workspace is ready. */
+      startPortal?: boolean;
       /** Pinned provider account; omitted means automatic pool selection. */
       accountId?: string;
       /** Fork an existing session, keeping its real conversation history. */

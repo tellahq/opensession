@@ -11,9 +11,9 @@
  * OVERRIDES any client-claimed `user` on the WebSocket (ws-handlers.ts), so
  * attribution/gating stop trusting self-declared names.
  *
- * Only GitHub logins that resolve to a configured team member
- * (identity.team[].github) may sign in — an arbitrary GitHub account bounces
- * even if it completed the OAuth flow (its token is also discarded).
+ * A verified GitHub sign-in creates a missing roster entry automatically.
+ * This is not a network-access gate or an organization-membership check.
+ * Removing a roster entry revokes its sessions, not future verified sign-ins.
  *
  * Sessions: ~/.opensession-web-sessions.json (0600), sliding 90-day expiry,
  * loaded into a globalThis map so hot reloads keep everyone signed in. Human
@@ -56,12 +56,14 @@ export interface WebSession {
   lastSeenAt: number;
   /** Omitted for human GitHub sessions; machine auth is explicit and auditable. */
   kind?: "automation";
+  authGeneration?: string;
 }
 
 export interface WebIdentity {
   login: string;
   name: string;
   automation?: boolean;
+  authGeneration?: string;
 }
 
 const g = globalThis as any;
@@ -154,12 +156,19 @@ export function keypadBearerAuthorized(req: Request): boolean {
 }
 
 /** The configured team member a GitHub login belongs to, or null. */
-export function teamMemberForLogin(login: string): { name: string } | null {
-  const lower = login.toLowerCase();
+export function teamMemberForLogin(
+  login: string,
+): { name: string; authGeneration?: string } | null {
+  const lower = login.trim().toLowerCase();
   const m = configuredIdentity().team.find(
-    (t) => t.github?.toLowerCase() === lower,
+    (t) => t.github?.trim().toLowerCase() === lower,
   );
-  return m ? { name: m.name } : null;
+  return m
+    ? {
+        name: m.name,
+        ...(m.authGeneration ? { authGeneration: m.authGeneration } : {}),
+      }
+    : null;
 }
 
 /** Re-resolve a verified identity against the live roster. Human membership
@@ -167,7 +176,8 @@ export function teamMemberForLogin(login: string): { name: string } | null {
 export function refreshWebIdentity(identity: WebIdentity): WebIdentity | null {
   if (identity.automation || !webAuthRequired()) return identity;
   const member = teamMemberForLogin(identity.login);
-  return member ? { login: identity.login, name: member.name } : null;
+  if (!member || member.authGeneration !== identity.authGeneration) return null;
+  return { login: identity.login, ...member };
 }
 
 /** Mint a session for a VERIFIED login. Returns null for non-team logins
@@ -183,10 +193,16 @@ export function createWebSession(
     token,
     login,
     name: member.name,
+    ...(member.authGeneration ? { authGeneration: member.authGeneration } : {}),
     createdAt: now,
     lastSeenAt: now,
   });
-  persist();
+  try {
+    persist();
+  } catch (error) {
+    sessions().delete(token);
+    throw error;
+  }
   audit({ kind: "web_auth_signin", login, user: member.name });
   return { token, name: member.name };
 }
@@ -228,6 +244,7 @@ export function resolveWebAuth(req: Request): WebIdentity | null {
   const refreshed = refreshWebIdentity({
     login: s.login,
     name: s.name,
+    ...(s.authGeneration ? { authGeneration: s.authGeneration } : {}),
     ...(s.kind === "automation" ? { automation: true } : {}),
   });
   if (!refreshed) {

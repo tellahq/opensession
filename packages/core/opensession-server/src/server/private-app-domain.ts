@@ -1,4 +1,5 @@
 /** Managed private app domains: Cloudflare DNS, ACME DNS-01, and Caddy. */
+import { CADDY_STREAM_CLOSE_DELAY } from "./caddy-stream";
 import { X509Certificate, randomBytes } from "crypto";
 import { resolve4 } from "dns/promises";
 import {
@@ -407,7 +408,7 @@ export function privateAppCaddySnippet(
   paths = certificatePaths(domain),
   upstream = "127.0.0.1:3850",
 ): string {
-  return `${domain} {\n    ${MANAGED_START}\n    bind ${tailnetIpv4}\n    tls ${paths.certificate} ${paths.key}\n    reverse_proxy ${upstream} {\n        lb_try_duration 15s\n        lb_try_interval 250ms\n    }\n    ${MANAGED_END}\n}`;
+  return `${domain} {\n    ${MANAGED_START}\n    bind ${tailnetIpv4}\n    tls ${paths.certificate} ${paths.key}\n    reverse_proxy ${upstream} {\n        lb_try_duration 15s\n        lb_try_interval 250ms\n        stream_close_delay ${CADDY_STREAM_CLOSE_DELAY}\n    }\n    ${MANAGED_END}\n}`;
 }
 
 function managedBlock(
@@ -416,7 +417,7 @@ function managedBlock(
   upstream: string,
 ): string {
   const paths = certificatePaths(domain);
-  return `${MANAGED_START}\nbind ${tailnetIpv4}\ntls ${paths.certificate} ${paths.key}\nreverse_proxy ${upstream} {\n    lb_try_duration 15s\n    lb_try_interval 250ms\n}\n${MANAGED_END}`;
+  return `${MANAGED_START}\nbind ${tailnetIpv4}\ntls ${paths.certificate} ${paths.key}\nreverse_proxy ${upstream} {\n    lb_try_duration 15s\n    lb_try_interval 250ms\n    stream_close_delay ${CADDY_STREAM_CLOSE_DELAY}\n}\n${MANAGED_END}`;
 }
 
 function closingBrace(source: string, opening: number): number | undefined {

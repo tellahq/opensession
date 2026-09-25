@@ -678,6 +678,39 @@ describe("session Portal supervisor", () => {
     expect((await listPortalServices(worktree))[0]?.state).toBe("stopped");
   });
 
+  test("starting a stopped Portal again reuses its port", async () => {
+    const command =
+      "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"ok\")}})'";
+    const first = await startPortalService({
+      sessionId: "os-portal-test",
+      worktreeDir: worktree,
+      name: "same-port",
+      port: 18_702,
+      command,
+    });
+    await stopPortalService({
+      sessionId: "os-portal-test",
+      worktreeDir: worktree,
+      name: "same-port",
+    });
+    const again = await startPortalService({
+      sessionId: "os-portal-test",
+      worktreeDir: worktree,
+      name: "same-port",
+      command,
+    });
+    try {
+      expect(again.port).toBe(first.port);
+      expect(again.url).toBe(first.url);
+    } finally {
+      await stopPortalService({
+        sessionId: "os-portal-test",
+        worktreeDir: worktree,
+        name: "same-port",
+      });
+    }
+  });
+
   test("fails a starting record stuck past the readiness window", async () => {
     // A record poisoned before the awake-history rule: state "starting", pid
     // alive, started long ago, nothing listening. It must surface as failed.

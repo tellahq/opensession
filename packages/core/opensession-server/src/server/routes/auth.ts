@@ -20,7 +20,6 @@ import {
   createWebSession,
   destroyWebSession,
   resolveWebAuth,
-  teamMemberForLogin,
   webAuthClearCookie,
   webAuthRequired,
   webAuthSetCookie,
@@ -29,11 +28,12 @@ import {
 import {
   githubDeviceFlowResult,
   githubReconnectRequired,
+  githubSignInGrantUsable,
   pollGithubDeviceFlow,
-  removeGithubAccount,
   startGithubDeviceFlow,
   watchGithubDeviceFlow,
 } from "../github-auth";
+import { enrollGithubSignIn } from "../github-signin-membership";
 
 export async function handleAuthRoutes(
   ctx: RouteContext,
@@ -94,8 +94,8 @@ export async function handleAuthRoutes(
 
   // One poll of the device flow. On success this BOTH connects the person's
   // PR token (github-auth store) and signs the browser in (session cookie) —
-  // one authorize covers both. Non-team logins are rejected and their token
-  // discarded.
+  // one authorize covers both. Missing members are enrolled automatically
+  // using only the verified GitHub login, before issuing a web session.
   if (path === "/api/auth/device/poll" && req.method === "POST") {
     if (!webAuthRequired())
       return Response.json(
@@ -126,14 +126,27 @@ export async function handleAuthRoutes(
       result = await pollGithubDeviceFlow(deviceCode);
     }
     if (result.status !== "ok") return Response.json(result);
-    if (!teamMemberForLogin(result.login)) {
-      removeGithubAccount(result.login);
-      return Response.json({
-        status: "error",
-        error: `GitHub account @${result.login} is not a workspace member. Add it in Settings > Members before enabling sign-in.`,
-      });
+    result = { ...result, login: result.login.toLowerCase() };
+    if (!(await githubSignInGrantUsable(result.login))) {
+      return Response.json(
+        {
+          status: "error",
+          error:
+            "GitHub authorization is no longer available. Please sign in again.",
+        },
+        { status: 401 },
+      );
     }
-    const session = createWebSession(result.login);
+    let session: ReturnType<typeof createWebSession>;
+    try {
+      await enrollGithubSignIn(result.login);
+      session = createWebSession(result.login);
+    } catch {
+      return Response.json(
+        { status: "error", error: "Could not save sign-in. Please try again." },
+        { status: 503 },
+      );
+    }
     if (!session)
       return Response.json(
         { status: "error", error: "Could not create a session" },

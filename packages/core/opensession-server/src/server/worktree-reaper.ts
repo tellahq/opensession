@@ -575,10 +575,21 @@ async function removeDir(repo: Repo, dir: string): Promise<boolean> {
 export async function sweepWorktreeReaper(
   opts: {
     dryRun?: boolean;
-    sessions?: readonly WorktreeActivitySession[];
+    sessions?: readonly (WorktreeActivitySession & { id?: string })[];
+    /** Sessions whose merged PR still waits on its deploy. They count as open
+     *  even when archived: the post-deploy verify prompt unarchives and runs
+     *  in them, so a done-signal must not reap the checkout before it lands.
+     *  The IDLE_DAYS horizon still applies. */
+    awaitingDeploy?: ReadonlySet<string>;
     nowMs?: number;
   } = {},
 ): Promise<ReapResult> {
+  const awaiting = opts.awaitingDeploy;
+  const sessions: readonly WorktreeActivitySession[] = (
+    opts.sessions ?? []
+  ).map((s) =>
+    s.archived && s.id && awaiting?.has(s.id) ? { ...s, archived: false } : s,
+  );
   const root = worktreesDir();
   const result: ReapResult = {
     removed: [],
@@ -597,33 +608,21 @@ export async function sweepWorktreeReaper(
   const nowMs = opts.nowMs ?? Date.now();
   if (!opts.dryRun) pruneParkedWork(nowMs);
   const idleWorktrees = idleSessionWorktrees(
-    opts.sessions ?? [],
+    sessions,
     nowMs - IDLE_DAYS * DAY,
     nowMs - AUTOMATION_IDLE_HOURS * HOUR,
   );
   const activeCutoffMs = nowMs - ACTIVE_HOURS * HOUR;
-  const activeWorktrees = activeSessionWorktrees(
-    opts.sessions ?? [],
-    activeCutoffMs,
-  );
-  const activeBranches = activeSessionBranches(
-    opts.sessions ?? [],
-    activeCutoffMs,
-  );
-  const openWorktrees = openSessionWorktrees(opts.sessions ?? []);
-  const openBranches = openSessionBranches(opts.sessions ?? []);
+  const activeWorktrees = activeSessionWorktrees(sessions, activeCutoffMs);
+  const activeBranches = activeSessionBranches(sessions, activeCutoffMs);
+  const openWorktrees = openSessionWorktrees(sessions);
+  const openBranches = openSessionBranches(sessions);
   // An open session's checkout can be owned through its branch alone (a
   // revived checkout whose stored path is stale), which the path-keyed idle
   // set never sees. Date those by every owner, path or branch, instead.
   const idleCutoffMs = nowMs - IDLE_DAYS * DAY;
-  const recentWorktrees = activeSessionWorktrees(
-    opts.sessions ?? [],
-    idleCutoffMs,
-  );
-  const recentBranches = activeSessionBranches(
-    opts.sessions ?? [],
-    idleCutoffMs,
-  );
+  const recentWorktrees = activeSessionWorktrees(sessions, idleCutoffMs);
+  const recentBranches = activeSessionBranches(sessions, idleCutoffMs);
 
   const inUse = worktreesWithProcesses(root);
   if (!inUse) {
@@ -891,9 +890,15 @@ export function startWorktreeReaper(
       console.error("[worktree-reaper] session snapshot failed; skipping:", e);
       return;
     }
-    void sweepWorktreeReaper({ sessions }).catch((e) =>
-      console.error("[worktree-reaper] sweep failed:", e),
-    );
+    // Loaded on demand: the GitHub agent's pending-deploy store is an
+    // optional extra guard, and a failure to read it only drops that guard.
+    void import("../agents/github/session-notify")
+      .then((m) => m.sessionsAwaitingDeploy())
+      .catch(() => new Set<string>())
+      .then((awaitingDeploy) =>
+        sweepWorktreeReaper({ sessions, awaitingDeploy }),
+      )
+      .catch((e) => console.error("[worktree-reaper] sweep failed:", e));
     // Session scratch dirs (session-scratch.ts) ride the same cadence and
     // session snapshot; scratch outlives its session only up to the same
     // horizons the worktrees do.
