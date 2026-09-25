@@ -1,7 +1,7 @@
 /**
  * Start a new session's Portal as soon as its workspace exists.
  *
- * Chosen in the New session composer ("Start <Portal> now"). A dev server
+ * Chosen in the New session composer ("Boot a Sandbox for <Portal>"). A dev server
  * can take minutes to come up and warm, and until now that clock only
  * started when someone opened the Portals panel. Started with the session,
  * it comes up while the agent reads code and makes its first changes.
@@ -29,6 +29,34 @@ export function portalWorkspaceReady(
   // A workspace Sandbox has a machine once the opening run brought it up.
   if (session.sandbox?.provider && !session.sandbox.sandboxId) return false;
   return true;
+}
+
+/** Whether this process is starting the session's Portal with it. */
+export function portalAutostarting(sessionId: string): boolean {
+  return starting.has(sessionId);
+}
+
+/**
+ * What the agent needs to know about its Portals before its first tool
+ * call, or null when nothing differs from a Portal run beside it. Without
+ * it an agent reads the repo's local dev-server instructions, probes
+ * localhost and port files, and starts a Portal the session is already
+ * starting.
+ */
+export function portalsContextNote(input: {
+  inPortalSandbox: boolean;
+  autostarting: boolean;
+}): string | null {
+  const lines: string[] = [];
+  if (input.autostarting)
+    lines.push(
+      "This session's Portal is already starting (it was requested with the session). Do not start it again: list_portals shows when it is up and whether its first pages are still compiling.",
+    );
+  if (input.inPortalSandbox)
+    lines.push(
+      "This repo's Portals run on their own Sandbox machine, not in this shell. localhost, port files, and repo scripts that start or expect a local dev server do not reach them. Use the Portal tools and the URL they report; that URL needs the person's sign-in, so a curl from this shell gets 401.",
+    );
+  return lines.length ? lines.join("\n") : null;
 }
 
 export function autostartSessionPortal(

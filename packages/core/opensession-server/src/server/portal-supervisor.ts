@@ -1897,6 +1897,44 @@ export async function listSandboxPortalServices(
   return listPortals(sandboxPortalOps(sandbox));
 }
 
+/**
+ * The Sandbox Portals whose warm-up is still compiling their first pages:
+ * the warm script holds `<log>.lock` while it runs (sandbox-portal-warm.ts),
+ * and a lock older than its 15-minute staleness limit is a dead run's. An
+ * app answers while it warms, but its first page loads take a minute, which
+ * an agent should say rather than call it ready. Never throws.
+ */
+export async function sandboxPortalsWarming(
+  sandbox: Sandbox,
+  sessionId: string,
+  names: string[],
+): Promise<Set<string>> {
+  if (!names.length) return new Set();
+  const dir = join(
+    sandboxSessionScratchDir(sessionId, sandbox.provider),
+    "portals",
+  );
+  const checks = names
+    .map(
+      (name) =>
+        `[ -n "$(find ${shellQuoteWord(`${dir}/${name}-warm.log.lock`)} -maxdepth 0 -mmin -15 2>/dev/null)" ] && echo ${shellQuoteWord(name)}`,
+    )
+    .join("; ");
+  try {
+    const result = await sandbox.exec(["bash", "-c", `${checks}; true`], {
+      timeoutMs: 15_000,
+    });
+    return new Set(
+      result.stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => names.includes(line)),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 /** The registry as persisted, without the liveness probe. A sandbox that just
  * woke has no processes left, so every record still marked live is a Portal
  * to restore rather than one to declare failed. */

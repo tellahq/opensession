@@ -12,6 +12,7 @@ import {
 import {
   listPortalServices,
   listSandboxPortalServices,
+  sandboxPortalsWarming,
   restartPortalService,
   restartSandboxPortalService,
   normalizePortalPath,
@@ -516,14 +517,25 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
             return result(
               "No Portals are registered. Use start_portal for a live app or service.",
             );
-          const status = await portalStatus(ctx, dir, sandbox);
+          const [status, warming] = await Promise.all([
+            portalStatus(ctx, dir, sandbox),
+            sandbox
+              ? sandboxPortalsWarming(
+                  sandbox,
+                  ctx.sessionId,
+                  portals
+                    .filter((portal) => portal.state === "awake")
+                    .map((portal) => portal.name),
+                )
+              : new Set<string>(),
+          ]);
           return result(
             portals
               .map((portal) => {
                 const service = status.services.find(
                   (candidate) => candidate.key === portal.key,
                 );
-                return `${portal.name}\nstate: ${portal.state}\nport: ${portal.port}\nurl: ${service?.previewUrl ?? "not ready"}${portal.description ? `\ndescription: ${portal.description}` : ""}${portal.state === "failed" && portal.lastError ? `\nerror: ${portal.lastError}` : ""}`;
+                return `${portal.name}\nstate: ${portal.state}\nport: ${portal.port}\nurl: ${service?.previewUrl ?? "not ready"}${portal.description ? `\ndescription: ${portal.description}` : ""}${warming.has(portal.name) ? "\nwarming: its first pages are still compiling, so opening one now can take a minute. Say so rather than calling it ready." : ""}${portal.state === "failed" && portal.lastError ? `\nerror: ${portal.lastError}` : ""}`;
               })
               .join("\n\n"),
           );

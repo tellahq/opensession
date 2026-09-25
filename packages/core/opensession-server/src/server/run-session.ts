@@ -8,6 +8,7 @@
  * cache in session-cache.ts.
  */
 
+import { portalAutostarting, portalsContextNote } from "./portal-autostart";
 import { ownedWorktreeHeadBranch } from "./session-branch-ownership";
 import {
   mirrorSlackSessionReply,
@@ -2983,6 +2984,18 @@ async function runSessionPromptInner(
       "pinned-goal",
     )}\n\n${prompt}`;
   }
+
+  const portalsNote =
+    session.source === "opensession" && session.worktreeDir && !session.runner
+      ? portalsContextNote({
+          autostarting: portalAutostarting(sessionId),
+          inPortalSandbox:
+            !session.sandbox?.provider &&
+            Boolean(session.portalSandbox || portalSandboxProvider(session)),
+        })
+      : null;
+  if (portalsNote)
+    prompt = `${wrapContext(portalsNote, "portals-note")}\n\n${prompt}`;
 
   // Resuming an automation-owned session must keep that automation's scoping
   // (MCP allowlist + tool denials) — otherwise a resume would silently hand it

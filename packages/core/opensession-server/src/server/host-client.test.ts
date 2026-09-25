@@ -1517,7 +1517,10 @@ describe("local run-host capability", () => {
     await handle.connectWithWait(100);
     const events = handle.events();
     liveHandlers!.onClose();
-    await Bun.sleep(40);
+    // Wait for the replacement connection to be adopted, not just entered.
+    const deadline = Date.now() + 1_000;
+    while ((connects < 3 || !(handle as any).up) && Date.now() < deadline)
+      await Bun.sleep(1);
     expect(connects).toBe(3);
     expect((handle as any).up).toBe(true);
 

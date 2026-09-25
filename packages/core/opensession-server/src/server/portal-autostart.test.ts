@@ -1,8 +1,8 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { portalWorkspaceReady } from "./portal-autostart";
+import { portalWorkspaceReady, portalsContextNote } from "./portal-autostart";
 import { repoPortalStarter } from "./preview";
 
 test("a Portal starts only once the session's workspace exists", () => {
@@ -43,4 +43,21 @@ test("a repo offers its first Portal with a command", async () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+describe("portalsContextNote", () => {
+  test("says nothing for a Portal beside the session", () => {
+    expect(
+      portalsContextNote({ inPortalSandbox: false, autostarting: false }),
+    ).toBeNull();
+  });
+
+  test("tells the agent where the Portal runs and that it is starting", () => {
+    const note = portalsContextNote({
+      inPortalSandbox: true,
+      autostarting: true,
+    })!;
+    expect(note).toContain("Do not start it again");
+    expect(note).toContain("not in this shell");
+  });
 });
