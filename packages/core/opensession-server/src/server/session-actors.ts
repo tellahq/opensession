@@ -54,8 +54,26 @@ export const SCHEDULED_ACTOR = "scheduled";
  *  the person keeps ownership, commit identity and provider account, but
  *  the agent wrote the prompt, so nobody pressed send. */
 export function scheduledActor(setBy?: string | null): string {
-  const name = (setBy || "").trim();
+  const name = scheduledOwner(setBy);
   return name ? `${name}${SCHEDULED_ACTOR_SUFFIX}` : SCHEDULED_ACTOR;
+}
+
+/** The person behind a sender, with every scheduler suffix removed. A
+ *  check-back that schedules the next one runs as `"<person> (scheduled)"`;
+ *  without this each round appended another suffix until the sender grew
+ *  past what transcript attribution parses and the check-back rendered as
+ *  the person's own message. */
+export function scheduledOwner(sender?: string | null): string {
+  let name = (sender || "").trim();
+  for (;;) {
+    const lower = name.toLowerCase();
+    if (lower === SCHEDULED_ACTOR || lower === LOOP_ACTOR) return "";
+    const suffix = [SCHEDULED_ACTOR_SUFFIX, LOOP_ACTOR_SUFFIX].find((s) =>
+      lower.endsWith(s),
+    );
+    if (!suffix) return name;
+    name = name.slice(0, -suffix.length).trim();
+  }
 }
 
 /** Sender for a scheduled `/loop` tick. The person who set the loop stays

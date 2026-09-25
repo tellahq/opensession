@@ -71,6 +71,20 @@ describe("public session safety state", () => {
     expect(automaticallyRecoverableSessionSafety(delivery)).toBe(true);
     expect(automaticallyRecoverableSessionSafety(committedOutbox)).toBe(true);
     expect(publicSessionSafety(committedOutbox).repairAvailable).toBe(true);
+    expect(
+      automaticallyRecoverableSessionSafety({
+        ...recoverable,
+        reason: "database is locked",
+        commandKind: "store:creationState",
+      }),
+    ).toBe(true);
+    expect(
+      automaticallyRecoverableSessionSafety({
+        ...recoverable,
+        reason: "database is locked",
+        commandKind: "store:setRunState",
+      }),
+    ).toBe(false);
     expect(automaticallyRecoverableSessionSafety(contradiction)).toBe(false);
     expect(automaticallyRecoverableSessionSafety(unreconciled)).toBe(false);
 

@@ -5,6 +5,8 @@
  * only with the token minted for its exact {session, sandbox, port} tuple.
  */
 import { randomBytes, timingSafeEqual } from "crypto";
+import { portalNavigationRequest } from "./portal-sign-in";
+import { portalWaitingResponse } from "./portal-waiting-page";
 import { sandboxHttpsPortFor } from "./sandbox/preview-ports";
 
 export type SandboxPortalGrant = {
@@ -538,7 +540,8 @@ export function sandboxPortalRelayClose(ws: any): boolean {
   return true;
 }
 
-async function relayFetch(
+/** Exported for tests; the relay server calls it for each HTTP request. */
+export async function relayFetch(
   input: { sessionId: string; sandboxId: string; port: number },
   request: Request,
 ): Promise<Response> {
@@ -613,6 +616,15 @@ async function relayFetch(
         finish({ status: 502, headers: {} });
       }
     });
+    // The agent could not reach the app: its dev server is (re)starting
+    // after a wake, or was restarted by hand. A person opening a page gets
+    // the self-refreshing waiting page rather than a bare 502.
+    if (
+      result.status === 502 &&
+      !result.body &&
+      portalNavigationRequest(request)
+    )
+      return portalWaitingResponse({ state: "waking", retrySeconds: 3 });
     const headers = new Headers();
     for (const [name, value] of Object.entries(result.headers))
       if (!HOP_HEADERS.has(name.toLowerCase()) && typeof value === "string")

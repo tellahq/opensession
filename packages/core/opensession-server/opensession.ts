@@ -137,6 +137,7 @@ import {
   webAuthRequired,
 } from "./src/server/web-auth";
 import { configureWebhookRoutes } from "./src/server/webhook-server";
+import { boatWebhookRoutes } from "./src/server/sandbox/boat-webhook";
 import { prImagePublicRoutes } from "./src/server/pr-images";
 import {
   sessionHtmlWithSocialMeta,
@@ -838,6 +839,9 @@ if (!g.__opensessionBooted) {
       webhookRoutes.set(key, handler);
     }
     for (const [key, handler] of sessionSocialCardPublicRoutes()) {
+      webhookRoutes.set(key, handler);
+    }
+    for (const [key, handler] of boatWebhookRoutes()) {
       webhookRoutes.set(key, handler);
     }
     configureWebhookRoutes(agents, webhookRoutes);

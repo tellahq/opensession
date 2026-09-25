@@ -37,6 +37,7 @@ import {
   type CreationState,
 } from "./creation-state-machine";
 import type { StagedCreationActorEffect } from "./creation-effect-protocol";
+import { isReadOnlyStoreQuarantine } from "./store-routing";
 import {
   chmodSync,
   closeSync,
@@ -1804,7 +1805,11 @@ export class SessionKernelStore {
     // These operations only read quarantine, timer, or outbox rows. A failed
     // read cannot leave an operation half-applied, so existing work must not
     // prevent the session from being read again.
-    if (READ_ONLY_QUARANTINE_COMMANDS.has(commandKind)) return true;
+    if (
+      READ_ONLY_QUARANTINE_COMMANDS.has(commandKind) ||
+      isReadOnlyStoreQuarantine(commandKind)
+    )
+      return true;
     // Older workers evaluated critical-settlement handling before recognizing
     // SessionQuarantinedError. The rejected operation never executed, but the
     // handler could persist its rejection as a second quarantine in the other
