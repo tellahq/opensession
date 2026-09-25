@@ -43,6 +43,12 @@ function fakeCaddy(): FakeCaddy {
         servers.set(key, await req.json());
         return new Response("", { status: 200 });
       }
+      if (req.method === "PATCH") {
+        // Caddy's PATCH replaces an existing key and 404s a missing one.
+        if (!servers.has(key)) return new Response("unknown", { status: 404 });
+        servers.set(key, await req.json());
+        return new Response("", { status: 200 });
+      }
       if (req.method === "DELETE") {
         servers.delete(key);
         return new Response("", { status: 200 });
@@ -163,11 +169,10 @@ describe.skipIf(process.platform !== "linux")("host Portal Caddy route", () => {
       expect(status.services[0]?.previewUrl).toBe(
         `https://portals.test:${httpsPort}`,
       );
+      // Replaced in place: a DELETE would close the port in between.
       expect(caddy.requests).toEqual([
         `GET preview_${httpsPort}`,
-        `PUT preview_${httpsPort}`,
-        `DELETE preview_${httpsPort}`,
-        `PUT preview_${httpsPort}`,
+        `PATCH preview_${httpsPort}`,
       ]);
       expect(caddy.servers.get(`preview_${httpsPort}`)).toEqual(
         previewServerConfig(httpsPort, `127.0.0.1:${port}`, "portals.test"),

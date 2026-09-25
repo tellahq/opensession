@@ -20,6 +20,7 @@
  * outbound Portal relay (sandbox-portal-relay.ts).
  */
 import { $ } from "bun";
+import { CADDY_STREAM_CLOSE_DELAY } from "./caddy-stream";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { basename, dirname, join, resolve } from "path";
 import type { Repo } from "./config";
@@ -281,6 +282,24 @@ function hostPreviewPortalRecipes(worktreeDir: string): PreviewPortalRecipe[] {
   }
 }
 
+/** The Portal a new session on this checkout can start with it: the first
+ *  `.agents/portals.json` recipe with a command. Read without blocking. */
+export async function repoPortalStarter(
+  repoRoot: string,
+): Promise<{ id: string; name: string } | null> {
+  try {
+    const raw = await Bun.file(
+      join(repoRoot, LIFECYCLE_DIR, "portals.json"),
+    ).text();
+    const recipe = parsePreviewPortalRecipes(raw).find(
+      (candidate) => candidate.command,
+    );
+    return recipe ? { id: recipe.id, name: recipe.name || recipe.id } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** What a repo's committed lifecycle directory provides. Read straight off
  *  the main checkout for Settings → Setup, which tells operators whether
  *  sessions in that repo can prepare themselves and expose their app.
@@ -484,6 +503,7 @@ export function previewServerConfig(
   const serviceProxy = {
     handler: "reverse_proxy",
     upstreams: [{ dial: upstream }],
+    stream_close_delay: CADDY_STREAM_CLOSE_DELAY,
   };
   // Dev servers behind a Portal serve uncompressed JavaScript (the relay's
   // fetch decodes whatever the app compressed), and a Next dev page is tens
@@ -559,9 +579,9 @@ async function ensurePreviewRoute(
     previewRoutes.delete(httpsPort);
   }
   const server = previewServerConfig(httpsPort, upstream, host);
-  const put = () =>
+  const write = (method: "PUT" | "PATCH") =>
     caddyFetch(path, {
-      method: "PUT",
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(server),
     });
@@ -576,14 +596,14 @@ async function ensurePreviewRoute(
       previewRoutes.set(httpsPort, signature);
       return true;
     }
-    // PUT creates the key; if it already exists with another upstream (the
-    // host port moved) it 409s — drop it and recreate so the route always
-    // points at the current upstream.
-    let res = await put();
-    if (res.status === 409) {
-      await caddyFetch(path, { method: "DELETE" }).catch(() => {});
-      res = await put();
-    }
+    // A route with another upstream (a rebuilt relay listens on a new
+    // loopback port) is replaced in place with PATCH: one reload that keeps
+    // the listener. DELETE + PUT closed the port in between, and a browser
+    // opening the Portal then got "connection refused". PUT creates a new
+    // key; a 409 means one appeared meanwhile, so replace that instead.
+    let res = await write(existing.ok ? "PATCH" : "PUT");
+    if (res.status === 409) res = await write("PATCH");
+    else if (res.status === 404 && existing.ok) res = await write("PUT");
     if (!res.ok) return false;
     previewRoutes.set(httpsPort, signature);
     return true;

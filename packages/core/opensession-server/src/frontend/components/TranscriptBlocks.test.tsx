@@ -178,6 +178,7 @@ describe("TranscriptBlocks sent message actions", () => {
       />,
     );
     expect(html.match(/aria-label="Edit and send again"/g)).toHaveLength(1);
+    expect(html.match(/aria-label="Copy message"/g)).toHaveLength(1);
   });
 
   test("does not animate a sent message when delivery settles", () => {

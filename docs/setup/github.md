@@ -337,6 +337,13 @@ use these placeholders:
 Unknown placeholders are left as written. Failed deploys keep the plain failure
 message with the run link.
 
+The verifying session is the first owner that is not one of the PR agent's own
+review or auto-fix sessions. If it was archived after the merge, it is
+unarchived before the prompt arrives, so the verification shows in the sidebar.
+While a merge waits on its deploy, the worktree reaper keeps that session's
+checkout even when it is archived. A session archived before the merge is not
+an owner, so its PR is not verified.
+
 ## Webhook reachability
 
 PR comments, labels, and other event-driven behavior need GitHub to reach the
