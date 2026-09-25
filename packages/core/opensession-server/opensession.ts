@@ -137,6 +137,7 @@ import {
   webAuthRequired,
 } from "./src/server/web-auth";
 import { configureWebhookRoutes } from "./src/server/webhook-server";
+import { boatWebhookRoutes } from "./src/server/sandbox/boat-webhook";
 import { prImagePublicRoutes } from "./src/server/pr-images";
 import {
   sessionHtmlWithSocialMeta,
@@ -641,6 +642,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
           user: authFirst,
           authUser: authFirst,
           authLogin: authUser?.login || null,
+          authGeneration: authUser?.authGeneration,
           authAutomation: authUser?.automation === true,
           // Headful/headless CDP browsers used by agents open the hosted app
           // through loopback and can leave inspection tabs alive for days. They
@@ -838,6 +840,9 @@ if (!g.__opensessionBooted) {
       webhookRoutes.set(key, handler);
     }
     for (const [key, handler] of sessionSocialCardPublicRoutes()) {
+      webhookRoutes.set(key, handler);
+    }
+    for (const [key, handler] of boatWebhookRoutes()) {
       webhookRoutes.set(key, handler);
     }
     configureWebhookRoutes(agents, webhookRoutes);

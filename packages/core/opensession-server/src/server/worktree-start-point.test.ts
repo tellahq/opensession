@@ -1,20 +1,14 @@
 import { getConfigAsync } from "./config";
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { describe, test, expect, beforeAll, afterAll, spyOn } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { $ } from "bun";
 
 /**
- * Where a session's branch starts when the caller names a base. Every session
- * passes its repository's default branch, and the repository's local copy of
- * that branch is not canonical: the shared tella-fusion checkout sat on a
- * feature branch for three days while its local `main` stood still, and every
- * new session started 50 commits behind the `origin/main` that had just been
- * fetched. A stacked worktree off a session branch with unpushed commits must
- * still start from the local branch.
- *
- * Runs against a scratch repo via OPENSESSION_CONFIG / OPENSESSION_WORKTREES_DIR.
+ * New branches follow origin's default branch, not the registered checkout's
+ * stale local copy. Explicit feature bases retain unpushed local work.
+ * Runs against real temporary repositories, with no network access.
  */
 
 const ENV_KEYS = ["OPENSESSION_CONFIG", "OPENSESSION_WORKTREES_DIR"] as const;
@@ -78,7 +72,7 @@ afterAll(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-describe("createWorktree start point for a named base", () => {
+describe("createWorktree start point", () => {
   test("a stale local default branch loses to origin/<default>", async () => {
     // Somebody else lands a commit; this checkout's local main never moves.
     await commit(publisherDir, "b.txt", "landed elsewhere");
@@ -93,6 +87,10 @@ describe("createWorktree start point for a named base", () => {
 
     expect(await git(wtPath, "rev-parse", "HEAD")).toBe(remoteHead);
     expect(await git(wtPath, "branch", "--show-current")).toBe("fresh-session");
+
+    const unstacked = await createWorktree("unstacked-session", "scratch");
+    expect(await git(unstacked, "rev-parse", "HEAD")).toBe(remoteHead);
+    expect(await git(repoDir, "rev-parse", "main")).not.toBe(remoteHead);
   });
 
   test("a local base with unpushed commits still wins", async () => {
@@ -131,4 +129,63 @@ describe("createWorktree start point for a named base", () => {
 
     expect(await git(wtPath, "rev-parse", "HEAD")).toBe(remoteHead);
   });
+
+  test("default bases ignore a diverged local main without changing the checkout", async () => {
+    await commit(repoDir, "local.txt", "local default branch work");
+    const localHead = await git(repoDir, "rev-parse", "HEAD");
+    const remoteHead = await git(publisherDir, "rev-parse", "main");
+    expect(localHead).not.toBe(remoteHead);
+    writeFileSync(join(repoDir, "a.txt"), "uncommitted checkout edit\n");
+    await git(repoDir, "add", "a.txt");
+    writeFileSync(join(repoDir, "untracked.txt"), "untracked checkout edit\n");
+    const status = await git(repoDir, "status", "--porcelain");
+    const staged = await git(repoDir, "diff", "--cached");
+    const existingHead = await git(repoDir, "rev-parse", "stack-base");
+
+    const { createWorktree } = await import("./worktree");
+    for (const [branch, base] of [
+      ["default-implicit", undefined],
+      ["default-explicit", "main"],
+    ] as const) {
+      const wtPath = await createWorktree(branch, "scratch", { base });
+      expect(await git(wtPath, "rev-parse", "HEAD")).toBe(remoteHead);
+      expect(await git(repoDir, "rev-parse", "HEAD")).toBe(localHead);
+      expect(await git(repoDir, "branch", "--show-current")).toBe("main");
+      expect(await git(repoDir, "status", "--porcelain")).toBe(status);
+      expect(await git(repoDir, "diff", "--cached")).toBe(staged);
+      expect(await git(repoDir, "rev-parse", "stack-base")).toBe(existingHead);
+    }
+  });
 });
+
+test.each([undefined, "main", "feature/stack"])(
+  "materialization preserves the requested base %s",
+  async (baseBranch) => {
+    // Capture the actor boundary; the tests above exercise Git itself.
+    const { actorWorktreeMaterializer } = await import("./session-create");
+    const intents = await import("./session-kernel/creation-intents");
+    const boundary = new Error("branch intent captured");
+    const request = spyOn(intents, "requestCreationBranch").mockRejectedValue(
+      boundary,
+    );
+    try {
+      const input = {
+        sessionId: "os-worktree-base",
+        identity: "create-worktree-base",
+        project: "scratch",
+        branch: "new-session",
+        worktreePath: "/worktrees/acme-new-session",
+        isolated: true,
+        ...(baseBranch ? { baseBranch } : {}),
+      };
+      await expect(actorWorktreeMaterializer(input)()).rejects.toThrow(
+        boundary,
+      );
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(request.mock.calls[0]![0]).toMatchObject(input);
+      expect(request.mock.calls[0]![0].baseBranch).toBe(baseBranch);
+    } finally {
+      request.mockRestore();
+    }
+  },
+);

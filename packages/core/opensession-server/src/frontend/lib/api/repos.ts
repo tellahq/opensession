@@ -35,6 +35,8 @@ export interface RepoInfo {
   iconSource?: "github" | "upload" | null;
   /** Changes when that art does, so a replaced icon isn't served stale. */
   iconRev?: number | null;
+  /** The Portal a new session can start with it, when the repo declares one. */
+  portal?: { id: string; name: string };
 }
 
 export type SharedCheckoutMode = "shared" | "worktree";

@@ -527,13 +527,21 @@ async function healthBaseUrl(): Promise<string> {
  * if the restart or the health check fails, repoint `src` back to the previous
  * release and restart it, then fail loudly rather than leave the box offline.
  */
-async function restartReleaseWithRollback(
+export async function restartReleaseWithRollback(
   srcLink: string,
   prevTarget: string,
   opts: UpdateOptions,
+  runtime: {
+    service: Pick<
+      typeof service,
+      "isInstalled" | "restartExecutor" | "control" | "waitHealthy"
+    >;
+    healthBaseUrl: () => Promise<string>;
+  } = { service, healthBaseUrl },
 ): Promise<number> {
+  const { service: services, healthBaseUrl: getHealthBaseUrl } = runtime;
   if (opts.restart === false) return 0;
-  if (!(await service.isInstalled())) {
+  if (!(await services.isInstalled())) {
     warn(
       "no service installed",
       "restart your foreground server to pick this up",
@@ -541,11 +549,11 @@ async function restartReleaseWithRollback(
     return 0;
   }
   heading("Restart (health-gated)");
-  const base = await healthBaseUrl();
-  const executorRestarted = (await service.restartExecutor()) === 0;
+  const base = await getHealthBaseUrl();
+  const executorRestarted = (await services.restartExecutor()) === 0;
   const restarted =
-    executorRestarted && (await service.control("restart")) === 0;
-  const healthy = restarted && (await service.waitHealthy(base));
+    executorRestarted && (await services.control("restart")) === 0;
+  const healthy = restarted && (await services.waitHealthy(base));
   if (healthy) {
     ok("restarted and healthy");
     return 0;
@@ -575,9 +583,20 @@ async function restartReleaseWithRollback(
     );
     return 1;
   }
-  await service.restartExecutor();
-  await service.control("restart");
-  fail("rolled back to the previous release", "the new one did not come up");
+  const rollbackRestarted =
+    (await services.restartExecutor()) === 0 &&
+    (await services.control("restart")) === 0;
+  if (!rollbackRestarted || !(await services.waitHealthy(base))) {
+    fail(
+      "previous release restored, but rollback did not come back healthy",
+      "check `opensession logs` and run `opensession restart` to recover",
+    );
+    return 1;
+  }
+  fail(
+    "rolled back to the previous release and verified healthy",
+    "the new one did not come up",
+  );
   return 1;
 }
 

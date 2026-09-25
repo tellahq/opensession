@@ -470,7 +470,18 @@ export async function handlePlainRoutes(
           `[plain-reply] ${senderName || "someone"} sent a reply to ${threadId} (as ${res.sentAs})`,
         );
         for (const id of attachmentIds) plainAttachmentUploads.delete(id);
-        return Response.json({ ok: true, sentAs: res.sentAs });
+        if (res.waitingForCustomer) {
+          // The thread left the Todo queue; refetch it on the next poll.
+          plainTodoCache = null;
+          try {
+            (await import("../feeds")).invalidateFeedCache("plain");
+          } catch {}
+        }
+        return Response.json({
+          ok: true,
+          sentAs: res.sentAs,
+          waitingForCustomer: res.waitingForCustomer,
+        });
       }
       console.log(
         `[plain-reply] ${requestUser(ctx, body?.user) || "someone"} sent a ${kind} to ${threadId}`,
