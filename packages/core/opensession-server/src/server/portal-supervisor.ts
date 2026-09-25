@@ -1795,6 +1795,8 @@ export async function ensureRemoteSandboxPortalAgent(input: {
   port: number;
   /** A fresh start warms the Portal itself; skip the rebuild warm-up. */
   starting?: boolean;
+  /** The Portal's name, recorded with its local address. */
+  name?: string;
 }): Promise<string | null> {
   if (!usesOutboundSandboxPortalRelay(input.sandbox.provider)) return null;
   const agentKey = `${input.sessionId}:${input.sandbox.id}:${input.port}`;
@@ -1809,7 +1811,7 @@ export async function ensureRemoteSandboxPortalAgent(input: {
     current.expiresAt > Date.now() + 30_000 &&
     sandboxPortalRelayConnected(relayIdentity)
   ) {
-    return ensureSandboxPortalRelay(relayIdentity);
+    return ensureSandboxPortalRelay({ ...relayIdentity, name: input.name });
   }
   const existingStart = remoteRelayAgentStarts.get(agentKey);
   if (existingStart) return existingStart;
@@ -1845,7 +1847,7 @@ export async function ensureRemoteSandboxPortalAgent(input: {
     // starting, or after): its warm-up may never have run. The script skips
     // itself when a finished one is on record.
     if (rebuilt && !input.starting) void warmRebuiltSandboxPortal(input);
-    return ensureSandboxPortalRelay(relayIdentity);
+    return ensureSandboxPortalRelay({ ...relayIdentity, name: input.name });
   })();
   remoteRelayAgentStarts.set(agentKey, start);
   try {
@@ -2096,6 +2098,7 @@ async function startSandboxPortalServiceInner(
     sandbox: input.sandbox,
     port: awake.port,
     starting: true,
+    name: awake.name,
   });
   if (
     usesOutboundSandboxPortalRelay(input.sandbox.provider) &&

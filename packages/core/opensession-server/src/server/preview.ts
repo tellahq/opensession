@@ -789,7 +789,12 @@ export async function getSandboxPreviewStatus(
     let previewUrl: string | null = null;
     if (running && relayed) {
       previewUrl = sessionId
-        ? await ensureRemoteSandboxPortalAgent({ sessionId, sandbox, port })
+        ? await ensureRemoteSandboxPortalAgent({
+            sessionId,
+            sandbox,
+            port,
+            name: portal?.name,
+          })
         : null;
     } else if (running) {
       const entry = (await sandbox.ports([port]))[port];

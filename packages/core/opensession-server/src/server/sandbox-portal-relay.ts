@@ -5,9 +5,12 @@
  * only with the token minted for its exact {session, sandbox, port} tuple.
  */
 import { randomBytes, timingSafeEqual } from "crypto";
+import { mkdir, readdir, readFile, rm, writeFile } from "fs/promises";
+import { join } from "path";
 import { portalNavigationRequest } from "./portal-sign-in";
 import { portalWaitingResponse } from "./portal-waiting-page";
 import { sandboxHttpsPortFor } from "./sandbox/preview-ports";
+import { hostSessionScratchDir } from "./session-scratch";
 
 export type SandboxPortalGrant = {
   sessionId: string;
@@ -96,6 +99,8 @@ type Relay = {
   sessionId: string;
   sandboxId: string;
   port: number;
+  /** The Portal name last written to its local address record. */
+  recordedName?: string | null;
 };
 const relays: Map<string, Relay> = (g.__opensessionSandboxPortalRelays ??=
   new Map()) as Map<string, Relay>;
@@ -154,6 +159,99 @@ function queueRouteOperation<T>(
     if (routeOps.get(id) === barrier) routeOps.delete(id);
   });
   return run;
+}
+
+/**
+ * Where an agent shell on this machine finds a Sandbox Portal: the relay's
+ * loopback server, which answers without sign-in exactly like a Portal
+ * running on this machine answers on its own port. One JSON record per
+ * Sandbox app port, `{ name, port, url }`, in the session's scratch dir
+ * (`$OPENSESSION_SCRATCH/sandbox-portals/`), so repo scripts that drive the
+ * app locally (screenshots, CDP) can find it. The relay's port changes when
+ * this process restarts; the record is rewritten when the relay is rebuilt.
+ */
+export function sandboxPortalLocalDir(sessionId: string): string {
+  return join(hostSessionScratchDir(sessionId), "sandbox-portals");
+}
+
+const localRecordOps: Map<
+  string,
+  Promise<void>
+> = (g.__opensessionSandboxPortalLocalRecordOps ??= new Map()) as Map<
+  string,
+  Promise<void>
+>;
+
+function queueLocalRecord(path: string, task: () => Promise<void>): void {
+  const next = (localRecordOps.get(path) ?? Promise.resolve())
+    .then(task)
+    .catch((error) =>
+      console.warn(
+        `[sandbox-portal] could not update ${path}:`,
+        error instanceof Error ? error.message : String(error),
+      ),
+    );
+  localRecordOps.set(path, next);
+  void next.finally(() => {
+    if (localRecordOps.get(path) === next) localRecordOps.delete(path);
+  });
+}
+
+function recordLocalAddress(relay: Relay, name: string | undefined): void {
+  if (
+    relay.recordedName !== undefined &&
+    (!name || name === relay.recordedName)
+  )
+    return;
+  const dir = sandboxPortalLocalDir(relay.sessionId);
+  const path = join(dir, `${relay.port}.json`);
+  const url = `http://127.0.0.1:${relay.server.port}`;
+  relay.recordedName = name ?? null;
+  queueLocalRecord(path, async () => {
+    // A relay rebuilt after a restart does not know its Portal's name; the
+    // record it replaces does.
+    let known = name;
+    if (!known)
+      try {
+        const previous = JSON.parse(await readFile(path, "utf8"));
+        if (previous?.port === relay.port && typeof previous.name === "string")
+          known = previous.name;
+      } catch {}
+    if (known) relay.recordedName = known;
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path,
+      `${JSON.stringify({ name: known ?? null, port: relay.port, url })}\n`,
+    );
+  });
+}
+
+function forgetLocalAddress(relay: Relay): void {
+  const path = join(
+    sandboxPortalLocalDir(relay.sessionId),
+    `${relay.port}.json`,
+  );
+  queueLocalRecord(path, () => rm(path, { force: true }));
+}
+
+/** The loopback URLs of this session's relayed Sandbox Portals, by Portal
+ *  name, as recorded for agent shells on this machine. Never throws. */
+export async function sandboxPortalLocalUrls(
+  sessionId: string,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const dir = sandboxPortalLocalDir(sessionId);
+  try {
+    for (const file of await readdir(dir)) {
+      if (!file.endsWith(".json")) continue;
+      try {
+        const record = JSON.parse(await readFile(join(dir, file), "utf8"));
+        if (typeof record?.name === "string" && typeof record.url === "string")
+          out.set(record.name, record.url);
+      } catch {}
+    }
+  } catch {}
+  return out;
 }
 
 function dropPortalRoute(id: string, sandboxId: string, port: number): void {
@@ -341,6 +439,7 @@ export function revokeSandboxPortalGrants(sandboxId: string): void {
         relay.server.stop(true);
       } catch {}
       dropPortalRoute(id, sandboxId, relay.port);
+      forgetLocalAddress(relay);
       relays.delete(id);
     }
 }
@@ -365,6 +464,7 @@ export function revokeSandboxPortalRelay(
         relay.server.stop(true);
       } catch {}
       dropPortalRoute(id, sandboxId, port);
+      forgetLocalAddress(relay);
       relays.delete(id);
     }
 }
@@ -640,6 +740,8 @@ export async function ensureSandboxPortalRelay(input: {
   sessionId: string;
   sandboxId: string;
   port: number;
+  /** The Portal's name, when the caller knows it (sandboxPortalLocalDir). */
+  name?: string;
 }): Promise<string | null> {
   const id = key(input.sessionId, input.sandboxId, input.port);
   let relay = relays.get(id);
@@ -728,9 +830,15 @@ export async function ensureSandboxPortalRelay(input: {
         },
       },
     });
-    relay = { ...input, server };
+    relay = {
+      sessionId: input.sessionId,
+      sandboxId: input.sandboxId,
+      port: input.port,
+      server,
+    };
     relays.set(id, relay);
   }
+  recordLocalAddress(relay, input.name);
   const upstream = `127.0.0.1:${relay.server.port}`;
   return queueRouteOperation(id, async () => {
     const { ensureAuthenticatedPortalRoute } = await import("./preview");

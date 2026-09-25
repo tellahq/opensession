@@ -54,7 +54,7 @@ export function portalsContextNote(input: {
     );
   if (input.inPortalSandbox)
     lines.push(
-      "This repo's Portals run on their own Sandbox machine, not in this shell. localhost, port files, and repo scripts that start or expect a local dev server do not reach them. Use the Portal tools and the URL they report; that URL needs the person's sign-in, so a curl from this shell gets 401.",
+      "This repo's Portals run on their own Sandbox machine, not in this shell: never start a dev server here. list_portals reports each Portal's `local:` URL, a loopback address this shell can reach without sign-in (curl, screenshots, CDP scripts); it is also recorded in $OPENSESSION_SCRATCH/sandbox-portals/*.json. The `url:` is for the person and needs their sign-in, so a curl of it gets 401.",
     );
   return lines.length ? lines.join("\n") : null;
 }
