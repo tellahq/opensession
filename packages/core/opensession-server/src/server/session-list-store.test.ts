@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   SessionListStore,
   SESSION_BRANCH_LOOKUP_SQL,
+  SESSION_LINKED_BRANCH_LOOKUP_SQL,
 } from "./session-list-sqlite";
 import type { UnifiedSession } from "./types";
 
@@ -96,6 +97,57 @@ describe("SessionListStore", () => {
       "SEARCH s USING INDEX sqlite_autoindex_session_list_1 (id=?)",
     );
     expect(plan).not.toMatch(/SCAN s\b|archived=\?/);
+  });
+
+  test("the linked-PR lookup is the same bounded probe", () => {
+    const store = memoryStore();
+    const plan = store
+      .queryPlan(SESSION_LINKED_BRANCH_LOOKUP_SQL, "alpha", "", "feature")
+      .join("\n");
+    expect(plan).toContain(
+      "SEARCH session_list_linked_branches USING COVERING INDEX",
+    );
+    expect(plan).toContain(
+      "SEARCH s USING INDEX sqlite_autoindex_session_list_1 (id=?)",
+    );
+    expect(plan).not.toMatch(/SCAN s\b|archived=\?/);
+  });
+
+  test("upgrades linked-PR membership from the existing catalog", () => {
+    const dir = mkdtempSync(join(tmpdir(), "session-linked-upgrade-"));
+    const path = join(dir, "index.sqlite");
+    let store = new SessionListStore(path);
+    try {
+      store.upsertManyCovered(
+        [
+          session("linker", "2026-09-17T00:00:00Z", {
+            repo: "alpha",
+            branch: "temp",
+            linkedPrs: [{ repo: "beta", branch: "linked", number: 7 }],
+          }),
+        ],
+        "include",
+      );
+      const linked = () =>
+        store
+          .listLiveByRepoBranchCovered("beta", "linked", "alpha", "linked")
+          ?.map((s) => s.id);
+      expect(linked()).toEqual(["linker"]);
+      expect(
+        store.listLiveByRepoBranchCovered("beta", "linked", "alpha"),
+      ).toEqual([]);
+      store.close();
+      const old = new Database(path);
+      old.exec(
+        "DROP TABLE session_list_linked_branches; DELETE FROM session_list_meta WHERE key = 'linked_branch_membership:v1'",
+      );
+      old.close();
+      store = new SessionListStore(path);
+      expect(linked()).toEqual(["linker"]);
+    } finally {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("upgrades branch membership from the existing catalog, with no file discovery", () => {

@@ -32,7 +32,11 @@ import {
   workspaceIdForRepo,
   SessionOwnershipOverflowError,
 } from "./session-matching";
-export { matchSessions, workspaceIdForRepo } from "./session-matching";
+export {
+  matchReviewOwners,
+  matchSessions,
+  workspaceIdForRepo,
+} from "./session-matching";
 
 const PENDING_PATH = `${stateDir("github")}/pending-deploys.json`;
 const DEPLOY_WORKFLOW_PATH = ".github/workflows/deploy.yml";

@@ -76,7 +76,9 @@ describe("GitHub ownership gateway boundary", () => {
           );
         if (
           ts.isCallExpression(node) &&
-          node.expression.getText(file) === "matchSessions"
+          ["matchSessions", "matchReviewOwners"].includes(
+            node.expression.getText(file),
+          )
         ) {
           expect(ts.isAwaitExpression(node.parent)).toBe(true);
           expect(node.arguments.length).toBe(2);

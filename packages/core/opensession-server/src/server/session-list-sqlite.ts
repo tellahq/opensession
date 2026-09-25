@@ -33,6 +33,20 @@ export const SESSION_BRANCH_LOOKUP_SQL = `
   WHERE s.archived = 0
 `;
 
+/** The same bounded probe over PRs a session linked (link_pr) rather than
+ * checked out. Kept in its own relation so plain branch ownership (merge and
+ * conflict notices) is unchanged; only callers that opt in consult it. */
+export const SESSION_LINKED_BRANCH_LOOKUP_SQL = `
+  SELECT s.payload FROM (
+    SELECT DISTINCT session_id FROM session_list_linked_branches
+    WHERE repo IN (?, ?) AND branch = ?
+    LIMIT ${SESSION_BRANCH_MATCH_LIMIT + 1}
+  ) matches CROSS JOIN session_list s ON s.id = matches.session_id
+  WHERE s.archived = 0
+`;
+
+export type SessionBranchRelation = "owned" | "linked";
+
 type StoredRow = {
   payload: string;
   automation_run_count?: number | null;
@@ -173,6 +187,33 @@ export class SessionListStore {
           INSERT INTO session_list_meta VALUES ('branch_membership:v1', '1');
         `);
       }
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS session_list_linked_branches (
+          session_id TEXT NOT NULL,
+          repo TEXT NOT NULL,
+          branch TEXT NOT NULL,
+          PRIMARY KEY (repo, branch, session_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_list_linked_branches_session
+          ON session_list_linked_branches(session_id);
+      `);
+      const linkedSeeded = this.db
+        .query(
+          "SELECT 1 FROM session_list_meta WHERE key = 'linked_branch_membership:v1'",
+        )
+        .get();
+      if (!linkedSeeded) {
+        this.db.exec(`
+          INSERT OR IGNORE INTO session_list_linked_branches
+            SELECT s.id, json_extract(l.value, '$.repo'), json_extract(l.value, '$.branch')
+            FROM session_list s, json_each(s.payload, '$.linkedPrs') l
+            WHERE s.archived = 0
+              AND json_extract(l.value, '$.repo') IS NOT NULL
+              AND json_extract(l.value, '$.branch') IS NOT NULL
+              AND json_extract(l.value, '$.branch') != '';
+          INSERT INTO session_list_meta VALUES ('linked_branch_membership:v1', '1');
+        `);
+      }
     })();
     this.upsertStatement = this.db.prepare(`
 			INSERT INTO session_list (
@@ -222,6 +263,10 @@ export class SessionListStore {
     this.db.run("DELETE FROM session_list_branches WHERE session_id = ?", [
       session.id,
     ]);
+    this.db.run(
+      "DELETE FROM session_list_linked_branches WHERE session_id = ?",
+      [session.id],
+    );
     if (!session.archived) {
       const branches = [...(session.attachedRepos ?? [])];
       if (session.branch && !session.repoLess)
@@ -234,6 +279,13 @@ export class SessionListStore {
         if (!branch) continue;
         this.db.run(
           "INSERT OR IGNORE INTO session_list_branches VALUES (?, ?, ?)",
+          [session.id, repo, branch],
+        );
+      }
+      for (const { repo, branch } of session.linkedPrs ?? []) {
+        if (!repo || !branch) continue;
+        this.db.run(
+          "INSERT OR IGNORE INTO session_list_linked_branches VALUES (?, ?, ?)",
           [session.id, repo, branch],
         );
       }
@@ -262,6 +314,7 @@ export class SessionListStore {
   replaceAll(sessions: UnifiedSession[]): void {
     this.db.transaction((rows: UnifiedSession[]) => {
       this.db.run("DELETE FROM session_list_branches");
+      this.db.run("DELETE FROM session_list_linked_branches");
       this.db.run("DELETE FROM session_list");
       for (const session of rows) this.write(session);
       this.markCovered("include");
@@ -289,6 +342,10 @@ export class SessionListStore {
       this.db.run("DELETE FROM session_list_branches WHERE session_id = ?", [
         id,
       ]);
+      this.db.run(
+        "DELETE FROM session_list_linked_branches WHERE session_id = ?",
+        [id],
+      );
       this.db.run("DELETE FROM session_list WHERE id = ?", [id]);
     })();
   }
@@ -417,16 +474,22 @@ export class SessionListStore {
     return this.hasCoverage("exclude") ? this.listLiveByBranch(branches) : null;
   }
 
-  /** Exact primary/attached-repository ownership, with a bounded response.
+  /** Exact primary/attached-repository ownership (or, with `linked`, the
+   * sessions that linked a PR on that branch), with a bounded response.
    * Unknown coverage is NOT an empty result and must never trigger file scans. */
   listLiveByRepoBranchCovered(
     repo: string,
     branch: string,
     defaultRepoId: string,
+    relation: SessionBranchRelation = "owned",
   ): UnifiedSession[] | null {
     if (!this.hasCoverage("exclude")) return null;
     const rows = this.db
-      .query(SESSION_BRANCH_LOOKUP_SQL)
+      .query(
+        relation === "linked"
+          ? SESSION_LINKED_BRANCH_LOOKUP_SQL
+          : SESSION_BRANCH_LOOKUP_SQL,
+      )
       .all(repo, repo === defaultRepoId ? "" : repo, branch) as StoredRow[];
     return decodeRows(rows);
   }

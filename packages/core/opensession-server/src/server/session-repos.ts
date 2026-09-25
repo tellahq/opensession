@@ -57,7 +57,11 @@ import type {
 import { defaultRepo } from "./config";
 import { hostRepoId } from "./pr-host";
 import { resolveRegisteredPr } from "./pr-labels";
-import { prMetaForBranch } from "./pr-info";
+import { isNoPrError, prMetaForBranch } from "./pr-info";
+import {
+  resolveGithubCredential,
+  serviceGithubCredential,
+} from "./github-auth";
 import { cachedPrNumberByBranch } from "./pr-cache";
 import {
   assessPrMergeReadiness,
@@ -775,42 +779,100 @@ export async function switchPrimaryRepo(
   return { repo: target.id, branch, worktreeDir: wtPath };
 }
 
-/** `gh pr view` for one PR — resolves a number or branch to its head branch + label fields. */
-async function ghPrView(
-  ghRepo: string,
-  selector: string,
-): Promise<{
+export interface GhPrViewResult {
   branch: string;
   number: number;
   url: string;
   title: string;
-} | null> {
+}
+
+export interface GhPrViewDeps {
+  /** Env carrying the credential gh should use for `ghRepo`. */
+  credentialEnv(ghRepo: string): Promise<Record<string, string>>;
+  run(
+    args: string[],
+    env: Record<string, string>,
+  ): Promise<{ out: string; err: string; code: number }>;
+}
+
+/** The server process has no gh login of its own: like every other
+ * server-owned gh call, read as the bot with a token minted for the PR's
+ * repository, so any registered repo resolves. */
+const ghPrViewDeps: GhPrViewDeps = {
+  async credentialEnv(ghRepo) {
+    return (
+      await resolveGithubCredential(serviceGithubCredential, { repo: ghRepo })
+    ).env;
+  },
+  async run(args, env) {
+    const proc = Bun.spawn(["gh", ...args], {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, ...env },
+    });
+    const [out, err, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    return { out, err, code };
+  },
+};
+
+/** `gh pr view` for one PR: resolves a number or branch to its head branch
+ * + label fields. Null only when GitHub says there is no such PR; a missing
+ * credential or any other gh failure throws with gh's own reason. */
+export async function ghPrView(
+  ghRepo: string,
+  selector: string,
+  deps: GhPrViewDeps = ghPrViewDeps,
+): Promise<GhPrViewResult | null> {
+  const what = /^\d+$/.test(selector)
+    ? `PR #${selector}`
+    : `branch ${selector}`;
+  let env: Record<string, string>;
   try {
-    const proc = Bun.spawn(
-      [
-        "gh",
-        "pr",
-        "view",
-        selector,
-        "--repo",
-        ghRepo,
-        "--json",
-        "headRefName,number,url,title",
-      ],
-      { stdout: "pipe", stderr: "ignore" },
+    env = await deps.credentialEnv(ghRepo);
+  } catch (e) {
+    throw new Error(
+      `Couldn't look up ${what} in ${ghRepo}: ${e instanceof Error ? e.message : String(e)}`,
     );
-    const raw = await new Response(proc.stdout).text();
-    if ((await proc.exited) !== 0 || !raw.trim()) return null;
-    const pr = JSON.parse(raw);
-    return {
-      branch: pr.headRefName,
-      number: pr.number,
-      url: pr.url,
-      title: pr.title || "",
-    };
-  } catch {
-    return null;
   }
+  const { out, err, code } = await deps.run(
+    [
+      "pr",
+      "view",
+      selector,
+      "--repo",
+      ghRepo,
+      "--json",
+      "headRefName,number,url,title",
+    ],
+    env,
+  );
+  const reason = err.trim().slice(0, 300);
+  if (code !== 0) {
+    if (isNoPrError(reason)) return null;
+    throw new Error(
+      `Couldn't look up ${what} in ${ghRepo}: ${reason || `gh exited with code ${code}`}`,
+    );
+  }
+  let pr: any;
+  try {
+    pr = JSON.parse(out);
+  } catch {
+    throw new Error(
+      `Couldn't look up ${what} in ${ghRepo}: gh returned unreadable output`,
+    );
+  }
+  if (!pr?.headRefName || !pr?.number) return null;
+  return {
+    branch: pr.headRefName,
+    number: pr.number,
+    url: pr.url || "",
+    title: pr.title || "",
+  };
 }
 
 /**
