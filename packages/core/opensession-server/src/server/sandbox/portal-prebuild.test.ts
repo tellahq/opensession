@@ -49,9 +49,10 @@ Bun.serve({ port: Number(process.env.PORT), fetch(req) {
     });
     const run = Bun.spawn(["bash", "-c", script], { stdout: "pipe" });
     expect(await run.exited).toBe(0);
-    expect(readFileSync(join(root, "hits"), "utf8")).toBe(
-      "/a handed-over\n/b handed-over\n",
-    );
+    // Independent routes warm concurrently; arrival order is not a contract.
+    expect(
+      readFileSync(join(root, "hits"), "utf8").trim().split("\n").sort(),
+    ).toEqual(["/a handed-over", "/b handed-over"]);
     // Stopped, cleaned, and the tracked file is back.
     const probe = Bun.spawnSync([
       "bash",
