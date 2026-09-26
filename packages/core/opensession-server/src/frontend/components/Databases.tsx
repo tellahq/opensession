@@ -115,6 +115,131 @@ function formatDate(value: string): string {
   }).format(new Date(value));
 }
 
+function DatabaseQueryEditor({
+  databaseId,
+  tableName,
+  isPhone,
+  result,
+  onResult,
+  onError,
+}: {
+  databaseId: string;
+  tableName?: string;
+  isPhone: boolean;
+  result: DatabaseQueryResult | null;
+  onResult: (result: DatabaseQueryResult) => void;
+  onError: (message: string) => void;
+}) {
+  const [sql, setSql] = useState("");
+  const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    setSql("");
+  }, [databaseId]);
+
+  const runQuery = async () => {
+    if (!sql.trim() || running) return;
+    setRunning(true);
+    try {
+      onResult(await queryDatabaseApi(databaseId, sql));
+    } catch (error) {
+      onError(errorMessage(error, "Query failed"));
+    }
+    setRunning(false);
+  };
+
+  return (
+    <div className="flex shrink-0 flex-col gap-2 px-4 pt-3 pb-2 phone:px-3">
+      <Textarea
+        className={DATABASES_QUERY_EDITOR}
+        aria-label="SQL query"
+        value={sql}
+        spellCheck={false}
+        placeholder={
+          tableName ? `SELECT * FROM "${tableName}" LIMIT 50` : "SELECT …"
+        }
+        onChange={(event) => setSql(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            void runQuery();
+          }
+        }}
+      />
+      <div className="flex items-center gap-2">
+        <Button
+          size="md"
+          variant="primary"
+          disabled={!sql.trim() || running}
+          onClick={() => void runQuery()}
+        >
+          {running ? "Running…" : "Run"}
+        </Button>
+        <span className="text-meta text-faint">
+          Read-only. {isPhone ? "" : "⌘⏎ runs it."}
+        </span>
+        {result && (
+          <span className="ml-auto text-meta tabular-nums text-faint">
+            {result.rows.length.toLocaleString()} row
+            {result.rows.length === 1 ? "" : "s"}
+            {result.truncated ? " (truncated)" : ""}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DatabaseQuery({
+  databaseId,
+  tableName,
+  isPhone,
+  visible,
+}: {
+  databaseId: string;
+  tableName?: string;
+  isPhone: boolean;
+  visible: boolean;
+}) {
+  const [result, setResult] = useState<DatabaseQueryResult | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setResult(null);
+    setError("");
+  }, [databaseId]);
+
+  return (
+    <div className={visible ? "contents" : "hidden"}>
+      <DatabaseQueryEditor
+        databaseId={databaseId}
+        tableName={tableName}
+        isPhone={isPhone}
+        result={result}
+        onResult={(next) => {
+          setResult(next);
+          setError("");
+        }}
+        onError={(message) => {
+          setResult(null);
+          setError(message);
+        }}
+      />
+      {error && (
+        <InlineAlert className="mx-4 mb-2 phone:mx-3">{error}</InlineAlert>
+      )}
+      {result &&
+        (result.rows.length ? (
+          <DataGrid columns={result.columns} rows={result.rows} />
+        ) : (
+          <div className="px-4 py-3 text-label text-dim phone:px-3">
+            No rows.
+          </div>
+        ))}
+    </div>
+  );
+}
+
 export function Databases({
   selectedDatabaseId,
   selectedTable,
@@ -230,31 +355,6 @@ export function Databases({
       alive = false;
     };
   }, [selectedDatabaseId, selectedTable, offset, sort, rowsVersion]);
-
-  // Query: a statement the person types, run read-only.
-  const [sql, setSql] = useState("");
-  const [queryResult, setQueryResult] = useState<DatabaseQueryResult | null>(
-    null,
-  );
-  const [queryError, setQueryError] = useState("");
-  const [running, setRunning] = useState(false);
-  useEffect(() => {
-    setSql("");
-    setQueryResult(null);
-    setQueryError("");
-  }, [selectedDatabaseId]);
-  const runQuery = async () => {
-    if (!selectedDatabaseId || !sql.trim() || running) return;
-    setRunning(true);
-    try {
-      setQueryResult(await queryDatabaseApi(selectedDatabaseId, sql));
-      setQueryError("");
-    } catch (e) {
-      setQueryResult(null);
-      setQueryError(errorMessage(e, "Query failed"));
-    }
-    setRunning(false);
-  };
 
   // New / rename share one small form.
   const [form, setForm] = useState<{
@@ -671,69 +771,12 @@ export function Databases({
                   </>
                 ))}
 
-              {mode === "query" && (
-                <>
-                  <div className="flex shrink-0 flex-col gap-2 px-4 pt-3 pb-2 phone:px-3">
-                    <Textarea
-                      className={DATABASES_QUERY_EDITOR}
-                      aria-label="SQL query"
-                      value={sql}
-                      spellCheck={false}
-                      placeholder={
-                        currentTable
-                          ? `SELECT * FROM "${currentTable.name}" LIMIT 50`
-                          : "SELECT …"
-                      }
-                      onChange={(event) => setSql(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (
-                          event.key === "Enter" &&
-                          (event.metaKey || event.ctrlKey)
-                        ) {
-                          event.preventDefault();
-                          void runQuery();
-                        }
-                      }}
-                    />
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="md"
-                        variant="primary"
-                        disabled={!sql.trim() || running}
-                        onClick={() => void runQuery()}
-                      >
-                        {running ? "Running…" : "Run"}
-                      </Button>
-                      <span className="text-meta text-faint">
-                        Read-only. {isPhone ? "" : "⌘⏎ runs it."}
-                      </span>
-                      {queryResult && (
-                        <span className="ml-auto text-meta tabular-nums text-faint">
-                          {queryResult.rows.length.toLocaleString()} row
-                          {queryResult.rows.length === 1 ? "" : "s"}
-                          {queryResult.truncated ? " (truncated)" : ""}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {queryError && (
-                    <InlineAlert className="mx-4 mb-2 phone:mx-3">
-                      {queryError}
-                    </InlineAlert>
-                  )}
-                  {queryResult &&
-                    (queryResult.rows.length ? (
-                      <DataGrid
-                        columns={queryResult.columns}
-                        rows={queryResult.rows}
-                      />
-                    ) : (
-                      <div className="px-4 py-3 text-label text-dim phone:px-3">
-                        No rows.
-                      </div>
-                    ))}
-                </>
-              )}
+              <DatabaseQuery
+                databaseId={database.id}
+                tableName={currentTable?.name}
+                isPhone={isPhone}
+                visible={mode === "query"}
+              />
             </>
           )}
           {formDialog}
