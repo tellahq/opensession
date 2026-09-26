@@ -2,9 +2,10 @@
  * Front controller for the compiled single-executable build.
  *
  * `bun build --compile` produces one `opensession` binary from THIS entry. The
- * same binary plays five roles that run as separate processes from source
+ * same binary plays the roles that run as separate processes from source
  * (`opensession.ts`, `scripts/cli.ts`, `src/runner-host/host.ts`,
- * `src/runner-host/mcp-proxy.ts`, `src/server/transcript-search-worker.ts`). A
+ * `src/runner-host/mcp-proxy.ts`, `src/server/transcript-search-worker.ts`,
+ * `src/simulator-portal/main.ts`). A
  * compiled process has no `bun`/`.ts` tree to re-exec, so it re-invokes itself
  * with a leading subcommand instead. The spawn
  * sites emit those subcommands via src/runner-host/exe.ts; this file routes
@@ -22,6 +23,9 @@
  *   opensession session-kernel-service → session-kernel-service.ts
  *   opensession transcript-search-worker
  *                                    → transcript-search-worker.ts (JSON via stdio)
+ *   opensession simulator-portal <flags>
+ *                                    → simulator-portal/main.ts (viewer process,
+ *                                      serves the embedded viewer assets)
  *   opensession server              → opensession.ts (the HTTP/WS server)
  *   opensession <anything else>     → scripts/cli.ts (onboard, start, doctor, …)
  *
@@ -99,6 +103,18 @@ if (sub === "runner-host") {
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
+  }
+} else if (sub === "simulator-portal") {
+  // The supervised viewer process behind start_simulator_portal. Its flags
+  // (--session, --workspace, --app, …) are parsed from argv after the splice,
+  // exactly as `bun src/simulator-portal/main.ts <flags>` sees them.
+  process.argv.splice(2, 1);
+  const { runSimulatorPortal } = await import("./simulator-portal/main");
+  try {
+    await runSimulatorPortal();
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
   }
 } else if (sub === "server") {
   process.argv.splice(2, 1);

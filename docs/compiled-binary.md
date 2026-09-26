@@ -2,7 +2,8 @@
 
 The default simple-mode artefact centres on an executable built with
 [`bun build --compile`](https://bun.com/docs/bundler/executables). It dispatches
-all seven process roles from one argv and embeds the prebuilt frontend. The
+all eight process roles from one argv and embeds the prebuilt frontend and
+the simulator Portal viewer. The
 release adds Worker and native sidecars beside that executable. It boots and
 serves the UI with no runtime interpreter on `PATH`; Anthropic turns still
 require the `claude` CLI, and the ChatGPT path requires `codex`. The Pi engine
@@ -22,18 +23,21 @@ bun scripts/build-compile.ts --os linux --arch arm64 --out ~/.cache/opensession-
 bun scripts/build-compile.ts --outfile dist/opensession
 ```
 
-The script builds the production frontend into `.frontend-dist`, bakes its
-assets into the binary, then compiles
+The script builds the production frontend into `.frontend-dist` and the
+simulator Portal viewer into `.simulator-viewer-dist`, bakes both asset sets
+into the binary, then compiles
 `packages/core/opensession-server/src/main.ts` with `sharp`, `@img/*` and the
 build-only React compiler marked external. It then restores
-`packages/core/opensession-server/src/server/embedded-frontend.ts` to its stub.
+`packages/core/opensession-server/src/server/embedded-frontend.ts` and
+`packages/core/opensession-server/src/simulator-portal/embedded-viewer.ts` to
+their stubs, also when the compile fails (`scripts/lib/compile-embeds.ts`).
 
 The executable and sharp sidecar are target-specific, but the build can run on
 another host. `--os` and `--arch` select `bun-<os>-<arch>` and fetch sharp's
 optional packages for that target. The Worker sidecars are bundled JavaScript
 and are platform-neutral.
 
-## One binary, seven process roles
+## One binary, eight process roles
 
 A compiled install has no `bun`/`.ts` tree to re-exec, so
 `packages/core/opensession-server/src/main.ts` dispatches a leading subcommand
@@ -47,6 +51,7 @@ to these source entrypoints:
 | `opensession executor`                 | supervised executor launcher          | `packages/core/opensession-server/src/executor/main.ts`                   |
 | `opensession session-kernel-service`   | supervised session-kernel service     | `packages/core/opensession-server/src/session-kernel-service.ts`          |
 | `opensession transcript-search-worker` | read-only transcript search worker    | `packages/core/opensession-server/src/server/transcript-search-worker.ts` |
+| `opensession simulator-portal <flags>` | iOS simulator Portal viewer process   | `packages/core/opensession-server/src/simulator-portal/main.ts`           |
 | `opensession <anything else>`          | CLI (`onboard`, `start`, `doctor`, …) | `scripts/cli.ts`                                                          |
 
 `packages/core/opensession-server/src/runner-host/exe.ts` supplies compiled and
@@ -61,6 +66,13 @@ JS/CSS/wasm, PNG app assets, sign-in WebP/MP4 media, splash images,
 `mac-app-icon.png` and `sw.js`. In compiled mode `isPrebuiltFrontend()` is true:
 the server serves these assets and skips the in-process frontend build and file
 watcher.
+
+**Embedded simulator Portal viewer.** The viewer bundle (`main.js`, `main.css`)
+and its Tailwind utilities sheet are built from
+`src/frontend/simulator` at release time and embedded through
+`src/simulator-portal/embedded-viewer.ts`. `opensession simulator-portal`
+serves them directly; a source install bundles the same viewer when the Portal
+starts (see [simulator Portals](simulator-portals.md)).
 
 At boot, `renderIndexHtml()` stitches the running install's product name, mark,
 persona, public and webhook URLs, default repo and related instance settings

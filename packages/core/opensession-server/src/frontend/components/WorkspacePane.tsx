@@ -104,6 +104,7 @@ import { mainSession } from "../lib/landing-session";
 import { sessionCarriesPr } from "../lib/session-prs";
 import type { NewTabMorphOrigin } from "../lib/session-tabs-types";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
+import { RenameDialog } from "./RenameDialog";
 import { WS_SUMMARY_ROOM_W } from "../lib/workspace-summary-open";
 
 interface Props {
@@ -884,6 +885,15 @@ export function WorkspacePane({
         <div className="flex-1 min-w-0 min-h-0">{main}</div>
       </div>
       {rightPanelEl && infoPanel ? createPortal(infoPanel, rightPanelEl) : null}
+      {isPhone && (
+        <RenameDialog
+          title="Rename workspace"
+          draft={renameDraft}
+          onDraftChange={setRenameDraft}
+          onCommit={commitWorkspaceRename}
+          onCancel={() => setRenameDraft(null)}
+        />
+      )}
       {confirmDialog}
     </MarkdownRepoProvider>
   );

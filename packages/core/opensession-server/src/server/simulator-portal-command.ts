@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
+import { isCompiledBinary, simulatorPortalArgv } from "../runner-host/exe";
+import { EMBEDDED_SIMULATOR_VIEWER } from "../simulator-portal/embedded-viewer";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
 
 export const simulatorPortalInput = {
@@ -52,15 +54,23 @@ export async function simulatorPortalCommand(
     throw new Error(
       "appPath must be an already-built simulator .app directory.",
     );
+  // A compiled binary re-execs itself as `opensession simulator-portal` and
+  // serves the viewer embedded at release time; a source install runs the
+  // TypeScript entry under bun and bundles the viewer when the Portal starts.
   const entry = resolve(import.meta.dir, "../simulator-portal/main.ts");
-  if (!(await stat(entry).catch(() => null))?.isFile())
+  if (isCompiledBinary()) {
+    if (!EMBEDDED_SIMULATOR_VIEWER)
+      throw new Error(
+        "This compiled Open Session build has no embedded simulator viewer. Rebuild the release with scripts/build-compile.ts or use a source installation.",
+      );
+  } else if (!(await stat(entry).catch(() => null))?.isFile()) {
     throw new Error(
-      "Simulator Portals currently require a source installation of Open Session on macOS.",
+      "Simulator Portals require the Open Session source checkout that runs this instance.",
     );
+  }
   const name = `ios-simulator-${createHash("sha256").update(input.sessionId).digest("hex").slice(0, 12)}`;
   const args = [
-    process.execPath,
-    entry,
+    ...simulatorPortalArgv(process.execPath, entry),
     "--session",
     input.sessionId,
     "--workspace",

@@ -36,6 +36,7 @@ import {
 import { RepoBar } from "../RepoBar";
 import { RepoTile } from "../RepoTile";
 import { SandboxBadge } from "../SandboxBadge";
+import { RenameDialog } from "../RenameDialog";
 import { SessionRelations, type RelatedSession } from "../SessionRelations";
 
 interface SessionHeaderProps {
@@ -383,5 +384,18 @@ export function SessionHeader({
   // title row is CSS-hidden there — the centered bar title replaces
   // it), giving one iOS-style nav bar instead of a second chrome row.
   const portalTarget = isPhone && headerActionsEl ? headerActionsEl : topbarEl;
-  return portalTarget ? createPortal(header, portalTarget) : header;
+  return (
+    <>
+      {portalTarget ? createPortal(header, portalTarget) : header}
+      {isPhone && (
+        <RenameDialog
+          title={session.workspaceId ? "Rename workspace" : "Rename session"}
+          draft={renameDraft}
+          onDraftChange={onRenameDraftChange}
+          onCommit={onCommitRename}
+          onCancel={onCancelRename}
+        />
+      )}
+    </>
+  );
 }

@@ -9,9 +9,9 @@ does not immediately pin it again. Phones use the full-width Portal view.
 
 ## Host requirements
 
-This first version supports local macOS workspaces in a **source installation**
-of Open Session. Sandboxes, remote Runners and compiled-binary installs are not
-supported. It needs:
+This first version supports local macOS workspaces. Both install modes work:
+the compiled release binary and a source installation. Sandboxes and remote
+Runners are not supported. It needs:
 
 - Full Xcode selected with `xcode-select`, with an installed iOS Simulator runtime.
 - `idb` and `idb_companion` on the service's PATH. See
@@ -19,7 +19,15 @@ supported. It needs:
 - Working authenticated [Portal routing](portals-and-agent-communication.md),
   including the instance's Caddy HTTPS configuration. A listening local port
   without that route is not a shareable viewer.
-- The source installation's Bun dependencies, including the Tailwind compiler.
+- In a source installation, the checkout's Bun dependencies, including the
+  Tailwind compiler. The viewer is bundled when the Portal starts, and the
+  Tailwind CLI runs under Bun, so `node` is not required on PATH.
+
+A compiled release binary carries the prebuilt viewer inside the executable
+(`scripts/build-compile.ts` embeds it next to the SPA) and starts the viewer
+process as `opensession simulator-portal`. Nothing is built at Portal start. A
+binary compiled without the embedded viewer reports that gap when the Portal is
+requested instead of failing inside the viewer process.
 
 The implementation uses `describe --json` for logical screen dimensions, then
 one persistent HTTP/2 gRPC connection to the private companion for input and

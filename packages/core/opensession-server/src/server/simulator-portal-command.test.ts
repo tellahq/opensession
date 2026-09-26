@@ -6,8 +6,10 @@ import { simulatorPortalCommand } from "./simulator-portal-command";
 import { portalHostCommand, spawnPortalHost } from "./portal-host-process";
 import { open } from "node:fs/promises";
 
+const execPath = process.execPath;
 const roots: string[] = [];
 afterEach(async () => {
+  Object.defineProperty(process, "execPath", { value: execPath });
   for (const root of roots.splice(0))
     await rm(root, { recursive: true, force: true });
 });
@@ -34,6 +36,26 @@ test("agent command quotes paths and isolates the portal name by session", async
   expect(first.command).toContain("'App'\\''s build.app'");
   expect(first.command).toContain("--session");
   expect(first.shutdownGraceMs).toBe(30_000);
+  // Source mode runs the TypeScript viewer entry under the current bun.
+  expect(first.command.startsWith(`${process.execPath} `)).toBe(true);
+  expect(first.command).toContain("/simulator-portal/main.ts --session");
+  expect(first.command).not.toContain(" simulator-portal --session");
+});
+
+test("a compiled binary without an embedded viewer reports the release gap, not a source path", async () => {
+  const workspaceDir = await workspace();
+  Object.defineProperty(process, "execPath", {
+    value: "/opt/acme/opensession",
+    configurable: true,
+    writable: true,
+  });
+  await expect(
+    simulatorPortalCommand({
+      sessionId: "session-a",
+      workspaceDir,
+      appPath: "App's build.app",
+    }),
+  ).rejects.toThrow(/no embedded simulator viewer/);
 });
 
 test("absolute, traversing, symlink-escaped, and non-bundle app paths are refused", async () => {
