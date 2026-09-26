@@ -8,7 +8,6 @@ import { useSidebarSources } from "../hooks/useSidebarSources";
 import { useSidebarStickyHeadings } from "../hooks/useSidebarStickyHeadings";
 import { useSidebarWorkspaceController } from "../hooks/useSidebarWorkspaceController";
 import { closePrPreviewApi } from "../lib/api";
-import { mobileFilterBtn } from "../lib/app-header-classes";
 import { useAutomationOverview } from "../lib/automation-overview";
 import {
   clearHides,
@@ -125,12 +124,12 @@ import { cn } from "../ui/cn";
 import { useConfirm } from "../ui/confirm";
 import { ContextMenu } from "../ui/menu";
 import { EmptyState, ListSkeleton } from "../ui/state";
-import { IconFilter, IconMessages } from "./icons";
+import { IconMessages } from "./icons";
 import { PrRow } from "./PrRow";
 import { AutomationsBand } from "./sidebar/AutomationsBand";
 import { DraftRow } from "./sidebar/DraftRow";
 import { FeedRow } from "./sidebar/FeedRows";
-import { FilterPopover, RepoFilterChip } from "./sidebar/Filters";
+import { RepoFilterChip, SidebarFilterControl } from "./sidebar/Filters";
 import { PeopleBand } from "./sidebar/PeopleBand";
 import { PersonalBand } from "./sidebar/PersonalBand";
 import { ProjectBands } from "./sidebar/ProjectBands";
@@ -261,15 +260,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
   // The person lens is shared with Home's facepile (lib/sidebar-filter), so
   // a face picked there is the sidebar you come back to.
   const filter = useSidebarFilter();
-  const [filterOpen, setFilterOpen] = useState(false);
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [filterButton, setFilterButton] = useState<HTMLButtonElement | null>(
-    null,
-  );
-  // The phone stand-in for the header filter button (portaled into the top
-  // bar next to Search). The popover anchors to whichever button is live.
-  const [mobileFilterButton, setMobileFilterButton] =
-    useState<HTMLButtonElement | null>(null);
   // The active repo-filter chip prefers to sit inline in the "My sessions"
   // header (right after the title); it drops to its own row only when the
   // sidebar is too narrow to fit it there. `repoInline` is decided by measuring
@@ -1336,7 +1327,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
         borrowedLens,
         workspacesOpen,
         repoInline,
-        filterOpen,
         newSessionKeys,
       }}
       tools={{
@@ -1351,12 +1341,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
         titleRef,
         actionsRef,
         probeRef,
-        setFilterButton,
       }}
       actions={{
         navigation,
-        setFilterOpen,
         onToggleWorkspaces: () => toggleBand("workspaces"),
+        filterControl: isPhone ? null : (
+          <SidebarFilterControl
+            variant="desktop"
+            filter={filter}
+            repos={repos}
+            people={peopleWithAgent}
+            currentUser={currentUser}
+            onChange={setFilter}
+          />
+        ),
       }}
     />
   );
@@ -1444,34 +1442,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
               !borrowedLens &&
               headerActionsEl &&
               createPortal(
-                <>
-                  <button
-                    ref={setMobileFilterButton}
-                    className={mobileFilterBtn(filterOpen)}
-                    onClick={() => setFilterOpen((o) => !o)}
-                    aria-label="Group, filter & sort"
-                  >
-                    <IconFilter size={22} />
-                  </button>
-                </>,
+                <SidebarFilterControl
+                  variant="phone"
+                  filter={filter}
+                  repos={repos}
+                  people={peopleWithAgent}
+                  currentUser={currentUser}
+                  onChange={setFilter}
+                />,
                 headerActionsEl,
               )}
-
-            {filterOpen && (
-              <FilterPopover
-                anchor={isPhone ? mobileFilterButton : filterButton}
-                filter={filter}
-                repos={repos}
-                people={peopleWithAgent}
-                currentUser={currentUser}
-                onChange={setFilter}
-                onClose={() => setFilterOpen(false)}
-                onCustomize={() => {
-                  setFilterOpen(false);
-                  setCustomizeOpen(true);
-                }}
-              />
-            )}
 
             {workspaceMenu && (
               <WorkspaceContextMenu
