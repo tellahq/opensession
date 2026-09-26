@@ -5,9 +5,12 @@
  * only with the token minted for its exact {session, sandbox, port} tuple.
  */
 import { randomBytes, timingSafeEqual } from "crypto";
+import { mkdir, readdir, readFile, rm, writeFile } from "fs/promises";
+import { join } from "path";
 import { portalNavigationRequest } from "./portal-sign-in";
 import { portalWaitingResponse } from "./portal-waiting-page";
 import { sandboxHttpsPortFor } from "./sandbox/preview-ports";
+import { hostSessionScratchDir } from "./session-scratch";
 
 export type SandboxPortalGrant = {
   sessionId: string;
@@ -45,17 +48,29 @@ type Connection = {
   expiryTimer: ReturnType<typeof setTimeout>;
   pending: Map<string, PendingRelayResponse>;
   limitRequests: RelayRequestLimiter;
+  limitAssets: RelayRequestLimiter;
 };
 
+/** Which lanes a request takes: built static files (`/_next/static/`, which
+ *  a dev server answers from memory) never wait behind a page or API route
+ *  that is still compiling. */
+export function relayLane(path: string): "assets" | "requests" {
+  return path.startsWith("/_next/static/") ? "assets" : "requests";
+}
+
 /** A browser can ask Turbopack for dozens of multi-megabyte chunks at once.
- * The outbound Portal rides one WebSocket, whose client-side send buffer drops
- * responses when all of those loopback fetches finish together. Keep fetches
- * below the measured backpressure cliff. The sidecar fetches a bounded set in
- * parallel and serializes the resulting WebSocket frames behind its actual
- * send buffer. This gate is per Portal connection, so sibling services never
- * block each other. */
+ * The outbound Portal rides one WebSocket. Before the sidecar sent responses
+ * in bounded frames behind its actual send buffer, responses finishing
+ * together overflowed it, so relayed requests were held to two at a time.
+ * That limit then made the Portal slow instead: a page's first API calls each
+ * compile for seconds on a fresh dev server, and its 90 script chunks queued
+ * behind them, so a warmed page took half a minute to render. The gate stays
+ * bounded, per Portal connection so sibling services never block each other,
+ * and static build output has lanes of its own (relayLane). */
+export const RELAY_LANES = 6;
+
 export function createRelayRequestLimiter(
-  maxConcurrent = 2,
+  maxConcurrent = RELAY_LANES,
 ): RelayRequestLimiter {
   if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1)
     throw new Error("Portal relay concurrency must be positive");
@@ -96,6 +111,8 @@ type Relay = {
   sessionId: string;
   sandboxId: string;
   port: number;
+  /** The Portal name last written to its local address record. */
+  recordedName?: string | null;
 };
 const relays: Map<string, Relay> = (g.__opensessionSandboxPortalRelays ??=
   new Map()) as Map<string, Relay>;
@@ -154,6 +171,106 @@ function queueRouteOperation<T>(
     if (routeOps.get(id) === barrier) routeOps.delete(id);
   });
   return run;
+}
+
+/**
+ * Where an agent shell on this machine finds a Sandbox Portal: the relay's
+ * loopback server, which answers without sign-in exactly like a Portal
+ * running on this machine answers on its own port. One JSON record per
+ * Sandbox app port, `{ name, port, url }`, in the session's scratch dir
+ * (`$OPENSESSION_SCRATCH/sandbox-portals/`), so repo scripts that drive the
+ * app locally (screenshots, CDP) can find it. The relay's port changes when
+ * this process restarts; the record is rewritten when the relay is rebuilt.
+ */
+export function sandboxPortalLocalDir(sessionId: string): string {
+  return join(hostSessionScratchDir(sessionId), "sandbox-portals");
+}
+
+const localRecordOps: Map<
+  string,
+  Promise<void>
+> = (g.__opensessionSandboxPortalLocalRecordOps ??= new Map()) as Map<
+  string,
+  Promise<void>
+>;
+
+function queueLocalRecord(path: string, task: () => Promise<void>): void {
+  const next = (localRecordOps.get(path) ?? Promise.resolve())
+    .then(task)
+    .catch((error) =>
+      console.warn(
+        `[sandbox-portal] could not update ${path}:`,
+        error instanceof Error ? error.message : String(error),
+      ),
+    );
+  localRecordOps.set(path, next);
+  void next.finally(() => {
+    if (localRecordOps.get(path) === next) localRecordOps.delete(path);
+  });
+}
+
+function recordLocalAddress(relay: Relay, name: string | undefined): void {
+  if (
+    relay.recordedName !== undefined &&
+    (!name || name === relay.recordedName)
+  )
+    return;
+  const dir = sandboxPortalLocalDir(relay.sessionId);
+  const path = join(dir, `${relay.port}.json`);
+  const url = `http://127.0.0.1:${relay.server.port}`;
+  relay.recordedName = name ?? null;
+  queueLocalRecord(path, async () => {
+    // A relay rebuilt after a restart does not know its Portal's name; the
+    // record it replaces does.
+    let known = name;
+    if (!known)
+      try {
+        const previous = JSON.parse(await readFile(path, "utf8"));
+        if (previous?.port === relay.port && typeof previous.name === "string")
+          known = previous.name;
+      } catch {}
+    if (known) relay.recordedName = known;
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path,
+      `${JSON.stringify({ name: known ?? null, port: relay.port, url })}\n`,
+    );
+  });
+}
+
+function forgetLocalAddress(relay: Relay): void {
+  const path = join(
+    sandboxPortalLocalDir(relay.sessionId),
+    `${relay.port}.json`,
+  );
+  queueLocalRecord(path, () => rm(path, { force: true }));
+}
+
+/** The loopback URLs of this session's relayed Sandbox Portals, by Portal
+ *  name, as recorded for agent shells on this machine, spelled with
+ *  `localhost`: dev servers such as Next refuse their scripts to a page
+ *  opened on 127.0.0.1 unless it is an allowed dev origin, and allow
+ *  localhost by default. The record keeps 127.0.0.1, which scripts parse.
+ *  Never throws. */
+export async function sandboxPortalLocalUrls(
+  sessionId: string,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const dir = sandboxPortalLocalDir(sessionId);
+  try {
+    for (const file of await readdir(dir)) {
+      if (!file.endsWith(".json")) continue;
+      try {
+        const record = JSON.parse(await readFile(join(dir, file), "utf8"));
+        if (typeof record?.name === "string" && typeof record.url === "string")
+          out.set(
+            record.name,
+            record.url.replace(/^http:\/\/127\.0\.0\.1:/, "http://localhost:"),
+          );
+      } catch {}
+    }
+  } catch {}
+  return out;
 }
 
 function dropPortalRoute(id: string, sandboxId: string, port: number): void {
@@ -341,6 +458,7 @@ export function revokeSandboxPortalGrants(sandboxId: string): void {
         relay.server.stop(true);
       } catch {}
       dropPortalRoute(id, sandboxId, relay.port);
+      forgetLocalAddress(relay);
       relays.delete(id);
     }
 }
@@ -365,6 +483,7 @@ export function revokeSandboxPortalRelay(
         relay.server.stop(true);
       } catch {}
       dropPortalRoute(id, sandboxId, port);
+      forgetLocalAddress(relay);
       relays.delete(id);
     }
 }
@@ -424,6 +543,7 @@ export function sandboxPortalRelayOpen(ws: any): boolean {
     expiryTimer: closeAtExpiry,
     pending: new Map(),
     limitRequests: createRelayRequestLimiter(),
+    limitAssets: createRelayRequestLimiter(),
   });
   return true;
 }
@@ -550,7 +670,11 @@ export async function relayFetch(
   );
   if (!connection)
     return new Response("Sandbox Portal is not connected", { status: 503 });
-  return connection.limitRequests(async () => {
+  const limit =
+    relayLane(new URL(request.url).pathname) === "assets"
+      ? connection.limitAssets
+      : connection.limitRequests;
+  return limit(async () => {
     if (request.signal.aborted) return new Response(null, { status: 499 });
     if (
       connections.get(key(input.sessionId, input.sandboxId, input.port)) !==
@@ -640,6 +764,8 @@ export async function ensureSandboxPortalRelay(input: {
   sessionId: string;
   sandboxId: string;
   port: number;
+  /** The Portal's name, when the caller knows it (sandboxPortalLocalDir). */
+  name?: string;
 }): Promise<string | null> {
   const id = key(input.sessionId, input.sandboxId, input.port);
   let relay = relays.get(id);
@@ -728,9 +854,15 @@ export async function ensureSandboxPortalRelay(input: {
         },
       },
     });
-    relay = { ...input, server };
+    relay = {
+      sessionId: input.sessionId,
+      sandboxId: input.sandboxId,
+      port: input.port,
+      server,
+    };
     relays.set(id, relay);
   }
+  recordLocalAddress(relay, input.name);
   const upstream = `127.0.0.1:${relay.server.port}`;
   return queueRouteOperation(id, async () => {
     const { ensureAuthenticatedPortalRoute } = await import("./preview");

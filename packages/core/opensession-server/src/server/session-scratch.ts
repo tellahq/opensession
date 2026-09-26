@@ -50,6 +50,13 @@ function scratchName(sessionId: string): string | null {
   return safe && safe !== "." && safe !== ".." ? safe : null;
 }
 
+/** The session's scratch dir on this machine, where `$OPENSESSION_SCRATCH`
+ *  points for an agent whose shell runs here. A path only; nothing is
+ *  created. */
+export function hostSessionScratchDir(sessionId: string): string {
+  return join(sessionScratchRoot(), scratchName(sessionId) ?? "_");
+}
+
 /**
  * The session's scratch dir as the runner inside a Sandbox resolves it, so
  * host code that writes Sandbox-side files (Portal logs, relay sidecars) lands

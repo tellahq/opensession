@@ -395,13 +395,14 @@ describe("LocalExecutor", () => {
   });
 
   test("uses unique batch streams and retries terminal status idempotently", async () => {
-    const { executor } = await setup();
+    const { root, executor } = await setup();
     const spawned = await execute(executor, {
       kind: "process.spawn",
       executable: "/usr/bin/python3",
       args: [
         "-c",
-        "import os,time; os.write(1,b'a'); time.sleep(.08); os.write(2,b'b')",
+        "import os,time,sys\nos.write(1,b'a')\nwhile not os.path.exists(sys.argv[1]): time.sleep(.01)\nos.write(2,b'b')",
+        join(root, "continue"),
       ],
       idempotencyKey: "batches",
     });
@@ -421,11 +422,39 @@ describe("LocalExecutor", () => {
     expect(
       first.events?.every((event) => event.streamId === firstStreamId),
     ).toBe(true);
-    await Bun.sleep(100);
-    const terminal = await execute(executor, {
-      kind: "process.status",
-      processId: spawned.outcome.processId,
+    expect(first.events).toMatchObject([
+      { kind: "text", channel: "stdout", data: "a" },
+    ]);
+    // Keep the writes in separate batches, then wait for close rather than a delay.
+    await writeFile(join(root, "continue"), "");
+    const streamIds = new Set([firstStreamId]);
+    const laterText: string[] = [];
+    const terminal = await waitUntil(async () => {
+      const current = await execute(executor, {
+        kind: "process.status",
+        processId,
+      });
+      if (current.outcome.kind !== "process")
+        throw new Error("unexpected outcome");
+      if (current.events?.length) {
+        const streamId = current.outcome.streamId;
+        expect(streamIds.has(streamId)).toBe(false);
+        streamIds.add(streamId);
+        expect(current.events.map((event) => event.sequence)).toEqual(
+          current.events.map((_, index) => index),
+        );
+        expect(
+          current.events.every((event) => event.streamId === streamId),
+        ).toBe(true);
+        laterText.push(
+          ...current.events.flatMap((event) =>
+            event.kind === "text" ? [event.data] : [],
+          ),
+        );
+      }
+      return current.outcome.state === "exited" ? current : undefined;
     });
+    expect(laterText.join("")).toBe("b");
     if (terminal.outcome.kind !== "process")
       throw new Error("unexpected outcome");
     const terminalStreamId = terminal.outcome.streamId;

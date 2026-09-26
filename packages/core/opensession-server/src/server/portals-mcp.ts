@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { createSdkMcpServer, tool } from "./inprocess-mcp";
+import { sandboxPortalLocalUrls } from "./sandbox-portal-relay";
 import {
   getPreviewStatus,
   getSandboxPreviewStatus,
@@ -66,6 +67,9 @@ export interface PortalsMcpContext {
   /** An explicit computation action may wake the Sandbox. Passive listing may not. */
   sandbox: (options?: { wake?: boolean }) => Promise<Sandbox | null>;
   hasSandbox: () => boolean;
+  /** The agent's shell runs on this machine while its Portals run in a
+   *  Portal Sandbox: list_portals then gives each Portal's loopback URL. */
+  shellOnHost?: () => boolean;
   /** How the Sandbox that runs the Portals is doing when none is live: the
    * answer says preparing, waking, asleep, or what failed. */
   sandboxState?: () => PortalSandboxReport | null;
@@ -517,7 +521,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
             return result(
               "No Portals are registered. Use start_portal for a live app or service.",
             );
-          const [status, warming] = await Promise.all([
+          const [status, warming, local] = await Promise.all([
             portalStatus(ctx, dir, sandbox),
             sandbox
               ? sandboxPortalsWarming(
@@ -528,6 +532,9 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
                     .map((portal) => portal.name),
                 )
               : new Set<string>(),
+            sandbox && ctx.shellOnHost?.()
+              ? sandboxPortalLocalUrls(ctx.sessionId)
+              : new Map<string, string>(),
           ]);
           return result(
             portals
@@ -535,7 +542,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
                 const service = status.services.find(
                   (candidate) => candidate.key === portal.key,
                 );
-                return `${portal.name}\nstate: ${portal.state}\nport: ${portal.port}\nurl: ${service?.previewUrl ?? "not ready"}${portal.description ? `\ndescription: ${portal.description}` : ""}${warming.has(portal.name) ? "\nwarming: its first pages are still compiling, so opening one now can take a minute. Say so rather than calling it ready." : ""}${portal.state === "failed" && portal.lastError ? `\nerror: ${portal.lastError}` : ""}`;
+                return `${portal.name}\nstate: ${portal.state}\nport: ${portal.port}\nurl: ${service?.previewUrl ?? "not ready"}${portal.state === "awake" && local.has(portal.name) ? `\nlocal: ${local.get(portal.name)} (from this shell, no sign-in: use it for curl, scripts, and screenshots)` : ""}${portal.description ? `\ndescription: ${portal.description}` : ""}${warming.has(portal.name) ? "\nwarming: its first pages are still compiling, so opening one now can take a minute. Say so rather than calling it ready." : ""}${portal.state === "failed" && portal.lastError ? `\nerror: ${portal.lastError}` : ""}`;
               })
               .join("\n\n"),
           );

@@ -333,6 +333,16 @@ export function ShippedChangeComposer({
       });
   };
 
+  const needsReconnect =
+    reconnectRequired || (!canUploadImages && screenshots.length > 0);
+  const canSend =
+    status === "idle" &&
+    !awaitingSlack &&
+    !needsReconnect &&
+    (message.trim() !== "" || screenshots.length > 0) &&
+    channel !== "" &&
+    !uploading;
+
   if (sent && !composingAfterSent) {
     return (
       <SlackSentNotice
@@ -396,6 +406,17 @@ export function ShippedChangeComposer({
           onChange={(event) => {
             draftDirtyRef.current = true;
             setMessage(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            // Cmd+Enter (Ctrl+Enter off Mac) sends; plain Enter stays a newline.
+            if (
+              event.key !== "Enter" ||
+              !(event.metaKey || event.ctrlKey) ||
+              event.nativeEvent.isComposing
+            )
+              return;
+            event.preventDefault();
+            if (canSend) onShare(message.trim(), channel, screenshots);
           }}
           onPaste={(event) => {
             const files = imageFilesFromPaste(event);
@@ -502,24 +523,17 @@ export function ShippedChangeComposer({
             disabled={
               status !== "idle" ||
               awaitingSlack ||
-              (!(
-                reconnectRequired ||
-                (!canUploadImages && screenshots.length > 0)
-              ) &&
-                ((!message.trim() && screenshots.length === 0) ||
-                  !channel ||
-                  uploading))
+              (!needsReconnect && !canSend)
             }
             onClick={() =>
-              reconnectRequired || (!canUploadImages && screenshots.length > 0)
+              needsReconnect
                 ? void reconnect()
                 : onShare(message.trim(), channel, screenshots)
             }
           >
             {awaitingSlack
               ? "Waiting…"
-              : reconnectRequired ||
-                  (!canUploadImages && screenshots.length > 0)
+              : needsReconnect
                 ? "Reconnect"
                 : status === "sharing"
                   ? "Sending…"
