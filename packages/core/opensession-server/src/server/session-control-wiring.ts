@@ -97,7 +97,11 @@ import { mergedSessionTranscriptAsync } from "./sessions";
 import { rebuildIndex } from "./slack-links";
 import { handleSlashCommand } from "./slash-commands";
 import { type UnifiedSession } from "./types";
-import { type Workspace, getWorkspace, updateWorkspace } from "./workspaces";
+import {
+  type Workspace,
+  getWorkspace,
+  materializeWorkspaceWorktree,
+} from "./workspaces";
 import { ownedWorktree } from "./session-workspace";
 import {
   ensureAskCheckout,
@@ -1048,15 +1052,10 @@ registerSessionControl({
       !isScratch &&
       ownedWorktree(wtPath)
     ) {
-      // A PR workspace's branch is the PR head; a session on the derived
-      // <head>-os-review checkout never renames it (see session-pr-target).
-      const workspaceBranch =
-        joinedWorkspace.prNumber != null && joinedWorkspace.branch
-          ? joinedWorkspace.branch
-          : sessionBranch;
-      await updateWorkspace(joinedWorkspace.id, {
+      await materializeWorkspaceWorktree(joinedWorkspace.id, {
+        repo: repo.id,
         worktreeDir: wtPath,
-        ...(workspaceBranch ? { branch: workspaceBranch } : {}),
+        branch: sessionBranch,
       });
     }
 
@@ -1150,11 +1149,18 @@ registerSessionControl({
           ...(branchForWs ? { branch: branchForWs } : {}),
           ...(dir ? { worktreeDir: dir } : {}),
         });
-        const ws = await getWorkspace(plannedWorkspaceId);
+        let ws = await getWorkspace(plannedWorkspaceId);
         if (!ws)
           throw new Error(
             `Workspace ${plannedWorkspaceId} projection is missing after actor receipt`,
           );
+        if (!isAsk && !isScratch && dir && !ws.worktreeDir)
+          ws =
+            (await materializeWorkspaceWorktree(ws.id, {
+              repo: wsParent?.repo || repo.id,
+              worktreeDir: dir,
+              branch: branchForWs,
+            })) || ws;
         resolvedWorkspaceId = ws.id;
         // Only when the name was seeded from this session's own first line
         // (compared before createWorkspace trims it): a workspace named

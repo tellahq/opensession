@@ -166,7 +166,12 @@ import {
 } from "./uploads";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
-import { type Workspace, getWorkspace, updateWorkspace } from "./workspaces";
+import {
+  type Workspace,
+  getWorkspace,
+  materializeWorkspaceWorktree,
+  updateWorkspace,
+} from "./workspaces";
 import {
   type CreationOpeningEffectItem,
   type CreationSetupPlan,
@@ -2858,22 +2863,11 @@ export async function handleCreateSessionMessage(
       (!usesSharedCheckout || fromPr) &&
       (worktreeMode !== "stack" || !workspace.branch)
     ) {
-      // A PR workspace's branch is the PR head. The session materializing
-      // it may sit on the derived <head>-os-review checkout, which no PR
-      // ever resolves on, so that checkout never renames the workspace.
-      const workspaceBranch =
-        workspace.prNumber != null && workspace.branch
-          ? workspace.branch
-          : branch;
-      await updateWorkspace(workspace.id, {
+      workspace = await materializeWorkspaceWorktree(workspace.id, {
+        repo: recoveringSession?.repo || forkSource?.repo || repo.id,
         worktreeDir: wtPath,
-        ...(workspaceBranch ? { branch: workspaceBranch } : {}),
+        branch,
       });
-      workspace = {
-        ...workspace,
-        worktreeDir: wtPath,
-        branch: workspaceBranch,
-      };
     }
     // The branch this session actually works on (also persisted below).
     const sessionBranch = forkSource
@@ -2958,6 +2952,17 @@ export async function handleCreateSessionMessage(
         throw new Error(
           `Workspace ${plannedWorkspaceId} projection is missing after actor receipt`,
         );
+      if (
+        !isAsk &&
+        !isScratch &&
+        !workspace.worktreeDir &&
+        ownedWorktree(wtPath)
+      )
+        workspace = await materializeWorkspaceWorktree(workspace.id, {
+          repo: repo.id,
+          worktreeDir: wtPath,
+          branch: sessionBranch,
+        });
       mintedForSession = true;
     }
     // An auto-created workspace is renamed ONCE from the generated
