@@ -169,5 +169,5 @@ export function useCopy(opts: UseCopyOptions = {}) {
     shareOrCopyLink(link, { title: o.title, onCopied: () => flash(o) });
   };
 
-  return { copied, copy, share };
+  return { copied, copy, share, flash };
 }

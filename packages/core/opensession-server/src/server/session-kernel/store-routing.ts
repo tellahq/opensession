@@ -123,6 +123,15 @@ export const READ_METHODS = new Set([
   "deliveryMigrationComplete",
 ]);
 
+/** A quarantine recorded for a failed compatibility-store read. Reads never
+ * change durable state, so the failure leaves nothing ambiguous to verify. */
+export function isReadOnlyStoreQuarantine(commandKind: string): boolean {
+  return (
+    commandKind.startsWith("store:") &&
+    READ_METHODS.has(commandKind.slice("store:".length))
+  );
+}
+
 /** The single routing registry for the compatibility store surface. */
 export function sessionKernelStoreRoute(
   method: string,

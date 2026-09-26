@@ -229,6 +229,13 @@ describe("scheduled prompt detection", () => {
     expect(parsed).toEqual({ id, body: prompt });
   });
 
+  it("still detects deliveries whose sender stacked a suffix per round", () => {
+    const sender = `Sam${" (scheduled)".repeat(10)}`;
+    expect(
+      parseScheduledPrompt(`[${sender}] ${scheduledPromptMessage(id, prompt)}`),
+    ).toEqual({ id, body: prompt });
+  });
+
   it("classifies the turn as a check-back notice with the prompt as its body", () => {
     const entry: TranscriptEntry = {
       id: "e1",
@@ -445,6 +452,44 @@ describe("classifyEntry", () => {
     const c = classifyEntry(entry({ content: "[GitHub] 🔀 merged" }));
     expect(c.notice).toMatchObject({ kind: "system", title: "merged" });
     expect(c.notice?.body).toBeUndefined();
+  });
+
+  it("collapses a long GitHub status behind its opening sentence", () => {
+    const content =
+      "PR #7607 deployed (5e0b469, https://github.com/acme/app/actions/runs/1). Verify it with the repository's post-deploy prompt:\n\n## 1. Confirm it shipped\nCheck the marker.";
+    const c = classifyEntry(entry({ content: `[GitHub] ${content}` }));
+    expect(c.notice).toMatchObject({
+      kind: "system",
+      title: "PR #7607 deployed (5e0b469)",
+      tone: "info",
+      icon: "deploy",
+      body: "collapsed",
+    });
+    expect(c.content).toBe(content);
+  });
+
+  it("collapses a long single-line status and drops its trailing URL", () => {
+    const c = classifyEntry(
+      entry({
+        content: `[GitHub] PR #9 “${"x".repeat(80)}” now has merge conflicts with its base branch. https://github.com/acme/app/pull/9`,
+      }),
+    );
+    expect(c.notice?.body).toBe("collapsed");
+    expect(c.notice?.title.endsWith("with its base branch")).toBe(true);
+  });
+
+  it("collapses a multi-line runner notice but keeps its tone", () => {
+    const c = classifyEntry(
+      entry({
+        type: "system",
+        content: "run failed: engine exited\n  at frame 1\n  at frame 2",
+      }),
+    );
+    expect(c.notice).toMatchObject({
+      title: "run failed: engine exited",
+      tone: "error",
+      body: "collapsed",
+    });
   });
 
   it("gives merge and deploy notices an icon instead of a leading emoji", () => {

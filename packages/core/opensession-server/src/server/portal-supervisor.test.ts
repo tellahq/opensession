@@ -678,6 +678,39 @@ describe("session Portal supervisor", () => {
     expect((await listPortalServices(worktree))[0]?.state).toBe("stopped");
   });
 
+  test("starting a stopped Portal again reuses its port", async () => {
+    const command =
+      "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"ok\")}})'";
+    const first = await startPortalService({
+      sessionId: "os-portal-test",
+      worktreeDir: worktree,
+      name: "same-port",
+      port: 18_702,
+      command,
+    });
+    await stopPortalService({
+      sessionId: "os-portal-test",
+      worktreeDir: worktree,
+      name: "same-port",
+    });
+    const again = await startPortalService({
+      sessionId: "os-portal-test",
+      worktreeDir: worktree,
+      name: "same-port",
+      command,
+    });
+    try {
+      expect(again.port).toBe(first.port);
+      expect(again.url).toBe(first.url);
+    } finally {
+      await stopPortalService({
+        sessionId: "os-portal-test",
+        worktreeDir: worktree,
+        name: "same-port",
+      });
+    }
+  });
+
   test("fails a starting record stuck past the readiness window", async () => {
     // A record poisoned before the awake-history rule: state "starting", pid
     // alive, started long ago, nothing listening. It must surface as failed.
@@ -686,18 +719,21 @@ describe("session Portal supervisor", () => {
       name: "web-stuck",
       key: "WEBAPP_PORT",
       command: "just dev",
-      port: 18_779,
+      port: await freePort(),
       state: "starting",
       pid: wrapper.pid,
       startedAt: new Date(Date.now() - 20 * 60_000).toISOString(),
     };
-    writeFileSync(
-      join(worktree, ".ports.conf"),
-      `${PREFIX(record)}\nWEBAPP_PORT=18779\n`,
-    );
-    const [portal] = await listPortalServices(worktree);
-    expect(portal?.state).toBe("failed");
-    wrapper.kill();
+    try {
+      writeFileSync(
+        join(worktree, ".ports.conf"),
+        `${PREFIX(record)}\nWEBAPP_PORT=${record.port}\n`,
+      );
+      const [portal] = await listPortalServices(worktree);
+      expect(portal?.state).toBe("failed");
+    } finally {
+      wrapper.kill();
+    }
   });
 
   test("marks a crashed awake Portal failed instead of an eternal starting ghost", async () => {
@@ -708,18 +744,21 @@ describe("session Portal supervisor", () => {
       name: "web-crashed",
       key: "WEBAPP_PORT",
       command: "just dev",
-      port: 18_777,
+      port: await freePort(),
       state: "awake",
       pid: wrapper.pid,
       startedAt: new Date().toISOString(),
     };
-    writeFileSync(
-      join(worktree, ".ports.conf"),
-      `${PREFIX(record)}\nWEBAPP_PORT=18777\n`,
-    );
-    const [portal] = await listPortalServices(worktree);
-    expect(portal?.state).toBe("failed");
-    wrapper.kill();
+    try {
+      writeFileSync(
+        join(worktree, ".ports.conf"),
+        `${PREFIX(record)}\nWEBAPP_PORT=${record.port}\n`,
+      );
+      const [portal] = await listPortalServices(worktree);
+      expect(portal?.state).toBe("failed");
+    } finally {
+      wrapper.kill();
+    }
   });
 
   test("starting over a failed Portal reaps its leftover process group", async () => {
@@ -757,7 +796,7 @@ describe("session Portal supervisor", () => {
   });
 
   test("terminates a Portal process group when readiness times out", async () => {
-    const port = 18_704;
+    const port = await freePort();
     const pidFile = join(worktree, "timed-out.pid");
     await expect(
       startPortalService({
@@ -768,7 +807,7 @@ describe("session Portal supervisor", () => {
         command: `bash -c 'echo $$ > ${pidFile}; exec sleep 60'`,
         readyTimeoutMs: 5_000,
       }),
-    ).rejects.toThrow("Nothing listened on port 18704 within 5 seconds.");
+    ).rejects.toThrow(`Nothing listened on port ${port} within 5 seconds.`);
     const pid = Number(await Bun.file(pidFile).text());
     expect(pid).toBeGreaterThan(1);
     expect(() => process.kill(pid, 0)).toThrow();

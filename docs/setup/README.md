@@ -131,9 +131,10 @@ never expose it publicly. [networking.md](networking.md) covers how.
 activates GitHub sign-in. Ordinary `/api/*` requests and the UI WebSocket then
 require an HttpOnly session cookie or a Bearer token; auth bootstrap,
 health/readiness, update feeds, and narrowly authenticated machine endpoints are
-explicit exceptions. Only logins in `identity.team[].github` may sign in, and
-the verified identity overrides any client-claimed user. Tella's own deployment
-runs with this on. See
+explicit exceptions. Any verified GitHub account that can reach the instance
+may sign in and automatically join `identity.team` and manage the workspace. The verified
+identity overrides any client-claimed user. This is not an organization or
+network-access gate. See
 [github.md](github.md#per-user-github-auth-prs-as-the-session-owner).
 
 Turning it on does **not** make the server safe to expose publicly. It protects

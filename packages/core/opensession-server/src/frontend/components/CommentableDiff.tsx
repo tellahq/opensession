@@ -39,6 +39,7 @@ import {
 } from "./icons";
 import { copyToClipboard } from "../lib/share-link";
 import { canAutoExpandDiffFile } from "../lib/review-diff";
+import { diffFilesFromNewText } from "../lib/diff-expand";
 import { noAutofill } from "../lib/composer-autofill";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
@@ -138,6 +139,8 @@ const BASE_OPTIONS = {
   disableFileHeader: true,
   // `overflow` is set per row from the caller's wrap preference.
   enableLineSelection: true,
+  // Each click on an "unmodified lines" row reveals this many, like GitHub.
+  expansionLineCount: 20,
 };
 
 /** Parse the patch and keep only the files the visible order names. */
@@ -497,6 +500,22 @@ export function CommentableDiff({ patch, options }: Props) {
       newFile,
     };
   };
+
+  // Read-only loader behind the "unmodified lines" rows: fetches the new side
+  // once and rebuilds the old side from the patch, so a reader can expand
+  // context like on GitHub. A live worktree wins over the provider copy so a
+  // file hydrated here is still the worktree's text if the reader then edits
+  // it; a mismatch fails the expand instead of showing or saving other text.
+  const loadNewText = editFile
+    ? (fd: FileDiffMetadata) => editFile.load(fd, "new")
+    : fileActions?.loadContents;
+  const loadContextFiles = loadNewText
+    ? async (fd: FileDiffMetadata): Promise<FileDiffLoadedFiles> => {
+        const text = await loadNewText(fd);
+        if (text == null) throw new Error(`${fd.name} is not available`);
+        return diffFilesFromNewText(fd, text);
+      }
+    : undefined;
 
   const {
     annotationsByFile: pendingByFile,
@@ -926,7 +945,7 @@ export function CommentableDiff({ patch, options }: Props) {
                   renderAnnotation={renderAnnotation}
                   editing={isEditing}
                   createEditor={isEditing ? createEditor : undefined}
-                  loadDiffFiles={isEditing ? loadDiffFiles : undefined}
+                  loadDiffFiles={isEditing ? loadDiffFiles : loadContextFiles}
                 />
               ))}
             {resolved.length > 0 && (

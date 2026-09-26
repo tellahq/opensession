@@ -482,7 +482,10 @@ export function parseScheduledPrompt(
   content?: string,
 ): { id: string | null; body: string } | null {
   if (!content) return null;
-  const text = content.replace(ATTR_PREFIX_RE, "");
+  // Any-length sender: deliveries stored before scheduledActor stopped
+  // stacking " (scheduled)" carry prefixes past ATTR_PREFIX_RE's limit, and
+  // the sentinel right after the bracket is what makes this unambiguous.
+  const text = content.replace(/^\[[^\]\n]+\]\s*/, "");
   const sentinel = text.match(SCHEDULED_PROMPT_SENTINEL_RE);
   if (!sentinel) return null;
   return {
@@ -696,9 +699,45 @@ export function parseAskRecord(
  * result cannot drift into three different readings of the same sentence.
  */
 function statusNotice(kind: NoticeKind, body: string): EntryNotice {
-  const tone = noticeTone(body);
-  const icon = tone === "info" ? noticeIcon(body) : undefined;
-  return { kind, title: body, tone, ...(icon ? { icon } : {}) };
+  const title = statusTitle(body);
+  const tone = noticeTone(title);
+  const icon = tone === "info" ? noticeIcon(title) : undefined;
+  return {
+    kind,
+    title,
+    tone,
+    ...(icon ? { icon } : {}),
+    ...(title === body ? {} : { body: "collapsed" as const }),
+  };
+}
+
+/** Longest status line that still reads as one line in the transcript. */
+const STATUS_TITLE_MAX = 160;
+
+/**
+ * The one line a status notice shows. A short single line is its own title.
+ * Anything longer (a deploy's verify prompt, a multi-line run failure) would
+ * otherwise render as a wall of centered text, so it gets its opening sentence
+ * as the title and the full text goes behind the show toggle. A URL in the
+ * opening parenthetical ("deployed (abc1234, https://…)") is dropped from the
+ * title; the body keeps it.
+ */
+export function statusTitle(body: string): string {
+  const text = body.trim();
+  if (!text.includes("\n") && text.length <= STATUS_TITLE_MAX) return body;
+  let title = text.split("\n", 1)[0].trim();
+  const sentence = title.match(/^.+?[.!?](?=\s)/)?.[0];
+  if (sentence) title = sentence;
+  title = title
+    .replace(/,\s*https?:\/\/[^\s)]+(?=\))/g, "")
+    .replace(/\s*\bhttps?:\/\/\S+$/, "")
+    .replace(/[\s.:]+$/, "");
+  if (title.length > STATUS_TITLE_MAX) {
+    const cut = title.slice(0, STATUS_TITLE_MAX);
+    const space = cut.lastIndexOf(" ");
+    title = `${(space > 80 ? cut.slice(0, space) : cut).trimEnd()}…`;
+  }
+  return title || text.slice(0, STATUS_TITLE_MAX);
 }
 
 /**

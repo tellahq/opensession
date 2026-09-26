@@ -110,12 +110,11 @@ export async function maybeHandoffFindings(
 
     // The PR's own review/fix runs also sit on this branch — never hand off to
     // those; deliver to the most recently active real session.
-    const owners = (await matchSessions(workspaceId, pr.headRef))
-      .filter((s) => !s.id.startsWith("bks-ghpr-"))
-      .sort(
-        (a, b) =>
-          Date.parse(b.lastActivity || "0") - Date.parse(a.lastActivity || "0"),
-      );
+    // A session that only linked the PR still owns it, but one with the
+    // branch checked out wins (matchSessions ranks it first).
+    const owners = (
+      await matchSessions(workspaceId, pr.headRef, { order: "activity" })
+    ).filter((s) => !s.id.startsWith("bks-ghpr-"));
     const target = owners[0];
     if (!target) {
       // No live owning session — the os-auto-fix label remains the path, but

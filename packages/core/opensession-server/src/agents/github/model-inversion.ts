@@ -58,13 +58,9 @@ export async function authorFamilyFor(
           defaultRepo(configuredRepos(await getConfigAsync())).ghRepo,
       );
       if (workspaceId) {
-        const owners = (await matchSessions(workspaceId, pr.headRef))
-          .filter((s) => !s.id.startsWith("bks-ghpr-"))
-          .sort(
-            (a, b) =>
-              Date.parse(b.lastActivity || "0") -
-              Date.parse(a.lastActivity || "0"),
-          );
+        const owners = (
+          await matchSessions(workspaceId, pr.headRef, { order: "activity" })
+        ).filter((s) => !s.id.startsWith("bks-ghpr-"));
         for (const s of owners) {
           const family = familyOf(s.model);
           if (family) return { family, source: `owning session ${s.id}` };

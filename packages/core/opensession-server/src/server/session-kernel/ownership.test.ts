@@ -583,7 +583,9 @@ describe("single session ownership", () => {
     expect(create).toContain("settleCreationSucceeded(");
     expect(create).toContain("settleCreationFailed(");
     expect(create).toContain("creationEffectId,");
-    expect(create).toContain(
+    // Unstacked creates must leave the base unset across the actor boundary.
+    expect(create).toContain("baseBranch: input.baseBranch,");
+    expect(create).not.toContain(
       "baseBranch: input.baseBranch || getRepo(input.project).defaultBranch",
     );
     expect(create).not.toMatch(/\bcreateWorkspace\(/);
