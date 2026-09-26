@@ -1,4 +1,5 @@
 /** Managed private app domains: Cloudflare DNS, ACME DNS-01, and Caddy. */
+import { CADDY_STREAM_CLOSE_DELAY } from "./caddy-stream";
 import { X509Certificate, randomBytes } from "crypto";
 import { resolve4 } from "dns/promises";
 import {
@@ -407,7 +408,7 @@ export function privateAppCaddySnippet(
   paths = certificatePaths(domain),
   upstream = "127.0.0.1:3850",
 ): string {
-  return `${domain} {\n    ${MANAGED_START}\n    bind ${tailnetIpv4}\n    tls ${paths.certificate} ${paths.key}\n    reverse_proxy ${upstream} {\n        lb_try_duration 15s\n        lb_try_interval 250ms\n    }\n    ${MANAGED_END}\n}`;
+  return `${domain} {\n    ${MANAGED_START}\n    bind ${tailnetIpv4}\n    tls ${paths.certificate} ${paths.key}\n    reverse_proxy ${upstream} {\n        lb_try_duration 15s\n        lb_try_interval 250ms\n        stream_close_delay ${CADDY_STREAM_CLOSE_DELAY}\n    }\n    ${MANAGED_END}\n}`;
 }
 
 function managedBlock(
@@ -416,7 +417,7 @@ function managedBlock(
   upstream: string,
 ): string {
   const paths = certificatePaths(domain);
-  return `${MANAGED_START}\nbind ${tailnetIpv4}\ntls ${paths.certificate} ${paths.key}\nreverse_proxy ${upstream} {\n    lb_try_duration 15s\n    lb_try_interval 250ms\n}\n${MANAGED_END}`;
+  return `${MANAGED_START}\nbind ${tailnetIpv4}\ntls ${paths.certificate} ${paths.key}\nreverse_proxy ${upstream} {\n    lb_try_duration 15s\n    lb_try_interval 250ms\n    stream_close_delay ${CADDY_STREAM_CLOSE_DELAY}\n}\n${MANAGED_END}`;
 }
 
 function closingBrace(source: string, opening: number): number | undefined {
@@ -492,12 +493,31 @@ export function upsertPrivateAppCaddy(
   return `${caddyfile.trimEnd()}\n\n${privateAppCaddySnippet(domain, tailnetIpv4, certificatePaths(domain), upstream)}\n`;
 }
 
-async function issueCertificate(
-  credential: PrivateAppCredential,
-  renew = false,
-): Promise<boolean> {
+function requirePrivateAppPlatform(): void {
+  if (process.platform !== "linux") {
+    throw new Error(
+      "Automatic private-domain setup requires Linux with systemd. On this platform, use an externally managed certificate and reverse proxy; Open Session cannot manage certificate renewal.",
+    );
+  }
+}
+
+async function requireLego(): Promise<string> {
   const lego = Bun.which("lego");
   if (!lego) throw new Error("lego is not installed on this server");
+  const version = await runCommand([lego, "--version"], commandEnvironment());
+  if (version.code !== 0 || !/^lego version (?:v)?4\./m.test(version.stdout)) {
+    throw new Error(
+      "Automatic private-domain setup requires the official go-acme lego 4.x CLI. Re-run install.sh --caddy to install the pinned build, and ensure ~/.local/bin precedes other lego installations on the service PATH.",
+    );
+  }
+  return lego;
+}
+
+async function issueCertificate(
+  credential: PrivateAppCredential,
+  lego: string,
+  renew = false,
+): Promise<boolean> {
   mkdirSync(ACME_PATH(), { recursive: true, mode: 0o700 });
   chmodSync(ACME_PATH(), 0o700);
   const certificatePath = legoCertificatePaths(credential.domain).certificate;
@@ -556,6 +576,7 @@ async function installCertificateAndCaddy(
   tailnetIpv4: string,
   upstream = "127.0.0.1:3850",
 ): Promise<void> {
+  requirePrivateAppPlatform();
   const caddy = Bun.which("caddy");
   const sudo = Bun.which("sudo");
   if (!caddy || !sudo)
@@ -727,14 +748,14 @@ export async function configurePrivateAppDomain(input: {
   upstream?: string;
   tailnetIpv4: string | null;
 }): Promise<void> {
+  requirePrivateAppPlatform();
   if (!input.tailnetIpv4)
     throw new Error(
       "Connect this server to Tailscale before setting up a private domain",
     );
   if (!Bun.which("caddy"))
     throw new Error("Caddy is not installed on this server");
-  if (!Bun.which("lego"))
-    throw new Error("lego is not installed on this server");
+  const lego = await requireLego();
   const credential = validateCredentialInput(input);
   if (credential.provider === "cloudflare") {
     await upsertCloudflarePrivateRecord(
@@ -752,6 +773,7 @@ export async function configurePrivateAppDomain(input: {
   }
   await issueCertificate(
     credential,
+    lego,
     existsSync(legoCertificatePaths(credential.domain).certificate),
   );
   await installCertificateAndCaddy(
@@ -770,12 +792,20 @@ export async function testPrivateAppDomain(
 }
 
 export async function renewPrivateAppCertificate(): Promise<boolean> {
-  if (runtime.__opensessionPrivateAppRenewing) return false;
+  // Externally managed macOS certificates must not be renewed behind the
+  // operator's back when we cannot install and reload them.
+  if (process.platform !== "linux" || runtime.__opensessionPrivateAppRenewing)
+    return false;
   const credential = safeCredential();
   if (!credential || !Bun.which("lego") || !Bun.which("caddy")) return false;
   runtime.__opensessionPrivateAppRenewing = true;
   try {
-    const changed = await issueCertificate(credential, true);
+    requirePrivateAppPlatform();
+    const changed = await issueCertificate(
+      credential,
+      await requireLego(),
+      true,
+    );
     if (changed) {
       const records = await resolve4(credential.domain).catch(
         (): string[] => [],

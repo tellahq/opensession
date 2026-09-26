@@ -1033,11 +1033,8 @@ export async function withClaimedBranchWorktree<T>(
  * session branch with unpushed work), otherwise `origin/<base>`, otherwise
  * whichever of the two exists, otherwise `origin/<defaultBranch>`.
  *
- * Every session passes its repository's default branch as `base`, and a
- * repository's local default branch is not the canonical state: the shared
- * tella-fusion checkout sat on a feature branch for three days while its
- * local `main` stood still, so every new session started 50 commits behind
- * the `origin/main` the caller had just fetched.
+ * Only explicit feature bases use this resolution. The default branch always
+ * goes through defaultStartPoint, even when the caller names it explicitly.
  */
 async function resolveStartPoint(
   repoDir: string,
@@ -1205,8 +1202,10 @@ export async function createWorktree(
       .quiet()
       .nothrow();
     let startPoint = await defaultStartPoint(repo);
-    if (base) {
-      // Stacked worktree: fetch the base (it may be remote-only), then branch off it.
+    if (base && base !== repo.defaultBranch) {
+      // Stacked feature base: retain local work. An explicit default branch
+      // uses the same remote-first start point as an omitted base.
+      // Fetch the base as it may be remote-only.
       await shell`git -C ${repo.repo} fetch origin ${base} --quiet`.nothrow();
       startPoint = await resolveStartPoint(repo.repo, base, repo.defaultBranch);
     }

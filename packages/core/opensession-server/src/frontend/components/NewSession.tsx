@@ -80,6 +80,7 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconChecklist,
+  IconGlobe,
   IconConnections,
   IconDotsHorizontal,
   IconEye,
@@ -281,6 +282,7 @@ export function NewSession({
       label: item.label || item.id,
       default: item.default,
       sharedCheckout: item.sharedCheckout,
+      portal: item.portal,
     }));
   // The workspace's configured choice is what a user with no preference of
   // their own starts on; the repo flagged `default` is the fallback behind it.
@@ -462,6 +464,9 @@ export function NewSession({
   // Pstack mode: the pstack playbooks and skills load for every turn. Off by
   // default so an ordinary session never sees them.
   const [pstackMode, setPstackMode] = useState(false);
+  // Start the repo's Portal with the session, so its dev server comes up
+  // while the agent works instead of when someone first opens it.
+  const [startPortal, setStartPortal] = useState(false);
   // Pinned provider account for the new session ("" = auto pool pick).
   // Soft pin: the runner prefers it and falls back on exhaustion. Only
   // meaningful for Anthropic/OpenAI subscription-backed models.
@@ -575,6 +580,13 @@ export function NewSession({
   const showSandboxPicker =
     !!sandboxStatus && (sandboxAvailable || !!sandboxProvider);
   const sandboxLabel = (id: string) => (id === "" ? "This machine" : "Sandbox");
+  // The repo's first declared Portal, offered to start with the session.
+  const repoPortal =
+    mode === "code" ? repos.find((option) => option.id === repo)?.portal : null;
+  // Where it runs: the session's own Sandbox, or the Portal Sandbox the repo
+  // asks for. Either way, starting it now means booting that machine.
+  const portalBootsSandbox =
+    sandboxProvider !== "" || !!sandboxStatus?.defaults?.portals?.[repo];
 
   // Provider-independent family check, driven by the same server list the
   // create path enforces.
@@ -1130,6 +1142,7 @@ export function NewSession({
     createMessage.autoFallback = autoFallback;
     if (fastMode) createMessage.fastMode = true;
     if (pstackMode) createMessage.pstackMode = true;
+    if (repoPortal && startPortal) createMessage.startPortal = true;
     if (accountProvider && accountId) createMessage.accountId = accountId;
     // Once defaults have loaded, Host is an explicit override ("local").
     // Omitting the field would make the server re-apply the user's default.
@@ -1694,6 +1707,7 @@ export function NewSession({
                       (branchPicked ||
                         sandboxProvider ||
                         pstackMode ||
+                        (repoPortal && startPortal) ||
                         modelEngine(effectiveModelId) !== "pi" ||
                         selectedMcpServers.length > 0) &&
                         paletteIconBtnOn,
@@ -1814,6 +1828,24 @@ export function NewSession({
                         })}
                       </Menu.Popup>
                     </Menu.SubmenuRoot>
+                  )}
+                  {repoPortal && (
+                    <Menu.CheckboxItem
+                      checked={startPortal}
+                      closeOnClick={false}
+                      onCheckedChange={setStartPortal}
+                      className="justify-between gap-3"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <IconGlobe className="shrink-0 text-dim" size={20} />
+                        <span className="truncate">
+                          {portalBootsSandbox
+                            ? `Boot a Sandbox for ${repoPortal.name}`
+                            : `Start ${repoPortal.name} right away`}
+                        </span>
+                      </span>
+                      <Menu.Check on={startPortal} className="text-dim" />
+                    </Menu.CheckboxItem>
                   )}
                   <Menu.CheckboxItem
                     checked={pstackMode}

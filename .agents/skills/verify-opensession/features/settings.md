@@ -7,7 +7,7 @@ Settings controls personal preferences and instance configuration. Users navigat
 - `settings-navigation` opens Account, Preferences, Setup, Providers, Connections, and other allowed sections.
 - `settings-search` finds a section or control from the settings search field.
 - `settings-personal` persists browser or user-scoped preferences such as composer and appearance behavior.
-- `settings-instance` persists admin configuration such as repositories, providers, members, ingress, and integrations.
+- `settings-instance` persists workspace configuration such as repositories, providers, members, ingress, and integrations.
 - `settings-phone` uses a section list and back navigation at phone width.
 
 ## How to get to it (user POV)
@@ -22,7 +22,7 @@ Settings controls personal preferences and instance configuration. Users navigat
 Preconditions:
 
 - Doctor passes for the isolated demo run.
-- `/api/auth/status` reports `admin: true`, which doctor requires for this demo run. If an admin-only section is hidden, record that precondition instead of bypassing it.
+- `/api/auth/status` reports `required: false` or `authenticated: true`. Every signed-in member can manage the workspace; the auth response has no admin role field.
 
 - **Open Account.** Run `verify-opensession browser "$RUN_ID" open --route /settings --width 1440 --height 900`. The Account section opens as the desktop default.
 - **Open a direct section.** Run `verify-opensession browser "$RUN_ID" open --route /settings/preferences --width 1440 --height 900`, then wait for heading `Preferences`. The settings rail marks the same section active.

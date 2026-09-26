@@ -138,6 +138,49 @@ describe("SessionListStore", () => {
     }
   });
 
+  test("backfills linked-PR ownership from the catalog once", () => {
+    const dir = mkdtempSync(join(tmpdir(), "session-branches-linked-"));
+    const path = join(dir, "index.sqlite");
+    let store = new SessionListStore(path);
+    try {
+      store.upsertManyCovered(
+        [
+          session("follower", "2026-09-17T00:00:00Z", {
+            repo: "alpha",
+            branch: "own",
+            linkedPrs: [{ repo: "beta", branch: "their-pr", number: 7 }],
+          }),
+          session("archived-follower", "2026-09-17T00:00:00Z", {
+            archived: true,
+            linkedPrs: [{ repo: "beta", branch: "their-pr" }],
+          }),
+        ],
+        "include",
+      );
+      expect(
+        store
+          .listLiveByRepoBranchCovered("beta", "their-pr", "alpha")
+          ?.map((s) => s.id),
+      ).toEqual(["follower"]);
+      store.close();
+      // An index written before linked PRs were indexed.
+      const old = new Database(path);
+      old.exec(
+        "DELETE FROM session_list_branches WHERE repo = 'beta'; DELETE FROM session_list_meta WHERE key = 'branch_membership:v2'",
+      );
+      old.close();
+      store = new SessionListStore(path);
+      expect(
+        store
+          .listLiveByRepoBranchCovered("beta", "their-pr", "alpha")
+          ?.map((s) => s.id),
+      ).toEqual(["follower"]);
+    } finally {
+      store.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("finds live rows by branch through the branch index", () => {
     const store = memoryStore();
     store.upsertMany([

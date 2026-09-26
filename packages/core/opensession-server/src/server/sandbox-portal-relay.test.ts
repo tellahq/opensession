@@ -2,11 +2,17 @@ import { expect, test } from "bun:test";
 import {
   applyRelayResponseFrame,
   createRelayRequestLimiter,
+  RELAY_LANES,
+  relayLane,
   handleSandboxPortalRelayUpgrade,
   mintSandboxPortalGrant,
   PORTAL_RESPONSE_CHUNK_BYTES,
+  relayFetch,
   revokeSandboxPortalGrants,
   revokeSandboxPortalRelay,
+  sandboxPortalRelayClose,
+  sandboxPortalRelayMessage,
+  sandboxPortalRelayOpen,
   verifySandboxPortalGrant,
   type RelayResponseAssembly,
 } from "./sandbox-portal-relay";
@@ -76,21 +82,28 @@ test("stopping one Portal revokes only its bound credential", () => {
   ).toBe(true);
 });
 
-test("uses two relay lanes by default", async () => {
+test("static build output takes its own relay lanes", () => {
+  expect(relayLane("/_next/static/chunks/app.js")).toBe("assets");
+  expect(relayLane("/api/flags")).toBe("requests");
+  expect(relayLane("/videos")).toBe("requests");
+});
+
+test("bounds relay concurrency to its lanes by default", async () => {
   const limit = createRelayRequestLimiter();
   const releases: Array<() => void> = [];
   const started: number[] = [];
-  const tasks = [1, 2, 3].map((id) =>
+  const ids = Array.from({ length: RELAY_LANES + 1 }, (_, i) => i + 1);
+  const tasks = ids.map((id) =>
     limit(async () => {
       started.push(id);
       await new Promise<void>((resolve) => releases.push(resolve));
     }),
   );
   await Bun.sleep(0);
-  expect(started).toEqual([1, 2]);
+  expect(started).toEqual(ids.slice(0, RELAY_LANES));
   releases.shift()!();
   await Bun.sleep(0);
-  expect(started).toEqual([1, 2, 3]);
+  expect(started).toEqual(ids);
   for (const release of releases) release();
   await Promise.all(tasks);
 });
@@ -209,4 +222,53 @@ test("rejects oversized individual Portal response frames", () => {
   });
   expect(result).toEqual({ status: 502, headers: {} });
   expect(assembly.byteLength).toBe(0);
+});
+
+test("a page opened while the app is not listening gets the waiting page", async () => {
+  const target = { sessionId: "s-wait", sandboxId: "sb-wait", port: 4000 };
+  const ws: any = {
+    data: {
+      kind: "sandbox-portal-relay",
+      ...target,
+      expiresAt: Date.now() + 60_000,
+    },
+    close() {},
+    // The agent answers every request the way it does when the dev server
+    // refuses the connection.
+    send(raw: string) {
+      const message = JSON.parse(raw);
+      if (message.t === "http")
+        queueMicrotask(() =>
+          sandboxPortalRelayMessage(
+            ws,
+            JSON.stringify({
+              t: "http_result_abort",
+              id: message.id,
+              status: 502,
+            }),
+          ),
+        );
+    },
+  };
+  sandboxPortalRelayOpen(ws);
+  try {
+    const page = await relayFetch(
+      target,
+      new Request("http://127.0.0.1/videos", {
+        headers: { "sec-fetch-mode": "navigate" },
+      }),
+    );
+    expect(page.status).toBe(503);
+    expect(page.headers.get("retry-after")).toBe("3");
+    expect(await page.text()).toContain("Starting the Portal");
+    const asset = await relayFetch(
+      target,
+      new Request("http://127.0.0.1/_next/static/a.js", {
+        headers: { "sec-fetch-mode": "no-cors" },
+      }),
+    );
+    expect(asset.status).toBe(502);
+  } finally {
+    sandboxPortalRelayClose(ws);
+  }
 });

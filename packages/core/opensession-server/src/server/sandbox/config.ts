@@ -51,6 +51,10 @@ export interface SandboxRepoOverride {
    *  a Sandbox provisioned on demand for the dev server alone
    *  (portal-sandbox.ts). Absent = the Portal runs beside the session. */
   portalSandbox?: RunnableSandboxProviderId;
+  /** Compile this repo's first Portal into its Boat image (portal-prebuild.ts).
+   *  The compile cache can hold the app's dev secrets, which is why only the
+   *  operator can turn it on. */
+  prebuildPortal?: boolean;
 }
 
 /** How remote providers authenticate `git clone` inside the sandbox (they
@@ -193,11 +197,13 @@ export function sandboxConfig(): SandboxConfig {
           const portalSandbox = isRunnableSandboxProvider(o?.portalSandbox)
             ? o.portalSandbox
             : undefined;
-          if (provider || sessionDefault || portalSandbox)
+          const prebuildPortal = o?.prebuildPortal === true;
+          if (provider || sessionDefault || portalSandbox || prebuildPortal)
             perRepo[repoId] = {
               ...(provider ? { provider } : {}),
               ...(sessionDefault ? { sessionDefault } : {}),
               ...(portalSandbox ? { portalSandbox } : {}),
+              ...(prebuildPortal ? { prebuildPortal } : {}),
             };
         }
       }
@@ -584,6 +590,11 @@ export function setRepoPortalSandbox(
 
 /** The provider that runs `repoId`'s Portals for sessions on this machine,
  * or null when they run beside the session. */
+/** Whether the operator opted this repo into a prebuilt Portal cache. */
+export function repoPrebuildsPortal(repoId: string | undefined): boolean {
+  return Boolean(repoId && sandboxConfig().perRepo?.[repoId]?.prebuildPortal);
+}
+
 export function repoPortalSandbox(
   repoId: string | undefined,
 ): RunnableSandboxProviderId | null {

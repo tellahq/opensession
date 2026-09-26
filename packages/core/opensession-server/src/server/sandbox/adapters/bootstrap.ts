@@ -356,6 +356,20 @@ function statePath(provider: string, sandboxId: string): string {
   return `${STATE_DIR}/${provider}-${sanitizeName(sandboxId)}.json`;
 }
 
+/** readRemoteState without blocking the event loop, for request handlers. */
+export async function readRemoteStateAsync(
+  provider: string,
+  sandboxId: string,
+): Promise<RemoteSandboxState | null> {
+  try {
+    return withTrustPolicy(
+      JSON.parse(await readFile(statePath(provider, sandboxId), "utf-8")),
+    );
+  } catch {
+    return null;
+  }
+}
+
 export function readRemoteState(
   provider: string,
   sandboxId: string,
@@ -1268,6 +1282,7 @@ export async function warmRemoteWorkspace(
   // remote.origin.url. Scrub before setup hooks or dependency installers run,
   // including when adopting an existing partially prepared warm checkout.
   await scrubRemoteWarmWorkspaceAuthority(driver, repo, dir);
+  await driver.exec(GIT_RESTORE_STABLE_CONFIG, { cwd: dir });
   if (opts?.runSetup) {
     await runRemoteLifecycleHook(
       driver,
@@ -1405,7 +1420,7 @@ export async function setupRemoteWorkspace(
         `if [ "$(git -C ${shellQuoteWord(cwd)} rev-parse HEAD)" = "$(git -C ${shellQuoteWord(cwd)} rev-parse "$__start")" ]; then ` +
         `git -C ${shellQuoteWord(cwd)} update-ref ${shellQuoteWord(`refs/heads/${branch}`)} "$__start" && ` +
         `git -C ${shellQuoteWord(cwd)} symbolic-ref HEAD ${shellQuoteWord(`refs/heads/${branch}`)}; else ` +
-        `git -C ${shellQuoteWord(cwd)} checkout -B ${shellQuoteWord(branch)} "$__start"; fi)`;
+        `{ cd ${shellQuoteWord(cwd)} && ${GIT_REFRESH_INDEX}; } && git -C ${shellQuoteWord(cwd)} checkout -B ${shellQuoteWord(branch)} "$__start"; fi)`;
     const prepare =
       `{ if [ -f ${shellQuoteWord(owner)} ] && [ "$(cat ${shellQuoteWord(owner)})" != ${shellQuoteWord(cwd)} ]; then exit 73; fi; } && ` +
       `__rc=0; { (${attach}) && ` +
@@ -1471,7 +1486,7 @@ export async function setupRemoteWorkspace(
     const startPoint =
       hasRemote.exitCode === 0 ? `origin/${branch}` : `origin/${defaultBranch}`;
     const co = await driver.exec(
-      `git checkout -B ${shellQuoteWord(branch)} ${shellQuoteWord(startPoint)}`,
+      `${GIT_REFRESH_INDEX}; git checkout -B ${shellQuoteWord(branch)} ${shellQuoteWord(startPoint)}`,
       { cwd },
     );
     if (co.exitCode !== 0) {
@@ -1554,6 +1569,27 @@ export async function setupRemoteWorkspace(
  * `onlyForward` additionally refuses unless the current HEAD is an ancestor
  * of the checkpoint, so a checkout that is reused rather than fresh can lose
  * no commit. Nothing is touched before every check has passed. */
+/**
+ * Re-read stale index stat data before git rewrites the work tree.
+ *
+ * A Sandbox restored from a snapshot gives every file a new inode and
+ * ctime, so the index's stat data no longer matches any file. `reset --hard`
+ * and `checkout` then rewrite every tracked file whose content they cannot
+ * trust, unchanged or not, and each one gets a new mtime. Build tools that
+ * compare mtimes treat all of them as edited: ReScript recompiled all
+ * 3,441 tella-fusion modules the image had just built. Refreshing first
+ * rehashes only stat-dirty files and leaves unchanged ones alone. Exits 0
+ * even with local modifications (which are the caller's to handle).
+ */
+export const GIT_REFRESH_INDEX =
+  "{ git update-index -q --refresh >/dev/null 2>&1; true; }";
+
+/** Git settings for a clone that a snapshot restore will move to new
+ *  inodes: compare files by mtime and size only, so the index survives the
+ *  restore and nothing needs rehashing (see GIT_REFRESH_INDEX). */
+export const GIT_RESTORE_STABLE_CONFIG =
+  "git config core.checkStat minimal && git config core.trustctime false";
+
 export function checkpointRestoreScript(
   ref: string,
   commit: string,
@@ -1573,6 +1609,7 @@ export function checkpointRestoreScript(
           "{ git merge-base --is-ancestor HEAD refs/opensession/checkpoint || { echo 'this checkout has commits the checkpoint does not include; restoring would drop them' >&2; false; }; }",
         ]
       : []),
+    GIT_REFRESH_INDEX,
     "git -c advice.detachedHead=false reset --hard --quiet refs/opensession/checkpoint",
     "git reset --mixed --quiet 'refs/opensession/checkpoint^'",
     "git update-ref -d refs/opensession/checkpoint",

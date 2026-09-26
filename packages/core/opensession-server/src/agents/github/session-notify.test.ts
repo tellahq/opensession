@@ -92,6 +92,55 @@ describe("catalog-only GitHub session matching", () => {
     expect(await workspaceIdForRepo("org/alpha")).toBe("alpha");
   });
 
+  test("a linked PR's head branch counts as ownership, ranked after checkouts", async () => {
+    const linked = (id: string, lastActivity: string) =>
+      row(id, {
+        repo: "beta",
+        branch: "own-work",
+        lastActivity,
+        linkedPrs: [{ repo: "alpha", branch: "feature", number: 7 }],
+      });
+    store.upsertMany([
+      linked("linked-newest", "2026-09-20T00:00:00Z"),
+      row("checkout-older", { lastActivity: "2026-09-18T00:00:00Z" }),
+      linked("linked-older", "2026-09-19T00:00:00Z"),
+      row("wrong-repo-link", {
+        repo: "beta",
+        branch: "x",
+        linkedPrs: [{ repo: "beta", branch: "feature" }],
+      }),
+    ]);
+    expect(
+      (await matchSessions("alpha", "feature", { order: "activity" })).map(
+        (s) => s.id,
+      ),
+    ).toEqual(["checkout-older", "linked-newest", "linked-older"]);
+    // Only a linked follower: it is the owner the handoff reaches.
+    store.remove("checkout-older");
+    expect(
+      (await matchSessions("alpha", "feature", { order: "activity" }))[0]?.id,
+    ).toBe("linked-newest");
+    // Unlinking (or archiving) drops the ownership.
+    store.upsert({ ...linked("linked-newest", "x"), linkedPrs: [] });
+    store.setArchived("linked-older", true);
+    expect(await matchSessions("alpha", "feature")).toEqual([]);
+  });
+
+  test("linked followers count toward the ambiguity limit", async () => {
+    store.upsertMany(
+      Array.from({ length: 26 }, (_, i) =>
+        row(`follower-${i}`, {
+          repo: "beta",
+          branch: `own-${i}`,
+          linkedPrs: [{ repo: "alpha", branch: "feature" }],
+        }),
+      ),
+    );
+    await expect(matchSessions("alpha", "feature")).rejects.toThrow(
+      "more than 25",
+    );
+  });
+
   test("does no synchronous I/O or checkout discovery at fleet scale", async () => {
     store.upsertMany(
       Array.from({ length: 10_000 }, (_, i) =>
