@@ -7,9 +7,9 @@
  * refreshes early. Rows carry the deterministic id of the issue's session so
  * the page can tell which issues already have one without a second lookup.
  */
+import { githubInstallationCredential } from "./github-app";
 import { configuredRepos, type Repo } from "./config";
 import {
-  botGhToken,
   ghRateLimited,
   isGhRateLimitMsg,
   noteGhRateLimited,
@@ -92,8 +92,6 @@ export function refreshIssueCache(): Promise<void> {
 async function refreshInner(): Promise<void> {
   const { bksIdFor } = await import("../agents/github/run");
   for (const repo of issueRepos()) {
-    // A rate-limit backoff stops the sweep; the stale rows stay served.
-    if (ghRateLimited("rest")) break;
     const rows = await listRepoIssues(repo, (number) =>
       bksIdFor(number, "issue", repo.ghRepo),
     );
@@ -150,14 +148,14 @@ async function listRepoIssues(
   repo: Repo,
   sessionIdFor: (number: number) => string,
 ): Promise<OpenIssueEntry[] | null> {
-  const token = await botGhToken({ repo: repo.ghRepo });
-  if (!token) return null;
+  const credential = await githubInstallationCredential({ repo: repo.ghRepo });
+  if (!credential || (await ghRateLimited("rest", credential))) return null;
   try {
     const resp = await fetchWithTimeout(
       `https://api.github.com/repos/${repo.ghRepo}/issues?state=open&sort=updated&direction=desc&per_page=${PER_REPO_LIMIT}`,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${credential.token}`,
           Accept: "application/vnd.github+json",
           "X-GitHub-Api-Version": "2022-11-28",
         },
@@ -170,10 +168,11 @@ async function listRepoIssues(
         (resp.headers.get("x-ratelimit-remaining") === "0" ||
           isGhRateLimitMsg(body))
       ) {
-        noteGhRateLimited(
+        await noteGhRateLimited(
           "issue-cache",
           Number(resp.headers.get("x-ratelimit-reset")) * 1000,
           "rest",
+          credential,
         );
       } else {
         console.warn(`[issues] ${repo.ghRepo}: HTTP ${resp.status}`);

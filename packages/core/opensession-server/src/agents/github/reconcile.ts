@@ -50,14 +50,15 @@ export function reconcileEnabled(): boolean {
 
 /** One sweep pass over every configured repo. Exported for tests/manual runs. */
 export async function reconcileOpenPrs(): Promise<void> {
-  if (!reconcileEnabled() || ghRateLimited("rest")) return;
+  if (!reconcileEnabled()) return;
   const { resolveReviewConfig, fireReview, fireAutoFix } =
     await import("./webhook");
   const { autoEnabled } = await resolveReviewConfig();
   let fires = 0;
 
   for (const repo of Object.values(configuredRepos())) {
-    if (!repo.ghRepo) continue;
+    if (!repo.ghRepo || (await ghRateLimited("rest", { repo: repo.ghRepo })))
+      continue;
     if (fires >= MAX_FIRES_PER_CYCLE) break;
     const prs = await listOpenPrs(repo.ghRepo).catch(
       () => [] as OpenPrSummary[],

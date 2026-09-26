@@ -1,6 +1,6 @@
+import { githubInstallationCredential } from "./github-app";
 import { githubLoginToPersonKey } from "./shared/user-mappings";
 import {
-  botGhToken,
   ghRateLimited,
   isGhRateLimitMsg,
   noteGhRateLimited,
@@ -86,9 +86,9 @@ export async function fetchReviewTeamLogins(
   const key = `${owner.toLowerCase()}/${teamSlug.toLowerCase()}`;
   const cached = reviewTeamCache.get(key);
   if (cached?.expiresAt && cached.expiresAt > Date.now()) return cached.logins;
-  if (ghRateLimited("rest")) return cached?.logins || null;
-  const token = await botGhToken({ owner });
-  if (!token) return cached?.logins || null;
+  const credential = await githubInstallationCredential({ owner });
+  if (!credential || (await ghRateLimited("rest", credential)))
+    return cached?.logins || null;
 
   const logins: string[] = [];
   let url: string | null =
@@ -97,7 +97,7 @@ export async function fetchReviewTeamLogins(
     while (url) {
       const response = await fetchWithTimeout(url, {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${credential.token}`,
           Accept: "application/vnd.github+json",
           "X-GitHub-Api-Version": "2022-11-28",
         },
@@ -111,10 +111,11 @@ export async function fetchReviewTeamLogins(
         ) {
           const reset =
             Number(response.headers.get("x-ratelimit-reset")) * 1000;
-          noteGhRateLimited(
+          await noteGhRateLimited(
             "pr-review-team",
             Number.isFinite(reset) ? reset : undefined,
             "rest",
+            credential,
           );
         }
         return cached?.logins || null;

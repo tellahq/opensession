@@ -36,6 +36,7 @@ import {
 } from "./github-auth";
 import {
   ghRateLimited,
+  ghCredentialScope,
   noteGhRateLimited,
   isGhRateLimitMsg,
 } from "./github-limit";
@@ -147,11 +148,12 @@ export async function getPrStack(
   if (stackApiUnavailable) return null;
   // A known rate-limit window: skip the call entirely rather than spend the
   // retry budget of a request we already expect to be refused.
-  if (ghRateLimited()) return null;
   const repo = splitRepo(ghRepo);
   if (!repo) return null;
   try {
     credential = await resolveGithubCredential(credential, { repo: ghRepo });
+    if (await ghRateLimited("graphql", ghCredentialScope(credential)))
+      return null;
   } catch {
     return null;
   }
@@ -243,7 +245,13 @@ async function graphql(
       );
       return null;
     }
-    if (isGhRateLimitMsg(msg)) noteGhRateLimited("pr-stack");
+    if (isGhRateLimitMsg(msg))
+      await noteGhRateLimited(
+        "pr-stack",
+        undefined,
+        "graphql",
+        ghCredentialScope(credential),
+      );
     // A partial response still carries usable `data`, and gh prints it on
     // stdout even when it exits non-zero — so fall through and parse rather
     // than discarding a body that may hold everything we asked for.

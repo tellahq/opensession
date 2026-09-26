@@ -990,6 +990,8 @@ export function githubRunOwnerLogin(user?: string | null): string | null {
 }
 
 export interface GithubCredential {
+  /** Installation quota identity, captured when the service token is minted. */
+  rateLimitKey?: string;
   kind: "service" | "user";
   /** Durable, non-secret selector. Raw tokens must never be persisted. */
   principal: string;
@@ -1011,13 +1013,17 @@ export async function resolveGithubCredential(
 ): Promise<GithubCredential> {
   if (credential.kind !== "service" || credential.env.GH_TOKEN)
     return credential;
-  const { githubToken } = await import("./github-app");
-  const token = await githubToken(opts);
-  if (!token)
+  const { githubInstallationCredential } = await import("./github-app");
+  const installation = await githubInstallationCredential(opts);
+  if (!installation)
     throw new Error("The selected GitHub bot credential is unavailable");
   return {
     ...credential,
-    env: githubProcessEnv({ GH_TOKEN: token, GITHUB_TOKEN: token }),
+    rateLimitKey: installation.rateLimitKey,
+    env: githubProcessEnv({
+      GH_TOKEN: installation.token,
+      GITHUB_TOKEN: installation.token,
+    }),
   };
 }
 

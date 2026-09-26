@@ -11,6 +11,7 @@
  * host round-trip (cachedPrDetailsForSession, reconcilePrDetails) stay in
  * pr-info.ts and are host-agnostic.
  */
+import { githubInstallationCredential } from "./github-app";
 import type { Repo } from "./config";
 import {
   resolveGithubCredential,
@@ -18,7 +19,7 @@ import {
   type GithubCredential,
 } from "./github-auth";
 import {
-  botGhToken,
+  ghCredentialScope,
   ghRateLimited,
   isGhRateLimitMsg,
   noteGhRateLimited,
@@ -165,7 +166,6 @@ export async function ghJson<T>(
   args: string[],
   consumer = "gh-json",
 ): Promise<T | null> {
-  if (ghRateLimited()) return null;
   const started = Date.now();
   let ok = false;
   try {
@@ -176,6 +176,8 @@ export async function ghJson<T>(
       serviceGithubCredential,
       repo ? { repo } : {},
     );
+    if (await ghRateLimited("graphql", ghCredentialScope(credential)))
+      return null;
     const proc = Bun.spawn(["gh", ...args], {
       stdout: "pipe",
       stderr: "pipe",
@@ -186,7 +188,13 @@ export async function ghJson<T>(
       new Response(proc.stderr).text(),
     ]);
     if ((await proc.exited) !== 0) {
-      if (isGhRateLimitMsg(err)) noteGhRateLimited("pr-cache");
+      if (isGhRateLimitMsg(err))
+        await noteGhRateLimited(
+          "pr-cache",
+          undefined,
+          "graphql",
+          ghCredentialScope(credential),
+        );
       return null;
     }
     if (!raw.trim()) return null;
@@ -279,14 +287,15 @@ export const githubPrHost: PrHost = {
   // instance polls for free. Moved from sessions.ts (repoPrsUnchanged) —
   // the caller keeps owning cursor persistence.
   async changedSince(repo, cursor) {
-    const token = await botGhToken({ repo });
-    if (!token) return { changed: true, cursor };
+    const credential = await githubInstallationCredential({ repo });
+    if (!credential || (await ghRateLimited("rest", credential)))
+      return { changed: true, cursor };
     try {
       const resp = await fetchWithTimeout(
         `https://api.github.com/repos/${repo}/pulls?state=all&sort=updated&direction=desc&per_page=1`,
         {
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${credential.token}`,
             Accept: "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
             ...(cursor ? { "If-None-Match": cursor } : {}),
@@ -306,10 +315,11 @@ export const githubPrHost: PrHost = {
           isGhRateLimitMsg(body))
       ) {
         const reset = Number(resp.headers.get("x-ratelimit-reset")) * 1000;
-        noteGhRateLimited(
+        await noteGhRateLimited(
           "pr-cache-rest",
           Number.isFinite(reset) ? reset : undefined,
           "rest",
+          credential,
         );
       }
       return { changed: true, cursor };

@@ -356,9 +356,9 @@ async function fireRecovery(
  */
 async function retryPendingMentions(): Promise<void> {
   const { ghRateLimited } = await import("../../server/github-limit");
-  if (ghRateLimited("rest")) return;
   for (const s of listPrStates()) {
     if (!s.pendingMention || s.activeMention || s.activeRun) continue;
+    if (await ghRateLimited("rest", { repo: s.ghRepo || undefined })) continue;
     const p = s.pendingMention;
     if (!isTrustedGithubLogin(p.author)) {
       clearPendingMention(s.prNumber, s.ghRepo);

@@ -797,13 +797,6 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
   const reviewRefreshGeneration = prReviewState.generation;
   const freshRepos = new Set<string>();
   const reviewAuthoritativeRepos = new Set<string>();
-  if (ghRateLimited() && prRepos().every((repo) => repo.ghBacked)) {
-    // Rate-limited — keep serving the stale snapshot, don't burn calls. Only
-    // a full stop when every polled repo is GitHub-backed: code.storage repos
-    // have no shared GitHub quota and proceed through the per-repo gate below.
-    prCache.ts = Date.now();
-    return freshRepos;
-  }
   try {
     // A session's branch is matched against open PRs, so we must see EVERY open
     // PR — not just the newest N (the host's listOpenPrs is authoritative for
@@ -820,7 +813,7 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
     for (const [repoId, byBranch] of prCache.data)
       if (!polled.has(repoId)) next.set(repoId, byBranch);
     // Keep repos and their two queries sequential. Besides lowering burst cost,
-    // this lets a rate-limit response stop the remaining sweep immediately.
+    // this lets a rate-limit response skip other repos on the same installation.
     for (const repo of prRepos()) {
       // Skip both GraphQL calls entirely when the conditional REST probe says
       // nothing changed since the last full refresh (bounded by the safety-net
@@ -834,7 +827,10 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
       const stale = prCache.data.get(repo.id);
       // The GitHub backoff is a GitHub-API concern: it must not stall
       // code.storage repos, whose calls never touch that quota.
-      if (repo.ghBacked && ghRateLimited()) {
+      if (
+        repo.ghBacked &&
+        (await ghRateLimited("graphql", { repo: repo.ghRepo }))
+      ) {
         if (stale) next.set(repo.id, stale);
         continue;
       }
@@ -856,7 +852,10 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
         }
       }
       // Re-checked after the probe: the probe itself can flag a fresh backoff.
-      if (repo.ghBacked && ghRateLimited()) {
+      if (
+        repo.ghBacked &&
+        (await ghRateLimited("graphql", { repo: repo.ghRepo }))
+      ) {
         if (stale) next.set(repo.id, stale);
         continue;
       }
