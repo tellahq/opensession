@@ -114,6 +114,12 @@ describe("machine actors", () => {
     // A schedule_prompt check-back is the agent's own text, not Kent's send.
     expect(scheduledActor("Kent")).toBe("Kent (scheduled)");
     expect(scheduledActor(undefined)).toBe("scheduled");
+    // A check-back scheduled from a check-back keeps one suffix.
+    expect(scheduledActor(scheduledActor(scheduledActor("Kent")))).toBe(
+      "Kent (scheduled)",
+    );
+    expect(scheduledActor("Kent (loop)")).toBe("Kent (scheduled)");
+    expect(scheduledActor("scheduled")).toBe("scheduled");
     for (const sender of [scheduledActor("Kent"), scheduledActor(null)]) {
       expect(isScheduledActor(sender)).toBe(true);
       expect(isMachineActor(sender)).toBe(false);

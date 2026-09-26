@@ -161,7 +161,7 @@ export function createPlainDiscussionMcpServer(ctx: {
             const outcome = await openGate(gate, args.text);
             if (outcome.status !== "APPROVED")
               return text(await explainNoGo(gate, outcome));
-            const { getThreadWithMessages, sendCustomerReply, plain } =
+            const { getThreadWithMessages, sendCustomerReply } =
               await import("./api");
             throwIfStopped(action.signal);
             const thread = await getThreadWithMessages(threadId);
@@ -176,17 +176,11 @@ export function createPlainDiscussionMcpServer(ctx: {
               args.text,
             );
             if (!sent.ok) throw new Error("Plain rejected the reply");
-            const { SnoozeStatusDetail } =
-              await import("@team-plain/typescript-sdk");
-            await plain
-              .snoozeThread({
-                threadId,
-                statusDetail: SnoozeStatusDetail.WaitingForCustomer,
-              })
-              .catch(() => {});
             await closeGate(gate, "SUCCESS", "sent");
             return text(
-              `Reply sent to the customer on ${threadId}; the thread is waiting for the customer.`,
+              sent.waitingForCustomer
+                ? `Reply sent to the customer on ${threadId}; the thread is waiting for the customer.`
+                : `Reply sent to the customer on ${threadId}, but its status could not be set to Waiting for customer.`,
             );
           } catch (e) {
             const message = e instanceof Error ? e.message : String(e);

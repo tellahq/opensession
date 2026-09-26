@@ -9,6 +9,7 @@ import type { NoticeIcon as NoticeIconName } from "@tellahq/opensession-protocol
 import { useCurrentUser } from "./UserPicker";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
+import { CopyCheck, useCopy } from "../ui/copy";
 import { BASE_PATH } from "../lib/base";
 import { resolveEntryImageSrc } from "../lib/osBlob";
 import { extBadge } from "../lib/images";
@@ -21,6 +22,7 @@ import { unplacedMedia } from "../lib/placed-media";
 import {
   IconArrowUpRight,
   IconChevronDown,
+  IconCopy,
   IconExpand,
   IconFileText2,
   IconPencil,
@@ -467,6 +469,9 @@ function TeammateAvatar({ name }: { name: string }) {
   );
 }
 
+const bubbleActionClass =
+  "flex size-7 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-faint select-none hover:bg-hover hover:text-dim [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100";
+
 /** Put a message you already sent back into the composer, so a typo is a fix
  * and a re-send rather than a re-type.
  *
@@ -484,7 +489,7 @@ function EditAgainButton({ onClick }: { onClick: () => void }) {
         type="button"
         onClick={onClick}
         aria-label="Edit and send again"
-        className="flex size-7 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-faint select-none hover:bg-hover hover:text-dim [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100"
+        className={bubbleActionClass}
       >
         <IconPencil size={16} />
       </button>
@@ -492,7 +497,57 @@ function EditAgainButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-/** The quiet row under your own bubble: the edit action, and the real time.
+/** Copy the message text as sent. A wire-clamped entry only carries its head,
+ * so its full content is fetched first; the pending ClipboardItem keeps the
+ * click's user activation while the fetch runs (WebKit drops it otherwise). */
+function CopyMessageButton({
+  entry,
+  sessionId,
+}: {
+  entry: TranscriptEntry;
+  sessionId?: string;
+}) {
+  const { copied, copy, flash } = useCopy();
+  const onClick = () => {
+    if (
+      !entry.contentClamped ||
+      !sessionId ||
+      !navigator.clipboard?.write ||
+      typeof ClipboardItem === "undefined"
+    ) {
+      copy(entry.content);
+      return;
+    }
+    const full = fetch(
+      `${BASE_PATH}/api/sessions/${encodeURIComponent(sessionId)}/entry/${encodeURIComponent(entry.id)}`,
+    )
+      .then(async (res) => {
+        const parsed = sessionEntryResponseSchema.safeParse(
+          res.ok ? await res.json() : null,
+        );
+        return parsed.success ? parsed.data.content : entry.content;
+      })
+      .then((text) => new Blob([text], { type: "text/plain" }));
+    navigator.clipboard.write([new ClipboardItem({ "text/plain": full })]).then(
+      () => flash(),
+      () => copy(entry.content),
+    );
+  };
+  return (
+    <Tooltip label={copied ? "Copied" : "Copy message"}>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={copied ? "Copied" : "Copy message"}
+        className={bubbleActionClass}
+      >
+        <CopyCheck copied={copied} idle={<IconCopy size={16} />} />
+      </button>
+    </Tooltip>
+  );
+}
+
+/** The quiet row under your own bubble: copy, edit, and the real time.
  *
  * Those turns carry no label row to hang a MsgTime off, and a timestamp on
  * every one of them would just be noise while reading — so the time stays
@@ -503,11 +558,20 @@ function EditAgainButton({ onClick }: { onClick: () => void }) {
  * mask is the same WebKit fix as the label's: a drag-select sweeping past
  * unselectable text paints a phantom highlight without it, and a fully
  * transparent background is ignored. */
-function BubbleMeta({ ts, onEdit }: { ts?: string; onEdit?: () => void }) {
+function BubbleMeta({
+  ts,
+  onEdit,
+  copy,
+}: {
+  ts?: string;
+  onEdit?: () => void;
+  copy?: { entry: TranscriptEntry; sessionId?: string };
+}) {
   const label = ts ? fullTime(ts) : "";
-  if (!onEdit && !label) return null;
+  if (!onEdit && !copy && !label) return null;
   return (
     <div className="absolute top-[calc(100%+2px)] right-0 flex items-center gap-1">
+      {copy && <CopyMessageButton {...copy} />}
       {onEdit && <EditAgainButton onClick={onEdit} />}
       {label && (
         <span className="hidden text-meta leading-none font-medium whitespace-nowrap text-faint select-none selection:bg-[rgba(0,0,0,0.01)] [@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100">
@@ -1001,6 +1065,7 @@ export const MessageBubble = function MessageBubble({
             <BubbleMeta
               ts={e.timestamp}
               onEdit={onEdit ? () => onEdit(e) : undefined}
+              copy={displayContent ? { entry: e, sessionId } : undefined}
             />
           )}
           {displayContent && (

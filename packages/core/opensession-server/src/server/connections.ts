@@ -14,6 +14,7 @@ import {
 import { writeFileAtomic } from "./shared/atomic-write";
 import { configuredPaths } from "./config";
 import {
+  isOauthCapable,
   mcpOauthStatus,
   mcpSharedGrantHeader,
   mcpUserGrantHeader,
@@ -409,8 +410,7 @@ async function checkServer(name: string, cfg: any): Promise<McpConnection> {
       // Reachable, but an OAuth-protected server with no grant and no static
       // Authorization header isn't usable yet — surface "Sign in required"
       // instead of a misleading "Connected" (the GET's 401/405 only proves
-      // the endpoint is up). Detection = the origin publishes RFC 9728
-      // protected-resource metadata.
+      // the endpoint is up). Use the same resource discovery as Connect.
       if (!cfg.headers?.Authorization) {
         try {
           const st = mcpOauthStatus(name);
@@ -425,11 +425,7 @@ async function checkServer(name: string, cfg: any): Promise<McpConnection> {
                 detail: "API token required. Connect from this card's menu",
               };
             }
-            const pr = await fetch(
-              `${new URL(cfg.url).origin}/.well-known/oauth-protected-resource`,
-              { signal: AbortSignal.timeout(3000) },
-            );
-            if (pr.ok) {
+            if (await isOauthCapable(cfg.url)) {
               return {
                 name,
                 transport: "http",

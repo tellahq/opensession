@@ -7,6 +7,7 @@
  */
 
 import { chmodSync, existsSync, readFileSync } from "fs";
+import { readFile } from "fs/promises";
 import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 
@@ -82,6 +83,21 @@ export function putWorkspaceSecret(
   }
   persist(store);
   return id;
+}
+
+/** resolveWorkspaceSecret for request handlers: never blocks the loop. */
+export async function resolveWorkspaceSecretAsync(
+  ref: string,
+): Promise<string | undefined> {
+  try {
+    const raw = JSON.parse(await readFile(storePath(), "utf-8"));
+    const found = Array.isArray(raw?.secrets)
+      ? raw.secrets.find((secret: WorkspaceSecretRecord) => secret?.id === ref)
+      : undefined;
+    return typeof found?.value === "string" ? found.value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function resolveWorkspaceSecret(ref: string): string | undefined {

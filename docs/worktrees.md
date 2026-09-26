@@ -74,9 +74,12 @@ normally follows its repository setting, while each person can override each
 repository under **Preferences** with **Local checkout** or **Separate worktree**.
 Additional sessions in an existing workspace keep its worktree, and
 a deliberately selected branch or pull request stays isolated. A new branch
-starts from the freshly fetched `origin/<defaultBranch>`; the repository
-checkout's own local default branch is used only when it holds commits origin
-lacks. Worktree sessions can commit and use the repository's configured
+starts from the freshly fetched `origin/<defaultBranch>`, including when that
+default branch is explicitly selected as a base. The registered checkout stays
+fetch-only: its local branch and uncommitted edits are not moved. If no remote
+default branch exists, a local default branch can still be used. Explicit feature
+bases retain local commits that origin lacks, so sessions can stack on unpushed
+work. Worktree sessions can commit and use the repository's configured
 pull-request flow.
 
 **`ask` sessions** are read-only. For an isolated repository they share one

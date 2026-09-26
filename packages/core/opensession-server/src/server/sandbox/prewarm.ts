@@ -733,6 +733,35 @@ async function runPrewarmBootstrap(
       void destroyRecord(record, "superseded mid-warm");
       return;
     }
+    // Compile the Portal into the image, when the operator opted the repo
+    // in. Only for an image about to be sealed: a standby handed straight to
+    // a waiting session would make that session wait for it.
+    if (
+      entry.provider === "box" &&
+      adapter.publishTemplate &&
+      (!restoredFromTemplate || entry.refreshTemplate) &&
+      (record.waiters || 0) === 0 &&
+      !isKeepReady(entry.provider, entry.repoId)
+    ) {
+      const { repoPrebuildsPortal } = await import("./config");
+      if (repoPrebuildsPortal(repo.id)) {
+        setPrewarmStage(entry, "Compiling the Portal", 80);
+        const { prebuildPortalCache } = await import("./portal-prebuild");
+        const { remoteLayoutForProvider } =
+          await import("./adapters/bootstrap");
+        await prebuildPortalCache(
+          driver,
+          remoteLayoutForProvider(entry.provider),
+          repo,
+          { sandboxId, provider: entry.provider },
+          `${entry.provider}-prewarm`,
+        );
+      }
+      if (!current()) {
+        void destroyRecord(record, "superseded mid-prebuild");
+        return;
+      }
+    }
     // A waiting session or keep-ready target needs the prepared sandbox now.
     // Hand it over before optional publication or parking work. Repository
     // templates can take minutes to seal, while adoption is immediate.

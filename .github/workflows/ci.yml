@@ -39,6 +39,11 @@ jobs:
         with:
           bun-version: 1.4.0
 
+      - name: Install ripgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -213,6 +218,11 @@ jobs:
         run: |
           echo "$HOME/.opensession/bin" >> "$GITHUB_PATH"
           echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+
+      - name: Private-domain platform and installer regressions
+        run: |
+          bun scripts/test-isolated.ts ./scripts/install-caddy.test.ts
+          bun scripts/test-isolated.ts ./packages/core/opensession-server/src/server/private-app-domain-platform.test.ts
 
       - name: The command exists and runs
         run: |
