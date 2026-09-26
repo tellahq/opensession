@@ -84,6 +84,8 @@ export interface RepoOption {
   /** A repo whose sessions share one live checkout can be the session's own
    *  repo, but never a second one: there is no isolated worktree to attach. */
   sharedCheckout?: boolean;
+  /** The Portal a new session in this repo can start right away. */
+  portal?: { id: string; name: string };
 }
 
 const LAST_REPO_KEY = "opensession-new-session-repo";

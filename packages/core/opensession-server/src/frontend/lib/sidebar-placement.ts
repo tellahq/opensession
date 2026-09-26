@@ -143,13 +143,15 @@ export function classifySidebarPlacement(
 ): SidebarPlacement {
   if (context.snoozed) return "snoozed";
 
+  // "Add to sidebar" says this is your work now, so it files into Active
+  // ahead of every review band: a GitHub ask, a teammate's handoff, or your
+  // own request of someone else. Without this, adding a row that was handed
+  // to you for review left it under Needs review and the add did nothing
+  // visible.
+  if (context.claimed) return context.inStatusScope ? "status" : "outside";
+
   const me = context.currentUser.toLowerCase();
-  // "Add to sidebar" says this is your work now. A GitHub ask is usually a
-  // team ask expanded to every member, so it does not outrank that claim;
-  // without this, keeping a teammate's PR left it under Needs review. A
-  // teammate's own handoff (reviewRequest) still takes its band below.
   const githubAsksMe =
-    !context.claimed &&
     wsPrRequestsReviewFrom(row, personKey(context.currentUser)) &&
     !rowIsOwnWork(row, context.currentUser);
   const inReviewScope = reviewRowMatchesPersonFilter(
@@ -205,11 +207,6 @@ export function classifySidebarPlacement(
       );
     if (mineRequest && reviewCompleted) return "completed-review";
   }
-
-  // A personal lane keeps ordinary work in Active, but a live review handoff
-  // is more specific: the asker tracks it in Awaiting review and the reviewer
-  // gets it in Needs review. Once that flow ends, the personal lane applies again.
-  if (context.claimed) return context.inStatusScope ? "status" : "outside";
 
   // Auto-created work has no band of its own: it files into the ordinary
   // lanes with everything else and identifies itself with a robot beside the

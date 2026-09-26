@@ -1,5 +1,6 @@
 import { activeRunRecords } from "./run-journal";
 import type { DurableSessionQuarantine } from "./session-kernel/store";
+import { isReadOnlyStoreQuarantine } from "./session-kernel/store-routing";
 import type { SessionSafetyState } from "./types";
 
 const OPERATION_LABELS: Record<string, string> = {
@@ -40,6 +41,9 @@ export function automaticallyRecoverableSessionSafety(
   // reducer performs the authoritative route + absence verification.
   if (committedOutboxSettlement) return true;
   if (!quarantine.repairable) return false;
+  // A failed read (for example a transient SQLite lock) changed nothing, so
+  // there is no action for a person to verify before the session continues.
+  if (isReadOnlyStoreQuarantine(quarantine.commandKind)) return true;
   const actorRestart =
     quarantine.reason === "actor restarted before execution admission" ||
     quarantine.reason === "actor restarted before acknowledgement" ||

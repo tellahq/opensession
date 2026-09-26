@@ -16,6 +16,8 @@ import { describe, expect, test } from "bun:test";
 import { platform } from "os";
 import {
   bootstrapLaunchAgent,
+  bootoutLaunchAgent,
+  controlLaunchd,
   bunPath,
   envFileWriteProblem,
   LAUNCHD_LABEL,
@@ -433,5 +435,128 @@ describe.skipIf(!onServiceHost)("launchd plist", () => {
     const plist = renderPlist();
     expect(plist).toMatch(/<key>RunAtLoad<\/key>\s*<true\/>/);
     expect(plist).toMatch(/<key>KeepAlive<\/key>\s*<true\/>/);
+  });
+});
+
+describe("launchd unload ordering", () => {
+  const gateway = {
+    label: "dev.opensession.test-gateway",
+    plist: "/tmp/gateway.plist",
+  };
+  const kernel = {
+    label: "dev.opensession.test-kernel",
+    plist: "/tmp/kernel.plist",
+  };
+  const result = (code = 0, stderr = "") => ({ code, stdout: "", stderr });
+  function fixture(unloadAt = 2000) {
+    let time = 0;
+    const calls: string[][] = [];
+    const loaded = new Set([gateway.label, kernel.label]);
+    const stopping = new Map<string, number>();
+    const options = {
+      domain: "gui/501",
+      gateway,
+      kernel,
+      now: () => time,
+      pause: async (ms: number) => {
+        time += ms;
+      },
+      runCommand: async (cmd: string[]) => {
+        calls.push(cmd);
+        const label = cmd.at(-1)!.split("/").at(-1)!;
+        if (cmd[1] === "bootout") {
+          if (!stopping.has(label)) stopping.set(label, time + unloadAt);
+          return result(loaded.has(label) ? 0 : 113);
+        }
+        if (cmd[1] === "print") {
+          if (time >= (stopping.get(label) ?? Infinity)) loaded.delete(label);
+          return result(loaded.has(label) ? 0 : 113);
+        }
+        if (cmd[1] === "bootstrap") {
+          const job = cmd[3] === gateway.plist ? gateway : kernel;
+          if (loaded.has(job.label))
+            return result(5, "Bootstrap failed: 5: Input/output error");
+          loaded.add(job.label);
+          stopping.delete(job.label);
+        }
+        return result();
+      },
+    };
+    return { options, calls, loaded, time: () => time };
+  }
+
+  test.each([2000, 125_000])(
+    "restart waits %ims for gateway unload before touching the kernel",
+    async (delay) => {
+      const f = fixture(delay);
+      expect((await controlLaunchd("restart", f.options)).code).toBe(0);
+      expect(f.time()).toBe(delay);
+      const mutations = f.calls.filter((c) => c[1] !== "print");
+      expect(mutations).toEqual([
+        ["launchctl", "bootout", "gui/501/" + gateway.label],
+        ["launchctl", "kickstart", "-k", "gui/501/" + kernel.label],
+        ["launchctl", "bootstrap", "gui/501", gateway.plist],
+      ]);
+    },
+  );
+
+  test("stop waits for both jobs, then start bootstraps kernel before gateway", async () => {
+    const f = fixture();
+    expect((await controlLaunchd("stop", f.options)).code).toBe(0);
+    expect(f.loaded.size).toBe(0);
+    expect(f.time()).toBe(4000);
+    expect((await controlLaunchd("start", f.options)).code).toBe(0);
+    expect(
+      f.calls.filter((c) => c[1] === "bootstrap").map((c) => c[3]),
+    ).toEqual([kernel.plist, gateway.plist]);
+  });
+
+  test("restart also recovers an already unloaded kernel and gateway", async () => {
+    const f = fixture();
+    f.loaded.clear();
+    expect((await controlLaunchd("restart", f.options)).code).toBe(0);
+    expect(
+      f.calls.filter((c) => c[1] === "bootstrap").map((c) => c[3]),
+    ).toEqual([kernel.plist, gateway.plist]);
+  });
+
+  test("timeout is bounded and does not restart kernel or bootstrap a draining gateway", async () => {
+    const f = fixture(Infinity);
+    const stopped = await controlLaunchd("restart", f.options);
+    expect(stopped.code).toBe(1);
+    expect(stopped.stderr).toContain("Timed out after 180000ms");
+    expect(f.time()).toBe(180_000);
+    expect(f.calls.filter((c) => c[1] !== "print")).toHaveLength(1);
+  });
+
+  test("a second restart waits out the first bootout instead of accepting the old registered job", async () => {
+    const f = fixture(3000);
+    expect(
+      (await controlLaunchd("restart", { ...f.options, unloadTimeoutMs: 1000 }))
+        .code,
+    ).toBe(1);
+    expect((await controlLaunchd("restart", f.options)).code).toBe(0);
+    expect(f.time()).toBe(3000);
+  });
+
+  test("inspection errors are not mistaken for an unloaded job", async () => {
+    const calls: string[][] = [];
+    const stopped = await bootoutLaunchAgent(gateway.label, {
+      runCommand: async (cmd) => {
+        calls.push(cmd);
+        return result(1, "Operation not permitted");
+      },
+    });
+    expect(stopped).toEqual(result(1, "Operation not permitted"));
+    expect(calls).toHaveLength(2);
+  });
+
+  test("kernel failure prevents gateway bootstrap", async () => {
+    const f = fixture(0);
+    const runCommand = f.options.runCommand;
+    f.options.runCommand = async (cmd) =>
+      cmd[1] === "kickstart" ? result(1, "kernel failure") : runCommand(cmd);
+    expect((await controlLaunchd("restart", f.options)).code).toBe(1);
+    expect(f.calls.some((c) => c[1] === "bootstrap")).toBe(false);
   });
 });

@@ -1,7 +1,6 @@
 /**
  * Plain agent webhook and mention handlers.
  */
-import { SnoozeStatusDetail } from "@team-plain/typescript-sdk";
 import {
   getThreadWithMessages,
   postNote,
@@ -10,7 +9,6 @@ import {
   cleanDraftText,
   createGithubIssue,
   linkThreadToGithubIssue,
-  plain,
 } from "./api";
 import {
   buildMentionPrompt,
@@ -276,20 +274,13 @@ async function handleAgentMention(
         pending.draftText,
       );
       if (sent.ok) {
-        try {
-          await plain.snoozeThread({
-            threadId,
-            statusDetail: SnoozeStatusDetail.WaitingForCustomer,
-          });
-          await postNote(
-            threadId,
-            customerId,
-            "✓ Reply sent to customer. Thread set to Waiting for Customer.",
-          );
-        } catch (e) {
-          console.error("Error setting thread status:", e);
-          await postNote(threadId, customerId, "✓ Reply sent to customer.");
-        }
+        await postNote(
+          threadId,
+          customerId,
+          sent.waitingForCustomer
+            ? "✓ Reply sent to customer. Thread set to Waiting for Customer."
+            : "✓ Reply sent to customer.",
+        );
       } else {
         await postNote(
           threadId,

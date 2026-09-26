@@ -260,6 +260,7 @@ export interface CreateSessionMessage {
   autoFallback?: unknown;
   fastMode?: unknown;
   pstackMode?: unknown;
+  startPortal?: unknown;
   accountId?: string;
   mcpServers?: unknown;
   repo?: unknown;
@@ -425,6 +426,8 @@ export interface ResolvedCreate {
   fastMode?: boolean;
   /** Pstack mode from the palette toggle; `/pstack <task>` as the opening prompt also enables it. */
   pstackMode?: boolean;
+  /** Start the repository's first Portal once the workspace is ready. */
+  startPortal?: boolean;
   accountId?: string;
   images?: ImageInput[];
   /** Server-staged file attachments named in the opening prompt's uploads
@@ -1062,7 +1065,7 @@ export function actorWorktreeMaterializer(input: {
         project: input.project,
         branch: input.branch,
         worktreePath: input.worktreePath,
-        baseBranch: input.baseBranch || getRepo(input.project).defaultBranch,
+        baseBranch: input.baseBranch,
         isolated: input.isolated,
         existingBranch: input.existingBranch,
         credentialPrincipal: input.credentialPrincipal,
@@ -1514,6 +1517,10 @@ export async function openCreatedSession(
   openingRun?: { runId: string; generation: number },
 ): Promise<void> {
   assertAutomationDescendantOpeningIsolation(spec);
+  if (spec.startPortal) {
+    const { autostartSessionPortal } = await import("./portal-autostart");
+    autostartSessionPortal(spec.id);
+  }
   if (spec.deferOpening) {
     await openEmptyCreatedSession(spec, io, creationIdentity, creationEffectId);
     return;
@@ -3125,6 +3132,7 @@ export async function handleCreateSessionMessage(
       autoFallback: createAutoFallback,
       fastMode: createFastMode,
       pstackMode: createPstackMode,
+      ...(msg.startPortal === true && !forkSource ? { startPortal: true } : {}),
       accountId: createAccountId,
       images,
       attachments: openingAttachments,

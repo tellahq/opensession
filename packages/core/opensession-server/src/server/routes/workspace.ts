@@ -369,9 +369,18 @@ export async function handleWorkspaceRoutes(
       const { [id]: _dropped, ...rest } = chosen;
       return assignRepoTileColors(ids, rest)[id];
     };
+    const { repoPortalStarter } = await import("../preview");
+    const portals = new Map(
+      await Promise.all(
+        Object.values(REPOS).map(
+          async (p) => [p.id, await repoPortalStarter(p.repo)] as const,
+        ),
+      ),
+    );
     return Response.json({
       repos: Object.values(REPOS).map((p) => {
         const icon = resolveRepoIcon(p.icon, p.repo);
+        const portal = portals.get(p.id);
         return {
           id: p.id,
           label: p.label,
@@ -392,6 +401,8 @@ export async function handleWorkspaceRoutes(
           iconSource: icon ? (p.iconSource ?? null) : null,
           /** Bumped when that art changes, so tiles don't stay cached. */
           iconRev: repoIconRevision(icon),
+          /** The Portal a new session can start with it, when declared. */
+          ...(portal ? { portal } : {}),
         };
       }),
       // What the New-session picker starts on for users with no personal

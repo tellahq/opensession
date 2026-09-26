@@ -1,10 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import {
   boxApiBaseUrl,
   boxDesktopUrl,
   BOX_PREVIEW_URL_PATTERN,
   BOX_RUNTIME_HOME_COMMAND,
   BOX_HOME_GUARD,
+  BOX_HOME_HYDRATION_PROBE,
   BOX_RUNTIME_HOME_LAZY_MARKER,
   boxCommandPlaneUnavailable,
   boxComposeShell,
@@ -93,25 +105,60 @@ describe("Box named snapshots", () => {
 });
 
 describe("Box persistent file paths", () => {
-  test("bind-mounts the durable home without changing its canonical spelling", () => {
+  test("links /home/ubuntu to Boat's home instead of binding it", () => {
+    // A bind captured Boat's lazy-restore FUSE mount for the machine's life.
+    expect(BOX_RUNTIME_HOME_COMMAND).toContain("ln -s /home/user /home/ubuntu");
+    expect(BOX_RUNTIME_HOME_COMMAND).not.toContain("mount --bind");
+    // An older release's bind is detached without touching /home/user: the
+    // symlink case is handled before any unmount, since unmounting through
+    // the link would unmount Boat's own FUSE layer.
+    expect(BOX_RUNTIME_HOME_COMMAND).toContain("umount -l /home/ubuntu");
+    expect(
+      BOX_RUNTIME_HOME_COMMAND.indexOf("[ -L /home/ubuntu ]"),
+    ).toBeLessThan(BOX_RUNTIME_HOME_COMMAND.indexOf("umount"));
     expect(BOX_RUNTIME_HOME_COMMAND).toContain(
-      "mount --bind /home/user /home/ubuntu",
+      `fuse*) echo ${BOX_RUNTIME_HOME_LAZY_MARKER}`,
     );
-    expect(BOX_RUNTIME_HOME_COMMAND).toContain("test ! -L /home/ubuntu");
-    expect(BOX_RUNTIME_HOME_COMMAND).toContain("umount /home/ubuntu");
-    expect(BOX_RUNTIME_HOME_COMMAND).not.toContain("ln -s");
   });
 
-  test("keeps a writable foreign /home/ubuntu mount and reports it as lazy", () => {
-    // After archive/resume Box serves the home through a FUSE layer at
-    // /home/ubuntu; unmounting it from under a live workspace is the bug this
-    // guards against, and the marker switches file writes to the shell path.
-    expect(BOX_RUNTIME_HOME_COMMAND).toContain(
-      `if test -w /home/ubuntu; then echo ${BOX_RUNTIME_HOME_LAZY_MARKER}; else sudo -n umount /home/ubuntu`,
-    );
-    expect(BOX_RUNTIME_HOME_COMMAND).not.toContain(
-      "test /home/ubuntu -ef /home/user && test -w /home/ubuntu",
-    );
+  test("the home command creates, repairs, and keeps the link", () => {
+    const root = mkdtempSync(join(tmpdir(), "box-home-"));
+    try {
+      const user = join(root, "user");
+      const ubuntu = join(root, "ubuntu");
+      mkdirSync(user);
+      // One pass: the temporary root may itself live under /home/ubuntu.
+      const replacements: Record<string, string> = {
+        "/home/user": user,
+        "/home/ubuntu": ubuntu,
+        "/tmp/.opensession-home.lock": join(root, "lock"),
+        "sudo -n ": "",
+      };
+      const script = BOX_RUNTIME_HOME_COMMAND.replace(
+        /\/home\/user|\/home\/ubuntu|\/tmp\/\.opensession-home\.lock|sudo -n /g,
+        (match) => replacements[match]!,
+      );
+      const run = () => Bun.spawnSync(["bash", "-c", script]).exitCode;
+      // An empty directory (a fresh VM root) becomes the link.
+      mkdirSync(ubuntu);
+      expect(run()).toBe(0);
+      expect(readlinkSync(ubuntu)).toBe(user);
+      // Idempotent.
+      expect(run()).toBe(0);
+      // A link elsewhere is repaired.
+      rmSync(ubuntu);
+      symlinkSync(root, ubuntu);
+      expect(run()).toBe(0);
+      expect(readlinkSync(ubuntu)).toBe(user);
+      // Real content at the path is never replaced.
+      rmSync(ubuntu);
+      mkdirSync(ubuntu);
+      writeFileSync(join(ubuntu, "keep"), "x");
+      expect(run()).not.toBe(0);
+      expect(existsSync(join(ubuntu, "keep"))).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("maps the cross-provider home to Box's native durable home", () => {
@@ -179,10 +226,12 @@ describe("Box command readiness", () => {
     );
   });
 
-  test("restores the /home/ubuntu bind mount before a workspace command", async () => {
-    // A Box the provider restarted on its own lost the mount; a cwd under
+  test("restores the /home/ubuntu link before a workspace command", async () => {
+    // A Box the provider restarted on its own lost the link; a cwd under
     // /home/ubuntu must still resolve.
-    expect(BOX_HOME_GUARD).toStartWith("{ mountpoint -q /home/ubuntu || {");
+    expect(BOX_HOME_GUARD).toStartWith(
+      '{ [ "$(readlink /home/ubuntu)" = /home/user ] || {',
+    );
     expect(BOX_HOME_GUARD).toContain(BOX_RUNTIME_HOME_COMMAND);
     const composed = boxComposeShell("git status", {
       cwd: "/home/ubuntu/worktrees/acme-feature",
@@ -191,6 +240,15 @@ describe("Box command readiness", () => {
     expect(
       composed.indexOf("cd /home/ubuntu/worktrees/acme-feature"),
     ).toBeGreaterThan(BOX_HOME_GUARD.length);
+  });
+
+  test("the home scripts are valid shell", () => {
+    for (const script of [BOX_HOME_GUARD, BOX_HOME_HYDRATION_PROBE]) {
+      expect(Bun.spawnSync(["bash", "-n", "-c", script]).exitCode).toBe(0);
+    }
+    expect(
+      Bun.spawnSync(["bash", "-c", BOX_HOME_HYDRATION_PROBE]).stdout.toString(),
+    ).toMatch(/^(ready|hydrating)\n$/);
   });
 
   test("only retries explicit no-command 409 states", () => {

@@ -173,6 +173,25 @@ export class SessionListStore {
           INSERT INTO session_list_meta VALUES ('branch_membership:v1', '1');
         `);
       }
+      // v2: a linked PR's head branch is ownership too (review handoff, merge
+      // and conflict notices). Backfill from the catalog payloads once.
+      const linkedSeeded = this.db
+        .query(
+          "SELECT 1 FROM session_list_meta WHERE key = 'branch_membership:v2'",
+        )
+        .get();
+      if (!linkedSeeded) {
+        this.db.exec(`
+          INSERT OR IGNORE INTO session_list_branches
+            SELECT s.id, json_extract(l.value, '$.repo'), json_extract(l.value, '$.branch')
+            FROM session_list s, json_each(s.payload, '$.linkedPrs') l
+            WHERE s.archived = 0
+              AND json_extract(l.value, '$.repo') IS NOT NULL
+              AND json_extract(l.value, '$.branch') IS NOT NULL
+              AND json_extract(l.value, '$.branch') != '';
+          INSERT INTO session_list_meta VALUES ('branch_membership:v2', '1');
+        `);
+      }
     })();
     this.upsertStatement = this.db.prepare(`
 			INSERT INTO session_list (
@@ -223,13 +242,14 @@ export class SessionListStore {
       session.id,
     ]);
     if (!session.archived) {
-      const branches = [...(session.attachedRepos ?? [])];
+      // Primary checkout, attached repos, and linked PRs (the session asked to
+      // follow that PR, so its review and merge news belongs here too).
+      const branches: Array<{ repo: string; branch: string }> = [
+        ...(session.attachedRepos ?? []),
+        ...(session.linkedPrs ?? []),
+      ];
       if (session.branch && !session.repoLess)
-        branches.push({
-          repo: session.repo || "",
-          branch: session.branch,
-          dir: session.worktreeDir || "",
-        });
+        branches.push({ repo: session.repo || "", branch: session.branch });
       for (const { repo, branch } of branches) {
         if (!branch) continue;
         this.db.run(
@@ -417,7 +437,7 @@ export class SessionListStore {
     return this.hasCoverage("exclude") ? this.listLiveByBranch(branches) : null;
   }
 
-  /** Exact primary/attached-repository ownership, with a bounded response.
+  /** Exact primary/attached-repository/linked-PR ownership, with a bounded response.
    * Unknown coverage is NOT an empty result and must never trigger file scans. */
   listLiveByRepoBranchCovered(
     repo: string,

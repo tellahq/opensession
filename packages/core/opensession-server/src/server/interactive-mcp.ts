@@ -318,6 +318,15 @@ export function interactiveMcpServers(
               const session = findSession(sessionId);
               return Boolean(session && portalsInSandbox(session));
             },
+            shellOnHost: () => {
+              const session = findSession(sessionId);
+              return Boolean(
+                session &&
+                !session.runner &&
+                !session.sandbox?.provider &&
+                !session.sandbox?.sandboxId,
+              );
+            },
             sandboxState: () => {
               const session = findSession(sessionId);
               return session ? describePortalSandbox(session) : null;

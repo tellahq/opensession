@@ -290,8 +290,9 @@ describe("offline actor transcript migration", () => {
     target.close();
   });
 
-  test("rollback fails closed after post-cutover append, import, or replace", async () => {
-    for (const operation of ["append", "import", "replace"] as const) {
+  test.each(["append", "import", "replace"] as const)(
+    "rollback fails closed after post-cutover %s",
+    async (operation) => {
       const paths = await fixture();
       migrateActorTranscriptsOffline(paths);
       const target = new TranscriptStore(
@@ -356,8 +357,8 @@ describe("offline actor transcript migration", () => {
         central.sessionPlacement(paths.sessionId)?.transcriptAuthority,
       ).toBe("actor");
       central.close();
-    }
-  });
+    },
+  );
 
   test("adopts a verified target after a crash before placement publication", async () => {
     const paths = await fixture();

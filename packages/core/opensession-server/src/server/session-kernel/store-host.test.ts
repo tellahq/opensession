@@ -599,6 +599,27 @@ describe("per-session session kernel storage", () => {
     host.close();
   });
 
+  test("releases a quarantine left by a failed store read", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const sessionId = "read-repair-session";
+    host.call("setRunState", [
+      { sessionId, state: "running", event: "prompt" },
+    ]);
+    host.central.quarantineSession(
+      sessionId,
+      "database is locked",
+      "store:creationState",
+    );
+
+    expect(host.quarantinedSession(sessionId)).toMatchObject({
+      repairable: true,
+    });
+    expect(host.call("releaseQuarantine", [sessionId])).toBe(true);
+    expect(host.quarantinedSession(sessionId)).toBeUndefined();
+    host.close();
+  });
+
   test("releases a replay-safe transcript wake acknowledgement during a live run", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);

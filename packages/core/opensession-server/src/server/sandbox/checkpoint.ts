@@ -48,6 +48,7 @@ import {
 import { existsSync } from "node:fs";
 import {
   checkpointRestoreScript,
+  GIT_REFRESH_INDEX,
   loadRemoteWorkspaceSeedFiles,
   shellQuoteWord,
 } from "./adapters/bootstrap";
@@ -189,6 +190,7 @@ export function checkpointLandScript(
     STALE_INDEX_LOCK_CLEANUP,
     `git fetch --no-tags --quiet origin ${shellQuoteWord(`+${ref}:refs/opensession/checkpoint`)}`,
     `test "$(git rev-parse --verify 'refs/opensession/checkpoint^{commit}')" = ${shellQuoteWord(commit)}`,
+    GIT_REFRESH_INDEX,
     "git -c advice.detachedHead=false reset --hard --quiet refs/opensession/checkpoint",
     `git clean -fdq ${exclude}`.trimEnd(),
     `git checkout --quiet -B ${shellQuoteWord(branch)}`,
