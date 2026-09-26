@@ -85,6 +85,38 @@ test("review inversion reuses catalog-derived authorship", async () => {
   store.remove("owner");
 });
 
+test("a session that linked the PR owns it; the PR's own runs never do", async () => {
+  // The PR's review run sits on the branch itself; it must never be the owner.
+  store.upsert({
+    ...row("bks-ghpr-1-review", "pi/openai/gpt-6-astra"),
+    lastActivity: "2026-09-20T00:00:00Z",
+  });
+  // Opened the PR from a temporary checkout, then linked it.
+  store.upsert({
+    ...row("follower", "pi/anthropic/claude-fable-5-1"),
+    branch: "scratch",
+    linkedPrs: [{ repo: "app", branch: "feature", number: 1 }],
+  });
+  expect(await authorFamilyFor(pr)).toEqual({
+    family: "anthropic",
+    source: "owning session follower",
+  });
+  // A session with the branch checked out outranks a newer linked follower.
+  store.upsert({
+    ...row("follower", "pi/anthropic/claude-fable-5-1"),
+    branch: "scratch",
+    lastActivity: "2026-09-19T00:00:00Z",
+    linkedPrs: [{ repo: "app", branch: "feature", number: 1 }],
+  });
+  store.upsert(row("checkout", "pi/openai/gpt-6-astra"));
+  expect(await authorFamilyFor(pr)).toEqual({
+    family: "openai",
+    source: "owning session checkout",
+  });
+  for (const id of ["bks-ghpr-1-review", "follower", "checkout"])
+    store.remove(id);
+});
+
 test("autofix author model comes from one catalog row, not a session file", async () => {
   store.upsert(row("bks-ghpr-1-autofix", "pi/openai/gpt-6-astra"));
   updatePrState(

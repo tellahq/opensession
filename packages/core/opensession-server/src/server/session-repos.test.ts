@@ -6,6 +6,7 @@ import { join } from "path";
 import {
   buildBranchNote,
   buildReposNote,
+  ghPrView,
   planCreateAttachRepos,
   resolvePrTarget,
   resolveSessionRepoContext,
@@ -469,5 +470,94 @@ describe("planCreateAttachRepos", () => {
     expect(() => planCreateAttachRepos(["docs"], "app", "", lookup)).toThrow(
       /needs a branch/,
     );
+  });
+});
+
+describe("ghPrView", () => {
+  const stream = (text: string) => new Response(text).body!;
+  const fakeGh =
+    (stdout: string, stderr: string, code: number, seen: unknown[] = []) =>
+    (args: string[], env: Record<string, string>) => {
+      seen.push({ args, env });
+      return {
+        stdout: stream(stdout),
+        stderr: stream(stderr),
+        exited: Promise.resolve(code),
+      };
+    };
+  const botCredential = async () => ({
+    kind: "service" as const,
+    principal: "service",
+    env: { GH_TOKEN: "minted-for-repo" },
+  });
+
+  test("runs gh with the repository's minted bot token", async () => {
+    const seen: Array<{ args: string[]; env: Record<string, string> }> = [];
+    const result = await ghPrView("acme/app", "7647", {
+      credential: botCredential,
+      spawn: fakeGh(
+        JSON.stringify({
+          headRefName: "feature",
+          number: 7647,
+          url: "https://github.com/acme/app/pull/7647",
+          title: "Feature",
+        }),
+        "",
+        0,
+        seen,
+      ),
+    });
+    expect(result).toEqual({
+      ok: true,
+      pr: {
+        branch: "feature",
+        number: 7647,
+        url: "https://github.com/acme/app/pull/7647",
+        title: "Feature",
+      },
+    });
+    expect(seen[0].env.GH_TOKEN).toBe("minted-for-repo");
+    expect(seen[0].args).toContain("acme/app");
+  });
+
+  test("keeps gh's error text instead of collapsing it into not found", async () => {
+    const result = await ghPrView("acme/app", "7647", {
+      credential: botCredential,
+      spawn: fakeGh(
+        "",
+        "GraphQL: Resource not accessible by personal access token (repository.pullRequest)\n",
+        1,
+      ),
+    });
+    expect(result).toEqual({
+      ok: false,
+      notFound: false,
+      reason:
+        "GraphQL: Resource not accessible by personal access token (repository.pullRequest)",
+    });
+  });
+
+  test("tells a missing PR apart from a failure", async () => {
+    const result = await ghPrView("acme/app", "no-pr-branch", {
+      credential: botCredential,
+      spawn: fakeGh("", 'no pull requests found for branch "x"\n', 1),
+    });
+    expect(result).toMatchObject({ ok: false, notFound: true });
+  });
+
+  test("an unavailable bot credential is the reported reason, and gh never runs", async () => {
+    const seen: unknown[] = [];
+    const result = await ghPrView("acme/app", "1", {
+      credential: async () => {
+        throw new Error("The selected GitHub bot credential is unavailable");
+      },
+      spawn: fakeGh("", "", 0, seen),
+    });
+    expect(result).toEqual({
+      ok: false,
+      notFound: false,
+      reason: "The selected GitHub bot credential is unavailable",
+    });
+    expect(seen).toEqual([]);
   });
 });

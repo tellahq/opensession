@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import * as dns from "node:dns/promises";
 import { mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { statePath } from "./paths";
@@ -10,14 +11,19 @@ import {
 
 describe("MCP OAuth client registration", () => {
   const realFetch = globalThis.fetch;
+  let lookup: ReturnType<typeof spyOn<typeof dns, "lookup">>;
   const storePath = statePath(".opensession-mcp-oauth.json");
 
   beforeEach(() => {
+    lookup = spyOn(dns, "lookup").mockImplementation((async () => [
+      { address: "203.0.113.1", family: 4 },
+    ]) as unknown as typeof dns.lookup);
     mkdirSync(dirname(storePath), { recursive: true });
   });
 
   afterEach(() => {
     globalThis.fetch = realFetch;
+    lookup.mockRestore();
     rmSync(storePath, { force: true });
   });
 
@@ -51,6 +57,7 @@ describe("MCP OAuth client registration", () => {
           "https://auth.example.test/.well-known/oauth-authorization-server"
         ) {
           return Response.json({
+            issuer: "https://auth.example.test",
             authorization_endpoint: "https://auth.example.test/authorize",
             token_endpoint: "https://auth.example.test/token",
             registration_endpoint: "https://auth.example.test/register",
@@ -76,7 +83,7 @@ describe("MCP OAuth client registration", () => {
         expect(params.get("code_challenge_method")).toBe("S256");
         expect(params.get("code_challenge")).toBeTruthy();
         expect(params.get("state")).toBeTruthy();
-        expect(requests).toBe(3);
+        expect(requests).toBe(5);
       }
     },
   );
@@ -95,6 +102,7 @@ describe("MCP OAuth client registration", () => {
         url === "https://api.figma.com/.well-known/oauth-authorization-server"
       ) {
         return Response.json({
+          issuer: "https://api.figma.com",
           authorization_endpoint: "https://www.figma.com/oauth/mcp",
           token_endpoint: "https://api.figma.com/v1/oauth/token",
           registration_endpoint: "https://api.figma.com/v1/oauth/mcp/register",

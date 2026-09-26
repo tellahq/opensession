@@ -1,7 +1,11 @@
 /**
  * Plain and GitHub issue helpers for the Plain agent.
  */
-import { AttachmentType, PlainClient } from "@team-plain/typescript-sdk";
+import {
+  AttachmentType,
+  PlainClient,
+  SnoozeStatusDetail,
+} from "@team-plain/typescript-sdk";
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
 import { defaultRepo } from "../../server/config";
 import { splitNoteText } from "./notes";
@@ -678,7 +682,41 @@ export function cleanDraftText(text: string): string {
     .trim();
 }
 
-/** Send a reply to the customer (email/chat based on thread type) */
+/**
+ * Park a thread as "Waiting for customer" the way Plain's inbox does after a
+ * reply: a snooze with that status detail, which Plain lifts back to Todo
+ * when the customer answers. Best effort; returns whether it stuck.
+ */
+export async function markWaitingForCustomer(
+  threadId: string,
+): Promise<boolean> {
+  try {
+    const result = await plain.snoozeThread({
+      threadId,
+      statusDetail: SnoozeStatusDetail.WaitingForCustomer,
+    });
+    if (result.error) {
+      console.error(
+        `[plain] Could not set ${threadId} to Waiting for customer:`,
+        result.error,
+      );
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(
+      `[plain] Could not set ${threadId} to Waiting for customer:`,
+      e,
+    );
+    return false;
+  }
+}
+
+/**
+ * Send a reply to the customer (email/chat based on thread type), then move
+ * the thread to Waiting for customer. A failed status change does not fail
+ * the send: the reply already went out.
+ */
 export async function sendCustomerReply(
   threadId: string,
   customerId: string,
@@ -688,6 +726,29 @@ export async function sendCustomerReply(
    *  to the system key so the customer still gets the reply. */
   userToken?: string,
   attachmentIds: string[] = [],
+): Promise<{
+  ok: boolean;
+  sentAs: "user" | "system";
+  waitingForCustomer: boolean;
+}> {
+  const sent = await deliverCustomerReply(
+    threadId,
+    text,
+    userToken,
+    attachmentIds,
+  );
+  if (!sent.ok) return { ...sent, waitingForCustomer: false };
+  return {
+    ...sent,
+    waitingForCustomer: await markWaitingForCustomer(threadId),
+  };
+}
+
+async function deliverCustomerReply(
+  threadId: string,
+  text: string,
+  userToken: string | undefined,
+  attachmentIds: string[],
 ): Promise<{ ok: boolean; sentAs: "user" | "system" }> {
   const cleanText = cleanDraftText(text);
   if (userToken) {

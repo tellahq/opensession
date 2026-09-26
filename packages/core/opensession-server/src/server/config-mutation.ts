@@ -14,7 +14,9 @@
 
 import { chmodSync, copyFileSync, existsSync, readFileSync } from "fs";
 import { configPath, configuredRepos, publishConfigSnapshot } from "./config";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { readFile, copyFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { writeJsonAtomic, writeFileAtomicAsync } from "./shared/atomic-write";
 
 const mutationState: { chain: Promise<unknown> } = ((
   globalThis as any
@@ -39,6 +41,44 @@ export function rawConfig(): Record<string, unknown> {
     throw new Error("Local config must contain a JSON object");
   }
   return parsed as Record<string, unknown>;
+}
+
+/** Request-path reader: fail closed on unreadable or malformed configuration. */
+export async function rawConfigAsync(): Promise<Record<string, unknown>> {
+  let text: string;
+  try {
+    text = await readFile(configPath(), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw error;
+  }
+  const parsed = JSON.parse(text);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Local config must contain a JSON object");
+  }
+  return parsed;
+}
+
+/** Async config persistence under the same mutation lock as setup routes.
+ * Publish only after the atomic rename; a failed write must not admit a user. */
+export async function persistRawConfigAsync(
+  config: Record<string, unknown>,
+): Promise<void> {
+  const path = configPath();
+  for (let n = 1; ; n++) {
+    try {
+      await copyFile(path, `${path}.bak-${n}`, constants.COPYFILE_EXCL);
+      break;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EEXIST") continue;
+      if (code === "ENOENT") break;
+      throw error;
+    }
+  }
+  const contents = JSON.stringify(config, null, 2) + "\n";
+  await writeFileAtomicAsync(path, contents, 0o600);
+  publishConfigSnapshot(path, contents);
 }
 
 /** Back up rather than clobber (same `.bak-<n>` scheme as scripts/lib/

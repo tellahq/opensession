@@ -59,6 +59,8 @@ export interface WSClientData {
   authUser?: string | null;
   /** Verified GitHub login of the signed-in user (createdByLogin stamping). */
   authLogin?: string | null;
+  /** Roster incarnation stamped at upgrade, never accepted from a client. */
+  authGeneration?: string;
   /** Machine sessions do not belong to the human roster. */
   authAutomation?: boolean;
   /**
