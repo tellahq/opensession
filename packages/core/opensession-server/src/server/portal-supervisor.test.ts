@@ -919,14 +919,24 @@ describe("session Portal supervisor", () => {
     expect(
       (
         await reapOrphanedPortalServices([
-          { id: "deleted-session", worktreeDir: worktree, attachedRepos: [] },
+          {
+            id: "deleted-session",
+            worktreeDir: worktree,
+            attachedRepos: [],
+            isRunning: false,
+          },
         ])
       ).stopped,
     ).toEqual([]);
     expect((await listPortalServices(worktree))[0]?.state).toBe("awake");
 
     const result = await reapOrphanedPortalServices([
-      { id: "replacement-session", worktreeDir: worktree, attachedRepos: [] },
+      {
+        id: "replacement-session",
+        worktreeDir: worktree,
+        attachedRepos: [],
+        isRunning: false,
+      },
     ]);
     expect(result.stopped).toEqual([
       expect.objectContaining({
@@ -956,8 +966,18 @@ describe("session Portal supervisor", () => {
     // by spelling, the registry read under the alias saw only that session
     // as owner and reaped the Portal.
     const result = await reapOrphanedPortalServices([
-      { id: "owner", worktreeDir: worktree, attachedRepos: [] },
-      { id: "other", worktreeDir: alias, attachedRepos: [] },
+      {
+        id: "owner",
+        worktreeDir: worktree,
+        attachedRepos: [],
+        isRunning: false,
+      },
+      {
+        id: "other",
+        worktreeDir: alias,
+        attachedRepos: [],
+        isRunning: false,
+      },
     ]);
     expect(result.stopped).toEqual([]);
     expect((await listPortalServices(worktree))[0]?.state).toBe("awake");
