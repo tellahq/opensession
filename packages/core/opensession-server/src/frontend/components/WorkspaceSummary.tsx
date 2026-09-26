@@ -537,6 +537,92 @@ export function WorkspaceSummary({
   );
 }
 
+function CommittedSection({
+  className,
+  commitCount,
+  commits,
+  prCommits,
+  committedRow,
+  prCommittedRow,
+}: {
+  className: string;
+  commitCount: number;
+  commits: WorkspaceCommit[];
+  prCommits: PrCommit[];
+  committedRow: (commit: WorkspaceCommit) => React.ReactNode;
+  prCommittedRow: (commit: PrCommit) => React.ReactNode;
+}) {
+  const [commitsOpen, setCommitsOpen] = useState(false);
+  const stats = commits.reduce(
+    (sum, commit) => ({
+      files: sum.files + commit.filesChanged,
+      additions: sum.additions + commit.additions,
+      deletions: sum.deletions + commit.deletions,
+    }),
+    { files: 0, additions: 0, deletions: 0 },
+  );
+  const label = `${commits.length} commit${commits.length === 1 ? "" : "s"}`;
+
+  return (
+    <div className={className}>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={cn(
+          WS_SUMMARY_SECTION,
+          "w-full cursor-pointer justify-between gap-2 border-none bg-transparent text-left hover:bg-transparent hover:text-faint active:scale-100",
+        )}
+        onClick={() => setCommitsOpen((open) => !open)}
+        aria-expanded={commitsOpen}
+      >
+        <span className="flex items-baseline gap-1.5">
+          <span>Committed</span>
+          <span className="text-meta tabular-nums">{commitCount}</span>
+        </span>
+        <IconChevronRight
+          size={14}
+          className={cn(
+            "shrink-0 transition-transform motion-reduce:transition-none",
+            commitsOpen && "rotate-90",
+          )}
+        />
+      </Button>
+      {commitsOpen ? (
+        prCommits.length > 0 ? (
+          prCommits.map(prCommittedRow)
+        ) : (
+          commits.map(committedRow)
+        )
+      ) : commits.length > 0 ? (
+        <button
+          type="button"
+          className={WS_SUMMARY_ROW}
+          onClick={() => setCommitsOpen(true)}
+          aria-expanded={false}
+          title={`View ${label}`}
+        >
+          <span className={WS_SUMMARY_RAIL}>
+            <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
+          </span>
+          <span className={WS_SUMMARY_LABEL}>{label}</span>
+          <span
+            className={cn(
+              WS_SUMMARY_STATE,
+              "flex items-baseline gap-2 text-dim tabular-nums",
+            )}
+          >
+            <span>
+              {stats.files} file{stats.files === 1 ? "" : "s"}
+            </span>
+            <span className="text-green">+{stats.additions}</span>
+            <span className="text-red">−{stats.deletions}</span>
+          </span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function WorkspaceSummaryBody({
   session,
   onOpenPanelTab,
@@ -656,7 +742,6 @@ export function WorkspaceSummaryBody({
       { additions: 0, deletions: 0, files: 0 },
     ) ?? null;
   const [prompted, setPrompted] = useState(false);
-  const [commitsOpen, setCommitsOpen] = useState(false);
   const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewBusy, setReviewBusy] = useState(false);
@@ -1241,47 +1326,6 @@ export function WorkspaceSummaryBody({
     );
   }
 
-  /** A long session can commit dozens of times. Keep the completed-work totals
-   *  folded, then let the section heading reveal every commit in this card. */
-  function committedSummaryRow() {
-    if (commits.length === 0) return null;
-    const stats = commits.reduce(
-      (sum, commit) => ({
-        files: sum.files + commit.filesChanged,
-        additions: sum.additions + commit.additions,
-        deletions: sum.deletions + commit.deletions,
-      }),
-      { files: 0, additions: 0, deletions: 0 },
-    );
-    const label = `${commits.length} commit${commits.length === 1 ? "" : "s"}`;
-    return (
-      <button
-        type="button"
-        className={WS_SUMMARY_ROW}
-        onClick={() => setCommitsOpen(true)}
-        aria-expanded={false}
-        title={`View ${label}`}
-      >
-        <span className={WS_SUMMARY_RAIL}>
-          <IconGitCommit size={20} className={WS_SUMMARY_ICON} />
-        </span>
-        <span className={WS_SUMMARY_LABEL}>{label}</span>
-        <span
-          className={cn(
-            WS_SUMMARY_STATE,
-            "flex items-baseline gap-2 text-dim tabular-nums",
-          )}
-        >
-          <span>
-            {stats.files} file{stats.files === 1 ? "" : "s"}
-          </span>
-          <span className="text-green">+{stats.additions}</span>
-          <span className="text-red">−{stats.deletions}</span>
-        </span>
-      </button>
-    );
-  }
-
   const groupClass = embedded
     ? "flex flex-col overflow-hidden rounded-2xl bg-raised py-2 empty:hidden"
     : "contents";
@@ -1675,35 +1719,14 @@ export function WorkspaceSummaryBody({
       </div>
 
       {hasCommitDetails && (
-        <div className={groupClass}>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              WS_SUMMARY_SECTION,
-              "w-full cursor-pointer justify-between gap-2 border-none bg-transparent text-left hover:bg-transparent hover:text-faint active:scale-100",
-            )}
-            onClick={() => setCommitsOpen((open) => !open)}
-            aria-expanded={commitsOpen}
-          >
-            <span className="flex items-baseline gap-1.5">
-              <span>Committed</span>
-              <span className="text-meta tabular-nums">{commitCount}</span>
-            </span>
-            <IconChevronRight
-              size={14}
-              className={cn(
-                "shrink-0 transition-transform motion-reduce:transition-none",
-                commitsOpen && "rotate-90",
-              )}
-            />
-          </Button>
-          {commitsOpen
-            ? prCommits.length > 0
-              ? prCommits.map(prCommittedRow)
-              : commits.map(committedRow)
-            : committedSummaryRow()}
-        </div>
+        <CommittedSection
+          className={groupClass}
+          commitCount={commitCount}
+          commits={commits}
+          prCommits={prCommits}
+          committedRow={committedRow}
+          prCommittedRow={prCommittedRow}
+        />
       )}
 
       {showDiffChanges && (
