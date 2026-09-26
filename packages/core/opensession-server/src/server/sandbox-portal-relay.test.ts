@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import {
   applyRelayResponseFrame,
   createRelayRequestLimiter,
+  RELAY_LANES,
+  relayLane,
   handleSandboxPortalRelayUpgrade,
   mintSandboxPortalGrant,
   PORTAL_RESPONSE_CHUNK_BYTES,
@@ -80,21 +82,28 @@ test("stopping one Portal revokes only its bound credential", () => {
   ).toBe(true);
 });
 
-test("uses two relay lanes by default", async () => {
+test("static build output takes its own relay lanes", () => {
+  expect(relayLane("/_next/static/chunks/app.js")).toBe("assets");
+  expect(relayLane("/api/flags")).toBe("requests");
+  expect(relayLane("/videos")).toBe("requests");
+});
+
+test("bounds relay concurrency to its lanes by default", async () => {
   const limit = createRelayRequestLimiter();
   const releases: Array<() => void> = [];
   const started: number[] = [];
-  const tasks = [1, 2, 3].map((id) =>
+  const ids = Array.from({ length: RELAY_LANES + 1 }, (_, i) => i + 1);
+  const tasks = ids.map((id) =>
     limit(async () => {
       started.push(id);
       await new Promise<void>((resolve) => releases.push(resolve));
     }),
   );
   await Bun.sleep(0);
-  expect(started).toEqual([1, 2]);
+  expect(started).toEqual(ids.slice(0, RELAY_LANES));
   releases.shift()!();
   await Bun.sleep(0);
-  expect(started).toEqual([1, 2, 3]);
+  expect(started).toEqual(ids);
   for (const release of releases) release();
   await Promise.all(tasks);
 });

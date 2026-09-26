@@ -48,17 +48,29 @@ type Connection = {
   expiryTimer: ReturnType<typeof setTimeout>;
   pending: Map<string, PendingRelayResponse>;
   limitRequests: RelayRequestLimiter;
+  limitAssets: RelayRequestLimiter;
 };
 
+/** Which lanes a request takes: built static files (`/_next/static/`, which
+ *  a dev server answers from memory) never wait behind a page or API route
+ *  that is still compiling. */
+export function relayLane(path: string): "assets" | "requests" {
+  return path.startsWith("/_next/static/") ? "assets" : "requests";
+}
+
 /** A browser can ask Turbopack for dozens of multi-megabyte chunks at once.
- * The outbound Portal rides one WebSocket, whose client-side send buffer drops
- * responses when all of those loopback fetches finish together. Keep fetches
- * below the measured backpressure cliff. The sidecar fetches a bounded set in
- * parallel and serializes the resulting WebSocket frames behind its actual
- * send buffer. This gate is per Portal connection, so sibling services never
- * block each other. */
+ * The outbound Portal rides one WebSocket. Before the sidecar sent responses
+ * in bounded frames behind its actual send buffer, responses finishing
+ * together overflowed it, so relayed requests were held to two at a time.
+ * That limit then made the Portal slow instead: a page's first API calls each
+ * compile for seconds on a fresh dev server, and its 90 script chunks queued
+ * behind them, so a warmed page took half a minute to render. The gate stays
+ * bounded, per Portal connection so sibling services never block each other,
+ * and static build output has lanes of its own (relayLane). */
+export const RELAY_LANES = 6;
+
 export function createRelayRequestLimiter(
-  maxConcurrent = 2,
+  maxConcurrent = RELAY_LANES,
 ): RelayRequestLimiter {
   if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1)
     throw new Error("Portal relay concurrency must be positive");
@@ -524,6 +536,7 @@ export function sandboxPortalRelayOpen(ws: any): boolean {
     expiryTimer: closeAtExpiry,
     pending: new Map(),
     limitRequests: createRelayRequestLimiter(),
+    limitAssets: createRelayRequestLimiter(),
   });
   return true;
 }
@@ -650,7 +663,11 @@ export async function relayFetch(
   );
   if (!connection)
     return new Response("Sandbox Portal is not connected", { status: 503 });
-  return connection.limitRequests(async () => {
+  const limit =
+    relayLane(new URL(request.url).pathname) === "assets"
+      ? connection.limitAssets
+      : connection.limitRequests;
+  return limit(async () => {
     if (request.signal.aborted) return new Response(null, { status: 499 });
     if (
       connections.get(key(input.sessionId, input.sandboxId, input.port)) !==
