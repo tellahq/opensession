@@ -24,6 +24,7 @@ import {
 } from "../../server/shared/bounded-body";
 import { handleMessageEvent, handleMentionEvent } from "./handlers";
 import { SlackEventInbox } from "./event-inbox";
+import { SlackSocketMode, slackSocketModeEnabled } from "./socket-mode";
 import {
   shouldHandleAppMention,
   shouldHandleDirectMessage,
@@ -137,7 +138,7 @@ function verifyWorktreeSecret(req: Request): boolean {
 
 /**
  * Dispatch a parsed Slack Events API callback. The HTTP `/slack/events`
- * route feeds `event_callback` JSON here so the routing lives in one place,
+ * route and Socket Mode feed `event_callback` JSON here so routing lives in one place,
  * separate from signature verification and the HTTP response.
  */
 export async function dispatchSlackEvent(payload: any): Promise<void> {
@@ -252,7 +253,7 @@ export async function dispatchSlackEvent(payload: any): Promise<void> {
 
 /**
  * Dispatch a parsed Slack interactive payload (Block Kit buttons, modal
- * submits) from the HTTP `/slack/actions` route.
+ * submits) from the HTTP `/slack/actions` route or Socket Mode.
  */
 export async function dispatchSlackInteractive(payload: any): Promise<void> {
   // Handle block_actions (button clicks)
@@ -541,6 +542,7 @@ export function slackOwnsGithubWebhookIntake(): boolean {
 
 export class SlackAgent implements AgentModule {
   name = "slack";
+  private socketMode?: SlackSocketMode;
   getRoutes(): Map<string, (req: Request, url: URL) => Promise<Response>> {
     const routes = new Map<
       string,
@@ -830,10 +832,20 @@ export class SlackAgent implements AgentModule {
       console.log(`[slack] Replaying ${pendingEvents} durable event(s)`);
     }
 
+    if (slackSocketModeEnabled() && !this.socketMode) {
+      this.socketMode = new SlackSocketMode(process.env.SLACK_APP_TOKEN || "", {
+        dispatchEvent: dispatchSlackEvent,
+        dispatchInteractive: dispatchSlackInteractive,
+      });
+      this.socketMode.start();
+    }
+
     console.log("[slack] Agent started");
   }
 
   async shutdown(): Promise<void> {
+    this.socketMode?.stop();
+    this.socketMode = undefined;
     slackEventInbox.stop();
     // A server restart must not masquerade as a person's Stop action. Keep the
     // queue head on disk and let startup continue it against the saved engine
@@ -868,7 +880,8 @@ export class SlackAgent implements AgentModule {
     return {
       status: "operational",
       agent: `${personaName()} (Slack)`,
-      transport: "http",
+      transport: slackSocketModeEnabled() ? "socket" : "http",
+      ...(this.socketMode ? { socketMode: this.socketMode.health() } : {}),
       activeSessions: activeSessions.size,
       activeQueues: sessionQueues.size,
       pendingInboundEvents: slackEventInbox.pendingCount(),
