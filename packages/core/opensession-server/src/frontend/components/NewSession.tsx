@@ -69,6 +69,7 @@ import {
   newSessionDefaultRepo,
   refreshedNewSessionRepo,
   newSessionWorkspaceScope,
+  newSessionWorkspaceDestination,
 } from "../lib/new-session-repo";
 import { NewSessionPrompt } from "./NewSessionPrompt";
 import type { NewSessionPromptHandle } from "../lib/new-session-prompt-types";
@@ -98,6 +99,7 @@ import {
   consumeNewSessionWorkspaceDraft,
   forgetParkedNewSessionWorkspace,
   getParkedNewSessionWorkspaceId,
+  getParkedNewSessionWorkspace,
   rememberParkedNewSessionWorkspace,
 } from "../lib/new-session-workspace-draft";
 import { VoiceInput } from "./VoiceInput";
@@ -943,10 +945,9 @@ export function NewSession({
         if (repo && repo !== NO_REPO) input.repo = repo;
         return createWorkspaceApi(input);
       };
-      const parkedId =
-        sourceWorkspaceId || forceRepo
-          ? null
-          : getParkedNewSessionWorkspaceId();
+      const previousPark =
+        sourceWorkspaceId || forceRepo ? null : getParkedNewSessionWorkspace();
+      const parkedId = previousPark?.repo === repo ? previousPark.id : null;
       const workspace = workspaceId
         ? // Scoped to an existing workspace: update its draft, never rename it.
           await updateWorkspaceApi(workspaceId, { draft })
@@ -965,6 +966,17 @@ export function NewSession({
               throw e;
             })
           : await createWorkspace();
+      if (previousPark && previousPark.id !== workspace.id) {
+        // The composer moved its draft to another repo. Retire only the old
+        // draft, never delete its workspace (another client may have joined it)
+        // or change the repository under any sessions it now contains.
+        await updateWorkspaceApi(previousPark.id, { draft: null }).catch(
+          (e) => {
+            if (!(e instanceof ApiError && e.status === 404)) throw e;
+          },
+        );
+        consumeNewSessionWorkspaceDraft(previousPark.id);
+      }
       if (operation.consumed) {
         // The same prompt started while this request was in flight. A create
         // that adopted this workspace only needs its late draft cleared. When
@@ -976,7 +988,7 @@ export function NewSession({
           await deleteWorkspaceApi(workspace.id);
         }
       } else {
-        if (!workspaceId) rememberParkedNewSessionWorkspace(workspace.id);
+        if (!workspaceId) rememberParkedNewSessionWorkspace(workspace.id, repo);
         // Attachments live in this browser's draft store, not on the server
         // record, so hand them to the workspace composer directly.
         const staged = loadDraft(DRAFT_KEY);
@@ -1038,12 +1050,19 @@ export function NewSession({
       : undefined;
     // A PR source owns its workspace identity too. Prefer its known lane over a
     // parked generic draft; without one, ask the server to mint a PR-named lane.
-    const createWorkspaceId =
+    const candidateWorkspaceId =
       workspaceId ||
       prWorkspaceId ||
       (!selectedPullRequest && !sourceWorkspaceId && !forceRepo
-        ? getParkedNewSessionWorkspaceId() || undefined
+        ? getParkedNewSessionWorkspaceId(repo) || undefined
         : undefined);
+    const createWorkspaceId = newSessionWorkspaceDestination(
+      workspaces,
+      candidateWorkspaceId,
+      createRepo,
+      createMode,
+      selectedPullRequest,
+    );
     const worktreeMode =
       createMode === "ask"
         ? "ask"
@@ -1110,6 +1129,11 @@ export function NewSession({
           }
         : {};
     }
+    // Keep a same-repo source on the wire even when Ask needs a fresh checkout.
+    // The server validates membership and retains the source's ticket/feed
+    // context separately. It must not appear in the optimistic destination.
+    if (candidateWorkspaceId && !createWorkspaceId)
+      createMessage.workspaceId = candidateWorkspaceId;
     if (modelWorkspaceId) createMessage.modelWorkspaceId = modelWorkspaceId;
     // This assignment replaces `selectedPullRequest ? { fromPr: true } : {}`.
     if (selectedPullRequest) createMessage.fromPr = true;

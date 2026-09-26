@@ -1,3 +1,4 @@
+import { canJoinCreateWorkspace } from "../shared/session-create-workspace";
 /**
  * Session creation — the ONE create path shared by the web UI and the
  * opensession-sessions MCP (session-control-wiring.ts).
@@ -2651,18 +2652,30 @@ export async function handleCreateSessionMessage(
     : typeof msg.workspaceId === "string" && msg.workspaceId
       ? await getWorkspace(msg.workspaceId)
       : null;
-  // A ticket-linked create always lands in the ticket's ONE workspace
-  // (adopt-don't-duplicate, workspace-resolve.ts) — even when the
-  // client asked for a fresh workspace, a second workspace for the
-  // same ticket is never right. A createWorkspace name doubles as
-  // the ticket-title hint for a first-time resolve.
+  let sourceWorkspace = workspace;
+  // Never trust a client's destination after its repo or mode changed. Recovery
+  // and forks retain their already-owned membership; fresh creates resolve a
+  // compatible workspace or mint one below, never persist the rejected raw id.
+  const canJoinWorkspace = (candidate: Workspace) =>
+    !!recoveringSession ||
+    !!forkSource ||
+    canJoinCreateWorkspace(candidate, {
+      repo: isRepoLess ? undefined : repo.id,
+      mode: isScratch ? "scratch" : isAsk ? "ask" : "code",
+      fromPr,
+      branch,
+    });
+  if (workspace && !canJoinWorkspace(workspace)) workspace = null;
+  // Prefer the ticket's canonical workspace when it is compatible with this
+  // checkout. Otherwise retain its context without adopting its membership.
+  // A createWorkspace name doubles as the title hint for a first-time resolve.
   const msgPlainThreadId =
     typeof msg.plainThreadId === "string" && msg.plainThreadId
       ? msg.plainThreadId
       : undefined;
   if (msgPlainThreadId && !workspace) {
     try {
-      workspace = (
+      const ticketWorkspace = (
         await resolvePlainWorkspace({
           threadId: msgPlainThreadId,
           title:
@@ -2672,6 +2685,8 @@ export async function handleCreateSessionMessage(
           createdBy: user || "Anonymous",
         })
       ).workspace;
+      sourceWorkspace ??= ticketWorkspace;
+      workspace = canJoinWorkspace(ticketWorkspace) ? ticketWorkspace : null;
     } catch {}
   }
   // Whether this create made a brand-new workspace (vs. adding a session
@@ -2923,11 +2938,7 @@ export async function handleCreateSessionMessage(
     // workspace minted on this path can be auto-named from the
     // generated title below.
     let mintedForSession = false;
-    if (
-      !workspace &&
-      !forkSource?.workspaceId &&
-      !(typeof msg.workspaceId === "string" && msg.workspaceId)
-    ) {
+    if (!workspace && !forkSource?.workspaceId) {
       const plannedWorkspaceId =
         createPlan.workspaceId || createPlanWorkspaceId(bksId);
       if (!createPlan.workspaceId)
@@ -3026,7 +3037,8 @@ export async function handleCreateSessionMessage(
     // inherits the workspace's externalRefs — that's what keeps the
     // Video tab on its sessions and joins the sidebar feed row to the
     // session — and gets the item named in its opening context.
-    const inheritedRefs = workspace?.externalRefs;
+    const openingContextWorkspace = sourceWorkspace ?? workspace;
+    const inheritedRefs = openingContextWorkspace?.externalRefs;
     // Least privilege for feed-workspace sessions: unless the creator
     // explicitly picked servers, the session's MCP allowlist is the
     // feed's declared list (e.g. posthog → ["posthog"]) — never the full
@@ -3047,7 +3059,8 @@ export async function handleCreateSessionMessage(
       if (refsContext)
         openingPrompt += `\n\n${wrapContext(refsContext, "external-refs")}`;
     }
-    const plainThreadId = msgPlainThreadId || workspace?.plainThreadId;
+    const plainThreadId =
+      msgPlainThreadId || openingContextWorkspace?.plainThreadId;
     if (plainThreadId) {
       try {
         const { getThreadWithMessages, formatThreadContext } =
@@ -3121,9 +3134,7 @@ export async function handleCreateSessionMessage(
         : forkSource?.workspaceId
           ? // A fork lands next to its source in the same workspace.
             forkSource.workspaceId
-          : typeof msg.workspaceId === "string" && msg.workspaceId
-            ? msg.workspaceId
-            : undefined,
+          : undefined,
       announceWorkspaceId: workspace?.id,
       createdWorkspaceNow,
       autoNameWorkspace: wsAutoNamed ? workspace : null,

@@ -263,9 +263,14 @@ test("a parked draft keeps the composer copy and carries its attachments", async
   expect(park).toContain("saveDraft(workspaceDraftKey(workspace.id), {");
   expect(park).toContain("images: staged.images,");
   expect(park).toContain("files: staged.files,");
-  // Closing twice updates the workspace the first close made.
-  expect(park).toContain("getParkedNewSessionWorkspaceId()");
-  expect(park).toContain("rememberParkedNewSessionWorkspace(workspace.id)");
+  // Closing twice updates the workspace the first close made, only in its repo.
+  expect(park).toContain("getParkedNewSessionWorkspace()");
+  expect(park).toContain(
+    "previousPark?.repo === repo ? previousPark.id : null",
+  );
+  expect(park).toContain(
+    "rememberParkedNewSessionWorkspace(workspace.id, repo)",
+  );
 });
 
 test("creating a reopened composer consumes its parked draft workspace", async () => {
@@ -282,7 +287,7 @@ test("creating a reopened composer consumes its parked draft workspace", async (
   );
   const successHandler = source.slice(successStart, successEnd);
 
-  expect(createHandler).toContain("getParkedNewSessionWorkspaceId()");
+  expect(createHandler).toContain("getParkedNewSessionWorkspaceId(repo)");
   expect(createHandler).toContain(
     "{ workspaceId: createWorkspaceId, worktreeMode }",
   );
@@ -368,4 +373,34 @@ test("empty creates are idle but any opening input starts a turn", () => {
   expect(
     hasNewSessionOpeningInput({ prompt: "", pastedTexts: ["Task notes"] }),
   ).toBe(true);
+});
+
+test("re-parking across repositories retires the old draft without deleting its workspace", async () => {
+  const source = await Bun.file(
+    new URL("./NewSession.tsx", import.meta.url),
+  ).text();
+  const start = source.indexOf(
+    "if (previousPark && previousPark.id !== workspace.id)",
+  );
+  const cleanup = source.slice(
+    start,
+    source.indexOf("if (operation.consumed)", start),
+  );
+  expect(start).toBeGreaterThan(-1);
+  expect(cleanup).toContain(
+    "updateWorkspaceApi(previousPark.id, { draft: null })",
+  );
+  expect(cleanup).toContain("consumeNewSessionWorkspaceDraft(previousPark.id)");
+  expect(cleanup).not.toContain("deleteWorkspaceApi");
+});
+
+test("a rejected optimistic join still sends the source for server-owned context inheritance", async () => {
+  const source = await Bun.file(
+    new URL("./NewSession.tsx", import.meta.url),
+  ).text();
+  expect(source).toContain("if (candidateWorkspaceId && !createWorkspaceId)");
+  expect(source).toContain("createMessage.workspaceId = candidateWorkspaceId");
+  expect(source).toContain(
+    "if (createWorkspaceId) optimisticCreate.workspaceId = createWorkspaceId",
+  );
 });

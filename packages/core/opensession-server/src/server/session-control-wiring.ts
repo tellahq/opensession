@@ -1,3 +1,4 @@
+import { canJoinCreateWorkspace } from "../shared/session-create-workspace";
 /**
  * Wires the SessionControl registry (src/server/session-control.ts) — the
  * surface behind the opensession-sessions MCP — into the same in-process state and
@@ -843,9 +844,7 @@ registerSessionControl({
     // this path's equivalent of the web tab strip's "+"). An unknown id is a
     // hard error: falling back to a standalone create would silently mint the
     // duplicate sidebar row the caller asked to avoid.
-    const joinedWorkspace = workspaceId
-      ? await getWorkspace(workspaceId)
-      : null;
+    let joinedWorkspace = workspaceId ? await getWorkspace(workspaceId) : null;
     if (workspaceId && !joinedWorkspace) {
       throw new Error(`No such workspace: ${workspaceId}`);
     }
@@ -865,6 +864,20 @@ registerSessionControl({
         parentRepoContext?.repo ||
         parentSession?.repo,
     );
+    const sourceWorkspace = joinedWorkspace;
+    // Interactive/native joins obey the same destination boundary as the web
+    // palette. Child reviewers and forks retain their source checkout context.
+    if (
+      joinedWorkspace &&
+      !parentSession &&
+      !fork &&
+      !completedCreate &&
+      !canJoinCreateWorkspace(joinedWorkspace, {
+        repo: isRepoLess ? undefined : repo.id,
+        mode: isScratch ? "scratch" : isAsk ? "ask" : "code",
+      })
+    )
+      joinedWorkspace = null;
     const requestedRunnerId =
       typeof runnerInput === "string" && runnerInput.trim()
         ? runnerInput.trim()
@@ -911,9 +924,10 @@ registerSessionControl({
       ? await getWorkspace(parentSession.workspaceId)
       : null;
     // The workspace this session lands in: the one it explicitly joins, else the
-    // parent's. Everything a session inherits from its workspace — repo context,
-    // worktree, feed refs and their MCP scoping — reads from this.
+    // parent's. Checkout selection reads only the compatible destination.
     const contextWorkspace = joinedWorkspace ?? parentWorkspace;
+    // A rejected join can still supply the ticket/feed that prompted the create.
+    const openingContextWorkspace = sourceWorkspace ?? contextWorkspace;
     // Least privilege: sessions in feed-item workspaces default their MCP
     // allowlist to the feed's declared servers, else inherit the parent's
     // scoping — never widen back to the full mcp-config.
@@ -921,9 +935,10 @@ registerSessionControl({
     const effectiveMcpServers =
       mcpServers !== undefined
         ? mcpServers
-        : contextWorkspace?.externalRefs?.length
-          ? ((await feedMcpServersForRefs(contextWorkspace.externalRefs)) ??
-            parentSession?.mcpServers)
+        : openingContextWorkspace?.externalRefs?.length
+          ? ((await feedMcpServersForRefs(
+              openingContextWorkspace.externalRefs,
+            )) ?? parentSession?.mcpServers)
           : parentSession?.mcpServers;
 
     let wtPath: string;
@@ -1221,19 +1236,19 @@ ${createMentionsNote}`;
     // same as the web create: the feed item it hangs off, and the support
     // ticket it belongs to. Without this a "new tab" in a ticket workspace is
     // an amnesiac session that has to be told what it's looking at.
-    if (joinedWorkspace) {
+    if (sourceWorkspace) {
       const { wrapContext } = await import("./prompt-context");
-      if (joinedWorkspace.externalRefs?.length) {
+      if (sourceWorkspace.externalRefs?.length) {
         const { externalRefsOpeningContext } = await import("./feeds");
         const refsContext = await externalRefsOpeningContext(
-          joinedWorkspace.externalRefs,
+          sourceWorkspace.externalRefs,
           { scratch: isScratch, user },
         );
         if (refsContext)
           openingPrompt += `\n\n${wrapContext(refsContext, "external-refs")}`;
       }
-      if (joinedWorkspace.plainThreadId) {
-        const threadId = joinedWorkspace.plainThreadId;
+      if (sourceWorkspace.plainThreadId) {
+        const threadId = sourceWorkspace.plainThreadId;
         try {
           const { getThreadWithMessages, formatThreadContext } =
             await import("../agents/plain/api");
@@ -1308,10 +1323,10 @@ ${createMentionsNote}`;
       attachments: openingAttachments,
       // Feed-item linkage follows the session's workspace (Video tab +
       // sidebar feed-row join — the feeds design).
-      externalRefs: contextWorkspace?.externalRefs,
+      externalRefs: openingContextWorkspace?.externalRefs,
       // A session in a support-ticket workspace is on that ticket too —
       // same rule as the web tab strip's "+".
-      plainThreadId: joinedWorkspace?.plainThreadId,
+      plainThreadId: sourceWorkspace?.plainThreadId,
       plainDiscussionId,
       slackOrigin,
       // Persist the MCP scoping so follow-up prompts keep it.
