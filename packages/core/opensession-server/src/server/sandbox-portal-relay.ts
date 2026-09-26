@@ -247,7 +247,11 @@ function forgetLocalAddress(relay: Relay): void {
 }
 
 /** The loopback URLs of this session's relayed Sandbox Portals, by Portal
- *  name, as recorded for agent shells on this machine. Never throws. */
+ *  name, as recorded for agent shells on this machine, spelled with
+ *  `localhost`: dev servers such as Next refuse their scripts to a page
+ *  opened on 127.0.0.1 unless it is an allowed dev origin, and allow
+ *  localhost by default. The record keeps 127.0.0.1, which scripts parse.
+ *  Never throws. */
 export async function sandboxPortalLocalUrls(
   sessionId: string,
 ): Promise<Map<string, string>> {
@@ -259,7 +263,10 @@ export async function sandboxPortalLocalUrls(
       try {
         const record = JSON.parse(await readFile(join(dir, file), "utf8"));
         if (typeof record?.name === "string" && typeof record.url === "string")
-          out.set(record.name, record.url);
+          out.set(
+            record.name,
+            record.url.replace(/^http:\/\/127\.0\.0\.1:/, "http://localhost:"),
+          );
       } catch {}
     }
   } catch {}

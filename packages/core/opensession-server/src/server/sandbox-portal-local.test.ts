@@ -36,8 +36,9 @@ test("records a Sandbox Portal's loopback address for shells on this machine", a
   const { name, port, url } = JSON.parse(readFileSync(record, "utf8"));
   expect({ name, port }).toEqual({ name: "web", port: 4000 });
   expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+  // Shown with localhost, which dev servers accept as a page origin.
   expect(await sandboxPortalLocalUrls("os-local")).toEqual(
-    new Map([["web", url]]),
+    new Map([["web", url.replace("127.0.0.1", "localhost")]]),
   );
   // A caller that does not know the name keeps the recorded one.
   await ensureSandboxPortalRelay(identity);
