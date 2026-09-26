@@ -509,11 +509,11 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     writeSessionFile(sid, { model });
     sessionCache.invalidateSessionsCache();
     const session = sessionCache.findSession(sid)!;
-    expect(slashCommands.handleSlashCommand(session, "/fallback")).toContain(
-      "is on",
-    );
     expect(
-      slashCommands.handleSlashCommand(session, "/fallback off"),
+      await slashCommands.handleSlashCommand(session, "/fallback"),
+    ).toContain("is on");
+    expect(
+      await slashCommands.handleSlashCommand(session, "/fallback off"),
     ).toContain("Auto-fallback off");
     // Await the same session's command lane before reading its projection.
     await sessionCache.updateSessionFile(sid, (data) => data);
@@ -528,9 +528,9 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     expect(fake.calls[0].model).toBe(model);
     expect(sessionJson(sid).model).toBe(model);
     expect(sessionJson(sid).autoFallbackModel).toBeUndefined();
-    expect(slashCommands.handleSlashCommand(session, "/fallback on")).toContain(
-      "Auto-fallback on",
-    );
+    expect(
+      await slashCommands.handleSlashCommand(session, "/fallback on"),
+    ).toContain("Auto-fallback on");
     await sessionCache.updateSessionFile(sid, (data) => data);
     expect(sessionJson(sid).autoFallback).toBe(true);
   });
@@ -546,7 +546,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
     const session = sessionCache.findSession(sid);
     expect(session).toBeDefined();
 
-    const notice = slashCommands.handleSlashCommand(
+    const notice = await slashCommands.handleSlashCommand(
       session!,
       "/model dial/high",
       "Test",

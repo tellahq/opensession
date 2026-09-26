@@ -2000,6 +2000,7 @@ export async function openCreatedSession(
               mcpServers: openingTrust.mcpServers,
               proxyMcpServers: Object.keys(openingMcp),
               reposNote: openingReposNote,
+              reposNoteHasPreset: !automationChild && !!spec.presetNote,
               images: spec.images,
               ...(spec.fork
                 ? {
@@ -2514,7 +2515,7 @@ export async function handleCreateSessionMessage(
   // disengage the dial (the preset id must be what the session stores).
   const workspacePreset = forkSource
     ? undefined
-    : resolveWorkspaceModelPreset(
+    : await resolveWorkspaceModelPreset(
         msg.model,
         msg.workspaceId ?? msg.modelWorkspaceId,
       );

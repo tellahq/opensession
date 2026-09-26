@@ -104,6 +104,7 @@ describe("unattended workflow swarm integration", () => {
     let next = 0;
     let activeCreates = 0;
     let maxActiveCreates = 0;
+    const firstPairEntered = Promise.withResolvers<void>();
 
     const control = {
       getSession: (id: string) => sessions.get(id),
@@ -111,7 +112,10 @@ describe("unattended workflow swarm integration", () => {
         creates.push(input);
         activeCreates++;
         maxActiveCreates = Math.max(maxActiveCreates, activeCreates);
-        await Bun.sleep(2);
+        // Prove actual overlap without depending on admission fitting inside
+        // a timer window. Only the first pair waits; later refills run freely.
+        if (creates.length === 2) firstPairEntered.resolve();
+        if (creates.length <= 2) await firstPairEntered.promise;
         const id = `child-${++next}`;
         const branch = input.branch || `swarm-${next}`;
         const descendant = input.automationDescendantPolicy;

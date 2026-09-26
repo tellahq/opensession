@@ -379,3 +379,15 @@ test("interactive fallback is on by default and a session can opt out", () => {
     ).toEqual([]);
   }
 });
+
+test("picker preset ids retain their identity rather than resolving to the lead at selection", () => {
+  for (const id of [
+    "pi/dial/high",
+    "pi/dial/opus-fable",
+    "pi/orchestrator/fable",
+  ]) {
+    expect(resolveModel(id)?.id).toBe(id);
+    expect(toPiModel(id)).not.toBe(id);
+  }
+  expect(resolveModel("pi/orchestrator/missing")).toBeNull();
+});

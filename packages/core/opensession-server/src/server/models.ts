@@ -1407,15 +1407,16 @@ export function resolveModel(input: string): ModelInfo | null {
       model.id.split("/").at(-1)?.toLowerCase() === pickerAlias,
   );
   if (pickerMatches.length === 1) return pickerMatches[0];
-  if (value.startsWith("dial/") || value.startsWith("orchestrator/")) {
-    const preset = modelPreset(value);
+  const presetId = value.startsWith("pi/") ? value.slice(3) : value;
+  if (presetId.startsWith("dial/") || presetId.startsWith("orchestrator/")) {
+    const preset = modelPreset(presetId);
     return preset
       ? {
-          id: preset.id,
+          id: value.startsWith("pi/") ? `pi/${preset.id}` : preset.id,
           provider: "pi",
           label: preset.label,
           aliases: [],
-          group: value.split("/")[0],
+          group: presetId.split("/")[0],
           description: preset.description,
         }
       : null;

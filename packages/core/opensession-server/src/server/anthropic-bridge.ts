@@ -30,7 +30,7 @@
  *
  * Containment (all enforced here, not in prompts):
  *  - Never starts unless an engine that uses it is enabled (Pi's
- *    ~/.opensession-model-providers.json or pi's ~/.opensession-pi.json) and at
+ *    ~/.opensession/model-providers.json or pi's ~/.opensession/pi.json) and at
  *    least one Claude account exists to serve on.
  *  - Account pick per request (pickBridgeAccount): when Pi's
  *    `bridgeAccountIds` designates accounts, ONLY those serve (legacy
@@ -86,8 +86,12 @@ import {
   type ClaudeAccount,
 } from "./claude-accounts";
 import { CLAUDE_CODE_BIN } from "./runner-shared";
-import { bridgePort, readModelProviderConfig } from "./model-providers";
-import { readPiEngineConfig } from "./pi-config";
+import {
+  bridgePort,
+  readModelProviderConfig,
+  configPath as modelProvidersConfigPath,
+} from "./model-providers";
+import { readPiEngineConfig, piConfigPath } from "./pi-config";
 import { mkdirSync } from "fs";
 
 const HOME = homeDir();
@@ -137,8 +141,8 @@ export function bridgeDesignationError(): string | null {
   const piCfg = readPiEngineConfig();
   if (!cfg?.enabled && !piCfg?.enabled) {
     return (
-      "The Anthropic bridge is disabled. Enable it in ~/.opensession-model-providers.json " +
-      '({"enabled": true}) or, for pi/anthropic/* models, in ~/.opensession-pi.json ' +
+      `The Anthropic bridge is disabled. Enable it in ${modelProvidersConfigPath()} ` +
+      `({"enabled": true}) or, for pi/anthropic/* models, in ${piConfigPath()} ` +
       '({"enabled": true}) — or use an API-key provider configured via `Pi auth login` instead.'
     );
   }
@@ -146,7 +150,7 @@ export function bridgeDesignationError(): string | null {
   if (ocIds.length || hasAccounts()) return null;
   return (
     "The Anthropic bridge has no accounts to serve on: add a Claude account in " +
-    "Settings → Providers (or designate bridgeAccountIds in ~/.opensession-model-providers.json)."
+    `Settings → Providers (or designate bridgeAccountIds in ${modelProvidersConfigPath()}).`
   );
 }
 

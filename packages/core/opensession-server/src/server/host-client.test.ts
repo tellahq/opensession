@@ -1316,6 +1316,7 @@ describe("local run-host capability", () => {
       cwd: "/tmp",
     };
     const lateConnection = Promise.withResolvers<HostConnection>();
+    const lateClosed = Promise.withResolvers<void>();
     let lateHandlers: HostConnectionHandlers | undefined;
     let liveHandlers: HostConnectionHandlers | undefined;
     const closed: string[] = [];
@@ -1367,8 +1368,11 @@ describe("local run-host capability", () => {
     await handle.connectWithWait(100);
     const events = handle.events();
     liveHandlers!.onClose();
-    // Attempt 2 stalls past its budget; attempt 3 must still happen.
-    await Bun.sleep(60);
+    // Attempt 2 stalls past its budget; wait for attempt 3 to be adopted,
+    // not merely entered (the connector resolves before up becomes true).
+    const deadline = Date.now() + 1_000;
+    while ((connects < 3 || !(handle as any).up) && Date.now() < deadline)
+      await Bun.sleep(1);
     expect(connects).toBe(3);
     expect((handle as any).up).toBe(true);
 
@@ -1378,9 +1382,12 @@ describe("local run-host capability", () => {
         sent.push({ via: "late", msg });
         return true;
       },
-      close: () => closed.push("late"),
+      close: () => {
+        closed.push("late");
+        lateClosed.resolve();
+      },
     });
-    await Bun.sleep(5);
+    await lateClosed.promise;
     expect(closed).toEqual(["late"]);
     lateHandlers!.onMsg({ t: "end", done: { type: "done", result: "stale" } });
     lateHandlers!.onClose();
@@ -1510,7 +1517,10 @@ describe("local run-host capability", () => {
     await handle.connectWithWait(100);
     const events = handle.events();
     liveHandlers!.onClose();
-    await Bun.sleep(40);
+    // Wait for the replacement connection to be adopted, not just entered.
+    const deadline = Date.now() + 1_000;
+    while ((connects < 3 || !(handle as any).up) && Date.now() < deadline)
+      await Bun.sleep(1);
     expect(connects).toBe(3);
     expect((handle as any).up).toBe(true);
 

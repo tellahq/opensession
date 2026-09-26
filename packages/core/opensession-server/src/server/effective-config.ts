@@ -349,7 +349,7 @@ export async function buildSessionEffectiveConfig(
   const preset =
     dialPreset(requestedModel) ??
     orchestratorPreset(requestedModel) ??
-    resolveWorkspaceModelPreset(requestedModel, session.workspaceId);
+    (await resolveWorkspaceModelPreset(requestedModel, session.workspaceId));
   const model: Record<string, ConfigRow> = {
     requested: row(
       requestedModel,

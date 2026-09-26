@@ -28,6 +28,10 @@
 
 import type { McpScope } from "./runner-shared";
 import { audit } from "./audit";
+import {
+  portableWorkspacePresetRun,
+  resolveWorkspaceModelPreset,
+} from "./workspace-model-presets";
 import { waitForRunHostAdmission } from "./host-admission";
 import {
   isRetryableSessionCommandError,
@@ -223,6 +227,7 @@ export interface HostedRunOpts {
   mode?: "ask" | "code" | "scratch";
   mcpGrantUser?: string;
   model?: string;
+  selectedModel?: string;
   images?: ImageInput[];
   forkSession?: boolean;
   resumeSessionAt?: string;
@@ -237,6 +242,8 @@ export interface HostedRunOpts {
    *  machine's upload paths (see RunHostSpec.files). */
   files?: PromptFile[];
   reposNote?: string;
+  /** reposNote already carries the session's captured workspace preset note. */
+  reposNoteHasPreset?: boolean;
   deniedTools?: Record<string, string>;
   publicationPolicy?: { repo: string; branch: string; headBranch: string };
   confirmTools?: Record<string, string>;
@@ -284,6 +291,28 @@ export interface HostedRunOpts {
     | undefined;
 }
 
+/** Resolve on the gateway before crossing into a host that has no catalog actor.
+ * Both opening turns and continuations use this boundary, as do auxiliary runs. */
+export async function resolveHostedRunOptions(
+  opts: HostedRunOpts,
+): Promise<HostedRunOpts> {
+  if (!/^(?:pi\/)?workspace-preset\//.test(opts.model || "")) return opts;
+  const preset = await resolveWorkspaceModelPreset(opts.model);
+  if (!preset)
+    throw new Error(
+      `Cannot resolve workspace model preset "${opts.model}". Check the workspace model settings.`,
+    );
+  return {
+    ...opts,
+    ...portableWorkspacePresetRun(preset),
+    // Interactive callers already put the session's captured preset note in
+    // reposNote. Keep that snapshot, even after the workspace is edited.
+    reposNote: opts.reposNoteHasPreset
+      ? opts.reposNote
+      : [preset.note, opts.reposNote].filter(Boolean).join("\n\n"),
+  };
+}
+
 /**
  * Run a prompt in a detached run host, yielding the same StreamEvents as
  * runAgent. A Linux host never falls back into the gateway: launch failure is
@@ -293,6 +322,7 @@ export async function* runAgentHosted(
   opts: HostedRunOpts,
 ): AsyncGenerator<StreamEvent> {
   if (opts.shouldCancel?.()) return;
+  opts = await resolveHostedRunOptions(opts);
   if (!runHostsEnabled()) {
     if (localRunHostsSupported()) {
       throw new Error(
@@ -368,6 +398,8 @@ export async function* runAuxiliaryAgentHosted(
 ): AsyncGenerator<StreamEvent> {
   const shouldCancel = () =>
     Boolean(opts.signal?.aborted || opts.shouldCancel?.());
+  if (shouldCancel()) return;
+  opts = { ...opts, ...(await resolveHostedRunOptions(opts)) };
   if (!runHostsEnabled()) {
     if (localRunHostsSupported()) {
       throw new Error(
@@ -453,6 +485,7 @@ async function* runAgentInProcess(
       mode: opts.mode,
       mcpGrantUser: opts.mcpGrantUser,
       model: opts.model,
+      selectedModel: opts.selectedModel,
       images: opts.images,
       forkSession: opts.forkSession,
       resumeSessionAt: opts.resumeSessionAt,
@@ -663,6 +696,7 @@ async function spawnHostRun(
     mode: opts.mode,
     mcpGrantUser: opts.mcpGrantUser,
     model: opts.model,
+    selectedModel: opts.selectedModel,
     images: opts.images,
     files: opts.files,
     forkSession: opts.forkSession,

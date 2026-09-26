@@ -1,7 +1,7 @@
 /**
  * Config for the pi engine (pi.dev's coding agent, served by pi-runner.ts).
  *
- * File: ~/.opensession-pi.json — missing or `enabled: false` means the pi
+ * File: ~/.opensession/pi.json — missing or `enabled: false` means the pi
  * engine is OFF everywhere at once: the Engine choice is hidden and the
  * runner refuses to start a turn with a clear config error. Deliberately
  * config-driven, never an env flag; the

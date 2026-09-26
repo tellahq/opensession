@@ -2219,6 +2219,7 @@ export async function maybeLaunchSandboxedRun(
       reposNote: opts.isAutomationSession
         ? undefined
         : await buildSessionNote(session, opts.user),
+      reposNoteHasPreset: !opts.isAutomationSession && !!session.presetNote,
       deniedTools: opts.deniedTools,
       publicationPolicy: security.publicationPolicy,
       confirmTools: STRIPE_CONFIRM_TOOLS,
@@ -3315,6 +3316,7 @@ async function runSessionPromptInner(
           reposNote: isAutomationSession
             ? undefined
             : await buildSessionNote(session, user),
+          reposNoteHasPreset: !isAutomationSession && !!session.presetNote,
           deniedTools,
           publicationPolicy: session.automationDescendantPolicy
             ? {

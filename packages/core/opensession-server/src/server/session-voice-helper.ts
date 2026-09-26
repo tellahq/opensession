@@ -90,11 +90,11 @@ export async function askSessionVoiceHelper(
  * preset's pinned effort taking precedence over the session's own. This is
  * the same resolution effective-config and the Pi runner apply; a client may
  * not name an arbitrary model here. */
-export function sessionConversationModel(
+export async function sessionConversationModel(
   session: Pick<UnifiedSession, "model" | "effort">,
-): { model: string; effort?: SessionEffort } {
+): Promise<{ model: string; effort?: SessionEffort }> {
   const requested = session.model?.trim() || interactiveDefaultModel();
-  const resolved = resolvePiRoutedModel(
+  const resolved = await resolvePiRoutedModel(
     toPiModel(requested) || requested,
     requested,
   );
@@ -118,7 +118,7 @@ export async function askSessionConversationModel(
   context: string,
   user?: string,
 ): Promise<SessionVoiceHelperAnswer> {
-  const selection = sessionConversationModel(session);
+  const selection = await sessionConversationModel(session);
   const result = await oneShotDetailed(
     JSON.stringify({ question: prompt, transcript: context }),
     {

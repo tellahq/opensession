@@ -1378,7 +1378,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
           maybePersistFastMode(session, msg.fastMode);
 
           // Slash commands are handled by opensession itself
-          const notice = handleSlashCommand(
+          const notice = await handleSlashCommand(
             session,
             String(content || "").trim(),
             user,
