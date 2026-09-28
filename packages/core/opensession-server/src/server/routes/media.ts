@@ -40,6 +40,7 @@ export async function handleMediaRoutes(
       ".jpeg": "image/jpeg",
       ".gif": "image/gif",
       ".webp": "image/webp",
+      ".svg": "image/svg+xml",
     };
     const ext = mediaPath.slice(mediaPath.lastIndexOf(".")).toLowerCase();
     const scoped =
@@ -74,6 +75,16 @@ export async function handleMediaRoutes(
       "Content-Type": type,
       "Accept-Ranges": "bytes",
       "Cache-Control": "private, max-age=60",
+      // An SVG is a document that can carry script. Inside an <img> it never
+      // runs, but opening this URL in a tab would run it on our origin, so
+      // the response is sandboxed into an opaque origin with no script.
+      ...(ext === ".svg"
+        ? {
+            "Content-Security-Policy":
+              "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox",
+            "X-Content-Type-Options": "nosniff",
+          }
+        : {}),
       ...(asAttachment
         ? {
             "Content-Disposition": `attachment; filename="${mediaPath

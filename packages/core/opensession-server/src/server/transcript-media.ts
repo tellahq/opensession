@@ -297,11 +297,12 @@ export function extractImageMarkers(text: string): string[] {
 // absolute paths that actually exist on disk (a diff's `b/logo.png` or a
 // source file's "/assets/x.png" never render), remote candidates must be
 // clean URLs ending in a media extension, and both are capped per entry.
-const IMAGE_EXT = /\.(?:png|jpe?g|gif|webp)$/i;
+const IMAGE_EXT = /\.(?:png|jpe?g|gif|webp|svg)$/i;
 // `*` and `_` sit in both boundaries so a path a person emphasised
-// (`**/tmp/shot.png**`) reads the same as a bare one.
+// (`**/tmp/shot.png**`) reads the same as a bare one. SVG is local-only:
+// remote `.svg` URLs are mostly README badges, not session artifacts.
 const LOCAL_MEDIA_RE =
-  /(?:^|[\s"'`(=*_])(\/[^\s"'`)\]},;]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|m4v))(?=$|[\s"'`)\]},;:*_])/gim;
+  /(?:^|[\s"'`(=*_])(\/[^\s"'`)\]},;]+\.(?:png|jpe?g|gif|webp|svg|mp4|webm|mov|m4v))(?=$|[\s"'`)\]},;:*_])/gim;
 const REMOTE_MEDIA_RE =
   /(https?:\/\/[^\s"'`)\]}>,;]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|m4v)(?:\?[^\s"'`)\]}>,;]*)?)/gi;
 const IMPLICIT_MEDIA_CAP = 6;
@@ -343,6 +344,50 @@ export function extractImplicitMedia(text: string): {
   return { images, videos };
 }
 
+// `![alt](/abs/path.png)`: agents write markdown images straight at a file on
+// disk. The browser would resolve that path against our origin and get the
+// app shell back, so the image rendered broken where it stood.
+const LOCAL_MARKDOWN_IMAGE_RE =
+  /(?<!`)(!\[[^\]\n]*\]\()(\/[^)\s]+\.(?:png|jpe?g|gif|webp|svg|mp4|webm|mov|m4v))((?:\s+"[^"\n]*")?\))/gi;
+const FENCE_RE = /^\s*(```|~~~)/;
+
+/**
+ * Points markdown images that name an existing local file at the `/media`
+ * route. Fenced code is left alone: it is quoted, not rendered.
+ */
+export function placeLocalMarkdownImages(text: string): {
+  content: string;
+  images: string[];
+  videos: string[];
+} {
+  const images: string[] = [];
+  const videos: string[] = [];
+  if (!text || !text.includes("](/")) return { content: text, images, videos };
+  let fence: string | null = null;
+  const lines = text.split("\n").map((line) => {
+    const f = FENCE_RE.exec(line)?.[1];
+    if (f && (!fence || fence === f)) {
+      fence = fence ? null : f;
+      return line;
+    }
+    if (fence) return line;
+    return line.replace(
+      LOCAL_MARKDOWN_IMAGE_RE,
+      (whole, open: string, path: string, close: string) => {
+        try {
+          if (path.includes("..") || !existsSync(path)) return whole;
+        } catch {
+          return whole;
+        }
+        const url = mediaUrlFor(path);
+        (IMAGE_EXT.test(path) ? images : videos).push(url);
+        return `${open}${url}${close}`;
+      },
+    );
+  });
+  return { content: lines.join("\n"), images, videos };
+}
+
 /**
  * An assistant message's media. Markers stay in the text, rewritten in place
  * (placeMediaMarkers); the entry's images[]/videos[] still carry every one of
@@ -361,14 +406,16 @@ export function extractAssistantVideos(text: string): {
   images: string[];
   featuredMedia: string[];
 } {
-  const placed = placeMediaMarkers(text);
+  const markers = placeMediaMarkers(text);
+  const local = placeLocalMarkdownImages(markers.content);
+  const placed = { ...markers, content: local.content };
   // Implicit mentions render too (markers stay the explicit override; the
   // Set-union keeps a marker + bare mention of the same file to one embed).
   // Scanned on the rewritten text: a placed `/media?path=` URL is not a bare
   // path, so nothing is counted twice.
   const implicit = extractImplicitMedia(placed.content);
-  const vset = new Set(placed.videos);
-  const iset = new Set(placed.images);
+  const vset = new Set([...placed.videos, ...local.videos]);
+  const iset = new Set([...placed.images, ...local.images]);
   for (const v of implicit.videos) vset.add(v);
   for (const i of implicit.images) iset.add(i);
   return {

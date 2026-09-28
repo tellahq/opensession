@@ -131,7 +131,7 @@ function extractImages(content: any): string[] {
 const UPLOADS_NOTE_RE =
   /\s*\[The user attached \d+ file\(s\), saved to disk — read them with your file tools if relevant:\n([\s\S]*?)\n\]\s*$/;
 const UPLOAD_VIDEO_EXT_RE = /\.(mp4|webm|mov)$/i;
-const UPLOAD_IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp)$/i;
+const UPLOAD_IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|svg)$/i;
 
 function extractUploadsNote(text: string): {
   text: string;

@@ -10,25 +10,11 @@ import {
   loadKeptFrame,
   showKeptFrame,
   subscribeKeptFrames,
-  stepKeptFrame,
 } from "../lib/kept-frames";
-import {
-  type BrowserHistory,
-  canStep,
-  currentAddress,
-  startHistory,
-  stepHistory,
-  visitAddress,
-} from "../lib/browser-history";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { PageLoader } from "../ui/page-loader";
-import {
-  IconArrowUpRight,
-  IconChevronLeft,
-  IconChevronRight,
-  IconRestore,
-} from "./icons";
+import { IconArrowUpRight, IconRestore } from "./icons";
 
 /**
  * What the person typed, as a URL the frame can load. A bare host gets https,
@@ -71,8 +57,7 @@ interface BrowserPaneProps {
 }
 
 /**
- * A framed page with a browser's toolbar: back and forward, reload, an
- * address bar, and a
+ * A framed page with a browser's toolbar: an address bar, reload, and a
  * break-out to a real browser tab. Portals and preview deployments share it.
  */
 export function BrowserPane(props: BrowserPaneProps) {
@@ -97,18 +82,17 @@ function OwnedBrowserPane({
   // The frame's own navigation is cross-origin and invisible to us, so the
   // address bar tracks what this pane loaded: the given URL, or one typed in.
   const [base, setBase] = useState(url);
-  const [history, setHistory] = useState(() => startHistory(url));
+  const [address, setAddress] = useState(url);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [loading, setLoading] = useState(true);
   if (base !== url) {
     setBase(url);
-    setHistory(startHistory(url));
+    setAddress(url);
     setLoading(true);
   }
-  const address = currentAddress(history);
 
-  function show(next: BrowserHistory) {
-    setHistory(next);
+  function load(next: string) {
+    setAddress(next);
     setLoading(true);
     setReloadNonce((nonce) => nonce + 1);
   }
@@ -117,9 +101,8 @@ function OwnedBrowserPane({
     <div className={BROWSER_PANE}>
       <BrowserToolbar
         name={name}
-        history={history}
-        onLoad={(next) => show(visitAddress(history, next))}
-        onStep={(delta) => show(stepHistory(history, delta))}
+        address={address}
+        onLoad={load}
         leading={leading}
         actions={actions}
         openWindowName={openWindowName}
@@ -171,9 +154,8 @@ function KeptBrowserPane({
     <div className={BROWSER_PANE}>
       <BrowserToolbar
         name={name}
-        history={frame?.url === url ? frame.history : startHistory(url)}
+        address={frame?.url === url ? frame.address : url}
         onLoad={(next) => loadKeptFrame(key, next)}
-        onStep={(delta) => stepKeptFrame(key, delta)}
         leading={leading}
         actions={actions}
         openWindowName={openWindowName}
@@ -200,22 +182,19 @@ export function BrowserLoading({ name }: { name: string }) {
 
 function BrowserToolbar({
   name,
-  history,
+  address,
   onLoad,
-  onStep,
   leading,
   actions,
   openWindowName = "_blank",
 }: {
   name: string;
-  history: BrowserHistory;
+  address: string;
   onLoad: (address: string) => void;
-  onStep: (delta: -1 | 1) => void;
   leading?: ReactNode;
   actions?: ReactNode;
   openWindowName?: string;
 }) {
-  const address = currentAddress(history);
   const [shown, setShown] = useState(address);
   const [draft, setDraft] = useState(address);
   if (shown !== address) {
@@ -226,24 +205,6 @@ function BrowserToolbar({
   return (
     <div className="flex min-h-11 items-center gap-1.5 border-b border-divider px-3 py-1.5">
       {leading}
-      <Button
-        variant="ghost"
-        size="md"
-        icon={<IconChevronLeft size={16} />}
-        onClick={() => onStep(-1)}
-        disabled={!canStep(history, -1)}
-        aria-label={`Back in ${name}`}
-        title="Back"
-      />
-      <Button
-        variant="ghost"
-        size="md"
-        icon={<IconChevronRight size={16} />}
-        onClick={() => onStep(1)}
-        disabled={!canStep(history, 1)}
-        aria-label={`Forward in ${name}`}
-        title="Forward"
-      />
       <Button
         variant="ghost"
         size="md"
