@@ -1157,7 +1157,6 @@ export function AppContent({
         currentPortalTarget: workspacePanes.currentPortalTarget,
         subagentActive: workspacePanes.subagentActive,
         terminalOpen: workspacePanes.terminalOpen,
-        stagingOpen: workspacePanes.stagingOpen,
         closeStagingTab: workspacePanes.closeStagingTab,
         closeAssetsTab: workspacePanes.closeAssetsTab,
         closeTerminalTab: workspacePanes.closeTerminalTab,

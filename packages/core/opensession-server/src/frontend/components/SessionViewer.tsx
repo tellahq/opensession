@@ -475,8 +475,7 @@ export function SessionViewer({
     showTerminal = false,
     onCloseTerminal,
     terminalTabOpen = false,
-    stagingTabOpen = false,
-    portalTabOpen = false,
+    frameScope,
     showConversation = false,
     conversationThreadId = null,
     showVideo = false,
@@ -1668,6 +1667,7 @@ export function SessionViewer({
             showVideo,
             subagentOpen,
             conversationThreadId,
+            frameScope,
           }}
           panes={{
             assetFiles,
@@ -1683,11 +1683,7 @@ export function SessionViewer({
             nameSubagent,
             hasWorkspace,
             waitingForWorkspace,
-            openTabs: {
-              terminal: terminalTabOpen,
-              staging: stagingTabOpen,
-              portal: portalTabOpen,
-            },
+            terminalTabOpen,
             previewStatus,
           }}
           review={{

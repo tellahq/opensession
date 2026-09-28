@@ -3,6 +3,7 @@ import {
   getActiveViewTabKeys,
   type ActiveViewTab,
 } from "../lib/active-view-tab";
+import { dropKeptFrame, keptFrameKey } from "../lib/kept-frames";
 import type { PortalTarget } from "../lib/portals";
 
 export function useOnDemandViewTabs({
@@ -57,6 +58,7 @@ export function useOnDemandViewTabs({
   }
   function closePortalTab() {
     if (workspaceKey) {
+      dropKeptFrame(keptFrameKey("portal", workspaceKey));
       setPortalTargets((prev) => {
         if (!prev[workspaceKey]) return prev;
         const next = { ...prev };
@@ -69,6 +71,7 @@ export function useOnDemandViewTabs({
   function closeStagingTab() {
     if (workspaceKey) {
       const key = workspaceKey;
+      dropKeptFrame(keptFrameKey("staging", key));
       setStagingOpen((prev) => {
         if (!prev.has(key)) return prev;
         const next = new Set(prev);

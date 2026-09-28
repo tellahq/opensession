@@ -1,4 +1,16 @@
-import { type ReactNode, useState } from "react";
+import {
+  type ReactNode,
+  useLayoutEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import {
+  getKeptFrame,
+  hideKeptFrame,
+  loadKeptFrame,
+  showKeptFrame,
+  subscribeKeptFrames,
+} from "../lib/kept-frames";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { PageLoader } from "../ui/page-loader";
@@ -25,20 +37,7 @@ export function browserAddress(input: string): string | null {
   }
 }
 
-/**
- * A framed page with a browser's toolbar: an address bar, reload, and a
- * break-out to a real browser tab. Portals and preview deployments share it.
- */
-export function BrowserPane({
-  url,
-  name,
-  frameTitle,
-  leading,
-  actions,
-  openWindowName = "_blank",
-  allow,
-  sandbox,
-}: {
+interface BrowserPaneProps {
   url: string;
   /** Names the page in control labels ("Reload Simulator"). */
   name: string;
@@ -50,89 +49,69 @@ export function BrowserPane({
   openWindowName?: string;
   allow?: string;
   sandbox?: string;
-}) {
+  /**
+   * Keeps the page loaded after this pane unmounts, so coming back to it
+   * (another tab, another session) finds it where it was. See kept-frames.ts.
+   */
+  keepAliveKey?: string;
+}
+
+/**
+ * A framed page with a browser's toolbar: an address bar, reload, and a
+ * break-out to a real browser tab. Portals and preview deployments share it.
+ */
+export function BrowserPane(props: BrowserPaneProps) {
+  return props.keepAliveKey ? (
+    <KeptBrowserPane {...props} keepAliveKey={props.keepAliveKey} />
+  ) : (
+    <OwnedBrowserPane {...props} />
+  );
+}
+
+/** The frame lives and dies with this pane. */
+function OwnedBrowserPane({
+  url,
+  name,
+  frameTitle,
+  leading,
+  actions,
+  openWindowName,
+  allow,
+  sandbox,
+}: BrowserPaneProps) {
   // The frame's own navigation is cross-origin and invisible to us, so the
   // address bar tracks what this pane loaded: the given URL, or one typed in.
   const [base, setBase] = useState(url);
   const [address, setAddress] = useState(url);
-  const [draft, setDraft] = useState(url);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [loading, setLoading] = useState(true);
   if (base !== url) {
     setBase(url);
     setAddress(url);
-    setDraft(url);
     setLoading(true);
   }
 
   function load(next: string) {
     setAddress(next);
-    setDraft(next);
     setLoading(true);
     setReloadNonce((nonce) => nonce + 1);
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-panel">
-      <div className="flex min-h-11 items-center gap-1.5 border-b border-divider px-3 py-1.5">
-        {leading}
-        <Button
-          variant="ghost"
-          size="md"
-          icon={<IconRestore size={16} />}
-          onClick={() => load(address)}
-          aria-label={`Reload ${name}`}
-          title="Reload"
-        />
-        <Input
-          size="md"
-          type="text"
-          inputMode="url"
-          enterKeyHint="go"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          aria-label={`${name} address`}
-          className="min-w-0 flex-1 text-supporting text-dim focus:text-fg"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onFocus={(event) => event.target.select()}
-          onBlur={() => setDraft(address)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              const next = browserAddress(draft);
-              if (next) load(next);
-              else setDraft(address);
-            } else if (event.key === "Escape") {
-              setDraft(address);
-              event.currentTarget.blur();
-            }
-          }}
-        />
-        <Button
-          variant="ghost"
-          size="md"
-          icon={<IconArrowUpRight size={16} />}
-          onClick={() => window.open(address, openWindowName, "noopener")}
-          aria-label={`Open ${name} in a new browser tab`}
-          title="Open in browser"
-        />
-        {actions}
-      </div>
+    <div className={BROWSER_PANE}>
+      <BrowserToolbar
+        name={name}
+        address={address}
+        onLoad={load}
+        leading={leading}
+        actions={actions}
+        openWindowName={openWindowName}
+      />
       <div className="relative min-h-0 flex-1 bg-white">
-        {loading ? (
-          <div
-            role="status"
-            aria-label={`Loading ${name}`}
-            className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-panel"
-          >
-            <PageLoader className="text-dim" />
-          </div>
-        ) : null}
+        {loading ? <BrowserLoading name={name} /> : null}
         <iframe
           key={`${address}#${reloadNonce}`}
-          className="block h-full w-full border-0 bg-white"
+          className={BROWSER_FRAME}
           src={address}
           title={frameTitle}
           onLoad={() => setLoading(false)}
@@ -140,6 +119,135 @@ export function BrowserPane({
           sandbox={sandbox}
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * The frame lives in KeptFrameLayer; this pane only marks where it goes. The
+ * slot is not positioned, so the layer's frame paints over it.
+ */
+function KeptBrowserPane({
+  url,
+  name,
+  frameTitle,
+  leading,
+  actions,
+  openWindowName,
+  allow,
+  sandbox,
+  keepAliveKey: key,
+}: BrowserPaneProps & { keepAliveKey: string }) {
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  const read = () => getKeptFrame(key);
+  const frame = useSyncExternalStore(subscribeKeptFrames, read, read);
+  useLayoutEffect(() => {
+    if (!slot) return;
+    return () => hideKeptFrame(key, slot);
+  }, [key, slot]);
+  useLayoutEffect(() => {
+    if (!slot) return;
+    showKeptFrame(key, { url, name, title: frameTitle, allow, sandbox }, slot);
+  }, [key, slot, url, name, frameTitle, allow, sandbox]);
+
+  return (
+    <div className={BROWSER_PANE}>
+      <BrowserToolbar
+        name={name}
+        address={frame?.url === url ? frame.address : url}
+        onLoad={(next) => loadKeptFrame(key, next)}
+        leading={leading}
+        actions={actions}
+        openWindowName={openWindowName}
+      />
+      <div ref={setSlot} className="min-h-0 flex-1 bg-white" />
+    </div>
+  );
+}
+
+const BROWSER_PANE = "flex h-full min-h-0 flex-col bg-panel";
+export const BROWSER_FRAME = "block h-full w-full border-0 bg-white";
+
+export function BrowserLoading({ name }: { name: string }) {
+  return (
+    <div
+      role="status"
+      aria-label={`Loading ${name}`}
+      className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-panel"
+    >
+      <PageLoader className="text-dim" />
+    </div>
+  );
+}
+
+function BrowserToolbar({
+  name,
+  address,
+  onLoad,
+  leading,
+  actions,
+  openWindowName = "_blank",
+}: {
+  name: string;
+  address: string;
+  onLoad: (address: string) => void;
+  leading?: ReactNode;
+  actions?: ReactNode;
+  openWindowName?: string;
+}) {
+  const [shown, setShown] = useState(address);
+  const [draft, setDraft] = useState(address);
+  if (shown !== address) {
+    setShown(address);
+    setDraft(address);
+  }
+
+  return (
+    <div className="flex min-h-11 items-center gap-1.5 border-b border-divider px-3 py-1.5">
+      {leading}
+      <Button
+        variant="ghost"
+        size="md"
+        icon={<IconRestore size={16} />}
+        onClick={() => onLoad(address)}
+        aria-label={`Reload ${name}`}
+        title="Reload"
+      />
+      <Input
+        size="md"
+        type="text"
+        inputMode="url"
+        enterKeyHint="go"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
+        aria-label={`${name} address`}
+        className="min-w-0 flex-1 text-supporting text-dim focus:text-fg"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onFocus={(event) => event.target.select()}
+        onBlur={() => setDraft(address)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            const next = browserAddress(draft);
+            setDraft(next ?? address);
+            if (next) onLoad(next);
+          } else if (event.key === "Escape") {
+            setDraft(address);
+            event.currentTarget.blur();
+          }
+        }}
+      />
+      <Button
+        variant="ghost"
+        size="md"
+        icon={<IconArrowUpRight size={16} />}
+        onClick={() => window.open(address, openWindowName, "noopener")}
+        aria-label={`Open ${name} in a new browser tab`}
+        title="Open in browser"
+      />
+      {actions}
     </div>
   );
 }
