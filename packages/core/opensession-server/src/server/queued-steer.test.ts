@@ -232,3 +232,36 @@ test("hands the host the bare text even when images ride the steer", async () =>
     { text: "Use this icon", images: 1 },
   ]);
 });
+
+test("an accepted steer records who sent it, a refused one does not", async () => {
+  const target = { token: "run-1", runId: "run-1", generation: 1 };
+  const steeredBy: Array<[string, string | undefined]> = [];
+  const deps = (steerOk: boolean): QueuedSteerDeps => ({
+    target: () => target,
+    prepare: async () => ({
+      id: "item-1",
+      content: "start a new session to fix the check",
+      user: "Grace Hopper",
+    }),
+    steer: () => steerOk,
+    accept: async () => true,
+    reject: async () => true,
+    steeredBy: async (sessionId, user) => {
+      steeredBy.push([sessionId, user]);
+    },
+  });
+  const input = { sessionId: "session-1", itemId: "item-1", text: "x" };
+
+  expect(await prepareAndSteerQueuedPrompt(input, deps(false))).toBe(
+    "rejected",
+  );
+  expect(steeredBy).toEqual([]);
+  expect(await prepareAndSteerQueuedPrompt(input, deps(true))).toBe("steered");
+  expect(await prepareAndInterruptQueuedPrompt(input, deps(true))).toBe(
+    "interrupted",
+  );
+  expect(steeredBy).toEqual([
+    ["session-1", "Grace Hopper"],
+    ["session-1", "Grace Hopper"],
+  ]);
+});

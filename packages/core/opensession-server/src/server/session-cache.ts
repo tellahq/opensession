@@ -57,6 +57,7 @@ import { audit } from "./audit";
 import { getDefaultModel, SESSION_EFFORTS as MODEL_EFFORTS } from "./models";
 import { writeJsonAtomicAsync } from "./shared/atomic-write";
 import type { UnifiedSession, NativeSessionFile } from "./types";
+import { humanPrompter } from "./session-actors";
 import {
   publicSessionSafety,
   reconcileAutomaticallyRecoverableSessionSafety,
@@ -865,6 +866,41 @@ function sessionFileRev(data: NativeSessionFile): number {
 function sessionActivityMs(data: NativeSessionFile): number {
   const value = Date.parse(data.lastActivity || data.createdAt || "");
   return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+/**
+ * Record the person behind a prompt or a mid-turn steer as the session's
+ * `lastPromptedBy`: the one it acts for on turns nobody sends
+ * (`sessionPrincipal`) and the owner of sessions it creates
+ * (`sessionCreationOwner`). Machine senders are ignored. Never throws:
+ * attribution is not worth a lost prompt.
+ */
+export async function recordSessionPrompter(
+  sessionId: string,
+  user: string | null | undefined,
+  session?: Pick<UnifiedSession, "source" | "lastPromptedBy">,
+): Promise<void> {
+  const prompter = humanPrompter(user);
+  if (!prompter) return;
+  try {
+    const current = session ?? (await findSessionAsync(sessionId));
+    if (
+      !current ||
+      current.source !== "opensession" ||
+      current.lastPromptedBy === prompter
+    )
+      return;
+    await updateSessionFile(sessionId, (data) => ({
+      ...data,
+      lastPromptedBy: prompter,
+    }));
+    current.lastPromptedBy = prompter;
+  } catch (error) {
+    console.warn(
+      `[run] could not record ${sessionId}'s prompter:`,
+      error instanceof Error ? error.message : error,
+    );
+  }
 }
 
 export async function updateSessionFile(

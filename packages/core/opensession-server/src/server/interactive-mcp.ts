@@ -15,7 +15,7 @@
 
 import { deskNavigationMcp } from "./desk-navigation-mcp";
 import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
-import { interactivePrompter } from "./session-actors";
+import { interactivePrompter, sessionCreationOwner } from "./session-actors";
 import { isDevInstance } from "./dev-mode";
 import { createRunnersMcpServer } from "./runners-mcp";
 import { createAdminMcpServer } from "../agents/slack/admin-tools";
@@ -58,6 +58,7 @@ import {
 } from "./automations";
 import {
   findSession,
+  findSessionAsync,
   touchNativeSession,
   touchNativeSessionStrict,
 } from "./session-cache";
@@ -174,6 +175,12 @@ export function interactiveMcpServers(
         : undefined,
       isAdmin: true,
       currentSessionId: sessionId,
+      // Read when a session is created, not when the turn starts, so a person
+      // who steers a webhook- or schedule-started turn owns what it creates.
+      creationOwner: sessionId
+        ? async () =>
+            sessionCreationOwner(createdBy, await findSessionAsync(sessionId))
+        : undefined,
     }),
     "opensession-admin": createAdminMcpServer({
       channel: "opensession",

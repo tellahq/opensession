@@ -211,6 +211,35 @@ export function sessionPrincipal(session: {
 }
 
 /**
+ * Who owns a session this one creates (create_session, spawn_task), given
+ * the sender of the running turn.
+ *
+ * The turn's sender is not the answer on its own: a webhook, a worker report
+ * or a scheduled check-back can start the turn a person then steers with
+ * "start a new session". Ownership goes to the most recent person who
+ * prompted or steered this session (`lastPromptedBy`, recorded on steers
+ * too), else the person who sent this turn, else the session's own person.
+ * Only a session no person owns falls back to the machine sender.
+ */
+export function sessionCreationOwner(
+  turnSender: string,
+  session?: {
+    startedBy?: string | null;
+    lastPromptedBy?: string | null;
+  } | null,
+): string {
+  // A scheduled turn records its sender (`"<person> (scheduled)"`) as the
+  // last prompter; the owner is the person, not the tick.
+  return (
+    humanPrompter(scheduledOwner(session?.lastPromptedBy)) ??
+    interactivePrompter(turnSender) ??
+    humanPrompter(session?.startedBy) ??
+    humanPrompter(scheduledOwner(turnSender)) ??
+    turnSender
+  );
+}
+
+/**
  * Identity whose personal provider subscription may serve this turn.
  *
  * Human-authored messages use the prompter's account. Machine-authored

@@ -82,6 +82,23 @@ export interface SessionsToolContext {
    * workspaces, not automation-owned ones.
    */
   humanResume?: boolean;
+  /**
+   * Who owns a session these tools create, resolved at call time. The turn's
+   * sender (`createdBy`) may be a webhook or a scheduled check-back while a
+   * person owns or is steering the calling session; see
+   * `sessionCreationOwner`. Defaults to `createdBy`.
+   */
+  creationOwner?: () => Promise<string>;
+}
+
+/** Owner of a session created from this context (create_session, spawn_task). */
+async function creationOwnerOf(ctx: SessionsToolContext): Promise<string> {
+  if (!ctx.creationOwner) return ctx.createdBy;
+  try {
+    return (await ctx.creationOwner()) || ctx.createdBy;
+  } catch {
+    return ctx.createdBy;
+  }
 }
 
 function text(s: string) {
@@ -571,7 +588,7 @@ export async function spawnTaskImpl(
     isolatedWorktree,
     parentSessionId: caller,
     reportBack: Boolean(caller),
-    user: ctx.createdBy,
+    user: await creationOwnerOf(ctx),
     sandbox: args.sandbox,
   });
   const depth = myDepth + 1;
@@ -1404,7 +1421,7 @@ export function createSessionsMcpServer(
               isolatedWorktree: args.isolatedWorktree,
               parentSessionId,
               reportBack: shouldReportBack,
-              user: ctx.createdBy,
+              user: await creationOwnerOf(ctx),
               sandbox: args.sandbox,
               accountId: args.accountId,
               forkFrom: args.forkFrom,

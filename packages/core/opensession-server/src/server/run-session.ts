@@ -169,6 +169,7 @@ import {
   applyRunOutcomeProjection,
   touchNativeSession,
   updateSessionFile,
+  recordSessionPrompter,
   SESSIONS_DIR,
 } from "./session-cache";
 import { markRecapPendingIfUnwatched } from "./recap";
@@ -2691,25 +2692,7 @@ async function runSessionPromptInner(
   // commits on their behalf, not the creator's (sessionPrincipal). Recorded
   // before the turn so a run that dies mid-way still leaves it behind, and
   // never allowed to block the turn: attribution is not worth a lost prompt.
-  const prompter = humanPrompter(user);
-  if (
-    prompter &&
-    session.source === "opensession" &&
-    session.lastPromptedBy !== prompter
-  ) {
-    try {
-      await updateSessionFile(sessionId, (data) => ({
-        ...data,
-        lastPromptedBy: prompter,
-      }));
-      session.lastPromptedBy = prompter;
-    } catch (error) {
-      console.warn(
-        `[run] could not record ${sessionId}'s prompter:`,
-        error instanceof Error ? error.message : error,
-      );
-    }
-  }
+  await recordSessionPrompter(sessionId, user, session);
 
   // The engine session id depends on the session's model: codex models resume
   // the codex thread, claude models the claude session. A missing engine id

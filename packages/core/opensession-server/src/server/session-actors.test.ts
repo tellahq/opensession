@@ -12,7 +12,10 @@ import {
   scheduledActor,
   machineActorLabel,
   providerAccountUser,
+  sessionCreationOwner,
   sessionPrincipal,
+  GITHUB_ACTOR,
+  SYSTEM_RESTART_USER,
   workerActor,
 } from "./session-actors";
 
@@ -153,5 +156,44 @@ describe("machine actors", () => {
     expect(machineActorLabel(agentActor(SESSION))).toBe("Agent sessions");
     expect(machineActorLabel("auto-continue")).toBe("Auto-continue");
     expect(machineActorLabel("Automation")).toBe("Automation");
+  });
+});
+
+describe("sessionCreationOwner", () => {
+  const session = { startedBy: "Ada Lovelace", lastPromptedBy: null };
+
+  test("a machine-started turn creates for the session's person", () => {
+    expect(sessionCreationOwner(GITHUB_ACTOR, session)).toBe("Ada Lovelace");
+    expect(sessionCreationOwner(SYSTEM_RESTART_USER, session)).toBe(
+      "Ada Lovelace",
+    );
+    expect(sessionCreationOwner(scheduledActor("Ada Lovelace"), session)).toBe(
+      "Ada Lovelace",
+    );
+  });
+
+  test("the person who last prompted or steered wins", () => {
+    const steered = { ...session, lastPromptedBy: "Grace Hopper" };
+    expect(sessionCreationOwner(GITHUB_ACTOR, steered)).toBe("Grace Hopper");
+    expect(
+      sessionCreationOwner(GITHUB_ACTOR, {
+        ...session,
+        lastPromptedBy: scheduledActor("Grace Hopper"),
+      }),
+    ).toBe("Grace Hopper");
+  });
+
+  test("a person's own turn creates for them", () => {
+    expect(sessionCreationOwner("Grace Hopper", session)).toBe("Grace Hopper");
+    expect(sessionCreationOwner("Grace Hopper", undefined)).toBe(
+      "Grace Hopper",
+    );
+  });
+
+  test("only a session no person owns keeps the machine sender", () => {
+    expect(
+      sessionCreationOwner(GITHUB_ACTOR, { startedBy: GITHUB_ACTOR }),
+    ).toBe(GITHUB_ACTOR);
+    expect(sessionCreationOwner(GITHUB_ACTOR, undefined)).toBe(GITHUB_ACTOR);
   });
 });

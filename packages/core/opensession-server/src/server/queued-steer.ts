@@ -17,6 +17,7 @@ import {
   transcriptLineUser,
 } from "./transcript-persistence";
 import { sessionKernel } from "./session-kernel";
+import { recordSessionPrompter } from "./session-cache";
 
 type QueuedSteerFence = {
   token: string;
@@ -55,6 +56,9 @@ export type QueuedSteerDeps = {
     text: string,
     images: ImageInput[] | undefined,
   ): Promise<void>;
+  /** A person's steer makes them the session's last prompter, so what the
+   *  running turn creates next is theirs (`sessionCreationOwner`). */
+  steeredBy?(sessionId: string, user: string | undefined): Promise<void>;
 };
 
 const queuedSteerDeps: QueuedSteerDeps = {
@@ -68,6 +72,7 @@ const queuedSteerDeps: QueuedSteerDeps = {
   steer: steerAgentRunToken,
   accept: acceptQueuedSteer,
   reject: rejectQueuedSteer,
+  steeredBy: recordSessionPrompter,
   async prepared(sessionId, itemId, item, text, images) {
     const promptEntryId = item.promptEntryId || itemId;
     if (text.trim() || images?.length) {
@@ -153,6 +158,7 @@ export async function prepareAndSteerQueuedPrompt(
   }
   if (!(await deps.accept(input.sessionId, input.itemId, before)))
     throw new Error("Pending steer changed before runner acceptance");
+  await deps.steeredBy?.(input.sessionId, prepared.user);
   return "steered";
 }
 
@@ -220,5 +226,6 @@ export async function prepareAndInterruptQueuedPrompt(
   }
   if (!(await deps.accept(input.sessionId, input.itemId, before)))
     throw new Error("Pending interrupt steer changed before runner acceptance");
+  await deps.steeredBy?.(input.sessionId, prepared.user);
   return "interrupted";
 }
