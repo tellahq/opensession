@@ -181,7 +181,15 @@ const MAINTENANCE_CHANGE_DELETE_BATCH = 250;
 const READ_ONLY_QUARANTINE_COMMANDS: ReadonlySet<string> = new Set([
   "storage:quarantine-read",
   "runtime:scan",
+  "turn:snapshot",
 ]);
+
+export function isRepairableReadQuarantine(commandKind: string): boolean {
+  return (
+    READ_ONLY_QUARANTINE_COMMANDS.has(commandKind) ||
+    isReadOnlyStoreQuarantine(commandKind)
+  );
+}
 const digest = (text: string): string =>
   new Bun.CryptoHasher("sha256").update(text).digest("hex");
 const resultRecord = (value: unknown) => {
@@ -1805,11 +1813,7 @@ export class SessionKernelStore {
     // These operations only read quarantine, timer, or outbox rows. A failed
     // read cannot leave an operation half-applied, so existing work must not
     // prevent the session from being read again.
-    if (
-      READ_ONLY_QUARANTINE_COMMANDS.has(commandKind) ||
-      isReadOnlyStoreQuarantine(commandKind)
-    )
-      return true;
+    if (isRepairableReadQuarantine(commandKind)) return true;
     // Older workers evaluated critical-settlement handling before recognizing
     // SessionQuarantinedError. The rejected operation never executed, but the
     // handler could persist its rejection as a second quarantine in the other

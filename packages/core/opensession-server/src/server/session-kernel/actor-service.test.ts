@@ -1766,4 +1766,98 @@ describe("session kernel actor service", () => {
       result: { status: "completed", result: "done" },
     });
   });
+
+  test("a locked reducer read retries without quarantining the session", async () => {
+    const isolatedState = mkdtempSync(
+      join(tmpdir(), "opensession-kernel-read-lock-"),
+    );
+    const databasePath = join(
+      isolatedState,
+      "sessions",
+      "session-kernel.sqlite",
+    );
+    const previousOpenStores =
+      process.env.OPENSESSION_SESSION_KERNEL_ACTIVE_STORES;
+    process.env.OPENSESSION_SESSION_KERNEL_ACTIVE_STORES = "1";
+    const isolatedService = await startSessionKernelService({
+      port: 0,
+      token,
+      workerCount: 1,
+      responseTimeoutMs: 700,
+      databasePath,
+    });
+    if (previousOpenStores === undefined)
+      delete process.env.OPENSESSION_SESSION_KERNEL_ACTIVE_STORES;
+    else
+      process.env.OPENSESSION_SESSION_KERNEL_ACTIVE_STORES = previousOpenStores;
+
+    const sessionId = "locked-reducer-read";
+    try {
+      for (const candidate of [sessionId, "evict-locked-reducer-read"]) {
+        expect(
+          await rpc(
+            {
+              t: "call",
+              rpcId: `seed-${candidate}`,
+              outputBytes: 256 * 1024,
+              request: {
+                t: "store",
+                method: "setRunState",
+                args: [{ sessionId: candidate, state: "idle", event: "seed" }],
+              },
+            },
+            isolatedService,
+          ),
+        ).toMatchObject({ t: "call_result", status: 1 });
+      }
+
+      const isolatedRoot = join(
+        isolatedState,
+        "sessions",
+        "session-kernel-sessions",
+      );
+      const lock = new Database(
+        sessionKernelSessionDbPath(sessionId, isolatedRoot),
+      );
+      lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
+      try {
+        const read = await rpc(
+          {
+            t: "call",
+            rpcId: "locked-turn-snapshot",
+            outputBytes: 256 * 1024,
+            request: {
+              t: "reduce",
+              command: {
+                kind: "turn",
+                commandId: "locked-turn-snapshot-command",
+                request: { op: "snapshot", sessionId },
+              },
+            },
+          },
+          isolatedService,
+        );
+        expect(read).toMatchObject({ t: "call_result", status: -1 });
+        expect(JSON.parse(read.body)).toMatchObject({ code: "retryable" });
+
+        const central = new Database(databasePath, { readonly: true });
+        expect(
+          central
+            .query(
+              "SELECT 1 FROM session_kernel_quarantine WHERE session_id = ?",
+            )
+            .get(sessionId),
+        ).toBeNull();
+        central.close();
+      } finally {
+        try {
+          lock.exec("ROLLBACK;");
+        } catch {}
+        lock.close();
+      }
+    } finally {
+      isolatedService.stop();
+      rmSync(isolatedState, { recursive: true, force: true });
+    }
+  });
 });

@@ -82,6 +82,13 @@ describe("public session safety state", () => {
       automaticallyRecoverableSessionSafety({
         ...recoverable,
         reason: "database is locked",
+        commandKind: "turn:snapshot",
+      }),
+    ).toBe(true);
+    expect(
+      automaticallyRecoverableSessionSafety({
+        ...recoverable,
+        reason: "database is locked",
         commandKind: "store:setRunState",
       }),
     ).toBe(false);

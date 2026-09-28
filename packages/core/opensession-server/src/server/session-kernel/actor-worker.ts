@@ -93,11 +93,12 @@ export function startSessionKernelActorWorker(): void {
   ): KernelActorCallResult {
     let store = host.central;
     let requestSessionId: string | undefined;
-    let readOnlyStoreCall = false;
+    let readOnlyCall = false;
     try {
       let result: unknown;
       if (request.t === "reduce") {
         const command = request.command;
+        readOnlyCall = isReadReducer(command);
         const sessionId = reducerSessionId(command, host);
         requestSessionId = sessionId;
         if (command.kind === "transcript")
@@ -403,7 +404,7 @@ export function startSessionKernelActorWorker(): void {
         const route = routedStoreCall(request.method, request.args, host);
         const { sessionId } = route;
         requestSessionId = sessionId;
-        readOnlyStoreCall = !route.mutation;
+        readOnlyCall = !route.mutation;
         if (
           route.mutation &&
           sessionId &&
@@ -442,10 +443,10 @@ export function startSessionKernelActorWorker(): void {
           request.t === "reduce" &&
           request.command.kind === "transcript" &&
           request.command.request.op === "ack_wake";
-        // A store read changes nothing, so transient storage pressure (such as
-        // SQLITE_BUSY) leaves no ambiguous state. Quarantining it paused whole
-        // sessions that had nothing to verify.
-        const replaySafeStoreRead = infrastructure && readOnlyStoreCall;
+        // A reducer or store read changes nothing, so transient storage pressure
+        // (such as SQLITE_BUSY) leaves no ambiguous state. Quarantining it paused
+        // whole sessions that had nothing to verify.
+        const replaySafeRead = infrastructure && readOnlyCall;
         if (
           !sessionId ||
           isSessionKernelCentralStoreFailure(error) ||
@@ -453,7 +454,7 @@ export function startSessionKernelActorWorker(): void {
         ) {
           failStop = true;
           responseCode = "actor_fatal";
-        } else if (replaySafeWakeAck || replaySafeStoreRead) {
+        } else if (replaySafeWakeAck || replaySafeRead) {
           // A read or monotonic acknowledgement is safe to retry after
           // transient storage pressure. Quarantining would incorrectly fence an active
           // run even though no lifecycle state became ambiguous.
