@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import { realpath, stat } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -90,7 +89,7 @@ const tools = [
   {
     name: "slack_upload_file",
     description:
-      "Upload a local file (image, video, PDF, log, ...) and share it in a channel, or in a thread when thread_ts is given. The file must be under /tmp or the service home directory and at most 1 GB.",
+      "Upload a local file (image, video, PDF, log, ...) and share it in a channel, or in a thread when thread_ts is given. Only files inside /tmp/slack-uploads are accepted: copy the file there first (mkdir -p /tmp/slack-uploads). At most 1 GB.",
     inputSchema: {
       type: "object",
       properties: {
@@ -255,12 +254,16 @@ export function buildSlackMessageBody(
 export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 
 /**
- * Resolve an upload path, allowing only regular files under /tmp or the
- * service home once symlinks are resolved.
+ * The only directory uploads may come from. This process can read everything
+ * the service user can, including credentials, so an agent must place the
+ * file here itself rather than naming an arbitrary path.
  */
+export const UPLOAD_ROOT = "/tmp/slack-uploads";
+
+/** Resolve an upload path, allowing only regular files inside `root`. */
 export async function resolveUploadFile(
   path: string,
-  home = homedir(),
+  root = UPLOAD_ROOT,
 ): Promise<{ path: string; size: number }> {
   let resolved: string;
   try {
@@ -268,8 +271,9 @@ export async function resolveUploadFile(
   } catch {
     throw new Error(`File not found: ${path}`);
   }
-  if (!resolved.startsWith("/tmp/") && !resolved.startsWith(`${home}/`))
-    throw new Error(`File must be under /tmp or ${home}: ${path}`);
+  const allowed = await realpath(root).catch(() => undefined);
+  if (!allowed || !resolved.startsWith(`${allowed}/`))
+    throw new Error(`File must be inside ${root}: ${path}`);
   const info = await stat(resolved);
   if (!info.isFile()) throw new Error(`Not a regular file: ${path}`);
   if (!info.size || info.size > MAX_UPLOAD_BYTES)
@@ -296,7 +300,10 @@ function slackError(step: string, result: any): Error {
 export class SlackClient {
   private readonly headers: Record<string, string>;
 
-  constructor(private readonly botToken: string) {
+  constructor(
+    private readonly botToken: string,
+    private readonly uploadRoot = UPLOAD_ROOT,
+  ) {
     this.headers = {
       Authorization: `Bearer ${botToken}`,
       "Content-Type": "application/json",
@@ -394,7 +401,7 @@ export class SlackClient {
     path: string,
     options: UploadOptions = {},
   ): Promise<unknown> {
-    const file = await resolveUploadFile(path);
+    const file = await resolveUploadFile(path, this.uploadRoot);
     const filename = basename(file.path);
     const reserved = await this.postForm("files.getUploadURLExternal", {
       filename,

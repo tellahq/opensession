@@ -235,7 +235,7 @@ Two optional facilities are separate from inbound Slack-agent setup:
   `SLACK_BOT_TOKEN` and `SLACK_TEAM_ID`; `SLACK_CHANNEL_IDS` optionally limits
   channel listing to a comma-separated set. Apply normal MCP `allowedUsers`
   gating. Its `slack_upload_file` tool shares a local file (image, video,
-  anything up to 1 GB) under `/tmp` or the service home in a channel or
+  anything up to 1 GB) from `/tmp/slack-uploads` in a channel or
   thread, and needs the bot token's `files:write` scope.
 - Personal Slack grants let signed-in people read or post as themselves. Set
   `SLACK_OAUTH_CLIENT_ID` and `SLACK_OAUTH_CLIENT_SECRET`, register

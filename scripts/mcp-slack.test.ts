@@ -48,28 +48,34 @@ describe("resolveUploadFile", () => {
     await rm(home, { recursive: true, force: true });
   });
 
-  test("accepts a file under the home directory", async () => {
+  test("accepts a file inside the upload root", async () => {
     const path = join(home, "clip.mp4");
     await writeFile(path, "video");
 
-    expect(await resolveUploadFile(path, await realpath(home))).toEqual({
+    expect(await resolveUploadFile(path, home)).toEqual({
       path: await realpath(path),
       size: 5,
     });
   });
 
-  test("rejects files outside /tmp and the home directory", async () => {
-    await expect(
-      resolveUploadFile("/etc/hostname", "/nonexistent-home"),
-    ).rejects.toThrow("must be under /tmp");
+  test("rejects files outside the upload root", async () => {
+    const sibling = join(dir, "secret.json");
+    await writeFile(sibling, "token");
+
+    await expect(resolveUploadFile(sibling, home)).rejects.toThrow(
+      "must be inside",
+    );
+    await expect(resolveUploadFile("/etc/hostname", home)).rejects.toThrow(
+      "must be inside",
+    );
   });
 
   test("rejects a symlink that points outside the allowed roots", async () => {
     const link = join(home, "escape");
     await symlink("/etc/hostname", link);
 
-    await expect(resolveUploadFile(link, await realpath(home))).rejects.toThrow(
-      "must be under /tmp",
+    await expect(resolveUploadFile(link, home)).rejects.toThrow(
+      "must be inside",
     );
   });
 
@@ -77,15 +83,13 @@ describe("resolveUploadFile", () => {
     const empty = join(dir, "empty.mp4");
     await writeFile(empty, "");
 
-    const root = await realpath(dir);
-
-    await expect(resolveUploadFile(empty, root)).rejects.toThrow(
+    await expect(resolveUploadFile(empty, dir)).rejects.toThrow(
       "between 1 byte",
     );
-    await expect(
-      resolveUploadFile(home, await realpath(tmpdir())),
-    ).rejects.toThrow("Not a regular file");
-    await expect(resolveUploadFile(join(dir, "nope"), root)).rejects.toThrow(
+    await expect(resolveUploadFile(home, tmpdir())).rejects.toThrow(
+      "Not a regular file",
+    );
+    await expect(resolveUploadFile(join(dir, "nope"), dir)).rejects.toThrow(
       "File not found",
     );
   });
@@ -133,10 +137,14 @@ describe("SlackClient.uploadFile", () => {
       },
     });
 
-    const result = await new SlackClient("xoxb-test").uploadFile("C1", path, {
-      threadTs: "123.456",
-      initialComment: "before/after",
-    });
+    const result = await new SlackClient("xoxb-test", dir).uploadFile(
+      "C1",
+      path,
+      {
+        threadTs: "123.456",
+        initialComment: "before/after",
+      },
+    );
 
     expect(result).toEqual({
       ok: true,
@@ -170,7 +178,7 @@ describe("SlackClient.uploadFile", () => {
     });
 
     await expect(
-      new SlackClient("xoxb-test").uploadFile("C1", path),
+      new SlackClient("xoxb-test", dir).uploadFile("C1", path),
     ).rejects.toThrow("missing the files:write scope");
   });
 
@@ -188,7 +196,7 @@ describe("SlackClient.uploadFile", () => {
     });
 
     await expect(
-      new SlackClient("xoxb-test").uploadFile("C1", path),
+      new SlackClient("xoxb-test", dir).uploadFile("C1", path),
     ).rejects.toThrow("upload completion failed: not_in_channel");
   });
 });
