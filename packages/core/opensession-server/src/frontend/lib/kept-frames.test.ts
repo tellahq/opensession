@@ -9,6 +9,7 @@ import {
   loadKeptFrame,
   resetKeptFrames,
   showKeptFrame,
+  stepKeptFrame,
 } from "./kept-frames";
 
 // SAFETY: the store only compares slots by identity; it never reads them.
@@ -39,6 +40,29 @@ test("a pane asking for a new URL starts the frame over", () => {
   showKeptFrame("portal:a", spec("https://two.example.test/"), el);
   expect(getKeptFrame("portal:a")!.address).toBe("https://two.example.test/");
   expect(getKeptFrame("portal:a")!.loading).toBe(true);
+});
+
+test("back and forward step through loaded addresses", () => {
+  showKeptFrame("staging:a", spec("https://a.example.test/"), slot());
+  loadKeptFrame("staging:a", "https://a.example.test/deep");
+  stepKeptFrame("staging:a", -1);
+  expect(getKeptFrame("staging:a")!.address).toBe("https://a.example.test/");
+  stepKeptFrame("staging:a", 1);
+  const frame = getKeptFrame("staging:a")!;
+  expect(frame.address).toBe("https://a.example.test/deep");
+  expect(frame.nonce).toBe(3);
+  stepKeptFrame("staging:a", 1);
+  expect(getKeptFrame("staging:a")).toBe(frame);
+});
+
+test("a new pane URL clears back and forward", () => {
+  const el = slot();
+  showKeptFrame("portal:a", spec("https://one.example.test/"), el);
+  loadKeptFrame("portal:a", "https://one.example.test/deep");
+  showKeptFrame("portal:a", spec("https://two.example.test/"), el);
+  expect(getKeptFrame("portal:a")!.history.entries).toEqual([
+    "https://two.example.test/",
+  ]);
 });
 
 test(`keeps the ${KEPT_FRAME_LIMIT} most recently shown frames`, () => {

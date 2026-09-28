@@ -1,3 +1,11 @@
+import {
+  type BrowserHistory,
+  currentAddress,
+  startHistory,
+  stepHistory,
+  visitAddress,
+} from "./browser-history";
+
 /**
  * Framed pages (the Browser and Portal tabs) that outlive the pane showing
  * them. An iframe reloads whenever its element leaves the document or moves
@@ -24,6 +32,8 @@ export interface KeptFrame extends KeptFrameSpec {
   key: string;
   /** What the frame loaded: the pane's URL, or one typed in its address bar. */
   address: string;
+  /** What Back and Forward step through; its current entry is `address`. */
+  history: BrowserHistory;
   /** Bumped by Reload so the frame remounts on the same address. */
   nonce: number;
   loading: boolean;
@@ -103,6 +113,7 @@ export function showKeptFrame(
           ...spec,
           key,
           address: spec.url,
+          history: startHistory(spec.url),
           nonce: 0,
           loading: true,
           slot,
@@ -117,7 +128,12 @@ export function showKeptFrame(
     ...spec,
     ...(frame.url === spec.url
       ? null
-      : { address: spec.url, nonce: frame.nonce + 1, loading: true }),
+      : {
+          address: spec.url,
+          history: startHistory(spec.url),
+          nonce: frame.nonce + 1,
+          loading: true,
+        }),
     slot,
     shownAt,
   }));
@@ -135,9 +151,25 @@ export function loadKeptFrame(key: string, address: string) {
   update(key, (frame) => ({
     ...frame,
     address,
+    history: visitAddress(frame.history, address),
     nonce: frame.nonce + 1,
     loading: true,
   }));
+}
+
+/** Back (-1) or Forward (1) through the addresses the frame loaded. */
+export function stepKeptFrame(key: string, delta: -1 | 1) {
+  update(key, (frame) => {
+    const history = stepHistory(frame.history, delta);
+    if (history === frame.history) return frame;
+    return {
+      ...frame,
+      address: currentAddress(history),
+      history,
+      nonce: frame.nonce + 1,
+      loading: true,
+    };
+  });
 }
 
 export function keptFrameLoaded(key: string) {

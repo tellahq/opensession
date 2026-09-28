@@ -302,7 +302,10 @@ function parseStaging(
 // long after the probe knew better.
 const EMBED_TTL = 300_000;
 const EMBED_PROBE_TIMEOUT_MS = 3000;
-const embedCache = new Map<string, { ok: boolean; ts: number }>();
+const embedCache = new Map<
+  string,
+  { ok: boolean; live: boolean; ts: number }
+>();
 const embedInflight = new Map<string, Promise<void>>();
 
 function probeEmbeddable(url: string): Promise<void> {
@@ -328,9 +331,12 @@ async function runEmbedProbe(url: string): Promise<void> {
     const ok = new RegExp(`frame-ancestors[^;]*\\b${escaped}\\b`, "i").test(
       csp,
     );
-    embedCache.set(url, { ok, ts: Date.now() });
+    // A branch alias with no deploy behind it yet 404s. Anything else (a page,
+    // an auth redirect, a 401) means an earlier deploy is already serving.
+    const live = res.status !== 404;
+    embedCache.set(url, { ok, live, ts: Date.now() });
   } catch {
-    embedCache.set(url, { ok: false, ts: Date.now() });
+    embedCache.set(url, { ok: false, live: false, ts: Date.now() });
   }
 }
 
@@ -352,8 +358,9 @@ async function withEmbeddable(
     void probeEmbeddable(staging.url);
   }
   const embeddable = hit?.ok ?? false;
-  if (staging.embeddable === embeddable) return data;
-  return { ...data, staging: { ...staging, embeddable } };
+  const live = hit?.live ?? false;
+  if (staging.embeddable === embeddable && staging.live === live) return data;
+  return { ...data, staging: { ...staging, embeddable, live } };
 }
 
 /** Changed files, biggest churn first, so the panel leads with the meat. */

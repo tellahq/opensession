@@ -62,6 +62,8 @@ export interface PrStaging {
   url: string;
   status: string;
   embeddable?: boolean;
+  /** The URL already serves a deploy, e.g. the previous one during a rebuild. */
+  live?: boolean;
 }
 
 export interface PrFile {

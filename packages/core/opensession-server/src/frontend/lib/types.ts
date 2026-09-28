@@ -878,8 +878,14 @@ export interface PrDetails {
   /** CLEAN | BEHIND | BLOCKED | DIRTY | UNSTABLE | … — merge-box state. */
   mergeStateStatus?: string;
   /** The PR's webapp preview environment (Vercel preview), when one exists.
-   * `embeddable` is true once the deploy's CSP lets this app frame it. */
-  staging?: { url: string; status: string; embeddable?: boolean } | null;
+   * `embeddable` is true once the deploy's CSP lets this app frame it;
+   * `live` is true once the URL serves a deploy, even mid-rebuild. */
+  staging?: {
+    url: string;
+    status: string;
+    embeddable?: boolean;
+    live?: boolean;
+  } | null;
   /** The GitHub stack this PR is a layer of. Null/absent covers both "not
    *  stacked" and "the stack read failed" — the UI treats them the same. */
   stack?: PrStack | null;

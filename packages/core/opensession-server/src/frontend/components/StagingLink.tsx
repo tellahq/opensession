@@ -6,7 +6,7 @@ import { useSessionPrResource } from "../hooks/useApiResources";
 import type { PrCheck, UnifiedSession } from "../lib/types";
 import { worstPrRef } from "../lib/pr-refs";
 import { sessionPrPresentation } from "../lib/session-prs";
-import { withPreviewPath } from "../lib/preview-url";
+import { previewOpenable, withPreviewPath } from "../lib/preview-url";
 import { WS_SUMMARY_ICON } from "../lib/workspace-summary-classes";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
@@ -253,10 +253,13 @@ export function StagingLink({
   // The branch alias keeps serving the last Ready deploy until the new one
   // lands, so a rebuild only means "possibly one push behind", never a dead
   // link — keep it clickable, spin the globe, and say so in the tooltip.
-  // Only a first deploy that has never gone Ready gets a dead (swallowed)
-  // click: before that the alias 404s.
-  const rebuilding = deployPending && staging.status === "Ready";
-  const building = staging.status !== "Ready";
+  // The deploy bot can also flip its own row back to Building on a push; the
+  // server's probe still sees the previous deploy serving (`live`), so that is
+  // a rebuild too. Only a first deploy with nothing behind the alias yet gets a
+  // dead (swallowed) click: before that the alias 404s.
+  const openable = previewOpenable(staging);
+  const building = !openable;
+  const rebuilding = openable && (deployPending || staging.status !== "Ready");
   // Deep-link to the agent-flagged route (set_preview_path) so the button
   // opens the feature under test, not the app root.
   const href = withPreviewPath(staging.url, session.previewPath);

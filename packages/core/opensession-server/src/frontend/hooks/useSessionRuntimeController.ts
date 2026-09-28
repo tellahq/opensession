@@ -29,7 +29,7 @@ import { isPinned, onPinsChanged, togglePin } from "../lib/pins";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { portalTargetFor } from "../lib/portals";
 import { NO_TYPING, type TypingPresence } from "../lib/typing";
-import { withPreviewPath } from "../lib/preview-url";
+import { previewOpenable, withPreviewPath } from "../lib/preview-url";
 import type { SessionViewerProps } from "../lib/session-viewer-bindings";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import { ownedBy } from "../lib/sidebar-lanes";
@@ -376,6 +376,7 @@ export function useSessionRuntimeController({
     url: string;
     status: string;
     embeddable?: boolean;
+    live?: boolean;
   } | null>(null);
   // True once the PR fetch has resolved at least once for this session — lets us
   // tell "staging genuinely absent" from "not loaded yet" (the fetch starts null
@@ -462,12 +463,12 @@ export function useSessionRuntimeController({
         window.open(prUrl, "_blank", "noopener");
       } else if (openPreview && staging) {
         e.preventDefault();
-        // Match the globe's click semantics: before the first deploy goes
-        // Ready the branch alias 404s, so swallow the chord with the same
-        // explanatory toast instead of opening a dead link. (A rebuild
-        // after a push keeps status Ready and stays openable — the alias
-        // serves the previous deploy until the new one lands.)
-        if (staging.status !== "Ready") {
+        // Match the globe's click semantics: before the first deploy lands
+        // the branch alias 404s, so swallow the chord with the same
+        // explanatory toast instead of opening a dead link. A rebuild stays
+        // openable: the alias serves the previous deploy until the new one
+        // lands.
+        if (!previewOpenable(staging)) {
           toast(
             `Preview environment is ${staging.status.toLowerCase()}. The link goes live once the first deploy finishes.`,
           );

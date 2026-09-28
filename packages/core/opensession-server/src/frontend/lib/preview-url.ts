@@ -10,3 +10,15 @@ export function withPreviewPath(base: string, path?: string | null): string {
   if (rel === "/") return base;
   return base.replace(/\/+$/, "") + rel;
 }
+
+/**
+ * Whether a PR preview environment's link opens a working deploy. A first
+ * build has nothing behind the branch alias yet (it 404s); a rebuild keeps
+ * serving the previous deploy, which the server reports as `live`.
+ */
+export function previewOpenable(staging: {
+  status: string;
+  live?: boolean;
+}): boolean {
+  return staging.status === "Ready" || staging.live === true;
+}
