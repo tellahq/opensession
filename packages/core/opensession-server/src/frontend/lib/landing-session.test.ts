@@ -8,6 +8,7 @@ import {
   workspaceSessionSeed,
   pinMainSessionFirst,
   pickLandingSession,
+  isPrReviewSession,
 } from "./landing-session";
 import type { UnifiedSession } from "./types";
 
@@ -247,5 +248,17 @@ describe("pickLandingSession", () => {
       ran: true,
     });
     expect(pickLandingSession([other], wsId)).toBeUndefined();
+  });
+});
+
+describe("isPrReviewSession", () => {
+  test("matches PR review and adversarial review runs only", () => {
+    expect(isPrReviewSession({ id: "bks-ghpr-7664-review" })).toBe(true);
+    expect(isPrReviewSession({ id: "bks-ghpr-acme-12-adversarial" })).toBe(
+      true,
+    );
+    expect(isPrReviewSession({ id: "bks-ghpr-7664-autofix" })).toBe(false);
+    expect(isPrReviewSession({ id: "bks-ghpr-7664-issue" })).toBe(false);
+    expect(isPrReviewSession({ id: "os-review" })).toBe(false);
   });
 });
