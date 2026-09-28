@@ -1,10 +1,14 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, describe, expect, it } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import {
   assistantProseFields,
   extractAssistantVideos,
   extractMediaMarkers,
   isCaptionLine,
   mediaUrlFor,
+  placeLocalMarkdownImages,
   placeMediaMarkers,
   stripMediaMarkers,
 } from "./transcript-media";
@@ -208,6 +212,50 @@ describe("extractAssistantVideos", () => {
     const out = extractAssistantVideos("Nothing to see.\n");
     expect(out.content).toBe("Nothing to see.\n");
     expect(out.featuredMedia).toEqual([]);
+  });
+});
+
+describe("placeLocalMarkdownImages", () => {
+  const dir = mkdtempSync(join(tmpdir(), "transcript-media-"));
+  const png = join(dir, "shot.png");
+  const svg = join(dir, "icon.svg");
+  writeFileSync(png, "");
+  writeFileSync(svg, "<svg/>");
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("points markdown images at existing local files through /media", () => {
+    const out = placeLocalMarkdownImages(
+      `Old ![a](${png}) new ![b](${svg} "t")![c](${png})`,
+    );
+    expect(out.content).toBe(
+      `Old ![a](${mediaUrlFor(png)}) new ![b](${mediaUrlFor(svg)} "t")![c](${mediaUrlFor(png)})`,
+    );
+    expect(out.images).toEqual([
+      mediaUrlFor(png),
+      mediaUrlFor(svg),
+      mediaUrlFor(png),
+    ]);
+  });
+
+  it("leaves missing files, inline code and fenced code alone", () => {
+    const text = [
+      "![gone](/tmp/definitely-missing-shot.png)",
+      `\`![a](${png})\``,
+      "```md",
+      `![a](${png})`,
+      "```",
+    ].join("\n");
+    expect(placeLocalMarkdownImages(text)).toEqual({
+      content: text,
+      images: [],
+      videos: [],
+    });
+  });
+
+  it("renders a raw SVG path in an assistant message in place", () => {
+    const out = extractAssistantVideos(`Here: ![icon](${svg})`);
+    expect(out.content).toBe(`Here: ![icon](${mediaUrlFor(svg)})`);
+    expect(out.images).toEqual([mediaUrlFor(svg)]);
   });
 });
 
