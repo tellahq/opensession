@@ -70,7 +70,16 @@ describe("github app permission sets", () => {
     // rollup — GitHub fails the entire GraphQL response, so every PR panel,
     // review and auto-fix run reports "missing a permission for this API".
     expect(GITHUB_APP_READ_PERMISSIONS.actions).toBe("read");
-    expect(GITHUB_APP_GRANT_PERMISSIONS.actions).toBe("read");
+  });
+
+  test("the App is granted actions:write but no mint requests it", () => {
+    // Connected-user tokens inherit the grant and need write to re-run
+    // failed jobs; installation mints stay at read so Apps created before
+    // the upgrade (holding only actions:read) do not 422.
+    expect(GITHUB_APP_GRANT_PERMISSIONS.actions).toBe("write");
+    expect(GITHUB_APP_READ_PERMISSIONS.actions).toBe("read");
+    expect(GITHUB_APP_CODE_PERMISSIONS.actions).toBe("read");
+    expect(GITHUB_APP_WRITE_PERMISSIONS.actions).toBeUndefined();
   });
 
   test("the write mint carries no read-only scope whose absence would 422 it", () => {

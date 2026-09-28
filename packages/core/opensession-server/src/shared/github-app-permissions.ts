@@ -27,7 +27,11 @@
 /** The full set the App is granted at creation — the create-URL permission
  *  params, and the superset of every mint. */
 export const GITHUB_APP_GRANT_PERMISSIONS: Record<string, string> = {
-  actions: "read", // workflow runs/logs for trusted autofix diagnosis
+  // Runs/logs for autofix diagnosis, and write so connected-user tokens can
+  // re-run failed jobs. Installation mints still request only read, so an
+  // App created before this change keeps minting until its owner accepts
+  // the upgrade.
+  actions: "write",
   checks: "read", // CI check runs
   statuses: "read", // commit statuses, the other half of the status rollup
   contents: "write", // clone; pushes only while git transport rides App tokens
