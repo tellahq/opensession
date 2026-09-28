@@ -689,26 +689,64 @@ registerSessionEffectExecutor("human_ask_deliver", async (item) => {
 /**
  * For a "block" ask: register a resolver and return a promise that settles when
  * the teammate replies (the answer), or after BLOCK_TIMEOUT_MS (null). On
- * timeout the ask degrades to async so a later reply still steers into the
- * session rather than being dropped.
+ * timeout, or when `signal` aborts (the caller gave up), the ask degrades to
+ * async so a later reply still steers into the session rather than being
+ * dropped. A new wait on the same ask supersedes an older one.
  */
-export function awaitBlockingAnswer(id: string): Promise<string | null> {
+export function awaitBlockingAnswer(
+  id: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  resolvers.get(id)?.(null);
   return new Promise((resolve) => {
-    const timer = setTimeout(() => {
+    const a = asks.get(id);
+    if (a && !isTerminal(a) && a.mode !== "block") {
+      a.mode = "block"; // a live waiter holds the answer again
+      persist();
+    }
+    const giveUp = () => {
+      if (resolvers.get(id) !== resolver) return;
+      clearTimeout(timer);
       resolvers.delete(id);
-      const a = asks.get(id);
-      if (a && a.state === "delivered") {
-        a.mode = "async"; // a late reply now routes back via deliverToSession
+      const cur = asks.get(id);
+      if (cur && !isTerminal(cur)) {
+        cur.mode = "async"; // a late reply now routes back via deliverToSession
         persist();
       }
       resolve(null);
-    }, BLOCK_TIMEOUT_MS);
-    resolvers.set(id, (answer) => {
+    };
+    const timer = setTimeout(giveUp, BLOCK_TIMEOUT_MS);
+    const resolver = (answer: string | null) => {
       clearTimeout(timer);
-      resolvers.delete(id);
+      signal?.removeEventListener("abort", giveUp);
+      if (resolvers.get(id) === resolver) resolvers.delete(id);
       resolve(answer);
-    });
+    };
+    resolvers.set(id, resolver);
+    if (signal?.aborted) giveUp();
+    else signal?.addEventListener("abort", giveUp, { once: true });
   });
+}
+
+/** Remind the teammate of a still-open ask in its DM thread. False when there
+ *  is nothing to remind (not delivered yet, or already settled). */
+export async function remindAsk(id: string): Promise<boolean> {
+  const a = asks.get(id);
+  if (!a || a.state !== "delivered" || !a.slack) return false;
+  const res = await sendSlackMessage(
+    a.slack.channel,
+    `<@${a.person.slackId}> Still waiting on this one, the session asked again.`,
+    a.slack.rootTs,
+  ).catch(() => null);
+  const ok = !!res && res.ok !== false;
+  audit({
+    context: "human_ask",
+    action: "reminded",
+    ask_id: id,
+    session_id: a.sessionId,
+    ok,
+  });
+  return ok;
 }
 
 // ---------------------------------------------------------------------------

@@ -47,7 +47,7 @@ touches an in-process tool:
 | [`opensession-search`](#opensession-search) | 2 | interactive | – |
 | [`opensession-self-deploy`](#opensession-self-deploy) | 2 | interactive | Withheld from dev instances (isDevInstance()) — the script targets the production service and state. |
 | [`opensession-humans`](#opensession-humans) | 3 | interactive, Slack loop, goal wake | Interactive runs need a session id (the answer routes back to it). |
-| [`opensession-keychain`](#opensession-keychain) | 6 | interactive | Needs a session id. |
+| [`opensession-keychain`](#opensession-keychain) | 7 | interactive | Needs a session id. |
 | [`opensession-publish`](#opensession-publish) | 4 | interactive | Needs a session id. |
 | [`opensession-repos`](#opensession-repos) | 6 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 9 | interactive | Needs a session id. |
@@ -74,7 +74,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-33 servers, 149 tools.
+33 servers, 150 tools.
 
 ## opensession-sessions
 
@@ -473,7 +473,13 @@ List the credentials teammates have registered in the keychain — service, owne
 
 `mcp__opensession-keychain__request_credential` · input: `credential` (string, required), `purpose` (string, required), `mode` ("once" | "standing")
 
-Ask a credential's owner to lend it to THIS session for a stated purpose. They get a DM (or a card, if they're driving a session) with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive broker instructions — a URL that injects the credential server-side; you never see the secret itself. Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. If they decline, don't re-ask.
+Ask a credential's owner to lend it to THIS session for a stated purpose. They get a DM (or a card, if they're driving a session) with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive broker instructions — a URL that injects the credential server-side; you never see the secret itself. Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. If they decline, don't re-ask. Calling again while your ask is still pending reminds the owner and waits on that same ask; if they already approved, it returns the live grant.
+
+### `cancel_credential_ask`
+
+`mcp__opensession-keychain__cancel_credential_ask` · input: `askId` (string, required)
+
+Withdraw one of this session's pending keychain asks (ids from list_grants). The owner is told it no longer needs an answer, and their buttons stop approving anything. Use it when the access is no longer needed or the ask should be replaced by a different one.
 
 ### `register_credential`
 

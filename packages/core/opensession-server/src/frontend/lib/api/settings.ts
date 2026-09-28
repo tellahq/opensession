@@ -197,7 +197,7 @@ export interface KeychainAskDto {
   requestedBy: string;
   purpose: string;
   requestedMode: "once" | "standing";
-  status: "pending" | "approved" | "declined" | "expired";
+  status: "pending" | "approved" | "declined" | "expired" | "cancelled";
   createdAt: string;
 }
 

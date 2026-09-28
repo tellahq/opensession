@@ -32,6 +32,7 @@ import {
   macKeychainRequests,
 } from "../../server/mac-keychain-requests";
 import {
+  cancelCredentialAsk,
   ensureKeychainLoaded,
   listCredentials,
   listGrants,
@@ -159,7 +160,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
     ),
     tool(
       "request_credential",
-      "Ask a credential's owner to lend it to THIS session for a stated purpose. They get a DM (or a card, if they're driving a session) with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive broker instructions — a URL that injects the credential server-side; you never see the secret itself. Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. If they decline, don't re-ask.",
+      "Ask a credential's owner to lend it to THIS session for a stated purpose. They get a DM (or a card, if they're driving a session) with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive broker instructions — a URL that injects the credential server-side; you never see the secret itself. Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. If they decline, don't re-ask. Calling again while your ask is still pending reminds the owner and waits on that same ask; if they already approved, it returns the live grant.",
       {
         credential: z
           .string()
@@ -176,11 +177,14 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
             "'once' (default) = a single broker call, expires in an hour. 'standing' = repeated calls for up to 7 days; the owner can approve either regardless of what you request.",
           ),
       },
-      async (args: {
-        credential: string;
-        purpose: string;
-        mode?: "once" | "standing";
-      }) => {
+      async (
+        args: {
+          credential: string;
+          purpose: string;
+          mode?: "once" | "standing";
+        },
+        extra: any,
+      ) => {
         const result = requestCredential({
           credential: args.credential,
           sessionId: ctx.sessionId,
@@ -189,17 +193,41 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
           ...(args.mode ? { mode: args.mode } : {}),
         });
         if ("error" in result) return text(`Couldn't ask: ${result.error}`);
+        if ("grant" in result)
+          return text(
+            `This session already holds a live grant for this credential.\n\n${result.instructions}`,
+          );
         // The human-asks transport owns the wait; the keychain domain handler
         // swaps the owner's button label for grant instructions, so whatever
         // comes back here is already the text the model should act on.
-        const { awaitBlockingAnswer } = await import("../../server/human-asks");
-        const answer = await awaitBlockingAnswer(result.transport.id);
+        const { awaitBlockingAnswer, remindAsk } =
+          await import("../../server/human-asks");
+        if (result.resurfaced) await remindAsk(result.transport.id);
+        // Stop holding the answer if the caller gives up, so a late approval
+        // steers into the session instead of into this dead call.
+        const answer = await awaitBlockingAnswer(
+          result.transport.id,
+          extra?.signal,
+        );
         if (answer === null) {
           return text(
-            `${result.ask.owner} hasn't answered yet — the ask stays open (${result.ask.id}) and their reply will arrive in this session as a message. Carry on with what doesn't need this credential, or stop and say what you're blocked on.`,
+            `${result.ask.owner} hasn't answered yet — the ask stays open (${result.ask.id}) and their reply will arrive in this session as a message. Carry on with what doesn't need this credential, or stop and say what you're blocked on. Call request_credential again to remind them, or cancel_credential_ask to withdraw it.`,
           );
         }
         return text(answer);
+      },
+    ),
+    tool(
+      "cancel_credential_ask",
+      "Withdraw one of this session's pending keychain asks (ids from list_grants). The owner is told it no longer needs an answer, and their buttons stop approving anything. Use it when the access is no longer needed or the ask should be replaced by a different one.",
+      {
+        askId: z.string().describe("The pending ask's id, e.g. 'ka-…'."),
+      },
+      async ({ askId }: { askId: string }) => {
+        const result = cancelCredentialAsk(askId, ctx.sessionId);
+        if ("error" in result)
+          return text(`Couldn't withdraw ${askId}: ${result.error}.`);
+        return text(`Withdrew keychain ask ${askId}.`);
       },
     ),
     tool(
@@ -361,6 +389,10 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
           (a) =>
             `- ${a.id}: awaiting ${a.owner}'s answer — purpose: ${a.purpose}`,
         );
+        if (pendingLines.length)
+          pendingLines.push(
+            "Call request_credential again to remind the owner, or cancel_credential_ask to withdraw one.",
+          );
         return text(
           [
             grants.length ? `Grants:\n${lines.join("\n")}` : "",

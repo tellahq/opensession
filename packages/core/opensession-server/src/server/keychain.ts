@@ -64,6 +64,8 @@ import { writeJsonAtomic, writeJsonAtomicAsync } from "./shared/atomic-write";
 import { audit } from "./audit";
 import { resolveTeammate } from "./shared/user-mappings";
 import {
+  cancelAsk,
+  getAsk,
   registerAsk,
   registerAskDomainHandler,
   type HumanAsk,
@@ -137,7 +139,7 @@ export interface KeychainAskRecord {
   requestedBy: string;
   purpose: string;
   requestedMode: GrantMode;
-  status: "pending" | "approved" | "declined" | "expired";
+  status: "pending" | "approved" | "declined" | "expired" | "cancelled";
   /** The human-asks transport record carrying the owner's buttons. */
   humanAskId?: string;
   grantId?: string;
@@ -712,9 +714,16 @@ export interface RequestCredentialInput {
   mode?: GrantMode;
 }
 
+export type RequestCredentialResult =
+  /** A new ask, or (resurfaced) this session's ask already awaiting the owner. */
+  | { ask: KeychainAskRecord; transport: HumanAsk; resurfaced?: true }
+  /** This session already holds a live grant that covers the request. */
+  | { grant: KeychainGrant; instructions: string }
+  | { error: string };
+
 export function requestCredential(
   input: RequestCredentialInput,
-): { ask: KeychainAskRecord; transport: HumanAsk } | { error: string } {
+): RequestCredentialResult {
   load();
   const credMeta = findCredential(input.credential);
   if (!credMeta) {
@@ -736,16 +745,40 @@ export function requestCredential(
       error: `credential owner "${credMeta.owner}" is not in the identity roster`,
     };
 
+  const requestedMode = input.mode || "once";
+  // An approval that landed after the caller stopped waiting is already a
+  // grant: hand it back rather than asking the owner twice.
+  const live = listGrants({ sessionId: input.sessionId }).find(
+    (gr) =>
+      gr.credentialId === credMeta.id &&
+      gr.status === "active" &&
+      (gr.mode === "standing" || requestedMode === "once"),
+  );
+  if (live)
+    return { grant: live, instructions: grantInstructions(live, credMeta) };
+
   const pending = [...keychainAsks.values()].find(
     (a) =>
       a.status === "pending" &&
       a.credentialId === credMeta.id &&
       a.sessionId === input.sessionId,
   );
-  if (pending)
-    return {
-      error: `an ask for this credential is already pending (${pending.id})`,
-    };
+  if (pending) {
+    const transport = pending.humanAskId
+      ? getAsk(pending.humanAskId)
+      : undefined;
+    // Still in front of the owner: re-surface it instead of refusing, so a
+    // caller that gave up waiting can pick the same ask back up.
+    if (
+      transport &&
+      transport.state !== "answered" &&
+      transport.state !== "cancelled"
+    )
+      return { ask: pending, transport, resurfaced: true };
+    // Its owner message is gone (cancelled or settled without reaching this
+    // record), so nobody can answer it. Close it and ask afresh.
+    settleAsk(pending, "cancelled", "owner message no longer open");
+  }
 
   const record: KeychainAskRecord = {
     id: `ka-${crypto.randomUUID()}`,
@@ -754,7 +787,7 @@ export function requestCredential(
     sessionId: input.sessionId,
     requestedBy: input.requestedBy,
     purpose,
-    requestedMode: input.mode || "once",
+    requestedMode,
     status: "pending",
     createdAt: new Date().toISOString(),
   };
@@ -789,6 +822,39 @@ export function requestCredential(
     owner: credMeta.owner,
   });
   return { ask: record, transport };
+}
+
+function settleAsk(
+  record: KeychainAskRecord,
+  status: "cancelled",
+  note: string,
+): void {
+  record.status = status;
+  record.resolvedAt = new Date().toISOString();
+  record.note = note;
+  keychainAsks.set(record.id, record);
+  persist();
+  audit({
+    kind: "keychain_ask_cancelled",
+    ask_id: record.id,
+    credential_id: record.credentialId,
+    session_id: record.sessionId,
+    note,
+  });
+}
+
+/** Withdraw a session's own pending ask; the owner is told it's moot. */
+export function cancelCredentialAsk(
+  askId: string,
+  sessionId: string,
+): { ask: KeychainAskRecord } | { error: string } {
+  load();
+  const record = keychainAsks.get(askId);
+  if (!record || record.sessionId !== sessionId || record.status !== "pending")
+    return { error: "no pending ask with that id in this session" };
+  settleAsk(record, "cancelled", "withdrawn by the requesting session");
+  if (record.humanAskId) cancelAsk(record.humanAskId);
+  return { ask: record };
 }
 
 export function listKeychainAsks(opts?: {
