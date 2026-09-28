@@ -222,6 +222,8 @@ describe("sessions created from a machine-started turn", () => {
       ownedSession({ lastPromptedBy: "Grace Hopper" }),
     );
     expect(opts.user).toBe("Grace Hopper");
+    // Ada's verified login must not be paired with Grace.
+    expect(opts.createdByLogin).toBeUndefined();
     expect(visibleInSidebarOf("Grace Hopper", opts.user)).toBe(true);
   });
 
@@ -231,6 +233,7 @@ describe("sessions created from a machine-started turn", () => {
       ownedSession(),
     );
     expect(opts.user).toBe(owner);
+    expect(opts.createdByLogin).toBe("ada");
     expect(visibleInSidebarOf(owner, opts.user)).toBe(true);
     // The scheduled turn records its own sender as the last prompter.
     const recorded = await createStandaloneFrom(

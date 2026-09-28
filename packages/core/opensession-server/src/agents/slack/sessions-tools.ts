@@ -86,18 +86,25 @@ export interface SessionsToolContext {
    * Who owns a session these tools create, resolved at call time. The turn's
    * sender (`createdBy`) may be a webhook or a scheduled check-back while a
    * person owns or is steering the calling session; see
-   * `sessionCreationOwner`. Defaults to `createdBy`.
+   * `sessionCreationOwner`. `login` is that owner's verified login, or
+   * undefined when it is not known for them. Defaults to `createdBy` and
+   * `createdByLogin`.
    */
-  creationOwner?: () => Promise<string>;
+  creationOwner?: () => Promise<{ user: string; login?: string }>;
 }
 
-/** Owner of a session created from this context (create_session, spawn_task). */
-async function creationOwnerOf(ctx: SessionsToolContext): Promise<string> {
-  if (!ctx.creationOwner) return ctx.createdBy;
+/** Owner of a session created from this context (create_session, spawn_task),
+ *  with a verified login only when it belongs to that same owner. */
+async function creationOwnerOf(
+  ctx: SessionsToolContext,
+): Promise<{ user: string; login?: string }> {
+  const fallback = { user: ctx.createdBy, login: ctx.createdByLogin };
+  if (!ctx.creationOwner) return fallback;
   try {
-    return (await ctx.creationOwner()) || ctx.createdBy;
+    const owner = await ctx.creationOwner();
+    return owner.user ? owner : fallback;
   } catch {
-    return ctx.createdBy;
+    return fallback;
   }
 }
 
@@ -576,10 +583,11 @@ export async function spawnTaskImpl(
     parentSessionId: caller,
     reportBack: Boolean(caller),
   });
+  const owner = await creationOwnerOf(ctx);
   const { id, createdBy, createdAt } = await deps.control.createSession({
     requestId,
     requestScope: caller || ctx.createdBy,
-    createdByLogin: ctx.createdByLogin,
+    createdByLogin: owner.login,
     prompt,
     repo: args.repo,
     mode,
@@ -588,7 +596,7 @@ export async function spawnTaskImpl(
     isolatedWorktree,
     parentSessionId: caller,
     reportBack: Boolean(caller),
-    user: await creationOwnerOf(ctx),
+    user: owner.user,
     sandbox: args.sandbox,
   });
   const depth = myDepth + 1;
@@ -1402,6 +1410,7 @@ export function createSessionsMcpServer(
               })
             : args.prompt;
           const branch = args.branch;
+          const owner = await creationOwnerOf(ctx);
           const { id, createdBy, createdAt } =
             await getSessionControl().createSession({
               requestId: durableToolRequestId(
@@ -1411,7 +1420,7 @@ export function createSessionsMcpServer(
                 args,
               ),
               requestScope: ctx.currentSessionId || ctx.createdBy,
-              createdByLogin: ctx.createdByLogin,
+              createdByLogin: owner.login,
               prompt,
               repo: args.repo,
               mode: args.mode,
@@ -1421,7 +1430,7 @@ export function createSessionsMcpServer(
               isolatedWorktree: args.isolatedWorktree,
               parentSessionId,
               reportBack: shouldReportBack,
-              user: await creationOwnerOf(ctx),
+              user: owner.user,
               sandbox: args.sandbox,
               accountId: args.accountId,
               forkFrom: args.forkFrom,

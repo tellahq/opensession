@@ -57,7 +57,9 @@ export type QueuedSteerDeps = {
     images: ImageInput[] | undefined,
   ): Promise<void>;
   /** A person's steer makes them the session's last prompter, so what the
-   *  running turn creates next is theirs (`sessionCreationOwner`). */
+   *  running turn creates next is theirs (`sessionCreationOwner`). Runs
+   *  before `steer`: a refused steer is still delivered as the next turn,
+   *  which records the same sender. */
   steeredBy?(sessionId: string, user: string | undefined): Promise<void>;
 };
 
@@ -150,6 +152,9 @@ export async function prepareAndSteerQueuedPrompt(
       throw new Error("Pending steer changed before fenced rejection");
     return "rejected";
   }
+  // Record the sender before the engine sees the message, so a
+  // create_session the steer prompts already resolves to them.
+  await deps.steeredBy?.(input.sessionId, prepared.user);
   deskTextNavigation.steer(input.sessionId, input.itemId);
   if (!deps.steer(before.token, input.text, input.images, input.itemId)) {
     if (!(await deps.reject(input.sessionId, input.itemId, before)))
@@ -158,7 +163,6 @@ export async function prepareAndSteerQueuedPrompt(
   }
   if (!(await deps.accept(input.sessionId, input.itemId, before)))
     throw new Error("Pending steer changed before runner acceptance");
-  await deps.steeredBy?.(input.sessionId, prepared.user);
   return "steered";
 }
 
@@ -217,6 +221,7 @@ export async function prepareAndInterruptQueuedPrompt(
       );
     return "target_changed";
   }
+  await deps.steeredBy?.(input.sessionId, prepared.user);
   if (!deps.steer(before.token, input.text, input.images, input.itemId)) {
     if (!(await deps.reject(input.sessionId, input.itemId, before)))
       throw new Error(
@@ -226,6 +231,5 @@ export async function prepareAndInterruptQueuedPrompt(
   }
   if (!(await deps.accept(input.sessionId, input.itemId, before)))
     throw new Error("Pending interrupt steer changed before runner acceptance");
-  await deps.steeredBy?.(input.sessionId, prepared.user);
   return "interrupted";
 }

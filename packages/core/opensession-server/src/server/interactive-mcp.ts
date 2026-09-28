@@ -178,8 +178,22 @@ export function interactiveMcpServers(
       // Read when a session is created, not when the turn starts, so a person
       // who steers a webhook- or schedule-started turn owns what it creates.
       creationOwner: sessionId
-        ? async () =>
-            sessionCreationOwner(createdBy, await findSessionAsync(sessionId))
+        ? async () => {
+            const session = await findSessionAsync(sessionId);
+            const owner = sessionCreationOwner(createdBy, session);
+            // The session's verified login belongs to its creator; never
+            // pair it with a different owner (a teammate who steered).
+            const creator = (session?.createdBy || session?.startedBy || "")
+              .trim()
+              .toLowerCase();
+            return {
+              user: owner,
+              login:
+                creator && creator === owner.trim().toLowerCase()
+                  ? session?.createdByLogin || undefined
+                  : undefined,
+            };
+          }
         : undefined,
     }),
     "opensession-admin": createAdminMcpServer({

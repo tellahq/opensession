@@ -233,35 +233,46 @@ test("hands the host the bare text even when images ride the steer", async () =>
   ]);
 });
 
-test("an accepted steer records who sent it, a refused one does not", async () => {
-  const target = { token: "run-1", runId: "run-1", generation: 1 };
-  const steeredBy: Array<[string, string | undefined]> = [];
-  const deps = (steerOk: boolean): QueuedSteerDeps => ({
+test("a steer records who sent it before the engine sees it", async () => {
+  let target = { token: "run-1", runId: "run-1", generation: 1 };
+  const events: string[] = [];
+  const deps = (): QueuedSteerDeps => ({
     target: () => target,
     prepare: async () => ({
       id: "item-1",
       content: "start a new session to fix the check",
       user: "Grace Hopper",
     }),
-    steer: () => steerOk,
+    steer: () => {
+      events.push("steer");
+      return true;
+    },
     accept: async () => true,
     reject: async () => true,
     steeredBy: async (sessionId, user) => {
-      steeredBy.push([sessionId, user]);
+      events.push(`recorded ${sessionId} ${user}`);
     },
   });
   const input = { sessionId: "session-1", itemId: "item-1", text: "x" };
 
-  expect(await prepareAndSteerQueuedPrompt(input, deps(false))).toBe(
-    "rejected",
-  );
-  expect(steeredBy).toEqual([]);
-  expect(await prepareAndSteerQueuedPrompt(input, deps(true))).toBe("steered");
-  expect(await prepareAndInterruptQueuedPrompt(input, deps(true))).toBe(
+  expect(await prepareAndSteerQueuedPrompt(input, deps())).toBe("steered");
+  expect(await prepareAndInterruptQueuedPrompt(input, deps())).toBe(
     "interrupted",
   );
-  expect(steeredBy).toEqual([
-    ["session-1", "Grace Hopper"],
-    ["session-1", "Grace Hopper"],
+  expect(events).toEqual([
+    "recorded session-1 Grace Hopper",
+    "steer",
+    "recorded session-1 Grace Hopper",
+    "steer",
   ]);
+
+  // A steer fenced off by a replacement run is not recorded here.
+  events.length = 0;
+  const fenced = deps();
+  fenced.prepare = async () => {
+    target = { token: "run-2", runId: "run-2", generation: 2 };
+    return { id: "item-1", content: "x", user: "Grace Hopper" };
+  };
+  expect(await prepareAndSteerQueuedPrompt(input, fenced)).toBe("rejected");
+  expect(events).toEqual([]);
 });
