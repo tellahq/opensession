@@ -4,10 +4,12 @@ import {
   daytonaDesktopUrl,
   daytonaCreateResources,
   daytonaCreateSource,
+  daytonaDriver,
   daytonaSnapshotIsRecent,
   daytonaSnapshotIsRecoverable,
   parseDaytonaExecResult,
 } from "./daytona";
+import { startUploadFixture } from "./daytona-upload-fixture";
 
 describe("Daytona create source", () => {
   test("cold repos without settings receive enough memory and disk for the runner", () => {
@@ -190,5 +192,32 @@ describe("Daytona desktop", () => {
     ).toBe(
       "https://6080-4kvyxv1qzdawyntz.daytonaproxy01.net/vnc.html?autoconnect=1&resize=scale",
     );
+  });
+});
+
+describe("Daytona file writes", () => {
+  test("writeFile uses the signed upload URL, not the form-data SDK upload", async () => {
+    const fixture = startUploadFixture();
+    try {
+      // SAFETY: replaces the SDK upload methods with tripwires for this test.
+      const sandbox = fixture.sandbox as any;
+      sandbox.fs.uploadFile = sandbox.fs.uploadFiles = () => {
+        throw new Error("fs.uploadFile needs form-data at runtime");
+      };
+      await daytonaDriver(sandbox).writeFile(
+        "/tmp/opensession-upload",
+        "uploaded",
+      );
+      expect(fixture.uploads).toHaveLength(1);
+      expect(fixture.uploads[0]).toMatchObject({
+        path: "/tmp/opensession-upload",
+        signatureValid: true,
+      });
+      expect(Buffer.from(fixture.uploads[0]!.bytes).toString()).toBe(
+        "uploaded",
+      );
+    } finally {
+      fixture.close();
+    }
   });
 });

@@ -58,6 +58,7 @@ import type {
   SandboxScreenshot,
 } from "../provider";
 import { x11WindowsViaXprop } from "../x11-desktop";
+import { uploadDaytonaFile } from "./daytona-upload";
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
@@ -361,7 +362,7 @@ async function daytonaClient(): Promise<Daytona> {
 
 // ── Driver ────────────────────────────────────────────────────────────────────
 
-function daytonaDriver(sbx: DaytonaSandbox): RemoteDriver {
+export function daytonaDriver(sbx: DaytonaSandbox): RemoteDriver {
   return {
     async exec(cmd: string, opts?: RemoteExecOpts) {
       // Daytona omits `result` when the transported shell exits non-zero. Run
@@ -403,7 +404,9 @@ function daytonaDriver(sbx: DaytonaSandbox): RemoteDriver {
     },
 
     async writeFile(path: string, content: string) {
-      await sbx.fs.uploadFile(Buffer.from(content, "utf-8"), path);
+      // Not sbx.fs.uploadFile: it requires `form-data` at runtime, which a
+      // compiled binary does not ship (see ./daytona-upload.ts).
+      await uploadDaytonaFile(sbx, path, content);
     },
 
     async ensureStarted() {
