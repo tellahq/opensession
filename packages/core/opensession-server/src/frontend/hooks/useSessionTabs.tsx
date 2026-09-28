@@ -19,6 +19,7 @@ import { BASE_PATH } from "../lib/base";
 import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { hasDraft } from "../lib/drafts";
 import {
+  isPrReviewSession,
   newSessionSource,
   sessionNeverRan,
   workspaceSessionSeed,
@@ -315,8 +316,10 @@ export function useSessionTabs({
     (a.createdAt || "").localeCompare(b.createdAt || "");
   // Archived (closed) sessions leave the strip — except the one you're actively
   // viewing (e.g. opened from Archived), which keeps its tab.
+  // PR review runs never take a tab: their results live in the Review pane.
+  // One still keeps its tab while it is the session on screen.
   const liveTab = (s: UnifiedSession) =>
-    !s.archived || s.id === currentSession?.id;
+    s.id === currentSession?.id || (!s.archived && !isPrReviewSession(s));
   /**
    * A worker session (one another session spawned through create_session) is a
    * drill-in, not a tab. Tabs are what a person opened; nobody opened this one.

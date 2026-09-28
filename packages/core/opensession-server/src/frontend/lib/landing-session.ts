@@ -59,6 +59,14 @@ export function isAutomationSession(s: UnifiedSession): boolean {
 }
 
 /**
+ * A PR review run (`bks-ghpr-<pr>-review` or `-adversarial`). Its findings live
+ * on the PR and in the Review pane, so it never takes a workspace tab.
+ */
+export function isPrReviewSession(s: { id: string }): boolean {
+  return /^bks-ghpr-.+-(review|adversarial)$/.test(s.id);
+}
+
+/**
  * The workspace's MAIN session from a createdAt-ascending list of its live sessions:
  * the oldest human conversation that actually ran — the session that started
  * the whole thing — with automation sessions (PR review/auto-fix runs) and
