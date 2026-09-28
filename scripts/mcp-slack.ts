@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { realpath, stat } from "node:fs/promises";
+import { basename } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -82,6 +84,38 @@ const tools = [
         ...booleanUnfurlProperties,
       },
       required: ["channel_id", "thread_ts", "text"],
+    },
+  },
+  {
+    name: "slack_upload_file",
+    description:
+      "Upload a local file (image, video, PDF, log, ...) and share it in a channel, or in a thread when thread_ts is given. Only files inside /tmp/slack-uploads are accepted: copy the file there first (mkdir -p /tmp/slack-uploads). At most 1 GB.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channel_id: {
+          type: "string",
+          description: "The ID of the channel to share the file in",
+        },
+        thread_ts: {
+          type: "string",
+          description:
+            "Timestamp of the parent message to share the file as a thread reply",
+        },
+        path: {
+          type: "string",
+          description: "Absolute path of the file to upload",
+        },
+        title: {
+          type: "string",
+          description: "Title shown on the file. Defaults to the filename",
+        },
+        initial_comment: {
+          type: "string",
+          description: "Message text posted together with the file",
+        },
+      },
+      required: ["channel_id", "path"],
     },
   },
   {
@@ -180,6 +214,13 @@ function requiredString(args: ToolArguments, name: string): string {
   return value;
 }
 
+function optionalString(args: ToolArguments, name: string): string | undefined {
+  const value = args[name];
+  if (value === undefined || value === "") return undefined;
+  if (typeof value !== "string") throw new Error(`${name} must be a string`);
+  return value;
+}
+
 function optionalBoolean(
   args: ToolArguments,
   name: string,
@@ -209,10 +250,60 @@ export function buildSlackMessageBody(
   };
 }
 
-class SlackClient {
+/** Slack's own per-file limit for external uploads. */
+export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
+
+/**
+ * The only directory uploads may come from. This process can read everything
+ * the service user can, including credentials, so an agent must place the
+ * file here itself rather than naming an arbitrary path.
+ */
+export const UPLOAD_ROOT = "/tmp/slack-uploads";
+
+/** Resolve an upload path, allowing only regular files inside `root`. */
+export async function resolveUploadFile(
+  path: string,
+  root = UPLOAD_ROOT,
+): Promise<{ path: string; size: number }> {
+  let resolved: string;
+  try {
+    resolved = await realpath(path);
+  } catch {
+    throw new Error(`File not found: ${path}`);
+  }
+  const allowed = await realpath(root).catch(() => undefined);
+  if (!allowed || !resolved.startsWith(`${allowed}/`))
+    throw new Error(`File must be inside ${root}: ${path}`);
+  const info = await stat(resolved);
+  if (!info.isFile()) throw new Error(`Not a regular file: ${path}`);
+  if (!info.size || info.size > MAX_UPLOAD_BYTES)
+    throw new Error(`File must be between 1 byte and 1 GB: ${path}`);
+  return { path: resolved, size: info.size };
+}
+
+export type UploadOptions = {
+  threadTs?: string;
+  title?: string;
+  initialComment?: string;
+};
+
+function slackError(step: string, result: any): Error {
+  if (result?.error === "missing_scope")
+    return new Error(
+      `Slack ${step} failed: the bot token is missing the ${result.needed || "files:write"} scope. Add it to the Slack app and reinstall it.`,
+    );
+  return new Error(
+    `Slack ${step} failed: ${result?.error || "invalid response"}`,
+  );
+}
+
+export class SlackClient {
   private readonly headers: Record<string, string>;
 
-  constructor(botToken: string) {
+  constructor(
+    private readonly botToken: string,
+    private readonly uploadRoot = UPLOAD_ROOT,
+  ) {
     this.headers = {
       Authorization: `Bearer ${botToken}`,
       "Content-Type": "application/json",
@@ -284,6 +375,71 @@ class SlackClient {
       "chat.postMessage",
       buildSlackMessageBody(channel, text, options, threadTs),
     );
+  }
+
+  private async postForm(
+    path: string,
+    params: Record<string, string>,
+  ): Promise<any> {
+    const response = await fetch(`https://slack.com/api/${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.botToken}`,
+        "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+      },
+      body: new URLSearchParams(params),
+    });
+    return response.json();
+  }
+
+  /**
+   * Slack retired files.upload; external uploads reserve a URL, receive the
+   * bytes there, and are shared by files.completeUploadExternal.
+   */
+  async uploadFile(
+    channel: string,
+    path: string,
+    options: UploadOptions = {},
+  ): Promise<unknown> {
+    const file = await resolveUploadFile(path, this.uploadRoot);
+    const filename = basename(file.path);
+    const reserved = await this.postForm("files.getUploadURLExternal", {
+      filename,
+      length: String(file.size),
+    });
+    if (!reserved?.ok || !reserved.upload_url || !reserved.file_id)
+      throw slackError("upload reservation", reserved);
+
+    const uploaded = await fetch(reserved.upload_url, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: Bun.file(file.path),
+    });
+    if (!uploaded.ok)
+      throw new Error(`Slack file upload failed: HTTP ${uploaded.status}`);
+
+    const completed = await this.postForm("files.completeUploadExternal", {
+      files: JSON.stringify([
+        { id: reserved.file_id, title: options.title || filename },
+      ]),
+      channel_id: channel,
+      ...(options.threadTs ? { thread_ts: options.threadTs } : {}),
+      ...(options.initialComment
+        ? { initial_comment: options.initialComment }
+        : {}),
+    });
+    if (!completed?.ok) throw slackError("upload completion", completed);
+
+    const info = (await this.get(
+      "files.info",
+      new URLSearchParams({ file: reserved.file_id }),
+    ).catch(() => undefined)) as any;
+    return {
+      ok: true,
+      file_id: reserved.file_id,
+      title: options.title || filename,
+      ...(info?.file?.permalink ? { permalink: info.file.permalink } : {}),
+    };
   }
 
   addReaction(
@@ -369,6 +525,17 @@ async function main(): Promise<void> {
             requiredString(args, "thread_ts"),
             requiredString(args, "text"),
             options,
+          );
+          break;
+        case "slack_upload_file":
+          result = await client.uploadFile(
+            requiredString(args, "channel_id"),
+            requiredString(args, "path"),
+            {
+              threadTs: optionalString(args, "thread_ts"),
+              title: optionalString(args, "title"),
+              initialComment: optionalString(args, "initial_comment"),
+            },
           );
           break;
         case "slack_add_reaction":
