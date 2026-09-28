@@ -35,8 +35,10 @@ export function createAskUserMcpServer(ctx: { ask: AskUserHandler }) {
       "Ask the human watching this session a question and wait for their answer. " +
         `The run pauses on a question card in the ${productName()} UI (escalating to the session ` +
         "owner over Slack if nobody answers there), and this tool returns what they chose " +
-        "or typed. Use it only for a genuine fork in the work — a decision you can't make " +
-        "from the request, the code, or a sensible default. Offer 2-4 concrete options " +
+        "or typed. Use it for a genuine fork in the work (a decision you can't make " +
+        "from the request, the code, or a sensible default) or a blocker only the human can " +
+        "clear: missing access, a credential, a login, or a physical action. Ask instead of " +
+        "working around such a blocker. Offer 2-4 concrete options " +
         "when the choice is enumerable; the human can always answer with free text.",
       {
         questions: z

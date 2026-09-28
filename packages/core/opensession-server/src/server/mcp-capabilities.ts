@@ -131,7 +131,7 @@ export const INTERNAL_MCP_CAPABILITIES = {
   "opensession-ask": {
     summary: "Ask the human a blocking question.",
     guidance:
-      "Pause on a blocking question card when a decision only the human can make is required.",
+      "Pause on a question card for what only the human can give: a decision, credential, access, login, or physical action. Never work around it.",
   },
   "opensession-workflows": {
     summary: "Deterministic agent fan-out from a model-authored script.",

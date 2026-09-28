@@ -96,6 +96,16 @@ export function buildRunInstructions(input: {
     "## Finish your turns\nComplete promised actions, then briefly report the outcome and " +
       "relevant links.",
   );
+  // The persistence rules above (and the auto-continue nudges) say when to
+  // keep going; this says when to stop. Without it, runs treat a 403 or a
+  // missing token as a puzzle and try route after route instead of asking.
+  parts.push(
+    "## When blocked\nA 401 or 403, `Repository not found`, `Bad credentials`, SSH `Permission " +
+      "denied`, a missing token or secret, or a login, 2FA, or password prompt needs the human. " +
+      "Check once for an alternative named in these instructions, then stop and ask for exactly " +
+      "what you need. Never hunt for credentials or try other routes to the same resource. A " +
+      "clear access request is a good way to end a turn.",
+  );
   parts.push(
     "## References\nFor PRs outside the current primary repository, write " +
       "`<repo>#<number>`, never bare `#<number>`. A bare `#<number>` reads as a " +

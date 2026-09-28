@@ -849,7 +849,7 @@ Ask the human a blocking question.
 
 `mcp__opensession-ask__ask_user` · input: `questions` (object[], required)
 
-Ask the human watching this session a question and wait for their answer. The run pauses on a question card in the Open Session UI (escalating to the session owner over Slack if nobody answers there), and this tool returns what they chose or typed. Use it only for a genuine fork in the work — a decision you can't make from the request, the code, or a sensible default. Offer 2-4 concrete options when the choice is enumerable; the human can always answer with free text.
+Ask the human watching this session a question and wait for their answer. The run pauses on a question card in the Open Session UI (escalating to the session owner over Slack if nobody answers there), and this tool returns what they chose or typed. Use it for a genuine fork in the work (a decision you can't make from the request, the code, or a sensible default) or a blocker only the human can clear: missing access, a credential, a login, or a physical action. Ask instead of working around such a blocker. Offer 2-4 concrete options when the choice is enumerable; the human can always answer with free text.
 
 ## opensession-workflows
 

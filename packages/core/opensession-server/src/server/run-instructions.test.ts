@@ -137,6 +137,7 @@ describe("buildRunInstructions", () => {
     expect(prompt.match(/^## .+$/gm)).toEqual([
       "## Data handling",
       "## Finish your turns",
+      "## When blocked",
       "## References",
       "## Working directory",
       "## Pull requests",
@@ -172,8 +173,9 @@ describe("buildRunInstructions", () => {
     // and Tools names what each mounted server is for: the two things a run
     // cannot learn from a skill or from mcp_search without already knowing
     // they exist. Two servers mounted here; a full interactive mount adds
-    // roughly 150 chars per server on top.
-    expect(prompt.length).toBeLessThan(3_000);
+    // roughly 150 chars per server on top. "When blocked" is the one
+    // standing counterweight to the keep-going rules, so it earns its bytes.
+    expect(prompt.length).toBeLessThan(3_400);
   });
 
   test("tells a sandboxed run where it is, in one shared paragraph", () => {
