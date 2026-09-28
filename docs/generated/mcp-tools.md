@@ -473,7 +473,7 @@ List the credentials teammates have registered in the keychain — service, owne
 
 `mcp__opensession-keychain__request_credential` · input: `credential` (string, required), `purpose` (string, required), `mode` ("once" | "standing")
 
-Ask a credential's owner to lend it to THIS session for a stated purpose. They get a DM (or a card, if they're driving a session) with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive broker instructions — a URL that injects the credential server-side; you never see the secret itself. Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. If they decline, don't re-ask. Calling again while your ask is still pending reminds the owner and waits on that same ask; if they already approved, it returns the live grant.
+Ask a credential's owner to lend it to THIS session for a stated purpose. They get a DM (or a card, if they're driving a session) with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive broker instructions — a URL that injects the credential server-side; you never see the secret itself. Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. If they decline, don't re-ask. Calling again with the same purpose while your ask is pending reminds the owner and waits on that same ask; if they already approved it, you get the live grant back.
 
 ### `cancel_credential_ask`
 

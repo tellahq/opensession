@@ -171,6 +171,9 @@ const imm = (
 export async function dispatchRunRpc(
   path: string,
   body: any,
+  /** Aborts a tools/call when the caller gives up (the agent's MCP client
+   *  cancelled or timed out), so the tool sees it on its own `extra.signal`. */
+  signal?: AbortSignal,
 ): Promise<RunRpcDispatch> {
   const token = String(body?.token || "");
   let ctx: RunTokenContext | undefined = tokens.get(token);
@@ -238,7 +241,7 @@ export async function dispatchRunRpc(
             arguments: body?.args ?? {},
           },
           undefined,
-          { timeout: RPC_TOOL_CALL_TIMEOUT_MS },
+          { timeout: RPC_TOOL_CALL_TIMEOUT_MS, signal },
         )
         .then(
           (res) => ({ result: res }),
@@ -267,7 +270,10 @@ async function handleRpc(req: Request): Promise<Response> {
   } catch {
     return json({ error: "invalid JSON body" }, 400);
   }
-  const dispatched = await dispatchRunRpc(path, body);
+  // The proxy drops the request when its caller cancels; pass that on.
+  const abort = new AbortController();
+  req.signal.addEventListener("abort", () => abort.abort(), { once: true });
+  const dispatched = await dispatchRunRpc(path, body, abort.signal);
   if (dispatched.kind === "immediate") {
     return json(dispatched.body, dispatched.status);
   }
@@ -278,8 +284,8 @@ async function handleRpc(req: Request): Promise<Response> {
   // so the proxy's res.json() sees only the final body. Errors ride the
   // body as { error } (the stream is already 200 by then) — the proxy
   // treats a body-level error like a non-OK status. If the caller goes away
-  // mid-call, the call still runs to completion (bounded by the call-level
-  // timeout) and dispatchRunRpc's internal cleanup releases the transports.
+  // mid-call, the tool call is cancelled (the tool sees it on its signal) and
+  // dispatchRunRpc's internal cleanup releases the transports.
   const done = dispatched.done;
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -296,6 +302,9 @@ async function handleRpc(req: Request): Promise<Response> {
           controller.close();
         } catch {}
       });
+    },
+    cancel() {
+      abort.abort();
     },
   });
   return new Response(stream, {
@@ -488,12 +497,17 @@ async function handleMcpHttp(req: Request): Promise<Response> {
 
   if (method === "tools/call") {
     const args: Record<string, unknown> = { ...(msg?.params?.arguments ?? {}) };
-    const d = await dispatchRunRpc("/mcp/call", {
-      token,
-      server,
-      tool: String(msg?.params?.name || ""),
-      args,
-    });
+    const abort = new AbortController();
+    const d = await dispatchRunRpc(
+      "/mcp/call",
+      {
+        token,
+        server,
+        tool: String(msg?.params?.name || ""),
+        args,
+      },
+      abort.signal,
+    );
     const toResult = (
       respBody: Record<string, unknown>,
     ): Record<string, unknown> =>
@@ -534,8 +548,9 @@ async function handleMcpHttp(req: Request): Promise<Response> {
         });
       },
       cancel() {
-        // Caller went away; the call runs to completion under its own timeout
-        // and dispatchRunRpc's cleanup releases the transports.
+        // Caller went away: cancel the tool call; dispatchRunRpc's cleanup
+        // releases the transports.
+        abort.abort();
       },
     });
     return new Response(stream, {

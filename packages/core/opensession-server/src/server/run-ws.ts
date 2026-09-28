@@ -415,6 +415,11 @@ function wsClose(ws: any): boolean {
   return data?.sandboxWs === "rpc";
 }
 
+/** In-flight rpc frames on one proxy connection, by frame id. */
+function rpcFrameAborts(ws: any): Map<string, AbortController> {
+  return ((ws as any).__rpcFrameAborts ??= new Map());
+}
+
 async function handleRpcFrame(
   ws: any,
   message: string | Buffer,
@@ -433,14 +438,27 @@ async function handleRpcFrame(
   }
   const id = String(frame?.id || "");
   if (!id) return;
+  // The proxy's caller gave up on an in-flight call: cancel the tool call.
+  if (frame?.t === "cancel") {
+    rpcFrameAborts(ws).get(id)?.abort();
+    return;
+  }
+  const aborts = rpcFrameAborts(ws);
+  const abort = new AbortController();
+  aborts.set(id, abort);
   const reply = (status: number, body: unknown) => {
+    aborts.delete(id);
     try {
       ws.send(JSON.stringify({ id, status, body }));
     } catch {}
   };
   try {
     // Same core as the unix RPC socket — token re-validated per frame.
-    const d = await dispatchRunRpc(String(frame?.path || ""), frame);
+    const d = await dispatchRunRpc(
+      String(frame?.path || ""),
+      frame,
+      abort.signal,
+    );
     if (d.kind === "immediate") reply(d.status, d.body);
     else reply(200, await d.done); // WS needs no heartbeat wrapper — pings keep the socket alive
   } catch (e: any) {

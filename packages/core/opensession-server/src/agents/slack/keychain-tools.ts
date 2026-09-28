@@ -160,7 +160,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
     ),
     tool(
       "request_credential",
-      "Ask a credential's owner to lend it to THIS session for a stated purpose. They get a DM (or a card, if they're driving a session) with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive broker instructions — a URL that injects the credential server-side; you never see the secret itself. Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. If they decline, don't re-ask. Calling again while your ask is still pending reminds the owner and waits on that same ask; if they already approved, it returns the live grant.",
+      "Ask a credential's owner to lend it to THIS session for a stated purpose. They get a DM (or a card, if they're driving a session) with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive broker instructions — a URL that injects the credential server-side; you never see the secret itself. Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. If they decline, don't re-ask. Calling again with the same purpose while your ask is pending reminds the owner and waits on that same ask; if they already approved it, you get the live grant back.",
       {
         credential: z
           .string()
@@ -202,13 +202,12 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
         // comes back here is already the text the model should act on.
         const { awaitBlockingAnswer, remindAsk } =
           await import("../../server/human-asks");
-        if (result.resurfaced) await remindAsk(result.transport.id);
         // Stop holding the answer if the caller gives up, so a late approval
-        // steers into the session instead of into this dead call.
-        const answer = await awaitBlockingAnswer(
-          result.transport.id,
-          extra?.signal,
-        );
+        // steers into the session instead of into this dead call. Wait
+        // before reminding, so an answer during the reminder isn't missed.
+        const waiting = awaitBlockingAnswer(result.transport.id, extra?.signal);
+        if (result.resurfaced) await remindAsk(result.transport.id);
+        const answer = await waiting;
         if (answer === null) {
           return text(
             `${result.ask.owner} hasn't answered yet — the ask stays open (${result.ask.id}) and their reply will arrive in this session as a message. Carry on with what doesn't need this credential, or stop and say what you're blocked on. Call request_credential again to remind them, or cancel_credential_ask to withdraw it.`,

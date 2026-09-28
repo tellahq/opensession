@@ -159,12 +159,25 @@ if (WS_URL) {
 async function rpcOnceWs(
   path: string,
   body: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<any> {
   const sock = await ensureWs();
   const id = crypto.randomUUID();
   const res = await new Promise<{ status: number; body: any }>(
     (resolve, reject) => {
       wsPending.set(id, { resolve, reject });
+      // Our caller gave up: tell opensession to cancel the tool call.
+      signal?.addEventListener(
+        "abort",
+        () => {
+          if (!wsPending.delete(id)) return;
+          try {
+            sock.send(JSON.stringify({ t: "cancel", id }));
+          } catch {}
+          reject(signal.reason);
+        },
+        { once: true },
+      );
       try {
         sock.send(
           JSON.stringify({
@@ -197,9 +210,12 @@ async function rpcOnceWs(
 async function rpcOnceSocket(
   path: string,
   body: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<any> {
+  // Aborting drops the request, which cancels the tool call on the far side.
   const res = await fetch(`http://backstage${path}`, {
     method: "POST",
+    signal,
     // Bun extension: route the request over a unix socket.
     unix: SOCK,
     headers: { "content-type": "application/json" },
@@ -233,13 +249,18 @@ async function rpc(
   path: string,
   body: Record<string, unknown>,
   timeoutMs = 120_000,
+  signal?: AbortSignal,
 ): Promise<any> {
   const deadline = Date.now() + timeoutMs;
   let lastErr: unknown;
   for (;;) {
+    signal?.throwIfAborted();
     try {
-      return await (WS_URL ? rpcOnceWs(path, body) : rpcOnceSocket(path, body));
+      return await (WS_URL
+        ? rpcOnceWs(path, body, signal)
+        : rpcOnceSocket(path, body, signal));
     } catch (e) {
+      if (signal?.aborted) throw e;
       if (e instanceof RpcError && !e.retryable) throw e;
       lastErr = e; // connect failure — opensession likely restarting
     }
@@ -268,7 +289,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return { tools: data.tools || [] };
 });
 
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
+server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
   try {
     // On SHARED engine servers, engine-plugin-session-tag.js injects the
     // engine session id into the tool arguments so calls can be routed to
@@ -286,6 +307,9 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
         args,
       },
       32 * 60_000,
+      // The engine cancelled or timed out the call: forward that, so the
+      // tool stops waiting instead of holding its answer for a dead call.
+      extra.signal,
     );
     return data.result;
   } catch (e: any) {

@@ -747,11 +747,13 @@ export function requestCredential(
 
   const requestedMode = input.mode || "once";
   // An approval that landed after the caller stopped waiting is already a
-  // grant: hand it back rather than asking the owner twice.
+  // grant: hand it back rather than asking the owner twice. Only for the
+  // purpose the owner approved; a new purpose is a new ask.
   const live = listGrants({ sessionId: input.sessionId }).find(
     (gr) =>
       gr.credentialId === credMeta.id &&
       gr.status === "active" &&
+      norm(gr.purpose) === norm(purpose) &&
       (gr.mode === "standing" || requestedMode === "once"),
   );
   if (live)
@@ -773,8 +775,16 @@ export function requestCredential(
       transport &&
       transport.state !== "answered" &&
       transport.state !== "cancelled"
-    )
+    ) {
+      // The owner is approving that ask's sentence, not this one.
+      if (norm(pending.purpose) !== norm(purpose))
+        return {
+          error:
+            `a different ask for this credential is already pending (${pending.id}, purpose: "${pending.purpose}"). ` +
+            `Ask again with that purpose to remind the owner, or withdraw it with cancel_credential_ask first`,
+        };
       return { ask: pending, transport, resurfaced: true };
+    }
     // Its owner message is gone (cancelled or settled without reaching this
     // record), so nobody can answer it. Close it and ask afresh.
     settleAsk(pending, "cancelled", "owner message no longer open");

@@ -29,6 +29,8 @@ mock.module("./shared/user-mappings", () => ({
 // Slack transport: record what the owner would see instead of calling Slack.
 const slackPosts: Array<{ channel: string; text: string; threadTs?: string }> =
   [];
+/** Runs while a threaded reply is in flight, e.g. the owner answering. */
+let duringReply: (() => void) | null = null;
 let nextTs = 1;
 const realSlack = await import("../agents/slack/slack-api");
 mock.module("../agents/slack/slack-api", () => ({
@@ -44,6 +46,10 @@ mock.module("../agents/slack/slack-api", () => ({
     threadTs?: string,
   ) => {
     slackPosts.push({ channel, text, threadTs });
+    const hook = duringReply;
+    duringReply = null;
+    await Promise.resolve();
+    hook?.();
     return { ok: true };
   },
   updateSlackBlocks: async () => ({ ok: true }),
@@ -57,6 +63,7 @@ mock.module("./session-kernel", () => ({
 }));
 
 const humanAsks = await import("./human-asks");
+const runRpc = await import("./run-rpc");
 const kc = await import("./keychain");
 const { createKeychainMcpServer } =
   await import("../agents/slack/keychain-tools");
@@ -75,6 +82,7 @@ beforeEach(() => {
   process.env.OPENSESSION_KEYCHAIN_STORE = STORE;
   resetKeychain();
   slackPosts.length = 0;
+  duringReply = null;
   kc.addCredential({
     owner: "Alex",
     service: "acme-prod",
@@ -205,11 +213,76 @@ describe("a request_credential call that timed out on the client", () => {
     const again = textOf(
       await client.callTool({
         name: "request_credential",
-        arguments: { credential: "acme-prod", purpose: "read invoices" },
+        arguments: {
+          credential: "acme-prod",
+          purpose: "Read the latest invoice ",
+        },
       }),
     );
     expect(again).toContain(grant.id);
     expect(kc.listKeychainAsks({ sessionId: SESSION })).toHaveLength(1);
+  });
+
+  test("a grant for another purpose is not handed back; the owner is asked", async () => {
+    const client = await connect();
+    await requestThatTimesOut(client);
+    const ask = pendingAsk();
+    await deliver(ask.humanAskId!);
+    humanAsks.resolveByOption(ask.humanAskId!, "Approve standing");
+
+    const result = kc.requestCredential({
+      credential: "acme-prod",
+      sessionId: SESSION,
+      requestedBy: "Alex",
+      purpose: "issue refunds",
+    });
+    if (!("ask" in result)) throw new Error("expected a new ask");
+    expect(result.resurfaced).toBeUndefined();
+    expect(result.ask.purpose).toBe("issue refunds");
+  });
+
+  test("a pending ask for another purpose is not re-surfaced as this one", async () => {
+    const client = await connect();
+    await requestThatTimesOut(client);
+    const ask = pendingAsk();
+
+    const result = kc.requestCredential({
+      credential: "acme-prod",
+      sessionId: SESSION,
+      requestedBy: "Alex",
+      purpose: "issue refunds",
+    });
+    expect("error" in result && result.error).toContain(ask.id);
+    expect("error" in result && result.error).toContain(
+      "cancel_credential_ask",
+    );
+    expect(pendingAsk().id).toBe(ask.id);
+  });
+
+  test("an approval that lands during the reminder still reaches the call", async () => {
+    const client = await connect();
+    await requestThatTimesOut(client);
+    const ask = pendingAsk();
+    await deliver(ask.humanAskId!);
+    duringReply = () =>
+      humanAsks.resolveByOption(ask.humanAskId!, "Approve standing");
+
+    const answer = textOf(
+      await client.callTool(
+        {
+          name: "request_credential",
+          arguments: {
+            credential: "acme-prod",
+            purpose: "read the latest invoice",
+            mode: "standing",
+          },
+        },
+        undefined,
+        { timeout: 1_000 },
+      ),
+    );
+    const grant = kc.listGrants({ sessionId: SESSION })[0]!;
+    expect(answer).toContain(grant.id);
   });
 
   test("the session can withdraw its pending ask and ask afresh", async () => {
@@ -267,5 +340,47 @@ describe("a request_credential call that timed out on the client", () => {
       kc.listKeychainAsks({ sessionId: SESSION }).find((a) => a.id === ask.id)
         ?.status,
     ).toBe("cancelled");
+  });
+});
+
+describe("cancellation through the run-rpc dispatcher", () => {
+  test("a caller that gives up releases the ask, so a late approval reaches the session", async () => {
+    const token = `tok-${crypto.randomUUID()}`;
+    runRpc.registerRunToken(token, { sessionId: SESSION, user: "Alex" });
+    runRpc.registerInteractiveMcpBuilder((sessionId, user) => ({
+      "opensession-keychain": createKeychainMcpServer({
+        sessionId,
+        user: user || "Alex",
+      }),
+    }));
+    try {
+      const abort = new AbortController();
+      const d = await runRpc.dispatchRunRpc(
+        "/mcp/call",
+        {
+          token,
+          server: "opensession-keychain",
+          tool: "request_credential",
+          args: {
+            credential: "acme-prod",
+            purpose: "read the latest invoice",
+            mode: "standing",
+          },
+        },
+        abort.signal,
+      );
+      if (d.kind !== "call") throw new Error("expected a tool call");
+      for (let i = 0; i < 100 && !kc.listKeychainAsks().length; i++)
+        await Bun.sleep(5);
+      const ask = pendingAsk();
+      await deliver(ask.humanAskId!);
+      expect(humanAsks.getAsk(ask.humanAskId!)?.mode).toBe("block");
+
+      abort.abort();
+      expect((await d.done).error).toBeTruthy();
+      expect(humanAsks.getAsk(ask.humanAskId!)?.mode).toBe("async");
+    } finally {
+      runRpc.unregisterRunToken(token);
+    }
   });
 });
