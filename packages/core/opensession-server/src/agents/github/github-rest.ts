@@ -268,6 +268,28 @@ export async function findReviewProgressComment(
   return mine ? mine.id : null;
 }
 
+const OUTDATED_SUMMARY =
+  "<summary>🕙 Outdated review — superseded by a newer review below</summary>";
+
+/**
+ * The body of a review comment collapsed as outdated. The review may contain
+ * its own <details> sections, which stay intact; only an earlier outdated
+ * wrapper is removed so re-superseding never nests it.
+ */
+export function outdatedReviewBody(body: string): string {
+  let inner = body.trim();
+  if (inner.startsWith(REVIEW_OUTDATED_MARKER)) {
+    inner = inner.slice(REVIEW_OUTDATED_MARKER.length).trim();
+    const wrapped = inner.match(
+      /^<details>\s*<summary>[\s\S]*?<\/summary>([\s\S]*)<\/details>$/i,
+    );
+    if (wrapped) inner = wrapped[1].trim();
+  } else if (inner.startsWith(REVIEW_MARKER)) {
+    inner = inner.slice(REVIEW_MARKER.length).trim();
+  }
+  return `${REVIEW_OUTDATED_MARKER}\n<details>\n${OUTDATED_SUMMARY}\n\n${inner}\n\n</details>`;
+}
+
 /** Collapse a prior review comment under a "Outdated review" <details> and re-mark it. */
 export async function supersedeReviewComment(
   commentId: number,
@@ -275,15 +297,7 @@ export async function supersedeReviewComment(
 ): Promise<void> {
   const old = await getComment(commentId, ghRepo);
   if (!old?.body) return;
-  let inner = old.body
-    .replace(REVIEW_MARKER, "")
-    .replace(REVIEW_OUTDATED_MARKER, "")
-    .trim();
-  const detailsMatch = inner.match(
-    /<details>[\s\S]*?<summary>[\s\S]*?<\/summary>\s*([\s\S]*?)<\/details>/i,
-  );
-  if (detailsMatch) inner = detailsMatch[1].trim(); // avoid nesting details on re-supersede
-  const collapsed = `${REVIEW_OUTDATED_MARKER}\n<details>\n<summary>🕙 Outdated review — superseded by a newer review below</summary>\n\n${inner}\n\n</details>`;
+  const collapsed = outdatedReviewBody(old.body);
   await githubRequest(
     "PATCH",
     `/repos/${ghRepo}/issues/comments/${commentId}`,
