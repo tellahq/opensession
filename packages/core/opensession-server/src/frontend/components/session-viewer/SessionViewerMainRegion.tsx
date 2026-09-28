@@ -157,17 +157,7 @@ interface SurfaceRegion {
   showVideo: boolean;
   subagentOpen: boolean;
   conversationThreadId?: string | null;
-}
-
-/**
- * Which kept-alive tabs exist in the strip, foregrounded or not. Their
- * surfaces stay mounted (hidden) while the tab exists, so switching away and
- * back keeps shells' PTYs and framed pages' state.
- */
-interface KeptAliveTabs {
-  terminal: boolean;
-  staging: boolean;
-  portal: boolean;
+  frameScope?: string;
 }
 
 interface PaneRegion {
@@ -184,7 +174,7 @@ interface PaneRegion {
   nameSubagent: ComponentProps<typeof SubagentPane>["onLabel"];
   hasWorkspace: boolean;
   waitingForWorkspace: boolean;
-  openTabs: KeptAliveTabs;
+  terminalTabOpen: boolean;
   previewStatus: PreviewStatus | null;
 }
 
@@ -455,6 +445,7 @@ export function SessionViewerMainRegion({
     showVideo,
     subagentOpen,
     conversationThreadId,
+    frameScope,
   } = surfaces;
   const {
     assetFiles,
@@ -470,7 +461,7 @@ export function SessionViewerMainRegion({
     nameSubagent,
     hasWorkspace,
     waitingForWorkspace,
-    openTabs,
+    terminalTabOpen,
     previewStatus,
   } = panes;
   const {
@@ -685,13 +676,28 @@ export function SessionViewerMainRegion({
         actionClearance,
       )}
     >
-      {showPortal && portalTarget ? null : showDesktop ? (
+      {showPortal && portalTarget ? (
+        <SessionPreviewSurface
+          surface={{ kind: "portal", target: portalTarget }}
+          frameScope={frameScope}
+        />
+      ) : showDesktop ? (
         // The Sandbox desktop, full-width like a Portal. Mounted only while
         // in front: the pane mints a one-viewer URL each time it opens.
         <div className={VIEWER_REVIEW_MAIN}>
           <SandboxDesktopPane sessionId={session.id} />
         </div>
-      ) : showStaging && stagingUrl ? null : showAssets ? (
+      ) : showStaging && stagingUrl ? (
+        <SessionPreviewSurface
+          surface={{
+            kind: "staging",
+            deployment: staging,
+            url: stagingUrl,
+            shareLink,
+          }}
+          frameScope={frameScope}
+        />
+      ) : showAssets ? (
         // The session's scratch assets, full-width (same component
         // the Info panel's Assets button opens). AssetsPanel is
         // `h-full`, so the flex-column viewer-review-main gives it
@@ -1510,32 +1516,11 @@ export function SessionViewerMainRegion({
           </div>
         </div>
       )}
-      {/* Portal and Browser frames keep their page, scroll, and form state
-					    across view-tab switches: mounted for as long as their tab
-					    exists (the chain above renders nothing for them), hidden while
-					    another surface is in front. */}
-      {portalTarget && (openTabs.portal || showPortal) ? (
-        <SessionPreviewSurface
-          hidden={!showPortal}
-          surface={{ kind: "portal", target: portalTarget }}
-        />
-      ) : null}
-      {stagingUrl && (openTabs.staging || showStaging) ? (
-        <SessionPreviewSurface
-          hidden={!showStaging}
-          surface={{
-            kind: "staging",
-            deployment: staging,
-            url: stagingUrl,
-            shareLink,
-          }}
-        />
-      ) : null}
       {/* Shells keep their PTYs alive across view-tab switches: mounted
 					    for as long as the Terminal tab exists, hidden while another
 					    surface is in front. Closing the tab unmounts them, which is what
 					    tears the PTYs down; they also die with the socket. */}
-      {hasWorkspace && !waitingForWorkspace && openTabs.terminal ? (
+      {hasWorkspace && !waitingForWorkspace && terminalTabOpen ? (
         <div className={showTerminal ? VIEWER_REVIEW_MAIN : "hidden"}>
           <ShellPanel sessionId={session.id} visible={showTerminal} />
         </div>

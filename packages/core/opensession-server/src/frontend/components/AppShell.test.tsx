@@ -10,7 +10,12 @@ function TitleBarStub({ pane }: { pane?: boolean }) {
   return <div data-pane={pane} />;
 }
 
+function KeptFrameLayerStub() {
+  return null;
+}
+
 mock.module("./TitleBar", () => ({ TitleBar: TitleBarStub }));
+mock.module("./KeptFrameLayer", () => ({ KeptFrameLayer: KeptFrameLayerStub }));
 afterAll(() => mock.restore());
 const { AppShell } = await import("./AppShell");
 
@@ -59,13 +64,15 @@ describe("AppShell", () => {
     expect(rightPanel.props.ref).toBe(rightPanelRef);
 
     const paneChildren = elementChildren(main.props.children);
-    expect(paneChildren).toHaveLength(3);
-    const [titleBar, dragHandle, child] = paneChildren;
+    expect(paneChildren).toHaveLength(4);
+    const [titleBar, dragHandle, child, keptFrames] = paneChildren;
     expect(titleBar.type).toBe(TitleBarStub);
     expect(titleBar.props.pane).toBe(true);
     expect(dragHandle.type).toBe("div");
     expect(dragHandle.props.className).toBe("wco-collapsed-drag-handle");
     expect(dragHandle.props["aria-hidden"]).toBe("true");
     expect(child.props["data-testid"]).toBe("pane-child");
+    // Last, so kept Browser and Portal pages paint over their slots.
+    expect(keptFrames.type).toBe(KeptFrameLayerStub);
   });
 });

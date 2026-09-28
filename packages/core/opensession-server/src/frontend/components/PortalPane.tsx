@@ -8,8 +8,10 @@ export function PortalPane({
   target,
   onExpand,
   onClose,
+  keepAliveKey,
 }: {
   target: PortalTarget;
+  keepAliveKey?: string;
   onExpand?: () => void;
   onClose?: () => void;
 }) {
@@ -20,6 +22,7 @@ export function PortalPane({
       frameTitle={`${target.name} portal`}
       openWindowName={`portal-${target.sessionId}-${target.key}`}
       allow="clipboard-read; clipboard-write; fullscreen"
+      keepAliveKey={keepAliveKey}
       sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads"
       leading={
         <span

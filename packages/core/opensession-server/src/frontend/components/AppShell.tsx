@@ -4,6 +4,7 @@ import {
   RIGHT_PANEL_SLOT,
   WORKSPACE_SHELL,
 } from "../lib/app-shell-classes";
+import { KeptFrameLayer } from "./KeptFrameLayer";
 import { TitleBar } from "./TitleBar";
 
 /** AppShell owns only layout chrome. App keeps routing, data, and mutations. */
@@ -28,6 +29,9 @@ export function AppShell({
             window can still move without stealing any control's clicks. */}
         <div className="wco-collapsed-drag-handle" aria-hidden="true" />
         {children}
+        {/* Browser and Portal pages that survive switching tabs and
+            sessions. Last, so it paints over the slots it fills. */}
+        <KeptFrameLayer />
       </main>
 
       {/* Full-height right column inside the same rounded workspace shell as

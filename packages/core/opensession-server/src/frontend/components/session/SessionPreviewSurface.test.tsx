@@ -50,42 +50,40 @@ test("a non-embeddable deployment keeps the first-party fallback", () => {
   expect(html).toContain(`href="${STAGING_URL.replace("&", "&amp;")}"`);
 });
 
-test("a backgrounded preview stays mounted but hidden", () => {
-  const surface = {
-    kind: "staging",
-    deployment: { status: "Ready", embeddable: true },
-    url: STAGING_URL,
-    shareLink,
-  } as const;
-  const shown = renderToStaticMarkup(
-    <SessionPreviewSurface surface={surface} />,
-  );
-  const hidden = renderToStaticMarkup(
-    <SessionPreviewSurface surface={surface} hidden />,
-  );
-
-  expect(shown.startsWith('<div class="contents">')).toBe(true);
-  expect(hidden.startsWith('<div class="hidden">')).toBe(true);
-  expect(hidden).toContain("<iframe");
-});
-
-test("SessionViewer keeps preview frames mounted across view-tab switches", async () => {
+test("SessionViewer keeps preview selection and state ownership", async () => {
   const viewer = await Bun.file(
     new URL("../session-viewer/SessionViewerMainRegion.tsx", import.meta.url),
   ).text();
-  const kept = viewer.slice(
-    viewer.indexOf("{portalTarget && (openTabs.portal || showPortal) ? ("),
-    viewer.indexOf("{/* Shells keep their PTYs alive"),
+  const branch = viewer.slice(
+    viewer.indexOf("{showPortal && portalTarget ? ("),
+    viewer.indexOf(") : showAssets ? ("),
   );
-  const portal = kept.indexOf('kind: "portal"');
-  const staging = kept.indexOf('kind: "staging"');
+  const portal = branch.indexOf('kind: "portal"');
+  const staging = branch.indexOf('kind: "staging"');
 
-  expect(kept).toContain("hidden={!showPortal}");
-  expect(kept).toContain("stagingUrl && (openTabs.staging || showStaging)");
-  expect(kept).toContain("hidden={!showStaging}");
+  expect(branch).toContain("<SessionPreviewSurface");
   expect(portal).toBeGreaterThan(-1);
   expect(staging).toBeGreaterThan(portal);
-  expect(kept).toContain("deployment: staging");
-  expect(kept).toContain("url: stagingUrl");
-  expect(kept).toContain("shareLink,");
+  expect(branch).toContain("deployment: staging");
+  expect(branch).toContain("url: stagingUrl");
+  expect(branch).toContain("shareLink,");
+  // Both surfaces keep their page in the app-wide frame layer.
+  expect(branch.split("frameScope={frameScope}")).toHaveLength(3);
+});
+
+test("a kept preview leaves its frame to the app-wide layer", () => {
+  const html = renderToStaticMarkup(
+    <SessionPreviewSurface
+      surface={{
+        kind: "staging",
+        deployment: { status: "Ready", embeddable: true },
+        url: STAGING_URL,
+        shareLink,
+      }}
+      frameScope="ws-1"
+    />,
+  );
+
+  expect(html).toContain(`value="${STAGING_URL.replace("&", "&amp;")}"`);
+  expect(html).not.toContain("<iframe");
 });
