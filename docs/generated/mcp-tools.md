@@ -810,7 +810,7 @@ Open an editable Slack composer. The human still presses Send.
 
 `mcp__opensession-slack__compose_message` · input: `message` (string), `channel` (string), `images` (string[])
 
-Open an editable Slack composer in this Open Session and wait for the signed-in person to send or cancel it. Use this when a useful update is ready to share but the human should review the message, channel, and images first. This tool never posts by itself: the person must press Send in the UI.
+Open an editable Slack composer in this Open Session and wait for the signed-in person to send or cancel it. Use this when a useful update is ready to share but the human should review the message, channel, and images first. This tool never posts by itself: the person must press Send in the UI. When the person has explicitly said to post without review, use the Slack server's slack_post_message instead: its images option attaches images (a chart PNG) to a direct post.
 
 ## opensession-local-files
 

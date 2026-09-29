@@ -9,7 +9,9 @@ import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { newQuote, type Quote } from "../lib/quotes";
 import {
+  followSelection,
   placeQuoteOffer,
+  selectedPassage,
   type OfferRect,
   type OfferPlacement,
 } from "../lib/quote-offer";
@@ -88,31 +90,43 @@ export function QuoteSelection({
     onClear();
   }, [onClear]);
 
-  const capture = useCallback(() => {
+  /** The live selection, when it is a passage of the transcript. */
+  const readSelection = useCallback((): {
+    range: Range;
+    offer: Offer;
+  } | null => {
     const container = containerRef.current;
-    if (!container || disabled) return;
+    if (!container) return null;
+    const passage = selectedPassage(window.getSelection(), (node: Node) =>
+      container.contains(node),
+    );
+    const boxes = passage && lineBoxes(passage.range);
+    if (!passage || !boxes) return null;
+    return { range: passage.range, offer: { text: passage.text, ...boxes } };
+  }, [containerRef]);
+
+  const offerSelection = useCallback(
+    (selected: { range: Range; offer: Offer }) => {
+      offerRangeRef.current = selected.range;
+      setOffer(selected.offer);
+    },
+    [],
+  );
+
+  const capture = useCallback(() => {
+    if (!containerRef.current || disabled) return;
     const selection = window.getSelection();
-    const text = selection?.toString().trim() ?? "";
     if (
       !selection ||
-      selection.rangeCount === 0 ||
       selection.isCollapsed ||
-      text.length < 2
+      selection.toString().trim().length < 2
     ) {
       setOffer(null);
       return;
     }
-    const range = selection.getRangeAt(0);
-    if (
-      !container.contains(range.startContainer) ||
-      !container.contains(range.endContainer)
-    )
-      return;
-    const boxes = lineBoxes(range);
-    if (!boxes) return;
-    offerRangeRef.current = range.cloneRange();
-    setOffer({ text, ...boxes });
-  }, [containerRef, disabled]);
+    const selected = readSelection();
+    if (selected) offerSelection(selected);
+  }, [containerRef, disabled, readSelection, offerSelection]);
 
   const add = () => {
     const range = offerRangeRef.current;
@@ -207,6 +221,13 @@ export function QuoteSelection({
       window.removeEventListener("resize", follow);
     };
   }, [offered, containerRef]);
+
+  // What the pill adds is what is selected now, not what was selected when it
+  // appeared: on touch screens the selection handles move without a touchend.
+  useEffect(() => {
+    if (!offered) return;
+    return followSelection(document, readSelection, offerSelection);
+  }, [offered, readSelection, offerSelection]);
 
   // Any press that isn't on the pill withdraws the offer: it is either the
   // start of a new selection (which offers itself on release) or a decision

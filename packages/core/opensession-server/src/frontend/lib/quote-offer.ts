@@ -64,3 +64,59 @@ export function placeQuoteOffer(
     side,
   };
 }
+
+/** The parts of a DOM Selection the offer reads. */
+export interface SelectionLike<R> {
+  readonly rangeCount: number;
+  readonly isCollapsed: boolean;
+  toString(): string;
+  getRangeAt(index: number): R;
+}
+
+/** A selected passage worth offering: its text and a copy of its range. */
+export interface SelectedPassage<R> {
+  text: string;
+  range: R;
+}
+
+/**
+ * The passage the live selection holds, or `null` when there is nothing to
+ * offer: no selection, a collapsed one, a stray character, or one that
+ * reaches outside the transcript.
+ */
+export function selectedPassage<
+  N,
+  R extends { startContainer: N; endContainer: N; cloneRange(): R },
+>(
+  selection: SelectionLike<R> | null | undefined,
+  inside: (node: N) => boolean,
+): SelectedPassage<R> | null {
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed)
+    return null;
+  const text = selection.toString().trim();
+  if (text.length < 2) return null;
+  const range = selection.getRangeAt(0);
+  if (!inside(range.startContainer) || !inside(range.endContainer)) return null;
+  return { text, range: range.cloneRange() };
+}
+
+/**
+ * Keeps an open offer in step with the selection. Touch browsers resize a
+ * selection with native handles that fire no touch or mouse events, only
+ * `selectionchange`, so an offer captured on the first `touchend` would
+ * otherwise keep the word the long-press picked. A selection that collapses
+ * or leaves the transcript is ignored rather than withdrawing the offer: a tap
+ * on the pill itself can collapse it on the way to the click.
+ */
+export function followSelection<P>(
+  target: Pick<EventTarget, "addEventListener" | "removeEventListener">,
+  read: () => P | null,
+  update: (passage: P) => void,
+): () => void {
+  const onChange = () => {
+    const passage = read();
+    if (passage) update(passage);
+  };
+  target.addEventListener("selectionchange", onChange);
+  return () => target.removeEventListener("selectionchange", onChange);
+}

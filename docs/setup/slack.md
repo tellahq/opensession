@@ -236,7 +236,11 @@ Two optional facilities are separate from inbound Slack-agent setup:
   channel listing to a comma-separated set. Apply normal MCP `allowedUsers`
   gating. Its `slack_upload_file` tool shares a local file (image, video,
   anything up to 1 GB) from `/tmp/slack-uploads` in a channel or
-  thread, and needs the bot token's `files:write` scope.
+  thread, and needs the bot token's `files:write` scope. `slack_post_message`
+  and `slack_reply_to_thread` take the same kind of paths in `images` and post
+  the text and up to 10 images as one message, with no review step. The
+  in-process `compose_message` tool stays the reviewed path: it only posts
+  after the signed-in person presses Send.
 - Personal Slack grants let signed-in people read or post as themselves. Set
   `SLACK_OAUTH_CLIENT_ID` and `SLACK_OAUTH_CLIENT_SECRET`, register
   `<OPENSESSION_UI_BASE>/api/connections/mcp-oauth/callback` as the Slack OAuth
