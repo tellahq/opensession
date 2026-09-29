@@ -315,15 +315,6 @@ export type UploadOptions = {
   initialComment?: string;
 };
 
-/** The message timestamp a file was shared into `channel` on. */
-export function fileShareTs(file: any, channel: string): string | undefined {
-  for (const scope of [file?.shares?.public, file?.shares?.private]) {
-    const ts = scope?.[channel]?.[0]?.ts;
-    if (typeof ts === "string") return ts;
-  }
-  return undefined;
-}
-
 function slackError(step: string, result: any): Error {
   if (result?.error === "missing_scope")
     return new Error(
@@ -498,11 +489,41 @@ export class SlackClient {
   }
 
   /**
+   * The message Slack shared `fileId` in. completeUploadExternal answers
+   * without it, and files.info would need files:read, which the generated
+   * manifest does not grant, so the message is found in the conversation the
+   * upload went to, with the history scopes the bot already has.
+   */
+  private async findFileMessage(
+    channel: string,
+    fileId: string,
+    since: number,
+    threadTs?: string,
+  ): Promise<{ ts?: string; error?: string }> {
+    const params = new URLSearchParams({
+      channel,
+      oldest: since.toFixed(6),
+      limit: "50",
+    });
+    if (threadTs) params.set("ts", threadTs);
+    const found = (await this.get(
+      threadTs ? "conversations.replies" : "conversations.history",
+      params,
+    ).catch(() => undefined)) as any;
+    if (!found?.ok) return { error: found?.error || "invalid response" };
+    const message = (found.messages ?? []).find((candidate: any) =>
+      (candidate?.files ?? []).some((file: any) => file?.id === fileId),
+    );
+    return { ts: typeof message?.ts === "string" ? message.ts : undefined };
+  }
+
+  /**
    * One message carrying `text` and the images, answered like
    * chat.postMessage (`ok`, `channel`, `ts` first) so callers that link a
    * post to its thread read an image post the same way. Slack shares an
-   * upload asynchronously, so the message ts is read back off the file with
-   * a short, bounded retry; the post itself has already succeeded.
+   * upload asynchronously, so the message is looked up with a short, bounded
+   * retry. The post has already succeeded by then, so a lookup that fails
+   * says why in `warning` rather than failing the call.
    */
   async postWithImages(
     channel: string,
@@ -511,20 +532,24 @@ export class SlackClient {
     threadTs?: string,
     shareWaitMs = 500,
   ): Promise<unknown> {
+    // A second of slack for clock skew between this host and Slack.
+    const since = Date.now() / 1000 - 1;
     const files = await this.shareFiles(channel, images, {
       threadTs,
       initialComment: text,
     });
     let ts: string | undefined;
-    let permalink: string | undefined;
-    for (let attempt = 0; attempt < 6 && !ts; attempt++) {
+    let error: string | undefined;
+    for (let attempt = 0; attempt < 6 && !ts && !error; attempt++) {
       if (attempt > 0) await Bun.sleep(shareWaitMs);
-      const info = (await this.get(
-        "files.info",
-        new URLSearchParams({ file: files[0]!.id }),
-      ).catch(() => undefined)) as any;
-      ts = fileShareTs(info?.file, channel);
+      ({ ts, error } = await this.findFileMessage(
+        channel,
+        files[0]!.id,
+        since,
+        threadTs,
+      ));
     }
+    let permalink: string | undefined;
     if (ts) {
       const link = (await this.get(
         "chat.getPermalink",
@@ -532,6 +557,11 @@ export class SlackClient {
       ).catch(() => undefined)) as any;
       if (typeof link?.permalink === "string") permalink = link.permalink;
     }
+    const warning = ts
+      ? undefined
+      : error === "missing_scope"
+        ? `Posted, but the message could not be looked up: the bot token is missing history scope for this conversation (channels:history, groups:history, im:history or mpim:history).`
+        : `Posted, but the message could not be looked up${error ? `: ${error}` : " yet"}.`;
     return {
       ok: true,
       channel,
@@ -539,6 +569,7 @@ export class SlackClient {
       ...(threadTs ? { thread_ts: threadTs } : {}),
       ...(permalink ? { permalink } : {}),
       files: files.map((file) => file.id),
+      ...(warning ? { warning } : {}),
     };
   }
 

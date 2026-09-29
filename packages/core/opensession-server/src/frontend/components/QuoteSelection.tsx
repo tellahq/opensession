@@ -113,6 +113,23 @@ export function QuoteSelection({
     [],
   );
 
+  // The pill mounts only while an offer is open, so its ref is where it starts
+  // following the selection: what it adds is what is selected now, not what
+  // was selected when it appeared, since touch selection handles move without
+  // a touchend.
+  const attachActions = useCallback(
+    (node: HTMLDivElement | null) => {
+      actionsRef.current = node;
+      if (!node) return;
+      const stop = followSelection(document, readSelection, offerSelection);
+      return () => {
+        stop();
+        actionsRef.current = null;
+      };
+    },
+    [readSelection, offerSelection],
+  );
+
   const capture = useCallback(() => {
     if (!containerRef.current || disabled) return;
     const selection = window.getSelection();
@@ -221,13 +238,6 @@ export function QuoteSelection({
       window.removeEventListener("resize", follow);
     };
   }, [offered, containerRef]);
-
-  // What the pill adds is what is selected now, not what was selected when it
-  // appeared: on touch screens the selection handles move without a touchend.
-  useEffect(() => {
-    if (!offered) return;
-    return followSelection(document, readSelection, offerSelection);
-  }, [offered, readSelection, offerSelection]);
 
   // Any press that isn't on the pill withdraws the offer: it is either the
   // start of a new selection (which offers itself on release) or a decision
@@ -360,7 +370,7 @@ export function QuoteSelection({
 
   return createPortal(
     <motion.div
-      ref={actionsRef}
+      ref={attachActions}
       role="group"
       aria-label="Selected text actions"
       initial={{ opacity: 0, scale: 0.96 }}

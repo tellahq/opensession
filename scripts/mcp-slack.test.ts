@@ -218,10 +218,14 @@ describe("posting with images", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  /** Slack, with the file share appearing only on the `shareAfter`th files.info. */
-  function mockSlack(shareAfter = 1) {
+  /**
+   * Slack with only the documented bot scopes: files.info is refused for want
+   * of files:read, and the shared message appears in history only on the
+   * `shareAfter`th lookup, as Slack shares an upload asynchronously.
+   */
+  function mockSlack(shareAfter = 1, historyError?: string) {
     let reserved = 0;
-    let infos = 0;
+    let lookups = 0;
     globalThis.fetch = (async (input: any, init?: RequestInit) => {
       const url = String(input);
       calls.push({ url, init });
@@ -238,14 +242,30 @@ describe("posting with images", () => {
       if (url.includes("files.example.test")) return json({ ok: true });
       if (url.includes("files.completeUploadExternal"))
         return json({ ok: true, files: [{ id: "F1" }, { id: "F2" }] });
-      if (url.includes("files.info")) {
-        infos += 1;
+      if (url.includes("files.info"))
+        return json({
+          ok: false,
+          error: "missing_scope",
+          needed: "files:read",
+        });
+      if (
+        url.includes("conversations.history") ||
+        url.includes("conversations.replies")
+      ) {
+        if (historyError) return json({ ok: false, error: historyError });
+        lookups += 1;
         return json({
           ok: true,
-          file:
-            infos >= shareAfter
-              ? { shares: { public: { C1: [{ ts: "1700000000.000100" }] } } }
-              : {},
+          messages:
+            lookups >= shareAfter
+              ? [
+                  { ts: "1700000000.000050", text: "someone else" },
+                  {
+                    ts: "1700000000.000100",
+                    files: [{ id: "F1" }, { id: "F2" }],
+                  },
+                ]
+              : [{ ts: "1700000000.000050", text: "someone else" }],
         });
       }
       if (url.includes("chat.getPermalink"))
@@ -302,6 +322,35 @@ describe("posting with images", () => {
     expect(calls.some((call) => call.url.includes("chat.postMessage"))).toBe(
       false,
     );
+    // Found with the history scope, not files.info (which needs files:read).
+    expect(calls.some((call) => call.url.includes("files.info"))).toBe(false);
+    const lookup = new URL(
+      calls.find((call) => call.url.includes("conversations.history"))!.url,
+    );
+    expect(lookup.searchParams.get("channel")).toBe("C1");
+    expect(Number(lookup.searchParams.get("oldest"))).toBeGreaterThan(0);
+  });
+
+  test("says why when the message cannot be looked up", async () => {
+    const chart = join(dir, "chart.png");
+    await writeFile(chart, "png");
+    mockSlack(1, "missing_scope");
+
+    const result = (await new SlackClient("xoxb-test", dir).postWithImages(
+      "C1",
+      "Chart",
+      [chart],
+      undefined,
+      0,
+    )) as any;
+
+    expect(result.ok).toBe(true);
+    expect(result.ts).toBeUndefined();
+    expect(result.warning).toContain("history scope");
+    // A refused scope does not get better by asking again.
+    expect(
+      calls.filter((call) => call.url.includes("conversations.history")),
+    ).toHaveLength(1);
   });
 
   test("links an image post to its thread like a text post", async () => {
@@ -348,6 +397,11 @@ describe("posting with images", () => {
     )) as any;
 
     expect(result.thread_ts).toBe("123.456");
+    expect(result.ts).toBe("1700000000.000100");
+    const lookup = new URL(
+      calls.find((call) => call.url.includes("conversations.replies"))!.url,
+    );
+    expect(lookup.searchParams.get("ts")).toBe("123.456");
     const complete = new URLSearchParams(
       String(
         calls.find((call) => call.url.includes("files.completeUploadExternal"))!
