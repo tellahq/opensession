@@ -236,7 +236,7 @@ describe("registration requests", () => {
     expectNoSecretLeaked();
   });
 
-  test("one request per session; bad specs, expiry and abort close cleanly", async () => {
+  test("one request per session; bad specs and expiry close cleanly", async () => {
     const first = open("s-one");
     expect(() => open("s-one", "other")).toThrow(/already has an open/);
     expect(() =>
@@ -278,11 +278,34 @@ describe("registration requests", () => {
     expect(await open("s-expire", "acme-exp", undefined, 5)).toEqual({
       status: "expired",
     });
+  });
+
+  test("a cancelled call leaves the card open, and asking again waits on it", async () => {
     const controller = new AbortController();
-    const aborted = open("s-abort", "acme-abort", controller.signal);
+    const cancelled = open("s-abort", "acme-abort", controller.signal);
+    const { request } = reg.pendingCredentialRegistration("s-abort")!;
     controller.abort();
-    expect(await aborted).toEqual({ status: "declined" });
-    expect(reg.pendingCredentialRegistration("s-abort")).toBeNull();
+
+    expect(await cancelled).toEqual({ status: "pending", request });
+    expect(reg.pendingCredentialRegistration("s-abort")?.request.id).toBe(
+      request.id,
+    );
+    expect(() => open("s-abort", "acme-other")).toThrow(
+      /open credential request for "acme-abort"/,
+    );
+    const again = open("s-abort", "acme-abort");
+    expect(reg.pendingCredentialRegistration("s-abort")?.request.id).toBe(
+      request.id,
+    );
+    const meta = await reg.submitCredentialRegistration(
+      "s-abort",
+      request.id,
+      "alex-gh",
+      SECRET,
+    );
+    expect(await again).toEqual({ status: "registered", credential: meta });
+    expect(kc.listCredentials().map((c) => c.service)).toContain("acme-abort");
+    expectNoSecretLeaked(meta);
   });
 });
 
@@ -323,7 +346,7 @@ describe("saving off the gateway thread", () => {
     expectNoSecretLeaked(result);
   });
 
-  test("cancelling the agent's call during a save still reports the save", async () => {
+  test("cancelling the agent's call during a save keeps the save", async () => {
     let release!: () => void;
     writeGate = new Promise((resolve) => (release = resolve));
     const controller = new AbortController();
@@ -336,15 +359,12 @@ describe("saving off the gateway thread", () => {
       SECRET,
     );
     controller.abort();
-    await Bun.sleep(5);
-    // Still open: the abort waits for the write to decide.
+    expect(await waiting).toEqual({ status: "pending", request });
     expect(reg.pendingCredentialRegistration("s-abort-save")).not.toBeNull();
     expect(broadcasts.some((m: any) => m.status === "declined")).toBe(false);
     writeGate = null;
     release();
     const meta = await saving;
-    const result = await waiting;
-    expect(result.status).toBe("registered");
     expect(kc.findCredential("acme-abort-save")?.id).toBe(meta.id);
     expect(
       broadcasts.filter(
@@ -353,7 +373,7 @@ describe("saving off the gateway thread", () => {
     ).toEqual([
       expect.objectContaining({ requestId: request.id, status: "registered" }),
     ]);
-    expectNoSecretLeaked(result);
+    expectNoSecretLeaked(meta);
   });
 
   test("async and sync writes interleaved end on the latest state", async () => {

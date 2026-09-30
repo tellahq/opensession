@@ -34,6 +34,10 @@ function server() {
         isError: true,
         content: [{ type: "text", text: "bad input" }],
       })),
+      tool("slow", "Answers after 200ms", {}, async () => {
+        await Bun.sleep(200);
+        return { content: [{ type: "text", text: "answered" }] };
+      }),
       tool("hang", "Hangs", {}, async (_args, extra: any) => {
         extra?.signal?.addEventListener?.("abort", () => {
           lastSignalAborted = true;
@@ -70,6 +74,7 @@ describe("MCP runtime catalog and exact calls", () => {
     expect(catalog.map((item) => item.id).sort()).toEqual([
       "alpha_echo",
       "alpha_hang",
+      "alpha_slow",
     ]);
     expect(
       (catalog.find((item) => item.id === "alpha_echo")!.inputSchema as any)
@@ -101,7 +106,7 @@ describe("MCP runtime catalog and exact calls", () => {
   test("errors, timeout, cancellation and audit stay call-scoped", async () => {
     const audits: Array<{ tool: string; ok: boolean }> = [];
     const { runtime } = await make({
-      callTimeoutMs: 50,
+      ownServerCallTimeoutMs: 50,
       onAudit: (event) => audits.push({ tool: event.tool, ok: event.ok }),
     });
     await expect(
@@ -133,6 +138,15 @@ describe("MCP runtime catalog and exact calls", () => {
         )
       ).content[0],
     ).toEqual({ type: "text", text: "echo:alive" });
+  });
+
+  test("own servers' calls are not bound by the external call timeout", async () => {
+    const { runtime } = await make({ callTimeoutMs: 50 });
+
+    expect(
+      (await runtime.callExact("alpha_slow", {}, { toolCallId: "wait" }))
+        .content,
+    ).toEqual([{ type: "text", text: "answered" }]);
   });
 
   test("close owns connections and is idempotent", async () => {

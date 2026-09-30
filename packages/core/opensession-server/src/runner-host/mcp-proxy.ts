@@ -73,6 +73,24 @@ function rpcError(status: number, data: any): RpcError {
   return new RpcError(message, message === "unauthorized (unknown run token)");
 }
 
+/**
+ * The body of an answered call. Long calls stream heartbeat padding before
+ * the JSON, so a call cut short by a restart arrives as a 200 with no body.
+ * That is not an answer, and the tool may already have acted, so it is not
+ * retried either.
+ */
+function answeredBody(status: number, data: any): Record<string, any> {
+  if (status !== 200) throw rpcError(status, data);
+  if (!data || typeof data !== "object")
+    throw new RpcError(
+      "opensession closed the call before answering, probably a restart. The tool may or may not have finished: check its result before calling it again.",
+    );
+  // Long tool calls report failures in the body instead of the status.
+  if (typeof data.error === "string" && data.error)
+    throw rpcError(status, data);
+  return data;
+}
+
 // ── WS transport: one persistent connection, request/response frames by id ───
 // Frames out: {id, path, token, server, tool?, args?}; frames in:
 // {id, status, body}. A dropped connection rejects the in-flight waiters as
@@ -194,17 +212,7 @@ async function rpcOnceWs(
       }
     },
   );
-  const data = res.body;
-  if (res.status !== 200) throw rpcError(res.status, data);
-  if (
-    data &&
-    typeof data === "object" &&
-    typeof data.error === "string" &&
-    data.error
-  ) {
-    throw rpcError(res.status, data);
-  }
-  return data;
+  return answeredBody(res.status, res.body);
 }
 
 async function rpcOnceSocket(
@@ -225,18 +233,7 @@ async function rpcOnceSocket(
   try {
     data = await res.json();
   } catch {}
-  if (!res.ok) throw rpcError(res.status, data);
-  // Long tool calls stream a 200 with heartbeat padding and report failures
-  // in the body instead of the status — treat those as answered errors too.
-  if (
-    data &&
-    typeof data === "object" &&
-    typeof data.error === "string" &&
-    data.error
-  ) {
-    throw rpcError(res.status, data);
-  }
-  return data;
+  return answeredBody(res.status, data);
 }
 
 /**
@@ -250,7 +247,7 @@ async function rpc(
   body: Record<string, unknown>,
   timeoutMs = 120_000,
   signal?: AbortSignal,
-): Promise<any> {
+): Promise<Record<string, any>> {
   const deadline = Date.now() + timeoutMs;
   let lastErr: unknown;
   for (;;) {
@@ -311,6 +308,8 @@ server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
       // tool stops waiting instead of holding its answer for a dead call.
       extra.signal,
     );
+    if (!data.result || typeof data.result !== "object")
+      throw new Error("opensession answered without a tool result");
     return data.result;
   } catch (e: any) {
     return {

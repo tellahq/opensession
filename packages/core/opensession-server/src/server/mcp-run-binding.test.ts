@@ -56,12 +56,14 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-async function bridgeWithStaleCatalog() {
+async function bridgeWithStaleCatalog(
+  opts: { callTimeoutMs?: number; socket?: string } = {},
+) {
   const proxy = {
     command: process.execPath,
     args: [join(import.meta.dir, "../runner-host/mcp-proxy.ts")],
     env: {
-      OPENSESSION_RPC_SOCKET: join(dir, "rpc.sock"),
+      OPENSESSION_RPC_SOCKET: opts.socket ?? join(dir, "rpc.sock"),
       OPENSESSION_MCP_SERVER: "opensession-sessions",
     },
   };
@@ -85,7 +87,7 @@ async function bridgeWithStaleCatalog() {
         },
       },
     },
-    callTimeoutMs: 5_000,
+    callTimeoutMs: opts.callTimeoutMs ?? 5_000,
   });
   const bridge = await createPiMcpBridge(runtime);
   const search = bridge.discoveryTools.find(
@@ -171,4 +173,52 @@ test("a scoped proxy lists only this run's tools, ignoring an unrestricted cache
   await expect(bridge.call("opensession-sessions_cancel_task")).rejects.toThrow(
     "not permitted by this run's tool policy",
   );
+});
+
+test("a proxied tool waiting on a person outlasts the runtime's call timeout", async () => {
+  registerInteractiveMcpBuilder(() => ({
+    "opensession-sessions": createSdkMcpServer({
+      name: "opensession-sessions",
+      tools: [
+        tool("wait_for_person", "Waits for an answer", {}, async () => {
+          await Bun.sleep(2_500);
+          return { content: [{ type: "text", text: "answered" }] };
+        }),
+      ],
+    }),
+  }));
+  const bridge = await bridgeWithStaleCatalog({ callTimeoutMs: 2_000 });
+  await bridge.search("wait");
+
+  expect(
+    (await bridge.call("opensession-sessions_wait_for_person")).content,
+  ).toEqual([{ type: "text", text: "answered" }]);
+});
+
+test("a call the server cut short without an answer fails with a clear error", async () => {
+  const cut = Bun.serve({
+    unix: join(dir, "cut.sock"),
+    async fetch(req) {
+      if (new URL(req.url).pathname === "/mcp/list")
+        return Response.json({
+          tools: [{ name: "task_status", inputSchema: { type: "object" } }],
+        });
+      // Heartbeat padding, then the server went away before the body.
+      return new Response("   ", {
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  try {
+    const bridge = await bridgeWithStaleCatalog({
+      socket: join(dir, "cut.sock"),
+    });
+    await bridge.search("task");
+
+    await expect(
+      bridge.call("opensession-sessions_task_status"),
+    ).rejects.toThrow(/closed the call before answering/);
+  } finally {
+    cut.stop(true);
+  }
 });

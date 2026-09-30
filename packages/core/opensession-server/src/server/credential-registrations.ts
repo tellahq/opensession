@@ -17,11 +17,17 @@
  * Same shape as local-file-requests.ts: one pending request per session, held
  * in memory, broadcast to every viewer. A restart drops the request and the
  * waiting tool call with it.
+ *
+ * The card belongs to the person, not to the tool call: a call that is
+ * cancelled or times out stops waiting, but the card stays open until it is
+ * answered or expires. Asking again for the same service and host waits on
+ * that same card, and a secret saved meanwhile is in list_credentials.
  */
 import { broadcastToSession } from "./ws-hub";
 import { audit } from "./audit";
 import {
   addCredentialAsync,
+  normalizeCredentialHost,
   normalizeCredentialSpec,
   type CredentialSpec,
   type KeychainCredentialMeta,
@@ -39,20 +45,20 @@ export interface CredentialRegistrationRequest extends NormalizedCredentialSpec 
 export type CredentialRegistrationResult =
   | { status: "registered"; credential: KeychainCredentialMeta }
   | { status: "declined" }
-  | { status: "expired" };
+  | { status: "expired" }
+  /** The waiting call was cancelled; the card is still open. */
+  | { status: "pending"; request: CredentialRegistrationRequest };
 
 type Pending = {
   request: CredentialRegistrationRequest;
   /** Lower-cased GitHub login of the only person who may answer. */
   login: string;
-  resolve: (result: CredentialRegistrationResult) => void;
+  /** Tool calls waiting on this card. */
+  waiters: Set<(result: CredentialRegistrationResult) => void>;
   timer: ReturnType<typeof setTimeout>;
   /** Set while a submitted secret is being saved, so a second answer from
    *  another tab cannot race it. */
   answering: boolean;
-  /** The agent's call was cancelled while a save was in flight. The save
-   *  decides the outcome: registered if it lands, declined if it fails. */
-  aborted: boolean;
 };
 
 /** Long enough to find a key in a provider dashboard. */
@@ -94,7 +100,8 @@ function settle(
   if (pending.get(sessionId) !== entry) return;
   pending.delete(sessionId);
   clearTimeout(entry.timer);
-  entry.resolve(result);
+  for (const resolve of entry.waiters) resolve(result);
+  entry.waiters.clear();
   audit({
     kind: `keychain_registration_${result.status}`,
     request_id: entry.request.id,
@@ -113,10 +120,31 @@ function settle(
   });
 }
 
+/** Wait on the card until it settles, or until `signal` gives up on it. */
+function wait(
+  entry: Pending,
+  signal?: AbortSignal,
+): Promise<CredentialRegistrationResult> {
+  return new Promise((resolve) => {
+    const waiter = (result: CredentialRegistrationResult) => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve(result);
+    };
+    const onAbort = () => {
+      entry.waiters.delete(waiter);
+      resolve({ status: "pending", request: entry.request });
+    };
+    if (signal?.aborted) return onAbort();
+    entry.waiters.add(waiter);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 /**
- * Open a request and wait for the driver to answer it. Throws (before any
- * card appears) on an invalid spec, a service slug already in the keychain,
- * or a second request in the same session.
+ * Open a request and wait for the driver to answer it. Asking again for the
+ * service and host of this session's open card waits on that card. Throws
+ * (before any card appears) on an invalid spec, a service slug already in
+ * the keychain, or a different open request in the same session.
  */
 export function requestCredentialRegistration(
   sessionId: string,
@@ -126,8 +154,19 @@ export function requestCredentialRegistration(
 ): Promise<CredentialRegistrationResult> {
   if (!sessionId || !input.login || !input.owner)
     throw new Error("a verified teammate must be driving this session");
-  if (pending.has(sessionId))
-    throw new Error("this session already has an open credential request");
+  const open = pending.get(sessionId);
+  if (open) {
+    const same =
+      open.login === input.login.toLowerCase() &&
+      open.request.service === input.spec.service.trim().toLowerCase() &&
+      open.request.host === normalizeCredentialHost(input.spec.host);
+    if (!same)
+      throw new Error(
+        `this session already has an open credential request for "${open.request.service}"`,
+      );
+    announce(sessionId, open.request);
+    return wait(open, signal);
+  }
   // The description is model-authored and shown to a person: no control or
   // bidi-override characters that could make the card say something else.
   const description = input.spec.description
@@ -145,42 +184,28 @@ export function requestCredentialRegistration(
     requestedAt: now,
     expiresAt: now + ttlMs,
   };
-  return new Promise((resolve) => {
-    const entry: Pending = {
-      request,
-      answering: false,
-      aborted: false,
-      login: input.login.toLowerCase(),
-      resolve: (result) => {
-        signal?.removeEventListener("abort", onAbort);
-        resolve(result);
-      },
-      timer: setTimeout(function expire() {
-        // A save in flight wins over expiry; look again once it lands.
-        if (entry.answering) entry.timer = setTimeout(expire, 1_000);
-        else settle(sessionId, entry, { status: "expired" });
-      }, ttlMs),
-    };
-    const onAbort = () => {
-      // Never report a decline for a credential that is being written: the
-      // card would close and the tool would say nothing was saved, while
-      // the store ends up holding it.
-      if (entry.answering) entry.aborted = true;
-      else settle(sessionId, entry, { status: "declined" });
-    };
-    pending.set(sessionId, entry);
-    audit({
-      kind: "keychain_registration_requested",
-      request_id: request.id,
-      session_id: sessionId,
-      service: request.service,
-      host: request.host,
-      owner: request.owner,
-    });
-    if (signal?.aborted) return onAbort();
-    signal?.addEventListener("abort", onAbort, { once: true });
-    announce(sessionId, request);
+  const entry: Pending = {
+    request,
+    answering: false,
+    login: input.login.toLowerCase(),
+    waiters: new Set(),
+    timer: setTimeout(function expire() {
+      // A save in flight wins over expiry; look again once it lands.
+      if (entry.answering) entry.timer = setTimeout(expire, 1_000);
+      else settle(sessionId, entry, { status: "expired" });
+    }, ttlMs),
+  };
+  pending.set(sessionId, entry);
+  audit({
+    kind: "keychain_registration_requested",
+    request_id: request.id,
+    session_id: sessionId,
+    service: request.service,
+    host: request.host,
+    owner: request.owner,
   });
+  announce(sessionId, request);
+  return wait(entry, signal);
 }
 
 export function pendingCredentialRegistration(
@@ -240,8 +265,6 @@ export async function submitCredentialRegistration(
     credential = await addCredentialAsync({ ...spec, owner, secret });
   } catch (error) {
     entry.answering = false;
-    // Cancelled mid-save and nothing was written: close it as declined.
-    if (entry.aborted) settle(sessionId, entry, { status: "declined" });
     // addCredentialAsync's messages describe the spec or the store, never
     // the secret.
     throw new CredentialRegistrationError(
@@ -250,8 +273,6 @@ export async function submitCredentialRegistration(
     );
   }
   entry.answering = false;
-  // Settled as registered even if the agent's call was cancelled meanwhile:
-  // the credential exists, so the card closes on what really happened.
   settle(sessionId, entry, { status: "registered", credential });
   return credential;
 }

@@ -231,7 +231,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
     ),
     tool(
       "register_credential",
-      "Add a credential to the keychain, owned by the person driving this session, so this and later sessions can borrow it through request_credential. You supply only metadata. A card appears in the session where THEY paste the secret; it goes straight to the keychain and you never see it. This call waits until they save or decline (15 minutes at most) and returns the credential's id, service, host and owner. Never ask anyone to paste a secret in chat; if they already did, tell them to rotate it. Check list_credentials first: service slugs are unique. Set allowedMethods / allowedPathPrefixes when the task needs less than full access. Interactive sessions with a signed-in teammate only.",
+      "Add a credential to the keychain, owned by the person driving this session, so this and later sessions can borrow it through request_credential. You supply only metadata. A card appears in the session where THEY paste the secret; it goes straight to the keychain and you never see it. This call waits until they save or decline (15 minutes at most) and returns the credential's id, service, host and owner. If the call is cut short, the card stays open: call again with the same service and host to keep waiting on it, or check list_credentials. Never ask anyone to paste a secret in chat; if they already did, tell them to rotate it. Check list_credentials first: service slugs are unique. Set allowedMethods / allowedPathPrefixes when the task needs less than full access. Interactive sessions with a signed-in teammate only.",
       {
         service: z
           .string()
@@ -337,6 +337,10 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
           );
         }
         const result = await waiting;
+        if (result.status === "pending")
+          return text(
+            `Stopped waiting, but the card stays open for ${owner} until ${new Date(result.request.expiresAt).toISOString()}. Call register_credential again with the same service and host to keep waiting, or check list_credentials for "${result.request.service}".`,
+          );
         if (result.status === "declined")
           return text(
             `${owner} declined to add the credential. Don't ask again without their go-ahead.`,

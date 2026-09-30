@@ -5,6 +5,16 @@ export function rpcSocketPath(sessionsDir: string): string {
   return `${sessionsDir}/opensession-rpc.sock`;
 }
 
+/**
+ * Ceiling for one call to an Open Session MCP tool. Tools may legitimately
+ * block for many minutes on a person: register_credential waits 15 minutes
+ * for a pasted secret, ask_human about 20 minutes for a teammate, and
+ * request_credential and ask_user until the owner answers. The MCP SDK's
+ * default request timeout is 60s, so every client of these servers passes
+ * this explicitly instead.
+ */
+export const RPC_TOOL_CALL_TIMEOUT_MS = 30 * 60_000;
+
 /** Absolute paths used by Codex MCP stdio proxy config. */
 export const BUN_BIN = process.execPath;
 export const REPO_ROOT = resolve(import.meta.dir, "../../../../..");

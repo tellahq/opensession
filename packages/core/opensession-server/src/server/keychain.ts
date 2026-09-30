@@ -325,6 +325,15 @@ const HTTP_METHODS = new Set([
   "OPTIONS",
 ]);
 
+/** A credential host as stored: lower-case, without scheme or path. */
+export function normalizeCredentialHost(host: string): string {
+  return host
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/[/?#].*$/, "");
+}
+
 /**
  * Validate and normalize everything about a credential except its owner and
  * secret. Throws with a message safe to show the caller. Shared by the HTTP
@@ -337,11 +346,7 @@ export function normalizeCredentialSpec(
 ): NormalizedCredentialSpec {
   load();
   const service = norm(input.service);
-  const host = input.host
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/[/?#].*$/, "");
+  const host = normalizeCredentialHost(input.host);
   if (!service || !/^[a-z0-9][a-z0-9._-]*$/.test(service)) {
     throw new Error(
       "service must be a short lowercase slug (letters, digits, . _ -)",

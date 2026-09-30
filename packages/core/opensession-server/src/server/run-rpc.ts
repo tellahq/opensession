@@ -29,17 +29,16 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { audit } from "./audit";
 import { devInstanceBootError, isDevInstance } from "./dev-mode";
-import { MCP_HTTP_PORT, rpcSocketPath } from "./run-rpc-protocol";
+import {
+  MCP_HTTP_PORT,
+  RPC_TOOL_CALL_TIMEOUT_MS,
+  rpcSocketPath,
+} from "./run-rpc-protocol";
 
 const g = globalThis as any;
 
-// Proxied tool calls can legitimately block for many minutes (opensession-humans
-// ask_human in block mode waits ~20 min for a teammate; opensession-ask's ask_user
-// waits on the UI question card + Slack escalation). The MCP SDK's default
-// request timeout is 60s, which killed those mid-wait — pass an explicit long
-// ceiling instead. Bun.serve gets idleTimeout: 0 below for the same reason
-// (its default silently closes any response slower than 10s).
-const RPC_TOOL_CALL_TIMEOUT_MS = 30 * 60 * 1000;
+// Bun.serve gets idleTimeout: 0 below because its default silently closes any
+// response slower than 10s, and tool calls may wait RPC_TOOL_CALL_TIMEOUT_MS.
 
 export interface RunTokenContext {
   /** Server-owned dispatch identity, never accepted from an MCP request body. */

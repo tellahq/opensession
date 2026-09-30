@@ -23,8 +23,13 @@ import {
 import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
 import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
 import type { InProcessMcpServer } from "./inprocess-mcp";
+import { RPC_TOOL_CALL_TIMEOUT_MS } from "./run-rpc-protocol";
 
 const DEFAULT_CALL_TIMEOUT_MS = 120_000;
+/** Open Session's own servers bound their calls themselves, and some wait on
+ *  a person for many minutes. Outlast that ceiling so the server's answer,
+ *  not a client-side -32001, ends the call. */
+const OWN_SERVER_CALL_TIMEOUT_MS = RPC_TOOL_CALL_TIMEOUT_MS + 2 * 60_000;
 export const MAX_MCP_SAFE_JSON_BYTES = 64 * 1024;
 const MAX_SAFE_JSON_DEPTH = 12;
 const MAX_SAFE_JSON_VALUES = 2_048;
@@ -80,6 +85,7 @@ interface ServerConn {
 interface Entry {
   name: string;
   factory: () => Promise<ServerConn>;
+  callTimeoutMs: number;
   cacheKey?: string;
   deferred?: boolean;
 }
@@ -289,9 +295,14 @@ export async function createMcpRuntime(opts: {
   inProcessMcp?: Readonly<Record<string, InProcessMcpServer>>;
   legacyProxyMcp?: LegacyProxyMcpBoundary;
   onAudit?: (event: McpAuditEvent) => void;
+  /** Connect, list and external tool calls. */
   callTimeoutMs?: number;
+  /** Tool calls to Open Session's own in-process and proxied servers. */
+  ownServerCallTimeoutMs?: number;
 }): Promise<McpRuntime> {
   const timeoutMs = opts.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
+  const ownTimeoutMs =
+    opts.ownServerCallTimeoutMs ?? OWN_SERVER_CALL_TIMEOUT_MS;
   const grantUsers = [opts.mcpGrantUser, opts.user];
   let closed = false;
   const live = new Set<ServerConn>();
@@ -387,13 +398,18 @@ export async function createMcpRuntime(opts: {
     entries.push({
       name,
       factory: () => connectExternal(name, cfg),
+      callTimeoutMs: timeoutMs,
       cacheKey: toolsCacheKey(cfg),
     });
   }
   const taken = new Set(entries.map((entry) => entry.name));
   for (const [name, server] of Object.entries(opts.inProcessMcp ?? {})) {
     if (!taken.has(name))
-      entries.push({ name, factory: () => connectInProcess(server) });
+      entries.push({
+        name,
+        factory: () => connectInProcess(server),
+        callTimeoutMs: ownTimeoutMs,
+      });
   }
   for (const [name, value] of Object.entries(
     opts.legacyProxyMcp?.configs ?? {},
@@ -402,6 +418,7 @@ export async function createMcpRuntime(opts: {
     entries.push({
       name,
       factory: () => connectExternal(name, value),
+      callTimeoutMs: ownTimeoutMs,
       // A proxy lists the current run's scoped server, not a shared catalog.
       // Never reuse another run's listing, even with identical proxy config.
       deferred: true,
@@ -563,8 +580,8 @@ export async function createMcpRuntime(opts: {
           },
           undefined,
           {
-            timeout: timeoutMs,
-            maxTotalTimeout: timeoutMs,
+            timeout: tool.entry.callTimeoutMs,
+            maxTotalTimeout: tool.entry.callTimeoutMs,
             signal: options.signal,
           },
         )) as Record<string, unknown>;
