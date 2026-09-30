@@ -2867,7 +2867,7 @@ async function runSessionPromptInner(
     if (session.branch) {
       broadcastToSession(sessionId, {
         type: "notice",
-        message: `This session's worktree was cleaned up — recreating it from branch ${session.branch}…`,
+        message: `Worktree missing. Recreating it from ${session.branch}…`,
       });
       let revived = false;
       try {
@@ -2876,7 +2876,7 @@ async function runSessionPromptInner(
       } catch (e) {
         broadcastToSession(sessionId, {
           type: "notice",
-          message: `Couldn't recreate the worktree (${e}); running in the main checkout instead.`,
+          message: `Couldn't recreate the worktree: ${e instanceof Error ? e.message : e}. Running in the main checkout.`,
         });
         cwd = repo.repo;
       }

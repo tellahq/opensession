@@ -7,6 +7,7 @@ import {
   statSync,
   unlinkSync,
 } from "fs";
+import { lstat, unlink } from "fs/promises";
 import { resolve as resolvePath } from "path";
 import type { UnifiedSession } from "./types";
 import { stopAllPortalServices } from "./portal-supervisor";
@@ -667,6 +668,17 @@ export async function sweepArchivedWorktrees(
 }
 
 /**
+ * The line of git stderr that says what went wrong. Git prefixes it with
+ * progress chatter ("Preparing worktree ..."), which is not the reason.
+ */
+export function gitFailureReason(stderr: string): string {
+  const lines = stderr.trim().split("\n");
+  const line =
+    lines.find((l) => /^(fatal|error):/.test(l)) ?? lines.at(-1) ?? "";
+  return line.replace(/^(fatal|error):\s*/, "").slice(0, 300) || "git failed";
+}
+
+/**
  * Recreate a worktree that was cleaned up while its session lives on. Reuses
  * the local branch when it still exists (uncommitted work is gone, but the
  * branch history survives); otherwise starts the branch fresh from main. The
@@ -684,12 +696,16 @@ export async function reviveWorktree(
   return withGitLock(async () => {
     await $`git -C ${repo.repo} worktree prune`.quiet();
     if (existsSync(wtPath)) return wtPath;
+    // A symlink whose target is gone reads as missing to existsSync but
+    // still blocks `worktree add` with "already exists". Drop it.
+    if ((await lstat(wtPath).catch(() => null))?.isSymbolicLink())
+      await unlink(wtPath);
     const owner = (await listWorktrees(repo.id)).find(
       (w) => w.branch === branch,
     );
     if (owner) {
       throw new Error(
-        `Branch ${JSON.stringify(branch)} is already checked out at ${owner.path}; cannot recreate ${wtPath}`,
+        `branch ${branch} is already checked out at ${owner.path}`,
       );
     }
     const hasBranch =
@@ -723,9 +739,7 @@ export async function reviveWorktree(
           .nothrow();
     }
     if (add.exitCode !== 0) {
-      throw new Error(
-        `git worktree add failed for ${JSON.stringify(branch)}: ${add.stderr.toString().trim().slice(0, 300)}`,
-      );
+      throw new Error(gitFailureReason(add.stderr.toString()));
     }
     return wtPath;
   });
