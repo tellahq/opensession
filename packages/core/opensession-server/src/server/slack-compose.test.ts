@@ -9,6 +9,11 @@ import {
   sendPendingSlackComposer,
 } from "./slack-compose";
 import { handleSlackComposeRoutes } from "./routes/slack-compose";
+import { createMcpRuntime } from "./mcp-runtime";
+import {
+  createSlackComposeMcpServer,
+  slackComposeOutcomeMessage,
+} from "../agents/slack/slack-compose-tools";
 import type { RouteContext } from "./routes/context";
 
 function routeContext(
@@ -101,8 +106,10 @@ describe("Slack composer lifecycle", () => {
     ]);
   });
 
-  test("blocks until the human sends", async () => {
-    const result = openSlackComposer("os-test", { message: "Status update" });
+  test("resolves when the human sends", async () => {
+    const { result } = openSlackComposer("os-test", {
+      message: "Status update",
+    });
     const request = pendingSlackComposers.get("os-test")?.request;
     expect(request?.message).toBe("Status update");
     expect(claimPendingSlackComposer("os-test", request!.id)).toBe(true);
@@ -119,7 +126,7 @@ describe("Slack composer lifecycle", () => {
   });
 
   test("cancel resolves without sending", async () => {
-    const result = openSlackComposer("os-test", {});
+    const { result } = openSlackComposer("os-test", {});
     const requestId = pendingSlackComposers.get("os-test")!.request.id;
     expect(cancelPendingSlackComposer("os-test", requestId)).toBe(true);
     expect(await result).toEqual({ status: "cancelled" });
@@ -154,13 +161,84 @@ describe("Slack composer lifecycle", () => {
     ]);
   });
 
-  test("abort cleans up the pending composer", async () => {
-    const abort = new AbortController();
-    const result = openSlackComposer("os-test", {}, abort.signal);
-    abort.abort();
-    expect(await result).toEqual({ status: "cancelled" });
+  test("an agent's draft outlives its MCP call and still sends", async () => {
+    const deliveries: string[] = [];
+    let delivered!: () => void;
+    const deliveredOnce = new Promise<void>((resolve) => {
+      delivered = resolve;
+    });
+    // A client that gives up on any request after 50ms, standing in for the
+    // agent-side request timeout that used to kill the draft.
+    const callTimeoutMs = 50;
+    const runtime = await createMcpRuntime({
+      mcpServers: [],
+      deniedToolIds: new Set(),
+      inProcessMcp: {
+        "opensession-slack": createSlackComposeMcpServer({
+          sessionId: "os-test",
+          deliver: async (sessionId, _requestId, message) => {
+            expect(sessionId).toBe("os-test");
+            deliveries.push(message);
+            delivered();
+          },
+        }),
+      },
+      callTimeoutMs,
+    });
+    const call = await runtime.callExact(
+      "opensession-slack_compose_message",
+      { message: "Render latency update" },
+      { toolCallId: "compose-1" },
+    );
+    const requestId = pendingSlackComposers.get("os-test")!.request.id;
+    expect(call.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining(`Opened Slack draft ${requestId}`),
+    });
+    // The agent's side is gone: its turn ended and its MCP connections closed.
+    await runtime.close();
+    await Bun.sleep(callTimeoutMs * 4);
+
+    const frames: object[] = [];
+    resendPendingSlackComposer("os-test", (frame) => frames.push(frame));
+    expect(frames).toEqual([
+      {
+        type: "slack_composer",
+        sessionId: "os-test",
+        request: {
+          id: requestId,
+          message: "Render latency update",
+          images: [],
+        },
+      },
+    ]);
+    expect(deliveries).toEqual([]);
+
+    expect(claimPendingSlackComposer("os-test", requestId)).toBe(true);
+    expect(
+      sendPendingSlackComposer(
+        "os-test",
+        requestId,
+        { id: "C1", name: "engineering" },
+        "https://acme.slack.com/archives/C1/p1",
+      ),
+    ).toBe(true);
+    await deliveredOnce;
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]).toContain(
+      `The person sent the Slack draft ${requestId} to #engineering: https://acme.slack.com/archives/C1/p1`,
+    );
+    expect(deliveries[0]).toStartWith(
+      '<opensession:context source="background-wait">',
+    );
     expect(pendingSlackComposers.has("os-test")).toBe(false);
-    void openSlackComposer("os-test", {});
-    expect(pendingSlackComposers.has("os-test")).toBe(true);
+  });
+
+  test("a cancelled agent draft reports back to the session", () => {
+    expect(
+      slackComposeOutcomeMessage("draft-1", { status: "cancelled" }),
+    ).toContain(
+      "The person cancelled the Slack draft draft-1. Nothing was sent.",
+    );
   });
 });

@@ -58,10 +58,10 @@ export async function handleSlackComposeRoutes(
     }
     const body = await ctx.req.json().catch(() => ({}));
     try {
-      void openSlackComposer(sessionId, {
+      const { request } = openSlackComposer(sessionId, {
         message: typeof body?.message === "string" ? body.message : "",
       });
-      return Response.json(pendingSlackComposers.get(sessionId)!.request);
+      return Response.json(request);
     } catch (error: any) {
       return Response.json(
         { error: error?.message || "Couldn't open the Slack composer" },

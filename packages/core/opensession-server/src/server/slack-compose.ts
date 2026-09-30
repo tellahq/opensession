@@ -107,11 +107,16 @@ function broadcast(sessionId: string, request: SlackComposeRequest): void {
   });
 }
 
+/**
+ * Open a composer and return at once. The draft lives here, not in the caller:
+ * it stays open until the person sends or cancels it, however long that takes,
+ * and `result` settles then. Nothing that happens to the caller (an agent's
+ * MCP call timing out or its turn ending) closes it.
+ */
 export function openSlackComposer(
   sessionId: string,
   input: { message?: string; channel?: string; images?: string[] },
-  signal?: AbortSignal,
-): Promise<SlackComposeResult> {
+): { request: SlackComposeRequest; result: Promise<SlackComposeResult> } {
   const existing = pendingSlackComposers.get(sessionId);
   if (existing) {
     throw new Error("this session already has a Slack composer open");
@@ -124,24 +129,16 @@ export function openSlackComposer(
   };
   const snapshot = snapshotImages(sessionId, request.id, input.images || []);
   request.images = snapshot.paths;
-  return new Promise((resolve) => {
-    const settle = (result: SlackComposeResult) => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve(result);
-    };
-    const onAbort = () => {
-      cancelPendingSlackComposer(sessionId, request.id);
-    };
+  const result = new Promise<SlackComposeResult>((resolve) => {
     pendingSlackComposers.set(sessionId, {
       request,
-      resolve: settle,
+      resolve,
       status: "pending",
       snapshotDir: snapshot.dir,
     });
-    if (signal?.aborted) onAbort();
-    else signal?.addEventListener("abort", onAbort, { once: true });
-    if (pendingSlackComposers.has(sessionId)) broadcast(sessionId, request);
   });
+  broadcast(sessionId, request);
+  return { request, result };
 }
 
 export function updatePendingSlackComposer(
