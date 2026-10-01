@@ -34,7 +34,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, open, stat, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
-import { audit as writeAudit } from "./audit";
+import { auditAsync } from "./audit";
 import { BROKER_METHODS, readCapped } from "./keychain-broker";
 import {
   brokerHeaders,
@@ -203,7 +203,8 @@ export async function startCredentialRun(
     proxyUrl: "",
     deps: {
       fetchImpl: input.deps?.fetchImpl ?? fetch,
-      audit: input.deps?.audit ?? writeAudit,
+      // Every proxied call is audited; never block the thread on it.
+      audit: input.deps?.audit ?? auditAsync,
     },
   };
   runs.set(id, run);
@@ -217,6 +218,13 @@ export async function startCredentialRun(
     run.proxyUrl = `http://127.0.0.1:${run.server.port}/${run.secret.toString("base64url")}`;
     await mkdir(input.logDir, { recursive: true });
     run.log = await open(run.logPath, "a", 0o600);
+    // The grant may have been revoked, or the run stopped, while this
+    // awaited. Then the approved command must not start at all.
+    if (run.state !== "running") {
+      const state = run.state;
+      await finish(run, state);
+      return { error: `the run was ${state} before it started` };
+    }
     // Only what the caller passed: never the server's own environment.
     const env: Record<string, string> = {
       ...input.env,

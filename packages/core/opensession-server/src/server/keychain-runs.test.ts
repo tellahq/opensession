@@ -294,6 +294,30 @@ await new Promise(() => {});`,
     expect(seen).toHaveLength(1);
   });
 
+  test("a grant revoked while the run is starting never runs the command", async () => {
+    const cred = credential();
+    const command = script("never.ts", `await Bun.write("never.ran", "yes");`);
+    const grant = grantRun(cred.id, command);
+    const pending = start(command);
+    // Claimed, and suspended on the log file before spawning.
+    const claimed = () =>
+      kc.listGrants({ sessionId: SESSION }).find((g) => g.id === grant.id)
+        ?.runId;
+    for (let i = 0; i < 2000 && !claimed(); i++) await Bun.sleep(1);
+    expect(claimed()).toBeDefined();
+    expect(kc.revokeGrant(grant.id, "Alex")).toEqual({ ok: true });
+
+    const result = await pending;
+    expect("error" in result && result.error).toContain("revoked");
+    await Bun.sleep(200);
+    expect(existsSync(join(dir, "never.ran"))).toBe(false);
+    expect(events.at(-1)).toMatchObject({
+      kind: "keychain_run_ended",
+      state: "revoked",
+      calls: 0,
+    });
+  });
+
   test("a run times out", async () => {
     const cred = credential();
     const command = script("slow.ts", "await new Promise(() => {});");

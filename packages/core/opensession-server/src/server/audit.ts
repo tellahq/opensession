@@ -7,6 +7,7 @@ import {
   readFileSync,
   unlinkSync,
 } from "node:fs";
+import { appendFile, mkdir } from "node:fs/promises";
 import { stateDir } from "./paths";
 
 // Structured audit log.
@@ -68,6 +69,60 @@ export function audit(event: Record<string, unknown>): void {
     );
   } catch (e) {
     console.error("[audit] write failed:", e);
+  }
+}
+
+let pendingLines: Array<{ file: string; line: string }> = [];
+let flushing: Promise<void> | null = null;
+
+/**
+ * audit() for hot paths on the gateway thread, such as a scripted run's
+ * proxy, which audits every one of possibly tens of thousands of calls.
+ * Events are stamped now and queued; one async writer appends them in
+ * batches, so the caller never waits on the filesystem. Never throws.
+ */
+export function auditAsync(event: Record<string, unknown>): void {
+  if (process.env.NODE_ENV === "test") return;
+  const now = new Date();
+  let line: string;
+  try {
+    line = JSON.stringify({
+      time: now.toISOString(),
+      service: "opensession",
+      ...event,
+    });
+  } catch (e) {
+    console.error("[audit] serialize failed:", e);
+    return;
+  }
+  pendingLines.push({
+    file: `${AUDIT_DIR}/audit-${now.toISOString().slice(0, 10)}.jsonl`,
+    line,
+  });
+  flushing ??= flushPending().finally(() => {
+    flushing = null;
+  });
+}
+
+async function flushPending(): Promise<void> {
+  try {
+    await mkdir(AUDIT_DIR, { recursive: true });
+  } catch (e) {
+    console.error("[audit] mkdir failed:", e);
+  }
+  while (pendingLines.length) {
+    const batch = pendingLines;
+    pendingLines = [];
+    const byFile = new Map<string, string>();
+    for (const { file, line } of batch)
+      byFile.set(file, (byFile.get(file) ?? "") + line + "\n");
+    for (const [file, text] of byFile) {
+      try {
+        await appendFile(file, text);
+      } catch (e) {
+        console.error("[audit] write failed:", e);
+      }
+    }
   }
 }
 
