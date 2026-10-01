@@ -6,6 +6,8 @@ import {
   parseXaiCatalogBody,
   parseXaiUsageBody,
   tokensFromResponse,
+  xaiClientVersion,
+  xaiOutdatedClientHint,
   xaiProxyHeaders,
   xaiStatusLabel,
 } from "./xai-oauth";
@@ -62,6 +64,30 @@ describe("xai-oauth token shaping", () => {
       "grok-4.6",
     );
     expect(xaiProxyHeaders()["X-XAI-Token-Auth"]).toBe("xai-grok-cli");
+  });
+
+  test("client version clears the proxy's 1.0.13 floor and honors a valid override", () => {
+    const [major, minor, patch] = xaiClientVersion(undefined)
+      .split(".")
+      .map(Number);
+    expect(major * 1e6 + minor * 1e3 + patch).toBeGreaterThanOrEqual(1_000_013);
+    expect(xaiClientVersion(" 1.2.3 ")).toBe("1.2.3");
+    expect(xaiClientVersion("1.2.3\r\nx-evil: 1")).toBe(
+      xaiClientVersion(undefined),
+    );
+    expect(xaiClientVersion("")).toBe(xaiClientVersion(undefined));
+  });
+
+  test("an outdated-client rejection gets an actionable hint", () => {
+    const raw =
+      'OpenAI API error (426): 426 "Your Grok CLI version (0.2.101) is outdated. Please update to version 1.0.13 or later"';
+    expect(xaiOutdatedClientHint(raw)).toContain(
+      "OPENSESSION_XAI_CLIENT_VERSION",
+    );
+    expect(xaiOutdatedClientHint("OpenAI API error (429): rate limited")).toBe(
+      null,
+    );
+    expect(xaiStatusLabel(426).label).toContain("outdated");
   });
 });
 

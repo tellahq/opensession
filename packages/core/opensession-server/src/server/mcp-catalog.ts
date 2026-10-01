@@ -58,6 +58,7 @@ import { createAuditMcpServer } from "./audit-mcp";
 import { createHealthMcpServer } from "./health-mcp";
 import { createRunnersMcpServer } from "./runners-mcp";
 import { createScheduleMcpServer } from "./schedule-mcp";
+import { createScriptsMcpServer } from "./scripts-mcp";
 import { createPortalsMcpServer } from "./portals-mcp";
 import { createChartsMcpServer } from "./charts-mcp";
 import { createDesktopMcpServer } from "./desktop-mcp";
@@ -355,6 +356,15 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     runClasses: ["interactive"],
     condition: "Needs a session id.",
     build: () => createSlackComposeMcpServer({ sessionId: SESSION_ID }),
+  },
+  {
+    name: "opensession-scripts",
+    summary: INTERNAL_MCP_CAPABILITIES["opensession-scripts"].summary,
+    source: "packages/core/opensession-server/src/server/scripts-mcp.ts",
+    wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts"],
+    runClasses: ["interactive"],
+    condition: "Needs a session id.",
+    build: () => createScriptsMcpServer({ sessionId: SESSION_ID }),
   },
   {
     name: "opensession-local-files",

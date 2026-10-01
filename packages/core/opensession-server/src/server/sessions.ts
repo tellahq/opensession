@@ -79,7 +79,9 @@ export {
   getRecentPrsForPerson,
   getPrReviewStatus,
   getOpenPrs,
+  getOpenPrSummaries,
   type OpenPrEntry,
+  type OpenPrSummary,
   type RecentPrEntry,
 } from "./pr-cache";
 

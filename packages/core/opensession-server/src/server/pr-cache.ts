@@ -14,12 +14,10 @@ import { chmodSync, readFileSync } from "fs";
 import { statePath } from "./paths";
 import { githubLoginToPersonKey, githubLoginFor } from "./shared/user-mappings";
 import { configuredRepos, githubBotLogins } from "./config";
-import {
-  isLockHeld,
-  readPrState,
-  type LastReviewState,
-} from "../agents/github/state";
+import { isLockHeld, type LastReviewState } from "../agents/github/state";
 import { ghRateLimited } from "./github-limit";
+import { prKey } from "../agents/github/constants";
+import { readPrReviews, type PrReviewProjection } from "./pr-review-catalog";
 import {
   ghJson,
   hostRepoId,
@@ -1397,24 +1395,48 @@ export function lastReviewSummary(
   };
 }
 
-/** Live automated-review state for one PR, shared by the queue and PR detail
- * surfaces so the same score and staleness rules are rendered everywhere. */
-export function getPrReviewStatus(
+function reviewStatus(
+  projection: PrReviewProjection | undefined,
   prNumber: number,
   ghRepo: string | undefined,
   headRefOid: string | undefined,
 ): { reviewActive: boolean; osReview?: OsReviewSummary } {
-  const state = readPrState(prNumber, ghRepo);
   return {
     reviewActive:
-      state?.activeRun?.kind === "review" ||
-      isLockHeld("review", prNumber, ghRepo),
-    osReview: lastReviewSummary(state?.lastReview, headRefOid),
+      !!projection?.reviewRunning || isLockHeld("review", prNumber, ghRepo),
+    osReview: lastReviewSummary(projection?.lastReview, headRefOid),
   };
 }
 
-export function getOpenPrs(): OpenPrEntry[] {
-  const out: OpenPrEntry[] = [];
+/** Live automated-review state for one PR, shared by the queue and PR detail
+ * surfaces so the same score and staleness rules are rendered everywhere.
+ * Reads the catalog projection (pr-review-catalog.ts), never the agent's
+ * state files. */
+export async function getPrReviewStatus(
+  prNumber: number,
+  ghRepo: string | undefined,
+  headRefOid: string | undefined,
+): Promise<{ reviewActive: boolean; osReview?: OsReviewSummary }> {
+  const key = prKey(prNumber, ghRepo);
+  const projections = await readPrReviews([key]);
+  return reviewStatus(projections.get(key), prNumber, ghRepo, headRefOid);
+}
+
+/** An open PR without its automated-review status: everything here is in
+ *  memory, so filters and notifiers that never show a review score read it
+ *  synchronously. */
+export type OpenPrSummary = Omit<OpenPrEntry, "reviewActive" | "osReview">;
+
+function openPrRows(): Array<{
+  summary: OpenPrSummary;
+  ghRepo: string | undefined;
+  headRefOid: string | undefined;
+}> {
+  const rows: Array<{
+    summary: OpenPrSummary;
+    ghRepo: string | undefined;
+    headRefOid: string | undefined;
+  }> = [];
   for (const [repoId, byBranch] of getPrsByRepo()) {
     const repoCfg = configuredRepos()[repoId];
     const ghRepo = repoCfg?.ghRepo;
@@ -1424,33 +1446,54 @@ export function getOpenPrs(): OpenPrEntry[] {
         : undefined;
     for (const [branch, pr] of byBranch) {
       if (pr.state !== "OPEN") continue;
-      const review = getPrReviewStatus(pr.number, ghRepo, pr.headRefOid);
-      out.push({
-        capabilities,
-        repo: repoId,
-        branch,
-        url: pr.url,
-        number: pr.number,
-        title: pr.title,
-        isDraft: pr.isDraft,
-        reviewDecision: pr.reviewDecision,
-        author: pr.author,
-        person:
-          githubLoginToPersonKey(pr.author) ??
-          pr.assignees
-            .map((l) => githubLoginToPersonKey(l))
-            .find((p): p is string => !!p) ??
-          null,
-        createdAt: pr.createdAt,
-        updatedAt: pr.updatedAt,
-        checks: pr.checks,
-        mergeable: pr.mergeable,
-        reviewRequested: pr.reviewRequested,
-        ...review,
+      rows.push({
+        ghRepo,
+        headRefOid: pr.headRefOid,
+        summary: {
+          capabilities,
+          repo: repoId,
+          branch,
+          url: pr.url,
+          number: pr.number,
+          title: pr.title,
+          isDraft: pr.isDraft,
+          reviewDecision: pr.reviewDecision,
+          author: pr.author,
+          person:
+            githubLoginToPersonKey(pr.author) ??
+            pr.assignees
+              .map((l) => githubLoginToPersonKey(l))
+              .find((p): p is string => !!p) ??
+            null,
+          createdAt: pr.createdAt,
+          updatedAt: pr.updatedAt,
+          checks: pr.checks,
+          mergeable: pr.mergeable,
+          reviewRequested: pr.reviewRequested,
+        },
       });
     }
   }
-  return out.sort((a, b) =>
-    (b.updatedAt || "").localeCompare(a.updatedAt || ""),
+  return rows.sort((a, b) =>
+    (b.summary.updatedAt || "").localeCompare(a.summary.updatedAt || ""),
   );
+}
+
+/** Open PRs, newest first, without review status (no file I/O). */
+export function getOpenPrSummaries(): OpenPrSummary[] {
+  return openPrRows().map((row) => row.summary);
+}
+
+/** Open PRs, newest first, with each PR's automated-review status from one
+ *  batched catalog read. */
+export async function getOpenPrs(): Promise<OpenPrEntry[]> {
+  const rows = openPrRows().map((row) => ({
+    ...row,
+    key: prKey(row.summary.number, row.ghRepo),
+  }));
+  const projections = await readPrReviews(rows.map((row) => row.key));
+  return rows.map(({ summary, ghRepo, headRefOid, key }) => ({
+    ...summary,
+    ...reviewStatus(projections.get(key), summary.number, ghRepo, headRefOid),
+  }));
 }

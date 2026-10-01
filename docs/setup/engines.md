@@ -71,7 +71,10 @@ The UI writes these files with mode `0600`:
 SuperGrok accounts sign in by device code from Settings → Providers. Their
 models appear in the picker as `pi/xai-oauth/<model>` and every request goes
 through xAI's `cli-chat-proxy.grok.com`, so it draws on the subscription's
-quota rather than API credits. Pay-per-token xAI keys stay a separate `xai`
+quota rather than API credits. The proxy rejects Grok CLI versions below its
+current minimum with HTTP 426; set `OPENSESSION_XAI_CLIENT_VERSION` to the
+current stable Grok CLI version (https://x.ai/cli/stable) to recover before a
+release bumps the built-in default. Pay-per-token xAI keys stay a separate `xai`
 provider under Your own providers. `bridge.xaiAccounts` in
 `model-providers.json` restricts which accounts serve Grok runs, like
 `bridge.openaiAccounts` does for the ChatGPT pool.

@@ -265,6 +265,17 @@ Successful agent and MCP calls are journaled and replayed when a workflow is
 resumed. The runner enforces concurrency, call-count and timeout limits. The
 Worker provides containment, not a hard security sandbox.
 
+## Script runs
+
+A script run is a long shell command, such as a migration, a backfill or a
+sync, that a session hands to Open Session instead of leaving it in a
+background shell. It runs on the host in the session's workspace, in its own
+process scope, so it keeps going through server restarts and deploys. The
+session shows a card for each run with its progress, output and a Stop button,
+and the agent is woken with the outcome when it ends. A run that borrows a
+teammate's credential is the same kind of run. See
+[docs/script-runs.md](docs/script-runs.md).
+
 ## Reports and databases
 
 Both are things a run produces that outlive it, kept by Open Session outside

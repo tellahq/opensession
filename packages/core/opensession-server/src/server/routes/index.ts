@@ -17,6 +17,7 @@ import { handleSlackComposeRoutes } from "./slack-compose";
 import { handleSystemRoutes } from "./system";
 import { handleUploadRoutes } from "./uploads";
 import { handleLocalFilesRoutes } from "./local-files";
+import { handleScriptRoutes } from "./scripts";
 import { handleSessionAssetsRoutes } from "./session-assets";
 import { handleSessionNotesRoutes } from "./session-notes";
 import { handleSessionContextRoutes } from "./session-context";
@@ -82,6 +83,7 @@ export const routeHandlers: RouteHandler[] = [
   handleSystemRoutes,
   handleUploadRoutes,
   handleLocalFilesRoutes,
+  handleScriptRoutes,
   handleOs1UpdateRoutes,
   handleLiveActivityRoutes,
   handleIngressRoutes,

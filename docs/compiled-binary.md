@@ -2,7 +2,7 @@
 
 The default simple-mode artefact centres on an executable built with
 [`bun build --compile`](https://bun.com/docs/bundler/executables). It dispatches
-all eight process roles from one argv and embeds the prebuilt frontend and
+all nine process roles from one argv and embeds the prebuilt frontend and
 the simulator Portal viewer. The
 release adds Worker and native sidecars beside that executable. It boots and
 serves the UI with no runtime interpreter on `PATH`; Anthropic turns still
@@ -37,7 +37,7 @@ another host. `--os` and `--arch` select `bun-<os>-<arch>` and fetch sharp's
 optional packages for that target. The Worker sidecars are bundled JavaScript
 and are platform-neutral.
 
-## One binary, eight process roles
+## One binary, nine process roles
 
 A compiled install has no `bun`/`.ts` tree to re-exec, so
 `packages/core/opensession-server/src/main.ts` dispatches a leading subcommand
@@ -46,6 +46,7 @@ to these source entrypoints:
 | Invocation                             | Runs                                  | Source entrypoint                                                         |
 | -------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------- |
 | `opensession server`                   | HTTP/WS gateway                       | `packages/core/opensession-server/opensession.ts`                         |
+| `opensession script-host <runDir>`     | one supervised script run             | `packages/core/opensession-server/src/script-host/main.ts`                |
 | `opensession runner-host <spec>`       | detached agent run                    | `packages/core/opensession-server/src/runner-host/host.ts`                |
 | `opensession mcp-proxy`                | stdio↔RPC MCP proxy                   | `packages/core/opensession-server/src/runner-host/mcp-proxy.ts`           |
 | `opensession executor`                 | supervised executor launcher          | `packages/core/opensession-server/src/executor/main.ts`                   |

@@ -23,7 +23,7 @@ import {
   type Workspace,
 } from "./workspaces";
 import { getCachedSessions, updateSessionFile } from "./session-cache";
-import { getOpenPrs, getRecentPrs } from "./sessions";
+import { getOpenPrSummaries, getRecentPrs } from "./sessions";
 import { workspaceOwningWorktree } from "./session-repos";
 import { getRepo, listWorktrees } from "./worktree";
 import { prKey } from "../agents/github/constants";
@@ -200,7 +200,8 @@ export async function resolvePrWorkspace(input: {
         const match = (p: { repo: string; number: number; branch: string }) =>
           p.repo === repoId &&
           (number !== undefined ? p.number === number : p.branch === branch);
-        const pr = getOpenPrs().find(match) || getRecentPrs().find(match);
+        const pr =
+          getOpenPrSummaries().find(match) || getRecentPrs().find(match);
         if (pr) {
           number = pr.number;
           branch = pr.branch;

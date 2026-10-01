@@ -25,8 +25,32 @@ const CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828";
 // conversations:* lets the proxy attach server-side history to x-grok-conv-id.
 const SCOPE =
   "openid profile email offline_access grok-cli:access api:access conversations:read conversations:write";
-const CLIENT_VERSION = "0.2.101";
+/** Grok CLI version the proxy sees. The proxy enforces a minimum (HTTP 426
+ * below it, 1.0.13 as of 2026-10), so track the current stable release
+ * (https://x.ai/cli/stable). `OPENSESSION_XAI_CLIENT_VERSION` overrides it so
+ * a deployment can recover from a raised floor without a code release. */
+const DEFAULT_CLIENT_VERSION = "1.0.46";
 const CLIENT_IDENTIFIER = "grok-shell";
+
+/** Env override when it is a plain dotted version, else the default. */
+export function xaiClientVersion(
+  override = process.env.OPENSESSION_XAI_CLIENT_VERSION,
+): string {
+  const trimmed = override?.trim();
+  return trimmed && /^\d+(?:\.\d+){1,3}$/.test(trimmed)
+    ? trimmed
+    : DEFAULT_CLIENT_VERSION;
+}
+
+const OUTDATED_CLIENT_SHAPE =
+  /\(426\)|\b426 upgrade required|version \S+ is outdated/i;
+
+/** Actionable wording for the proxy's outdated-client rejection, appended to
+ * the raw error so a run failure says how to recover. Null for other errors. */
+export function xaiOutdatedClientHint(message: string): string | null {
+  if (!OUTDATED_CLIENT_SHAPE.test(message)) return null;
+  return `xAI rejected Grok client version ${xaiClientVersion()} as outdated. Set OPENSESSION_XAI_CLIENT_VERSION to the current Grok CLI version (https://x.ai/cli/stable) and restart, or update Open Session.`;
+}
 
 /** Every subscription request rides the CLI proxy, never api.x.ai. */
 export const XAI_CLI_PROXY_BASE_URL = "https://cli-chat-proxy.grok.com/v1";
@@ -91,10 +115,11 @@ function platformLabel(): string {
 /** Identity headers the cli-chat-proxy gates on. `modelId` adds the routing
  * override an inference request needs; account and catalog calls omit it. */
 export function xaiProxyHeaders(modelId?: string): Record<string, string> {
+  const version = xaiClientVersion();
   return {
-    "User-Agent": `${CLIENT_IDENTIFIER}/${CLIENT_VERSION} (${platformLabel()})`,
+    "User-Agent": `${CLIENT_IDENTIFIER}/${version} (${platformLabel()})`,
     "x-grok-client-identifier": CLIENT_IDENTIFIER,
-    "x-grok-client-version": CLIENT_VERSION,
+    "x-grok-client-version": version,
     "x-grok-client-mode": "interactive",
     "X-XAI-Token-Auth": "xai-grok-cli",
     "x-authenticateresponse": "authenticate-response",
@@ -106,7 +131,7 @@ function authHeaders(): Record<string, string> {
   return {
     "Content-Type": "application/x-www-form-urlencoded",
     Accept: "application/json",
-    "x-grok-client-version": CLIENT_VERSION,
+    "x-grok-client-version": xaiClientVersion(),
     "x-grok-client-surface": "cli",
   };
 }
@@ -152,6 +177,11 @@ export function xaiStatusLabel(status: number): {
   if (status === 401 || status === 403)
     return { label: "authentication rejected", fatal: true };
   if (status === 404) return { label: "endpoint unavailable", fatal: false };
+  if (status === 426)
+    return {
+      label: `Grok client version ${xaiClientVersion()} is outdated; set OPENSESSION_XAI_CLIENT_VERSION`,
+      fatal: false,
+    };
   if (status === 429) return { label: "rate limited", fatal: false };
   if (status >= 500) return { label: "upstream error", fatal: false };
   return { label: `HTTP ${status}`, fatal: false };

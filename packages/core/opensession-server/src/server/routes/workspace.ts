@@ -42,7 +42,7 @@ import {
   switchPrimaryRepo,
   workspaceOwningWorktree,
 } from "../session-repos";
-import { getOpenPrs, getTranscriptPath } from "../sessions";
+import { getOpenPrSummaries, getTranscriptPath } from "../sessions";
 import { readDuplicateSessionTranscript } from "../session-duplicate";
 import { importLegacyTranscript } from "../actor-transcript";
 import {
@@ -517,7 +517,7 @@ export async function handleWorkspaceRoutes(
             .map((session) => session.workspaceId)
             .filter((id): id is string => typeof id === "string" && !!id),
       );
-      const openPrs = getOpenPrs();
+      const openPrs = getOpenPrSummaries();
       workspaces = workspaces.filter(
         (workspace) =>
           workspace.id === includeWorkspaceId ||

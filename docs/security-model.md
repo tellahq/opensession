@@ -320,6 +320,23 @@ vault access, item enumeration, raw export, Apple Passwords/iCloud access, or
 Keychain mutation. Native tests use a new disposable keychain with interaction
 disabled, never the default search list or real user credentials.
 
+## Script runs
+
+The interactive-only `opensession-scripts` server starts a long shell command
+as a supervised script run (`src/server/script-runs.ts`). Like a Portal, a run
+outlives the call that started it, so automation runs, workflow scripts, and
+Sandbox or Runner sessions cannot start one. The command gets a minimal
+environment (`PATH`, `HOME`, `LANG`, `TMPDIR` and the session scratch path),
+never the server's own environment, and runs as the service user in the
+session's workspace, with the same reach as the agent's shell.
+
+Each run is owned by a script host process in its own transient user scope in
+the low-priority workload slice. The host enforces the run's deadline itself,
+so it cannot outlive it while the server is down. The registry and per-run
+files are written `0600` in a `0700` directory under the state dir. Anyone who
+can view the session can read the run's output tail and stop it; automation
+identities cannot stop runs over HTTP.
+
 ## Local file requests
 
 The interactive-only `opensession-local-files` server lets an agent ask the

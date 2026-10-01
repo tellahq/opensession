@@ -56,6 +56,7 @@ touches an in-process tool:
 | [`opensession-desktop`](#opensession-desktop) | 8 | interactive | Needs a sandboxed session. |
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | Needs a session id. |
 | [`opensession-slack`](#opensession-slack) | 1 | interactive | Needs a session id. |
+| [`opensession-scripts`](#opensession-scripts) | 3 | interactive | Needs a session id. |
 | [`opensession-local-files`](#opensession-local-files) | 1 | interactive | Needs a session id. |
 | [`opensession-plain-discussion`](#opensession-plain-discussion) | 2 | interactive | Only a session that answers a Plain discussion (plainDiscussionId): an Ask Sidekick session carries this server alone instead of the interactive set; an auto-triage session that reports into a discussion carries it beside the automation-bar set on its later turns. |
 | [`opensession-ask`](#opensession-ask) | 1 | interactive, Slack loop | Needs a session id. |
@@ -74,7 +75,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-33 servers, 163 tools.
+34 servers, 166 tools.
 
 ## opensession-sessions
 
@@ -889,6 +890,33 @@ Open an editable Slack composer. The human still presses Send.
 `mcp__opensession-slack__compose_message` · input: `message` (string), `channel` (string), `images` (string[])
 
 Open an editable Slack composer in this Open Session for the signed-in person to review, then return at once. The draft stays open until the person presses Send or Cancel, however long that takes, and the outcome (with the message link when sent) arrives later in this session as system context. Do not post the same update another way or open a second draft while waiting. Use this when a useful update is ready to share but the human should review the message, channel, and images first. This tool never posts by itself: the person must press Send in the UI. When the person has explicitly said to post without review, use the Slack server's slack_post_message instead: its images option attaches images (a chart PNG) to a direct post.
+
+## opensession-scripts
+
+Supervised script runs (migrations, backfills, long jobs) that survive restarts and show in the session.
+
+- **Source** `packages/core/opensession-server/src/server/scripts-mcp.ts`
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
+- **Runs** interactive
+- **Condition** Needs a session id.
+
+### `start_script`
+
+`mcp__opensession-scripts__start_script` · input: `command` (string, required), `title` (string), `cwd` (string), `timeoutMinutes` (number), `notify` (boolean)
+
+Run a long shell command (a migration, backfill, sync, data fix, long build) as a supervised script run instead of a background shell job. It keeps running through Open Session restarts and deploys, shows as a card in the session where people can follow and stop it, and when it ends this session is woken with how it ended and the end of its output, so start it and end your turn instead of polling or scheduling a check-back. It runs on this server, in the session's workspace, with a minimal environment (PATH, HOME, LANG, TMPDIR): pass anything else on the command line, e.g. 'set -a; . ./.env; set +a; bun scripts/migrate.ts'. Make long jobs resumable and print progress lines. Output is appended to the log at logPath. A Sandbox or Runner session cannot start one. For a script that needs a teammate's credential, use run_with_credential (opensession-keychain) instead.
+
+### `script_status`
+
+`mcp__opensession-scripts__script_status` · input: `id` (string)
+
+Check a script run started with start_script or run_with_credential: running/exited/failed/timed_out/stopped/revoked/lost, exit code, start and end times, credential call counts, and the last few KB of its output (the full log is at logPath). Without an id, lists this session's runs.
+
+### `stop_script`
+
+`mcp__opensession-scripts__stop_script` · input: `id` (string, required)
+
+Stop a running script run: its process group is sent SIGTERM, then SIGKILL after 10 seconds. The session is woken when it has ended, as for any other end.
 
 ## opensession-local-files
 

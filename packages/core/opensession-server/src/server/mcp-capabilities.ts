@@ -99,6 +99,12 @@ export const INTERNAL_MCP_CAPABILITIES = {
     guidance:
       "Start and manage supervised HTTP or WebSocket services for this workspace instead of leaving an unmanaged background process.",
   },
+  "opensession-scripts": {
+    summary:
+      "Supervised script runs (migrations, backfills, long jobs) that survive restarts and show in the session.",
+    guidance:
+      "Run a long script or migration with `start_script`, not a background shell job: it survives restarts, shows as a card in the session, and wakes this session when it ends.",
+  },
   "opensession-desktop": {
     summary:
       "See and drive the Sandbox desktop: screenshot, click, type, keys, windows.",

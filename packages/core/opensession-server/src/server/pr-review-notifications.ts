@@ -1,5 +1,9 @@
 import { notifyUser, type NotificationEvent } from "./notifications";
-import { getOpenPrs, refreshPrCache, type OpenPrEntry } from "./sessions";
+import {
+  getOpenPrSummaries,
+  refreshPrCache,
+  type OpenPrSummary,
+} from "./sessions";
 import { personKeyToDisplayName } from "./shared/user-mappings";
 import { configuredRepos } from "./config";
 
@@ -23,7 +27,7 @@ export function markPrReviewNotified(
   internalMirrors.set(mirrorKey(ghRepo, branch, reviewer), Date.now());
 }
 
-function consumeInternalMirror(pr: OpenPrEntry, reviewer: string): boolean {
+function consumeInternalMirror(pr: OpenPrSummary, reviewer: string): boolean {
   const ghRepo = configuredRepos()[pr.repo]?.ghRepo || pr.repo;
   const key = mirrorKey(ghRepo, pr.branch, reviewer);
   const markedAt = internalMirrors.get(key);
@@ -34,21 +38,21 @@ function consumeInternalMirror(pr: OpenPrEntry, reviewer: string): boolean {
 
 interface PrReviewNotificationDeps {
   refresh: () => Promise<Set<string>>;
-  getPrs: () => OpenPrEntry[];
+  getPrs: () => OpenPrSummary[];
   resolveUser: (personKey: string) => string | null;
-  shouldSuppress?: (pr: OpenPrEntry, reviewer: string) => boolean;
+  shouldSuppress?: (pr: OpenPrSummary, reviewer: string) => boolean;
   notify: (user: string, event: NotificationEvent) => Promise<unknown>;
 }
 
 const defaultDeps: PrReviewNotificationDeps = {
   refresh: refreshPrCache,
-  getPrs: getOpenPrs,
+  getPrs: getOpenPrSummaries,
   resolveUser: personKeyToDisplayName,
   shouldSuppress: consumeInternalMirror,
   notify: notifyUser,
 };
 
-function assignmentKey(pr: OpenPrEntry, reviewer: string): string {
+function assignmentKey(pr: OpenPrSummary, reviewer: string): string {
   return `${pr.number}\0${reviewer.toLowerCase()}`;
 }
 
@@ -65,7 +69,7 @@ export function createPrReviewNotifier(
       const currentByRepo = new Map<string, Set<string>>();
       for (const repo of freshRepos) currentByRepo.set(repo, new Set());
 
-      const assignments: Array<{ pr: OpenPrEntry; reviewer: string }> = [];
+      const assignments: Array<{ pr: OpenPrSummary; reviewer: string }> = [];
       for (const pr of deps.getPrs()) {
         const current = currentByRepo.get(pr.repo);
         if (!current) continue;

@@ -13,7 +13,7 @@ import { configuredRepos, getConfigAsync } from "../../server/config";
 import type { HandoffState } from "./handoff-gates";
 import type { StoredMonitoringPlan } from "./monitoring-plan";
 import { mkdirSync, readFileSync, existsSync, readdirSync } from "fs";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 
 const STATE_DIR = stateDir("github");
@@ -223,6 +223,38 @@ export async function readPrStateAsync(
   }
 }
 
+/** PRs whose state carries a pending mention, so the retry sweep reads only
+ *  those files instead of every PR this agent has ever seen. Seeded from the
+ *  boot recovery pass and kept current by writePrState, the only writer. */
+const pendingMentionPrs = new Map<
+  string,
+  { prNumber: number; ghRepo?: string }
+>();
+
+function indexPendingMention(state: GithubPrState): void {
+  const key = prKey(state.prNumber, state.ghRepo);
+  if (state.pendingMention)
+    pendingMentionPrs.set(key, {
+      prNumber: state.prNumber,
+      ghRepo: state.ghRepo,
+    });
+  else pendingMentionPrs.delete(key);
+}
+
+/** Seed the pending-mention index from the boot recovery pass. */
+export function indexPendingMentions(states: GithubPrState[]): void {
+  pendingMentionPrs.clear();
+  for (const state of states) indexPendingMention(state);
+}
+
+/** PRs with a pending mention, from the in-process index. */
+export function pendingMentionRefs(): Array<{
+  prNumber: number;
+  ghRepo?: string;
+}> {
+  return [...pendingMentionPrs.values()];
+}
+
 export function getOrInitPrState(
   prNumber: number,
   headRef: string,
@@ -249,6 +281,14 @@ function writePrState(state: GithubPrState): void {
   if (state.reviewedShas.length > 20)
     state.reviewedShas = state.reviewedShas.slice(-20);
   writeJsonAtomic(statePath(state.prNumber, state.ghRepo), state);
+  indexPendingMention(state);
+  // Request paths read review status from the catalog projection, never
+  // from these files. Publication is asynchronous and ordered per PR.
+  const key = prKey(state.prNumber, state.ghRepo);
+  const snapshot = structuredClone(state);
+  void import("../../server/pr-review-catalog").then((m) =>
+    m.publishPrReview(key, snapshot),
+  );
 }
 
 /**
@@ -391,6 +431,31 @@ export function listPrStates(): GithubPrState[] {
           readFileSync(`${STATE_DIR}/${file}`, "utf-8"),
         ) as GithubPrState,
       );
+    } catch {}
+  }
+  return out;
+}
+
+/** Every PR state file with its key, read asynchronously. Only the one-time
+ *  catalog import calls this; request paths read the projection. */
+export async function listPrStateEntriesAsync(): Promise<
+  Array<{ key: string; state: GithubPrState }>
+> {
+  let files: string[];
+  try {
+    files = (await readdir(STATE_DIR)).filter((f) => f.endsWith(".json"));
+  } catch {
+    return [];
+  }
+  const out: Array<{ key: string; state: GithubPrState }> = [];
+  for (const file of files) {
+    try {
+      out.push({
+        key: file.slice(0, -5),
+        state: JSON.parse(
+          await readFile(`${STATE_DIR}/${file}`, "utf-8"),
+        ) as GithubPrState,
+      });
     } catch {}
   }
   return out;

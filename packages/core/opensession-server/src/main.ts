@@ -26,6 +26,8 @@
  *   opensession simulator-portal <flags>
  *                                    → simulator-portal/main.ts (viewer process,
  *                                      serves the embedded viewer assets)
+ *   opensession script-host <runDir> → script-host/main.ts (owns one script
+ *                                      run, outliving the server)
  *   opensession server              → opensession.ts (the HTTP/WS server)
  *   opensession <anything else>     → scripts/cli.ts (onboard, start, doctor, …)
  *
@@ -116,6 +118,12 @@ if (sub === "runner-host") {
     console.error(error);
     process.exit(1);
   }
+} else if (sub === "script-host") {
+  // The process that owns one script run (src/server/script-runs.ts), so it
+  // outlives the server that started it.
+  process.argv.splice(2, 1);
+  const { scriptHostMain } = await import("./script-host/main");
+  scriptHostMain(process.argv[2]);
 } else if (sub === "server") {
   process.argv.splice(2, 1);
   // Surface a boot failure with a clear origin: a compiled binary's otherwise

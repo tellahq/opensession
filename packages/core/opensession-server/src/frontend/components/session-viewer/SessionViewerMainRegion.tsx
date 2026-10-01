@@ -48,6 +48,7 @@ import { SessionSafetyNotice } from "../SessionSafetyNotice";
 import { AskCard } from "../AskCard";
 import { LocalFilesRequestCard } from "../LocalFilesRequestCard";
 import { CredentialRegistrationCard } from "../CredentialRegistrationCard";
+import { ScriptRunsCard } from "../ScriptRunsCard";
 import {
   ShippedChangeComposer,
   SlackSentNotice,
@@ -1089,6 +1090,8 @@ export function SessionViewerMainRegion({
               <LocalFilesRequestCard sessionId={session.id} />
 
               <CredentialRegistrationCard sessionId={session.id} />
+
+              <ScriptRunsCard sessionId={session.id} />
 
               {slackComposer && (
                 <ShippedChangeComposer

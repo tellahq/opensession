@@ -21,6 +21,7 @@ import {
   CATALOG_DOCUMENT_MAX_VALUE_BYTES,
   sessionCatalogDocument,
 } from "./session-kernel";
+import type { CatalogDocumentSeedRow } from "./session-kernel/catalog-document-protocol";
 
 export const APPLICATION_CATALOG_NAMESPACES = [
   "automations",
@@ -35,6 +36,9 @@ export const APPLICATION_CATALOG_NAMESPACES = [
   // incident.io incident (ULID and INC-n) → the session that declared it
   // (incident-declarations.ts).
   "incident-declarations",
+  // Per-PR review status projected from the github agent's state files
+  // (pr-review-catalog.ts), read by the open-PR queue and PR panel.
+  "pr-reviews",
 ] as const;
 
 export type ApplicationCatalogNamespace =
@@ -84,6 +88,15 @@ function validateKey(key: string): void {
     throw new Error("Invalid application catalog document key");
 }
 
+/** Projections whose source of truth is another store. They import from that
+ * store instead of a legacy directory and are never mirrored back to files. */
+const DERIVED_IMPORT_SOURCES: Partial<
+  Record<ApplicationCatalogNamespace, () => Promise<CatalogDocumentSeedRow[]>>
+> = {
+  "pr-reviews": async () =>
+    (await import("./pr-review-catalog")).prReviewSeedRows(),
+};
+
 /** Idempotent import before the gateway accepts traffic. A partial import can
  * resume: seeds never overwrite a committed document or a deletion tombstone.
  * Invalid legacy JSON fails the import rather than silently losing state. */
@@ -91,6 +104,18 @@ export async function importApplicationCatalog(): Promise<void> {
   for (const namespace of APPLICATION_CATALOG_NAMESPACES) {
     if (await sessionCatalogDocument({ op: "import_complete", namespace }))
       continue;
+    const derived = DERIVED_IMPORT_SOURCES[namespace];
+    if (derived) {
+      const rows = await derived();
+      for (let offset = 0; offset < rows.length; offset += 500)
+        await sessionCatalogDocument({
+          op: "seed",
+          namespace,
+          rows: rows.slice(offset, offset + 500),
+        });
+      await sessionCatalogDocument({ op: "mark_import_complete", namespace });
+      continue;
+    }
     const directory = await legacyCatalogDirectory(namespace);
     let files: string[];
     try {
@@ -169,6 +194,7 @@ async function exportCommitted(
   value: unknown,
 ): Promise<void> {
   const identity = `${namespace}\u0000${key}`;
+  if (namespace in DERIVED_IMPORT_SOURCES) return;
   try {
     await exportDocument(namespace, key, value);
     failedExports.delete(identity);

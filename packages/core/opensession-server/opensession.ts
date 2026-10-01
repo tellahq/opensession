@@ -962,6 +962,14 @@ if (!g.__opensessionBooted) {
     );
   }
 
+  // Script runs (script-runs.ts) live in their own scopes and outlive this
+  // process. Reattach to the ones recorded as running, settle the ones that
+  // ended while it was down, and wake their sessions. Every boot mode: the
+  // registry is in this instance's own state dir.
+  void import("./src/server/script-runs")
+    .then((m) => m.startScriptRuns())
+    .catch((e) => console.error("[scripts] recovery failed:", e));
+
   // code.storage-hosted repos: make sure existing main checkouts have the
   // URL-scoped credential helper wired, so ambient git fetch/push mints fresh
   // JWTs. Idempotent (read-before-write) and a no-op unless

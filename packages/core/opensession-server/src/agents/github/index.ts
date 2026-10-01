@@ -42,7 +42,10 @@ import {
 import { githubWebhookCount, loadGithubDeliveries } from "./webhook-deliveries";
 import { handleGithubWebhook } from "./webhook-intake";
 import {
+  indexPendingMentions,
   listPrStates,
+  pendingMentionRefs,
+  readPrStateAsync,
   activeCodeLoops,
   clearPendingMention,
   clearRecoveryMarker,
@@ -356,8 +359,11 @@ async function fireRecovery(
  */
 async function retryPendingMentions(): Promise<void> {
   const { ghRateLimited } = await import("../../server/github-limit");
-  for (const s of listPrStates()) {
-    if (!s.pendingMention || s.activeMention || s.activeRun) continue;
+  // Only PRs the in-process index says have a pending mention; this used to
+  // read every PR state file on the gateway thread once a minute.
+  for (const ref of pendingMentionRefs()) {
+    const s = await readPrStateAsync(ref.prNumber, ref.ghRepo);
+    if (!s?.pendingMention || s.activeMention || s.activeRun) continue;
     if (await ghRateLimited("rest", { repo: s.ghRepo || undefined })) continue;
     const p = s.pendingMention;
     if (!isTrustedGithubLogin(p.author)) {
@@ -538,7 +544,9 @@ export class GithubAgent implements AgentModule {
     await ensureReviewAutomation();
     await ensureDocsSyncAutomation();
     await recoverInterrupted();
-    restoreDesiredReviews(listPrStates());
+    const states = listPrStates();
+    indexPendingMentions(states);
+    restoreDesiredReviews(states);
     startPendingMentionRetry();
     // Safety net under all of the above: the webhook path is fire-once, so
     // reviews that die on dry pools or whose delivery never arrives are
@@ -566,7 +574,7 @@ export class GithubAgent implements AgentModule {
       githubCredentialMode: "app",
       githubCredentialConfigured: githubConfigured(),
       reviewAutomationEnabled: autoEnabled,
-      trackedPrs: listPrStates().length,
+      pendingMentions: pendingMentionRefs().length,
       activeCodeLoops: activeCodeLoops(),
       reviewFeedback: feedbackStats(),
       webhookConfigured: !!GITHUB_WEBHOOK_SECRET,

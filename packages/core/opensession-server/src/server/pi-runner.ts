@@ -75,6 +75,7 @@ import {
   type XaiAccount,
 } from "./xai-accounts";
 import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
+import { xaiOutdatedClientHint } from "./xai-oauth";
 import { enableXaiProxyPayload } from "./xai-payload";
 import {
   enableOpenaiFastMode,
@@ -1073,6 +1074,15 @@ export function isPiUsageLimitShape(
     // error, which deliberately says "no Claude accounts configured").
     s.includes("no usable claude account")
   );
+}
+
+/** Terminal error text for a pi run, with an actionable hint appended when
+ *  the SuperGrok proxy rejected our pinned Grok client version. Exported for
+ *  tests. */
+export function piErrorContent(message: string, providerID: string): string {
+  const hint =
+    providerID === XAI_OAUTH_PROVIDER ? xaiOutdatedClientHint(message) : null;
+  return hint ? `pi: ${message}\n\n${hint}` : `pi: ${message}`;
 }
 
 /** First jsonl line of a pi session file (the v3 header), bounded read. */
@@ -3689,7 +3699,7 @@ async function* runPiAttempt(
       sidelineOnUsageLimit(usageLimit);
       terminal = {
         type: "error",
-        content: `pi: ${message}`,
+        content: piErrorContent(message, parsed.providerID),
         provider: PROVIDER,
         model,
         ...(sawUsage ? { usage: { ...usageTotal } } : {}),
@@ -3703,7 +3713,7 @@ async function* runPiAttempt(
       sidelineOnUsageLimit(usageLimit);
       terminal = {
         type: "error",
-        content: `pi: ${message}`,
+        content: piErrorContent(message, parsed.providerID),
         provider: PROVIDER,
         model,
         ...(sawUsage ? { usage: { ...usageTotal } } : {}),
@@ -3773,7 +3783,7 @@ async function* runPiAttempt(
     });
     yield {
       type: "error",
-      content: `pi: ${message}`,
+      content: piErrorContent(message, parsed.providerID),
       provider: PROVIDER,
       model,
       ...(sawUsage ? { usage: { ...usageTotal } } : {}),

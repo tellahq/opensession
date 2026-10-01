@@ -281,22 +281,9 @@ export function declaredPreparationInputs(
   }
 }
 
-/** Committed git object id (blob or tree — directories work too) for one
- * preparation input, so content addressing is git's own. */
-function committedInputId(
-  repoDir: string,
-  relative: string,
-  hasHead: boolean,
-): string {
-  if (hasHead) {
-    const r = spawnSync(
-      "git",
-      ["-C", repoDir, "rev-parse", "--verify", "--quiet", `HEAD:${relative}`],
-      { encoding: "utf-8" },
-    );
-    const oid = r.status === 0 ? r.stdout.trim() : "";
-    return oid || "<absent>";
-  }
+/** Content hash for one preparation input of a repo with no commits yet (a
+ * repo with HEAD uses git's own object id, see preparationSignatureSteps). */
+function uncommittedInputId(repoDir: string, relative: string): string {
   try {
     return createHash("sha256")
       .update(readFileSync(join(repoDir, relative)))
@@ -306,30 +293,124 @@ function committedInputId(
   }
 }
 
+type GitResult = { status: number | null; stdout: string };
+
+/** The signature computation as a sequence of git queries, so the same logic
+ *  runs synchronously (a cold cache) or off the gateway thread (the sweep). */
+function* preparationSignatureSteps(
+  repoId: string,
+): Generator<string[], string, GitResult> {
+  const repo = configuredRepos()[repoId];
+  const hash = createHash("sha256");
+  hash.update(`project-preparation-v3\0${repoId}\0`);
+  if (!repo) return hash.update("<unregistered>").digest("hex");
+  const hasHead =
+    (yield ["-C", repo.repo, "rev-parse", "--verify", "HEAD"]).status === 0;
+  let declared: string[] = [];
+  if (hasHead) {
+    const shown = yield [
+      "-C",
+      repo.repo,
+      "show",
+      "HEAD:.agents/sandbox-environment.json",
+    ];
+    try {
+      declared =
+        shown.status === 0 && shown.stdout
+          ? parsePreparationInputs(JSON.parse(shown.stdout)).filter(
+              (p) =>
+                !(DEFAULT_PREPARATION_INPUTS as readonly string[]).includes(p),
+            )
+          : [];
+    } catch {
+      declared = [];
+    }
+  } else {
+    declared = declaredPreparationInputs(repo.repo, false);
+  }
+  for (const relative of [...DEFAULT_PREPARATION_INPUTS, ...declared]) {
+    hash.update(`${relative}\0`);
+    if (hasHead) {
+      const r = yield [
+        "-C",
+        repo.repo,
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        `HEAD:${relative}`,
+      ];
+      hash.update((r.status === 0 && r.stdout.trim()) || "<absent>");
+    } else {
+      hash.update(uncommittedInputId(repo.repo, relative));
+    }
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
+/** Signatures are read on every prewarm claim, template lookup and sweep. Each
+ *  computation runs about seven git processes, and doing that synchronously
+ *  several times a second stalled the gateway's event loop. The sweep refreshes
+ *  them asynchronously (every minute, inside this TTL); a cold or expired
+ *  entry still computes inline. */
+const SIGNATURE_TTL_MS = 90_000;
+const signatureCache = new Map<string, { at: number; value: string }>();
+
 /** Hash only committed content whose bytes affect the reusable prepared
  * filesystem: the defaults above plus whatever the repo itself declares.
  * Shared project images are built from repository commits, never from an
  * operator's dirty worktree. Reading working-tree bytes here made an
  * unrelated local bun.lock edit invalidate every provider artifact. */
 export function projectPreparationSignature(repoId: string): string {
-  const repo = configuredRepos()[repoId];
-  const hash = createHash("sha256");
-  hash.update(`project-preparation-v3\0${repoId}\0`);
-  if (!repo) return hash.update("<unregistered>").digest("hex");
-  const hasHead =
-    spawnSync("git", ["-C", repo.repo, "rev-parse", "--verify", "HEAD"], {
-      stdio: "ignore",
-    }).status === 0;
-  const inputs = [
-    ...DEFAULT_PREPARATION_INPUTS,
-    ...declaredPreparationInputs(repo.repo, hasHead),
-  ];
-  for (const relative of inputs) {
-    hash.update(`${relative}\0`);
-    hash.update(committedInputId(repo.repo, relative, hasHead));
-    hash.update("\0");
+  const hit = signatureCache.get(repoId);
+  if (hit && Date.now() - hit.at < SIGNATURE_TTL_MS) return hit.value;
+  const steps = preparationSignatureSteps(repoId);
+  let step = steps.next();
+  while (!step.done) {
+    const r = spawnSync("git", step.value, {
+      encoding: "utf-8",
+      maxBuffer: 1024 * 1024,
+    });
+    step = steps.next({ status: r.status, stdout: r.stdout ?? "" });
   }
-  return hash.digest("hex");
+  signatureCache.set(repoId, { at: Date.now(), value: step.value });
+  return step.value;
+}
+
+/** Recompute a repo's signature without blocking the event loop, so later
+ *  synchronous reads hit a fresh cache entry. */
+export async function refreshProjectPreparationSignature(
+  repoId: string,
+): Promise<string> {
+  const steps = preparationSignatureSteps(repoId);
+  let step = steps.next();
+  while (!step.done) {
+    const proc = Bun.spawn(["git", ...step.value], {
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    const [stdout, status] = await Promise.all([
+      new Response(proc.stdout).text(),
+      proc.exited,
+    ]);
+    step = steps.next({ status, stdout });
+  }
+  signatureCache.set(repoId, { at: Date.now(), value: step.value });
+  return step.value;
+}
+
+/** Refresh every signature something has asked for, off the event loop. */
+export async function refreshCachedProjectPreparationSignatures(): Promise<void> {
+  for (const repoId of [...signatureCache.keys()]) {
+    await refreshProjectPreparationSignature(repoId).catch((e) =>
+      console.warn(`[sandbox] preparation signature for ${repoId} failed:`, e),
+    );
+  }
+}
+
+/** Test-only: drop memoized signatures after a fixture commit. */
+export function resetProjectPreparationSignaturesForTests(): void {
+  signatureCache.clear();
 }
 
 function dir(): string {

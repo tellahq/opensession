@@ -491,6 +491,45 @@ export type ProtocolClientMessage =
  * identical shape, so a client can unwrap a feed frame straight into its
  * ordinary handler, and a new field can never reach one route only.
  */
+/** One script run as viewers see it (script_runs). */
+export interface ScriptRunWire {
+  id: string;
+  sessionId: string;
+  kind: "script" | "credential";
+  title: string;
+  command: string;
+  cwd: string;
+  logPath: string;
+  state:
+    | "running"
+    | "exited"
+    | "failed"
+    | "timed_out"
+    | "stopped"
+    | "revoked"
+    | "lost";
+  /** Asked to stop and on its way down. */
+  stopping?: boolean;
+  startedAt: string;
+  deadline: string;
+  startedBy?: string;
+  endedAt?: string;
+  exitCode?: number | null;
+  signal?: string | null;
+  error?: string;
+  notify: boolean;
+  /** One per borrowed credential of a run_with_credential run. */
+  credentials?: Array<{
+    env: string[];
+    service: string;
+    host: string;
+    grantId: string;
+    calls: number;
+    denied: number;
+    maxCalls: number;
+  }>;
+}
+
 export interface SessionSafetyState {
   status: "paused_for_safety";
   explanation: string;
@@ -771,6 +810,15 @@ export type ProtocolServerMessage =
       sessionId: string;
       requestId: string;
       status: "registered" | "declined" | "expired";
+    }
+  | {
+      /** Every script run of the session (start_script,
+       *  run_with_credential), newest first, sent whenever one starts, ends
+       *  or its credential call counts move. Output is fetched over HTTP
+       *  (/api/scripts/:id), never sent on the socket. */
+      type: "script_runs";
+      sessionId: string;
+      runs: ScriptRunWire[];
     }
   | { type: "command_ack_result"; sessionId: string; requestId: string }
   | {

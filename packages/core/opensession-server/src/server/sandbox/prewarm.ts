@@ -55,7 +55,10 @@ import {
   isWorkspaceSandboxProvider,
   sandboxConnectionReady,
 } from "./connections";
-import { projectPreparationSignature } from "./remote-repo-template";
+import {
+  projectPreparationSignature,
+  refreshCachedProjectPreparationSignatures,
+} from "./remote-repo-template";
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
@@ -1093,6 +1096,7 @@ function knownSandboxIds(provider: string): Set<string> {
  *  entries a restart orphaned, and — throttled — provider-side sandboxes
  *  still labeled as prewarms that nothing tracks. */
 export async function sweepPrewarms(now = Date.now()): Promise<void> {
+  await refreshCachedProjectPreparationSignatures();
   restoreReadyPrewarms(now);
   const cfg = sandboxPrewarmConfig();
   const ttlMs = cfg.ttlMinutes * 60_000;

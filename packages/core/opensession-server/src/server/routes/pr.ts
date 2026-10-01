@@ -142,7 +142,7 @@ export async function handlePrRoutes(
   // identity table — the sidebar's Open PRs section (which must include
   // PRs that have no Open Session session).
   if (path === "/api/open-prs" && req.method === "GET") {
-    return conditionalJsonResponse(req, { prs: getOpenPrs() });
+    return conditionalJsonResponse(req, { prs: await getOpenPrs() });
   }
 
   // Resolved review threads shown at the bottom of each file. GitHub's REST
@@ -313,7 +313,7 @@ export async function handlePrRoutes(
       target.branch === primaryTarget.branch
         ? session.stackedOn.branch
         : undefined;
-    const withReview = <
+    const withReview = async <
       T extends { number: number; headRefOid?: string } | null,
     >(
       details: T,
@@ -323,11 +323,11 @@ export async function handlePrRoutes(
             ...details,
             capabilities: host.capabilities,
             ...(stackBase ? { stackBase } : {}),
-            ...getPrReviewStatus(
+            ...(await getPrReviewStatus(
               details.number,
               target.ghRepo,
               details.headRefOid,
-            ),
+            )),
           }
         : null;
     return prApiResponse(
@@ -338,7 +338,7 @@ export async function handlePrRoutes(
             fallback,
           ),
         ),
-      withReview(fallback) ?? undefined,
+      (await withReview(fallback)) ?? undefined,
     );
   }
 

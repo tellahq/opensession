@@ -17,6 +17,9 @@ process.env.OPENSESSION_STATE_DIR = SCRATCH;
 const {
   activeRunCancellationRequested,
   getOrInitPrState,
+  clearPendingMention,
+  indexPendingMentions,
+  pendingMentionRefs,
   readPrState,
   recordReviewed,
   requestActiveRunCancellation,
@@ -36,7 +39,7 @@ afterAll(() => {
   // every root it could have resolved to, so no run leaves state behind.
   for (const root of [SCRATCH, savedRoot, process.env.HOME, homedir()]) {
     if (!root) continue;
-    for (const pr of [PR, PR + 1, PR + 2, PR + 3])
+    for (const pr of [PR, PR + 1, PR + 2, PR + 3, PR + 4])
       rmSync(`${root}/.opensession-github/${pr}.json`, { force: true });
   }
 });
@@ -187,5 +190,15 @@ describe("review debounce timing", () => {
     expect(reviewRetryDelay(1, 15_000, 300_000)).toBe(15_000);
     expect(reviewRetryDelay(4, 15_000, 300_000)).toBe(120_000);
     expect(reviewRetryDelay(10, 15_000, 300_000)).toBe(300_000);
+  });
+});
+
+describe("pending mention index", () => {
+  test("tracks writes so the retry sweep never lists every PR", () => {
+    indexPendingMentions([]);
+    setPendingMention(PR + 4, pendingMention(7));
+    expect(pendingMentionRefs().map((r) => r.prNumber)).toContain(PR + 4);
+    clearPendingMention(PR + 4);
+    expect(pendingMentionRefs().map((r) => r.prNumber)).not.toContain(PR + 4);
   });
 });

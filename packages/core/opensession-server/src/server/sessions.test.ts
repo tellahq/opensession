@@ -684,7 +684,7 @@ describe("getAllSessions", () => {
       "COMMENT",
     );
 
-    expect(sessionsModule.getOpenPrs()[0]?.reviewRequested).toEqual([]);
+    expect(sessionsModule.getOpenPrSummaries()[0]?.reviewRequested).toEqual([]);
     expect(
       sessionsModule
         .getAllSessions()
@@ -744,7 +744,7 @@ describe("getAllSessions", () => {
 
     expect(
       sessionsModule
-        .getOpenPrs()
+        .getOpenPrSummaries()
         .find((pr: { number: number }) => pr.number === 124)?.reviewRequested,
     ).toEqual([]);
     expect(

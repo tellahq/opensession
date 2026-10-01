@@ -25,6 +25,7 @@ import { createPublishMcpServer } from "../agents/slack/publish-tools";
 import { createAskUserMcpServer } from "../agents/slack/ask-tools";
 import { createReposMcpServer } from "../agents/slack/repos-tools";
 import { createPortalsMcpServer } from "./portals-mcp";
+import { createScriptsMcpServer } from "./scripts-mcp";
 import { createDesktopMcpServer } from "./desktop-mcp";
 import { getSandboxProvider } from "./sandbox";
 import { createWalkthroughMcpServer } from "../agents/slack/walkthrough-tools";
@@ -404,6 +405,13 @@ export function interactiveMcpServers(
           // Human-gated Slack composition: the tool only opens an editable
           // composer. Posting still requires the signed-in person to press Send.
           "opensession-slack": createSlackComposeMcpServer({ sessionId }),
+          // Supervised script runs that outlive the turn and the server
+          // (script-runs.ts). Interactive only, like Portals: a run outlives
+          // the call, and automation text must not leave one behind.
+          "opensession-scripts": createScriptsMcpServer({
+            sessionId,
+            user: createdBy,
+          }),
           // Ask the person watching for files from their own computer. They
           // pick the files; the agent never names a path there. Interactive
           // only: the purpose string is shown to a person as a request.
