@@ -1592,7 +1592,7 @@ describe("workflow durable session API", () => {
       () => getWorkflowRun(original.runId)?.sessions?.[0]?.cancelPending,
     );
     expect(getWorkflowRun(original.runId)?.status).toBe("cancelled");
-    markInterruptedWorkflows();
+    await markInterruptedWorkflows();
     expect(getWorkflowRun(original.runId)?.status).toBe("interrupted");
     failCancel = false;
     const recoveredId = await recoverWorkflow(original.runId, {

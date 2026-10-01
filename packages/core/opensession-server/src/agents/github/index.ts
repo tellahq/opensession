@@ -43,7 +43,7 @@ import { githubWebhookCount, loadGithubDeliveries } from "./webhook-deliveries";
 import { handleGithubWebhook } from "./webhook-intake";
 import {
   indexPendingMentions,
-  listPrStates,
+  listPrStatesAsync,
   pendingMentionRefs,
   readPrStateAsync,
   activeCodeLoops,
@@ -413,7 +413,7 @@ function startPendingMentionRetry(): void {
 }
 
 async function recoverInterrupted(): Promise<void> {
-  for (const s of listPrStates()) {
+  for (const s of await listPrStatesAsync()) {
     const { fire, stale } = planRecovery(s);
     for (const kind of stale) {
       const label = kind === "run" ? s.activeRun?.kind || "run" : kind;
@@ -544,7 +544,7 @@ export class GithubAgent implements AgentModule {
     await ensureReviewAutomation();
     await ensureDocsSyncAutomation();
     await recoverInterrupted();
-    const states = listPrStates();
+    const states = await listPrStatesAsync();
     indexPendingMentions(states);
     restoreDesiredReviews(states);
     startPendingMentionRetry();

@@ -51,6 +51,7 @@ import { homeDir } from "./paths";
 import { existsSync } from "fs";
 import type { RemotePtyHandle, RemotePtyIo } from "./sandbox/adapters/daytona";
 import type { RunnerVmTerminal } from "./runner-ws";
+import { workloadArgv } from "./workload-scope";
 
 /** Live transport for one shell — how input/resize/teardown reach the PTY,
  *  whether it's a host process or a remote (in-sandbox) socket. */
@@ -526,7 +527,7 @@ function spawnPty(
   target: SpawnTarget,
   opts: TerminalOpts,
 ): void {
-  const proc = Bun.spawn(target.argv, {
+  const proc = Bun.spawn(workloadArgv(target.argv, "terminal"), {
     cwd: target.cwd,
     env: { ...process.env, TERM: "xterm-256color", ...target.env },
     terminal: {

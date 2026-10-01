@@ -87,6 +87,7 @@ import {
 } from "./claude-accounts";
 import { cacheCreationUsage } from "./claude-cache-writes";
 import { CLAUDE_CODE_BIN } from "./runner-shared";
+import { spawnClaudeCodeInWorkload } from "./workload-scope";
 import {
   bridgePort,
   readModelProviderConfig,
@@ -780,6 +781,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
         allowedTools: requestTools.map((t) => `${PASSTHROUGH_PREFIX}${t.name}`),
         pathToClaudeCodeExecutable: CLAUDE_CODE_BIN,
         executable: "bun" as const,
+        spawnClaudeCodeProcess: spawnClaudeCodeInWorkload("bridge"),
         env: {
           PATH: process.env.PATH,
           HOME: process.env.HOME,

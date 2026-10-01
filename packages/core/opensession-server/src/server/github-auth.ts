@@ -53,6 +53,7 @@ import { configuredIdentity, getConfig } from "./config";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { fetchWithTimeout } from "./shared/fetch-with-timeout";
 import { githubGitCredentialEnv } from "./github-git-credential";
+import { readJsonFileCopy } from "./shared/json-file-cache";
 
 /** Env override is for tests/sandboxes; read per call so it can change. */
 function storePath(): string {
@@ -253,7 +254,7 @@ export function githubAppInstallUrl(): string | null {
 
 function readStore(): Store {
   try {
-    const raw = JSON.parse(readFileSync(storePath(), "utf-8"));
+    const raw = readJsonFileCopy<{ users?: Store["users"] }>(storePath());
     const users = raw?.users && typeof raw.users === "object" ? raw.users : {};
     return { users };
   } catch {

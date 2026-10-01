@@ -187,7 +187,7 @@ describe("workflow store", () => {
     expect(readWorkflowJournal("wf-none")).toEqual([]);
   });
 
-  test("listWorkflowRunsForSession filters by session, newest first", () => {
+  test("listWorkflowRunsForSession filters by session, newest first", async () => {
     const a = makeRun({ sessionId: "bks-list-test" });
     updateWorkflowRun(a.runId, (s) => {
       s.startedAt = "2026-07-01T00:00:00.000Z";
@@ -198,9 +198,9 @@ describe("workflow store", () => {
     });
     makeRun({ sessionId: "bks-other" });
 
-    const runs = listWorkflowRunsForSession("bks-list-test");
+    const runs = await listWorkflowRunsForSession("bks-list-test");
     expect(runs.map((r) => r.runId)).toEqual([b.runId, a.runId]);
-    expect(listWorkflowRunsForSession("bks-nobody")).toEqual([]);
+    expect(await listWorkflowRunsForSession("bks-nobody")).toEqual([]);
   });
 
   test("registerLiveWorkflow exposes run and agent controls", () => {
@@ -221,7 +221,7 @@ describe("workflow store", () => {
     expect(cancelLiveWorkflow(snapshot.runId)).toBe(false);
   });
 
-  test("markInterruptedWorkflows flips dead running runs, leaves live ones", () => {
+  test("markInterruptedWorkflows flips dead running runs, leaves live ones", async () => {
     const dead = makeRun({ recovery: { autoResume: true } });
     updateWorkflowRun(dead.runId, (s) => {
       s.agents.push({
@@ -239,13 +239,13 @@ describe("workflow store", () => {
     });
     unregisterLiveWorkflow(finished.runId);
 
-    markInterruptedWorkflows();
+    await markInterruptedWorkflows();
 
     const deadNow = getWorkflowRun(dead.runId)!;
     expect(deadNow.status).toBe("interrupted");
     expect(deadNow.endedAt).toBeTruthy();
     expect(deadNow.agents[0].status).toBe("cancelled");
-    expect(recoverableWorkflowRunIds()).toContain(dead.runId);
+    expect(await recoverableWorkflowRunIds()).toContain(dead.runId);
     expect(getWorkflowRun(live.runId)?.status).toBe("running");
     expect(getWorkflowRun(finished.runId)?.status).toBe("done");
   });

@@ -42,6 +42,7 @@ import {
 import { audit } from "../audit";
 import { serviceReadiness } from "../service-readiness";
 import { runtimeGeneration } from "../runtime-generation";
+import { controlPlaneResidents } from "../workload-scope";
 
 // The listing is served from catalog state only. Keep a short-TTL snapshot with
 // single-flight refresh so repeated reliability-panel polling is cheap even
@@ -284,6 +285,9 @@ export async function handleSystemRoutes(
       sessionKernel: await sessionKernelHealth(),
       agents: agentHealth,
       system: systemStats(),
+      // Should stay near zero: work the gateway starts runs in a workload
+      // scope, not beside the event loop (workload-scope.ts).
+      controlPlaneResidents: await controlPlaneResidents(),
     });
   }
 

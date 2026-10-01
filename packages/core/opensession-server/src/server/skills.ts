@@ -143,6 +143,27 @@ function readSkillsDir(
   return out;
 }
 
+/** Parsed skill directories. The per-worktree cache above still rescanned the
+ *  shipped skills tree for every distinct worktree, synchronously. Each
+ *  directory is now scanned at most once per TTL; the shipped tree lives in
+ *  the immutable release checkout, so it is scanned once per process unless an
+ *  installer-managed OPENSESSION_SKILLS_DIR points it somewhere writable. */
+const dirCache = new Map<string, { entries: SkillEntry[]; at: number }>();
+
+function cachedSkillsDir(
+  dir: string,
+  source: SkillEntry["source"],
+  immutable: boolean,
+): SkillEntry[] {
+  const key = `${source}\0${dir}`;
+  const hit = dirCache.get(key);
+  if (hit && (immutable || performance.now() - hit.at < CACHE_TTL_MS))
+    return hit.entries;
+  const entries = readSkillsDir(dir, source);
+  dirCache.set(key, { entries, at: performance.now() });
+  return entries;
+}
+
 /** All skills a run in `worktreeDir` would see (deduped by name; the directory the run would load it from wins). */
 function loadSkills(
   worktreeDir?: string,
@@ -161,9 +182,14 @@ function loadSkills(
     ...skillSearchPaths(worktreeDir)
       .slice()
       .reverse()
-      .flatMap((dir) =>
-        readSkillsDir(dir, resolve(dir) === shipped ? "user" : "project"),
-      ),
+      .flatMap((dir) => {
+        const isShipped = resolve(dir) === shipped;
+        return cachedSkillsDir(
+          dir,
+          isShipped ? "user" : "project",
+          isShipped && !process.env.OPENSESSION_SKILLS_DIR,
+        );
+      }),
     // Last so they win dedupe: opensession intercepts these names before any
     // same-named file skill could run, so the menu should describe the builtin.
     // Only for existing-session composers (includeBuiltins) — an opening prompt

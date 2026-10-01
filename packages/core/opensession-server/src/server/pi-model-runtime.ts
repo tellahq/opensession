@@ -90,6 +90,7 @@ import {
   isClaudeUsageLimitError,
   usageLimitResetAt,
 } from "./runner-shared";
+import { spawnClaudeCodeInWorkload } from "./workload-scope";
 
 const g = globalThis as any;
 
@@ -1239,6 +1240,7 @@ function createLiveSdkConversation(input: {
       ),
       pathToClaudeCodeExecutable: CLAUDE_CODE_BIN,
       executable: "bun" as const,
+      spawnClaudeCodeProcess: spawnClaudeCodeInWorkload("model"),
       env: {
         PATH: process.env.PATH,
         HOME: process.env.HOME,

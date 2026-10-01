@@ -8,6 +8,7 @@ import type { SessionSpeed } from "@tellahq/opensession-protocol/session";
 import type { McpScope } from "./runner-shared";
 import type { RemoteWorkspaceSpec } from "@tellahq/opensession-protocol/runner";
 import { existsSync, readFileSync } from "fs";
+import { readJsonFileShared } from "./shared/json-file-cache";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {} from "./paths";
 import { transitionRunState } from "./run-state";
@@ -62,6 +63,7 @@ export function __setActiveRunsPathForTest(path: string): string {
   ACTIVE_RUNS_PATH = path;
   activeRunAliases.clear();
   activeRunAliasesInitialized = false;
+  aliasedJournal = null;
   return prev;
 }
 
@@ -154,17 +156,32 @@ export interface ActiveRunRecord {
   claimedAt?: string;
 }
 
-function readRunJournal(): Record<string, ActiveRunRecord> {
+// The last parsed journal, so the alias set is rebuilt only when it changed.
+let aliasedJournal: Record<string, ActiveRunRecord> | null = null;
+const EMPTY_JOURNAL: Record<string, ActiveRunRecord> = Object.freeze({});
+
+/** The journal as last written, shared and read-only. Hot readers (dozens of
+ *  calls a second) get it from a stat-validated parse instead of re-reading
+ *  and parsing the whole file each time. */
+function sharedRunJournal(): Record<string, ActiveRunRecord> {
+  let journal: Record<string, ActiveRunRecord>;
   try {
-    const journal = existsSync(ACTIVE_RUNS_PATH)
-      ? JSON.parse(readFileSync(ACTIVE_RUNS_PATH, "utf-8"))
-      : {};
-    syncActiveRunAliases(journal);
-    return journal;
+    journal =
+      readJsonFileShared<Record<string, ActiveRunRecord>>(ACTIVE_RUNS_PATH) ??
+      EMPTY_JOURNAL;
   } catch {
-    syncActiveRunAliases({});
-    return {};
+    journal = EMPTY_JOURNAL;
   }
+  if (journal !== aliasedJournal || !activeRunAliasesInitialized) {
+    syncActiveRunAliases(journal);
+    aliasedJournal = journal;
+  }
+  return journal;
+}
+
+/** A private copy for read-modify-write callers. */
+function readRunJournal(): Record<string, ActiveRunRecord> {
+  return structuredClone(sharedRunJournal());
 }
 
 function writeRunJournal(journal: Record<string, ActiveRunRecord>): void {
@@ -513,7 +530,8 @@ export function journalClearIfLineage(record: ActiveRunRecord): boolean {
 
 /** Snapshot of the runs currently journaled as in-flight (does not clear). */
 export function activeRunRecords(): ActiveRunRecord[] {
-  return Object.values(readRunJournal());
+  // Shallow copies: callers may patch a record they hand on, never the cache.
+  return Object.values(sharedRunJournal()).map((record) => ({ ...record }));
 }
 
 /** Hot-path journal ownership check. Writes and normal journal snapshots keep
@@ -521,7 +539,7 @@ export function activeRunRecords(): ActiveRunRecord[] {
 export function hasActiveRunFor(
   ...ids: Array<string | null | undefined>
 ): boolean {
-  if (!activeRunAliasesInitialized) readRunJournal();
+  if (!activeRunAliasesInitialized) sharedRunJournal();
   return ids.some((id) => !!id && activeRunAliases.has(id));
 }
 

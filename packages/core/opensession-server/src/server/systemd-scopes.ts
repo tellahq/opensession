@@ -71,12 +71,16 @@ export function systemdUserScopesAvailable(): boolean {
   );
 }
 
+// A process never changes cgroup on its own, so read it once.
+let ownCgroup: string | undefined;
 function selfCgroup(): string {
+  if (ownCgroup !== undefined) return ownCgroup;
   try {
-    return readFileSync("/proc/self/cgroup", "utf8");
+    ownCgroup = readFileSync("/proc/self/cgroup", "utf8");
   } catch {
-    return "";
+    ownCgroup = "";
   }
+  return ownCgroup;
 }
 
 export function processRunsInControlPlane(cgroup = selfCgroup()): boolean {

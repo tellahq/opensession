@@ -7,18 +7,13 @@ import {
   deliverAutomationOutputs,
   sanitizeAutomationOutputs,
 } from "./automation-outputs";
-import {
-  __resetReportIndexForTest,
-  publishReport,
-  REPORTS_ROOT,
-} from "./reports";
+import { publishReport, REPORTS_ROOT } from "./reports";
 
 const automationId = `test-automation-outputs-${process.pid}`;
 
 afterEach(() => {
   deleteAutomationOutputState(automationId);
   rmSync(join(REPORTS_ROOT, automationId), { recursive: true, force: true });
-  __resetReportIndexForTest();
 });
 
 describe("sanitizeAutomationOutputs", () => {

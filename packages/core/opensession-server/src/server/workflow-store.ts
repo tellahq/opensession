@@ -23,6 +23,8 @@ import {
   readdirSync,
   readFileSync,
 } from "fs";
+import { readdir, readFile, stat } from "fs/promises";
+import { catalogDocuments } from "./catalog-documents";
 import { stateDir } from "./paths";
 import { writeFileAtomic, writeJsonAtomic } from "./shared/atomic-write";
 import { broadcastSessionActivityStatus, broadcastToSession } from "./ws-hub";
@@ -82,30 +84,6 @@ function runDir(runId: string): string {
   return `${workflowsDir()}/${runId}`;
 }
 
-// readdir results for the list scan, invalidated on create and after a short
-// TTL (list is polled by the UI; the dirent scan is the only part worth
-// caching — run.json reads stay fresh).
-let direntCache: { dir: string; at: number; names: string[] } | null = null;
-const DIRENT_CACHE_MS = 2_000;
-
-function runIdsOnDisk(): string[] {
-  const dir = workflowsDir();
-  const now = Date.now();
-  if (
-    direntCache &&
-    direntCache.dir === dir &&
-    now - direntCache.at < DIRENT_CACHE_MS
-  ) {
-    return direntCache.names;
-  }
-  let names: string[] = [];
-  try {
-    names = readdirSync(dir).filter((name) => name.startsWith("wf-"));
-  } catch {}
-  direntCache = { dir, at: now, names };
-  return names;
-}
-
 function readRunJson(runId: string): WorkflowRunSnapshot | undefined {
   try {
     return JSON.parse(
@@ -116,9 +94,189 @@ function readRunJson(runId: string): WorkflowRunSnapshot | undefined {
   }
 }
 
+async function readRunJsonAsync(
+  runId: string,
+): Promise<WorkflowRunSnapshot | undefined> {
+  try {
+    return JSON.parse(
+      await readFile(`${runDir(runId)}/run.json`, "utf-8"),
+    ) as WorkflowRunSnapshot;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Catalog projection: a session's workflow runs (id and start time), so the
+ *  per-session list never walks every run directory. createWorkflowRun keeps
+ *  it current; the boot catalog import seeds it once. */
+export const SESSION_WORKFLOWS_NAMESPACE = "session-workflows";
+type SessionWorkflowRuns = {
+  runs: Array<{ runId: string; startedAt: string }>;
+};
+
+let projectionWrites: Promise<void> = Promise.resolve();
+
+/** Resolves once every session-workflows write issued so far has landed. */
+export function workflowProjectionsSettled(): Promise<void> {
+  return projectionWrites;
+}
+
+function projectSessionWorkflow(snapshot: WorkflowRunSnapshot): void {
+  const write = catalogDocuments(SESSION_WORKFLOWS_NAMESPACE).update(
+    snapshot.sessionId,
+    (current) => {
+      const runs = (current as SessionWorkflowRuns | null)?.runs ?? [];
+      return {
+        runs: [
+          ...runs.filter((run) => run.runId !== snapshot.runId),
+          { runId: snapshot.runId, startedAt: snapshot.startedAt },
+        ],
+      } satisfies SessionWorkflowRuns;
+    },
+  );
+  trackWorkflowProjection(write, snapshot.runId);
+}
+
+/** Catalog projection: runs a boot pass must look at (still running or
+ *  paused, a pending cancellation, or awaiting auto-resume). Boot reads only
+ *  these instead of every run.json ever written. */
+export const OPEN_WORKFLOWS_NAMESPACE = "open-workflows";
+
+function needsBootAttention(snapshot: WorkflowRunSnapshot): boolean {
+  return (
+    snapshot.status === "running" ||
+    snapshot.status === "paused" ||
+    (snapshot.status === "cancelled" &&
+      !!snapshot.sessions?.some((session) => session.cancelPending)) ||
+    (snapshot.status === "interrupted" &&
+      snapshot.recovery?.autoResume === true &&
+      !snapshot.recoveredAsRunId)
+  );
+}
+
+/** What this process last projected per run, so steady-state persists (a
+ *  running workflow writes its snapshot several times a second) cost no
+ *  catalog write. */
+const projectedOpen = new Map<string, boolean>();
+
+function projectOpenWorkflow(snapshot: WorkflowRunSnapshot): void {
+  const open = needsBootAttention(snapshot);
+  const previous = projectedOpen.get(snapshot.runId);
+  if (previous === open) return;
+  projectedOpen.set(snapshot.runId, open);
+  const documents = catalogDocuments(OPEN_WORKFLOWS_NAMESPACE);
+  const write = open
+    ? documents.set(snapshot.runId, { sessionId: snapshot.sessionId })
+    : previous === true
+      ? documents.delete(snapshot.runId)
+      : // First sight since boot: a previous process may have listed it.
+        documents
+          .get(snapshot.runId)
+          .then((row) =>
+            row === null ? false : documents.delete(snapshot.runId),
+          );
+  trackWorkflowProjection(write, snapshot.runId);
+}
+
+function trackWorkflowProjection(write: Promise<unknown>, runId: string): void {
+  const settled = write.then(
+    () => {},
+    (error) => {
+      projectedOpen.delete(runId);
+      console.warn(
+        `[workflow] catalog projection failed for ${runId}:`,
+        error instanceof Error ? error.message : error,
+      );
+    },
+  );
+  projectionWrites = Promise.all([projectionWrites, settled]).then(() => {});
+}
+
+/** Run ids the boot passes must inspect, from the catalog projection. */
+async function openWorkflowRunIds(): Promise<string[]> {
+  await projectionWrites;
+  return (await catalogDocuments(OPEN_WORKFLOWS_NAMESPACE).list()).map(
+    (row) => row.key,
+  );
+}
+
+type WorkflowSeedRows = {
+  sessions: Array<{ key: string; value: string }>;
+  open: Array<{ key: string; value: string }>;
+};
+
+let seedRows: Promise<WorkflowSeedRows> | null = null;
+
+/** One-time catalog import: every run directory, read asynchronously once
+ *  for both projections. Never called on a request path. */
+export function workflowCatalogSeedRows(): Promise<WorkflowSeedRows> {
+  return (seedRows ??= readWorkflowSeedRows());
+}
+
+async function readWorkflowSeedRows(): Promise<WorkflowSeedRows> {
+  let runIds: string[];
+  try {
+    runIds = (await readdir(workflowsDir())).filter((name) =>
+      name.startsWith("wf-"),
+    );
+  } catch {
+    return { sessions: [], open: [] };
+  }
+  const bySession = new Map<string, SessionWorkflowRuns["runs"]>();
+  const open: WorkflowSeedRows["open"] = [];
+  for (const runId of runIds) {
+    const snapshot = await readRunJsonAsync(runId);
+    if (!snapshot?.sessionId) continue;
+    const runs = bySession.get(snapshot.sessionId) ?? [];
+    runs.push({ runId, startedAt: snapshot.startedAt });
+    bySession.set(snapshot.sessionId, runs);
+    if (needsBootAttention(snapshot))
+      open.push({
+        key: runId,
+        value: JSON.stringify({ sessionId: snapshot.sessionId }),
+      });
+  }
+  return {
+    sessions: [...bySession].map(([key, runs]) => ({
+      key,
+      value: JSON.stringify({ runs } satisfies SessionWorkflowRuns),
+    })),
+    open,
+  };
+}
+
+/** Repair after a fresh import: runs whose run.json changed since `since` are
+ *  re-projected. Covers runs a previous gateway created or advanced while the
+ *  import was reading. */
+export async function reconcileWorkflowCatalog(since: number): Promise<void> {
+  let runIds: string[];
+  try {
+    runIds = (await readdir(workflowsDir())).filter((name) =>
+      name.startsWith("wf-"),
+    );
+  } catch {
+    return;
+  }
+  for (const runId of runIds) {
+    try {
+      if ((await stat(`${runDir(runId)}/run.json`)).mtimeMs < since) continue;
+    } catch {
+      continue;
+    }
+    const snapshot =
+      liveWorkflows.get(runId)?.snapshot ?? (await readRunJsonAsync(runId));
+    if (!snapshot?.sessionId) continue;
+    projectSessionWorkflow(snapshot);
+    projectedOpen.delete(runId);
+    projectOpenWorkflow(snapshot);
+  }
+  await projectionWrites;
+}
+
 function persistSnapshot(snapshot: WorkflowRunSnapshot): void {
   mkdirSync(runDir(snapshot.runId), { recursive: true });
   writeJsonAtomic(`${runDir(snapshot.runId)}/run.json`, snapshot);
+  projectOpenWorkflow(snapshot);
 }
 
 function broadcastSnapshot(snapshot: WorkflowRunSnapshot): void {
@@ -214,7 +372,7 @@ export function createWorkflowRun(init: {
   refreshDerivedProgress(snapshot);
   persistSnapshot(snapshot);
   writeFileAtomic(`${runDir(init.runId)}/script.mjs`, init.script);
-  direntCache = null;
+  projectSessionWorkflow(snapshot);
   // Park the snapshot in the live map now; registerLiveWorkflow fills in the
   // real cancel hook once the runner has one.
   const existing = liveWorkflows.get(init.runId);
@@ -257,15 +415,25 @@ export function readWorkflowScript(runId: string): string | undefined {
   }
 }
 
-/** All of a session's runs, newest first. */
-export function listWorkflowRunsForSession(
+/** All of a session's runs, newest first. The run ids come from the catalog
+ *  projection; only that session's run files are read, asynchronously. */
+export async function listWorkflowRunsForSession(
   sessionId: string,
-): WorkflowRunSnapshot[] {
-  const runs: WorkflowRunSnapshot[] = [];
-  for (const runId of runIdsOnDisk()) {
-    const snapshot = liveWorkflows.get(runId)?.snapshot ?? readRunJson(runId);
-    if (snapshot?.sessionId === sessionId) runs.push(snapshot);
-  }
+): Promise<WorkflowRunSnapshot[]> {
+  await projectionWrites; // runs this process created are visible
+  const indexed = (await catalogDocuments(SESSION_WORKFLOWS_NAMESPACE).get(
+    sessionId,
+  )) as SessionWorkflowRuns | null;
+  const snapshots = await Promise.all(
+    (indexed?.runs ?? []).map(
+      async ({ runId }) =>
+        liveWorkflows.get(runId)?.snapshot ?? (await readRunJsonAsync(runId)),
+    ),
+  );
+  const runs = snapshots.filter(
+    (snapshot): snapshot is WorkflowRunSnapshot =>
+      snapshot?.sessionId === sessionId,
+  );
   runs.sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
   return runs;
 }
@@ -514,26 +682,28 @@ export function pauseWorkflowsForShutdown(): number {
   return paused;
 }
 
-export function recoverableWorkflowRunIds(): string[] {
-  return runIdsOnDisk().filter((runId) => {
-    const snapshot = readRunJson(runId);
-    return (
+export async function recoverableWorkflowRunIds(): Promise<string[]> {
+  const recoverable: string[] = [];
+  for (const runId of await openWorkflowRunIds()) {
+    const snapshot = await readRunJsonAsync(runId);
+    if (
       snapshot?.status === "interrupted" &&
       snapshot.recovery?.autoResume === true &&
       !snapshot.recoveredAsRunId
-    );
-  });
+    )
+      recoverable.push(runId);
+  }
+  return recoverable;
 }
 
 /** Boot pass: a run.json still "running" with no live entry died with the
  *  previous process — mark it interrupted so the UI doesn't show a zombie.
  *  (Callers guard this behind the boot flag; the function itself is safe to
  *  re-run.) */
-export function markInterruptedWorkflows(): void {
-  direntCache = null;
-  for (const runId of runIdsOnDisk()) {
+export async function markInterruptedWorkflows(): Promise<void> {
+  for (const runId of await openWorkflowRunIds()) {
     if (liveWorkflows.has(runId)) continue;
-    const snapshot = readRunJson(runId);
+    const snapshot = await readRunJsonAsync(runId);
     if (!snapshot) continue;
     const pendingCancellation =
       snapshot.status === "cancelled" &&

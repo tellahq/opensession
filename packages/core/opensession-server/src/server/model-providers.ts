@@ -9,6 +9,7 @@ import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { chmodSync, existsSync, readFileSync } from "fs";
 import { dirname, isAbsolute, resolve } from "path";
+import { readJsonFileCopy } from "./shared/json-file-cache";
 
 const HOME = homeDir();
 
@@ -478,7 +479,7 @@ function readCatalogFile(
     return undefined;
   }
   try {
-    return catalogRows(JSON.parse(readFileSync(path, "utf-8")));
+    return catalogRows(readJsonFileCopy(path));
   } catch (e) {
     console.warn(`[model-providers] Failed to parse ${path}:`, e);
     return undefined;
@@ -636,11 +637,9 @@ export function configuredCatalogModel(
 
 export function readModelProviderConfig(): ModelProviderSettings | null {
   const path = configPath();
-  if (!existsSync(path)) return null;
   try {
-    return normalizeModelProviderConfig(
-      JSON.parse(readFileSync(path, "utf-8")),
-    );
+    const raw = readJsonFileCopy(path);
+    return raw === undefined ? null : normalizeModelProviderConfig(raw);
   } catch (e) {
     console.warn(`[model-providers] Failed to parse ${path}:`, e);
     return null;

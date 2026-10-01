@@ -27,6 +27,7 @@ import {
   sandboxProviderNeedsCredential,
 } from "./adapter-signature";
 import type { SandboxProviderId, SandboxProviderUsability } from "./provider";
+import { readJsonFileCopy } from "../shared/json-file-cache";
 
 // Env-overridable so the verify suite (and unit tests) can point a scratch
 // config at a scratch setup without touching the live file (which is read
@@ -182,8 +183,8 @@ export function sandboxesEnabled(): boolean {
 export function sandboxConfig(): SandboxConfig {
   try {
     const path = configPath();
-    if (existsSync(path)) {
-      const raw = JSON.parse(readFileSync(path, "utf-8"));
+    const raw = readJsonFileCopy<any>(path);
+    if (raw !== undefined) {
       const perRepo: Record<string, SandboxRepoOverride> = {};
       if (raw?.perRepo && typeof raw.perRepo === "object") {
         for (const [repoId, o] of Object.entries<any>(raw.perRepo)) {

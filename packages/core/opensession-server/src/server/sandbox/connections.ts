@@ -21,6 +21,7 @@ import {
   resolveWorkspaceSecret,
   workspaceSecretExists,
 } from "../workspace-secrets";
+import { readJsonFileCopy } from "../shared/json-file-cache";
 export { sandboxAdapterSignature } from "./adapter-signature";
 export const WORKSPACE_SANDBOX_PROVIDERS = [
   "daytona",
@@ -127,8 +128,7 @@ function configPath(): string {
 
 function readRaw(): RawSandboxConfig {
   try {
-    if (!existsSync(configPath())) return {};
-    const raw = JSON.parse(readFileSync(configPath(), "utf-8"));
+    const raw = readJsonFileCopy<RawSandboxConfig>(configPath());
     return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   } catch {
     return {};

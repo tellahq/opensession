@@ -24,6 +24,7 @@ import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
 import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
 import type { InProcessMcpServer } from "./inprocess-mcp";
 import { RPC_TOOL_CALL_TIMEOUT_MS } from "./run-rpc-protocol";
+import { workloadCommand } from "./workload-scope";
 
 const DEFAULT_CALL_TIMEOUT_MS = 120_000;
 /** Open Session's own servers bound their calls themselves, and some wait on
@@ -344,8 +345,11 @@ export async function createMcpRuntime(opts: {
           : new StreamableHTTPClientTransport(new URL(url), { requestInit });
     } else if (cfg.command) {
       transport = new StdioClientTransport({
-        command: String(cfg.command),
-        args: (cfg.args as string[]) || [],
+        ...workloadCommand(
+          String(cfg.command),
+          (cfg.args as string[]) || [],
+          "mcp",
+        ),
         env: {
           ...getDefaultEnvironment(),
           ...((cfg.env as Record<string, string>) || {}),

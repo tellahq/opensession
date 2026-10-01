@@ -86,6 +86,7 @@ interface AppSessionPaneProps {
     | "closeAssetsTab"
     | "closeTerminalTab"
     | "closeDesktopTab"
+    | "closePortalTab"
   >;
   tabs: {
     context: Pick<
@@ -160,6 +161,7 @@ export function AppSessionPane({
     closeAssetsTab,
     closeTerminalTab,
     closeDesktopTab,
+    closePortalTab,
   },
   tabs: {
     context: { activeWorkspaceId, workspaceSessions },
@@ -328,6 +330,7 @@ export function AppSessionPane({
           onCloseAssets: closeAssetsTab,
           onCloseTerminal: closeTerminalTab,
           onCloseDesktop: closeDesktopTab,
+          onClosePortal: closePortalTab,
         }}
         subagents={{
           // The sub-agent drill-in, opened from this pane's own transcript.

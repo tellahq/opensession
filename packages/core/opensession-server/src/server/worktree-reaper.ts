@@ -88,6 +88,7 @@ import {
   repoForPathOrNull,
   repoFromGitPointer,
 } from "./worktree";
+import { workloadArgv } from "./workload-scope";
 
 const worktreesDir = () => configuredPaths().worktreesDir;
 
@@ -400,7 +401,7 @@ async function closedPrReason(
  *  unpushed work? sudo because husk contents can be root-owned. */
 async function huskHasWork(dir: string): Promise<boolean> {
   const found =
-    await $`sudo find ${dir} -name .git -not -path "*/node_modules/*"`
+    await $`${workloadArgv(["sudo", "find", dir, "-name", ".git", "-not", "-path", "*/node_modules/*"], "reaper")}`
       .nothrow()
       .text();
   for (const g of found.split("\n").filter(Boolean)) {
@@ -562,11 +563,16 @@ async function removeDir(repo: Repo, dir: string): Promise<boolean> {
       worktreeDir: dir,
     });
   } catch {}
-  await $`git -C ${repo.repo} worktree remove --force ${dir}`.quiet().nothrow();
+  await $`${workloadArgv(["git", "-C", repo.repo, "worktree", "remove", "--force", dir], "reaper")}`
+    .quiet()
+    .nothrow();
   if (existsSync(dir))
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   // Root-owned cargo/wasm build output defeats a plain rm.
-  if (existsSync(dir)) await $`sudo rm -rf ${dir}`.nothrow().quiet();
+  if (existsSync(dir))
+    await $`${workloadArgv(["sudo", "rm", "-rf", dir], "reaper")}`
+      .nothrow()
+      .quiet();
   await $`git -C ${repo.repo} worktree prune`.quiet().nothrow();
   return !existsSync(dir);
 }
@@ -698,7 +704,9 @@ export async function sweepWorktreeReaper(
         result.husksSwept.push(e.name);
         continue;
       }
-      await $`sudo rm -rf ${dir}`.nothrow().quiet();
+      await $`${workloadArgv(["sudo", "rm", "-rf", dir], "reaper")}`
+        .nothrow()
+        .quiet();
       if (!existsSync(dir)) {
         result.husksSwept.push(e.name);
         console.log(`[worktree-reaper] swept husk ${e.name}`);

@@ -68,7 +68,7 @@ export async function handleAutomationsRoutes(
   // sidebar loads on every page.
   if (path === "/api/automations/overview" && req.method === "GET") {
     const latestByAutomation = new Map(
-      listReportGroups().map((g) => [g.automationId, g.latest]),
+      (await listReportGroups()).map((g) => [g.automationId, g.latest]),
     );
     const automations = await listAutomations();
     const workspaces = await Promise.all(

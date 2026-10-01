@@ -207,6 +207,8 @@ export interface SessionViewerViewTabsBinding {
   showPortal?: boolean;
   /** The service currently loaded in the center-panel browser. */
   portalTarget?: PortalTarget | null;
+  /** Close this workspace's Portal view-tab. */
+  onClosePortal?: () => void;
 }
 
 export interface SessionViewerSubagentsBinding {

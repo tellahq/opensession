@@ -759,13 +759,24 @@ export function configuredIngress(): ResolvedIngress {
   };
 }
 
+// PATH lookups walk ~10 directories with a syscall each, and configuredPaths
+// is called on hot paths that never use claudeBin. Resolve once per PATH.
+let claudeOnPath: { path: string | undefined; bin: string | null } | null =
+  null;
+function claudeFromPath(): string | null {
+  const path = process.env.PATH;
+  if (!claudeOnPath || claudeOnPath.path !== path)
+    claudeOnPath = { path, bin: Bun.which("claude") };
+  return claudeOnPath.bin;
+}
+
 export function configuredPaths(): ResolvedPaths {
   const p = getConfig().paths || {};
   return {
     claudeBin:
       process.env.OPENSESSION_CLAUDE_BIN ||
       p.claudeBin ||
-      Bun.which("claude") ||
+      claudeFromPath() ||
       "claude",
     worktreesDir:
       process.env.OPENSESSION_WORKTREES_DIR ||

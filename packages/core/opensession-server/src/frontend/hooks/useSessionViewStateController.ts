@@ -332,6 +332,12 @@ export function useSessionViewStateController({
     setPinnedPortal(target);
     return true;
   };
+  /** Move a full-width Portal tab into the side panel, beside the chat. */
+  const pinPortalTab = (target: PortalTarget, closeTab?: () => void) => {
+    pinPortal(target);
+    setActivePanelOpen(true);
+    closeTab?.();
+  };
   const closePinnedPortal = () => {
     if (pinnedPortal?.sessionId !== session.id) return;
     setPinnedPortal(null);
@@ -480,6 +486,7 @@ export function useSessionViewStateController({
       pinnedPortal:
         pinnedPortal?.sessionId === session.id ? pinnedPortal : null,
       pinPortal,
+      pinPortalTab,
       autoPinPortal,
       closePinnedPortal,
       expandPinnedPortal,

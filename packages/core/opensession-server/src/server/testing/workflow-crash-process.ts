@@ -88,7 +88,7 @@ if (stage === "start") {
   process.exit(86);
 } else if (stage === "recover") {
   const oldRunId = readFileSync(join(root, "run-id"), "utf8");
-  markInterruptedWorkflows();
+  await markInterruptedWorkflows();
   const recoveredId = await recoverWorkflow(oldRunId, {
     executor,
     sessionController: controller,

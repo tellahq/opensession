@@ -714,7 +714,7 @@ export async function recoverInterruptedWorkflows(
   overrides: Partial<StartWorkflowOpts> = {},
 ): Promise<string[]> {
   const recovered: string[] = [];
-  for (const runId of recoverableWorkflowRunIds()) {
+  for (const runId of await recoverableWorkflowRunIds()) {
     const next = await recoverWorkflow(runId, overrides);
     if (next) recovered.push(next);
   }

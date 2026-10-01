@@ -28,6 +28,7 @@ import { discoverMcpOauth, OauthDiscoveryError } from "./mcp-oauth-discovery";
 import { configuredServer, productName } from "./config";
 import { statePath } from "./paths";
 import { resolveTeammate } from "./shared/user-mappings";
+import { readJsonFileCopy } from "./shared/json-file-cache";
 
 const STORE_PATH = statePath(".opensession-mcp-oauth.json");
 
@@ -102,7 +103,7 @@ function writeGrant(entry: ServerAuth, slot: GrantSlot, grant: Grant): void {
 
 function readStore(): Store {
   try {
-    return JSON.parse(readFileSync(STORE_PATH, "utf8"));
+    return readJsonFileCopy<Store>(STORE_PATH) ?? {};
   } catch {
     return {};
   }

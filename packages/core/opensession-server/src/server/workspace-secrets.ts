@@ -10,6 +10,7 @@ import { chmodSync, existsSync, readFileSync } from "fs";
 import { readFile } from "fs/promises";
 import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
+import { readJsonFileCopy } from "./shared/json-file-cache";
 
 interface WorkspaceSecretRecord {
   id: string;
@@ -33,8 +34,7 @@ function storePath(): string {
 
 function readStore(): WorkspaceSecretStore {
   try {
-    if (!existsSync(storePath())) return { version: 1, secrets: [] };
-    const raw = JSON.parse(readFileSync(storePath(), "utf-8"));
+    const raw = readJsonFileCopy<{ secrets?: unknown }>(storePath());
     if (!raw || !Array.isArray(raw.secrets)) return { version: 1, secrets: [] };
     return {
       version: 1,

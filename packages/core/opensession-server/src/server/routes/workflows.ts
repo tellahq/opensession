@@ -50,7 +50,7 @@ export async function handleWorkflowsRoutes(
     const m = path.match(/^\/api\/sessions\/([^/]+)\/workflows$/);
     if (m && req.method === "GET") {
       return Response.json({
-        runs: listWorkflowRunsForSession(decodeURIComponent(m[1])),
+        runs: await listWorkflowRunsForSession(decodeURIComponent(m[1])),
       });
     }
   }

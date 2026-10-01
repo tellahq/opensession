@@ -35,6 +35,7 @@
 import { chmodSync, existsSync, readFileSync } from "fs";
 import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
+import { readJsonFileCopy } from "./shared/json-file-cache";
 
 /** Pi-config file path (env override is a test seam, not the feature flag). */
 export function piConfigPath(): string {
@@ -92,9 +93,9 @@ export function normalizePiConfig(raw: unknown): PiEngineConfig {
 
 export function readPiEngineConfig(): PiEngineConfig | null {
   const path = piConfigPath();
-  if (!existsSync(path)) return null;
   try {
-    return normalizePiConfig(JSON.parse(readFileSync(path, "utf-8")));
+    const raw = readJsonFileCopy(path);
+    return raw === undefined ? null : normalizePiConfig(raw);
   } catch (e) {
     console.warn(`[pi-config] Failed to parse ${path}:`, e);
     return null;

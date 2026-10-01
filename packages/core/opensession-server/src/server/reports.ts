@@ -13,6 +13,12 @@
  * automation run); browsed via routes/reports.ts and the frontend Reports
  * view (left: one row per automation with history, right: the rendered HTML).
  * Publishes broadcast `reports_changed` so open Reports views refresh.
+ *
+ * The files are the store; list views read two catalog projections instead
+ * of walking the tree per request: `report-groups` (one row per automation:
+ * name, count, latest) and `session-reports` (one row per producing session).
+ * publishReport, the only writer, keeps both current; the boot catalog import
+ * seeds them once from the files.
  */
 
 import {
@@ -24,7 +30,9 @@ import {
   statSync,
   writeFileSync,
 } from "fs";
+import { readdir, readFile, stat } from "fs/promises";
 import { dirname, join, normalize, resolve } from "path";
+import { catalogDocuments } from "./catalog-documents";
 import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { broadcastToAll } from "./ws-hub";
@@ -119,11 +127,70 @@ export interface ReportGroup {
   latest: ReportMeta;
 }
 
-let sessionReportIndex: Map<string, ReportMeta[]> | null = null;
+export const REPORT_GROUPS_NAMESPACE = "report-groups";
+export const SESSION_REPORTS_NAMESPACE = "session-reports";
 
-/** Test seam for suites that create sidecars directly instead of publishReport. */
-export function __resetReportIndexForTest(): void {
-  if (process.env.NODE_ENV === "test") sessionReportIndex = null;
+type StoredReportGroup = Omit<ReportGroup, "automationId">;
+
+// Catalog writes are fire and forget for the synchronous publisher; this
+// chain lets callers (and tests) wait until every projection write landed.
+let projectionWrites: Promise<void> = Promise.resolve();
+function trackProjection(write: Promise<unknown>, what: string): void {
+  const settled = write.then(
+    () => {},
+    (error) =>
+      console.warn(
+        `[reports] catalog projection ${what} failed:`,
+        error instanceof Error ? error.message : error,
+      ),
+  );
+  projectionWrites = Promise.all([projectionWrites, settled]).then(() => {});
+}
+
+/** Resolves once every catalog projection write issued so far has landed. */
+export function reportProjectionsSettled(): Promise<void> {
+  return projectionWrites;
+}
+
+function sameReport(a: ReportMeta, b: ReportMeta): boolean {
+  return a.id === b.id && a.automationId === b.automationId;
+}
+
+function newestFirst(reports: ReportMeta[]): ReportMeta[] {
+  return reports.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+function projectSessionReport(meta: ReportMeta): void {
+  if (!meta.sessionId) return;
+  trackProjection(
+    catalogDocuments(SESSION_REPORTS_NAMESPACE).update(
+      meta.sessionId,
+      (current) =>
+        newestFirst([
+          meta,
+          ...((current as ReportMeta[] | null) ?? []).filter(
+            (report) => !sameReport(report, meta),
+          ),
+        ]),
+    ),
+    `session ${meta.sessionId}`,
+  );
+}
+
+function unprojectSessionReport(meta: ReportMeta | null): void {
+  if (!meta?.sessionId) return;
+  trackProjection(
+    catalogDocuments(SESSION_REPORTS_NAMESPACE).update(
+      meta.sessionId,
+      (current) => {
+        const rest = ((current as ReportMeta[] | null) ?? []).filter(
+          (report) => !sameReport(report, meta),
+        );
+        return rest.length ? rest : null;
+      },
+    ),
+    `session ${meta.sessionId}`,
+  );
 }
 
 /** Path-segment guard for ids that travel through URLs. */
@@ -200,26 +267,6 @@ function readMeta(automationId: string, sidecar: string): ReportMeta | null {
   } catch {
     return null;
   }
-}
-
-function indexReport(meta: ReportMeta | null): void {
-  if (!sessionReportIndex || !meta?.sessionId) return;
-  const reports = sessionReportIndex.get(meta.sessionId) || [];
-  reports.push(meta);
-  reports.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  sessionReportIndex.set(meta.sessionId, reports);
-}
-
-function removeIndexedReport(meta: ReportMeta | null): void {
-  if (!sessionReportIndex || !meta?.sessionId) return;
-  const reports = sessionReportIndex
-    .get(meta.sessionId)
-    ?.filter(
-      (report) =>
-        report.id !== meta.id || report.automationId !== meta.automationId,
-    );
-  if (reports?.length) sessionReportIndex.set(meta.sessionId, reports);
-  else sessionReportIndex.delete(meta.sessionId);
 }
 
 export function publishReport(input: {
@@ -374,14 +421,21 @@ export function publishReport(input: {
     });
     throw error;
   }
-  indexReport(meta);
+  projectSessionReport(meta);
   // Prune beyond the cap (both files) — newest first, drop the tail.
-  for (const stale of sidecarsFor(input.automationId).slice(
-    MAX_REPORTS_PER_GROUP,
-  )) {
+  const sidecars = sidecarsFor(input.automationId);
+  trackProjection(
+    catalogDocuments(REPORT_GROUPS_NAMESPACE).set(input.automationId, {
+      automationName: meta.automationName,
+      count: Math.min(sidecars.length, MAX_REPORTS_PER_GROUP),
+      latest: meta,
+    } satisfies StoredReportGroup),
+    `group ${input.automationId}`,
+  );
+  for (const stale of sidecars.slice(MAX_REPORTS_PER_GROUP)) {
     try {
       const staleMeta = readMeta(input.automationId, stale);
-      removeIndexedReport(staleMeta);
+      unprojectSessionReport(staleMeta);
       rmSync(join(dir, stale));
       rmSync(join(dir, stale.replace(/\.json$/, ".html")), {
         force: true,
@@ -401,26 +455,17 @@ export function publishReport(input: {
   return meta;
 }
 
-/** One row per automation that has published at least one report. */
-export function listReportGroups(): ReportGroup[] {
-  if (!existsSync(reportsRoot())) return [];
-  const groups: ReportGroup[] = [];
-  for (const entry of readdirSync(reportsRoot(), { withFileTypes: true })) {
-    if (!entry.isDirectory() || !safeSegment(entry.name)) continue;
-    const sidecars = sidecarsFor(entry.name);
-    if (!sidecars.length) continue;
-    const latest = readMeta(entry.name, sidecars[0]);
-    if (!latest) continue;
-    groups.push({
-      automationId: entry.name,
-      automationName: latest.automationName,
-      count: sidecars.length,
-      latest,
-    });
-  }
-  return groups.sort((a, b) =>
-    b.latest.createdAt.localeCompare(a.latest.createdAt),
-  );
+/** One row per automation that has published at least one report, newest
+ *  first, from the catalog projection. */
+export async function listReportGroups(): Promise<ReportGroup[]> {
+  await projectionWrites; // this process's own publishes are visible
+  const rows = await catalogDocuments(REPORT_GROUPS_NAMESPACE).list();
+  return rows
+    .map((row) => ({
+      automationId: row.key,
+      ...(row.value as StoredReportGroup),
+    }))
+    .sort((a, b) => b.latest.createdAt.localeCompare(a.latest.createdAt));
 }
 
 /** One report's metadata, or null when it doesn't exist. */
@@ -440,20 +485,129 @@ export function listReports(automationId: string): ReportMeta[] {
     .filter((m): m is ReportMeta => !!m);
 }
 
-/** Every report produced by one session, newest first. */
-export function listReportsForSession(sessionId: string): ReportMeta[] {
-  if (!safeSegment(sessionId) || !existsSync(reportsRoot())) return [];
-  if (!sessionReportIndex) {
-    sessionReportIndex = new Map();
-    for (const entry of readdirSync(reportsRoot(), { withFileTypes: true })) {
-      if (!entry.isDirectory() || !safeSegment(entry.name)) continue;
-      for (const sidecar of sidecarsFor(entry.name)) {
-        const meta = readMeta(entry.name, sidecar);
-        indexReport(meta);
+/** Every report produced by one session, newest first, from the catalog. */
+export async function listReportsForSession(
+  sessionId: string,
+): Promise<ReportMeta[]> {
+  if (!safeSegment(sessionId)) return [];
+  await projectionWrites; // this process's own publishes are visible
+  return (
+    ((await catalogDocuments(SESSION_REPORTS_NAMESPACE).get(sessionId)) as
+      | ReportMeta[]
+      | null) ?? []
+  );
+}
+
+/** One-time catalog import: both projections from the report files. Reads
+ *  asynchronously; never called on a request path. */
+let seedRows: ReturnType<typeof readReportSeedRows> | null = null;
+export function reportCatalogSeedRows(): ReturnType<typeof readReportSeedRows> {
+  return (seedRows ??= readReportSeedRows());
+}
+
+async function readReportSeedRows(): Promise<{
+  groups: Array<{ key: string; value: string }>;
+  sessions: Array<{ key: string; value: string }>;
+}> {
+  const groups: Array<{ key: string; value: string }> = [];
+  const bySession = new Map<string, ReportMeta[]>();
+  let automationIds: string[];
+  try {
+    automationIds = (await readdir(reportsRoot(), { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() && safeSegment(entry.name))
+      .map((entry) => entry.name);
+  } catch {
+    return { groups, sessions: [] };
+  }
+  for (const automationId of automationIds) {
+    let sidecars: string[];
+    try {
+      sidecars = (await readdir(groupDir(automationId)))
+        .filter((file) => file.endsWith(".json"))
+        .sort()
+        .reverse();
+    } catch {
+      continue;
+    }
+    let latest: ReportMeta | null = null;
+    for (const sidecar of sidecars) {
+      let meta: ReportMeta;
+      try {
+        meta = JSON.parse(
+          await readFile(join(groupDir(automationId), sidecar), "utf8"),
+        ) as ReportMeta;
+      } catch {
+        continue;
+      }
+      if (!meta || typeof meta.id !== "string") continue;
+      latest ??= meta;
+      if (meta.sessionId) {
+        const list = bySession.get(meta.sessionId) ?? [];
+        list.push(meta);
+        bySession.set(meta.sessionId, list);
       }
     }
+    if (latest)
+      groups.push({
+        key: automationId,
+        value: JSON.stringify({
+          automationName: latest.automationName,
+          count: sidecars.length,
+          latest,
+        } satisfies StoredReportGroup),
+      });
   }
-  return sessionReportIndex.get(sessionId) || [];
+  return {
+    groups,
+    sessions: [...bySession].map(([key, reports]) => ({
+      key,
+      value: JSON.stringify(newestFirst(reports)),
+    })),
+  };
+}
+
+/** Repair after a fresh import: groups whose directory changed since `since`
+ *  are recomputed, and their reports written since then are merged into the
+ *  session projection. Covers publishes by a previous gateway mid-import. */
+export async function reconcileReportCatalog(since: number): Promise<void> {
+  let automationIds: string[];
+  try {
+    automationIds = (await readdir(reportsRoot(), { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() && safeSegment(entry.name))
+      .map((entry) => entry.name);
+  } catch {
+    return;
+  }
+  for (const automationId of automationIds) {
+    const dir = groupDir(automationId);
+    try {
+      if ((await stat(dir)).mtimeMs < since) continue;
+      const sidecars = (await readdir(dir))
+        .filter((file) => file.endsWith(".json"))
+        .sort()
+        .reverse();
+      let latest: ReportMeta | null = null;
+      for (const sidecar of sidecars) {
+        const path = join(dir, sidecar);
+        const fresh = (await stat(path)).mtimeMs >= since;
+        if (latest && !fresh) break; // older sidecars are already indexed
+        const meta = JSON.parse(await readFile(path, "utf8")) as ReportMeta;
+        if (!meta || typeof meta.id !== "string") continue;
+        latest ??= meta;
+        if (fresh) projectSessionReport(meta);
+      }
+      if (latest)
+        trackProjection(
+          catalogDocuments(REPORT_GROUPS_NAMESPACE).set(automationId, {
+            automationName: latest.automationName,
+            count: sidecars.length,
+            latest,
+          } satisfies StoredReportGroup),
+          `group ${automationId}`,
+        );
+    } catch {}
+  }
+  await projectionWrites;
 }
 
 /** The report HTML itself, or null when it doesn't exist. */

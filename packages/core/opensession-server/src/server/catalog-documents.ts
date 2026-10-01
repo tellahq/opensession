@@ -39,6 +39,14 @@ export const APPLICATION_CATALOG_NAMESPACES = [
   // Per-PR review status projected from the github agent's state files
   // (pr-review-catalog.ts), read by the open-PR queue and PR panel.
   "pr-reviews",
+  // Report list projections (reports.ts): one row per automation, and one
+  // row per producing session.
+  "report-groups",
+  "session-reports",
+  // Workflow runs per session, and runs a boot pass must inspect
+  // (workflow-store.ts).
+  "session-workflows",
+  "open-workflows",
 ] as const;
 
 export type ApplicationCatalogNamespace =
@@ -77,14 +85,18 @@ function validateNamespace(namespace: string): void {
     throw new Error(`Unsupported application catalog namespace: ${namespace}`);
 }
 
-function validateKey(key: string): void {
-  if (
+function isValidKey(key: string): boolean {
+  return !(
     !key ||
     key.length > 256 ||
     key === "." ||
     key === ".." ||
     /[\\/\u0000-\u001f]/.test(key)
-  )
+  );
+}
+
+function validateKey(key: string): void {
+  if (!isValidKey(key))
     throw new Error("Invalid application catalog document key");
 }
 
@@ -95,7 +107,103 @@ const DERIVED_IMPORT_SOURCES: Partial<
 > = {
   "pr-reviews": async () =>
     (await import("./pr-review-catalog")).prReviewSeedRows(),
+  "report-groups": async () =>
+    (await (await import("./reports")).reportCatalogSeedRows()).groups,
+  "session-reports": async () =>
+    (await (await import("./reports")).reportCatalogSeedRows()).sessions,
+  "session-workflows": async () =>
+    (await (await import("./workflow-store")).workflowCatalogSeedRows())
+      .sessions,
+  "open-workflows": async () =>
+    (await (await import("./workflow-store")).workflowCatalogSeedRows()).open,
 };
+
+/** Derived namespaces imported by THIS boot, with the time the import began.
+ * During a gateway handoff the previous process keeps serving (and writing
+ * the source files) while this one imports. Code from before a projection
+ * existed does not publish to it, so its writes in that window are repaired
+ * once, after the handoff, from the files changed since the import began. */
+const freshDerivedImports = new Map<ApplicationCatalogNamespace, number>();
+
+const DERIVED_REPAIRS: Partial<
+  Record<
+    ApplicationCatalogNamespace,
+    () => Promise<(since: number) => Promise<void>>
+  >
+> = {
+  "pr-reviews": async () =>
+    (await import("./pr-review-catalog")).reconcilePrReviews,
+  "report-groups": async () =>
+    (await import("./reports")).reconcileReportCatalog,
+  "session-reports": async () =>
+    (await import("./reports")).reconcileReportCatalog,
+  "session-workflows": async () =>
+    (await import("./workflow-store")).reconcileWorkflowCatalog,
+  "open-workflows": async () =>
+    (await import("./workflow-store")).reconcileWorkflowCatalog,
+};
+
+/** Run the one-time repair for projections this boot imported. */
+export async function repairFreshDerivedImports(): Promise<void> {
+  const done = new Set<(since: number) => Promise<void>>();
+  for (const [namespace, startedAt] of freshDerivedImports) {
+    const load = DERIVED_REPAIRS[namespace];
+    if (!load) continue;
+    const repair = await load();
+    if (done.has(repair)) continue;
+    done.add(repair);
+    await repair(startedAt - 60_000).catch((error) =>
+      console.warn(
+        `[catalog] repair of ${namespace} failed:`,
+        error instanceof Error ? error.message : error,
+      ),
+    );
+  }
+  freshDerivedImports.clear();
+}
+
+/** After the handoff has drained the previous gateway, repair projections
+ * this boot imported. Idempotent; a no-op when nothing was imported. */
+export function startDerivedCatalogRepair(delayMs = 120_000): void {
+  if (!freshDerivedImports.size) return;
+  const g = globalThis as { __derivedCatalogRepair?: unknown };
+  if (g.__derivedCatalogRepair) return;
+  const timer = setTimeout(() => void repairFreshDerivedImports(), delayMs);
+  timer.unref?.();
+  g.__derivedCatalogRepair = timer;
+}
+
+/** Seed a derived projection in bounded batches. A row this catalog would
+ * refuse (odd key, oversize value) is skipped: the source store still holds
+ * it, and one stray file must not fail the boot. */
+async function seedDerived(
+  namespace: ApplicationCatalogNamespace,
+  rows: CatalogDocumentSeedRow[],
+): Promise<void> {
+  let batch: CatalogDocumentSeedRow[] = [];
+  let bytes = 0;
+  const flush = async () => {
+    if (!batch.length) return;
+    await sessionCatalogDocument({ op: "seed", namespace, rows: batch });
+    batch = [];
+    bytes = 0;
+  };
+  for (const row of rows) {
+    const size = Buffer.byteLength(row.key) + Buffer.byteLength(row.value);
+    if (
+      !isValidKey(row.key) ||
+      Buffer.byteLength(row.value) > CATALOG_DOCUMENT_MAX_VALUE_BYTES
+    ) {
+      console.warn(`[catalog] skipped unimportable ${namespace}/${row.key}`);
+      continue;
+    }
+    if (batch.length >= 500 || bytes + size > 8 * 1024 * 1024) await flush();
+    batch.push(row);
+    bytes += size;
+  }
+  await flush();
+  await sessionCatalogDocument({ op: "mark_import_complete", namespace });
+}
 
 /** Idempotent import before the gateway accepts traffic. A partial import can
  * resume: seeds never overwrite a committed document or a deletion tombstone.
@@ -106,14 +214,9 @@ export async function importApplicationCatalog(): Promise<void> {
       continue;
     const derived = DERIVED_IMPORT_SOURCES[namespace];
     if (derived) {
-      const rows = await derived();
-      for (let offset = 0; offset < rows.length; offset += 500)
-        await sessionCatalogDocument({
-          op: "seed",
-          namespace,
-          rows: rows.slice(offset, offset + 500),
-        });
-      await sessionCatalogDocument({ op: "mark_import_complete", namespace });
+      const startedAt = Date.now();
+      await seedDerived(namespace, await derived());
+      freshDerivedImports.set(namespace, startedAt);
       continue;
     }
     const directory = await legacyCatalogDirectory(namespace);

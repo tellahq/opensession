@@ -15,6 +15,7 @@ import { homeDir } from "./paths";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unlink } from "node:fs/promises";
+import { workloadArgv } from "./workload-scope";
 
 const WHISPER_CLI =
   process.env.WHISPER_CLI ||
@@ -69,19 +70,22 @@ async function transcribeLocal(audio: Blob, ext: string): Promise<string> {
   try {
     await Bun.write(inPath, audio);
     const ffmpeg = Bun.spawn(
-      [
-        "ffmpeg",
-        "-y",
-        "-i",
-        inPath,
-        "-ar",
-        "16000",
-        "-ac",
-        "1",
-        "-f",
-        "wav",
-        wavPath,
-      ],
+      workloadArgv(
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          inPath,
+          "-ar",
+          "16000",
+          "-ac",
+          "1",
+          "-f",
+          "wav",
+          wavPath,
+        ],
+        "transcode",
+      ),
       { stdout: "ignore", stderr: "pipe" },
     );
     if ((await ffmpeg.exited) !== 0) {
@@ -89,19 +93,22 @@ async function transcribeLocal(audio: Blob, ext: string): Promise<string> {
       throw new Error(`ffmpeg failed: ${err.slice(-300)}`);
     }
     const whisper = Bun.spawn(
-      [
-        WHISPER_CLI,
-        "-m",
-        WHISPER_MODEL,
-        "-f",
-        wavPath,
-        "-t",
-        "14",
-        "-bs",
-        "1",
-        "-np", // no progress/system prints on stderr
-        "-nt", // no timestamps — plain text lines on stdout
-      ],
+      workloadArgv(
+        [
+          WHISPER_CLI,
+          "-m",
+          WHISPER_MODEL,
+          "-f",
+          wavPath,
+          "-t",
+          "14",
+          "-bs",
+          "1",
+          "-np", // no progress/system prints on stderr
+          "-nt", // no timestamps — plain text lines on stdout
+        ],
+        "transcribe",
+      ),
       { stdout: "pipe", stderr: "pipe" },
     );
     const [code, out, err] = await Promise.all([

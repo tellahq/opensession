@@ -66,3 +66,12 @@ export async function prReviewSeedRows(): Promise<CatalogDocumentSeedRow[]> {
     value: JSON.stringify(projectPrReview(state)),
   }));
 }
+
+/** Repair after a fresh import: republish PRs whose state changed since
+ *  `since`, which covers writes a previous gateway made during the import. */
+export async function reconcilePrReviews(since: number): Promise<void> {
+  const { listPrStateEntriesChangedSince } =
+    await import("../agents/github/state");
+  for (const { key, state } of await listPrStateEntriesChangedSince(since))
+    await publishPrReview(key, state);
+}

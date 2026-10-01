@@ -7,6 +7,14 @@ if (!root || !phase) throw new Error("root and phase are required");
 process.env.HOME = root;
 process.env.OPENSESSION_STATE_DIR = join(root, "state");
 process.env.OPENSESSION_WORKFLOWS_DIR = join(root, "workflows");
+// Workflow boot passes read the catalog, which outlives a restart in
+// production. Without a kernel actor here, use the test store on a file that
+// both phases share.
+(process.env as Record<string, string>).NODE_ENV = "test";
+process.env.OPENSESSION_SESSION_KERNEL_DB_PATH = join(
+  root,
+  "session-kernel.sqlite",
+);
 mkdirSync(root, { recursive: true });
 
 const store = await import("../workflow-store");
@@ -172,7 +180,7 @@ if (phase === "before") {
       return status("cancelled");
     },
   };
-  store.markInterruptedWorkflows();
+  await store.markInterruptedWorkflows();
   const [recoveredId] = await workflows.recoverInterruptedWorkflows({
     executor,
     sessionController: controller,

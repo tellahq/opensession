@@ -57,6 +57,7 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { readFileSync } from "fs";
 import { filterMcpServers, STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { WORKFLOW_LIMITS } from "./workflow-types";
+import { workloadCommand } from "./workload-scope";
 
 const HOME = homeDir();
 
@@ -419,8 +420,11 @@ export function createWorkflowMcpHost(
     }
     await client.connect(
       new StdioClientTransport({
-        command: String(cfg.command),
-        args: (cfg.args || []).map(String),
+        ...workloadCommand(
+          String(cfg.command),
+          (cfg.args || []).map(String),
+          "mcp",
+        ),
         // The SDK's default environment is already a minimal safe set
         // (PATH/HOME/…); the server's own credentials come from its config
         // entry — never the server process's full secret-bearing env.

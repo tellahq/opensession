@@ -355,7 +355,7 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
       "List this session's workflow runs, newest first — one line each with run id, name, status and agent count.",
       {},
       async () => {
-        const runs = listWorkflowRunsForSession(ctx.sessionId);
+        const runs = await listWorkflowRunsForSession(ctx.sessionId);
         if (!runs.length) return text("No workflow runs in this session yet.");
         const lines = runs.map(
           (r: WorkflowRunSnapshot) =>

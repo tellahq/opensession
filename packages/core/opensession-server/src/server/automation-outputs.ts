@@ -220,7 +220,7 @@ export async function deliverAutomationOutputs(opts: {
   startedAt: Date;
 }): Promise<void> {
   if (!opts.outputs?.length) return;
-  const reports = listReportsForSession(opts.sessionId).filter(
+  const reports = (await listReportsForSession(opts.sessionId)).filter(
     (report) => Date.parse(report.createdAt) >= opts.startedAt.getTime(),
   );
   const latest = reports[0];

@@ -24,6 +24,7 @@ type PreviewSurface =
   | {
       kind: "portal";
       target: ComponentProps<typeof PortalPane>["target"];
+      onPin?: () => void;
     }
   | {
       kind: "staging";
@@ -47,6 +48,7 @@ export function SessionPreviewSurface({
         <div className={VIEWER_REVIEW_MAIN}>
           <PortalPane
             target={surface.target}
+            onPin={surface.onPin}
             keepAliveKey={frameScope && keptFrameKey("portal", frameScope)}
           />
         </div>

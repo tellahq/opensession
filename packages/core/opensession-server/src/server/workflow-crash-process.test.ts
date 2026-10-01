@@ -11,6 +11,8 @@ async function runStage(root: string, stage: "start" | "recover") {
       ...process.env,
       OPENSESSION_WORKFLOWS_DIR: join(root, "workflows"),
       OPENSESSION_STATE_DIR: join(root, "state"),
+      // The catalog survives a restart in production; so must the fixture's.
+      OPENSESSION_SESSION_KERNEL_DB_PATH: join(root, "session-kernel.sqlite"),
       WORKFLOW_CRASH_ROOT: root,
       WORKFLOW_CRASH_STAGE: stage,
     },

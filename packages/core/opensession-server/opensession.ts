@@ -101,6 +101,7 @@ import {
 import { startGoalTicker } from "./src/server/goal-runner";
 import { startSessionHistoryIndexing } from "./src/server/session-index";
 import { startEventLoopLagMonitor } from "./src/server/system-stats";
+import { startDerivedCatalogRepair } from "./src/server/catalog-documents";
 import { ensureWarmTemplateScheduler } from "./src/server/warm-template";
 import { handleRunnerWsUpgrade } from "./src/server/runner-ws";
 import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-relay";
@@ -951,6 +952,10 @@ if (!g.__opensessionBooted) {
     // client; this is the server-side counterpart.
     startEventLoopLagMonitor();
 
+    // Catalog projections imported by this boot get a one-time repair once
+    // the previous gateway has drained (catalog-documents.ts).
+    startDerivedCatalogRepair();
+
     // Re-try sidebar titles whose one-shot died in flight (a restart, or an
     // engine-spawn outage) — without this they stay raw forever.
     startGeneratedTitleSweep(publishSessionChange);
@@ -1177,7 +1182,7 @@ if (!g.__opensessionBooted) {
         } catch (error) {
           throw error;
         }
-        markInterruptedWorkflows();
+        await markInterruptedWorkflows();
         const recoveredWorkflows = await recoverInterruptedWorkflows();
         if (recoveredWorkflows.length)
           console.log(

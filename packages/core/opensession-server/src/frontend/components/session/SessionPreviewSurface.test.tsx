@@ -55,7 +55,7 @@ test("SessionViewer keeps preview selection and state ownership", async () => {
     new URL("../session-viewer/SessionViewerMainRegion.tsx", import.meta.url),
   ).text();
   const branch = viewer.slice(
-    viewer.indexOf("{showPortal && portalTarget ? ("),
+    viewer.indexOf("{showPortal && portal ? ("),
     viewer.indexOf(") : showAssets ? ("),
   );
   const portal = branch.indexOf('kind: "portal"');

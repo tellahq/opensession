@@ -13,6 +13,7 @@ import { readFileSync } from "fs";
 import type { CodexAccount } from "./codex-accounts";
 import { withCodexAuthLock } from "./codex-auth-lock";
 import { homeDir } from "./paths";
+import { workloadArgv } from "./workload-scope";
 
 export interface CodexUsageWindow {
   utilization: number | null;
@@ -245,7 +246,7 @@ async function probeCodexUsageUnlocked(
   // than the FileSink this writes to and stdout is not async-iterable.
   let proc: Bun.Subprocess<"pipe", "pipe", "ignore">;
   try {
-    proc = Bun.spawn([executable, "app-server"], {
+    proc = Bun.spawn(workloadArgv([executable, "app-server"], "codex-probe"), {
       env: appServerEnv(codexHome),
       stdin: "pipe",
       stdout: "pipe",

@@ -32,6 +32,7 @@ import {
 import { basename, join } from "node:path";
 import { audit } from "./audit";
 import { configuredPaths } from "./config";
+import { workloadArgv } from "./workload-scope";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -370,7 +371,9 @@ export async function findTargetCaches(
 
 async function dirSizeBytes(dir: string): Promise<number> {
   try {
-    const out = await Bun.$`du -sx -B1 ${dir}`.nothrow().text();
+    const out = await Bun.$`${workloadArgv(["du", "-sx", "-B1", dir], "gc")}`
+      .nothrow()
+      .text();
     return Number(out.split(/\s/)[0]) || 0;
   } catch {
     return 0;
@@ -382,7 +385,9 @@ async function removeCache(dir: string): Promise<boolean> {
   try {
     await rm(dir, { recursive: true, force: true });
   } catch {
-    await Bun.$`sudo rm -rf ${dir}`.nothrow().quiet();
+    await Bun.$`${workloadArgv(["sudo", "rm", "-rf", dir], "gc")}`
+      .nothrow()
+      .quiet();
   }
   try {
     await stat(dir);

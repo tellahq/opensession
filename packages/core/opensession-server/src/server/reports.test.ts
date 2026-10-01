@@ -8,9 +8,14 @@ import {
   writeFileSync,
 } from "fs";
 import { join } from "path";
+import { importApplicationCatalog } from "./catalog-documents";
 import {
-  __resetReportIndexForTest,
+  SessionKernelStore,
+  __setSessionKernelStoreForTest,
+} from "./session-kernel";
+import {
   getReport,
+  listReportGroups,
   listReports,
   MAX_REPORT_TASK_PROMPT,
   MAX_REPORT_TASKS,
@@ -30,11 +35,10 @@ const dirs = [
 
 afterEach(() => {
   for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
-  __resetReportIndexForTest();
 });
 
 describe("listReportsForSession", () => {
-  test("returns only reports produced by the requested session, newest first", () => {
+  test("the boot import indexes existing reports by session, newest first", async () => {
     for (const dir of dirs) mkdirSync(dir, { recursive: true });
     const reports: ReportMeta[] = [
       {
@@ -75,15 +79,49 @@ describe("listReportsForSession", () => {
       writeFileSync(join(dir, `${report.id}.json`), JSON.stringify(report));
     }
 
+    const store = new SessionKernelStore(":memory:");
+    const previous = __setSessionKernelStoreForTest(store);
+    try {
+      await importApplicationCatalog();
+      expect(
+        (await listReportsForSession("bks-target")).map(
+          (report) => `${report.automationId}/${report.id}`,
+        ),
+      ).toEqual([
+        `${secondAutomationId}/newer`,
+        `${automationId}/newer`,
+        `${automationId}/older`,
+      ]);
+      const groups = await listReportGroups();
+      expect(
+        groups.find((group) => group.automationId === automationId),
+      ).toMatchObject({ count: 3, latest: { id: "other" } });
+    } finally {
+      __setSessionKernelStoreForTest(previous);
+      store.close();
+    }
+  });
+
+  test("publishing updates the session and group projections", async () => {
+    const report = publishReport({
+      automationId,
+      automationName: "Published",
+      sessionId: "bks-published",
+      title: "Fresh",
+      html: "<p>fresh</p>",
+    });
     expect(
-      listReportsForSession("bks-target").map(
-        (report) => `${report.automationId}/${report.id}`,
+      (await listReportsForSession("bks-published")).map((r) => r.id),
+    ).toEqual([report.id]);
+    expect(
+      (await listReportGroups()).find(
+        (group) => group.automationId === automationId,
       ),
-    ).toEqual([
-      `${secondAutomationId}/newer`,
-      `${automationId}/newer`,
-      `${automationId}/older`,
-    ]);
+    ).toMatchObject({
+      automationName: "Published",
+      count: 1,
+      latest: { id: report.id },
+    });
   });
 });
 

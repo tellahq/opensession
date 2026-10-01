@@ -16,6 +16,7 @@ import { chmodSync, existsSync, readFileSync } from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { userMatchesAny } from "./shared/user-mappings";
 import { stateDir } from "./paths";
+import { readJsonFileCopy } from "./shared/json-file-cache";
 
 const HOME = homeDir();
 // The env override is a test seam — bun tests point it at a temp store so they
@@ -269,10 +270,9 @@ function fetchWithTimeout(
 }
 
 function readStore(): ClaudeAccount[] {
-  if (!existsSync(storePath())) return [];
   try {
-    const parsed = JSON.parse(readFileSync(storePath(), "utf-8"));
-    return Array.isArray(parsed.accounts) ? parsed.accounts : [];
+    const parsed = readJsonFileCopy<{ accounts?: unknown }>(storePath());
+    return Array.isArray(parsed?.accounts) ? parsed.accounts : [];
   } catch (e) {
     console.error("[claude-accounts] Failed to read store:", e);
     return [];

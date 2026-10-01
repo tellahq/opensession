@@ -59,6 +59,21 @@ export function stateContext(): StateContext {
   };
 }
 
+/** Resolved legacy-vs-current choices. Hot stores resolve their path on every
+ * read, and the two existence probes per call added up to hundreds of
+ * synchronous syscalls a second on the gateway thread. A store that lives at
+ * the current location stays there, so that answer is memoized outright. A
+ * legacy answer still probes the current location (one syscall instead of
+ * two), so a migration takes effect at once. "Neither exists yet" is never
+ * memoized: the first write decides. */
+const resolvedStatePaths = new Map<string, { at: number; path: string }>();
+const STATE_PATH_MEMO_MS = 10_000;
+
+/** Test seam: forget memoized legacy/current resolutions. */
+export function __clearStatePathMemoForTest(): void {
+  resolvedStatePaths.clear();
+}
+
 /** statePath for an explicit context. Same rules, no environment reads. */
 export function statePathIn(rel: string, context: StateContext): string {
   const standardBase = rel.startsWith(".opensession-")
@@ -69,9 +84,24 @@ export function statePathIn(rel: string, context: StateContext): string {
   const home = context.home;
   if (!standardBase) return join(home, rel);
 
+  const key = `${home}\0${standardBase}`;
+  const now = Date.now();
+  const hit = resolvedStatePaths.get(key);
   const current = join(home, ".opensession", standardBase);
   const legacy = join(home, rel);
-  return existsSync(current) || !existsSync(legacy) ? current : legacy;
+  if (hit && now - hit.at < STATE_PATH_MEMO_MS) {
+    if (hit.path === current || !existsSync(current)) return hit.path;
+    resolvedStatePaths.set(key, { at: now, path: current });
+    return current;
+  }
+  const path = existsSync(current)
+    ? current
+    : existsSync(legacy)
+      ? legacy
+      : null;
+  if (!path) return current;
+  resolvedStatePaths.set(key, { at: now, path });
+  return path;
 }
 
 /** Sugar for standard state: `stateDir("audit")` → `~/.opensession/audit`.

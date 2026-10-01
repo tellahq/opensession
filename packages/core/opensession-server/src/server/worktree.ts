@@ -20,6 +20,7 @@ import {
   type Repo,
 } from "./config";
 import { stateDir } from "./paths";
+import { workloadArgv } from "./workload-scope";
 
 // The Repo type + registry defaults live in config.ts now. Re-exported so existing
 // `import { type Repo } from "./worktree"` call sites keep working.
@@ -351,14 +352,20 @@ export async function installWorktreeDeps(
     // resolves; docs/repo-lifecycle.md).
     const repoSetup = `${wtPath}/.agents/setup`;
     if (existsSync(repoSetup)) {
-      await $`bash ${repoSetup}`.cwd(wtPath).quiet();
+      await $`${workloadArgv(["bash", repoSetup], "setup")}`
+        .cwd(wtPath)
+        .quiet();
     } else if (repo.worktreeSetup) {
-      await $`sh -c ${repo.worktreeSetup}`.cwd(wtPath).quiet();
+      await $`${workloadArgv(["sh", "-c", repo.worktreeSetup], "setup")}`
+        .cwd(wtPath)
+        .quiet();
     }
     if (repo.depsInstall) {
-      await $`sh -c ${repo.depsInstall}`.cwd(wtPath).quiet();
+      await $`${workloadArgv(["sh", "-c", repo.depsInstall], "setup")}`
+        .cwd(wtPath)
+        .quiet();
     } else if (await Bun.file(`${wtPath}/package.json`).exists()) {
-      await $`bun install`.cwd(wtPath).quiet();
+      await $`${workloadArgv(["bun", "install"], "setup")}`.cwd(wtPath).quiet();
     }
   } catch (e) {
     console.warn(`[worktree] setup failed for ${branchLabel} (continuing):`, e);

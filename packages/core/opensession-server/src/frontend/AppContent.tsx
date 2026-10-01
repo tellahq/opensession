@@ -1162,6 +1162,7 @@ export function AppContent({
         closeAssetsTab: workspacePanes.closeAssetsTab,
         closeTerminalTab: workspacePanes.closeTerminalTab,
         closeDesktopTab: workspacePanes.closeDesktopTab,
+        closePortalTab: workspacePanes.closePortalTab,
       }}
       tabs={{
         context: {

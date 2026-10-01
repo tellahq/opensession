@@ -26,6 +26,7 @@ import { createSdkMcpServer, tool } from "./inprocess-mcp";
 import { stateDir } from "./paths";
 import { ensureSessionScratch } from "./session-scratch";
 import { fetchWeb, readFetched } from "./web-fetch";
+import { workloadArgv } from "./workload-scope";
 
 const CLONE_TIMEOUT_MS = 120_000;
 const TREE_LIMIT = 200;
@@ -54,7 +55,7 @@ async function run(
   cmd: string[],
   cwd?: string,
 ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
-  const proc = Bun.spawn(cmd, {
+  const proc = Bun.spawn(workloadArgv(cmd, "clone"), {
     cwd,
     stdout: "pipe",
     stderr: "pipe",
