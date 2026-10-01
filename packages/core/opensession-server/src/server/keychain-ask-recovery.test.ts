@@ -767,6 +767,46 @@ describe("a scripted run with several credentials", () => {
     expect(kc.listGrants()).toHaveLength(0);
   });
 
+  test("asking again after an earlier approval lapsed starts a fresh request", async () => {
+    addPair();
+    const client = await connect();
+    const { call, ask } = await askForRun(client, 2);
+    kc.answerKeychainAsk(ask("payments-prod").id, "run", "Alex");
+    const alexGrant = kc.listGrants({ sessionId: SESSION })[0]!;
+    expect(kc.revokeGrant(alexGrant.id, "Alex")).toEqual({ ok: true });
+
+    slackPosts.length = 0;
+    const again = client.callTool({
+      name: "request_credential",
+      arguments: {
+        credentials: CREDS,
+        purpose: "sync every subscription into billing",
+        run: {
+          command: COMMAND,
+          maxCalls: { "payments-prod": 14000, "billing-prod": 15000 },
+        },
+      },
+    });
+    const fresh = () =>
+      kc
+        .listKeychainAsks({ sessionId: SESSION })
+        .filter(
+          (a) =>
+            a.status === "pending" &&
+            a.run?.group?.id !== ask("payments-prod").run!.group!.id,
+        );
+    for (let i = 0; i < 100 && fresh().length < 2; i++) await Bun.sleep(5);
+    // Both owners are asked afresh; Bea's stale ask is withdrawn.
+    expect(fresh()).toHaveLength(2);
+    expect(
+      kc.listKeychainAsks().find((a) => a.id === ask("billing-prod").id)
+        ?.status,
+    ).toBe("cancelled");
+    await call;
+    for (const a of fresh()) kc.cancelCredentialAsk(a.id, SESSION);
+    await again;
+  });
+
   test("an owner of both credentials gets one message and approves both at once", async () => {
     addPair("Alex");
     const client = await connect();

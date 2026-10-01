@@ -1656,15 +1656,32 @@ export function requestCredentialRun(
       };
     const groupId = ours[0]?.run?.group?.id;
     const group = ours.filter((a) => a.run?.group?.id === groupId);
-    if (group.length && group.every(open)) {
+    // Resurface only a request that can still complete: every credential
+    // either still waits on its owner or holds a live approval from it. An
+    // approval that expired or was revoked can't be given again on that
+    // request, so it needs a fresh one.
+    const completable = metas.every(
+      (m) =>
+        group.some((a) => a.credentialId === m.id) ||
+        [...grants.values()].some(
+          (gr) =>
+            gr.sessionId === input.sessionId &&
+            gr.credentialId === m.id &&
+            gr.run?.group?.id === groupId &&
+            !gr.runId &&
+            liveNow(gr),
+        ),
+    );
+    if (group.length && completable && group.every(open)) {
       const transports = [
         ...new Map(group.map((a) => [a.humanAskId!, open(a)!])).values(),
       ];
       return { asks: group, transports, resurfaced: true };
     }
-    // An owner message is gone, so that request can never be complete.
+    // An owner message or an approval is gone, so that request can never be
+    // complete.
     for (const a of pending) {
-      settleAsk(a, "cancelled", "owner message no longer open");
+      settleAsk(a, "cancelled", "the run's request can no longer complete");
       if (a.humanAskId) cancelAsk(a.humanAskId);
     }
   }
