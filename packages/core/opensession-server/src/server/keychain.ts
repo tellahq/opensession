@@ -192,10 +192,11 @@ export interface KeychainGrant {
   run?: KeychainScriptedRun;
   /** The run that claimed this grant; a run grant starts one run only. */
   runId?: string;
-  /** Calls the run made with this grant, saved as it goes, so a run cut off
-   *  by a server restart can say how far it got. */
+  /** Calls the run made with this grant, saved when it ends, so a run that
+   *  was cut off can say how far it got. */
   runCalls?: number;
-  /** The run was cut off by a server restart, not ended by its own exit. */
+  /** The run was cut off (its host lost, or gone at boot), not ended by its
+   *  own exit, stop, timeout or revocation. */
   interrupted?: true;
 }
 
@@ -285,13 +286,9 @@ function ingest(data: Stored): void {
   for (const gr of data.grants || []) {
     if (gr.status !== "active" && new Date(gr.createdAt).getTime() < cutoff)
       continue;
-    // A claimed run grant's proxy lived in the process that loaded it last.
-    // That process is gone, so the run is over.
-    if (gr.mode === "run" && gr.runId && gr.status === "active") {
-      gr.status = "used";
-      gr.usedAt ??= new Date().toISOString();
-      gr.interrupted = true;
-    }
+    // A claimed run grant stays active: its run is a script run that
+    // outlives this process. Boot settles the ones whose run is gone
+    // (settleOrphanRunGrants), and the rest settle when their run ends.
     grants.set(gr.id, gr);
   }
   for (const a of data.asks || []) {
@@ -1120,10 +1117,12 @@ export async function claimLoginRelease(input: {
   return { credential: cred, grant: gr, undo };
 }
 
-/** Close a run's grants when the run ends, without blocking on the store. */
+/** Close a run's grants when the run ends, without blocking on the store.
+ *  `interrupted`: the run was cut off rather than ending on its own. */
 export async function settleRunGrants(
   runId: string,
   calls: Array<{ grantId: string; calls: number }>,
+  opts: { interrupted?: boolean } = {},
 ): Promise<void> {
   let changed = false;
   for (const { grantId, calls: made } of calls) {
@@ -1133,11 +1132,34 @@ export async function settleRunGrants(
     if (gr.status === "active") {
       gr.status = "used";
       gr.usedAt = new Date().toISOString();
+      if (opts.interrupted) gr.interrupted = true;
     }
     grants.set(gr.id, gr);
     changed = true;
   }
   if (changed) await persistAsync();
+}
+
+/**
+ * At boot: settle every claimed run grant whose run is not live, as cut off.
+ * Those are runs from before scripted runs became script runs, or runs whose
+ * record was lost. A live run's grants stay claimed until it ends.
+ */
+export async function settleOrphanRunGrants(
+  isLive: (runId: string) => boolean,
+): Promise<number> {
+  await ensureKeychainLoaded();
+  let settled = 0;
+  for (const gr of grants.values()) {
+    if (gr.mode !== "run" || !gr.runId || gr.status !== "active") continue;
+    if (isLive(gr.runId)) continue;
+    gr.status = "used";
+    gr.usedAt ??= new Date().toISOString();
+    gr.interrupted = true;
+    settled++;
+  }
+  if (settled) await persistAsync();
+  return settled;
 }
 
 /** Save how many calls a live run made with each grant, so a server restart
@@ -1474,7 +1496,7 @@ function maxCallsError(maxCalls: number): string | null {
 }
 
 /** For an owner asked to approve a command again: an earlier approved run
- *  of it in this session was cut off by a server restart. */
+ *  of it in this session was cut off before it finished. */
 function interruptedNote(
   sessionId: string,
   command: string,
@@ -1499,7 +1521,7 @@ function interruptedNote(
     );
   return (
     `\nResume: you approved this command for this session on ${cut[0]!.createdAt.slice(0, 10)}, ` +
-    `and a server restart cut that run off` +
+    `and that run was cut off before it finished` +
     (made.length ? ` after about ${made.join(" and ")}` : "") +
     `. Approving starts it again from the beginning of the command.`
   );

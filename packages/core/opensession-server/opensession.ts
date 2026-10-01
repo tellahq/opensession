@@ -965,10 +965,16 @@ if (!g.__opensessionBooted) {
   // Script runs (script-runs.ts) live in their own scopes and outlive this
   // process. Reattach to the ones recorded as running, settle the ones that
   // ended while it was down, and wake their sessions. Every boot mode: the
-  // registry is in this instance's own state dir.
-  void import("./src/server/script-runs")
-    .then((m) => m.startScriptRuns())
-    .catch((e) => console.error("[scripts] recovery failed:", e));
+  // registry is in this instance's own state dir. Scripted keychain runs
+  // (keychain-runs.ts) are script runs with credential relays.
+  // Keychain hooks first: a credential run that ended while this process
+  // was down settles its grants as it is reattached.
+  void (async () => {
+    const keychainRuns = await import("./src/server/keychain-runs");
+    keychainRuns.hookKeychainRuns();
+    await (await import("./src/server/script-runs")).startScriptRuns();
+    await keychainRuns.startKeychainRuns();
+  })().catch((e) => console.error("[scripts] recovery failed:", e));
 
   // code.storage-hosted repos: make sure existing main checkouts have the
   // URL-scoped credential helper wired, so ambient git fetch/push mints fresh
@@ -1310,6 +1316,11 @@ if (!g.__opensessionBooted) {
     // instances skip it (nothing resumes them, and a snapshot must never
     // make the production boot try to wake dev sessions).
     if (!devInstance) snapshotActiveSessions();
+    // Script runs keep going; save their latest credential call counts so
+    // the next boot reattaches them with nothing lost.
+    void import("./src/server/script-runs")
+      .then((m) => m.flushScriptRuns())
+      .catch(() => {});
     const pausedWorkflows = pauseWorkflowsForShutdown();
     if (pausedWorkflows)
       console.log(

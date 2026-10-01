@@ -189,10 +189,13 @@ it is a scripted run and shows the exact command and the call cap, and offers
 only Approve run or Decline. An ordinary once or standing grant cannot start
 a run, and a run grant cannot be used through `call_credential`.
 `run_with_credential` starts that command, character for character, as one
-process on the server, in the session's workspace, with a minimal environment
-and `KEYCHAIN_PROXY_URL`. That URL points at a proxy opened for this run only,
-on a loopback port, with a 32-byte random secret in its path that is compared
-in constant time. Every proxied call is checked against the grant and the
+script run (see Script runs below) on the server, in the session's workspace,
+with a minimal environment and `KEYCHAIN_PROXY_URL`. That URL points at a
+loopback port the run's script host opens for this run only, with a 32-byte
+random secret in its path. The host relays each request over the run's
+`0600` unix socket to the server, which compares the secret's SHA-256 with
+the one it stored, in constant time, and injects the credential; the host
+never holds a credential, and the secret is never written to disk. Every proxied call is checked against the grant and the
 credential's method and path ceiling, counted against the cap, and audited
 (`keychain_run_call`, `keychain_run_denied`, `keychain_run_ended`). The
 injected header, cookies and routing headers cannot be set by the script,
@@ -219,11 +222,15 @@ never reach another's host. Method and path limits, caps and audit entries
 are per credential. All of a run's URLs close together, and revoking any of
 its grants ends the whole run.
 
-A server restart ends every run. The claimed grants are then marked
-interrupted, with the call counts the run last saved (once a minute while
-it runs). They cannot be reused; asking again for the same command tells
-each owner that a restart cut the earlier run off and roughly how many calls
-it had made, and approving starts the command again from its beginning.
+A server restart does not end a run: its script host keeps the command
+running, holds the script's requests until the server is back (a request
+cut off mid-flight is retried only for GET and HEAD), and the run's grants
+stay claimed until it ends, then settle with its call counts. A run whose
+host is gone without recording an end, or a claimed grant whose run is not
+live at boot, is marked interrupted. Such grants cannot be reused; asking
+again for the same command tells each owner that the earlier run was cut off
+and roughly how many calls it had made, and approving starts the command
+again from its beginning.
 
 The old broker URL (`/api/keychain/broker/...`) answers every caller with
 410 and names these two paths, rather than a sign-in error.

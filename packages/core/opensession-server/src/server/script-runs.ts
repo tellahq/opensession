@@ -153,6 +153,8 @@ export interface ScriptRunDeps {
   root?: string;
   /** The host's argv before the run dir. Test seam. */
   hostArgv?: string[];
+  /** How often moving call counts are saved. Test seam. */
+  persistEveryMs?: number;
 }
 
 interface Live {
@@ -296,8 +298,14 @@ function persistSoon(): void {
   state.persistTimer = setTimeout(() => {
     state.persistTimer = undefined;
     if (state.dirtyPersist) void persist().catch(() => {});
-  }, PERSIST_THROTTLE_MS);
+  }, state.deps.persistEveryMs ?? PERSIST_THROTTLE_MS);
   state.persistTimer.unref?.();
+}
+
+/** Save call counts that moved since the last write. For a graceful
+ *  shutdown, so a restart loses none of them. */
+export async function flushScriptRuns(): Promise<void> {
+  if (state.dirtyPersist) await persist().catch(() => {});
 }
 
 // ── Views ──────────────────────────────────────────────────────────────────
@@ -345,6 +353,22 @@ export async function getScriptRun(
   await ensureLoaded();
   const run = state.runs.get(id);
   return run && run.sessionId === sessionId ? run : undefined;
+}
+
+/** Any session's run, for server-side bookkeeping (a revoked grant). */
+export async function scriptRunRecord(
+  id: string,
+): Promise<ScriptRunRecord | undefined> {
+  await ensureLoaded();
+  return state.runs.get(id);
+}
+
+/** The ids of every run that is still going. */
+export async function runningScriptRunIds(): Promise<string[]> {
+  await ensureLoaded();
+  return [...state.runs.values()]
+    .filter((run) => run.state === "running")
+    .map((run) => run.id);
 }
 
 export async function scriptRunStatus(
@@ -407,6 +431,9 @@ export interface StartScriptInput {
   /** Run id, when the caller already claimed something under it. */
   id?: string;
   relays?: ScriptRelayInfo[];
+  /** Checked right before the host is launched: a reason not to start
+   *  after all (e.g. a grant revoked while the run was being prepared). */
+  shouldStart?: () => string | undefined;
 }
 
 export function newScriptRunId(): string {
@@ -502,6 +529,13 @@ export async function startScriptRun(
     }
   }
 
+  const refusal = input.shouldStart?.();
+  if (refusal) {
+    live.relayServer?.stop(true);
+    state.runs.delete(id);
+    state.live.delete(id);
+    return { error: refusal };
+  }
   const env: Record<string, string> = { ...input.env };
   if (secrets.length) env[RELAY_SECRETS_ENV] = secrets.join(",");
   const unit = `opensession-script-${id.slice(3, 15)}`;

@@ -889,6 +889,8 @@ describe("a scripted run with several credentials", () => {
     g.__keychainGrants.clear();
     g.__keychainAsks.clear();
     await kc.ensureKeychainLoaded();
+    // Boot finds no live script run for it, so the run was cut off.
+    await kc.settleOrphanRunGrants(() => false);
     expect(
       kc
         .listGrants({ sessionId: SESSION })
@@ -901,7 +903,7 @@ describe("a scripted run with several credentials", () => {
     const client = await connect();
     const { call } = await askForRun(client, 2);
     for (const post of slackPosts) {
-      expect(post.text).toContain("a server restart cut that run off");
+      expect(post.text).toContain("that run was cut off before it finished");
       expect(post.text).toContain("6,000 calls with payments-prod");
       expect(post.text).toContain("6,001 calls with billing-prod");
     }

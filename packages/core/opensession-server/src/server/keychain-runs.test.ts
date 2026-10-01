@@ -1,11 +1,20 @@
 /**
- * Scripted runs: a real child process pages through an API via
- * KEYCHAIN_PROXY_URL. Every call is injected, checked against the grant and
- * the credential's ceiling, capped and audited, and the URL is dead the
- * moment the run ends. Another run's secret opens nothing.
+ * Scripted runs: a real script host runs a real child process that pages
+ * through an API via KEYCHAIN_PROXY_URL. Every call is injected, checked
+ * against the grant and the credential's ceiling, capped and audited, and
+ * the URL is dead the moment the run ends. Another run's secret opens
+ * nothing, and the run keeps going through a server restart.
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  setDefaultTimeout,
+  test,
+} from "bun:test";
+import {
+  copyFileSync,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -16,6 +25,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const dir = mkdtempSync(join(tmpdir(), "kc-runs-"));
+// Short: the runs' relay sockets live under it.
+const scriptRoot = mkdtempSync("/tmp/kcr-");
 const STORE = join(dir, "kc.json");
 process.env.OPENSESSION_KEYCHAIN_STORE = STORE;
 
@@ -23,6 +34,34 @@ import type { StartRunInput } from "./keychain-runs";
 
 const kc = await import("./keychain");
 const runs = await import("./keychain-runs");
+const scripts = await import("./script-runs");
+
+// Real processes, and a host start per run.
+setDefaultTimeout(30_000);
+
+/** No user scope under test: a plain detached host, like a dev box. */
+const scriptDeps = (extra: Record<string, unknown> = {}) => ({
+  root: scriptRoot,
+  hostArgv: [
+    process.execPath,
+    "run",
+    join(import.meta.dir, "../script-host/main.ts"),
+  ],
+  launch: async (input: { argv: string[]; env: Record<string, string> }) => {
+    const proc = Bun.spawn({
+      cmd: input.argv,
+      env: input.env,
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "inherit",
+      detached: true,
+    });
+    return { pid: proc.pid, exited: proc.exited };
+  },
+  deliver: async () => {},
+  broadcast: () => {},
+  ...extra,
+});
 
 const SECRET = "sk-run-secret-5678";
 const SESSION = "s-run";
@@ -45,6 +84,9 @@ const fetchImpl = (async (url: URL, init: RequestInit) => {
 const deps = { fetchImpl, audit: (e: Record<string, any>) => events.push(e) };
 
 beforeEach(() => {
+  rmSync(scriptRoot, { recursive: true, force: true });
+  scripts.__resetScriptRunsForTest(scriptDeps());
+  runs.__resetKeychainRunsForTest();
   if (existsSync(STORE)) rmSync(STORE);
   const g = globalThis as any;
   g.__keychainCredentials?.clear();
@@ -54,8 +96,11 @@ beforeEach(() => {
   events = [];
 });
 afterEach(async () => {
-  for (const r of runs.listCredentialRuns(SESSION))
-    if (r.state === "running") runs.stopCredentialRun(r.id, SESSION);
+  for (const r of await runs.listCredentialRuns(SESSION))
+    if (r.state === "running") {
+      await runs.stopCredentialRun(r.id, SESSION);
+      await runs.waitForCredentialRun(r.id, 15_000);
+    }
 });
 
 function credential() {
@@ -243,7 +288,9 @@ await new Promise(() => {});`,
     expect((await fetch(`${urlA.href}/v1/ping`)).status).toBe(200);
     expect(seen).toHaveLength(1);
 
-    expect(runs.stopCredentialRun(runA.id, SESSION)).toHaveProperty("run");
+    expect(await runs.stopCredentialRun(runA.id, SESSION)).toHaveProperty(
+      "run",
+    );
     const stopped = await runs.waitForCredentialRun(runA.id, 30_000);
     expect(stopped?.state).toBe("stopped");
     const after = await fetch(`${urlA.href}/v1/ping`).then(
@@ -252,9 +299,10 @@ await new Promise(() => {});`,
     );
     expect(after).toBe("refused");
     expect(
-      runs.listCredentialRuns(SESSION).find((r) => r.id === runB.id)?.state,
+      (await runs.listCredentialRuns(SESSION)).find((r) => r.id === runB.id)
+        ?.state,
     ).toBe("running");
-    runs.stopCredentialRun(runB.id, SESSION);
+    await runs.stopCredentialRun(runB.id, SESSION);
     await runs.waitForCredentialRun(runB.id, 30_000);
     expect(seen).toHaveLength(1);
   });
@@ -289,11 +337,13 @@ await new Promise(() => {});`,
     expect((await fetch(`${url}/v1/x`)).status).toBe(200);
 
     expect(kc.revokeGrant(grant.id, "Alex")).toEqual({ ok: true });
+    // Refused at once (403 while the run is told to stop, 410 once it is
+    // stopping, or a closed port once it ended), and never forwarded.
     const after = await fetch(`${url}/v1/x`).then(
       (r) => r.status,
       () => "refused",
     );
-    expect(after).toBe("refused");
+    expect([403, 410, "refused"]).toContain(after);
     const done = await runs.waitForCredentialRun(run.id, 30_000);
     expect(done?.state).toBe("revoked");
     expect(seen).toHaveLength(1);
@@ -663,6 +713,7 @@ await new Promise(() => {});`,
   });
 
   test("a live run saves its call counts as it goes", async () => {
+    scripts.__resetScriptRunsForTest(scriptDeps({ persistEveryMs: 20 }));
     const { payments, billing } = credentials();
     const command = script(
       "progress.ts",
@@ -671,19 +722,96 @@ await Bun.write("progress.done", "1");
 await new Promise(() => {});`,
     );
     grantGroup({ payments: payments.id, billing: billing.id }, command);
-    const run = await started(command, {
-      ...both,
-      deps: { ...twoDeps, progressEveryMs: 20 },
-    });
+    const run = await started(command, { ...both, deps: twoDeps });
     await proxyUrlFrom("progress.done");
+    const registry = join(scriptRoot, "registry.json");
     const saved = () =>
-      JSON.parse(readFileSync(STORE, "utf-8")).grants.map(
-        (g: any) => g.runCalls,
-      );
-    for (let i = 0; i < 200 && !saved().includes(2); i++) await Bun.sleep(10);
-    expect(saved().sort()).toEqual([0, 2]);
-    runs.stopCredentialRun(run.id, SESSION);
+      existsSync(registry)
+        ? JSON.parse(readFileSync(registry, "utf-8"))
+            .runs.find((r: any) => r.id === run.id)
+            ?.relays.map((r: any) => r.calls)
+        : [];
+    for (let i = 0; i < 200 && !saved()?.includes(2); i++) await Bun.sleep(10);
+    expect(saved()).toEqual([2, 0]);
+    await runs.stopCredentialRun(run.id, SESSION);
     await runs.waitForCredentialRun(run.id, 30_000);
+  });
+});
+
+describe("a server restart", () => {
+  test("leaves the run going: its calls wait for the server and then go through, and its grant stays claimed until it ends", async () => {
+    const cred = credential();
+    const command = script(
+      "survivor.ts",
+      `const base = process.env.KEYCHAIN_PROXY_URL;
+const first = (await fetch(base + "/v1/first")).status;
+await Bun.write("survivor.first", "1");
+while (!(await Bun.file("survivor.go").exists())) await Bun.sleep(20);
+const second = (await fetch(base + "/v1/second")).status;
+console.log(first + "," + second);`,
+    );
+    const grant = grantRun(cred.id, command);
+    const run = await started(command);
+    await proxyUrlFrom("survivor.first");
+
+    // The server shuts down (saving the moving call counts, as its graceful
+    // shutdown does) and comes back with no script runs in memory and the
+    // keychain loaded afresh from its file.
+    await scripts.flushScriptRuns();
+    scripts.__simulateRestartForTest();
+    runs.__resetKeychainRunsForTest();
+    const restarted = join(dir, "kc-restarted.json");
+    copyFileSync(STORE, restarted);
+    process.env.OPENSESSION_KEYCHAIN_STORE = restarted;
+    const g = globalThis as any;
+    g.__keychainCredentials.clear();
+    g.__keychainGrants.clear();
+    g.__keychainAsks.clear();
+    await kc.ensureKeychainLoaded();
+    // The script's next call is made while the server is down.
+    writeFileSync(join(dir, "survivor.go"), "");
+    await Bun.sleep(300);
+
+    // Boot, in the server's order, with this test's upstream.
+    runs.__setKeychainRunDefaultsForTest(deps);
+    runs.hookKeychainRuns();
+    await scripts.startScriptRuns(scriptDeps());
+    await runs.startKeychainRuns();
+    expect(
+      kc.listGrants({ sessionId: SESSION }).find((x) => x.id === grant.id)
+        ?.status,
+    ).toBe("active");
+    const done = await runs.waitForCredentialRun(run.id, 30_000);
+    expect(done?.state).toBe("exited");
+    expect(readFileSync(done!.logPath, "utf-8").trim()).toBe("200,200");
+    expect(done?.calls).toBe(2);
+    // The grant settles when the run ends, with its calls, not as cut off.
+    const settled = kc
+      .listGrants({ sessionId: SESSION })
+      .find((x) => x.id === grant.id);
+    expect(settled?.status).toBe("used");
+    expect(settled?.runCalls).toBe(2);
+    expect(settled?.interrupted).toBeUndefined();
+    process.env.OPENSESSION_KEYCHAIN_STORE = STORE;
+    rmSync(restarted, { force: true });
+  });
+
+  test("settles at boot a grant whose run is gone, as cut off", async () => {
+    const cred = credential();
+    const grant = grantRun(cred.id, "true");
+    const claim = await kc.claimRunGrants({
+      sessionId: SESSION,
+      credentials: ["acme"],
+      command: "true",
+      runId: "sr-gone",
+      deadline: Date.now() + 60_000,
+    });
+    expect("claims" in claim).toBe(true);
+    await runs.startKeychainRuns();
+    const settled = kc
+      .listGrants({ sessionId: SESSION })
+      .find((x) => x.id === grant.id);
+    expect([settled?.status, settled?.interrupted]).toEqual(["used", true]);
   });
 });
 
