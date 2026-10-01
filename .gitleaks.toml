@@ -31,6 +31,7 @@ regexes = [
   '''^OS1API\.DeskVoiceSecret$''',
   '''^os1\.notifications\.completionSound$''',
   '''^plain\-th_123$''',
+  '''^sk\-broker\-secret\-1234$''',
   '''^9d1c250a\-e61b\-44d9\-88ed\-5944d1962f5e$''',
   '''^MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA/FM97H\+e6PYi5cRpw5ohonHFldVoSXWoOFTzei4ZG8AfHiRkYfHFsQZ8yIuQ3OmG\+7//92KDLI4aS6SRFNvrojI3xuXjTrBFEBzCM9MVbWeDIUI1viAH5I\+oC35K7Z2pNQrRA\+j928nA8JpxUbhBwhOHgRDfzFxgvXKpWvREv2pi9gpDp1IxjLEbzET38kaGXOXXzFDHS7YG5Un95d0LPwzp8XZQDh83PBJLEiszFwQVIv2mzDqOmQP2Iqj/AqnglWhI0noL4GKR7jkdmrJ8qES\+xU19nZ7svbemNOkEVx3qC7sXMLNpXhJ2Asi/B2wV7yl/cdXeTiPvd2EwpN2XZQIDAQAB$''',
 ]
