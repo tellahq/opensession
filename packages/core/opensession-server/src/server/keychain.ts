@@ -18,7 +18,9 @@
  *                in the session, which anyone watching could click.
  *   grant      — the approval: scoped to the REQUESTING SESSION only,
  *                once (single broker call, 1h) or standing (7d), revocable,
- *                audited.
+ *                audited. A third mode, run, approves one named script for
+ *                bulk use through a per-run proxy (keychain-runs.ts); the
+ *                owner sees the command and the call cap before approving.
  *
  * Delivery is broker-only: the agent never sees the secret. It calls the
  * keychain's call_credential tool (keychain-broker.ts), which runs inside
@@ -72,11 +74,24 @@ function storePath(): string {
 }
 
 const ONCE_GRANT_TTL_MS = 60 * 60 * 1000;
+/** How long an approved scripted run may wait to be started. The run itself
+ *  then lives until its own deadline (keychain-runs.ts). */
+const RUN_GRANT_START_TTL_MS = 60 * 60 * 1000;
 const STANDING_GRANT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Terminal asks/grants older than this are pruned on load. */
 const TERMINAL_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type GrantMode = "once" | "standing";
+export type GrantMode = "once" | "standing" | "run";
+
+/** What the owner approves for a scripted run: this exact command, and at
+ *  most this many proxied calls. */
+export interface KeychainScriptedRun {
+  command: string;
+  maxCalls: number;
+}
+
+export const MAX_RUN_COMMAND_CHARS = 2000;
+export const MAX_RUN_CALLS = 1_000_000;
 
 export interface KeychainCredential {
   id: string;
@@ -120,6 +135,10 @@ export interface KeychainGrant {
   usedAt?: string;
   revokedAt?: string;
   askId?: string;
+  /** Set for mode "run": the script the owner approved. */
+  run?: KeychainScriptedRun;
+  /** The run that claimed this grant; a run grant starts one run only. */
+  runId?: string;
 }
 
 export interface KeychainAskRecord {
@@ -130,6 +149,8 @@ export interface KeychainAskRecord {
   requestedBy: string;
   purpose: string;
   requestedMode: GrantMode;
+  /** Set when the ask is for a scripted run (requestedMode "run"). */
+  run?: KeychainScriptedRun;
   status: "pending" | "approved" | "declined" | "expired" | "cancelled";
   /** The human-asks transport record carrying the owner's buttons. */
   humanAskId?: string;
@@ -206,6 +227,12 @@ function ingest(data: Stored): void {
   for (const gr of data.grants || []) {
     if (gr.status !== "active" && new Date(gr.createdAt).getTime() < cutoff)
       continue;
+    // A claimed run grant's proxy lived in the process that loaded it last.
+    // That process is gone, so the run is over.
+    if (gr.mode === "run" && gr.runId && gr.status === "active") {
+      gr.status = "used";
+      gr.usedAt ??= new Date().toISOString();
+    }
     grants.set(gr.id, gr);
   }
   for (const a of data.asks || []) {
@@ -454,14 +481,17 @@ export function deleteCredential(id: string, by: string): boolean {
   credentials.delete(id);
   // A deleted credential takes its live grants with it — the broker would
   // otherwise 404 on the credential with an "active" grant lying around.
+  const revoked: string[] = [];
   for (const gr of grants.values()) {
     if (gr.credentialId === id && gr.status === "active") {
       gr.status = "revoked";
       gr.revokedAt = new Date().toISOString();
       grants.set(gr.id, gr);
+      revoked.push(gr.id);
     }
   }
   persist();
+  for (const grantId of revoked) notifyRevoked(grantId);
   audit({ kind: "keychain_credential_deleted", credential_id: id, by });
   return true;
 }
@@ -499,6 +529,25 @@ export function listGrants(opts?: {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+const revokedListeners: Set<(grantId: string) => void> =
+  (g.__keychainRevokedListeners ??= new Set());
+
+/** Called with a grant's id when it is revoked, directly or by deleting its
+ *  credential, so a running scripted run can end at once. */
+export function onGrantRevoked(listener: (grantId: string) => void): void {
+  revokedListeners.add(listener);
+}
+
+function notifyRevoked(grantId: string): void {
+  for (const listener of revokedListeners) {
+    try {
+      listener(grantId);
+    } catch (e) {
+      console.error("[keychain] revocation listener failed:", e);
+    }
+  }
+}
+
 export function revokeGrant(
   id: string,
   by: string,
@@ -522,6 +571,7 @@ export function revokeGrant(
     credential_id: gr.credentialId,
     by,
   });
+  notifyRevoked(id);
   return { ok: true };
 }
 
@@ -538,9 +588,15 @@ function mintGrant(ask: KeychainAskRecord, mode: GrantMode): KeychainGrant {
     status: "active",
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(
-      now + (mode === "once" ? ONCE_GRANT_TTL_MS : STANDING_GRANT_TTL_MS),
+      now +
+        (mode === "once"
+          ? ONCE_GRANT_TTL_MS
+          : mode === "run"
+            ? RUN_GRANT_START_TTL_MS
+            : STANDING_GRANT_TTL_MS),
     ).toISOString(),
     askId: ask.id,
+    ...(mode === "run" && ask.run ? { run: { ...ask.run } } : {}),
   };
   grants.set(gr.id, gr);
   persist();
@@ -567,6 +623,7 @@ export function __mintGrantForTest(input: {
   requestedBy: string;
   mode: GrantMode;
   expiresAt?: string;
+  run?: KeychainScriptedRun;
 }): KeychainGrant {
   load();
   const gr = mintGrant(
@@ -578,6 +635,7 @@ export function __mintGrantForTest(input: {
       requestedBy: input.requestedBy,
       purpose: "test",
       requestedMode: input.mode,
+      ...(input.run ? { run: input.run } : {}),
       status: "approved",
       createdAt: new Date().toISOString(),
     },
@@ -619,24 +677,17 @@ export function consumeGrantForBroker(
   settleExpiry(gr);
   if (gr.status !== "active")
     return { error: `grant is ${gr.status}`, status: 403 };
+  // A run grant is used only through its run's proxy (useRunGrant).
+  if (gr.mode === "run")
+    return {
+      error:
+        "this grant is for a scripted run; start it with run_with_credential",
+      status: 403,
+    };
   const cred = credentials.get(gr.credentialId);
   if (!cred) return { error: "credential no longer exists", status: 404 };
-  const m = method.toUpperCase();
-  if (cred.allowedMethods?.length && !cred.allowedMethods.includes(m)) {
-    return {
-      error: `method ${m} is not allowed for this credential (allowed: ${cred.allowedMethods.join(", ")})`,
-      status: 403,
-    };
-  }
-  if (
-    cred.allowedPathPrefixes?.length &&
-    !cred.allowedPathPrefixes.some((p) => path.startsWith(p))
-  ) {
-    return {
-      error: `path is outside this credential's allowed prefixes (${cred.allowedPathPrefixes.join(", ")})`,
-      status: 403,
-    };
-  }
+  const refusal = ceilingRefusal(cred, method, path);
+  if (refusal) return { error: refusal, status: 403 };
   if (gr.mode === "once") {
     gr.status = "used";
     gr.usedAt = new Date().toISOString();
@@ -644,6 +695,109 @@ export function consumeGrantForBroker(
     persist();
   }
   return { credential: cred, grant: gr };
+}
+
+/** Why the credential's method/path ceiling refuses a call, or null. `path`
+ *  must already be parsed and normalized. */
+function ceilingRefusal(
+  cred: KeychainCredential,
+  method: string,
+  path: string,
+): string | null {
+  const m = method.toUpperCase();
+  if (cred.allowedMethods?.length && !cred.allowedMethods.includes(m))
+    return `method ${m} is not allowed for this credential (allowed: ${cred.allowedMethods.join(", ")})`;
+  if (
+    cred.allowedPathPrefixes?.length &&
+    !cred.allowedPathPrefixes.some((p) => path.startsWith(p))
+  )
+    return `path is outside this credential's allowed prefixes (${cred.allowedPathPrefixes.join(", ")})`;
+  return null;
+}
+
+/**
+ * Claim this session's approved run grant for a credential to start one run
+ * of `command`. The command must be the one the owner approved, character
+ * for character. The grant then lives until the run's deadline and cannot
+ * start a second run.
+ */
+export function claimRunGrant(input: {
+  sessionId: string;
+  credential: string;
+  command: string;
+  runId: string;
+  deadline: number;
+}):
+  | { grant: KeychainGrant; credential: KeychainCredentialMeta }
+  | { error: string } {
+  const credMeta = findCredential(input.credential);
+  if (!credMeta)
+    return { error: `no credential matches "${input.credential}"` };
+  const runGrants = listGrants({ sessionId: input.sessionId }).filter(
+    (gr) =>
+      gr.credentialId === credMeta.id &&
+      gr.mode === "run" &&
+      gr.status === "active" &&
+      !gr.runId,
+  );
+  if (!runGrants.length)
+    return {
+      error: `this session holds no approved scripted run for ${credMeta.service}. Ask its owner with request_credential({ credential, purpose, run: { command, maxCalls } }) first`,
+    };
+  const gr = runGrants.find((g) => g.run?.command === input.command);
+  if (!gr)
+    return {
+      error: `the owner approved a different command (${runGrants.map((g) => JSON.stringify(g.run?.command)).join(", ")}). Run exactly that, or ask again for this one`,
+    };
+  gr.runId = input.runId;
+  gr.expiresAt = new Date(input.deadline).toISOString();
+  grants.set(gr.id, gr);
+  persist();
+  audit({
+    kind: "keychain_run_started",
+    grant_id: gr.id,
+    run_id: input.runId,
+    credential_id: gr.credentialId,
+    session_id: gr.sessionId,
+    owner: gr.owner,
+    max_calls: gr.run?.maxCalls,
+  });
+  return { grant: gr, credential: credMeta };
+}
+
+/**
+ * Check one proxied call of a run against its grant: still active, claimed
+ * by this run, and inside the credential's ceiling. Nothing is persisted,
+ * so a run can make many calls without rewriting the store.
+ */
+export function useRunGrant(
+  grantId: string,
+  runId: string,
+  method: string,
+  path: string,
+): { credential: KeychainCredential } | { error: string; status: number } {
+  load();
+  const gr = grants.get(grantId);
+  if (!gr || gr.mode !== "run" || gr.runId !== runId)
+    return { error: "unknown run", status: 403 };
+  settleExpiry(gr);
+  if (gr.status !== "active")
+    return { error: `the run's grant is ${gr.status}`, status: 403 };
+  const cred = credentials.get(gr.credentialId);
+  if (!cred) return { error: "credential no longer exists", status: 403 };
+  const refusal = ceilingRefusal(cred, method, path);
+  return refusal ? { error: refusal, status: 403 } : { credential: cred };
+}
+
+/** Close a run's grant when the run ends. */
+export function settleRunGrant(grantId: string, runId: string): void {
+  load();
+  const gr = grants.get(grantId);
+  if (!gr || gr.runId !== runId || gr.status !== "active") return;
+  gr.status = "used";
+  gr.usedAt = new Date().toISOString();
+  grants.set(gr.id, gr);
+  persist();
 }
 
 /**
@@ -658,7 +812,10 @@ export function activeGrantFor(
   const cred = findCredential(credentialRef);
   if (!cred) return undefined;
   const live = listGrants({ sessionId }).filter(
-    (gr) => gr.credentialId === cred.id && gr.status === "active",
+    (gr) =>
+      gr.credentialId === cred.id &&
+      gr.status === "active" &&
+      gr.mode !== "run",
   );
   return live.find((gr) => gr.mode === "standing") ?? live[0];
 }
@@ -694,6 +851,7 @@ export function scrubSecret(body: string, secret: string): string {
 
 const APPROVE_ONCE = "Approve once";
 const APPROVE_STANDING = "Approve standing";
+const APPROVE_RUN = "Approve run";
 const DECLINE = "Decline";
 
 const KEYCHAIN_ASK_DOMAIN = "keychain-ask";
@@ -714,6 +872,18 @@ export function grantInstructions(
   ]
     .filter(Boolean)
     .join("; ");
+  if (gr.mode === "run" && gr.run)
+    return (
+      `${gr.owner} approved a scripted run with **${credMeta.service}** ` +
+      `(up to ${gr.run.maxCalls} calls, grant ${gr.id}; start it before ${gr.expiresAt}).\n` +
+      `Start it with run_with_credential({ credential: "${credMeta.service}", command: ${JSON.stringify(gr.run.command)} }), ` +
+      `optionally with cwd and timeoutMinutes. The command must be exactly that. ` +
+      `The script gets KEYCHAIN_PROXY_URL: use it as the API base URL in place of https://${credMeta.host}; ` +
+      `the proxy injects the credential and stops working when the script exits. ` +
+      `Poll credential_run_status for progress and output. ` +
+      (limits ? `Limits: ${limits}. ` : "") +
+      `Stay within the approved purpose ("${gr.purpose}"); every proxied call is audited.`
+    );
   return (
     `${gr.owner} approved your keychain ask for **${credMeta.service}** ` +
     `(${gr.mode === "once" ? "one single call" : `standing until ${gr.expiresAt}`}, grant ${gr.id}).\n` +
@@ -737,7 +907,9 @@ export interface RequestCredentialInput {
   sessionId: string;
   requestedBy: string;
   purpose: string;
-  mode?: GrantMode;
+  mode?: Exclude<GrantMode, "run">;
+  /** Ask for a scripted run instead of once/standing calls. */
+  run?: KeychainScriptedRun;
 }
 
 export type RequestCredentialResult =
@@ -771,16 +943,39 @@ export function requestCredential(
       error: `credential owner "${credMeta.owner}" is not in the identity roster`,
     };
 
-  const requestedMode = input.mode || "once";
+  let run: KeychainScriptedRun | undefined;
+  if (input.run) {
+    const command = input.run.command.trim();
+    if (!command || command.length > MAX_RUN_COMMAND_CHARS)
+      return {
+        error: `a scripted run needs a command of at most ${MAX_RUN_COMMAND_CHARS} characters`,
+      };
+    const maxCalls = input.run.maxCalls;
+    if (!Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > MAX_RUN_CALLS)
+      return {
+        error: `maxCalls must be a whole number from 1 to ${MAX_RUN_CALLS}`,
+      };
+    run = { command, maxCalls };
+  }
+  const requestedMode: GrantMode = run ? "run" : input.mode || "once";
+  const sameRun = (other?: KeychainScriptedRun) =>
+    (!run && !other) ||
+    (!!run &&
+      !!other &&
+      run.command === other.command &&
+      run.maxCalls === other.maxCalls);
   // An approval that landed after the caller stopped waiting is already a
   // grant: hand it back rather than asking the owner twice. Only for the
-  // purpose the owner approved; a new purpose is a new ask.
+  // purpose (and script) the owner approved; anything new is a new ask.
   const live = listGrants({ sessionId: input.sessionId }).find(
     (gr) =>
       gr.credentialId === credMeta.id &&
       gr.status === "active" &&
+      !gr.runId &&
       norm(gr.purpose) === norm(purpose) &&
-      (gr.mode === "standing" || requestedMode === "once"),
+      sameRun(gr.run) &&
+      (gr.mode === requestedMode ||
+        (gr.mode === "standing" && requestedMode === "once")),
   );
   if (live)
     return { grant: live, instructions: grantInstructions(live, credMeta) };
@@ -803,7 +998,7 @@ export function requestCredential(
       transport.state !== "cancelled"
     ) {
       // The owner is approving that ask's sentence, not this one.
-      if (norm(pending.purpose) !== norm(purpose))
+      if (norm(pending.purpose) !== norm(purpose) || !sameRun(pending.run))
         return {
           error:
             `a different ask for this credential is already pending (${pending.id}, purpose: "${pending.purpose}"). ` +
@@ -824,6 +1019,7 @@ export function requestCredential(
     requestedBy: input.requestedBy,
     purpose,
     requestedMode,
+    ...(run ? { run } : {}),
     status: "pending",
     createdAt: new Date().toISOString(),
   };
@@ -832,14 +1028,24 @@ export function requestCredential(
     sessionId: input.sessionId,
     createdBy: input.requestedBy,
     person: { slackId: owner.slackId, name: owner.name },
-    question:
-      `May this session borrow your **${credMeta.service}** credential ` +
-      `(${credMeta.host})?\nPurpose: ${purpose}\nRequested: ${record.requestedMode} ` +
-      `(once = a single API call through the broker; standing = 7 days, revocable).`,
-    context:
-      "_The secret is never shown to the session — approved calls go through the " +
-      "keychain broker with method/path limits, and every call is audited._",
-    options: [APPROVE_ONCE, APPROVE_STANDING, DECLINE],
+    question: run
+      ? `May this session run a script with your **${credMeta.service}** credential ` +
+        `(${credMeta.host})? This is a scripted run: bulk API use, not a single call.\n` +
+        `Purpose: ${purpose}\nCommand: \`${run.command}\`\n` +
+        `Expected volume: up to ${run.maxCalls.toLocaleString("en-US")} API calls, refused beyond that.`
+      : `May this session borrow your **${credMeta.service}** credential ` +
+        `(${credMeta.host})?\nPurpose: ${purpose}\nRequested: ${record.requestedMode} ` +
+        `(once = a single API call through the broker; standing = 7 days, revocable).`,
+    context: run
+      ? "_The script never sees the secret. It gets a proxy URL that works only for " +
+        "this one process, within the credential's method/path limits, and stops " +
+        "working when the script exits or times out. Every call is audited, and " +
+        "revoking the grant stops the run._"
+      : "_The secret is never shown to the session — approved calls go through the " +
+        "keychain broker with method/path limits, and every call is audited._",
+    options: run
+      ? [APPROVE_RUN, DECLINE]
+      : [APPROVE_ONCE, APPROVE_STANDING, DECLINE],
     mode: "block",
     deliver: "now",
     domain: { kind: KEYCHAIN_ASK_DOMAIN, ref: record.id },
@@ -858,6 +1064,7 @@ export function requestCredential(
     requested_by: input.requestedBy,
     mode: record.requestedMode,
     owner: credMeta.owner,
+    ...(run ? { max_calls: run.maxCalls } : {}),
   });
   return { ask: record, transport };
 }
@@ -904,7 +1111,7 @@ export function listKeychainAsks(opts?: {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export type OwnerDecision = "once" | "standing" | "decline";
+export type OwnerDecision = "once" | "standing" | "run" | "decline";
 
 /**
  * The owner answers an ask from Settings. `by` must be an identity the caller
@@ -923,12 +1130,26 @@ export function answerKeychainAsk(
     return { error: "That request is no longer waiting for an answer" };
   if (!by || !sameOwner(record.owner, by))
     return { error: "Only the credential's owner can answer this request" };
+  // A scripted run is approved as a run or not at all, and only a run ask
+  // can be approved as one.
+  if (
+    (decision === "run") !== (record.requestedMode === "run") &&
+    decision !== "decline"
+  )
+    return {
+      error:
+        record.requestedMode === "run"
+          ? "This request is for a scripted run: approve the run or decline"
+          : "This request is not for a scripted run",
+    };
   const label =
     decision === "once"
       ? APPROVE_ONCE
       : decision === "standing"
         ? APPROVE_STANDING
-        : DECLINE;
+        : decision === "run"
+          ? APPROVE_RUN
+          : DECLINE;
   if (!resolveAskAsPerson(record.humanAskId, label, ownerName(by)))
     return { error: "That request is no longer waiting for an answer" };
   return { ok: true, status: keychainAsks.get(askId)?.status ?? "pending" };
@@ -971,6 +1192,18 @@ export function parseOwnerAnswer(
   requestedMode: GrantMode,
 ): { approve: true; mode: GrantMode } | { approve: false; note?: string } {
   const t = answer.trim().toLowerCase();
+  // A run ask approves its run or nothing; a once/standing ask can never
+  // turn into a scripted run, whatever the reply says.
+  if (requestedMode === "run") {
+    if (t === DECLINE.toLowerCase() || /^(no|deny|decline|reject)\b/.test(t))
+      return { approve: false };
+    if (
+      t === APPROVE_RUN.toLowerCase() ||
+      /^(approve|yes|ok|sure|go ahead)\b/.test(t)
+    )
+      return { approve: true, mode: "run" };
+    return { approve: false, note: answer.trim() };
+  }
   if (t === APPROVE_ONCE.toLowerCase()) return { approve: true, mode: "once" };
   if (t === APPROVE_STANDING.toLowerCase())
     return { approve: true, mode: "standing" };

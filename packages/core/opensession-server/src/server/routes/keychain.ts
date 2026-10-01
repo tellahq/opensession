@@ -1,9 +1,10 @@
 /**
  * Keychain routes: credential registration, the owner's answers to asks, and
  * inspection for humans (Settings → Account). All of them sit behind the
- * web sign-in gate. There is no HTTP broker: agents call a borrowed
- * credential through the call_credential tool (keychain-broker.ts), which
- * binds the call to the calling run's session.
+ * web sign-in gate, except the retired broker URL's explanation. There is no
+ * HTTP broker: agents call a borrowed credential through the call_credential
+ * tool (keychain-broker.ts), which binds the call to the calling run's
+ * session, or through a scripted run's own proxy (keychain-runs.ts).
  */
 
 import type { RouteContext } from "./context";
@@ -35,10 +36,38 @@ export function verifiedPerson(ctx: RouteContext): string {
   return requestUser(ctx);
 }
 
+/** The loopback broker URL grants used to be served at:
+ *  /api/keychain/broker/<grant>/<path>. */
+export function isRetiredKeychainBrokerPath(path: string): boolean {
+  return (
+    path === "/api/keychain/broker" || path.startsWith("/api/keychain/broker/")
+  );
+}
+
+/** What a caller of the retired broker URL is told. Open to every caller, so
+ *  a script that still uses one learns why instead of seeing a sign-in
+ *  error. It never touches a grant. */
+export function retiredKeychainBrokerResponse(): Response {
+  return Response.json(
+    {
+      error:
+        "The keychain broker URL was retired: a grant is no longer usable over HTTP. " +
+        "For a single API call, use the call_credential tool. For bulk work by a script, " +
+        "ask the owner for a scripted run (request_credential with `run`: the command and " +
+        "its call cap), then start it with run_with_credential; the script gets " +
+        "KEYCHAIN_PROXY_URL, which works only while it runs.",
+      retired: true,
+    },
+    { status: 410, headers: { "Cache-Control": "no-store" } },
+  );
+}
+
 export async function handleKeychainRoutes(
   ctx: RouteContext,
 ): Promise<Response | undefined> {
   const { req, path } = ctx;
+
+  if (isRetiredKeychainBrokerPath(path)) return retiredKeychainBrokerResponse();
 
   if (
     path === "/api/keychain/registrations" ||
@@ -71,10 +100,14 @@ export async function handleKeychainRoutes(
     if (
       decision !== "once" &&
       decision !== "standing" &&
+      decision !== "run" &&
       decision !== "decline"
     )
       return Response.json(
-        { error: 'expected { decision: "once" | "standing" | "decline" }' },
+        {
+          error:
+            'expected { decision: "once" | "standing" | "run" | "decline" }',
+        },
         { status: 400 },
       );
     await ensureKeychainLoaded();

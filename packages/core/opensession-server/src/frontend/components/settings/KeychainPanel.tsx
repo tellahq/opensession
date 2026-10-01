@@ -190,39 +190,63 @@ export function KeychainSection() {
               <SettingRow
                 key={a.id}
                 title={`${a.requestedBy} wants ${byId.get(a.credentialId)?.service ?? a.credentialId}`}
-                desc={`Asked for ${a.requestedMode === "once" ? "one call" : "7 days"} · ${a.purpose}`}
+                desc={
+                  a.run
+                    ? `Scripted run, up to ${a.run.maxCalls.toLocaleString()} calls · ${a.run.command} · ${a.purpose}`
+                    : `Asked for ${a.requestedMode === "once" ? "one call" : "7 days"} · ${a.purpose}`
+                }
                 controlClassName="flex flex-wrap justify-end gap-1"
                 control={
-                  <>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => answer(a.id, "decline")}
-                    >
-                      Decline
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => answer(a.id, "standing")}
-                    >
-                      Allow 7 days
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      onClick={() => answer(a.id, "once")}
-                    >
-                      Allow once
-                    </Button>
-                  </>
+                  a.run ? (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => answer(a.id, "decline")}
+                      >
+                        Decline
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => answer(a.id, "run")}
+                      >
+                        Allow run
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => answer(a.id, "decline")}
+                      >
+                        Decline
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => answer(a.id, "standing")}
+                      >
+                        Allow 7 days
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => answer(a.id, "once")}
+                      >
+                        Allow once
+                      </Button>
+                    </>
+                  )
                 }
               />
             ))}
           </SettingCard>
           <SettingsHint>
-            Allow once covers a single API call. Either way the session never
-            sees the secret, and you can revoke a grant below.
+            Allow once covers a single API call. Allow run covers one script, up
+            to its call cap, while it runs. The session never sees the secret,
+            and you can revoke a grant below.
           </SettingsHint>
         </>
       )}

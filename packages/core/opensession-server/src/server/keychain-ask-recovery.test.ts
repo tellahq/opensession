@@ -535,6 +535,97 @@ describe("the keychain routes", () => {
   });
 });
 
+describe("a scripted-run ask", () => {
+  const RUN = { command: "bun scripts/sync.ts", maxCalls: 40000 };
+
+  async function askForRun(client: Client) {
+    const call = client.callTool({
+      name: "request_credential",
+      arguments: {
+        credential: "acme-prod",
+        purpose: "page through every customer to backfill plans",
+        run: RUN,
+      },
+    });
+    for (let i = 0; i < 100 && !kc.listKeychainAsks().length; i++)
+      await Bun.sleep(5);
+    return { call, ask: pendingAsk() };
+  }
+
+  test("tells the owner it is a scripted run, with the command and volume", async () => {
+    const client = await connect();
+    const { call, ask } = await askForRun(client);
+    expect(ask.requestedMode).toBe("run");
+    await deliver(ask.humanAskId!);
+
+    const transport = humanAsks.getAsk(ask.humanAskId!)!;
+    expect(transport.options).toEqual(["Approve run", "Decline"]);
+    const dm = slackPosts.map((p) => p.text).join("\n");
+    expect(dm).toContain("scripted run");
+    expect(dm).toContain(RUN.command);
+    expect(dm).toContain("40,000");
+
+    // A once/standing answer from Settings cannot approve a run.
+    expect(kc.answerKeychainAsk(ask.id, "once", "Alex")).toHaveProperty(
+      "error",
+    );
+    expect(kc.answerKeychainAsk(ask.id, "run", "Alex")).toEqual({
+      ok: true,
+      status: "approved",
+    });
+    const grant = kc.listGrants({ sessionId: SESSION })[0]!;
+    expect(grant.mode).toBe("run");
+    expect(grant.run).toEqual(RUN);
+    const answer = textOf(await call);
+    expect(answer).toContain("run_with_credential");
+    expect(answer).toContain("KEYCHAIN_PROXY_URL");
+  });
+
+  test("an ordinary ask can never be approved as a run", async () => {
+    const client = await connect();
+    const call = client.callTool({
+      name: "request_credential",
+      arguments: { credential: "acme-prod", purpose: "read the invoices" },
+    });
+    for (let i = 0; i < 100 && !kc.listKeychainAsks().length; i++)
+      await Bun.sleep(5);
+    const ask = pendingAsk();
+    expect(kc.answerKeychainAsk(ask.id, "run", "Alex")).toHaveProperty("error");
+    expect(kc.parseOwnerAnswer("Approve run", "once")).toEqual({
+      approve: true,
+      mode: "once",
+    });
+    kc.answerKeychainAsk(ask.id, "decline", "Alex");
+    await call;
+    expect(kc.listGrants()).toHaveLength(0);
+  });
+
+  test("a run grant is not usable through call_credential", async () => {
+    const client = await connect();
+    const { call, ask } = await askForRun(client);
+    kc.answerKeychainAsk(ask.id, "run", "Alex");
+    await call;
+    const result = textOf(
+      await client.callTool({
+        name: "call_credential",
+        arguments: { credential: "acme-prod", method: "GET", path: "/v1/x" },
+      }),
+    );
+    expect(result).toContain("no live grant");
+  });
+});
+
+describe("the retired broker URL", () => {
+  test("explains the supported paths to any caller instead of asking for sign-in", async () => {
+    const res = await route("/api/keychain/broker/kg-123/v1/items", null);
+    expect(res.status).toBe(410);
+    const body = await res.json();
+    expect(body.error).toContain("retired");
+    expect(body.error).toContain("call_credential");
+    expect(body.error).toContain("run_with_credential");
+  });
+});
+
 describe("what each person sees of the keychain", () => {
   test("grant tokens only reach the owner and the requester", () => {
     const cred = kc.findCredential("acme-prod")!;

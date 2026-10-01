@@ -179,6 +179,11 @@ export interface KeychainCredentialDto {
   mine?: boolean;
 }
 
+export interface KeychainScriptedRunDto {
+  command: string;
+  maxCalls: number;
+}
+
 export interface KeychainGrantDto {
   id: string;
   credentialId: string;
@@ -186,8 +191,9 @@ export interface KeychainGrantDto {
   sessionId: string;
   requestedBy: string;
   purpose: string;
-  mode: "once" | "standing";
+  mode: "once" | "standing" | "run";
   status: "active" | "used" | "revoked" | "expired";
+  run?: KeychainScriptedRunDto;
   createdAt: string;
   expiresAt: string;
 }
@@ -199,7 +205,9 @@ export interface KeychainAskDto {
   sessionId: string;
   requestedBy: string;
   purpose: string;
-  requestedMode: "once" | "standing";
+  requestedMode: "once" | "standing" | "run";
+  /** A scripted run: the command the owner approves and its call cap. */
+  run?: KeychainScriptedRunDto;
   status: "pending" | "approved" | "declined" | "expired" | "cancelled";
   createdAt: string;
   /** Pending, and the signed-in person owns the credential. */
@@ -237,7 +245,7 @@ export async function deleteKeychainCredential(
 
 export async function answerKeychainAsk(
   id: string,
-  decision: "once" | "standing" | "decline",
+  decision: "once" | "standing" | "run" | "decline",
 ): Promise<{ ok: true }> {
   return request(`/keychain/asks/${encodeURIComponent(id)}/answer`, {
     method: "POST",

@@ -182,6 +182,7 @@ import { ensureSlackLinkIndex } from "./src/server/session-control-wiring"; // o
 import "./src/server/keychain"; // registers the keychain human-ask domain handler
 import { websocketHandlers } from "./src/server/ws-handlers";
 import { routeHandlers, type RouteContext } from "./src/server/routes";
+import { isRetiredKeychainBrokerPath } from "./src/server/routes/keychain";
 
 // Under the stable supervisor, PORT/HOST remain the public address while the
 // child binds the private backend override. Direct and dev launches keep the
@@ -576,9 +577,13 @@ const server: import("bun").Server<WSClientData> = hotServe({
         (path === "/api/runners/register" ||
           path === "/api/runners/heartbeat") &&
         req.method === "POST";
+      // The retired keychain broker URL answers anyone with why it is gone
+      // and what to use instead (routes/keychain.ts). It serves nothing.
+      const retiredKeychainBroker = isRetiredKeychainBrokerPath(path);
       if (
         !authUser &&
         !openHealth &&
+        !retiredKeychainBroker &&
         !keypadBearer &&
         !openOs1Update &&
         !openRunnerAuth &&

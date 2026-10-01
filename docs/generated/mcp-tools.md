@@ -47,7 +47,7 @@ touches an in-process tool:
 | [`opensession-search`](#opensession-search) | 2 | interactive | – |
 | [`opensession-self-deploy`](#opensession-self-deploy) | 2 | interactive | Withheld from dev instances (isDevInstance()) — the script targets the production service and state. |
 | [`opensession-humans`](#opensession-humans) | 3 | interactive, Slack loop, goal wake | Interactive runs need a session id (the answer routes back to it). |
-| [`opensession-keychain`](#opensession-keychain) | 8 | interactive | Needs a session id. |
+| [`opensession-keychain`](#opensession-keychain) | 11 | interactive | Needs a session id. |
 | [`opensession-publish`](#opensession-publish) | 4 | interactive | Needs a session id. |
 | [`opensession-repos`](#opensession-repos) | 6 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 9 | interactive | Needs a session id. |
@@ -74,7 +74,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-33 servers, 159 tools.
+33 servers, 162 tools.
 
 ## opensession-sessions
 
@@ -513,15 +513,33 @@ List the credentials teammates have registered in the keychain — service, owne
 
 ### `request_credential`
 
-`mcp__opensession-keychain__request_credential` · input: `credential` (string, required), `purpose` (string, required), `mode` ("once" | "standing")
+`mcp__opensession-keychain__request_credential` · input: `credential` (string, required), `purpose` (string, required), `mode` ("once" | "standing"), `run` (object)
 
-Ask a credential's owner to lend it to THIS session for a stated purpose. They get a DM (or a card, if they're driving a session) with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive broker instructions — a URL that injects the credential server-side; you never see the secret itself. Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. If they decline, don't re-ask. Calling again with the same purpose while your ask is pending reminds the owner and waits on that same ask; if they already approved it, you get the live grant back.
+Ask a credential's owner to lend it to THIS session for a stated purpose. They get a DM with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive instructions for call_credential, which injects the credential server-side; you never see the secret itself. Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. For bulk work by a script (hundreds or more calls), pass `run` instead: the owner approves that exact command and call cap, and you start it with run_with_credential. If they decline, don't re-ask. Calling again with the same purpose while your ask is pending reminds the owner and waits on that same ask; if they already approved it, you get the live grant back.
 
 ### `call_credential`
 
 `mcp__opensession-keychain__call_credential` · input: `credential` (string, required), `method` ("GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE", required), `path` (string, required), `headers` (object), `body` (string)
 
 Make one HTTPS API call with a credential this session holds a live grant for (see request_credential and list_grants). The credential is injected server-side; you never see it. The call goes to the credential's own host, within its method and path limits, and does not follow redirects. A once grant is spent by this call even if it fails. Returns the status, a few response headers and the text body (secret scrubbed, long bodies truncated, binary omitted), or only the status for a status-only credential. Stay within the purpose the owner approved; every call is audited.
+
+### `run_with_credential`
+
+`mcp__opensession-keychain__run_with_credential` · input: `credential` (string, required), `command` (string, required), `cwd` (string), `timeoutMinutes` (number)
+
+Start a scripted run the credential's owner approved (request_credential with `run`): one process running exactly the approved command, on this server, in the session's workspace. The process gets KEYCHAIN_PROXY_URL, a base URL standing in for https://<credential host>: a request to $KEYCHAIN_PROXY_URL/v1/items goes to https://<host>/v1/items with the credential injected. The URL works only for this run and stops working when the process exits, times out or is stopped. Calls are held to the credential's method/path limits and the approved cap, and every call is audited. The script gets a minimal environment (PATH, HOME, LANG, TMPDIR), so pass anything else on the command line, and never a secret. Returns at once with a run id; poll credential_run_status. A Sandbox or Runner session cannot start one.
+
+### `credential_run_status`
+
+`mcp__opensession-keychain__credential_run_status` · input: `runId` (string)
+
+Check a scripted run started with run_with_credential: running/exited/timed_out/stopped/revoked/failed, exit code, calls made, calls refused, the cap, and the last few KB of its output (the full log is at logPath). Without a run id, lists this session's runs.
+
+### `stop_credential_run`
+
+`mcp__opensession-keychain__stop_credential_run` · input: `runId` (string, required)
+
+Stop a running scripted run: its proxy URL stops working at once and its process group is sent SIGTERM (SIGKILL after 10 seconds).
 
 ### `cancel_credential_ask`
 

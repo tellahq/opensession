@@ -182,6 +182,31 @@ and body verbatim and in common encodings (URL, JSON, base64), which is best
 effort. A credential registered as status-only returns only the HTTP status,
 for APIs that might echo the secret in a form scrubbing cannot catch.
 
+A loopback URL that any local process could reuse is exactly what the broker
+route was, so bulk work by a script has its own path instead. The agent asks
+for a scripted run (`request_credential` with `run`): the owner's message says
+it is a scripted run and shows the exact command and the call cap, and offers
+only Approve run or Decline. An ordinary once or standing grant cannot start
+a run, and a run grant cannot be used through `call_credential`.
+`run_with_credential` starts that command, character for character, as one
+process on the server, in the session's workspace, with a minimal environment
+and `KEYCHAIN_PROXY_URL`. That URL points at a proxy opened for this run only,
+on a loopback port, with a 32-byte random secret in its path that is compared
+in constant time. Every proxied call is checked against the grant and the
+credential's method and path ceiling, counted against the cap, and audited
+(`keychain_run_call`, `keychain_run_denied`, `keychain_run_ended`). The
+injected header, cookies and routing headers cannot be set by the script,
+redirects are not followed, and the secret is scrubbed from response headers
+and text bodies. The proxy closes when the process exits, times out (12 hours
+at most), is stopped, or its grant is revoked; a request after that, or with
+another run's secret, is refused. A grant starts one run. Sessions in a
+Sandbox or on a Runner cannot start one, because the proxy listens on the
+server. While a run is live, another process of the same Unix user could read
+its environment; the exposure is limited to that run's lifetime and cap.
+
+The old broker URL (`/api/keychain/broker/...`) answers every caller with
+410 and names these two paths, rather than a sign-in error.
+
 The store is a 0600 file owned by the service user. Agent shells run as the
 same Unix user today, so the file does not protect secrets from a local agent
 that reads it directly. This is a known gap.

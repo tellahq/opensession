@@ -192,7 +192,7 @@ export async function brokerCall(
   };
 }
 
-async function readCapped(
+export async function readCapped(
   res: Response,
   max: number,
 ): Promise<{ bytes: Uint8Array; cut: boolean }> {
