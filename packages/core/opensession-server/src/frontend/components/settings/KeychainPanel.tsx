@@ -110,7 +110,16 @@ export function KeychainSection() {
   const byId = new Map(data.credentials.map((c) => [c.id, c]));
   const activeGrants = data.grants.filter((g) => g.status === "active");
   const pending = data.asks.filter((a) => a.status === "pending");
-  const toAnswer = pending.filter((a) => a.canAnswer);
+  const serviceOf = (id: string) => byId.get(id)?.service ?? id;
+  // One owner's credentials in a multi-credential run are one answer.
+  const sameRun = (a: KeychainAskDto) =>
+    pending.filter(
+      (o) =>
+        o.canAnswer && !!a.run?.group && o.run?.group?.id === a.run.group.id,
+    );
+  const toAnswer = pending.filter(
+    (a) => a.canAnswer && (!a.run?.group || sameRun(a)[0] === a),
+  );
   const waiting = pending.filter((a) => !a.canAnswer);
   const answer = (
     id: string,
@@ -222,13 +231,28 @@ export function KeychainSection() {
             {toAnswer.map((a) => (
               <SettingRow
                 key={a.id}
-                title={`${a.requestedBy} wants ${byId.get(a.credentialId)?.service ?? a.credentialId}`}
+                title={`${a.requestedBy} wants ${
+                  a.run?.group
+                    ? sameRun(a)
+                        .map((o) => serviceOf(o.credentialId))
+                        .join(" and ")
+                    : serviceOf(a.credentialId)
+                }`}
                 desc={
                   a.requestedMode === "release"
                     ? `Wants the password, which the agent will see · ${a.purpose}`
-                    : a.run
-                      ? `Scripted run, up to ${a.run.maxCalls.toLocaleString()} calls · ${a.run.command} · ${a.purpose}`
-                      : `Asked for ${a.requestedMode === "once" ? "one call" : "7 days"} · ${a.purpose}`
+                    : a.run?.group
+                      ? `Scripted run with ${a.run.group.members
+                          .map(
+                            (m) =>
+                              `${m.service} (owner ${m.owner}, up to ${m.maxCalls.toLocaleString()} calls)`,
+                          )
+                          .join(
+                            ", ",
+                          )}; starts once every owner allows it · ${a.run.command} · ${a.purpose}`
+                      : a.run
+                        ? `Scripted run, up to ${a.run.maxCalls.toLocaleString()} calls · ${a.run.command} · ${a.purpose}`
+                        : `Asked for ${a.requestedMode === "once" ? "one call" : "7 days"} · ${a.purpose}`
                 }
                 controlClassName="flex flex-wrap justify-end gap-1"
                 control={

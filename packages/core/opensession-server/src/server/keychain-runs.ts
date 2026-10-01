@@ -4,25 +4,36 @@
  *
  * call_credential makes one call per tool call, which does not scale to a
  * script that pages through tens of thousands of records. A scripted run
- * starts ONE process and gives it KEYCHAIN_PROXY_URL, a loopback base URL
- * that only this run answers:
+ * starts ONE process and gives it a loopback base URL per credential that
+ * only this run answers:
  *
  *   http://127.0.0.1:<port>/<secret>/<path on the credential's host>
  *
- * - The owner approved this run explicitly: the exact command and a call cap
- *   (request_credential with `run`, mode "run" in keychain.ts). An ordinary
- *   once or standing grant cannot start a run.
- * - The port is opened for this run and closed when its process exits, times
- *   out, is stopped, or the grant is revoked. The secret is 32 random bytes,
- *   lives only in the child's environment, and is compared in constant time.
- *   A request after the run ends, or with another run's secret, is refused.
- * - Every call is checked against the grant and the credential's method and
- *   path ceiling, counted against the cap, and audited. Redirects are not
- *   followed, the injected header cannot be overridden, and the secret is
- *   scrubbed from response headers and text bodies.
+ * A run with one credential gets it as KEYCHAIN_PROXY_URL (and under the
+ * per-credential name); a run with several gets one KEYCHAIN_PROXY_URL_<SLUG>
+ * each (proxyEnvName in keychain.ts).
  *
- * The run lives in this server process. A restart ends it: the proxy goes
- * with the process and keychain.ts settles the claimed grant on load.
+ * - The owners approved this run explicitly: the exact command and a call
+ *   cap per credential (request_credential with `run`, mode "run" in
+ *   keychain.ts). A run with several credentials starts only once every
+ *   credential's owner approved. An ordinary once or standing grant cannot
+ *   start a run.
+ * - Each credential has its own port and its own 32 random byte secret, and
+ *   forwards only to its own credential's host: one credential's URL can
+ *   never reach another's host. Secrets live only in the child's
+ *   environment and are compared in constant time. All of a run's ports
+ *   close together when its process exits, times out, is stopped, or any of
+ *   its grants is revoked. A request after that, or with another secret, is
+ *   refused.
+ * - Every call is checked against its credential's grant and method and path
+ *   ceiling, counted against that credential's cap, and audited. Redirects
+ *   are not followed, the injected header cannot be overridden, and the
+ *   secret is scrubbed from response headers and text bodies.
+ *
+ * The run lives in this server process. A restart ends it: the proxies go
+ * with the process and keychain.ts settles the claimed grants on load,
+ * marked interrupted with the call counts last saved, so asking again tells
+ * the owners it resumes a run a restart cut off.
  *
  * Stated limitation: agent shells run as the same Unix user, so another local
  * process could read the child's environment while it runs. The exposure is
@@ -38,11 +49,13 @@ import { auditAsync } from "./audit";
 import { BROKER_METHODS, readCapped } from "./keychain-broker";
 import {
   brokerHeaders,
-  claimRunGrant,
+  claimRunGrants,
   ensureKeychainLoaded,
   onGrantRevoked,
+  proxyEnvName,
+  saveRunProgress,
   scrubSecret,
-  settleRunGrant,
+  settleRunGrants,
   useRunGrant,
 } from "./keychain";
 
@@ -54,6 +67,7 @@ const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
 const KILL_GRACE_MS = 10_000;
 const LOG_TAIL_BYTES = 4096;
 const FINISHED_RETENTION_MS = 24 * 60 * 60 * 1000;
+const PROGRESS_SAVE_MS = 60_000;
 
 /** Request headers a script may not set: the credential, cookies, routing
  *  and framing are the proxy's. The credential's own header is added to this
@@ -93,12 +107,26 @@ export type RunState =
   | "revoked"
   | "failed";
 
+/** One credential of a run: its proxy's variable, and its own counts. */
+export interface CredentialRunLeg {
+  service: string;
+  host: string;
+  grantId: string;
+  /** The environment variable the script reads this proxy's URL from. */
+  env: string;
+  calls: number;
+  denied: number;
+  maxCalls: number;
+}
+
 export interface CredentialRunSummary {
   id: string;
   sessionId: string;
-  grantId: string;
-  service: string;
-  host: string;
+  /** The credential of a single-credential run; see `credentials` for each
+   *  credential of any run. */
+  grantId?: string;
+  service?: string;
+  host?: string;
   command: string;
   cwd: string;
   logPath: string;
@@ -108,18 +136,36 @@ export interface CredentialRunSummary {
   endedAt?: string;
   exitCode?: number | null;
   signal?: string | null;
+  /** Totals over every credential of the run. */
   calls: number;
   denied: number;
   maxCalls: number;
+  credentials: CredentialRunLeg[];
 }
 
-interface Run extends CredentialRunSummary {
+interface Leg extends CredentialRunLeg {
   secret: Buffer;
   proxyUrl: string;
   server?: ReturnType<typeof Bun.serve>;
+}
+
+interface Run {
+  id: string;
+  sessionId: string;
+  command: string;
+  cwd: string;
+  logPath: string;
+  state: RunState;
+  startedAt: string;
+  deadline: string;
+  endedAt?: string;
+  exitCode?: number | null;
+  signal?: string | null;
+  legs: Leg[];
   child?: ChildProcess;
   log?: FileHandle;
   timer?: ReturnType<typeof setTimeout>;
+  progress?: ReturnType<typeof setInterval>;
   /** Set when finish() starts, since it awaits before setting endedAt. */
   finishing?: boolean;
   deps: Required<RunDeps>;
@@ -130,6 +176,8 @@ export interface RunDeps {
   fetchImpl?: typeof fetch;
   /** Audit sink. Test seam; the real one is a no-op under test. */
   audit?: (event: Record<string, unknown>) => void;
+  /** How often call counts are saved while the run is live. Test seam. */
+  progressEveryMs?: number;
 }
 
 const g = globalThis as any;
@@ -141,20 +189,22 @@ function watchRevocations(): void {
   g.__keychainRunsWatching = true;
   onGrantRevoked((grantId) => {
     for (const run of runs.values())
-      if (run.grantId === grantId) end(run, "revoked");
+      if (run.legs.some((leg) => leg.grantId === grantId)) end(run, "revoked");
   });
 }
 
 export interface StartRunInput {
   sessionId: string;
-  credential: string;
+  /** One credential, or several in `credentials`. */
+  credential?: string;
+  credentials?: string[];
   command: string;
   /** Existing directory the command runs in. */
   cwd: string;
   /** Where the combined stdout/stderr log goes. */
   logDir: string;
   timeoutMinutes?: number;
-  /** Environment for the child, before KEYCHAIN_PROXY_URL is added. */
+  /** Environment for the child, before the proxy URLs are added. */
   env: Record<string, string>;
   deps?: RunDeps;
 }
@@ -174,59 +224,69 @@ export async function startCredentialRun(
   if (!dir?.isDirectory())
     return { error: `cwd ${input.cwd} is not a directory` };
 
+  const refs =
+    input.credentials ?? (input.credential ? [input.credential] : []);
+  if (!refs.length || (input.credential && input.credentials))
+    return { error: "name the credential, or the credentials, of the run" };
+
   const id = `kr-${crypto.randomUUID()}`;
   const deadline = Date.now() + minutes * 60_000;
-  const claim = await claimRunGrant({
+  const claim = await claimRunGrants({
     sessionId: input.sessionId,
-    credential: input.credential,
+    credentials: refs,
     command: input.command,
     runId: id,
     deadline,
   });
   if ("error" in claim) return claim;
-  const { grant, credential } = claim;
 
   const run: Run = {
     id,
     sessionId: input.sessionId,
-    grantId: grant.id,
-    service: credential.service,
-    host: credential.host,
     command: input.command,
     cwd: input.cwd,
     logPath: join(input.logDir, `${id}.log`),
     state: "running",
     startedAt: new Date().toISOString(),
     deadline: new Date(deadline).toISOString(),
-    calls: 0,
-    denied: 0,
-    maxCalls: grant.run?.maxCalls ?? 0,
-    secret: randomBytes(32),
-    proxyUrl: "",
+    legs: claim.claims.map(({ grant, credential }) => ({
+      service: credential.service,
+      host: credential.host,
+      grantId: grant.id,
+      env: proxyEnvName(credential.service),
+      calls: 0,
+      denied: 0,
+      maxCalls: grant.run?.maxCalls ?? 0,
+      secret: randomBytes(32),
+      proxyUrl: "",
+    })),
     deps: {
       fetchImpl: input.deps?.fetchImpl ?? fetch,
       // Every proxied call is audited; never block the thread on it.
       audit: input.deps?.audit ?? auditAsync,
+      progressEveryMs: input.deps?.progressEveryMs ?? PROGRESS_SAVE_MS,
     },
   };
   runs.set(id, run);
   // The claim awaited its write; a revocation in that window found no run
   // to end. Then the approved command must not start at all.
-  if (grant.status !== "active") {
+  if (claim.claims.some(({ grant }) => grant.status !== "active")) {
     await finish(run, "revoked");
     return { error: "the run was revoked before it started" };
   }
 
   try {
-    run.server = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch: (req) => proxy(run, req),
-    });
-    run.proxyUrl = `http://127.0.0.1:${run.server.port}/${run.secret.toString("base64url")}`;
+    for (const leg of run.legs) {
+      leg.server = Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        fetch: (req) => proxy(run, leg, req),
+      });
+      leg.proxyUrl = `http://127.0.0.1:${leg.server.port}/${leg.secret.toString("base64url")}`;
+    }
     await mkdir(input.logDir, { recursive: true });
     run.log = await open(run.logPath, "a", 0o600);
-    // The grant may have been revoked, or the run stopped, while this
+    // A grant may have been revoked, or the run stopped, while this
     // awaited. Then the approved command must not start at all.
     if (run.state !== "running") {
       const state = run.state;
@@ -234,10 +294,9 @@ export async function startCredentialRun(
       return { error: `the run was ${state} before it started` };
     }
     // Only what the caller passed: never the server's own environment.
-    const env: Record<string, string> = {
-      ...input.env,
-      KEYCHAIN_PROXY_URL: run.proxyUrl,
-    };
+    const env: Record<string, string> = { ...input.env };
+    for (const leg of run.legs) env[leg.env] = leg.proxyUrl;
+    if (run.legs.length === 1) env.KEYCHAIN_PROXY_URL = run.legs[0]!.proxyUrl;
     const child = spawn(Bun.which("bash") ?? "/bin/sh", ["-c", input.command], {
       cwd: input.cwd,
       env: env as unknown as NodeJS.ProcessEnv,
@@ -256,6 +315,14 @@ export async function startCredentialRun(
       void finish(run, "failed");
     });
     run.timer = setTimeout(() => end(run, "timed_out"), deadline - Date.now());
+    run.progress = setInterval(
+      () =>
+        void saveRunProgress(run.id, legCalls(run)).catch((error) =>
+          console.error("[keychain] failed to save a run's progress:", error),
+        ),
+      run.deps.progressEveryMs,
+    );
+    run.progress.unref?.();
   } catch (error) {
     await finish(run, "failed");
     return {
@@ -263,6 +330,10 @@ export async function startCredentialRun(
     };
   }
   return { run: summary(run) };
+}
+
+function legCalls(run: Run): Array<{ grantId: string; calls: number }> {
+  return run.legs.map((leg) => ({ grantId: leg.grantId, calls: leg.calls }));
 }
 
 /** A run of this session, with the tail of its output. */
@@ -310,20 +381,36 @@ export async function waitForCredentialRun(
 
 function summary(run: Run): CredentialRunSummary {
   const {
-    secret: _secret,
-    proxyUrl: _proxyUrl,
-    server: _server,
+    legs,
     child: _child,
     log: _log,
     timer: _timer,
+    progress: _progress,
     finishing: _finishing,
     deps: _deps,
     ...rest
   } = run;
-  return { ...rest };
+  const credentials = legs.map(
+    ({ secret: _secret, proxyUrl: _proxyUrl, server: _server, ...leg }) => ({
+      ...leg,
+    }),
+  );
+  const only = credentials.length === 1 ? credentials[0]! : undefined;
+  const total = (key: "calls" | "denied" | "maxCalls") =>
+    credentials.reduce((sum, leg) => sum + leg[key], 0);
+  return {
+    ...rest,
+    ...(only
+      ? { grantId: only.grantId, service: only.service, host: only.host }
+      : {}),
+    calls: total("calls"),
+    denied: total("denied"),
+    maxCalls: total("maxCalls"),
+    credentials,
+  };
 }
 
-/** Close the proxy now and signal the process group; finish() runs on exit. */
+/** Close the proxies now and signal the process group; finish() runs on exit. */
 function end(run: Run, state: Exclude<RunState, "running" | "exited">): void {
   if (run.state !== "running") return;
   run.state = state;
@@ -338,22 +425,34 @@ async function finish(run: Run, state: RunState): Promise<void> {
   run.finishing = true;
   run.state = state;
   if (run.timer) clearTimeout(run.timer);
+  if (run.progress) clearInterval(run.progress);
   closeProxy(run);
   // The script is done. Anything it left running in the background has lost
-  // the proxy with it, and is told to stop.
+  // the proxies with it, and is told to stop.
   signalGroup(run, "SIGTERM");
-  await settleRunGrant(run.grantId, run.id).catch((error) =>
-    console.error("[keychain] failed to settle a run's grant:", error),
+  await settleRunGrants(run.id, legCalls(run)).catch((error) =>
+    console.error("[keychain] failed to settle a run's grants:", error),
   );
+  const totals = summary(run);
   run.deps.audit({
     kind: "keychain_run_ended",
     run_id: run.id,
-    grant_id: run.grantId,
+    ...(totals.grantId ? { grant_id: totals.grantId } : {}),
     session_id: run.sessionId,
     state,
     exit_code: run.exitCode ?? null,
-    calls: run.calls,
-    denied: run.denied,
+    calls: totals.calls,
+    denied: totals.denied,
+    ...(run.legs.length > 1
+      ? {
+          credentials: run.legs.map((leg) => ({
+            service: leg.service,
+            grant_id: leg.grantId,
+            calls: leg.calls,
+            denied: leg.denied,
+          })),
+        }
+      : {}),
   });
   await run.log?.close().catch(() => {});
   run.log = undefined;
@@ -361,8 +460,10 @@ async function finish(run: Run, state: RunState): Promise<void> {
 }
 
 function closeProxy(run: Run): void {
-  run.server?.stop(true);
-  run.server = undefined;
+  for (const leg of run.legs) {
+    leg.server?.stop(true);
+    leg.server = undefined;
+  }
 }
 
 function signalGroup(run: Run, signal: NodeJS.Signals): void {
@@ -386,62 +487,71 @@ function refuse(status: number, error: string): Response {
   return Response.json({ error }, { status });
 }
 
-/** The rest of the path after the run's secret, or null when the first
- *  segment is not the secret. Compared in constant time. */
-function authorizedPath(run: Run, pathname: string): string | null {
+/** The rest of the path after this credential's secret, or null when the
+ *  first segment is not the secret. Compared in constant time. */
+function authorizedPath(leg: Leg, pathname: string): string | null {
   const slash = pathname.indexOf("/", 1);
   const segment = pathname.slice(1, slash === -1 ? undefined : slash);
   const presented = Buffer.from(segment, "base64url");
   if (
-    presented.length !== run.secret.length ||
+    presented.length !== leg.secret.length ||
     presented.toString("base64url") !== segment ||
-    !timingSafeEqual(presented, run.secret)
+    !timingSafeEqual(presented, leg.secret)
   )
     return null;
   return slash === -1 ? "/" : pathname.slice(slash);
 }
 
-async function proxy(run: Run, req: Request): Promise<Response> {
+async function proxy(run: Run, leg: Leg, req: Request): Promise<Response> {
   const url = new URL(req.url);
-  const rest = authorizedPath(run, url.pathname);
+  const rest = authorizedPath(leg, url.pathname);
   if (rest === null) return refuse(404, "not found");
   if (run.state !== "running") return refuse(410, `this run ${run.state}`);
 
   const method = req.method.toUpperCase();
   if (!(BROKER_METHODS as readonly string[]).includes(method))
-    return deny(run, method, rest, 405, `method ${method} is not supported`);
-  let target: URL;
-  try {
-    target = new URL(`https://${run.host}${rest}${url.search}`);
-  } catch {
-    return deny(run, method, rest, 400, "not a valid path");
-  }
-  if (target.hostname !== run.host || target.port || target.username)
     return deny(
       run,
+      leg,
+      method,
+      rest,
+      405,
+      `method ${method} is not supported`,
+    );
+  let target: URL;
+  try {
+    target = new URL(`https://${leg.host}${rest}${url.search}`);
+  } catch {
+    return deny(run, leg, method, rest, 400, "not a valid path");
+  }
+  if (target.hostname !== leg.host || target.port || target.username)
+    return deny(
+      run,
+      leg,
       method,
       rest,
       400,
-      `path must stay on https://${run.host}`,
+      `path must stay on https://${leg.host}`,
     );
 
-  const use = useRunGrant(run.grantId, run.id, method, target.pathname);
+  const use = useRunGrant(leg.grantId, run.id, method, target.pathname);
   if ("error" in use) {
     // A grant that is no longer active ends the run, after this response
     // has gone out.
     if (/grant is|no longer exists/.test(use.error))
       setTimeout(() => end(run, "revoked"), 0);
-    return deny(run, method, target.pathname, use.status, use.error);
+    return deny(run, leg, method, target.pathname, use.status, use.error);
   }
-  if (run.calls >= run.maxCalls)
+  if (leg.calls >= leg.maxCalls)
     return deny(
       run,
+      leg,
       method,
       target.pathname,
       429,
-      `this run reached its approved cap of ${run.maxCalls} calls`,
+      `this run reached its approved cap of ${leg.maxCalls} calls with ${leg.service}`,
     );
-  run.calls++;
+  leg.calls++;
   const { credential } = use;
 
   const injected = brokerHeaders(credential);
@@ -463,6 +573,7 @@ async function proxy(run: Run, req: Request): Promise<Response> {
     if (!body || body.byteLength > MAX_REQUEST_BYTES)
       return upstreamError(
         run,
+        leg,
         method,
         target,
         413,
@@ -485,13 +596,14 @@ async function proxy(run: Run, req: Request): Promise<Response> {
     const reason = e?.name === "TimeoutError" ? "timed out" : "failed";
     return upstreamError(
       run,
+      leg,
       method,
       target,
       502,
-      `the request to ${run.host} ${reason}`,
+      `the request to ${leg.host} ${reason}`,
     );
   }
-  auditCall(run, method, target.pathname, res.status);
+  auditCall(run, leg, method, target.pathname, res.status);
 
   if (credential.statusOnly) {
     await res.body?.cancel().catch(() => {});
@@ -507,7 +619,7 @@ async function proxy(run: Run, req: Request): Promise<Response> {
   if (cut)
     return refuse(
       502,
-      `the response from ${run.host} is larger than ${MAX_RESPONSE_BYTES} bytes`,
+      `the response from ${leg.host} is larger than ${MAX_RESPONSE_BYTES} bytes`,
     );
   const contentType = res.headers.get("content-type") || "";
   const textual =
@@ -523,15 +635,21 @@ async function proxy(run: Run, req: Request): Promise<Response> {
   );
 }
 
-function auditCall(run: Run, method: string, path: string, status: number) {
+function auditCall(
+  run: Run,
+  leg: Leg,
+  method: string,
+  path: string,
+  status: number,
+) {
   run.deps.audit({
     kind: "keychain_run_call",
     run_id: run.id,
-    grant_id: run.grantId,
+    grant_id: leg.grantId,
     session_id: run.sessionId,
-    service: run.service,
+    service: leg.service,
     method,
-    host: run.host,
+    host: leg.host,
     path,
     status,
   });
@@ -539,28 +657,31 @@ function auditCall(run: Run, method: string, path: string, status: number) {
 
 function upstreamError(
   run: Run,
+  leg: Leg,
   method: string,
   target: URL,
   status: number,
   error: string,
 ): Response {
-  auditCall(run, method, target.pathname, status);
+  auditCall(run, leg, method, target.pathname, status);
   return refuse(status, error);
 }
 
 function deny(
   run: Run,
+  leg: Leg,
   method: string,
   path: string,
   status: number,
   reason: string,
 ): Response {
-  run.denied++;
+  leg.denied++;
   run.deps.audit({
     kind: "keychain_run_denied",
     run_id: run.id,
-    grant_id: run.grantId,
+    grant_id: leg.grantId,
     session_id: run.sessionId,
+    service: leg.service,
     method,
     path,
     reason,

@@ -204,6 +204,27 @@ Sandbox or on a Runner cannot start one, because the proxy listens on the
 server. While a run is live, another process of the same Unix user could read
 its environment; the exposure is limited to that run's lifetime and cap.
 
+One run may use several credentials (`request_credential` with `credentials`
+and `run`), for a script that needs more than one API in the same process.
+Each credential's owner gets one message listing every credential in the
+run, its owner and its cap, and the command; an owner of several approves
+them together. The asks and grants share a group id, and
+`run_with_credential` starts the run only when a live grant from that one
+request exists for every credential: a missing approval, or approvals from
+two different requests, start nothing. A decline withdraws the other
+owners' asks. The script gets one URL per credential,
+`KEYCHAIN_PROXY_URL_<SLUG>`, each on its own port with its own secret and
+forwarding only to its own credential's host, so one credential's URL can
+never reach another's host. Method and path limits, caps and audit entries
+are per credential. All of a run's URLs close together, and revoking any of
+its grants ends the whole run.
+
+A server restart ends every run. The claimed grants are then marked
+interrupted, with the call counts the run last saved (once a minute while
+it runs). They cannot be reused; asking again for the same command tells
+each owner that a restart cut the earlier run off and roughly how many calls
+it had made, and approving starts the command again from its beginning.
+
 The old broker URL (`/api/keychain/broker/...`) answers every caller with
 410 and names these two paths, rather than a sign-in error.
 
