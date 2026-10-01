@@ -55,6 +55,7 @@ import {
 } from "fs";
 import { dirname, join } from "path";
 import { configuredPaths, configuredRepos, type Repo } from "./config";
+import { remoteRef } from "./git-remote-ref";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 
@@ -407,7 +408,7 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
         await $`git -C ${repo.repo} worktree prune`.quiet().nothrow();
         if (existsSync(dir)) return;
         await $`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`.nothrow();
-        await $`git -C ${repo.repo} worktree add --detach ${dir} origin/${repo.defaultBranch}`;
+        await $`git -C ${repo.repo} worktree add --detach ${dir} ${remoteRef(repo.defaultBranch)}`;
       });
     }
 
@@ -415,7 +416,7 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
     //    refresh was good.
     await $`git -C ${dir} fetch origin ${repo.defaultBranch} --quiet`.nothrow();
     const sha = (
-      await $`git -C ${dir} rev-parse --short origin/${repo.defaultBranch}`
+      await $`git -C ${dir} rev-parse --short ${remoteRef(repo.defaultBranch)}`
         .nothrow()
         .text()
     ).trim();
@@ -462,7 +463,7 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
     //    rebuild below is incremental. This is our dedicated detached
     //    worktree; the shared-checkout no-reset rule doesn't apply here.
     await step("reset", 2 * 60_000, () =>
-      $`git -C ${dir} reset --hard origin/${repo.defaultBranch}`
+      $`git -C ${dir} reset --hard ${remoteRef(repo.defaultBranch)}`
         .quiet()
         .then(() => {}),
     );
