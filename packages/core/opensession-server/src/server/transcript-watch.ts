@@ -64,7 +64,8 @@ export interface TranscriptWatchHandle {
   changeSeq(): number;
 }
 
-const RESUME_LIMIT = 199;
+export const TRANSCRIPT_RESUME_MAX_ENTRIES = 199;
+export const TRANSCRIPT_RESUME_MAX_BYTES = 1024 * 1024;
 
 // The opening window. SNAPSHOT_TAIL_ENTRIES is the floor it has always had;
 // the rest let it reach further back when those entries hold no conversation.
@@ -176,7 +177,7 @@ export async function startTranscriptWatch(
           const page = await store.readChangesSince(
             sessionId,
             cursor,
-            RESUME_LIMIT,
+            TRANSCRIPT_RESUME_MAX_ENTRIES,
           );
           if (!page.entries.length) break;
           cursor = Math.max(
@@ -204,7 +205,7 @@ export async function startTranscriptWatch(
               : undefined;
           send(formatAppend(append, matchingEvent));
           wakeEvent = undefined;
-          if (page.entries.length < RESUME_LIMIT) break;
+          if (page.entries.length < TRANSCRIPT_RESUME_MAX_ENTRIES) break;
         }
       } while (pending && !closed);
     } finally {
@@ -238,24 +239,33 @@ export async function startTranscriptWatch(
         const changes = await store.readChangesSince(
           sessionId,
           requested,
-          RESUME_LIMIT + 1,
+          TRANSCRIPT_RESUME_MAX_ENTRIES + 1,
         );
-        if (changes.entries.length <= RESUME_LIMIT) {
+        const prepared = prepareEntries(changes.entries);
+        const append = {
+          type: "transcript_append",
+          sessionId,
+          entries: prepared,
+          firstSeq: changes.firstSeq,
+          lastSeq: changes.lastSeq,
+          lastChangeSeq: Math.max(
+            requested,
+            ...changes.entries.map((entry) => entry.changeSeq),
+          ),
+          v2: true,
+        };
+        if (
+          changes.entries.length <= TRANSCRIPT_RESUME_MAX_ENTRIES &&
+          Buffer.byteLength(JSON.stringify(append)) <=
+            TRANSCRIPT_RESUME_MAX_BYTES
+        ) {
           cursor = requested;
           if (changes.entries.length) {
             cursor = Math.max(
               cursor,
               ...changes.entries.map((entry) => entry.changeSeq),
             );
-            send({
-              type: "transcript_append",
-              sessionId,
-              entries: prepareEntries(changes.entries),
-              firstSeq: changes.firstSeq,
-              lastSeq: changes.lastSeq,
-              lastChangeSeq: cursor,
-              v2: true,
-            });
+            send(append);
           }
           resumed = true;
         }

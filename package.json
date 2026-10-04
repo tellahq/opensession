@@ -22,7 +22,7 @@
   "scripts": {
     "app:dev": "bun scripts/app-dev.ts",
     "bench:memory": "bun scripts/memory-bench.ts",
-    "check": "bun run format:check && bun run typecheck && bun run lint && scripts/test-unit-isolated.sh && bun run test:snapshots",
+    "check": "bun run format:check && bun run typecheck && bun run lint && scripts/test-unit-isolated.sh && bun run test:wire-budgets && bun run test:snapshots",
     "dev": "bun --hot packages/core/opensession-server/opensession.ts",
     "format": "oxfmt",
     "format:check": "bun scripts/check-format.ts",
@@ -30,6 +30,7 @@
     "setup": "bun scripts/cli.ts onboard",
     "start": "bun packages/core/opensession-server/opensession.ts",
     "test": "bun test packages/core/opensession-server/src scripts",
+    "test:wire-budgets": "bun scripts/test-isolated.ts ./packages/core/opensession-server/src/server/wire-budgets.test.ts",
     "test:snapshots": "bun scripts/test-isolated.ts --snapshots ./packages/core/opensession-server/src/server/zz-snapshot-runs.test.ts",
     "test:transcript-scroll": "bun packages/core/opensession-server/src/frontend/tools/transcript-scroll-regression.ts",
     "lint": "bun run check:compiler && oxlint packages/core/opensession-server/src/frontend",

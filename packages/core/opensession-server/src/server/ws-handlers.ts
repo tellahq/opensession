@@ -123,7 +123,11 @@ import { resumeSessionFeed } from "./session-feed";
 import type { SeqEntry } from "./transcript-store";
 import { importLegacyTranscript, transcript } from "./actor-transcript";
 import { startTranscriptWatch } from "./transcript-watch";
-import { clampV2InitEntries } from "./transcript-wire";
+import {
+  clampV2InitEntries,
+  transcriptHistoryFrame,
+  transcriptHistoryLimit,
+} from "./transcript-wire";
 import {
   MAX_UPLOAD_BYTES,
   WS_MAX_PAYLOAD_BYTES,
@@ -1222,19 +1226,15 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               const page = await transcript.readBefore(
                 msg.sessionId,
                 Math.floor(msg.beforeSeq),
-                Math.min(Math.max(1, Math.floor(msg.limit ?? 40)), 200),
+                transcriptHistoryLimit(msg.limit),
               );
-              sendTranscriptFrame(ws, {
-                type: "transcript_history",
-                sessionId: msg.sessionId,
-                // Backlog pages take the same init clamp as legacy history
-                // pages (see clampV2InitEntries).
-                entries: clampV2InitEntries(classifyV2Entries(page.entries)),
-                firstSeq: page.firstSeq,
-                lastSeq: page.lastSeq,
-                truncated: page.firstSeq > 1,
-                v2: true,
-              });
+              sendTranscriptFrame(
+                ws,
+                transcriptHistoryFrame(msg.sessionId, {
+                  ...page,
+                  entries: classifyV2Entries(page.entries),
+                }),
+              );
               break;
             } catch (e) {
               console.warn(

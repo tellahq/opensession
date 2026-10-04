@@ -1,3 +1,4 @@
+import type { TranscriptEntry } from "./types";
 import type { SeqEntry } from "./transcript-store";
 import {
   MESSAGE_COLLAPSE_CHARS,
@@ -118,4 +119,58 @@ function foldedAssistantIndexes(entries: SeqEntry[]): Set<number> {
   }
   finishTurn(entries.length);
   return folded;
+}
+
+/** The backwards history wire frame, shared by paging and its budget tests. */
+export const TRANSCRIPT_HISTORY_MAX_ENTRIES = 200;
+export function transcriptHistoryLimit(limit = 40): number {
+  return Number.isFinite(limit)
+    ? Math.min(Math.max(1, Math.floor(limit)), TRANSCRIPT_HISTORY_MAX_ENTRIES)
+    : 40;
+}
+export function transcriptHistoryFrame(
+  sessionId: string,
+  page: { entries: SeqEntry[]; firstSeq: number; lastSeq: number },
+) {
+  return {
+    type: "transcript_history" as const,
+    sessionId,
+    entries: clampV2InitEntries(page.entries),
+    firstSeq: page.firstSeq,
+    lastSeq: page.lastSeq,
+    truncated: page.firstSeq > 1,
+    v2: true,
+  };
+}
+
+/** Live tool previews hydrate from the same durable entry endpoint after commit.
+ * Never repeat large file bodies or base64 images in transient feed frames. */
+export const LIVE_TOOL_INPUT_MAX_BYTES = 4096;
+export function liveToolEntryForWire(entry: TranscriptEntry): TranscriptEntry {
+  const projected = { ...entry };
+  if (
+    entry.type === "tool_result" &&
+    entry.content.length > INIT_TOOL_RESULT_CLAMP_BYTES
+  ) {
+    projected.content = entry.content.slice(0, INIT_TOOL_RESULT_CLAMP_BYTES);
+    projected.contentClamped = true;
+    projected.contentLength = entry.contentLength ?? entry.content.length;
+  }
+  if (entry.toolInput !== undefined) {
+    const byteSize = Buffer.byteLength(JSON.stringify(entry.toolInput));
+    if (byteSize > LIVE_TOOL_INPUT_MAX_BYTES)
+      projected.toolInput = {
+        toolName: entry.toolName ?? "",
+        byteSize,
+        keys:
+          typeof entry.toolInput === "object" && entry.toolInput !== null
+            ? Object.keys(entry.toolInput).slice(0, 50)
+            : [],
+      };
+  }
+  if (entry.images)
+    projected.images = entry.images.map((source, index) =>
+      source.startsWith("data:") ? `os-blob:${entry.id}/${index}` : source,
+    );
+  return projected;
 }

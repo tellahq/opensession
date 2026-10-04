@@ -1,3 +1,4 @@
+import { liveToolEntryForWire } from "./transcript-wire";
 import { LiveTextBuffer } from "@tellahq/opensession-protocol/live-text";
 import type { SessionLiveEvent } from "@tellahq/opensession-protocol/session";
 import { setPrimarySessionRunning } from "./session-state-events";
@@ -63,6 +64,8 @@ interface FeedState {
   bytes: number;
 }
 
+export const FEED_RESUME_MAX_FRAMES = 128;
+export const FEED_RESUME_MAX_BYTES = 1024 * 1024;
 const MAX_FRAMES = 2_000;
 const MAX_FEED_BYTES = 2 * 1024 * 1024;
 const MAX_SESSIONS = 200;
@@ -119,6 +122,9 @@ export function appendSessionFeed(
   // primary boundary, but put the aggregate state on the wire so stream_done
   // cannot make the session look idle while background work is still live.
   let feedEvent = event;
+  if (event.type === "stream_tool_use" || event.type === "stream_tool_result") {
+    feedEvent = { ...event, entry: liveToolEntryForWire(event.entry) };
+  }
   if (event.type === "stream_start") {
     setPrimarySessionRunning(sessionId, true);
   } else if (event.type === "stream_done") {
@@ -171,13 +177,13 @@ export function appendSessionFeed(
     event: feedEvent,
   };
   state.frames.push(frame);
-  state.bytes += JSON.stringify(frame).length;
+  state.bytes += Buffer.byteLength(JSON.stringify(frame));
   while (
     state.frames.length > MAX_FRAMES ||
     (state.bytes > MAX_FEED_BYTES && state.frames.length > 1)
   ) {
     const removed = state.frames.shift();
-    if (removed) state.bytes -= JSON.stringify(removed).length;
+    if (removed) state.bytes -= Buffer.byteLength(JSON.stringify(removed));
   }
   if (type === "stream_done") {
     state.active = null;
@@ -220,13 +226,23 @@ export function resumeSessionFeed(
     return { frames: [], snapshot };
   }
   if (!state.active) return { frames: [], snapshot };
+  const frames = state.frames.filter(
+    (frame) =>
+      frame.feedSeq > sinceFeedSeq &&
+      (frame.runId === state.active?.runId ||
+        (frame.phase === "committed" && !frame.runId)),
+  );
+  if (
+    frames.length > FEED_RESUME_MAX_FRAMES ||
+    frames.reduce(
+      (bytes, frame) => bytes + Buffer.byteLength(JSON.stringify(frame)),
+      0,
+    ) > FEED_RESUME_MAX_BYTES
+  ) {
+    return { frames: [], snapshot };
+  }
   return {
-    frames: state.frames.filter(
-      (frame) =>
-        frame.feedSeq > sinceFeedSeq &&
-        (frame.runId === state.active?.runId ||
-          (frame.phase === "committed" && !frame.runId)),
-    ),
+    frames,
     // A valid cursor replays deltas; sending cumulative active text as well
     // would duplicate that gap on the client.
     snapshot: { ...snapshot, active: null },
