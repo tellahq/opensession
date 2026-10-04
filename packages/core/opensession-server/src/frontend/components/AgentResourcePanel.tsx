@@ -31,9 +31,6 @@ export function AgentResourcePanel() {
   const rows = AgentResourceRuntime.resourceSessions(state);
   return (
     <section aria-label="Agent resources" className="space-y-3 px-4 py-3">
-      <h3 className="m-0 text-supporting font-medium text-fg">
-        Agent resources
-      </h3>
       <p className="m-0 text-meta text-dim" role="status">
         {state.status === "loading"
           ? "Collecting samples…"
