@@ -1056,3 +1056,34 @@ export function __simulateRestartForTest(): void {
   state.poll = undefined;
   g.__scriptRunsStarted = false;
 }
+
+/** Targeted metadata reads for already known live scripts, never discovery. */
+export async function scriptResourceRoots(): Promise<
+  import("../shared/agent-resources").ResourceRoot[]
+> {
+  const roots = await Promise.all(
+    [...state.runs.values()]
+      .filter((run) => run.state === "running")
+      .map(async (run) => {
+        try {
+          const host = JSON.parse(
+            await readFile(join(runDir(run.id), HOST_FILE), "utf8"),
+          ) as { pid?: number; startTicks?: string; startedAt?: number };
+          if (!host.pid || run.state !== "running") return null;
+          return {
+            pid: host.pid,
+            sessionId: run.sessionId,
+            runId: run.id,
+            kind: "script" as const,
+            start: host.startTicks,
+            startedAt: host.startedAt ?? Date.parse(run.startedAt),
+          };
+        } catch {
+          return null;
+        }
+      }),
+  );
+  return roots.filter(
+    (root): root is NonNullable<typeof root> => root !== null,
+  );
+}

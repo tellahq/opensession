@@ -1167,6 +1167,26 @@ export class HostHandle {
       steerable: modelSupportsSteer(spec.model),
       connected: () => this.up,
       ended: () => this.endedClean,
+      resourceRoot: async () => {
+        const hostId = this.ctl.hostId;
+        const meta = await this.readMeta();
+        if (
+          !meta?.pid ||
+          meta.done ||
+          this.endedClean ||
+          this.ctl.hostId !== hostId ||
+          meta.hostId !== hostId
+        )
+          return null;
+        return {
+          pid: meta.pid,
+          sessionId: this.spec.osSessionId,
+          runId: hostId,
+          kind: "agent",
+          startedAt: Date.parse(meta.startedAt),
+          ...(meta.startTicks ? { start: meta.startTicks } : {}),
+        };
+      },
 
       steer: (text, images, steerId) => {
         const sent = this.send({ t: "steer", text, images, steerId });

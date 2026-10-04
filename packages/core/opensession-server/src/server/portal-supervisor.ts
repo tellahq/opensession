@@ -127,6 +127,9 @@ const DEFAULT_MAX_HOST_PORTALS = 4;
 const DEFAULT_MIN_AVAILABLE_MEMORY_MB = 24 * 1024;
 
 type HostPortalRef = {
+  pid?: number;
+  generation?: string;
+  startedAt?: number;
   sessionId: string;
   worktreeDir: string;
   name: string;
@@ -1200,6 +1203,9 @@ async function registerHostPortal(
     worktreeDir: await canonicalDir(worktreeDir),
     name: portal.name,
     port: portal.port,
+    pid: portal.pid,
+    generation: portalGeneration(portal),
+    startedAt: portal.startedAt ? Date.parse(portal.startedAt) : undefined,
   };
   hostPortalRefs.set(portal.port, ref);
   if (accessedNow) {
@@ -2382,4 +2388,21 @@ export async function setSandboxPortalPath(
   const next = withPortalPath(await ops.readRegistry(), path, name);
   await ops.writeRegistry(next);
   return next;
+}
+
+/** Host roots already registered by the supervisor, never remote sandbox PIDs. */
+export function portalResourceRoots(): import("../shared/agent-resources").ResourceRoot[] {
+  return [...hostPortalRefs.values()].flatMap((ref) =>
+    ref.pid
+      ? [
+          {
+            pid: ref.pid,
+            sessionId: ref.sessionId,
+            runId: ref.generation ?? ref.name,
+            kind: "portal" as const,
+            startedAt: ref.startedAt,
+          },
+        ]
+      : [],
+  );
 }

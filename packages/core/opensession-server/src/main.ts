@@ -71,7 +71,10 @@ if (process.env.OPENSESSION_DISPATCH_DEBUG === "1")
     `[dispatch] sub=${JSON.stringify(sub)} execPath=${process.execPath} argv=${JSON.stringify(process.argv)}`,
   );
 
-if (sub === "runner-host") {
+if (sub === "resource-sampler") {
+  const { startResourceSampler } = await import("./server/resource-sampler");
+  startResourceSampler();
+} else if (sub === "runner-host") {
   process.argv.splice(2, 1);
   await import("./runner-host/host");
 } else if (sub === "mcp-proxy") {

@@ -56,6 +56,7 @@ import { workloadArgv } from "./workload-scope";
 /** Live transport for one shell — how input/resize/teardown reach the PTY,
  *  whether it's a host process or a remote (in-sandbox) socket. */
 interface TermEntry {
+  resourceRoot?: import("../shared/agent-resources").ResourceRoot;
   write: (data: Buffer) => void;
   resize: (cols: number, rows: number) => void;
   stop: () => void;
@@ -468,7 +469,7 @@ export async function startSessionTerminal(
     return;
   }
   deletePending(ws, termId);
-  spawnPty(ws, termId, target, opts);
+  spawnPty(ws, termId, target, opts, session?.id);
 }
 
 /** Connect a provider-managed remote PTY (daytona) and register it. */
@@ -526,6 +527,7 @@ function spawnPty(
   termId: string,
   target: SpawnTarget,
   opts: TerminalOpts,
+  sessionId?: string,
 ): void {
   const proc = Bun.spawn(workloadArgv(target.argv, "terminal"), {
     cwd: target.cwd,
@@ -543,6 +545,16 @@ function spawnPty(
   } as any);
 
   const entry: TermEntry = {
+    resourceRoot:
+      target.target === "host" && sessionId
+        ? {
+            pid: proc.pid,
+            sessionId,
+            runId: crypto.randomUUID(),
+            kind: "shell",
+            startedAt: Date.now(),
+          }
+        : undefined,
     write: (data) => {
       try {
         (proc as any).terminal?.write(data);
@@ -628,4 +640,13 @@ export function stopAllTerminals(ws: unknown): void {
       t.stop();
     } catch {}
   }
+}
+
+/** Only registered host PTYs, not SSH transports or remote runner processes. */
+export function terminalResourceRoots(): import("../shared/agent-resources").ResourceRoot[] {
+  return [...terms.values()].flatMap((entries) =>
+    [...entries.values()].flatMap((entry) =>
+      entry.resourceRoot ? [entry.resourceRoot] : [],
+    ),
+  );
 }

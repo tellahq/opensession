@@ -1,3 +1,4 @@
+import { AgentResourcePanel } from "../AgentResourcePanel";
 import {
   useCallback,
   useEffect,
@@ -343,6 +344,7 @@ function DebugSection() {
     [],
   );
   const [serverHealth, setServerHealth] = useState(getServerHealthMonitorPref);
+  const [resourcesOpen, setResourcesOpen] = useState(false);
   useEffect(
     () =>
       onServerHealthMonitorChanged(() =>
@@ -354,6 +356,20 @@ function DebugSection() {
   return (
     <>
       <SettingsGroupLabel>Debug</SettingsGroupLabel>
+      <SettingCard>
+        <SettingRow
+          title="Agent resources"
+          desc="See which sessions use this host. Samples only while open."
+          control={
+            <Switch
+              aria-label="Agent resources"
+              checked={resourcesOpen}
+              onCheckedChange={setResourcesOpen}
+            />
+          }
+        />
+        {resourcesOpen && <AgentResourcePanel />}
+      </SettingCard>
       <SettingCard>
         {AGENTATION_ENABLED && (
           <SettingRow

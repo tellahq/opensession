@@ -201,7 +201,23 @@ export async function runScriptHost(runDir: string): Promise<number> {
 
   await writeFile(
     join(runDir, HOST_FILE),
-    JSON.stringify({ pid: process.pid, childPid: started.pid ?? null }),
+    JSON.stringify({
+      pid: process.pid,
+      childPid: started.pid ?? null,
+      startedAt: Date.now(),
+      startTicks:
+        process.platform === "linux"
+          ? await readFile(`/proc/${process.pid}/stat`, "utf8")
+              .then(
+                (stat) =>
+                  stat
+                    .slice(stat.lastIndexOf(")") + 2)
+                    .trim()
+                    .split(/\s+/)[19],
+              )
+              .catch(() => undefined)
+          : undefined,
+    }),
     { mode: 0o600 },
   ).catch(() => {});
 

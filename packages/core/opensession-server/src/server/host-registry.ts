@@ -24,6 +24,10 @@ export interface HostRunControl {
   osSessionId: string;
   /** Whether the run's backend supports mid-run steering (claude yes, codex no). */
   steerable: boolean;
+  /** Targeted async metadata read, never a fleet scan. */
+  resourceRoot?: () => Promise<
+    import("../shared/agent-resources").ResourceRoot | null
+  >;
   /** True while the socket to the host is up (steers need a live connection). */
   connected: () => boolean;
   /** Cached: true once the handle finished or was abandoned. Never does I/O. */
@@ -111,4 +115,18 @@ export function hostCancel(id: string): boolean {
   const ctl = hostRuns.get(id);
   if (!ctl || ctl.ended()) return false;
   return ctl.cancel();
+}
+
+export async function hostResourceRoots(): Promise<
+  import("../shared/agent-resources").ResourceRoot[]
+> {
+  const controls = [...new Set(hostRuns.values())].filter(
+    (ctl) => !ctl.ended(),
+  );
+  const roots = await Promise.all(
+    controls.map((ctl) => ctl.resourceRoot?.().catch(() => null)),
+  );
+  return roots.filter(
+    (root): root is import("../shared/agent-resources").ResourceRoot => !!root,
+  );
 }

@@ -7,6 +7,7 @@
  */
 
 import type { RouteHandler } from "./context";
+import { handleAgentResourceRoutes } from "./agent-resources";
 import { handleAuthRoutes } from "./auth";
 import { handleMediaRoutes } from "./media";
 import { handleStaticAssetsRoutes } from "./static-assets";
@@ -82,6 +83,7 @@ export const routeHandlers: RouteHandler[] = [
   handleSlackChannelRoutes,
   handleSlackComposeRoutes,
   handleSystemRoutes,
+  handleAgentResourceRoutes,
   handleUploadRoutes,
   handleLocalFilesRoutes,
   handleForceMergeRoutes,
