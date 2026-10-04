@@ -1,3 +1,4 @@
+import { drainTranscriptBus } from "./transcript-bus";
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -98,14 +99,14 @@ describe("destination-idempotent transcript append receipts", () => {
         updated: 0,
         changes: [{ entryId: "entry-1", seq: 1, changeSeq: 1 }],
       });
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await drainTranscriptBus();
       expect([hooks, bus]).toEqual([1, 1]);
       expect(receiptCount(path)).toBe(1);
       store.close();
 
       const reopened = new TranscriptStore(path);
       const replay = reopened.commitTranscriptDestinationAppend(request());
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await drainTranscriptBus();
       expect(JSON.stringify(replay)).toBe(JSON.stringify(first));
       expect(reopened.getLastChangeSeq("os-destination")).toBe(1);
       expect(reopened.countEvents("os-destination")).toBe(1);
@@ -379,7 +380,7 @@ describe("destination-idempotent transcript append receipts", () => {
     });
     try {
       const receipt = store.commitTranscriptDestinationAppendReceipt(input);
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await drainTranscriptBus();
       expect(hooks).toBe(1);
       expect(bus).toBe(1);
       expect(receipt).toMatchObject({
@@ -445,7 +446,7 @@ describe("destination-idempotent transcript append receipts", () => {
           transcriptAnchor,
         }),
       ).toThrow(TranscriptAppendReceiptMismatchError);
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await drainTranscriptBus();
       expect({
         events: store.countEvents(input.sessionId),
         seq: store.getLastSeq(input.sessionId),
@@ -462,7 +463,7 @@ describe("destination-idempotent transcript append receipts", () => {
       expect(reopened.queryTranscriptDestinationReceipt(query)).toEqual(
         receipt,
       );
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await drainTranscriptBus();
       expect(hooks).toBe(1);
       expect(bus).toBe(1);
       reopened.deleteSessionTranscript(input.sessionId);

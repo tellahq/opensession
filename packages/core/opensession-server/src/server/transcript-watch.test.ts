@@ -1,3 +1,4 @@
+import { drainTranscriptBus } from "./transcript-bus";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -157,8 +158,8 @@ describe("race-free transcript watch", () => {
     state.store.appendTranscriptEvents(sid, [entry("a", "one")]);
     // A second subscriber-style wake is represented by another upsert-free
     // notification; reconciliation reads only changeSeq > cursor.
-    await Bun.sleep(0);
-    await Bun.sleep(0);
+    await drainTranscriptBus();
+    await handle.drain();
 
     expect(state.frames).toHaveLength(1);
     expect(state.frames[0].entries.map((e: TranscriptEntry) => e.id)).toEqual([
@@ -184,8 +185,8 @@ describe("race-free transcript watch", () => {
     state.frames.length = 0;
 
     state.store.appendTranscriptEvents(sid, [entry("a", "one")]);
-    await Bun.sleep(0);
-    await Bun.sleep(0);
+    await drainTranscriptBus();
+    await handle.drain();
 
     expect(state.frames[0]).toMatchObject({
       type: "session_feed",
@@ -196,6 +197,49 @@ describe("race-free transcript watch", () => {
         entries: [expect.objectContaining({ id: "a", changeSeq: 1 })],
       },
     });
+  });
+
+  test("drain waits for durable reconciliation after bus delivery has finished", async () => {
+    const state = setup();
+    const sid = `bks-drain-${crypto.randomUUID()}`;
+    const entered = Promise.withResolvers<void>();
+    const held = Promise.withResolvers<void>();
+    let hold = false;
+    const handle = await startTranscriptWatch({
+      sessionId: sid,
+      store: {
+        getLastChangeSeq: state.store.getLastChangeSeq.bind(state.store),
+        getLastResetChangeSeq: state.store.getLastResetChangeSeq.bind(
+          state.store,
+        ),
+        readTail: state.store.readTail.bind(state.store),
+        async readChangesSince(sessionId, cursor, limit) {
+          if (hold) {
+            entered.resolve();
+            await held.promise;
+          }
+          return state.store.readChangesSince(sessionId, cursor, limit);
+        },
+      },
+      socket: state.socket,
+      subscribe: subscribeTranscript,
+      isCurrent: () => true,
+    });
+    cleanups.push(() => handle.unsubscribe());
+    hold = true;
+    state.store.appendTranscriptEvents(sid, [entry("a", "one")]);
+    await drainTranscriptBus();
+    await entered.promise;
+    let drained = false;
+    const drain = handle.drain().then(() => {
+      drained = true;
+    });
+    expect(handle.changeSeq()).toBe(0);
+    expect(drained).toBe(false);
+    held.resolve();
+    await drain;
+    expect(handle.changeSeq()).toBe(1);
+    expect(drained).toBe(true);
   });
 
   test("unsubscribe is idempotent and releases the bus subscription", async () => {
@@ -234,7 +278,8 @@ describe("race-free transcript watch", () => {
     state.frames.length = 0;
 
     state.store.replaceTranscriptEvents(sid, [entry("new", "replacement")]);
-    await Bun.sleep(0);
+    await drainTranscriptBus();
+    await handle.drain();
     expect(state.frames).toHaveLength(1);
     expect(state.frames[0]).toMatchObject({
       type: "transcript_init",
@@ -392,7 +437,8 @@ describe("race-free transcript watch", () => {
     cleanups.push(() => handle.unsubscribe());
     state.store.appendTranscriptEvents(sid, [entry("c", "live")]);
     // The bus fans out on the microtask queue, never inside the write.
-    await Bun.sleep(0);
+    await drainTranscriptBus();
+    await handle.drain();
 
     const sent = state.frames.flatMap((frame) => frame.entries ?? []);
     expect(sent.map((e: any) => e.id)).toEqual(["b", "c"]);

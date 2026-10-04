@@ -14,14 +14,20 @@ import {
   type TranscriptWakeDrainOps,
 } from "./transcript-wake-drain";
 
-type Gate = { release(): void; promise: Promise<void> };
+type Gate = {
+  release(): void;
+  promise: Promise<void>;
+  entered: Promise<void>;
+  enter(): void;
+};
 
 function gate(): Gate {
   let release!: () => void;
   const promise = new Promise<void>((resolve) => {
     release = resolve;
   });
-  return { release, promise };
+  const { promise: entered, resolve: enter } = Promise.withResolvers<void>();
+  return { release, promise, entered, enter };
 }
 
 class FakeWakeStore {
@@ -81,6 +87,7 @@ class FakeWakeStore {
                 resetEpoch: this.resetEpoch,
                 ackedResetEpoch: this.ackedResetEpoch,
               };
+        this.holds.pending?.enter();
         await this.holds.pending?.promise;
         if (this.failNext.pending) {
           const error = this.failNext.pending;
@@ -109,6 +116,7 @@ class FakeWakeStore {
           return true;
         };
         const early = this.ackBeforeHold ? apply() : null;
+        this.holds.ack?.enter();
         await this.holds.ack?.promise;
         if (this.failNext.ack) {
           const error = this.failNext.ack;
@@ -135,19 +143,6 @@ function changeSeqs(event: TranscriptBusEvent | undefined): number[] {
   return event?.entries.map((entry) => entry.changeSeq) ?? [];
 }
 
-async function settled<T>(
-  promise: Promise<T>,
-): Promise<{ status: "fulfilled"; value: T } | { status: "pending" }> {
-  const marker = Symbol("pending");
-  const result = await Promise.race([
-    promise,
-    Bun.sleep(20).then(() => marker),
-  ]);
-  return result === marker
-    ? { status: "pending" }
-    : { status: "fulfilled", value: result as T };
-}
-
 describe("transcript wake drain", () => {
   test("overlapping callers share one read, one publication and one ack", async () => {
     const store = new FakeWakeStore();
@@ -157,7 +152,12 @@ describe("transcript wake drain", () => {
     const two = store.commit(1);
     const first = drainer.require(SESSION, one);
     const second = drainer.require(SESSION, two);
-    expect(await settled(first)).toEqual({ status: "pending" });
+    await store.holds.pending.entered;
+    let completed = false;
+    void first.then(() => {
+      completed = true;
+    });
+    expect(completed).toBe(false);
     store.holds.pending.release();
     expect(await Promise.all([first, second])).toEqual([true, true]);
     expect(store.counts).toEqual({
@@ -176,7 +176,7 @@ describe("transcript wake drain", () => {
     const drainer = createTranscriptWakeDrainer(store.ops());
     store.holds.ack = gate();
     const first = drainer.require(SESSION, store.commit(1));
-    await Bun.sleep(0);
+    await store.holds.ack.entered;
     expect(store.counts).toMatchObject({ pending: 1, publish: 1, ack: 1 });
     // Committed while ack(1) is in flight: the durable cursor is now 2.
     const second = drainer.require(SESSION, store.commit(1));
@@ -201,13 +201,13 @@ describe("transcript wake drain", () => {
     store.ackBeforeHold = true;
     store.holds.ack = gate();
     const first = drainer.require(SESSION, store.commit(1));
-    await Bun.sleep(0);
+    await store.holds.ack.entered;
     expect(store.acked).toBe(1);
     // ack(1) is durable but its reply is still in flight when cursor 2 lands.
     const second = drainer.require(SESSION, store.commit(1));
     store.holds.ack.release();
     expect(await first).toBe(true);
-    expect(await settled(second)).toEqual({ status: "fulfilled", value: true });
+    expect(await second).toBe(true);
     expect(store.counts).toEqual({
       pending: 2,
       changes: 2,
@@ -225,7 +225,7 @@ describe("transcript wake drain", () => {
     store.ackBeforeHold = true;
     store.holds.ack = gate();
     const first = drainer.require(SESSION, store.commit(1));
-    await Bun.sleep(0);
+    await store.holds.ack.entered;
     expect(store.acked).toBe(1);
     // Cursor 2 commits, then a startup-style drain joins while ack(1)'s
     // (already durable) reply is still in flight.
@@ -251,7 +251,7 @@ describe("transcript wake drain", () => {
     store.holds.pending = gate();
     // Startup-style drain with nothing pending: the read snapshots null.
     const startup = drainer.require(SESSION, 0);
-    await Bun.sleep(0);
+    await store.holds.pending.entered;
     expect(store.counts.pending).toBe(1);
     const mutation = drainer.require(SESSION, store.commit(1));
     const hold = store.holds.pending;
@@ -287,7 +287,7 @@ describe("transcript wake drain", () => {
     const second = drainer.require(SESSION, two);
     // An uncovered waiter keeps the owner alive through a second, held read.
     const later = drainer.require(SESSION, 99);
-    await Bun.sleep(0);
+    await firstRead.entered;
     const secondRead = gate();
     store.holds.pending = secondRead;
     firstRead.release();
@@ -306,10 +306,7 @@ describe("transcript wake drain", () => {
     const chained = drainer
       .require(SESSION, store.commit(1))
       .then(() => drainer.require(SESSION, store.commit(1)));
-    expect(await settled(chained)).toEqual({
-      status: "fulfilled",
-      value: true,
-    });
+    expect(await chained).toBe(true);
     expect(store.counts).toEqual({
       pending: 2,
       changes: 2,
@@ -432,7 +429,12 @@ describe("transcript wake drain", () => {
     stores.a.holds.pending = gate();
     const blocked = drainer.require("a", stores.a.commit(1));
     expect(await drainer.require("b", stores.b.commit(1))).toBe(true);
-    expect(await settled(blocked)).toEqual({ status: "pending" });
+    await stores.a.holds.pending!.entered;
+    let completed = false;
+    void blocked.then(() => {
+      completed = true;
+    });
+    expect(completed).toBe(false);
     stores.a.holds.pending.release();
     expect(await blocked).toBe(true);
   });

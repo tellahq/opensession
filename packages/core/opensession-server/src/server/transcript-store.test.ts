@@ -1,3 +1,4 @@
+import { drainTranscriptBus } from "./transcript-bus";
 /**
  * Transcript v2 store tests (docs/transcripts.md §1, §1a, §2, §3).
  *
@@ -48,7 +49,7 @@ function entry(
 }
 
 /** Drain microtasks (bus fan-out) before asserting. */
-const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+const tick = drainTranscriptBus;
 
 describe("append + read roundtrip", () => {
   const sid = "bks-roundtrip";

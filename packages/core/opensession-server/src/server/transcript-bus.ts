@@ -19,6 +19,7 @@
  *    safe to import from tests and from anywhere in the server graph.
  */
 
+import { DrainableWork } from "./drainable-work";
 import type { TranscriptEntry } from "./types";
 import { appendSessionFeed, type SessionFeedFrame } from "./session-feed";
 
@@ -42,6 +43,7 @@ export interface TranscriptBusEvent {
 export type TranscriptSubscriber = (event: TranscriptBusEvent) => void;
 
 const g = globalThis as {
+  __osTranscriptBusWork?: DrainableWork;
   __osTranscriptBus?: Map<string, Set<TranscriptSubscriber>>;
 };
 
@@ -83,7 +85,7 @@ export function publishTranscript(
   event: TranscriptBusEvent,
 ): void {
   const subscribers = [...(bus().get(sessionId) ?? [])];
-  queueMicrotask(() => {
+  (g.__osTranscriptBusWork ??= new DrainableWork()).schedule(() => {
     const lastChangeSeq = event.entries.reduce(
       (last, entry) => Math.max(last, entry.changeSeq),
       0,
@@ -114,4 +116,9 @@ export function publishTranscript(
 /** Live subscriber count for one session (diagnostics / serve decisions). */
 export function transcriptSubscriberCount(sessionId: string): number {
   return bus().get(sessionId)?.size ?? 0;
+}
+
+/** Await queued fan-out. Async subscriber-owned work needs its own drain. */
+export function drainTranscriptBus(): Promise<void> {
+  return g.__osTranscriptBusWork?.drain() ?? Promise.resolve();
 }

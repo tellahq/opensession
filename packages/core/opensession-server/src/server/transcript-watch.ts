@@ -1,3 +1,4 @@
+import { DrainableWork } from "./drainable-work";
 import type {
   SeqEntry,
   TailWindowOpts,
@@ -60,6 +61,8 @@ export interface StartTranscriptWatchOptions {
 
 export interface TranscriptWatchHandle {
   unsubscribe(): void;
+  /** Await reconciliation already requested by delivered bus wakes. */
+  drain(): Promise<void>;
   /** Current durable mutation cursor, exposed for deterministic tests. */
   changeSeq(): number;
 }
@@ -215,8 +218,9 @@ export async function startTranscriptWatch(
 
   // Subscribe before observing any cursor or snapshot. A commit at every
   // possible handshake boundary either appears in the read or sets pending.
+  const work = new DrainableWork();
   const unsubscribeBus = subscribe(sessionId, (event) => {
-    void flush(event);
+    void work.run(() => flush(event));
   });
   try {
     const requested =
@@ -285,6 +289,7 @@ export async function startTranscriptWatch(
         closed = true;
         unsubscribeBus();
       },
+      drain: () => work.drain(),
       changeSeq: () => cursor,
     };
   } catch (error) {

@@ -1,3 +1,4 @@
+import { drainTranscriptBus } from "./transcript-bus";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -304,7 +305,7 @@ describe("actor transcript wake crash recovery", () => {
     );
     try {
       expect(await drainPendingTranscriptWakesForSessions([sessionId])).toBe(1);
-      await Bun.sleep(0);
+      await drainTranscriptBus();
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({
         entries: [],
@@ -362,7 +363,7 @@ describe("actor transcript wake crash recovery", () => {
       );
       try {
         await drainPendingTranscriptWakesForSessions([sessionId]);
-        await Bun.sleep(0);
+        await drainTranscriptBus();
         expect(events).toHaveLength(1);
         expect(events[0]).toMatchObject({
           reset: true,
@@ -406,7 +407,7 @@ describe("actor transcript wake crash recovery", () => {
         appendTranscriptEvents(sessionId, [entry("one")]),
         appendTranscriptEvents(sessionId, [entry("two")]),
       ]);
-      await Bun.sleep(0);
+      await drainTranscriptBus();
       expect(store.pendingActorWake(sessionId)).toBeNull();
       expect(store.pendingActorWake(sessionId, true)).toMatchObject({
         cursor: 2,
@@ -443,7 +444,7 @@ describe("actor transcript wake crash recovery", () => {
       expect(
         await importLegacyTranscript(sessionId, entries, "merged", 42),
       ).toEqual({ inserted: 501, updated: 0 });
-      await Bun.sleep(0);
+      await drainTranscriptBus();
       expect(store.needsImport(sessionId)).toBe(false);
       expect(store.pendingActorWake(sessionId)).toBeNull();
       expect(events.flatMap((event) => event.entries)).toHaveLength(501);

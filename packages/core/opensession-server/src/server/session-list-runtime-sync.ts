@@ -1,9 +1,11 @@
+import { DrainableWork } from "./drainable-work";
 import { publishSessionChange } from "./session-cache";
 import { onSessionStateChange } from "./session-state-events";
 
 const g = globalThis as {
   __osSessionListRuntimeSync?: {
     stop?: () => void;
+    work?: DrainableWork;
     pending: Set<string>;
     queued: boolean;
   };
@@ -30,15 +32,16 @@ export function startSessionListRuntimeSync(
   publish: (sessionId: string) => void = publishSessionChange,
 ): void {
   if (state.stop) return;
+  const work = (state.work ??= new DrainableWork());
   state.stop = onSessionStateChange((event) => {
     state.pending.add(event.sessionId);
     if (state.queued) return;
     state.queued = true;
-    queueMicrotask(() => {
+    work.schedule(() => {
       state.queued = false;
       const ids = [...state.pending];
       state.pending.clear();
-      for (const id of ids) publish(id);
+      for (const id of ids) void work.run(() => publish(id));
     });
   });
 }
@@ -48,4 +51,9 @@ export function stopSessionListRuntimeSync(): void {
   state.stop = undefined;
   state.queued = false;
   state.pending.clear();
+}
+
+/** Includes async list-index writes started by the coalesced callback. */
+export function drainSessionListRuntimeSync(): Promise<void> {
+  return state.work?.drain() ?? Promise.resolve();
 }
