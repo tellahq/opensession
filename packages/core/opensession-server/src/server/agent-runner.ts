@@ -38,14 +38,7 @@ import {
 // heavy @earendil-works SDK import stays dynamic inside it, prewarmed only
 // when the engine is enabled), and the dispatchers below need its registry
 // checks on every busy/steer/cancel call.
-import {
-  runPi,
-  isPiSessionBusy,
-  steerPiRun,
-  retractPiSteer,
-  cancelPiRun,
-  activePiRunCount,
-} from "./pi-runner";
+import { engines } from "./engine-adapter";
 import {
   providerFor,
   nextFallbackModel,
@@ -447,7 +440,7 @@ async function* runOnModel(
     return;
   }
   const route = routeModel(requested, { interactive: isInteractiveRun(opts) });
-  yield* runPi(opts, route.model);
+  yield* engines.run(route.engine, opts, route.model);
 }
 
 /** Pi owns every live engine session transcript. */
@@ -1174,7 +1167,7 @@ export function isAgentLiveEngineBusy(
       pendingStarts.has(id) ||
       legacyPendingStarts()?.has(id) ||
       activeSessionRunTokens.has(id) ||
-      isPiSessionBusy(id) ||
+      engines.busy(id) ||
       hostRunBusy(id)
     )
       return true;
@@ -1211,7 +1204,7 @@ export function isAgentSessionBusy(
  * not count external CLI/tmux runs — we can't drain those.)
  */
 export function activeAgentRunCount(): number {
-  return activePiRunCount() + hostRunCount();
+  return engines.activeCount() + hostRunCount();
 }
 
 /** Of those, how many execute on a DETACHED engine server that survives a
@@ -1249,7 +1242,7 @@ export function steerAgentRunToken(
   images?: ImageInput[],
   steerId?: string,
 ): boolean {
-  if (steerPiRun(runToken, text, images, steerId)) return true;
+  if (engines.steer(runToken, text, images, steerId)) return true;
   // Images ride the host frame too (protocol ClientToHostMsg.steer).
   return hostSteer(runToken, text, images, steerId);
 }
@@ -1261,7 +1254,7 @@ export async function retractAgentSteer(
   steerId: string,
 ): Promise<boolean> {
   for (const id of ids) {
-    if (id && retractPiSteer(id, steerId)) return true;
+    if (id && engines.retract(id, steerId)) return true;
   }
   return hostRetractSteer(ids, steerId);
 }
@@ -1348,7 +1341,7 @@ function agentRunTokenLatched(runToken: string): boolean {
 function agentRunTokenControlled(runToken: string): boolean {
   return (
     agentRunTokenLatched(runToken) ||
-    isPiSessionBusy(runToken) ||
+    engines.busy(runToken) ||
     hostRunBusy(runToken)
   );
 }
@@ -1397,7 +1390,7 @@ export async function cancelAgentRunTokenAndWait(
       return true;
     }
     if (
-      (isPiSessionBusy(runToken) || hostRunBusy(runToken)) &&
+      (engines.busy(runToken) || hostRunBusy(runToken)) &&
       (await cancelAgentRun(runToken))
     )
       return true;
@@ -1425,7 +1418,7 @@ export async function cancelAgentRun(
   let cancelled = false;
   for (const id of ids) {
     if (!id) continue;
-    if (cancelPiRun(id)) cancelled = true;
+    if (engines.cancel(id)) cancelled = true;
     if (hostCancel(id)) cancelled = true;
   }
   const wanted = new Set(ids.filter((id): id is string => !!id));
@@ -1858,7 +1851,7 @@ export async function resumeInterruptedRuns(
   const cancelRecoveredEngine = (run: ActiveRunRecord): void => {
     for (const id of [run.claudeSessionId, run.osSessionId, run.runKey]) {
       if (!id) continue;
-      cancelPiRun(id);
+      engines.cancel(id);
       hostCancel(id);
     }
   };

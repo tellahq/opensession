@@ -1,3 +1,5 @@
+import type { EngineCapabilities } from "./engine";
+
 /**
  * Engine-neutral run event types shared by the runner (pi) and by
  * everything that consumes a run's event stream (opensession.ts, sandbox
@@ -108,6 +110,10 @@ export interface StreamEvent {
     // transcript (the remote mirror does the same host-side), so stream
     // consumers should not fold it into assistant text.
     | "runner_notice";
+  /** Driver identity, distinct from its configured instance or upstream model. */
+  engineKind?: string;
+  engineInstanceId?: string;
+  engineCapabilities?: EngineCapabilities;
   sessionId?: string;
   text?: string;
   /**

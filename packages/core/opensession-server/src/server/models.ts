@@ -1,3 +1,5 @@
+import { PI_CAPABILITIES } from "./engine-capabilities";
+import type { EngineCapabilities } from "@tellahq/opensession-protocol/engine";
 /**
  * Pi-only model catalog, presets, labels, account-pool selection and fallback routing.
  * Native and provider/model ids are normalized to pi/<provider>/<model> at dispatch.
@@ -791,9 +793,17 @@ export function directModelLabel(id: string): string {
 }
 
 /** Models selectable for new turns. Every advertised id routes to Pi. */
-export function selectableModels(): { id: string; label: string }[] {
+export function selectableModels(): {
+  id: string;
+  label: string;
+  engineCapabilities: Readonly<EngineCapabilities>;
+}[] {
   const list = KNOWN_MODELS.filter((m) => m.provider === "pi");
-  return list.map((m) => ({ id: m.id, label: m.label }));
+  return list.map((m) => ({
+    id: m.id,
+    label: m.label,
+    engineCapabilities: PI_CAPABILITIES,
+  }));
 }
 
 /** Refresh the configured Pi model catalog after Settings writes. */
