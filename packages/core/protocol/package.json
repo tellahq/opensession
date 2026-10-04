@@ -13,6 +13,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./events": "./src/events.ts",
+    "./engine": "./src/engine.ts",
     "./live-text": "./src/live-text.ts",
     "./stream-cuts": "./src/stream-cuts.ts",
     "./runner": "./src/runner.ts",

@@ -1,3 +1,4 @@
+import { PI_CAPABILITIES } from "../engine-capabilities";
 /**
  * Model catalog + default model + per-model default engine, sandbox capability/prewarm, branch-name suggestion, voice transcription.
  *
@@ -182,6 +183,8 @@ export async function handleModelsRoutes(
       ...visibleModels,
     ].map((model) => ({
       ...model,
+      engineKind: "pi",
+      engineCapabilities: PI_CAPABILITIES,
       efforts: modelEfforts(model.id, providers),
       accountProvider: accountProviderForModel(model.id),
       fastModeSupported: supportsOpenaiFastMode(toPiModel(model.id)),

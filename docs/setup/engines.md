@@ -193,3 +193,14 @@ After changing service environment or gateway/runner code, use
 [service setup](install.md#9-running-it-as-a-service), the
 [restart guidance](install.md#10-frontend-rebuilds-vs-restart), and the
 [executor architecture](../executor-architecture.md).
+
+## Engine capabilities and ACP
+
+Pi runs through the engine adapter registry. Model metadata and turn `init`
+events include a versioned capabilities descriptor so clients can discover
+supported actions without inspecting model names. Provider-family changes
+still identify conversation ownership, not feature availability.
+
+An experimental ACP v1 subprocess adapter implements the same turn boundary.
+It is not yet enabled for production sessions. See [ACP adapter](acp.md) for
+its integration API, permission boundaries and remaining setup work.
