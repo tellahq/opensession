@@ -41,8 +41,10 @@
  */
 import { Database } from "bun:sqlite";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
@@ -58,6 +60,7 @@ import {
   relative,
   resolve,
 } from "node:path";
+import { tmpdir } from "node:os";
 import {
   homeDir,
   statePathIn,
@@ -367,11 +370,48 @@ export function assertDevServerStopped(
   }
 }
 
-/** Open a source database without any write capability. */
+/** Open a source database without any write capability.
+ *
+ * A WAL database needs its `-shm` file even for read-only connections. When
+ * the source directory itself is read-only and that file is absent, Linux
+ * SQLite refuses the open (SQLITE_READONLY_DIRECTORY). Then read a private
+ * copy of the database and its WAL instead; the source is still never
+ * written, and the copy is removed when the connection closes. */
 function openSourceReadonly(path: string): Database {
-  const db = new Database(path, { readonly: true });
+  let db: Database;
+  try {
+    db = new Database(path, { readonly: true });
+    db.exec("PRAGMA query_only = ON; PRAGMA busy_timeout = 2000;");
+    db.query("SELECT count(*) FROM sqlite_master").get();
+    return db;
+  } catch (error) {
+    if (!isReadonlyDirectoryError(error)) throw error;
+  }
+  const copyDir = mkdtempSync(join(tmpdir(), "seed-dev-state-src-"));
+  const copy = join(copyDir, basename(path));
+  for (const suffix of ["", "-wal"]) {
+    if (existsSync(`${path}${suffix}`))
+      copyFileSync(`${path}${suffix}`, `${copy}${suffix}`);
+  }
+  db = new Database(copy, { readonly: true });
   db.exec("PRAGMA query_only = ON; PRAGMA busy_timeout = 2000;");
+  const close = db.close.bind(db);
+  db.close = (throwOnError?: boolean) => {
+    try {
+      close(throwOnError);
+    } finally {
+      rmSync(copyDir, { recursive: true, force: true });
+    }
+  };
   return db;
+}
+
+function isReadonlyDirectoryError(error: unknown): boolean {
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? String((error as { code: unknown }).code)
+      : "";
+  return code === "SQLITE_READONLY_DIRECTORY" || code === "SQLITE_CANTOPEN";
 }
 
 function tableExists(db: Database, table: string, schema = "main"): boolean {
