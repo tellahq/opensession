@@ -105,8 +105,8 @@ export function buildEngineSwitchHandoffNote(input: {
   sessionId?: string;
   reservedBytes?: number;
   requiredEntryId?: string;
-  fromProvider: "claude" | "codex" | "pi";
-  toProvider: "claude" | "codex" | "pi";
+  fromProvider: "claude" | "codex" | "pi" | "acp";
+  toProvider: "claude" | "codex" | "pi" | "acp";
   /** True when the target engine is resuming its own earlier thread (Claude
    *  coming back to a session it ran before) — then it already remembers the
    *  turns up to the switch and only needs the other engine's turns since. */

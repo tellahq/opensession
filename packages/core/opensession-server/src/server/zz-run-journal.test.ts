@@ -39,6 +39,33 @@ afterEach(() => {
 });
 
 describe("run journal", () => {
+  it("async ACP journal updates retain concurrent compatibility writes", async () => {
+    const record = (runKey: string): mod.ActiveRunRecord => ({
+      runKey,
+      cwd: "/tmp",
+      model: "acp/example",
+      startedAt: new Date().toISOString(),
+    });
+    const first = mod.journalSetAsync(record("async-a"));
+    const legacy = new Promise<void>((resolve, reject) =>
+      queueMicrotask(() => {
+        mod.journalSet(record("legacy")).then(resolve, reject);
+      }),
+    );
+    await Promise.all([first, legacy, mod.journalSetAsync(record("async-b"))]);
+    expect(
+      Object.keys(
+        JSON.parse(readFileSync(join(dir, "active-runs.json"), "utf8")),
+      ).sort(),
+    ).toEqual(["async-a", "async-b", "legacy"]);
+    await mod.journalClearAsync("async-a");
+    expect(
+      Object.keys(
+        JSON.parse(readFileSync(join(dir, "active-runs.json"), "utf8")),
+      ).sort(),
+    ).toEqual(["async-b", "legacy"]);
+  });
+
   it("awaits run registration before journal admission completes", async () => {
     const gate = Promise.withResolvers<void>();
     const started = Promise.withResolvers<void>();

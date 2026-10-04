@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 /**
  * Crash/restart run journal — every in-flight run is recorded on disk;
  * entries that survive a process restart are interrupted runs, which
@@ -164,6 +166,7 @@ const EMPTY_JOURNAL: Record<string, ActiveRunRecord> = Object.freeze({});
  *  calls a second) get it from a stat-validated parse instead of re-reading
  *  and parsing the whole file each time. */
 function sharedRunJournal(): Record<string, ActiveRunRecord> {
+  if (pendingAsyncJournal) return pendingAsyncJournal;
   let journal: Record<string, ActiveRunRecord>;
   try {
     journal =
@@ -185,6 +188,8 @@ function readRunJournal(): Record<string, ActiveRunRecord> {
 }
 
 function writeRunJournal(journal: Record<string, ActiveRunRecord>): void {
+  journalRevision++;
+  if (pendingAsyncJournal) pendingAsyncJournal = journal;
   try {
     writeJsonAtomic(ACTIVE_RUNS_PATH, journal);
     syncActiveRunAliases(journal);
@@ -287,6 +292,76 @@ type JournalRunStateTransition = (
   event: Parameters<typeof transitionRunState>[1],
   meta?: Parameters<typeof transitionRunState>[2],
 ) => Promise<unknown>;
+
+// Async gateway writers serialize. While a rename is in flight, synchronous
+// compatibility writers read/update this same candidate; a revision change
+// causes the async writer to publish their newest candidate before returning.
+let pendingAsyncJournal: Record<string, ActiveRunRecord> | undefined;
+let journalRevision = 0;
+let asyncJournalQueue = Promise.resolve();
+function mutateJournalAsync(
+  mutate: (journal: Record<string, ActiveRunRecord>) => void,
+): Promise<void> {
+  const path = ACTIVE_RUNS_PATH;
+  const operation = asyncJournalQueue.then(async () => {
+    let journal: Record<string, ActiveRunRecord> = {};
+    let revision: number;
+    do {
+      revision = journalRevision;
+      try {
+        journal = JSON.parse(await readFile(path, "utf8"));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+    } while (revision !== journalRevision);
+    pendingAsyncJournal = journal;
+    try {
+      mutate(pendingAsyncJournal);
+      journalRevision++;
+      syncActiveRunAliases(pendingAsyncJournal);
+      do {
+        revision = journalRevision;
+        await writeJsonAtomicAsync(path, pendingAsyncJournal);
+      } while (revision !== journalRevision);
+    } finally {
+      pendingAsyncJournal = undefined;
+    }
+  });
+  asyncJournalQueue = operation.catch(() => {});
+  return operation;
+}
+
+export async function journalSetAsync(record: ActiveRunRecord): Promise<void> {
+  let rejournal = false;
+  let written = record;
+  await mutateJournalAsync((journal) => {
+    const prior = journal[record.runKey];
+    rejournal = !!prior;
+    written = {
+      ...record,
+      firstJournaledAt:
+        prior?.firstJournaledAt ||
+        record.firstJournaledAt ||
+        prior?.startedAt ||
+        record.startedAt,
+      resumeAttempts: prior ? prior.resumeAttempts : record.resumeAttempts,
+      lastResumeAt: prior ? prior.lastResumeAt : record.lastResumeAt,
+    };
+    journal[record.runKey] = written;
+  });
+  await onJournalSet?.(written);
+  if (record.osSessionId)
+    await transitionRunState(record.osSessionId, "run_registered", {
+      run_key: record.runKey,
+      kind: record.kind,
+      rejournal: rejournal || undefined,
+    });
+}
+export function journalClearAsync(runKey: string): Promise<void> {
+  return mutateJournalAsync((journal) => {
+    delete journal[runKey];
+  });
+}
 
 export async function journalSet(
   record: ActiveRunRecord,

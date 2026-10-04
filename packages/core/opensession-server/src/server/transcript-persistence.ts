@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 /** Transcript entry builders and the single-writer owned-store bridge. */
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
@@ -78,6 +80,38 @@ export function recordEngineSessionOwner(
   } catch (error) {
     console.warn("[transcript] engine-session map write failed:", error);
   }
+}
+
+let asyncOwnerWrite = Promise.resolve();
+export function recordEngineSessionOwnerAsync(
+  engineSessionId: string,
+  sessionId: string,
+): Promise<void> {
+  const write = asyncOwnerWrite.then(async () => {
+    if (!ownerState.loaded) {
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = JSON.parse(await readFile(ENGINE_SESSION_MAP_PATH, "utf8"));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      for (const [key, value] of Object.entries(parsed))
+        if (typeof value === "string") ownerState.map.set(key, value);
+      ownerState.loaded = true;
+    }
+    ownerState.map.set(engineSessionId, sessionId);
+    while (ownerState.map.size > OWNER_MAP_MAX_ENTRIES) {
+      const oldest = ownerState.map.keys().next().value;
+      if (!oldest) break;
+      ownerState.map.delete(oldest);
+    }
+    await writeJsonAtomicAsync(
+      ENGINE_SESSION_MAP_PATH,
+      Object.fromEntries(ownerState.map),
+    );
+  });
+  asyncOwnerWrite = write.catch(() => {});
+  return write;
 }
 
 export function sessionForEngineId(

@@ -75,6 +75,7 @@ export const ENGINE_LABELS = {
   claude: "Claude",
   codex: "Codex",
   pi: "Pi",
+  acp: "ACP",
 };
 const ENGINE_LABEL_BY_ID = new Map(Object.entries(ENGINE_LABELS));
 
@@ -205,6 +206,7 @@ const PROVIDER_LABELS = {
   anthropic: "Anthropic",
   openai: "OpenAI",
   pi: "Pi",
+  acp: "ACP",
   "xai-oauth": "xAI SuperGrok",
   xai: "xAI",
   meta: "Meta",
@@ -273,7 +275,7 @@ const MODEL_TAIL_ORDER = [
 ];
 
 /** The engine providers whose entries form the first-class model list. */
-const ENGINE_PROVIDERS = new Set(["pi"]);
+const ENGINE_PROVIDERS = new Set(["pi", "acp"]);
 
 /**
  * Split the registry into the first-class Pi entries and current canonical
@@ -718,7 +720,9 @@ export function ModelEffortSelect({
   const renderModelOption = (option: ModelMenuOption, standalone = false) => {
     const selected = isSelected(option);
     const optionLabel = standalone ? option.standaloneLabel : option.label;
-    const optionDescription = standalone ? undefined : option.description;
+    const optionDescription =
+      modelById.get(option.id)?.unavailableReason ||
+      (standalone ? undefined : option.description);
     const nextModelInfo = modelById.get(option.id);
     const nextEfforts = nextModelInfo?.efforts ?? [];
     const nextEffort =
@@ -751,7 +755,8 @@ export function ModelEffortSelect({
     // disabled rather than silently dropped back to engine.
     const routed = engineModelId(activeEngine, option.id);
     const offEngine = routed === null;
-    const disabled = modelDisabled || offEngine;
+    const disabled =
+      modelDisabled || offEngine || nextModelInfo?.available === false;
     const item = (
       <Menu.Item
         onClick={() => {

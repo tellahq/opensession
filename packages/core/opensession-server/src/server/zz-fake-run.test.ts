@@ -141,6 +141,132 @@ async function waitForLastRunError(id: string): Promise<{ message: string }> {
 }
 
 describe("fake-engine session runs (consumer loop end-to-end)", () => {
+  test("ACP production turn persists, resumes and cancels through run-session", async () => {
+    if (!redirected) return;
+    const config = await import("./config");
+    const previous = config.getConfig();
+    const configured = {
+      ...previous,
+      acp: [
+        {
+          id: "fake",
+          name: "Fake ACP",
+          command: process.execPath,
+          args: [
+            new URL("./testing/fake-acp-agent.fixture.ts", import.meta.url)
+              .pathname,
+          ],
+        },
+      ],
+    };
+    const { mkdirSync } = await import("node:fs");
+    const { dirname } = await import("node:path");
+    mkdirSync(dirname(config.configPath()), { recursive: true });
+    writeFileSync(config.configPath(), JSON.stringify(configured));
+    config.publishConfigSnapshot(
+      config.configPath(),
+      JSON.stringify(configured),
+    );
+    agentRunner.__setEngineForTest(null);
+    const sid = "bks-zz-acp";
+    writeSessionFile(sid, {
+      model: "acp/fake",
+      mode: "code",
+      worktreeDir: tmp,
+      mcpServers: [],
+    });
+    sessionCache.invalidateSessionsCache();
+    try {
+      await runSession.runSessionPromptAndDrain(sid, "hello", "Test");
+      expect(sessionJson(sid).acpSessionId).toBe("acp:fake:fake-session");
+      expect(sessionJson(sid).lastEngineProvider).toBe("acp");
+      const { transcript } = await import("./actor-transcript");
+      const first = (await transcript.readTail(sid)).entries;
+      expect(
+        first.some(
+          (entry) => entry.type === "assistant" && entry.content === "Hello",
+        ),
+      ).toBe(true);
+      expect(
+        first.some(
+          (entry) => entry.isReasoning && entry.content === "Private thought",
+        ),
+      ).toBe(true);
+      expect(
+        first.some(
+          (entry) =>
+            entry.type === "tool_use" && entry.toolUseId?.endsWith(":tool-1"),
+        ),
+      ).toBe(true);
+      await runSession.runSessionPromptAndDrain(sid, "continue", "Test");
+      expect(
+        (await transcript.readTail(sid)).entries.some(
+          (entry) => entry.type === "assistant" && entry.content === "Resumed",
+        ),
+      ).toBe(true);
+      const pending = runSession.runSessionPromptAndDrain(sid, "wait", "Test");
+      const deadline = Date.now() + 2000;
+      while (
+        !agentRunner.isAgentLiveEngineBusy("acp:fake:fake-session") &&
+        Date.now() < deadline
+      )
+        await Bun.sleep(10);
+      expect(await agentRunner.cancelAgentRun("acp:fake:fake-session")).toBe(
+        true,
+      );
+      await pending;
+      expect(agentRunner.isAgentLiveEngineBusy("acp:fake:fake-session")).toBe(
+        false,
+      );
+      const noResume = {
+        ...configured,
+        acp: configured.acp.map((agent) => ({
+          ...agent,
+          env: { FAKE_NO_RESUME: "1" },
+        })),
+      };
+      writeFileSync(config.configPath(), JSON.stringify(noResume));
+      config.publishConfigSnapshot(
+        config.configPath(),
+        JSON.stringify(noResume),
+      );
+      await runSession.runSessionPromptAndDrain(
+        sid,
+        "continue without native loading",
+        "Test",
+      );
+      expect(
+        (await transcript.readTail(sid)).entries.some(
+          (entry) => entry.content === "Handoff resumed",
+        ),
+      ).toBe(true);
+      const journal = await import("./run-journal");
+      await journal.journalSet({
+        runKey: "acp-interrupted-fixture",
+        osSessionId: sid,
+        claudeSessionId: "acp:fake:fake-session",
+        cwd: tmp,
+        prompt: "interrupted work",
+        model: "acp/fake",
+        mode: "code",
+        startedAt: new Date().toISOString(),
+      });
+      const recovered: import("./run-events").StreamEvent[] = [];
+      await agentRunner.resumeInterruptedRuns((id, event) => {
+        if (id === sid && event) recovered.push(event);
+      });
+      expect(recovered).toHaveLength(1);
+      expect(recovered[0].type).toBe("error");
+      expect(recovered[0].content).toContain("interrupted by a server restart");
+    } finally {
+      writeFileSync(config.configPath(), JSON.stringify(previous));
+      config.publishConfigSnapshot(
+        config.configPath(),
+        JSON.stringify(previous),
+      );
+    }
+  });
+
   test("recovery exports rotated engine identity before announcing idle", async () => {
     if (!redirected) return;
     const sid = "bks-zz-recovered-identity";

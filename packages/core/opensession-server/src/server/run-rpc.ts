@@ -42,6 +42,8 @@ const g = globalThis as any;
 // response slower than 10s, and tool calls may wait RPC_TOOL_CALL_TIMEOUT_MS.
 
 export interface RunTokenContext {
+  allowedServers?: string[];
+  allowWorkspaceExec?: boolean;
   /** Server-owned dispatch identity, never accepted from an MCP request body. */
   promptEntryId?: string;
   sessionId: string;
@@ -181,6 +183,8 @@ export async function dispatchRunRpc(
 
   // A remote workspace's file and shell operations (remote-workspace.ts).
   // The token's session decides which Sandbox; the body cannot name one.
+  if (path === "/workspace/exec" && ctx.allowWorkspaceExec === false)
+    return imm(403, { error: "Workspace execution not granted" });
   if (path === "/workspace/exec") {
     const sessionId = ctx.sessionId;
     const done = import("./sandbox/workspace-rpc")
@@ -197,6 +201,8 @@ export async function dispatchRunRpc(
   if (!builder) return imm(503, { error: "MCP builder not registered yet" });
 
   const serverName = String(body?.server || "");
+  if (ctx.allowedServers && !ctx.allowedServers.includes(serverName))
+    return imm(403, { error: "MCP server not granted to this run" });
   const perSession = sessionServers.get(ctx.sessionId);
   const cfg =
     perSession?.[serverName] ??

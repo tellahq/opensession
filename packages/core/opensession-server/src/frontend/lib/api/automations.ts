@@ -1,3 +1,6 @@
+import * as Effect from "effect/Effect";
+import type { EngineCapabilities } from "@tellahq/opensession-protocol/engine";
+import { fetchModelCatalog } from "../model-catalog-runtime";
 import { z } from "zod";
 import { ApiError, BASE, request } from "./request";
 import {
@@ -10,7 +13,10 @@ import {
 
 export interface ModelOption {
   id: string;
-  provider: "claude" | "codex" | "pi";
+  provider: "claude" | "codex" | "pi" | "acp";
+  engineCapabilities?: Readonly<EngineCapabilities>;
+  available?: boolean;
+  unavailableReason?: string;
   label: string;
   aliases: string[];
   efforts: string[];
@@ -78,11 +84,16 @@ export async function transcribeClip(audio: Blob): Promise<string> {
 }
 
 export async function fetchModels(workspaceId?: string): Promise<ModelCatalog> {
-  const params = new URLSearchParams();
-  if (workspaceId) params.set("workspace", workspaceId);
-  return request<ModelCatalog>(`/models${params.size ? `?${params}` : ""}`, {
-    label: "Failed to fetch models",
-  });
+  const catalog = await Effect.runPromise(fetchModelCatalog(workspaceId));
+  return {
+    ...catalog,
+    models: catalog.models.map((model) => ({
+      ...model,
+      aliases: [...model.aliases],
+      efforts: [...model.efforts],
+      composition: model.composition ? [...model.composition] : undefined,
+    })),
+  };
 }
 
 /** Trimmed provider account shape for the per-session account picker. */

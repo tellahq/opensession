@@ -1,3 +1,4 @@
+import { acpModelMetadata } from "../acp-runtime";
 import { PI_CAPABILITIES } from "../engine-capabilities";
 /**
  * Model catalog + default model + per-model default engine, sandbox capability/prewarm, branch-name suggestion, voice transcription.
@@ -190,14 +191,15 @@ export async function handleModelsRoutes(
       fastModeSupported: supportsOpenaiFastMode(toPiModel(model.id)),
       ultrafastSupported: supportsOpenaiUltrafast(toPiModel(model.id)),
     }));
+    const allCatalogModels = [...catalogModels, ...(await acpModelMetadata())];
     const routedDefault = pickerModelId(interactiveDefault);
-    const catalogDefault = catalogModels.some(
+    const catalogDefault = allCatalogModels.some(
       (model) => model.id === routedDefault,
     )
       ? routedDefault
-      : catalogModels[0]?.id || routedDefault;
+      : allCatalogModels[0]?.id || routedDefault;
     return Response.json({
-      models: catalogModels,
+      models: allCatalogModels,
       default: catalogDefault,
       autoFallback: getModelFallbackAuto(),
       // The engines a model can be routed to, and which of them are ready

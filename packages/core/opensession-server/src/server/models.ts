@@ -1,3 +1,4 @@
+import { configuredAcpAgents } from "./acp-config";
 import { PI_CAPABILITIES } from "./engine-capabilities";
 import type { EngineCapabilities } from "@tellahq/opensession-protocol/engine";
 /**
@@ -36,7 +37,7 @@ import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 // "claude" and "codex" are LEGACY provider tags: the CLI-era engines and the
 // removed direct-SDK engines stored them on sessions (and readers still key
 // engine-id slots on them), but routing never produces them anymore.
-export type Provider = "claude" | "codex" | "pi";
+export type Provider = "claude" | "codex" | "pi" | "acp";
 
 /** Every engine id that can lead a model id, as a routing prefix — including
  *  the removed direct engines' claude/ and codex/, which legacy stored ids
@@ -1114,6 +1115,7 @@ export function resolveConcreteModel(
   model?: string | null,
   exclude?: Set<string>,
 ): string {
+  if (model?.startsWith("acp/")) return model;
   const resolved = model
     ? resolveModel(model)
     : resolveModel(getDefaultModel());
@@ -1165,6 +1167,7 @@ export function toPiModel(model?: string | null): string | undefined {
   const raw = (model || "").trim();
   let requested = raw.toLowerCase();
   if (!requested) return model ?? undefined;
+  if (requested.startsWith("acp/")) return raw;
   const inputLower = requested;
   if (requested.startsWith("claude/") || requested.startsWith("codex/")) {
     requested = requested.slice(requested.indexOf("/") + 1);
@@ -1254,8 +1257,9 @@ export function modelSupportsSteer(_model?: string | null): boolean {
 export function routeModel(
   model: string | null | undefined,
   _opts?: { interactive?: boolean },
-): { engine: "pi"; model: string } {
+): { engine: "pi" | "acp"; model: string } {
   const requested = (model || "").trim();
+  if (requested.startsWith("acp/")) return { engine: "acp", model: requested };
   return {
     engine: "pi",
     model: toPiModel(requested) || toPiModel(getDefaultModel())!,
@@ -1418,6 +1422,14 @@ export function resolveModel(input: string): ModelInfo | null {
   const raw = input.trim();
   const value = raw.toLowerCase();
   if (!value) return null;
+  if (value.startsWith("acp/")) {
+    const agent = configuredAcpAgents().find(
+      (agent) => `acp/${agent.id}` === value,
+    );
+    return agent
+      ? { id: value, provider: "acp", label: agent.name, aliases: [] }
+      : null;
+  }
   for (const model of KNOWN_MODELS) {
     if (model.id.toLowerCase() === value || model.aliases.includes(value)) {
       const replacement =
@@ -1478,11 +1490,16 @@ export function resolveModel(input: string): ModelInfo | null {
 
 /** Execution provider for a session model. */
 export function providerFor(_model?: string | null): Provider {
-  return "pi";
+  return _model?.startsWith("acp/") ? "acp" : "pi";
 }
 
 export function modelLabel(model?: string | null): string {
   const id = model || getDefaultModel();
+  if (id.startsWith("acp/"))
+    return (
+      configuredAcpAgents().find((agent) => `acp/${agent.id}` === id)?.name ||
+      id
+    );
   return (
     KNOWN_MODELS.find((entry) => entry.id === id)?.label ||
     (id.startsWith("pi/") ? piModelLabel(id) : directModelLabel(id))

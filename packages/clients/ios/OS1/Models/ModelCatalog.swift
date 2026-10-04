@@ -13,6 +13,8 @@ struct ModelOption: Decodable, Identifiable, Hashable, Sendable {
     /// Reasoning-effort variants this model supports (may be empty — presets).
     var efforts: [String]?
     var fastModeSupported: Bool?
+    var available: Bool?
+    var unavailableReason: String?
     /// The subscription pool this model spends from ("claude", "codex",
     /// "xai"), or nil for a model without a managed account pool.
     var accountProvider: String?
@@ -66,6 +68,7 @@ struct ModelCatalog: Decodable, Sendable {
 
     static func routedID(_ id: String, engine: String) -> String? {
         guard engine == "pi", !id.isEmpty else { return nil }
+        if id.hasPrefix("acp/") { return id }
         if id.hasPrefix("pi/") { return id }
         if isPresetID(id) { return "pi/\(id)" }
         if id.hasPrefix("claude-") { return "pi/anthropic/\(id)" }

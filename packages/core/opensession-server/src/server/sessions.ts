@@ -134,7 +134,7 @@ export function getTranscriptPath(
 export function getEngineTranscriptPath(
   worktreeDir: string,
   engineSessionId: string,
-  provider: "claude" | "codex" | "pi",
+  provider: "claude" | "codex" | "pi" | "acp",
 ): string | null {
   if (provider === "codex") {
     return findCodexRollout(engineSessionId)?.path || null;
@@ -142,7 +142,7 @@ export function getEngineTranscriptPath(
   // Pi has no per-session file at all: the pi runner persists every turn
   // straight into the owned transcript store (viewers stream over the store
   // bus, readers go through readEngineTranscript's pi branch below).
-  if (provider === "pi") return null;
+  if (provider === "pi" || provider === "acp") return null;
   return getTranscriptPath(worktreeDir, engineSessionId);
 }
 
@@ -156,9 +156,10 @@ export function getEngineTranscriptPath(
 export function readEngineTranscript(
   worktreeDir: string,
   engineSessionId: string,
-  provider: "claude" | "codex" | "pi",
+  provider: "claude" | "codex" | "pi" | "acp",
 ): TranscriptEntry[] {
-  if (provider === "pi") return engineStoreTranscript(engineSessionId);
+  if (provider === "pi" || provider === "acp")
+    return engineStoreTranscript(engineSessionId);
   const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
   if (!path || !existsSync(path)) return engineStoreTranscript(engineSessionId);
   return parseTranscript(path);
@@ -169,9 +170,10 @@ export function readEngineTranscript(
 export async function readEngineTranscriptAsync(
   worktreeDir: string,
   engineSessionId: string,
-  provider: "claude" | "codex" | "pi",
+  provider: "claude" | "codex" | "pi" | "acp",
 ): Promise<TranscriptEntry[]> {
-  if (provider === "pi") return engineStoreTranscriptAsync(engineSessionId);
+  if (provider === "pi" || provider === "acp")
+    return engineStoreTranscriptAsync(engineSessionId);
   const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
   if (!path || !existsSync(path))
     return engineStoreTranscriptAsync(engineSessionId);
@@ -186,9 +188,9 @@ export async function readEngineTranscriptAsync(
 export async function readEngineHandoffTranscriptAsync(
   worktreeDir: string,
   engineSessionId: string,
-  provider: "claude" | "codex" | "pi",
+  provider: "claude" | "codex" | "pi" | "acp",
 ): Promise<TranscriptEntry[]> {
-  if (provider === "pi")
+  if (provider === "pi" || provider === "acp")
     return engineStoreHandoffTranscriptAsync(engineSessionId);
   const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
   if (!path || !existsSync(path))
@@ -242,6 +244,7 @@ async function engineStoreOwner(
     .peekCachedSessions()
     .find(
       (session) =>
+        session.acpSessionId === engineSessionId ||
         session.piSessionId === engineSessionId ||
         session.codexThreadId === engineSessionId ||
         session.claudeSessionId === engineSessionId,
@@ -498,11 +501,12 @@ export async function trailingUserTexts(session: {
 }
 
 export function engineSessionPatch(
-  provider: "claude" | "codex" | "pi",
+  provider: "claude" | "codex" | "pi" | "acp",
   engineSessionId: string,
 ): Partial<NativeSessionFile> {
   if (provider === "codex")
     return { codexThreadId: engineSessionId || undefined };
+  if (provider === "acp") return { acpSessionId: engineSessionId || undefined };
   if (provider === "pi") return { piSessionId: engineSessionId || undefined };
   return { claudeSessionId: engineSessionId || undefined };
 }
@@ -511,11 +515,13 @@ export function engineSessionIdFor(
   session: {
     claudeSessionId?: string | null;
     codexThreadId?: string | null;
+    acpSessionId?: string | null;
     piSessionId?: string | null;
   },
-  provider: "claude" | "codex" | "pi",
+  provider: "claude" | "codex" | "pi" | "acp",
 ): string | undefined {
   if (provider === "codex") return session.codexThreadId || undefined;
+  if (provider === "acp") return session.acpSessionId || undefined;
   if (provider === "pi")
     return session.piSessionId || session.claudeSessionId || undefined;
   return session.claudeSessionId || undefined;
@@ -525,6 +531,7 @@ function sessionEngineKeys(session: UnifiedSession): string[] {
   return [
     session.claudeSessionId ? `claude:${session.claudeSessionId}` : null,
     session.codexThreadId ? `codex:${session.codexThreadId}` : null,
+    session.acpSessionId ? `acp:${session.acpSessionId}` : null,
     session.piSessionId ? `pi:${session.piSessionId}` : null,
   ].filter((key): key is string => !!key);
 }
@@ -712,6 +719,7 @@ const SIDECAR_SOURCE_OWNED = new Set<string>([
   // resolution at a dead engine session.
   "claudeSessionId",
   "codexThreadId",
+  "acpSessionId",
   "piSessionId",
   "model",
   // Where the session runs. The owning store decides that; a stale sidecar
@@ -825,6 +833,7 @@ function slackSessionRowFromData(
     // Written by agent-session-sync when a web-UI run on a pi/* model minted
     // an engine session; without it every pi read falls to the claude-slot
     // ride and the run-start arm can't resume the pi session.
+    acpSessionId: data.acpSessionId || undefined,
     piSessionId: data.piSessionId || undefined,
     archived: archived || undefined,
     archivedReason: archived ? getArchiveReason(id) || "manual" : undefined,
@@ -1076,6 +1085,7 @@ function linearSessionRowFromData(
       : undefined,
     model: data.model,
     // Same pi-slot mapping as the slack scan (agent-session-sync writes it).
+    acpSessionId: data.acpSessionId || undefined,
     piSessionId: data.piSessionId || undefined,
     archived: archived || undefined,
     archivedReason: archived ? getArchiveReason(id) || "manual" : undefined,
@@ -1145,6 +1155,7 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
     pstackMode: data.pstackMode,
     accountId: data.accountId,
     codexThreadId: data.codexThreadId,
+    acpSessionId: data.acpSessionId || undefined,
     piSessionId: data.piSessionId,
     lastEngineProvider: data.lastEngineProvider,
     lastEngineModel: data.lastEngineModel,

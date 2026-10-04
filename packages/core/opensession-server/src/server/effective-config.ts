@@ -1,3 +1,4 @@
+import { configuredAcpAgents } from "./acp-config";
 /** Explain the configuration that will apply to a session's next Pi turn. */
 import { sessionSpeed } from "@tellahq/opensession-protocol/session";
 import type { UnifiedSession } from "./types";
@@ -351,12 +352,31 @@ export async function buildSessionEffectiveConfig(
     dialPreset(requestedModel) ??
     orchestratorPreset(requestedModel) ??
     (await resolveWorkspaceModelPreset(requestedModel, session.workspaceId));
+  const acpInstance =
+    routed.engine === "acp"
+      ? configuredAcpAgents().find(
+          (agent) => `acp/${agent.id}` === routed.model,
+        )
+      : undefined;
   const model: Record<string, ConfigRow> = {
     requested: row(
       requestedModel,
       session.model ? "session file model" : "instance interactive default",
     ),
-    engine: row("pi", "models.ts routeModel"),
+    engine: row(routed.engine, "models.ts routeModel"),
+    ...(acpInstance
+      ? {
+          instance: row(
+            {
+              id: acpInstance.id,
+              command: acpInstance.command,
+              args: acpInstance.args,
+              envKeys: Object.keys(acpInstance.env || {}),
+            },
+            "config.json acp",
+          ),
+        }
+      : {}),
     dispatchModel: row(routed.model, "models.ts routeModel"),
     provider: row(providerID ?? null, "Pi model id provider segment"),
     preset: row(

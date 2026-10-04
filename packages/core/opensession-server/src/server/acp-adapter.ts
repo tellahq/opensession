@@ -1,3 +1,12 @@
+import { appendTranscriptEvents } from "./actor-transcript";
+import { recordEngineSessionOwnerAsync } from "./transcript-persistence";
+import {
+  journalSetAsync,
+  journalClearAsync,
+  buildRunJournalRecord,
+} from "./run-journal";
+import { readEngineHandoffTranscriptAsync } from "./sessions";
+import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { EngineCapabilities } from "@tellahq/opensession-protocol/engine";
@@ -40,7 +49,7 @@ export function acpCapabilities(
     canForkNatively: false,
     supportsMcpTools: true,
     supportsImages: caps.promptCapabilities?.image === true,
-    streamsReasoning: false,
+    streamsReasoning: true,
     emitsToolOutput: true,
     terminalStatusQuality: "authoritative",
   };
@@ -247,9 +256,9 @@ export function acpUpdateEvents(params: Json): StreamEvent[] {
         ? [{ type: "text_chunk", text: update.content.text }]
         : [];
     case "agent_thought_chunk":
-      // The existing event contract has no reasoning block. Never append
-      // private thoughts to the assistant's answer.
-      return [];
+      return update.content?.type === "text"
+        ? [{ type: "text_chunk", text: update.content.text, isReasoning: true }]
+        : [];
     case "tool_call":
       return [
         {
@@ -260,18 +269,39 @@ export function acpUpdateEvents(params: Json): StreamEvent[] {
         },
       ];
     case "tool_call_update":
-      if (update.status !== "completed" && update.status !== "failed")
+      if (
+        update.status !== "completed" &&
+        update.status !== "failed" &&
+        !update.content?.length &&
+        update.rawOutput === undefined
+      )
         return [];
       return [
+        ...(update.rawInput !== undefined
+          ? [
+              {
+                type: "tool_use" as const,
+                toolUseId: update.toolCallId,
+                toolName: update.title || "Tool",
+                toolInput: update.rawInput,
+              },
+            ]
+          : []),
         {
           type: "tool_result",
           toolUseId: update.toolCallId,
+          isError: update.status === "failed",
+          images: (update.content || []).flatMap((item: Json) =>
+            item.type === "content" && item.content?.type === "image"
+              ? [`data:${item.content.mimeType};base64,${item.content.data}`]
+              : [],
+          ),
           content:
             (update.content || [])
               .flatMap((item: Json) =>
                 item.type === "content" && item.content?.type === "text"
                   ? [item.content.text]
-                  : [],
+                  : [JSON.stringify(item)],
               )
               .join("\n") || JSON.stringify(update.rawOutput ?? ""),
         },
@@ -343,7 +373,10 @@ export function createAcpAdapter(config: AcpAgentConfig): EngineAdapter {
         return;
       }
       let text = "";
+      let engineId: string | undefined;
+      let turnPrompt = opts.prompt;
       let streaming = false;
+      const toolNames = new Map<string, string>();
       let sessionId: string | undefined;
       const connection = new AcpConnection(
         config,
@@ -352,8 +385,19 @@ export function createAcpAdapter(config: AcpAgentConfig): EngineAdapter {
           // session/load replays history. Only new prompt updates are live output.
           if (!streaming || params.sessionId !== sessionId) return [];
           const events = acpUpdateEvents(params);
+          for (const event of events) {
+            if (event.toolUseId) {
+              const rawId = event.toolUseId;
+              if (event.type === "tool_use" && event.toolName !== "Tool")
+                toolNames.set(rawId, event.toolName || "Tool");
+              event.toolName = toolNames.get(rawId) || event.toolName;
+              if (opts.journal?.osSessionId)
+                event.toolUseId = `${key}:${rawId}`;
+            }
+          }
           for (const event of events)
-            if (event.type === "text_chunk") text += event.text;
+            if (event.type === "text_chunk" && !event.isReasoning)
+              text += event.text;
           return events;
         },
         (params) => {
@@ -365,7 +409,8 @@ export function createAcpAdapter(config: AcpAgentConfig): EngineAdapter {
           );
           return {
             outcome:
-              option && (opts.mode === "code" || opts.mode === "scratch")
+              option &&
+              (!opts.mode || opts.mode === "code" || opts.mode === "scratch")
                 ? { outcome: "selected", optionId: option.optionId }
                 : { outcome: "cancelled" },
           };
@@ -374,6 +419,16 @@ export function createAcpAdapter(config: AcpAgentConfig): EngineAdapter {
       const handle = { connection, sessionId };
       active.set(key, handle);
       try {
+        if (opts.journal?.osSessionId)
+          await journalSetAsync(
+            buildRunJournalRecord(opts, {
+              runKey: key,
+              osSessionId: opts.journal.osSessionId,
+              cwd: opts.cwd,
+              prompt: opts.prompt,
+              model,
+            }),
+          );
         const initialized = await connection.request("initialize", {
           protocolVersion: 1,
           clientInfo: { name: "opensession", version: "1" },
@@ -386,36 +441,84 @@ export function createAcpAdapter(config: AcpAgentConfig): EngineAdapter {
           throw new Error("ACP agent did not negotiate protocol version 1");
         capabilities = acpCapabilities(initialized);
         const params = { cwd: opts.cwd, mcpServers: opts.acpMcpServers || [] };
-        if (opts.sessionId) {
-          if (!capabilities.canResume)
-            throw new Error(
-              "ACP agent does not support loading stored sessions",
-            );
+        const prefix = `acp:${config.id}:`;
+        const stored = opts.sessionId?.startsWith("acp:")
+          ? opts.sessionId.startsWith(prefix)
+            ? opts.sessionId.slice(prefix.length)
+            : undefined
+          : opts.sessionId;
+        if (stored && capabilities.canResume) {
           await connection.request("session/load", {
             ...params,
-            sessionId: opts.sessionId,
+            sessionId: stored,
           });
-          sessionId = opts.sessionId;
+          sessionId = stored;
         } else {
+          if (stored && !capabilities.canResume) {
+            if (!opts.journal?.osSessionId)
+              throw new Error(
+                "ACP agent does not support loading stored sessions",
+              );
+            await recordEngineSessionOwnerAsync(
+              opts.sessionId!,
+              opts.journal.osSessionId,
+            );
+            const history = await readEngineHandoffTranscriptAsync(
+              opts.cwd,
+              opts.sessionId!,
+              "acp",
+            );
+            if (history.length)
+              turnPrompt = `${buildEngineSwitchHandoffNote({
+                entries: history.filter(
+                  (entry) => entry.id !== opts.promptEntryId,
+                ),
+                targetModel: model,
+                sessionId: opts.journal.osSessionId,
+                reservedBytes: new TextEncoder().encode(turnPrompt).length,
+                fromModel: model,
+                fromProvider: "acp",
+                toProvider: "acp",
+                sameEngineRestart: true,
+              })}}\n\n${turnPrompt}`;
+          }
           const created = await connection.request("session/new", params);
           if (typeof created.sessionId !== "string" || !created.sessionId)
             throw new Error("ACP agent returned no session id");
           sessionId = created.sessionId;
         }
+        engineId = `${prefix}${sessionId}`;
+        if (opts.journal?.osSessionId) {
+          await recordEngineSessionOwnerAsync(
+            engineId,
+            opts.journal.osSessionId,
+          );
+          await journalSetAsync(
+            buildRunJournalRecord(opts, {
+              runKey: key,
+              osSessionId: opts.journal.osSessionId,
+              cwd: opts.cwd,
+              prompt: opts.prompt,
+              model,
+              claudeSessionId: engineId,
+            }),
+          );
+        }
         handle.sessionId = sessionId;
-        if (active.has(sessionId) && active.get(sessionId) !== handle)
+        if (active.has(engineId) && active.get(engineId) !== handle)
           throw new Error("ACP session is already running");
-        active.set(sessionId, handle);
+        active.set(engineId, handle);
         yield {
           type: "init",
-          sessionId,
+          sessionId: engineId,
+          provider: "acp",
           model,
           engineKind: "acp",
           engineInstanceId: config.id,
           engineCapabilities: capabilities,
         };
         if (opts.shouldCancel?.()) throw new Error("ACP turn cancelled");
-        const prompt: Json[] = [{ type: "text", text: opts.prompt }];
+        const prompt: Json[] = [{ type: "text", text: turnPrompt }];
         if (opts.images?.length && !capabilities.supportsImages)
           throw new Error("ACP agent does not support images");
         for (const image of opts.images || [])
@@ -432,28 +535,71 @@ export function createAcpAdapter(config: AcpAgentConfig): EngineAdapter {
               if (result.stopReason === "end_turn")
                 connection.push({
                   type: "done",
-                  sessionId,
+                  sessionId: engineId,
+                  provider: "acp",
                   model,
                   result: text,
                 });
               else
                 connection.push({
                   type: "error",
-                  sessionId,
+                  sessionId: engineId,
+                  provider: "acp",
                   content: `ACP turn stopped: ${result.stopReason || "unknown"}`,
                 });
+              connection.kill();
             },
-            (error) => connection.fail(error),
+            (error) => {
+              connection.fail(error);
+              connection.kill();
+            },
           );
         while (true) {
           const event = await connection.next();
+          if (
+            opts.journal?.osSessionId &&
+            ["text_chunk", "tool_use", "tool_result", "runner_notice"].includes(
+              event.type,
+            )
+          ) {
+            const id = event.toolUseId
+              ? `${event.type}:${event.toolUseId}`
+              : event.blockId || crypto.randomUUID();
+            if (event.type === "text_chunk") event.blockId = id;
+            await appendTranscriptEvents(opts.journal.osSessionId, [
+              {
+                id,
+                type:
+                  event.type === "text_chunk"
+                    ? "assistant"
+                    : event.type === "runner_notice"
+                      ? "system"
+                      : (event.type as "tool_use" | "tool_result"),
+                content:
+                  event.type === "text_chunk" || event.type === "runner_notice"
+                    ? event.text || ""
+                    : event.content || "",
+                timestamp: new Date().toISOString(),
+                model,
+                isReasoning: event.isReasoning,
+                isError: event.isError,
+                images: event.images,
+                toolName: event.toolName,
+                toolInput: event.toolInput,
+                toolUseId: event.toolUseId,
+              },
+            ]);
+          }
           yield event;
           if (event.type === "done" || event.type === "error") break;
         }
       } catch (error) {
+        connection.kill();
+        await connection.exited;
         yield {
           type: "error",
-          sessionId,
+          sessionId: engineId,
+          provider: "acp",
           content: error instanceof Error ? error.message : String(error),
         };
       } finally {
@@ -461,6 +607,7 @@ export function createAcpAdapter(config: AcpAgentConfig): EngineAdapter {
           if (value === handle) active.delete(alias);
         connection.kill();
         await connection.exited;
+        if (opts.journal?.osSessionId) await journalClearAsync(key);
       }
     },
   };

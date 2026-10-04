@@ -41,7 +41,16 @@ lines.on("line", (line) => {
       promptId = message.id;
       update({
         sessionUpdate: "agent_message_chunk",
-        content: { type: "text", text: resumed ? "Resumed" : "Hello" },
+        content: {
+          type: "text",
+          text:
+            process.env.FAKE_NO_RESUME === "1" &&
+            message.params.prompt[0].text.includes("## Engine handoff")
+              ? "Handoff resumed"
+              : resumed
+                ? "Resumed"
+                : "Hello",
+        },
       });
       if (message.params.prompt[0].text === "wait") break;
       if (message.params.prompt[0].text === "crash") process.exit(9);

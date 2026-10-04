@@ -116,6 +116,8 @@ export interface StreamEvent {
   engineCapabilities?: EngineCapabilities;
   sessionId?: string;
   text?: string;
+  isReasoning?: boolean;
+  isError?: boolean;
   /**
    * On a text_chunk: which assistant block this text belongs to, when the
    * engine names its blocks (pi's part id). The durable transcript
@@ -161,7 +163,7 @@ export interface StreamEvent {
    */
   featuredMedia?: string[];
   /** Which backend emitted this event (set on init/done). */
-  provider?: "claude" | "codex" | "pi";
+  provider?: "claude" | "codex" | "pi" | "acp";
   /** Effective model for the run (set on init/done). */
   model?: string;
   /**

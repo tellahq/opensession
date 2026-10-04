@@ -39,13 +39,14 @@ describe("ACP adapter", () => {
     expect(events.map((event) => event.type)).toEqual([
       "init",
       "text_chunk",
+      "text_chunk",
       "runner_notice",
       "tool_use",
       "tool_result",
       "done",
     ]);
     expect(events[0]).toMatchObject({
-      sessionId: "fake-session",
+      sessionId: "acp:fake:fake-session",
       engineKind: "acp",
       engineInstanceId: "fake",
       engineCapabilities: {
@@ -55,12 +56,12 @@ describe("ACP adapter", () => {
         supportsImages: true,
       },
     });
-    expect(events[3]).toMatchObject({
+    expect(events[4]).toMatchObject({
       toolName: "Read",
       toolUseId: "tool-1",
       toolInput: { path: "example.txt" },
     });
-    expect(events[4].content).toContain('"optionId":"once"');
+    expect(events[5].content).toContain('"optionId":"once"');
     expect(events.at(-1)?.result).toBe("Hello");
     expect(adapter.activeCount()).toBe(0);
   });

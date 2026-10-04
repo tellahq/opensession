@@ -39,6 +39,7 @@ export function isAnthropicModel(
 }
 
 export function engineModelId(_engine: EngineId, id: string): string | null {
+  if (id.startsWith("acp/")) return id;
   if (!id) return null;
   if (id.startsWith("pi/")) return id;
   if (isPresetId(id)) return `pi/${id}`;

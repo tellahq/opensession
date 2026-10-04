@@ -1,3 +1,4 @@
+import { acpDriver } from "./acp-runtime";
 import type { EngineCapabilities } from "@tellahq/opensession-protocol/engine";
 import type { RunAgentOpts, EngineRunner } from "./agent-runner";
 import type { ImageInput, StreamEvent } from "./run-events";
@@ -99,7 +100,8 @@ export class EngineRegistry {
         ? {
             ...event,
             engineKind: kind,
-            engineCapabilities: adapter.capabilities,
+            engineCapabilities:
+              event.engineCapabilities ?? adapter.capabilities,
           }
         : event;
     }
@@ -108,3 +110,5 @@ export class EngineRegistry {
 
 export const engines = new EngineRegistry();
 engines.register(piAdapter);
+
+engines.register(acpDriver);

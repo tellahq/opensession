@@ -1431,7 +1431,7 @@ export function attachSessionWatchersToEngineTranscript(
   // "pi" and "pi" resolve to no transcript path (both keep their turns
   // in the owned store); those sessions stream through run events only, so
   // this attaches nothing for them.
-  provider: "claude" | "codex" | "pi",
+  provider: "claude" | "codex" | "pi" | "acp",
   cwd: string,
   engineSessionId: string,
   attempt = 0,
@@ -2830,8 +2830,8 @@ async function runSessionPromptInner(
   // 2026-07-12; sessions from before lastEngineModel existed skip this and
   // still get the runner's prior-transcript file seeding).
   const familySwitch =
-    lastProvider === "pi" &&
-    provider === "pi" &&
+    lastProvider === provider &&
+    (provider === "pi" || provider === "acp") &&
     !!session.lastEngineModel &&
     !!session.model &&
     engineFamily(session.lastEngineModel) !== engineFamily(session.model);

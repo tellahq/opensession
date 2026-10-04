@@ -24,7 +24,7 @@ import { Switch } from "../ui/switch";
 
 interface ModelInfo {
   id: string;
-  provider: "claude" | "codex" | "pi";
+  provider: "claude" | "codex" | "pi" | "acp";
   label: string;
   aliases: string[];
   efforts: string[];

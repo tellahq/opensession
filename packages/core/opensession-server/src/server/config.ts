@@ -1,3 +1,5 @@
+import { parseAcpAgents } from "./acp-config";
+import type { AcpAgentConfig } from "./acp-adapter";
 /**
  * Open Session instance configuration.
  *
@@ -235,6 +237,7 @@ export interface BrandingSection {
 }
 
 export interface OpenSessionConfig {
+  acp?: AcpAgentConfig[];
   /** The instance-wide first-run walkthrough has been explicitly finished. */
   onboardingCompleted?: boolean;
   server?: ServerSection;
@@ -497,6 +500,7 @@ function parseConfig(text: string): OpenSessionConfig {
       });
     }
 
+    if (raw.acp !== undefined) cfg.acp = parseAcpAgents(raw.acp);
     const paths = obj(raw.paths);
     if (paths) {
       cfg.paths = defined({
@@ -770,6 +774,15 @@ function claudeFromPath(): string | null {
   return claudeOnPath.bin;
 }
 
+/** MCP-only callers must not perform an unrelated executable PATH lookup. */
+export function configuredMcpConfigPath(): string {
+  return (
+    process.env.OPENSESSION_MCP_CONFIG ||
+    getConfig().paths?.mcpConfig ||
+    `${OPENSESSION_ROOT}/mcp-config.json`
+  );
+}
+
 export function configuredPaths(): ResolvedPaths {
   const p = getConfig().paths || {};
   return {
@@ -784,10 +797,7 @@ export function configuredPaths(): ResolvedPaths {
       // statePath, so a dev/demo instance's worktrees land in its own state
       // root instead of the operator's home. Unset ⇒ $HOME (unchanged).
       statePath(".opensession/worktrees"),
-    mcpConfig:
-      process.env.OPENSESSION_MCP_CONFIG ||
-      p.mcpConfig ||
-      `${OPENSESSION_ROOT}/mcp-config.json`,
+    mcpConfig: configuredMcpConfigPath(),
   };
 }
 

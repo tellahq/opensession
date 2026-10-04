@@ -222,3 +222,29 @@ test("a call the server cut short without an answer fails with a clear error", a
     cut.stop(true);
   }
 });
+
+test("ACP bridge tokens cannot widen their MCP grant or execute workspace commands", async () => {
+  const scopedToken = crypto.randomUUID();
+  registerInteractiveMcpBuilder(() => ({}));
+  registerRunToken(scopedToken, {
+    sessionId: "acp-scoped",
+    allowedServers: ["opensession-search"],
+    allowWorkspaceExec: false,
+  });
+  try {
+    const denied = await dispatchRunRpc("/mcp/list", {
+      token: scopedToken,
+      server: "opensession-admin",
+    });
+    expect(denied.kind).toBe("immediate");
+    if (denied.kind === "immediate") expect(denied.status).toBe(403);
+    const workspace = await dispatchRunRpc("/workspace/exec", {
+      token: scopedToken,
+      command: "true",
+    });
+    expect(workspace.kind).toBe("immediate");
+    if (workspace.kind === "immediate") expect(workspace.status).toBe(403);
+  } finally {
+    unregisterRunToken(scopedToken);
+  }
+});

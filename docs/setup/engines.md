@@ -1,6 +1,6 @@
 # Pi engine
 
-Open Session sends every production model turn through the bundled Pi runtime;
+Open Session sends Pi model turns through the bundled Pi runtime;
 there is no separate `pi` executable to install. Model ids use
 `pi/<provider>/<model>`. Recognized bare ids such as `claude-fable-5-1` and
 `gpt-6.1-sol`, and provider paths such as `openai/gpt-6.1-sol`, normalize to
@@ -10,8 +10,8 @@ for the current routing table.
 ## Enable Pi
 
 `opensession onboard` creates the Pi config with `{"enabled": true}` when it is
-absent. A missing or malformed config, or `"enabled": false`, prevents every
-model turn from starting.
+absent. A missing or malformed config, or `"enabled": false`, prevents Pi
+model turns from starting. ACP agents have their own executable configuration.
 
 A fresh installation stores the config at `~/.opensession/pi.json`. To create
 it by hand:
@@ -201,6 +201,6 @@ events include a versioned capabilities descriptor so clients can discover
 supported actions without inspecting model names. Provider-family changes
 still identify conversation ownership, not feature availability.
 
-An experimental ACP v1 subprocess adapter implements the same turn boundary.
-It is not yet enabled for production sessions. See [ACP adapter](acp.md) for
-its integration API, permission boundaries and remaining setup work.
+ACP v1 CLI agents implement the same turn boundary and appear as `acp/<id>`
+models. Configure them in the instance `acp` array. See [ACP agents](acp.md)
+for setup, permission boundaries and restart behavior.

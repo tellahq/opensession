@@ -1,3 +1,4 @@
+import { modelSupportsSteering } from "../lib/model-catalog-runtime";
 import React, {
   useEffect,
   useEffectEvent,
@@ -527,8 +528,9 @@ export function Composer({
   // ⌘/Ctrl switches to the "mod" pref. (With ⌘/Ctrl+Enter as the send key the
   // modifier is held on every send, so it's one gesture — the "enter"
   // follow-up pref rules and the mod pref is moot.)
-  const entSteer = busySendPrefs.enter === "steer";
-  const modSteer = busySendPrefs.mod === "steer";
+  const supportsSteering = modelSupportsSteering(models, model || defaultModel);
+  const entSteer = supportsSteering && busySendPrefs.enter === "steer";
+  const modSteer = supportsSteering && busySendPrefs.mod === "steer";
   const modifierPicks = sendKey === "enter";
   // Notes bypass the busy queue/steer machinery entirely — they post straight
   // to the team whether or not a turn is running.
@@ -1982,19 +1984,21 @@ export function Composer({
                       size={16}
                     />
                   </ContextMenu.Item>
-                  <ContextMenu.Item onClick={() => pickBusySend("steer")}>
-                    <IconArrowUp size={20} />
-                    <span className="grow">Steer into running turn</span>
-                    {busySendKeys("steer") && (
-                      <ContextMenu.Shortcut>
-                        {busySendKeys("steer")}
-                      </ContextMenu.Shortcut>
-                    )}
-                    <ContextMenu.Check
-                      on={busySendPrefs.enter === "steer"}
-                      size={16}
-                    />
-                  </ContextMenu.Item>
+                  {supportsSteering && (
+                    <ContextMenu.Item onClick={() => pickBusySend("steer")}>
+                      <IconArrowUp size={20} />
+                      <span className="grow">Steer into running turn</span>
+                      {busySendKeys("steer") && (
+                        <ContextMenu.Shortcut>
+                          {busySendKeys("steer")}
+                        </ContextMenu.Shortcut>
+                      )}
+                      <ContextMenu.Check
+                        on={busySendPrefs.enter === "steer"}
+                        size={16}
+                      />
+                    </ContextMenu.Item>
+                  )}
                 </ContextMenu.Popup>
               </ContextMenu.Root>
             </motion.div>

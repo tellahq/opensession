@@ -1,6 +1,6 @@
 /**
  * Agent runner dispatcher: one entry point for every model turn.
- * All production turns run on Pi. The dispatcher owns the fallback walk,
+ * Turns run through registered engine adapters. The dispatcher owns the fallback walk,
  * transcript handoffs, cancellation and restart recovery around Pi's shared
  * StreamEvent contract.
  */
@@ -444,8 +444,8 @@ async function* runOnModel(
 }
 
 /** Pi owns every live engine session transcript. */
-export function transcriptProviderFor(_engineModel: string): "pi" {
-  return "pi";
+export function transcriptProviderFor(_engineModel: string): "pi" | "acp" {
+  return _engineModel.startsWith("acp/") ? "acp" : "pi";
 }
 
 /** Whether the per-model default engine applies to this run. Automations and
@@ -655,8 +655,9 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
   const wantsBestCodex = requestedModel?.id === BEST_AVAILABLE_CODEX_MODEL;
   const primaryModel =
     workspacePreset?.model || resolveConcreteModel(opts.model);
-  const preferredFallback =
-    opts.fallbackModel === "none" || /^(?:claude|codex)\//.test(primaryModel)
+  const preferredFallback = primaryModel.startsWith("acp/")
+    ? "none"
+    : opts.fallbackModel === "none" || /^(?:claude|codex)\//.test(primaryModel)
       ? "none"
       : wantsBestCodex
         ? BEST_AVAILABLE_CODEX_MODEL
@@ -962,6 +963,7 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
 /** Provider family inside Pi. A provider change starts a fresh Pi session and
  * bridges the previous transcript; a same-provider fallback can resume. */
 export function engineFamily(model: string): string {
+  if (model.startsWith("acp/")) return model;
   const routed = toPiModel(model) || model;
   return `pi-${routed.match(/^pi\/([^/]+)\//)?.[1] || providerFor(routed)}`;
 }
@@ -1882,6 +1884,14 @@ export async function resumeInterruptedRuns(
   const recoveryTasks: Array<() => Promise<void>> = [];
 
   for (const run of interrupted) {
+    if (run.model?.startsWith("acp/")) {
+      rememberHandledSession(run);
+      await reportRecoveryFailure(
+        run,
+        "ACP turn was interrupted by a server restart. Send a prompt to continue from the saved conversation.",
+      );
+      continue;
+    }
     if (run.terminalFailure) {
       await reportRecoveryFailure(run, run.terminalFailure.content);
       continue;

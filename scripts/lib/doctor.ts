@@ -1,3 +1,7 @@
+import {
+  parseAcpAgents,
+  acpUnavailableReason,
+} from "../../packages/core/opensession-server/src/server/acp-config";
 /**
  * `opensession doctor` — tell the operator what is wrong, specifically.
  *
@@ -338,6 +342,19 @@ export async function doctor(): Promise<number> {
   info(dim(`checkout ${REPO_ROOT}`));
   await checkTools(t);
   const config = await checkConfig(t);
+  heading("ACP agents");
+  try {
+    for (const agent of parseAcpAgents(config?.acp)) {
+      const reason = await acpUnavailableReason(agent);
+      if (reason) {
+        fail(agent.name, reason);
+        t.errors++;
+      } else ok(agent.name, "ACP executable available");
+    }
+  } catch (error) {
+    fail("ACP configuration", String(error));
+    t.errors++;
+  }
   await checkEngine(t);
   await checkIntegrations(t, config);
   await checkService(t, config);
