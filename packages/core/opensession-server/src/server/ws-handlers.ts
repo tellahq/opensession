@@ -1,3 +1,4 @@
+import { SERVER_DESCRIPTOR } from "./server-capabilities";
 import { getConfigAsync } from "./config";
 /**
  * The UI WebSocket: watch/unwatch sessions, live prompts and queue control,
@@ -589,7 +590,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
         JSON.stringify({
           type: "hello",
           bootId: BOOT_ID,
-          capabilities: { commandResults: true },
+          capabilities: SERVER_DESCRIPTOR.capabilities,
+          server: SERVER_DESCRIPTOR,
           ...(ws.data?.authLogin
             ? { commandScope: `github:${ws.data.authLogin.toLowerCase()}` }
             : {}),

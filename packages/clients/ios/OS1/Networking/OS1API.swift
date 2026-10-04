@@ -49,6 +49,11 @@ enum OS1API {
         }
     }
 
+    /// Missing on older servers. Never infer support from the app version.
+    static func serverDescriptor() async -> ServerDescriptor? {
+        try? await get("/api/capabilities")
+    }
+
     /// The live sessions list — everything except archived.
     ///
     /// Archived sessions are the larger half of this instance's list and none
@@ -1940,7 +1945,10 @@ enum OS1API {
     /// Mint a short-lived Realtime client secret for a Desk voice call — the
     /// real OpenAI key stays on the server (desk-voice.ts).
     static func deskVoiceSecret() async throws -> DeskVoiceSecret {
-        try await post("/api/desk/voice/secret", body: ["user": ServerConfig.shared.userName])
+        guard await serverDescriptor()?.supports("deskVoice") == true else {
+            throw APIError.server("Voice calls are not available on this server.")
+        }
+        return try await post("/api/desk/voice/secret", body: ["user": ServerConfig.shared.userName])
     }
 
     /// Run one Realtime tool call server-side, as the verified user, and hand

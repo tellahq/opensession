@@ -126,3 +126,10 @@ see `crossSiteViolation` in `packages/core/opensession-server/src/server/web-aut
   picker; tags the chosen node with `data-os1-picked` so the follow-up
   MAIN-world script (`readPickedReactInfo` in sidepanel.js) can walk its React
   fiber — isolated worlds can't see page-JS expandos.
+
+## Server capabilities
+
+The panel refreshes `GET /api/capabilities` on account bootstrap. Missing flags
+disable optional list slicing and persistent session-creation retry identities.
+Older servers still support one-shot session creation and full-list reads. See
+[client capability negotiation](../../../docs/client-capabilities.md).

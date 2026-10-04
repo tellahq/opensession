@@ -20,6 +20,7 @@ struct DeskSheet: View {
     @AppStorage("os1.desk.voice") private var deskVoice = "off"
 
     @State private var loadState: LoadState = .loading
+    @State private var voiceSupported = false
     @State private var engine = DeskVoiceEngine()
 
     var body: some View {
@@ -38,10 +39,11 @@ struct DeskSheet: View {
             content
         }
         .task {
+            voiceSupported = await OS1API.serverDescriptor()?.supports("deskVoice") == true
             #if DEBUG
             // Dev loop: start the call on open (`OS1_VOICE_AUTOSTART=1`) so
             // simulator voice runs need no UI driving.
-            if ProcessInfo.processInfo.environment["OS1_VOICE_AUTOSTART"] != nil {
+            if voiceSupported && ProcessInfo.processInfo.environment["OS1_VOICE_AUTOSTART"] != nil {
                 engine.open()
             }
             #endif
@@ -166,7 +168,7 @@ struct DeskSheet: View {
                 .foregroundStyle(OS1VisualStyle.text)
             Spacer(minLength: 8)
             voiceStatusLabel
-            if deskVoice == "on" {
+            if deskVoice == "on" && voiceSupported {
                 micButton
             }
             Button {

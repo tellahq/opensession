@@ -1,3 +1,4 @@
+import { useServerCapability } from "../hooks/useServerCapability";
 import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { z } from "zod";
 import { BASE_PATH } from "../lib/base";
@@ -82,6 +83,7 @@ function DeskBody({
   // one settled utterance at a time; the call's own transcript deltas fill
   // the wait as live captions (one store for the body's lifetime, cleared as
   // each call starts), so the conversation below moves while you talk.
+  const voiceSupported = useServerCapability("deskVoice");
   const [voiceEnabled, setVoiceEnabled] = useState(getDeskVoicePref);
   const [voiceState, setVoiceState] = useState<DeskVoiceState>("idle");
   const [voiceError, setVoiceError] = useState<string | null>(null);
@@ -130,6 +132,7 @@ function DeskBody({
       voiceRef.current.stop();
       return;
     }
+    if (!voiceSupported) return;
     setVoiceError(null);
     voiceCaptions.clear();
     const client = new DeskVoiceClient({
@@ -307,7 +310,7 @@ function DeskBody({
             // The handset lives in the composer beside dictation; the header
             // label above shows the call's state.
             voiceCall={
-              voiceEnabled
+              voiceEnabled && voiceSupported
                 ? {
                     active: voiceActive,
                     status: voiceStatus[voiceState],

@@ -1,3 +1,5 @@
+import { supportsCapability } from "./capabilities.js";
+
 // Open Session side panel — the whole client lives here. Extension pages have
 // full chrome.* API access, so the panel drives captures (screenshot, element
 // pick via scripting injection) itself and talks to the Open Session server
@@ -121,6 +123,9 @@ async function clearDurableIntent(intent) {
   if (stored?.version !== 3 || stored.id !== intent.id) return;
   await chrome.storage.local.remove(intent.key);
 }
+
+// Refreshed per account/bootstrap. A missing endpoint means no optional features.
+let serverDescriptor = null;
 
 // ── API ──────────────────────────────────────────────────────────────────────
 
@@ -551,15 +556,23 @@ async function startSession() {
       ...($("sel-model").value ? { model: $("sel-model").value } : {}),
       ...(images.length ? { images } : {}),
     };
-    const createIntent = await durableIntent(
-      "create",
-      JSON.stringify({ server: cfg.serverUrl, body }),
-    );
+    const createIntent = supportsCapability(
+      serverDescriptor,
+      "sessionCreateIdempotency",
+    )
+      ? await durableIntent(
+          "create",
+          JSON.stringify({ server: cfg.serverUrl, body }),
+        )
+      : null;
     const { id } = await api("/sessions", {
       method: "POST",
-      body: JSON.stringify({ ...body, requestId: createIntent.id }),
+      body: JSON.stringify({
+        ...body,
+        ...(createIntent ? { requestId: createIntent.id } : {}),
+      }),
     });
-    await clearDurableIntent(createIntent);
+    if (createIntent) await clearDurableIntent(createIntent);
     $("prompt").value = "";
     ctx.screenshot = null;
     ctx.element = null;
@@ -688,7 +701,11 @@ async function loadTranscript(initial = false) {
       // The side panel only ever shows live sessions, so it asks the server to
       // leave archived ones out — ~46% of the payload on a busy instance. The
       // filter below stays for older servers, which ignore the parameter.
-      const sessions = await api("/sessions?archived=exclude");
+      const sessions = await api(
+        supportsCapability(serverDescriptor, "sessionListSlices")
+          ? "/sessions?archived=exclude"
+          : "/sessions",
+      );
       if (cfg.id !== accountID) return;
       const s = sessions.find((x) => x.id === detail.id);
       if (s) {
@@ -748,13 +765,16 @@ async function sendFollowup() {
 
 async function loadComposerData() {
   const accountID = cfg.id;
+  serverDescriptor = null;
   try {
-    const [repos, models, organization] = await Promise.all([
+    const [repos, models, organization, descriptor] = await Promise.all([
       api("/repos"),
       api("/models"),
       api("/settings/general").catch(() => null),
+      api("/capabilities", { cache: "no-store" }).catch(() => null),
     ]);
     if (cfg.id !== accountID) return;
+    serverDescriptor = descriptor;
     cfg.repositories = (repos.repos || []).map((repo) => ({
       id: repo.id,
       ghRepo: repo.ghRepo || repo.id,

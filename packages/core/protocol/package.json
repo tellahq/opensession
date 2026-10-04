@@ -23,6 +23,7 @@
     "./tool-presentation": "./src/tool-presentation.ts",
     "./identity": "./src/identity.ts",
     "./workspace-group": "./src/workspace-group.ts",
-    "./executor": "./src/executor.ts"
+    "./executor": "./src/executor.ts",
+    "./capabilities": "./src/capabilities.ts"
   }
 }

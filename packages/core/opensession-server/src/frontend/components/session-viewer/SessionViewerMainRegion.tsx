@@ -1,3 +1,4 @@
+import { useServerCapability } from "../../hooks/useServerCapability";
 import { useSessionVoice } from "../../hooks/useSessionVoice";
 import { SessionVoiceStatus } from "../SessionVoiceStatus";
 import { SESSION_VOICE_STATUS } from "../../lib/session-voice-client";
@@ -642,7 +643,9 @@ export function SessionViewerMainRegion({
     leaveLatest,
   } = layout;
 
+  const sessionVoiceSupported = useServerCapability("sessionVoice");
   const voiceAvailable =
+    sessionVoiceSupported &&
     !noEngine &&
     !noteMode &&
     !forkFrom &&

@@ -21,6 +21,7 @@
  * breaks one. Unknown frame types must be ignored by clients.
  */
 
+import type { ServerDescriptor, ServerCapabilities } from "./capabilities";
 import type { AnsweredAskData, EntryNotice, NoticeKind } from "./notices";
 import type { ToolPresentation } from "./tool-presentation";
 
@@ -593,7 +594,8 @@ export type ProtocolServerMessage =
       type: "hello";
       bootId: string;
       restartBy?: string;
-      capabilities?: { commandResults?: boolean };
+      capabilities?: ServerCapabilities;
+      server?: ServerDescriptor;
       /** Verified durable-command partition. Never derived from client claims. */
       commandScope?: string;
     }

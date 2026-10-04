@@ -1,3 +1,4 @@
+import { publishServerDescriptor } from "../lib/server-capabilities";
 import {
   use,
   useState,
@@ -260,6 +261,7 @@ export function useWebSocket(presenceActive = true) {
       countSessionPerf("ws_bytes_received", byteLength);
       try {
         const msg = parseServerMessage(data);
+        if (msg.type === "hello") publishServerDescriptor(msg.server);
         if (!commandNegotiatedRef.current) {
           if (msg.type === "hello") {
             handoffPendingRef.current = false;

@@ -632,8 +632,9 @@ describe("single session ownership", () => {
 
   test("durable client replay is negotiated before commands are resent", () => {
     expect(read("ws-handlers.ts")).toContain(
-      "capabilities: { commandResults: true }",
+      "capabilities: SERVER_DESCRIPTOR.capabilities",
     );
+    expect(read("server-capabilities.ts")).toContain("commandResults: true");
     const hook = read("../frontend/hooks/useWebSocket.ts");
     expect(hook).toContain("commandResultsRef.current = false");
     expect(hook).toContain("msg.capabilities?.commandResults === true");

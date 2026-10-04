@@ -607,3 +607,10 @@ OS1/
 
 - Image attachments in assistant markdown
 - Push-style updates for the sessions list (it polls today)
+
+## Server capabilities
+
+The app tolerantly decodes `GET /api/capabilities` before offering Desk voice
+calls and before requesting a voice secret. Missing endpoints or flags mean
+unsupported; text conversations continue to work. See
+[client capability negotiation](../../../docs/client-capabilities.md).

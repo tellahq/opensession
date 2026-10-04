@@ -1,3 +1,4 @@
+import { serverCapabilitiesResponse } from "../server-capabilities";
 /**
  * Health check, macropad keypad feed, in-process frontend rebuild, HTTP upload staging, audit-log viewer.
  *
@@ -255,6 +256,10 @@ export async function handleSystemRoutes(
         { status: 503 },
       );
     }
+  }
+
+  if (path === "/api/capabilities" && req.method === "GET") {
+    return serverCapabilitiesResponse();
   }
 
   // Health check (includes agent health — Tailscale-only, not public).
