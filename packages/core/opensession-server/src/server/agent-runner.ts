@@ -907,6 +907,14 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
       handoffEntries = entries;
       if (entries.length) {
         const handoff = buildEngineSwitchHandoffNote({
+          targetModel: nextModel,
+          sessionId:
+            currentOpts.journal?.osSessionId || currentOpts.transcriptSessionId,
+          requiredEntryId:
+            entries.find((e) => e.id === currentOpts.promptEntryId)?.id ||
+            entries.findLast((e) => e.type === "user")?.id,
+          reservedBytes:
+            new TextEncoder().encode(currentOpts.prompt).length + 4000,
           fromModel: currentModel,
           fromProvider: familyLabel(fromFamily),
           toProvider: familyLabel(toFamily),

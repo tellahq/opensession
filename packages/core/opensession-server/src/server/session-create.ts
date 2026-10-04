@@ -321,11 +321,15 @@ export function resolveForkContext(
 }
 
 /** Opening-prompt context block handing a non-clonable fork its source transcript. */
-export async function forkHandoffContext(fork: ForkContext): Promise<string> {
+export async function forkHandoffContext(
+  fork: ForkContext,
+  reservedBytes = 0,
+): Promise<string> {
   const entries = await mergedSessionTranscriptAsync(fork.source);
   return wrapContext(
     buildForkHandoffNote({
       sourceId: fork.source.id,
+      reservedBytes,
       sourceTitle: fork.source.title,
       sourceModel: fork.source.model,
       messageId: fork.messageId,
@@ -3106,7 +3110,7 @@ export async function handleCreateSessionMessage(
       }
     }
     if (needsForkHandoff && fork) {
-      openingPrompt += `\n\n${await forkHandoffContext(fork)}`;
+      openingPrompt += `\n\n${await forkHandoffContext(fork, new TextEncoder().encode(openingPrompt).length)}`;
     }
 
     if (branch && branch !== createPlan.branch)

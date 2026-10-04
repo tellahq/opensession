@@ -157,6 +157,8 @@ import {
 } from "./github-auth";
 import { ensureAgentAwsCredsFile } from "./aws-creds";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
+import { HandoffBudgetError } from "./portable-handoff";
+import { recoverFreshEngineTranscript } from "./engine-handoff-transcript";
 import {
   piAnthropicTransport,
   piEngineEnabled,
@@ -3045,23 +3047,30 @@ async function* runPiAttempt(
         const tail = (
           transcriptForwarder()
             ? opts.seedTranscriptEntries || []
-            : (await transcript.readTail(unifiedSessionId, 200)).entries
+            : await recoverFreshEngineTranscript({
+                unifiedSessionId,
+                priorEngineSessionId: opts.sessionId,
+                currentEntryId: String(userLine.uuid),
+              })
         )
           // This turn's own prompt was already early-persisted — the model
           // gets it as the actual prompt, not as history.
           .filter((e) => e.id !== String(userLine.uuid));
         if (tail.length) {
           resumeMissNote = buildEngineSwitchHandoffNote({
+            targetModel: model,
+            sessionId: unifiedSessionId,
+            reservedBytes: new TextEncoder().encode(opts.prompt).length + 4000,
             fromModel: model,
             fromProvider: PROVIDER,
             toProvider: PROVIDER,
             sameEngineRestart: true,
             entries: tail,
-            maxEntries: 200,
             maxChars: 60_000,
           });
         }
       } catch (e) {
+        if (e instanceof HandoffBudgetError) throw e;
         console.warn("[pi-runner] resume-miss handoff build failed:", e);
       }
     }

@@ -1036,3 +1036,65 @@ describe("suggest_task", () => {
     }
   });
 });
+
+describe("read_session_transcript", () => {
+  it("resolves omitted entries in pages and excludes injection records and unknown sessions", async () => {
+    const h = makeHarness();
+    h.sessions.set("example-session", {
+      id: "example-session",
+      title: "Example",
+    });
+    h.deps.control.transcriptEntry = async (_id, entryId) => ({
+      id: entryId,
+      type: "assistant",
+      content: "first\nsecond",
+      timestamp: "2026-01-01T00:00:00Z",
+      ...(entryId === "injection"
+        ? { noticeKind: "context-injection" as const }
+        : {}),
+    });
+    registerSessionControl(h.deps.control);
+    const server = createSessionsMcpServer({
+      ...ctx(),
+      currentSessionId: "example-session",
+    });
+    const client = new Client({
+      name: "transcript-reader-test",
+      version: "1.0.0",
+    });
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    await server.instance.connect(serverTransport);
+    await client.connect(clientTransport);
+    const read = async (args: Record<string, unknown>) => {
+      const result = await client.callTool({
+        name: "read_session_transcript",
+        arguments: args,
+      });
+      return (result as { content: Array<{ text: string }> }).content[0].text;
+    };
+    try {
+      const first = JSON.parse(await read({ entry_id: "message", limit: 6 }));
+      expect(first.content).toBe("first\n");
+      expect(first.nextOffset).toBe(6);
+      const rest = JSON.parse(
+        await read({
+          id: "example-session",
+          entry_id: "message",
+          offset: first.nextOffset,
+        }),
+      );
+      expect(rest.content).toBe("second");
+      expect(rest.nextOffset).toBeNull();
+      expect(await read({ entry_id: "injection" })).toBe(
+        "Transcript entry not found.",
+      );
+      expect(await read({ id: "unknown", entry_id: "message" })).toBe(
+        "Session not found.",
+      );
+    } finally {
+      await client.close();
+      await server.instance.close();
+    }
+  });
+});

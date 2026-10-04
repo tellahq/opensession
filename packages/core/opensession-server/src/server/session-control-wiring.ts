@@ -288,6 +288,18 @@ registerSessionControl({
     return s ? (summaryState.byId.get(s.id) ?? buildSummary(s)) : undefined;
   },
 
+  transcriptEntry: async (id, entryId) => {
+    const s = findSession(id);
+    if (!s) return null;
+    const { transcript } = await import("./actor-transcript");
+    const entry = await transcript.getFullEntry(id, entryId);
+    if (entry) return entry;
+    return (
+      (await mergedSessionTranscriptAsync(s)).find((e) => e.id === entryId) ??
+      null
+    );
+  },
+
   transcriptTail: async (id, n) => {
     const s = findSession(id);
     if (!s) return [];
@@ -1275,7 +1287,7 @@ ${createMentionsNote}`;
     // A non-clonable fork hands the source transcript over in the opening
     // prompt instead (same as the web create).
     if (fork?.needsHandoff) {
-      openingPrompt += `\n\n${await forkHandoffContext(fork)}`;
+      openingPrompt += `\n\n${await forkHandoffContext(fork, new TextEncoder().encode(openingPrompt).length)}`;
     }
 
     const computedSpec: ResolvedCreate = {

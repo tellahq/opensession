@@ -102,7 +102,7 @@ describe("buildSessionContextNote", () => {
     );
     expect(note).toContain("turn 39");
     expect(note).toContain("turn 35");
-    expect(note).not.toContain("turn 34");
+    expect(note).toContain("Omitted user entry u34");
   });
 });
 
@@ -155,13 +155,22 @@ describe("buildEngineSwitchHandoffNote", () => {
       sameEngineRestart: true,
       entries: [
         entry("u1", "user", "Inspect the failing build."),
-        entry("t1", "tool_use", "Running the test suite"),
-        entry("r1", "tool_result", "3 tests failed in session-transfer"),
+        {
+          ...entry("t1", "tool_use", "Running the test suite"),
+          toolName: "bash",
+          toolUseId: "c",
+          toolInput: { command: "bun test" },
+        },
+        {
+          ...entry("r1", "tool_result", "exit code: 1"),
+          toolUseId: "c",
+          isError: true,
+        },
       ],
     });
 
-    expect(note).toContain("- Tool: Running the test suite");
-    expect(note).toContain("- Tool result: 3 tests failed in session-transfer");
+    expect(note).toContain("- Tool: Command: bun test");
+    expect(note).toContain("- Tool result: Command: bun test; failed; exit 1");
   });
 
   it("degrades gracefully with no transcript entries", () => {
@@ -192,7 +201,7 @@ describe("buildEngineSwitchHandoffNote", () => {
     expect(note).toContain("Progress update 20.");
   });
 
-  it("drops only the oldest turns when the handoff reaches its character budget", () => {
+  it("keeps the original request and emits references when selection is limited", () => {
     const note = buildEngineSwitchHandoffNote({
       fromProvider: "claude",
       toProvider: "codex",
@@ -200,11 +209,12 @@ describe("buildEngineSwitchHandoffNote", () => {
         entry("u1", "user", "old instruction"),
         entry("a1", "assistant", "new instruction"),
       ],
-      maxChars: 40,
+      maxChars: 300,
+      maxEntries: 1,
     });
 
-    expect(note).toContain("Earlier conversation omitted");
-    expect(note).not.toContain("old instruction");
-    expect(note).toContain("new instruction");
+    expect(note).toContain("Omitted assistant entry a1");
+    expect(note).toContain("- User: old instruction");
+    expect(note).not.toContain("- Assistant: new instruction");
   });
 });

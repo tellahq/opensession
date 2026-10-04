@@ -2860,6 +2860,10 @@ async function runSessionPromptInner(
       // remembers everything up to the switch and only needs the interim
       // turns; a fresh target treats the transcript as the whole conversation.
       switchHandoff = buildEngineSwitchHandoffNote({
+        targetModel: session.model,
+        sessionId,
+        reservedBytes: new TextEncoder().encode(prompt).length + 4000,
+
         // The model that last drove the session is the second-to-last
         // modelHistory entry (the last is the switch into the current model).
         fromModel:
@@ -3002,7 +3006,7 @@ async function runSessionPromptInner(
     }
     for (const c of attachedDigests) inlinedSessionIds.add(c.id);
     if (attachedDigests.length)
-      prompt = `${wrapContext(buildSessionContextNote(attachedDigests), "attached-session-excerpt")}\n\n${prompt}`;
+      prompt = `${wrapContext(buildSessionContextNote(attachedDigests, undefined, session.model, new TextEncoder().encode(prompt).length), "attached-session-excerpt")}\n\n${prompt}`;
   }
   // Non-image attachments: stage to disk and tell the agent where they landed.
   // A host on another machine also gets the bytes (see the launchers below).

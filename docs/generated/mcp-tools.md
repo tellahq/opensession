@@ -40,7 +40,7 @@ touches an in-process tool:
 
 | Server | Tools | Runs | Condition |
 | --- | --- | --- | --- |
-| [`opensession-sessions`](#opensession-sessions) | 23 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
+| [`opensession-sessions`](#opensession-sessions) | 24 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
 | [`opensession-admin`](#opensession-admin) | 14 | interactive, Slack loop | – |
 | [`opensession-runners`](#opensession-runners) | 5 | interactive | – |
 | [`opensession-goals`](#opensession-goals) | 8 | interactive | – |
@@ -75,7 +75,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-34 servers, 167 tools.
+34 servers, 168 tools.
 
 ## opensession-sessions
 
@@ -98,6 +98,12 @@ List Open Session sessions with their live state and explicit creator metadata. 
 `mcp__opensession-sessions__get_session` · input: `id` (string, required), `transcript_lines` (number)
 
 Get detail on one session by id, including explicit createdBy and createdAt metadata (createdBy is null when the origin did not record identity), state, any pending question, queue depth, and transcript tail.
+
+### `read_session_transcript`
+
+`mcp__opensession-sessions__read_session_transcript` · input: `id` (string), `entry_id` (string, required), `offset` (integer), `limit` (integer)
+
+Read a saved transcript entry by id, including omitted portable handoff history. Returns full text in character pages, with nextOffset for continuation. Same session visibility as get_session. Context-injection records are excluded.
 
 ### `suggest_task`
 
@@ -227,7 +233,7 @@ Remove a teammate from a workspace's collaborators. Removing someone who is not 
 
 ### Variant · selfImprove automation (isAdmin: false, automationSelf: true)
 
-Built for: automation. 13 tools, without `wait_for`, `wait_status`, `cancel_wait`, `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`.
+Built for: automation. 14 tools, without `wait_for`, `wait_status`, `cancel_wait`, `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`.
 
 ## opensession-admin
 

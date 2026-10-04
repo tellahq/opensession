@@ -1,36 +1,18 @@
-import { isContextInjection } from "@tellahq/opensession-protocol/notices";
+import { selectPortableHandoff } from "./portable-handoff";
+import { contextWindowFor } from "./models";
 import { productName } from "./config";
 import type { TranscriptEntry } from "./types";
 
-function clip(text: string, max = 1200): string {
-  const oneLine = text.replace(/\s+/g, " ").trim();
-  return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
-}
-
-function roleLabel(type: TranscriptEntry["type"]): string {
-  switch (type) {
-    case "user":
-      return "User";
-    case "assistant":
-      return "Assistant";
-    case "system":
-      return "System";
-    case "tool_use":
-      return "Tool";
-    case "tool_result":
-      return "Tool result";
-  }
-}
-
 export function buildForkHandoffNote(input: {
   sourceId: string;
+  reservedBytes?: number;
   sourceTitle?: string | null;
   sourceModel?: string | null;
+  targetModel?: string | null;
   messageId?: string;
   entries: TranscriptEntry[];
   maxEntries?: number;
 }): string {
-  const maxEntries = input.maxEntries ?? 12;
   let entries = input.entries;
   let boundary = "latest message";
   if (input.messageId) {
@@ -43,14 +25,13 @@ export function buildForkHandoffNote(input: {
     }
   }
 
-  const useful = entries
-    .filter(
-      (e) =>
-        ["user", "assistant", "system"].includes(e.type) &&
-        !isContextInjection(e),
-    )
-    .slice(-maxEntries);
-  const lines = useful.map((e) => `- ${roleLabel(e.type)}: ${clip(e.content)}`);
+  const transcript = selectPortableHandoff({
+    entries,
+    sessionId: input.sourceId,
+    reservedBytes: (input.reservedBytes ?? 0) + 4000,
+    contextWindow: contextWindowFor(input.targetModel || input.sourceModel),
+    maxEntries: input.maxEntries,
+  });
 
   return [
     "## Fork handoff",
@@ -58,8 +39,8 @@ export function buildForkHandoffNote(input: {
     input.sourceTitle ? `Source title: ${input.sourceTitle}` : undefined,
     input.sourceModel ? `Source model: ${input.sourceModel}` : undefined,
     "The original engine cannot clone its internal conversation state here, so use this transcript handoff as context and continue the requested work in this new session.",
-    lines.length
-      ? `Recent source transcript:\n${lines.join("\n")}`
+    transcript
+      ? `Source transcript:\n${transcript}`
       : "No source transcript entries were available.",
   ]
     .filter(Boolean)
@@ -80,26 +61,29 @@ export function buildSessionContextNote(
     model?: string | null;
     entries: TranscriptEntry[];
   }>,
-  maxEntriesPerSession = 30,
+  maxEntriesPerSession?: number,
+  targetModel?: string | null,
+  reservedBytes = 0,
 ): string {
   const sections = sessions.map((session) => {
-    const useful = session.entries
-      .filter(
-        (e) =>
-          ["user", "assistant", "system"].includes(e.type) &&
-          !isContextInjection(e),
-      )
-      .slice(-maxEntriesPerSession);
-    const lines = useful.map(
-      (e) => `- ${roleLabel(e.type)}: ${clip(e.content, 700)}`,
-    );
+    const transcript = selectPortableHandoff({
+      entries: session.entries,
+      sessionId: session.id,
+      reservedBytes: reservedBytes + 4000,
+      contextWindow: contextWindowFor(targetModel),
+      maxEntries: maxEntriesPerSession,
+      maxBytes: Math.floor(
+        Math.min(64_000, (contextWindowFor(targetModel) || 128_000) / 4) /
+          Math.max(1, sessions.length),
+      ),
+    });
     const head = `### ${session.title || "Untitled session"} — @session:${session.id}${session.model ? ` (${session.model})` : ""}`;
-    return `${head}\n${lines.length ? lines.join("\n") : "(no transcript yet)"}`;
+    return `${head}\n${transcript || "(no transcript yet)"}`;
   });
 
   return [
     "## Attached session transcripts",
-    "The user attached transcripts of other sessions from this workspace as background context for this conversation. They are reference material from parallel conversations — the user's own message is the actual instruction. Excerpts are truncated; for the full history of any of them, use the opensession-sessions `get_session` tool with the session id shown.",
+    "The user attached transcripts of other sessions from this workspace as background context for this conversation. They are reference material from parallel conversations — the user's own message is the actual instruction. Selected messages are intact; use opensession-sessions `read_session_transcript` for omitted entries (get_session shows session details).",
     ...sections,
   ].join("\n\n");
 }
@@ -117,6 +101,10 @@ export function buildSessionContextNote(
  */
 export function buildEngineSwitchHandoffNote(input: {
   fromModel?: string | null;
+  targetModel?: string | null;
+  sessionId?: string;
+  reservedBytes?: number;
+  requiredEntryId?: string;
   fromProvider: "claude" | "codex" | "pi";
   toProvider: "claude" | "codex" | "pi";
   /** True when the target engine is resuming its own earlier thread (Claude
@@ -132,34 +120,15 @@ export function buildEngineSwitchHandoffNote(input: {
   maxEntries?: number;
   maxChars?: number;
 }): string {
-  const maxChars = input.maxChars ?? 180_000;
-  // An injection record is the harness's own audit row, not conversation:
-  // folding it into a handoff would re-inject a payload the new engine is
-  // about to be handed anyway, and grow it on every restart.
-  const entries = input.entries.filter((e) => !isContextInjection(e));
-  const conversational = input.sameEngineRestart
-    ? entries
-    : entries.filter((e) => ["user", "assistant", "system"].includes(e.type));
-  const useful =
-    input.maxEntries !== undefined
-      ? conversational.slice(-input.maxEntries)
-      : conversational;
-  const candidates = useful.map(
-    (e) => `- ${roleLabel(e.type)}: ${clip(e.content, 8_000)}`,
-  );
-  const lines: string[] = [];
-  let chars = 0;
-  for (let i = candidates.length - 1; i >= 0; i--) {
-    const line = candidates[i];
-    if (lines.length && chars + line.length + 1 > maxChars) break;
-    lines.unshift(line.slice(0, maxChars));
-    chars += line.length + 1;
-  }
-  if (lines.length < candidates.length) {
-    lines.unshift(
-      "- System: Earlier conversation omitted because the engine handoff reached its context budget.",
-    );
-  }
+  const transcript = selectPortableHandoff({
+    entries: input.entries,
+    sessionId: input.sessionId,
+    contextWindow: contextWindowFor(input.targetModel),
+    reservedBytes: (input.reservedBytes ?? 0) + 4000,
+    requiredEntryId: input.requiredEntryId,
+    maxBytes: input.maxChars,
+    maxEntries: input.maxEntries,
+  });
 
   const fromLabel = input.fromModel
     ? `${input.fromModel} (${input.fromProvider})`
@@ -175,8 +144,8 @@ export function buildEngineSwitchHandoffNote(input: {
       : input.targetResuming
         ? "You resumed your own earlier thread in this session, so you remember the conversation up to the switch — the transcript below covers the turns the other engine ran in between, which you were not part of."
         : "The previous engine cannot transfer its internal conversation state to you, so treat the transcript below as the conversation so far and continue seamlessly.",
-    lines.length
-      ? `Conversation transcript:\n${lines.join("\n")}`
+    transcript
+      ? `Conversation transcript:\n${transcript}`
       : "No prior transcript entries were available.",
   ]
     .filter(Boolean)

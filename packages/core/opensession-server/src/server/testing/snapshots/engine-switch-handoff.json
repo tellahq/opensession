@@ -94,7 +94,7 @@
       "prompt": {
         "injectedContext": [
           {
-            "body": "## Engine handoff\n\nThis Open Session session was just switched mid-conversation from claude to you. You are continuing the *same* session, not starting a new task.\n\nYou resumed your own earlier thread in this session, so you remember the conversation up to the switch — the transcript below covers the turns the other engine ran in between, which you were not part of.\n\nConversation transcript:\n- User: start the migration\n- Assistant: Renamed the first two call sites.",
+            "body": "## Engine handoff\n\nThis Open Session session was just switched mid-conversation from claude to you. You are continuing the *same* session, not starting a new task.\n\nYou resumed your own earlier thread in this session, so you remember the conversation up to the switch — the transcript below covers the turns the other engine ran in between, which you were not part of.\n\nConversation transcript:\nRead omitted entries with opensession-sessions read_session_transcript (session id: bks-snap-switch, entry_id, offset). Offsets are characters.\n- User: start the migration\n\n- Assistant: Renamed the first two call sites.",
             "source": "handoff"
           }
         ],
@@ -289,7 +289,7 @@
       "type": "user"
     },
     {
-      "content": "## Engine handoff\n\nThis Open Session session was just switched mid-conversation from claude to you. You are continuing the *same* session, not starting a new task.\n\nYou resumed your own earlier thread in this session, so you remember the conversation up to the switch — the transcript below covers the turns the other engine ran in between, which you were not part of.\n\nConversation transcript:\n- User: start the migration\n- Assistant: Renamed the first two call sites.",
+      "content": "## Engine handoff\n\nThis Open Session session was just switched mid-conversation from claude to you. You are continuing the *same* session, not starting a new task.\n\nYou resumed your own earlier thread in this session, so you remember the conversation up to the switch — the transcript below covers the turns the other engine ran in between, which you were not part of.\n\nConversation transcript:\nRead omitted entries with opensession-sessions read_session_transcript (session id: bks-snap-switch, entry_id, offset). Offsets are characters.\n- User: start the migration\n\n- Assistant: Renamed the first two call sites.",
       "contextSource": "handoff",
       "noticeKind": "context-injection",
       "seq": 7,

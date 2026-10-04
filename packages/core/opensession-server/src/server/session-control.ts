@@ -209,6 +209,11 @@ export interface SessionControl {
   getSession(id: string): SessionSummary | undefined;
   /** Last `n` transcript entries for a session (for the "what's it doing" view). */
   transcriptTail(id: string, n: number): Promise<TranscriptEntry[]>;
+  /** Targeted read for portable context references. Same visibility as getSession. */
+  transcriptEntry?(
+    id: string,
+    entryId: string,
+  ): Promise<TranscriptEntry | null>;
   /**
    * Resolve a session's pending AskUserQuestion. `answers` maps each question's
    * header to the chosen option label. Returns false if nothing was waiting.

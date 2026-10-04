@@ -1,3 +1,4 @@
+import { isContextInjection } from "@tellahq/opensession-protocol/notices";
 /**
  * opensession-sessions — an in-process MCP server that lets the agent see and steer
  * every other Open Session session from Slack: what's running, what's waiting on a
@@ -790,6 +791,49 @@ export function createSessionsMcpServer(
         );
         parts.push(`\n*Recent transcript:*\n${fmtTranscriptTail(tail)}`);
         return text(parts.join("\n"));
+      },
+    ),
+    tool(
+      "read_session_transcript",
+      "Read a saved transcript entry by id, including omitted portable handoff history. Returns full text in character pages, with nextOffset for continuation. Same session visibility as get_session. Context-injection records are excluded.",
+      {
+        id: z
+          .string()
+          .optional()
+          .describe("Session id. Omit for the current session."),
+        entry_id: z.string(),
+        offset: z.number().int().min(0).optional(),
+        limit: z.number().int().min(1).max(16000).optional(),
+      },
+      async (args: {
+        id?: string;
+        entry_id: string;
+        offset?: number;
+        limit?: number;
+      }) => {
+        const ctrl = getSessionControl();
+        const id = args.id || ctx.currentSessionId;
+        if (!id || !ctrl.getSession(id)) return text("Session not found.");
+        if (!ctrl.transcriptEntry)
+          return text("Transcript entry reading is unavailable.");
+        const entry = await ctrl.transcriptEntry(id, args.entry_id);
+        if (!entry || isContextInjection(entry))
+          return text("Transcript entry not found.");
+        const offset = args.offset ?? 0;
+        const end = Math.min(
+          entry.content.length,
+          offset + (args.limit ?? 8000),
+        );
+        return text(
+          JSON.stringify({
+            id: entry.id,
+            role: entry.type,
+            content: entry.content.slice(offset, end),
+            offset,
+            nextOffset: end < entry.content.length ? end : null,
+            totalCharacters: entry.content.length,
+          }),
+        );
       },
     ),
     // Delegation the person keeps control of: the agent proposes, the card
