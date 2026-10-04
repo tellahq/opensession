@@ -65,6 +65,54 @@ variable-by-variable rationale.
 appears in the checkout the Portal ran from; it is disposable and must stay
 gitignored.
 
+## Test with real data
+
+The demo dataset is synthetic. To check a change against the shape of your
+own recent sessions, seed `.dev-state` from your state before starting the
+Portal:
+
+```bash
+bun scripts/seed-dev-state.ts [--from <state root>] [--to .dev-state] [--sessions 30] [--force]
+```
+
+`--from` defaults to your home directory, the live state root. It also accepts
+another state root or a sessions directory. The script copies the most
+recently active non-archived sessions that have an actor transcript: their
+session documents and transcript history. It reads the source on read-only
+SQLite connections and never writes to it.
+
+The copy is display-only. It builds a fresh store with the checkout's schema
+and copies only an allowlist, so the dev instance has nothing to resume or
+deliver:
+
+- Session documents keep display fields such as title, mode, repo, branch,
+  model, usage, and parent. Engine resume ids, worktree paths, MCP servers,
+  report-back wiring, automation, goal, loop, sandbox, runner, account, and
+  Slack fields are dropped.
+- Run state, turns, asks, deliveries, timers, outbox effects, commands, agent
+  operations, wake cursors, and append receipts are not copied.
+- Common credential shapes in transcript text (GitHub, Anthropic, OpenAI,
+  Slack, AWS, and Google keys, bearer tokens, private keys, `token=` values)
+  are replaced with `[REDACTED]`. This is best effort. Treat the result as
+  private data and keep it on the machine.
+
+The script refuses to run when replacing the target would touch source or
+live state: the sessions directory, an ancestor of it, your home,
+`~/.opensession`, or the deploy state. It also refuses while a dev server
+uses the target, detected by `start.sh`'s `dev-server.pid`, the gateway lease,
+or an open kernel database. A non-empty target is replaced only with
+`--force`, and only when it already looks like dev state. The result is built
+in a sibling directory and swapped in at the end.
+
+The seed writes `.dev-state/real-data-seed.json`. While that marker exists,
+`start.sh` boots with demo mode off, so no demo dataset is generated into the
+seeded state. Delete `.dev-state` to go back to the demo. With demo mode off,
+the demo stubs for message summaries, voice calls, and Slack channel lists
+are off too. The seed prevents automatic resumption; it does not make the UI
+read-only. Sending a prompt starts a new run, and explicitly invoking these
+features can make real calls using credentials available on the machine.
+Use this mode to inspect history, not to exercise live integrations.
+
 ## What a dev instance does NOT cover
 
 Live integrations are out of scope by design. A dev instance has no Slack,

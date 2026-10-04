@@ -21,6 +21,12 @@
 # only the variables listed below, so the instance is a demo-mode dev server
 # (OPENSESSION_DEV=1 OPENSESSION_DEMO=1) with isolated state, its own gateway
 # lease and its own kernel. See docs/self-development.md.
+#
+# Real data: when ./.dev-state holds the marker written by
+# `bun scripts/seed-dev-state.ts`, the seeded sessions are served instead and
+# demo mode stays off, so no demo dataset is generated into them. While the
+# instance runs, ./.dev-state/dev-server.pid names this script's pid; the seed
+# script refuses to replace a directory a dev server is using.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -48,6 +54,15 @@ command -v bun >/dev/null 2>&1 || {
 STATE_DIR="$PWD/.dev-state"
 mkdir -p "$STATE_DIR"
 
+DEMO=1
+if [ -f "$STATE_DIR/real-data-seed.json" ]; then
+	DEMO=0
+	echo "Real-data seed found in $STATE_DIR; demo generation is skipped."
+fi
+
+PID_FILE="$STATE_DIR/dev-server.pid"
+echo "$$" >"$PID_FILE"
+
 KERNEL_PORT="$(bun -e 'const s = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } }); process.stdout.write(String(s.port)); s.stop(true);')"
 KERNEL_URL="http://127.0.0.1:$KERNEL_PORT"
 KERNEL_TOKEN="$(bun -e 'process.stdout.write(crypto.randomUUID() + crypto.randomUUID())')"
@@ -67,6 +82,7 @@ env -i \
 KERNEL_PID=$!
 cleanup() {
 	kill "$KERNEL_PID" 2>/dev/null || true
+	rm -f "$PID_FILE"
 }
 trap cleanup EXIT INT TERM
 
@@ -96,7 +112,7 @@ env -i \
 	PORT="$PORT" \
 	HOST=127.0.0.1 \
 	OPENSESSION_DEV=1 \
-	OPENSESSION_DEMO=1 \
+	OPENSESSION_DEMO="$DEMO" \
 	OPENSESSION_STATE_DIR="$STATE_DIR" \
 	OPENSESSION_DEPLOY_STATE="$STATE_DIR/deploy" \
 	OPENSESSION_GATEWAY_LEASE="$STATE_DIR/gateway-active.lock" \
@@ -123,5 +139,6 @@ GATEWAY_PID=$!
 cleanup() {
 	kill "$GATEWAY_PID" 2>/dev/null || true
 	kill "$KERNEL_PID" 2>/dev/null || true
+	rm -f "$PID_FILE"
 }
 wait "$GATEWAY_PID"
