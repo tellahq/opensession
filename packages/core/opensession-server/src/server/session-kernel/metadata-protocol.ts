@@ -40,6 +40,8 @@ export type SessionMetadataSeedRow = {
 };
 
 export type MetadataActorRequest =
+  | { op: "worktree_sessions"; worktreeDir: string }
+  | { op: "worktree_activity"; worktreeDir: string; excludeSessionId: string }
   | { op: "get"; sessionId: string }
   | {
       op: "put";
@@ -78,28 +80,34 @@ export type SessionMetadataPutResult =
   | { status: "conflict"; current: SessionMetadataRecord | null };
 
 export type MetadataActorResult<T extends MetadataActorRequest> = T extends {
-  op: "get";
+  op: "worktree_activity" | "worktree_sessions";
 }
-  ? SessionMetadataRecord | null
-  : T extends { op: "put" }
-    ? SessionMetadataPutResult
-    : T extends { op: "catalog_get" }
-      ? SessionMetadataCatalogRow | null
-      : T extends { op: "seed_catalog" }
-        ? number
-        : T extends { op: "catalog_page" }
-          ? SessionMetadataCatalogRow[]
-          : T extends { op: "pending_exports" }
-            ? Array<{ sessionId: string; rev: number; exportedRev: number }>
-            : T extends { op: "catalog_complete" }
-              ? boolean
-              : void;
+  ? string[]
+  : T extends {
+        op: "get";
+      }
+    ? SessionMetadataRecord | null
+    : T extends { op: "put" }
+      ? SessionMetadataPutResult
+      : T extends { op: "catalog_get" }
+        ? SessionMetadataCatalogRow | null
+        : T extends { op: "seed_catalog" }
+          ? number
+          : T extends { op: "catalog_page" }
+            ? SessionMetadataCatalogRow[]
+            : T extends { op: "pending_exports" }
+              ? Array<{ sessionId: string; rev: number; exportedRev: number }>
+              : T extends { op: "catalog_complete" }
+                ? boolean
+                : void;
 
 export const SESSION_METADATA_MAX_DOC_BYTES = 4 * 1024 * 1024;
 export const SESSION_METADATA_CATALOG_PAGE_LIMIT = 1_000;
 
 export function isMetadataRead(request: MetadataActorRequest): boolean {
   return (
+    request.op === "worktree_sessions" ||
+    request.op === "worktree_activity" ||
     request.op === "get" ||
     request.op === "catalog_get" ||
     request.op === "catalog_page" ||
@@ -122,6 +130,13 @@ export function assertMetadataActorRequest(
   if ("sessionId" in request) {
     if (typeof request.sessionId !== "string" || !request.sessionId)
       throw new Error("Session metadata request requires a session id");
+  }
+  if (
+    request.op === "worktree_activity" ||
+    request.op === "worktree_sessions"
+  ) {
+    if (!request.worktreeDir || request.worktreeDir.length > 4096)
+      throw new Error("Invalid worktree lookup");
   }
   if (request.op === "put") {
     if (

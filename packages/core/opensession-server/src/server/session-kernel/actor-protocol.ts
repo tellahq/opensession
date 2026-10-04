@@ -188,6 +188,8 @@ export type KernelActorRunEventResult = RunEventDecisionResult;
 export function isCriticalSettlementCommand(
   command: SessionActorReducerCommand,
 ): boolean {
+  if (command.kind === "revert")
+    return command.request.op !== "get" && command.request.op !== "begin";
   if (command.kind === "gateway")
     return command.request.op === "complete" || command.request.op === "fail";
   if (command.kind === "core")

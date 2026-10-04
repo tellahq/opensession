@@ -1,3 +1,4 @@
+import type { RevertActorRequest, RevertActorResult } from "./revert-protocol";
 /**
  * One logical owner for a session.
  *
@@ -202,6 +203,14 @@ export async function sessionCore<T extends CoreActorRequest>(
   return store.tombstoneSession(request.sessionId) as CoreActorResult<T>;
 }
 
+export async function sessionRevert<T extends RevertActorRequest>(
+  request: T,
+): Promise<RevertActorResult<T>> {
+  if (!state.actor)
+    throw new Error("Revert requires the authoritative session actor");
+  return state.actor.decideRevertAsync(request);
+}
+
 /** Session metadata: the actor owns the document; the catalog projects it. */
 export async function sessionMetadata<T extends MetadataActorRequest>(
   request: T,
@@ -209,6 +218,13 @@ export async function sessionMetadata<T extends MetadataActorRequest>(
   if (state.actor) return state.actor.decideMetadataAsync(request);
   const store = compatibilityStoreForTest("metadata");
   type R = MetadataActorResult<T>;
+  if (request.op === "worktree_sessions")
+    return store.sessionsInWorktree(request.worktreeDir) as R;
+  if (request.op === "worktree_activity")
+    return store.worktreeActivity(
+      request.worktreeDir,
+      request.excludeSessionId,
+    ) as R;
   if (request.op === "get")
     return store.sessionMetadata(request.sessionId) as R;
   if (request.op === "put") {

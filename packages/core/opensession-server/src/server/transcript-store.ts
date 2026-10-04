@@ -1,3 +1,15 @@
+import {
+  assertRevertRequest,
+  type RevertActorRequest,
+  type RevertActorResult,
+  type RevertState,
+  type RevertIntent,
+  type RevertMutationResult,
+} from "./session-kernel/revert-protocol";
+import {
+  readSessionMetadata,
+  putSessionMetadata,
+} from "./session-kernel/metadata-store";
 /**
  * Transcript v2 store (docs/transcripts.md §1, §1a) — the owned
  * per-session sequence-numbered event log co-located with that session's
@@ -1157,6 +1169,36 @@ export class TranscriptStore {
   applyActorRequest(request: TranscriptActorRequest): unknown {
     assertTranscriptActorRequest(request);
     const result = this.applyActorRequestValidated(request);
+    if (
+      result &&
+      typeof result === "object" &&
+      "entries" in result &&
+      Array.isArray(result.entries)
+    ) {
+      const hasMetadata = this.db
+        .query(
+          "SELECT 1 FROM sqlite_master WHERE type='table' AND name='session_kernel_metadata'",
+        )
+        .get();
+      const record = hasMetadata
+        ? readSessionMetadata(this.db, request.sessionId)
+        : null;
+      const ranges = record
+        ? ((
+            JSON.parse(record.doc) as {
+              turnRevertedRanges?: { fromSeq: number; toSeq: number }[];
+            }
+          ).turnRevertedRanges ?? [])
+        : [];
+      for (const entry of result.entries as TranscriptEntry[]) {
+        if (
+          !entry.turnRevert &&
+          entry.seq !== undefined &&
+          ranges.some((r) => entry.seq! >= r.fromSeq && entry.seq! <= r.toSeq)
+        )
+          entry.reverted = true;
+      }
+    }
     assertTranscriptActorResponse(result);
     return result;
   }
@@ -1241,9 +1283,11 @@ export class TranscriptStore {
     if (request.op === "count") return this.countEvents(request.sessionId);
     if (request.op === "summary") {
       const row = this.db
-        .query(`
+        .query(
+          `
         SELECT last_ts, next_seq FROM transcript_sessions WHERE session_id = ?
-      `)
+      `,
+        )
         .get(request.sessionId) as {
         last_ts: number | null;
         next_seq: number;
@@ -1255,6 +1299,241 @@ export class TranscriptStore {
     if (request.op === "pending_wake")
       return this.pendingActorWake(request.sessionId);
     return this.ackActorWake(request.sessionId, request.cursor);
+  }
+
+  /** Revert metadata and its append-only marker share THIS connection and
+   * transaction. Never perform a gateway-side pair of independent writes. */
+  applyRevertActorRequest<T extends RevertActorRequest>(
+    request: T,
+  ): RevertActorResult<T> {
+    assertRevertRequest(request);
+    return this.db
+      .transaction(() => {
+        const stored = readSessionMetadata(this.db, request.sessionId);
+        if (!stored)
+          throw new Error("Revert requires actor-owned session metadata");
+        const doc = JSON.parse(stored.doc) as Record<string, unknown> & {
+          turnRevertedRanges?: { fromSeq: number; toSeq: number }[];
+          piSessionId?: string;
+          turnRevertIntent?: RevertIntent;
+          lastTurnRevert?: RevertIntent;
+          turnRevertReceipts?: string[];
+        };
+        const state = (): RevertState => ({
+          intent: doc.turnRevertIntent ?? null,
+          lastRevert: doc.lastTurnRevert ?? null,
+          engineSessionId: doc.piSessionId,
+        });
+        if (request.op === "get") return state();
+        if (request.op === "reconcile")
+          return { status: "committed", state: state() };
+        const refused = (
+          reason: Extract<
+            RevertMutationResult,
+            { status: "refused" }
+          >["reason"],
+        ): RevertMutationResult => ({
+          status: "refused",
+          reason,
+          state: state(),
+        });
+        const id =
+          request.op === "begin" ? request.intent.intentId : request.intentId;
+        if (doc.turnRevertReceipts?.includes(id))
+          return { status: "duplicate", state: state() };
+        const active = this.db
+          .query(
+            "SELECT run_state FROM session_kernel_state WHERE session_id = ?",
+          )
+          .get(request.sessionId) as { run_state: string } | null;
+        const queue = this.db
+          .query(
+            "SELECT queued, dispatch, steered, pending_steers FROM session_kernel_delivery WHERE session_id = ?",
+          )
+          .get(request.sessionId) as Record<string, string | null> | null;
+        const busy =
+          active && !["idle", "stopped", "failed"].includes(active.run_state);
+        if (request.op === "begin") {
+          if (doc.turnRevertIntent) {
+            if (doc.turnRevertIntent.intentId !== id)
+              return refused("intent_exists");
+            const {
+              phase: _phase,
+              createdAt: _createdAt,
+              ...original
+            } = doc.turnRevertIntent;
+            if (
+              canonicalDestinationJson(original) !==
+              canonicalDestinationJson(request.intent)
+            )
+              throw new Error(
+                "Revert identity was reused with different inputs",
+              );
+            return { status: "duplicate", state: state() };
+          }
+          const target = this.db
+            .query(
+              "SELECT seq FROM transcript_events WHERE session_id = ? AND uuid = ?",
+            )
+            .get(request.sessionId, request.intent.targetTurnId) as {
+            seq: number;
+          } | null;
+          if (
+            !target ||
+            target.seq !== request.intent.revertedEntryRange.fromSeq ||
+            request.intent.revertedEntryRange.toSeq >
+              this.getLastSeq(request.sessionId)
+          )
+            return refused("turn_missing");
+          if (busy) return refused("run_active");
+          if (
+            queue &&
+            (queue.dispatch ||
+              [queue.queued, queue.steered, queue.pending_steers].some(
+                (v) => v && v !== "[]",
+              ))
+          )
+            return refused("queued_work");
+          if (doc.piSessionId !== request.intent.fromEngineSessionId)
+            return refused("engine_changed");
+          if (
+            request.intent.operation === "undo" &&
+            (!doc.lastTurnRevert ||
+              doc.lastTurnRevert.toEngineSessionId !==
+                request.intent.fromEngineSessionId)
+          )
+            return refused("undo_unavailable");
+          doc.turnRevertIntent = {
+            ...request.intent,
+            phase: "begun",
+            createdAt: new Date().toISOString(),
+          };
+        } else {
+          const intent = doc.turnRevertIntent;
+          if (!intent || intent.intentId !== id)
+            return refused("intent_missing");
+          if (request.op === "mark_files_restored") {
+            if (intent.phase === "files_restored")
+              return { status: "duplicate", state: state() };
+            intent.phase = "files_restored";
+          } else if (request.op === "rollback") {
+            delete doc.turnRevertIntent;
+            doc.turnRevertReceipts = [
+              ...(doc.turnRevertReceipts ?? []),
+              id,
+            ].slice(-100);
+          } else {
+            if (intent.phase !== "files_restored")
+              throw new Error("Revert files have not been restored");
+            if (doc.piSessionId !== intent.fromEngineSessionId)
+              return refused("engine_changed");
+            if (busy) return refused("run_active");
+            if (request.op === "undo_last" && intent.operation !== "undo")
+              return refused("undo_unavailable");
+            doc.piSessionId = intent.toEngineSessionId;
+            if (intent.operation === "revert")
+              doc.turnRevertedRanges = [
+                ...(doc.turnRevertedRanges ?? []),
+                intent.revertedEntryRange,
+              ];
+            else {
+              const ranges = [...(doc.turnRevertedRanges ?? [])];
+              const at = ranges.findLastIndex(
+                (r) =>
+                  r.fromSeq === intent.revertedEntryRange.fromSeq &&
+                  r.toSeq === intent.revertedEntryRange.toSeq,
+              );
+              if (at >= 0) ranges.splice(at, 1);
+              doc.turnRevertedRanges = ranges;
+            }
+
+            if (intent.operation === "revert") doc.lastTurnRevert = intent;
+            else delete doc.lastTurnRevert;
+            delete doc.turnRevertIntent;
+            doc.turnRevertReceipts = [
+              ...(doc.turnRevertReceipts ?? []),
+              id,
+            ].slice(-100);
+            const turnCount = Math.max(
+              1,
+              Number(
+                (
+                  this.db
+                    .query(
+                      "SELECT count(*) AS n FROM transcript_events WHERE session_id = ? AND seq >= ? AND seq <= ? AND kind = 'user'",
+                    )
+                    .get(
+                      request.sessionId,
+                      intent.revertedEntryRange.fromSeq,
+                      intent.revertedEntryRange.toSeq,
+                    ) as { n: number }
+                ).n,
+              ),
+            );
+            const marker = this.applyActorRequest({
+              op: "append",
+              sessionId: request.sessionId,
+              requestId: `revert:${id}`,
+              entries: [
+                {
+                  id: `revert-${id}`,
+                  type: "system",
+                  content:
+                    intent.operation === "undo"
+                      ? "Workspace revert undone"
+                      : `Reverted ${Math.max(1, turnCount)} turn${turnCount === 1 ? "" : "s"}`,
+                  noticeKind: "system",
+                  timestamp: new Date().toISOString(),
+                  turnRevert: {
+                    intentId: id,
+                    operation: intent.operation,
+                    ...intent.revertedEntryRange,
+                    activeRanges: doc.turnRevertedRanges,
+                    preRevertRef: intent.preRevertRef,
+                    fromEngineSessionId: intent.fromEngineSessionId,
+                    toEngineSessionId: intent.toEngineSessionId,
+                  },
+                },
+              ],
+            }) as TranscriptMutationResult<unknown>;
+            const rev = stored.rev + 1;
+            doc.rev = rev;
+            const result = putSessionMetadata(this.db, {
+              op: "put",
+              sessionId: request.sessionId,
+              requestId: `revert:${id}:${request.op}`,
+              expectedRev: stored.rev,
+              rev,
+              doc: JSON.stringify(doc),
+              archived: stored.archived,
+              lastActivityMs: stored.lastActivityMs,
+            });
+            if (result.status === "conflict")
+              throw new Error("Revert metadata changed");
+            return {
+              status: "committed",
+              state: state(),
+              wakeCursor: marker.wakeCursor,
+            };
+          }
+        }
+        const rev = stored.rev + 1;
+        doc.rev = rev;
+        const result = putSessionMetadata(this.db, {
+          op: "put",
+          sessionId: request.sessionId,
+          requestId: `revert:${id}:${request.op}`,
+          expectedRev: stored.rev,
+          rev,
+          doc: JSON.stringify(doc),
+          archived: stored.archived,
+          lastActivityMs: stored.lastActivityMs,
+        });
+        if (result.status === "conflict")
+          throw new Error("Revert metadata changed");
+        return { status: "committed", state: state() };
+      })
+      .immediate() as RevertActorResult<T>;
   }
 
   private actorRequestDigest(request: LegacyTranscriptMutationRequest): string {
@@ -1269,11 +1548,13 @@ export class TranscriptStore {
   ): TranscriptMutationResult<unknown> | undefined {
     const digest = this.actorRequestDigest(request);
     const receipt = this.db
-      .query(`
+      .query(
+        `
       SELECT session_id, append_id, request_digest, fence_json, result_json, created_at
       FROM transcript_append_receipts
       WHERE session_id = ? AND append_id = ?
-    `)
+    `,
+      )
       .get(
         request.sessionId,
         request.requestId,
@@ -1508,11 +1789,13 @@ export class TranscriptStore {
     includeAcked = false,
   ): TranscriptWake | null {
     const row = this.db
-      .query(`
+      .query(
+        `
       SELECT cursor, acked_cursor, first_change_seq, last_change_seq, reset_epoch,
         acked_reset_epoch
       FROM session_kernel_transcript_wakes WHERE session_id = ?
-    `)
+    `,
+      )
       .get(sessionId) as {
       cursor: number;
       acked_cursor: number;
@@ -1849,7 +2132,8 @@ export class TranscriptStore {
     maxBytes = 12 * 1024 * 1024,
   ): TranscriptHydratedPage {
     const rows = this.db
-      .query(`
+      .query(
+        `
       SELECT event.seq, event.change_seq,
         COALESCE(blob.data, event.data) AS data
       FROM transcript_events event
@@ -1859,7 +2143,8 @@ export class TranscriptStore {
        AND blob.uuid = event.uuid
       WHERE event.session_id = ? AND event.seq > ?
       ORDER BY event.seq LIMIT ?
-    `)
+    `,
+      )
       .all(sessionId, sinceSeq, limit + 1) as Array<{
       seq: number;
       change_seq: number;

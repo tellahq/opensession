@@ -1,4 +1,5 @@
 import { isContextInjection } from "@tellahq/opensession-protocol/notices";
+import { turnRevertService } from "../../server/turn-revert";
 /**
  * opensession-sessions — an in-process MCP server that lets the agent see and steer
  * every other Open Session session from Slack: what's running, what's waiting on a
@@ -921,6 +922,68 @@ export function createSessionsMcpServer(
       // ---------------------------------------------------------------------
       // Control (trusted user only)
       // ---------------------------------------------------------------------
+      tool(
+        "turn_workspace_checkpoint",
+        "Preview exact changes or revert an idle local code session to before a turn, rewinding its Pi conversation too. Interactive only. Revert and undo require expected_tree set to currentTree from a fresh preview. Refuses changed commits/index, active or queued work, shared checkouts and active sibling sessions. Discard explicitly keeps current files after an interrupted revert.",
+        {
+          session_id: z.string(),
+          turn_id: z.string(),
+          action: z.enum([
+            "preview",
+            "preview_undo",
+            "revert",
+            "undo",
+            "discard",
+          ]),
+          expected_tree: z.string().optional(),
+        },
+        async (args) => {
+          try {
+            if (args.action === "preview")
+              return text(
+                JSON.stringify(
+                  await turnRevertService.preview(
+                    args.session_id,
+                    args.turn_id,
+                  ),
+                ),
+              );
+            if (args.action === "preview_undo")
+              return text(
+                JSON.stringify(
+                  await turnRevertService.previewUndo(args.session_id),
+                ),
+              );
+            if (args.action === "discard")
+              await turnRevertService.discard(args.session_id);
+            else {
+              if (!args.expected_tree)
+                return {
+                  ...text("Review the restore preview first"),
+                  isError: true,
+                };
+              if (args.action === "undo")
+                await turnRevertService.undo(
+                  args.session_id,
+                  args.expected_tree,
+                );
+              else
+                await turnRevertService.revert(
+                  args.session_id,
+                  args.turn_id,
+                  args.expected_tree,
+                );
+            }
+            return text("Workspace and conversation updated");
+          } catch (error) {
+            return {
+              ...text(error instanceof Error ? error.message : String(error)),
+              isError: true,
+            };
+          }
+        },
+      ),
+
       tool(
         "wait_for",
         "End this turn cleanly and wake this same session later without sleeping in a tool call. Register the wait, then write the human a normal status/final message and STOP the turn. A timer wakes after the requested delay. A pr_checks wait polls durably outside the model turn, waits for the check set to remain settled, then starts a new turn with the result; it also wakes on PR close/merge or timeout. A session_turn wait wakes when ANOTHER session's turn ends (it goes idle, stops on a question for a human, fails, or is cancelled); the wake-up carries that session's final state and last assistant message, so use it after send_to_session instead of guessing a delay. An already idle target wakes you right away. One wait may be active per session, and a new one replaces it. Never call sleep after this tool succeeds.",

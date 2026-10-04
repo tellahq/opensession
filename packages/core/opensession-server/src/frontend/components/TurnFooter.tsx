@@ -1,3 +1,4 @@
+import { TurnCheckpointActions } from "./TurnCheckpointActions";
 import React, { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import type { TranscriptEntry } from "../lib/types";
@@ -59,6 +60,8 @@ interface Props {
   /** Scratch files the turn wrote (`opensession-assets`), in first-write order. */
   assets: string[];
   onFork?: (entryId: string) => void;
+  sessionId?: string;
+  turnId?: string;
 }
 
 /**
@@ -79,6 +82,8 @@ export const TurnFooter = function TurnFooter({
   assets,
   onFork,
   className,
+  sessionId,
+  turnId,
 }: Props) {
   const pathRoots = useToolPathRoots();
   const isPhone = useIsPhone();
@@ -109,6 +114,9 @@ export const TurnFooter = function TurnFooter({
       {assets.map((path) => (
         <AssetChip key={path} path={path} />
       ))}
+      {sessionId && turnId && (
+        <TurnCheckpointActions sessionId={sessionId} turnId={turnId} />
+      )}
       <div className={ACTIONS}>
         <Tooltip label={copied ? "Copied" : "Copy message"}>
           <button
@@ -235,6 +243,8 @@ function turnFooterPropsEqual(prev: Props, next: Props): boolean {
     prev.entry !== next.entry ||
     prev.durationMs !== next.durationMs ||
     prev.onFork !== next.onFork ||
+    prev.sessionId !== next.sessionId ||
+    prev.turnId !== next.turnId ||
     prev.className !== next.className ||
     prev.assets.length !== next.assets.length ||
     prev.files.length !== next.files.length

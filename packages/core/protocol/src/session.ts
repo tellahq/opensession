@@ -81,6 +81,19 @@ export function isExecutorProvider(value: unknown): value is ExecutorProvider {
 
 /** One rendered line of a session's durable transcript (the jsonl record). */
 export interface TranscriptEntry {
+  /** Derived from actor-owned rollback ranges; original rows remain intact. */
+  reverted?: boolean;
+  /** Append-only workspace/conversation rollback audit marker. */
+  turnRevert?: {
+    intentId: string;
+    operation: "revert" | "undo";
+    fromSeq: number;
+    toSeq: number;
+    activeRanges?: { fromSeq: number; toSeq: number }[];
+    preRevertRef?: string;
+    fromEngineSessionId?: string;
+    toEngineSessionId?: string;
+  };
   id: string;
   type: "user" | "assistant" | "tool_use" | "tool_result" | "system";
   content: string;

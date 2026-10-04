@@ -177,6 +177,10 @@ is either delivered as a steer or queued behind it and delivered as the next
 turn — nothing is dropped. A session can also ask _you_ something mid-turn and park
 until answered, which is what puts it in the "needs input" lane.
 
+Local code worktrees also keep [turn checkpoints](docs/turn-checkpoints.md).
+The web transcript can show exact changes and restore files and the Pi
+conversation to before a turn, without moving commits or the staging index.
+
 Sessions can spawn other sessions. An orchestrator delegates focused work to workers
 (their own context, possibly a different model), reads their reports and keeps
 the final call. Spawn depth is capped so this cannot run away.

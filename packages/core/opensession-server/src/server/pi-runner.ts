@@ -1,3 +1,7 @@
+import {
+  captureTurnWorkspace,
+  type TurnCheckpointInput,
+} from "./turn-workspace-checkpoint";
 /**
  * Pi coding-agent runner. Every production model id routes here.
  *
@@ -2277,6 +2281,7 @@ async function* runPiAttempt(
   let mcpRuntime: McpRuntime | undefined;
   let mcpBridge: PiMcpBridge | undefined;
   let checkpointWriter: PiTurnCheckpointWriter | undefined;
+  let workspaceTurn: TurnCheckpointInput | undefined;
   let sawSettled = false;
   // Pool-backed providers only (pi/openai: Codex pool, pi/xai-oauth: SuperGrok
   // pool): the picked account — visible to the catch/terminal paths so the
@@ -3055,7 +3060,10 @@ async function* runPiAttempt(
         )
           // This turn's own prompt was already early-persisted — the model
           // gets it as the actual prompt, not as history.
-          .filter((e) => e.id !== String(userLine.uuid));
+          .filter(
+            (e) =>
+              e.id !== String(userLine.uuid) && !e.reverted && !e.turnRevert,
+          );
         if (tail.length) {
           resumeMissNote = buildEngineSwitchHandoffNote({
             targetModel: model,
@@ -3093,6 +3101,33 @@ async function* runPiAttempt(
         );
       } catch (e) {
         console.warn("[pi-runner] interrupted-turn repair failed:", e);
+      }
+    }
+
+    // Local isolated code worktrees only. Shared checkouts belong to all
+    // sessions; remote hosts need a remote checkpoint implementation.
+    if (
+      !remote &&
+      !sharedCheckout &&
+      !isAsk &&
+      !isScratch &&
+      cwdRepo &&
+      unifiedSessionId
+    ) {
+      workspaceTurn = {
+        cwd,
+        sessionId: unifiedSessionId,
+        turnId: String(userLine.uuid),
+      };
+      try {
+        await captureTurnWorkspace(workspaceTurn, "before", {
+          engineId: sessionManager.getSessionId(),
+          file: basename(sessionManager.getSessionFile() || ""),
+          leafId: sessionManager.getLeafId(),
+        });
+      } catch (error) {
+        workspaceTurn = undefined;
+        console.warn("[pi-runner] turn workspace capture skipped:", error);
       }
     }
 
@@ -3967,6 +4002,16 @@ async function* runPiAttempt(
       try {
         void session.abort();
       } catch {}
+    }
+    if (workspaceTurn && reachedTerminal && !walk.rotate) {
+      try {
+        await captureTurnWorkspace(workspaceTurn, "after");
+      } catch (error) {
+        console.warn(
+          "[pi-runner] turn workspace completion capture skipped:",
+          error,
+        );
+      }
     }
     // Mirrors the run journal below: only a turn torn down mid-run (or a
     // process that never reaches here) leaves a checkpoint to recover from.

@@ -40,7 +40,7 @@ touches an in-process tool:
 
 | Server | Tools | Runs | Condition |
 | --- | --- | --- | --- |
-| [`opensession-sessions`](#opensession-sessions) | 24 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
+| [`opensession-sessions`](#opensession-sessions) | 25 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
 | [`opensession-admin`](#opensession-admin) | 14 | interactive, Slack loop | – |
 | [`opensession-runners`](#opensession-runners) | 5 | interactive | – |
 | [`opensession-goals`](#opensession-goals) | 8 | interactive | – |
@@ -75,7 +75,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-34 servers, 168 tools.
+34 servers, 169 tools.
 
 ## opensession-sessions
 
@@ -110,6 +110,12 @@ Read a saved transcript entry by id, including omitted portable handoff history.
 `mcp__opensession-sessions__suggest_task` · input: `title` (string, required), `description` (string, required), `instructions` (string, required), `repo` (string), `mode` ("ask" | "code"), `branch` (string)
 
 Propose a drive-by finding for a person to start in a new Open Session session, without starting it. Use it rarely: only for a self-contained piece of work unrelated to the current request that this session will not pick up, such as a bug spotted on the way in another area, a missing test elsewhere, or a docs gap you passed. Do not use it for the work you were asked to do, for follow-ups or next steps of that work, or for anything the person is likely to ask this session to do next; those belong in your reply as a plain suggestion so the person decides. Suggest each task at most once. The suggestion renders as a card in this session with a "Start session" button that creates a new session from your instructions; nothing runs until they press it. Write instructions a fresh session can act on with no access to this conversation: goal, relevant files, constraints, acceptance criteria, what to report. In your reply mention the suggestion in one line and do not repeat its instructions. Do not start the task yourself (spawn_task, create_session) unless asked.
+
+### `turn_workspace_checkpoint`
+
+`mcp__opensession-sessions__turn_workspace_checkpoint` · input: `session_id` (string, required), `turn_id` (string, required), `action` ("preview" | "preview_undo" | "revert" | "undo" | "discard", required), `expected_tree` (string)
+
+Preview exact changes or revert an idle local code session to before a turn, rewinding its Pi conversation too. Interactive only. Revert and undo require expected_tree set to currentTree from a fresh preview. Refuses changed commits/index, active or queued work, shared checkouts and active sibling sessions. Discard explicitly keeps current files after an interrupted revert.
 
 ### `wait_for`
 
@@ -233,7 +239,7 @@ Remove a teammate from a workspace's collaborators. Removing someone who is not 
 
 ### Variant · selfImprove automation (isAdmin: false, automationSelf: true)
 
-Built for: automation. 14 tools, without `wait_for`, `wait_status`, `cancel_wait`, `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`.
+Built for: automation. 14 tools, without `turn_workspace_checkpoint`, `wait_for`, `wait_status`, `cancel_wait`, `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`.
 
 ## opensession-admin
 

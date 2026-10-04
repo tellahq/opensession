@@ -1,3 +1,4 @@
+import { turnRevertService } from "./turn-revert";
 /**
  * Driving a session turn: runSessionPrompt(Inner) and everything that feeds it —
  * the queue-coupled delivery ops (enqueue/steer/interrupt/drain), the sandbox
@@ -1539,6 +1540,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
     // Selection, interrupt consumption, and claim are one actor reduction.
     // Queue contents cannot change between choosing a batch and durable
     // dispatch ownership, and a crash cannot lose or duplicate the interrupt.
+    await turnRevertService.recover(sessionId);
     const claim = await beginNextPromptDispatch(sessionId, {
       stillWorking: runningChildCount(sessionId) > 0,
     });
@@ -2570,6 +2572,7 @@ export async function runSessionPrompt(
   // is. Waiting here, before the reservation below, keeps the reservation
   // from making that operation refuse.
   await settleSessionLifecycle(sessionId);
+  await turnRevertService.recover(sessionId);
   // A direct send to a sandbox can spend minutes provisioning before its run
   // journal exists. Give it the same durable dispatch record as a queue drain,
   // so a restart during provisioning requeues the complete prompt.

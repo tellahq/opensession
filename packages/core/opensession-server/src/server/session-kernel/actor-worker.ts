@@ -136,11 +136,16 @@ export function startSessionKernelActorWorker(): void {
           throw new Error(`Session ${command.request.sessionId} is tombstoned`);
         else if (command.kind === "transcript")
           result = host.transcript(command.request);
-        else if (command.kind === "creation_event")
+        else if (command.kind === "revert") {
+          result = host.revert(command.request);
+          if (command.request.op !== "get")
+            host.settleSessionMetadataCatalog(command.request.sessionId);
+        } else if (command.kind === "creation_event")
           result = store.applyCreationEvent(command.decision);
-        else if (command.kind === "run_event")
+        else if (command.kind === "run_event") {
           result = store.applyRunEvent(command.decision);
-        else if (command.kind === "delivery") {
+          host.refreshWorktreeActivity(command.decision.sessionId);
+        } else if (command.kind === "delivery") {
           const delivery = command.request;
           if (delivery.op === "snapshot")
             result = store.deliverySnapshot(delivery.sessionId);
@@ -284,7 +289,14 @@ export function startSessionKernelActorWorker(): void {
         } else if (command.kind === "metadata") {
           const metadata = command.request;
           assertMetadataActorRequest(metadata);
-          if (metadata.op === "get")
+          if (metadata.op === "worktree_sessions")
+            result = host.central.sessionsInWorktree(metadata.worktreeDir);
+          else if (metadata.op === "worktree_activity")
+            result = host.central.worktreeActivity(
+              metadata.worktreeDir,
+              metadata.excludeSessionId,
+            );
+          else if (metadata.op === "get")
             result = store.sessionMetadata(metadata.sessionId);
           else if (metadata.op === "put") {
             const put = store.putSessionMetadata(metadata);

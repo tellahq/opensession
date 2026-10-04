@@ -1,3 +1,4 @@
+import type { RevertActorRequest } from "./revert-protocol";
 import type { AskActorRequest } from "./ask-protocol";
 import type { DeliveryActorRequest } from "./delivery-protocol";
 import type { GatewayCommandRequest } from "./gateway-command-protocol";
@@ -16,6 +17,7 @@ export type RunFence = {
 };
 
 export type SessionActorReducerCommand =
+  | { kind: "revert"; commandId: string; request: RevertActorRequest }
   | {
       kind: "creation_event";
       commandId: string;

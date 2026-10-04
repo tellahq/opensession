@@ -20,6 +20,7 @@ export type SessionActorRoute =
   | { scope: "outbox"; id: number; mutation: boolean };
 
 export function isReadReducer(command: SessionActorReducerCommand): boolean {
+  if (command.kind === "revert") return command.request.op === "get";
   if (command.kind === "ask")
     return (
       command.request.op === "snapshot" || command.request.op === "entries"
@@ -50,6 +51,7 @@ export function sessionActorReducerRoute(
         sessionId: command.decision.sessionId,
         mutation: true,
       };
+    case "revert":
     case "delivery":
     case "ask":
     case "turn":

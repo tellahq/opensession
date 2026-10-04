@@ -37,6 +37,13 @@ file-backed as described below.
   actor. Backfills and detached, sandbox, and remote run hosts relay bounded
   transcript batches through that facade; they never open actor databases.
 
+Workspace reverts append an audit marker rather than deleting transcript rows.
+The revert reducer switches the Pi engine pointer, updates reverted sequence
+ranges, appends the marker, and clears the recovery intent in one transaction
+on the actor database. Read projections annotate reverted rows; model handoff
+readers omit them. See [turn checkpoints](turn-checkpoints.md) for admission,
+recovery, and undo invariants.
+
 The authority move is an offline, all-at-once operation. Stop the gateway,
 executor, and session-kernel services, then run
 `scripts/migrate-actor-transcripts.ts`. It fails closed unless all three units

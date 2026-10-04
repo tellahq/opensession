@@ -307,3 +307,58 @@ export function markSessionMetadataCatalogComplete(db: Database): void {
     [CATALOG_COMPLETE_MIGRATION, Date.now()],
   );
 }
+
+export function migrateWorktreeActivitySchema35(
+  db: Database,
+  schemaVersion: number,
+): void {
+  if (schemaVersion >= 35) return;
+  db.transaction(() => {
+    db.exec(`CREATE TABLE IF NOT EXISTS session_kernel_worktree_activity (
+      session_id TEXT PRIMARY KEY, active INTEGER NOT NULL, queued INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS idx_skmc_worktree ON session_kernel_metadata_catalog(json_extract(doc, '$.worktreeDir'));
+    PRAGMA user_version = 35;`);
+  }).immediate();
+}
+export function projectWorktreeActivity(
+  db: Database,
+  sessionId: string,
+  active: boolean,
+  queued: boolean,
+): void {
+  db.run(
+    "INSERT INTO session_kernel_worktree_activity VALUES (?, ?, ?) ON CONFLICT(session_id) DO UPDATE SET active=excluded.active, queued=excluded.queued",
+    [sessionId, Number(active), Number(queued)],
+  );
+}
+export function worktreeActivity(
+  db: Database,
+  worktreeDir: string,
+  excludeSessionId: string,
+): string[] {
+  return (
+    db
+      .query(
+        `SELECT m.session_id FROM session_kernel_metadata_catalog m
+    LEFT JOIN session_kernel_worktree_activity a ON a.session_id = m.session_id
+    WHERE json_extract(m.doc, '$.worktreeDir') = ? AND m.session_id != ?
+      AND (a.session_id IS NULL OR a.active = 1 OR a.queued = 1) LIMIT 1`,
+      )
+      .all(worktreeDir, excludeSessionId) as { session_id: string }[]
+  ).map((row) => row.session_id);
+}
+
+export function sessionsInWorktree(
+  db: Database,
+  worktreeDir: string,
+): string[] {
+  const rows = db
+    .query(
+      "SELECT session_id FROM session_kernel_metadata_catalog WHERE json_extract(doc, '$.worktreeDir') = ? LIMIT 1001",
+    )
+    .all(worktreeDir) as { session_id: string }[];
+  if (rows.length > 1000)
+    throw new Error("Too many sessions in this worktree to clean up safely");
+  return rows.map((row) => row.session_id);
+}

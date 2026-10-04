@@ -1,3 +1,5 @@
+import { revertedEntryIds } from "../lib/reverted-turns";
+import { cn } from "../ui/cn";
 import React, { useEffect, useEffectEvent, useRef } from "react";
 import type {
   SessionNote,
@@ -66,6 +68,7 @@ type RenderBlock =
       kind: "footer";
       entry: TranscriptEntry;
       durationMs: number;
+      turnId?: string;
       files: TouchedFile[];
       assets: string[];
     }
@@ -417,6 +420,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   const renderedEntries = normalizeLegacyVoiceToolEntries(entries)
     .map(classifyEntry)
     .filter((entry) => entry.turnBoundary || !isRenderlessUserEntry(entry));
+  const reverted = revertedEntryIds(renderedEntries);
   const shareAfterEntryIds = new Set<string>();
   if (slackShare) {
     for (let i = 0; i < renderedEntries.length; i++) {
@@ -444,6 +448,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
   // entry is work; keeping it in one block prevents narration from splitting a
   // run into a ladder of one-step disclosures.
   let turn: TranscriptEntry[] = [];
+  let turnId: string | undefined;
 
   const flushTurn = (trailing = false) => {
     if (turn.length === 0) return;
@@ -475,6 +480,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       blocks.push({
         kind: "footer",
         entry: final,
+        turnId,
         durationMs:
           new Date(final.timestamp).getTime() -
           new Date(turn[0].timestamp).getTime(),
@@ -496,6 +502,7 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
       turn.push(entry);
     } else {
       flushTurn();
+      if (entry.type === "user" || entry.turnBoundary) turnId = entry.id;
       // Hidden system-triggered turns exist only to keep the completed output
       // before them out of later work. They are structural, never a blank row.
       if (!entry.turnBoundary) blocks.push({ kind: "entry", entry });
@@ -614,6 +621,8 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
                         durationMs={inner.durationMs}
                         files={inner.files}
                         assets={inner.assets}
+                        sessionId={sessionId}
+                        turnId={inner.turnId}
                         onFork={onFork}
                       />
                     ) : inner.kind === "entry" &&
@@ -681,6 +690,8 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
             durationMs={block.durationMs}
             files={block.files}
             assets={block.assets}
+            sessionId={sessionId}
+            turnId={block.turnId}
             onFork={onFork}
           />
         ) : (
@@ -716,7 +727,11 @@ const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
         estimateSize: renderBlockEstimate(block),
         // A footer overlaps the answer above it, so its margin belongs to the
         // measured wrapper rather than inside the contained row.
-        className: block.kind === "footer" ? TURN_FOOTER_LIFT : undefined,
+        className: cn(
+          block.kind === "footer" && TURN_FOOTER_LIFT,
+          entriesInBlock.some((entry) => reverted.has(entry.id)) &&
+            "opacity-50",
+        ),
         content: (
           <>
             {content}

@@ -1,3 +1,4 @@
+import { handleTurnCheckpointRoutes } from "./turn-checkpoints";
 /**
  * Ordered HTTP route handler chain. Handlers are grouped by domain; a handler
  * returns undefined to fall through. Order across modules is free because the
@@ -105,6 +106,7 @@ export const routeHandlers: RouteHandler[] = [
   handleSandboxesRoutes,
   handleSandboxRoutes,
   handleShippedChangeRoutes,
+  handleTurnCheckpointRoutes,
   handleSessionsRoutes,
   handlePrRoutes,
   handleIssuesRoutes,

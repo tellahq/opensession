@@ -1,3 +1,4 @@
+import type { RevertActorRequest, RevertActorResult } from "./revert-protocol";
 import { dirname } from "node:path";
 import {
   SessionKernelStore,
@@ -333,6 +334,14 @@ export class SessionKernelStoreHost {
     return this.openIsolated(sessionId);
   }
 
+  revert<T extends RevertActorRequest>(request: T): RevertActorResult<T> {
+    // Validate isolated transcript authority before opening the known actor.
+    this.transcript({ op: "count", sessionId: request.sessionId });
+    return this.openTranscript(request.sessionId).applyRevertActorRequest(
+      request,
+    );
+  }
+
   transcript<T extends TranscriptActorRequest>(
     request: T,
   ): TranscriptActorResult<T> {
@@ -500,6 +509,8 @@ export class SessionKernelStoreHost {
       method,
       args,
     );
+    if (route.mutation && ["setRunState", "applyRunEvent"].includes(method))
+      this.refreshWorktreeActivity(route.sessionId);
     if (route.mutation && SPARSE_PROJECTION_MUTATIONS.has(method))
       this.refreshSessionProjections(route.sessionId);
     return result;
@@ -519,7 +530,24 @@ export class SessionKernelStoreHost {
     );
   }
 
+  refreshWorktreeActivity(sessionId: string): void {
+    const store = this.storeForSession(sessionId);
+    const run = store.runState(sessionId);
+    const delivery = store.deliverySnapshot(sessionId);
+    this.centralOperation(() =>
+      this.central.projectWorktreeActivity(
+        sessionId,
+        !["idle", "stopped", "failed"].includes(run.state),
+        !!delivery.dispatch ||
+          delivery.queued.length > 0 ||
+          delivery.steered.length > 0 ||
+          delivery.pendingSteers.length > 0,
+      ),
+    );
+  }
+
   refreshSessionProjections(sessionId: string): void {
+    this.refreshWorktreeActivity(sessionId);
     if (!this.isIsolated(sessionId)) return;
     const store = this.storeForSession(sessionId);
     const quarantined =

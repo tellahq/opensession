@@ -271,7 +271,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
     bootId: linuxBootId(),
     start: linuxProcessStart(process.pid),
   } satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 34;
+export const SESSION_KERNEL_SCHEMA_VERSION = 35;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -1594,6 +1594,7 @@ export class SessionKernelStore {
     migrateAgentOperationCancellationSchema32(this.db, schemaVersion);
     metadataStore.migrateSessionMetadataSchema33(this.db, schemaVersion);
     catalogDocumentStore.migrateCatalogDocumentSchema34(this.db, schemaVersion);
+    metadataStore.migrateWorktreeActivitySchema35(this.db, schemaVersion);
     assertAgentOperationSchema28(this.db);
     assertAgentOperationCancellationSchema32(this.db);
     if (path !== ":memory:") {
@@ -2101,6 +2102,14 @@ export class SessionKernelStore {
         requestId,
       ],
     );
+  }
+
+  hasRevertIntent(sessionId: string): boolean {
+    return !!this.db
+      .query(
+        "SELECT 1 FROM session_kernel_metadata WHERE session_id = ? AND json_extract(doc, '$.turnRevertIntent') IS NOT NULL",
+      )
+      .get(sessionId);
   }
 
   runState(sessionId: string): DurableRunState {
@@ -2642,6 +2651,21 @@ export class SessionKernelStore {
       const prior = this.runState(input.sessionId);
       const from = prior.state as RunState;
       if (
+        this.hasRevertIntent(input.sessionId) &&
+        !["idle", "stopped", "failed", "interrupted"].includes(
+          nextRunState(from, input.event) ?? from,
+        )
+      ) {
+        result = {
+          accepted: false,
+          from,
+          to: from,
+          reason: "invalid_transition",
+          state: prior,
+        };
+        return;
+      }
+      if (
         input.runKey &&
         ["turn_end", "run_failed", "start_failed", "start_aborted"].includes(
           input.event,
@@ -2790,6 +2814,11 @@ export class SessionKernelStore {
     generation?: number;
     currentRunId?: string | null;
   }): DurableRunState {
+    if (
+      this.hasRevertIntent(input.sessionId) &&
+      !["idle", "stopped", "failed", "interrupted"].includes(input.state)
+    )
+      throw new Error("Revert interrupted, needs attention");
     const now = Date.now();
     const since = new Date(now).toISOString();
     let next!: DurableRunState;
@@ -2886,6 +2915,7 @@ export class SessionKernelStore {
         "session_kernel_outbox",
         "session_kernel_metadata",
         "session_kernel_metadata_catalog",
+        "session_kernel_worktree_activity",
       ])
         this.db.run(`DELETE FROM ${table} WHERE session_id = ?`, [sessionId]);
       this.db.run(
@@ -2920,6 +2950,7 @@ export class SessionKernelStore {
         "session_kernel_outbox",
         "session_kernel_metadata",
         "session_kernel_metadata_catalog",
+        "session_kernel_worktree_activity",
       ]) {
         this.db.run(`DELETE FROM ${table} WHERE session_id = ?`, [sessionId]);
       }
@@ -4501,6 +4532,14 @@ export class SessionKernelStore {
         interrupted: boolean;
         revision: number;
       } {
+    if (this.hasRevertIntent(input.sessionId)) {
+      const delivery = this.deliveryRow(input.sessionId);
+      return {
+        kind: "hold",
+        heldCount: delivery.queued.length,
+        revision: delivery.revision,
+      };
+    }
     if (!input.promptEntryId || input.promptEntryId.length > 256)
       throw new Error("Invalid next prompt dispatch identity");
     const mutation = this.mutateDelivery(
@@ -4591,6 +4630,8 @@ export class SessionKernelStore {
     kind?: "create";
     requireQueued?: boolean;
   }): { promptEntryId: string; items: unknown[]; revision: number } {
+    if (this.hasRevertIntent(input.sessionId))
+      throw new Error("Revert interrupted, needs attention");
     const mutation = this.mutateDelivery(
       input.sessionId,
       "delivery_dispatch_claimed",
@@ -6224,6 +6265,24 @@ export class SessionKernelStore {
   // The document is actor-owned; see metadata-store.ts for the SQL and
   // metadata-protocol.ts for the contract.
 
+  projectWorktreeActivity(
+    sessionId: string,
+    active: boolean,
+    queued: boolean,
+  ): void {
+    metadataStore.projectWorktreeActivity(this.db, sessionId, active, queued);
+  }
+  sessionsInWorktree(worktreeDir: string): string[] {
+    return metadataStore.sessionsInWorktree(this.db, worktreeDir);
+  }
+  worktreeActivity(worktreeDir: string, excludeSessionId: string): string[] {
+    return metadataStore.worktreeActivity(
+      this.db,
+      worktreeDir,
+      excludeSessionId,
+    );
+  }
+
   sessionMetadata(sessionId: string): SessionMetadataRecord | null {
     return metadataStore.readSessionMetadata(this.db, sessionId);
   }
@@ -6233,6 +6292,25 @@ export class SessionKernelStore {
   ): SessionMetadataPutResult {
     if (this.isTombstoned(input.sessionId))
       throw new Error(`Session ${input.sessionId} was deleted`);
+    const prior = metadataStore.readSessionMetadata(this.db, input.sessionId);
+    const before = prior
+      ? (JSON.parse(prior.doc) as {
+          turnRevertIntent?: unknown;
+          piSessionId?: string;
+        })
+      : null;
+    const after = JSON.parse(input.doc) as {
+      turnRevertIntent?: unknown;
+      piSessionId?: string;
+    };
+    if (
+      JSON.stringify(before?.turnRevertIntent) !==
+        JSON.stringify(after.turnRevertIntent) ||
+      (before?.turnRevertIntent && before.piSessionId !== after.piSessionId)
+    )
+      throw new Error(
+        "Only the revert actor may change a pending revert or its engine pointer",
+      );
     return metadataStore.putSessionMetadata(this.db, input);
   }
 

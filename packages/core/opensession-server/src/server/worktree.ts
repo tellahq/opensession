@@ -589,6 +589,20 @@ export async function removeWorktree(
         worktreeDir: wtPath,
       });
     } catch {}
+    const { sessionMetadata } = await import("./session-kernel");
+    const { deleteTurnWorkspaces } =
+      await import("./turn-workspace-checkpoint");
+    // Indexed ownership for one known checkout, never a session list or actor
+    // database scan. Delete refs before Git removes the linked worktree.
+    try {
+      const owners = await sessionMetadata({
+        op: "worktree_sessions",
+        worktreeDir: wtPath,
+      });
+      for (const owner of owners) await deleteTurnWorkspaces(repo.repo, owner);
+    } catch (error) {
+      console.warn("Could not clean up local turn checkpoint refs:", error);
+    }
     await $`git -C ${repo.repo} worktree remove ${wtPath} --force`.quiet();
   } catch (e) {
     console.error(`Failed to remove worktree for ${branch}:`, e);

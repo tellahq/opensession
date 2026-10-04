@@ -19,3 +19,5 @@ export * from "./lifecycle-protocol";
 export * from "./effect-executors";
 export * from "./creation-effect-executors";
 export * from "./creation-intents";
+
+export * from "./revert-protocol";

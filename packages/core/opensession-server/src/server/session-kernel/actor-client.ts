@@ -1,3 +1,4 @@
+import type { RevertActorRequest, RevertActorResult } from "./revert-protocol";
 import type { SessionActorReducerCommand } from "./lifecycle-protocol";
 import {
   type CreationEventDecision,
@@ -419,6 +420,18 @@ export class SessionKernelActorClient {
         command: { kind: "core", commandId: crypto.randomUUID(), request },
       },
       `core ${request.op}`,
+    );
+  }
+
+  decideRevertAsync<T extends RevertActorRequest>(
+    request: T,
+  ): Promise<RevertActorResult<T>> {
+    return this.callAsync<RevertActorResult<T>>(
+      {
+        t: "reduce",
+        command: { kind: "revert", commandId: crypto.randomUUID(), request },
+      },
+      `revert ${request.op}`,
     );
   }
 

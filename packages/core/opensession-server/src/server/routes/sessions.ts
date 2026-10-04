@@ -1,3 +1,4 @@
+import { deleteTurnWorkspaces } from "../turn-workspace-checkpoint";
 import { handleAgentMessageSummaryRoutes } from "./agent-message-summary";
 /**
  * Session listing, transcripts, transcript search/images, archive/title/status/review overrides, delete.
@@ -139,7 +140,7 @@ import {
 import { statePath } from "../paths";
 import { writeFileAtomic } from "../shared/atomic-write";
 import { githubMutationCredential } from "./github-credential";
-import { defaultRepo } from "../config";
+import { defaultRepo, configuredRepos, getConfigAsync } from "../config";
 import type { UnifiedSession } from "../types";
 import {
   enrichSessionPrRefs,
@@ -2014,6 +2015,12 @@ export async function handleSessionsRoutes(
       // (it finds no session and skips). Best-effort: a refused push is
       // logged there and never blocks the delete.
       await deleteSessionCheckpoint(session).catch(() => {});
+      const checkpointRepo = Object.values(
+        configuredRepos(await getConfigAsync()),
+      ).find((repo) => repo.id === session.repo);
+      const checkpointDir = checkpointRepo?.repo || session.worktreeDir;
+      if (checkpointDir)
+        await deleteTurnWorkspaces(checkpointDir, session.id).catch(() => {});
       // If that was the workspace's last session, delete the workspace too.
       // Otherwise auto-wrapped 1:1 workspaces linger as undeletable empty
       // sidebar rows. PR-backed workspaces (`key`) stay because they regroup new

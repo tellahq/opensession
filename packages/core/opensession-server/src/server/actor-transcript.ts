@@ -296,7 +296,12 @@ export const transcript = {
         maxEstimatedBytes: 180_000,
         weightProfile: "handoff",
       },
-    }),
+    }).then((page) => ({
+      ...page,
+      entries: page.entries.filter(
+        (entry) => !entry.reverted && !entry.turnRevert,
+      ),
+    })),
   readSince: (
     sessionId: string,
     sinceSeq: number,
