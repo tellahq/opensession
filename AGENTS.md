@@ -43,6 +43,46 @@ and phone together. For protocol, preference, or transcript changes, check the
 native app and Chrome extension for matching wire models or behavior. Read the
 nearest nested `AGENTS.md` before editing a client.
 
+## Hit every surface
+
+The most common defect is a change that works on the path you tested and is
+missing everywhere else. Before calling a change done, walk this list and say
+which entries applied:
+
+- **Entry points.** A behavior reachable from the session view is usually also
+  reachable from the sidebar, the command menu, a keybinding, and Settings.
+- **Clients.** Web desktop and phone, Electron, the native app, and the Chrome
+  extension (see above). Newer servers talk to older clients and the reverse;
+  gate new behavior on server-advertised capabilities, never on a version guess.
+- **Engines.** An engine-shaped feature needs a decision per engine through its
+  declared capabilities, even if the decision is "not supported here".
+- **Agents.** A capability a person can trigger is usually one an agent should
+  reach through an MCP tool, and automations and goals run the same paths. That
+  works only when it is a service method, not route handler code.
+- **Reverse states.** If you add a way in, add the way out and the way to see
+  it. Archive needs unarchive; snooze needs unsnooze. A one-way door is a bug.
+- **Where work runs.** Host worktrees, the shared checkout, sandboxes, runners,
+  and detached run hosts behave differently. So do local, Tailscale, and public
+  ingress connections.
+- **Docs.** Check whether the change makes existing guidance inaccurate.
+
+## Ways to hurt yourself
+
+1. **Killing by pattern.** Never `pkill -f`, `killall`, `pgrep | xargs kill`, or
+   kill a PID found by matching a name, path, or worktree string. Your own agent
+   process, sibling sessions sharing your worktree, run hosts, and the live
+   server all carry matching strings in their argv. Kill only a PID you captured
+   at spawn, or the listener of a port you own after confirming its cwd is your
+   checkout. Prefer Portals and script runs, which stop their own process group.
+2. **Writing to live state.** `~/.opensession` and the `~/.opensession-*`
+   stores belong to the running instance. Reading and copying from them is fine.
+   Never start a server against them, open their databases read-write, or clean
+   them up. Dev instances use `OPENSESSION_STATE_DIR` (see
+   `docs/self-development.md`); copy data in, never symlink it.
+3. **Waiting on time in tests.** A test that needs a sleep to pass is wrong.
+   Await the specific persisted event or promise, or a drainable worker's
+   `drain()`, instead of `Bun.sleep`.
+
 ## Checkout, publication, and deployment workflow
 
 Checkout isolation and publication are separate repository settings. Sessions
