@@ -243,7 +243,6 @@ describe("script runs", () => {
             grantId: "kg-1",
             calls: 0,
             denied: 0,
-            maxCalls: 10,
           },
         ],
       },

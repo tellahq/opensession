@@ -624,7 +624,7 @@ describe("the keychain card in the asking session", () => {
 });
 
 describe("a scripted-run ask", () => {
-  const RUN = { command: "bun scripts/sync.ts", maxCalls: 40000 };
+  const RUN = { command: "bun scripts/sync.ts" };
 
   async function askForRun(client: Client) {
     const call = client.callTool({
@@ -640,7 +640,7 @@ describe("a scripted-run ask", () => {
     return { call, ask: pendingAsk() };
   }
 
-  test("tells the owner it is a scripted run, with the command and volume", async () => {
+  test("tells the owner it is a scripted run, with the command and no call cap", async () => {
     const client = await connect();
     const { call, ask } = await askForRun(client);
     expect(ask.requestedMode).toBe("run");
@@ -651,7 +651,8 @@ describe("a scripted-run ask", () => {
     const dm = slackPosts.map((p) => p.text).join("\n");
     expect(dm).toContain("scripted run");
     expect(dm).toContain(RUN.command);
-    expect(dm).toContain("40,000");
+    expect(dm).not.toContain("refused beyond");
+    expect(dm).not.toMatch(/up to [\d,]+ (API )?calls/);
 
     // A once/standing answer from Settings cannot approve a run.
     expect(kc.answerKeychainAsk(ask.id, "once", "Alex")).toHaveProperty(
@@ -667,6 +668,25 @@ describe("a scripted-run ask", () => {
     const answer = textOf(await call);
     expect(answer).toContain("run_with_credential");
     expect(answer).toContain("KEYCHAIN_PROXY_URL");
+  });
+
+  test("a maxCalls an older agent still passes is ignored", async () => {
+    const client = await connect();
+    const call = client.callTool({
+      name: "request_credential",
+      arguments: {
+        credential: "acme-prod",
+        purpose: "page through every customer to backfill plans",
+        run: { ...RUN, maxCalls: 13000 },
+      },
+    });
+    for (let i = 0; i < 100 && !kc.listKeychainAsks().length; i++)
+      await Bun.sleep(5);
+    const ask = pendingAsk();
+    expect(ask.run).toEqual(RUN);
+    kc.answerKeychainAsk(ask.id, "run", "Alex");
+    expect(textOf(await call)).not.toContain("calls, grant");
+    expect(kc.listGrants({ sessionId: SESSION })[0]!.run).toEqual(RUN);
   });
 
   test("an ordinary ask can never be approved as a run", async () => {
@@ -728,10 +748,7 @@ describe("a scripted run with several credentials", () => {
       arguments: {
         credentials: CREDS,
         purpose: "sync every subscription into billing",
-        run: {
-          command: COMMAND,
-          maxCalls: { "payments-prod": 14000, "billing-prod": 15000 },
-        },
+        run: { command: COMMAND },
       },
     });
     const pending = () =>
@@ -755,14 +772,13 @@ describe("a scripted run with several credentials", () => {
     expect(asks).toHaveLength(2);
 
     // Each owner's message lists every credential in the run, its owner and
-    // cap, and the exact command.
+    // the exact command, with no call cap.
     expect(slackPosts.map((p) => p.channel)).toEqual(["DALEX", "DALEX"]);
     for (const post of slackPosts) {
       expect(post.text).toContain(COMMAND);
       expect(post.text).toContain("payments-prod");
       expect(post.text).toContain("billing-prod");
-      expect(post.text).toContain("14,000");
-      expect(post.text).toContain("15,000");
+      expect(post.text).not.toContain("beyond its cap");
     }
     expect(humanAsks.getAsk(ask("billing-prod").humanAskId!)?.person.name).toBe(
       "Bea",
@@ -808,9 +824,9 @@ describe("a scripted run with several credentials", () => {
     expect(answer).toContain("KEYCHAIN_PROXY_URL_BILLING_PROD");
 
     const grants = kc.listGrants({ sessionId: SESSION });
-    expect(grants.map((g) => [g.owner, g.run?.maxCalls]).sort()).toEqual([
-      ["Alex", 14000],
-      ["Bea", 15000],
+    expect(grants.map((g) => [g.owner, g.run?.command]).sort()).toEqual([
+      ["Alex", COMMAND],
+      ["Bea", COMMAND],
     ]);
     expect(new Set(grants.map((g) => g.run?.group?.id)).size).toBe(1);
 
@@ -821,10 +837,7 @@ describe("a scripted run with several credentials", () => {
         arguments: {
           credentials: CREDS,
           purpose: "sync every subscription into billing",
-          run: {
-            command: COMMAND,
-            maxCalls: { "payments-prod": 14000, "billing-prod": 15000 },
-          },
+          run: { command: COMMAND },
         },
       }),
     );
@@ -867,10 +880,7 @@ describe("a scripted run with several credentials", () => {
       arguments: {
         credentials: CREDS,
         purpose: "sync every subscription into billing",
-        run: {
-          command: COMMAND,
-          maxCalls: { "payments-prod": 14000, "billing-prod": 15000 },
-        },
+        run: { command: COMMAND },
       },
     });
     const fresh = () =>
@@ -910,7 +920,7 @@ describe("a scripted run with several credentials", () => {
       sessionId: SESSION,
       requestedBy: "Alex",
       purpose: "sync every subscription into billing",
-      run: { command: COMMAND, maxCalls: 14000 },
+      run: { command: COMMAND },
     });
     expect(result).toHaveProperty("ask");
     const multi = kc.requestCredentialRun({
@@ -918,7 +928,7 @@ describe("a scripted run with several credentials", () => {
       sessionId: SESSION,
       requestedBy: "Alex",
       purpose: "sync every subscription into billing",
-      run: { command: COMMAND, maxCalls: 14000 },
+      run: { command: COMMAND },
     });
     expect("error" in multi && multi.error).toContain("already pending");
   });
@@ -932,13 +942,11 @@ describe("a scripted run with several credentials", () => {
           service: "payments-prod",
           host: "api.payments.example.test",
           owner: "Alex",
-          maxCalls: 14000,
         },
         {
           service: "billing-prod",
           host: "api.billing.example.test",
           owner: "Bea",
-          maxCalls: 15000,
         },
       ],
     };
@@ -948,7 +956,7 @@ describe("a scripted run with several credentials", () => {
         sessionId: SESSION,
         requestedBy: "Alex",
         mode: "run",
-        run: { command: COMMAND, maxCalls: 14000, group },
+        run: { command: COMMAND, group },
       });
     const claim = await kc.claimRunGrants({
       sessionId: SESSION,
@@ -1193,7 +1201,7 @@ describe("a login", () => {
         arguments: {
           credential: "acme-staging",
           purpose: "sign in from a script",
-          run: { command: "bun sign-in.ts", maxCalls: 1 },
+          run: { command: "bun sign-in.ts" },
         },
       }),
     );

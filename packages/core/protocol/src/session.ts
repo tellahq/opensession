@@ -526,7 +526,6 @@ export interface ScriptRunWire {
     grantId: string;
     calls: number;
     denied: number;
-    maxCalls: number;
   }>;
 }
 

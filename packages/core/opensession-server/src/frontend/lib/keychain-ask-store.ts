@@ -15,7 +15,7 @@ export type SessionKeychainAsk = {
   requestedBy: string;
   purpose: string;
   requestedMode: "once" | "standing" | "run" | "release";
-  run?: { command: string; maxCalls: number };
+  run?: { command: string };
   credentials: Array<{
     service: string;
     host: string;

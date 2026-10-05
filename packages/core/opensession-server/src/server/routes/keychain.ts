@@ -54,8 +54,8 @@ export function retiredKeychainBrokerResponse(): Response {
       error:
         "The keychain broker URL was retired: a grant is no longer usable over HTTP. " +
         "For a single API call, use the call_credential tool. For bulk work by a script, " +
-        "ask the owner for a scripted run (request_credential with `run`: the command and " +
-        "its call cap), then start it with run_with_credential; the script gets " +
+        "ask the owner for a scripted run (request_credential with `run` and the command), " +
+        "then start it with run_with_credential; the script gets " +
         "KEYCHAIN_PROXY_URL, which works only while it runs.",
       retired: true,
     },

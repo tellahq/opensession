@@ -9,7 +9,7 @@
  * Mac requests instead resolve one Keychain item locally and return status only.
  *
  * Bulk work goes through a scripted run instead (keychain-runs.ts): the owner
- * approves one command and a call cap, and run_with_credential starts that
+ * approves one command, and run_with_credential starts that
  * process with a proxy URL that works only while it runs. A run may use
  * several credentials; it starts once every one's owner approved, and gets
  * one proxy URL per credential.
@@ -51,7 +51,6 @@ import {
   listCredentials,
   listGrants,
   listKeychainAsks,
-  MAX_RUN_CALLS,
   MAX_RUN_COMMAND_CHARS,
   claimLoginRelease,
   requestCredential,
@@ -168,7 +167,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
   const requestRun = async (
     credentials: string[],
     purpose: string,
-    run: { command: string; maxCalls: number | Record<string, number> },
+    run: { command: string },
     extra: any,
   ) => {
     const result = requestCredentialRun({
@@ -287,7 +286,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
     tool(
       "request_credential",
       "Ask a credential's owner to lend it to THIS session for a stated purpose. They get a DM with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive instructions for call_credential, which injects the credential server-side; you never see the secret itself. For a login (a username and password for a sign-in page), the owner instead chooses Release password or Decline, and on approval you use use_login to get the password into this session's workspace." +
-        " Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. For bulk work by a script (hundreds or more calls), pass `run` instead: the owner approves that exact command and call cap, and you start it with run_with_credential. A script that needs several APIs in one process names them all in `credentials` with `run`: each credential's owner approves, and the run starts only once all of them did. If they decline, don't re-ask. Calling again with the same purpose while your ask is pending reminds the owner and waits on that same ask; if they already approved it, you get the live grant back.",
+        " Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. For bulk work by a script (hundreds or more calls), pass `run` instead: the owner approves that exact command, and you start it with run_with_credential. A script that needs several APIs in one process names them all in `credentials` with `run`: each credential's owner approves, and the run starts only once all of them did. If they decline, don't re-ask. Calling again with the same purpose while your ask is pending reminds the owner and waits on that same ask; if they already approved it, you get the live grant back.",
       {
         credential: z
           .string()
@@ -323,21 +322,10 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
               .describe(
                 "The exact shell command run_with_credential will start, e.g. 'bun scripts/sync.ts --base \"$KEYCHAIN_PROXY_URL\"'. With one credential it reads the API base URL from KEYCHAIN_PROXY_URL; with several, from KEYCHAIN_PROXY_URL_<SLUG> for each (the slug upper-cased, other characters as _, e.g. KEYCHAIN_PROXY_URL_PAYMENTS_PROD).",
               ),
-            maxCalls: z
-              .union([
-                z.number().int().min(1).max(MAX_RUN_CALLS),
-                z.record(
-                  z.string(),
-                  z.number().int().min(1).max(MAX_RUN_CALLS),
-                ),
-              ])
-              .describe(
-                "Expected volume: the most API calls the run will make with each credential, as one number for every credential or { slug: number } per credential. Calls beyond it are refused. Shown to the owners.",
-              ),
           })
           .optional()
           .describe(
-            "Ask for a scripted run: one process, given a proxy URL per credential while it runs. The owners see the command and the call caps.",
+            "Ask for a scripted run: one process, given a proxy URL per credential while it runs. The owners see the command. There is no call limit: the run is bounded by its time limit and each credential's method/path limits.",
           ),
       },
       async (
@@ -346,10 +334,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
           credentials?: string[];
           purpose: string;
           mode?: "once" | "standing";
-          run?: {
-            command: string;
-            maxCalls: number | Record<string, number>;
-          };
+          run?: { command: string };
         },
         extra: any,
       ) => {
@@ -364,15 +349,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
             );
           return requestRun(refs, args.purpose, args.run, extra);
         }
-        let run: { command: string; maxCalls: number } | undefined;
-        if (args.run) {
-          const caps = args.run.maxCalls;
-          const values =
-            typeof caps === "number" ? [caps] : Object.values(caps);
-          if (values.length !== 1)
-            return text("Couldn't ask: give maxCalls for the one credential.");
-          run = { command: args.run.command, maxCalls: values[0]! };
-        }
+        const run = args.run ? { command: args.run.command } : undefined;
         const result = requestCredential({
           credential: refs[0]!,
           sessionId: ctx.sessionId,
@@ -500,7 +477,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
     ),
     tool(
       "run_with_credential",
-      `Start a scripted run the credential's owner approved (request_credential with \`run\`): one process running exactly the approved command, on this server, in the session's workspace. The process gets KEYCHAIN_PROXY_URL, a base URL standing in for https://<credential host>: a request to $KEYCHAIN_PROXY_URL/v1/items goes to https://<host>/v1/items with the credential injected. A run approved with several \`credentials\` starts once every owner approved, and gets one URL per credential instead, KEYCHAIN_PROXY_URL_<SLUG> (slug upper-cased, other characters as _), each reaching only its own credential's host. The URLs work only for this run and all stop working when the process exits, times out or is stopped. Calls are held to each credential's method/path limits and its approved cap, and every call is audited. The script gets a minimal environment (PATH, HOME, LANG, TMPDIR), so pass anything else on the command line, and never a secret. The run is a script run: it keeps going through Open Session restarts (the URLs hold requests while the server is back up), shows as a card in the session with its call counts, and this session is woken with how it ended, so start it and end your turn. Returns at once with a run id; credential_run_status shows progress. A Sandbox or Runner session cannot start one.`,
+      `Start a scripted run the credential's owner approved (request_credential with \`run\`): one process running exactly the approved command, on this server, in the session's workspace. The process gets KEYCHAIN_PROXY_URL, a base URL standing in for https://<credential host>: a request to $KEYCHAIN_PROXY_URL/v1/items goes to https://<host>/v1/items with the credential injected. A run approved with several \`credentials\` starts once every owner approved, and gets one URL per credential instead, KEYCHAIN_PROXY_URL_<SLUG> (slug upper-cased, other characters as _), each reaching only its own credential's host. The URLs work only for this run and all stop working when the process exits, times out or is stopped. Calls are held to each credential's method/path limits, are not capped in number, and every call is audited. The script gets a minimal environment (PATH, HOME, LANG, TMPDIR), so pass anything else on the command line, and never a secret. The run is a script run: it keeps going through Open Session restarts (the URLs hold requests while the server is back up), shows as a card in the session with its call counts, and this session is woken with how it ended, so start it and end your turn. Returns at once with a run id; credential_run_status shows progress. A Sandbox or Runner session cannot start one.`,
       {
         credential: z
           .string()
@@ -579,7 +556,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
     ),
     tool(
       "credential_run_status",
-      "Check a scripted run started with run_with_credential: running/exited/timed_out/stopped/revoked/failed/lost, exit code, calls made, calls refused and the cap (in total, and per credential under `credentials`), and the last few KB of its output (the full log is at logPath). Without a run id, lists this session's runs.",
+      "Check a scripted run started with run_with_credential: running/exited/timed_out/stopped/revoked/failed/lost, exit code, calls made and calls refused (in total, and per credential under `credentials`), and the last few KB of its output (the full log is at logPath). Without a run id, lists this session's runs.",
       {
         runId: z
           .string()

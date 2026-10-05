@@ -362,7 +362,7 @@ final class SessionActionCardsModel {
                     state: "running", startedAt: at.addingTimeInterval(-185),
                     deadline: at.addingTimeInterval(3415),
                     credentials: [.init(grantId: "fixture-grant", service: "Acme Billing",
-                                        calls: 120, denied: 0, maxCalls: 500)]
+                                        calls: 120, denied: 0)]
                 ),
             ]
         }

@@ -136,7 +136,6 @@ struct SessionKeychainAsk: Decodable, Equatable, Sendable, Identifiable {
 
     struct Run: Decodable, Equatable, Sendable {
         let command: String
-        let maxCalls: Int
     }
 
     struct Credential: Decodable, Equatable, Sendable {
@@ -229,7 +228,7 @@ struct SessionKeychainAsk: Decodable, Equatable, Sendable, Identifiable {
             return "\(agent) will see the password: it types it into the sign-in page itself. Release only a test account."
         }
         if let run {
-            return "Runs this script, up to \(run.maxCalls.formatted()) calls, refused beyond that. The script never sees the secret."
+            return "Runs this script until it exits or times out, within the credential's limits. The script never sees the secret, and every call is audited."
         }
         return "The secret is never shown to the session. Calls go through the keychain broker within the credential's limits, and each one is audited."
     }
@@ -395,18 +394,16 @@ struct ScriptRun: Decodable, Equatable, Sendable, Identifiable {
         let service: String
         let calls: Int
         let denied: Int
-        let maxCalls: Int
 
         var id: String { grantId }
 
-        private enum CodingKeys: String, CodingKey { case grantId, service, calls, denied, maxCalls }
+        private enum CodingKeys: String, CodingKey { case grantId, service, calls, denied }
 
-        init(grantId: String, service: String, calls: Int, denied: Int = 0, maxCalls: Int) {
+        init(grantId: String, service: String, calls: Int, denied: Int = 0) {
             self.grantId = grantId
             self.service = service
             self.calls = calls
             self.denied = denied
-            self.maxCalls = maxCalls
         }
 
         init(from decoder: Decoder) throws {
@@ -415,11 +412,6 @@ struct ScriptRun: Decodable, Equatable, Sendable, Identifiable {
             service = (try? c.decodeIfPresent(String.self, forKey: .service)) ?? "Credential"
             calls = (try? c.decodeIfPresent(Int.self, forKey: .calls)) ?? 0
             denied = (try? c.decodeIfPresent(Int.self, forKey: .denied)) ?? 0
-            maxCalls = (try? c.decodeIfPresent(Int.self, forKey: .maxCalls)) ?? 0
-        }
-
-        var fraction: Double {
-            maxCalls > 0 ? min(1, Double(calls) / Double(maxCalls)) : 0
         }
     }
 

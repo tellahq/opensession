@@ -186,16 +186,13 @@ export interface KeychainCredentialDto {
 
 export interface KeychainScriptedRunDto {
   command: string;
-  /** This credential's cap. */
-  maxCalls: number;
-  /** A run with several credentials: all of them, each with its cap. */
+  /** A run with several credentials: all of them. */
   group?: {
     id: string;
     members: Array<{
       service: string;
       host: string;
       owner: string;
-      maxCalls: number;
     }>;
   };
 }
@@ -222,7 +219,7 @@ export interface KeychainAskDto {
   requestedBy: string;
   purpose: string;
   requestedMode: "once" | "standing" | "run" | "release";
-  /** A scripted run: the command the owner approves and its call cap. */
+  /** A scripted run: the command the owner approves. */
   run?: KeychainScriptedRunDto;
   status: "pending" | "approved" | "declined" | "expired" | "cancelled";
   createdAt: string;

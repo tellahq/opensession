@@ -1,7 +1,7 @@
 /**
  * Scripted runs: a real script host runs a real child process that pages
  * through an API via KEYCHAIN_PROXY_URL. Every call is injected, checked
- * against the grant and the credential's ceiling, capped and audited, and
+ * against the grant and the credential's ceiling, counted and audited, and
  * the URL is dead the moment the run ends. Another run's secret opens
  * nothing, and the run keeps going through a server restart.
  */
@@ -31,6 +31,7 @@ const STORE = join(dir, "kc.json");
 process.env.OPENSESSION_KEYCHAIN_STORE = STORE;
 
 import type { StartRunInput } from "./keychain-runs";
+import type { KeychainScriptedRun } from "./keychain";
 
 const kc = await import("./keychain");
 const runs = await import("./keychain-runs");
@@ -120,13 +121,13 @@ function script(name: string, source: string): string {
   return `"${process.execPath}" ${name}`;
 }
 
-function grantRun(credentialId: string, command: string, maxCalls = 1000) {
+function grantRun(credentialId: string, command: string) {
   return kc.__mintGrantForTest({
     credentialId,
     sessionId: SESSION,
     requestedBy: "Sam",
     mode: "run",
-    run: { command, maxCalls },
+    run: { command },
   });
 }
 
@@ -307,21 +308,34 @@ await new Promise(() => {});`,
     expect(seen).toHaveLength(1);
   });
 
-  test("calls past the approved cap are refused", async () => {
+  test("a run keeps proxying past the call cap older approvals carried", async () => {
     const cred = credential();
     const command = script(
-      "capped.ts",
+      "uncapped.ts",
       `const out = [];
-for (let i = 0; i < 5; i++) out.push((await fetch(process.env.KEYCHAIN_PROXY_URL + "/v1/x")).status);
+for (let i = 0; i < 25; i++) out.push((await fetch(process.env.KEYCHAIN_PROXY_URL + "/v1/x")).status);
 console.log(out.join(","));`,
     );
-    grantRun(cred.id, command, 3);
+    // An approval stored before the cap was dropped still has maxCalls.
+    kc.__mintGrantForTest({
+      credentialId: cred.id,
+      sessionId: SESSION,
+      requestedBy: "Sam",
+      mode: "run",
+      run: { command, maxCalls: 3 } as KeychainScriptedRun,
+    });
     const run = await started(command);
     const done = await runs.waitForCredentialRun(run.id, 30_000);
     expect(readFileSync(done!.logPath, "utf-8").trim()).toBe(
-      "200,200,200,429,429",
+      Array(25).fill(200).join(","),
     );
-    expect(seen).toHaveLength(3);
+    expect(seen).toHaveLength(25);
+    expect(done).toMatchObject({ state: "exited", calls: 25, denied: 0 });
+    expect(done).not.toHaveProperty("maxCalls");
+    expect(done?.credentials[0]).not.toHaveProperty("maxCalls");
+    expect(events.filter((e) => e.kind === "keychain_run_call")).toHaveLength(
+      25,
+    );
   });
 
   test("revoking the grant cuts the run off and ends it", async () => {
@@ -451,18 +465,16 @@ describe("a scripted run with two credentials", () => {
     return { payments, billing };
   }
 
-  const MEMBERS = (caps: { payments: number; billing: number }) => [
+  const MEMBERS = [
     {
       service: "payments-prod",
       host: "api.payments.example.test",
       owner: "Alex",
-      maxCalls: caps.payments,
     },
     {
       service: "billing-prod",
       host: "api.billing.example.test",
       owner: "Bea",
-      maxCalls: caps.billing,
     },
   ];
 
@@ -471,17 +483,16 @@ describe("a scripted run with two credentials", () => {
   function grantGroup(
     ids: { payments: string; billing: string },
     command: string,
-    caps = { payments: 1000, billing: 1000 },
     only: Array<"payments" | "billing"> = ["payments", "billing"],
   ) {
-    const group = { id: `krg-${crypto.randomUUID()}`, members: MEMBERS(caps) };
+    const group = { id: `krg-${crypto.randomUUID()}`, members: MEMBERS };
     return only.map((which) =>
       kc.__mintGrantForTest({
         credentialId: ids[which],
         sessionId: SESSION,
         requestedBy: "Sam",
         mode: "run",
-        run: { command, maxCalls: caps[which], group },
+        run: { command, group },
       }),
     );
   }
@@ -491,7 +502,7 @@ describe("a scripted run with two credentials", () => {
     credentials: ["payments-prod", "billing-prod"],
   };
 
-  test("each proxy injects only its own credential, on its own host, within its own limits and cap", async () => {
+  test("each proxy injects only its own credential, on its own host, within its own limits", async () => {
     const { payments, billing } = credentials();
     const command = script(
       "sync.ts",
@@ -518,10 +529,7 @@ out.denied.crossed = (await fetch(crossed, { method: "POST", body: "{}" })).stat
 console.log(JSON.stringify(out));
 `,
     );
-    grantGroup({ payments: payments.id, billing: billing.id }, command, {
-      payments: 1000,
-      billing: 3,
-    });
+    grantGroup({ payments: payments.id, billing: billing.id }, command);
 
     const run = await started(command, { ...both, deps: twoDeps });
     const done = await runs.waitForCredentialRun(run.id, 30_000);
@@ -531,7 +539,7 @@ console.log(JSON.stringify(out));
     );
     expect(out).toEqual({
       single: null,
-      sync: ["200/200", "200/200", "200/200", "200/429", "200/429"],
+      sync: ["200/200", "200/200", "200/200", "200/200", "200/200"],
       leaked: false,
       denied: { payPost: 403, billGet: 403, crossed: 404 },
     });
@@ -543,8 +551,8 @@ console.log(JSON.stringify(out));
       (c) => c.url === "https://api.billing.example.test/v2/usage",
     );
     expect(toPayments).toHaveLength(5);
-    expect(toBilling).toHaveLength(3);
-    expect(seen).toHaveLength(8);
+    expect(toBilling).toHaveLength(5);
+    expect(seen).toHaveLength(10);
     for (const call of toPayments) {
       expect(call.method).toBe("GET");
       expect(call.headers.get("authorization")).toBe(`Bearer ${PAY}`);
@@ -556,15 +564,14 @@ console.log(JSON.stringify(out));
       expect(call.headers.get("authorization")).toBeNull();
     }
 
-    expect(done).toMatchObject({ calls: 8, denied: 4, maxCalls: 1003 });
+    expect(done).toMatchObject({ calls: 10, denied: 2 });
     expect(done?.grantId).toBeUndefined();
     expect(
-      done?.credentials.map(({ service, env, calls, denied, maxCalls }) => ({
+      done?.credentials.map(({ service, env, calls, denied }) => ({
         service,
         env,
         calls,
         denied,
-        maxCalls,
       })),
     ).toEqual([
       {
@@ -572,14 +579,12 @@ console.log(JSON.stringify(out));
         env: "KEYCHAIN_PROXY_URL_PAYMENTS_PROD",
         calls: 5,
         denied: 1,
-        maxCalls: 1000,
       },
       {
         service: "billing-prod",
         env: "KEYCHAIN_PROXY_URL_BILLING_PROD",
-        calls: 3,
-        denied: 3,
-        maxCalls: 3,
+        calls: 5,
+        denied: 1,
       },
     ]);
 
@@ -593,7 +598,7 @@ console.log(JSON.stringify(out));
         "billing-prod billing-prod api.billing.example.test",
       ]),
     );
-    expect(audited).toHaveLength(8);
+    expect(audited).toHaveLength(10);
     expect(
       events
         .filter((e) => e.kind === "keychain_run_denied")
@@ -601,17 +606,15 @@ console.log(JSON.stringify(out));
         .sort(),
     ).toEqual([
       "billing-prod GET /v2/usage",
-      "billing-prod POST /v2/usage",
-      "billing-prod POST /v2/usage",
       "payments-prod POST /v1/subscriptions",
     ]);
     expect(events.at(-1)).toMatchObject({
       kind: "keychain_run_ended",
-      calls: 8,
-      denied: 4,
+      calls: 10,
+      denied: 2,
       credentials: [
         { service: "payments-prod", calls: 5, denied: 1 },
-        { service: "billing-prod", calls: 3, denied: 3 },
+        { service: "billing-prod", calls: 5, denied: 1 },
       ],
     });
     // Both grants started this one run and are spent.
@@ -620,7 +623,7 @@ console.log(JSON.stringify(out));
     ).toEqual(
       expect.arrayContaining([
         ["used", 5],
-        ["used", 3],
+        ["used", 5],
       ]),
     );
     expect(await start(command, both)).toHaveProperty("error");
@@ -629,22 +632,16 @@ console.log(JSON.stringify(out));
   test("a run missing one owner's approval does not start", async () => {
     const { payments, billing } = credentials();
     const command = script("half.ts", `await Bun.write("half.ran", "yes");`);
-    grantGroup(
-      { payments: payments.id, billing: billing.id },
-      command,
-      undefined,
-      ["payments"],
-    );
+    grantGroup({ payments: payments.id, billing: billing.id }, command, [
+      "payments",
+    ]);
     const refused = await start(command, both);
     expect("error" in refused && refused.error).toContain("billing-prod");
 
     // Approvals from two different requests do not add up to one run.
-    grantGroup(
-      { payments: payments.id, billing: billing.id },
-      command,
-      undefined,
-      ["billing"],
-    );
+    grantGroup({ payments: payments.id, billing: billing.id }, command, [
+      "billing",
+    ]);
     expect(await start(command, both)).toHaveProperty("error");
     // Nor does an ordinary single-credential run grant for one of them.
     grantRun(billing.id, command);
@@ -832,7 +829,6 @@ describe("a single-credential run", () => {
       host: "api.example.test",
       calls: 1,
       denied: 0,
-      maxCalls: 1000,
     });
   });
 });

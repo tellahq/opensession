@@ -13,8 +13,8 @@
  * per-credential name); a run with several gets one KEYCHAIN_PROXY_URL_<SLUG>
  * each (proxyEnvName in keychain.ts).
  *
- * - The owners approved this run explicitly: the exact command and a call
- *   cap per credential (request_credential with `run`, mode "run" in
+ * - The owners approved this run explicitly: the exact command, with each
+ *   credential named (request_credential with `run`, mode "run" in
  *   keychain.ts). A run with several credentials starts only once every
  *   credential's owner approved. An ordinary once or standing grant cannot
  *   start a run.
@@ -26,7 +26,9 @@
  *   any of its grants is revoked. A request after that, or with another
  *   secret, is refused.
  * - Every call is checked against its credential's grant and method and path
- *   ceiling, counted against that credential's cap, and audited. Redirects
+ *   ceiling, counted, and audited. There is no call cap: a run is bounded by
+ *   its lifetime (and deadline), its credentials' method and path limits,
+ *   stop_credential_run and revocation. Redirects
  *   are not followed, the injected header cannot be overridden, and the
  *   secret is scrubbed from response headers and text bodies.
  *
@@ -40,7 +42,7 @@
  *
  * Stated limitation: agent shells run as the same Unix user, so another local
  * process could read the script's environment while it runs. The exposure is
- * bounded by the run (one process, its lifetime, its cap), unlike the retired
+ * bounded by the run (one process, its lifetime), unlike the retired
  * broker URL, which any process could use for as long as the grant lived.
  */
 
@@ -126,7 +128,6 @@ export interface CredentialRunLeg {
   env: string;
   calls: number;
   denied: number;
-  maxCalls: number;
 }
 
 export interface CredentialRunSummary {
@@ -149,7 +150,6 @@ export interface CredentialRunSummary {
   /** Totals over every credential of the run. */
   calls: number;
   denied: number;
-  maxCalls: number;
   credentials: CredentialRunLeg[];
 }
 
@@ -311,7 +311,6 @@ async function claimAndStart(
       grantId: grant.id,
       calls: 0,
       denied: 0,
-      maxCalls: grant.run?.maxCalls ?? 0,
     }),
   );
   const deps: Required<RunDeps> = {
@@ -381,10 +380,17 @@ async function claimAndStart(
 
 function credentialSummary(run: ScriptRunSummary): CredentialRunSummary {
   const credentials: CredentialRunLeg[] = (run.credentials ?? []).map(
-    ({ env, ...leg }) => ({ ...leg, env: env[0] ?? "" }),
+    ({ env, service, host, grantId, calls, denied }) => ({
+      service,
+      host,
+      grantId,
+      env: env[0] ?? "",
+      calls,
+      denied,
+    }),
   );
   const only = credentials.length === 1 ? credentials[0]! : undefined;
-  const total = (key: "calls" | "denied" | "maxCalls") =>
+  const total = (key: "calls" | "denied") =>
     credentials.reduce((sum, leg) => sum + leg[key], 0);
   return {
     id: run.id,
@@ -403,7 +409,6 @@ function credentialSummary(run: ScriptRunSummary): CredentialRunSummary {
     ...(run.signal !== undefined ? { signal: run.signal } : {}),
     calls: total("calls"),
     denied: total("denied"),
-    maxCalls: total("maxCalls"),
     credentials,
   };
 }
@@ -537,15 +542,6 @@ async function relay(
       setTimeout(() => void endScriptRun(run.id, "revoked"), 0);
     return deny(run, leg, method, target.pathname, use.status, use.error);
   }
-  if (leg.calls >= leg.maxCalls)
-    return deny(
-      run,
-      leg,
-      method,
-      target.pathname,
-      429,
-      `this run reached its approved cap of ${leg.maxCalls} calls with ${leg.service}`,
-    );
   leg.calls++;
   const { credential } = use;
 

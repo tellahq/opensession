@@ -312,34 +312,16 @@ function CredentialCalls({
 }: {
   credential: NonNullable<ScriptRunWire["credentials"]>[number];
 }) {
-  const percent = credential.maxCalls
-    ? Math.min(100, Math.floor((credential.calls / credential.maxCalls) * 100))
-    : 0;
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex min-w-0 items-baseline justify-between gap-3 text-meta text-dim">
-        <span className="min-w-0 truncate">{credential.service}</span>
-        <span className="shrink-0 tabular-nums">
-          {credential.calls.toLocaleString()} of{" "}
-          {credential.maxCalls.toLocaleString()} calls
-          {credential.denied
-            ? ` · ${credential.denied.toLocaleString()} refused`
-            : ""}
-        </span>
-      </div>
-      <div
-        role="progressbar"
-        aria-label={`${credential.service} calls`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={percent}
-        className="h-1 overflow-hidden rounded-full bg-fg/8"
-      >
-        <div
-          className="h-full rounded-full bg-fg transition-[width] duration-300 motion-reduce:transition-none"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
+    <div className="flex min-w-0 items-baseline justify-between gap-3 text-meta text-dim">
+      <span className="min-w-0 truncate">{credential.service}</span>
+      <span className="shrink-0 tabular-nums">
+        {credential.calls.toLocaleString()}{" "}
+        {credential.calls === 1 ? "call" : "calls"}
+        {credential.denied
+          ? ` · ${credential.denied.toLocaleString()} refused`
+          : ""}
+      </span>
     </div>
   );
 }
