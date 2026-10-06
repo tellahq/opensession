@@ -205,8 +205,18 @@ export function buildRunInstructions(input: {
   // AGENTS.md and in schedule guidance scoped to "external work", so a run
   // polling its own benchmark in another repository never saw it. Frame it
   // by wait length, which is how the choice actually presents itself.
+  //
+  // CI was the biggest case: runs polled `gh pr checks` in until-loops for
+  // ~20 minutes a PR, because this section only offered the loop and
+  // schedule_prompt. wait_for pr_checks ends the turn and wakes on the first
+  // failure or once the checks settle.
   parts.push(
-    "## Waiting\nNever wait with a fixed `sleep N`. For a short wait, poll until done or " +
+    "## Waiting\nNever wait with a fixed `sleep N`. " +
+      (inproc["opensession-sessions"]
+        ? "For PR checks or CI, call `wait_for` with kind `pr_checks` and end your turn; " +
+          "never poll `gh pr checks`, `gh run watch`, or a sleep loop. "
+        : "") +
+      "For anything else short, poll until done or " +
       "failed under a hard cap, e.g. " +
       "`timeout 300 bash -c 'until grep -q DONE out.log; do sleep 10; done'`. " +
       (inproc["opensession-schedule"]

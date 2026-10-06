@@ -316,6 +316,60 @@ describe("PR check settlement", () => {
     ]);
   });
 
+  test("wakes on a failed check without waiting for the rest", async () => {
+    let now = 10_000;
+    let current = details([failing, running]);
+    const scheduled: AgentWait[] = [];
+    const delivered: string[] = [];
+    const deps = handlerDeps({
+      now: () => now,
+      getPrDetails: async () => current,
+      schedule: (wait) => scheduled.push(wait),
+      deliver: async (_wait, message) => {
+        delivered.push(message);
+      },
+    });
+    const wait: PrChecksAgentWait = {
+      version: 1,
+      id: "wait-fail",
+      sessionId: "s1",
+      kind: "pr_checks",
+      user: "Jaap",
+      prompt: "Continue.",
+      repo: "example",
+      branch: "feature",
+      createdAt: 0,
+      deadlineAt: 300_000,
+      pollSeconds: 30,
+      settleSeconds: 45,
+    };
+
+    expect(await handleAgentWait(wait, deps)).toBe("rescheduled");
+    const candidate = scheduled.at(-1) as PrChecksAgentWait;
+    expect(candidate.candidateSince).toBe(10_000);
+
+    // Another check finishing keeps the failure's window running.
+    current = details([failing, passing, running]);
+    now = 40_000;
+    expect(await handleAgentWait(candidate, deps)).toBe("rescheduled");
+    expect((scheduled.at(-1) as PrChecksAgentWait).candidateSince).toBe(10_000);
+
+    now = 60_000;
+    expect(
+      await handleAgentWait(scheduled.at(-1) as PrChecksAgentWait, deps),
+    ).toBe("delivered");
+    expect(delivered).toEqual([
+      "PR example#42 has failing checks: lint. 1 failed, 1 passed, 1 still running.",
+    ]);
+
+    // A rerun of the failed check clears the candidate again.
+    current = details([{ ...failing, status: "IN_PROGRESS", conclusion: "" }]);
+    expect(await handleAgentWait(candidate, deps)).toBe("rescheduled");
+    expect(
+      (scheduled.at(-1) as PrChecksAgentWait).candidateSince,
+    ).toBeUndefined();
+  });
+
   test("wakes on PR closure and on timeout after transient failures", async () => {
     const delivered: string[] = [];
     const wait: PrChecksAgentWait = {

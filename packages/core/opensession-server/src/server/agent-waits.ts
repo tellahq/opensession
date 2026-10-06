@@ -275,7 +275,7 @@ export async function registerPrChecksAgentWait(input: {
     user: input.user.trim() || "Anonymous",
     prompt:
       input.prompt?.trim() ||
-      "Inspect the settled PR checks. Fix failures if needed, then finish the task.",
+      "Inspect the PR checks. Fix failures if needed, then finish the task.",
     repo,
     branch,
     createdAt: now,
@@ -644,6 +644,10 @@ export function sessionTurnWakeMessage(input: {
 export interface PrCheckSettlement {
   settled: boolean;
   signature: string;
+  /** Head plus the failed checks only, so later checks finishing do not
+   *  restart the settlement window of an already known failure. */
+  failedSignature: string;
+  failedNames: string[];
   total: number;
   pending: number;
   failed: number;
@@ -677,10 +681,14 @@ export function prCheckSettlement(details: PrDetails): PrCheckSettlement {
   let pending = 0;
   let failed = 0;
   let passed = 0;
+  const failedNames: string[] = [];
   for (const check of checks) {
     if (checkPending(check)) pending += 1;
-    else if (checkFailed(check)) failed += 1;
-    else if ((check.conclusion || "").toUpperCase() === "SUCCESS") passed += 1;
+    else if (checkFailed(check)) {
+      failed += 1;
+      failedNames.push(check.name);
+    } else if ((check.conclusion || "").toUpperCase() === "SUCCESS")
+      passed += 1;
   }
   const signature = [
     details.headRefOid,
@@ -689,9 +697,17 @@ export function prCheckSettlement(details: PrDetails): PrCheckSettlement {
         `${check.workflowName || ""}\0${check.name}\0${check.status}\0${check.conclusion}`,
     ),
   ].join("\n");
+  const failedSignature = [
+    details.headRefOid,
+    ...checks
+      .filter((check) => !checkPending(check) && checkFailed(check))
+      .map((check) => `${check.workflowName || ""}\0${check.name}`),
+  ].join("\n");
   return {
     settled: pending === 0,
     signature,
+    failedSignature,
+    failedNames,
     total: checks.length,
     pending,
     failed,
@@ -866,7 +882,10 @@ export async function handleAgentWait(
   }
 
   const state = prCheckSettlement(details);
-  if (!state.settled) {
+  // A failed check is final for this head, so it wakes the agent without
+  // waiting for the slower checks: fixing can start while they still run.
+  // The settlement window still applies, keyed on the failed set alone.
+  if (!state.settled && state.failed === 0) {
     const next: PrChecksAgentWait = {
       ...wait,
       candidateSince: undefined,
@@ -877,7 +896,8 @@ export async function handleAgentWait(
     return "rescheduled";
   }
 
-  const sameCandidate = wait.candidateSignature === state.signature;
+  const signature = state.failed ? state.failedSignature : state.signature;
+  const sameCandidate = wait.candidateSignature === signature;
   const candidateSince = sameCandidate ? wait.candidateSince : now;
   if (
     candidateSince == null ||
@@ -886,11 +906,21 @@ export async function handleAgentWait(
     const next: PrChecksAgentWait = {
       ...wait,
       candidateSince,
-      candidateSignature: state.signature,
+      candidateSignature: signature,
       lastError: undefined,
     };
     deps.schedule(next, nextPrPoll(next, now));
     return "rescheduled";
+  }
+
+  if (!state.settled) {
+    await deps.deliver(
+      wait,
+      `PR ${wait.repo}#${details.number} has failing checks: ` +
+        `${state.failedNames.join(", ")}. ${state.failed} failed, ` +
+        `${state.passed} passed, ${state.pending} still running.`,
+    );
+    return "delivered";
   }
 
   const result =
