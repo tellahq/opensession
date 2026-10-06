@@ -27,6 +27,13 @@ export const DIRECT_MCP_TOOLS: Readonly<Record<string, string>> = {
   "opensession-sessions_wait_for": "wait_for",
 };
 
+/** Servers behind DIRECT_MCP_TOOLS. A detached run reaches them through
+ *  deferred run-scoped proxies, so the bridge lists these before picking
+ *  direct tools. Server names never contain `_`; tool names may. */
+const DIRECT_MCP_SERVERS = [
+  ...new Set(Object.keys(DIRECT_MCP_TOOLS).map((id) => id.split("_")[0]!)),
+];
+
 type BoundTool = McpRuntimeTool & { runtime: McpRuntime };
 
 function definitionOf(tool: BoundTool): ToolDefinition<any, any, any> {
@@ -52,7 +59,7 @@ export async function createPiMcpBridge(
 ): Promise<PiMcpBridge> {
   const tools: ToolDefinition<any, any, any>[] = [];
   const seen = new Set<string>();
-  const syncCatalog = async (hydrate: boolean) => {
+  const syncCatalog = async (hydrate: boolean | readonly string[]) => {
     for (const tool of await runtime.catalog({ hydrate })) {
       if (seen.has(tool.id)) continue;
       seen.add(tool.id);
@@ -60,7 +67,10 @@ export async function createPiMcpBridge(
       tools.push(definition);
     }
   };
-  await syncCatalog(false);
+  // Read before listing the direct servers: one that turns out unbound must
+  // not take discovery away with it, exactly as when listing was lazy.
+  const hasCatalog = runtime.hasCatalog;
+  await syncCatalog(DIRECT_MCP_SERVERS);
 
   const describedWeight = (length: number) =>
     Math.min(1, 400 / Math.max(length, 400));
@@ -182,7 +192,7 @@ export async function createPiMcpBridge(
 
   return {
     tools,
-    discoveryTools: runtime.hasCatalog ? [searchCatalog, callCatalog] : [],
+    discoveryTools: hasCatalog ? [searchCatalog, callCatalog] : [],
     directTools,
   };
 }

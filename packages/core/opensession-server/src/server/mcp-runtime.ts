@@ -53,8 +53,11 @@ export interface McpRuntimeCallResult {
 }
 
 export interface McpRuntime {
-  /** Returns the post-policy catalog. hydrate:false never opens deferred servers. */
-  catalog(options?: { hydrate?: boolean }): Promise<readonly McpRuntimeTool[]>;
+  /** Returns the post-policy catalog. hydrate:false never opens deferred
+   *  servers; a list of server names opens only those. */
+  catalog(options?: {
+    hydrate?: boolean | readonly string[];
+  }): Promise<readonly McpRuntimeTool[]>;
   /** Calls only an exact identity returned by catalog(). */
   callExact(
     id: string,
@@ -509,28 +512,28 @@ export async function createMcpRuntime(opts: {
     }
   }
 
-  let hydration: Promise<void> | undefined;
-  const hydrate = async () => {
-    if (hydration) return hydration;
-    const deferred = [...pending.values()];
-    if (!deferred.length) return;
-    pending.clear();
-    hydration = Promise.all(
-      deferred.map(async (entry) => {
-        const started = Date.now();
-        try {
-          const listed = await listEntry(entry);
-          if (!closed) register(entry, listed);
-        } catch (error) {
-          unavailable(entry, started, error);
-        }
-      }),
-    ).then(() => {});
-    try {
-      await hydration;
-    } finally {
-      hydration = undefined;
+  // One listing per deferred server, shared by concurrent callers.
+  const hydrating = new Map<string, Promise<void>>();
+  const hydrate = async (only?: readonly string[]) => {
+    for (const entry of [...pending.values()]) {
+      if (only && !only.includes(entry.name)) continue;
+      pending.delete(entry.name);
+      const started = Date.now();
+      hydrating.set(
+        entry.name,
+        listEntry(entry)
+          .then((listed) => {
+            if (!closed) register(entry, listed);
+          })
+          .catch((error) => unavailable(entry, started, error))
+          .finally(() => hydrating.delete(entry.name)),
+      );
     }
+    await Promise.all(
+      [...hydrating].flatMap(([name, listing]) =>
+        !only || only.includes(name) ? [listing] : [],
+      ),
+    );
   };
 
   return {
@@ -539,7 +542,8 @@ export async function createMcpRuntime(opts: {
     },
     async catalog(options) {
       if (closed) throw new Error("MCP runtime is closed");
-      if (options?.hydrate !== false) await hydrate();
+      const scope = options?.hydrate ?? true;
+      if (scope !== false) await hydrate(scope === true ? undefined : scope);
       return tools;
     },
     async callExact(id, args, options) {

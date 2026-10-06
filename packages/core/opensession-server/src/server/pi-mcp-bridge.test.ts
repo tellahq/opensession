@@ -234,4 +234,18 @@ describe("Pi MCP adapter", () => {
     );
     expect(without.directTools).toEqual([]);
   });
+
+  test("hydrates only the direct tools' servers before picking them", async () => {
+    const runtime = fakeRuntime([
+      tool("opensession-sessions_wait_for", "Wait for PR checks"),
+    ]);
+    const scopes: unknown[] = [];
+    const catalog = runtime.catalog.bind(runtime);
+    runtime.catalog = async (options) => {
+      scopes.push(options?.hydrate);
+      return catalog(options);
+    };
+    await createPiMcpBridge(runtime);
+    expect(scopes).toEqual([["opensession-schedule", "opensession-sessions"]]);
+  });
 });

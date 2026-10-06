@@ -95,6 +95,7 @@ async function bridgeWithStaleCatalog(
   )!;
   const call = bridge.discoveryTools.find((tool) => tool.name === "mcp_call")!;
   return {
+    directTools: bridge.directTools.map((tool) => tool.name),
     search: (query: string) =>
       search.execute("search", { query }, undefined, undefined, {} as any),
     call: (name: string) =>
@@ -173,6 +174,27 @@ test("a scoped proxy lists only this run's tools, ignoring an unrestricted cache
   await expect(bridge.call("opensession-sessions_cancel_task")).rejects.toThrow(
     "not permitted by this run's tool policy",
   );
+});
+
+test("a deferred proxy still yields direct tools this run is bound to", async () => {
+  const sessionsServer = (names: string[]) =>
+    createSdkMcpServer({
+      name: "opensession-sessions",
+      tools: names.map((name) =>
+        tool(name, name, {}, async () => ({ content: [] })),
+      ),
+    });
+  registerInteractiveMcpBuilder(() => ({
+    "opensession-sessions": sessionsServer(["wait_for", "task_status"]),
+  }));
+  expect((await bridgeWithStaleCatalog()).directTools).toEqual(["wait_for"]);
+  await runtime?.close();
+
+  // A run whose binding lacks wait_for (non-admin) gets no direct tool.
+  registerInteractiveMcpBuilder(() => ({
+    "opensession-sessions": sessionsServer(["task_status"]),
+  }));
+  expect((await bridgeWithStaleCatalog()).directTools).toEqual([]);
 });
 
 test("a proxied tool waiting on a person outlasts the runtime's call timeout", async () => {
