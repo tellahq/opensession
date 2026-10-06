@@ -6,7 +6,7 @@ import { useSessionPrResource } from "../hooks/useApiResources";
 import type { PrCheck, UnifiedSession } from "../lib/types";
 import { worstPrRef } from "../lib/pr-refs";
 import { sessionPrPresentation } from "../lib/session-prs";
-import { previewOpenable, withPreviewPath } from "../lib/preview-url";
+import { previewOpenable, stagingHref } from "../lib/preview-url";
 import { WS_SUMMARY_ICON } from "../lib/workspace-summary-classes";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
@@ -262,7 +262,7 @@ export function StagingLink({
   const rebuilding = openable && (deployPending || staging.status !== "Ready");
   // Deep-link to the agent-flagged route (set_preview_path) so the button
   // opens the feature under test, not the app root.
-  const href = withPreviewPath(staging.url, session.previewPath);
+  const href = stagingHref(staging, session.previewPath);
 
   // A plain click opens the preview in the workspace's in-app Preview tab, so
   // testing the change stays next to the session. ⌘/Ctrl-click, shift-click

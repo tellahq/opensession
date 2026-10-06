@@ -64,6 +64,8 @@ export interface PrStaging {
   embeddable?: boolean;
   /** The URL already serves a deploy, e.g. the previous one during a rebuild. */
   live?: boolean;
+  /** Route the link opens when the session has no recorded preview path. */
+  defaultPath?: string;
 }
 
 export interface PrFile {

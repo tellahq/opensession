@@ -22,3 +22,14 @@ export function previewOpenable(staging: {
 }): boolean {
   return staging.status === "Ready" || staging.live === true;
 }
+
+/**
+ * The PR preview environment link: the session's recorded route when it has
+ * one, else the deployment's configured landing route, else the root.
+ */
+export function stagingHref(
+  staging: { url: string; defaultPath?: string },
+  previewPath?: string | null,
+): string {
+  return withPreviewPath(staging.url, previewPath || staging.defaultPath);
+}

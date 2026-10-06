@@ -29,7 +29,7 @@ import { isPinned, onPinsChanged, togglePin } from "../lib/pins";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { portalTargetFor } from "../lib/portals";
 import { NO_TYPING, type TypingPresence } from "../lib/typing";
-import { previewOpenable, withPreviewPath } from "../lib/preview-url";
+import { previewOpenable, stagingHref } from "../lib/preview-url";
 import type { SessionViewerProps } from "../lib/session-viewer-bindings";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import { useWorkspaceRecord } from "../lib/workspace-records";
@@ -420,9 +420,7 @@ export function useSessionRuntimeController({
     phonePr?.repo,
     phonePr?.branch,
   ]);
-  const stagingUrl = staging
-    ? withPreviewPath(staging.url, session.previewPath)
-    : null;
+  const stagingUrl = staging ? stagingHref(staging, session.previewPath) : null;
   // The Preview environment pane is a top-strip view-tab now (App owns whether it's
   // foregrounded). If the deploy vanishes while its tab is open+active — PR
   // merged/closed, so `stagingRelevant` drops and the fetch settles with no
@@ -483,7 +481,7 @@ export function useSessionRuntimeController({
           return;
         }
         window.open(
-          withPreviewPath(staging.url, session.previewPath),
+          stagingHref(staging, session.previewPath),
           "_blank",
           "noopener",
         );

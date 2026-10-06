@@ -25,6 +25,15 @@ import {
 import { matchesShortcut } from "../lib/shortcuts";
 import { useSessionScroll } from "./useSessionScroll";
 import { useTranscriptIndexAnchor } from "./useTranscript";
+import {
+  holdTranscriptAnchor,
+  readFollowingLive,
+} from "../components/session-viewer/transcript-anchor";
+import {
+  captureTranscriptScroll,
+  rememberTranscriptScroll,
+  rememberedTranscriptScroll,
+} from "../components/session-viewer/transcript-scroll-memory";
 import type { useTranscript } from "./useTranscript";
 import type { SessionSocketSend } from "./useSessionSocket";
 import {
@@ -69,6 +78,9 @@ interface ReaderIndexState {
 }
 
 type HistoryController = ReturnType<typeof useTranscriptHistoryController>;
+
+// How long scrolling must rest before the reader's place is remembered.
+const SCROLL_SAVE_IDLE_MS = 150;
 
 interface ReaderHistoryState {
   controller: HistoryController;
@@ -205,8 +217,8 @@ export function useTranscriptReaderLayout({
   });
 
   // Keep the cached snapshot current as live frames and history pages land.
-  // Only what a remount resumes from belongs here: every session reopens at
-  // the live edge, so no scroll position is carried.
+  // Only what a remount resumes from belongs here. The reader's position is
+  // kept separately (transcript-scroll-memory), saved when scrolling rests.
   useEffect(() => {
     const cursors = transcriptHistoryRef.current.cursors;
     if (cursors.transcriptReadySessionRef.current !== session.id) return;
@@ -440,12 +452,14 @@ export function useTranscriptReaderLifecycle({
   const transcriptHistoryRef = useRef(transcriptHistory);
   const tailActionRef = useRef(tailActionNeedsLayoutScrollRef);
   const isSessionFocused = useEffectEvent(() => focused);
-  // Every session opens at the live edge. Do this in a layout effect so the
-  // transcript never paints at scrollTop 0 before moving to the end.
+  // A session opens where the reader left it, or at the live edge when they
+  // were following it (or never opened it). Do this in a layout effect so the
+  // transcript never paints at scrollTop 0 before moving.
   const initiallyScrolledSessionRef = useRef<string | null>(null);
   const [initialScrollSession, setInitialScrollSession] = useState<
     string | null
   >(null);
+  const scrollRestoreRef = useRef<(() => void) | null>(null);
   useLayoutEffect(() => {
     const el = messagesRef.current;
     if (
@@ -457,9 +471,74 @@ export function useTranscriptReaderLifecycle({
     )
       return;
     initiallyScrolledSessionRef.current = session.id;
-    scrollToLatest("auto");
-    setInitialScrollSession(session.id);
-  }, [entries, session.id, sessionHidden, scrollToLatest, messagesRef]);
+    const remembered = rememberedTranscriptScroll(session.id);
+    if (!remembered) {
+      scrollToLatest("auto");
+      setInitialScrollSession(session.id);
+      return;
+    }
+    leaveLatest();
+    el.scrollTop = remembered.scrollTop;
+    if (!remembered.anchorEid) return;
+    // Rows above the anchor mount and measure over the next frames. Hold the
+    // remembered row in place until they settle or the reader takes over.
+    const stop = holdTranscriptAnchor(
+      el,
+      remembered.anchorEid,
+      remembered.anchorTop,
+      Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight),
+      leaveLatest,
+      () => {
+        if (scrollRestoreRef.current === stop) scrollRestoreRef.current = null;
+      },
+    );
+    scrollRestoreRef.current = stop;
+  }, [
+    entries,
+    session.id,
+    sessionHidden,
+    scrollToLatest,
+    leaveLatest,
+    messagesRef,
+  ]);
+  useEffect(() => () => scrollRestoreRef.current?.(), []);
+  // Remember the reader's place once their scrolling comes to rest. Reading
+  // it on every scroll event would force layout on the streaming hot path,
+  // and reading it on every unmount would do the same to session switches.
+  const scrollSaveTimerRef = useRef(0);
+  const saveScrollPosition = useCallback(() => {
+    scrollSaveTimerRef.current = 0;
+    const el = messagesRef.current;
+    if (
+      !el ||
+      !el.isConnected ||
+      scrollRestoreRef.current ||
+      initiallyScrolledSessionRef.current !== session.id
+    )
+      return;
+    rememberTranscriptScroll(
+      session.id,
+      readFollowingLive(followingLive) ? null : captureTranscriptScroll(el),
+    );
+  }, [followingLive, messagesRef, session.id]);
+  const scheduleScrollSave = useCallback(() => {
+    window.clearTimeout(scrollSaveTimerRef.current);
+    scrollSaveTimerRef.current = window.setTimeout(
+      saveScrollPosition,
+      SCROLL_SAVE_IDLE_MS,
+    );
+  }, [saveScrollPosition]);
+  // A layout cleanup still sees the attached scroller; a passive one runs
+  // after React has detached the ref.
+  useLayoutEffect(
+    () => () => {
+      // Switching away mid-scroll still keeps the latest resting place.
+      if (!scrollSaveTimerRef.current) return;
+      window.clearTimeout(scrollSaveTimerRef.current);
+      saveScrollPosition();
+    },
+    [saveScrollPosition],
+  );
   // Message blocks use content-visibility with estimated heights. Those estimates
   // resolve after the first scroll calculation without a React update, growing the
   // transcript above the viewport. Hold the bottom through that initial browser
@@ -705,7 +784,8 @@ export function useTranscriptReaderLifecycle({
       },
       { onScroll, loadEarlierHistory },
     );
-  }, [loadEarlierHistory, messagesRef, onScroll]);
+    scheduleScrollSave();
+  }, [loadEarlierHistory, messagesRef, onScroll, scheduleScrollSave]);
   useEffect(() => {
     const controller = transcriptHistoryRef.current;
     const {

@@ -359,8 +359,25 @@ async function withEmbeddable(
   }
   const embeddable = hit?.ok ?? false;
   const live = hit?.live ?? false;
-  if (staging.embeddable === embeddable && staging.live === live) return data;
-  return { ...data, staging: { ...staging, embeddable, live } };
+  const defaultPath = previewDefaultPath();
+  if (
+    staging.embeddable === embeddable &&
+    staging.live === live &&
+    staging.defaultPath === defaultPath
+  )
+    return data;
+  return { ...data, staging: { ...staging, embeddable, live, defaultPath } };
+}
+
+// Where the preview link lands when the session has not recorded the route of
+// the feature under test (`integrations.github.previewDefaultPath`, e.g. the
+// app's signed-in home rather than a marketing root). Read at serve time so a
+// config change applies without waiting out the details cache.
+function previewDefaultPath(): string | undefined {
+  const raw = configuredIntegration("github").previewDefaultPath;
+  if (typeof raw !== "string") return undefined;
+  const path = "/" + raw.trim().replace(/^\/+/, "");
+  return path === "/" ? undefined : path;
 }
 
 /** Changed files, biggest churn first, so the panel leads with the meat. */

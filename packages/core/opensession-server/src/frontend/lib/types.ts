@@ -925,6 +925,8 @@ export interface PrDetails {
     status: string;
     embeddable?: boolean;
     live?: boolean;
+    /** Route to open when the session has no recorded preview path. */
+    defaultPath?: string;
   } | null;
   /** The GitHub stack this PR is a layer of. Null/absent covers both "not
    *  stacked" and "the stack read failed" — the UI treats them the same. */
