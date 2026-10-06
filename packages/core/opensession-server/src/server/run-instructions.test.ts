@@ -155,7 +155,8 @@ describe("buildRunInstructions", () => {
     );
     expect(prompt).toContain(
       "For PRs outside the current primary repository, write `<repo>#<number>`, never bare `#<number>`. " +
-        "A bare `#<number>` reads as a PR; write GitHub issues as `issue #<number>`.",
+        "A bare `#<number>` reads as a PR; write GitHub issues as `issue #<number>`. " +
+        "Name each PR by number once per reply, then by what it does.",
     );
     // Every MCP tool hides behind mcp_search; the Tools section is the only
     // way a run learns a tool exists before it knows to search for it, and it
