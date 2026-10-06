@@ -156,7 +156,8 @@ describe("buildRunInstructions", () => {
     expect(prompt).toContain(
       "For PRs outside the current primary repository, write `<repo>#<number>`, never bare `#<number>`. " +
         "A bare `#<number>` reads as a PR; write GitHub issues as `issue #<number>`. " +
-        "A PR URL renders as that reference, so write one, not both.",
+        "A PR URL renders as that reference, so write one, not both. " +
+        "Name each PR by number once per reply, then by what it does.",
     );
     // Every MCP tool hides behind mcp_search; the Tools section is the only
     // way a run learns a tool exists before it knows to search for it, and it
@@ -187,9 +188,11 @@ describe("buildRunInstructions", () => {
     // Self-contained questions add ~150: a late question that only points back
     // at an earlier turn is unanswerable once the person has lost that context.
     // Portals add ~50 so the PR preview link opens the feature, not the root.
+    // Naming each PR once per reply adds ~60: without it a reply restates the
+    // number in every sentence.
     // The CI line in Waiting adds ~140: polling checks in a tool call was a
     // quarter of active agent time on PR work.
-    expect(prompt.length).toBeLessThan(3_600);
+    expect(prompt.length).toBeLessThan(3_660);
   });
 
   // `sleep 240; check` blocks the turn and misses a job that finished early

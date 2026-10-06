@@ -983,6 +983,19 @@ describe("renderMarkdown PR mentions", () => {
     }
   });
 
+  it("draws only the first mention of a PR as a chip", () => {
+    const html = renderMarkdown(
+      "#5528 fixes it. **#5832** depends on #5528, and #5528 lands first.",
+      fusion,
+    );
+    expect(html.match(/class="pr-ref"/g)?.length).toBe(2);
+    expect(html.match(/class="pr-ref pr-ref-repeat"/g)?.length).toBe(2);
+    expect(html.match(/class="pr-ref-icon"/g)?.length).toBe(2);
+    expect(html.match(/href="\/pr\/tella-fusion\/5528"/g)?.length).toBe(3);
+    // A fresh render starts over: the next message gets its own chip.
+    expect(renderMarkdown("Merged #5528.", fusion)).toContain('class="pr-ref"');
+  });
+
   it("keeps two different pull requests as two chips", () => {
     setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
     const html = renderMarkdown(

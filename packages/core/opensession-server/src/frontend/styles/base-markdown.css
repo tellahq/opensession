@@ -1374,6 +1374,35 @@ a.pr-ref[data-pr-tone="yellow"] .pr-ref-icon {
   color: var(--yellow);
 }
 
+/* A PR the same message already showed as a chip. Every later mention drops
+   the pill, glyph and state colour and reads as a link in the sentence, so a
+   reply that names its PR a dozen times is not a wall of filled chips. The
+   tone selectors are repeated so this wins over the colours above. */
+a.pr-ref.pr-ref-repeat,
+a.pr-ref.pr-ref-repeat[data-pr-tone] {
+  display: inline;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font-weight: inherit;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--text-dim);
+  text-underline-offset: 3px;
+}
+a.pr-ref.pr-ref-repeat::before {
+  content: none;
+}
+a.pr-ref.pr-ref-repeat:hover,
+a.pr-ref.pr-ref-repeat[data-pr-tone]:hover {
+  background: none;
+  text-decoration: underline solid;
+  text-decoration-color: currentColor;
+}
+a.pr-ref.pr-ref-repeat:active {
+  background: none;
+  scale: none;
+}
+
 /* A commit sha, which markdown.ts leaves in the monospace capsule it was
    written in rather than making a pill of it. A sha IS a code identifier, and
    the sentences these turn up in name two or three at a time ("reverting

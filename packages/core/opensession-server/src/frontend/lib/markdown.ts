@@ -80,6 +80,13 @@ function isLinkToken(token: Token): token is Tokens.Link {
  *  repeated further down stays a link. Reset per renderMarkdown call. */
 let renderedTellaVideos = new Set<string>();
 
+/** PRs already drawn as a full chip in the document being rendered. A reply
+ *  can name the same PR a dozen times, and a dozen filled, state-coloured
+ *  pills bury the prose around them; later mentions render as a quiet link
+ *  that still opens the review and still gets the hover card. Reset per
+ *  renderMarkdown call; null outside one, where every mention is a chip. */
+let renderedPrRefs: Set<string> | null = null;
+
 /**
  * The Tella videos linked from a block's prose that have not played yet in
  * this document, in the order written, one per video however many times it
@@ -1100,9 +1107,21 @@ function prMentionLink(
   // `data-pr-gh` is the escape hatch, not the destination: a plain click
   // stays in the review here, cmd/ctrl-click leaves for github.com.
   const ghRepo = knownRepos.get(repo);
-  const state = knownPrStates.get(prStateKey(repo, number));
+  const key = prStateKey(repo, number);
+  const state = knownPrStates.get(key);
+  const repeat = renderedPrRefs?.has(key) ?? false;
+  renderedPrRefs?.add(key);
+  const icon = repeat
+    ? ""
+    : `<span class="pr-ref-icon" aria-hidden="true">` +
+      `<svg viewBox="0 0 24 24" fill="none">` +
+      `<circle cx="7" cy="6.5" r="1.75"/><circle cx="7" cy="17.5" r="1.75"/>` +
+      `<circle cx="17" cy="17.5" r="1.75"/><path d="M7 8.25V15.75"/>` +
+      `<path d="M12.25 6.5H15C16.1046 6.5 17 7.39543 17 8.5V15.75"/>` +
+      `</svg></span>`;
   return (
-    `<a href="${attr(href)}" class="pr-ref" data-pr-repo="${attr(repo)}"` +
+    `<a href="${attr(href)}" class="pr-ref${repeat ? " pr-ref-repeat" : ""}"` +
+    ` data-pr-repo="${attr(repo)}"` +
     ` data-pr-number="${attr(number)}"` +
     (unqualified ? ` data-pr-context-repo="${attr(contextRepo)}"` : "") +
     (ghRepo ? ` data-pr-gh="${attr(ghRepo)}"` : "") +
@@ -1110,12 +1129,7 @@ function prMentionLink(
       ? ` data-pr-state="${state.state}" data-pr-tone="${state.tone}"`
       : "") +
     ` title="${attr(prRefTitle(repo, number, state))}">` +
-    `<span class="pr-ref-icon" aria-hidden="true">` +
-    `<svg viewBox="0 0 24 24" fill="none">` +
-    `<circle cx="7" cy="6.5" r="1.75"/><circle cx="7" cy="17.5" r="1.75"/>` +
-    `<circle cx="17" cy="17.5" r="1.75"/><path d="M7 8.25V15.75"/>` +
-    `<path d="M12.25 6.5H15C16.1046 6.5 17 7.39543 17 8.5V15.75"/>` +
-    `</svg></span><span class="pr-ref-label">${attr(label)}</span></a>`
+    `${icon}<span class="pr-ref-label">${attr(label)}</span></a>`
   );
 }
 
@@ -1917,11 +1931,13 @@ export function renderMarkdown(src: string, ctx?: MarkdownContext): string {
   const previousAssetSessionId = renderAssetSessionId;
   const previousRawHtml = renderRawHtml;
   const previousTellaVideos = renderedTellaVideos;
+  const previousPrRefs = renderedPrRefs;
   renderRepo = ctx?.repo;
   renderAssetReferences = assets;
   renderAssetSessionId = ctx?.sessionId;
   renderRawHtml = ctx?.rawHtml ?? "escape";
   renderedTellaVideos = new Set();
+  renderedPrRefs = new Set();
   try {
     const parsed = md.parse(collapseDuplicatePrReferences(src));
     if (parsed instanceof Promise) throw new Error("Unexpected async markdown");
@@ -1934,6 +1950,7 @@ export function renderMarkdown(src: string, ctx?: MarkdownContext): string {
     renderAssetSessionId = previousAssetSessionId;
     renderRawHtml = previousRawHtml;
     renderedTellaVideos = previousTellaVideos;
+    renderedPrRefs = previousPrRefs;
   }
   if (cacheable) {
     dropStreamedPrefix(contextKey, src);
