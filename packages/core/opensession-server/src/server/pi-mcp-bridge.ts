@@ -17,10 +17,14 @@ export interface PiMcpBridge {
  * the name it sees. Everything else stays behind mcp_search. A tool earns a
  * place here only when the two-step search is itself what stops the model
  * from using it: `schedule_prompt` competes with a one-line `sleep`, and
- * searching for it first made the wrong choice the easy one.
+ * searching for it first made the wrong choice the easy one. `wait_for`
+ * (pr_checks) loses to an inline `until gh pr checks` loop the same way.
+ * It is registered only for admin runs, so runs without it get no direct
+ * `wait_for` either.
  */
 export const DIRECT_MCP_TOOLS: Readonly<Record<string, string>> = {
   "opensession-schedule_schedule_prompt": "schedule_prompt",
+  "opensession-sessions_wait_for": "wait_for",
 };
 
 type BoundTool = McpRuntimeTool & { runtime: McpRuntime };

@@ -214,4 +214,24 @@ describe("Pi MCP adapter", () => {
     );
     expect(without.directTools).toEqual([]);
   });
+
+  test("offers wait_for by name only when the catalog carries it", async () => {
+    const runtime = fakeRuntime([
+      tool("opensession-sessions_wait_for", "Wait for PR checks"),
+      tool("opensession-sessions_send_to_session", "Send"),
+    ]);
+    const bridge = await createPiMcpBridge(runtime);
+    expect(bridge.directTools.map((item) => item.name)).toEqual(["wait_for"]);
+    await exec(bridge.directTools[0]!, { kind: "pr_checks" });
+    expect(runtime.calls[0]).toMatchObject({
+      id: "opensession-sessions_wait_for",
+      args: { kind: "pr_checks" },
+    });
+
+    // Non-admin runs mount opensession-sessions without wait_for.
+    const without = await createPiMcpBridge(
+      fakeRuntime([tool("opensession-sessions_send_to_session", "Send")]),
+    );
+    expect(without.directTools).toEqual([]);
+  });
 });
