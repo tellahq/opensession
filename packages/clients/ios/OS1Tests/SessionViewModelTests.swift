@@ -1352,6 +1352,47 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.sentAskAnswer)
     }
 
+    /// The X sends the protocol's null answer for the card's own question.
+    func testDismissingSendsANullAnswerForThatQuestion() throws {
+        let socket = MockSocket()
+        let viewModel = SessionViewModel(session: Session(id: "bks-1"), socketFactory: { socket })
+        viewModel.start(owner: UUID())
+        let question = askedQuestion()
+        viewModel.handle(.askQuestion(sessionId: "bks-1", question: question))
+
+        viewModel.answer(question: question, answers: nil)
+
+        let call = try XCTUnwrap(socket.answers.last)
+        XCTAssertEqual(socket.answers.count, 1)
+        XCTAssertEqual(call.sessionId, "bks-1")
+        XCTAssertEqual(call.questionId, "ask-1")
+        XCTAssertNil(call.answers, "a dismissal is null, never a guessed text answer")
+        XCTAssertNil(viewModel.pendingQuestion)
+        XCTAssertNil(viewModel.sentAskAnswer)
+    }
+
+    /// Another client dismisses: the server's `ask_resolved` retires the
+    /// matching card here, including one for an ask the server no longer
+    /// holds (a stale card), and leaves a different question alone.
+    func testAskResolvedFromAnotherClientRetiresOnlyTheMatchingCard() {
+        let stale = makeViewModel()
+        stale.handle(.askQuestion(sessionId: "bks-1", question: AskQuestion(id: "ask-stale", questions: [])))
+        let other = makeViewModel()
+        other.handle(.askQuestion(sessionId: "bks-1", question: AskQuestion(id: "ask-live", questions: [])))
+
+        let retraction = ServerEvent.parse(Data(
+            #"{"type":"ask_resolved","sessionId":"bks-1","questionId":"ask-stale"}"#.utf8
+        ))
+        stale.handle(retraction)
+        other.handle(retraction)
+
+        XCTAssertNil(stale.pendingQuestion, "the stale card is retracted")
+        XCTAssertEqual(other.pendingQuestion?.id, "ask-live", "a different question stays")
+
+        other.handle(.askResolved(sessionId: "bks-other", questionId: "ask-live"))
+        XCTAssertEqual(other.pendingQuestion?.id, "ask-live", "another session's resolution is ignored")
+    }
+
     func testNewQuestionClearsAnUnretiredReceipt() {
         let viewModel = makeViewModel()
         let question = askedQuestion()
@@ -2586,7 +2627,15 @@ private final class MockSocket: SessionSocket {
     func takeSteered(sessionId: String, queueId: String) { takenSteerIds.append(queueId) }
     func reorderQueued(sessionId: String, order: [String]) { reorders.append(order) }
     func cancelWatchedRun() {}
-    func answer(sessionId: String, questionId: String, answers: [String: String]?) {}
+    struct AnswerCall {
+        let sessionId: String
+        let questionId: String
+        let answers: [String: String]?
+    }
+    private(set) var answers: [AnswerCall] = []
+    func answer(sessionId: String, questionId: String, answers: [String: String]?) {
+        self.answers.append(AnswerCall(sessionId: sessionId, questionId: questionId, answers: answers))
+    }
 }
 
 /// Speed through the session view model: what the menu picks, what a pin or

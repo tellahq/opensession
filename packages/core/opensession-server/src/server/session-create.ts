@@ -87,6 +87,7 @@ import {
   withPastedTexts,
 } from "@tellahq/opensession-protocol/pasted-text";
 import { wrapContext } from "./prompt-context";
+import { localFoldersContextNote } from "./local-folders";
 import {
   acknowledgePromptDispatch,
   acknowledgeSteerDelivery,
@@ -3061,6 +3062,14 @@ export async function handleCreateSessionMessage(
     {
       const mentionsNote = sessionMentionsNote(openingPrompt);
       if (mentionsNote) openingPrompt += `\n\n${mentionsNote}`;
+    }
+    // Folders the creator connected from the New-session box, on their own
+    // computer (local-folders.ts). Their client attaches them to this id
+    // before sending the create, so the opening turn already knows.
+    if (!ws.data.authAutomation) {
+      const foldersNote = localFoldersContextNote(bksId, user);
+      if (foldersNote)
+        openingPrompt = `${wrapContext(foldersNote, "local-folders-note")}\n\n${openingPrompt}`;
     }
     // Session opened from the Support view: link it to its Plain
     // thread (conversation tab + the sidebar's ticket→session

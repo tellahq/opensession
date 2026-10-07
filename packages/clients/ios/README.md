@@ -164,7 +164,14 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   Long answers clamp with `Show full message · 12 KB` (wire-clamped entries
   refetch on demand), system events are toned by severity, and a floating pill
   offers the way back down — reading `New messages` when output arrived while
-  you were scrolled up. On wide pointer layouts, a native rail indexes the
+  you were scrolled up. Switching away from a session you were reading and
+  back reopens it on the same passage (the block at the top and its offset,
+  kept in memory per account, server and session, for the 200 most recent);
+  leaving at the latest message reopens there and keeps following. Folders
+  connected from someone's own computer show as chips above the composer
+  with their device, read-only and offline state; the person who connected
+  one can disconnect it here. Connecting and allowing edits stay on the
+  device that holds the folder. On wide pointer layouts, a native rail indexes the
   current person's sent messages; hover previews one and activation jumps the
   transcript to it. It stays hidden on iPhone and compact widths. A selected
   Markdown passage stays highlighted as
@@ -320,7 +327,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   session's staged file channel before Start becomes available.
 - **AskUserQuestion:** blocking questions render as an inline card with option
   buttons + free-text answer, wired to `answer_question`. After you submit, the
-  card becomes a read-only receipt showing the question and your answer.
+  card becomes a read-only receipt showing the question and your answer. The
+  card's X dismisses without answering: it sends `answers: null`, the asking
+  run proceeds on its own judgment, and the server's `ask_resolved` (sent even
+  for a card it no longer holds) retires the card on every open client.
 - **Review progress** — the PR code page tracks which files you reviewed
   and which changed after you did. GitHub PRs use GitHub's viewed state
   (`GET /api/pr-viewed-files`, whose `changed` list is GitHub's DIRTY state);
@@ -658,7 +668,7 @@ OS1/
     WalkthroughCard.swift    Published walkthrough: demo video, writeup, stills
     MarkdownBody.swift       Streaming/durable markdown rendering, block switch
     Blocks/                  One view per block kind (choices, tree, compare, …)
-    AskQuestionCard.swift    Options + free text answer
+    AskQuestionCard.swift    Options, free text answer, dismiss
     PrPanel.swift            Pull-request overview, actions, and review entry
     PrReviewCanvas.swift     Committed diff, inline pending comments, guide steps
     PrReviewProgressViews.swift  Review progress, changed-since-review, step chips
@@ -710,6 +720,10 @@ OS1/
   `/api/force-merge`, which answer with this viewer's permissions. The
   `*_resolved` frames clear the matching card, and a read that started before
   a resolution cannot bring it back. `script_runs` replaces the run list.
+- `local_folders` carries the session's whole folder list; it is re-read from
+  `GET /api/local-folders?sessionId=` on every handshake, and
+  `POST /api/local-folders/disconnect {sessionId,key,user}` answers 403 to
+  anyone but the person who connected the folder.
 - `reply_suggestions` carries a session id and optional `{label,text}` choices.
   A JSON `null` suggestion payload clears the current row; a new stream or send
   clears it locally so stale replies cannot follow the next turn.

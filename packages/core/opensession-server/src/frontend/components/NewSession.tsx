@@ -80,6 +80,11 @@ import { NewSessionPrompt } from "./NewSessionPrompt";
 import type { NewSessionPromptHandle } from "../lib/new-session-prompt-types";
 import { ComposerContextChip } from "./ComposerContextChip";
 import {
+  NewSessionFolderChips,
+  NewSessionFolderMenuItem,
+  useNewSessionFolders,
+} from "./NewSessionFolders";
+import {
   IconPaperclip,
   IconArrowUp,
   IconChevronDown,
@@ -415,6 +420,8 @@ export function NewSession({
   );
   const [status, setStatus] = useState<CreateStatus>({ kind: "idle" });
   const busy = status.kind === "creating" || status.kind === "reconnecting";
+  // Folders on this computer to connect to the session once it exists.
+  const localFolders = useNewSessionFolders();
   // "New repository" at the foot of the Project picker: a project that exists
   // nowhere yet starts here rather than in a scratch dir. It is available in workspace composers too: choosing a new project
   // releases the original workspace and branch through the scope above.
@@ -1019,7 +1026,7 @@ export function NewSession({
       });
   }
 
-  function handleCreate() {
+  async function handleCreate() {
     if (!canCreate) return;
     const prompt = promptText.current.trim();
     const createRepo = repo;
@@ -1164,6 +1171,10 @@ export function NewSession({
           : { name: file.name, dataUrl: file.dataUrl },
       );
     }
+    // Before the create goes out, so the opening turn knows the folders.
+    // Only awaited when there are folders, so a plain create stays synchronous.
+    if (localFolders.folders.length)
+      await localFolders.attachTo(clientSessionId);
     createSessionIdRef.current = clientSessionId;
     createMessageRef.current = createMessage;
     // A globally selected PR adopts its workspace, but its composer draft did
@@ -1551,6 +1562,7 @@ export function NewSession({
                 Using
               </span>
             )}
+            <NewSessionFolderChips folders={localFolders} disabled={busy} />
             <AnimatePresence initial={false}>
               {selectedMcpServers.map((mcp) => (
                 <ComposerContextChip
@@ -1772,6 +1784,7 @@ export function NewSession({
                       </Menu.Popup>
                     </Menu.SubmenuRoot>
                   )}
+                  <NewSessionFolderMenuItem folders={localFolders} />
                   {showSandboxPicker && (
                     <Menu.SubmenuRoot>
                       <Menu.SubmenuTrigger className="justify-between gap-3">

@@ -387,6 +387,9 @@ final class SessionViewModel {
     /// know answers. Its own observable so the cards never invalidate the
     /// transcript; this view model only feeds it this session's frames.
     let actionCards: SessionActionCardsModel
+    /// Folders on people's own computers this session can reach. Its own
+    /// observable for the same reason; it checks each frame's session itself.
+    let localFolders: SessionLocalFoldersModel
     /// Bumped to put the cursor in the composer (Ask about this).
     private(set) var composerFocusRequest = 0
 
@@ -673,9 +676,11 @@ final class SessionViewModel {
         workflowLoader: @escaping @MainActor (String) async throws -> [WorkflowRun] = {
             try await OS1API.workflowRuns(sessionId: $0)
         },
-        actionCards: SessionActionCardsModel? = nil
+        actionCards: SessionActionCardsModel? = nil,
+        localFolders: SessionLocalFoldersModel? = nil
     ) {
         self.actionCards = actionCards ?? SessionActionCardsModel(sessionId: session.id)
+        self.localFolders = localFolders ?? SessionLocalFoldersModel(sessionId: session.id)
         self.session = session
         self.socketFactory = socketFactory
         self.outbox = outbox
@@ -832,6 +837,7 @@ final class SessionViewModel {
         stopped = true
         replySuggestions = []
         actionCards.deactivate()
+        localFolders.deactivate()
         outbox.stopObserving(sessionId: session.id)
         reconnectTask?.cancel()
         cancelConnectionPresentation()
@@ -2139,6 +2145,7 @@ final class SessionViewModel {
             // Cards are announced by broadcast, which a socket that was not
             // connected at the time never saw: re-read them on every handshake.
             actionCards.rehydrate()
+            localFolders.rehydrate()
             // A completed handshake is proof the server is reachable — better
             // evidence than any network path status, so anything waiting out a
             // backoff goes now.
@@ -2543,6 +2550,10 @@ final class SessionViewModel {
 
         case .scriptRuns(let id, let runs) where id == session.id:
             actionCards.scriptRunsFrame(runs)
+
+        case .localFolders(let id, let folders):
+            // The model drops another session's list itself.
+            localFolders.frame(sessionId: id, folders: folders)
 
         case .gitPushed(let id, _) where id == session.id:
             loadPr()

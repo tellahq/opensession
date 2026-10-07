@@ -195,6 +195,27 @@ describe("buildRunInstructions", () => {
     expect(prompt.length).toBeLessThan(3_660);
   });
 
+  test("asks for visual proof by default only where walkthroughs are mounted", () => {
+    const withTool = buildRunInstructions({
+      isAsk: false,
+      hasSession: true,
+      inProcessMcp: { "opensession-walkthrough": {} },
+    });
+    expect(withTool).toContain("## Visual proof");
+    expect(withTool).toContain("even when it is small");
+    expect(withTool).toContain("`publish_walkthrough`");
+
+    const ask = buildRunInstructions({
+      isAsk: true,
+      hasSession: true,
+      inProcessMcp: { "opensession-walkthrough": {} },
+    });
+    expect(ask).not.toContain("## Visual proof");
+    expect(
+      buildRunInstructions({ isAsk: false, hasSession: true }),
+    ).not.toContain("## Visual proof");
+  });
+
   // `sleep 240; check` blocks the turn and misses a job that finished early
   // or died. The rule reaches every run, not one repository's AGENTS.md, and
   // points at schedule_prompt only where that tool is mounted.

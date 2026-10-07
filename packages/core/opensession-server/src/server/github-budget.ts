@@ -5,7 +5,13 @@ import {
   serviceGithubCredential,
 } from "./github-auth";
 
-type Sample = { calls: number; failures: number; durationMs: number };
+type Sample = {
+  calls: number;
+  failures: number;
+  durationMs: number;
+  /** GraphQL points, from the `rateLimit.cost` the consumer asked for. */
+  points: number;
+};
 const samples = new Map<string, Sample>();
 let lastLogAt = 0;
 let probe: Promise<void> | null = null;
@@ -67,8 +73,15 @@ export function noteGithubGraphqlCall(
   opts: { ambient?: boolean; bucket?: unknown } = {},
 ): void {
   const key = `${opts.ambient ? "ambient" : "service"}:${consumer}`;
-  const sample = samples.get(key) || { calls: 0, failures: 0, durationMs: 0 };
+  const sample = samples.get(key) || {
+    calls: 0,
+    failures: 0,
+    durationMs: 0,
+    points: 0,
+  };
   sample.calls++;
+  const cost = Number((opts.bucket as { cost?: unknown } | null)?.cost);
+  if (Number.isFinite(cost) && cost > 0) sample.points += cost;
   sample.durationMs += Math.max(0, durationMs);
   if (!ok) sample.failures++;
   samples.set(key, sample);
@@ -107,7 +120,7 @@ export function noteGithubGraphqlCall(
     const totals = [...samples.entries()]
       .map(
         ([label, value]) =>
-          `${label}{calls=${value.calls},failures=${value.failures},durationMs=${Math.round(value.durationMs)}}`,
+          `${label}{calls=${value.calls},failures=${value.failures},durationMs=${Math.round(value.durationMs)}${value.points ? `,points=${value.points}` : ""}}`,
       )
       .join(" ");
     console.log(

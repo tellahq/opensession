@@ -252,9 +252,23 @@ final class OS1Socket: SessionSocket {
 
 
     func answer(sessionId: String, questionId: String, answers: [String: String]?) {
-        var frame: [String: Any] = ["type": "answer_question", "sessionId": sessionId, "questionId": questionId]
-        frame["answers"] = answers ?? NSNull()
-        send(frame)
+        send(Self.answerFrame(sessionId: sessionId, questionId: questionId, answers: answers))
+    }
+
+    /// `answers: nil` is a dismissal and goes out as an explicit JSON null,
+    /// never an omitted key: the server reads null as "proceed without an
+    /// answer" and broadcasts `ask_resolved` even for a stale card.
+    nonisolated static func answerFrame(
+        sessionId: String,
+        questionId: String,
+        answers: [String: String]?
+    ) -> [String: Any] {
+        [
+            "type": "answer_question",
+            "sessionId": sessionId,
+            "questionId": questionId,
+            "answers": answers.map { $0 as Any } ?? NSNull(),
+        ]
     }
 
     private func finishCommandNegotiation(

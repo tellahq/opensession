@@ -26,7 +26,16 @@
  * detected instead of being mistaken for the next turn.
  */
 import { randomUUIDv7 } from "bun";
-import { getPrDetailsFresh, type PrDetails } from "./pr-info";
+import { configuredRepos, type Repo } from "./config";
+import type { PrDetails } from "./pr-info";
+import {
+  githubCheckRollups,
+  githubPrHost,
+  hostRepoId,
+  prHostFor,
+  type PrHost,
+} from "./pr-host";
+import type { RollupContextCounts } from "./pr-check-summary";
 import { wrapContext } from "./prompt-context";
 import { isRunStateUnsettled, type RunState } from "./run-state";
 import { getSessionControl, type SessionSummary } from "./session-control";
@@ -57,6 +66,9 @@ const MAX_WAIT_SECONDS = 24 * 60 * 60;
 const DEFAULT_PR_POLL_SECONDS = 30;
 const DEFAULT_PR_SETTLE_SECONDS = 45;
 const DEFAULT_PR_TIMEOUT_SECONDS = 2 * 60 * 60;
+/** While checks plainly run, the full PR read still happens this often: the
+ * cheap count read cannot see everything the full read dedupes or names. */
+const PR_FULL_READ_EVERY_MS = 5 * 60_000;
 const DEFAULT_SESSION_TURN_POLL_SECONDS = 30;
 const DEFAULT_SESSION_TURN_TIMEOUT_SECONDS = 2 * 60 * 60;
 /** Tail of the target's last assistant message carried in the wake-up. */
@@ -90,6 +102,10 @@ export interface PrChecksAgentWait {
   candidateSince?: number;
   candidateSignature?: string;
   lastError?: string;
+  /** The PR number the last full read found, for the cheap count read. */
+  number?: number;
+  /** When the last full read succeeded. */
+  fullReadAt?: number;
 }
 
 /** How a watched session's turn ended, as reported in the wake-up. */
@@ -231,6 +247,46 @@ export async function registerTimerAgentWait(input: {
   return { ok: true, wait, replaced: !!current };
 }
 
+/** Where a PR wait reads its pull request: the host and the host-side repo
+ * (`owner/name` on GitHub). */
+export interface PrWaitRepo {
+  host: PrHost;
+  hostRepo: string;
+  github: boolean;
+}
+
+/**
+ * Resolve the repo a PR wait names. Agents pass the registered repo id (the
+ * tool's documented form, and the session default), and some pass the GitHub
+ * `owner/name`. The PR reads need the host-side repo either way: passing the
+ * id straight through made every read fail for the whole wait.
+ */
+export function resolvePrWaitRepo(
+  repo: string,
+  repos: Record<string, Repo> = configuredRepos(),
+): PrWaitRepo | null {
+  const id = repo.trim();
+  if (!id) return null;
+  const registered =
+    repos[id] ||
+    Object.values(repos).find(
+      (entry) =>
+        !!entry.ghRepo && entry.ghRepo.toLowerCase() === id.toLowerCase(),
+    );
+  if (registered) {
+    const hostRepo = hostRepoId(registered);
+    if (!hostRepo) return null;
+    return {
+      host: prHostFor(registered),
+      hostRepo,
+      github: registered.host !== "codestorage",
+    };
+  }
+  return /^[\w.-]+\/[\w.-]+$/.test(id)
+    ? { host: githubPrHost, hostRepo: id, github: true }
+    : null;
+}
+
 export async function registerPrChecksAgentWait(input: {
   sessionId: string;
   user: string;
@@ -242,6 +298,8 @@ export async function registerPrChecksAgentWait(input: {
   settleSeconds?: number;
   waitId?: string;
   now?: number;
+  /** The repository registry; tests pass their own. */
+  repos?: Record<string, Repo>;
 }): Promise<AgentWaitRegistration> {
   const sessionId = input.sessionId.trim();
   const repo = input.repo.trim();
@@ -251,6 +309,11 @@ export async function registerPrChecksAgentWait(input: {
   if (!repo)
     return { ok: false, error: "Repository id is required for a PR wait." };
   if (!branch) return { ok: false, error: "Branch is required for a PR wait." };
+  if (!resolvePrWaitRepo(repo, input.repos))
+    return {
+      ok: false,
+      error: `Unknown repository "${repo}". Pass a registered repo id or a GitHub owner/name.`,
+    };
   const now = input.now ?? Date.now();
   const pollSeconds = boundedSeconds(
     input.pollSeconds,
@@ -716,9 +779,61 @@ export function prCheckSettlement(details: PrDetails): PrCheckSettlement {
   };
 }
 
+/** A PR's state, head, and per-state check counts, from the cheap read. */
+export interface PrWaitRollup {
+  state: string;
+  headRefOid: string;
+  contexts: RollupContextCounts | null;
+}
+
+// Count states as the full read classifies them (checkPending/checkFailed):
+// a state in neither set is settled and does not wake the wait on its own.
+const ROLLUP_PENDING = new Set([
+  "QUEUED",
+  "IN_PROGRESS",
+  "PENDING",
+  "WAITING",
+  "REQUESTED",
+  "EXPECTED",
+]);
+const ROLLUP_FAILED = new Set([
+  "FAILURE",
+  "TIMED_OUT",
+  "ERROR",
+  "ACTION_REQUIRED",
+]);
+
+/** Whether per-state counts alone show checks still running with nothing
+ * failed, the one case where the full read would only reschedule. */
+export function rollupStillRunning(
+  contexts: RollupContextCounts | null | undefined,
+): boolean {
+  let pending = 0;
+  for (const rows of [
+    contexts?.checkRunCountsByState,
+    contexts?.statusContextCountsByState,
+  ]) {
+    for (const row of rows || []) {
+      const count = row.count || 0;
+      if (count <= 0) continue;
+      const state = (row.state || "").toUpperCase();
+      if (ROLLUP_FAILED.has(state)) return false;
+      if (ROLLUP_PENDING.has(state)) pending += count;
+    }
+  }
+  return pending > 0;
+}
+
 export interface AgentWaitHandlerDeps {
   now: () => number;
+  /** The full PR read: every check by name, state, and head (~7 points). */
   getPrDetails: (branch: string, repo: string) => Promise<PrDetails | null>;
+  /** The cheap read (1 point): state, head, and check counts by state. null
+   * when the host has none or GitHub gave no answer. */
+  getCheckRollup: (
+    repo: string,
+    number: number,
+  ) => Promise<PrWaitRollup | null>;
   schedule: (wait: AgentWait, dueAt: number) => void;
   deliver: (wait: AgentWait, message: string) => Promise<void>;
   getSession: (id: string) => SessionSummary | undefined;
@@ -741,7 +856,21 @@ export function agentWaitWakePrompt(wait: AgentWait, message: string): string {
 
 const defaultHandlerDeps: AgentWaitHandlerDeps = {
   now: () => Date.now(),
-  getPrDetails: getPrDetailsFresh,
+  getPrDetails: async (branch, repo) => {
+    const target = resolvePrWaitRepo(repo);
+    if (!target) throw new Error(`Unknown repository "${repo}".`);
+    return target.host.getPrDetailsFresh(branch, target.hostRepo);
+  },
+  getCheckRollup: async (repo, number) => {
+    const target = resolvePrWaitRepo(repo);
+    if (!target?.github) return null;
+    const rollups = await githubCheckRollups(
+      target.hostRepo,
+      [number],
+      "agent-wait:checks",
+    );
+    return rollups?.get(number) ?? null;
+  },
   schedule: async (wait, dueAt) => {
     // A cancel or replacement can land while a GitHub request is in flight.
     // Never let that stale response recreate the old wait over the newer one.
@@ -875,6 +1004,25 @@ export function __resetPrChecksWakesForTest(): void {
   prChecksWakes.clear();
 }
 
+async function checksStillRunning(
+  wait: PrChecksAgentWait,
+  deps: AgentWaitHandlerDeps,
+  now: number,
+): Promise<boolean> {
+  if (
+    wait.number == null ||
+    wait.fullReadAt == null ||
+    now - wait.fullReadAt >= PR_FULL_READ_EVERY_MS
+  )
+    return false;
+  try {
+    const rollup = await deps.getCheckRollup(wait.repo, wait.number);
+    return rollup?.state === "OPEN" && rollupStillRunning(rollup.contexts);
+  } catch {
+    return false;
+  }
+}
+
 export async function handleAgentWait(
   wait: AgentWait,
   deps: AgentWaitHandlerDeps = defaultHandlerDeps,
@@ -900,6 +1048,20 @@ export async function handleAgentWait(
     return "delivered";
   }
 
+  // Checks plainly still running: the cheap count read says so for a point,
+  // and the full read would only reschedule. A full read still runs every
+  // few minutes and for every candidate settlement or failure.
+  if (await checksStillRunning(wait, deps, now)) {
+    const next: PrChecksAgentWait = {
+      ...wait,
+      candidateSince: undefined,
+      candidateSignature: undefined,
+      lastError: undefined,
+    };
+    deps.schedule(next, nextPrPoll(next, now));
+    return "rescheduled";
+  }
+
   let details: PrDetails | null;
   try {
     details = await deps.getPrDetails(wait.branch, wait.repo);
@@ -917,6 +1079,7 @@ export async function handleAgentWait(
     deps.schedule(next, nextPrPoll(next, now));
     return "rescheduled";
   }
+  wait = { ...wait, number: details.number, fullReadAt: now };
   if (details.state !== "OPEN") {
     await deps.deliver(
       wait,

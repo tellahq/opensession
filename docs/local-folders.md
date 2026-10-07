@@ -13,6 +13,11 @@ you can turn **Allow edits** off to make the folder read-only, or
 **Disconnect** it. You can connect several folders to a session and the same
 folder to several sessions.
 
+When starting a session, choose **Connect a folder…** from the new-session
+box's **⋯** menu. Picked folders show as chips above the prompt and are
+connected the moment the session is created, so its first turn can already
+use them.
+
 Where it works:
 
 | Client         | How                                                                                                                    |

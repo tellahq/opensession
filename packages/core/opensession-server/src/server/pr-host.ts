@@ -50,6 +50,7 @@ import type {
 export type { PrHostCapabilities } from "./pr-contract";
 import { fetchWithTimeout } from "./shared/fetch-with-timeout";
 import { noteGithubGraphqlCall } from "./github-budget";
+import { githubGraphql } from "./github-graphql";
 import {
   summarizeRollupCounts,
   type PrChecksSummary,
@@ -182,9 +183,11 @@ export interface PrHost {
 }
 
 // Per-state counts only: no check contexts are paged, which is what made the
-// bulk statusCheckRollup unaffordable. ~3 GraphQL points per 100 PRs.
+// bulk statusCheckRollup unaffordable. ~3 GraphQL points per 100 PRs, and
+// one point for a single PR.
 const CHECK_SUMMARY_FRAGMENT = `fragment CheckSummary on PullRequest {
   number
+  state
   commits(last: 1) { nodes { commit { oid statusCheckRollup {
     contexts(first: 1) {
       totalCount
@@ -197,6 +200,7 @@ export const CHECK_SUMMARY_BATCH = 100;
 
 interface CheckSummaryNode {
   number: number;
+  state?: string;
   commits?: {
     nodes?: Array<{
       commit?: {
@@ -207,20 +211,30 @@ interface CheckSummaryNode {
   };
 }
 
-async function githubCheckSummaries(
+/** One PR's head and raw per-state check counts. */
+export interface PrCheckRollup {
+  /** OPEN | CLOSED | MERGED */
+  state: string;
+  headRefOid: string;
+  contexts: RollupContextCounts | null;
+}
+
+/**
+ * Head commit and per-state check counts for these PRs, keyed by number, read
+ * with direct GraphQL in aliased batches. null = a batch failed (rate limit,
+ * GitHub error); PRs GitHub returned nothing for are absent.
+ */
+export async function githubCheckRollups(
   repo: string,
   numbers: number[],
-): Promise<Map<
-  number,
-  { headRefOid: string; checks: PrChecksSummary }
-> | null> {
+  consumer = "pr-cache:check-summaries",
+): Promise<Map<number, PrCheckRollup> | null> {
   const [owner, name] = repo.split("/");
   if (!owner || !name) return null;
-  const out = new Map<
-    number,
-    { headRefOid: string; checks: PrChecksSummary }
-  >();
-  const unique = [...new Set(numbers)].filter((n) => Number.isInteger(n));
+  const out = new Map<number, PrCheckRollup>();
+  const unique = [...new Set(numbers)].filter(
+    (n) => Number.isSafeInteger(n) && n > 0,
+  );
   for (let i = 0; i < unique.length; i += CHECK_SUMMARY_BATCH) {
     const batch = unique.slice(i, i + CHECK_SUMMARY_BATCH);
     const fields = batch
@@ -232,33 +246,42 @@ ${fields}
   }
 }
 ${CHECK_SUMMARY_FRAGMENT}`;
-    const res = await ghJson<{
-      data?: { repository?: Record<string, CheckSummaryNode | null> };
-    }>(
-      [
-        "api",
-        "graphql",
-        "-f",
-        `query=${query}`,
-        "-f",
-        `owner=${owner}`,
-        "-f",
-        `name=${name}`,
-      ],
-      "pr-cache:check-summaries",
-      repo,
-    );
-    const nodes = res?.data?.repository;
+    const res = await githubGraphql<{
+      repository?: Record<string, CheckSummaryNode | null>;
+    }>({ repo, consumer, query, variables: { owner, name } });
+    const nodes = res.ok ? res.data.repository : undefined;
     if (!nodes) return null;
     for (const node of Object.values(nodes)) {
       const commit = node?.commits?.nodes?.[0]?.commit;
       if (!node || !commit?.oid) continue;
       out.set(node.number, {
+        state: node.state || "OPEN",
         headRefOid: commit.oid,
-        checks: summarizeRollupCounts(commit.statusCheckRollup?.contexts),
+        contexts: commit.statusCheckRollup?.contexts ?? null,
       });
     }
   }
+  return out;
+}
+
+async function githubCheckSummaries(
+  repo: string,
+  numbers: number[],
+): Promise<Map<
+  number,
+  { headRefOid: string; checks: PrChecksSummary }
+> | null> {
+  const rollups = await githubCheckRollups(repo, numbers);
+  if (!rollups) return null;
+  const out = new Map<
+    number,
+    { headRefOid: string; checks: PrChecksSummary }
+  >();
+  for (const [number, rollup] of rollups)
+    out.set(number, {
+      headRefOid: rollup.headRefOid,
+      checks: summarizeRollupCounts(rollup.contexts),
+    });
   return out;
 }
 

@@ -225,6 +225,12 @@ describe("local folders", () => {
     expect(sessionLocalFolders("s1")).toEqual([]);
   });
 
+  test("a folder announced for a session id before it exists is ready for its first turn", () => {
+    const { socket } = fakeDevice("Alice", new Map());
+    hello(socket, [{ id: "f1", name: "Taxes", sessionIds: ["s-new"] }]);
+    expect(localFoldersContextNote("s-new", "Alice")).toContain("Taxes");
+  });
+
   test("the prompt note names only the prompter's folders", () => {
     const { socket } = fakeDevice("Alice", new Map());
     hello(socket, [

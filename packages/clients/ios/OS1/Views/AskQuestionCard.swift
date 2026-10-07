@@ -19,14 +19,19 @@ import SwiftUI
 /// question" command (⌘I) arms the card instead: it takes the keyboard back
 /// from the composer and rings the card, and the letters answer from there.
 /// Only the card in the key window hears any of it; see `AskKeyScope`.
+///
+/// The X in the corner dismisses without answering: it sends the protocol's
+/// null answer, the asking run proceeds on its own judgment, and the server
+/// answers with `ask_resolved` (even for a card it no longer holds), which
+/// retires the card on every open client.
 struct AskQuestionCard: View {
     let ask: AskQuestion
     let onAnswer: ([String: String]?) -> Void
 
     @State private var freeText = ""
-    /// The row that was tapped, so it can confirm the choice for the moment
-    /// between the tap and the server retiring the card.
-    @State private var chosen: String?
+    /// What was sent, so the card confirms it for the moment between the
+    /// send and the server retiring the card, and never sends twice.
+    @State private var submission = AskSubmission.idle
     @FocusState private var inputFocused: Bool
     /// The card itself holds keyboard focus, after the focus command. This is
     /// only what arms the card and draws the ring; the letters answer through
@@ -50,6 +55,7 @@ struct AskQuestionCard: View {
         VStack(alignment: .leading, spacing: 0) {
             if let question {
                 prompt(question)
+                    .overlay(alignment: .topTrailing) { dismissButton }
 
                 ForEach(Array(options.enumerated()), id: \.element.label) { index, option in
                     hairline
@@ -74,21 +80,49 @@ struct AskQuestionCard: View {
             return .handled
         }
         .askHardwareKeys(
-            active: chosen == nil,
+            active: !submission.isInFlight,
             onLetter: pressLetter,
             onFocusCommand: focusCard
         )
-        .animation(.snappy(duration: 0.2), value: chosen)
+        .animation(.snappy(duration: 0.2), value: submission)
         .animation(.snappy(duration: 0.2), value: trimmedFreeText.isEmpty)
         // Answering is the moment a stuck session starts moving again — worth
         // the success cue rather than a send's tap, and it covers both ways of
-        // answering because both set `chosen`.
+        // answering because both set `chosen`. A dismissal is not an answer.
         .haptic(trigger: chosen) { previous, chosen in
             previous == nil && chosen != nil ? .commit : nil
         }
     }
 
+    private var chosen: String? { submission.chosen }
+
     // MARK: - Pieces
+
+    /// Close without answering. The glyph stays small and dim so it never
+    /// competes with the options; the hit target is the platform's minimum.
+    private var dismissButton: some View {
+        Button(action: dismiss) {
+            Image(systemName: "xmark")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .frame(width: Self.dismissTarget, height: Self.dismissTarget)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 4)
+        .padding(.trailing, 4)
+        .disabled(submission.isInFlight)
+        .opacity(submission.isInFlight ? 0.4 : 1)
+        .help("Dismiss question")
+        .accessibilityLabel("Dismiss question")
+        .accessibilityHint("The agent continues without your answer")
+    }
+
+    #if os(macOS)
+    private static let dismissTarget: CGFloat = 28
+    #else
+    private static let dismissTarget: CGFloat = 44
+    #endif
 
     private func prompt(_ question: AskQuestion.Question) -> some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -105,7 +139,9 @@ struct AskQuestionCard: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
+        .padding(.leading, 16)
+        // Room for the dismiss button so a long question never runs under it.
+        .padding(.trailing, Self.dismissTarget + 4)
         .padding(.top, 14)
         .padding(.bottom, 13)
     }
@@ -151,8 +187,8 @@ struct AskQuestionCard: View {
         .askLetterKeyEquivalent(letter)
         // The unpicked rows step back once a choice is in flight, so the card
         // reads as answered rather than still waiting.
-        .opacity(chosen == nil || chosen == option.label ? 1 : 0.4)
-        .disabled(chosen != nil)
+        .opacity(!submission.isInFlight || chosen == option.label ? 1 : 0.4)
+        .disabled(submission.isInFlight)
         .accessibilityHint(letter.map { "Press \($0) to pick" } ?? "")
     }
 
@@ -206,7 +242,7 @@ struct AskQuestionCard: View {
         .padding(.vertical, 12)
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .onTapGesture { inputFocused = true }
-        .disabled(chosen != nil)
+        .disabled(submission.isInFlight)
     }
 
     private var hairline: some View {
@@ -220,8 +256,7 @@ struct AskQuestionCard: View {
 
     /// A tap, a letter, and Return all land here: pick the row and send.
     private func choose(_ option: AskQuestion.Option, in question: AskQuestion.Question) {
-        guard chosen == nil else { return }
-        chosen = option.label
+        guard submission.begin(.chosen(option.label)) else { return }
         cardFocused = false
         onAnswer([question.question: option.label])
     }
@@ -229,7 +264,7 @@ struct AskQuestionCard: View {
     /// A letter from the window. False when it names nothing on this
     /// question, so the keystroke stays the system's.
     private func pressLetter(_ letter: String) -> Bool {
-        guard chosen == nil, let question,
+        guard !submission.isInFlight, let question,
               let option = AskLetterShortcuts.option(in: question, letter: letter)
         else { return false }
         choose(option, in: question)
@@ -240,7 +275,7 @@ struct AskQuestionCard: View {
     /// composer. Focus the answer field for free-text questions, otherwise
     /// ring the card so a letter answers it.
     private func focusCard() {
-        guard chosen == nil else { return }
+        guard !submission.isInFlight else { return }
         if options.isEmpty {
             cardFocused = false
             inputFocused = true
@@ -251,12 +286,44 @@ struct AskQuestionCard: View {
     }
 
     private func sendFreeText() {
-        guard let question, chosen == nil else { return }
+        guard let question, !submission.isInFlight else { return }
         let text = trimmedFreeText
-        guard !text.isEmpty else { return }
-        chosen = text
+        guard !text.isEmpty, submission.begin(.chosen(text)) else { return }
         inputFocused = false
         onAnswer([question.question: text])
+    }
+
+    /// The X: send the protocol's null answer. Never a guessed textual one,
+    /// and never a local hide — the server's `ask_resolved` is what retires
+    /// the card everywhere.
+    private func dismiss() {
+        guard submission.begin(.dismissed) else { return }
+        cardFocused = false
+        inputFocused = false
+        onAnswer(nil)
+    }
+}
+
+/// One card sends at most once: a pick, a free-text answer, or a dismissal,
+/// whichever lands first. Everything after it is ignored until the server
+/// retires the card.
+enum AskSubmission: Equatable {
+    case idle
+    case chosen(String)
+    case dismissed
+
+    var isInFlight: Bool { self != .idle }
+
+    var chosen: String? {
+        if case .chosen(let label) = self { return label }
+        return nil
+    }
+
+    /// Claim the card's one send. False when something was already sent.
+    mutating func begin(_ next: AskSubmission) -> Bool {
+        guard self == .idle, next != .idle else { return false }
+        self = next
+        return true
     }
 }
 

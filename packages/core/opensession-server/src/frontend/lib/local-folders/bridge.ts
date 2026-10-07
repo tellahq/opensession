@@ -73,6 +73,8 @@ let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let pingTimer: ReturnType<typeof setInterval> | null = null;
 let started = false;
+/** Resolved by the server's next acknowledgement of a hello. */
+let readyWaiters: Array<() => void> = [];
 
 function emit(next: Partial<LocalFolderBridgeState>) {
   state = { ...state, ...next };
@@ -208,8 +210,12 @@ function openSocket() {
       return;
     }
     const frame = parsed.data;
-    if (frame.type === "local_folders_ready") emit({ connected: true });
-    else if (frame.type === "local_folder_op") void answer(ws, frame);
+    if (frame.type === "local_folders_ready") {
+      emit({ connected: true });
+      const waiters = readyWaiters;
+      readyWaiters = [];
+      for (const resolve of waiters) resolve();
+    } else if (frame.type === "local_folder_op") void answer(ws, frame);
     else if (frame.type === "local_folder_detach")
       void detachHere(frame.folderId, frame.sessionId);
     else handoff = true;
@@ -315,4 +321,51 @@ export async function reauthorizeLocalFolder(
 export async function localFolderDeviceId(): Promise<string | null> {
   const p = localFolderProvider();
   return p ? (await p.device()).id : null;
+}
+
+/** Pick a folder with the system picker without connecting it anywhere yet
+ *  (the New-session box, before the session exists). */
+export async function pickLocalFolder(): Promise<FolderGrant | null> {
+  const p = localFolderProvider();
+  if (!p) throw new Error("This app cannot open local folders");
+  startLocalFolderBridge();
+  const grant = await p.pick();
+  await refreshLocalFolders();
+  return grant;
+}
+
+/**
+ * Connect picked folders to a session that is about to be created, and wait
+ * (briefly) until the server has them, so the opening turn is told about
+ * them. A slow or missing acknowledgement does not block the create: the
+ * folders still reach the session as soon as the socket catches up.
+ */
+export async function attachLocalFolders(
+  folderIds: string[],
+  sessionId: string,
+  timeoutMs = 3_000,
+): Promise<void> {
+  const p = localFolderProvider();
+  if (!p || !folderIds.length) return;
+  startLocalFolderBridge();
+  const acknowledged = new Promise<void>((resolve) => {
+    readyWaiters.push(resolve);
+    setTimeout(resolve, timeoutMs);
+  });
+  for (const id of folderIds) {
+    const grant = state.grants.find((g) => g.id === id);
+    if (grant && !grant.sessionIds.includes(sessionId))
+      await p.update(id, { sessionIds: [...grant.sessionIds, sessionId] });
+  }
+  await refreshLocalFolders();
+  await acknowledged;
+}
+
+/** Drop a picked folder that no session ended up using. */
+export async function forgetUnusedLocalFolder(folderId: string): Promise<void> {
+  const p = localFolderProvider();
+  const grant = state.grants.find((g) => g.id === folderId);
+  if (!p || !grant || grant.sessionIds.length) return;
+  await p.remove(folderId);
+  await refreshLocalFolders();
 }

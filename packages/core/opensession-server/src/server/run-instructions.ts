@@ -254,6 +254,18 @@ export function buildRunInstructions(input: {
     );
   }
 
+  // Without a default, runs skipped visual proof for anything that looked
+  // costly to capture, small visual changes most of all.
+  if (!input.isAsk && inproc["opensession-walkthrough"]) {
+    parts.push(
+      "## Visual proof\nWhen a change alters what a person sees, show it before you finish, " +
+        "even when it is small: a before/after `OPENSESSION_COMPARE` pair for a static change, " +
+        "a short recording for an interaction. Capture at native resolution, and for web UI " +
+        "capture desktop and phone widths. Publish that proof with `publish_walkthrough` when " +
+        "the change lands in a PR or the default branch.",
+    );
+  }
+
   if (!input.isAsk && inproc["opensession-desktop"]) {
     parts.push(
       "## Desktop\nThe Sandbox has a desktop you can drive through `opensession-desktop` when a task " +

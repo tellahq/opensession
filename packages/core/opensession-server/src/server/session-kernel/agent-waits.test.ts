@@ -9,15 +9,19 @@ import {
   registerPrChecksAgentWait,
   registerSessionTurnAgentWait,
   registerTimerAgentWait,
+  resolvePrWaitRepo,
+  rollupStillRunning,
   sessionTurnOutcome,
   stopSessionTurnWatcherForTest,
   type AgentWait,
   type AgentWaitHandlerDeps,
   type PrChecksAgentWait,
+  type PrWaitRollup,
   type SessionTurnAgentWait,
   type SessionTurnWaitDeps,
 } from "../agent-waits";
 import { isContextOnly, parseContextBlocks } from "../prompt-context";
+import type { Repo } from "../config";
 import type { PrDetails } from "../pr-info";
 import type { SessionSummary } from "../session-control";
 import {
@@ -47,6 +51,7 @@ function handlerDeps(
   return {
     now: () => 0,
     getPrDetails: async () => null,
+    getCheckRollup: async () => null,
     schedule: () => {},
     deliver: async () => {},
     getSession: () => undefined,
@@ -154,6 +159,27 @@ const running = {
   conclusion: "",
 };
 
+const TEST_REPOS: Record<string, Repo> = {
+  example: {
+    id: "example",
+    label: "Example",
+    repo: "/tmp/example",
+    wtPrefix: "example",
+    defaultBranch: "main",
+    ghRepo: "acme/example",
+  },
+  notes: {
+    id: "notes",
+    label: "Notes",
+    repo: "/tmp/notes",
+    wtPrefix: "notes",
+    defaultBranch: "main",
+    ghRepo: "",
+    host: "codestorage",
+    csRepo: "cs-notes",
+  },
+};
+
 describe("agent wait registration", () => {
   test("stores one durable timer and replaces it idempotently", async () => {
     const first = await registerTimerAgentWait({
@@ -187,6 +213,7 @@ describe("agent wait registration", () => {
       branch: "feature",
       waitId: "call-2",
       now: 3_000,
+      repos: TEST_REPOS,
     });
     expect(replacement).toMatchObject({ ok: true, replaced: true });
     expect(await getAgentWait("s1")).toMatchObject({
@@ -887,5 +914,160 @@ describe("session turn waits", () => {
       kind: "session_turn",
       targetSessionId: "target-1",
     });
+  });
+});
+
+describe("PR wait repository", () => {
+  test("resolves a registered id to the GitHub owner/name", () => {
+    expect(resolvePrWaitRepo("example", TEST_REPOS)).toMatchObject({
+      hostRepo: "acme/example",
+      github: true,
+    });
+    expect(resolvePrWaitRepo("ACME/Example", TEST_REPOS)).toMatchObject({
+      hostRepo: "acme/example",
+      github: true,
+    });
+    expect(resolvePrWaitRepo("notes", TEST_REPOS)).toMatchObject({
+      hostRepo: "cs-notes",
+      github: false,
+    });
+    expect(resolvePrWaitRepo("acme/other", TEST_REPOS)).toMatchObject({
+      hostRepo: "acme/other",
+      github: true,
+    });
+    expect(resolvePrWaitRepo("missing", TEST_REPOS)).toBeNull();
+  });
+
+  test("registration rejects a repository it cannot read", async () => {
+    const result = await registerPrChecksAgentWait({
+      sessionId: "s1",
+      user: "Jaap",
+      repo: "missing",
+      branch: "feature",
+      repos: TEST_REPOS,
+    });
+    expect(result.ok).toBe(false);
+    expect(await getAgentWait("s1")).toBeUndefined();
+  });
+});
+
+describe("PR wait cheap check read", () => {
+  const counts = (
+    runs: Record<string, number>,
+    statuses: Record<string, number> = {},
+  ): PrWaitRollup => ({
+    state: "OPEN",
+    headRefOid: "abc",
+    contexts: {
+      checkRunCountsByState: Object.entries(runs).map(([state, count]) => ({
+        state,
+        count,
+      })),
+      statusContextCountsByState: Object.entries(statuses).map(
+        ([state, count]) => ({ state, count }),
+      ),
+    },
+  });
+
+  test("only plain running checks count as still running", () => {
+    expect(
+      rollupStillRunning(counts({ IN_PROGRESS: 2, SUCCESS: 3 }).contexts),
+    ).toBe(true);
+    expect(
+      rollupStillRunning(counts({ SUCCESS: 3 }, { PENDING: 1 }).contexts),
+    ).toBe(true);
+    expect(
+      rollupStillRunning(counts({ CANCELLED: 1, QUEUED: 1 }).contexts),
+    ).toBe(true);
+    expect(
+      rollupStillRunning(counts({ IN_PROGRESS: 2, FAILURE: 1 }).contexts),
+    ).toBe(false);
+    expect(
+      rollupStillRunning(counts({ QUEUED: 1, ACTION_REQUIRED: 1 }).contexts),
+    ).toBe(false);
+    expect(
+      rollupStillRunning(counts({ QUEUED: 1 }, { ERROR: 1 }).contexts),
+    ).toBe(false);
+    expect(rollupStillRunning(counts({ SUCCESS: 3 }).contexts)).toBe(false);
+    expect(rollupStillRunning(null)).toBe(false);
+  });
+
+  test("skips the full read while checks run, and still reads in full regularly", async () => {
+    let now = 10_000;
+    let rollup: PrWaitRollup | null = counts({ IN_PROGRESS: 1 });
+    let fullReads = 0;
+    let rollupReads = 0;
+    const scheduled: PrChecksAgentWait[] = [];
+    const delivered: string[] = [];
+    const deps = handlerDeps({
+      now: () => now,
+      getPrDetails: async () => {
+        fullReads += 1;
+        return details([running]);
+      },
+      getCheckRollup: async (repo, number) => {
+        rollupReads += 1;
+        expect(repo).toBe("example");
+        expect(number).toBe(42);
+        return rollup;
+      },
+      schedule: (wait) => scheduled.push(wait as PrChecksAgentWait),
+      deliver: async (_wait, message) => {
+        delivered.push(message);
+      },
+    });
+    const wait: PrChecksAgentWait = {
+      version: 1,
+      id: "wait-cheap",
+      sessionId: "s1",
+      kind: "pr_checks",
+      user: "Jaap",
+      prompt: "Continue.",
+      repo: "example",
+      branch: "feature",
+      createdAt: 0,
+      deadlineAt: 3_600_000,
+      pollSeconds: 30,
+      settleSeconds: 45,
+    };
+
+    // The first poll has no PR number yet, so it reads in full.
+    expect(await handleAgentWait(wait, deps)).toBe("rescheduled");
+    expect(fullReads).toBe(1);
+    expect(rollupReads).toBe(0);
+    expect(scheduled.at(-1)).toMatchObject({ number: 42, fullReadAt: 10_000 });
+
+    // Checks still running: the count read answers, no full read.
+    for (let poll = 1; poll <= 5; poll += 1) {
+      now = 10_000 + poll * 30_000;
+      expect(await handleAgentWait(scheduled.at(-1)!, deps)).toBe(
+        "rescheduled",
+      );
+    }
+    expect(fullReads).toBe(1);
+    expect(rollupReads).toBe(5);
+
+    // A failure shows in the counts: the full read decides.
+    rollup = counts({ IN_PROGRESS: 1, FAILURE: 1 });
+    now += 30_000;
+    expect(await handleAgentWait(scheduled.at(-1)!, deps)).toBe("rescheduled");
+    expect(fullReads).toBe(2);
+
+    // Five minutes after the last full read, read in full regardless.
+    rollup = counts({ IN_PROGRESS: 1 });
+    now += 5 * 60_000;
+    expect(await handleAgentWait(scheduled.at(-1)!, deps)).toBe("rescheduled");
+    expect(fullReads).toBe(3);
+
+    // A closed PR or a failed count read falls back to the full read.
+    rollup = { ...counts({ IN_PROGRESS: 1 }), state: "MERGED" };
+    now += 30_000;
+    await handleAgentWait(scheduled.at(-1)!, deps);
+    expect(fullReads).toBe(4);
+    rollup = null;
+    now += 30_000;
+    await handleAgentWait(scheduled.at(-1)!, deps);
+    expect(fullReads).toBe(5);
+    expect(delivered).toEqual([]);
   });
 });

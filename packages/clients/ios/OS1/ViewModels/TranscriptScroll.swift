@@ -154,3 +154,138 @@ struct TranscriptGeometry: Equatable {
     var insetBottom: CGFloat
     var containerHeight: CGFloat
 }
+
+/// Where a reader left a transcript they were NOT following: the block at the
+/// top of the viewport and how far into it the visible top edge sat. A block
+/// id and an offset survive what a raw scroll offset does not — rows above
+/// realizing at different heights, markdown settling, a page of history
+/// landing above — which is why the web keeps the same pair.
+struct TranscriptReaderAnchor: Equatable, Sendable {
+    var blockId: String
+    /// Visible top minus the block's top, in points. Negative when the
+    /// visible top sits in the gap above the block.
+    var offset: CGFloat
+}
+
+/// A transcript row's vertical extent in the scroll CONTENT's coordinates,
+/// which do not change as the reader scrolls, only as rows lay out.
+struct TranscriptRowExtent: Equatable, Sendable {
+    var minY: CGFloat
+    var maxY: CGFloat
+}
+
+extension TranscriptScroll {
+    /// The anchor for a viewport whose top edge sits at `visibleTop`, in the
+    /// same content coordinates as `rows`: the last row that starts at or
+    /// above the edge, else the first one below it.
+    static func readerAnchor(
+        visibleTop: CGFloat,
+        rows: [String: TranscriptRowExtent]
+    ) -> TranscriptReaderAnchor? {
+        var above: (id: String, row: TranscriptRowExtent)?
+        var below: (id: String, row: TranscriptRowExtent)?
+        for (id, row) in rows {
+            if row.minY <= visibleTop {
+                if above.map({ row.minY > $0.row.minY || (row.minY == $0.row.minY && id < $0.id) }) ?? true {
+                    above = (id, row)
+                }
+            } else if below.map({ row.minY < $0.row.minY || (row.minY == $0.row.minY && id < $0.id) }) ?? true {
+                below = (id, row)
+            }
+        }
+        guard let pick = above ?? below else { return nil }
+        return TranscriptReaderAnchor(blockId: pick.id, offset: visibleTop - pick.row.minY)
+    }
+
+    /// What to hand `ScrollPosition.scrollTo(y:)` to put the anchor back.
+    /// `scrollTo(y:)` measures from the top of the content area, which is
+    /// where the visible top edge sits at y, so no inset term is needed (the
+    /// visible top is captured as `contentOffset.y + contentInsets.top`).
+    static func restoredScrollY(for anchor: TranscriptReaderAnchor, rowMinY: CGFloat) -> CGFloat {
+        max(0, rowMinY + anchor.offset)
+    }
+}
+
+/// Reader anchors for sessions switched away from, in memory for the app's
+/// lifetime, like the web's transcript-scroll-memory.
+///
+/// Keyed by account, server and session, so a second organization's session
+/// with a colliding id, or the same one opened under another sign-in, never
+/// lands in someone else's place. Bounded to the most recent `capacity`.
+/// A reader who left at the live edge has no entry: that is the default, so
+/// following sessions still reopen at the bottom.
+@MainActor
+final class TranscriptReaderMemory {
+    static let shared = TranscriptReaderMemory()
+    nonisolated static let capacity = 200
+
+    private let capacity: Int
+    private var anchors: [String: TranscriptReaderAnchor] = [:]
+    /// Least recently remembered first.
+    private var order: [String] = []
+
+    init(capacity: Int = 200) {
+        self.capacity = max(1, capacity)
+    }
+
+    /// The scope a key is built from. The active account's id and server
+    /// address, never its token.
+    struct Scope: Equatable, Sendable {
+        var accountId: String
+        var server: String
+
+        @MainActor static var current: Scope {
+            let config = ServerConfig.shared
+            return Scope(accountId: config.activeAccount.id, server: config.baseURLString)
+        }
+    }
+
+    var count: Int { anchors.count }
+
+    /// The active account's anchor.
+    func anchor(sessionId: String) -> TranscriptReaderAnchor? {
+        anchor(sessionId: sessionId, scope: .current)
+    }
+
+    func remember(_ anchor: TranscriptReaderAnchor?, sessionId: String) {
+        remember(anchor, sessionId: sessionId, scope: .current)
+    }
+
+    func anchor(sessionId: String, scope: Scope) -> TranscriptReaderAnchor? {
+        anchors[Self.key(sessionId, scope)]
+    }
+
+    /// `nil` forgets: the reader is at the live edge.
+    func remember(_ anchor: TranscriptReaderAnchor?, sessionId: String, scope: Scope) {
+        let key = Self.key(sessionId, scope)
+        if anchors[key] != nil { order.removeAll { $0 == key } }
+        anchors[key] = anchor
+        guard anchor != nil else { return }
+        order.append(key)
+        while order.count > capacity {
+            anchors[order.removeFirst()] = nil
+        }
+    }
+
+    private static func key(_ sessionId: String, _ scope: Scope) -> String {
+        [scope.accountId, scope.server, sessionId].joined(separator: "\u{1F}")
+    }
+}
+
+/// Live measurements the reader anchor needs, held OUTSIDE SwiftUI's
+/// observation on purpose: they change on every scroll frame and every row
+/// layout, and the transcript body must not re-evaluate for either.
+@MainActor
+final class TranscriptReaderTracker {
+    /// `contentOffset.y + contentInsets.top`: the visible top edge in
+    /// content coordinates.
+    var visibleTop: CGFloat = 0
+    private(set) var rows: [String: TranscriptRowExtent] = [:]
+
+    func record(_ id: String, _ extent: TranscriptRowExtent) { rows[id] = extent }
+    func forget(_ id: String) { rows[id] = nil }
+
+    var anchor: TranscriptReaderAnchor? {
+        TranscriptScroll.readerAnchor(visibleTop: visibleTop, rows: rows)
+    }
+}
