@@ -249,6 +249,12 @@ export interface CiFailureDeps {
   waitFor(
     sessionId: string,
   ): Promise<{ kind: string; repo?: string; branch?: string } | undefined>;
+  /** The last failing-checks wake the session's pr_checks wait delivered. */
+  checksWake(
+    sessionId: string,
+  ): Promise<
+    { repo: string; branch: string; sha?: string; at: number } | undefined
+  >;
   deliver(
     sessionId: string,
     message: string,
@@ -265,6 +271,8 @@ const defaultDeps: CiFailureDeps = {
     (await import("./pr-conflict")).owningPrSession(repoId, branch, sessionRef),
   waitFor: async (sessionId) =>
     (await import("../../server/agent-waits")).getAgentWait(sessionId),
+  checksWake: async (sessionId) =>
+    (await import("../../server/agent-waits")).recentPrChecksWake(sessionId),
   deliver: async (sessionId, message, deliveryId) => {
     const { tryGetSessionControl } =
       await import("../../server/session-control");
@@ -288,6 +296,7 @@ export function __setCiFailureDepsForTest(
 
 interface CiWindow {
   failures: Map<string, CiFailure>;
+  openedAt: number;
   timer: unknown;
 }
 
@@ -313,9 +322,13 @@ export function recordCiFailure(failure: CiFailure): void {
   }
   const window: CiWindow = {
     failures: new Map([[failure.id, failure]]),
+    openedAt: Date.now(),
     timer: deps.setTimer(() => {
       windows.delete(key);
-      void flushCiFailures([...window.failures.values()]).catch((error) =>
+      void flushCiFailures(
+        [...window.failures.values()],
+        window.openedAt,
+      ).catch((error) =>
         console.error(
           `[github] CI failure notice failed for PR #${failure.number}:`,
           error,
@@ -335,7 +348,27 @@ function sameRepo(waitRepo: string | undefined, failure: CiFailure): boolean {
   );
 }
 
-export async function flushCiFailures(failures: CiFailure[]): Promise<void> {
+/**
+ * Whether the session's pr_checks wait already woke it about this push. The
+ * wait is deleted once it delivers, so an active wait is not the only sign:
+ * it can wake (on a failed job, or after its own settle window) before this
+ * window flushes. Its receipt names the head it saw; one without a head
+ * counts only when it woke after this window opened.
+ */
+function checksWaitCovers(
+  wake: { repo: string; branch: string; sha?: string; at: number } | undefined,
+  failure: CiFailure,
+  openedAt: number,
+): boolean {
+  if (!wake || wake.branch !== failure.branch || !sameRepo(wake.repo, failure))
+    return false;
+  return wake.sha ? wake.sha === failure.sha : wake.at >= openedAt;
+}
+
+export async function flushCiFailures(
+  failures: CiFailure[],
+  openedAt = Date.now(),
+): Promise<void> {
   if (!failures.length) return;
   const first = failures[0]!;
   const { repoId, branch, number, sha } = first;
@@ -370,6 +403,11 @@ export async function flushCiFailures(failures: CiFailure[]): Promise<void> {
     sameRepo(wait.repo, first)
   ) {
     deps.audit({ ...base, session_id: target.id, delivery: "pr_checks_wait" });
+    return;
+  }
+  const wake = await deps.checksWake(target.id).catch(() => undefined);
+  if (checksWaitCovers(wake, first, openedAt)) {
+    deps.audit({ ...base, session_id: target.id, delivery: "pr_checks_woke" });
     return;
   }
 

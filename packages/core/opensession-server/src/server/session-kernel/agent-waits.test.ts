@@ -5,6 +5,7 @@ import {
   getAgentWait,
   handleAgentWait,
   prCheckSettlement,
+  recentPrChecksWake,
   registerPrChecksAgentWait,
   registerSessionTurnAgentWait,
   registerTimerAgentWait,
@@ -361,6 +362,13 @@ describe("PR check settlement", () => {
     expect(delivered).toEqual([
       "PR example#42 has failing checks: lint. 1 failed, 1 passed, 1 still running.",
     ]);
+    // The CI failure notice reads this receipt once the wait is gone.
+    expect(recentPrChecksWake("s1", 60_000)).toEqual({
+      repo: "example",
+      branch: "feature",
+      sha: "abc",
+      at: 60_000,
+    });
 
     // A rerun of the failed check clears the candidate again.
     current = details([{ ...failing, status: "IN_PROGRESS", conclusion: "" }]);

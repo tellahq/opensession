@@ -831,6 +831,50 @@ async function handleSessionTurnWait(
   return "delivered";
 }
 
+/**
+ * The last failing-checks wake each session's pr_checks wait delivered. A
+ * delivered wait is deleted, so the CI failure notice (agents/github/
+ * ci-failure.ts) reads this receipt to avoid telling the session about the
+ * same failure twice. In memory: both run in the process that owns session
+ * control, and a lost receipt costs one duplicate notice at worst.
+ */
+export interface PrChecksWake {
+  repo: string;
+  branch: string;
+  /** Head the wake looked at, when the PR details carried it. */
+  sha?: string;
+  at: number;
+}
+const PR_CHECKS_WAKE_TTL_MS = 60 * 60_000;
+const prChecksWakes = new Map<string, PrChecksWake>();
+
+function notePrChecksWake(
+  wait: PrChecksAgentWait,
+  details: PrDetails,
+  at: number,
+): void {
+  for (const [id, wake] of prChecksWakes)
+    if (at - wake.at > PR_CHECKS_WAKE_TTL_MS) prChecksWakes.delete(id);
+  prChecksWakes.set(wait.sessionId, {
+    repo: wait.repo,
+    branch: wait.branch,
+    ...(details.headRefOid ? { sha: details.headRefOid } : {}),
+    at,
+  });
+}
+
+export function recentPrChecksWake(
+  sessionId: string,
+  now = Date.now(),
+): PrChecksWake | undefined {
+  const wake = prChecksWakes.get(sessionId);
+  return wake && now - wake.at <= PR_CHECKS_WAKE_TTL_MS ? wake : undefined;
+}
+
+export function __resetPrChecksWakesForTest(): void {
+  prChecksWakes.clear();
+}
+
 export async function handleAgentWait(
   wait: AgentWait,
   deps: AgentWaitHandlerDeps = defaultHandlerDeps,
@@ -913,6 +957,7 @@ export async function handleAgentWait(
     return "rescheduled";
   }
 
+  if (state.failed) notePrChecksWake(wait, details, now);
   if (!state.settled) {
     await deps.deliver(
       wait,

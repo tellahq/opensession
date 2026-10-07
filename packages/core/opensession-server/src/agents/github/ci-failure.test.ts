@@ -293,6 +293,9 @@ describe("grouping and delivery", () => {
   let cache: Map<string, PrInfo>;
   let owner: (UnifiedSession & { state?: string }) | undefined;
   let wait: { kind: string; repo?: string; branch?: string } | undefined;
+  let wake:
+    | { repo: string; branch: string; sha?: string; at: number }
+    | undefined;
   let ownerError: Error | undefined;
 
   beforeEach(() => {
@@ -302,6 +305,7 @@ describe("grouping and delivery", () => {
     cache = prs();
     owner = { id: "os-owner", branch: BRANCH, repo: "acme-app" } as never;
     wait = undefined;
+    wake = undefined;
     ownerError = undefined;
     __setCiFailureDepsForTest({
       setTimer: (fn, ms) => {
@@ -319,6 +323,7 @@ describe("grouping and delivery", () => {
         return owner;
       },
       waitFor: async () => wait,
+      checksWake: async () => wake,
       deliver: async (id, message, deliveryId) => {
         delivered.push({ id, message, deliveryId });
         return { status: "steered" };
@@ -418,6 +423,33 @@ describe("grouping and delivery", () => {
     handleCiWebhookEvent("workflow_run", workflowRun({ id: 1004 }), REPO);
     await flush();
     expect(delivered).toEqual([]);
+  });
+
+  test("a wait that already woke on this head is not woken again", async () => {
+    // The wait polls faster than this window: it saw the failure, delivered,
+    // and was deleted before the window flushed.
+    handleCiWebhookEvent("workflow_run", workflowRun(), REPO);
+    wake = { repo: "acme/app", branch: BRANCH, sha: SHA, at: Date.now() };
+    await flush();
+    expect(delivered).toEqual([]);
+    expect(audits[0]).toMatchObject({ delivery: "pr_checks_woke" });
+
+    // It woke on a failed job before the workflow run completed.
+    wake = { repo: "acme-app", branch: BRANCH, sha: SHA, at: 0 };
+    handleCiWebhookEvent("workflow_run", workflowRun({ id: 1006 }), REPO);
+    await flush();
+    expect(delivered).toEqual([]);
+  });
+
+  test("a wake about an older head does not cover a new failure", async () => {
+    wake = { repo: "acme-app", branch: BRANCH, sha: "f00", at: Date.now() };
+    handleCiWebhookEvent("workflow_run", workflowRun(), REPO);
+    await flush();
+    // Without a head, only a wake after the window opened counts.
+    wake = { repo: "acme-app", branch: BRANCH, at: 0 };
+    handleCiWebhookEvent("workflow_run", workflowRun({ id: 1007 }), REPO);
+    await flush();
+    expect(delivered).toHaveLength(2);
   });
 
   test("other waits do not suppress the notice", async () => {
