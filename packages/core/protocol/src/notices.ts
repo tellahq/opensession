@@ -73,6 +73,9 @@ const WARN_PATTERNS: RegExp[] = [
   // carry its own ⚠️/⏹️, which the glyph strip below now removes, so the tone
   // is the only thing left to say it did not finish cleanly.
   /^workflow "[^"]*" (?:failed|cancelled|canceled|stopped|error)\b/,
+  // agents/github/ci-failure.ts: red CI on the session's own PR, which the
+  // session is asked to fix.
+  /^ci failed on pr #\d+/,
 ];
 
 /**

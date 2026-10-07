@@ -101,6 +101,20 @@ function prRef(pr: PrPayload, ghRepo?: string): PrRef | null {
   };
 }
 
+/** Collect a failed CI report for the owning session's notice (ci-failure.ts). */
+async function routeCiEvent(
+  event: string,
+  payload: any,
+  repo: { id: string; ghRepo: string },
+): Promise<void> {
+  try {
+    const { handleCiWebhookEvent } = await import("./ci-failure");
+    handleCiWebhookEvent(event, payload, repo);
+  } catch (e) {
+    console.error(`[github] CI failure intake failed for ${event}:`, e);
+  }
+}
+
 /** Resolve review config from the seeded automation (its enabled flag + prompt/model). */
 export async function resolveReviewConfig(): Promise<{
   autoEnabled: boolean;
@@ -176,6 +190,20 @@ export async function handleGithubPrEvent(
       void handleDeployWorkflowRun(payload).catch((e) =>
         console.error("[github] handleDeployWorkflowRun failed:", e),
       );
+      if (eventRepo) await routeCiEvent(event, payload, eventRepo);
+      return;
+    }
+
+    // Checks from other GitHub Apps and commit statuses: only an App installed
+    // on the repository can create a check run, and only an account with
+    // write access a commit status. Their sender is that App's bot (vercel,
+    // terraform-cloud, ...), so accept Bot senders besides the usual
+    // trusted logins. Untrusted ones drop silently: these arrive by the
+    // thousand.
+    if (event === "check_run" || event === "status") {
+      const senderIsApp = payload?.sender?.type === "Bot";
+      if (eventRepo && (senderIsApp || senderIsBot || senderIsTrusted))
+        await routeCiEvent(event, payload, eventRepo);
       return;
     }
 

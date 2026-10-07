@@ -56,7 +56,7 @@ enum NoticeTone: String, Equatable {
     /// Something went sideways, but the work continued.
     private static let warnPrefixes = [
         "sandbox unavailable", "couldn't", "this session's worktree",
-        "app update paused",
+        "app update paused", "ci failed on pr #",
     ]
 
     /// How long a notice earns on the composer before it fades on its own.

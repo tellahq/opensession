@@ -67,6 +67,7 @@ describe("GitHub ownership gateway boundary", () => {
       "handoff",
       "model-inversion",
       "pr-conflict",
+      "ci-failure",
     ]) {
       const file = source(`agents/github/${name}.ts`);
       visit(file, (node) => {

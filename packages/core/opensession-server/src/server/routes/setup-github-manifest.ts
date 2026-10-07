@@ -17,10 +17,12 @@ const MAX_PENDING_MANIFESTS = 32;
 const GITHUB_API_VERSION = "2022-11-28";
 
 export const GITHUB_APP_MANIFEST_EVENTS = [
+  "check_run",
   "issue_comment",
   "pull_request",
   "pull_request_review",
   "pull_request_review_comment",
+  "status",
   "workflow_run",
 ] as const;
 

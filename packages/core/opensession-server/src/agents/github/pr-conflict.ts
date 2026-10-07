@@ -170,6 +170,44 @@ export function settleConflictIntent(event: PrConflictEvent): void {
   writePending(pending);
 }
 
+/** Whether a session can be handed work on its PR: live, not one of the PR
+ *  agent's own review/fix runs, not an automation run, and able to change
+ *  code. */
+export function canOwnPrWork(
+  session: UnifiedSession & { state?: string },
+): boolean {
+  return (
+    session.state !== "archived" &&
+    !session.archived &&
+    !session.id.startsWith("bks-ghpr-") &&
+    !session.automation &&
+    session.mode !== "ask" &&
+    session.mode !== "scratch"
+  );
+}
+
+/**
+ * The ONE session a PR event is assigned to: the session named in the PR
+ * body's attribution footer while it can take the work, else the oldest
+ * session that owns the branch (checkouts before linked-only followers).
+ * Throws SessionOwnershipOverflowError when the branch has too many owners.
+ */
+export async function owningPrSession(
+  repoId: string,
+  branch: string,
+  sessionRef?: string,
+): Promise<UnifiedSession | undefined> {
+  const { tryGetSessionControl } = await import("../../server/session-control");
+  const referenced = sessionRef
+    ? tryGetSessionControl()?.getSession(sessionRef)
+    : undefined;
+  if (referenced && canOwnPrWork(referenced)) return referenced;
+  const { matchSessions } = await import("./session-notify");
+  return (await matchSessions(repoId, branch, { order: "created" })).find(
+    canOwnPrWork,
+  );
+}
+
 export async function notifyConflictedPrSession(
   event: PrConflictEvent,
 ): Promise<void> {
@@ -182,17 +220,11 @@ export async function notifyConflictedPrSession(
     const control = tryGetSessionControl();
     if (!control) return;
 
-    const referenced = event.sessionRef
-      ? control.getSession(event.sessionRef)
-      : undefined;
-    let target: UnifiedSession | undefined =
-      referenced?.state === "archived" ? undefined : referenced;
-    if (!target) {
-      const { matchSessions } = await import("./session-notify");
-      target = (
-        await matchSessions(event.repoId, event.branch, { order: "created" })
-      )[0];
-    }
+    const target = await owningPrSession(
+      event.repoId,
+      event.branch,
+      event.sessionRef,
+    );
     if (!target) return;
 
     const { audit } = await import("../../server/audit");

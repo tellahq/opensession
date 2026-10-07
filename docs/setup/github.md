@@ -254,7 +254,7 @@ strong secret stored as `GITHUB_WEBHOOK_SECRET` in Settings → Integrations or
 `~/.opensession.env` (for example, generate one with `openssl rand -hex 32`).
 Then under **Permissions & events → Subscribe to events**, select **Issues**,
 **Issue comments**, **Pull request review comments**, **Pull request reviews**,
-**Pull requests**, and **Workflow runs**. The generated Create GitHub App link
+**Pull requests**, **Workflow runs**, **Check runs**, and **Statuses**. The generated Create GitHub App link
 pre-fills the URL and active state, but it cannot fill the secret or event
 subscriptions. Restart Open Session after setting or changing the secret; the
 GitHub-side subscription checkboxes take effect without an Open Session restart.
@@ -270,7 +270,8 @@ These are the subscribed events the code consumes
 | `pull_request` `opened`/`reopened`/`synchronize`/`ready_for_review` | auto-review, if the PR is non-draft and either carries `os-review` or the review automation is enabled                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `pull_request` action `closed` + merged                             | notifies linked sessions; fires the docs-sync automation on `github:pr_merged`                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `pull_request_review`                                               | refreshes PR state; when the Slack agent is enabled, review → Slack notification                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `workflow_run`                                                      | notifies sessions waiting on a merged PR's deploy                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `workflow_run`                                                      | notifies sessions waiting on a merged PR's deploy; a failed run on a PR head feeds the CI failure notice                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `check_run`, `status`                                               | a failed check from another GitHub App, or a failed commit status, feeds the CI failure notice                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 An automatic review that ends unsatisfied (blocking findings, or open findings
 below quality 4/5) hands its findings straight into the live session that owns
@@ -281,6 +282,14 @@ gets one closing message asking for a short wrap-up: where the PR stands, what
 changed across the rounds, and where to look. The transcript folds the whole
 loop into one "Review loop" row with the wrap-up beneath it.
 `OPENSESSION_REVIEW_HANDOFF=0` disables the handoff.
+
+When CI fails on a PR's head commit, the session that owns the PR gets one
+notice listing every failed workflow run, check run, and commit status on that
+push, collected over 60 seconds, and is asked to fix the cause or say why it is
+unrelated. Cancelled runs, Actions jobs (reported once as their workflow run),
+commit statuses that link to an Actions run, and failures on a head the branch
+has already moved past are skipped, as is a session already waiting on the PR's
+checks with `wait_for`. `OPENSESSION_CI_FAILURE_NOTICE=0` disables it.
 
 ### Public-repository actor gate
 
