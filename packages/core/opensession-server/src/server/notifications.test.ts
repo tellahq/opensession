@@ -87,16 +87,20 @@ describe("notification inbox", () => {
     expect(inbox.threads[0].subject.context).toBe("acme");
   });
 
-  test("switched-off kinds are recorded without a push", async () => {
+  test("switched-off kinds are not recorded, broadcast or pushed", async () => {
     await setAlertPrefs("Ada", { collaborators: false });
-    await notifyUser("Ada", {
-      kind: "collaborator",
-      subject: { type: "workspace", id: "ws-1", title: "Shared work" },
-      reason: "Sam added you to Shared work",
-      url: "/workspace/ws-1",
-    });
+    frames.length = 0;
+    expect(
+      await notifyUser("Ada", {
+        kind: "collaborator",
+        subject: { type: "workspace", id: "ws-1", title: "Shared work" },
+        reason: "Sam added you to Shared work",
+        url: "/workspace/ws-1",
+      }),
+    ).toBeNull();
     expect(pushes).toHaveLength(0);
-    expect((await getNotificationInbox("Ada")).threads).toHaveLength(1);
+    expect(frames).toHaveLength(0);
+    expect((await getNotificationInbox("Ada")).threads).toHaveLength(0);
   });
 
   test("marking read reaches the person's other devices", async () => {

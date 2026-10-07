@@ -219,7 +219,7 @@ export function NotificationsPanel() {
       </SettingCard>
       <SettingsHint className={alertError ? "text-red" : undefined}>
         {alertError ||
-          "Everything still lands in your inbox. These choose what also sends a banner, a sound and a push, on every device."}
+          "Switched off events skip your inbox and send no banner, sound or push, on every device."}
       </SettingsHint>
     </SettingsPanel>
   );

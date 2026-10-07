@@ -4,7 +4,8 @@
  *
  * This is the only way the server notifies a person. `notifyUser` records the
  * event, tells that person's open clients over the WebSocket, and sends Web
- * Push to their devices when their alert settings allow it. Clients never
+ * Push to their devices. An event in a group the person switched off is not
+ * recorded at all, so it neither alerts nor lands in the inbox. Clients never
  * work out notifications by diffing session lists: a banner can only come
  * from a new record, so reconnecting or restarting an app cannot replay one.
  *
@@ -17,7 +18,6 @@ import {
   applyNotificationEvent,
   cleanDocument,
   markNotificationThreads,
-  shouldAlert,
   unreadCount,
   wireThread,
   type AlertPrefs,
@@ -104,16 +104,13 @@ export async function notifyUser(
   if (!validUser(user)) return null;
   // Written by the mutator, which the catalog may rerun on a conflict: the
   // last run is the one that committed.
-  const outcome: { thread: NotificationThread | null; alert: boolean } = {
-    thread: null,
-    alert: false,
-  };
+  // A group the person switched off records nothing, so the thread is null
+  // and nothing is broadcast or pushed.
+  const outcome: { thread: NotificationThread | null } = { thread: null };
   try {
     await documents.update(inboxKey(user), (current) => {
-      const doc = cleanDocument(current);
-      const result = applyNotificationEvent(doc, event);
+      const result = applyNotificationEvent(cleanDocument(current), event);
       outcome.thread = result.thread ? wireThread(result.thread) : null;
-      outcome.alert = shouldAlert(doc, event.kind);
       return result.doc;
     });
   } catch (error) {
@@ -123,7 +120,7 @@ export async function notifyUser(
     );
     return null;
   }
-  const { thread, alert } = outcome;
+  const { thread } = outcome;
   if (!thread) return null;
   try {
     const { broadcastToUser } = await import("./ws-hub");
@@ -131,27 +128,27 @@ export async function notifyUser(
       type: "notification",
       user,
       notification: thread,
-      alert,
+      // Always true now that a switched-off group never records; kept on
+      // the wire for clients that still check it.
+      alert: true,
     });
   } catch {}
-  if (alert) {
-    try {
-      const { sendPushToUser } = await import("./push");
-      await sendPushToUser(user, {
-        title: thread.reason,
-        body: [thread.subject.title, thread.body].filter(Boolean).join(": "),
-        url: thread.url,
-        // One OS notification per thread: a newer event replaces the older
-        // banner instead of stacking, on every device.
-        tag: `os-notification-${thread.id}`,
-        id: thread.id,
-      });
-    } catch (error) {
-      console.warn(
-        "[notifications] push failed:",
-        error instanceof Error ? error.message : error,
-      );
-    }
+  try {
+    const { sendPushToUser } = await import("./push");
+    await sendPushToUser(user, {
+      title: thread.reason,
+      body: [thread.subject.title, thread.body].filter(Boolean).join(": "),
+      url: thread.url,
+      // One OS notification per thread: a newer event replaces the older
+      // banner instead of stacking, on every device.
+      tag: `os-notification-${thread.id}`,
+      id: thread.id,
+    });
+  } catch (error) {
+    console.warn(
+      "[notifications] push failed:",
+      error instanceof Error ? error.message : error,
+    );
   }
   return thread;
 }

@@ -157,6 +157,25 @@ describe("notification threads", () => {
     ).toBe(false);
   });
 
+  test("a switched-off group never reaches the inbox", () => {
+    const off: NotificationDocument = {
+      threads: [],
+      alerts: { teamReviews: false },
+    };
+    const team = applyNotificationEvent(
+      off,
+      event({ kind: "team_review_requested" }),
+    );
+    expect(team.thread).toBeNull();
+    expect(team.doc).toBe(off);
+    expect(unreadCount(team.doc)).toBe(0);
+    const named = applyNotificationEvent(
+      off,
+      event({ kind: "review_requested" }),
+    );
+    expect(named.thread).not.toBeNull();
+  });
+
   test("agent rows stored before they were removed are dropped", () => {
     const { doc } = applyNotificationEvent(empty, event());
     const stored = JSON.parse(JSON.stringify(doc));

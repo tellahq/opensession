@@ -56,7 +56,7 @@ struct NotificationsSettingsView: View {
                 if let alertError {
                     Text(alertError).foregroundStyle(.red)
                 } else {
-                    Text("Everything still lands in your inbox. These choose what also sends a banner and a sound, on every device.")
+                    Text("Switched off events skip your inbox and send no banner, on every device.")
                 }
             }
 

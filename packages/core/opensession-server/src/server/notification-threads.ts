@@ -216,12 +216,14 @@ function prune(threads: StoredThread[], now: number): StoredThread[] {
 
 /**
  * Apply one event. Returns the next document and the thread it touched, or
- * `thread: null` when the event was a replay and nothing changed.
+ * `thread: null` when nothing changed: the event was a replay, or the person
+ * switched its group off, in which case it never reaches the inbox at all.
  */
 export function applyNotificationEvent(
   doc: NotificationDocument,
   event: NotificationEvent,
 ): { doc: NotificationDocument; thread: StoredThread | null } {
+  if (!shouldAlert(doc, event.kind)) return { doc, thread: null };
   const now = event.at ?? Date.now();
   const id = threadId(event.subject);
   const existing = doc.threads.find((thread) => thread.id === id);
