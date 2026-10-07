@@ -96,6 +96,10 @@ enum ServerEvent: Sendable {
     /// Every script run of the session, whenever one starts, ends, or its
     /// credential call counts move. Output is fetched over HTTP.
     case scriptRuns(sessionId: String, runs: [ScriptRun])
+    /// The folders on people's own computers this session can reach, whole.
+    /// Sent to the session's watchers whenever one connects, disconnects,
+    /// changes read-only, or its device goes offline.
+    case localFolders(sessionId: String, folders: [LocalFolder])
     /// This session published local commits. Its PR surfaces should re-read now.
     case gitPushed(sessionId: String, repo: String?)
     /// A git-host webhook changed PR, review, or check state for this branch.
@@ -300,6 +304,9 @@ enum ServerEvent: Sendable {
         case "script_runs":
             guard let id = frame.sessionId else { return .ignored }
             return .scriptRuns(sessionId: id, runs: frame.runs?.items ?? [])
+        case "local_folders":
+            guard let id = frame.sessionId else { return .ignored }
+            return .localFolders(sessionId: id, folders: frame.folders?.items ?? [])
         case "git_pushed":
             guard let id = frame.sessionId else { return .ignored }
             return .gitPushed(sessionId: id, repo: frame.repo)
@@ -617,6 +624,7 @@ private struct RawFrame: Decodable {
     let credentialRequest: PresenceProbe?
     let forceMergeRequest: PresenceProbe?
     let runs: LossyList<ScriptRun>?
+    let folders: LossyList<LocalFolder>?
     let repo: String?
     let branch: String?
     let message: String?

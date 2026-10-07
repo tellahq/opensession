@@ -476,6 +476,34 @@ enum OS1API {
         return try await get("/api/sessions/\(session)/subagent/\(agent)")
     }
 
+    // ── Local folders: folders on people's own computers ────────────────────
+
+    /// The folders a session can reach, online or not. Connecting happens on
+    /// the device holding the folder; this app only reads the list.
+    static func localFolders(sessionId: String) async throws -> [LocalFolder] {
+        var components = URLComponents()
+        components.path = "/api/local-folders"
+        components.queryItems = [URLQueryItem(name: "sessionId", value: sessionId)]
+        let response: LocalFoldersResponse = try await getReportingServerError(
+            components.string ?? "/api/local-folders"
+        )
+        return response.folders
+    }
+
+    /// Disconnect a folder from a session. Only the person who connected it
+    /// may; anyone else gets the server's refusal as `APIError.server`.
+    /// `user` matters only to a server without per-person sign-in.
+    static func disconnectLocalFolder(
+        sessionId: String,
+        key: String,
+        user: String
+    ) async throws {
+        struct OkResponse: Decodable, Sendable { let ok: Bool? }
+        var body: [String: Any] = ["sessionId": sessionId, "key": key]
+        if !user.isEmpty { body["user"] = user }
+        let _: OkResponse = try await post("/api/local-folders/disconnect", body: body)
+    }
+
     // ── Agents: the workflow runs a session fanned out ──────────────────────
 
     /// Every workflow run this session started, newest first. There is no

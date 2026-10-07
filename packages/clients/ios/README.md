@@ -164,7 +164,14 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   Long answers clamp with `Show full message · 12 KB` (wire-clamped entries
   refetch on demand), system events are toned by severity, and a floating pill
   offers the way back down — reading `New messages` when output arrived while
-  you were scrolled up. On wide pointer layouts, a native rail indexes the
+  you were scrolled up. Switching away from a session you were reading and
+  back reopens it on the same passage (the block at the top and its offset,
+  kept in memory per account, server and session, for the 200 most recent);
+  leaving at the latest message reopens there and keeps following. Folders
+  connected from someone's own computer show as chips above the composer
+  with their device, read-only and offline state; the person who connected
+  one can disconnect it here. Connecting and allowing edits stay on the
+  device that holds the folder. On wide pointer layouts, a native rail indexes the
   current person's sent messages; hover previews one and activation jumps the
   transcript to it. It stays hidden on iPhone and compact widths. A selected
   Markdown passage stays highlighted as
@@ -713,6 +720,10 @@ OS1/
   `/api/force-merge`, which answer with this viewer's permissions. The
   `*_resolved` frames clear the matching card, and a read that started before
   a resolution cannot bring it back. `script_runs` replaces the run list.
+- `local_folders` carries the session's whole folder list; it is re-read from
+  `GET /api/local-folders?sessionId=` on every handshake, and
+  `POST /api/local-folders/disconnect {sessionId,key,user}` answers 403 to
+  anyone but the person who connected the folder.
 - `reply_suggestions` carries a session id and optional `{label,text}` choices.
   A JSON `null` suggestion payload clears the current row; a new stream or send
   clears it locally so stale replies cannot follow the next turn.

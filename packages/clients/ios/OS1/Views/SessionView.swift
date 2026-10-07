@@ -161,6 +161,28 @@ struct SessionView: View {
     /// screens-tall blocks has no row fine-grained enough to land on.
     @State private var scrollPosition = ScrollPosition()
 
+    /// The visible top edge and the realized rows' extents, for the reader
+    /// anchor remembered across session switches. A plain object, not
+    /// observed: it changes every scroll frame.
+    @State private var readerTracker = TranscriptReaderTracker()
+    /// Puts the remembered anchor back while the rows above it realize and
+    /// their markdown settles. A hand on the transcript, a send or anything
+    /// else that takes the reader somewhere ends it.
+    @State private var anchorRestoreTask: Task<Void, Never>?
+    /// A remembered anchor in history this open has not loaded yet (a reopen
+    /// starts from the tail). Pages back for it, a bounded number of times,
+    /// while the transcript holds at the latest.
+    @State private var pendingReaderAnchor: TranscriptReaderAnchor?
+    @State private var pendingAnchorPages = 0
+    /// Retries a page request a socket still connecting could not send yet.
+    @State private var pendingAnchorRetry: Task<Void, Never>?
+    @State private var pendingAnchorRetries = 0
+    private static let pendingAnchorMaxPages = 10
+    private static let anchorRestoreSeconds: Double = 2.5
+    /// The content's own coordinate space, which rows are measured in: it
+    /// scrolls WITH them, so a row's frame there changes only on layout.
+    fileprivate static let transcriptContentSpace = "transcript-content"
+
     /// How work folds start out: where a turn's work rests (folded / running,
     /// which opens it only while the turn is live / open), and whether that
     /// includes its tool calls. Set in Settings → Preferences, shared with the
@@ -410,6 +432,7 @@ struct SessionView: View {
                             containerHeight: $0.containerSize.height
                         )
                     } action: { old, new in
+                        readerTracker.visibleTop = new.offset + new.insetTop
                         let wasFollowing = pinnedToBottom && !readerMovedTowardHistory
                         if awaitingPrepend, new.contentHeight != old.contentHeight {
                             awaitingPrepend = false
@@ -554,6 +577,7 @@ struct SessionView: View {
                             scrollInteractionGeneration += 1
                             endHold()
                             cancelPrependRestore()
+                            cancelAnchorRestore()
                             if !readerMovedTowardHistory {
                                 readerMovedTowardHistory = true
                             }
@@ -578,6 +602,9 @@ struct SessionView: View {
                                 newBelow = false
                             }
                         }
+                        // Remember the reader's place once scrolling rests,
+                        // not per frame. Disappearing saves it too.
+                        if phase == .idle, old != .idle { rememberReaderPlace() }
                         // Reading counts as being here: a hand on the transcript
                         // is what keeps our face on this session (the view model
                         // throttles it). Output scrolling past on its own does
@@ -588,12 +615,18 @@ struct SessionView: View {
                     // cached one is already loaded when the view appears, so
                     // waiting on the loading flag alone would leave the hold
                     // armed forever and the return pill permanently hidden.
+                    // A reader who left this session scrolled into its
+                    // history reopens on the same passage instead.
                     let loadedScroll = interactiveScroll
-                        .onAppear { beginHold(proxy) }
+                        .onAppear { openTranscript(proxy) }
                         // The transcript exists now: hold it at the latest
-                        // while its rows settle.
+                        // (or the remembered passage) while its rows settle.
                         .onChange(of: viewModel.isLoadingConversation) { _, loading in
-                            if !loading { beginHold(proxy) }
+                            if !loading { openTranscript(proxy) }
+                        }
+                        .onDisappear {
+                            rememberReaderPlace()
+                            cancelAnchorRestore()
                         }
 
                     let receivedScroll = loadedScroll
@@ -663,6 +696,12 @@ struct SessionView: View {
                     let outputScroll = deliveryScroll
                         .onChange(of: viewModel.displayItems.count) {
                             displayItemsChanged()
+                            continuePendingAnchor(proxy)
+                        }
+                        // A rewatch's fresh transcript can answer a page
+                        // request instead of the page: ask again.
+                        .onChange(of: viewModel.loadingEarlier) { _, loading in
+                            if !loading { continuePendingAnchor(proxy) }
                         }
                         // The clock arriving lengthens the transcript by a row;
                         // follow it so it lands above the composer rather than
@@ -676,6 +715,10 @@ struct SessionView: View {
 
                     outputScroll
                         .onChange(of: viewModel.historyPrependSeq) {
+                        if pendingReaderAnchor != nil {
+                            continuePendingAnchor(proxy)
+                            return
+                        }
                         // Keep the reader where they were. The rows land above
                         // everything on screen, so the geometry observer above
                         // takes the measurement and `restoreAfterPrepend` puts
@@ -1110,6 +1153,11 @@ struct SessionView: View {
             if showingEmptyContent, let composerAccessory {
                 composerAccessory()
             }
+            LocalFoldersFlap(
+                model: viewModel.localFolders,
+                contentMaxWidth: contentMaxWidth,
+                horizontalInset: contentInset
+            )
             SessionInputBar(
                 viewModel: viewModel,
                 contentMaxWidth: contentMaxWidth,
@@ -1533,6 +1581,7 @@ struct SessionView: View {
         seconds: Double = SessionView.initialHoldSeconds,
         after delay: Duration = .zero
     ) {
+        cancelAnchorRestore()
         holdTask?.cancel()
         holdingAtLatest = true
         holdTask = Task {
@@ -1556,6 +1605,130 @@ struct SessionView: View {
         holdTask?.cancel()
         holdTask = nil
         holdingAtLatest = false
+    }
+
+    /// Open the loaded transcript where this reader left it, or at the latest
+    /// when they were following it, never opened it, or something there
+    /// needs their eyes (a question, a card that waits on them, a thread
+    /// link) — the same cases that always take the reader down.
+    private func openTranscript(_ proxy: ScrollViewProxy) {
+        guard !viewModel.isLoadingConversation, anchorRestoreTask == nil else { return }
+        guard pendingReaderAnchor == nil else { return }
+        guard let anchor = TranscriptReaderMemory.shared.anchor(sessionId: viewModel.session.id),
+              viewModel.pendingQuestion == nil,
+              viewModel.actionCards.attentionKey.isEmpty,
+              pendingThreadReveal == nil
+        else {
+            beginHold(proxy)
+            return
+        }
+        if viewModel.displayBlocks.contains(where: { $0.id == anchor.blockId }) {
+            restoreReaderAnchor(anchor, proxy)
+            return
+        }
+        guard viewModel.canLoadEarlier else {
+            beginHold(proxy)
+            return
+        }
+        beginHold(proxy)
+        pendingReaderAnchor = anchor
+        pendingAnchorPages = 0
+        pendingAnchorRetries = 0
+        continuePendingAnchor(proxy)
+    }
+
+    /// One step of paging back for a remembered anchor: restore once its
+    /// block is in, ask for the next page while there is one and the budget
+    /// lasts, else settle for the latest.
+    private func continuePendingAnchor(_ proxy: ScrollViewProxy) {
+        guard let anchor = pendingReaderAnchor else { return }
+        if viewModel.displayBlocks.contains(where: { $0.id == anchor.blockId }) {
+            pendingReaderAnchor = nil
+            restoreReaderAnchor(anchor, proxy)
+            return
+        }
+        guard !viewModel.loadingEarlier else { return }
+        guard viewModel.canLoadEarlier, pendingAnchorPages < Self.pendingAnchorMaxPages else {
+            pendingReaderAnchor = nil
+            return
+        }
+        // Not a reader's page: nothing on screen to keep in place.
+        cancelPrependRestore()
+        viewModel.loadEarlier()
+        if viewModel.loadingEarlier {
+            pendingAnchorPages += 1
+            return
+        }
+        // A socket still connecting asks nothing yet: try again shortly, for
+        // a few seconds at most.
+        guard pendingAnchorRetries < 40 else {
+            pendingReaderAnchor = nil
+            return
+        }
+        pendingAnchorRetries += 1
+        pendingAnchorRetry?.cancel()
+        pendingAnchorRetry = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            continuePendingAnchor(proxy)
+        }
+    }
+
+    /// Hold the remembered block at its remembered offset while the rows
+    /// above it realize and their markdown settles, as the web's
+    /// `holdTranscriptAnchor` does. The row is first brought into the lazy
+    /// stack by id; after that its measured top in content coordinates is
+    /// exact, so each tick puts the visible top back on it.
+    private func restoreReaderAnchor(_ anchor: TranscriptReaderAnchor, _ proxy: ScrollViewProxy) {
+        endHold()
+        cancelPrependRestore()
+        readerMovedTowardHistory = true
+        pinnedToBottom = false
+        newBelow = false
+        proxy.scrollTo(anchor.blockId, anchor: .top)
+        let tracker = readerTracker
+        anchorRestoreTask = Task { @MainActor in
+            let ticks = max(1, Int(Self.anchorRestoreSeconds / 0.05))
+            for _ in 0..<ticks {
+                try? await Task.sleep(for: .milliseconds(50))
+                guard !Task.isCancelled else { return }
+                guard let row = tracker.rows[anchor.blockId] else {
+                    proxy.scrollTo(anchor.blockId, anchor: .top)
+                    continue
+                }
+                let y = TranscriptScroll.restoredScrollY(for: anchor, rowMinY: row.minY)
+                if abs(tracker.visibleTop - y) > 0.5 { scrollPosition.scrollTo(y: y) }
+            }
+            anchorRestoreTask = nil
+        }
+    }
+
+    private func cancelAnchorRestore() {
+        anchorRestoreTask?.cancel()
+        anchorRestoreTask = nil
+        pendingReaderAnchor = nil
+        pendingAnchorRetry?.cancel()
+        pendingAnchorRetry = nil
+    }
+
+    /// Keep where the reader is for the next time this session opens, or
+    /// forget it when they are at the live edge.
+    private func rememberReaderPlace() {
+        // A restore still settling (or paging back for its block) has not
+        // moved the reader yet: keep the place it is restoring.
+        guard anchorRestoreTask == nil, pendingReaderAnchor == nil,
+              !viewModel.isLoadingConversation,
+              viewModel.conversationLoadError == nil,
+              !showingEmptyContent
+        else { return }
+        let following = holdingAtLatest || (pinnedToBottom && !readerMovedTowardHistory)
+        if following {
+            TranscriptReaderMemory.shared.remember(nil, sessionId: viewModel.session.id)
+        } else if let anchor = readerTracker.anchor {
+            TranscriptReaderMemory.shared.remember(anchor, sessionId: viewModel.session.id)
+        }
+        // No measured rows (they tear down before the transcript does on a
+        // switch): keep what the last resting save recorded.
     }
 
     /// Put the reader back where the page of earlier history found them as
@@ -1683,6 +1856,7 @@ struct SessionView: View {
                 minHeight: viewportHeight,
                 alignment: .top
             )
+            .coordinateSpace(name: Self.transcriptContentSpace)
         }
         .softScrollEdges()
         .environment(\.transcriptQuoteSelection, viewModel.quoteSelection)
@@ -1748,6 +1922,15 @@ struct SessionView: View {
         )
         .id(block.id)
         .transcriptTail(block.id == tailId)
+        // Its extent in content coordinates, for the reader anchor. Fires on
+        // layout, not on scroll.
+        .onGeometryChange(for: TranscriptRowExtent.self) { geometry in
+            let frame = geometry.frame(in: .named(Self.transcriptContentSpace))
+            return TranscriptRowExtent(minY: frame.minY, maxY: frame.maxY)
+        } action: { [readerTracker] extent in
+            readerTracker.record(block.id, extent)
+        }
+        .onDisappear { [readerTracker] in readerTracker.forget(block.id) }
     }
 
     private func beginPrependRestoreIfPossible() {
@@ -1786,6 +1969,7 @@ struct SessionView: View {
 
     private func jumpToStartIfLanded(_ proxy: ScrollViewProxy) {
         cancelPrependRestore()
+        cancelAnchorRestore()
         if let first = viewModel.displayBlocks.first?.id {
             proxy.scrollTo(first, anchor: .top)
         }
@@ -1817,6 +2001,7 @@ struct SessionView: View {
     ) {
         guard let target = tailId else { return }
         if repin {
+            cancelAnchorRestore()
             if readerMovedTowardHistory { readerMovedTowardHistory = false }
             if !pinnedToBottom { pinnedToBottom = true }
         }
@@ -1846,6 +2031,7 @@ struct SessionView: View {
                 guard generation == scrollInteractionGeneration else { return }
                 endHold()
                 cancelPrependRestore()
+                cancelAnchorRestore()
                 readerMovedTowardHistory = true
                 pinnedToBottom = false
                 newBelow = false
@@ -1865,6 +2051,7 @@ struct SessionView: View {
         guard let target = viewModel.blockId(containing: message.id) else { return }
         endHold()
         cancelPrependRestore()
+        cancelAnchorRestore()
         readerMovedTowardHistory = true
         pinnedToBottom = false
         newBelow = false
