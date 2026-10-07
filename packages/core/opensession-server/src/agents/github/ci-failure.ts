@@ -186,7 +186,8 @@ export function ciFailureFromStatus(
   const context = clean(payload?.context);
   if (!sha || !context) return null;
   const url = httpsUrl(payload?.target_url);
-  const actionsRun = `https://github.com/${repo.ghRepo}/actions/runs/`.toLowerCase();
+  const actionsRun =
+    `https://github.com/${repo.ghRepo}/actions/runs/`.toLowerCase();
   if (url.toLowerCase().startsWith(actionsRun)) return null;
   if (/\bcancel(?:l?ed|ling|led)\b/i.test(payload?.description || ""))
     return null;
