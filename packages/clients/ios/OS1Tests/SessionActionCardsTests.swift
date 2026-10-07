@@ -162,13 +162,13 @@ final class SessionActionCardsTests: XCTestCase {
         let runs = [
             run("running", "running"),
             run("old", "exited", ended: 0, code: 0),
-            run("recent", "exited", ended: 10 * 60, code: 0),
+            run("recent", "exited", ended: 17 * 60, code: 0),
         ]
         let now = start.addingTimeInterval(20 * 60)
         XCTAssertEqual(ScriptRun.visible(runs, at: now).map(\.id), ["recent", "running"])
         XCTAssertEqual(
             ScriptRun.nextExpiry(runs, after: now),
-            start.addingTimeInterval(25 * 60)
+            start.addingTimeInterval(22 * 60)
         )
     }
 
