@@ -33,7 +33,7 @@ function summary(ask: SessionKeychainAsk): string {
   if (ask.requestedMode === "release")
     return `${AGENT_NAME} will see the password: it types it into the sign-in page itself. Release only a test account.`;
   if (ask.run)
-    return `Runs this script, up to ${ask.run.maxCalls.toLocaleString("en-US")} calls, refused beyond that. The script never sees the secret.`;
+    return `Runs this script until it exits or times out, within the credential's limits. The script never sees the secret, and every call is audited.`;
   return `The secret is never shown to the session. Calls go through the keychain broker within the credential's limits, and each one is audited.`;
 }
 

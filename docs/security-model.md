@@ -194,7 +194,7 @@ for APIs that might echo the secret in a form scrubbing cannot catch.
 A loopback URL that any local process could reuse is exactly what the broker
 route was, so bulk work by a script has its own path instead. The agent asks
 for a scripted run (`request_credential` with `run`): the owner's message says
-it is a scripted run and shows the exact command and the call cap, and offers
+it is a scripted run and shows the exact command, and offers
 only Approve run or Decline. An ordinary once or standing grant cannot start
 a run, and a run grant cannot be used through `call_credential`.
 `run_with_credential` starts that command, character for character, as one
@@ -205,21 +205,26 @@ random secret in its path. The host relays each request over the run's
 `0600` unix socket to the server, which compares the secret's SHA-256 with
 the one it stored, in constant time, and injects the credential; the host
 never holds a credential, and the secret is never written to disk. Every proxied call is checked against the grant and the
-credential's method and path ceiling, counted against the cap, and audited
+credential's method and path ceiling, counted, and audited
 (`keychain_run_call`, `keychain_run_denied`, `keychain_run_ended`). The
 injected header, cookies and routing headers cannot be set by the script,
 redirects are not followed, and the secret is scrubbed from response headers
 and text bodies. The proxy closes when the process exits, times out (12 hours
 at most), is stopped, or its grant is revoked; a request after that, or with
-another run's secret, is refused. A grant starts one run. Sessions in a
+another run's secret, is refused. There is no cap on the number of calls:
+a script cannot know its volume in advance once it retries errors and rate
+limits, and a wrong guess wasted a whole approved run. The run's time limit,
+the method and path ceiling, `stop_credential_run` and revocation bound it
+instead. A grant starts one run. Sessions in a
 Sandbox or on a Runner cannot start one, because the proxy listens on the
 server. While a run is live, another process of the same Unix user could read
-its environment; the exposure is limited to that run's lifetime and cap.
+its environment; the exposure is limited to that run's lifetime and the
+credential's method and path ceiling.
 
 One run may use several credentials (`request_credential` with `credentials`
 and `run`), for a script that needs more than one API in the same process.
 Each credential's owner gets one message listing every credential in the
-run, its owner and its cap, and the command; an owner of several approves
+run, its owner, and the command; an owner of several approves
 them together. The asks and grants share a group id, and
 `run_with_credential` starts the run only when a live grant from that one
 request exists for every credential: a missing approval, or approvals from
@@ -227,8 +232,8 @@ two different requests, start nothing. A decline withdraws the other
 owners' asks. The script gets one URL per credential,
 `KEYCHAIN_PROXY_URL_<SLUG>`, each on its own port with its own secret and
 forwarding only to its own credential's host, so one credential's URL can
-never reach another's host. Method and path limits, caps and audit entries
-are per credential. All of a run's URLs close together, and revoking any of
+never reach another's host. Method and path limits, call counts and audit
+entries are per credential. All of a run's URLs close together, and revoking any of
 its grants ends the whole run.
 
 A server restart does not end a run: its script host keeps the command

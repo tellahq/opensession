@@ -502,18 +502,13 @@ private struct ScriptRunCard: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             ForEach(run.credentials) { credential in
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(credential.service).lineLimit(1)
-                        Spacer(minLength: 12)
-                        Text(callsLine(credential)).monospacedDigit()
-                    }
-                    .font(.caption)
-                    .foregroundStyle(OS1VisualStyle.textDim)
-                    ProgressView(value: credential.fraction)
-                        .tint(OS1VisualStyle.text)
-                        .accessibilityLabel("\(credential.service) calls")
+                HStack(alignment: .firstTextBaseline) {
+                    Text(credential.service).lineLimit(1)
+                    Spacer(minLength: 12)
+                    Text(callsLine(credential)).monospacedDigit()
                 }
+                .font(.caption)
+                .foregroundStyle(OS1VisualStyle.textDim)
             }
 
             HStack {
@@ -583,7 +578,7 @@ private struct ScriptRunCard: View {
     }
 
     private func callsLine(_ credential: ScriptRun.CredentialUse) -> String {
-        var line = "\(credential.calls.formatted()) of \(credential.maxCalls.formatted()) calls"
+        var line = credential.calls == 1 ? "1 call" : "\(credential.calls.formatted()) calls"
         if credential.denied > 0 { line += " · \(credential.denied.formatted()) refused" }
         return line
     }

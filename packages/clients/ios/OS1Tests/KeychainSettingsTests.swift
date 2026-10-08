@@ -72,8 +72,6 @@ final class KeychainSettingsTests: XCTestCase {
     }
     """#
 
-    private let en = Locale(identifier: "en_US")
-
     private func decode(_ json: String) throws -> KeychainResponse {
         try JSONDecoder().decode(KeychainResponse.self, from: Data(json.utf8))
     }
@@ -140,9 +138,9 @@ final class KeychainSettingsTests: XCTestCase {
     func testGroupedRunNamesEveryCredentialWithItsOwnerAndCap() throws {
         let ask = try XCTUnwrap(decode(newFixture).asks?.first)
         XCTAssertEqual(
-            KeychainPresentation.askDetail(ask, locale: en),
-            "Scripted run with acme (owner Alex, up to 100 calls), beta (owner Sam, up to 50 calls), "
-                + "gamma (owner Sam, up to 2,000 calls); starts once every owner allows it · bun scripts/sync.ts · Sync"
+            KeychainPresentation.askDetail(ask),
+            "Scripted run with acme (owner Alex), beta (owner Sam), "
+                + "gamma (owner Sam); starts once every owner allows it · bun scripts/sync.ts · Sync"
         )
         XCTAssertEqual(KeychainDecision.choices(for: ask), [.decline, .run])
     }
@@ -151,8 +149,8 @@ final class KeychainSettingsTests: XCTestCase {
         let response = try decode(newFixture)
         let grant = try XCTUnwrap(response.grants?.first)
         XCTAssertEqual(
-            KeychainPresentation.grantDetail(grant, expiry: "expires soon", locale: en),
-            "Scripted run, up to 1,200 calls · bun scripts/backfill.ts · owner Sam · expires soon · Backfill"
+            KeychainPresentation.grantDetail(grant, expiry: "expires soon"),
+            "Scripted run · bun scripts/backfill.ts · owner Sam · expires soon · Backfill"
         )
         let release = try XCTUnwrap(response.asks?.first { $0.id == "ask-login" })
         XCTAssertEqual(KeychainPresentation.askDetail(release), "Wants the password, which the agent will see · Sign in to staging")

@@ -83,7 +83,8 @@ final class SessionActionCardsTests: XCTestCase {
         """#)
         guard case .scriptRuns("bks-1", let runs) = event else { return XCTFail("expected runs") }
         XCTAssertEqual(runs.map(\.id), ["sr-1", "sr-2"])
-        XCTAssertEqual(runs[0].credentials.first?.fraction, 0.4)
+        XCTAssertEqual(runs[0].credentials.first?.calls, 40)
+        XCTAssertEqual(runs[0].credentials.first?.denied, 2)
         XCTAssertNotNil(runs[0].startedAt)
         XCTAssertEqual(runs[1].title, "Script")
         XCTAssertEqual(runs[1].outcome.text, "Lost track of it")

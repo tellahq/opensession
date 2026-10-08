@@ -243,15 +243,12 @@ export function KeychainSection() {
                     ? `Wants the password, which the agent will see · ${a.purpose}`
                     : a.run?.group
                       ? `Scripted run with ${a.run.group.members
-                          .map(
-                            (m) =>
-                              `${m.service} (owner ${m.owner}, up to ${m.maxCalls.toLocaleString()} calls)`,
-                          )
+                          .map((m) => `${m.service} (owner ${m.owner})`)
                           .join(
                             ", ",
                           )}; starts once every owner allows it · ${a.run.command} · ${a.purpose}`
                       : a.run
-                        ? `Scripted run, up to ${a.run.maxCalls.toLocaleString()} calls · ${a.run.command} · ${a.purpose}`
+                        ? `Scripted run · ${a.run.command} · ${a.purpose}`
                         : `Asked for ${a.requestedMode === "once" ? "one call" : "7 days"} · ${a.purpose}`
                 }
                 controlClassName="flex flex-wrap justify-end gap-1"
@@ -320,11 +317,10 @@ export function KeychainSection() {
             ))}
           </SettingCard>
           <SettingsHint>
-            Allow once covers a single API call. Allow run covers one script, up
-            to its call cap, while it runs. The session never sees those
-            secrets, and you can revoke a grant below. Release password writes a
-            login's password to a file the session reads once, deleted after 30
-            minutes.
+            Allow once covers a single API call. Allow run covers one script
+            while it runs. The session never sees those secrets, and you can
+            revoke a grant below. Release password writes a login's password to
+            a file the session reads once, deleted after 30 minutes.
           </SettingsHint>
         </>
       )}

@@ -128,7 +128,7 @@ struct KeychainSettingsView: View {
         } header: {
             Text("Requests for your credentials")
         } footer: {
-            Text("Allow once covers one API call, Allow run one script up to its call cap. The session never sees those secrets. Release password hands a login's password to the session, which can read it.")
+            Text("Allow once covers one API call, Allow run one script while it runs. The session never sees those secrets. Release password hands a login's password to the session, which can read it.")
         }
     }
 

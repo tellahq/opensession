@@ -83,12 +83,13 @@ struct KeychainCredential: Codable, Sendable, Identifiable, Equatable {
     }
 }
 
-/// What an owner approves for a scripted run: this exact command, and at most
-/// this many proxied calls with this credential.
+/// What an owner approves for a scripted run: this exact command. Records
+/// from before the call cap was dropped may still carry `maxCalls`; it is
+/// ignored.
 struct KeychainScriptedRun: Codable, Sendable, Equatable {
     struct Group: Codable, Sendable, Equatable {
         var id: String?
-        /// Every credential in the run, in the order asked, with its own cap.
+        /// Every credential in the run, in the order asked.
         var members: [Member]?
     }
 
@@ -96,12 +97,9 @@ struct KeychainScriptedRun: Codable, Sendable, Equatable {
         var service: String?
         var host: String?
         var owner: String?
-        var maxCalls: Int?
     }
 
     var command: String?
-    /// This credential's cap.
-    var maxCalls: Int?
     /// Set when the run uses several credentials.
     var group: Group?
 
@@ -201,26 +199,17 @@ enum KeychainPresentation {
         }
     }
 
-    /// "up to 1,000 calls".
-    static func callCap(_ maxCalls: Int?, locale: Locale = .current) -> String? {
-        guard let maxCalls else { return nil }
-        let formatted = maxCalls.formatted(.number.grouping(.automatic).locale(locale))
-        return maxCalls == 1 ? "up to 1 call" : "up to \(formatted) calls"
-    }
-
     /// The one-line description of a scripted run. A grouped run names every
-    /// credential with its owner and cap, because no single owner can start it.
-    static func runSummary(_ run: KeychainScriptedRun, locale: Locale = .current) -> String {
+    /// credential with its owner, because no single owner can start it.
+    static func runSummary(_ run: KeychainScriptedRun) -> String {
         let members = run.groupMembers
         var head: String
         if members.isEmpty {
-            head = ["Scripted run", callCap(run.maxCalls, locale: locale)].compactMap { $0 }.joined(separator: ", ")
+            head = "Scripted run"
         } else {
             let list = members.map { member in
                 let name = member.service ?? "credential"
-                let details = [member.owner.map { "owner \($0)" }, callCap(member.maxCalls, locale: locale)]
-                    .compactMap { $0 }
-                return details.isEmpty ? name : "\(name) (\(details.joined(separator: ", ")))"
+                return member.owner.map { "\(name) (owner \($0))" } ?? name
             }
             head = "Scripted run with \(list.joined(separator: ", ")); starts once every owner allows it"
         }
@@ -255,21 +244,21 @@ enum KeychainPresentation {
     }
 
     /// What an owner is being asked to approve.
-    static func askDetail(_ ask: KeychainAsk, locale: Locale = .current) -> String {
+    static func askDetail(_ ask: KeychainAsk) -> String {
         let purpose = nonEmpty(ask.purpose) ?? "No reason given"
         if ask.requestedMode == "release" {
             return "Wants the password, which the agent will see · \(purpose)"
         }
-        if let run = ask.run { return "\(runSummary(run, locale: locale)) · \(purpose)" }
+        if let run = ask.run { return "\(runSummary(run)) · \(purpose)" }
         let wants = ask.requestedMode == "once" ? "one call" : ask.requestedMode == "standing" ? "7 days" : nil
         return [wants.map { "Asked for \($0)" }, purpose].compactMap { $0 }.joined(separator: " · ")
     }
 
     /// What a grant row says under its title.
-    static func grantDetail(_ grant: KeychainGrant, expiry: String?, locale: Locale = .current) -> String {
+    static func grantDetail(_ grant: KeychainGrant, expiry: String?) -> String {
         var parts: [String] = []
         if let run = grant.run {
-            parts.append(runSummary(run, locale: locale))
+            parts.append(runSummary(run))
         } else if let mode = modeLabel(grant.mode) {
             parts.append(mode)
         }

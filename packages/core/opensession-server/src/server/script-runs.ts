@@ -84,7 +84,6 @@ export interface ScriptRelayInfo {
   grantId: string;
   calls: number;
   denied: number;
-  maxCalls: number;
 }
 
 interface StoredRelay extends ScriptRelayInfo {
@@ -326,9 +325,18 @@ export function summarizeScriptRun(run: ScriptRunRecord): ScriptRunSummary {
     ...(stopping && run.state === "running" ? { stopping: true } : {}),
     ...(relays?.length
       ? {
-          credentials: relays.map(({ secretHash: _hash, ...relay }) => ({
-            ...relay,
-          })),
+          // Picked field by field: relays stored before the call cap was
+          // dropped still carry a `maxCalls` that nothing enforces.
+          credentials: relays.map(
+            ({ env, service, host, grantId, calls, denied }) => ({
+              env,
+              service,
+              host,
+              grantId,
+              calls,
+              denied,
+            }),
+          ),
         }
       : {}),
   };
@@ -930,7 +938,7 @@ export function scriptEndedMessage(run: ScriptRunRecord, tail: string): string {
     ? `\nCredential calls: ${run.relays
         .map(
           (r) =>
-            `${r.service} ${r.calls}/${r.maxCalls}${r.denied ? `, ${r.denied} refused` : ""}`,
+            `${r.service} ${r.calls}${r.denied ? `, ${r.denied} refused` : ""}`,
         )
         .join("; ")}.`
     : "";

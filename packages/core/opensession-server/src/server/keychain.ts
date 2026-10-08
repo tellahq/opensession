@@ -20,7 +20,7 @@
  *                once (single broker call, 1h) or standing (7d), revocable,
  *                audited. A third mode, run, approves one named script for
  *                bulk use through a per-run proxy (keychain-runs.ts); the
- *                owner sees the command and the call cap before approving.
+ *                owner sees the command before approving.
  *
  * Delivery is broker-only: the agent never sees the secret. It calls the
  * keychain's call_credential tool (keychain-broker.ts), which runs inside
@@ -105,11 +105,12 @@ export type GrantMode = "once" | "standing" | "run" | "release";
  *  "login" is a username and password for a sign-in page. */
 export type CredentialKind = "api" | "login";
 
-/** What the owner approves for a scripted run: this exact command, and at
- *  most this many proxied calls with this credential. */
+/** What the owner approves for a scripted run: this exact command. The run
+ *  is bounded by its lifetime and the credential's method/path limits, not
+ *  by a call count. Records written before the call cap was dropped may
+ *  still carry a `maxCalls` field; nothing reads it. */
 export interface KeychainScriptedRun {
   command: string;
-  maxCalls: number;
   /** Set when the run uses several credentials. The same on every ask and
    *  grant of that run, so a run starts only with grants from one request,
    *  once every credential's owner approved. */
@@ -118,7 +119,7 @@ export interface KeychainScriptedRun {
 
 export interface KeychainRunGroup {
   id: string;
-  /** Every credential in the run, in the order asked, with its own cap. */
+  /** Every credential in the run, in the order asked. */
   members: KeychainRunMember[];
 }
 
@@ -126,11 +127,9 @@ export interface KeychainRunMember {
   service: string;
   host: string;
   owner: string;
-  maxCalls: number;
 }
 
 export const MAX_RUN_COMMAND_CHARS = 2000;
-export const MAX_RUN_CALLS = 1_000_000;
 export const MAX_RUN_CREDENTIALS = 8;
 
 /** The environment variable holding a credential's proxy URL in a scripted
@@ -916,7 +915,7 @@ export async function claimRunGrants(input: {
     const runGrants = unclaimed(credMeta);
     if (!runGrants.length)
       return {
-        error: `this session holds no approved scripted run for ${credMeta.service}. Ask its owner with request_credential({ credential, purpose, run: { command, maxCalls } }) first`,
+        error: `this session holds no approved scripted run for ${credMeta.service}. Ask its owner with request_credential({ credential, purpose, run: { command } }) first`,
       };
     const gr = runGrants.find((g) => g.run?.command === input.command);
     if (!gr)
@@ -960,7 +959,6 @@ export async function claimRunGrants(input: {
       credential_id: gr.credentialId,
       session_id: gr.sessionId,
       owner: gr.owner,
-      max_calls: gr.run?.maxCalls,
       ...(gr.run?.group ? { run_group: gr.run.group.id } : {}),
     });
   return {
@@ -1016,7 +1014,7 @@ function findRunGroup(
       missing.length && missing.length < metas.length
         ? ` (none for ${missing.map((m) => m.service).join(", ")})`
         : ""
-    }. Ask with request_credential({ credentials: [...], purpose, run: { command, maxCalls } }) first`,
+    }. Ask with request_credential({ credentials: [...], purpose, run: { command } }) first`,
   };
 }
 
@@ -1269,7 +1267,7 @@ export function grantInstructions(
   if (gr.mode === "run" && gr.run)
     return (
       `${gr.owner} approved a scripted run with **${credMeta.service}** ` +
-      `(up to ${gr.run.maxCalls} calls, grant ${gr.id}; start it before ${gr.expiresAt}).\n` +
+      `(grant ${gr.id}; start it before ${gr.expiresAt}).\n` +
       `Start it with run_with_credential({ credential: "${credMeta.service}", command: ${JSON.stringify(gr.run.command)} }), ` +
       `optionally with cwd and timeoutMinutes. The command must be exactly that. ` +
       `The script gets KEYCHAIN_PROXY_URL (also as ${proxyEnvName(credMeta.service)}): use it as the API base URL in place of https://${credMeta.host}; ` +
@@ -1346,9 +1344,7 @@ export function requestCredential(
   if (input.run) {
     const command = runCommand(input.run.command);
     if ("error" in command) return command;
-    const capError = maxCallsError(input.run.maxCalls);
-    if (capError) return { error: capError };
-    run = { command: command.command, maxCalls: input.run.maxCalls };
+    run = { command: command.command };
   }
   const requestedMode: GrantMode = isLogin
     ? "release"
@@ -1357,11 +1353,7 @@ export function requestCredential(
       : input.mode || "once";
   const sameRun = (other?: KeychainScriptedRun) =>
     (!run && !other) ||
-    (!!run &&
-      !!other &&
-      !other.group &&
-      run.command === other.command &&
-      run.maxCalls === other.maxCalls);
+    (!!run && !!other && !other.group && run.command === other.command);
   // An approval that landed after the caller stopped waiting is already a
   // grant: hand it back rather than asking the owner twice. Only for the
   // purpose (and script) the owner approved; anything new is a new ask.
@@ -1434,8 +1426,7 @@ export function requestCredential(
       : run
         ? `May this session run a script with your **${credMeta.service}** credential ` +
           `(${credMeta.host})? This is a scripted run: bulk API use, not a single call.\n` +
-          `Purpose: ${purpose}\nCommand: \`${run.command}\`\n` +
-          `Expected volume: up to ${run.maxCalls.toLocaleString("en-US")} API calls, refused beyond that.` +
+          `Purpose: ${purpose}\nCommand: \`${run.command}\`` +
           interruptedNote(input.sessionId, run.command, [credMeta.id])
         : `May this session borrow your **${credMeta.service}** credential ` +
           `(${credMeta.host})?\nPurpose: ${purpose}\nRequested: ${record.requestedMode} ` +
@@ -1475,7 +1466,6 @@ export function requestCredential(
     requested_by: input.requestedBy,
     mode: record.requestedMode,
     owner: credMeta.owner,
-    ...(run ? { max_calls: run.maxCalls } : {}),
   });
   return { ask: record, transport };
 }
@@ -1487,14 +1477,6 @@ function runCommand(raw: string): { command: string } | { error: string } {
       error: `a scripted run needs a command of at most ${MAX_RUN_COMMAND_CHARS} characters`,
     };
   return { command };
-}
-
-function maxCallsError(maxCalls: number): string | null {
-  return Number.isInteger(maxCalls) &&
-    maxCalls >= 1 &&
-    maxCalls <= MAX_RUN_CALLS
-    ? null
-    : `maxCalls must be a whole number from 1 to ${MAX_RUN_CALLS}`;
 }
 
 /** For an owner asked to approve a command again: an earlier approved run
@@ -1535,8 +1517,7 @@ export interface RequestCredentialRunInput {
   sessionId: string;
   requestedBy: string;
   purpose: string;
-  /** maxCalls is per credential: one number for each, or one per slug. */
-  run: { command: string; maxCalls: number | Record<string, number> };
+  run: { command: string };
 }
 
 export type RequestCredentialRunResult =
@@ -1550,7 +1531,7 @@ export type RequestCredentialRunResult =
 /**
  * Ask for one scripted run that uses several credentials. Each credential's
  * owner approves their part: one message per owner, listing every
- * credential in the run, the command and each cap. The asks and grants
+ * credential in the run and the command. The asks and grants
  * share a group id, and run_with_credential starts the run only once a live
  * grant exists for every credential in the group.
  */
@@ -1594,43 +1575,17 @@ export function requestCredentialRun(
     };
   const command = runCommand(input.run.command);
   if ("error" in command) return command;
-  const caps = input.run.maxCalls;
-  if (typeof caps === "object") {
-    const extra = Object.keys(caps).filter(
-      (k) => !metas.some((m) => m.service === norm(k)),
-    );
-    if (extra.length)
-      return {
-        error: `maxCalls names ${extra.join(", ")}, which is not in this run`,
-      };
-  }
-  const members: KeychainRunMember[] = [];
-  for (const m of metas) {
-    const maxCalls =
-      typeof caps === "number"
-        ? caps
-        : Object.entries(caps).find(([k]) => norm(k) === m.service)?.[1];
-    if (maxCalls === undefined)
-      return { error: `maxCalls has no cap for ${m.service}` };
-    const capError = maxCallsError(maxCalls);
-    if (capError) return { error: `${m.service}: ${capError}` };
-    members.push({
-      service: m.service,
-      host: m.host,
-      owner: m.owner,
-      maxCalls,
-    });
-  }
+  const members: KeychainRunMember[] = metas.map((m) => ({
+    service: m.service,
+    host: m.host,
+    owner: m.owner,
+  }));
   const sameRequest = (r: KeychainScriptedRun | undefined, p: string) =>
     !!r?.group &&
     r.command === command.command &&
     norm(p) === norm(purpose) &&
     r.group.members.length === members.length &&
-    members.every((m) =>
-      r.group!.members.some(
-        (o) => o.service === m.service && o.maxCalls === m.maxCalls,
-      ),
-    );
+    members.every((m) => r.group!.members.some((o) => o.service === m.service));
   const ids = new Set(metas.map((m) => m.id));
 
   // Every owner already approved: hand the grants back.
@@ -1718,10 +1673,7 @@ export function requestCredentialRun(
     if (!owners.some((o) => sameOwner(o, m.owner))) owners.push(m.owner);
   const now = new Date().toISOString();
   const runList = members
-    .map(
-      (m) =>
-        `• **${m.service}** (${m.host}, owner ${m.owner}): up to ${m.maxCalls.toLocaleString("en-US")} calls`,
-    )
+    .map((m) => `• **${m.service}** (${m.host}, owner ${m.owner})`)
     .join("\n");
   for (const owner of owners) {
     const person = resolveTeammate(owner)!;
@@ -1735,11 +1687,7 @@ export function requestCredentialRun(
       requestedBy: input.requestedBy,
       purpose,
       requestedMode: "run",
-      run: {
-        command: command.command,
-        maxCalls: members.find((x) => x.service === m.service)!.maxCalls,
-        group,
-      },
+      run: { command: command.command, group },
       status: "pending",
       createdAt: now,
     }));
@@ -1752,7 +1700,7 @@ export function requestCredentialRun(
         `including your ${mine.map((m) => `**${m.service}**`).join(" and ")}? ` +
         `This is a scripted run: bulk API use, not a single call.\n` +
         `Purpose: ${purpose}\nCommand: \`${command.command}\`\n` +
-        `Credentials in this run, each refused beyond its cap:\n${runList}` +
+        `Credentials in this run:\n${runList}` +
         (others.length
           ? `\nThe run starts only once ${[...new Set(others.map((m) => m.owner))].join(" and ")} also approve${others.length === 1 ? "s" : ""}.`
           : "") +
@@ -1780,7 +1728,6 @@ export function requestCredentialRun(
         requested_by: input.requestedBy,
         mode: "run",
         owner: record.owner,
-        max_calls: record.run!.maxCalls,
         run_group: group.id,
       });
     }
@@ -1863,7 +1810,7 @@ export function runGroupAnswer(sessionId: string, groupId: string): string {
       .filter(Boolean)
       .join("; ");
     return (
-      `- ${proxyEnvName(m.service)}: in place of https://${m.host} (${m.service}, up to ${m.maxCalls} calls` +
+      `- ${proxyEnvName(m.service)}: in place of https://${m.host} (${m.service}` +
       (limits ? `; ${limits}` : "") +
       ")"
     );
@@ -2004,7 +1951,7 @@ export interface SessionKeychainAsk {
   requestedBy: string;
   purpose: string;
   requestedMode: GrantMode;
-  run?: { command: string; maxCalls: number };
+  run?: { command: string };
   /** Every credential of this owner the one answer covers (a
    *  multi-credential run asks each owner once for all of theirs). */
   credentials: Array<{
@@ -2055,9 +2002,7 @@ export function keychainAsksInSession(
       requestedBy: a.requestedBy,
       purpose: a.purpose,
       requestedMode: a.requestedMode,
-      ...(a.run
-        ? { run: { command: a.run.command, maxCalls: a.run.maxCalls } }
-        : {}),
+      ...(a.run ? { run: { command: a.run.command } } : {}),
       credentials: [meta],
       createdAt: a.createdAt,
     });
