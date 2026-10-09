@@ -147,7 +147,6 @@ EOF
       LANG="${LANG:-C.UTF-8}" \
       PORT="$PORT" \
       HOST=127.0.0.1 \
-      OPENSESSION_DEV=1 \
       OPENSESSION_DEMO=1 \
       OPENSESSION_STATE_DIR="$RUN_DIR/state" \
       OPENSESSION_DEPLOY_STATE="$RUN_DIR/state/deploy" \
@@ -239,6 +238,10 @@ EOF
     health="$(curl -fsS "$APP_URL/api/health?brief=1" 2>/dev/null || true)"
     if [ "$(jq -r '.bootId // empty' <<<"$health")" != "$BOOT_ID" ]; then
       echo "FAIL health probe returned a different boot id" >&2
+      errors=$((errors + 1))
+    fi
+    if [ -z "$FRONTEND_VERSION" ] || [ "$(jq -r '.frontendVersion // empty' <<<"$health")" != "$FRONTEND_VERSION" ]; then
+      echo "FAIL frontend bundle is unavailable or changed since launch" >&2
       errors=$((errors + 1))
     fi
     auth="$(curl -fsS "$APP_URL/api/auth/status" 2>/dev/null || true)"
