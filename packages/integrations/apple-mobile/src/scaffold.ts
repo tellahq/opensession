@@ -1,0 +1,304 @@
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { CONFIG_PATH, XCODEGEN_SPEC } from "./config";
+import { platformProfile } from "./platforms";
+import type { AppleMobileConfig, ApplePlatform } from "./types";
+
+const BUNDLE_ID = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
+const TEAM_ID = /^[A-Z0-9]{10}$/;
+const DEPLOYMENT_TARGET: Record<ApplePlatform, string> = {
+  ios: "18.0",
+  macos: "15.0",
+};
+
+export interface CreateAppInput {
+  /** Absolute directory to create. It must not exist or must be empty. */
+  projectDir: string;
+  /** Display name, e.g. "Acme Notes". */
+  name: string;
+  bundleId: string;
+  teamId?: string;
+  platform?: ApplePlatform;
+  deploymentTarget?: string;
+}
+
+/** A Swift identifier for the target and module, derived from the name. */
+export function targetName(name: string): string {
+  const words = name.match(/[A-Za-z0-9]+/g) ?? [];
+  const joined = words
+    .map((word) => word[0]!.toUpperCase() + word.slice(1))
+    .join("");
+  if (!joined) throw new Error("name must contain letters or digits");
+  return /^[0-9]/.test(joined) ? `App${joined}` : joined;
+}
+
+function yamlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function projectSpec(input: {
+  target: string;
+  name: string;
+  bundleId: string;
+  teamId?: string;
+  platform: ApplePlatform;
+  deploymentTarget: string;
+}): string {
+  const platform = platformProfile(input.platform).xcodegen;
+  const ios = input.platform === "ios";
+  const info = [
+    `        CFBundleDisplayName: ${yamlString(input.name)}`,
+    "        CFBundleShortVersionString: $(MARKETING_VERSION)",
+    "        CFBundleVersion: $(CURRENT_PROJECT_VERSION)",
+    // Answers the export compliance question for every build. Change it to
+    // true if the app uses non-exempt encryption.
+    "        ITSAppUsesNonExemptEncryption: false",
+    ...(ios
+      ? [
+          "        UILaunchScreen: {}",
+          "        UIApplicationSceneManifest:",
+          "          UIApplicationSupportsMultipleScenes: true",
+        ]
+      : [
+          "        LSApplicationCategoryType: public.app-category.productivity",
+        ]),
+  ];
+  return [
+    `name: ${input.target}`,
+    "options:",
+    `  bundleIdPrefix: ${input.bundleId.split(".").slice(0, -1).join(".")}`,
+    "  deploymentTarget:",
+    `    ${platform}: ${yamlString(input.deploymentTarget)}`,
+    "  createIntermediateGroups: true",
+    "settings:",
+    "  base:",
+    '    MARKETING_VERSION: "1.0"',
+    '    CURRENT_PROJECT_VERSION: "1"',
+    '    SWIFT_VERSION: "6.0"',
+    ...(input.teamId ? [`    DEVELOPMENT_TEAM: ${input.teamId}`] : []),
+    "targets:",
+    `  ${input.target}:`,
+    "    type: application",
+    `    platform: ${platform}`,
+    "    sources:",
+    `      - ${input.target}`,
+    "    info:",
+    `      path: ${input.target}/Info.plist`,
+    "      properties:",
+    ...info,
+    "    settings:",
+    "      base:",
+    `        PRODUCT_BUNDLE_IDENTIFIER: ${input.bundleId}`,
+    "        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon",
+    "        CODE_SIGN_STYLE: Automatic",
+    ...(ios ? ['        TARGETED_DEVICE_FAMILY: "1,2"'] : []),
+    `  ${input.target}Tests:`,
+    "    type: bundle.unit-test",
+    `    platform: ${platform}`,
+    "    sources:",
+    `      - ${input.target}Tests`,
+    "    dependencies:",
+    `      - target: ${input.target}`,
+    "schemes:",
+    `  ${input.target}:`,
+    "    build:",
+    "      targets:",
+    `        ${input.target}: all`,
+    "    test:",
+    "      targets:",
+    `        - ${input.target}Tests`,
+    "    archive:",
+    "      config: Release",
+    "",
+  ].join("\n");
+}
+
+function json(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+function files(input: {
+  target: string;
+  name: string;
+  bundleId: string;
+  teamId?: string;
+  platform: ApplePlatform;
+  deploymentTarget: string;
+}): Record<string, string> {
+  const config: AppleMobileConfig = {
+    version: 1,
+    backend: "xcode",
+    bundleId: input.bundleId,
+    platform: input.platform,
+    ...(input.teamId ? { teamId: input.teamId } : {}),
+    xcode: {
+      container: "project",
+      path: `${input.target}.xcodeproj`,
+      scheme: input.target,
+      configuration: "Release",
+      generator: "xcodegen",
+    },
+    release: {
+      requireClean: true,
+      allowedBranches: ["main"],
+      artifactDirectory: ".build/apple-mobile",
+    },
+  };
+  const iconSize =
+    input.platform === "ios"
+      ? [{ idiom: "universal", platform: "ios", size: "1024x1024" }]
+      : [16, 32, 128, 256, 512].flatMap((size) =>
+          ["1x", "2x"].map((scale) => ({
+            idiom: "mac",
+            scale,
+            size: `${size}x${size}`,
+          })),
+        );
+  return {
+    [CONFIG_PATH]: json(config),
+    [XCODEGEN_SPEC]: projectSpec(input),
+    ".gitignore": [
+      "# Generated by XcodeGen from project.yml",
+      "*.xcodeproj",
+      "",
+      ".build/",
+      "DerivedData/",
+      "xcuserdata/",
+      ".DS_Store",
+      "",
+    ].join("\n"),
+    [`${input.target}/${input.target}App.swift`]: [
+      "import SwiftUI",
+      "",
+      "@main",
+      `struct ${input.target}App: App {`,
+      "    var body: some Scene {",
+      "        WindowGroup {",
+      "            ContentView()",
+      "        }",
+      "    }",
+      "}",
+      "",
+    ].join("\n"),
+    [`${input.target}/ContentView.swift`]: [
+      "import SwiftUI",
+      "",
+      "struct ContentView: View {",
+      "    var body: some View {",
+      "        VStack(spacing: 12) {",
+      '            Image(systemName: "sparkles")',
+      "                .font(.largeTitle)",
+      "                .foregroundStyle(.tint)",
+      `            Text(${JSON.stringify(input.name)})`,
+      "                .font(.title)",
+      "        }",
+      "        .padding()",
+      "    }",
+      "}",
+      "",
+      "#Preview {",
+      "    ContentView()",
+      "}",
+      "",
+    ].join("\n"),
+    [`${input.target}/Assets.xcassets/Contents.json`]: json({
+      info: { author: "xcode", version: 1 },
+    }),
+    [`${input.target}/Assets.xcassets/AppIcon.appiconset/Contents.json`]: json({
+      images: iconSize,
+      info: { author: "xcode", version: 1 },
+    }),
+    [`${input.target}/Assets.xcassets/AccentColor.colorset/Contents.json`]:
+      json({
+        colors: [{ idiom: "universal" }],
+        info: { author: "xcode", version: 1 },
+      }),
+    [`${input.target}Tests/${input.target}Tests.swift`]: [
+      "import Testing",
+      `@testable import ${input.target}`,
+      "",
+      `struct ${input.target}Tests {`,
+      "    @Test func launches() {",
+      "        _ = ContentView()",
+      "    }",
+      "}",
+      "",
+    ].join("\n"),
+    "README.md": [
+      `# ${input.name}`,
+      "",
+      `SwiftUI ${platformProfile(input.platform).xcodegen} app. The Xcode project is generated from \`project.yml\`:`,
+      "",
+      "```sh",
+      "xcodegen generate",
+      `open ${input.target}.xcodeproj`,
+      "```",
+      "",
+      "Version and build numbers live in `project.yml` (`MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`). Release builds get the next build number from App Store Connect automatically.",
+      "",
+      "Add a 1024×1024 app icon to `AppIcon` before submitting to the App Store.",
+      "",
+    ].join("\n"),
+  };
+}
+
+/** Writes a new SwiftUI app that the Apple mobile tools can build and release:
+ *  an XcodeGen spec, sources, tests, an asset catalog, and its
+ *  `.opensession/apple-mobile.json`. Never overwrites anything. */
+export function createApp(input: CreateAppInput) {
+  if (!input.projectDir || !isAbsolute(input.projectDir)) {
+    throw new Error("projectDir must be an absolute path");
+  }
+  const projectDir = resolve(input.projectDir);
+  const name = input.name?.trim();
+  if (!name) throw new Error("name is required");
+  if (!BUNDLE_ID.test(input.bundleId ?? "")) {
+    throw new Error("bundleId must look like com.example.App");
+  }
+  if (input.teamId !== undefined && !TEAM_ID.test(input.teamId)) {
+    throw new Error("teamId must be a 10-character Apple Developer Team ID");
+  }
+  const platform = input.platform ?? "ios";
+  if (platform !== "ios" && platform !== "macos") {
+    throw new Error("platform must be ios or macos");
+  }
+  const deploymentTarget =
+    input.deploymentTarget ?? DEPLOYMENT_TARGET[platform];
+  if (!/^\d+(?:\.\d+)?$/.test(deploymentTarget)) {
+    throw new Error("deploymentTarget must look like 18.0");
+  }
+  if (
+    existsSync(projectDir) &&
+    readdirSync(projectDir).some((entry) => entry !== ".git")
+  ) {
+    throw new Error(`${projectDir} already exists and is not empty`);
+  }
+  const target = targetName(name);
+  const written = files({
+    target,
+    name,
+    bundleId: input.bundleId,
+    teamId: input.teamId,
+    platform,
+    deploymentTarget,
+  });
+  for (const [path, content] of Object.entries(written)) {
+    const destination = join(projectDir, path);
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, content, { flag: "wx" });
+  }
+  return {
+    projectDir,
+    target,
+    scheme: target,
+    bundleId: input.bundleId,
+    platform,
+    files: Object.keys(written).sort(),
+    nextSteps: [
+      "Commit the project on main (release plans need a clean main branch).",
+      "Build it with apple_mobile_build_unsigned and preview it with start_simulator_portal.",
+      "With the release server: apple_release_register_bundle_id, then create the app record in App Store Connect (apple_release_app_status prints the exact values).",
+      "Then apple_release_plan_testflight; the build number is picked automatically.",
+    ],
+  };
+}

@@ -14,45 +14,46 @@ import {
 import { timingSafeEqual } from "node:crypto";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { homedir } from "node:os";
-import { loadConfig } from "./config";
+import { loadConfig, XCODEGEN_SPEC } from "./config";
+import { ascClient } from "./asc";
 import {
-  isWithin,
-  resolvePrivateKeyPath,
-  resolveProjectDir,
-  resolveProjectPath,
-} from "./security";
+  checkRelease,
+  checkSubmission,
+  findApp,
+  nextBuildNumber,
+} from "./app-store";
+import { requireDistribution } from "./platforms";
+import { isWithin, resolveProjectDir, resolveProjectPath } from "./security";
 import { runChecked } from "./exec";
+import { CREDENTIAL_REFS, credentials } from "./credentials";
+
+export { CREDENTIAL_REFS, credentials };
 import { enforceReleasePolicy } from "./project";
 import type {
   AppleMobileConfig,
+  ApplePlatform,
+  AppStoreReleaseType,
   CommandSpec,
   ReleaseAction,
   ReleasePlan,
+  StoreAction,
 } from "./types";
 
 const PLAN_TTL_MS = 60 * 60_000;
 const RELEASE_CHECKOUT_REF = "<APPLE_MOBILE_RELEASE_CHECKOUT>";
-export const CREDENTIAL_REFS = {
-  keyId: "<APPLE_ASC_KEY_ID>",
-  issuerId: "<APPLE_ASC_ISSUER_ID>",
-  keyPath: "<APPLE_ASC_PRIVATE_KEY_PATH>",
-} as const;
+export const EXPORTED_ARTIFACT_REF = "<exported-artifact>";
+const RELEASE_ACTIONS: readonly ReleaseAction[] = [
+  "adhoc",
+  "testflight",
+  "upload",
+  "submit",
+  "release",
+];
+const STORE_ACTIONS: readonly ReleaseAction[] = ["submit", "release"];
 
-export function credentials(required: boolean, projectDir?: string) {
-  const keyId = process.env.APPLE_ASC_KEY_ID;
-  const issuerId = process.env.APPLE_ASC_ISSUER_ID;
-  const keyPath = process.env.APPLE_ASC_PRIVATE_KEY_PATH;
-  if (required && (!keyId || !issuerId || !keyPath)) {
-    throw new Error(
-      "APPLE_ASC_KEY_ID, APPLE_ASC_ISSUER_ID, and APPLE_ASC_PRIVATE_KEY_PATH are required",
-    );
-  }
-  const resolvedKeyPath = keyPath
-    ? resolvePrivateKeyPath(keyPath, projectDir)
-    : undefined;
-  return { keyId, issuerId, keyPath: resolvedKeyPath };
+export function isStoreAction(action: ReleaseAction): action is StoreAction {
+  return STORE_ACTIONS.includes(action);
 }
-
 function xcodeArchiveCommand(
   projectDir: string,
   config: AppleMobileConfig,
@@ -67,7 +68,10 @@ function xcodeArchiveCommand(
   }
   credentials(true);
   const xcode = config.xcode;
-  resolveProjectPath(projectDir, xcode.path);
+  const profile = requireDistribution(config.platform);
+  resolveProjectPath(projectDir, xcode.path, {
+    mustExist: xcode.generator === undefined,
+  });
   const args = [
     xcode.container === "workspace" ? "-workspace" : "-project",
     join(RELEASE_CHECKOUT_REF, xcode.path),
@@ -76,7 +80,7 @@ function xcodeArchiveCommand(
     "-configuration",
     xcode.configuration ?? "Release",
     "-destination",
-    "generic/platform=iOS",
+    profile.archiveDestination,
     "-archivePath",
     archivePath,
     "-allowProvisioningUpdates",
@@ -92,7 +96,30 @@ function xcodeArchiveCommand(
   if (marketingVersion) args.push(`MARKETING_VERSION=${marketingVersion}`);
   if (buildNumber) args.push(`CURRENT_PROJECT_VERSION=${buildNumber}`);
   args.push("archive");
-  return { executable: "xcodebuild", args, cwd: RELEASE_CHECKOUT_REF };
+  return {
+    executable: "xcodebuild",
+    args,
+    cwd: RELEASE_CHECKOUT_REF,
+    step: "archive",
+  };
+}
+
+function generateCommand(config: AppleMobileConfig): CommandSpec[] {
+  if (config.xcode?.generator !== "xcodegen") return [];
+  return [
+    {
+      executable: "xcodegen",
+      args: [
+        "generate",
+        "--spec",
+        join(RELEASE_CHECKOUT_REF, XCODEGEN_SPEC),
+        "--project",
+        RELEASE_CHECKOUT_REF,
+      ],
+      cwd: RELEASE_CHECKOUT_REF,
+      step: "generate",
+    },
+  ];
 }
 
 function xcodeExportCommand(
@@ -120,20 +147,25 @@ function xcodeExportCommand(
       CREDENTIAL_REFS.issuerId,
     ],
     cwd: RELEASE_CHECKOUT_REF,
+    step: "export",
   };
 }
 
-function uploadCommand(ipaPlaceholder: string): CommandSpec {
+function uploadCommand(
+  platform: ApplePlatform,
+  artifactPlaceholder: string,
+): CommandSpec {
   credentials(true);
   return {
     executable: "xcrun",
+    step: "upload",
     args: [
       "altool",
       "--upload-app",
       "--type",
-      "ios",
+      requireDistribution(platform).uploadType,
       "--file",
-      ipaPlaceholder,
+      artifactPlaceholder,
       "--apiKey",
       CREDENTIAL_REFS.keyId,
       "--apiIssuer",
@@ -245,12 +277,17 @@ export interface ReleaseApprovalRequest {
   projectDir: string;
   commit: string;
   branch: string;
+  bundleId: string;
+  platform: ApplePlatform;
   createdAt: string;
   expiresAt: string;
   marketingVersion?: string;
   buildNumber?: string;
   sourceArtifactName?: string;
   sourceArtifactSha256?: string;
+  releaseType?: AppStoreReleaseType;
+  whatsNew?: string;
+  effects: string[];
 }
 
 interface ReleaseApprovalGrant {
@@ -330,12 +367,17 @@ function approvalRequest(plan: ReleasePlan): ReleaseApprovalRequest {
     projectDir: plan.projectDir,
     commit: plan.commit,
     branch: plan.branch,
+    bundleId: plan.bundleId,
+    platform: plan.platform,
     createdAt: plan.createdAt,
     expiresAt: plan.expiresAt,
     marketingVersion: plan.marketingVersion,
     buildNumber: plan.buildNumber,
     sourceArtifactName: plan.sourceArtifactName,
     sourceArtifactSha256: plan.sourceArtifactSha256,
+    releaseType: plan.releaseType,
+    whatsNew: plan.whatsNew,
+    effects: plan.effects,
   };
 }
 
@@ -356,7 +398,17 @@ function validApprovalRequest(
   return (
     request.schemaVersion === 1 &&
     request.planId === planId &&
-    ["adhoc", "testflight", "upload"].includes(request.action) &&
+    RELEASE_ACTIONS.includes(request.action) &&
+    typeof request.bundleId === "string" &&
+    (request.platform === "ios" || request.platform === "macos") &&
+    Array.isArray(request.effects) &&
+    request.effects.every((effect) => typeof effect === "string") &&
+    (!isStoreAction(request.action) ||
+      typeof request.marketingVersion === "string") &&
+    (request.action !== "submit" ||
+      (typeof request.buildNumber === "string" &&
+        (request.releaseType === "manual" ||
+          request.releaseType === "after_approval"))) &&
     typeof request.projectDir === "string" &&
     request.projectDir.length > 0 &&
     typeof request.commit === "string" &&
@@ -460,7 +512,7 @@ export function consumeReleaseApproval(
     renameSync(requestPath, requestClaimPath);
   } catch {
     throw new Error(
-      "Release plan needs approval in Settings → Integrations → Apple mobile",
+      "Release plan needs approval: use the card under the plan in the session, or Settings → Integrations → Apple mobile",
     );
   }
 
@@ -479,7 +531,7 @@ export function consumeReleaseApproval(
       );
     }
     throw new Error(
-      "Release plan needs approval in Settings → Integrations → Apple mobile",
+      "Release plan needs approval: use the card under the plan in the session, or Settings → Integrations → Apple mobile",
     );
   }
 
@@ -491,6 +543,12 @@ export function consumeReleaseApproval(
       request.projectDir !== plan.projectDir ||
       request.commit !== plan.commit ||
       request.action !== plan.action ||
+      request.bundleId !== plan.bundleId ||
+      request.platform !== plan.platform ||
+      request.marketingVersion !== plan.marketingVersion ||
+      request.buildNumber !== plan.buildNumber ||
+      request.releaseType !== plan.releaseType ||
+      request.whatsNew !== plan.whatsNew ||
       request.sourceArtifactName !== plan.sourceArtifactName ||
       request.sourceArtifactSha256 !== plan.sourceArtifactSha256 ||
       grant.schemaVersion !== 1 ||
@@ -564,34 +622,105 @@ async function persist(plan: ReleasePlan) {
   };
 }
 
+const MARKETING_VERSION = /^\d+(?:\.\d+){0,2}$/;
+const BUILD_NUMBER = /^\d+(?:\.\d+){0,2}$/;
+
+function checkedVersion(
+  value: string | undefined,
+  label: string,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (!MARKETING_VERSION.test(value)) {
+    throw new Error(`${label} must look like 1, 1.2, or 1.2.3`);
+  }
+  return value;
+}
+
+function checkedBuildNumber(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (!BUILD_NUMBER.test(value)) {
+    throw new Error("buildNumber must look like 42 or 1.2.3");
+  }
+  return value;
+}
+
+/** For TestFlight, an omitted build number becomes one above the highest
+ *  already in App Store Connect, so repeated uploads never collide. Ad-hoc
+ *  builds keep the project's number when the app is not in App Store Connect. */
+async function resolveBuildNumber(
+  action: "adhoc" | "testflight",
+  config: AppleMobileConfig,
+  projectDir: string,
+  requested: string | undefined,
+): Promise<{ buildNumber?: string; automatic: boolean }> {
+  if (requested) return { buildNumber: requested, automatic: false };
+  const client = ascClient(projectDir);
+  const app = await findApp(client, config.bundleId);
+  if (!app) {
+    if (action === "adhoc") return { automatic: false };
+    throw new Error(
+      `App Store Connect has no app with bundle ID ${config.bundleId}. Run apple_release_app_status for setup steps, or pass buildNumber.`,
+    );
+  }
+  return {
+    buildNumber: await nextBuildNumber(client, app.id),
+    automatic: true,
+  };
+}
+
 export async function createBuildPlan(
   projectDirInput: string,
-  action: Exclude<ReleaseAction, "upload">,
+  action: "adhoc" | "testflight",
   options: { marketingVersion?: string; buildNumber?: string } = {},
 ) {
   const projectDir = resolveProjectDir(projectDirInput);
   const { config, hash, git } = await enforceReleasePolicy(projectDir);
   ensureControlledState(projectDir);
   credentials(true, projectDir);
+  requireDistribution(config.platform);
+  const marketingVersion = checkedVersion(
+    options.marketingVersion,
+    "marketingVersion",
+  );
+  const { buildNumber, automatic } = await resolveBuildNumber(
+    action,
+    config,
+    projectDir,
+    checkedBuildNumber(options.buildNumber),
+  );
   const id = crypto.randomUUID();
   const outputDirectory = controlledOutputDirectory(id);
-  const archivePath = join(
-    outputDirectory,
-    `${config.xcode?.scheme ?? "App"}.xcarchive`,
-  );
+  const scheme = config.xcode?.scheme ?? "App";
+  const archivePath = join(outputDirectory, `${scheme}.xcarchive`);
   const exportPath = join(outputDirectory, "export");
   const plistPath = join(outputDirectory, "ExportOptions.plist");
   const commands = [
+    ...generateCommand(config),
     xcodeArchiveCommand(
       projectDir,
       config,
       archivePath,
-      options.marketingVersion,
-      options.buildNumber,
+      marketingVersion,
+      buildNumber,
     ),
     xcodeExportCommand(archivePath, exportPath, plistPath),
   ];
-  if (action === "testflight") commands.push(uploadCommand("<exported-ipa>"));
+  if (action === "testflight") {
+    commands.push(uploadCommand(config.platform, EXPORTED_ARTIFACT_REF));
+  }
+  const version = [
+    marketingVersion ? `version ${marketingVersion}` : "the project's version",
+    buildNumber
+      ? `build ${buildNumber}${automatic ? " (next after App Store Connect's latest)" : ""}`
+      : "the project's build number",
+  ].join(", ");
+  const effects = [
+    `Archive ${scheme} at ${git.commit.slice(0, 12)} as ${version}`,
+    "Xcode may create or renew signing certificates and profiles",
+    action === "adhoc"
+      ? "Export an ad-hoc signed app for registered devices"
+      : `Upload ${config.bundleId} to App Store Connect for TestFlight processing`,
+  ];
   const now = Date.now();
   const plan: ReleasePlan = {
     schemaVersion: 1,
@@ -601,10 +730,13 @@ export async function createBuildPlan(
     commit: git.commit,
     branch: git.branch,
     configHash: hash,
+    bundleId: config.bundleId,
+    platform: config.platform,
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + PLAN_TTL_MS).toISOString(),
-    marketingVersion: options.marketingVersion,
-    buildNumber: options.buildNumber,
+    marketingVersion,
+    buildNumber,
+    effects,
     outputDirectory,
     commands,
   };
@@ -619,9 +751,10 @@ export async function createUploadPlan(
   const { config, hash, git } = await enforceReleasePolicy(projectDir);
   ensureControlledState(projectDir);
   credentials(true, projectDir);
+  const profile = requireDistribution(config.platform);
   const artifact = resolveProjectPath(projectDir, artifactPath);
-  if (!artifact.endsWith(".ipa"))
-    throw new Error("Only .ipa uploads are supported");
+  if (!artifact.endsWith(profile.artifactExtension))
+    throw new Error(`Only ${profile.artifactExtension} uploads are supported`);
   const id = crypto.randomUUID();
   const approvedArtifact = await copyApprovedArtifact(artifact, id);
   const now = Date.now();
@@ -633,13 +766,18 @@ export async function createUploadPlan(
     commit: git.commit,
     branch: git.branch,
     configHash: hash,
+    bundleId: config.bundleId,
+    platform: config.platform,
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + PLAN_TTL_MS).toISOString(),
     sourceArtifact: approvedArtifact.path,
     sourceArtifactName: approvedArtifact.name,
     sourceArtifactSha256: approvedArtifact.sha256,
+    effects: [
+      `Upload ${approvedArtifact.name} (SHA-256 ${approvedArtifact.sha256.slice(0, 12)}…) to App Store Connect for TestFlight processing`,
+    ],
     outputDirectory: dirname(approvedArtifact.path),
-    commands: [uploadCommand(approvedArtifact.path)],
+    commands: [uploadCommand(config.platform, approvedArtifact.path)],
   };
   try {
     return await persist(plan);
@@ -647,6 +785,98 @@ export async function createUploadPlan(
     rmSync(controlledArtifactDirectory(id), { recursive: true, force: true });
     throw error;
   }
+}
+
+/** Plans an App Store Connect change that needs no build: submitting a
+ *  processed build for App Review, or releasing an approved version. The plan
+ *  is bound to the clean release commit like every other plan, so the same
+ *  branch policy governs who can ship. */
+export async function createStorePlan(
+  projectDirInput: string,
+  action: StoreAction,
+  options: {
+    marketingVersion: string;
+    buildNumber?: string;
+    releaseType?: AppStoreReleaseType;
+    whatsNew?: string;
+  },
+) {
+  const projectDir = resolveProjectDir(projectDirInput);
+  const { config, hash, git } = await enforceReleasePolicy(projectDir);
+  ensureControlledState(projectDir);
+  credentials(true, projectDir);
+  requireDistribution(config.platform);
+  const marketingVersion = checkedVersion(
+    options.marketingVersion,
+    "marketingVersion",
+  )!;
+  if (!marketingVersion) throw new Error("marketingVersion is required");
+  const client = ascClient(projectDir);
+  let effects: string[];
+  let buildNumber: string | undefined;
+  let releaseType: AppStoreReleaseType | undefined;
+  let whatsNew: string | undefined;
+  if (action === "submit") {
+    buildNumber = checkedBuildNumber(options.buildNumber);
+    if (!buildNumber) throw new Error("buildNumber is required");
+    releaseType = options.releaseType ?? "manual";
+    if (releaseType !== "manual" && releaseType !== "after_approval") {
+      throw new Error("releaseType must be manual or after_approval");
+    }
+    whatsNew = options.whatsNew?.trim() || undefined;
+    if (whatsNew && whatsNew.length > 4000) {
+      throw new Error("whatsNew must be at most 4000 characters");
+    }
+    const checked = await checkSubmission(client, {
+      bundleId: config.bundleId,
+      platform: config.platform,
+      marketingVersion,
+      buildNumber,
+    });
+    effects = [
+      checked.existingVersion
+        ? `Update App Store version ${marketingVersion} (${checked.existingVersion.state})`
+        : `Create App Store version ${marketingVersion}`,
+      `Attach build ${buildNumber}`,
+      ...(whatsNew ? ["Set What's New for every localization"] : []),
+      releaseType === "manual"
+        ? "After approval, wait for a separate release plan"
+        : "Release to the public automatically as soon as Apple approves it",
+      `Submit ${config.bundleId} ${marketingVersion} for App Review`,
+    ];
+  } else {
+    await checkRelease(client, {
+      bundleId: config.bundleId,
+      platform: config.platform,
+      marketingVersion,
+    });
+    effects = [
+      `Release ${config.bundleId} ${marketingVersion} to the public App Store now`,
+    ];
+  }
+  const id = crypto.randomUUID();
+  const now = Date.now();
+  const plan: ReleasePlan = {
+    schemaVersion: 1,
+    id,
+    action,
+    projectDir,
+    commit: git.commit,
+    branch: git.branch,
+    configHash: hash,
+    bundleId: config.bundleId,
+    platform: config.platform,
+    createdAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + PLAN_TTL_MS).toISOString(),
+    marketingVersion,
+    buildNumber,
+    releaseType,
+    whatsNew,
+    effects,
+    outputDirectory: controlledOutputDirectory(id),
+    commands: [],
+  };
+  return persist(plan);
 }
 
 export async function loadPlan(
@@ -665,9 +895,12 @@ export async function loadPlan(
   if (
     plan.schemaVersion !== 1 ||
     plan.id !== planId ||
-    plan.projectDir !== projectDir
+    plan.projectDir !== projectDir ||
+    !RELEASE_ACTIONS.includes(plan.action) ||
+    typeof plan.bundleId !== "string" ||
+    !Array.isArray(plan.effects)
   )
-    throw new Error("Invalid release plan");
+    throw new Error("Invalid release plan; create a new plan");
   if (Date.parse(plan.expiresAt) < Date.now()) {
     discardReleasePlan(planId);
     throw new Error("Release plan has expired");
@@ -707,7 +940,9 @@ function materializeCommand(
     ? join(RELEASE_CHECKOUT_REF, config.xcode.path)
     : undefined;
   const executionContainer = config.xcode
-    ? resolveProjectPath(checkoutDir, config.xcode.path)
+    ? resolveProjectPath(checkoutDir, config.xcode.path, {
+        mustExist: config.xcode.generator === undefined,
+      })
     : undefined;
   return {
     ...command,

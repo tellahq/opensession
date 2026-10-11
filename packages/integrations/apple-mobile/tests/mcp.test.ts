@@ -32,6 +32,7 @@ describe("MCP surfaces", () => {
     const result = await tools("build");
     const names = result.tools.map((tool) => tool.name);
     expect(names).toContain("apple_mobile_build_unsigned");
+    expect(names).toContain("apple_mobile_create_app");
     expect(names.some((name) => name.startsWith("apple_release"))).toBe(false);
   });
 
@@ -40,6 +41,14 @@ describe("MCP surfaces", () => {
     const names = result.tools.map((tool) => tool.name);
     expect(names).toContain("apple_release_plan_testflight");
     expect(names).toContain("apple_release_execute");
+    for (const name of [
+      "apple_release_app_status",
+      "apple_release_register_bundle_id",
+      "apple_release_testflight_distribute",
+      "apple_release_plan_submit",
+      "apple_release_plan_store_release",
+    ])
+      expect(names).toContain(name);
     expect(names.some((name) => name.startsWith("apple_mobile_build"))).toBe(
       false,
     );

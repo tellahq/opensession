@@ -20,6 +20,7 @@ import {
 import { InlineAlert } from "../ui/state";
 import { Switch } from "../ui/switch";
 import { toast } from "../ui/toast";
+import { AppleReleaseRequestDetails } from "./AppleReleaseRequest";
 import { IconTile } from "./BrandTile";
 import { LinkChips, StateChip } from "./setup-shared";
 
@@ -192,7 +193,7 @@ function AppleMobileSetupDialog({
             <div className="flex items-center gap-4">
               <div className="min-w-0 flex-1">
                 <div className="text-item-title font-medium text-fg">
-                  Ad-hoc and TestFlight releases
+                  Ad-hoc, TestFlight, and App Store releases
                 </div>
                 <div className="mt-0.5 text-supporting text-dim">
                   Xcode signing behind a reviewed, commit-bound release plan.
@@ -306,72 +307,7 @@ function AppleMobileSetupDialog({
                         className="rounded-control bg-surface p-3"
                       >
                         <div className="flex flex-wrap items-start gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="text-item-title font-medium text-fg">
-                              {request.action === "adhoc"
-                                ? "Ad-hoc export"
-                                : request.action === "testflight"
-                                  ? "TestFlight upload"
-                                  : "IPA upload"}
-                            </div>
-                            {request.marketingVersion || request.buildNumber ? (
-                              <div className="mt-1 text-meta text-dim">
-                                {request.marketingVersion ??
-                                  "Version unchanged"}
-                                {request.buildNumber
-                                  ? ` (${request.buildNumber})`
-                                  : ""}
-                              </div>
-                            ) : null}
-                            <dl className="m-0 mt-2 grid gap-1.5 text-meta">
-                              <div>
-                                <dt className="text-faint">Project</dt>
-                                <dd className="m-0">
-                                  <code className="block break-all text-dim">
-                                    {request.projectDir}
-                                  </code>
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="text-faint">Plan ID</dt>
-                                <dd className="m-0">
-                                  <code className="block break-all text-dim">
-                                    {request.planId}
-                                  </code>
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="text-faint">Commit</dt>
-                                <dd className="m-0">
-                                  <code className="block break-all text-dim">
-                                    {request.commit}
-                                  </code>
-                                </dd>
-                              </div>
-                              {request.action === "upload" ? (
-                                <>
-                                  <div>
-                                    <dt className="text-faint">Artifact</dt>
-                                    <dd className="m-0">
-                                      <code className="block break-all text-dim">
-                                        {request.sourceArtifactName ??
-                                          "Missing artifact name"}
-                                      </code>
-                                    </dd>
-                                  </div>
-                                  <div>
-                                    <dt className="text-faint">SHA-256</dt>
-                                    <dd className="m-0">
-                                      <code className="block break-all text-dim">
-                                        {request.sourceArtifactSha256 ??
-                                          "Missing artifact hash"}
-                                      </code>
-                                    </dd>
-                                  </div>
-                                </>
-                              ) : null}
-                            </dl>
-                          </div>
+                          <AppleReleaseRequestDetails request={request} />
                           <Button
                             size="sm"
                             className="phone:min-h-11"
