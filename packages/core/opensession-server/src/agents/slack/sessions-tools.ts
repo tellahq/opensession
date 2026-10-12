@@ -25,6 +25,8 @@ import {
   registerPrChecksAgentWait,
   registerSessionTurnAgentWait,
   registerTimerAgentWait,
+  registerWorkflowRunAgentWait,
+  describeWorkflowRunTarget,
 } from "../../server/agent-waits";
 import {
   configuredServer,
@@ -879,12 +881,30 @@ export function createSessionsMcpServer(
       // ---------------------------------------------------------------------
       tool(
         "wait_for",
-        "End this turn cleanly and wake this same session later without sleeping in a tool call. Register the wait, then write the human a normal status/final message and STOP the turn. A timer wakes after the requested delay. A pr_checks wait polls durably outside the model turn and starts a new turn as soon as a check fails or once the whole check set stays settled; it also wakes on PR close/merge or timeout. A check waiting on a person (an approval gate) never wakes it early, and a new pr_checks wait does not re-report checks an earlier wake already reported: it waits until they change (new head, new failure, rerun, approval). Use it for CI instead of polling gh pr checks, gh run watch, or a sleep loop. A session_turn wait wakes when ANOTHER session's turn ends (it goes idle, stops on a question for a human, fails, or is cancelled); the wake-up carries that session's final state and last assistant message, so use it after send_to_session instead of guessing a delay. An already idle target wakes you right away. One wait may be active per session, and a new one replaces it. Never call sleep after this tool succeeds.",
+        "End this turn cleanly and wake this same session later without sleeping in a tool call. Register the wait, then write the human a normal status/final message and STOP the turn. A timer wakes after the requested delay. A pr_checks wait polls durably outside the model turn and starts a new turn as soon as a check fails or once the whole check set stays settled; it also wakes on PR close/merge or timeout. A check waiting on a person (an approval gate) never wakes it early, and a new pr_checks wait does not re-report checks an earlier wake already reported: it waits until they change (new head, new failure, rerun, approval). Use it for CI instead of polling gh pr checks, gh run watch, or a sleep loop. A workflow_run wait watches one GitHub Actions run that need not belong to a PR (a release started by a tag push, a deploy, a workflow_dispatch): pass run_id, or workflow plus ref (branch, tag, or commit sha) to find a run that may not exist yet, so it can be registered right after the push. It wakes when the run completes, as soon as one of its jobs fails, or on timeout, with the conclusion, run URL, and failed jobs and steps; webhooks wake it within seconds and a durable poll covers the rest. A session_turn wait wakes when ANOTHER session's turn ends (it goes idle, stops on a question for a human, fails, or is cancelled); the wake-up carries that session's final state and last assistant message, so use it after send_to_session instead of guessing a delay. An already idle target wakes you right away. One wait may be active per session, and a new one replaces it. Never call sleep after this tool succeeds.",
         {
           kind: z
-            .enum(["timer", "pr_checks", "session_turn"])
+            .enum(["timer", "pr_checks", "workflow_run", "session_turn"])
             .describe(
-              "timer for a one-shot delay, pr_checks to wake when this branch's PR checks settle or one fails, or session_turn to wake when another session finishes its current turn.",
+              "timer for a one-shot delay, pr_checks to wake when this branch's PR checks settle or one fails, workflow_run to wake when one GitHub Actions run (with or without a PR) completes or a job fails, or session_turn to wake when another session finishes its current turn.",
+            ),
+          run_id: z
+            .number()
+            .optional()
+            .describe(
+              "GitHub Actions run id for kind=workflow_run (the number in .../actions/runs/<id>). Alternative to workflow plus ref.",
+            ),
+          workflow: z
+            .string()
+            .optional()
+            .describe(
+              "Workflow file name (such as release.yml) or numeric id for kind=workflow_run without run_id. The newest run for ref started from shortly before registration on is watched.",
+            ),
+          ref: z
+            .string()
+            .optional()
+            .describe(
+              "Branch, tag, or full commit sha the run was started for, with workflow for kind=workflow_run. Defaults to this session's primary branch.",
             ),
           session_id: z
             .string()
@@ -902,7 +922,7 @@ export function createSessionsMcpServer(
             .string()
             .optional()
             .describe(
-              "Registered repo id for kind=pr_checks. Defaults to this session's primary repo.",
+              "Registered repo id (or GitHub owner/name) for kind=pr_checks and kind=workflow_run. Defaults to this session's primary repo.",
             ),
           branch: z
             .string()
@@ -914,7 +934,7 @@ export function createSessionsMcpServer(
             .number()
             .optional()
             .describe(
-              "Maximum wait before waking anyway, for kind=pr_checks and kind=session_turn. Defaults to 2 hours, maximum 24 hours.",
+              "Maximum wait before waking anyway, for kind=pr_checks, kind=workflow_run, and kind=session_turn. Defaults to 2 hours, maximum 24 hours.",
             ),
           prompt: z
             .string()
@@ -925,8 +945,11 @@ export function createSessionsMcpServer(
         },
         async (
           args: {
-            kind: "timer" | "pr_checks" | "session_turn";
+            kind: "timer" | "pr_checks" | "workflow_run" | "session_turn";
             session_id?: string;
+            run_id?: number;
+            workflow?: string;
+            ref?: string;
             seconds?: number;
             repo?: string;
             branch?: string;
@@ -951,24 +974,39 @@ export function createSessionsMcpServer(
                   prompt: args.prompt,
                   waitId,
                 })
-              : args.kind === "session_turn"
-                ? await registerSessionTurnAgentWait({
+              : args.kind === "workflow_run"
+                ? await registerWorkflowRunAgentWait({
                     sessionId,
                     user: ctx.createdBy,
-                    targetSessionId: args.session_id || "",
+                    repo: args.repo || current?.repo || "",
+                    runId: args.run_id,
+                    workflow: args.workflow,
+                    ref:
+                      args.run_id == null
+                        ? args.ref || current?.branch || ""
+                        : args.ref,
                     timeoutSeconds: args.timeout_seconds,
                     prompt: args.prompt,
                     waitId,
                   })
-                : await registerPrChecksAgentWait({
-                    sessionId,
-                    user: ctx.createdBy,
-                    repo: args.repo || current?.repo || "",
-                    branch: args.branch || current?.branch || "",
-                    timeoutSeconds: args.timeout_seconds,
-                    prompt: args.prompt,
-                    waitId,
-                  });
+                : args.kind === "session_turn"
+                  ? await registerSessionTurnAgentWait({
+                      sessionId,
+                      user: ctx.createdBy,
+                      targetSessionId: args.session_id || "",
+                      timeoutSeconds: args.timeout_seconds,
+                      prompt: args.prompt,
+                      waitId,
+                    })
+                  : await registerPrChecksAgentWait({
+                      sessionId,
+                      user: ctx.createdBy,
+                      repo: args.repo || current?.repo || "",
+                      branch: args.branch || current?.branch || "",
+                      timeoutSeconds: args.timeout_seconds,
+                      prompt: args.prompt,
+                      waitId,
+                    });
           if (!result.ok) return text(result.error);
           audit({
             msg: "agent_wait_registered",
@@ -980,11 +1018,13 @@ export function createSessionsMcpServer(
           const when =
             result.wait.kind === "timer"
               ? new Date(result.wait.dueAt).toISOString()
-              : result.wait.kind === "session_turn"
-                ? result.wait.observedEndAt != null
-                  ? `right away: session ${result.wait.targetSessionId} is not running`
-                  : `when session ${result.wait.targetSessionId} finishes its turn (timeout ${new Date(result.wait.deadlineAt).toISOString()})`
-                : `when ${result.wait.repo}/${result.wait.branch} checks settle (timeout ${new Date(result.wait.deadlineAt).toISOString()})`;
+              : result.wait.kind === "workflow_run"
+                ? `when ${describeWorkflowRunTarget(result.wait)} completes or a job fails (timeout ${new Date(result.wait.deadlineAt).toISOString()})`
+                : result.wait.kind === "session_turn"
+                  ? result.wait.observedEndAt != null
+                    ? `right away: session ${result.wait.targetSessionId} is not running`
+                    : `when session ${result.wait.targetSessionId} finishes its turn (timeout ${new Date(result.wait.deadlineAt).toISOString()})`
+                  : `when ${result.wait.repo}/${result.wait.branch} checks settle (timeout ${new Date(result.wait.deadlineAt).toISOString()})`;
           return text(
             `Background wait \`${result.wait.id}\` registered for ${when}. ` +
               `${result.replaced ? "It replaced the previous wait. " : ""}` +
@@ -1005,6 +1045,14 @@ export function createSessionsMcpServer(
           if (wait.kind === "timer")
             return text(
               `Timer wait \`${wait.id}\` wakes at ${new Date(wait.dueAt).toISOString()}.`,
+            );
+          if (wait.kind === "workflow_run")
+            return text(
+              `Workflow run wait \`${wait.id}\` watches ${describeWorkflowRunTarget(wait)}` +
+                (wait.runUrl ? ` (${wait.runUrl})` : "") +
+                (wait.lastStatus ? `, last seen ${wait.lastStatus}` : "") +
+                (wait.lastError ? `; last check: ${wait.lastError}` : "") +
+                `; timeout ${new Date(wait.deadlineAt).toISOString()}.`,
             );
           if (wait.kind === "session_turn")
             return text(

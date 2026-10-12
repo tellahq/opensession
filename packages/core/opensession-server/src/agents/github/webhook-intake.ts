@@ -105,6 +105,19 @@ export async function handleGithubWebhook(req: Request): Promise<Response> {
       }
     }
 
+    // An Actions run moving pulls any workflow_run wait on it forward. Before
+    // the PR-cache handler, which drops default-branch and tag activity.
+    if (
+      event === "workflow_run" ||
+      event === "workflow_job" ||
+      event === "check_run"
+    )
+      import("../../server/agent-waits")
+        .then((m) => m.observeWorkflowRunWebhook(event, payload))
+        .catch((e) =>
+          console.error("[github] workflow run wait dispatch failed:", e),
+        );
+
     // Sync PR caches for every delivery; the cache handler filters events itself.
     import("../../server/pr-webhook")
       .then((m) => m.handlePrWebhookEvent(event, payload))

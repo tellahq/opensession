@@ -210,12 +210,14 @@ export function buildRunInstructions(input: {
   // CI was the biggest case: runs polled `gh pr checks` in until-loops for
   // ~20 minutes a PR, because this section only offered the loop and
   // schedule_prompt. wait_for pr_checks ends the turn and wakes on the first
-  // failure or once the checks settle.
+  // failure or once the checks settle. A release started by a tag push has
+  // no PR, so it needs wait_for workflow_run or it falls back to a timer.
   parts.push(
     "## Waiting\nNever wait with a fixed `sleep N`. " +
       (inproc["opensession-sessions"]
         ? "For PR checks or CI, call `wait_for` with kind `pr_checks` and end your turn; " +
-          "never poll `gh pr checks`, `gh run watch`, or a sleep loop. "
+          "for an Actions run without a PR (a release tag), kind `workflow_run`. " +
+          "Never poll `gh pr checks`, `gh run watch`, or a sleep loop. "
         : "") +
       "For anything else short, poll until done or " +
       "failed under a hard cap, e.g. " +

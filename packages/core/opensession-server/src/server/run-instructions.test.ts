@@ -194,7 +194,10 @@ describe("buildRunInstructions", () => {
     // quarter of active agent time on PR work.
     // The table line in Media adds ~220: multi-PR summaries came out as
     // paragraphs that a table scans faster.
-    expect(prompt.length).toBeLessThan(3_880);
+    // The workflow_run clause in Waiting adds ~70: a release run started by a
+    // tag has no PR, and without it agents polled `gh run view` or guessed a
+    // timer.
+    expect(prompt.length).toBeLessThan(3_950);
   });
 
   test("asks for visual proof by default only where walkthroughs are mounted", () => {
@@ -253,11 +256,13 @@ describe("buildRunInstructions", () => {
     );
     expect(waiting).toContain(
       "For PR checks or CI, call `wait_for` with kind `pr_checks` and end your turn; " +
-        "never poll `gh pr checks`, `gh run watch`, or a sleep loop.",
+        "for an Actions run without a PR (a release tag), kind `workflow_run`. " +
+        "Never poll `gh pr checks`, `gh run watch`, or a sleep loop.",
     );
     expect(waiting).toContain("For anything else short, poll until done");
     expect(prompt).not.toMatch(/schedule_prompt`?[^.\n]*\bCI\b/);
     expect(prompt).toContain("Use `wait_for` kind `pr_checks` for PR checks");
+    expect(prompt).toContain("`workflow_run` for an Actions run with no PR");
   });
 
   test("tells a sandboxed run where it is, in one shared paragraph", () => {

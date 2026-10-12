@@ -24,6 +24,13 @@
  * unsettled. The event bus also retains each session's last turn end, so a
  * boundary that passes while registration or a poll is mid-await is still
  * detected instead of being mistaken for the next turn.
+ *
+ * A workflow_run wait watches one GitHub Actions run that may belong to no
+ * PR, such as a release started by a tag push. It names the run by id, or by
+ * workflow plus a branch, tag, or sha, so it can be registered before the
+ * push has created the run. It polls the same durable timer as pr_checks and
+ * wakes when the run completes, when a job fails while others still run, or
+ * on timeout.
  */
 import { randomUUIDv7 } from "bun";
 import { configuredRepos, type Repo } from "./config";
@@ -57,6 +64,16 @@ import {
   type SessionTurnEnd,
 } from "./session-state-events";
 import type { TranscriptEntry } from "./types";
+import {
+  FAILED_CONCLUSIONS,
+  getWorkflowRun,
+  isCommitSha,
+  listWorkflowRunJobs,
+  listWorkflowRuns,
+  WorkflowRunNotFoundError,
+  type WorkflowRun,
+  type WorkflowRunJob,
+} from "./github-workflow-runs";
 
 const TIMER_KIND = "agent_wait";
 const TIMER_ID = "agent-wait";
@@ -72,6 +89,12 @@ const PR_FULL_READ_EVERY_MS = 5 * 60_000;
 /** How often a wait re-reads checks that still match what an earlier wake
  * already reported. */
 const PR_UNCHANGED_POLL_MS = 2 * 60_000;
+const DEFAULT_WORKFLOW_RUN_POLL_SECONDS = 45;
+const DEFAULT_WORKFLOW_RUN_TIMEOUT_SECONDS = 2 * 60 * 60;
+/** How long before registration a branch or tag run may have started and
+ * still be the one the wait means: the agent usually pushes first and
+ * registers the wait a few seconds later. Older runs need a run id. */
+const WORKFLOW_RUN_LOOKBACK_MS = 15 * 60_000;
 const DEFAULT_SESSION_TURN_POLL_SECONDS = 30;
 const DEFAULT_SESSION_TURN_TIMEOUT_SECONDS = 2 * 60 * 60;
 /** Tail of the target's last assistant message carried in the wake-up. */
@@ -114,6 +137,32 @@ export interface PrChecksAgentWait {
   unchangedSince?: number;
 }
 
+export interface WorkflowRunAgentWait {
+  version: 1;
+  id: string;
+  sessionId: string;
+  kind: "workflow_run";
+  user: string;
+  prompt: string;
+  /** Registered repo id or GitHub owner/name. */
+  repo: string;
+  /** The run, given at registration or found from workflow and ref. */
+  runId?: number;
+  /** Workflow file name (`release.yml`) or numeric id, to find the run. */
+  workflow?: string;
+  /** Branch, tag, or full commit sha the run was started for. */
+  ref?: string;
+  createdAt: number;
+  deadlineAt: number;
+  pollSeconds: number;
+  lastError?: string;
+  /** The run's status at the last successful read, for the timeout. */
+  lastStatus?: string;
+  runUrl?: string;
+  /** Set while the run still looks exactly as an earlier wake reported it. */
+  unchangedSince?: number;
+}
+
 /** How a watched session's turn ended, as reported in the wake-up. */
 export type SessionTurnOutcome =
   | "idle"
@@ -150,7 +199,8 @@ export interface SessionTurnAgentWait {
 export type AgentWait =
   | TimerAgentWait
   | PrChecksAgentWait
-  | SessionTurnAgentWait;
+  | SessionTurnAgentWait
+  | WorkflowRunAgentWait;
 
 export type AgentWaitRegistration =
   | { ok: true; wait: AgentWait; replaced: boolean }
@@ -184,6 +234,16 @@ function isAgentWait(value: unknown): value is AgentWait {
       typeof turn.targetSessionId === "string" &&
       typeof turn.deadlineAt === "number" &&
       typeof turn.pollSeconds === "number"
+    );
+  }
+  if (wait.kind === "workflow_run") {
+    const run = wait as Partial<WorkflowRunAgentWait>;
+    return (
+      typeof run.repo === "string" &&
+      typeof run.deadlineAt === "number" &&
+      typeof run.pollSeconds === "number" &&
+      (typeof run.runId === "number" ||
+        (typeof run.workflow === "string" && typeof run.ref === "string"))
     );
   }
   if (wait.kind !== "pr_checks") return false;
@@ -362,6 +422,101 @@ export async function registerPrChecksAgentWait(input: {
     payload: wait,
   });
   return { ok: true, wait, replaced: !!current };
+}
+
+export async function registerWorkflowRunAgentWait(input: {
+  sessionId: string;
+  user: string;
+  repo: string;
+  runId?: number;
+  workflow?: string;
+  ref?: string;
+  prompt?: string;
+  timeoutSeconds?: number;
+  pollSeconds?: number;
+  waitId?: string;
+  now?: number;
+  /** The repository registry; tests pass their own. */
+  repos?: Record<string, Repo>;
+}): Promise<AgentWaitRegistration> {
+  const sessionId = input.sessionId.trim();
+  const repo = input.repo.trim();
+  const workflow = input.workflow?.trim() || "";
+  const ref = input.ref?.trim() || "";
+  const runId = input.runId;
+  if (!sessionId)
+    return { ok: false, error: "Current session id is required." };
+  if (!repo)
+    return {
+      ok: false,
+      error: "Repository is required for a workflow_run wait.",
+    };
+  const target = resolvePrWaitRepo(repo, input.repos);
+  if (!target)
+    return {
+      ok: false,
+      error: `Unknown repository "${repo}". Pass a registered repo id or a GitHub owner/name.`,
+    };
+  if (!target.github)
+    return {
+      ok: false,
+      error: `Repository "${repo}" is not on GitHub, so it has no Actions runs to watch.`,
+    };
+  if (runId != null && !(Number.isSafeInteger(runId) && runId > 0))
+    return { ok: false, error: "run_id must be a positive integer." };
+  if (runId == null && (!workflow || !ref))
+    return {
+      ok: false,
+      error:
+        "A workflow_run wait needs run_id, or workflow (such as release.yml) plus ref (the branch, tag, or commit sha the run was started for).",
+    };
+  const now = input.now ?? Date.now();
+  const pollSeconds = boundedSeconds(
+    input.pollSeconds,
+    DEFAULT_WORKFLOW_RUN_POLL_SECONDS,
+    15,
+  );
+  const timeoutSeconds = boundedSeconds(
+    input.timeoutSeconds,
+    DEFAULT_WORKFLOW_RUN_TIMEOUT_SECONDS,
+    pollSeconds,
+  );
+  const wait: WorkflowRunAgentWait = {
+    version: 1,
+    id: input.waitId || `wait-${randomUUIDv7()}`,
+    sessionId,
+    kind: "workflow_run",
+    user: input.user.trim() || "Anonymous",
+    prompt:
+      input.prompt?.trim() ||
+      "Inspect the workflow run result. Fix failures if needed, then finish the task.",
+    repo,
+    ...(runId != null ? { runId } : {}),
+    ...(workflow ? { workflow } : {}),
+    ...(ref ? { ref } : {}),
+    createdAt: now,
+    deadlineAt: now + timeoutSeconds * 1000,
+    pollSeconds,
+  };
+  const current = await getAgentWait(sessionId);
+  if (current?.id === wait.id)
+    return { ok: true, wait: current, replaced: false };
+  // The first look comes sooner than the poll interval: a run that already
+  // finished should not cost a full interval.
+  await sessionKernel(sessionId).scheduleTimer({
+    timerId: TIMER_ID,
+    kind: TIMER_KIND,
+    dueAt: Math.min(wait.deadlineAt, now + 15_000),
+    payload: wait,
+  });
+  watchWorkflowRun(wait, input.repos);
+  return { ok: true, wait, replaced: !!current };
+}
+
+/** What a workflow_run wait is watching, for status lines. */
+export function describeWorkflowRunTarget(wait: WorkflowRunAgentWait): string {
+  if (wait.runId != null) return `${wait.repo} Actions run ${wait.runId}`;
+  return `${wait.repo} workflow ${wait.workflow} for ${wait.ref}`;
 }
 
 /** The authoritative reads a session_turn wait classifies a target with.
@@ -862,6 +1017,21 @@ export interface AgentWaitHandlerDeps {
   transcriptTail: (id: string, n: number) => Promise<TranscriptEntry[]>;
   /** Re-arm the in-process listener for a still-running target. */
   watch: (wait: SessionTurnAgentWait) => void;
+  /** One Actions run by id (REST). */
+  getWorkflowRun: (repo: string, runId: number) => Promise<WorkflowRun>;
+  /** Newest runs of a workflow for a branch, tag, or sha (REST). */
+  listWorkflowRuns: (
+    repo: string,
+    workflow: string,
+    ref: string,
+  ) => Promise<WorkflowRun[]>;
+  /** The latest attempt's jobs with their failed steps (REST). */
+  listWorkflowRunJobs: (
+    repo: string,
+    runId: number,
+  ) => Promise<WorkflowRunJob[]>;
+  /** Re-arm the webhook index for a wait that keeps polling. */
+  watchWorkflowRun: (wait: WorkflowRunAgentWait) => void;
 }
 
 export function agentWaitWakePrompt(wait: AgentWait, message: string): string {
@@ -926,10 +1096,23 @@ const defaultHandlerDeps: AgentWaitHandlerDeps = {
   lastTurnEnd: lastSessionTurnEnd,
   transcriptTail: (id, n) => getSessionControl().transcriptTail(id, n),
   watch: watchSessionTurn,
+  getWorkflowRun: (repo, runId) =>
+    getWorkflowRun(workflowRunHostRepo(repo), runId),
+  listWorkflowRuns: (repo, workflow, ref) =>
+    listWorkflowRuns(workflowRunHostRepo(repo), workflow, ref),
+  listWorkflowRunJobs: (repo, runId) =>
+    listWorkflowRunJobs(workflowRunHostRepo(repo), runId),
+  watchWorkflowRun: (wait) => watchWorkflowRun(wait),
 };
 
+function workflowRunHostRepo(repo: string): string {
+  const target = resolvePrWaitRepo(repo);
+  if (!target?.github) throw new Error(`Unknown GitHub repository "${repo}".`);
+  return target.hostRepo;
+}
+
 function nextPrPoll(
-  wait: PrChecksAgentWait | SessionTurnAgentWait,
+  wait: PrChecksAgentWait | SessionTurnAgentWait | WorkflowRunAgentWait,
   now: number,
 ): number {
   return Math.min(wait.deadlineAt, now + wait.pollSeconds * 1000);
@@ -1116,6 +1299,9 @@ export async function handleAgentWait(
   if (wait.kind === "session_turn")
     return handleSessionTurnWait(wait, deps, now);
 
+  if (wait.kind === "workflow_run")
+    return handleWorkflowRunWait(wait, deps, now);
+
   if (now >= wait.deadlineAt) {
     const detail = wait.lastError ? ` Last check: ${wait.lastError}` : "";
     await deps.deliver(
@@ -1253,6 +1439,345 @@ export async function handleAgentWait(
   );
   notePrChecksReport(wait, signature, now);
   return "delivered";
+}
+
+// --- workflow_run waits -------------------------------------------------------
+
+/**
+ * What each session's last workflow_run wake reported. A wait re-armed for
+ * the same run (after rerunning failed jobs, say) would otherwise wake at once
+ * on the old result, because GitHub keeps showing the finished attempt until
+ * the rerun starts. It waits instead until the run differs: a new attempt, a
+ * new failed job, or completion. In memory for the same reason as
+ * prChecksReports: a lost record costs one repeated wake.
+ */
+interface WorkflowRunReport {
+  repo: string;
+  signature: string;
+  at: number;
+}
+const workflowRunReports = new Map<string, WorkflowRunReport>();
+
+function noteWorkflowRunReport(
+  wait: WorkflowRunAgentWait,
+  signature: string,
+  at: number,
+): void {
+  for (const [id, report] of workflowRunReports)
+    if (at - report.at > PR_CHECKS_REPORT_TTL_MS) workflowRunReports.delete(id);
+  workflowRunReports.set(wait.sessionId, { repo: wait.repo, signature, at });
+}
+
+function workflowRunAlreadyReported(
+  wait: WorkflowRunAgentWait,
+  signature: string,
+  now: number,
+): boolean {
+  const report = workflowRunReports.get(wait.sessionId);
+  return (
+    !!report &&
+    now - report.at <= PR_CHECKS_REPORT_TTL_MS &&
+    report.repo === wait.repo &&
+    report.signature === signature
+  );
+}
+
+export function __resetWorkflowRunWaitsForTest(): void {
+  workflowRunReports.clear();
+  workflowRunWatchState.watchers.clear();
+}
+
+function jobFailed(job: WorkflowRunJob): boolean {
+  return job.status === "completed" && FAILED_CONCLUSIONS.has(job.conclusion);
+}
+
+function describeFailedJobs(jobs: WorkflowRunJob[]): string {
+  const failed = jobs.filter(jobFailed);
+  if (!failed.length) return "";
+  return (
+    "Failed jobs:\n" +
+    failed
+      .map(
+        (job) =>
+          `- ${job.name} (${job.conclusion})` +
+          (job.failedSteps.length
+            ? `: failed step ${job.failedSteps.join(", ")}`
+            : ""),
+      )
+      .join("\n")
+  );
+}
+
+function runLabel(wait: WorkflowRunAgentWait, run: WorkflowRun): string {
+  const attempt = run.runAttempt > 1 ? `, attempt ${run.runAttempt}` : "";
+  return `Workflow "${run.name}" run ${run.id} in ${wait.repo} (${run.event || "run"} on ${run.headBranch || run.headSha.slice(0, 12)}${attempt})`;
+}
+
+/** The self-contained wake-up for a finished or failing workflow run. */
+export function workflowRunWakeMessage(input: {
+  wait: WorkflowRunAgentWait;
+  run: WorkflowRun;
+  jobs: WorkflowRunJob[] | null;
+}): string {
+  const { wait, run, jobs } = input;
+  const done = run.status === "completed";
+  const lines = [
+    done
+      ? `${runLabel(wait, run)} completed: ${run.conclusion || "no conclusion"}.`
+      : `${runLabel(wait, run)} has a failed job while others still run (status ${run.status}).`,
+  ];
+  if (run.url) lines.push(`Run: ${run.url}`);
+  if (jobs) {
+    const failed = describeFailedJobs(jobs);
+    if (failed) lines.push(failed);
+    const running = jobs.filter((job) => job.status !== "completed").length;
+    if (!done && running) lines.push(`${running} jobs still running.`);
+  } else if (run.conclusion !== "success")
+    lines.push("Its jobs could not be read; open the run for details.");
+  if (run.conclusion !== "success")
+    lines.push(
+      `Read failed logs with \`gh run view ${run.id} --repo ${resolvePrWaitRepo(wait.repo)?.hostRepo || wait.repo} --log-failed\`.`,
+    );
+  return lines.join("\n\n");
+}
+
+/** Pick the run a workflow-and-ref wait means: the newest one started no
+ * earlier than shortly before registration. */
+function pickWorkflowRun(
+  wait: WorkflowRunAgentWait,
+  runs: WorkflowRun[],
+): WorkflowRun | undefined {
+  const ref = (wait.ref || "").toLowerCase();
+  return runs
+    .filter(
+      (run) =>
+        run.createdAt >= wait.createdAt - WORKFLOW_RUN_LOOKBACK_MS &&
+        (isCommitSha(ref)
+          ? run.headSha.toLowerCase() === ref
+          : run.headBranch.toLowerCase() === ref),
+    )
+    .sort((a, b) => b.createdAt - a.createdAt || b.id - a.id)[0];
+}
+
+async function handleWorkflowRunWait(
+  wait: WorkflowRunAgentWait,
+  deps: AgentWaitHandlerDeps,
+  now: number,
+): Promise<"delivered" | "rescheduled"> {
+  const reschedule = (
+    next: WorkflowRunAgentWait,
+    dueAt = nextPrPoll(next, now),
+  ) => {
+    deps.watchWorkflowRun(next);
+    deps.schedule(next, dueAt);
+    return "rescheduled" as const;
+  };
+  if (now >= wait.deadlineAt) {
+    const detail = wait.lastError ? ` Last check: ${wait.lastError}` : "";
+    const where = wait.runUrl ? ` Run: ${wait.runUrl}` : "";
+    await deps.deliver(
+      wait,
+      wait.unchangedSince != null
+        ? `Background wait timed out: ${describeWorkflowRunTarget(wait)} has not changed since the last wake reported it.${where}${detail}`
+        : wait.runId == null
+          ? `Background wait timed out: no run of ${describeWorkflowRunTarget(wait)} started.${detail}`
+          : `Background wait timed out while ${describeWorkflowRunTarget(wait)} was still ${wait.lastStatus || "running"}.${where}${detail}`,
+    );
+    return "delivered";
+  }
+
+  let run: WorkflowRun | undefined;
+  try {
+    if (wait.runId != null)
+      run = await deps.getWorkflowRun(wait.repo, wait.runId);
+    else
+      run = pickWorkflowRun(
+        wait,
+        await deps.listWorkflowRuns(wait.repo, wait.workflow!, wait.ref!),
+      );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // A wrong workflow name or run id never fixes itself: say so now rather
+    // than at the timeout.
+    if (error instanceof WorkflowRunNotFoundError) {
+      await deps.deliver(
+        wait,
+        `Cannot watch ${describeWorkflowRunTarget(wait)}: GitHub answered ${message.slice(0, 300)}`,
+      );
+      return "delivered";
+    }
+    return reschedule({ ...wait, lastError: message.slice(0, 300) });
+  }
+  if (!run)
+    return reschedule({
+      ...wait,
+      lastError: `No run of ${wait.workflow} for ${wait.ref} has started yet.`,
+    });
+  wait = {
+    ...wait,
+    runId: run.id,
+    runUrl: run.url || wait.runUrl,
+    lastStatus: run.status,
+    lastError: undefined,
+  };
+
+  // Jobs name what failed, and show a failure before the whole run ends.
+  let jobs: WorkflowRunJob[] | null = null;
+  try {
+    jobs = await deps.listWorkflowRunJobs(wait.repo, run.id);
+  } catch {}
+
+  const done = run.status === "completed";
+  const failedJobs = (jobs || [])
+    .filter(jobFailed)
+    .map((job) => job.name)
+    .sort();
+  if (!done && !failedJobs.length)
+    return reschedule({ ...wait, unchangedSince: undefined });
+  const signature = done
+    ? `done\0${run.id}\0${run.runAttempt}\0${run.conclusion}`
+    : `failing\0${run.id}\0${run.runAttempt}\0${failedJobs.join("\0")}`;
+  if (workflowRunAlreadyReported(wait, signature, now)) {
+    const next = { ...wait, unchangedSince: wait.unchangedSince ?? now };
+    // A finished run changes only on a rerun, so look less often.
+    return reschedule(
+      next,
+      done
+        ? Math.min(
+            next.deadlineAt,
+            now + Math.max(next.pollSeconds * 1000, PR_UNCHANGED_POLL_MS),
+          )
+        : nextPrPoll(next, now),
+    );
+  }
+  await deps.deliver(wait, workflowRunWakeMessage({ wait, run, jobs }));
+  // Only after delivery: a failed delivery retries and must not find its own
+  // report and go quiet.
+  noteWorkflowRunReport(wait, signature, now);
+  return "delivered";
+}
+
+// Process-local index from GitHub repo to the sessions with a workflow_run
+// wait on it, so a webhook delivery can pull the durable poll forward. Not
+// durable, like the turn watcher: registration and every poll re-add the
+// entry, and a restart at worst falls back to the poll interval.
+type WorkflowRunWatchState = { watchers: Map<string, Set<string>> };
+const workflowRunWatchState: WorkflowRunWatchState = ((
+  globalThis as typeof globalThis & {
+    __opensessionWorkflowRunWatchers?: WorkflowRunWatchState;
+  }
+).__opensessionWorkflowRunWatchers ??= { watchers: new Map() });
+
+function watchWorkflowRun(
+  wait: WorkflowRunAgentWait,
+  repos?: Record<string, Repo>,
+): void {
+  const target = resolvePrWaitRepo(wait.repo, repos);
+  if (!target?.github) return;
+  const key = target.hostRepo.toLowerCase();
+  let waiting = workflowRunWatchState.watchers.get(key);
+  if (!waiting) {
+    waiting = new Set();
+    workflowRunWatchState.watchers.set(key, waiting);
+  }
+  waiting.add(wait.sessionId);
+}
+
+/** What a webhook delivery says about an Actions run, enough to match it. */
+interface WorkflowRunSignal {
+  runId?: number;
+  headBranch?: string;
+  headSha?: string;
+}
+
+function workflowRunSignal(
+  event: string,
+  payload: any,
+): WorkflowRunSignal | null {
+  if (event === "workflow_run" || event === "workflow_job") {
+    const raw =
+      event === "workflow_run" ? payload?.workflow_run : payload?.workflow_job;
+    const runId = Number(event === "workflow_run" ? raw?.id : raw?.run_id);
+    if (!raw) return null;
+    return {
+      ...(runId > 0 ? { runId } : {}),
+      headBranch: String(raw.head_branch || ""),
+      headSha: String(raw.head_sha || ""),
+    };
+  }
+  // An Actions job is also a check run. Only a finished failure matters:
+  // starts and successes do not change what the wait would report.
+  if (event === "check_run" && payload?.action === "completed") {
+    const check = payload?.check_run;
+    if (!FAILED_CONCLUSIONS.has(String(check?.conclusion || ""))) return null;
+    const match = String(check?.details_url || "").match(
+      /\/actions\/runs\/(\d+)\//,
+    );
+    if (!match) return null;
+    return {
+      runId: Number(match[1]),
+      headBranch: String(check?.check_suite?.head_branch || ""),
+      headSha: String(check?.head_sha || ""),
+    };
+  }
+  return null;
+}
+
+function signalMatches(
+  wait: WorkflowRunAgentWait,
+  signal: WorkflowRunSignal,
+): boolean {
+  if (wait.runId != null) return signal.runId === wait.runId;
+  const ref = (wait.ref || "").toLowerCase();
+  return isCommitSha(ref)
+    ? (signal.headSha || "").toLowerCase() === ref
+    : (signal.headBranch || "").toLowerCase() === ref;
+}
+
+/**
+ * A GitHub webhook delivery about an Actions run. Pull each matching wait's
+ * durable poll forward to now; the handler still reads the run itself, so a
+ * forged or stale delivery can only cause an early look, never a wake.
+ */
+export async function observeWorkflowRunWebhook(
+  event: string,
+  payload: any,
+): Promise<void> {
+  const fullName = String(payload?.repository?.full_name || "").toLowerCase();
+  const waiting = fullName
+    ? workflowRunWatchState.watchers.get(fullName)
+    : undefined;
+  if (!waiting?.size) return;
+  const signal = workflowRunSignal(event, payload);
+  if (!signal) return;
+  let pulled = false;
+  for (const sessionId of [...waiting]) {
+    const timer = await sessionTimerSnapshot(sessionId, TIMER_ID);
+    const wait =
+      timer?.kind === TIMER_KIND && isAgentWait(timer.payload)
+        ? timer.payload
+        : undefined;
+    if (wait?.kind !== "workflow_run") {
+      waiting.delete(sessionId);
+      continue;
+    }
+    if (!signalMatches(wait, signal)) continue;
+    // Already due means a look is queued or running. Rescheduling then
+    // would mint a new token over the running handler and could bring back
+    // a wait it is about to deliver.
+    if (timer!.dueAt <= Date.now() + 2_000) continue;
+    // Index entries are removed lazily; the poll re-adds a live one.
+    waiting.delete(sessionId);
+    await sessionKernel(sessionId).scheduleTimer({
+      timerId: TIMER_ID,
+      kind: TIMER_KIND,
+      dueAt: Date.now(),
+      payload: wait,
+    });
+    pulled = true;
+  }
+  if (!waiting.size) workflowRunWatchState.watchers.delete(fullName);
+  if (pulled) requestSessionKernelRuntimeDrain();
 }
 
 registerSessionTimerHandler(TIMER_KIND, async (timer: DurableTimer) => {

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   __resetPrChecksWakesForTest,
+  __resetWorkflowRunWaitsForTest,
+  observeWorkflowRunWebhook,
+  registerWorkflowRunAgentWait,
+  type WorkflowRunAgentWait,
   agentWaitWakePrompt,
   cancelAgentWait,
   getAgentWait,
@@ -30,6 +34,7 @@ import {
   setPrimarySessionRunning,
 } from "../session-state-events";
 import type { TranscriptEntry } from "../types";
+import type { WorkflowRun, WorkflowRunJob } from "../github-workflow-runs";
 import { SessionKernelStore, __setSessionKernelStoreForTest } from ".";
 
 let store: SessionKernelStore;
@@ -39,6 +44,7 @@ beforeEach(() => {
   store = new SessionKernelStore(":memory:");
   previousStore = __setSessionKernelStoreForTest(store);
   __resetPrChecksWakesForTest();
+  __resetWorkflowRunWaitsForTest();
 });
 
 afterEach(() => {
@@ -62,6 +68,12 @@ function handlerDeps(
     lastTurnEnd: () => undefined,
     transcriptTail: async () => [],
     watch: () => {},
+    getWorkflowRun: async () => {
+      throw new Error("unexpected run read");
+    },
+    listWorkflowRuns: async () => [],
+    listWorkflowRunJobs: async () => [],
+    watchWorkflowRun: () => {},
     ...overrides,
   };
 }
@@ -1228,5 +1240,346 @@ describe("PR wait cheap check read", () => {
     await handleAgentWait(scheduled.at(-1)!, deps);
     expect(fullReads).toBe(5);
     expect(delivered).toEqual([]);
+  });
+});
+
+function run(extra: Partial<WorkflowRun> = {}): WorkflowRun {
+  return {
+    id: 777,
+    name: "Release",
+    status: "in_progress",
+    conclusion: "",
+    url: "https://github.com/acme/example/actions/runs/777",
+    headBranch: "v2.0",
+    headSha: "a".repeat(40),
+    event: "push",
+    runNumber: 12,
+    runAttempt: 1,
+    createdAt: 1_000,
+    ...extra,
+  };
+}
+
+function job(
+  name: string,
+  conclusion = "",
+  failedSteps: string[] = [],
+): WorkflowRunJob {
+  return {
+    name,
+    status: conclusion ? "completed" : "in_progress",
+    conclusion,
+    failedSteps,
+  };
+}
+
+function workflowWait(
+  extra: Partial<WorkflowRunAgentWait> = {},
+): WorkflowRunAgentWait {
+  return {
+    version: 1,
+    id: "wait-run",
+    sessionId: "s1",
+    kind: "workflow_run",
+    user: "Jaap",
+    prompt: "Continue.",
+    repo: "example",
+    workflow: "release.yml",
+    ref: "v2.0",
+    createdAt: 2_000,
+    deadlineAt: 1_000_000,
+    pollSeconds: 45,
+    ...extra,
+  };
+}
+
+describe("workflow run waits", () => {
+  test("registration needs a run id, or a workflow plus ref, on GitHub", async () => {
+    const base = { sessionId: "s1", user: "Jaap", repos: TEST_REPOS };
+    expect(
+      await registerWorkflowRunAgentWait({ ...base, repo: "example" }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await registerWorkflowRunAgentWait({
+        ...base,
+        repo: "example",
+        workflow: "release.yml",
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await registerWorkflowRunAgentWait({ ...base, repo: "notes", runId: 1 }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await registerWorkflowRunAgentWait({
+        ...base,
+        repo: "example",
+        runId: -3,
+      }),
+    ).toMatchObject({ ok: false });
+    expect(await getAgentWait("s1")).toBeUndefined();
+
+    const registered = await registerWorkflowRunAgentWait({
+      ...base,
+      repo: "example",
+      workflow: "release.yml",
+      ref: "v2.0",
+      waitId: "call-1",
+      now: 10_000,
+    });
+    expect(registered).toMatchObject({ ok: true, replaced: false });
+    expect(await getAgentWait("s1")).toMatchObject({
+      kind: "workflow_run",
+      workflow: "release.yml",
+      ref: "v2.0",
+      deadlineAt: 10_000 + 2 * 60 * 60 * 1000,
+    });
+    // One wait per session: a run-id wait replaces it.
+    expect(
+      await registerWorkflowRunAgentWait({
+        ...base,
+        repo: "example",
+        runId: 777,
+        waitId: "call-2",
+      }),
+    ).toMatchObject({ ok: true, replaced: true });
+    expect(await getAgentWait("s1")).toMatchObject({
+      id: "call-2",
+      runId: 777,
+    });
+  });
+
+  test("finds a run that did not exist at registration, then wakes on completion", async () => {
+    const delivered: string[] = [];
+    const scheduled: WorkflowRunAgentWait[] = [];
+    let runs: WorkflowRun[] = [];
+    const deps = handlerDeps({
+      now: () => 60_000,
+      listWorkflowRuns: async (repo, workflow, ref) => {
+        expect([repo, workflow, ref]).toEqual([
+          "example",
+          "release.yml",
+          "v2.0",
+        ]);
+        return runs;
+      },
+      getWorkflowRun: async () =>
+        run({ status: "completed", conclusion: "success" }),
+      schedule: (wait) => {
+        scheduled.push(wait as WorkflowRunAgentWait);
+      },
+      deliver: async (_wait, message) => {
+        delivered.push(message);
+      },
+    });
+
+    expect(await handleAgentWait(workflowWait(), deps)).toBe("rescheduled");
+    expect(scheduled.at(-1)?.lastError).toContain("No run of release.yml");
+
+    // A run for the same tag from long before registration is not this one.
+    runs = [run({ id: 500, createdAt: 2_000 - 60 * 60_000 })];
+    expect(await handleAgentWait(workflowWait(), deps)).toBe("rescheduled");
+    expect(scheduled.at(-1)?.runId).toBeUndefined();
+
+    runs = [run({ id: 500, createdAt: 2_000 - 60 * 60_000 }), run()];
+    expect(await handleAgentWait(workflowWait(), deps)).toBe("rescheduled");
+    const found = scheduled.at(-1)!;
+    expect(found).toMatchObject({
+      runId: 777,
+      lastStatus: "in_progress",
+      runUrl: "https://github.com/acme/example/actions/runs/777",
+    });
+    expect(delivered).toEqual([]);
+
+    // Later polls read the run by id.
+    expect(await handleAgentWait(found, deps)).toBe("delivered");
+    expect(delivered.at(-1)).toContain("completed: success");
+    expect(delivered.at(-1)).toContain(
+      "https://github.com/acme/example/actions/runs/777",
+    );
+  });
+
+  test("wakes on the first failed job and names its failed steps", async () => {
+    const delivered: string[] = [];
+    const scheduled: WorkflowRunAgentWait[] = [];
+    let jobs = [job("build"), job("notarize")];
+    const deps = handlerDeps({
+      now: () => 60_000,
+      getWorkflowRun: async () => run(),
+      listWorkflowRunJobs: async () => jobs,
+      schedule: (wait) => {
+        scheduled.push(wait as WorkflowRunAgentWait);
+      },
+      deliver: async (_wait, message) => {
+        delivered.push(message);
+      },
+    });
+    const wait = workflowWait({ runId: 777 });
+    expect(await handleAgentWait(wait, deps)).toBe("rescheduled");
+
+    jobs = [job("build", "failure", ["Archive", "Sign"]), job("notarize")];
+    expect(await handleAgentWait(wait, deps)).toBe("delivered");
+    expect(delivered.at(-1)).toContain(
+      "has a failed job while others still run",
+    );
+    expect(delivered.at(-1)).toContain(
+      "- build (failure): failed step Archive, Sign",
+    );
+    expect(delivered.at(-1)).toContain("1 jobs still running.");
+    expect(delivered.at(-1)).toContain("gh run view 777");
+
+    // Re-armed on the same run: the known failure does not wake it again,
+    // completion does.
+    expect(await handleAgentWait(wait, deps)).toBe("rescheduled");
+    expect(delivered).toHaveLength(1);
+    deps.getWorkflowRun = async () =>
+      run({ status: "completed", conclusion: "failure" });
+    jobs = [job("build", "failure", ["Archive"]), job("notarize", "skipped")];
+    expect(await handleAgentWait(wait, deps)).toBe("delivered");
+    expect(delivered.at(-1)).toContain("completed: failure");
+    expect(delivered.at(-1)).not.toContain("notarize");
+  });
+
+  test("a finished run is reported once, and a rerun attempt wakes again", async () => {
+    const delivered: string[] = [];
+    const scheduled: Array<{ wait: WorkflowRunAgentWait; dueAt: number }> = [];
+    let current = run({ status: "completed", conclusion: "failure" });
+    const deps = handlerDeps({
+      now: () => 60_000,
+      getWorkflowRun: async () => current,
+      listWorkflowRunJobs: async () => {
+        throw new Error("jobs unavailable");
+      },
+      schedule: (wait, dueAt) => {
+        scheduled.push({ wait: wait as WorkflowRunAgentWait, dueAt });
+      },
+      deliver: async (_wait, message) => {
+        delivered.push(message);
+      },
+    });
+    const wait = workflowWait({ runId: 777 });
+    expect(await handleAgentWait(wait, deps)).toBe("delivered");
+    expect(delivered.at(-1)).toContain("Its jobs could not be read");
+
+    expect(await handleAgentWait(wait, deps)).toBe("rescheduled");
+    expect(scheduled.at(-1)!.wait.unchangedSince).toBe(60_000);
+    expect(scheduled.at(-1)!.dueAt).toBe(60_000 + 2 * 60_000);
+
+    current = run({ runAttempt: 2 });
+    expect(await handleAgentWait(wait, deps)).toBe("rescheduled");
+    current = run({
+      runAttempt: 2,
+      status: "completed",
+      conclusion: "success",
+    });
+    expect(await handleAgentWait(wait, deps)).toBe("delivered");
+    expect(delivered.at(-1)).toContain("attempt 2");
+    expect(delivered.at(-1)).toContain("completed: success");
+  });
+
+  test("a missing workflow wakes at once, transient errors and timeout do not lose detail", async () => {
+    const delivered: string[] = [];
+    const scheduled: WorkflowRunAgentWait[] = [];
+    const { WorkflowRunNotFoundError } =
+      await import("../github-workflow-runs");
+    const deps = handlerDeps({
+      now: () => 60_000,
+      schedule: (wait) => {
+        scheduled.push(wait as WorkflowRunAgentWait);
+      },
+      deliver: async (_wait, message) => {
+        delivered.push(message);
+      },
+    });
+    deps.listWorkflowRuns = async () => {
+      throw new Error("GitHub REST 502");
+    };
+    expect(await handleAgentWait(workflowWait(), deps)).toBe("rescheduled");
+    expect(scheduled.at(-1)?.lastError).toBe("GitHub REST 502");
+
+    deps.listWorkflowRuns = async () => {
+      throw new WorkflowRunNotFoundError("Not Found");
+    };
+    expect(await handleAgentWait(workflowWait(), deps)).toBe("delivered");
+    expect(delivered.at(-1)).toContain(
+      "Cannot watch example workflow release.yml for v2.0",
+    );
+
+    expect(
+      await handleAgentWait(
+        workflowWait({
+          runId: 777,
+          lastStatus: "waiting",
+          runUrl: "https://github.com/acme/example/actions/runs/777",
+        }),
+        { ...deps, now: () => 1_000_000 },
+      ),
+    ).toBe("delivered");
+    expect(delivered.at(-1)).toContain(
+      "timed out while example Actions run 777 was still waiting",
+    );
+  });
+
+  test("a matching webhook delivery pulls the durable poll forward", async () => {
+    const now = Date.now();
+    await registerWorkflowRunAgentWait({
+      sessionId: "s1",
+      user: "Jaap",
+      repo: "acme/example",
+      workflow: "release.yml",
+      ref: "v2.0",
+      waitId: "call-1",
+      now,
+    });
+    await registerWorkflowRunAgentWait({
+      sessionId: "s2",
+      user: "Jaap",
+      repo: "acme/example",
+      runId: 900,
+      waitId: "call-2",
+      now,
+    });
+    const dueAt = async (id: string) =>
+      (await store.timer(id, "agent-wait"))!.dueAt;
+    expect(await dueAt("s1")).toBe(now + 15_000);
+
+    const repository = { full_name: "Acme/Example" };
+    // Another ref, another repo, and a successful check run change nothing.
+    await observeWorkflowRunWebhook("workflow_run", {
+      repository,
+      workflow_run: { id: 1, head_branch: "main" },
+    });
+    await observeWorkflowRunWebhook("workflow_run", {
+      repository: { full_name: "acme/other" },
+      workflow_run: { id: 900, head_branch: "v2.0" },
+    });
+    await observeWorkflowRunWebhook("check_run", {
+      action: "completed",
+      repository,
+      check_run: {
+        conclusion: "success",
+        details_url: "https://github.com/acme/example/actions/runs/900/job/1",
+      },
+    });
+    expect(await dueAt("s1")).toBe(now + 15_000);
+    expect(await dueAt("s2")).toBe(now + 15_000);
+
+    await observeWorkflowRunWebhook("workflow_run", {
+      repository,
+      workflow_run: { id: 778, head_branch: "v2.0" },
+    });
+    expect(await dueAt("s1")).toBeLessThanOrEqual(Date.now());
+    expect(await dueAt("s2")).toBe(now + 15_000);
+
+    // A failed Actions job names its run in the check run's details URL.
+    await observeWorkflowRunWebhook("check_run", {
+      action: "completed",
+      repository,
+      check_run: {
+        conclusion: "failure",
+        details_url: "https://github.com/acme/example/actions/runs/900/job/5",
+      },
+    });
+    expect(await dueAt("s2")).toBeLessThanOrEqual(Date.now());
+    expect(await getAgentWait("s2")).toMatchObject({ id: "call-2" });
   });
 });
