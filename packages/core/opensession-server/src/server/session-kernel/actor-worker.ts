@@ -378,6 +378,8 @@ export function startSessionKernelActorWorker(): void {
         } else if (command.kind === "timer") {
           const timer = command.request;
           if (timer.op === "schedule") result = store.scheduleTimer(timer);
+          else if (timer.op === "pull_forward")
+            result = store.pullTimerForward(timer);
           else if (timer.op === "cancel")
             result = store.cancelTimer(timer.sessionId, timer.timerId);
           else if (timer.op === "begin")

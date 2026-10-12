@@ -4895,6 +4895,37 @@ export class SessionKernelStore {
       : undefined;
   }
 
+  /** Move a timer earlier without minting a new token, only while it still
+   * carries `token`, is not yet due, and has not started or failed an
+   * attempt. Returns whether the timer moved. */
+  pullTimerForward(input: {
+    sessionId: string;
+    timerId: string;
+    token: string;
+    dueAt: number;
+  }): boolean {
+    if (!input.timerId || !input.token || !Number.isFinite(input.dueAt))
+      throw new Error("Invalid timer pull-forward");
+    const now = Date.now();
+    const result = this.db.run(
+      `UPDATE session_kernel_timers SET due_at = ?, next_attempt_at = ?
+       WHERE session_id = ? AND timer_id = ? AND token = ? AND attempts = 0
+         AND dead_lettered_at IS NULL AND due_at > ? AND next_attempt_at > ?
+         AND due_at > ?`,
+      [
+        input.dueAt,
+        input.dueAt,
+        input.sessionId,
+        input.timerId,
+        input.token,
+        now,
+        now,
+        input.dueAt,
+      ],
+    );
+    return result.changes > 0;
+  }
+
   cancelTimer(sessionId: string, timerId: string): void {
     this.db.run(
       "DELETE FROM session_kernel_timers WHERE session_id = ? AND timer_id = ?",

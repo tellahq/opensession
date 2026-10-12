@@ -66,6 +66,7 @@ const SESSION_INPUT_METHODS = new Set([
   "completeCommandDecision",
   "setRunState",
   "scheduleTimer",
+  "pullTimerForward",
   "requestGatewayCommand",
   "completeGatewayCommand",
   "failGatewayCommand",

@@ -1583,3 +1583,98 @@ describe("workflow run waits", () => {
     expect(await getAgentWait("s2")).toMatchObject({ id: "call-2" });
   });
 });
+
+describe("workflow run webhook fencing", () => {
+  const delivery = {
+    repository: { full_name: "acme/example" },
+    workflow_run: { id: 778, head_branch: "v2.0" },
+  };
+
+  async function register(sessionId: string, waitId: string, now: number) {
+    await registerWorkflowRunAgentWait({
+      sessionId,
+      user: "Jaap",
+      repo: "acme/example",
+      workflow: "release.yml",
+      ref: "v2.0",
+      waitId,
+      now,
+    });
+  }
+
+  /** Run `between` right after the webhook's timer snapshot is read. */
+  function afterSnapshot(between: () => void) {
+    const original = store.timer.bind(store);
+    let fired = false;
+    store.timer = ((sessionId: string, timerId: string) => {
+      const snapshot = original(sessionId, timerId);
+      if (!fired && snapshot) {
+        fired = true;
+        between();
+      }
+      return snapshot;
+    }) as typeof store.timer;
+    return () => {
+      store.timer = original;
+    };
+  }
+
+  test("a cancel between snapshot and update is not undone", async () => {
+    await register("s1", "call-1", Date.now());
+    const restore = afterSnapshot(() => store.cancelTimer("s1", "agent-wait"));
+    try {
+      await observeWorkflowRunWebhook("workflow_run", delivery);
+    } finally {
+      restore();
+    }
+    expect(await getAgentWait("s1")).toBeUndefined();
+  });
+
+  test("a replacement between snapshot and update keeps the new wait as is", async () => {
+    const now = Date.now();
+    await register("s1", "call-1", now);
+    const restore = afterSnapshot(() =>
+      store.scheduleTimer({
+        sessionId: "s1",
+        timerId: "agent-wait",
+        kind: "agent_wait",
+        dueAt: now + 60_000,
+        payload: { ...workflowWait({ id: "call-2" }), createdAt: now },
+      }),
+    );
+    try {
+      await observeWorkflowRunWebhook("workflow_run", delivery);
+    } finally {
+      restore();
+    }
+    expect(await getAgentWait("s1")).toMatchObject({ id: "call-2" });
+    expect(store.timer("s1", "agent-wait")!.dueAt).toBe(now + 60_000);
+  });
+
+  test("pull-forward keeps the token and never moves a due timer", async () => {
+    const now = Date.now();
+    await register("s1", "call-1", now);
+    const before = store.timer("s1", "agent-wait")!;
+    expect(
+      store.pullTimerForward({
+        sessionId: "s1",
+        timerId: "agent-wait",
+        token: "other-token",
+        dueAt: now,
+      }),
+    ).toBe(false);
+    await observeWorkflowRunWebhook("workflow_run", delivery);
+    const after = store.timer("s1", "agent-wait")!;
+    expect(after.token).toBe(before.token);
+    expect(after.dueAt).toBeLessThanOrEqual(Date.now());
+    // Already due: a second delivery leaves it alone.
+    expect(
+      store.pullTimerForward({
+        sessionId: "s1",
+        timerId: "agent-wait",
+        token: after.token,
+        dueAt: after.dueAt - 1_000,
+      }),
+    ).toBe(false);
+  });
+});

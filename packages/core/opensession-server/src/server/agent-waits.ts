@@ -1762,18 +1762,20 @@ export async function observeWorkflowRunWebhook(
       continue;
     }
     if (!signalMatches(wait, signal)) continue;
-    // Already due means a look is queued or running. Rescheduling then
-    // would mint a new token over the running handler and could bring back
-    // a wait it is about to deliver.
-    if (timer!.dueAt <= Date.now() + 2_000) continue;
     // Index entries are removed lazily; the poll re-adds a live one.
     waiting.delete(sessionId);
-    await sessionKernel(sessionId).scheduleTimer({
-      timerId: TIMER_ID,
-      kind: TIMER_KIND,
-      dueAt: Date.now(),
-      payload: wait,
-    });
+    // Fenced on the snapshot's token inside the actor: a cancel or a
+    // replacement that lands after the snapshot makes this a no-op, so a
+    // delivery can never resurrect or overwrite a wait. A timer that is
+    // already due (a look queued or running) is left alone too.
+    if (
+      !(await sessionKernel(sessionId).pullTimerForward({
+        timerId: TIMER_ID,
+        token: timer!.token,
+        dueAt: Date.now(),
+      }))
+    )
+      continue;
     pulled = true;
   }
   if (!waiting.size) workflowRunWatchState.watchers.delete(fullName);

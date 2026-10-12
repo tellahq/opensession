@@ -161,6 +161,8 @@ export async function sessionTimer<T extends TimerActorRequest>(
   const store = compatibilityStoreForTest("turn");
   if (request.op === "schedule")
     return store.scheduleTimer(request) as TimerActorResult<T>;
+  if (request.op === "pull_forward")
+    return store.pullTimerForward(request) as TimerActorResult<T>;
   if (request.op === "cancel")
     return store.cancelTimer(
       request.sessionId,
@@ -736,6 +738,21 @@ export class SessionKernel {
       op: "schedule",
       sessionId: this.sessionId,
       ...timer,
+    });
+  }
+
+  /** Move this timer earlier only while it is the same timer (same token)
+   * and not yet due. A cancel or replacement in between makes it a no-op,
+   * so a stale observer can never resurrect or overwrite a wait. */
+  pullTimerForward(input: {
+    timerId: string;
+    token: string;
+    dueAt: number;
+  }): Promise<boolean> {
+    return sessionTimer({
+      op: "pull_forward",
+      sessionId: this.sessionId,
+      ...input,
     });
   }
 
