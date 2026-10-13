@@ -683,6 +683,53 @@ export function SessionViewerMainRegion({
     entries,
   });
 
+  // Its own value so the compiler memoizes it on the transcript's inputs
+  // alone. Inside the region's JSX it shared one scope with every panel and
+  // session-list prop, so a background session's update re-rendered the
+  // whole transcript.
+  const transcriptView = (
+    <TranscriptView
+      openSettlePending={openSettlePending}
+      assetPaths={assetPaths}
+      toolPathRoots={toolPathRoots}
+      liveSubagents={liveSubagents}
+      openAsset={openAssetFromTranscript}
+      onRender={onTranscriptRender}
+      entries={entries}
+      optimisticEntries={optimisticTranscriptEntries}
+      pendingDeliveryIds={pendingTranscriptDeliveryIds}
+      transcriptIndex={transcriptIndex ?? undefined}
+      historyLoading={loadingHistory}
+      transcriptRangeRetryGeneration={transcriptRangeRetryGeneration}
+      onLoadTranscriptRanges={loadTranscriptRanges}
+      onVisibleRangesSettled={onVisibleRangesSettled}
+      live={isBusy}
+      sessionId={session.id}
+      liveTurnStore={liveTurnStore}
+      shouldMaintainEnd={shouldMaintainEnd}
+      onLayout={relayout}
+      reviewResult={reviewResult}
+      onEditMessage={editSentMessageInComposer}
+      // Same gate the composer sends under: a busy session
+      // is already continuing, and one you cannot type into
+      // must not offer a button that types for you.
+      onContinue={
+        connected && !isBusy && !noEngine ? continueAfterFailure : undefined
+      }
+      walkthrough={sessionWalkthrough}
+      notes={notes}
+      slackShare={shippedChangeShare}
+      onFork={canForkSession ? handleFork : undefined}
+      onOpenSubagent={openSubagent}
+      // For automation-owned sessions (e.g. a GitHub PR run), the
+      // automation never *types* a user turn — humans steer them.
+      // So don't credit un-attributed turns to the automation
+      // ("GitHub (automation)"); leave the owner unset so they read
+      // as "You" (explicit [Name] steers still show the teammate).
+      owner={session.automation ? undefined : session.startedBy || undefined}
+    />
+  );
+
   return (
     <div
       /* The last class is what the floating action band covers, paid for
@@ -1010,54 +1057,7 @@ export function SessionViewerMainRegion({
                     Empty transcript
                   </div>
                 ) : (
-                  <TranscriptView
-                    openSettlePending={openSettlePending}
-                    assetPaths={assetPaths}
-                    toolPathRoots={toolPathRoots}
-                    liveSubagents={liveSubagents}
-                    openAsset={openAssetFromTranscript}
-                    onRender={onTranscriptRender}
-                    entries={entries}
-                    optimisticEntries={optimisticTranscriptEntries}
-                    pendingDeliveryIds={pendingTranscriptDeliveryIds}
-                    transcriptIndex={transcriptIndex ?? undefined}
-                    historyLoading={loadingHistory}
-                    transcriptRangeRetryGeneration={
-                      transcriptRangeRetryGeneration
-                    }
-                    onLoadTranscriptRanges={loadTranscriptRanges}
-                    onVisibleRangesSettled={onVisibleRangesSettled}
-                    live={isBusy}
-                    sessionId={session.id}
-                    liveTurnStore={liveTurnStore}
-                    shouldMaintainEnd={shouldMaintainEnd}
-                    onLayout={relayout}
-                    reviewResult={reviewResult}
-                    onEditMessage={editSentMessageInComposer}
-                    // Same gate the composer sends under: a busy session
-                    // is already continuing, and one you cannot type into
-                    // must not offer a button that types for you.
-                    onContinue={
-                      connected && !isBusy && !noEngine
-                        ? continueAfterFailure
-                        : undefined
-                    }
-                    walkthrough={sessionWalkthrough}
-                    notes={notes}
-                    slackShare={shippedChangeShare}
-                    onFork={canForkSession ? handleFork : undefined}
-                    onOpenSubagent={openSubagent}
-                    // For automation-owned sessions (e.g. a GitHub PR run), the
-                    // automation never *types* a user turn — humans steer them.
-                    // So don't credit un-attributed turns to the automation
-                    // ("GitHub (automation)"); leave the owner unset so they read
-                    // as "You" (explicit [Name] steers still show the teammate).
-                    owner={
-                      session.automation
-                        ? undefined
-                        : session.startedBy || undefined
-                    }
-                  />
+                  transcriptView
                 )}
               </AnimatePresence>
 

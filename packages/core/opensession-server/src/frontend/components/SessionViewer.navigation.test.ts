@@ -156,7 +156,7 @@ test("duplicate session stays available at the current tip inside a workspace", 
   expect(viewer).not.toContain("{!workspaceScopedMenu && forkAction}");
   expect(viewer).toContain("                handleFork();");
   expect(conversation).toContain(
-    "void navigation.duplicateSession(messageId);",
+    "void navigationRef.current.duplicateSession(messageId);",
   );
   const forkAction = conversation.slice(
     conversation.indexOf("const handleFork ="),

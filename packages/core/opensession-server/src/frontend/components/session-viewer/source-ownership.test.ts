@@ -150,6 +150,8 @@ test("the main conversation region owns its complete bounded JSX contract", asyn
   for (const group of groups) {
     expect(interfaceMemberCount(region, group), group).toBeLessThanOrEqual(15);
   }
+  // Hoisted so the compiler memoizes the transcript apart from the region.
+  expect(region).toContain("const transcriptView = (\n    <TranscriptView");
   expect(region).not.toMatch(/\buse(?:Memo|Callback)\(/);
   expect(region).not.toMatch(/\b(?:any|ts-ignore|ts-expect-error)\b/);
 });
