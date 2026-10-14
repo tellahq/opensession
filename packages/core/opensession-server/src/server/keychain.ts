@@ -261,6 +261,21 @@ function persist(): void {
 
 let asyncWrites: Promise<void> = Promise.resolve();
 
+let credentialMutations: Promise<unknown> = Promise.resolve();
+
+/**
+ * Run an async credential change (add, update, delete) as one transaction:
+ * its check, its in-memory change, its write and, if the write fails, its
+ * rollback, before the next one starts. Serializing only the write would let
+ * a rollback undo a later change, e.g. bring back a credential deleted while
+ * an update of it was being saved.
+ */
+function serializeCredentialMutation<T>(run: () => Promise<T>): Promise<T> {
+  const result = credentialMutations.then(run);
+  credentialMutations = result.catch(() => {});
+  return result;
+}
+
 /**
  * Persist without blocking the calling thread, for request handlers on the
  * gateway. Writes are serialized, and each one re-writes if the store changed
@@ -600,27 +615,44 @@ export async function addCredentialAsync(
   input: AddCredentialInput,
 ): Promise<KeychainCredentialMeta> {
   await ensureKeychainLoaded();
-  const cred = insertCredential(input);
-  try {
-    await persistAsync();
-  } catch (error) {
-    credentials.delete(cred.id);
-    await persistAsync().catch(() => {});
-    // A filesystem error names the store path, never the secret.
-    console.error("[keychain] failed to save credential:", error);
-    throw new Error("couldn't write the keychain store");
-  }
-  return auditAdded(cred);
+  return serializeCredentialMutation(async () => {
+    const cred = insertCredential(input);
+    try {
+      await persistAsync();
+    } catch (error) {
+      // Only if nothing synchronous replaced or removed it meanwhile.
+      if (credentials.get(cred.id) === cred) credentials.delete(cred.id);
+      await persistAsync().catch(() => {});
+      // A filesystem error names the store path, never the secret.
+      console.error("[keychain] failed to save credential:", error);
+      throw new Error("couldn't write the keychain store");
+    }
+    return auditAdded(cred);
+  });
 }
 
 /** Revoke a credential's active grants in memory, without persisting.
  *  Returns what was revoked, so a failed write can put it back. */
-function revokeGrantsOf(id: string): KeychainGrant[] {
-  const revoked: KeychainGrant[] = [];
+interface RevokedGrant {
+  id: string;
+  /** The grant as it was before. */
+  before: KeychainGrant;
+  /** The object revoked in place, to tell whether anything touched it since. */
+  revoked: KeychainGrant;
+  revokedAt: string;
+}
+
+function revokeGrantsOf(id: string): RevokedGrant[] {
+  const revoked: RevokedGrant[] = [];
   const now = new Date().toISOString();
   for (const gr of grants.values()) {
     if (gr.credentialId === id && gr.status === "active") {
-      revoked.push({ ...gr });
+      revoked.push({
+        id: gr.id,
+        before: { ...gr },
+        revoked: gr,
+        revokedAt: now,
+      });
       gr.status = "revoked";
       gr.revokedAt = now;
     }
@@ -628,8 +660,18 @@ function revokeGrantsOf(id: string): KeychainGrant[] {
   return revoked;
 }
 
-function restoreGrants(previous: KeychainGrant[]): void {
-  for (const gr of previous) grants.set(gr.id, gr);
+/** Undo revokeGrantsOf after a failed write, for each grant still exactly
+ *  as this revocation left it. */
+function restoreGrants(previous: RevokedGrant[]): void {
+  for (const r of previous) {
+    const now = grants.get(r.id);
+    if (
+      now === r.revoked &&
+      now.status === "revoked" &&
+      now.revokedAt === r.revokedAt
+    )
+      grants.set(r.id, r.before);
+  }
 }
 
 /** The credential `id` for `by`, its owner. Throws with a message safe to
@@ -674,28 +716,31 @@ export async function deleteCredentialAsync(
   by: string,
 ): Promise<KeychainCredentialMeta | null> {
   await ensureKeychainLoaded();
-  if (!credentials.has(id)) return null;
-  const cred = ownedCredential(id, by, "delete");
-  credentials.delete(id);
-  const revoked = revokeGrantsOf(id);
-  try {
-    await persistAsync();
-  } catch (error) {
-    credentials.set(id, cred);
-    restoreGrants(revoked);
-    await persistAsync().catch(() => {});
-    console.error("[keychain] failed to delete credential:", error);
-    throw new Error("couldn't write the keychain store");
-  }
-  for (const gr of revoked) notifyRevoked(gr.id);
-  auditAsync({
-    kind: "keychain_credential_deleted",
-    credential_id: id,
-    service: cred.service,
-    by,
-    grants_revoked: revoked.length,
+  return serializeCredentialMutation(async () => {
+    if (!credentials.has(id)) return null;
+    const cred = ownedCredential(id, by, "delete");
+    credentials.delete(id);
+    const revoked = revokeGrantsOf(id);
+    try {
+      await persistAsync();
+    } catch (error) {
+      // Only if nothing synchronous re-added the id meanwhile.
+      if (!credentials.has(id)) credentials.set(id, cred);
+      restoreGrants(revoked);
+      await persistAsync().catch(() => {});
+      console.error("[keychain] failed to delete credential:", error);
+      throw new Error("couldn't write the keychain store");
+    }
+    for (const gr of revoked) notifyRevoked(gr.id);
+    auditAsync({
+      kind: "keychain_credential_deleted",
+      credential_id: id,
+      service: cred.service,
+      by,
+      grants_revoked: revoked.length,
+    });
+    return meta(cred);
   });
-  return meta(cred);
 }
 
 /** The fields of a credential an update may change. Its id, owner, service
@@ -777,85 +822,89 @@ export async function updateCredentialAsync(
   },
 ): Promise<UpdateCredentialResult> {
   await ensureKeychainLoaded();
-  const cred = ownedCredential(id, by, "update");
-  if (
-    input.expectedUpdatedAt !== undefined &&
-    cred.updatedAt !== input.expectedUpdatedAt
-  )
-    throw new Error(
-      "the credential changed since this was proposed; decline and ask again",
+  return serializeCredentialMutation(async () => {
+    const cred = ownedCredential(id, by, "update");
+    if (
+      input.expectedUpdatedAt !== undefined &&
+      cred.updatedAt !== input.expectedUpdatedAt
+    )
+      throw new Error(
+        "the credential changed since this was proposed; decline and ask again",
+      );
+    const spec = normalizeCredentialSpec(
+      {
+        ...input.spec,
+        service: cred.service,
+        ...(cred.kind ? { kind: cred.kind } : {}),
+      },
+      id,
     );
-  const spec = normalizeCredentialSpec(
-    {
-      ...input.spec,
-      service: cred.service,
-      ...(cred.kind ? { kind: cred.kind } : {}),
-    },
-    id,
-  );
-  const before = credentialSpecOf(meta(cred));
-  const changed = changedCredentialFields(before, spec);
-  const secret =
-    input.secret === undefined
-      ? undefined
-      : cred.kind === "login"
-        ? input.secret
-        : input.secret.trim();
-  if (secret !== undefined && !secret.trim())
-    throw new Error("secret is empty");
-  if (!changed.length && secret === undefined)
-    throw new Error("nothing to change");
-  // A new object, never an edit of the old one: a broker call or scripted
-  // run in flight holds the old one, and must scrub its response against
-  // the secret it actually sent.
-  const kept: Partial<KeychainCredential> = { ...cred };
-  for (const field of UPDATABLE_CREDENTIAL_FIELDS) delete kept[field];
-  // Strictly later than before, so an update's revision check never
-  // mistakes a same-millisecond change for no change.
-  const nowMs = Date.now();
-  const lastMs = new Date(cred.updatedAt).getTime();
-  const next: KeychainCredential = {
-    ...(kept as KeychainCredential),
-    ...spec,
-    secret: secret ?? cred.secret,
-    updatedAt: new Date(nowMs > lastMs ? nowMs : lastMs + 1).toISOString(),
-  };
-  credentials.set(id, next);
-  const moved = changed.includes("host") || changed.includes("loginUrl");
-  const revoked = moved ? revokeGrantsOf(id) : [];
-  try {
-    await persistAsync();
-  } catch (error) {
-    credentials.set(id, cred);
-    restoreGrants(revoked);
-    await persistAsync().catch(() => {});
-    console.error("[keychain] failed to update credential:", error);
-    throw new Error("couldn't write the keychain store");
-  }
-  for (const gr of revoked) notifyRevoked(gr.id);
-  const grantsKept = moved
-    ? 0
-    : [...grants.values()].filter((gr) => gr.credentialId === id && liveNow(gr))
-        .length;
-  auditAsync({
-    kind: "keychain_credential_updated",
-    credential_id: id,
-    owner: next.owner,
-    service: next.service,
-    host: next.host,
-    by,
-    fields: changed,
-    secret_rotated: secret !== undefined,
-    grants_kept: grantsKept,
-    grants_revoked: revoked.length,
+    const before = credentialSpecOf(meta(cred));
+    const changed = changedCredentialFields(before, spec);
+    const secret =
+      input.secret === undefined
+        ? undefined
+        : cred.kind === "login"
+          ? input.secret
+          : input.secret.trim();
+    if (secret !== undefined && !secret.trim())
+      throw new Error("secret is empty");
+    if (!changed.length && secret === undefined)
+      throw new Error("nothing to change");
+    // A new object, never an edit of the old one: a broker call or scripted
+    // run in flight holds the old one, and must scrub its response against
+    // the secret it actually sent.
+    const kept: Partial<KeychainCredential> = { ...cred };
+    for (const field of UPDATABLE_CREDENTIAL_FIELDS) delete kept[field];
+    // Strictly later than before, so an update's revision check never
+    // mistakes a same-millisecond change for no change.
+    const nowMs = Date.now();
+    const lastMs = new Date(cred.updatedAt).getTime();
+    const next: KeychainCredential = {
+      ...(kept as KeychainCredential),
+      ...spec,
+      secret: secret ?? cred.secret,
+      updatedAt: new Date(nowMs > lastMs ? nowMs : lastMs + 1).toISOString(),
+    };
+    credentials.set(id, next);
+    const moved = changed.includes("host") || changed.includes("loginUrl");
+    const revoked = moved ? revokeGrantsOf(id) : [];
+    try {
+      await persistAsync();
+    } catch (error) {
+      // Only if nothing synchronous replaced or deleted it meanwhile.
+      if (credentials.get(id) === next) credentials.set(id, cred);
+      restoreGrants(revoked);
+      await persistAsync().catch(() => {});
+      console.error("[keychain] failed to update credential:", error);
+      throw new Error("couldn't write the keychain store");
+    }
+    for (const gr of revoked) notifyRevoked(gr.id);
+    const grantsKept = moved
+      ? 0
+      : [...grants.values()].filter(
+          (gr) => gr.credentialId === id && liveNow(gr),
+        ).length;
+    auditAsync({
+      kind: "keychain_credential_updated",
+      credential_id: id,
+      owner: next.owner,
+      service: next.service,
+      host: next.host,
+      by,
+      fields: changed,
+      secret_rotated: secret !== undefined,
+      grants_kept: grantsKept,
+      grants_revoked: revoked.length,
+    });
+    return {
+      credential: meta(next),
+      changed,
+      secretRotated: secret !== undefined,
+      grantsKept,
+      grantsRevoked: revoked.length,
+    };
   });
-  return {
-    credential: meta(next),
-    changed,
-    secretRotated: secret !== undefined,
-    grantsKept,
-    grantsRevoked: revoked.length,
-  };
 }
 
 export function listCredentials(): KeychainCredentialMeta[] {

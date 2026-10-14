@@ -37,6 +37,8 @@ mock.module("./audit", () => ({
 }));
 // Holds async keychain writes open while a test needs a save in flight.
 let writeGate: Promise<void> | null = null;
+// The next async keychain write waits on this, once, and fails if it rejects.
+let nextWriteGate: Promise<void> | null = null;
 const realWrite = await import("./shared/atomic-write");
 // Captured before mocking: mock.module swaps the namespace in place.
 const writeJsonAtomicAsync = realWrite.writeJsonAtomicAsync;
@@ -46,6 +48,11 @@ mock.module("./shared/atomic-write", () => ({
     ...args: Parameters<typeof writeJsonAtomicAsync>
   ) => {
     await writeGate;
+    if (nextWriteGate) {
+      const gate = nextWriteGate;
+      nextWriteGate = null;
+      await gate;
+    }
     return writeJsonAtomicAsync(...args);
   },
 }));
@@ -99,6 +106,7 @@ beforeEach(() => {
 
 afterEach(() => {
   writeGate = null;
+  nextWriteGate = null;
   Object.assign(console, originalConsole);
   resetKeychain();
 });
@@ -732,6 +740,39 @@ describe("updating and deleting a credential", () => {
     ).rejects.toThrow(/changed since/);
     expect(kc.findCredential(cred.id)?.allowedMethods).toEqual(["HEAD"]);
     expect(storedSecret(cred.id)).toBe(OLD);
+  });
+
+  test("a failed update's rollback cannot bring back a credential deleted meanwhile", async () => {
+    const cred = existing();
+    const grant = kc.__mintGrantForTest({
+      credentialId: cred.id,
+      sessionId: "s-other",
+      requestedBy: "Blair",
+      mode: "standing",
+    });
+    let failWrite!: (error: Error) => void;
+    nextWriteGate = new Promise((_, reject) => (failWrite = reject));
+    // A host change, so the update revokes the grant and its rollback
+    // would restore it.
+    const update = kc.updateCredentialAsync(cred.id, "Alex", {
+      spec: { service: "acme-prod", host: "api.eu.example.test" },
+      secret: SECRET,
+    });
+    await Bun.sleep(5);
+    // The owner deletes it in Settings while the update is being saved.
+    const deletion = kc.deleteCredentialAsync(cred.id, "Alex");
+    await Bun.sleep(5);
+    failWrite(new Error("disk full"));
+    await expect(update).rejects.toThrow(/couldn't write/);
+    expect((await deletion)?.id).toBe(cred.id);
+    expect(kc.findCredential(cred.id)).toBeUndefined();
+    expect(kc.listGrants().find((g) => g.id === grant.id)?.status).toBe(
+      "revoked",
+    );
+    const stored = readFileSync(STORE, "utf8");
+    expect(JSON.parse(stored).credentials).toEqual([]);
+    expect(stored).not.toContain(OLD);
+    expect(stored).not.toContain(SECRET);
   });
 
   test("a call in flight keeps the credential object it read", async () => {
