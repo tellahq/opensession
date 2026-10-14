@@ -700,6 +700,68 @@ describe("updating and deleting a credential", () => {
     );
   });
 
+  test("a card opened before another change to the credential is refused", async () => {
+    const cred = existing();
+    reg.requestCredentialUpdate("s-stale", {
+      ...driver,
+      credential: "acme-prod",
+      patch: {},
+    });
+    const { request } = reg.pendingCredentialRegistration("s-stale")!;
+    // Meanwhile another session tightens the limits.
+    const other = reg.requestCredentialUpdate("s-other-card", {
+      ...driver,
+      credential: "acme-prod",
+      patch: { allowedMethods: ["HEAD"] },
+    });
+    const tighten = reg.pendingCredentialRegistration("s-other-card")!.request;
+    await reg.submitCredentialRegistration(
+      "s-other-card",
+      tighten.id,
+      "alex-gh",
+      undefined,
+    );
+    expect((await other).status).toBe("updated");
+    await expect(
+      reg.submitCredentialRegistration(
+        "s-stale",
+        request.id,
+        "alex-gh",
+        SECRET,
+      ),
+    ).rejects.toThrow(/changed since/);
+    expect(kc.findCredential(cred.id)?.allowedMethods).toEqual(["HEAD"]);
+    expect(storedSecret(cred.id)).toBe(OLD);
+  });
+
+  test("a call in flight keeps the credential object it read", async () => {
+    const cred = existing();
+    const grant = kc.__mintGrantForTest({
+      credentialId: cred.id,
+      sessionId: "s-flight",
+      requestedBy: "Alex",
+      mode: "standing",
+    });
+    const use = kc.consumeGrantForBroker(grant.id, "s-flight", "GET", "/v1");
+    if ("error" in use) throw new Error(use.error);
+    const waiting = reg.requestCredentialUpdate("s-rot", {
+      ...driver,
+      credential: "acme-prod",
+      patch: {},
+    });
+    const { request } = reg.pendingCredentialRegistration("s-rot")!;
+    await reg.submitCredentialRegistration(
+      "s-rot",
+      request.id,
+      "alex-gh",
+      SECRET,
+    );
+    await waiting;
+    // The in-flight call still scrubs against the secret it sent.
+    expect(use.credential.secret).toBe(OLD);
+    expect(storedSecret(cred.id)).toBe(SECRET);
+  });
+
   test("only the owner can be asked, and a bad change opens no card", () => {
     existing("Blair");
     expect(() =>

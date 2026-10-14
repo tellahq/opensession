@@ -68,6 +68,10 @@ export interface CredentialRegistrationRequest extends NormalizedCredentialSpec 
   /** For an update: a new secret must be pasted. When false, the card
    *  offers to replace it but saves the metadata without one. */
   requireSecret?: boolean;
+  /** For an update: the credential's updatedAt when the card opened. The
+   *  card's spec replaces the credential's metadata, so a save after any
+   *  other change to it is refused rather than undoing that change. */
+  credentialUpdatedAt?: string;
 }
 
 export type CredentialRegistrationResult =
@@ -375,6 +379,7 @@ export function requestCredentialUpdate(
             }
           : {}),
         requireSecret,
+        credentialUpdatedAt: current.updatedAt,
       };
     },
     signal,
@@ -460,6 +465,7 @@ export async function submitCredentialRegistration(
     changed: _c,
     previous: _p,
     requireSecret,
+    credentialUpdatedAt,
     ...spec
   } = entry.request;
   const pasted = typeof secret === "string" && secret.trim() ? secret : null;
@@ -482,6 +488,9 @@ export async function submitCredentialRegistration(
         update: await updateCredentialAsync(credentialId!, owner, {
           spec,
           ...(pasted ? { secret: pasted } : {}),
+          ...(credentialUpdatedAt
+            ? { expectedUpdatedAt: credentialUpdatedAt }
+            : {}),
         }),
       };
     } else {

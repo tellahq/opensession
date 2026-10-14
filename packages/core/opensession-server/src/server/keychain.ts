@@ -768,10 +768,23 @@ export interface UpdateCredentialResult {
 export async function updateCredentialAsync(
   id: string,
   by: string,
-  input: { spec: CredentialSpec; secret?: string },
+  input: {
+    spec: CredentialSpec;
+    secret?: string;
+    /** The credential's updatedAt when the change was proposed. A
+     *  different one means it changed since, and `spec` would undo that. */
+    expectedUpdatedAt?: string;
+  },
 ): Promise<UpdateCredentialResult> {
   await ensureKeychainLoaded();
   const cred = ownedCredential(id, by, "update");
+  if (
+    input.expectedUpdatedAt !== undefined &&
+    cred.updatedAt !== input.expectedUpdatedAt
+  )
+    throw new Error(
+      "the credential changed since this was proposed; decline and ask again",
+    );
   const spec = normalizeCredentialSpec(
     {
       ...input.spec,
@@ -792,19 +805,28 @@ export async function updateCredentialAsync(
     throw new Error("secret is empty");
   if (!changed.length && secret === undefined)
     throw new Error("nothing to change");
-  const previous = { ...cred };
-  for (const field of UPDATABLE_CREDENTIAL_FIELDS) delete (cred as any)[field];
-  Object.assign(cred, spec, {
-    ...(secret !== undefined ? { secret } : {}),
-    updatedAt: new Date().toISOString(),
-  });
+  // A new object, never an edit of the old one: a broker call or scripted
+  // run in flight holds the old one, and must scrub its response against
+  // the secret it actually sent.
+  const kept: Partial<KeychainCredential> = { ...cred };
+  for (const field of UPDATABLE_CREDENTIAL_FIELDS) delete kept[field];
+  // Strictly later than before, so an update's revision check never
+  // mistakes a same-millisecond change for no change.
+  const nowMs = Date.now();
+  const lastMs = new Date(cred.updatedAt).getTime();
+  const next: KeychainCredential = {
+    ...(kept as KeychainCredential),
+    ...spec,
+    secret: secret ?? cred.secret,
+    updatedAt: new Date(nowMs > lastMs ? nowMs : lastMs + 1).toISOString(),
+  };
+  credentials.set(id, next);
   const moved = changed.includes("host") || changed.includes("loginUrl");
   const revoked = moved ? revokeGrantsOf(id) : [];
   try {
     await persistAsync();
   } catch (error) {
-    for (const key of Object.keys(cred)) delete (cred as any)[key];
-    Object.assign(cred, previous);
+    credentials.set(id, cred);
     restoreGrants(revoked);
     await persistAsync().catch(() => {});
     console.error("[keychain] failed to update credential:", error);
@@ -818,9 +840,9 @@ export async function updateCredentialAsync(
   auditAsync({
     kind: "keychain_credential_updated",
     credential_id: id,
-    owner: cred.owner,
-    service: cred.service,
-    host: cred.host,
+    owner: next.owner,
+    service: next.service,
+    host: next.host,
     by,
     fields: changed,
     secret_rotated: secret !== undefined,
@@ -828,7 +850,7 @@ export async function updateCredentialAsync(
     grants_revoked: revoked.length,
   });
   return {
-    credential: meta(cred),
+    credential: meta(next),
     changed,
     secretRotated: secret !== undefined,
     grantsKept,
