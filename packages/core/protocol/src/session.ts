@@ -842,7 +842,9 @@ export type ProtocolServerMessage =
     }
   | {
       /** The agent asked the session's driver to add a keychain credential
-       *  (register_credential). Metadata only: the secret is typed into the
+       *  (register_credential), or to replace or remove one they own
+       *  (update_credential, delete_credential: `action`). Metadata only:
+       *  the secret is typed into the
        *  card and posted over HTTP (/api/keychain/registrations), never sent
        *  on the socket. `null` retires the card. */
       type: "credential_registration_request";
@@ -860,16 +862,44 @@ export type ProtocolServerMessage =
         injection?: { header?: string; scheme?: string };
         allowedMethods?: string[];
         allowedPathPrefixes?: string[];
+        statusOnly?: boolean;
         owner: string;
         requestedAt: number;
         expiresAt: number;
+        /** Absent: add a new credential. Otherwise the fields above are what
+         *  `credentialId` will be (update) or is (delete). */
+        action?: "update" | "delete";
+        credentialId?: string;
+        /** An update's changed fields, with their current values. */
+        changed?: (
+          | "host"
+          | "description"
+          | "loginUrl"
+          | "username"
+          | "injection"
+          | "allowedMethods"
+          | "allowedPathPrefixes"
+          | "statusOnly"
+        )[];
+        previous?: {
+          host?: string;
+          description?: string;
+          loginUrl?: string;
+          username?: string;
+          injection?: { header?: string; scheme?: string };
+          allowedMethods?: string[];
+          allowedPathPrefixes?: string[];
+          statusOnly?: boolean;
+        };
+        /** An update must come with a new secret; otherwise one is optional. */
+        requireSecret?: boolean;
       } | null;
     }
   | {
       type: "credential_registration_resolved";
       sessionId: string;
       requestId: string;
-      status: "registered" | "declined" | "expired";
+      status: "registered" | "updated" | "deleted" | "declined" | "expired";
     }
   | {
       /** A keychain ask from this session was made or settled. Names no

@@ -491,33 +491,42 @@ describe("registration routes", () => {
   });
 });
 
-describe("register_credential tool", () => {
-  type Call = (args: Record<string, unknown>) => Promise<string>;
-  async function toolFor(
-    user: string,
-    session: { automation?: string; automationId?: string } = {},
-  ): Promise<Call> {
-    const server = createKeychainMcpServer({
-      sessionId: `s-tool-${user}`,
-      user,
-      session: () => session,
+type Call = (args: Record<string, unknown>) => Promise<string>;
+async function toolFor(
+  user: string,
+  session: { automation?: string; automationId?: string } = {},
+  name = "register_credential",
+): Promise<Call> {
+  const server = createKeychainMcpServer({
+    sessionId: `s-tool-${user}`,
+    user,
+    session: () => session,
+  });
+  const client = new Client({ name: "test", version: "1.0.0" });
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
+  await server.instance.connect(serverTransport);
+  await client.connect(clientTransport);
+  return async (args) => {
+    const result = await client.callTool({ name, arguments: args }, undefined, {
+      timeout: 5_000,
     });
-    const client = new Client({ name: "test", version: "1.0.0" });
-    const [clientTransport, serverTransport] =
-      InMemoryTransport.createLinkedPair();
-    await server.instance.connect(serverTransport);
-    await client.connect(clientTransport);
-    return async (args) => {
-      const result = await client.callTool(
-        { name: "register_credential", arguments: args },
-        undefined,
-        { timeout: 5_000 },
-      );
-      return (result.content as { text?: string }[])
-        .map((c) => c.text ?? "")
-        .join("\n");
-    };
+    return (result.content as { text?: string }[])
+      .map((c) => c.text ?? "")
+      .join("\n");
+  };
+}
+
+async function openCard(sessionId: string) {
+  let open: ReturnType<typeof reg.pendingCredentialRegistration> = null;
+  for (let i = 0; i < 100 && !open; i++) {
+    await Bun.sleep(5);
+    open = reg.pendingCredentialRegistration(sessionId);
   }
+  return open!.request;
+}
+
+describe("register_credential tool", () => {
   const args = { service: "acme-prod", host: "api.example.test" };
 
   test("automation runs and unknown drivers get a clear refusal, and no card", async () => {
@@ -564,5 +573,259 @@ describe("register_credential tool", () => {
     const out = await (await toolFor("alex"))(args);
     expect(out).toMatch(/already exists.*Nothing was registered/);
     expect(broadcasts).toEqual([]);
+  });
+});
+
+describe("updating and deleting a credential", () => {
+  const OLD = "sk-old-key-wrong-0000";
+  function existing(owner = "Alex", service = "acme-prod") {
+    return kc.addCredential({
+      owner,
+      service,
+      host: "api.example.test",
+      secret: OLD,
+      allowedMethods: ["GET"],
+    });
+  }
+  const storedSecret = (id: string) =>
+    JSON.parse(readFileSync(STORE, "utf8")).credentials.find(
+      (c: { id: string }) => c.id === id,
+    ).secret;
+  const driver = { owner: "Alex", login: "alex-gh" };
+
+  test("a re-paste replaces the secret and keeps standing grants", async () => {
+    const cred = existing();
+    const grant = kc.__mintGrantForTest({
+      credentialId: cred.id,
+      sessionId: "s-other",
+      requestedBy: "Blair",
+      mode: "standing",
+    });
+    const waiting = reg.requestCredentialUpdate("s-rotate", {
+      ...driver,
+      credential: "acme-prod",
+      patch: {},
+    });
+    const { request } = reg.pendingCredentialRegistration("s-rotate")!;
+    expect(request).toMatchObject({
+      action: "update",
+      credentialId: cred.id,
+      requireSecret: true,
+      service: "acme-prod",
+    });
+    expect(request.changed).toBeUndefined();
+    // A rotation needs the new secret.
+    await expect(
+      reg.submitCredentialRegistration("s-rotate", request.id, "alex-gh", ""),
+    ).rejects.toThrow(/Paste the secret/);
+
+    await reg.submitCredentialRegistration(
+      "s-rotate",
+      request.id,
+      "alex-gh",
+      ` ${SECRET} `,
+    );
+    const result = await waiting;
+    expect(result.status).toBe("updated");
+    if (result.status !== "updated") return;
+    expect(result.update).toMatchObject({
+      changed: [],
+      secretRotated: true,
+      grantsKept: 1,
+      grantsRevoked: 0,
+    });
+    expect(storedSecret(cred.id)).toBe(SECRET);
+    expect(kc.findCredential("acme-prod")?.id).toBe(cred.id);
+    expect(kc.listGrants().find((g) => g.id === grant.id)?.status).toBe(
+      "active",
+    );
+    expect(audits).toContainEqual(
+      expect.objectContaining({
+        kind: "keychain_registration_updated",
+        credential_id: cred.id,
+        secret_rotated: true,
+        grants_kept: 1,
+      }),
+    );
+    expectNoSecretLeaked(result);
+  });
+
+  test("a metadata change shows what changes; a new host revokes grants", async () => {
+    const cred = existing();
+    const grant = kc.__mintGrantForTest({
+      credentialId: cred.id,
+      sessionId: "s-other",
+      requestedBy: "Blair",
+      mode: "standing",
+    });
+    const waiting = reg.requestCredentialUpdate("s-meta", {
+      ...driver,
+      credential: cred.id,
+      patch: {
+        host: "api.eu.example.test",
+        allowedMethods: [],
+        description: "EU region",
+      },
+    });
+    const { request } = reg.pendingCredentialRegistration("s-meta")!;
+    expect(request.changed).toEqual(["host", "description", "allowedMethods"]);
+    expect(request.previous).toEqual({
+      host: "api.example.test",
+      allowedMethods: ["GET"],
+    });
+    expect(request.requireSecret).toBe(false);
+    expect(request.allowedMethods).toBeUndefined();
+
+    // No new secret: the metadata changes, the secret stays.
+    await reg.submitCredentialRegistration(
+      "s-meta",
+      request.id,
+      "alex-gh",
+      undefined,
+    );
+    const result = await waiting;
+    if (result.status !== "updated") throw new Error(result.status);
+    expect(result.update).toMatchObject({
+      secretRotated: false,
+      grantsRevoked: 1,
+    });
+    expect(kc.findCredential(cred.id)).toMatchObject({
+      host: "api.eu.example.test",
+      description: "EU region",
+    });
+    expect(kc.findCredential(cred.id)?.allowedMethods).toBeUndefined();
+    expect(storedSecret(cred.id)).toBe(OLD);
+    expect(kc.listGrants().find((g) => g.id === grant.id)?.status).toBe(
+      "revoked",
+    );
+  });
+
+  test("only the owner can be asked, and a bad change opens no card", () => {
+    existing("Blair");
+    expect(() =>
+      reg.requestCredentialUpdate("s-x", {
+        ...driver,
+        credential: "acme-prod",
+        patch: {},
+      }),
+    ).toThrow(/belongs to Blair/);
+    expect(() =>
+      reg.requestCredentialDeletion("s-x", {
+        ...driver,
+        credential: "acme-prod",
+      }),
+    ).toThrow(/belongs to Blair/);
+    expect(() =>
+      reg.requestCredentialUpdate("s-x", {
+        ...driver,
+        credential: "nope",
+        patch: {},
+      }),
+    ).toThrow(/no credential matches/);
+    existing("Alex", "acme-sandbox");
+    expect(() =>
+      reg.requestCredentialUpdate("s-x", {
+        ...driver,
+        credential: "acme-sandbox",
+        patch: { host: "https://" },
+      }),
+    ).toThrow(/host/);
+    expect(reg.pendingCredentialRegistration("s-x")).toBeNull();
+    expect(broadcasts).toEqual([]);
+  });
+
+  test("a deletion waits for the owner, and revokes grants when confirmed", async () => {
+    const cred = existing();
+    const grant = kc.__mintGrantForTest({
+      credentialId: cred.id,
+      sessionId: "s-other",
+      requestedBy: "Blair",
+      mode: "standing",
+    });
+    const kept = reg.requestCredentialDeletion("s-del", {
+      ...driver,
+      credential: "acme-prod",
+    });
+    const first = reg.pendingCredentialRegistration("s-del")!.request;
+    expect(first).toMatchObject({ action: "delete", credentialId: cred.id });
+    expect(
+      (
+        await route(`/api/keychain/registrations/${first.id}/decline`, alex, {
+          sessionId: "s-del",
+        })
+      ).status,
+    ).toBe(200);
+    expect(await kept).toEqual({ status: "declined" });
+    expect(kc.findCredential(cred.id)).toBeDefined();
+
+    const waiting = reg.requestCredentialDeletion("s-del", {
+      ...driver,
+      credential: "acme-prod",
+    });
+    const { request } = reg.pendingCredentialRegistration("s-del")!;
+    const path = `/api/keychain/registrations/${request.id}`;
+    // Another teammate cannot confirm it.
+    expect((await route(path, blair, { sessionId: "s-del" })).status).toBe(403);
+    const res = await route(path, alex, { sessionId: "s-del" });
+    expect(res.status).toBe(200);
+    const result = await waiting;
+    expect(result.status).toBe("deleted");
+    expect(kc.findCredential(cred.id)).toBeUndefined();
+    expect(kc.listGrants().find((g) => g.id === grant.id)?.status).toBe(
+      "revoked",
+    );
+    expect(readFileSync(STORE, "utf8")).not.toContain(OLD);
+  });
+
+  test("update_credential and delete_credential tools return metadata only", async () => {
+    const cred = existing();
+    const update = (await toolFor("alex", {}, "update_credential"))({
+      credential: "acme-prod",
+    });
+    const request = await openCard("s-tool-alex");
+    expect(request.action).toBe("update");
+    await reg.submitCredentialRegistration(
+      "s-tool-alex",
+      request.id,
+      "alex-gh",
+      SECRET,
+    );
+    const out = await update;
+    expect(JSON.parse(out).updated).toMatchObject({
+      id: cred.id,
+      service: "acme-prod",
+      secretRotated: true,
+    });
+    expectNoSecretLeaked(out);
+
+    const del = (await toolFor("alex", {}, "delete_credential"))({
+      credential: "acme-prod",
+    });
+    const confirm = await openCard("s-tool-alex");
+    expect(confirm.action).toBe("delete");
+    await reg.submitCredentialRegistration(
+      "s-tool-alex",
+      confirm.id,
+      "alex-gh",
+      undefined,
+    );
+    expect(await del).toMatch(/Deleted "acme-prod"/);
+    expect(kc.listCredentials()).toEqual([]);
+  });
+
+  test("the tools refuse someone else's credential and automation runs, with no card", async () => {
+    existing("Blair");
+    const theirs = await (
+      await toolFor("alex", {}, "update_credential")
+    )({
+      credential: "acme-prod",
+    });
+    expect(theirs).toMatch(/belongs to Blair.*Nothing changed/);
+    const auto = await (
+      await toolFor("alex", { automation: "nightly" }, "delete_credential")
+    )({ credential: "acme-prod" });
+    expect(auto).toMatch(/can't be deleted from an automation run/);
+    expect(broadcasts).toEqual([]);
+    expect(kc.listCredentials()).toHaveLength(1);
   });
 });

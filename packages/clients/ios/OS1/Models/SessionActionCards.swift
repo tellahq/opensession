@@ -32,7 +32,7 @@ struct LossyList<Element: Decodable & Sendable>: Decodable, Sendable {
     private struct Discard: Decodable {}
 }
 
-// MARK: - Credential registration (register_credential)
+// MARK: - Credential registration (register_credential, update_credential, delete_credential)
 
 struct CredentialRegistrationRequest: Decodable, Equatable, Sendable, Identifiable {
     let id: String
@@ -47,8 +47,36 @@ struct CredentialRegistrationRequest: Decodable, Equatable, Sendable, Identifiab
     let allowedMethods: [String]
     let allowedPathPrefixes: [String]
     let owner: String
+    /// Absent: add a new credential. "update" replaces the secret or
+    /// metadata of one the driver owns, "delete" removes it; the fields
+    /// above are what it will be (update) or is (delete).
+    let action: String?
+    /// For an update: the metadata fields that change, by wire name.
+    let changed: [String]
+    /// For an update: a new secret must be pasted. Otherwise it is optional.
+    let requireSecret: Bool
 
     var isLogin: Bool { kind == "login" }
+    var isUpdate: Bool { action == "update" }
+    var isDelete: Bool { action == "delete" }
+    /// The secret field may be left empty: an update that changes metadata.
+    var secretOptional: Bool { isUpdate && !requireSecret }
+
+    /// "Host, Methods": what an update changes, for the card.
+    var changeSummary: String? {
+        let labels: [String: String] = [
+            "host": "Host", "description": "Description", "loginUrl": "Sign-in page",
+            "username": "Username", "injection": "Header", "allowedMethods": "Methods",
+            "allowedPathPrefixes": "Paths", "statusOnly": "Responses",
+        ]
+        let names = changed.map { labels[$0] ?? $0 }
+        return names.isEmpty ? nil : names.joined(separator: ", ")
+    }
+
+    /// A new host or sign-in page revokes the credential's active grants.
+    var revokesGrants: Bool {
+        isDelete || changed.contains("host") || changed.contains("loginUrl")
+    }
 
     /// "GET, POST · /v1/, /v2/": the limits the credential will carry.
     var limits: String? {
@@ -61,6 +89,7 @@ struct CredentialRegistrationRequest: Decodable, Equatable, Sendable, Identifiab
     private enum CodingKeys: String, CodingKey {
         case id, service, host, description, kind, loginUrl, username
         case allowedMethods, allowedPathPrefixes, owner
+        case action, changed, requireSecret
     }
 
     init(
@@ -73,7 +102,10 @@ struct CredentialRegistrationRequest: Decodable, Equatable, Sendable, Identifiab
         username: String? = nil,
         allowedMethods: [String] = [],
         allowedPathPrefixes: [String] = [],
-        owner: String = ""
+        owner: String = "",
+        action: String? = nil,
+        changed: [String] = [],
+        requireSecret: Bool = false
     ) {
         self.id = id
         self.service = service
@@ -85,6 +117,9 @@ struct CredentialRegistrationRequest: Decodable, Equatable, Sendable, Identifiab
         self.allowedMethods = allowedMethods
         self.allowedPathPrefixes = allowedPathPrefixes
         self.owner = owner
+        self.action = action
+        self.changed = changed
+        self.requireSecret = requireSecret
     }
 
     init(from decoder: Decoder) throws {
@@ -100,6 +135,9 @@ struct CredentialRegistrationRequest: Decodable, Equatable, Sendable, Identifiab
         allowedPathPrefixes =
             (try? c.decodeIfPresent([String].self, forKey: .allowedPathPrefixes)) ?? []
         owner = (try? c.decodeIfPresent(String.self, forKey: .owner)) ?? ""
+        action = try? c.decodeIfPresent(String.self, forKey: .action)
+        changed = (try? c.decodeIfPresent([String].self, forKey: .changed)) ?? []
+        requireSecret = (try? c.decodeIfPresent(Bool.self, forKey: .requireSecret)) ?? false
     }
 }
 

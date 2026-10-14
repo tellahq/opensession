@@ -272,8 +272,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   updates each run immediately from `workflow_update` socket frames. A 3-second
   poll remains while a run is live for compatibility with older servers.
 - **Action cards** — when the agent needs a person, the session ends with a
-  card: register a keychain credential (the secret goes straight to the
-  keychain over HTTP, never to the agent), answer a keychain ask for a
+  card: register, replace or delete a keychain credential (the secret goes
+  straight to the keychain over HTTP, never to the agent), answer a keychain ask for a
   credential you own, or confirm a force merge (only the driver confirms, with
   a second confirmation; anyone signed in may cancel). Script runs show state,
   credential call counts, a polled output tail, Stop and Close. Close hides an

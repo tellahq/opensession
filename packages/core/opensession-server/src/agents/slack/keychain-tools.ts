@@ -23,6 +23,8 @@
  * register_credential never takes one: the agent names the service and host,
  * the session's driver pastes the secret into a card that posts over HTTP
  * (credential-registrations.ts), and the tool gets metadata back.
+ * update_credential and delete_credential use the same card: the driver
+ * re-pastes a secret or confirms a change to a credential they own.
  *
  * A login (a test account's username and password for a sign-in page) is the
  * one secret an agent does get, because it must type it into the page. Its
@@ -39,7 +41,12 @@ import {
 } from "../../server/shared/user-mappings";
 import { findSession } from "../../server/session-cache";
 import type { UnifiedSession } from "../../server/types";
-import { requestCredentialRegistration } from "../../server/credential-registrations";
+import {
+  requestCredentialDeletion,
+  requestCredentialRegistration,
+  requestCredentialUpdate,
+  type CredentialRegistrationResult,
+} from "../../server/credential-registrations";
 import {
   macKeychainRequestSchema,
   macKeychainRequests,
@@ -136,16 +143,126 @@ function runWorkspace(
  * second, explicit check so a misrouted automation gets a clear refusal
  * rather than a card nobody is watching.
  */
-function registrationRefusal(ctx: KeychainToolContext): string | null {
+function registrationRefusal(
+  ctx: KeychainToolContext,
+  verb = "register",
+  past = "registered",
+): string | null {
   const session = (ctx.session ?? findSession)(ctx.sessionId);
   if (
     session?.automation ||
     session?.automationId ||
     session?.automationDescendantPolicy
   )
-    return "Credentials can't be registered from an automation run. Ask a teammate to add it in Settings → Account.";
+    return `Credentials can't be ${past} from an automation run. Ask a teammate to do it in Settings → Account.`;
   if (!githubLoginFor(ctx.user) || !resolveTeammate(ctx.user))
-    return "Only a signed-in teammate driving this session can register a credential. Ask them to add it in Settings → Account.";
+    return `Only a signed-in teammate driving this session can ${verb} a credential. Ask them to do it in Settings → Account.`;
+  return null;
+}
+
+/** Metadata a credential carries, as register_credential and
+ *  update_credential take it. */
+const credentialFields = {
+  host: z
+    .string()
+    .max(253)
+    .optional()
+    .describe(
+      "API host the broker will call over HTTPS, e.g. 'api.example.test'. No scheme, port or path. Required unless kind is 'login'.",
+    ),
+  loginUrl: z
+    .string()
+    .max(2000)
+    .optional()
+    .describe(
+      "For a login: the full https:// URL of the sign-in page, e.g. 'https://app.example.test/login'.",
+    ),
+  username: z
+    .string()
+    .max(200)
+    .optional()
+    .describe(
+      "For a login: the username or email. Not secret; it is shown to the owner and to agents.",
+    ),
+  description: z
+    .string()
+    .max(240)
+    .optional()
+    .describe("What the credential is, shown to teammates who borrow it."),
+  allowedMethods: z
+    .array(z.enum(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]))
+    .optional()
+    .describe("Limit broker calls to these methods. Omit for all."),
+  allowedPathPrefixes: z
+    .array(z.string().min(1).max(200))
+    .max(20)
+    .optional()
+    .describe(
+      "Limit broker calls to paths starting with these, e.g. ['/v1/customers']. Omit for all.",
+    ),
+  header: z
+    .string()
+    .max(64)
+    .optional()
+    .describe(
+      "Header that carries the secret. Default 'Authorization' with the Bearer scheme.",
+    ),
+  scheme: z
+    .string()
+    .max(32)
+    .optional()
+    .describe(
+      "Prefix before the secret in that header, e.g. 'Bearer' or 'Token'. Empty string for none.",
+    ),
+  statusOnly: z
+    .boolean()
+    .optional()
+    .describe(
+      "Calls return only the HTTP status, never the response. For keys whose API could echo the secret.",
+    ),
+};
+
+type CredentialFieldArgs = {
+  host?: string;
+  loginUrl?: string;
+  username?: string;
+  description?: string;
+  allowedMethods?: string[];
+  allowedPathPrefixes?: string[];
+  header?: string;
+  scheme?: string;
+  statusOnly?: boolean;
+};
+
+/** The given fields as a spec, header and scheme folded into injection. */
+function specFields(args: CredentialFieldArgs) {
+  const { header, scheme, ...rest } = args;
+  const spec: Record<string, unknown> = Object.fromEntries(
+    Object.entries(rest).filter(([, value]) => value !== undefined),
+  );
+  if (header !== undefined || scheme !== undefined)
+    spec.injection = {
+      ...(header !== undefined ? { header } : {}),
+      ...(scheme !== undefined ? { scheme } : {}),
+    };
+  return spec as Omit<CredentialFieldArgs, "header" | "scheme"> & {
+    injection?: { header?: string; scheme?: string };
+  };
+}
+
+/** The common answers to a card: still open, declined, expired. */
+function unsettledReply(
+  result: CredentialRegistrationResult,
+  owner: string,
+  tool: string,
+  again: string,
+): string | null {
+  if (result.status === "pending")
+    return `Stopped waiting, but the card stays open for ${owner} until ${new Date(result.request.expiresAt).toISOString()}. Call ${tool} again ${again} to keep waiting, or check list_credentials for "${result.request.service}".`;
+  if (result.status === "declined")
+    return `${owner} declined. Nothing changed. Don't ask again without their go-ahead.`;
+  if (result.status === "expired")
+    return "Nobody answered the card within 15 minutes, so the request closed. Nothing changed.";
   return null;
 }
 
@@ -632,85 +749,18 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
           .describe(
             "Unique lowercase slug, e.g. 'acme-prod'. Use separate slugs for separate keys (prod vs sandbox).",
           ),
-        host: z
-          .string()
-          .max(253)
-          .optional()
-          .describe(
-            "API host the broker will call over HTTPS, e.g. 'api.example.test'. No scheme, port or path. Required unless kind is 'login'.",
-          ),
         kind: z
           .enum(["api", "login"])
           .optional()
           .describe(
             "'api' (default): a token the broker injects as a header. 'login': a username and password typed into a sign-in page.",
           ),
-        loginUrl: z
-          .string()
-          .max(2000)
-          .optional()
-          .describe(
-            "For a login: the full https:// URL of the sign-in page, e.g. 'https://app.example.test/login'.",
-          ),
-        username: z
-          .string()
-          .max(200)
-          .optional()
-          .describe(
-            "For a login: the username or email. Not secret; it is shown to the owner and to agents.",
-          ),
-        description: z
-          .string()
-          .max(240)
-          .optional()
-          .describe(
-            "What the credential is, shown to teammates who borrow it.",
-          ),
-        allowedMethods: z
-          .array(z.enum(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]))
-          .optional()
-          .describe("Limit broker calls to these methods. Omit for all."),
-        allowedPathPrefixes: z
-          .array(z.string().min(1).max(200))
-          .max(20)
-          .optional()
-          .describe(
-            "Limit broker calls to paths starting with these, e.g. ['/v1/customers']. Omit for all.",
-          ),
-        header: z
-          .string()
-          .max(64)
-          .optional()
-          .describe(
-            "Header that carries the secret. Default 'Authorization' with the Bearer scheme.",
-          ),
-        scheme: z
-          .string()
-          .max(32)
-          .optional()
-          .describe(
-            "Prefix before the secret in that header, e.g. 'Bearer' or 'Token'. Empty string for none.",
-          ),
-        statusOnly: z
-          .boolean()
-          .optional()
-          .describe(
-            "Calls return only the HTTP status, never the response. For keys whose API could echo the secret.",
-          ),
+        ...credentialFields,
       },
       async (
-        args: {
+        args: CredentialFieldArgs & {
           service: string;
-          host?: string;
           kind?: "api" | "login";
-          loginUrl?: string;
-          username?: string;
-          description?: string;
-          allowedMethods?: string[];
-          allowedPathPrefixes?: string[];
-          header?: string;
-          scheme?: string;
-          statusOnly?: boolean;
         },
         extra: any,
       ) => {
@@ -728,35 +778,15 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
               owner,
               login,
               spec: {
+                ...specFields({
+                  ...args,
+                  // An empty description is no description.
+                  description: args.description || undefined,
+                  // Only a true statusOnly is a setting.
+                  statusOnly: args.statusOnly || undefined,
+                }),
                 service: args.service,
-                ...(args.host !== undefined ? { host: args.host } : {}),
                 ...(args.kind ? { kind: args.kind } : {}),
-                ...(args.loginUrl !== undefined
-                  ? { loginUrl: args.loginUrl }
-                  : {}),
-                ...(args.username !== undefined
-                  ? { username: args.username }
-                  : {}),
-                ...(args.description ? { description: args.description } : {}),
-                ...(args.allowedMethods
-                  ? { allowedMethods: args.allowedMethods }
-                  : {}),
-                ...(args.allowedPathPrefixes
-                  ? { allowedPathPrefixes: args.allowedPathPrefixes }
-                  : {}),
-                ...(args.statusOnly ? { statusOnly: true } : {}),
-                ...(args.header !== undefined || args.scheme !== undefined
-                  ? {
-                      injection: {
-                        ...(args.header !== undefined
-                          ? { header: args.header }
-                          : {}),
-                        ...(args.scheme !== undefined
-                          ? { scheme: args.scheme }
-                          : {}),
-                      },
-                    }
-                  : {}),
               },
             },
             extra?.signal,
@@ -767,18 +797,14 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
           );
         }
         const result = await waiting;
-        if (result.status === "pending")
-          return text(
-            `Stopped waiting, but the card stays open for ${owner} until ${new Date(result.request.expiresAt).toISOString()}. Call register_credential again with the same service and host to keep waiting, or check list_credentials for "${result.request.service}".`,
-          );
-        if (result.status === "declined")
-          return text(
-            `${owner} declined to add the credential. Don't ask again without their go-ahead.`,
-          );
-        if (result.status === "expired")
-          return text(
-            "Nobody saved the credential within 15 minutes, so the request closed. Nothing was registered.",
-          );
+        const unsettled = unsettledReply(
+          result,
+          owner,
+          "register_credential",
+          "with the same service and host",
+        );
+        if (unsettled) return text(unsettled);
+        if (result.status !== "registered") return text("Nothing changed.");
         const c = result.credential;
         return text(
           JSON.stringify({
@@ -800,6 +826,124 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
                 ? `Ask for it with request_credential({ credential: "${c.service}", purpose }); once its owner releases the password, use_login puts it in a file in this session's workspace.`
                 : `Borrow it with request_credential({ credential: "${c.service}", purpose }). The secret is never available to you directly.`,
           }),
+        );
+      },
+    ),
+    tool(
+      "update_credential",
+      "Replace a keychain credential's secret, or change its metadata, when the person driving this session owns it: e.g. they pasted the wrong key and the API answers 401. A card appears where THEY paste the new secret (and see any metadata change); you never see it. With only `credential`, the card asks for a new secret. With metadata fields, only those change (omitted ones keep their value; an empty description or list clears it), and a new secret is optional unless rotateSecret is true. The service slug and kind can't change." +
+        " Active grants keep working with the new secret and limits; a new host or sign-in page revokes them, since they were approved for the old one. This call waits until they save or decline (15 minutes at most). Interactive sessions with a signed-in teammate only.",
+      {
+        credential: z
+          .string()
+          .min(1)
+          .max(200)
+          .describe("Service slug (from list_credentials) or credential id."),
+        rotateSecret: z
+          .boolean()
+          .optional()
+          .describe(
+            "Require a new secret along with the metadata change. Implied when no metadata is given.",
+          ),
+        ...credentialFields,
+      },
+      async (
+        args: CredentialFieldArgs & {
+          credential: string;
+          rotateSecret?: boolean;
+        },
+        extra: any,
+      ) => {
+        const refusal = registrationRefusal(ctx, "update", "updated");
+        if (refusal) return text(refusal);
+        const owner = resolveTeammate(ctx.user)!.name;
+        const login = githubLoginFor(ctx.user)!;
+        await ensureKeychainLoaded();
+        const { credential, rotateSecret, ...fields } = args;
+        let waiting;
+        try {
+          waiting = requestCredentialUpdate(
+            ctx.sessionId,
+            {
+              owner,
+              login,
+              credential,
+              patch: specFields(fields),
+              ...(rotateSecret ? { rotateSecret } : {}),
+            },
+            extra?.signal,
+          );
+        } catch (error: any) {
+          return text(
+            `Couldn't ask: ${error?.message || String(error)}. Nothing changed.`,
+          );
+        }
+        const result = await waiting;
+        const unsettled = unsettledReply(
+          result,
+          owner,
+          "update_credential",
+          "for the same credential",
+        );
+        if (unsettled) return text(unsettled);
+        if (result.status !== "updated") return text("Nothing changed.");
+        const u = result.update;
+        return text(
+          JSON.stringify({
+            updated: {
+              id: u.credential.id,
+              service: u.credential.service,
+              host: u.credential.host,
+              owner: u.credential.owner,
+              changed: u.changed,
+              secretRotated: u.secretRotated,
+            },
+            grants: u.grantsRevoked
+              ? `${u.grantsRevoked} active grant(s) were revoked because the host changed; ask again with request_credential.`
+              : `Active grants keep working${u.grantsKept ? ` (${u.grantsKept})` : ""}.`,
+          }),
+        );
+      },
+    ),
+    tool(
+      "delete_credential",
+      "Remove a keychain credential the person driving this session owns, e.g. one registered by mistake. A card asks them to confirm; nothing is deleted until they do. Its active grants are revoked and any scripted run using it stops. This call waits until they confirm or keep it (15 minutes at most). Interactive sessions with a signed-in teammate only.",
+      {
+        credential: z
+          .string()
+          .min(1)
+          .max(200)
+          .describe("Service slug (from list_credentials) or credential id."),
+      },
+      async ({ credential }: { credential: string }, extra: any) => {
+        const refusal = registrationRefusal(ctx, "delete", "deleted");
+        if (refusal) return text(refusal);
+        const owner = resolveTeammate(ctx.user)!.name;
+        const login = githubLoginFor(ctx.user)!;
+        await ensureKeychainLoaded();
+        let waiting;
+        try {
+          waiting = requestCredentialDeletion(
+            ctx.sessionId,
+            { owner, login, credential },
+            extra?.signal,
+          );
+        } catch (error: any) {
+          return text(
+            `Couldn't ask: ${error?.message || String(error)}. Nothing was deleted.`,
+          );
+        }
+        const result = await waiting;
+        const unsettled = unsettledReply(
+          result,
+          owner,
+          "delete_credential",
+          "for the same credential",
+        );
+        if (unsettled) return text(unsettled);
+        if (result.status !== "deleted") return text("Nothing changed.");
+        return text(
+          `Deleted "${result.credential.service}" (${result.credential.id}) from the keychain. Its active grants were revoked.`,
         );
       },
     ),

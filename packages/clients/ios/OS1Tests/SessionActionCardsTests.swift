@@ -101,6 +101,33 @@ final class SessionActionCardsTests: XCTestCase {
         XCTAssertEqual(body.pending?.request.limits, "GET · /v1/")
         XCTAssertNil(try decode(CredentialRegistrationResponse.self, #"{"request":null,"canAnswer":true}"#).pending)
         XCTAssertNil(try decode(CredentialRegistrationResponse.self, "{}").pending)
+        XCTAssertNil(body.pending?.request.action)
+        XCTAssertEqual(body.pending?.request.secretOptional, false)
+    }
+
+    func testCredentialUpdateAndDeletionRequests() throws {
+        let update = try decode(CredentialRegistrationRequest.self, #"""
+        {"id":"r2","service":"acme","host":"api.eu.example.test","owner":"alex","action":"update",
+         "credentialId":"kc-1","changed":["host","allowedMethods"],"previous":{"host":"api.example.test"},
+         "requireSecret":false}
+        """#)
+        XCTAssertTrue(update.isUpdate)
+        XCTAssertTrue(update.secretOptional)
+        XCTAssertTrue(update.revokesGrants)
+        XCTAssertEqual(update.changeSummary, "Host, Methods")
+
+        let rotate = try decode(CredentialRegistrationRequest.self, #"""
+        {"id":"r3","service":"acme","host":"api.example.test","action":"update","requireSecret":true}
+        """#)
+        XCTAssertFalse(rotate.secretOptional, "a re-paste needs the new secret")
+        XCTAssertFalse(rotate.revokesGrants)
+        XCTAssertNil(rotate.changeSummary)
+
+        let delete = try decode(CredentialRegistrationRequest.self, #"""
+        {"id":"r4","service":"acme","host":"api.example.test","action":"delete"}
+        """#)
+        XCTAssertTrue(delete.isDelete)
+        XCTAssertTrue(delete.revokesGrants)
     }
 
     func testKeychainAskChoicesPutTheRequestedModeLast() throws {

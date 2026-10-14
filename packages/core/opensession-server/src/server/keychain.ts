@@ -453,15 +453,22 @@ const UNSAFE_DISPLAY_CHARS = /[\x00-\x1f\x7f‪-‮⁦-⁩]/;
  */
 export function normalizeCredentialSpec(
   input: CredentialSpec,
+  /** The credential being updated: its own slug is not "taken". */
+  replacing?: string,
 ): NormalizedCredentialSpec {
   load();
+  const taken = (service: string) =>
+    [...credentials.values()].some(
+      (c) => c.service === service && c.id !== replacing,
+    );
   const service = norm(input.service);
   if (!service || !/^[a-z0-9][a-z0-9._-]*$/.test(service)) {
     throw new Error(
       "service must be a short lowercase slug (letters, digits, . _ -)",
     );
   }
-  if (input.kind === "login") return normalizeLoginSpec(input, service);
+  if (input.kind === "login")
+    return normalizeLoginSpec(input, service, taken(service));
   if (input.kind !== undefined && input.kind !== "api")
     throw new Error('kind must be "api" or "login"');
   if (input.loginUrl !== undefined || input.username !== undefined)
@@ -470,7 +477,7 @@ export function normalizeCredentialSpec(
   if (!host || !/^[a-z0-9][a-z0-9.-]*$/.test(host) || host.includes(":")) {
     throw new Error("host must be a bare host name (no scheme, port, or path)");
   }
-  if ([...credentials.values()].some((c) => c.service === service)) {
+  if (taken(service)) {
     throw new Error(`a credential for service "${service}" already exists`);
   }
   const methods = (input.allowedMethods || [])
@@ -513,6 +520,7 @@ export function normalizeCredentialSpec(
 function normalizeLoginSpec(
   input: CredentialSpec,
   service: string,
+  taken: boolean,
 ): NormalizedCredentialSpec {
   if (
     input.injection ||
@@ -533,7 +541,7 @@ function normalizeLoginSpec(
   const username = input.username?.trim() || "";
   if (!username || username.length > 200 || UNSAFE_DISPLAY_CHARS.test(username))
     throw new Error("a login needs a username of at most 200 characters");
-  if ([...credentials.values()].some((c) => c.service === service))
+  if (taken)
     throw new Error(`a credential for service "${service}" already exists`);
   const description = input.description?.trim();
   return {
@@ -605,28 +613,227 @@ export async function addCredentialAsync(
   return auditAdded(cred);
 }
 
-export function deleteCredential(id: string, by: string): boolean {
+/** Revoke a credential's active grants in memory, without persisting.
+ *  Returns what was revoked, so a failed write can put it back. */
+function revokeGrantsOf(id: string): KeychainGrant[] {
+  const revoked: KeychainGrant[] = [];
+  const now = new Date().toISOString();
+  for (const gr of grants.values()) {
+    if (gr.credentialId === id && gr.status === "active") {
+      revoked.push({ ...gr });
+      gr.status = "revoked";
+      gr.revokedAt = now;
+    }
+  }
+  return revoked;
+}
+
+function restoreGrants(previous: KeychainGrant[]): void {
+  for (const gr of previous) grants.set(gr.id, gr);
+}
+
+/** The credential `id` for `by`, its owner. Throws with a message safe to
+ *  show the caller when it is gone or someone else's. */
+function ownedCredential(
+  id: string,
+  by: string,
+  verb: string,
+): KeychainCredential {
+  const cred = credentials.get(id);
+  if (!cred) throw new Error("that credential no longer exists");
+  if (!sameOwner(cred.owner, by))
+    throw new Error(`only the credential's owner can ${verb} it`);
+  return cred;
+}
+
+/** Whether `person` owns the credential `id`. */
+export function isCredentialOwner(id: string, person: string): boolean {
   load();
   const cred = credentials.get(id);
-  if (!cred) return false;
-  if (!sameOwner(cred.owner, by))
-    throw new Error("only the credential's owner can delete it");
+  return !!cred && sameOwner(cred.owner, person);
+}
+
+export function deleteCredential(id: string, by: string): boolean {
+  load();
+  if (!credentials.has(id)) return false;
+  ownedCredential(id, by, "delete");
   credentials.delete(id);
   // A deleted credential takes its live grants with it — the broker would
   // otherwise 404 on the credential with an "active" grant lying around.
-  const revoked: string[] = [];
-  for (const gr of grants.values()) {
-    if (gr.credentialId === id && gr.status === "active") {
-      gr.status = "revoked";
-      gr.revokedAt = new Date().toISOString();
-      grants.set(gr.id, gr);
-      revoked.push(gr.id);
-    }
-  }
+  const revoked = revokeGrantsOf(id);
   persist();
-  for (const grantId of revoked) notifyRevoked(grantId);
+  for (const gr of revoked) notifyRevoked(gr.id);
   audit({ kind: "keychain_credential_deleted", credential_id: id, by });
   return true;
+}
+
+/** deleteCredential for request handlers on the gateway: loads and persists
+ *  asynchronously. A failed write puts the credential and its grants back. */
+export async function deleteCredentialAsync(
+  id: string,
+  by: string,
+): Promise<KeychainCredentialMeta | null> {
+  await ensureKeychainLoaded();
+  if (!credentials.has(id)) return null;
+  const cred = ownedCredential(id, by, "delete");
+  credentials.delete(id);
+  const revoked = revokeGrantsOf(id);
+  try {
+    await persistAsync();
+  } catch (error) {
+    credentials.set(id, cred);
+    restoreGrants(revoked);
+    await persistAsync().catch(() => {});
+    console.error("[keychain] failed to delete credential:", error);
+    throw new Error("couldn't write the keychain store");
+  }
+  for (const gr of revoked) notifyRevoked(gr.id);
+  auditAsync({
+    kind: "keychain_credential_deleted",
+    credential_id: id,
+    service: cred.service,
+    by,
+    grants_revoked: revoked.length,
+  });
+  return meta(cred);
+}
+
+/** The fields of a credential an update may change. Its id, owner, service
+ *  slug and kind stay. */
+export const UPDATABLE_CREDENTIAL_FIELDS = [
+  "host",
+  "description",
+  "loginUrl",
+  "username",
+  "injection",
+  "allowedMethods",
+  "allowedPathPrefixes",
+  "statusOnly",
+] as const;
+
+export type UpdatableCredentialField =
+  (typeof UPDATABLE_CREDENTIAL_FIELDS)[number];
+
+/** A credential's current metadata as a spec, the base an update edits. */
+export function credentialSpecOf(
+  meta: KeychainCredentialMeta,
+): NormalizedCredentialSpec {
+  const spec: NormalizedCredentialSpec = {
+    service: meta.service,
+    host: meta.host,
+  };
+  if (meta.kind) spec.kind = meta.kind;
+  for (const field of UPDATABLE_CREDENTIAL_FIELDS)
+    if (meta[field] !== undefined) (spec as any)[field] = meta[field];
+  return spec;
+}
+
+/** The updatable fields whose value differs between two specs. */
+export function changedCredentialFields(
+  before: NormalizedCredentialSpec,
+  after: NormalizedCredentialSpec,
+): UpdatableCredentialField[] {
+  return UPDATABLE_CREDENTIAL_FIELDS.filter(
+    (field) =>
+      JSON.stringify(before[field] ?? null) !==
+      JSON.stringify(after[field] ?? null),
+  );
+}
+
+export interface UpdateCredentialResult {
+  credential: KeychainCredentialMeta;
+  changed: UpdatableCredentialField[];
+  secretRotated: boolean;
+  /** Active grants kept: the owner approved them for this credential, and a
+   *  new secret for the same access does not change what they approved. */
+  grantsKept: number;
+  /** Active grants revoked because the credential now goes to a different
+   *  host or sign-in page than the one they were approved for. */
+  grantsRevoked: number;
+}
+
+/**
+ * Replace a credential's secret and/or metadata, as its owner, for request
+ * handlers on the gateway (loads and persists asynchronously). The new
+ * metadata is validated like a new credential's; the service slug and kind
+ * stay. The credential is changed in place, so the broker and a running
+ * scripted run use the new secret on their next call.
+ *
+ * Active grants survive a new secret or new limits: the owner approved
+ * access to this credential and is the one updating it. A new host or
+ * sign-in page revokes them, since they were approved for calls to the old
+ * one (and a running scripted run's proxy is bound to it). Every update is
+ * audited with the fields it changed; the secret is never in the audit line.
+ */
+export async function updateCredentialAsync(
+  id: string,
+  by: string,
+  input: { spec: CredentialSpec; secret?: string },
+): Promise<UpdateCredentialResult> {
+  await ensureKeychainLoaded();
+  const cred = ownedCredential(id, by, "update");
+  const spec = normalizeCredentialSpec(
+    {
+      ...input.spec,
+      service: cred.service,
+      ...(cred.kind ? { kind: cred.kind } : {}),
+    },
+    id,
+  );
+  const before = credentialSpecOf(meta(cred));
+  const changed = changedCredentialFields(before, spec);
+  const secret =
+    input.secret === undefined
+      ? undefined
+      : cred.kind === "login"
+        ? input.secret
+        : input.secret.trim();
+  if (secret !== undefined && !secret.trim())
+    throw new Error("secret is empty");
+  if (!changed.length && secret === undefined)
+    throw new Error("nothing to change");
+  const previous = { ...cred };
+  for (const field of UPDATABLE_CREDENTIAL_FIELDS) delete (cred as any)[field];
+  Object.assign(cred, spec, {
+    ...(secret !== undefined ? { secret } : {}),
+    updatedAt: new Date().toISOString(),
+  });
+  const moved = changed.includes("host") || changed.includes("loginUrl");
+  const revoked = moved ? revokeGrantsOf(id) : [];
+  try {
+    await persistAsync();
+  } catch (error) {
+    for (const key of Object.keys(cred)) delete (cred as any)[key];
+    Object.assign(cred, previous);
+    restoreGrants(revoked);
+    await persistAsync().catch(() => {});
+    console.error("[keychain] failed to update credential:", error);
+    throw new Error("couldn't write the keychain store");
+  }
+  for (const gr of revoked) notifyRevoked(gr.id);
+  const grantsKept = moved
+    ? 0
+    : [...grants.values()].filter((gr) => gr.credentialId === id && liveNow(gr))
+        .length;
+  auditAsync({
+    kind: "keychain_credential_updated",
+    credential_id: id,
+    owner: cred.owner,
+    service: cred.service,
+    host: cred.host,
+    by,
+    fields: changed,
+    secret_rotated: secret !== undefined,
+    grants_kept: grantsKept,
+    grants_revoked: revoked.length,
+  });
+  return {
+    credential: meta(cred),
+    changed,
+    secretRotated: secret !== undefined,
+    grantsKept,
+    grantsRevoked: revoked.length,
+  };
 }
 
 export function listCredentials(): KeychainCredentialMeta[] {

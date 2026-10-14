@@ -191,6 +191,21 @@ and body verbatim and in common encodings (URL, JSON, base64), which is best
 effort. A credential registered as status-only returns only the HTTP status,
 for APIs that might echo the secret in a form scrubbing cannot catch.
 
+An owner replaces a credential's secret or metadata, or removes it, from a
+session they drive with `update_credential` or `delete_credential`. The agent
+names the credential and any metadata change; the session shows the owner a
+card (the same one `register_credential` uses) listing what changes, and
+nothing happens until they paste the new secret or confirm. The card is
+answerable only with the owner's verified GitHub sign-in, and the tools refuse,
+before any card, a credential someone else owns and automation runs. The
+service slug and kind never change. Active grants keep working after a new
+secret or new limits, because the owner approved access to that credential and
+is the one changing it; a new host or sign-in page revokes them, since they
+were approved for calls to the old one. Deleting revokes them too. Each change
+is audited with the fields it changed and whether the secret was rotated
+(`keychain_credential_updated`, `keychain_credential_deleted`), never the
+secret itself.
+
 A loopback URL that any local process could reuse is exactly what the broker
 route was, so bulk work by a script has its own path instead. The agent asks
 for a scripted run (`request_credential` with `run`): the owner's message says

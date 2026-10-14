@@ -47,7 +47,7 @@ touches an in-process tool:
 | [`opensession-search`](#opensession-search) | 2 | interactive, automation | – |
 | [`opensession-self-deploy`](#opensession-self-deploy) | 2 | interactive | Withheld from dev instances (isDevInstance()) — the script targets the production service and state. |
 | [`opensession-humans`](#opensession-humans) | 3 | interactive, Slack loop, goal wake | Interactive runs need a session id (the answer routes back to it). |
-| [`opensession-keychain`](#opensession-keychain) | 12 | interactive | Needs a session id. |
+| [`opensession-keychain`](#opensession-keychain) | 14 | interactive | Needs a session id. |
 | [`opensession-publish`](#opensession-publish) | 4 | interactive | Needs a session id. |
 | [`opensession-repos`](#opensession-repos) | 7 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 6 | interactive, automation | Needs a session id. |
@@ -78,7 +78,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-37 servers, 178 tools.
+37 servers, 180 tools.
 
 ## opensession-sessions
 
@@ -560,9 +560,21 @@ Withdraw one of this session's pending keychain asks (ids from list_grants). The
 
 ### `register_credential`
 
-`mcp__opensession-keychain__register_credential` · input: `service` (string, required), `host` (string), `kind` ("api" | "login"), `loginUrl` (string), `username` (string), `description` (string), `allowedMethods` ("GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE"[]), `allowedPathPrefixes` (string[]), `header` (string), `scheme` (string), `statusOnly` (boolean)
+`mcp__opensession-keychain__register_credential` · input: `service` (string, required), `kind` ("api" | "login"), `host` (string), `loginUrl` (string), `username` (string), `description` (string), `allowedMethods` ("GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE"[]), `allowedPathPrefixes` (string[]), `header` (string), `scheme` (string), `statusOnly` (boolean)
 
 Add a credential to the keychain, owned by the person driving this session, so this and later sessions can borrow it through request_credential. You supply only metadata. A card appears in the session where THEY paste the secret; it goes straight to the keychain and you never see it. For a username and password that must be typed into a sign-in page, pass kind 'login' with loginUrl and username (no host or limits): its owner later approves each release of the password with use_login, and the agent does see it then, so only register test accounts this way. This call waits until they save or decline (15 minutes at most) and returns the credential's id, service, host and owner. If the call is cut short, the card stays open: call again with the same service and host to keep waiting on it, or check list_credentials. Never ask anyone to paste a secret in chat; if they already did, tell them to rotate it. Check list_credentials first: service slugs are unique. Set allowedMethods / allowedPathPrefixes when the task needs less than full access. Interactive sessions with a signed-in teammate only.
+
+### `update_credential`
+
+`mcp__opensession-keychain__update_credential` · input: `credential` (string, required), `rotateSecret` (boolean), `host` (string), `loginUrl` (string), `username` (string), `description` (string), `allowedMethods` ("GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE"[]), `allowedPathPrefixes` (string[]), `header` (string), `scheme` (string), `statusOnly` (boolean)
+
+Replace a keychain credential's secret, or change its metadata, when the person driving this session owns it: e.g. they pasted the wrong key and the API answers 401. A card appears where THEY paste the new secret (and see any metadata change); you never see it. With only `credential`, the card asks for a new secret. With metadata fields, only those change (omitted ones keep their value; an empty description or list clears it), and a new secret is optional unless rotateSecret is true. The service slug and kind can't change. Active grants keep working with the new secret and limits; a new host or sign-in page revokes them, since they were approved for the old one. This call waits until they save or decline (15 minutes at most). Interactive sessions with a signed-in teammate only.
+
+### `delete_credential`
+
+`mcp__opensession-keychain__delete_credential` · input: `credential` (string, required)
+
+Remove a keychain credential the person driving this session owns, e.g. one registered by mistake. A card asks them to confirm; nothing is deleted until they do. Its active grants are revoked and any scripted run using it stops. This call waits until they confirm or keep it (15 minutes at most). Interactive sessions with a signed-in teammate only.
 
 ### `list_grants`
 

@@ -105,10 +105,11 @@ private func describe(_ error: Error, fallback: String) -> String {
 
 // MARK: - Credential registration
 
-/// The agent asked the person driving this session to add a credential.
-/// Every viewer sees the card; only the driver, as the server decides, gets
-/// the field, because the credential will be theirs. The secret goes straight
-/// to the keychain over HTTP and is never shown to the agent.
+/// The agent asked the person driving this session to add a credential, or
+/// to replace or delete one they own. Every viewer sees the card; only the
+/// driver, as the server decides, gets the field, because the credential is
+/// theirs. The secret goes straight to the keychain over HTTP and is never
+/// shown to the agent.
 private struct CredentialRegistrationCard: View {
     let model: SessionActionCardsModel
     let pending: PendingCredentialRegistration
@@ -120,14 +121,32 @@ private struct CredentialRegistrationCard: View {
 
     private var request: CredentialRegistrationRequest { pending.request }
     private var canSave: Bool {
-        !busy && !secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !busy && (request.isDelete || request.secretOptional
+            || !secret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+    private var word: String { request.isLogin ? "password" : "secret" }
+    private var thing: String { request.isLogin ? "login" : "credential" }
+
+    private var headline: String {
+        if request.isDelete { return "\(agentName) wants to delete a \(thing) from the keychain" }
+        if request.isUpdate {
+            return request.changed.isEmpty
+                ? "\(agentName) wants to replace a keychain \(word)"
+                : "\(agentName) wants to change a \(thing) in the keychain"
+        }
+        return request.isLogin
+            ? "\(agentName) wants to add a login to the keychain"
+            : "\(agentName) wants to add a credential to the keychain"
+    }
+
+    private var placeholder: String {
+        if request.secretOptional { return "Paste a new \(word), or leave empty to keep it" }
+        return request.isUpdate ? "Paste the new \(word)" : "Paste the \(word)"
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            CardHeader(text: request.isLogin
-                ? "\(agentName) wants to add a login to the keychain"
-                : "\(agentName) wants to add a credential to the keychain")
+            CardHeader(text: headline)
 
             VStack(alignment: .leading, spacing: 4) {
                 Group {
@@ -144,6 +163,11 @@ private struct CredentialRegistrationCard: View {
                         .font(.footnote)
                         .foregroundStyle(OS1VisualStyle.textDim)
                 }
+                if let changes = request.changeSummary {
+                    Text("Changes \(changes)")
+                        .font(.caption)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                }
                 if let limits = request.limits {
                     Text("Limited to \(limits)")
                         .font(.caption)
@@ -155,11 +179,8 @@ private struct CredentialRegistrationCard: View {
             }
             .fixedSize(horizontal: false, vertical: true)
 
-            if pending.canAnswer {
-                SecureField(
-                    request.isLogin ? "Paste the password" : "Paste the secret",
-                    text: $secret
-                )
+            if pending.canAnswer && !request.isDelete {
+                SecureField(placeholder, text: $secret)
                 .accessibilityLabel(request.isLogin ? "Password" : "Secret")
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
@@ -179,27 +200,49 @@ private struct CredentialRegistrationCard: View {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(OS1VisualStyle.border, lineWidth: 0.5)
                 )
+            }
 
+            if pending.canAnswer {
                 CardError(message: error)
 
                 CardButtons {
-                    Button("Decline") { Task { await submit(decline: true) } }
-                        .buttonStyle(.bordered)
-                        .disabled(busy)
-                    Button("Save to keychain") { Task { await submit(decline: false) } }
+                    Button(request.isDelete ? "Keep it" : "Decline") {
+                        Task { await submit(decline: true) }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(busy)
+                    if request.isDelete {
+                        Button("Delete", role: .destructive) { Task { await submit(decline: false) } }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!canSave)
+                    } else {
+                        Button(request.isUpdate ? "Save" : "Save to keychain") {
+                            Task { await submit(decline: false) }
+                        }
                         .buttonStyle(.borderedProminent)
                         .disabled(!canSave)
+                    }
                 }
             }
         }
         .actionCardShell()
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Credential request")
+        .accessibilityLabel(request.isDelete
+            ? "Credential deletion"
+            : request.isUpdate ? "Credential update" : "Credential request")
     }
 
     private var permissionLine: String {
         if !pending.canAnswer {
-            return "Waiting for \(request.owner) to add the \(request.isLogin ? "password" : "secret")."
+            if request.isDelete { return "Waiting for \(request.owner) to confirm." }
+            if request.isUpdate { return "Waiting for \(request.owner) to confirm the change." }
+            return "Waiting for \(request.owner) to add the \(word)."
+        }
+        if request.isDelete { return "Its active grants are revoked, and any run using it stops." }
+        if request.isUpdate {
+            return request.revokesGrants
+                ? "Its active grants are revoked: they were approved for the old \(request.isLogin ? "sign-in page" : "host")."
+                : "Its active grants keep working. \(agentName) never sees the \(word)."
         }
         if request.isLogin {
             return "Owned by you. Each time a session asks, you decide whether to release the password to it, and \(agentName) can read it then. Use a test account."

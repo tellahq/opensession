@@ -12,7 +12,7 @@ import { requestUser } from "./context";
 import {
   addCredentialAsync,
   answerKeychainAsk,
-  deleteCredential,
+  deleteCredentialAsync,
   ensureKeychainLoaded,
   keychainAsksInSession,
   keychainViewFor,
@@ -198,7 +198,7 @@ export async function handleKeychainRoutes(
   const credMatch = path.match(/^\/api\/keychain\/credentials\/([^/]+)$/);
   if (credMatch && req.method === "DELETE") {
     try {
-      const ok = deleteCredential(
+      const ok = await deleteCredentialAsync(
         decodeURIComponent(credMatch[1]!),
         requestUser(ctx),
       );
@@ -225,11 +225,11 @@ export async function handleKeychainRoutes(
 }
 
 /**
- * The driver's side of a register_credential request
- * (credential-registrations.ts):
+ * The driver's side of a register_credential, update_credential or
+ * delete_credential request (credential-registrations.ts):
  *
  *   GET  /api/keychain/registrations?sessionId=     -> { request | null, canAnswer }
- *   POST /api/keychain/registrations/:id            { sessionId, secret }
+ *   POST /api/keychain/registrations/:id            { sessionId, secret? }
  *   POST /api/keychain/registrations/:id/decline    { sessionId }
  *
  * Answering needs a verified GitHub sign-in that matches the person who drove
