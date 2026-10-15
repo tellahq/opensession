@@ -172,6 +172,20 @@ This is a deliberate trade with sharp edges. In a shared checkout:
 
 If sessions do not need to edit the running checkout, use isolated worktrees.
 
+## No `git stash` in sessions
+
+Every worktree of a repository shares one git dir, and `refs/stash` is not
+per-worktree. Two sessions that each stash and pop at about the same time can
+pop each other's entries, which silently swaps their uncommitted work. The
+agent shell therefore puts a `git` wrapper first on PATH
+(`src/server/git-stash-guard.ts`) that refuses `git stash` and its push, save,
+pop, apply, drop, clear, store, and branch forms, including through aliases,
+and prints the alternatives: commit first, `git worktree add` a clean copy, or
+save a patch with `git diff` and restore it with `git apply`. `git stash list`,
+`show`, and `create` still work. The wrapper is a tripwire for agents, not a
+boundary. A person's own terminal does not use the agent PATH, so people can
+still stash on purpose there.
+
 ## What cleans up automatically
 
 ### Rust build-cache GC
