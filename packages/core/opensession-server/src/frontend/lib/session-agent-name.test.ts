@@ -1,3 +1,4 @@
+import { publishClientDataIdentity } from "./client-data-scope";
 import { afterEach, expect, test } from "bun:test";
 import {
   sessionAgentName,
@@ -94,5 +95,36 @@ test("late session titles never replace an author's explicit link label", () => 
   } finally {
     if (previous) Object.defineProperty(globalThis, "document", previous);
     else Reflect.deleteProperty(globalThis, "document");
+  }
+});
+
+test("numeric identity replacement clears private agent and hover titles", () => {
+  const identify = (githubAccountId: number) =>
+    publishClientDataIdentity({
+      required: true,
+      authenticated: true,
+      githubAccountId,
+      login: "same-login",
+    });
+  try {
+    identify(101);
+    setSessionTitles([["private-root", "Private root task"]]);
+    setResolvedSessionTitles([
+      {
+        requestedId: "private-child-alias",
+        id: "private-child",
+        title: "Private child task",
+        parentSessionId: "private-root",
+      },
+    ]);
+    expect(sessionAgentName("private-child-alias")).toBe("Private child task");
+    expect(sessionAgentTitle("private-child-alias")).toBe("Private child task");
+    identify(202);
+    expect(sessionAgentTitle("private-child-alias")).toBe("");
+    expect(sessionAgentTitle("private-root")).toBe("");
+    expect(sessionAgentName("private-child")).toBe("Session");
+    expect(sessionAgentName("private-child-alias")).toBe("Session");
+  } finally {
+    publishClientDataIdentity(null);
   }
 });

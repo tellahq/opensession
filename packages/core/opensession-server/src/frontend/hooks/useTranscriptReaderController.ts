@@ -1,4 +1,8 @@
 import {
+  captureClientDataScope,
+  isCurrentClientDataScope,
+} from "../lib/client-data-scope";
+import {
   useCallback,
   useEffect,
   useEffectEvent,
@@ -116,6 +120,7 @@ export function useTranscriptReaderLayout({
   history: { controller: transcriptHistory, loadingHistory },
   send,
 }: ReaderLayoutOptions) {
+  const [dataScope] = useState(captureClientDataScope);
   const transcriptHistoryRef = useRef(transcriptHistory);
   // Intent-aware scrolling: stick to the live edge only while the reader is there,
   // pin new turns near the top, and surface a "Jump to latest" affordance.
@@ -222,6 +227,7 @@ export function useTranscriptReaderLayout({
   useEffect(() => {
     const cursors = transcriptHistoryRef.current.cursors;
     if (cursors.transcriptReadySessionRef.current !== session.id) return;
+    if (!isCurrentClientDataScope(dataScope)) return;
     cacheTranscriptView(session.id, {
       entries,
       cursor: cursors.transcriptCursorRef.current,
@@ -232,6 +238,7 @@ export function useTranscriptReaderLayout({
       indexEpoch: transcriptIndexEpochRef.current,
     });
   }, [
+    dataScope,
     entries,
     historyTruncated,
     session.id,

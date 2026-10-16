@@ -1,3 +1,9 @@
+import {
+  captureClientDataScope,
+  assertClientDataScope,
+  clientDataScopeHeaders,
+  type ClientDataScope,
+} from "./client-data-scope";
 /** Shared helpers for attaching pasted/dropped images to a composer/form. */
 
 import { BASE_PATH } from "./base";
@@ -227,19 +233,27 @@ export async function uploadFile(
   file: File,
   signal?: AbortSignal,
   onProgress?: UploadProgress,
+  scope: ClientDataScope | null = captureClientDataScope(),
 ): Promise<{ name: string; path: string }> {
-  if (file.size > SINGLE_REQUEST_BYTES)
-    return uploadChunked(file, signal, onProgress);
+  assertClientDataScope(scope);
+  if (file.size > SINGLE_REQUEST_BYTES) {
+    const staged = await uploadChunked(file, signal, onProgress);
+    assertClientDataScope(scope);
+    return staged;
+  }
   const res = await fetch(`${BASE_PATH}/api/upload`, {
     method: "POST",
     headers: {
+      ...clientDataScopeHeaders(scope),
       "x-file-name": encodeURIComponent(file.name),
       "content-type": file.type || "application/octet-stream",
     },
     body: file,
     signal,
   });
+  assertClientDataScope(scope);
   const body = await res.json().catch(() => ({}));
+  assertClientDataScope(scope);
   if (!res.ok || !body?.ok || !body?.path) {
     throw new Error(body?.error || `Upload failed (${res.status})`);
   }
@@ -353,6 +367,7 @@ async function stageImage(
   file: File,
   rejected: string[],
   signal?: AbortSignal,
+  scope: ClientDataScope | null = captureClientDataScope(),
 ): Promise<string | null> {
   if (file.size > MAX_UPLOAD_BYTES) {
     rejected.push(
@@ -379,6 +394,8 @@ async function stageImage(
         type: stageable.type,
       }),
       signal,
+      undefined,
+      scope,
     );
     return `/media?path=${encodeURIComponent(path)}`;
   } catch (e) {
@@ -404,14 +421,18 @@ export async function splitAttachments(
   files: FileList | File[],
   signal?: AbortSignal,
   onProgress?: UploadProgress,
+  scope: ClientDataScope | null = captureClientDataScope(),
 ): Promise<{ images: string[]; files: FileAttachment[]; rejected: string[] }> {
+  assertClientDataScope(scope);
   const all = Array.from(files);
   const imageFiles = all.filter((f) => f.type.startsWith("image/"));
   const otherFiles = all.filter((f) => !f.type.startsWith("image/"));
 
   const rejected: string[] = [];
   const images = (
-    await Promise.all(imageFiles.map((f) => stageImage(f, rejected, signal)))
+    await Promise.all(
+      imageFiles.map((f) => stageImage(f, rejected, signal, scope)),
+    )
   ).filter((u): u is string => u !== null);
 
   const uploaded = await Promise.all(
@@ -423,7 +444,7 @@ export async function splitAttachments(
         return null;
       }
       try {
-        const { name, path } = await uploadFile(f, signal, onProgress);
+        const { name, path } = await uploadFile(f, signal, onProgress, scope);
         return { name, type: f.type, path };
       } catch (e) {
         if (signal?.aborted) return null;
@@ -435,6 +456,7 @@ export async function splitAttachments(
     }),
   );
 
+  assertClientDataScope(scope);
   return {
     images,
     files: uploaded.filter((f): f is FileAttachment => f !== null),

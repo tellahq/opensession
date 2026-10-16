@@ -39,7 +39,10 @@ export function migrateCatalogDocumentSchema34(
   db: Database,
   schemaVersion: number,
 ): void {
-  if (schemaVersion >= 34) return;
+  if (schemaVersion >= 34) {
+    ensureCatalogDocumentLiveIndex(db);
+    return;
+  }
   const tx = db.transaction(() => {
     db.exec(`
       CREATE TABLE IF NOT EXISTS session_kernel_catalog_documents (
@@ -55,6 +58,18 @@ export function migrateCatalogDocumentSchema34(
     `);
   });
   tx.immediate();
+  ensureCatalogDocumentLiveIndex(db);
+}
+
+/** Partial index behind `page_live`: only rows that currently exist, so a
+ * live page never visits a tombstone. Additive and idempotent on every open;
+ * an older reader ignores it, so it needs no schema version of its own. */
+function ensureCatalogDocumentLiveIndex(db: Database): void {
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_skcd_live
+       ON session_kernel_catalog_documents(namespace, key)
+       WHERE value IS NOT NULL`,
+  );
 }
 
 export function catalogDocumentGet(
@@ -140,6 +155,52 @@ export function catalogDocumentPage(
         namespace,
         afterKey,
         limit,
+        CATALOG_DOCUMENT_MAX_PAGE_BYTES,
+      ) as DocumentRow[]
+  ).map(record);
+}
+
+/** `page` restricted to live rows. The inner query is pinned to the partial
+ * live index (INDEXED BY fails loudly if the index is missing), so the page
+ * costs O(limit) live keys regardless of how many tombstones the namespace
+ * carries; the planner would otherwise prefer the covering primary key and
+ * walk every tombstone. Each live key is then one primary-key lookup, and the
+ * byte budget applies as for `page`. */
+export function catalogDocumentPageLive(
+  db: Database,
+  namespace: string,
+  afterKey: string,
+  limit: number,
+): CatalogDocumentRecord[] {
+  return (
+    db
+      .query(
+        `SELECT key, value, rev FROM (
+           SELECT d.key AS key, d.value AS value, d.rev AS rev,
+             ROW_NUMBER() OVER (ORDER BY d.key) AS position,
+             SUM(
+               length(CAST(d.key AS BLOB)) + COALESCE(length(CAST(d.value AS BLOB)), 0)
+             ) OVER (
+               ORDER BY d.key ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+             ) AS cumulative
+           FROM (
+             SELECT key FROM session_kernel_catalog_documents
+               INDEXED BY idx_skcd_live
+             WHERE namespace = ? AND key > ? AND value IS NOT NULL
+             ORDER BY key
+             LIMIT ?
+           ) AS live
+           JOIN session_kernel_catalog_documents d
+             ON d.namespace = ? AND d.key = live.key
+         )
+         WHERE cumulative <= ? OR position = 1
+         ORDER BY key`,
+      )
+      .all(
+        namespace,
+        afterKey,
+        limit,
+        namespace,
         CATALOG_DOCUMENT_MAX_PAGE_BYTES,
       ) as DocumentRow[]
   ).map(record);

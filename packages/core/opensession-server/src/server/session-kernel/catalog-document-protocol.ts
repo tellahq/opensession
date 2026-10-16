@@ -33,6 +33,11 @@ export type CatalogDocumentRequest =
   /** Keys strictly after `afterKey` in byte order, tombstones included. Pass
    * `""` to start from the first key. */
   | { op: "page"; namespace: string; afterKey: string; limit: number }
+  /** Like `page`, but only live rows: tombstones are skipped inside the
+   * worker through a partial index, so a page costs O(limit) live rows
+   * however many deletions the namespace has accumulated. For projections
+   * that only need what currently exists (an active-work journal). */
+  | { op: "page_live"; namespace: string; afterKey: string; limit: number }
   | {
       op: "put";
       namespace: string;
@@ -60,7 +65,7 @@ export type CatalogDocumentPutResult =
 export type CatalogDocumentResult<T extends CatalogDocumentRequest> =
   T extends { op: "get" }
     ? CatalogDocumentRecord | null
-    : T extends { op: "page" | "get_many" }
+    : T extends { op: "page" | "page_live" | "get_many" }
       ? CatalogDocumentRecord[]
       : T extends { op: "put" }
         ? CatalogDocumentPutResult
@@ -102,6 +107,7 @@ export function isCatalogDocumentRead(
     request.op === "get" ||
     request.op === "get_many" ||
     request.op === "page" ||
+    request.op === "page_live" ||
     request.op === "import_complete"
   );
 }
@@ -153,6 +159,7 @@ export function assertCatalogDocumentRequest(
       return;
     }
     case "page":
+    case "page_live":
       if (
         typeof request.afterKey !== "string" ||
         request.afterKey.includes("\0") ||

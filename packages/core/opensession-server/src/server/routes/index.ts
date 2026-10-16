@@ -8,6 +8,7 @@
 
 import type { RouteHandler } from "./context";
 import { handleAuthRoutes } from "./auth";
+import { handleSessionAccessRoutes } from "./session-access";
 import { handleMediaRoutes } from "./media";
 import { handleStaticAssetsRoutes } from "./static-assets";
 import { handlePlainRoutes } from "./plain";
@@ -68,6 +69,7 @@ import { handleDatabasesRoutes } from "./databases";
 import { handleAnalyticsRoutes } from "./analytics";
 import { handleSearchRoutes } from "./search";
 import { handleSetupRoutes } from "./setup";
+import { handlePersonalGithubRoutes } from "./personal-github";
 import { handleOs1UpdateRoutes } from "./os1-update";
 import { handleInstanceSettingsRoutes } from "./instance-settings";
 import { handleLiveActivityRoutes } from "./live-activities";
@@ -79,6 +81,7 @@ export const routeHandlers: RouteHandler[] = [
   // First: the sign-in endpoints are exempt from the auth gate (which runs
   // before dispatch in opensession.ts) and must never be shadowed.
   handleAuthRoutes,
+  handleSessionAccessRoutes,
   handleMediaRoutes,
   handleStaticAssetsRoutes,
   handlePlainRoutes,
@@ -145,6 +148,7 @@ export const routeHandlers: RouteHandler[] = [
   handleDatabasesRoutes,
   handleAnalyticsRoutes,
   handleSearchRoutes,
+  handlePersonalGithubRoutes,
   handleSetupRoutes,
   handleInstanceSettingsRoutes,
 ];

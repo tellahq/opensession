@@ -5,6 +5,7 @@ import {
   shouldRetireCommandResult,
   TOMBSTONE_TTL_MS,
   WsCommandOutbox,
+  createEphemeralCommandOutbox,
 } from "./ws-command-outbox";
 
 class MemoryStorage {
@@ -125,16 +126,17 @@ describe("WebSocket command outbox", () => {
     expect(storage.getItem(`${KEY}:retired:a`)).not.toBeNull();
   });
 
-  test("adopts the previously shipped user key into a verified scope", () => {
+  test("quarantines the previously shipped user key instead of guessing identity", () => {
     const storage = new MemoryStorage();
     const old = new WsCommandOutbox(storage, () => 1, `${KEY}:ada`);
     expect(old.put({ type: "cancel", requestId: "old-a" })).toBe(true);
     const scoped = new WsCommandOutbox(storage, () => 2, `${KEY}:github:ada`);
     scoped.adoptLegacyPrefix(`${KEY}:ada`);
-    expect(scoped.pending().map((item) => item.requestId)).toEqual(["old-a"]);
+    expect(scoped.pending()).toEqual([]);
+    expect(old.pending().map((item) => item.requestId)).toEqual(["old-a"]);
   });
 
-  test("moves the previous scoped key once and binds it to one identity", () => {
+  test("never adopts a display-name scope into a new namespace", () => {
     const storage = new MemoryStorage();
     const prior = new WsCommandOutbox(storage, () => 1, `${KEY}:github:ada`);
     expect(prior.put({ type: "cancel", requestId: "prior" })).toBe(true);
@@ -144,8 +146,8 @@ describe("WebSocket command outbox", () => {
       `${KEY}:github%3Aada`,
     );
     encoded.adoptLegacyPrefix(`${KEY}:github:ada`);
-    expect(encoded.pending().map((item) => item.requestId)).toEqual(["prior"]);
-    expect(storage.getItem(`${KEY}:github:ada:item:prior`)).toBeNull();
+    expect(encoded.pending()).toEqual([]);
+    expect(storage.getItem(`${KEY}:github:ada:item:prior`)).not.toBeNull();
     const other = new WsCommandOutbox(
       storage,
       () => 3,
@@ -275,4 +277,39 @@ describe("WebSocket command outbox", () => {
     ).toBe(true);
     expect(shouldRetireCommandResult({ status: "completed" })).toBe(true);
   });
+});
+
+test("legacy ephemeral commands belong to one ready connection and never touch browser storage", () => {
+  const prior = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    get() {
+      throw new Error("must not read disk");
+    },
+  });
+  let ready = false;
+  try {
+    const old = createEphemeralCommandOutbox(() => ready);
+    expect(
+      old.tryPut({ type: "cancel", requestId: "not-ready" }),
+    ).toMatchObject({ ok: false });
+    ready = true;
+    expect(
+      old.put({
+        type: "prompt",
+        requestId: "legacy-A",
+        sessionId: "shared",
+        content: "only this connection",
+      }),
+    ).toBe(true);
+    expect(old.pending()).toHaveLength(1);
+    ready = false;
+    expect(old.pending()).toEqual([]);
+    expect(old.ack("legacy-A", "shared")).toBe(false);
+    const replacement = createEphemeralCommandOutbox(() => true);
+    expect(replacement.pending()).toEqual([]);
+  } finally {
+    if (prior) Object.defineProperty(globalThis, "localStorage", prior);
+    else Reflect.deleteProperty(globalThis, "localStorage");
+  }
 });

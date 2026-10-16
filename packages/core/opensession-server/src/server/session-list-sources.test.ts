@@ -66,14 +66,18 @@ describe("session list sources", () => {
       cache.indexOf("export async function getCachedSessionsAsync"),
       cache.indexOf("export async function getSessionListSnapshotAsync"),
     );
-    expect(asyncPath).toContain("rebuildSessionListFromCatalogs(slice)");
+    // A request never rebuilds: it starts the one coalesced catalog bootstrap
+    // and stays unavailable until that lands.
+    expect(asyncPath).toContain("primeSessionListIndex()");
+    expect(asyncPath).toContain("SessionListUnavailableError");
     expect(asyncPath).not.toContain("getAllSessions(");
     const prime = cache.slice(
-      cache.indexOf("export async function primeSessionListIndex"),
+      cache.indexOf("export function primeSessionListIndex"),
       cache.indexOf("export function __resetSessionListCatalogStateForTest"),
     );
     // Boot fails rather than serving no list; nothing infers completeness.
     expect(prime).toContain("throw error;");
+    expect(prime).toContain('rebuildSessionListFromCatalogs("include")');
     expect(prime).not.toContain("getAllSessions(");
     expect(cache).not.toContain("mark_catalog_complete");
     expect(cache).not.toContain("markAgentSessionCatalogImportComplete");
@@ -97,12 +101,10 @@ describe("session list sources", () => {
     expect(sources).toContain('agentSessionCatalogSources("linear")');
     expect(sources).toContain("throw new SessionListUnavailableError(");
     expect(sources).not.toContain("return undefined");
-    // The synchronous scanner is reachable from exactly one place: the
-    // test-only fallback of the synchronous reader.
-    expect(cache.match(/getAllSessions\(\)/g)?.length).toBe(1);
-    expect(cache).toMatch(
-      /if \(process\.env\.NODE_ENV === "test"\) \{\s*sessionsCacheGenerations\.include\+\+;\s*return enrichCachedSessions\("include", getAllSessions\(\)\);/,
-    );
+    // The synchronous scanner is unreachable from the cache: a synchronous
+    // whole-list reader cannot prove current authority and refuses instead.
+    expect(cache).not.toContain("getAllSessions(");
+    expect(cache).toContain("export function getCachedSessions(): never");
   });
 
   test("the sync scanner is a lazily required, offline-only seam", () => {

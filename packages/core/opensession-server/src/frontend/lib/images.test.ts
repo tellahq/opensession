@@ -1,4 +1,9 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { publishClientDataIdentity } from "./client-data-scope";
+beforeEach(() =>
+  publishClientDataIdentity({ required: false, authenticated: false }),
+);
+afterEach(() => publishClientDataIdentity(null));
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { preparePromptImages, splitAttachments } from "./images";
 
 // `bun test` has no DOM FileReader, and the inline fallback path needs one.

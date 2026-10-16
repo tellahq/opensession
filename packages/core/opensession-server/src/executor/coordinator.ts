@@ -501,7 +501,18 @@ export class ExecutorCoordinator {
         "host id is already bound to another run spec",
       );
     }
-    await this.deps.stop(hostId);
+    try {
+      await this.deps.stop(hostId);
+    } catch (cause) {
+      // Collected transient units cannot be stopped again. This receipt fences
+      // future dispatch only; the gateway still proves exact process/cgroup
+      // absence independently. Unknown or failed probes never certify it.
+      const [unitActive, hostReady] = await Promise.all([
+        this.deps.unitActive(hostId),
+        this.deps.hostReady(`${this.hostsDir}/${hostId}`),
+      ]);
+      if (unitActive !== false || hostReady !== false) throw cause;
+    }
     this.record({
       hostId,
       specHash,

@@ -452,8 +452,7 @@ export async function executeVoiceTool(
   switch (name) {
     case "list_current_work": {
       const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
-      const sessions = control
-        .listSessions()
+      const sessions = (await control.listSessions())
         .filter(
           (s) =>
             !s.desk &&
@@ -476,7 +475,7 @@ export async function executeVoiceTool(
     }
     case "inspect_session": {
       const id = String(args.session_id ?? "");
-      const s = control.getSession(id);
+      const s = await control.getSession(id);
       if (!s) return { error: `no session ${id}` };
       return {
         id: s.id,
@@ -502,7 +501,8 @@ export async function executeVoiceTool(
         repo: typeof args.repo === "string" ? args.repo : undefined,
         mode,
         user,
-        createdByLogin: control.getSession(desk.sessionId)?.createdByLogin,
+        createdByLogin: (await control.getSession(desk.sessionId))
+          ?.createdByLogin,
         parentSessionId: desk.sessionId,
       });
       return { id, started: true, mode };

@@ -244,3 +244,8 @@ export function isFeedEvent(msg: object): msg is SessionLiveEvent {
     type === "session_status"
   );
 }
+
+/** Authority replacement invalidates buffered bytes, not merely cursors. */
+export function resetSessionFeeds(): void {
+  feeds().clear();
+}

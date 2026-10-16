@@ -63,6 +63,13 @@ Object.assign(globalThis, {
   },
 });
 
+// Client data belongs to a resolved signed-in scope (client-data-scope.ts).
+const { publishClientDataIdentity } = await import("./client-data-scope");
+publishClientDataIdentity({
+  required: true,
+  authenticated: true,
+  githubAccountId: 11,
+});
 const store = await import("./notifications");
 afterAll(() => Object.assign(globalThis, original));
 

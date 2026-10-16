@@ -1,4 +1,4 @@
-const FALLBACK_MS = 10_000;
+import { captureClientDataScope } from "./client-data-scope";
 const USER_KEY = "opensession-user";
 const LEGACY_USER_KEY = "backstage-user";
 export const AUTH_STATUS_EVENT = "opensession-auth-status-changed";
@@ -26,35 +26,30 @@ function storedCurrentUser(): string {
 
 /**
  * Run startup hydration after the server has resolved this browser's identity.
- * A remembered user can start immediately. A fresh browser waits so it does
- * not load every per-user store once as Anonymous and again after sign-in.
+ * Stored display names and elapsed time are not proof of identity. Wait for
+ * explicit auth readiness; local mode is available after required:false.
  */
 export function whenCurrentUserReady(run: (user: string) => void): () => void {
   if (!(globalThis.window?.addEventListener instanceof Function)) {
-    run("Anonymous");
+    if (captureClientDataScope()) run("Anonymous");
     return () => {};
   }
   const current = storedCurrentUser();
-  if (current !== "Anonymous") {
+  if (captureClientDataScope() && current !== "Anonymous") {
     run(current);
     return () => {};
   }
   let done = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
   const finish = () => {
-    if (done) return;
+    if (done || !captureClientDataScope()) return;
     done = true;
     window.removeEventListener(AUTH_STATUS_EVENT, finish);
-    clearTimeout(timer);
     run(storedCurrentUser());
   };
   window.addEventListener(AUTH_STATUS_EVENT, finish);
-  // Local instances predating the auth-status route still need to start.
-  timer = setTimeout(finish, FALLBACK_MS);
   return () => {
     done = true;
     window.removeEventListener(AUTH_STATUS_EVENT, finish);
-    clearTimeout(timer);
   };
 }
 

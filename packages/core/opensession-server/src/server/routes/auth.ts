@@ -13,6 +13,7 @@
  * one path to keep honest, rather than a fallback nobody exercises.
  */
 
+import { isGithubAccountId } from "../../shared/access-scope";
 import { organizationName } from "../config";
 import { organizationIconRevision } from "../organization-settings";
 import type { RouteContext } from "./context";
@@ -58,9 +59,14 @@ export async function handleAuthRoutes(
     // static asset, already served pre-auth (page loads stay open so the
     // sign-in screen can render); only the revisioned URL needed a way out.
     const iconRevision = await organizationIconRevision();
-    return Response.json({
+    const response = Response.json({
       required: webAuthRequired(),
       authenticated: signedIn,
+      ...(signedIn &&
+      !identity.automation &&
+      isGithubAccountId(identity.githubAccountId)
+        ? { githubAccountId: identity.githubAccountId }
+        : {}),
       // The sign-in gate is the one screen a signed-out browser can see, so
       // it names the server it belongs to from here — every other source of
       // the organization name sits behind the gate this response unlocks.
@@ -75,6 +81,8 @@ export async function handleAuthRoutes(
       // between "sign in" and "sign in again as you".
       ...(identity ? { login: identity.login, name: identity.name } : {}),
     });
+    response.headers.set("Cache-Control", "no-store");
+    return response;
   }
 
   if (path === "/api/auth/device" && req.method === "POST") {
@@ -121,7 +129,12 @@ export async function handleAuthRoutes(
     } else if (watched && watched.status === "error") {
       return Response.json(watched);
     } else if (watched) {
-      result = { status: "ok", login: watched.login, name: watched.name };
+      result = {
+        status: "ok",
+        login: watched.login,
+        name: watched.name,
+        githubAccountId: watched.githubAccountId,
+      };
     } else {
       result = await pollGithubDeviceFlow(deviceCode);
     }
@@ -140,7 +153,7 @@ export async function handleAuthRoutes(
     let session: ReturnType<typeof createWebSession>;
     try {
       await enrollGithubSignIn(result.login);
-      session = createWebSession(result.login);
+      session = createWebSession(result.login, result.githubAccountId);
     } catch {
       return Response.json(
         { status: "error", error: "Could not save sign-in. Please try again." },

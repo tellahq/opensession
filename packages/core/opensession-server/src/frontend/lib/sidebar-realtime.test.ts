@@ -41,6 +41,13 @@ Object.assign(globalThis, {
     return Response.json({ prefs: {} });
   },
 });
+// Client data belongs to a resolved signed-in scope (client-data-scope.ts).
+const { publishClientDataIdentity } = await import("./client-data-scope");
+publishClientDataIdentity({
+  required: true,
+  authenticated: true,
+  githubAccountId: 11,
+});
 const pins = await import("./pins");
 const reads = await import("./reads");
 const { resyncUserMap, resyncUserMaps } = await import("./user-map");

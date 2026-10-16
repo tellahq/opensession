@@ -1,3 +1,9 @@
+import {
+  captureClientDataScope,
+  assertClientDataScope,
+  clientDataScopeHeaders,
+  type ClientDataScope,
+} from "../client-data-scope";
 import { z } from "zod";
 import { BASE, request } from "./request";
 import type {
@@ -44,6 +50,7 @@ export async function sendPlainReplyApi(
   kind: "reply" | "note",
   user: string,
   attachmentIds: string[] = [],
+  scope: ClientDataScope | null = captureClientDataScope(),
 ): Promise<void> {
   await request<{ ok: boolean }>(
     `/plain/threads/${encodeURIComponent(threadId)}/reply`,
@@ -51,6 +58,7 @@ export async function sendPlainReplyApi(
       method: "POST",
       body: { text, kind, user, attachmentIds },
       label: "Failed to send",
+      scope,
     },
   );
 }
@@ -70,7 +78,9 @@ export async function uploadPlainAttachmentApi(
   threadId: string,
   file: File,
   kind: "reply" | "note",
+  scope: ClientDataScope | null = captureClientDataScope(),
 ): Promise<string> {
+  assertClientDataScope(scope);
   if (file.size > PLAIN_ATTACHMENT_MAX_BYTES) {
     throw new Error(`${file.name} is too large (25 MB max)`);
   }
@@ -79,6 +89,7 @@ export async function uploadPlainAttachmentApi(
     {
       method: "POST",
       headers: {
+        ...clientDataScopeHeaders(scope),
         "x-file-name": encodeURIComponent(file.name),
         "x-plain-kind": kind,
         "content-type": file.type || "application/octet-stream",
@@ -86,9 +97,11 @@ export async function uploadPlainAttachmentApi(
       body: file,
     },
   );
+  assertClientDataScope(scope);
   const parsedBody = attachmentResponseSchema.safeParse(
     await res.json().catch(() => null),
   );
+  assertClientDataScope(scope);
   const body = parsedBody.success ? parsedBody.data : null;
   if (!res.ok || !body?.attachmentId) {
     throw new Error(body?.error || `Attachment upload failed (${res.status})`);

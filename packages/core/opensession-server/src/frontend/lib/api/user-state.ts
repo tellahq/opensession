@@ -1,3 +1,7 @@
+import {
+  captureClientDataScope,
+  type ClientDataScope,
+} from "../client-data-scope";
 import { z } from "zod";
 import type { MapDelta } from "../user-map";
 import { request } from "./request";
@@ -103,10 +107,11 @@ export interface RemoteDraft {
 
 export async function fetchDrafts(
   user: string,
+  scope: ClientDataScope | null = captureClientDataScope(),
 ): Promise<Record<string, RemoteDraft>> {
   const body = await request<unknown>(
     `/drafts?user=${encodeURIComponent(user)}`,
-    { label: "Failed to fetch drafts" },
+    { label: "Failed to fetch drafts", scope },
   );
   const parsed = draftsResponseSchema.safeParse(body);
   return parsed.success ? (parsed.data.drafts ?? {}) : {};
@@ -120,6 +125,7 @@ export async function saveDraftApi(
   text: string,
   updatedAt: string,
   keepalive = false,
+  scope: ClientDataScope | null = captureClientDataScope(),
 ): Promise<{ draft: RemoteDraft | null; applied: boolean }> {
   const body = await request<{ draft?: RemoteDraft | null; applied?: boolean }>(
     "/drafts",
@@ -128,6 +134,7 @@ export async function saveDraftApi(
       body: { user, sessionId, text, updatedAt },
       keepalive,
       label: "Failed to save draft",
+      scope,
     },
   );
   return { draft: body?.draft ?? null, applied: body?.applied !== false };

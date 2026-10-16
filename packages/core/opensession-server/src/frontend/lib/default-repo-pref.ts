@@ -11,23 +11,51 @@
 // applied as-is; the palette validates it against the live repo list, so a
 // preference naming a repo that has since been removed simply stops applying.
 
+import {
+  captureClientDataScope,
+  clientDataStorageKey,
+  subscribeClientDataScope,
+} from "./client-data-scope";
 import * as userPref from "./user-pref";
-
-const pref = userPref.makeUserPref<string>({
-  localKey: "opensession-default-repo-pref",
+const KEY = "opensession-default-repo-pref";
+const EVENT = "opensession-default-repo-pref-changed";
+// Preserve legacy sync only for explicit unauthenticated local operation.
+const localPref = userPref.makeUserPref<string>({
+  localKey: KEY,
   prefKey: "default-repo",
-  changeEvent: "opensession-default-repo-pref-changed",
+  changeEvent: EVENT,
   defaultValue: "",
-  decode: (value) =>
-    value === null || value === undefined
-      ? null
-      : value === "auto"
-        ? ""
-        : value,
-  encode: (v) => v,
+  decode: (value) => (value == null ? null : value === "auto" ? "" : value),
+  encode: (value) => value,
+  localOnlyIdentity: true,
 });
-
-/** The user's preferred new-session repo id, or "" for no preference. */
-export const getDefaultRepoPref = pref.get;
-export const setDefaultRepoPref = pref.set;
-export const onDefaultRepoPrefChanged = pref.onChanged;
+export function getDefaultRepoPref(): string {
+  const scope = captureClientDataScope();
+  if (scope?.key === "shared:local") return localPref.get();
+  const key = clientDataStorageKey(KEY);
+  if (!key) return "";
+  try {
+    const value = localStorage.getItem(key);
+    return value === "auto" ? "" : (value ?? "");
+  } catch {
+    return "";
+  }
+}
+export function setDefaultRepoPref(value: string): void {
+  if (captureClientDataScope()?.key === "shared:local") {
+    localPref.set(value);
+    return;
+  }
+  const key = clientDataStorageKey(KEY);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* Storage optional. */
+  }
+  window.dispatchEvent(new Event(EVENT));
+}
+export const onDefaultRepoPrefChanged = localPref.onChanged;
+subscribeClientDataScope(() => {
+  globalThis.window?.dispatchEvent(new Event(EVENT));
+});

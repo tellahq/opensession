@@ -16,8 +16,13 @@ export const SESSION_BRANCH_MATCH_LIMIT = 25;
 
 /** Store methods the facade may invoke by name. Anything else is refused. */
 export const SESSION_LIST_STORE_METHODS = [
+  "scopeState",
+  "filterScopeIds",
+  "resetScopeReplica",
+  "applyScopeDelta",
   "upsert",
   "upsertMany",
+  "upsertScopePage",
   "upsertManyCovered",
   "replaceAll",
   "markCovered",

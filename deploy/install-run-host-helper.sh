@@ -26,6 +26,9 @@ health_url="${11}"
 runner_mode="${12}"
 runner_bin="${13}"
 script_dir="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+# Root-side JSON parsing never executes service-owned Bun/JS as root.
+[ -x /usr/bin/python3 ] && [ -x /bin/bash ] || { echo "run-host helper requires system Python 3 and Bash" >&2; exit 2; }
+command -v timeout >/dev/null && command -v runuser >/dev/null || { echo "run-host capability checks require timeout and runuser" >&2; exit 2; }
 helper="/usr/local/libexec/opensession-run-host"
 config="/etc/opensession/run-host.conf"
 sudoers="/etc/sudoers.d/opensession-run-host"

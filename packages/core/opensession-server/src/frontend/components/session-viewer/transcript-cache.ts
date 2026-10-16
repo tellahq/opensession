@@ -1,3 +1,7 @@
+import {
+  captureClientDataScope,
+  subscribeClientDataScope,
+} from "../../lib/client-data-scope";
 import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
 import type { TranscriptEntry } from "../../lib/types";
 
@@ -27,6 +31,7 @@ const TRANSCRIPT_VIEW_CACHE_MAX = 6;
 export function cachedTranscriptView(
   sessionId: string,
 ): CachedTranscriptView | null {
+  if (!captureClientDataScope()) return null;
   const hit = transcriptViewCache.get(sessionId);
   if (!hit) return null;
   transcriptViewCache.delete(sessionId);
@@ -37,6 +42,7 @@ export function cachedTranscriptView(
 export function peekCachedTranscriptView(
   sessionId: string,
 ): CachedTranscriptView | null {
+  if (!captureClientDataScope()) return null;
   return transcriptViewCache.get(sessionId) ?? null;
 }
 
@@ -44,6 +50,7 @@ export function cacheTranscriptView(
   sessionId: string,
   view: CachedTranscriptView,
 ) {
+  if (!captureClientDataScope()) return;
   transcriptViewCache.delete(sessionId);
   transcriptViewCache.set(sessionId, view);
   while (transcriptViewCache.size > TRANSCRIPT_VIEW_CACHE_MAX) {
@@ -52,3 +59,5 @@ export function cacheTranscriptView(
     transcriptViewCache.delete(oldest);
   }
 }
+
+subscribeClientDataScope(() => transcriptViewCache.clear());

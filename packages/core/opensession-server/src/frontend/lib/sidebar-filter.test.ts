@@ -1,3 +1,7 @@
+import { publishClientDataIdentity } from "./client-data-scope";
+beforeEach(() =>
+  publishClientDataIdentity({ required: false, authenticated: false }),
+);
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { FilterState } from "./sidebar-filter";
 

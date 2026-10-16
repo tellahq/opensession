@@ -121,6 +121,7 @@ function githubIntegrationSection(
 export async function bootstrapUserAuthOnConnect(
   login: string,
   name: string | undefined,
+  verifiedGithubAccountId?: number,
 ): Promise<
   { token: string; cookie: string; name: string } | { error: string }
 > {
@@ -204,7 +205,7 @@ export async function bootstrapUserAuthOnConnect(
   // (d) mint the session for the just-rostered login. getConfig() re-reads on
   // the file change (mtime+size guard), so teamMemberForLogin inside
   // createWebSession sees the fresh roster.
-  const session = createWebSession(login);
+  const session = createWebSession(login, verifiedGithubAccountId);
   if (!session)
     return { error: "Signed in with GitHub but could not create a session" };
   return {
@@ -923,6 +924,7 @@ export async function handleConnectionsRoutes(
         const boot = await bootstrapUserAuthOnConnect(
           result.login,
           result.name,
+          result.githubAccountId,
         );
         if ("error" in boot) {
           return Response.json({ status: "error", error: boot.error });

@@ -1,3 +1,11 @@
+import {
+  clientDataScopeHeaders,
+  captureClientDataScope,
+  assertClientDataScope,
+  isCurrentClientDataScope,
+  subscribeClientDataScope,
+  type ClientDataScope,
+} from "../client-data-scope";
 import { API_BASE, ApiError, request } from "./request";
 import { newRepoRegistration } from "../new-repo";
 import { rememberRepoColors } from "../repo-colors";
@@ -37,6 +45,11 @@ export interface RepoInfo {
   iconRev?: number | null;
   /** The Portal a new session can start with it, when the repo declares one. */
   portal?: { id: string; name: string };
+  /** Present only for a private repository registered from the signed-in
+   *  account's own GitHub connection; the shared registry never carries it.
+   *  This is the server's answer, so the client never infers privacy from an
+   *  id or label. */
+  accessScope?: { kind: "personal"; ownerGithubAccountId: number };
 }
 
 export type SharedCheckoutMode = "shared" | "worktree";
@@ -68,14 +81,17 @@ export function setSharedCheckoutMode(
  * Repositories); the per-user preference overrides it.
  */
 export async function setNewSessionRepoApi(repo: string): Promise<string> {
+  const scope = captureClientDataScope();
   const data = await request<{ newSessionRepo?: string }>(
     "/repos/new-session-default",
     {
       method: "PUT",
       body: { repo },
       label: "Failed to set the default repository",
+      scope,
     },
   );
+  assertClientDataScope(scope);
   workspaceNewSessionRepo = data?.newSessionRepo ?? repo;
   workspaceRepoLive = true;
   // Keep the remembered copy honest, so the palette that opens next doesn't
@@ -110,10 +126,12 @@ export function repoGithubAvatarUrl(id: string): string {
 export async function uploadRepoIconApi(
   id: string,
   png: Blob,
+  scope: ClientDataScope | null = captureClientDataScope(),
 ): Promise<{ color: string | null; hasIcon: boolean; iconRev: number | null }> {
+  assertClientDataScope(scope);
   const res = await fetch(`${API_BASE}/repos/${encodeURIComponent(id)}/icon`, {
     method: "POST",
-    headers: { "Content-Type": "image/png" },
+    headers: { ...clientDataScopeHeaders(scope), "Content-Type": "image/png" },
     body: png,
   });
   const body: {
@@ -122,6 +140,7 @@ export async function uploadRepoIconApi(
     hasIcon?: boolean;
     iconRev?: number | null;
   } | null = await res.json().catch(() => null);
+  assertClientDataScope(scope);
   if (!res.ok) {
     throw new ApiError(
       body?.error || `Failed to upload the icon: ${res.status}`,
@@ -169,20 +188,24 @@ let reposInFlight: Promise<RepoInfo[]> | null = null;
 
 export function fetchRepos(): Promise<RepoInfo[]> {
   if (!reposInFlight) {
-    reposInFlight = loadRepos().finally(() => {
-      reposInFlight = null;
+    const scope = captureClientDataScope();
+    const pending = loadRepos(scope).finally(() => {
+      if (reposInFlight === pending) reposInFlight = null;
     });
+    reposInFlight = pending;
   }
   return reposInFlight;
 }
 
-async function loadRepos(): Promise<RepoInfo[]> {
+async function loadRepos(scope: ClientDataScope | null): Promise<RepoInfo[]> {
   for (let attempt = 0; ; attempt++) {
     try {
+      assertClientDataScope(scope);
       const data = await request<{
         repos?: RepoInfo[];
         newSessionRepo?: string;
-      }>("/repos", { label: "Failed to load repositories" });
+      }>("/repos", { label: "Failed to load repositories", scope });
+      assertClientDataScope(scope);
       if (data?.newSessionRepo !== undefined) {
         workspaceNewSessionRepo = data.newSessionRepo;
         workspaceRepoLive = true;
@@ -199,6 +222,7 @@ async function loadRepos(): Promise<RepoInfo[]> {
       rememberRepos(data?.repos ?? [], workspaceNewSessionRepo);
       return data?.repos ?? [];
     } catch (error) {
+      if (!isCurrentClientDataScope(scope)) throw error;
       const retryDelay = REPO_FETCH_RETRY_DELAYS_MS[attempt];
       const transient = !(error instanceof ApiError) || error.status >= 500;
       if (!transient || retryDelay === undefined) throw error;
@@ -341,3 +365,9 @@ export async function fetchWorktrees(repo?: string): Promise<WorktreeInfo[]> {
     label: "Failed to fetch worktrees",
   });
 }
+
+subscribeClientDataScope(() => {
+  reposInFlight = null;
+  workspaceNewSessionRepo = "";
+  workspaceRepoLive = false;
+});

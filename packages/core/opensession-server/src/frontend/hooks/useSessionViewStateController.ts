@@ -37,6 +37,10 @@ import {
   useSessionComposerDraft,
   useSessionPromptOutbox,
 } from "./useSessionComposerController";
+import {
+  PRIVATE_ATTACHMENTS_UNAVAILABLE,
+  isPrivateSession,
+} from "../lib/private-session-attachments";
 import { useSessionRuntime } from "./useSessionRuntime";
 import { useSessionRuntimeController } from "./useSessionRuntimeController";
 import { reviewLoopResult, type ReviewLoopResult } from "../lib/review-loop";
@@ -417,6 +421,10 @@ export function useSessionViewStateController({
       focused: identity.focused,
       sessionHidden,
       noteMode,
+      // Authoritative privacy: the server-projected scope, never a name.
+      attachmentsUnavailable: isPrivateSession(session)
+        ? PRIVATE_ATTACHMENTS_UNAVAILABLE
+        : undefined,
     },
     draft: { draftKey, setImages, setFiles, uploads },
   });

@@ -1,8 +1,18 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { publishClientDataIdentity } from "./client-data-scope";
 import { uploadFile } from "./images";
 
 const realFetch = globalThis.fetch;
+beforeEach(() => {
+  // Uploads run inside a resolved signed-in scope.
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 11,
+  });
+});
 afterEach(() => {
+  publishClientDataIdentity(null);
   globalThis.fetch = realFetch;
 });
 
