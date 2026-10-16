@@ -248,6 +248,9 @@ export interface UnifiedSession {
    * pool fallback); an exhausted soft pin falls back to another eligible account.
    */
   accountId?: string;
+  /** "fixed": accountId is a hard, immutable funding pin for every run of
+   *  this session and of sessions created from it (fixed-subscription.ts). */
+  subscriptionPolicy?: "fixed";
   /** Codex thread id, when this session has run on a codex-provider model. */
   codexThreadId?: string;
   /** Pi session id (`ses_…`), when this session has run on an
@@ -678,6 +681,8 @@ export interface NativeSessionFile {
   fastMode?: boolean; // OpenAI priority service tier for ChatGPT OAuth Codex runs
   speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs GPT-6 Astra and a Pro $500 login
   accountId?: string; // pinned Claude/Codex provider account; unset = auto pool
+  /** Set only at creation; never cleared or changed (fixed-subscription.ts). */
+  subscriptionPolicy?: "fixed";
   codexThreadId?: string; // codex thread id once the session has run on a codex model
   piSessionId?: string; // pi engine session id (uuid) once the session has run on a pi/* model
   /** Provider whose engine last actually drove a run in this session. Lets the

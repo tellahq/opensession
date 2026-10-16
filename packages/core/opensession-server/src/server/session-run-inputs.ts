@@ -212,10 +212,11 @@ export async function resolveSessionRunInputs(
  * pin and credit policy (its cost ceiling); every other machine turn keeps the
  * session's soft pin. The automation's MCP and GitHub restrictions are
  * unaffected: they read `user`, which stays dropped. Interactive sessions
- * always keep their own soft pin.
+ * always keep their own soft pin, except a fixed-subscription session: its
+ * pin is hard on every turn, with no usage credits, whoever prompts.
  */
 export function runAccountSpec(
-  session: Pick<UnifiedSession, "accountId">,
+  session: Pick<UnifiedSession, "accountId" | "subscriptionPolicy">,
   turn: Pick<SessionRunInputs, "isAutomationSession"> & {
     accountUser?: string | undefined;
   },
@@ -228,6 +229,13 @@ export function runAccountSpec(
   accountStrict: boolean | undefined;
   usageCredits: boolean | undefined;
 } {
+  if (session.subscriptionPolicy === "fixed") {
+    return {
+      accountId: session.accountId,
+      accountStrict: true,
+      usageCredits: false,
+    };
+  }
   if (turn.isAutomationSession && turn.accountUser) {
     return {
       accountId: undefined,

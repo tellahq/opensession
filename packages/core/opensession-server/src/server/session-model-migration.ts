@@ -19,6 +19,10 @@
  *    model mid-turn races the run's own end-of-turn session patch.
  *  - targets that don't name an engine.
  */
+import {
+  fixedSubscriptionModelError,
+  isFixedSubscription,
+} from "./fixed-subscription";
 import { executeSessionProjection } from "./session-projection-executor";
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
@@ -123,6 +127,11 @@ export async function migrateSessionEngine(
         "Automation sessions can only migrate to Pi.",
     };
   }
+
+  const fixedRefusal = isFixedSubscription(data)
+    ? fixedSubscriptionModelError(data.accountId, resolved.id)
+    : undefined;
+  if (fixedRefusal) return { ok: false, error: fixedRefusal };
 
   if (sessionHasJournaledRun(sessionId, data)) {
     return {

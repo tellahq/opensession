@@ -45,6 +45,10 @@ import { getRunState, transitionRunState } from "./run-state";
 import { settlePromptThrowRunState } from "./prompt-throw-settlement";
 import { retryOnKernelSaturation } from "./session-projection-executor";
 import { resolveSessionRunInputs, runAccountSpec } from "./session-run-inputs";
+import {
+  fixedSubscriptionTurnError,
+  isFixedSubscription,
+} from "./fixed-subscription";
 import { defaultRepo } from "./config";
 import { agentAwsCredsForUntrustedRuns } from "./aws-creds";
 import { isDevInstance } from "./dev-mode";
@@ -2271,7 +2275,9 @@ export async function maybeLaunchSandboxedRun(
       accountUser: opts.accountUser,
       fallbackModel: opts.isAutomationSession
         ? undefined
-        : interactiveFallbackModel(session.model, session.autoFallback),
+        : isFixedSubscription(session)
+          ? "none"
+          : interactiveFallbackModel(session.model, session.autoFallback),
       effort: session.effort,
       fastMode: session.fastMode,
       speed: session.speed,
@@ -3215,6 +3221,20 @@ async function runSessionPromptInner(
     throw new Error(
       "Automation descendants require a sandbox or an explicitly isolated Runner",
     );
+  // A fixed subscription fails closed before any backend is chosen: a
+  // disconnected account, or a model its provider cannot serve, ends this
+  // turn (queued, retried or recovered alike) with an error instead of
+  // finding other funding. No Runner, sandbox or engine is started.
+  const fixedSubscriptionError = fixedSubscriptionTurnError(session);
+  const fixedSubscriptionRefusal = fixedSubscriptionError
+    ? (async function* (): AsyncGenerator<StreamEvent> {
+        yield {
+          type: "error",
+          content: fixedSubscriptionError,
+          model: session.model,
+        };
+      })()
+    : null;
   // Resolved once, before a backend is chosen: the automation-bar server set
   // is a catalog read, and the Runner, sandbox and hosted proxy name lists,
   // the run-rpc fallback and the in-process mount below must all describe
@@ -3243,44 +3263,48 @@ async function runSessionPromptInner(
   const attachedGhRepos = session.automationDescendantPolicy
     ? undefined
     : attachedGithubRepos(session);
-  const runnerRun = await maybeLaunchRunnerRun(session, {
-    prompt,
-    hostId: startToken,
-    shouldCancel: () => isAgentSessionCancelled(session.id, startToken),
-    engineSessionId: engineSessionId || undefined,
-    images,
-    attachments,
-    mcpServers: mcpServers ?? "all",
-    user,
-    reposNote: isAutomationSession
-      ? undefined
-      : await buildSessionNote(session, user),
-    automationProxyMcpServers,
-  });
-  const sandboxRun = runnerRun
+  const runnerRun = fixedSubscriptionRefusal
     ? null
-    : await maybeLaunchSandboxedRun(session, {
+    : await maybeLaunchRunnerRun(session, {
         prompt,
-        promptEntryId: durablePromptEntryId,
-        seedTranscriptEntries: piHostSeedEntries,
+        hostId: startToken,
+        shouldCancel: () => isAgentSessionCancelled(session.id, startToken),
         engineSessionId: engineSessionId || undefined,
-        promptCarriesHandoff: !!switchHandoff,
-        cwd,
-        user,
-        accountUser: runInputs.accountUser,
-        humanPrompter: runInputs.humanPrompter,
         images,
         attachments,
         mcpServers: mcpServers ?? "all",
-        deniedTools,
-        isAutomationSession,
+        user,
+        reposNote: isAutomationSession
+          ? undefined
+          : await buildSessionNote(session, user),
         automationProxyMcpServers,
-        startToken,
       });
+  const sandboxRun =
+    runnerRun || fixedSubscriptionRefusal
+      ? null
+      : await maybeLaunchSandboxedRun(session, {
+          prompt,
+          promptEntryId: durablePromptEntryId,
+          seedTranscriptEntries: piHostSeedEntries,
+          engineSessionId: engineSessionId || undefined,
+          promptCarriesHandoff: !!switchHandoff,
+          cwd,
+          user,
+          accountUser: runInputs.accountUser,
+          humanPrompter: runInputs.humanPrompter,
+          images,
+          attachments,
+          mcpServers: mcpServers ?? "all",
+          deniedTools,
+          isAutomationSession,
+          automationProxyMcpServers,
+          startToken,
+        });
 
   // Defensive guard: a session with an explicit runnable provider must never
   // reach the host path, even if a future launcher regression returns null.
   if (
+    !fixedSubscriptionRefusal &&
     !runnerRun &&
     !sandboxRun &&
     isRunnableSandboxProvider(session.sandbox?.provider)
@@ -3355,7 +3379,10 @@ async function runSessionPromptInner(
             }
           : interactiveMcpServers(user, sessionId, durablePromptEntryId);
   const hostedRun =
-    !runnerRun && !sandboxRun && routedEngine === "pi"
+    !fixedSubscriptionRefusal &&
+    !runnerRun &&
+    !sandboxRun &&
+    routedEngine === "pi"
       ? runAgentHosted({
           osSessionId: session.id,
           prompt,
@@ -3398,10 +3425,9 @@ async function runSessionPromptInner(
           author: commitAuthorFor(user, sessionPrincipal(session)),
           user: runInputs.user,
           accountUser: runInputs.accountUser,
-          fallbackModel: interactiveFallbackModel(
-            session.model,
-            session.autoFallback,
-          ),
+          fallbackModel: isFixedSubscription(session)
+            ? "none"
+            : interactiveFallbackModel(session.model, session.autoFallback),
           effort: session.effort,
           fastMode: session.fastMode,
           speed: session.speed,
@@ -3445,7 +3471,8 @@ async function runSessionPromptInner(
     session.id,
   );
 
-  for await (const event of runnerRun ??
+  for await (const event of fixedSubscriptionRefusal ??
+    runnerRun ??
     sandboxRun ??
     hostedRun ??
     runAgent({
@@ -3466,10 +3493,10 @@ async function runSessionPromptInner(
       // is tried before the automation's account and the pool.
       ...runAccountSpec(session, runInputs),
       // Respect the session opt-out as well as the instance fallback policy.
-      fallbackModel: interactiveFallbackModel(
-        session.model,
-        session.autoFallback,
-      ),
+      // A fixed subscription never moves to another model on its own.
+      fallbackModel: isFixedSubscription(session)
+        ? "none"
+        : interactiveFallbackModel(session.model, session.autoFallback),
       images,
       // Engine switch: seed the fresh pi session's persisted transcript
       // with the prior history (same entries the handoff note was built from)
