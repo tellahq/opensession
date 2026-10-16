@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { formatBytes, formatStructures } from "./memory";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { formatBytes, formatStructures, memory } from "./memory";
 
 describe("opensession memory formatting", () => {
   test("formats byte counts", () => {
@@ -22,5 +22,44 @@ describe("opensession memory formatting", () => {
       "a.small  2",
       "c.broken  error: boom",
     ]);
+  });
+});
+
+describe("opensession memory --json", () => {
+  afterEach(() => {
+    (console.log as any).mockRestore?.();
+    (console.error as any).mockRestore?.();
+  });
+
+  test.each([true, false])(
+    "stdout is one JSON document (snapshot=%p)",
+    async (snapshot) => {
+      const out: string[] = [];
+      spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+        out.push(args.join(" "));
+      });
+      spyOn(console, "error").mockImplementation(() => {});
+      const code = await memory({ json: true, snapshot }, async (path) =>
+        path.endsWith("/heap-snapshot")
+          ? { path: "/state/heap.heapsnapshot", bytes: 10, durationMs: 1 }
+          : { process: { rss: 1 }, structures: {} },
+      );
+      expect(code).toBe(0);
+      const parsed = JSON.parse(out.join("\n"));
+      expect(parsed).toHaveProperty(snapshot ? "path" : "process");
+    },
+  );
+
+  test("failures stay off stdout", async () => {
+    const out: string[] = [];
+    spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      out.push(args.join(" "));
+    });
+    spyOn(console, "error").mockImplementation(() => {});
+    const code = await memory({ json: true, snapshot: true }, async () => {
+      throw new Error("server returned 403");
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([]);
   });
 });

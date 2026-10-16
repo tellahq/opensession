@@ -53,6 +53,7 @@ describe("writeHeapSnapshot", () => {
           return '{"snapshot":{}}';
         },
         now: () => new Date("2099-01-01T00:00:00Z"),
+        freeBytes: async () => Number.MAX_SAFE_INTEGER,
       };
       const a = writeHeapSnapshot(options);
       const b = writeHeapSnapshot(options);
@@ -81,11 +82,69 @@ describe("writeHeapSnapshot", () => {
           generate: () => {
             throw new Error("out of memory");
           },
+          freeBytes: async () => Number.MAX_SAFE_INTEGER,
         }),
       ).rejects.toThrow("out of memory");
       expect(heapSnapshotInFlight()).toBe(false);
-      const ok = await writeHeapSnapshot({ dir, generate: () => "{}" });
+      const ok = await writeHeapSnapshot({
+        dir,
+        generate: () => "{}",
+        freeBytes: async () => Number.MAX_SAFE_INTEGER,
+      });
       expect(ok.bytes).toBe(2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("writeHeapSnapshot failures", () => {
+  test("a failed write leaves no snapshot file and still prunes old ones", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "os-heap-test-"));
+    try {
+      for (let i = 0; i < KEEP_HEAP_SNAPSHOTS + 2; i++)
+        await writeFile(join(dir, `gateway-2000-01-0${i}.heapsnapshot`), "{}");
+      await writeFile(join(dir, "gateway-old.heapsnapshot.partial"), "{");
+      await expect(
+        writeHeapSnapshot({
+          dir,
+          generate: () => '{"snapshot":{}}',
+          freeBytes: async () => Number.MAX_SAFE_INTEGER,
+          write: async (path, data) => {
+            // Simulate ENOSPC after part of the file reached disk.
+            await writeFile(path, data.slice(0, 5));
+            throw Object.assign(new Error("no space left on device"), {
+              code: "ENOSPC",
+            });
+          },
+          now: () => new Date("2099-01-01T00:00:00Z"),
+        }),
+      ).rejects.toThrow("no space left on device");
+      const files = (await readdir(dir)).sort();
+      expect(files.some((name) => name.includes("2099"))).toBe(false);
+      expect(files.some((name) => name.endsWith(".partial"))).toBe(false);
+      expect(files.length).toBe(KEEP_HEAP_SNAPSHOTS);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("refuses a snapshot that would nearly fill the disk", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "os-heap-test-"));
+    try {
+      let wrote = false;
+      await expect(
+        writeHeapSnapshot({
+          dir,
+          generate: () => "{}",
+          freeBytes: async () => 1024,
+          write: async () => {
+            wrote = true;
+          },
+        }),
+      ).rejects.toThrow("not enough free disk space");
+      expect(wrote).toBe(false);
+      expect(await readdir(dir)).toEqual([]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

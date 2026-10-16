@@ -15,7 +15,15 @@
  * few are kept.
  */
 import { heapStats, memoryUsage as jscMemoryUsage } from "bun:jsc";
-import { chmod, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  readdir,
+  rename,
+  rm,
+  statfs,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { readMemoryProbes } from "./memory-probes";
 import { stateDir } from "./paths";
@@ -24,6 +32,10 @@ import { stateDir } from "./paths";
 const TOP_OBJECT_TYPES = 30;
 /** Snapshots kept in the state directory; older ones are deleted. */
 export const KEEP_HEAP_SNAPSHOTS = 3;
+/** Free space left after a snapshot is written, so it cannot fill the disk
+ *  the gateway's own state lives on. */
+export const SNAPSHOT_FREE_SPACE_MARGIN_BYTES = 256 * 1024 * 1024;
+const PARTIAL_SUFFIX = ".partial";
 
 export const heapSnapshotDir = () => stateDir("heap-snapshots");
 
@@ -140,6 +152,9 @@ export function writeHeapSnapshot(
     dir?: string;
     generate?: () => string;
     now?: () => Date;
+    /** Bytes free in `dir`; defaults to statfs. */
+    freeBytes?: (dir: string) => Promise<number>;
+    write?: (path: string, data: string) => Promise<void>;
   } = {},
 ): Promise<HeapSnapshotResult> {
   if (snapshotInFlight) return snapshotInFlight;
@@ -153,27 +168,49 @@ export function writeHeapSnapshot(
     await new Promise<void>((resolve) => setImmediate(resolve));
     const generate =
       options.generate ?? (() => Bun.generateHeapSnapshot("v8") as string);
+    const freeBytes =
+      options.freeBytes ??
+      (async (target: string) => {
+        const fs = await statfs(target);
+        return fs.bavail * fs.bsize;
+      });
+    const write =
+      options.write ??
+      ((target: string, data: string) =>
+        writeFile(target, data, { mode: 0o600, flag: "wx" }));
     const stamp = (options.now?.() ?? new Date())
       .toISOString()
       .replace(/[:.]/g, "-");
     const path = join(dir, `gateway-${stamp}-${process.pid}.heapsnapshot`);
-    let snapshot: string | null = generate();
-    const bytes = Buffer.byteLength(snapshot);
-    await writeFile(path, snapshot, { mode: 0o600, flag: "wx" });
-    snapshot = null;
-    const files = (await readdir(dir))
-      .filter((name) => name.endsWith(".heapsnapshot"))
-      .sort();
-    for (const old of files.slice(
-      0,
-      Math.max(0, files.length - KEEP_HEAP_SNAPSHOTS),
-    ))
-      await rm(join(dir, old), { force: true });
-    return {
-      path,
-      bytes,
-      durationMs: Math.round(performance.now() - started),
-    };
+    // Written under a name retention and readers ignore, then renamed, so a
+    // failed write never leaves a truncated snapshot behind.
+    const partial = `${path}${PARTIAL_SUFFIX}`;
+    try {
+      let snapshot: string | null = generate();
+      const bytes = Buffer.byteLength(snapshot);
+      const free = await freeBytes(dir);
+      if (free < bytes + SNAPSHOT_FREE_SPACE_MARGIN_BYTES)
+        throw new Error(
+          `not enough free disk space for a ${Math.ceil(bytes / 1024 / 1024)} MB snapshot`,
+        );
+      try {
+        await write(partial, snapshot);
+        snapshot = null;
+        await rename(partial, path);
+      } catch (error) {
+        await rm(partial, { force: true }).catch(() => {});
+        throw error;
+      }
+      return {
+        path,
+        bytes,
+        durationMs: Math.round(performance.now() - started),
+      };
+    } finally {
+      await pruneSnapshots(dir).catch((error) =>
+        console.warn("[memory-diagnostics] snapshot cleanup failed:", error),
+      );
+    }
   })();
   snapshotInFlight = run;
   const clear = () => {
@@ -181,4 +218,18 @@ export function writeHeapSnapshot(
   };
   run.then(clear, clear);
   return run;
+}
+
+/** Keep the newest snapshots and drop partial files a crashed write left. */
+async function pruneSnapshots(dir: string): Promise<void> {
+  const names = await readdir(dir);
+  for (const name of names)
+    if (name.endsWith(PARTIAL_SUFFIX))
+      await rm(join(dir, name), { force: true });
+  const files = names.filter((name) => name.endsWith(".heapsnapshot")).sort();
+  for (const old of files.slice(
+    0,
+    Math.max(0, files.length - KEEP_HEAP_SNAPSHOTS),
+  ))
+    await rm(join(dir, old), { force: true });
 }

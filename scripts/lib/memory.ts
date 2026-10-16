@@ -63,14 +63,22 @@ async function call(path: string, init?: RequestInit): Promise<any> {
   return body;
 }
 
-export async function memory(options: {
-  json: boolean;
-  snapshot: boolean;
-}): Promise<number> {
+export async function memory(
+  options: {
+    json: boolean;
+    snapshot: boolean;
+  },
+  request: (path: string, init?: RequestInit) => Promise<any> = call,
+): Promise<number> {
   try {
     if (options.snapshot) {
-      info(dim("writing a heap snapshot; the server pauses while it runs"));
-      const result = await call("/api/system/memory/heap-snapshot", {
+      // With --json, stdout carries only the JSON document; progress goes to
+      // stderr so `opensession memory --snapshot --json | jq` still parses.
+      const progress =
+        "writing a heap snapshot; the server pauses while it runs";
+      if (options.json) console.error(progress);
+      else info(dim(progress));
+      const result = await request("/api/system/memory/heap-snapshot", {
         method: "POST",
       });
       if (options.json) {
@@ -82,7 +90,7 @@ export async function memory(options: {
       info(dim("  open it in Chrome DevTools → Memory → Load profile"));
       return 0;
     }
-    const report = await call("/api/system/memory");
+    const report = await request("/api/system/memory");
     if (options.json) {
       console.log(JSON.stringify(report, null, 2));
       return 0;
@@ -119,7 +127,12 @@ export async function memory(options: {
     );
     return 0;
   } catch (error) {
-    fail("could not read gateway memory", (error as Error).message);
+    const message = (error as Error).message;
+    if (options.json) {
+      console.error(`could not read gateway memory: ${message}`);
+      return 1;
+    }
+    fail("could not read gateway memory", message);
     info(dim("  run this on the server box as the service user"));
     return 1;
   }
