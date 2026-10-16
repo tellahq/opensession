@@ -188,6 +188,19 @@ export interface CreateSessionOpts {
    */
   accountId?: string;
   /**
+   * Opt in to a fixed subscription: `accountId` becomes a hard funding pin
+   * for every run of this session and of sessions created from it, with no
+   * fallback to another account, usage credits, or another provider. The
+   * create fails when no usable `accountId` is given. Off by default.
+   */
+  fixedSubscription?: boolean;
+  /**
+   * Server-set id of the session whose agent tool call issued this create,
+   * even when the result is standalone. Only used so a fixed-subscription
+   * policy follows delegated work; never accept it from tool arguments.
+   */
+  invokingSessionId?: string;
+  /**
    * Fork an existing session instead of starting fresh: the new session shares
    * the source's worktree/branch/model (and effort/fast-mode/account pin), and
    * Claude-engine sources are cloned via SDK forkSession — optionally from a

@@ -43,6 +43,7 @@ import type { StagedAttachment } from "./prompt-attachments";
 import { readPromptFiles } from "./uploads";
 import type { ImageInput } from "./run-events";
 import { resolveSessionRunInputs, runAccountSpec } from "./session-run-inputs";
+import { isFixedSubscription } from "./fixed-subscription";
 import {
   activeRunRecords,
   journalClear,
@@ -201,7 +202,9 @@ export async function maybeLaunchRunnerRun(
     user: runUser,
     accountUser: runInputs.accountUser,
     mcpGrantUser: runInputs.mcpGrantUser,
-    fallbackModel: interactiveFallbackModel(session.model),
+    fallbackModel: isFixedSubscription(session)
+      ? "none"
+      : interactiveFallbackModel(session.model),
     journalKind: runInputs.isAutomationSession ? "automation" : "prompt",
     trustProfile: runInputs.isAutomationSession ? "automation" : "interactive",
   };
@@ -239,7 +242,13 @@ export async function maybeLaunchRunnerRun(
     fastMode: session.fastMode,
     speed: session.speed,
     accountId: session.accountId,
-    fallbackModel: interactiveFallbackModel(session.model),
+    // A resumed fixed-subscription run keeps its hard pin.
+    ...(isFixedSubscription(session)
+      ? { accountStrict: true, usageCredits: false }
+      : {}),
+    fallbackModel: isFixedSubscription(session)
+      ? "none"
+      : interactiveFallbackModel(session.model),
     deniedTools: runInputs.deniedTools,
     publicationPolicy,
     aws: !runInputs.isAutomationSession || agentAwsCredsForUntrustedRuns(),
