@@ -62,7 +62,7 @@ export function workloadUnitName(kind: string): string {
 export function workloadArgv(
   argv: string[],
   kind: string,
-  options: { unit?: string } = {},
+  options: { unit?: string; properties?: string[] } = {},
 ): string[] {
   if (!shouldScope()) return argv;
   return [
@@ -76,6 +76,7 @@ export function workloadArgv(
     `--unit=${options.unit ?? workloadUnitName(kind)}`,
     ...engineScopeSystemdArgs(),
     "--property=TimeoutStopSec=2",
+    ...(options.properties ?? []).map((p) => `--property=${p}`),
     "--",
     ...argv,
   ];

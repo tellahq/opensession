@@ -21,6 +21,13 @@ import {
 } from "./config";
 import { stateDir } from "./paths";
 import { workloadArgv } from "./workload-scope";
+import {
+  recordSetupTimeout,
+  runSetupCommand,
+  SetupStoppedError,
+  SetupTimeoutError,
+  setupTimeoutMs,
+} from "./worktree-setup";
 
 // The Repo type + registry defaults live in config.ts now. Re-exported so existing
 // `import { type Repo } from "./worktree"` call sites keep working.
@@ -347,28 +354,38 @@ export async function installWorktreeDeps(
   wtPath: string,
   branchLabel: string,
 ): Promise<void> {
+  // Each command is bounded and runs in a setup scope named after the
+  // worktree, so archive, delete and the lifecycle reaper can stop it.
+  const timeoutMs = setupTimeoutMs(repo);
+  const run = (argv: string[]) =>
+    runSetupCommand(argv, { cwd: wtPath, timeoutMs });
   try {
     // `.agents/setup` — the repo lifecycle provision hook (same dir preview.ts
     // resolves; docs/repo-lifecycle.md).
     const repoSetup = `${wtPath}/.agents/setup`;
     if (existsSync(repoSetup)) {
-      await $`${workloadArgv(["bash", repoSetup], "setup")}`
-        .cwd(wtPath)
-        .quiet();
+      await run(["bash", repoSetup]);
     } else if (repo.worktreeSetup) {
-      await $`${workloadArgv(["sh", "-c", repo.worktreeSetup], "setup")}`
-        .cwd(wtPath)
-        .quiet();
+      await run(["sh", "-c", repo.worktreeSetup]);
     }
     if (repo.depsInstall) {
-      await $`${workloadArgv(["sh", "-c", repo.depsInstall], "setup")}`
-        .cwd(wtPath)
-        .quiet();
+      await run(["sh", "-c", repo.depsInstall]);
     } else if (await Bun.file(`${wtPath}/package.json`).exists()) {
-      await $`${workloadArgv(["bun", "install"], "setup")}`.cwd(wtPath).quiet();
+      await run(["bun", "install"]);
     }
   } catch (e) {
+    if (e instanceof SetupStoppedError) {
+      console.log(`[worktree] setup stopped for ${branchLabel}`);
+      return;
+    }
     console.warn(`[worktree] setup failed for ${branchLabel} (continuing):`, e);
+    if (e instanceof SetupTimeoutError)
+      await recordSetupTimeout(wtPath, e.timeoutMs).catch((error) =>
+        console.warn(
+          `[worktree] could not record the setup timeout for ${branchLabel}:`,
+          error,
+        ),
+      );
   }
 }
 
