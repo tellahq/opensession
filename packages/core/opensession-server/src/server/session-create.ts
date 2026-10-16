@@ -643,9 +643,11 @@ const activeOpeningCreates = new Map<
   }
 >();
 
-// Bounds concurrent opening turns (worktree materialization, deps install,
-// repo attach and the opening engine turn). Gateway process: configurable via
-// ~/.opensession.env or a systemd drop-in.
+// Bounds concurrent opening-turn startups (worktree materialization, repo
+// attach and the engine launch). A slot is released as soon as the opening run
+// yields its first event, so long opening turns never hold it: the gate smooths
+// creation bursts without parking later sessions behind running agents.
+// Gateway process: configurable via ~/.opensession.env or a systemd drop-in.
 const OPENING_TURN_CONCURRENCY = envCapacity(
   "OPENSESSION_OPENING_TURN_CONCURRENCY",
   8,
@@ -676,11 +678,14 @@ function openingTurnRelease(): () => void {
   };
 }
 
-function acquireOpeningTurn(): Promise<() => void> {
+function acquireOpeningTurn(
+  onQueued?: (ahead: number) => void,
+): Promise<() => void> {
   if (openingTurnGate.active < OPENING_TURN_CONCURRENCY) {
     openingTurnGate.active += 1;
     return Promise.resolve(openingTurnRelease());
   }
+  onQueued?.(openingTurnGate.waiters.length);
   return new Promise((resolve) => openingTurnGate.waiters.push(resolve));
 }
 
@@ -1938,11 +1943,16 @@ async function openCreatedSessionInner(
       // so a repo note or a handoff cannot invent a mention.
       if (!spec.personalRepo)
         void notifyMentions(spec.titlePrompt, spec.user || "", bksId, "prompt");
-      // Projection is latency-sensitive; the agent turn is capacity-sensitive.
+      // Projection is latency-sensitive; startup is capacity-sensitive.
       // Persist and announce every accepted session first, then wait for one of
-      // the bounded opening-run slots. Keeping the gate here prevents eight long
-      // turns from hiding every later session behind "Setting up workspace".
-      releaseOpeningTurn = await acquireOpeningTurn();
+      // the bounded startup slots. The slot is released on the opening run's
+      // first event, so a waiting session is only ever behind other startups.
+      releaseOpeningTurn = await acquireOpeningTurn((ahead) =>
+        io.emit({
+          type: "notice",
+          message: `Waiting for a free start slot (position ${ahead + 1} in queue).`,
+        }),
+      );
 
       // Every worktree this session works in, its own first. The extra
       // repos are cut inside the same gate: they are git work of the same
@@ -2274,6 +2284,9 @@ async function openCreatedSessionInner(
         openingRun,
         !!spec.personalRepo,
         async (event) => {
+          // The engine is up: free the startup slot for the next session.
+          releaseOpeningTurn?.();
+          releaseOpeningTurn = undefined;
           // Opening turns use this event ladder instead of run-session's
           // follow-up ladder. Consume Pi's exact boundary acknowledgement here
           // too, including context-only steers that transcript parsing hides.
