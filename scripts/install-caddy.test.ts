@@ -152,7 +152,7 @@ for (const [os, arch, target] of [
     expect(result.stdout).toContain("lego version 4.26.0");
     if (os === "Darwin")
       expect(result.stdout).toContain(
-        "Automatic private-domain setup requires Linux with systemd",
+        "run Caddy as your user: brew services start caddy",
       );
   });
 }

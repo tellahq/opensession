@@ -10,7 +10,16 @@ import {
   readFileSync,
   rmSync,
 } from "fs";
-import { join } from "path";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  writeFile,
+} from "fs/promises";
+import { dirname, join } from "path";
 import { tmpdir } from "os";
 import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
@@ -44,11 +53,18 @@ export interface PrivateAppDomainStatus {
 
 const CREDENTIAL_PATH = () => stateDir("private-app-dns.json");
 const ACME_PATH = () => stateDir("private-app-acme");
-const CADDYFILE = () =>
-  process.env.OPENSESSION_CADDYFILE || "/etc/caddy/Caddyfile";
-const TLS_DIR = () => process.env.OPENSESSION_TLS_DIR || "/etc/opensession/tls";
+/** Platforms where Open Session can install and reload Caddy itself. Linux
+ * uses the system Caddy under systemd; macOS uses Homebrew's per-user Caddy. */
+export type PrivateAppPlatform = "linux" | "darwin";
+const TLS_DIR = (platform: PrivateAppPlatform = currentPlatform()) =>
+  process.env.OPENSESSION_TLS_DIR ||
+  (platform === "darwin"
+    ? stateDir("private-app-tls")
+    : "/etc/opensession/tls");
 const MANAGED_START = "# BEGIN OPENSESSION PRIVATE APP";
 const MANAGED_END = "# END OPENSESSION PRIVATE APP";
+const REDIRECT_MARKER = "# OPENSESSION PRIVATE APP HTTP REDIRECT";
+const TAILNET_RANGES = "100.64.0.0/10 fd7a:115c:a1e0::/48";
 const runtime = globalThis as typeof globalThis & {
   __opensessionPrivateAppRenewal?: ReturnType<typeof setInterval>;
   __opensessionPrivateAppRenewing?: boolean;
@@ -73,13 +89,20 @@ function safeCredential(): PrivateAppCredential | null {
   }
 }
 
-function certificatePaths(domain: string): {
+function currentPlatform(): PrivateAppPlatform {
+  return process.platform === "darwin" ? "darwin" : "linux";
+}
+
+function certificatePaths(
+  domain: string,
+  platform: PrivateAppPlatform = currentPlatform(),
+): {
   certificate: string;
   key: string;
 } {
   return {
-    certificate: join(TLS_DIR(), `${domain}.crt`),
-    key: join(TLS_DIR(), `${domain}.key`),
+    certificate: join(TLS_DIR(platform), `${domain}.crt`),
+    key: join(TLS_DIR(platform), `${domain}.key`),
   };
 }
 
@@ -405,19 +428,75 @@ export function privateAppCaddyUpstream(host: string, port: number): string {
 export function privateAppCaddySnippet(
   domain: string,
   tailnetIpv4: string,
-  paths = certificatePaths(domain),
+  paths?: { certificate: string; key: string },
   upstream = "127.0.0.1:3850",
+  platform: PrivateAppPlatform = currentPlatform(),
 ): string {
-  return `${domain} {\n    ${MANAGED_START}\n    bind ${tailnetIpv4}\n    tls ${paths.certificate} ${paths.key}\n    reverse_proxy ${upstream} {\n        lb_try_duration 15s\n        lb_try_interval 250ms\n        stream_close_delay ${CADDY_STREAM_CLOSE_DELAY}\n    }\n    ${MANAGED_END}\n}`;
+  const body = managedBlock(
+    tailnetIpv4,
+    upstream,
+    platform,
+    paths ?? certificatePaths(domain, platform),
+  )
+    .split("\n")
+    .map((line) => `    ${line}`)
+    .join("\n");
+  return `https://${domain} {\n${body}\n}\n\n${privateAppCaddyRedirectSite(domain, tailnetIpv4, platform)}`;
+}
+
+/** Linux binds the tailnet address. An unprivileged macOS Caddy cannot bind a
+ * specific address on a low port, so it listens on every interface and both
+ * platforms drop connections that do not come from the tailnet. */
+function tailnetGuard(
+  tailnetIpv4: string,
+  platform: PrivateAppPlatform,
+): string[] {
+  return [
+    ...(platform === "linux" ? [`bind ${tailnetIpv4}`] : []),
+    `@outside_tailnet not remote_ip ${TAILNET_RANGES}`,
+  ];
 }
 
 function managedBlock(
-  domain: string,
   tailnetIpv4: string,
   upstream: string,
+  platform: PrivateAppPlatform,
+  paths: { certificate: string; key: string },
 ): string {
-  const paths = certificatePaths(domain);
-  return `${MANAGED_START}\nbind ${tailnetIpv4}\ntls ${paths.certificate} ${paths.key}\nreverse_proxy ${upstream} {\n    lb_try_duration 15s\n    lb_try_interval 250ms\n    stream_close_delay ${CADDY_STREAM_CLOSE_DELAY}\n}\n${MANAGED_END}`;
+  return [
+    MANAGED_START,
+    ...tailnetGuard(tailnetIpv4, platform),
+    "abort @outside_tailnet",
+    `tls ${paths.certificate} ${paths.key}`,
+    `reverse_proxy ${upstream} {`,
+    "    lb_try_duration 15s",
+    "    lb_try_interval 250ms",
+    `    stream_close_delay ${CADDY_STREAM_CLOSE_DELAY}`,
+    "}",
+    MANAGED_END,
+  ].join("\n");
+}
+
+/** Plain HTTP for the private domain: tailnet clients are redirected to HTTPS,
+ * everyone else is dropped. `route` keeps the abort ahead of redir, which
+ * Caddy would otherwise order first. */
+export function privateAppCaddyRedirectSite(
+  domain: string,
+  tailnetIpv4: string,
+  platform: PrivateAppPlatform = currentPlatform(),
+): string {
+  return [
+    `http://${domain} {`,
+    ...[
+      REDIRECT_MARKER,
+      ...tailnetGuard(tailnetIpv4, platform),
+      "route {",
+      "    abort @outside_tailnet",
+      "    redir https://{host}{uri} permanent",
+      "}",
+    ].map((line) => `    ${line}`),
+    "}",
+  ].join("\n");
 }
 
 function closingBrace(source: string, opening: number): number | undefined {
@@ -458,11 +537,26 @@ function caddySites(
 /** Update only Open Session's marked private-app site. Existing unmarked sites
  * are left alone because silently taking ownership could expose or break them. */
 export function upsertPrivateAppCaddy(
-  caddyfile: string,
+  source: string,
   domain: string,
   tailnetIpv4: string,
   upstream = "127.0.0.1:3850",
+  platform: PrivateAppPlatform = currentPlatform(),
 ): string {
+  let caddyfile = source;
+  for (const site of caddySites(caddyfile).reverse()) {
+    if (
+      !caddyfile.slice(site.opening + 1, site.closing).includes(REDIRECT_MARKER)
+    )
+      continue;
+    const before = caddyfile.slice(0, site.header).trimEnd();
+    const after = caddyfile.slice(site.closing + 1).replace(/^\s*\n/, "");
+    caddyfile = after.trim()
+      ? `${before}${before ? "\n\n" : ""}${after}`
+      : `${before}\n`;
+  }
+  const redirect = privateAppCaddyRedirectSite(domain, tailnetIpv4, platform);
+  const paths = certificatePaths(domain, platform);
   const managed = new RegExp(
     `^[ \\t]*${MANAGED_START}[\\s\\S]*?^[ \\t]*${MANAGED_END}[ \\t]*(?:\\r?\\n)?`,
     "gm",
@@ -472,17 +566,18 @@ export function upsertPrivateAppCaddy(
   );
   if (owned) {
     const body = caddyfile.slice(owned.opening + 1, owned.closing);
-    const replacement = managedBlock(domain, tailnetIpv4, upstream)
+    const replacement = managedBlock(tailnetIpv4, upstream, platform, paths)
       .split("\n")
       .map((line) => `    ${line}`)
       .join("\n");
     managed.lastIndex = 0;
     const nextBody = body.replace(managed, `${replacement}\n`);
-    return `${caddyfile.slice(0, owned.header)}${domain} {${nextBody}${caddyfile.slice(owned.closing)}`;
+    const updated = `${caddyfile.slice(0, owned.header)}https://${domain} {${nextBody}${caddyfile.slice(owned.closing)}`;
+    return `${updated.trimEnd()}\n\n${redirect}\n`;
   }
   const escaped = domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (
-    new RegExp(`^\\s*(?:https?://)?${escaped}(?::443)?\\s*\\{`, "m").test(
+    new RegExp(`^\\s*(?:https?://)?${escaped}(?::443|:80)?\\s*\\{`, "m").test(
       caddyfile,
     )
   ) {
@@ -490,15 +585,71 @@ export function upsertPrivateAppCaddy(
       `${domain} already has an unmanaged Caddy site. Use Advanced setup or remove that site first`,
     );
   }
-  return `${caddyfile.trimEnd()}\n\n${privateAppCaddySnippet(domain, tailnetIpv4, certificatePaths(domain), upstream)}\n`;
+  const site = privateAppCaddySnippet(
+    domain,
+    tailnetIpv4,
+    paths,
+    upstream,
+    platform,
+  );
+  return caddyfile.trim() ? `${caddyfile.trimEnd()}\n\n${site}\n` : `${site}\n`;
 }
 
-function requirePrivateAppPlatform(): void {
-  if (process.platform !== "linux") {
+function supportedPrivateAppPlatform(): PrivateAppPlatform | null {
+  return process.platform === "linux" || process.platform === "darwin"
+    ? process.platform
+    : null;
+}
+
+function requirePrivateAppPlatform(): PrivateAppPlatform {
+  const platform = supportedPrivateAppPlatform();
+  if (!platform) {
     throw new Error(
-      "Automatic private-domain setup requires Linux with systemd. On this platform, use an externally managed certificate and reverse proxy; Open Session cannot manage certificate renewal.",
+      "Automatic private-domain setup requires Linux with systemd or macOS with Homebrew Caddy. On this platform, use an externally managed certificate and reverse proxy; Open Session cannot manage certificate renewal.",
     );
   }
+  return platform;
+}
+
+/** Commands that apply a new Caddyfile, tried in order until one succeeds.
+ * Linux reloads the system service. Homebrew's Caddy runs as the current user,
+ * so macOS reloads it through its admin API and falls back to restarting the
+ * Homebrew service, which also starts a stopped Caddy. */
+export function privateAppCaddyReloadCommands(
+  platform: PrivateAppPlatform,
+  tools: { caddy: string; caddyfile: string; sudo?: string; brew?: string },
+): string[][] {
+  if (platform === "linux")
+    return [[tools.sudo || "sudo", "-n", "systemctl", "reload", "caddy"]];
+  return [
+    [
+      tools.caddy,
+      "reload",
+      "--config",
+      tools.caddyfile,
+      "--adapter",
+      "caddyfile",
+    ],
+    ...(tools.brew ? [[tools.brew, "services", "restart", "caddy"]] : []),
+  ];
+}
+
+/** Homebrew's Caddyfile: `$(brew --prefix)/etc/Caddyfile`. */
+export async function privateAppCaddyfile(
+  platform: PrivateAppPlatform,
+): Promise<string> {
+  if (process.env.OPENSESSION_CADDYFILE)
+    return process.env.OPENSESSION_CADDYFILE;
+  if (platform === "linux") return "/etc/caddy/Caddyfile";
+  const brew = Bun.which("brew");
+  if (brew) {
+    const prefix = await runCommand([brew, "--prefix"], commandEnvironment());
+    if (prefix.code === 0 && prefix.stdout.trim().startsWith("/"))
+      return join(prefix.stdout.trim(), "etc", "Caddyfile");
+  }
+  return process.arch === "arm64"
+    ? "/opt/homebrew/etc/Caddyfile"
+    : "/usr/local/etc/Caddyfile";
 }
 
 async function requireLego(): Promise<string> {
@@ -576,7 +727,114 @@ async function installCertificateAndCaddy(
   tailnetIpv4: string,
   upstream = "127.0.0.1:3850",
 ): Promise<void> {
-  requirePrivateAppPlatform();
+  if (requirePrivateAppPlatform() === "darwin")
+    await installDarwinCaddy(domain, tailnetIpv4, upstream);
+  else await installLinuxCaddy(domain, tailnetIpv4, upstream);
+}
+
+async function firstSuccessfulCommand(
+  commands: string[][],
+): Promise<{ code: number; stderr: string }> {
+  let last = { code: 1, stderr: "" };
+  for (const command of commands) {
+    last = await runCommand(command, commandEnvironment());
+    if (last.code === 0) break;
+  }
+  return last;
+}
+
+/** Homebrew's Caddy runs as the current user: no sudo or root ownership. The
+ * certificate lives in Open Session's state directory, readable only by the
+ * user that runs both services. */
+async function installDarwinCaddy(
+  domain: string,
+  tailnetIpv4: string,
+  upstream: string,
+): Promise<void> {
+  const caddy = Bun.which("caddy");
+  if (!caddy) throw new Error("Caddy is not installed on this server");
+  const brew = Bun.which("brew") || undefined;
+  const source = legoCertificatePaths(domain);
+  if (
+    !(await Bun.file(source.certificate).exists()) ||
+    !(await Bun.file(source.key).exists())
+  ) {
+    throw new Error(
+      "Let’s Encrypt did not produce the expected certificate files",
+    );
+  }
+  const caddyfile = await privateAppCaddyfile("darwin");
+  let current = "";
+  let existed = true;
+  try {
+    current = await readFile(caddyfile, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== "ENOENT")
+      throw new Error(`Could not read ${caddyfile}`);
+    existed = false;
+  }
+  const next = upsertPrivateAppCaddy(
+    current,
+    domain,
+    tailnetIpv4,
+    upstream,
+    "darwin",
+  );
+  const tlsDir = TLS_DIR("darwin");
+  const target = certificatePaths(domain, "darwin");
+  await mkdir(tlsDir, { recursive: true, mode: 0o700 });
+  await chmod(tlsDir, 0o700);
+  await copyFile(source.certificate, target.certificate);
+  await chmod(target.certificate, 0o644);
+  await copyFile(source.key, target.key);
+  await chmod(target.key, 0o600);
+
+  const backup = `${caddyfile}.backup-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  const reloadCommands = privateAppCaddyReloadCommands("darwin", {
+    caddy,
+    caddyfile,
+    brew,
+  });
+  if (existed) await copyFile(caddyfile, backup);
+  else await mkdir(dirname(caddyfile), { recursive: true });
+  const rollback = async () => {
+    if (existed) await copyFile(backup, caddyfile);
+    else await rm(caddyfile, { force: true });
+    await firstSuccessfulCommand(reloadCommands);
+  };
+  const staged = `${caddyfile}.opensession-${randomBytes(4).toString("hex")}`;
+  try {
+    await writeFile(staged, next, { mode: 0o644 });
+    await rename(staged, caddyfile);
+  } catch {
+    await rm(staged, { force: true });
+    throw new Error(`Could not write ${caddyfile}`);
+  }
+  const validation = await runCommand(
+    [caddy, "validate", "--config", caddyfile, "--adapter", "caddyfile"],
+    commandEnvironment(),
+  );
+  if (validation.code !== 0) {
+    await rollback();
+    throw new Error(
+      validation.stderr.trim() ||
+        "Caddy rejected the private app configuration",
+    );
+  }
+  const reload = await firstSuccessfulCommand(reloadCommands);
+  if (reload.code !== 0) {
+    await rollback();
+    throw new Error(
+      `${reload.stderr.trim() || "Caddy reload failed"}. Start Caddy with \`brew services start caddy\` and try again; the prior Caddyfile was restored.`,
+    );
+  }
+}
+
+async function installLinuxCaddy(
+  domain: string,
+  tailnetIpv4: string,
+  upstream: string,
+): Promise<void> {
   const caddy = Bun.which("caddy");
   const sudo = Bun.which("sudo");
   if (!caddy || !sudo)
@@ -589,14 +847,20 @@ async function installCertificateAndCaddy(
       "Let’s Encrypt did not produce the expected certificate files",
     );
   }
-  const caddyfile = CADDYFILE();
+  const caddyfile = await privateAppCaddyfile("linux");
   let current: string;
   try {
     current = readFileSync(caddyfile, "utf8");
   } catch {
     throw new Error(`Could not read ${caddyfile}`);
   }
-  const next = upsertPrivateAppCaddy(current, domain, tailnetIpv4, upstream);
+  const next = upsertPrivateAppCaddy(
+    current,
+    domain,
+    tailnetIpv4,
+    upstream,
+    "linux",
+  );
   const scratch = mkdtempSync(
     join(
       tmpdir(),
@@ -627,11 +891,11 @@ async function installCertificateAndCaddy(
           "root",
           "-g",
           group,
-          TLS_DIR(),
+          TLS_DIR("linux"),
         ])
       ).code !== 0
     ) {
-      throw new Error(`Could not create ${TLS_DIR()}`);
+      throw new Error(`Could not create ${TLS_DIR("linux")}`);
     }
     if (
       (
@@ -791,16 +1055,24 @@ export async function testPrivateAppDomain(
   return privateAppDomainStatus(origin, tailnetIpv4);
 }
 
+/** Before managed macOS setup existed, some operators saved the credential
+ * by hand next to their own Caddy. Renew only a Caddyfile Open Session owns. */
+async function ownsCaddySite(platform: PrivateAppPlatform): Promise<boolean> {
+  if (platform !== "darwin") return true;
+  const caddyfile = await privateAppCaddyfile(platform);
+  return (await readFile(caddyfile, "utf8").catch(() => "")).includes(
+    MANAGED_START,
+  );
+}
+
 export async function renewPrivateAppCertificate(): Promise<boolean> {
-  // Externally managed macOS certificates must not be renewed behind the
-  // operator's back when we cannot install and reload them.
-  if (process.platform !== "linux" || runtime.__opensessionPrivateAppRenewing)
-    return false;
+  const platform = supportedPrivateAppPlatform();
+  if (!platform || runtime.__opensessionPrivateAppRenewing) return false;
   const credential = safeCredential();
   if (!credential || !Bun.which("lego") || !Bun.which("caddy")) return false;
   runtime.__opensessionPrivateAppRenewing = true;
   try {
-    requirePrivateAppPlatform();
+    if (!(await ownsCaddySite(platform))) return false;
     const changed = await issueCertificate(
       credential,
       await requireLego(),
