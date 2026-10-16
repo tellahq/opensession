@@ -350,9 +350,36 @@ export async function handleGithubPrEvent(
 
     // Closed (merged or not): a pending debounced review would fire against a
     // dead PR — cancel it, and drop any handoff round tracking.
+    // Its own review/mention/auto-fix sessions are done too: archive them as
+    // `auto` (never one with a run in flight), and restore them on reopen.
     if (action === "closed") {
       desiredReviews.cancel(ref);
       clearHandoff(pr.number, ghRepo);
+      void import("./pr-session-archive")
+        .then((m) =>
+          m.archiveClosedPrSessions(pr.number, ghRepo || defaultRepo().ghRepo),
+        )
+        .catch((e) =>
+          console.error(
+            `[github] archiving sessions for closed PR #${pr.number} failed:`,
+            e,
+          ),
+        );
+    }
+    if (action === "reopened") {
+      void import("./pr-session-archive")
+        .then((m) =>
+          m.restoreReopenedPrSessions(
+            pr.number,
+            ghRepo || defaultRepo().ghRepo,
+          ),
+        )
+        .catch((e) =>
+          console.error(
+            `[github] restoring sessions for reopened PR #${pr.number} failed:`,
+            e,
+          ),
+        );
     }
 
     // ── Merge → notify linked sessions + fire configured docs-sync ──
