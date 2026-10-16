@@ -158,6 +158,79 @@ describe("resolveCreateSubscriptionPolicy", () => {
     ).toThrow(/cannot run/);
   });
 
+  // Source order as session-control-wiring passes it: fork source, parent,
+  // then the trusted invoking session. The first two come from tool args.
+  const fixedTo = (id: string, accountId: string) => ({
+    id,
+    subscriptionPolicy: "fixed" as const,
+    accountId,
+  });
+
+  test("a fork fixed to another account cannot replace the caller's", () => {
+    expect(() =>
+      policy.resolveCreateSubscriptionPolicy({
+        sources: [
+          fixedTo("bks-fork", "spare"),
+          null,
+          fixedTo("bks-caller", "team"),
+        ],
+        model: CLAUDE_MODEL,
+        requestedAccountId: undefined,
+        pinnedAccountId: "spare",
+      }),
+    ).toThrow(/different accounts/);
+  });
+
+  test("an unfixed parent does not widen a fixed caller", () => {
+    expect(
+      policy.resolveCreateSubscriptionPolicy({
+        sources: [
+          undefined,
+          { id: "bks-parent", accountId: "spare" },
+          fixedTo("bks-caller", "team"),
+        ],
+        model: CLAUDE_MODEL,
+        requestedAccountId: undefined,
+        pinnedAccountId: undefined,
+      }),
+    ).toEqual({ accountId: "team", subscriptionPolicy: "fixed" });
+  });
+
+  test("a fixed parent binds the child of an unfixed caller", () => {
+    expect(
+      policy.resolveCreateSubscriptionPolicy({
+        sources: [
+          undefined,
+          fixedTo("bks-parent", "team"),
+          { id: "bks-caller", accountId: "spare" },
+        ],
+        model: CLAUDE_MODEL,
+        requestedAccountId: undefined,
+        pinnedAccountId: undefined,
+      }),
+    ).toEqual({ accountId: "team", subscriptionPolicy: "fixed" });
+  });
+
+  test("any two fixed sources on different accounts are rejected", () => {
+    expect(() =>
+      policy.resolveCreateSubscriptionPolicy({
+        sources: [fixedTo("bks-a", "team"), fixedTo("bks-b", "spare")],
+        model: CLAUDE_MODEL,
+        requestedAccountId: undefined,
+        pinnedAccountId: undefined,
+      }),
+    ).toThrow(/different accounts/);
+    // Agreeing fixed sources are fine.
+    expect(
+      policy.resolveCreateSubscriptionPolicy({
+        sources: [fixedTo("bks-a", "team"), fixedTo("bks-b", "team")],
+        model: CLAUDE_MODEL,
+        requestedAccountId: undefined,
+        pinnedAccountId: undefined,
+      }),
+    ).toEqual({ accountId: "team", subscriptionPolicy: "fixed" });
+  });
+
   test("an unmanaged parent does not make its child fixed", () => {
     expect(
       policy.resolveCreateSubscriptionPolicy({

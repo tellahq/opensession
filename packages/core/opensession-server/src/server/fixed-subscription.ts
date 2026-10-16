@@ -106,12 +106,15 @@ function providerLabel(provider: "claude" | "codex" | "xai"): string {
  * Resolve the funding fields of a new session.
  *
  * `sources` are the sessions this one is created from (fork source, parent,
- * the session whose agent asked for it). The first fixed one wins: the new
- * session inherits its account and policy, and an explicit different account
- * is an error rather than a silent override. Otherwise `fixed: true` opts a
- * fresh session in, and needs a pin the creator may use (`pinnedAccountId`,
- * already validated by resolvePinnedAccountId). Without either the existing
- * soft pin passes through unchanged.
+ * the session whose agent asked for it). Every fixed source is checked, not
+ * just the first: some sources come from tool arguments (forkFrom,
+ * parentSessionId), so none may replace another's funding. When the fixed
+ * sources disagree on the account the create fails; otherwise the new
+ * session inherits that account and policy, and an explicit different
+ * account is an error rather than a silent override. Without a fixed source,
+ * `fixed: true` opts a fresh session in and needs a pin the creator may use
+ * (`pinnedAccountId`, already validated by resolvePinnedAccountId). Without
+ * either the existing soft pin passes through unchanged.
  */
 export function resolveCreateSubscriptionPolicy(input: {
   fixed?: unknown;
@@ -120,8 +123,16 @@ export function resolveCreateSubscriptionPolicy(input: {
   requestedAccountId: unknown;
   pinnedAccountId: string | undefined;
 }): { accountId: string | undefined; subscriptionPolicy?: SubscriptionPolicy } {
-  const source = input.sources.find((s) => isFixedSubscription(s));
-  if (source) {
+  const fixedSources = input.sources.filter(
+    (s): s is PolicySession => !!s && isFixedSubscription(s),
+  );
+  if (fixedSources.length) {
+    const accountIds = new Set(fixedSources.map((s) => s.accountId));
+    if (accountIds.size > 1)
+      throw new Error(
+        `Sessions ${fixedSources.map((s) => s.id || "(unknown)").join(", ")} have fixed subscriptions on different accounts. A new session can only be created from sessions that share one funding account.`,
+      );
+    const source = fixedSources[0];
     if (
       typeof input.requestedAccountId === "string" &&
       input.requestedAccountId &&
