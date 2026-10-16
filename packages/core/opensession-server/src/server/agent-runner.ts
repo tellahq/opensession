@@ -167,6 +167,11 @@ export interface RunAgentOpts {
    */
   disableLocalWorkspaceTools?: boolean;
   /**
+   * Throwaway, never-resumed run (tool-less one-shots). The model runtime
+   * releases its live provider conversation as soon as the turn settles.
+   */
+  ephemeral?: boolean;
+  /**
    * System-prompt note describing the session's repos (primary + attached) and
    * their worktree paths, so the agent works in the right isolated checkout for
    * cross-repo sessions. Claude receives it as system context; Codex via the
