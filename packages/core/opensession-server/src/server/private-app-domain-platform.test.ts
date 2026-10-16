@@ -304,6 +304,55 @@ describe("automatic private-domain setup on macOS", () => {
     );
   });
 
+  const legacyWithUnmanagedHttp =
+    "os.example.test {\n    # BEGIN OPENSESSION PRIVATE APP\n    reverse_proxy 127.0.0.1:3850\n    # END OPENSESSION PRIVATE APP\n}\n\nhttp://os.example.test {\n    respond mine\n}\n";
+
+  test("setup refuses an unmanaged HTTP site next to a managed HTTPS site", async () => {
+    await mkdir(join(scratch, "homebrew", "etc"), { recursive: true });
+    await writeFile(caddyfile, legacyWithUnmanagedHttp);
+    await expect(configurePrivateAppDomain(input)).rejects.toThrow(
+      "unmanaged Caddy site",
+    );
+    expect(await Bun.file(caddyfile).text()).toBe(legacyWithUnmanagedHttp);
+    expect(await calls()).not.toContainEqual(
+      expect.stringMatching(/^caddy (validate|reload)/),
+    );
+    expect(await readdir(process.env.OPENSESSION_STATE_DIR!)).not.toContain(
+      ".opensession-private-app-dns.json",
+    );
+  });
+
+  test("renewal refuses an unmanaged HTTP site next to a managed HTTPS site", async () => {
+    await mkdir(join(scratch, "homebrew", "etc"), { recursive: true });
+    await writeFile(caddyfile, legacyWithUnmanagedHttp);
+    await mkdir(process.env.OPENSESSION_STATE_DIR!);
+    await writeFile(
+      join(
+        process.env.OPENSESSION_STATE_DIR!,
+        ".opensession-private-app-dns.json",
+      ),
+      JSON.stringify({ ...input, version: 1 }),
+      { mode: 0o600 },
+    );
+    const resolver = spyOn(dns, "resolve4").mockResolvedValue([
+      input.tailnetIpv4,
+    ]);
+    const error = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(await renewPrivateAppCertificate()).toBe(false);
+      expect(String(error.mock.calls[0]?.[1])).toContain(
+        "unmanaged Caddy site",
+      );
+    } finally {
+      resolver.mockRestore();
+      error.mockRestore();
+    }
+    expect(await Bun.file(caddyfile).text()).toBe(legacyWithUnmanagedHttp);
+    expect(await calls()).not.toContainEqual(
+      expect.stringMatching(/^caddy (validate|reload)/),
+    );
+  });
+
   test("renewal leaves a hand-managed macOS Caddy alone", async () => {
     await mkdir(join(scratch, "homebrew", "etc"), { recursive: true });
     await writeFile(caddyfile, "https://os.example.test {\n}\n");

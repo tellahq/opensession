@@ -165,6 +165,30 @@ describe("managed private app domains", () => {
     expect(updated).toContain("http://os.example.com {");
   });
 
+  test("refuses an unmanaged HTTP site next to a managed HTTPS site", () => {
+    const legacy =
+      "os.example.com {\n    # BEGIN OPENSESSION PRIVATE APP\n    bind 100.64.0.10\n    reverse_proxy 127.0.0.1:3850\n    # END OPENSESSION PRIVATE APP\n}\n\nhttp://os.example.com {\n    redir https://{host}{uri}\n}\n";
+    expect(() =>
+      upsertPrivateAppCaddy(
+        legacy,
+        "os.example.com",
+        "100.64.0.10",
+        undefined,
+        "linux",
+      ),
+    ).toThrow("unmanaged Caddy site");
+    // Addresses that only share a prefix are not conflicts.
+    expect(
+      upsertPrivateAppCaddy(
+        legacy.replace("http://os.example.com", "http://os.example.com.au"),
+        "os.example.com",
+        "100.64.0.10",
+        undefined,
+        "linux",
+      ),
+    ).toContain("http://os.example.com.au {");
+  });
+
   test("does not take ownership of an existing unmarked site", () => {
     expect(() =>
       upsertPrivateAppCaddy(

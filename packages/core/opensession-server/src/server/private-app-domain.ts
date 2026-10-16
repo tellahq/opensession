@@ -561,9 +561,27 @@ export function upsertPrivateAppCaddy(
     `^[ \\t]*${MANAGED_START}[\\s\\S]*?^[ \\t]*${MANAGED_END}[ \\t]*(?:\\r?\\n)?`,
     "gm",
   );
-  const owned = caddySites(caddyfile).find(({ opening, closing }) =>
+  const sites = caddySites(caddyfile);
+  const owned = sites.find(({ opening, closing }) =>
     caddyfile.slice(opening + 1, closing).includes(MANAGED_START),
   );
+  // Same policy as a fresh setup: never write a second site for an address
+  // the operator already serves, including an HTTP site next to a managed one.
+  const escaped = domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const address = new RegExp(`^(?:https?://)?${escaped}(?::443|:80)?$`, "i");
+  const unmanaged = sites.some(
+    (site) =>
+      site !== owned &&
+      caddyfile
+        .slice(site.header, site.opening)
+        .split(/[\s,]+/)
+        .some((entry) => address.test(entry)),
+  );
+  if (unmanaged) {
+    throw new Error(
+      `${domain} already has an unmanaged Caddy site. Use Advanced setup or remove that site first`,
+    );
+  }
   if (owned) {
     const body = caddyfile.slice(owned.opening + 1, owned.closing);
     const replacement = managedBlock(tailnetIpv4, upstream, platform, paths)
@@ -574,16 +592,6 @@ export function upsertPrivateAppCaddy(
     const nextBody = body.replace(managed, `${replacement}\n`);
     const updated = `${caddyfile.slice(0, owned.header)}https://${domain} {${nextBody}${caddyfile.slice(owned.closing)}`;
     return `${updated.trimEnd()}\n\n${redirect}\n`;
-  }
-  const escaped = domain.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  if (
-    new RegExp(`^\\s*(?:https?://)?${escaped}(?::443|:80)?\\s*\\{`, "m").test(
-      caddyfile,
-    )
-  ) {
-    throw new Error(
-      `${domain} already has an unmanaged Caddy site. Use Advanced setup or remove that site first`,
-    );
   }
   const site = privateAppCaddySnippet(
     domain,
