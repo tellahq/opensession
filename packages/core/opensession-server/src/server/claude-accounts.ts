@@ -196,6 +196,17 @@ export function __reloadSidelinesForTest(): void {
   sidelines();
 }
 
+/** Test seam: apply a fresh usage snapshot the way a successful poll does. */
+export function __applyUsageRefreshForTest(
+  id: string,
+  usage: AccountUsage,
+): void {
+  const account = readStore().find((a) => a.id === id);
+  if (!account) return;
+  usageCache.set(id, usage);
+  releaseDisprovenSidelines(account, usage);
+}
+
 function exhaustionKey(id: string, model?: string): string {
   return model ? `${id}:${model}` : id;
 }
@@ -216,7 +227,8 @@ function isExhaustionKeyActive(key: string): boolean {
  * shows headroom returns the account early. The two scopes need different
  * evidence: the account-level entry answers to the 5-hour window, while a
  * model-scoped entry answers to that model's own weekly cap, and 5-hour
- * headroom says nothing about a spent Fable week.
+ * headroom says nothing about a spent Fable week. A model with no weekly cap
+ * of its own falls back to the account-wide 7-day and 5-hour windows.
  */
 function releaseDisprovenSidelines(
   account: ClaudeAccount,
@@ -240,11 +252,30 @@ function releaseDisprovenSidelines(
     if (!key.startsWith(prefix)) continue;
     const model = key.slice(prefix.length);
     const scoped = scopedLimitForModel(usage, model);
-    if (scoped !== null && scoped < SCOPED_EXHAUSTED_UTILIZATION) {
+    let evidence: string | null = null;
+    if (scoped !== null) {
+      if (scoped < SCOPED_EXHAUSTED_UTILIZATION) evidence = `${scoped}%`;
+    } else if (
+      !scopedEntryForModel(usage, model) &&
+      usage.sevenDay?.utilization != null &&
+      usage.fiveHour?.utilization != null
+    ) {
+      // No weekly cap of its own (e.g. Sonnet without a weekly_scoped entry):
+      // the limit it hit was account-wide, so the account-wide windows decide.
+      const sevenDay = currentUtilization(usage.sevenDay);
+      const fiveHour = currentUtilization(usage.fiveHour);
+      if (
+        sevenDay < SCOPED_EXHAUSTED_UTILIZATION &&
+        fiveHour < EXHAUSTED_UTILIZATION
+      ) {
+        evidence = `7d at ${sevenDay}%, 5h at ${fiveHour}%`;
+      }
+    }
+    if (evidence !== null) {
       map.delete(key);
       changed = true;
       console.log(
-        `[claude-accounts] ${account.name} usable again for ${model} (${scoped}%${via})`,
+        `[claude-accounts] ${account.name} usable again for ${model} (${evidence}${via})`,
       );
     }
   }

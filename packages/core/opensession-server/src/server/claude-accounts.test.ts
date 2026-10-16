@@ -2,6 +2,7 @@ import { describe, expect, test, afterAll, beforeAll } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import type { AccountUsage } from "./claude-accounts";
 
 // Point the module at a temp store BEFORE it loads (env is read at import).
 const dir = mkdtempSync(join(tmpdir(), "claude-accounts-test-"));
@@ -613,5 +614,63 @@ describe("sidelines survive a restart", () => {
       "reboot-opus",
     );
     expect((otherModel as number) - Date.now()).toBeLessThan(1000);
+  });
+});
+
+describe("model-scoped sidelines without a weekly cap of their own", () => {
+  const originalStore = readFileSync(storePath, "utf-8");
+  const farFuture = () => Date.now() + 3 * 24 * 60 * 60 * 1000;
+  const snapshot = (
+    sevenDayPct: number,
+    scopedLimits?: AccountUsage["scopedLimits"],
+  ) => ({
+    ...usage(10),
+    sevenDay: { utilization: sevenDayPct, resetsAt: null },
+    ...(scopedLimits ? { scopedLimits } : {}),
+  });
+
+  beforeAll(() => {
+    const parsed = JSON.parse(originalStore);
+    writeFileSync(
+      storePath,
+      JSON.stringify({
+        accounts: [
+          ...parsed.accounts,
+          { ...mkAccount("sonnet-ok"), usageScope: "missing" },
+          { ...mkAccount("sonnet-spent"), usageScope: "missing" },
+          { ...mkAccount("fable-unknown"), usageScope: "missing" },
+        ],
+      }),
+    );
+    for (const id of ["sonnet-ok", "sonnet-spent", "fable-unknown"]) {
+      accounts.__setUsageCacheForTest(id, usage(10));
+    }
+    accounts.markExhausted("sonnet-ok", "claude-sonnet-5-5", farFuture());
+    accounts.markExhausted("sonnet-spent", "claude-sonnet-5-5", farFuture());
+    accounts.markExhausted("fable-unknown", "claude-fable-5-1", farFuture());
+  });
+
+  afterAll(() => writeFileSync(storePath, originalStore));
+
+  const pick = (id: string, model: string) =>
+    accounts.getUsableAccountById(id, model)?.id;
+
+  test("7-day headroom releases a Sonnet sideline early", () => {
+    expect(pick("sonnet-ok", "claude-sonnet-5-5")).toBeUndefined();
+    accounts.__applyUsageRefreshForTest("sonnet-ok", snapshot(40));
+    expect(pick("sonnet-ok", "claude-sonnet-5-5")).toBe("sonnet-ok");
+  });
+
+  test("an exhausted 7-day window keeps the Sonnet sideline", () => {
+    accounts.__applyUsageRefreshForTest("sonnet-spent", snapshot(100));
+    expect(pick("sonnet-spent", "claude-sonnet-5-5")).toBeUndefined();
+  });
+
+  test("a model with its own cap of unknown utilization stays sidelined", () => {
+    accounts.__applyUsageRefreshForTest(
+      "fable-unknown",
+      snapshot(40, [{ label: "Fable", utilization: null, resetsAt: null }]),
+    );
+    expect(pick("fable-unknown", "claude-fable-5-1")).toBeUndefined();
   });
 });
