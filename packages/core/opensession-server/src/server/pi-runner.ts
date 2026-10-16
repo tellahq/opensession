@@ -10,6 +10,7 @@
  *    Open Session's owned stores and detached run-host protocol.
  */
 
+import { registerMemoryProbe } from "./memory-probes";
 import {
   mkdirSync,
   readdirSync,
@@ -818,6 +819,10 @@ interface PiRunHandle {
 // parked on globalThis so hot reloads keep cancel/steer/isBusy working for
 // in-flight turns — same pattern as the previous runner runner's activeRuns.
 const activeRuns: Map<string, PiRunHandle> = (g.__piActiveRuns ??= new Map());
+registerMemoryProbe("pi-runner.activeRuns", () => ({
+  keys: activeRuns.size,
+  runs: new Set(activeRuns.values()).size,
+}));
 
 registerActiveRunProbe((runKey) => activeRuns.has(runKey));
 

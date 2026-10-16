@@ -9,6 +9,7 @@
  * individual key, and needs a separate organization-level integration.
  */
 
+import { registerMemoryProbe } from "./memory-probes";
 import { readFileSync } from "fs";
 import type { CodexAccount } from "./codex-accounts";
 import { withCodexAuthLock } from "./codex-auth-lock";
@@ -60,6 +61,8 @@ export interface CodexAccountUsage {
 const usageCache: Map<string, CodexAccountUsage> = ((
   globalThis as any
 ).__codexAccountUsage ??= new Map());
+registerMemoryProbe("codex-usage.usage", () => usageCache.size);
+
 const DEFAULT_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 60 * 60 * 1000;
 // Same window codex-token-refresh.ts uses: refresh only near expiry, so an

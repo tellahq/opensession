@@ -1,3 +1,5 @@
+import { registerMemoryProbe } from "./memory-probes";
+
 export interface SessionStateEvent {
   sessionId: string;
   isRunning: boolean;
@@ -28,6 +30,13 @@ const g = globalThis as {
 };
 
 const MAX_RETAINED_TURN_ENDS = 4096;
+registerMemoryProbe("session-state-events", () => ({
+  listeners: g.__osSessionStateListeners?.size ?? 0,
+  primaryRunning: g.__osPrimarySessionRunning?.size ?? 0,
+  runningHolds: g.__osSessionRunningHolds?.size ?? 0,
+  pendingOpenings: g.__osPendingOpenings?.size ?? 0,
+  lastTurnEnds: g.__osLastTurnEnds?.size ?? 0,
+}));
 
 function listeners(): Set<SessionStateListener> {
   return (g.__osSessionStateListeners ??= new Set());

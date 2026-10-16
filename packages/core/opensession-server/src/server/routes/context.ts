@@ -17,7 +17,7 @@ export interface RouteContext {
   /** Verified sign-in identity (web-auth.ts) when GitHub web sign-in is
    *  active; null when signed out or when the feature is off. When set,
    *  handlers should prefer it over any client-supplied `user` field. */
-  authUser?: { login: string; name: string } | null;
+  authUser?: { login: string; name: string; automation?: boolean } | null;
 }
 
 export type RouteHandler = (ctx: RouteContext) => Promise<Response | undefined>;

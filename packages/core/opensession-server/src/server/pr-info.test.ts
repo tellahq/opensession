@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { PR_DIFF_CACHE_LIMITS } from "./bounded-cache";
 import {
+  __prDiffCacheForTest,
   cachedPrDetailsForSession,
   ghApiErrorMessage,
   isNoPrError,
@@ -11,6 +13,7 @@ import {
   parsePrFileLines,
   prApiErrorMessage,
   reconcilePrDetails,
+  seedPrDiff,
   type PrDetails,
 } from "./pr-info";
 import type { UnifiedSession } from "./types";
@@ -304,5 +307,28 @@ test("parseAutoMerge reads gh's autoMergeRequest", () => {
     method: "squash",
     enabledBy: "acme",
     enabledAt: "2026-10-13T00:00:00Z",
+  });
+});
+
+describe("PR diff cache bound", () => {
+  test("keeps only recent whole-PR patches resident", () => {
+    const cache = __prDiffCacheForTest();
+    cache.clear();
+    const patch = "+line\n".repeat(200_000);
+    // Each session branch with a reviewed PR used to keep its full patch for
+    // the life of the process.
+    for (let i = 0; i < 500; i++)
+      seedPrDiff("acme/widgets", `session-${i}`, {
+        number: i + 1,
+        headRefOid: `head-${i}`,
+        baseRefOid: "base",
+        patch,
+      });
+    let chars = 0;
+    for (const entry of cache.values()) chars += entry.data?.patch.length ?? 0;
+    expect(cache.size).toBeLessThanOrEqual(PR_DIFF_CACHE_LIMITS.maxEntries);
+    expect(chars).toBeLessThanOrEqual(PR_DIFF_CACHE_LIMITS.maxWeight);
+    expect(cache.has("acme/widgets\u0000session-499")).toBe(true);
+    cache.clear();
   });
 });

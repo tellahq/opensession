@@ -70,6 +70,7 @@
  * body caps) remain bridge-only.
  */
 
+import { registerMemoryProbe } from "./memory-probes";
 import { homeDir } from "./paths";
 import { stateDir } from "./paths";
 import {
@@ -122,6 +123,7 @@ interface StoredBridgeSession {
 // conversation into a fresh SDK session — correct, only slower.
 const sessions: Map<string, StoredBridgeSession> =
   (g.__anthropicBridgeSessions ??= new Map());
+registerMemoryProbe("anthropic-bridge.sessions", () => sessions.size);
 
 /** Per-boot shared secret between Pi-runner and this bridge. */
 export function bridgeKey(): string {

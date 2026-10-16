@@ -20,6 +20,8 @@
  * error and the capability flags (CODESTORAGE_CAPABILITIES) hide the surfaces.
  */
 import { audited } from "../audit";
+import { PR_DIFF_CACHE_LIMITS, setBounded } from "../bounded-cache";
+import { registerMemoryProbe, totalChars } from "../memory-probes";
 import { createHash } from "node:crypto";
 import { codeStorageConfig, configuredRepos, personaName } from "../config";
 import type { GithubCredential } from "../github-auth";
@@ -89,6 +91,13 @@ const TTL = 60_000;
 const cacheKey = (repo: string, branch: string) => `${repo}\u0000${branch}`;
 const detailsCache = new Map<string, { data: PrDetails | null; ts: number }>();
 const diffCache = new Map<string, { data: PrDiffData | null; ts: number }>();
+registerMemoryProbe("codestorage-pr-host.caches", () => ({
+  details: detailsCache.size,
+  diffs: diffCache.size,
+  diffPatchChars: totalChars(
+    [...diffCache.values()].map((entry) => entry.data?.patch),
+  ),
+}));
 const detailsInflight = new Map<string, Promise<PrDetails | null>>();
 const diffInflight = new Map<string, Promise<PrDiffData | null>>();
 
@@ -626,6 +635,8 @@ function cachedFetch<T>(
   key: string,
   fresh: boolean,
   fetch: () => Promise<T>,
+  remember: (key: string, entry: { data: T; ts: number }) => void = (k, e) =>
+    cache.set(k, e),
 ): Promise<T> {
   const hit = cache.get(key);
   if (!fresh && hit && Date.now() - hit.ts < TTL)
@@ -634,7 +645,7 @@ function cachedFetch<T>(
   if (!p) {
     p = fetch()
       .then((data) => {
-        cache.set(key, { data, ts: Date.now() });
+        remember(key, { data, ts: Date.now() });
         return data;
       })
       .finally(() => inflight.delete(key));
@@ -709,6 +720,8 @@ export const csPrHost: PrHost = {
           cacheKey(repo, branch),
           false,
           () => fetchDiff(branch, repo),
+          (key, entry) =>
+            setBounded(diffCache, key, entry, PR_DIFF_CACHE_LIMITS),
         ),
 
   async prMetaForBranch(branch, repo): Promise<MutationPrMeta | null> {
