@@ -165,6 +165,49 @@ describe("unarchiving", () => {
   });
 });
 
+describe("close and reopen ordering", () => {
+  test("a reopen that arrives while close is still reading wins", async () => {
+    const { deps, registry } = fakeDeps([row("bks-ghpr-7-review")]);
+    // Hold close inside its indexed read, the window where an unserialized
+    // reopen would read no `auto` reason, skip, and finish first.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const read = deps.readSession;
+    let held = false;
+    deps.readSession = async (id) => {
+      if (!held) {
+        held = true;
+        await gate;
+      }
+      return read(id);
+    };
+    const closing = archiveClosedPrSessions(7, "acme/app", deps);
+    const reopening = restoreReopenedPrSessions(7, "acme/app", deps);
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    release();
+    expect(await closing).toEqual(["bks-ghpr-7-review"]);
+    expect(await reopening).toEqual(["bks-ghpr-7-review"]);
+    expect(registry.size).toBe(0);
+  });
+
+  test("a failed close does not block the next operation on the PR", async () => {
+    const { deps, registry } = fakeDeps([row("bks-ghpr-7-review")]);
+    const failing = {
+      ...deps,
+      readSession: async () => {
+        throw new Error("index down");
+      },
+    };
+    await expect(
+      archiveClosedPrSessions(7, "acme/app", failing),
+    ).rejects.toThrow("index down");
+    expect(await archiveClosedPrSessions(7, "acme/app", deps)).toEqual([
+      "bks-ghpr-7-review",
+    ]);
+    expect(registry.get("bks-ghpr-7-review")).toBe("auto");
+  });
+});
+
 describe("sweepClosedPrSessions", () => {
   test("archives sessions of closed PRs, one lookup per PR, skipping known-open ones", async () => {
     const { deps, registry, lookups } = fakeDeps(

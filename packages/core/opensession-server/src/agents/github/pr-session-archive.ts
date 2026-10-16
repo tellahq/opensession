@@ -59,6 +59,39 @@ export function parsePrSessionId(
   return prKey(prNumber, ghRepo, repos) === key ? { prNumber, ghRepo } : null;
 }
 
+// ── Per-PR serialization ─────────────────────────────────────────────────
+
+const prQueues = new Map<string, Promise<unknown>>();
+
+/**
+ * Run `fn` after every earlier archive operation on the same PR settles.
+ * Close, reopen, a run's unarchive and the backfill each await indexed reads
+ * before they write, so unserialized they can interleave: a reopen could read
+ * the reason before close wrote `auto`, finish first, and leave a reopened
+ * PR's sessions archived. Callers enqueue synchronously, in event order.
+ */
+export function withPrArchiveLock<T>(
+  key: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const prev = prQueues.get(key) ?? Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.catch(() => {});
+  prQueues.set(key, tail);
+  void tail.then(() => {
+    if (prQueues.get(key) === tail) prQueues.delete(key);
+  });
+  return run;
+}
+
+function prLockKey(
+  prNumber: number,
+  ghRepo: string,
+  repos?: Record<string, Repo>,
+): string {
+  return prKey(prNumber, ghRepo, repos);
+}
+
 export interface PrSessionArchiveDeps {
   /** One indexed row by id, runtime-enriched (isRunning is current). */
   readSession(id: string): Promise<UnifiedSession | null>;
@@ -118,7 +151,17 @@ async function defaultDeps(): Promise<PrSessionArchiveDeps> {
  * a PR whose review or code lock is held is skipped whole. The backfill sweep
  * retries what was skipped. Returns the archived ids.
  */
-export async function archiveClosedPrSessions(
+export function archiveClosedPrSessions(
+  prNumber: number,
+  ghRepo: string,
+  deps?: PrSessionArchiveDeps,
+): Promise<string[]> {
+  return withPrArchiveLock(prLockKey(prNumber, ghRepo, deps?.repos()), () =>
+    archiveClosedPrSessionsNow(prNumber, ghRepo, deps),
+  );
+}
+
+async function archiveClosedPrSessionsNow(
   prNumber: number,
   ghRepo: string,
   deps?: PrSessionArchiveDeps,
@@ -149,7 +192,17 @@ export async function archiveClosedPrSessions(
 
 /** On reopen, restore only the sessions this module archived (reason `auto`).
  * A person's manual archive stays. Returns the restored ids. */
-export async function restoreReopenedPrSessions(
+export function restoreReopenedPrSessions(
+  prNumber: number,
+  ghRepo: string,
+  deps?: PrSessionArchiveDeps,
+): Promise<string[]> {
+  return withPrArchiveLock(prLockKey(prNumber, ghRepo, deps?.repos()), () =>
+    restoreReopenedPrSessionsNow(prNumber, ghRepo, deps),
+  );
+}
+
+async function restoreReopenedPrSessionsNow(
   prNumber: number,
   ghRepo: string,
   deps?: PrSessionArchiveDeps,
@@ -170,17 +223,23 @@ export async function restoreReopenedPrSessions(
 
 /** A new run in a GitHub session brings it back, whatever archived it: the
  * run's output and links would otherwise land in a hidden session. */
-export async function unarchiveGithubRunSession(
+export function unarchiveGithubRunSession(
   bksId: string,
   deps?: PrSessionArchiveDeps,
 ): Promise<boolean> {
-  const d = deps ?? (await defaultDeps());
-  if (!d.isArchivedId(bksId)) return false;
-  const session = (await d.readSession(bksId)) ?? {
-    id: bksId,
-    archived: true,
-  };
-  return d.unarchive(session as UnifiedSession);
+  const pr = parsePrSessionId(bksId, deps?.repos() ?? configuredRepos());
+  return withPrArchiveLock(
+    pr ? prLockKey(pr.prNumber, pr.ghRepo, deps?.repos()) : bksId,
+    async () => {
+      const d = deps ?? (await defaultDeps());
+      if (!d.isArchivedId(bksId)) return false;
+      const session = (await d.readSession(bksId)) ?? {
+        id: bksId,
+        archived: true,
+      };
+      return d.unarchive(session as UnifiedSession);
+    },
+  );
 }
 
 // ── Backfill ─────────────────────────────────────────────────────────────

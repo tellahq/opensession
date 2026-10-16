@@ -53,6 +53,10 @@ import { DEFAULT_REVIEW_PROMPT } from "./prompts";
 import { automaticReviewEventAllowed } from "./public-review";
 import { refreshApprovalGate } from "./approval-gate";
 import { githubAppIdentity } from "../../server/github-auth";
+import {
+  archiveClosedPrSessions,
+  restoreReopenedPrSessions,
+} from "./pr-session-archive";
 
 let onSessionInvalidate: (() => void) | undefined;
 export function setGithubSessionInvalidate(cb: () => void): void {
@@ -355,31 +359,26 @@ export async function handleGithubPrEvent(
     if (action === "closed") {
       desiredReviews.cancel(ref);
       clearHandoff(pr.number, ghRepo);
-      void import("./pr-session-archive")
-        .then((m) =>
-          m.archiveClosedPrSessions(pr.number, ghRepo || defaultRepo().ghRepo),
-        )
-        .catch((e) =>
+      // Enqueued synchronously (static import) so a later reopen always runs
+      // after this archive, never interleaved with it.
+      archiveClosedPrSessions(pr.number, ghRepo || defaultRepo().ghRepo).catch(
+        (e) =>
           console.error(
             `[github] archiving sessions for closed PR #${pr.number} failed:`,
             e,
           ),
-        );
+      );
     }
     if (action === "reopened") {
-      void import("./pr-session-archive")
-        .then((m) =>
-          m.restoreReopenedPrSessions(
-            pr.number,
-            ghRepo || defaultRepo().ghRepo,
-          ),
-        )
-        .catch((e) =>
-          console.error(
-            `[github] restoring sessions for reopened PR #${pr.number} failed:`,
-            e,
-          ),
-        );
+      restoreReopenedPrSessions(
+        pr.number,
+        ghRepo || defaultRepo().ghRepo,
+      ).catch((e) =>
+        console.error(
+          `[github] restoring sessions for reopened PR #${pr.number} failed:`,
+          e,
+        ),
+      );
     }
 
     // ── Merge → notify linked sessions + fire configured docs-sync ──
