@@ -253,3 +253,66 @@ describe("recordSetupTimeout", () => {
     expect(notices[0]?.[1]).toContain("Workspace setup timed out after 15 min");
   });
 });
+
+describe("pending setup pipelines", () => {
+  test("archiving while seeding waits stops setup before it starts", async () => {
+    const { seedAndInstallWorktree } = await import("./worktree");
+    let releaseSeed!: () => void;
+    let seeding!: () => void;
+    const seedStarted = new Promise<void>((r) => (seeding = r));
+    const pipeline = seedAndInstallWorktree(
+      {
+        id: "acme",
+        worktreeSetup: "touch setup-ran",
+        depsInstall: "touch deps-ran",
+      } as never,
+      dir,
+      "acme-branch",
+      () => {
+        seeding();
+        return new Promise<void>((r) => (releaseSeed = r));
+      },
+    );
+    await seedStarted;
+    // The session is archived while seeding still waits on its lock.
+    expect(await stopWorktreeSetup(dir, { scopes: false })).toBe(1);
+    releaseSeed();
+    await pipeline;
+    expect(await Bun.file(join(dir, "setup-ran")).exists()).toBe(false);
+    expect(await Bun.file(join(dir, "deps-ran")).exists()).toBe(false);
+  });
+
+  test("the reaper cancels a pending pipeline of an archived owner", async () => {
+    const { seedAndInstallWorktree } = await import("./worktree");
+    let releaseSeed!: () => void;
+    let seeding!: () => void;
+    const seedStarted = new Promise<void>((r) => (seeding = r));
+    const pipeline = seedAndInstallWorktree(
+      { id: "acme", depsInstall: "touch deps-ran" } as never,
+      dir,
+      "acme-branch",
+      () => {
+        seeding();
+        return new Promise<void>((r) => (releaseSeed = r));
+      },
+    );
+    await seedStarted;
+    await reapSetupScopes([session("a", dir, { archived: true })], {
+      list: async () => [],
+    });
+    releaseSeed();
+    await pipeline;
+    expect(await Bun.file(join(dir, "deps-ran")).exists()).toBe(false);
+  });
+
+  test("an uncancelled pipeline runs its setup after seeding", async () => {
+    const { seedAndInstallWorktree } = await import("./worktree");
+    await seedAndInstallWorktree(
+      { id: "acme", depsInstall: "touch deps-ran" } as never,
+      dir,
+      "acme-branch",
+      async () => {},
+    );
+    expect(await Bun.file(join(dir, "deps-ran")).exists()).toBe(true);
+  });
+});

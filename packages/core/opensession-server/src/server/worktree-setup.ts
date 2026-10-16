@@ -72,6 +72,43 @@ export class SetupStoppedError extends Error {
   }
 }
 
+/**
+ * One fresh-worktree setup pipeline (warm-template seeding, then each setup
+ * command). Registered synchronously before the pipeline's first await, so a
+ * session archived while seeding still waits on a lock cancels the commands
+ * that would have started afterwards.
+ */
+export type SetupPipeline = { dir: string; cancelled: boolean };
+const pipelines = new Set<SetupPipeline>();
+
+export function beginSetupPipeline(dir: string): SetupPipeline {
+  const pipeline = { dir: resolve(dir), cancelled: false };
+  pipelines.add(pipeline);
+  return pipeline;
+}
+
+export function endSetupPipeline(pipeline: SetupPipeline): void {
+  pipelines.delete(pipeline);
+}
+
+/** Throws SetupStoppedError once the pipeline's session has ended. */
+export function assertSetupPipelineLive(pipeline?: SetupPipeline): void {
+  if (pipeline?.cancelled) throw new SetupStoppedError();
+}
+
+async function cancelPipelines(
+  matches: (canonical: string) => boolean,
+): Promise<number> {
+  let cancelled = 0;
+  for (const pipeline of [...pipelines]) {
+    if (pipeline.cancelled) continue;
+    if (!matches(await canonicalDir(pipeline.dir))) continue;
+    pipeline.cancelled = true;
+    cancelled++;
+  }
+  return cancelled;
+}
+
 type RunningSetup = {
   dir: string;
   unit?: string;
@@ -88,9 +125,12 @@ const running = new Set<RunningSetup>();
  */
 export async function runSetupCommand(
   argv: string[],
-  options: { cwd: string; timeoutMs: number },
+  options: { cwd: string; timeoutMs: number; pipeline?: SetupPipeline },
 ): Promise<void> {
+  assertSetupPipelineLive(options.pipeline);
   const dir = await canonicalDir(options.cwd);
+  // The session may have ended while the path resolved.
+  assertSetupPipelineLive(options.pipeline);
   const unit = workloadScopingActive()
     ? `${setupScopePrefix(dir)}-${randomUUID().replace(/-/g, "").slice(0, 8)}`
     : undefined;
@@ -163,14 +203,15 @@ async function stopUnits(pattern: string): Promise<void> {
   } catch {}
 }
 
-/** Stop every setup still running in `dir`, including scopes a previous
- * gateway process started. Returns how many in-process setups it stopped. */
+/** Stop every setup still running or pending in `dir`, including scopes a
+ * previous gateway process started. Returns how many in-process setups
+ * (running commands and pending pipelines) it stopped. */
 export async function stopWorktreeSetup(
   dir: string,
   options: { scopes?: boolean } = {},
 ): Promise<number> {
   const canonical = await canonicalDir(dir);
-  let stopped = 0;
+  let stopped = await cancelPipelines((d) => d === canonical);
   for (const entry of [...running]) {
     if (entry.dir !== canonical) continue;
     entry.stopped = true;
@@ -359,8 +400,6 @@ export async function reapSetupScopes(
   const list =
     options.list ??
     (async () => (workloadScopingActive() ? listSetupScopes() : []));
-  const scopes = await list();
-  if (!scopes.length) return { stopped: [] };
   const owners = new Map<string, boolean[]>();
   for (const session of sessions)
     for (const dir of ownerDirs(session)) {
@@ -369,6 +408,13 @@ export async function reapSetupScopes(
       flags.push(session.archived === true);
       owners.set(key, flags);
     }
+  // A pipeline still seeding has no scope yet; cancel it before it spawns.
+  await cancelPipelines((dir) => {
+    const flags = owners.get(setupScopePrefix(dir));
+    return !!flags?.length && flags.every(Boolean);
+  });
+  const scopes = await list();
+  if (!scopes.length) return { stopped: [] };
   const maxAgeMs = options.maxAgeMs ?? maxConfiguredSetupTimeoutMs();
   const stop =
     options.stop ??
