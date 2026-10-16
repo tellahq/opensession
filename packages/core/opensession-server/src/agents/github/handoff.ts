@@ -124,7 +124,7 @@ export async function maybeHandoffFindings(
     const sessionRef =
       cached?.number === pr.number ? cached.sessionRef : undefined;
     const target = pickHandoffOwner(
-      sessionRef ? control.getSession(sessionRef) : undefined,
+      sessionRef ? await control.getSession(sessionRef) : undefined,
       canOwnPrWork,
       owners,
     );

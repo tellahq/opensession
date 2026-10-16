@@ -139,6 +139,11 @@ import {
   type WebIdentity,
   webAuthRequired,
 } from "./src/server/web-auth";
+import {
+  isGithubAccountId,
+  PERSONAL_PRIVACY_PROTOCOL,
+} from "./src/shared/access-scope";
+import { privacyPrincipalAdmission } from "./src/server/routes/privacy-principal";
 import { configureWebhookRoutes } from "./src/server/webhook-server";
 import { boatWebhookRoutes } from "./src/server/sandbox/boat-webhook";
 import { prImagePublicRoutes } from "./src/server/pr-images";
@@ -177,7 +182,16 @@ import {
   startSessionKernelRuntime,
   stopSessionKernelRuntime,
 } from "./src/server/session-kernel";
-import { activeRunRecords } from "./src/server/run-journal";
+import {
+  activeRunRecords,
+  ensurePersonalRunJournalReady,
+} from "./src/server/run-journal";
+import { startSessionAudiences } from "./src/server/session-audience";
+import { stopPersonalHostAndConfirm } from "./src/server/host-client";
+import { createPersonalConsumerControl } from "./src/server/personal-consumer-control";
+import { createPersonalRepositoryConsumers } from "./src/server/personal-run-consumers";
+import { createPersonalRepositoryCoordinator } from "./src/server/personal-repository-coordinator";
+import { installPersonalRepositoryCoordinator } from "./src/server/personal-github/worker-client";
 import {
   markInterruptedWorkflows,
   pauseWorkflowsForShutdown,
@@ -261,22 +275,14 @@ process.env.OPENSESSION_GATEWAY_ROLE = "active";
   }
 }
 
-// Listeners the server owns. Deliberately started HERE and not as module side
-// effects: interactive-mcp.ts used to bind both at import, so any script, test
-// or one-off bun process reaching that import chain took the live server's
-// run-rpc socket out from under it (2026-07-16, 2026-07-17, 2026-08-16).
-// Outside the __opensessionBooted block on purpose — both are idempotent and
-// re-point their handler through globalThis, which is how a `bun --hot` reload
-// picks up new code without rebinding.
-startRunRpcServer();
-startMcpHttpServer();
 // A Sandbox session's run must carry its remote workspace; a recovery or
 // fallback path that lost it is refused instead of acting on this machine.
 registerSandboxSessionPredicate((sessionId) =>
   isRunnableSandboxProvider(findSession(sessionId)?.sandbox?.provider),
 );
-// Same reasoning for the timer-poison heartbeat: re-checked on every
-// evaluation, which is exactly when a hot reload may have killed the timers.
+// Re-check the timer-poison heartbeat on every evaluation, which is exactly
+// when a hot reload may have killed the timers. Client listeners start below,
+// only after the catalog, private journal and audience authority are ready.
 startTimerPoisonHeartbeat();
 
 mkdirSync(SESSIONS_DIR, { recursive: true });
@@ -302,6 +308,9 @@ if (!g.__opensessionBooted) {
   const { importApplicationCatalog } =
     await import("./src/server/catalog-documents");
   await importApplicationCatalog();
+}
+await ensurePersonalRunJournalReady();
+if (!g.__opensessionBooted) {
   // Pure synchronous readers use this even when the list index has coverage.
   const { warmWorkspacesAsync } = await import("./src/server/workspaces");
   await warmWorkspacesAsync();
@@ -315,6 +324,20 @@ if (!g.__opensessionBooted) {
 if (!g.__opensessionBooted && process.env.OPENSESSION_DEMO === "1")
   await (await import("./src/server/demo")).seedDemoDataset();
 if (!g.__opensessionBooted) await primeSessionListIndex();
+await startSessionAudiences();
+// Install before a connection worker or recovery consumer can start. Hot reload
+// refreshes callbacks while retaining the worker and its serialized owner lanes.
+// Runtime readiness is checked on admission, so an unavailable personal helper
+// denies private work without preventing shared-only instances from booting.
+installPersonalRepositoryCoordinator(
+  createPersonalRepositoryCoordinator(
+    createPersonalRepositoryConsumers(
+      createPersonalConsumerControl({
+        stopAndConfirm: stopPersonalHostAndConfirm,
+      }),
+    ),
+  ),
+);
 void ensureSlackLinkIndex();
 
 // Loaded agents (Plain/Linear/Slack/Stripe/…). Module-scoped because request
@@ -333,6 +356,13 @@ if (!g.__opensessionBooted && !isDevInstance()) {
 // Session files are exports of actor-owned metadata. Repair the ones a crash
 // left behind their committed revision before any route reads them.
 if (!g.__opensessionBooted) await reconcileSessionMetadataExports();
+
+// These listeners also admit detached runs and interactive MCP clients. Keep
+// them behind journal hydration, audience readiness and durable interaction
+// restoration, not just HTTP startup. Idempotent starts update hot-reload
+// handlers without rebinding their sockets.
+startRunRpcServer();
+startMcpHttpServer();
 
 const gatewayProcessLabel = process.env.OPENSESSION_GATEWAY_BACKEND_PORT
   ? "gateway backend"
@@ -628,6 +658,8 @@ const server: import("bun").Server<WSClientData> = hotServe({
     // upgrades, the SPA fallback and the 404 stay here (they need `server`
     // or must run last).
     const ctx: RouteContext = { req, url, path, publicPrefix, authUser };
+    const privacyRejection = privacyPrincipalAdmission(ctx);
+    if (privacyRejection) return privacyRejection;
     for (const handler of routeHandlers) {
       const res = await handler(ctx);
       if (res) return res;
@@ -647,6 +679,18 @@ const server: import("bun").Server<WSClientData> = hotServe({
           authLogin: authUser?.login || null,
           authGeneration: authUser?.authGeneration,
           authAutomation: authUser?.automation === true,
+          ...(ctx.applicationAccess?.principal
+            ? {
+                privacyProtocol: PERSONAL_PRIVACY_PROTOCOL,
+                expectedGithubAccountId:
+                  ctx.applicationAccess.principal.githubAccountId,
+              }
+            : {}),
+          ...(authUser &&
+          !authUser.automation &&
+          isGithubAccountId(authUser.githubAccountId)
+            ? { authGithubAccountId: authUser.githubAccountId }
+            : {}),
           // Headful/headless CDP browsers used by agents open the hosted app
           // through loopback and can leave inspection tabs alive for days. They
           // may subscribe to transcripts, but are never a human looking at the

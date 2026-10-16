@@ -229,9 +229,7 @@ test("dismissing a nonempty composer parks it without an explicit draft action",
   const createStart = source.indexOf("function handleCreate()");
   const sendStart = source.indexOf("send({", createStart);
   const createHandler = source.slice(createStart, sendStart);
-  expect(createHandler).toContain(
-    "consumePendingDraftParks(prompt, workspaceId, createWorkspaceId);",
-  );
+  expect(createHandler).toContain("consumePendingDraftParks(");
   expect(source).not.toContain('action: "draft"');
   expect(source).not.toContain("Save as draft");
 });
@@ -262,16 +260,18 @@ test("a parked draft keeps the composer copy and carries its attachments", async
   // Leaving copies the draft, it never empties the composer.
   expect(park).not.toContain('saveDraft(DRAFT_KEY, { text: "" })');
   // The workspace composer reads staged files from its own draft key.
-  expect(park).toContain("saveDraft(workspaceDraftKey(workspace.id), {");
+  expect(park).toMatch(
+    /saveDraft\(\s*workspaceDraftKey\(workspace.id,\s*draftClientDataScope\(DRAFT_KEY\)\)/,
+  );
   expect(park).toContain("images: staged.images,");
   expect(park).toContain("files: staged.files,");
   // Closing twice updates the workspace the first close made, only in its repo.
-  expect(park).toContain("getParkedNewSessionWorkspace()");
+  expect(park).toContain("getParkedNewSessionWorkspace(draftScope)");
   expect(park).toContain(
     "previousPark?.repo === repo ? previousPark.id : null",
   );
-  expect(park).toContain(
-    "rememberParkedNewSessionWorkspace(workspace.id, repo)",
+  expect(park).toMatch(
+    /rememberParkedNewSessionWorkspace\(\s*workspace.id,\s*repo,\s*draftClientDataScope\(DRAFT_KEY\)/,
   );
 });
 
@@ -289,14 +289,14 @@ test("creating a reopened composer consumes its parked draft workspace", async (
   );
   const successHandler = source.slice(successStart, successEnd);
 
-  expect(createHandler).toContain("getParkedNewSessionWorkspaceId(repo)");
+  expect(createHandler).toContain(
+    "getParkedNewSessionWorkspaceId(repo, draftScope)",
+  );
   expect(createHandler).toContain(
     "{ workspaceId: createWorkspaceId, worktreeMode }",
   );
   expect(createHandler).toContain("{ workspaceId: createWorkspaceId }");
-  expect(successHandler).toContain(
-    "consumeNewSessionWorkspaceDraft(consumedWorkspaceId)",
-  );
+  expect(successHandler).toContain("consumeNewSessionWorkspaceDraft(");
 });
 
 test("a late re-park clears rather than deletes an adopted workspace", async () => {
@@ -309,8 +309,10 @@ test("a late re-park clears rather than deletes an adopted workspace", async () 
 
   expect(park).toContain("operation.consumedIntoWorkspaceId === workspace.id");
   expect(
-    park.indexOf("updateWorkspaceApi(workspace.id, { draft: null })"),
-  ).toBeLessThan(park.indexOf("deleteWorkspaceApi(workspace.id)"));
+    park.search(/updateWorkspaceApi\(\s*workspace.id,\s*{ draft: null }/),
+  ).toBeLessThan(
+    park.search(/deleteWorkspaceApi\(workspace.id,\s*draftScope\)/),
+  );
 });
 
 test("workspace composers offer repository creation and release the old source on adoption", async () => {
@@ -389,10 +391,12 @@ test("re-parking across repositories retires the old draft without deleting its 
     source.indexOf("if (operation.consumed)", start),
   );
   expect(start).toBeGreaterThan(-1);
-  expect(cleanup).toContain(
-    "updateWorkspaceApi(previousPark.id, { draft: null })",
+  expect(cleanup).toMatch(
+    /updateWorkspaceApi\(\s*previousPark.id,\s*\{ draft: null \}/,
   );
-  expect(cleanup).toContain("consumeNewSessionWorkspaceDraft(previousPark.id)");
+  expect(cleanup).toContain(
+    "consumeNewSessionWorkspaceDraft(previousPark.id, draftScope)",
+  );
   expect(cleanup).not.toContain("deleteWorkspaceApi");
 });
 

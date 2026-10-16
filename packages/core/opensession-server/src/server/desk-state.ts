@@ -1,3 +1,4 @@
+import { withSessionScopeFence } from "./session-scope-coverage";
 /**
  * Desk live state — what the user's world looks like right now, for both the
  * Desk's own eyes (a compact briefing injected into every Desk turn) and the
@@ -28,7 +29,7 @@
  */
 import { pendingAskAwaitingAnswerSync } from "./asks";
 import { listAsks as listHumanAsks } from "./human-asks";
-import { findSession, getCachedSessions } from "./session-cache";
+import { getCachedSessionsAsync } from "./session-cache";
 import { getReads, isUnread } from "./reads";
 import { listTodos } from "./todos";
 import { gitIdentityFor } from "./shared/user-mappings";
@@ -188,88 +189,99 @@ const newestFirst = (a: DeskWorkItem, b: DeskWorkItem) =>
  * The user's live state. Cheap: one cached sessions read (2s TTL, the same
  * one the sessions list uses), one reads file, one todos file.
  */
-export function buildDeskState(user: string): DeskState {
-  const now = Date.now();
-  const reads = getReads(user);
-  const waiting: DeskWorkItem[] = [];
-  const running: DeskWorkItem[] = [];
-  const review: DeskWorkItem[] = [];
+export async function buildDeskState(user: string): Promise<DeskState> {
+  return withSessionScopeFence(async () => {
+    const sessions = await getCachedSessionsAsync();
+    const byId = new Map(
+      sessions.flatMap((session) =>
+        [session.id, ...(session.aliasIds ?? [])].map(
+          (id) => [id, session] as const,
+        ),
+      ),
+    );
+    const now = Date.now();
+    const reads = getReads(user);
+    const waiting: DeskWorkItem[] = [];
+    const running: DeskWorkItem[] = [];
+    const review: DeskWorkItem[] = [];
 
-  for (const s of getCachedSessions()) {
-    // The Desk never lists itself, and never another person's work.
-    if (s.desk) continue;
-    if (!samePerson(s.createdBy, user)) continue;
+    for (const s of sessions) {
+      // The Desk never lists itself, and never another person's work.
+      if (s.desk) continue;
+      if (!samePerson(s.createdBy, user)) continue;
 
-    const question = askSummary(s.id);
-    if (question || s.runState === "ask_blocked") {
-      waiting.push(toItem(s, question));
-      continue;
+      const question = askSummary(s.id);
+      if (question || s.runState === "ask_blocked") {
+        waiting.push(toItem(s, question));
+        continue;
+      }
+      if (isRunningSession(s)) {
+        running.push(toItem(s));
+        continue;
+      }
+      // Finished. It earns a place only while it's recent AND unread — a
+      // session with no read mark at all was never opened, which is exactly
+      // the case that needs eyes, so it counts too.
+      const age = now - new Date(s.lastActivity).getTime();
+      if (Number.isNaN(age) || age > REVIEW_WINDOW_MS) continue;
+      const mark = reads[s.id];
+      if (mark && !isUnread(s.lastActivity, mark)) continue;
+      review.push(toItem(s));
     }
-    if (isRunningSession(s)) {
-      running.push(toItem(s));
-      continue;
-    }
-    // Finished. It earns a place only while it's recent AND unread — a
-    // session with no read mark at all was never opened, which is exactly
-    // the case that needs eyes, so it counts too.
-    const age = now - new Date(s.lastActivity).getTime();
-    if (Number.isNaN(age) || age > REVIEW_WINDOW_MS) continue;
-    const mark = reads[s.id];
-    if (mark && !isUnread(s.lastActivity, mark)) continue;
-    review.push(toItem(s));
-  }
 
-  // Asks addressed to this user (ask_human), whoever started the session they
-  // came from — being the named answerer is what makes it theirs. Sessions
-  // already in `waiting` via their own pending card aren't listed twice.
-  const seen = new Set(waiting.map((w) => w.sessionId));
-  for (const ask of listHumanAsks()) {
-    // "delivered" only: a scheduled ask hasn't been put to them yet, and
-    // showing a question nobody has asked is worse than showing nothing.
-    if (ask.state !== "delivered") continue;
-    if (seen.has(ask.sessionId)) continue;
-    if (!samePerson(ask.person?.name, user)) continue;
-    const session = findSession(ask.sessionId);
-    seen.add(ask.sessionId);
-    waiting.push({
-      sessionId: ask.sessionId,
-      title: session?.title || "Untitled session",
-      repo: session?.repo,
-      lastActivity: session?.lastActivity || ask.createdAt,
-      question: {
-        kind: "human" as const,
-        questionId: ask.id,
-        text: plainText(ask.question),
-        options: (ask.options || []).slice(0, 4),
+    // Asks addressed to this user (ask_human), whoever started the session they
+    // came from — being the named answerer is what makes it theirs. Sessions
+    // already in `waiting` via their own pending card aren't listed twice.
+    const seen = new Set(waiting.map((w) => w.sessionId));
+    for (const ask of listHumanAsks()) {
+      // "delivered" only: a scheduled ask hasn't been put to them yet, and
+      // showing a question nobody has asked is worse than showing nothing.
+      if (ask.state !== "delivered") continue;
+      if (seen.has(ask.sessionId)) continue;
+      if (!samePerson(ask.person?.name, user)) continue;
+      const session = byId.get(ask.sessionId);
+      if (!session) continue;
+      seen.add(ask.sessionId);
+      waiting.push({
+        sessionId: ask.sessionId,
+        title: session?.title || "Untitled session",
+        repo: session?.repo,
+        lastActivity: session?.lastActivity || ask.createdAt,
+        question: {
+          kind: "human" as const,
+          questionId: ask.id,
+          text: plainText(ask.question),
+          options: (ask.options || []).slice(0, 4),
+        },
+        ...(session && prFor(session) ? { pr: prFor(session) } : {}),
+      });
+    }
+
+    waiting.sort(newestFirst);
+    running.sort(newestFirst);
+    review.sort(newestFirst);
+
+    const allTodos = listTodos({ user, status: "open", limit: 50 });
+    const todos = allTodos.slice(0, MAX_PER_BUCKET).map((t) => ({
+      id: t.id,
+      text: t.text,
+      ...(t.due ? { due: t.due } : {}),
+    }));
+
+    return {
+      waiting: waiting.slice(0, MAX_PER_BUCKET),
+      running: running.slice(0, MAX_PER_BUCKET),
+      review: review.slice(0, MAX_PER_BUCKET),
+      todos,
+      more: {
+        waiting: Math.max(0, waiting.length - MAX_PER_BUCKET),
+        running: Math.max(0, running.length - MAX_PER_BUCKET),
+        review: Math.max(0, review.length - MAX_PER_BUCKET),
+        todos: Math.max(0, allTodos.length - MAX_PER_BUCKET),
       },
-      ...(session && prFor(session) ? { pr: prFor(session) } : {}),
-    });
-  }
-
-  waiting.sort(newestFirst);
-  running.sort(newestFirst);
-  review.sort(newestFirst);
-
-  const allTodos = listTodos({ user, status: "open", limit: 50 });
-  const todos = allTodos.slice(0, MAX_PER_BUCKET).map((t) => ({
-    id: t.id,
-    text: t.text,
-    ...(t.due ? { due: t.due } : {}),
-  }));
-
-  return {
-    waiting: waiting.slice(0, MAX_PER_BUCKET),
-    running: running.slice(0, MAX_PER_BUCKET),
-    review: review.slice(0, MAX_PER_BUCKET),
-    todos,
-    more: {
-      waiting: Math.max(0, waiting.length - MAX_PER_BUCKET),
-      running: Math.max(0, running.length - MAX_PER_BUCKET),
-      review: Math.max(0, review.length - MAX_PER_BUCKET),
-      todos: Math.max(0, allTodos.length - MAX_PER_BUCKET),
-    },
-    generatedAt: new Date().toISOString(),
-  };
+      generatedAt: new Date().toISOString(),
+    };
+  });
 }
 
 function line(item: DeskWorkItem, extra?: string): string {
@@ -348,10 +360,12 @@ export function renderDeskBriefing(state: DeskState): string {
 
 /** The briefing for a user, or undefined when it can't be built — a state
  *  failure must never block a Desk turn. */
-export function deskBriefingFor(user: string | undefined): string | undefined {
+export async function deskBriefingFor(
+  user: string | undefined,
+): Promise<string | undefined> {
   if (!user) return undefined;
   try {
-    return renderDeskBriefing(buildDeskState(user));
+    return renderDeskBriefing(await buildDeskState(user));
   } catch (e) {
     console.warn("[desk] failed to build the live-state briefing:", e);
     return undefined;

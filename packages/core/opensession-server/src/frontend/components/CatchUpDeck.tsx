@@ -1,3 +1,5 @@
+import { fetchMentionPalette } from "../lib/private-mention-palette";
+import { isPrivateSession } from "../lib/private-session-attachments";
 import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import type {
@@ -11,12 +13,11 @@ import {
   fetchModels,
   fetchProviderAccounts,
   fetchFileMentions,
-  fetchMentionSuggestions,
   fetchSkillMentions,
   type ModelOption,
   type ProviderAccountOption,
 } from "../lib/api";
-import { loadDraft, saveDraft } from "../lib/drafts";
+import { bindDraftKey, loadDraft, saveDraft } from "../lib/drafts";
 import { Button } from "../ui/button";
 import { InlineAlert } from "../ui/state";
 import type { FileAttachment } from "../lib/images";
@@ -625,7 +626,7 @@ function CatchUpComposer({
   // Share the session's draft with the main session view (same key), so a reply
   // half-typed here shows up there and vice-versa. Images/files are parked in
   // the same draft record (Composer only owns the text).
-  const draftKey = `session:${target.id}`;
+  const draftKey = bindDraftKey(`session:${target.id}`);
   const [images, setImages] = useState<string[]>(
     () => loadDraft(draftKey).images,
   );
@@ -760,7 +761,11 @@ function CatchUpComposer({
           onSetGoal: isNative ? handleSetGoal : undefined,
           mentionFetch: (query) => fetchFileMentions(query, target.id),
           paletteFetch: (query) =>
-            fetchMentionSuggestions(query, target.id, currentUser),
+            fetchMentionPalette(query, {
+              privateTarget: isPrivateSession(target),
+              sessionId: target.id,
+              user: currentUser,
+            }),
           skillsFetch: (query) => fetchSkillMentions(query, target.id),
         }}
       />

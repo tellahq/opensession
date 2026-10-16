@@ -1,3 +1,4 @@
+import { canAccessScope } from "../shared/access-scope";
 import { executeSessionProjection } from "./session-projection-executor";
 import { readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
 import { opendir, readFile, stat } from "fs/promises";
@@ -839,7 +840,7 @@ export function readSlackSession(sessionId: string): UnifiedSession | null {
   const key = sessionId.slice("slack-".length);
   if (!key || key.includes("/") || key.includes("\\")) return null;
   const session = slackSessionRow(`${key}.json`);
-  if (!session) return null;
+  if (!session || !canAccessScope(session.accessScope)) return null;
   session.transcriptPath = resolveTranscriptPath(
     findTranscriptPath(session.worktreeDir, session.claudeSessionId),
     session.codexThreadId,
@@ -1086,9 +1087,13 @@ function linearSessionRowFromData(
  * so the catalog-backed rebuild in session-cache builds rows from committed
  * documents the same way the file scan does. */
 export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
-  const archived = !!data.archived || isArchivedId(data.id);
+  const archived =
+    !!data.archived ||
+    (data.accessScope?.kind !== "personal" && isArchivedId(data.id));
   return {
     id: data.id,
+    accessScope: data.accessScope,
+    personalRepo: data.personalRepo,
     duplicatedFromSessionId: data.duplicatedFromSessionId,
     claudeSessionId: data.claudeSessionId,
     source: "opensession",
@@ -1127,7 +1132,11 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
     archived: archived || undefined,
     archivedReason:
       data.archivedReason ||
-      (archived ? getArchiveReason(data.id) || "manual" : undefined),
+      (archived
+        ? data.accessScope?.kind === "personal"
+          ? "manual"
+          : getArchiveReason(data.id) || "manual"
+        : undefined),
     plainThreadId: data.plainThreadId,
     plainDiscussionId: data.plainDiscussionId,
     externalRefs: data.externalRefs,
@@ -1211,6 +1220,8 @@ export function nativeSessionListRowFromData(
  * the registries.
  */
 export function applySessionOverlays(session: UnifiedSession): void {
+  // Legacy sidecars are unversioned/shared. Personal rows use only their owned document.
+  if (session.accessScope?.kind === "personal") return;
   const generated =
     getGeneratedTitle(session.id) ??
     session.aliasIds?.map((a) => getGeneratedTitle(a)).find(Boolean);
@@ -1238,7 +1249,9 @@ export function readNativeSession(
   sessionId: string,
 ): UnifiedSession | undefined {
   const session = readNativeSessionListRow(sessionId);
-  return session ? withTranscriptPath(session) : undefined;
+  return session && canAccessScope(session.accessScope)
+    ? withTranscriptPath(session)
+    : undefined;
 }
 
 /** Detail shape of a native session document: the list row plus its resolved
@@ -1647,6 +1660,37 @@ function* assembleSessionSteps(
   return selectedSessions;
 }
 
+/** Drop rows this process may not show before grouping or overlays can copy
+ * one row's fields to its siblings. */
+export function visibleSessionListSources(
+  sources: SessionListSources,
+  authorized?: ReadonlySet<UnifiedSession>,
+): SessionListSources {
+  const visible = (row: UnifiedSession) =>
+    (!authorized || authorized.has(row)) && canAccessScope(row.accessScope);
+  return {
+    native: sources.native.filter(visible),
+    slack: sources.slack.filter(visible),
+    linear: sources.linear.filter(visible),
+  };
+}
+
+/** `visibleSessionListSources` after an asynchronous authority check over
+ * every source row, such as the central scope projection. */
+export async function authorizeSessionListSources(
+  sources: SessionListSources,
+  authorizeRows: (rows: UnifiedSession[]) => Promise<UnifiedSession[]>,
+): Promise<SessionListSources> {
+  const authorized = new Set(
+    await authorizeRows([
+      ...sources.native,
+      ...sources.slack,
+      ...sources.linear,
+    ]),
+  );
+  return visibleSessionListSources(sources, authorized);
+}
+
 /**
  * Assemble the unified list synchronously from rows already in hand, the
  * way legacy unit fixtures construct it: process-local overlays, pending
@@ -1707,8 +1751,10 @@ export function getAllSessions(
   const scan =
     require("./session-source-scan") as typeof import("./session-source-scan");
   return assembleSessionList(
-    sessionListSourcesFromDocuments(
-      scan.scanSessionSourceDocuments("getAllSessions"),
+    visibleSessionListSources(
+      sessionListSourcesFromDocuments(
+        scan.scanSessionSourceDocuments("getAllSessions"),
+      ),
     ),
     slice,
   );

@@ -12,7 +12,7 @@
  * is opened). It may read transcripts through opensession-search.
  */
 
-import { getCachedSessions } from "../session-cache";
+import { getCachedSessionsAsync } from "../session-cache";
 import { sessionLink } from "../run-instructions";
 import { REPOS } from "../worktree";
 import { resolveTeammate } from "../shared/user-mappings";
@@ -75,7 +75,7 @@ export async function dreamingContext(
   const commits = (await memoryRepo.service("history", repo, { limit: 200 }))
     .filter((commit) => new Date(commit.date) > since)
     .slice(0, MAX_COMMITS);
-  const sessions = getCachedSessions()
+  const sessions = (await getCachedSessionsAsync())
     .filter((session) => new Date(session.lastActivity) > since)
     .filter((session) => !session.automation?.startsWith("Memory dreaming"))
     .filter(

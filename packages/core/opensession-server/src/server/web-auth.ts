@@ -30,6 +30,7 @@
 import { chmodSync, existsSync, readFileSync } from "fs";
 import { randomBytes, timingSafeEqual } from "crypto";
 import { audit } from "./audit";
+import { githubAccountId } from "./personal-access";
 import { configuredIdentity } from "./config";
 import { githubUserAuthActive } from "./github-auth";
 import { stateDir } from "./paths";
@@ -47,6 +48,8 @@ const TTL_MS = 90 * 24 * 60 * 60 * 1000; // sliding
 const TOUCH_INTERVAL_MS = 60 * 60 * 1000;
 
 export interface WebSession {
+  /** Stable id returned by GitHub at sign-in; absent on legacy sessions. */
+  githubAccountId?: number;
   token: string;
   /** GitHub login, verified via GET /user at sign-in. */
   login: string;
@@ -60,6 +63,7 @@ export interface WebSession {
 }
 
 export interface WebIdentity {
+  githubAccountId?: number;
   login: string;
   name: string;
   automation?: boolean;
@@ -177,13 +181,20 @@ export function refreshWebIdentity(identity: WebIdentity): WebIdentity | null {
   if (identity.automation || !webAuthRequired()) return identity;
   const member = teamMemberForLogin(identity.login);
   if (!member || member.authGeneration !== identity.authGeneration) return null;
-  return { login: identity.login, ...member };
+  return {
+    login: identity.login,
+    ...member,
+    ...(githubAccountId(identity.githubAccountId) !== undefined
+      ? { githubAccountId: identity.githubAccountId }
+      : {}),
+  };
 }
 
 /** Mint a session for a VERIFIED login. Returns null for non-team logins
  *  (fail-closed — the caller should also discard the OAuth token). */
 export function createWebSession(
   login: string,
+  verifiedGithubAccountId?: number,
 ): { token: string; name: string } | null {
   const member = teamMemberForLogin(login);
   if (!member) return null;
@@ -194,6 +205,9 @@ export function createWebSession(
     login,
     name: member.name,
     ...(member.authGeneration ? { authGeneration: member.authGeneration } : {}),
+    ...(githubAccountId(verifiedGithubAccountId) !== undefined
+      ? { githubAccountId: verifiedGithubAccountId }
+      : {}),
     createdAt: now,
     lastSeenAt: now,
   });
@@ -245,6 +259,9 @@ export function resolveWebAuth(req: Request): WebIdentity | null {
     login: s.login,
     name: s.name,
     ...(s.authGeneration ? { authGeneration: s.authGeneration } : {}),
+    ...(githubAccountId(s.githubAccountId) !== undefined
+      ? { githubAccountId: s.githubAccountId }
+      : {}),
     ...(s.kind === "automation" ? { automation: true } : {}),
   });
   if (!refreshed) {

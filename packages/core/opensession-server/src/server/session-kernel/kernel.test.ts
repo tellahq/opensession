@@ -3526,3 +3526,59 @@ test("catalog documents serve the in-process store when no actor is attached", a
     await sessionCatalogDocument({ op: "import_complete", namespace }),
   ).toBe(true);
 });
+
+test("current catalog and actor schemas reopen in writers and read mirrors", () => {
+  const dir = mkdtempSync(join(tmpdir(), "kernel-schema-reopen-"));
+  try {
+    for (const filename of ["catalog.sqlite", "actor.sqlite"]) {
+      const path = join(dir, filename);
+      const first = new SessionKernelStore(path);
+      first.setDeliverySlot("known", "queued", [{ id: "retained" }]);
+      first.close();
+      // Model a prior schema-36 release, before the new App lookup index.
+      const previousDb = new Database(path);
+      previousDb.exec(
+        "DROP INDEX IF EXISTS idx_repository_catalog_app; PRAGMA user_version = 36;",
+      );
+      previousDb.close();
+      const migrated = new SessionKernelStore(path);
+      expect(migrated.stats().schemaVersion).toBe(
+        SESSION_KERNEL_SCHEMA_VERSION,
+      );
+      migrated.close();
+      const reopened = new SessionKernelStore(path);
+      const mirror = new SessionKernelStore(path, { readonly: true });
+      try {
+        expect(reopened.deliverySnapshot("known").queued).toEqual([
+          { id: "retained" },
+        ]);
+        expect(mirror.deliverySnapshot("known").queued).toEqual([
+          { id: "retained" },
+        ]);
+      } finally {
+        mirror.close();
+        reopened.close();
+      }
+      const inspect = new Database(path);
+      expect(
+        inspect
+          .query(
+            "SELECT name FROM sqlite_master WHERE name='idx_repository_catalog_app'",
+          )
+          .get(),
+      ).not.toBeNull();
+      inspect.exec(
+        `PRAGMA user_version = ${SESSION_KERNEL_SCHEMA_VERSION + 1}`,
+      );
+      inspect.close();
+      expect(() => new SessionKernelStore(path, { readonly: true })).toThrow(
+        "does not match supported",
+      );
+      expect(() => new SessionKernelStore(path)).toThrow(
+        "newer than supported",
+      );
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

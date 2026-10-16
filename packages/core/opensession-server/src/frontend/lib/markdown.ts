@@ -1,3 +1,4 @@
+import { subscribeClientDataScope } from "./client-data-scope";
 import { Marked, type Token, type TokenizerThis, type Tokens } from "marked";
 import { type CalloutIconKind, calloutIconMarkup } from "../components/icons";
 import { BASE_PATH } from "./base";
@@ -2220,3 +2221,22 @@ export function renderPrCommentMarkdown(
   });
   return html;
 }
+
+// Registries and rendered HTML can contain names, paths and transcript text.
+// Drop them synchronously before another identity can mount a consumer.
+subscribeClientDataScope(() => {
+  sessionTitles.clear();
+  resolvedSessionTitles.clear();
+  unavailableSessionIds.clear();
+  queuedSessionTitleRequests.clear();
+  inFlightSessionTitleRequests.clear();
+  workspaceTitles.clear();
+  runningSessions.clear();
+  knownRepos.clear();
+  knownPrStates.clear();
+  sessionPrStates.clear();
+  repoPrStates.clear();
+  assetReferenceCache.clear();
+  mdCache.clear();
+  mdStreamTail.clear();
+});

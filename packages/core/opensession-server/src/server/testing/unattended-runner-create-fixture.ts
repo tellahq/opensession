@@ -55,6 +55,8 @@ process.env.OPENSESSION_SESSION_KERNEL_URL = kernel.url;
 process.env.OPENSESSION_SESSION_KERNEL_TOKEN = kernelToken;
 const actorRuntime = await import("../session-kernel/actor-runtime");
 await actorRuntime.startSessionKernelActor();
+const { ensurePersonalRunJournalReady } = await import("../run-journal");
+await ensurePersonalRunJournalReady();
 
 const runWs = await import("../run-ws");
 const runWsServer = Bun.serve({
@@ -214,6 +216,36 @@ const stored = await automations.getAutomation(automation.id);
 if (!stored) throw new Error("stored automation missing");
 const workflowPolicy = automations.automationWorkflowSessionPolicy(stored);
 if (!workflowPolicy) throw new Error("stored policy missing");
+
+// A bare parent id is not authority. Commit the real shared fixture parent.
+const { reserveSharedSessionCreation } =
+  await import("../personal-session-reservation");
+const { sessionMetadata } = await import("../session-kernel");
+await reserveSharedSessionCreation("automation-parent", "fixture-parent");
+const parentDoc = {
+  id: "automation-parent",
+  accessScope: { kind: "shared" },
+  repo: "renderer",
+  mode: "code",
+  title: "Automation parent fixture",
+  createdBy: "Renderer swarm (automation)",
+  automation: "Renderer swarm",
+  automationId: automation.id,
+  createdAt: new Date(0).toISOString(),
+  lastActivity: new Date(0).toISOString(),
+};
+const parentWrite = await sessionMetadata({
+  op: "put",
+  sessionId: parentDoc.id,
+  doc: JSON.stringify(parentDoc),
+  requestId: "fixture-parent-metadata",
+  expectedRev: null,
+  rev: 1,
+  archived: false,
+  lastActivityMs: 0,
+});
+if (parentWrite.status !== "committed")
+  throw new Error("Parent fixture did not commit");
 
 await import("../session-control-wiring");
 const kernelRuntime = await import("../session-kernel/runtime");

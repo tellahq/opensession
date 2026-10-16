@@ -1,3 +1,7 @@
+import {
+  clientDataStorageKey,
+  subscribeClientDataScope,
+} from "./client-data-scope";
 /**
  * How many projects this instance has registered, remembered across loads.
  *
@@ -16,9 +20,11 @@ let cached: number | null | undefined;
 
 /** The count as of the last load, or null the very first time. */
 export function repoCount(): number | null {
+  const key = clientDataStorageKey(KEY);
+  if (!key) return null;
   if (cached === undefined) {
     try {
-      const raw = localStorage.getItem(KEY);
+      const raw = localStorage.getItem(key);
       const n = raw === null ? Number.NaN : Number.parseInt(raw, 10);
       cached = Number.isFinite(n) ? n : null;
     } catch {
@@ -30,10 +36,12 @@ export function repoCount(): number | null {
 
 /** Record the size of the registered set (called as the repo list lands). */
 export function rememberRepoCount(count: number): void {
+  const key = clientDataStorageKey(KEY);
+  if (!key) return;
   if (cached === count) return;
   cached = count;
   try {
-    localStorage.setItem(KEY, String(count));
+    localStorage.setItem(key, String(count));
   } catch {
     // A browser with storage blocked still gets the in-memory count.
   }
@@ -47,3 +55,7 @@ export function onRepoCountChanged(handler: () => void): () => void {
   window.addEventListener(CHANGE_EVENT, handler);
   return () => window.removeEventListener(CHANGE_EVENT, handler);
 }
+
+subscribeClientDataScope(() => {
+  cached = undefined;
+});

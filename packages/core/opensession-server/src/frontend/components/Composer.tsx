@@ -1,3 +1,5 @@
+import { captureClientDataScope } from "../lib/client-data-scope";
+import { toast } from "../ui/toast";
 import React, {
   useEffect,
   useEffectEvent,
@@ -18,6 +20,7 @@ import {
   updateImageAttachmentComment,
 } from "../lib/image-attachment-comment";
 import {
+  bindDraftKey,
   clearDraft,
   loadDraft,
   onDraftsChanged,
@@ -196,7 +199,7 @@ export function Composer({
   onTyping,
   onDictationActive,
   config: {
-    draftKey,
+    draftKey: rawDraftKey,
     placeholder,
     prediction,
     complete,
@@ -222,6 +225,7 @@ export function Composer({
     usage,
     prefill,
     hint,
+    attachmentsUnavailable,
     attachmentShortcutActive,
     autoFocus,
     textareaRef: externalRef,
@@ -262,6 +266,8 @@ export function Composer({
   attachedAction,
   sendMenu,
 }: Props) {
+  const draftKey = rawDraftKey ? bindDraftKey(rawDraftKey) : undefined;
+  const clientDataScope = captureClientDataScope();
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef ?? internalRef;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -479,8 +485,11 @@ export function Composer({
   const imageComments = parseImageAttachmentComments(text);
   // Notes accept images but not arbitrary files: images remain team-visible,
   // while files are agent-readable workspace context and belong to prompts.
-  const canAttachImages = !!onImagesChange;
-  const canAttachFiles = !noteMode && !!onFilesChange;
+  // A private session attaches nothing: the entries hide and every intake
+  // below refuses with the reason before staging (config.attachmentsUnavailable).
+  const canAttachImages = !!onImagesChange && !attachmentsUnavailable;
+  const canAttachFiles =
+    !noteMode && !!onFilesChange && !attachmentsUnavailable;
   const canAttach = canAttachImages || canAttachFiles;
 
   useEffect(() => {
@@ -810,6 +819,10 @@ export function Composer({
   });
 
   async function addFiles(picked: FileList | File[]) {
+    if (attachmentsUnavailable) {
+      toast(attachmentsUnavailable);
+      return;
+    }
     if (!canAttach) return;
     if (onAddAttachments) {
       await onAddAttachments(picked);
@@ -832,7 +845,7 @@ export function Composer({
     const results = await localUploads.upload(
       accepted,
       (file, signal, onProgress) =>
-        splitAttachments([file], signal, onProgress),
+        splitAttachments([file], signal, onProgress, clientDataScope),
     );
     const newImgs = results.flatMap((result) => result.images);
     const newFls = results.flatMap((result) => result.files);
@@ -856,6 +869,12 @@ export function Composer({
     // A session link goes in as the id it carries, which is the same reference
     // in a third of the room and chips the same way (lib/session-url.ts).
     if (insertPastedSessionId(e)) return;
+    // Pasted media is refused before it is staged; pasted text still chips.
+    if (attachmentsUnavailable && imageFilesFromPaste(e).length) {
+      e.preventDefault();
+      toast(attachmentsUnavailable);
+      return;
+    }
     const pastedText = e.clipboardData?.getData("text/plain") ?? "";
     // A paste too long to ride the prompt goes as a file the agent reads with
     // its tools. A note has no agent and no file channel, so it keeps the chip.
@@ -1910,6 +1929,7 @@ export function Composer({
               disabled={disabled}
               canAttach={canAttach}
               canAttachFiles={canAttachFiles}
+              attachmentsUnavailable={attachmentsUnavailable}
               isPhone={isPhone}
               attachChord={attachChord}
               mentionEnabled={!!mentionFetch}

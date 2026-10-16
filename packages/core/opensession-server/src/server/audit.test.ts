@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { buildAuditDigestFromLines, resolvedError } from "./audit";
+import {
+  buildAuditDigestFromLines,
+  markPrivateAuditKeys,
+  redactPrivateAuditText,
+  resolvedError,
+  summarizeText,
+} from "./audit";
 
 const digest = (...events: Array<Record<string, unknown>>) =>
   buildAuditDigestFromLines(
@@ -186,5 +192,30 @@ describe("resolvedError", () => {
     expect(resolvedError({ error: "" })).toBeUndefined();
     expect(resolvedError(undefined)).toBeUndefined();
     expect(resolvedError("done")).toBeUndefined();
+  });
+});
+
+describe("redactPrivateAuditText", () => {
+  test("drops a personal run's text snippet but keeps its hash and size", () => {
+    const summary = summarizeText("private launch plan");
+    const shared = { msg: "pi_turn", session: "shared-run", ...summary };
+    markPrivateAuditKeys("private-run", undefined, "private-engine");
+    expect(redactPrivateAuditText(shared)).toBe(shared);
+    for (const event of [
+      { msg: "pi_turn", session: "private-run", ...summary },
+      {
+        msg: "anthropic_bridge_request",
+        engine_session: "private-engine",
+        ...summary,
+      },
+    ]) {
+      const stored = redactPrivateAuditText(event);
+      expect(stored.text_snippet).toBeUndefined();
+      expect(stored.text_redacted).toBe(true);
+      expect(stored.text_sha256).toBe(summary.text_sha256);
+      expect(stored.text_bytes).toBe(summary.text_bytes);
+    }
+    const noText = { msg: "pi_turn", session: "private-run" };
+    expect(redactPrivateAuditText(noText)).toBe(noText);
   });
 });

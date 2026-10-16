@@ -10,6 +10,10 @@
  */
 import { z } from "zod";
 import { getWebSocketUrl } from "../api";
+import {
+  captureClientDataScope,
+  subscribeClientDataScope,
+} from "../client-data-scope";
 import { os1Shell } from "../os1-shell";
 import { webSocketReconnectDelay } from "../ws-reconnect";
 import { getCurrentUser } from "../../components/UserPicker";
@@ -181,6 +185,9 @@ function closeSocket() {
 
 function openSocket() {
   if (socket || !needed(state.grants)) return;
+  // The socket belongs to one signed-in account. Until that is known there is
+  // nobody to announce folders for; the scope listener opens it then.
+  if (!captureClientDataScope()) return;
   const ws = new WebSocket(getWebSocketUrl());
   socket = ws;
   let handoff = false;
@@ -255,6 +262,12 @@ export function startLocalFolderBridge(): void {
   if (!p) return;
   emit({ kind: p.kind });
   p.onChange(() => void refreshLocalFolders());
+  // A new sign-in, sign-out or account switch must not keep announcing this
+  // device's folders on the previous account's socket.
+  subscribeClientDataScope(() => {
+    closeSocket();
+    void refreshLocalFolders();
+  });
   void refreshLocalFolders();
 }
 

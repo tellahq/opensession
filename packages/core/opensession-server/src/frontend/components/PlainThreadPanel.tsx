@@ -1,3 +1,4 @@
+import { assertClientDataScope } from "../lib/client-data-scope";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type {
   PlainEntryAttachment,
@@ -28,7 +29,14 @@ import { BASE_PATH } from "../lib/base";
 import { Menu } from "../ui/menu";
 import { renderMarkdown } from "../lib/markdown";
 import { MarkdownBody } from "./MarkdownBody";
-import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
+import {
+  bindDraftKey,
+  draftClientDataScope,
+  requireDraftWriteScope,
+  loadDraft,
+  saveDraft,
+  clearDraft,
+} from "../lib/drafts";
 import { useCurrentUser } from "./UserPicker";
 import { cn } from "../ui/cn";
 import { PLAIN_WORKSPACE_ID, PRODUCT_NAME } from "../lib/brand";
@@ -763,7 +771,8 @@ export function PlainReplyBox({
   onSent?: () => void;
   className?: string;
 }) {
-  const draftKey = `plain-reply:${threadId}`;
+  const draftKey = bindDraftKey(`plain-reply:${threadId}`);
+  const draftScope = draftClientDataScope(draftKey);
   const [text, setText] = useState(() => loadDraft(draftKey).text);
   useEffect(() => {
     saveDraft(draftKey, { text });
@@ -809,13 +818,22 @@ export function PlainReplyBox({
     setSending(true);
     setError(null);
     await (async () => {
+      requireDraftWriteScope(draftKey);
       const attachmentIds: string[] = [];
       for (const file of attachments) {
         attachmentIds.push(
-          await uploadPlainAttachmentApi(threadId, file, kind),
+          await uploadPlainAttachmentApi(threadId, file, kind, draftScope),
         );
       }
-      await sendPlainReplyApi(threadId, t, kind, currentUser, attachmentIds);
+      await sendPlainReplyApi(
+        threadId,
+        t,
+        kind,
+        currentUser,
+        attachmentIds,
+        draftScope,
+      );
+      assertClientDataScope(draftScope);
       setText("");
       setAttachments([]);
       clearDraft(draftKey);

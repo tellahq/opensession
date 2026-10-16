@@ -1,3 +1,5 @@
+import { requestApplicationAccess } from "./context";
+import { listPersonalRepositories } from "../personal-repository-coordinator";
 /**
  * Worktrees, file/skill autocomplete, repo registry, workspaces, sibling sessions, promote-to-code, and attach/switch/detach repos.
  *
@@ -33,7 +35,6 @@ import {
   getCachedSessionsAsync,
   getSessionListSnapshotAsync,
   invalidateSessionsCache,
-  peekCachedSessions,
   touchNativeSession,
   updateSessionFile,
 } from "../session-cache";
@@ -274,7 +275,7 @@ export async function handleWorkspaceRoutes(
     const ql = q.toLowerCase();
     const sessionHits =
       ql.length >= 2
-        ? peekCachedSessions()
+        ? (await getCachedSessionsAsync())
             .filter((s) => !s.archived && s.id !== sessionId)
             .filter(
               (s) =>
@@ -348,6 +349,11 @@ export async function handleWorkspaceRoutes(
 
   // Repos available to attach / start a session against.
   if (path === "/api/repos" && req.method === "GET") {
+    const principal = requestApplicationAccess(ctx).principal;
+    const personal = principal
+      ? await listPersonalRepositories(principal.githubAccountId)
+      : [];
+
     // `color` is the repo's fallback tile: a color chosen for it, else one
     // assigned across the whole set so no two registered repos wear the
     // same one — which is what lets a tile stand in for a repo where
@@ -377,39 +383,67 @@ export async function handleWorkspaceRoutes(
         ),
       ),
     );
-    return Response.json({
-      repos: Object.values(REPOS).map((p) => {
-        const icon = resolveRepoIcon(p.icon, p.repo);
-        const portal = portals.get(p.id);
-        return {
-          id: p.id,
-          label: p.label,
-          description: p.description,
-          ghRepo: p.ghRepo,
-          defaultBranch: p.defaultBranch,
-          sharedCheckout: !!p.sharedCheckout,
-          default: !!p.default,
-          color: colors[p.id],
-          /** Whether that color was chosen rather than assigned. */
-          colorChosen: !!p.color,
-          /** What it would wear on automatic — the same when nothing
-           *  was chosen for it. */
-          autoColor: autoColor(p.id),
-          /** Whether the tile paints art instead of the letter. */
-          hasIcon: !!icon,
-          /** Which picker choice that art came from, when we stored it. */
-          iconSource: icon ? (p.iconSource ?? null) : null,
-          /** Bumped when that art changes, so tiles don't stay cached. */
-          iconRev: repoIconRevision(icon),
-          /** The Portal a new session can start with it, when declared. */
-          ...(portal ? { portal } : {}),
-        };
-      }),
-      // What the New-session picker starts on for users with no personal
-      // preference of their own. Rides this fetch because it is the same
-      // thing the picker is already loading.
-      newSessionRepo: newSessionRepoDefault(),
-    });
+    return Response.json(
+      {
+        repos: [
+          ...Object.values(REPOS).map((p) => {
+            const icon = resolveRepoIcon(p.icon, p.repo);
+            const portal = portals.get(p.id);
+            return {
+              id: p.id,
+              label: p.label,
+              description: p.description,
+              ghRepo: p.ghRepo,
+              defaultBranch: p.defaultBranch,
+              sharedCheckout: !!p.sharedCheckout,
+              default: !!p.default,
+              color: colors[p.id],
+              /** Whether that color was chosen rather than assigned. */
+              colorChosen: !!p.color,
+              /** What it would wear on automatic — the same when nothing
+               *  was chosen for it. */
+              autoColor: autoColor(p.id),
+              /** Whether the tile paints art instead of the letter. */
+              hasIcon: !!icon,
+              /** Which picker choice that art came from, when we stored it. */
+              iconSource: icon ? (p.iconSource ?? null) : null,
+              /** Bumped when that art changes, so tiles don't stay cached. */
+              iconRev: repoIconRevision(icon),
+              /** The Portal a new session can start with it, when declared. */
+              ...(portal ? { portal } : {}),
+            };
+          }),
+          ...personal.map(({ registryId, descriptor }) => ({
+            id: registryId,
+            label: descriptor.fullName,
+            ghRepo: descriptor.fullName,
+            defaultBranch: "HEAD",
+            sharedCheckout: false,
+            default: false,
+            accessScope: {
+              kind: "personal",
+              ownerGithubAccountId: descriptor.ownerGithubAccountId,
+            },
+            color: assignRepoTileColors([registryId], {})[registryId],
+            colorChosen: false,
+            autoColor: assignRepoTileColors([registryId], {})[registryId],
+            hasIcon: false,
+            iconSource: null,
+            iconRev: null,
+          })),
+        ],
+        // What the New-session picker starts on for users with no personal
+        // preference of their own. Rides this fetch because it is the same
+        // thing the picker is already loading.
+        newSessionRepo: newSessionRepoDefault(),
+      },
+      {
+        headers: {
+          "Cache-Control": "private, no-store",
+          Vary: "Cookie, Authorization",
+        },
+      },
+    );
   }
 
   // Where new sessions start for everyone without a preference of their own.

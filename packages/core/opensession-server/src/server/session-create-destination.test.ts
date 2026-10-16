@@ -97,6 +97,8 @@ beforeEach(async () => {
   store = new SessionKernelStore(":memory:");
   previousStore = __setSessionKernelStoreForTest(store);
   index = new SessionListStore(":memory:");
+  // A primed, empty list: list reads never rebuild on a request.
+  index.markCovered("include");
   previousIndex = __setSessionListStoreForTest(index);
   __resetWorkspaceProjectionForTest();
   startSessionKernelRuntime(5);

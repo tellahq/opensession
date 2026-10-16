@@ -1,3 +1,4 @@
+import { sessionPublicationAllowed } from "./session-audience";
 /**
  * Transcript v2 in-process bus (docs/transcripts.md §2).
  *
@@ -83,7 +84,9 @@ export function publishTranscript(
   event: TranscriptBusEvent,
 ): void {
   const subscribers = [...(bus().get(sessionId) ?? [])];
+  if (!sessionPublicationAllowed(sessionId)) return;
   queueMicrotask(() => {
+    if (!sessionPublicationAllowed(sessionId)) return;
     const lastChangeSeq = event.entries.reduce(
       (last, entry) => Math.max(last, entry.changeSeq),
       0,

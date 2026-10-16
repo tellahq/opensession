@@ -1,5 +1,12 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { publishClientDataIdentity } from "../client-data-scope";
 import { ApiError, request } from "./request";
+
+// Every case starts from the same known identity so no scope leaks in
+// from another test.
+beforeEach(() =>
+  publishClientDataIdentity({ required: false, authenticated: false }),
+);
 
 const originalFetch = globalThis.fetch;
 
@@ -88,4 +95,32 @@ describe("request", () => {
       expect(error.status).toBe(409);
     }
   });
+});
+
+test("captured A request never recaptures B or returns a late A body", async () => {
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 11,
+  });
+  const { captureClientDataScope } = await import("../client-data-scope");
+  const a = captureClientDataScope();
+  const deferred = deferredResponse();
+  let calls = 0;
+  installFetch(() => {
+    calls++;
+    return deferred.promise;
+  });
+  const pending = request("/repos", { scope: a });
+  publishClientDataIdentity({
+    required: true,
+    authenticated: true,
+    githubAccountId: 22,
+  });
+  deferred.resolve(Response.json({ repos: [{ id: "A-private" }] }));
+  await expect(pending).rejects.toThrow("account changed");
+  await expect(request("/repos", { scope: a })).rejects.toThrow(
+    "account changed",
+  );
+  expect(calls).toBe(1);
 });

@@ -2,6 +2,7 @@
  * gateway's rollout fallback. It accepts no caller-provided command or path. */
 
 import { existsSync } from "fs";
+import { readFile } from "node:fs/promises";
 import { userInfo } from "os";
 import { homeDir, statePath } from "../server/paths";
 import {
@@ -14,6 +15,24 @@ import {
 
 export const RUN_HOST_HELPER = "/usr/local/libexec/opensession-run-host";
 export const RUN_HOST_HELPER_VERSION = 2;
+
+/** Fixed compatibility probe; old helpers reject the new action. No operator
+ * boolean and no fallback to the ordinary entrypoint for personal work. */
+export async function verifyPersonalRunHostHelper(): Promise<void> {
+  const proc = Bun.spawn(["sudo", "-n", RUN_HOST_HELPER, "check-personal"], {
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+  const timeout = setTimeout(() => proc.kill(), 15_000);
+  try {
+    if ((await proc.exited) !== 0)
+      throw new Error(
+        "Personal run-host runtime requires an updated full deployment",
+      );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export async function verifyRunHostHelper(): Promise<void> {
   if (!existsSync(RUN_HOST_HELPER))
@@ -49,6 +68,18 @@ export async function launchHostUnitDirect(
   specHash?: string,
 ): Promise<void> {
   if (!specHash) throw new Error("run-host launch requires a spec hash");
+  const spec = JSON.parse(await readFile(`${dir}/spec.json`, "utf8"));
+  const personal = Object.hasOwn(spec, "personalRepo");
+  if (personal) {
+    await verifyPersonalRunHostHelper();
+    const proc = Bun.spawn(hostUnitArgs(hostId, dir, specHash, true), {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    if ((await proc.exited) !== 0)
+      throw new Error("Personal run-host launch failed");
+    return;
+  }
   const user = userInfo();
   if (!existsSync(RUN_HOST_HELPER) && user.uid === 0) {
     throw new Error("legacy run-host launch refuses to run an agent as root");
@@ -111,8 +142,17 @@ export function hostUnitArgs(
   hostId: string,
   dir: string,
   specHash: string,
+  personal = false,
 ): string[] {
-  return ["sudo", "-n", RUN_HOST_HELPER, "launch", hostId, dir, specHash];
+  return [
+    "sudo",
+    "-n",
+    RUN_HOST_HELPER,
+    personal ? "launch-personal" : "launch",
+    hostId,
+    dir,
+    specHash,
+  ];
 }
 
 export async function stopHostUnitDirect(hostId: string): Promise<void> {

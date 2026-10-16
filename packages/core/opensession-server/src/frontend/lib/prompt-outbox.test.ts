@@ -30,6 +30,7 @@ test("persists before returning and delivers each session in order", async () =>
   const storage = memoryStorage();
   const delivered: string[] = [];
   const outbox = new PromptOutbox({
+    isCurrent: () => true,
     storage,
     scope: "test",
     deliver: async (_sessionId, body) => {
@@ -64,6 +65,7 @@ test("persists optimistic anchors without sending them to the server", async () 
       >[1]
     | undefined;
   const outbox = new PromptOutbox({
+    isCurrent: () => true,
     storage,
     scope: "transcript-anchor",
     deliver: async (_sessionId, body) => {
@@ -99,6 +101,7 @@ test("keeps the item state as the only in-tab send lock", async () => {
     releaseSecond = resolve;
   });
   const outbox = new PromptOutbox({
+    isCurrent: () => true,
     storage,
     scope: "send-lock",
     deliver: async (_sessionId, body) => {
@@ -148,6 +151,7 @@ test("serializes one durable prompt across browser tabs", async () => {
     return { status: "started" as const, message: "ok" };
   };
   const firstTab = new PromptOutbox({
+    isCurrent: () => true,
     storage,
     locks,
     scope: "cross-tab",
@@ -155,6 +159,7 @@ test("serializes one durable prompt across browser tabs", async () => {
   });
   firstTab.enqueue({ sessionId: "s1", content: "once" });
   const secondTab = new PromptOutbox({
+    isCurrent: () => true,
     storage,
     locks,
     scope: "cross-tab",
@@ -177,6 +182,7 @@ test("serializes one durable prompt across browser tabs", async () => {
 
 test("reports a handled command before retiring its durable row", async () => {
   const outbox = new PromptOutbox({
+    isCurrent: () => true,
     storage: memoryStorage(),
     scope: "handled-command",
     deliver: async (_sessionId, body) => ({
@@ -214,6 +220,7 @@ test("keeps a retryable failed head item and exposes it for retry or editing", a
   const storage = memoryStorage();
   let fail = true;
   const outbox = new PromptOutbox({
+    isCurrent: () => true,
     storage,
     scope: "failure",
     deliver: async () => {
@@ -238,6 +245,7 @@ test("keeps a retryable failed head item and exposes it for retry or editing", a
 
 test("marks a rejected delivery failed without losing its editable payload", async () => {
   const outbox = new PromptOutbox({
+    isCurrent: () => true,
     storage: memoryStorage(),
     scope: "rejected",
     deliver: async () => {
@@ -266,6 +274,7 @@ test("marks a rejected delivery failed without losing its editable payload", asy
 test("a terminally rejected item does not block a later follow-up", async () => {
   const delivered: string[] = [];
   const outbox = new PromptOutbox({
+    isCurrent: () => true,
     storage: memoryStorage(),
     scope: "rejected-head",
     deliver: async (_sessionId, body) => {
@@ -308,6 +317,7 @@ test("resumes a persisted send after the tab that started it closes", async () =
     }),
   );
   const outbox = new PromptOutbox({
+    isCurrent: () => true,
     storage,
     scope: "resume",
     deliver: async () => ({ status: "started", message: "ok" }),
@@ -321,6 +331,7 @@ test("resumes a persisted send after the tab that started it closes", async () =
 test("keeps retryable outages pending beyond the backoff cap", async () => {
   let now = 1;
   const outbox = new PromptOutbox({
+    isCurrent: () => true,
     storage: memoryStorage(),
     scope: "long-outage",
     now: () => now,
@@ -340,6 +351,7 @@ test("keeps retryable outages pending beyond the backoff cap", async () => {
 
 test("does not retain an item in memory when durable storage rejects it", () => {
   const outbox = new PromptOutbox({
+    isCurrent: () => true,
     storage: {
       getItem: () => null,
       setItem: () => {
@@ -359,6 +371,7 @@ test("does not retain an item in memory when durable storage rejects it", () => 
 // like a cap on attachments and tells nobody what to do about it.
 test("says what a full store means, in place of the browser's message", () => {
   const outbox = new PromptOutbox({
+    isCurrent: () => true,
     storage: {
       getItem: () => null,
       setItem: () => {
@@ -395,6 +408,7 @@ test("keeps memory in step with storage when a state change cannot be written", 
   });
   let delivered = 0;
   const outbox = new PromptOutbox({
+    isCurrent: () => true,
     storage: {
       getItem: () => stored,
       setItem: () => {
@@ -414,5 +428,108 @@ test("keeps memory in step with storage when a state change cannot be written", 
   expect(delivered).toBe(0);
   expect(outbox.list()[0]?.state).toBe("pending");
   expect(JSON.parse(stored).items[0].state).toBe("pending");
+  outbox.dispose();
+});
+
+test("deferred browser lock checks the original lifetime before reading or sending", async () => {
+  const storage = memoryStorage();
+  let active = true;
+  let calls = 0;
+  const turns: Array<() => Promise<void>> = [];
+  const outbox = new PromptOutbox({
+    storage,
+    scope: "owner-11",
+    isCurrent: () => active,
+    locks: {
+      request: (_name, callback) =>
+        new Promise((resolve, reject) => {
+          turns.push(async () => {
+            try {
+              resolve(await callback());
+            } catch (e) {
+              reject(e);
+            }
+          });
+        }),
+    },
+    deliver: async () => {
+      calls++;
+      return { status: "started", message: "ok" };
+    },
+  });
+  outbox.enqueue({
+    sessionId: "shared",
+    content: "A private writing",
+    files: [{ name: "A", path: "/A" }],
+  });
+  active = false;
+  for (const turn of turns) await turn();
+  await outbox.flush();
+  expect(calls).toBe(0);
+  expect(outbox.list()).toEqual([]);
+  expect(storage.getItem("opensession-prompt-outbox:v1:owner-11")).toContain(
+    "A private writing",
+  );
+  expect(() => outbox.retry("anything")).toThrow("Sign-in changed");
+  outbox.dispose();
+});
+
+for (const outcome of ["success", "failure"] as const)
+  test(`late ${outcome} cannot retire, retry or publish another lifetime's prompt`, async () => {
+    const storage = memoryStorage();
+    let active = true;
+    let calls = 0;
+    let observed = 0;
+    let resolve!: (value: { status: "started"; message: string }) => void;
+    let reject!: (error: Error) => void;
+    const held = new Promise<{ status: "started"; message: string }>(
+      (yes, no) => {
+        resolve = yes;
+        reject = no;
+      },
+    );
+    const outbox = new PromptOutbox({
+      storage,
+      scope: "owner-11",
+      isCurrent: () => active,
+      deliver: () => {
+        calls++;
+        return held;
+      },
+    });
+    outbox.observeDelivery(() => {
+      observed++;
+    });
+    outbox.enqueue({ sessionId: "shared", content: "A" });
+    const before = storage.getItem("opensession-prompt-outbox:v1:owner-11");
+    active = false;
+    if (outcome === "success") resolve({ status: "started", message: "ok" });
+    else reject(new Error("offline"));
+    await held.catch(() => {});
+    await Promise.resolve();
+    await outbox.flush();
+    expect(calls).toBe(1);
+    expect(observed).toBe(0);
+    expect(storage.getItem("opensession-prompt-outbox:v1:owner-11")).toBe(
+      before,
+    );
+    outbox.dispose();
+  });
+
+test("an unresolved low-level sender never eagerly restores or delivers old origin data", async () => {
+  const storage = memoryStorage();
+  storage.setItem(
+    "opensession-prompt-outbox:v1:old-origin",
+    "recoverable legacy data",
+  );
+  const outbox = new PromptOutbox({ storage, scope: "old-origin" });
+  expect(outbox.list()).toEqual([]);
+  await outbox.flush();
+  expect(() =>
+    outbox.enqueue({ sessionId: "shared", content: "no" }),
+  ).toThrow();
+  expect(storage.getItem("opensession-prompt-outbox:v1:old-origin")).toBe(
+    "recoverable legacy data",
+  );
   outbox.dispose();
 });

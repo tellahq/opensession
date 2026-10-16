@@ -1,4 +1,11 @@
-import { expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
+import { publishClientDataIdentity } from "./client-data-scope";
+
+// Every case starts from the same known identity so cache keys never inherit
+// a scope left over from another test.
+beforeEach(() =>
+  publishClientDataIdentity({ required: false, authenticated: false }),
+);
 
 // The test runtime has no Web Storage, and the module treats a missing one as
 // "no cache" rather than an error, so the persistence half would silently pass

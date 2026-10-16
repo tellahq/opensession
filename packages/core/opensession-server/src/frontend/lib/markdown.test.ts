@@ -1,4 +1,5 @@
 import { sessionAgentName } from "./markdown";
+import { publishClientDataIdentity } from "./client-data-scope";
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import {
   markdownAffordable,
@@ -198,6 +199,36 @@ describe("renderMarkdown automation links", () => {
 
 describe("session chip labels", () => {
   const id = "bks-019f24b5-f31d-7000-a48f-31a9e829c4ae";
+
+  it("clears resolved private titles on numeric owner changes while retaining agent-name fallback", () => {
+    const source = `Delegated to \u0060${id}\u0060.`;
+    try {
+      publishClientDataIdentity({
+        required: true,
+        authenticated: true,
+        githubAccountId: 101,
+        login: "same-login",
+      });
+      setResolvedSessionTitles([
+        { requestedId: id, title: "Private owner A title" },
+      ]);
+      expect(renderMarkdown(source)).toContain("Private owner A title");
+      publishClientDataIdentity({
+        required: true,
+        authenticated: true,
+        githubAccountId: 202,
+        login: "same-login",
+      });
+      const html = renderMarkdown(source);
+      expect(html).not.toContain("Private owner A title");
+      expect(html).toContain(
+        `<span class="session-link-label">${sessionAgentName(id)}</span>`,
+      );
+      expect(html).toContain(`title="Open ${sessionAgentName(id)}"`);
+    } finally {
+      publishClientDataIdentity(null);
+    }
+  });
 
   it("labels a chip with the session's title once registered", () => {
     setSessionTitles([[id, "Fix the sidebar hover states"]]);

@@ -199,7 +199,7 @@ export async function owningPrSession(
 ): Promise<UnifiedSession | undefined> {
   const { tryGetSessionControl } = await import("../../server/session-control");
   const referenced = sessionRef
-    ? tryGetSessionControl()?.getSession(sessionRef)
+    ? await tryGetSessionControl()?.getSession(sessionRef)
     : undefined;
   if (referenced && canOwnPrWork(referenced)) return referenced;
   const { matchSessions } = await import("./session-notify");

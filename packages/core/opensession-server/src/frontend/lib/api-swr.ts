@@ -1,3 +1,4 @@
+import { captureClientDataScope } from "./client-data-scope";
 import type { Arguments, SWRConfiguration } from "swr";
 
 /**
@@ -28,26 +29,46 @@ export function apiResourceSWRConfig<Data>(
   return config;
 }
 
+function scopeKey(): string {
+  const scope = captureClientDataScope();
+  return scope ? `${scope.key}:${scope.generation}` : "unresolved";
+}
+
 // Keep resource identities in one place so separate surfaces share both the
 // cached value and an in-flight revalidation instead of merely looking alike.
 export const apiSWRKey = {
-  session: (sessionId: string) => ["api", "session", sessionId] as const,
+  session: (sessionId: string) =>
+    ["api", "session", sessionId, scopeKey()] as const,
   workspaceOverview: (workspaceKey: string) =>
-    ["api", "workspace-overview", workspaceKey] as const,
+    ["api", "workspace-overview", workspaceKey, scopeKey()] as const,
   sessionDiff: (sessionId: string) =>
-    ["api", "session-diff", sessionId] as const,
+    ["api", "session-diff", sessionId, scopeKey()] as const,
   sessionPr: (sessionId: string, repo?: string, branch?: string) =>
-    ["api", "session-pr", sessionId, repo || "", branch || ""] as const,
+    [
+      "api",
+      "session-pr",
+      sessionId,
+      repo || "",
+      branch || "",
+      scopeKey(),
+    ] as const,
   sessionPrDiff: (sessionId: string, repo?: string, branch?: string) =>
-    ["api", "session-pr-diff", sessionId, repo || "", branch || ""] as const,
+    [
+      "api",
+      "session-pr-diff",
+      sessionId,
+      repo || "",
+      branch || "",
+      scopeKey(),
+    ] as const,
   sessionGit: (sessionId: string, repo?: string) =>
-    ["api", "session-git", sessionId, repo || ""] as const,
+    ["api", "session-git", sessionId, repo || "", scopeKey()] as const,
   sessionAssets: (sessionId: string) =>
-    ["api", "session-assets", sessionId] as const,
+    ["api", "session-assets", sessionId, scopeKey()] as const,
   previewPr: (repo: string, branch: string) =>
-    ["api", "preview-pr", repo, branch] as const,
+    ["api", "preview-pr", repo, branch, scopeKey()] as const,
   previewPrDiff: (repo: string, branch: string) =>
-    ["api", "preview-pr-diff", repo, branch] as const,
+    ["api", "preview-pr-diff", repo, branch, scopeKey()] as const,
 };
 
 /**

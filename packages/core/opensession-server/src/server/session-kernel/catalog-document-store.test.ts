@@ -190,6 +190,70 @@ describe("catalog document store", () => {
     expect(store.catalogDocumentPage("empty", "", 3)).toEqual([]);
   });
 
+  test("a live page skips tombstones through the partial live index", () => {
+    const dir = mkdtempSync(join(tmpdir(), "catalog-documents-live-"));
+    const path = join(dir, "kernel.sqlite");
+    try {
+      const onDisk = new SessionKernelStore(path);
+      for (let i = 0; i < 40; i++)
+        onDisk.putCatalogDocument({
+          op: "put",
+          namespace: "runs",
+          key: `run-${String(i).padStart(3, "0")}`,
+          expectedRev: null,
+          value: `v${i}`,
+          requestId: crypto.randomUUID(),
+        });
+      // Retire everything except three live rows scattered across history.
+      for (let i = 0; i < 40; i++) {
+        if (i === 7 || i === 21 || i === 38) continue;
+        onDisk.putCatalogDocument({
+          op: "put",
+          namespace: "runs",
+          key: `run-${String(i).padStart(3, "0")}`,
+          expectedRev: 1,
+          value: null,
+          requestId: crypto.randomUUID(),
+        });
+      }
+      expect(onDisk.catalogDocumentPageLive("runs", "", 2)).toEqual([
+        { key: "run-007", value: "v7", rev: 1 },
+        { key: "run-021", value: "v21", rev: 1 },
+      ]);
+      expect(onDisk.catalogDocumentPageLive("runs", "run-021", 2)).toEqual([
+        { key: "run-038", value: "v38", rev: 1 },
+      ]);
+      expect(onDisk.catalogDocumentPageLive("runs", "run-038", 2)).toEqual([]);
+      // The historical page still reports every tombstone for importers.
+      expect(onDisk.catalogDocumentPage("runs", "", 40)).toHaveLength(40);
+      onDisk.close();
+      const db = new Database(path);
+      expect(
+        db
+          .query(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_skcd_live'",
+          )
+          .get(),
+      ).toEqual({ name: "idx_skcd_live" });
+      const plan = db
+        .query(
+          // The live page pins this inner query to the partial index; the
+          // unpinned form walks the covering primary key, tombstones included.
+          `EXPLAIN QUERY PLAN SELECT key
+             FROM session_kernel_catalog_documents INDEXED BY idx_skcd_live
+             WHERE namespace = ? AND key > ? AND value IS NOT NULL
+             ORDER BY key LIMIT ?`,
+        )
+        .all("runs", "", 2) as Array<{ detail: string }>;
+      expect(plan.map((row) => row.detail).join("\n")).toContain(
+        "idx_skcd_live",
+      );
+      db.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("a page stops at its byte budget but never comes back empty", () => {
     // Three documents of 3 MiB against an 8 MiB page budget: the third row
     // would push the page to 9 MiB, so it waits for the next page.

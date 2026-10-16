@@ -525,7 +525,9 @@ export function describeWorkflowRunTarget(wait: WorkflowRunAgentWait): string {
 export interface SessionTurnWaitDeps {
   now: () => number;
   /** Same visibility as get_session: undefined when the caller cannot see it. */
-  getSession: (id: string) => SessionSummary | undefined;
+  getSession: (
+    id: string,
+  ) => Promise<SessionSummary | undefined> | SessionSummary | undefined;
   /** Durable run state from the session actor, not the gateway projection. */
   runState: (id: string) => Promise<string>;
   /** A prompt queued or dispatched for the session that no run owns yet, or
@@ -577,7 +579,7 @@ async function classifyTarget(
   target: SessionSummary | undefined;
   outcome: SessionTurnOutcome | undefined;
 }> {
-  const target = deps.getSession(targetSessionId);
+  const target = await deps.getSession(targetSessionId);
   if (!target) return { target, outcome: "missing" };
   const [runState, queuedWork] = await Promise.all([
     deps.runState(targetSessionId),
@@ -1010,7 +1012,9 @@ export interface AgentWaitHandlerDeps {
   ) => Promise<PrWaitRollup | null>;
   schedule: (wait: AgentWait, dueAt: number) => void;
   deliver: (wait: AgentWait, message: string) => Promise<void>;
-  getSession: (id: string) => SessionSummary | undefined;
+  getSession: (
+    id: string,
+  ) => Promise<SessionSummary | undefined> | SessionSummary | undefined;
   runState: (id: string) => Promise<string>;
   hasQueuedWork: (id: string) => Promise<boolean>;
   lastTurnEnd: (id: string) => SessionTurnEnd | undefined;

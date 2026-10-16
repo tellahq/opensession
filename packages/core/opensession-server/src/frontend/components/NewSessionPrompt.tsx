@@ -6,20 +6,14 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  fetchFileMentions,
-  fetchMentionSuggestions,
-  fetchSkillMentions,
-} from "../lib/api";
-import { saveDraft, NEW_SESSION_DRAFT_KEY as DRAFT_KEY } from "../lib/drafts";
+import { fetchFileMentions, fetchSkillMentions } from "../lib/api";
+import { fetchMentionPalette } from "../lib/private-mention-palette";
+import { bindDraftKey, saveDraft, NEW_SESSION_DRAFT_KEY } from "../lib/drafts";
 import { appendDictation } from "../lib/dictation";
 import { attachingLabel } from "../lib/attachments";
 import { imageFilesFromPaste } from "../lib/images";
-import {
-  pastedTextFile,
-  shouldAttachPastedTextAsFile,
-  shouldCollapsePastedText,
-} from "../lib/pasted-text";
+import { pastedTextFile, shouldCollapsePastedText } from "../lib/pasted-text";
+import { pastedTextBecomesFile } from "../lib/private-session-attachments";
 import { fileChipRow } from "../lib/composer-classes";
 import { insertPastedSessionId } from "../lib/session-url";
 import { insideOpenFence, isSendCombo } from "../lib/send-key";
@@ -100,10 +94,12 @@ export function NewSessionPrompt({
   refs: NewSessionPromptRefs;
   actions: NewSessionPromptActions;
 }) {
+  const DRAFT_KEY = bindDraftKey(NEW_SESSION_DRAFT_KEY);
   const {
     initialText,
     repo,
     mcpServers,
+    privateRepo,
     placeholder,
     disabled,
     images,
@@ -166,7 +162,7 @@ export function NewSessionPrompt({
       draftTimer.current = null;
       saveDraft(DRAFT_KEY, draft.current);
     }, DRAFT_MS);
-  }, [text]);
+  }, [text, DRAFT_KEY]);
 
   // Every exit that is not a create: the palette being dismissed or navigated
   // away from (the cleanup), the tab being closed, reloaded or backgrounded.
@@ -194,7 +190,7 @@ export function NewSessionPrompt({
       document.removeEventListener("visibilitychange", onHidden);
       writeDraftNow();
     };
-  }, []);
+  }, [DRAFT_KEY]);
 
   useImperativeHandle(
     handle,
@@ -248,7 +244,11 @@ export function NewSessionPrompt({
     textareaRef,
     mentionFetch: (q) => fetchFileMentions(q, undefined, repo),
     paletteFetch: (q) =>
-      fetchMentionSuggestions(q, undefined, getCurrentUser(), mcpServers),
+      fetchMentionPalette(q, {
+        privateTarget: !!privateRepo,
+        user: getCurrentUser(),
+        mcpServers,
+      }),
     skillsFetch: (q) => fetchSkillMentions(q, undefined, repo),
   });
 
@@ -356,7 +356,8 @@ export function NewSessionPrompt({
     const pastedText = e.clipboardData?.getData("text/plain") ?? "";
     // Past the file threshold the paste is staged like a dropped file, so the
     // agent reads it with its tools instead of the prompt carrying it whole.
-    if (shouldAttachPastedTextAsFile(pastedText)) {
+    // A private repository has no file channel: its paste keeps the chip.
+    if (pastedTextBecomesFile(!!privateRepo, pastedText)) {
       e.preventDefault();
       onAddAttachments([pastedTextFile(pastedText)]);
       return;

@@ -1,3 +1,4 @@
+import { captureClientDataScope } from "./client-data-scope";
 import { z } from "zod";
 import type { OpenPr } from "./api";
 import { getDefaultRepoPref, setDefaultRepoPref } from "./default-repo-pref";
@@ -86,6 +87,9 @@ export interface RepoOption {
   sharedCheckout?: boolean;
   /** The Portal a new session in this repo can start right away. */
   portal?: { id: string; name: string };
+  /** Carried from RepoInfo: set only for a private repository, whose runs
+   *  get no connected services. */
+  accessScope?: { kind: "personal"; ownerGithubAccountId: number };
 }
 
 const LAST_REPO_KEY = "opensession-new-session-repo";
@@ -101,6 +105,7 @@ const SIDEBAR_FILTER_SCHEMA = z.object({ repo: z.string().optional() });
 export function migratedRepoPref(): string {
   const preferred = getDefaultRepoPref();
   if (preferred) return preferred;
+  if (captureClientDataScope()?.key !== "shared:local") return "";
   try {
     const sticky = localStorage.getItem(LAST_REPO_KEY);
     if (!sticky) return "";
@@ -117,6 +122,7 @@ export function migratedRepoPref(): string {
 // this key). When set to a real repo, a new session should default to it so
 // creating from a repo-filtered view lands on that repo.
 function filteredRepo(): string | null {
+  if (captureClientDataScope()?.key !== "shared:local") return null;
   try {
     const parsed = SIDEBAR_FILTER_SCHEMA.safeParse(
       JSON.parse(localStorage.getItem("opensession-sidebar-filter") || "{}"),
@@ -162,41 +168,5 @@ export function firstNonEmptyLine(text: string): string {
       .split("\n")
       .find((l) => l.trim())
       ?.trim() ?? ""
-  );
-}
-
-export type PendingDraftPark = {
-  text: string;
-  workspaceId?: string;
-  consumed: boolean;
-  /** The existing workspace the create adopted. When absent, the create made
-   *  another workspace and a late unscoped park can be deleted outright. */
-  consumedIntoWorkspaceId?: string;
-};
-
-// A dismissed palette can be reopened while its workspace request is still in
-// flight. If that prompt starts a session first, the late response must not
-// leave a second, stale draft workspace behind.
-export const pendingDraftParks = new Set<PendingDraftPark>();
-
-export function consumePendingDraftParks(
-  text: string,
-  workspaceId: string | undefined,
-  consumedIntoWorkspaceId?: string,
-) {
-  for (const operation of pendingDraftParks) {
-    if (operation.text === text && operation.workspaceId === workspaceId) {
-      operation.consumed = true;
-      operation.consumedIntoWorkspaceId = consumedIntoWorkspaceId;
-    }
-  }
-}
-
-export function draftParkInFlight(text: string, workspaceId?: string): boolean {
-  return [...pendingDraftParks].some(
-    (operation) =>
-      !operation.consumed &&
-      operation.text === text &&
-      operation.workspaceId === workspaceId,
   );
 }

@@ -947,6 +947,9 @@ export class SessionKernelStoreHost {
       const candidates =
         this.central.isolatedPendingSteerProjectionSessionIds();
       for (const sessionId of candidates) {
+        const scope = this.central.sessionScopeLookup(sessionId);
+        if (scope && (scope.deleted || scope.owner !== 0)) continue;
+
         this.centralOperation(() =>
           this.central.markIsolatedSessionProjectionDirty(sessionId),
         );

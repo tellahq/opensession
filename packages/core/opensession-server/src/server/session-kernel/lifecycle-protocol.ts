@@ -1,3 +1,4 @@
+import type { ActorAccess } from "./private-access";
 import type { AskActorRequest } from "./ask-protocol";
 import type { DeliveryActorRequest } from "./delivery-protocol";
 import type { GatewayCommandRequest } from "./gateway-command-protocol";
@@ -15,7 +16,7 @@ export type RunFence = {
   generation: number;
 };
 
-export type SessionActorReducerCommand =
+export type SessionActorReducerCommand = { access?: ActorAccess } & (
   | {
       kind: "creation_event";
       commandId: string;
@@ -70,7 +71,8 @@ export type SessionActorReducerCommand =
       kind: "transcript";
       commandId: string;
       request: TranscriptActorRequest;
-    };
+    }
+);
 
 export type SessionActorCommand =
   | SessionActorReducerCommand

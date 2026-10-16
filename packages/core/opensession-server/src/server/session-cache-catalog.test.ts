@@ -184,27 +184,28 @@ describe("catalog-only list rebuild", () => {
     const listings = spyOn(fs, "readdirSync");
     const dirs = spyOn(fs.promises, "readdir");
     try {
-      // Nothing is marked complete: no snapshot, so the failure is bounded.
+      // Nothing is marked complete. Boot refuses instead of scanning or
+      // guessing, and names the operator step.
       expect(await indexedSessions("include")).toBeNull();
-      const failure = await getCachedSessionsAsync("include").catch((e) => e);
-      expect(failure).toBeInstanceOf(SessionListUnavailableError);
-      expect(failure.reason).toContain("seed-session-metadata-catalog");
-      expect(failure.reason).toContain("metadata catalog");
-      // Boot refuses instead of scanning or guessing.
       const boot = await primeSessionListIndex().catch((e) => e);
       expect(boot).toBeInstanceOf(SessionListUnavailableError);
+      expect(boot.reason).toContain("seed-session-metadata-catalog");
+      expect(boot.reason).toContain("metadata catalog");
       expect(await indexedSessions("include")).toBeNull();
+      // A request never rebuilds a whole list: with no snapshot it fails
+      // bounded with the same reason.
+      const failure = await getCachedSessionsAsync("include").catch((e) => e);
+      expect(failure).toBeInstanceOf(SessionListUnavailableError);
+      expect(failure.reason).toContain("metadata catalog");
 
       // The metadata catalog alone is not enough: the agent stores must be
       // imported too, or every Slack thread would vanish from the rebuild.
       await sessionMetadata({ op: "mark_catalog_complete" });
-      const partial = await getCachedSessionsAsync("include").catch((e) => e);
+      const partial = await primeSessionListIndex().catch((e) => e);
       expect(partial).toBeInstanceOf(SessionListUnavailableError);
       expect(partial.reason).toContain("slack");
       await markAgentSessionCatalogImportComplete("slack");
-      const linearMissing = await getCachedSessionsAsync("include").catch(
-        (e) => e,
-      );
+      const linearMissing = await primeSessionListIndex().catch((e) => e);
       expect(linearMissing.reason).toContain("linear");
       await markAgentSessionCatalogImportComplete("linear");
 
@@ -398,17 +399,24 @@ describe("catalog-only list rebuild", () => {
     const live = __setSessionKernelStoreForTest(broken);
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     try {
-      await publishSessionChange(`slack-${key}`);
-      expect(await indexedSession(`slack-${key}`)).toBeNull();
+      // Either the scope fence refuses the publish outright or the row
+      // refresh fails and says so; the index row never lands first.
+      const refused = await publishSessionChange(`slack-${key}`).then(
+        () => false,
+        () => true,
+      );
       expect(
-        warn.mock.calls.some((call) =>
-          String(call[0]).includes("row refresh failed"),
-        ),
+        refused ||
+          warn.mock.calls.some((call) =>
+            String(call[0]).includes("row refresh failed"),
+          ),
       ).toBe(true);
     } finally {
       warn.mockRestore();
       __setSessionKernelStoreForTest(live);
     }
+    // Index reads are scope-fenced too, so check once the catalog is back.
+    expect(await indexedSession(`slack-${key}`)).toBeNull();
     // With the catalog back, the same publish lands both copies.
     await publishSessionChange(`slack-${key}`);
     expect(await indexedSession(`slack-${key}`)).toMatchObject({
@@ -462,7 +470,7 @@ describe("catalog-only list rebuild", () => {
     }
   });
 
-  test("a reader with a snapshot keeps it when the catalogs fail", async () => {
+  test("a reader fails bounded when the catalogs fail, never scanning", async () => {
     const { getCachedSessionsAsync, __expireSessionListCacheForTest } =
       await import("./session-cache");
     const { SessionKernelStore, __setSessionKernelStoreForTest } =
@@ -477,16 +485,21 @@ describe("catalog-only list rebuild", () => {
     broken.close();
     const live = __setSessionKernelStoreForTest(broken);
     const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const listings = spyOn(fs, "readdirSync");
     try {
-      const served = await getCachedSessionsAsync("include");
-      expect(served.map((s) => s.id)).toEqual(snapshot.map((s) => s.id));
-      // The failed rebuild settles in the background; the snapshot stays.
+      // An expired snapshot cannot prove current access scope, so it is not
+      // served once the authority is unreachable. Nothing reads the files.
+      await expect(getCachedSessionsAsync("include")).rejects.toThrow();
       await Bun.sleep(0);
       await Bun.sleep(0);
+      await expect(getCachedSessionsAsync("include")).rejects.toThrow();
       expect(
-        (await getCachedSessionsAsync("include")).map((s) => s.id),
-      ).toEqual(snapshot.map((s) => s.id));
+        listings.mock.calls.filter((call) =>
+          String(call[0]).startsWith(sessionsDir),
+        ),
+      ).toEqual([]);
     } finally {
+      listings.mockRestore();
       warn.mockRestore();
       __setSessionKernelStoreForTest(live);
     }
