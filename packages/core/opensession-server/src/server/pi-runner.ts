@@ -42,7 +42,7 @@ import type {
  *  accepts (ProviderConfigInput — not re-exported by the package index). */
 type PiProviderConfigInput = Parameters<ModelRuntime["registerProvider"]>[1];
 import { stateDir } from "./paths";
-import { audit, summarizeText } from "./audit";
+import { audit, markPrivateAuditKeys, summarizeText } from "./audit";
 import {
   journalSet,
   buildRunJournalRecord,
@@ -2323,6 +2323,15 @@ async function* runPiAttempt(
     model,
     mode: mode || "code",
   };
+  // The audit log is shared: a personal run's prompts and replies keep only
+  // their hash and size there (audit.ts redactPrivateAuditText).
+  if (opts.personalRepo)
+    markPrivateAuditKeys(
+      journal?.osSessionId,
+      opts.transcriptSessionId,
+      runKey,
+      opts.sessionId,
+    );
   // First-call-wins run closer + finally backstop (the bridgeRunEnd pattern).
   let turnEnded = false;
   const endTurn = (fields: Record<string, unknown>) => {
@@ -3302,6 +3311,7 @@ async function* runPiAttempt(
 
     // Map pi→unified BEFORE any engine-keyed append (the W1 import-first gate
     // resolves through this map; unmapped appends are dropped + degraded).
+    if (opts.personalRepo) markPrivateAuditKeys(piSessionId);
     if (unifiedSessionId)
       recordEngineSessionOwner(piSessionId, unifiedSessionId);
 

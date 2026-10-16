@@ -591,7 +591,7 @@ setJournalSetListener(async (record) => {
     return;
   await acknowledgePromptDispatch(record.osSessionId, record.promptEntryId);
 });
-import { audit } from "./audit";
+import { audit, markPrivateAuditKeys } from "./audit";
 import {
   githubCredentialForLogin,
   githubCredentialForRun,
@@ -2875,6 +2875,9 @@ async function runSessionPromptInner(
   if (!foundSession) return;
   const session: UnifiedSession = foundSession;
   const personal = session.accessScope?.kind === "personal";
+  // In-process runs audit under these ids too; keep their text out of the
+  // shared audit log (audit.ts redactPrivateAuditText).
+  if (personal) markPrivateAuditKeys(session.id, ...(session.aliasIds ?? []));
   assertPersonalAttachmentsAbsent({
     personalRepo: personal || session.personalRepo,
     images,

@@ -50,7 +50,46 @@ function pruneOldFiles(): void {
  * Emit one audit event as a JSON line. Never throws — audit failures must not
  * take down the run they're observing (they do land in journald via stderr).
  */
+// Session, run and engine ids of personal runs in this process. The audit log
+// is shared with every signed-in person, so their events keep the text's hash
+// and size but never the text itself. Personal ids stay personal: the set only
+// grows, bounded by the personal runs this process has served.
+const privateAuditKeys: Set<string> = ((
+  globalThis as { __opensessionPrivateAuditKeys?: Set<string> }
+).__opensessionPrivateAuditKeys ??= new Set());
+const PRIVATE_AUDIT_KEY_FIELDS = [
+  "session",
+  "session_id",
+  "session_key",
+  "engine_session",
+  "run_key",
+  "resume",
+] as const;
+
+/** Mark ids whose audit events must carry no prompt or reply text. */
+export function markPrivateAuditKeys(
+  ...keys: Array<string | null | undefined>
+): void {
+  for (const key of keys) if (key) privateAuditKeys.add(key);
+}
+
+/** The event as the shared log may store it: a personal run's text snippet
+ * is dropped, its hash and byte length kept. */
+export function redactPrivateAuditText(
+  event: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!privateAuditKeys.size || !("text_snippet" in event)) return event;
+  const privateEvent = PRIVATE_AUDIT_KEY_FIELDS.some((field) => {
+    const value = event[field];
+    return typeof value === "string" && privateAuditKeys.has(value);
+  });
+  if (!privateEvent) return event;
+  const { text_snippet: _snippet, ...rest } = event;
+  return { ...rest, text_redacted: true };
+}
+
 export function audit(event: Record<string, unknown>): void {
+  event = redactPrivateAuditText(event);
   try {
     // bun test shares this module with the live audit paths — keep fake-run /
     // FSM test events out of the real ~/.opensession-audit files (they feed
@@ -83,6 +122,7 @@ let flushing: Promise<void> | null = null;
  */
 export function auditAsync(event: Record<string, unknown>): void {
   if (process.env.NODE_ENV === "test") return;
+  event = redactPrivateAuditText(event);
   const now = new Date();
   let line: string;
   try {
