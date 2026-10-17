@@ -105,8 +105,8 @@ export interface RunHostSpec {
    *  for back-compat with specs sent before McpScope; absent reads as "all". */
   mcpServers?: McpScope;
   /**
-   * opensession-* in-process servers to expose via the RPC proxy (mcp-proxy.ts →
-   * opensession-rpc.sock). Names must match what the server-side builder
+   * opensession-* in-process servers to expose via the run host's run-rpc relay
+   * (run-rpc-relay.ts → opensession-rpc.sock or /rpc-ws). Names must match what the server-side builder
    * produces for this session. Automation-owned sessions may name only their
    * deliberately registered report/workflow/self-improvement tools.
    */

@@ -1,13 +1,13 @@
 /**
- * mcp-proxy — a stdio MCP server that forwards tools/list and tools/call to
- * the opensession process over its run-rpc unix socket (src/server/run-rpc.ts).
+ * mcp-proxy — a stdio MCP server that forwards tools/list and tools/call for
+ * ONE opensession-* server to the opensession process over its run-rpc
+ * (src/server/run-rpc.ts), via the shared relay in run-rpc-relay.ts.
  *
- * Spawned by Codex as a stdio MCP server, one instance per opensession-* server
- * (OPENSESSION_MCP_SERVER names which one). The actual tool implementations close
- * over live opensession state and must execute there, while Codex can only
- * consume external stdio MCP servers.
+ * Run hosts no longer spawn this: they mount every opensession-* server on a
+ * single in-process relay (host.ts). It stays as `opensession mcp-proxy` for
+ * MCP clients that can only consume an external stdio server.
  *
- * Env (set in the injected MCP config by codex-runner.ts / host.ts):
+ * Env:
  *   OPENSESSION_RPC_SOCKET  — opensession's run-rpc unix socket path, OR
  *   OPENSESSION_RPC_WS_URL  — opensession's /rpc-ws WebSocket route (remote
  *                     sandboxes, where a unix socket can't cross the boundary)
@@ -19,304 +19,28 @@
  *   OPENSESSION_MCP_SERVER  — which interactive server to proxy (e.g. opensession-sessions)
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
-  ListToolsRequestSchema,
-  CallToolRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+  createRunRpcRelay,
+  relayMcpServer,
+  runRpcRelayConfigError,
+  type RunRpcRelayConfig,
+} from "./run-rpc-relay";
 
-const SOCK = process.env.OPENSESSION_RPC_SOCKET || "";
-const WS_URL = process.env.OPENSESSION_RPC_WS_URL || "";
-const WS_HOST = process.env.OPENSESSION_RPC_WS_HOST || "";
-const WS_AUTH = process.env.OPENSESSION_RPC_WS_AUTH || "";
-const TOKEN = process.env.OPENSESSION_RPC_TOKEN || "";
+const cfg: Partial<RunRpcRelayConfig> = {
+  socket: process.env.OPENSESSION_RPC_SOCKET || "",
+  wsUrl: process.env.OPENSESSION_RPC_WS_URL || "",
+  wsHost: process.env.OPENSESSION_RPC_WS_HOST || "",
+  wsAuth: process.env.OPENSESSION_RPC_WS_AUTH || "",
+  token: process.env.OPENSESSION_RPC_TOKEN || "",
+};
 const SERVER_NAME = process.env.OPENSESSION_MCP_SERVER || "";
-if (
-  (!SOCK && !WS_URL) ||
-  !TOKEN ||
-  !SERVER_NAME ||
-  (WS_URL && (!WS_HOST || !WS_AUTH))
-) {
+if (runRpcRelayConfigError(cfg) || !SERVER_NAME) {
   console.error(
     "mcp-proxy: OPENSESSION_RPC_SOCKET or OPENSESSION_RPC_WS_URL (+ OPENSESSION_RPC_WS_HOST/OPENSESSION_RPC_WS_AUTH), plus OPENSESSION_RPC_TOKEN and OPENSESSION_MCP_SERVER are required",
   );
   process.exit(2);
 }
-/** The rpc-ws upgrade authenticates per ws-transport run: hostId in the URL,
- *  wsToken as the bearer (src/server/run-ws.ts). Frames still carry TOKEN. */
-const WS_DIAL_URL = WS_URL
-  ? `${WS_URL}${WS_URL.includes("?") ? "&" : "?"}host=${encodeURIComponent(WS_HOST)}`
-  : "";
 
-/**
- * An error the opensession side answered with. Most are terminal, but an
- * unknown run token is special: after an opensession restart the detached
- * engine and this proxy are still alive before boot recovery has re-registered
- * the token. Retrying that one answer lets the proxy bridge the recovery gap.
- */
-class RpcError extends Error {
-  constructor(
-    message: string,
-    readonly retryable = false,
-  ) {
-    super(message);
-  }
-}
-
-function rpcError(status: number, data: any): RpcError {
-  const message = data?.error || `opensession RPC ${status}`;
-  // A token that is genuinely invalid is no more privileged by waiting: this
-  // only gives an in-flight detached run time for the restarted server to
-  // restore its in-memory token registry. All other answered authz/tool
-  // errors remain immediate failures.
-  return new RpcError(message, message === "unauthorized (unknown run token)");
-}
-
-/**
- * The body of an answered call. Long calls stream heartbeat padding before
- * the JSON, so a call cut short by a restart arrives as a 200 with no body.
- * That is not an answer, and the tool may already have acted, so it is not
- * retried either.
- */
-function answeredBody(status: number, data: any): Record<string, any> {
-  if (status !== 200) throw rpcError(status, data);
-  if (!data || typeof data !== "object")
-    throw new RpcError(
-      "opensession closed the call before answering, probably a restart. The tool may or may not have finished: check its result before calling it again.",
-    );
-  // Long tool calls report failures in the body instead of the status.
-  if (typeof data.error === "string" && data.error)
-    throw rpcError(status, data);
-  return data;
-}
-
-// ── WS transport: one persistent connection, request/response frames by id ───
-// Frames out: {id, path, token, server, tool?, args?}; frames in:
-// {id, status, body}. A dropped connection rejects the in-flight waiters as
-// retryable — same semantics as a unix-socket connect failure (the attempt is
-// re-sent after reconnect until the deadline).
-
-let wsLive: WebSocket | null = null;
-let wsDialing: Promise<WebSocket> | null = null;
-const wsPending = new Map<
-  string,
-  {
-    resolve: (v: { status: number; body: any }) => void;
-    reject: (e: unknown) => void;
-  }
->();
-
-function ensureWs(): Promise<WebSocket> {
-  if (wsLive && wsLive.readyState === WebSocket.OPEN)
-    return Promise.resolve(wsLive);
-  if (wsDialing) return wsDialing;
-  wsDialing = new Promise<WebSocket>((resolve, reject) => {
-    let settled = false;
-    let sock: WebSocket;
-    try {
-      // Bun extension: custom headers on the client handshake.
-      sock = new WebSocket(WS_DIAL_URL, {
-        headers: { authorization: `Bearer ${WS_AUTH}` },
-      } as unknown as string[]);
-    } catch (e) {
-      wsDialing = null;
-      reject(e);
-      return;
-    }
-    sock.onopen = () => {
-      wsLive = sock;
-      wsDialing = null;
-      if (!settled) {
-        settled = true;
-        resolve(sock);
-      }
-    };
-    sock.onmessage = (ev) => {
-      let msg: any;
-      try {
-        msg = JSON.parse(String(ev.data));
-      } catch {
-        return;
-      }
-      if (msg?.t === "pong") return;
-      const waiter = wsPending.get(String(msg?.id || ""));
-      if (waiter) {
-        wsPending.delete(String(msg.id));
-        waiter.resolve({ status: Number(msg.status) || 0, body: msg.body });
-      }
-    };
-    sock.onclose = () => {
-      if (wsLive === sock) wsLive = null;
-      wsDialing = null;
-      const err = new Error("rpc-ws connection dropped");
-      for (const [id, w] of [...wsPending]) {
-        wsPending.delete(id);
-        w.reject(err); // retryable — rpc()'s loop re-sends after reconnect
-      }
-      if (!settled) {
-        settled = true;
-        reject(err);
-      }
-    };
-    sock.onerror = () => {}; // onclose follows and owns the rejection
-  });
-  return wsDialing;
-}
-
-// Keepalive: quiet minutes-long tool calls must not look idle to Bun.serve's
-// per-socket timer on the opensession side.
-if (WS_URL) {
-  setInterval(() => {
-    try {
-      if (wsLive?.readyState === WebSocket.OPEN) wsLive.send('{"t":"ping"}');
-    } catch {}
-  }, 30_000).unref?.();
-}
-
-async function rpcOnceWs(
-  path: string,
-  body: Record<string, unknown>,
-  signal?: AbortSignal,
-): Promise<any> {
-  const sock = await ensureWs();
-  const id = crypto.randomUUID();
-  const res = await new Promise<{ status: number; body: any }>(
-    (resolve, reject) => {
-      wsPending.set(id, { resolve, reject });
-      // Our caller gave up: tell opensession to cancel the tool call.
-      signal?.addEventListener(
-        "abort",
-        () => {
-          if (!wsPending.delete(id)) return;
-          try {
-            sock.send(JSON.stringify({ t: "cancel", id }));
-          } catch {}
-          reject(signal.reason);
-        },
-        { once: true },
-      );
-      try {
-        sock.send(
-          JSON.stringify({
-            id,
-            path,
-            token: TOKEN,
-            server: SERVER_NAME,
-            ...body,
-          }),
-        );
-      } catch (e) {
-        wsPending.delete(id);
-        reject(e);
-      }
-    },
-  );
-  return answeredBody(res.status, res.body);
-}
-
-async function rpcOnceSocket(
-  path: string,
-  body: Record<string, unknown>,
-  signal?: AbortSignal,
-): Promise<any> {
-  // Aborting drops the request, which cancels the tool call on the far side.
-  const res = await fetch(`http://backstage${path}`, {
-    method: "POST",
-    signal,
-    // Bun extension: route the request over a unix socket.
-    unix: SOCK,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ token: TOKEN, server: SERVER_NAME, ...body }),
-  } as any);
-  let data: any = null;
-  try {
-    data = await res.json();
-  } catch {}
-  return answeredBody(res.status, data);
-}
-
-/**
- * One RPC to opensession over whichever transport is configured. Connection-
- * level failures (socket gone / WS dropped — opensession restarting) retry
- * until the deadline. Answered errors surface immediately, except an unknown
- * run token during restart recovery (see rpcError above).
- */
-async function rpc(
-  path: string,
-  body: Record<string, unknown>,
-  timeoutMs = 120_000,
-  signal?: AbortSignal,
-): Promise<Record<string, any>> {
-  const deadline = Date.now() + timeoutMs;
-  let lastErr: unknown;
-  for (;;) {
-    signal?.throwIfAborted();
-    try {
-      return await (WS_URL
-        ? rpcOnceWs(path, body, signal)
-        : rpcOnceSocket(path, body, signal));
-    } catch (e) {
-      if (signal?.aborted) throw e;
-      if (e instanceof RpcError && !e.retryable) throw e;
-      lastErr = e; // connect failure — opensession likely restarting
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(
-        `opensession unreachable at ${WS_URL || SOCK} for ${Math.round(timeoutMs / 1000)}s: ${lastErr}`,
-      );
-    }
-    await new Promise((r) => setTimeout(r, 1500));
-  }
-}
-
-const server = new Server(
-  { name: `backstage-proxy-${SERVER_NAME}`, version: "1.0.0" },
-  { capabilities: { tools: {} } },
-);
-
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  // tools/list happens during the engine's MCP init, BEFORE the turn's first
-  // output — so its retry budget must stay well under the runner's 90s
-  // liveness guard. It must also cover detached-run recovery: adoption plus
-  // reattach can take tens of seconds after the new server opens its socket.
-  // Keep this below the runner's 90s liveness guard, rather than marking the
-  // proxy permanently failed while its token is still being restored.
-  const data = await rpc("/mcp/list", {}, 45_000);
-  return { tools: data.tools || [] };
-});
-
-server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
-  try {
-    // On SHARED engine servers, engine-plugin-session-tag.js injects the
-    // engine session id into the tool arguments so calls can be routed to
-    // the right opensession session. Strip it back out of the args (the tools'
-    // schemas don't know it) and forward it as a sibling field for run-rpc's
-    // per-call session resolution.
-    const args: Record<string, unknown> = { ...(req.params.arguments ?? {}) };
-    // Tool calls may block for many minutes (e.g. ask_human/ask_user waiting on
-    // a teammate) — allow reconnect retries well past the opensession side's
-    // 30-minute per-call ceiling (run-rpc.ts) instead of the default 2 minutes.
-    const data = await rpc(
-      "/mcp/call",
-      {
-        tool: req.params.name,
-        args,
-      },
-      32 * 60_000,
-      // The engine cancelled or timed out the call: forward that, so the
-      // tool stops waiting instead of holding its answer for a dead call.
-      extra.signal,
-    );
-    if (!data.result || typeof data.result !== "object")
-      throw new Error("opensession answered without a tool result");
-    return data.result;
-  } catch (e: any) {
-    return {
-      content: [{ type: "text", text: `Tool call failed: ${e?.message || e}` }],
-      isError: true,
-    };
-  }
-});
-
-await server.connect(new StdioServerTransport());
+const relay = createRunRpcRelay(cfg as RunRpcRelayConfig);
+await relayMcpServer(relay, SERVER_NAME).connect(new StdioServerTransport());

@@ -138,7 +138,7 @@ install/service/update, non-sandbox turns) works and is not listed here.
 - **Sandboxed agent runs launched from a compiled host** are untested: the
   sandbox re-exec sites run `bun run <host-entry>` inside a container that
   carries its own bun + checkout. Non-sandbox / local runs work (the dispatcher
-  self-execs the binary for `runner-host` and `mcp-proxy`).
+  self-execs the binary for `runner-host`).
 - **Stored transcript search.** The sessions route launches the TypeScript
   worker path directly instead of using the compiled
   `transcript-search-worker` subcommand, so compiled installs currently return
