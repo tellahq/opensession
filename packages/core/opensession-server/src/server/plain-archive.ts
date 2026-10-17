@@ -116,6 +116,9 @@ export async function archivePlainSessionCandidates(
   stopPortals: (sessionId: string) => Promise<void> = async (sessionId) => {
     const { stopArchivedSessionPortals } = await import("./portal-supervisor");
     await stopArchivedSessionPortals(sessionId);
+    const { stopSessionContainersAfterCommit } =
+      await import("./session-containers");
+    void stopSessionContainersAfterCommit([sessionId]);
   },
 ): Promise<number> {
   let archived = 0;

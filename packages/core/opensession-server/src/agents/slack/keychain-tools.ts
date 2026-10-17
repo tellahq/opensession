@@ -758,7 +758,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
           command: args.command,
           cwd: where.cwd,
           logDir: scriptLogDir(ctx.sessionId),
-          env: scriptEnv(ctx.sessionId),
+          env: await scriptEnv(ctx.sessionId),
           ...(args.timeoutMinutes !== undefined
             ? { timeoutMinutes: args.timeoutMinutes }
             : {}),

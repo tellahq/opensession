@@ -59,6 +59,11 @@ import {
   sessionScratchRoot,
 } from "./session-scratch";
 import type { Sandbox } from "./sandbox/provider";
+import {
+  ensureContainerShimDir,
+  reapSessionContainers,
+  sessionContainerEnv,
+} from "./session-containers";
 import type { UnifiedSession } from "./types";
 
 export type PortalState =
@@ -913,7 +918,12 @@ async function startHostPortal(
         const log = await open(logPath, "w");
         const directCommand = portalHostCommand(command);
         const portalEnv = {
-          PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
+          // A Portal's containers carry its session, like the agent's do.
+          ...sessionContainerEnv(
+            input.sessionId,
+            process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
+            await ensureContainerShimDir(),
+          ),
           HOME: process.env.HOME || "/tmp",
           ...awsEnv,
           ...input.env,
@@ -1677,6 +1687,13 @@ export function startPortalReaper(
       const { stopped } = await reapOrphanedPortalServices(sessions);
       if (stopped.length)
         console.log(`[portals] reaped ${stopped.length} Portal service(s)`);
+      // Containers labelled with an archived or deleted session's id: the
+      // retry for an archive or delete whose own stop failed or was missed.
+      const containers = await reapSessionContainers(sessions);
+      if (containers.stopped.length)
+        console.log(
+          `[containers] reaped ${containers.stopped.length} container(s) of archived or deleted sessions`,
+        );
       const { slept } = await sleepIdlePortalServices(sessions);
       if (slept.length)
         console.log(`[portals] slept ${slept.length} idle Portal service(s)`);
