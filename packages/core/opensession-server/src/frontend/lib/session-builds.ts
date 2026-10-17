@@ -147,6 +147,37 @@ export function visibleBuildGroups(
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
 }
 
+/** What the session view needs to know about the groups: whether there is a
+ * flap at all, and whether one is still running (which sets how often the
+ * clock ticks). Only a change here re-renders the session view. */
+export function buildsFlapStatus(
+  groups: BuildGroup[],
+): "none" | "live" | "ended" {
+  if (!groups.length) return "none";
+  return groups.some((g) => g.live) ? "live" : "ended";
+}
+
+/** One clock for every builds row, read through useSyncExternalStore, so a
+ * tick re-renders only what reads the time it moved. */
+export function createBuildsClock(now = Date.now()) {
+  const listeners = new Set<() => void>();
+  return {
+    get: () => now,
+    set(next: number) {
+      now = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+export type BuildsClock = ReturnType<typeof createBuildsClock>;
+
 const hiddenGroups = hiddenIdStore("opensession-hidden-build-groups");
 
 export function hiddenBuildGroupKeys(now = Date.now()): Set<string> {
