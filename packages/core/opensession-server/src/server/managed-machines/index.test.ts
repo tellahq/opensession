@@ -244,9 +244,21 @@ describe("start, stop and exec", () => {
     expect(await startMachine("gpu-box", { user: "ana", via: "agent" })).toBe(
       false,
     );
-    // Past startTimeoutMinutes (20) a person may start it again.
+    // Past startTimeoutMinutes (20) it is flagged, but while status still
+    // says starting the earlier start may be provisioning: keep waiting.
     await pollFor(16);
     expect((await view()).attention).toContain("still reports starting");
+    expect(await startMachine("gpu-box", { user: "ana", via: "agent" })).toBe(
+      false,
+    );
+    status = { code: 1, stdout: "", stderr: "Unauthorized" };
+    await pollFor(1);
+    expect(await startMachine("gpu-box", { user: "ana", via: "agent" })).toBe(
+      false,
+    );
+    // Only a fresh check saying off allows another dispatch.
+    status = json({ state: "off" });
+    await pollFor(1);
     expect(await startMachine("gpu-box", { user: "ana", via: "agent" })).toBe(
       true,
     );

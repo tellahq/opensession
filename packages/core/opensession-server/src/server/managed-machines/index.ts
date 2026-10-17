@@ -346,9 +346,21 @@ export async function startMachine(
   const poll = entry.lastPoll;
   if (poll?.ok && poll.report.state === "on") return false;
   // Even while status still says off: the start may not be visible yet, and
-  // a second dispatch is worse than waiting. A start still not on after
-  // startTimeoutMinutes is flagged for a person, and then may run again.
+  // a second dispatch is worse than waiting.
   if (startPending(machine)) return false;
+  // Past startTimeoutMinutes an earlier accepted start is flagged for a
+  // person, but it may still be provisioning. Dispatch again only when a
+  // fresh, successful status check says the machine is off; while it says
+  // starting, stopping, or cannot be read, keep waiting.
+  const last = machineRecord(id).lastAction;
+  if (last?.kind === "start" && last.ok === true) {
+    const freshOff =
+      poll?.ok &&
+      poll.report.state === "off" &&
+      registry.deps.now() - poll.at <= maxGapMs(machine) &&
+      poll.at > Date.parse(last.at);
+    if (!freshOff) return false;
+  }
   if (entry.acting === "stop")
     throw new MachineError(
       `${machine.label} is running its stop command. Try again when it finishes.`,
