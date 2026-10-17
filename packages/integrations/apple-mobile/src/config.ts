@@ -4,6 +4,7 @@ import type { AppleMobileConfig } from "./types";
 import { resolveProjectPath } from "./security";
 
 export const CONFIG_PATH = ".opensession/apple-mobile.json";
+export const XCODEGEN_SPEC = "project.yml";
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -45,10 +46,16 @@ export async function loadConfig(projectDir: string): Promise<{
     throw new Error(`${CONFIG_PATH}: bundleId is invalid`);
   }
 
+  const platform = raw.platform ?? "ios";
+  if (platform !== "ios" && platform !== "macos") {
+    throw new Error(`${CONFIG_PATH}: platform must be ios or macos`);
+  }
+
   const config: AppleMobileConfig = {
     version: 1,
     backend: raw.backend,
     bundleId,
+    platform,
     teamId: optionalString(raw.teamId, "teamId"),
   };
 
@@ -76,12 +83,27 @@ export async function loadConfig(projectDir: string): Promise<{
     const scheme = optionalString(xcode.scheme, "xcode.scheme");
     if (!xcodePath || !scheme)
       throw new Error("xcode.path and xcode.scheme are required");
-    resolveProjectPath(projectDir, xcodePath);
+    const generator = xcode.generator;
+    if (generator !== undefined && generator !== "xcodegen") {
+      throw new Error("xcode.generator must be xcodegen");
+    }
+    if (generator === "xcodegen") {
+      // The project is generated at build time, so it need not exist yet,
+      // but the spec it is generated from must.
+      if (xcode.container !== "project") {
+        throw new Error("xcode.generator requires container project");
+      }
+      resolveProjectPath(projectDir, xcodePath, { mustExist: false });
+      resolveProjectPath(projectDir, XCODEGEN_SPEC);
+    } else {
+      resolveProjectPath(projectDir, xcodePath);
+    }
     config.xcode = {
       container: xcode.container,
       path: xcodePath,
       scheme,
       configuration: optionalString(xcode.configuration, "xcode.configuration"),
+      generator,
     };
   }
 

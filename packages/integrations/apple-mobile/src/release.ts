@@ -3,8 +3,13 @@ import { basename, dirname, join, relative } from "node:path";
 import { ensureDirectory } from "./build";
 import { findExecutable, runChecked } from "./exec";
 import { resolveProjectPath } from "./security";
+import { ascClient } from "./asc";
+import { releaseVersion, submitForReview } from "./app-store";
+import { requireDistribution } from "./platforms";
 import {
   CREDENTIAL_REFS,
+  EXPORTED_ARTIFACT_REF,
+  isStoreAction,
   cleanupReleaseExecution,
   consumeReleaseApproval,
   credentials,
@@ -67,14 +72,56 @@ function publishArtifact(
   return destination;
 }
 
-function findExportedIpa(exportPath: string): string {
-  const ipas = readdirSync(exportPath, { recursive: true })
+function findExportedArtifact(exportPath: string, extension: string): string {
+  const found = readdirSync(exportPath, { recursive: true })
     .map(String)
-    .filter((entry) => entry.endsWith(".ipa"))
+    .filter((entry) => entry.endsWith(extension))
     .map((entry) => join(exportPath, entry));
-  if (ipas.length !== 1)
-    throw new Error(`Expected one exported IPA, found ${ipas.length}`);
-  return ipas[0]!;
+  if (found.length !== 1)
+    throw new Error(
+      `Expected one exported ${extension}, found ${found.length}`,
+    );
+  return found[0]!;
+}
+
+async function sha256(path: string): Promise<string> {
+  return new Bun.CryptoHasher("sha256")
+    .update(await Bun.file(path).arrayBuffer())
+    .digest("hex");
+}
+
+/** Submit and release plans only call the App Store Connect API, so they need
+ *  no checkout or Xcode. The approval is still consumed before any call. */
+async function executeStorePlan(plan: ReleasePlan) {
+  const client = ascClient(plan.projectDir);
+  const approval = consumeReleaseApproval(plan);
+  try {
+    const input = {
+      bundleId: plan.bundleId,
+      platform: plan.platform,
+      marketingVersion: plan.marketingVersion!,
+    };
+    const result =
+      plan.action === "submit"
+        ? await submitForReview(client, {
+            ...input,
+            buildNumber: plan.buildNumber!,
+            releaseType: plan.releaseType ?? "manual",
+            whatsNew: plan.whatsNew,
+          })
+        : await releaseVersion(client, input);
+    return {
+      planId: plan.id,
+      action: plan.action,
+      commit: plan.commit,
+      approvedBy: approval.approvedBy,
+      approvedAt: approval.approvedAt,
+      effects: plan.effects,
+      result,
+    };
+  } finally {
+    discardReleasePlan(plan.id);
+  }
 }
 
 export async function executePlan(
@@ -87,6 +134,9 @@ export async function executePlan(
     throw new Error("confirmation must exactly match the planned commit SHA");
   }
   credentials(true, plan.projectDir);
+  const profile = requireDistribution(plan.platform);
+  if (isStoreAction(plan.action)) return executeStorePlan(plan);
+
   if (process.platform !== "darwin" || !findExecutable("xcodebuild")) {
     throw new Error("Release execution requires Xcode on macOS");
   }
@@ -96,6 +146,14 @@ export async function executePlan(
   ) {
     throw new Error(
       "TestFlight upload requires Xcode command-line tools on macOS",
+    );
+  }
+  if (
+    plan.commands.some((command) => command.step === "generate") &&
+    !findExecutable("xcodegen")
+  ) {
+    throw new Error(
+      "This project generates its Xcode project; install xcodegen",
     );
   }
   const prepared = await prepareReleaseExecution(plan);
@@ -108,14 +166,7 @@ export async function executePlan(
     let artifact: string | undefined;
     let reportedArtifact: string | undefined;
 
-    if (plan.action === "upload") {
-      results.push(
-        await runChecked(withCredentials(prepared.commands[0]!), {
-          timeoutMs: 45 * 60_000,
-          extraEnv: privateKeyEnv(),
-        }),
-      );
-    } else {
+    if (plan.action !== "upload") {
       const exportPath = join(plan.outputDirectory, "export");
       const plistPath = join(plan.outputDirectory, "ExportOptions.plist");
       ensureDirectory(exportPath);
@@ -124,49 +175,45 @@ export async function executePlan(
         exportOptions(prepared.config, plan.action),
         prepared.checkoutDir,
       );
-      results.push(
-        await runChecked(withCredentials(prepared.commands[0]!), {
-          timeoutMs: 60 * 60_000,
-        }),
-      );
-      results.push(
-        await runChecked(withCredentials(prepared.commands[1]!), {
-          timeoutMs: 45 * 60_000,
-        }),
-      );
-      artifact = findExportedIpa(exportPath);
-      reportedArtifact = publishArtifact(
-        plan.projectDir,
-        prepared.config.release?.artifactDirectory,
-        plan.id,
-        artifact,
-      );
-      if (plan.action === "testflight") {
-        const upload = structuredClone(prepared.commands[2]!);
-        upload.args = upload.args.map((arg) =>
-          arg === "<exported-ipa>" ? artifact! : arg,
+    }
+
+    for (const command of prepared.commands) {
+      const step = command.step;
+      if (!step)
+        throw new Error("Release command has no step; create a new plan");
+      if (step === "upload" && plan.action !== "upload") {
+        if (!artifact) throw new Error("Nothing was exported to upload");
+        command.args = command.args.map((arg) =>
+          arg === EXPORTED_ARTIFACT_REF ? artifact! : arg,
         );
-        results.push(
-          await runChecked(withCredentials(upload), {
-            timeoutMs: 45 * 60_000,
-            extraEnv: privateKeyEnv(),
-          }),
+      }
+      results.push(
+        await runChecked(withCredentials(command), {
+          timeoutMs:
+            (step === "archive" ? 60 : step === "generate" ? 10 : 45) * 60_000,
+          extraEnv: step === "upload" ? privateKeyEnv() : undefined,
+        }),
+      );
+      if (step === "export") {
+        artifact = findExportedArtifact(
+          join(plan.outputDirectory, "export"),
+          profile.artifactExtension,
+        );
+        reportedArtifact = publishArtifact(
+          plan.projectDir,
+          prepared.config.release?.artifactDirectory,
+          plan.id,
+          artifact,
         );
       }
     }
 
-    const sha256 =
-      plan.action === "upload"
-        ? plan.sourceArtifactSha256
-        : artifact
-          ? new Bun.CryptoHasher("sha256")
-              .update(await Bun.file(artifact).arrayBuffer())
-              .digest("hex")
-          : undefined;
     return {
       planId: plan.id,
       action: plan.action,
       commit: plan.commit,
+      marketingVersion: plan.marketingVersion,
+      buildNumber: plan.buildNumber,
       approvedBy: approval.approvedBy,
       approvedAt: approval.approvedAt,
       artifact:
@@ -175,7 +222,16 @@ export async function executePlan(
           : reportedArtifact
             ? relative(plan.projectDir, reportedArtifact)
             : undefined,
-      sha256,
+      sha256:
+        plan.action === "upload"
+          ? plan.sourceArtifactSha256
+          : artifact
+            ? await sha256(artifact)
+            : undefined,
+      next:
+        plan.action === "adhoc"
+          ? undefined
+          : "Apple is processing the build. Check apple_release_app_status until it is VALID, then use apple_release_testflight_distribute.",
       results,
     };
   } finally {

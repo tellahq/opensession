@@ -16,10 +16,12 @@ import {
 } from "../src/plans";
 import { resolveProjectDir, resolveProjectPath } from "../src/security";
 import { runChecked } from "../src/exec";
+import { fakeAsc, writeTestKey } from "./fake-asc";
 
 let root: string;
 let project: string;
 let key: string;
+let asc: ReturnType<typeof fakeAsc>;
 const previous = { ...process.env };
 
 beforeEach(async () => {
@@ -32,8 +34,9 @@ beforeEach(async () => {
     '<Workspace version="1.0"/>\n',
   );
   key = join(root, "AuthKey_TEST.p8");
-  await Bun.write(key, "test-key");
-  chmodSync(key, 0o600);
+  await writeTestKey(key);
+  asc = fakeAsc();
+  process.env.APPLE_ASC_API_BASE_URL = asc.url;
   delete process.env.APPLE_MOBILE_STATE_DIR;
   process.env.OPENSESSION_STATE_DIR = join(root, "state");
   process.env.APPLE_ASC_KEY_ID = "TESTKEY";
@@ -80,6 +83,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  asc.stop();
   rmSync(root, { recursive: true, force: true });
   process.env = { ...previous };
 });

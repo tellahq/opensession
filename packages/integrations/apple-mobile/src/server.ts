@@ -8,7 +8,12 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { buildUnsigned, doctor, inspectIpa, runSwiftTests } from "./build";
 import { inspectProject } from "./project";
-import { createBuildPlan, createUploadPlan } from "./plans";
+import { createBuildPlan, createStorePlan, createUploadPlan } from "./plans";
+import { loadConfig } from "./config";
+import { ascClient } from "./asc";
+import { appStatus, distributeTestFlight, registerBundleId } from "./app-store";
+import { createApp } from "./scaffold";
+import { resolveProjectDir } from "./security";
 import { executePlan, safePlanView } from "./release";
 
 function modeFrom(args: string[]): "build" | "release" {
@@ -46,6 +51,31 @@ const projectProperty = {
   },
 };
 const buildTools: Tool[] = [
+  {
+    name: "apple_mobile_create_app",
+    description:
+      "Create a new SwiftUI app in an empty directory: XcodeGen project.yml, sources, tests, asset catalog, and .opensession/apple-mobile.json. Writes files only; no Apple account calls.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectDir: {
+          type: "string",
+          description: "Absolute path of a new or empty directory",
+        },
+        name: { type: "string", description: "Display name, e.g. Acme Notes" },
+        bundleId: { type: "string", description: "e.g. com.example.AcmeNotes" },
+        teamId: { type: "string", description: "Apple Developer Team ID" },
+        platform: {
+          type: "string",
+          enum: ["ios", "macos"],
+          description:
+            "Default ios. macOS apps build, but cannot be released yet.",
+        },
+        deploymentTarget: { type: "string" },
+      },
+      required: ["projectDir", "name", "bundleId"],
+    },
+  },
   {
     name: "apple_mobile_doctor",
     description:
@@ -117,6 +147,80 @@ const releaseTools: Tool[] = [
     },
   },
   {
+    name: "apple_release_app_status",
+    description:
+      "Read-only App Store Connect status for the configured app: bundle ID, app record, recent builds and their processing state, App Store versions, TestFlight groups, and next steps.",
+    inputSchema: {
+      type: "object",
+      properties: projectProperty,
+      required: ["projectDir"],
+    },
+  },
+  {
+    name: "apple_release_register_bundle_id",
+    description:
+      "Register the configured bundle ID in the Apple Developer account if it is missing. Idempotent. Does not create the App Store Connect app record, which Apple's API cannot do.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...projectProperty,
+        name: { type: "string", description: "Bundle ID display name" },
+      },
+      required: ["projectDir"],
+    },
+  },
+  {
+    name: "apple_release_testflight_distribute",
+    description:
+      "For a processed build: set its What to Test notes and add it to internal TestFlight groups. External groups need Beta App Review and are refused.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...projectProperty,
+        buildNumber: { type: "string" },
+        marketingVersion: { type: "string" },
+        whatToTest: { type: "string" },
+        groups: { type: "array", items: { type: "string" } },
+        locale: { type: "string", description: "Default en-US" },
+      },
+      required: ["projectDir", "buildNumber"],
+    },
+  },
+  {
+    name: "apple_release_plan_submit",
+    description:
+      "Create a one-hour, commit-bound plan to submit a processed build for App Review: creates or updates the App Store version, attaches the build, and submits. Store metadata and screenshots must already be complete. Does not submit.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...projectProperty,
+        marketingVersion: { type: "string" },
+        buildNumber: { type: "string" },
+        releaseType: {
+          type: "string",
+          enum: ["manual", "after_approval"],
+          description:
+            "manual (default) needs a later release plan; after_approval goes live as soon as Apple approves",
+        },
+        whatsNew: { type: "string" },
+      },
+      required: ["projectDir", "marketingVersion", "buildNumber"],
+    },
+  },
+  {
+    name: "apple_release_plan_store_release",
+    description:
+      "Create a one-hour, commit-bound plan to release an approved version that is waiting for developer release. Does not release.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...projectProperty,
+        marketingVersion: { type: "string" },
+      },
+      required: ["projectDir", "marketingVersion"],
+    },
+  },
+  {
     name: "apple_release_plan_adhoc",
     description:
       "Create a one-hour, commit-bound plan for an Xcode ad-hoc export. Does not build or sign.",
@@ -125,7 +229,11 @@ const releaseTools: Tool[] = [
       properties: {
         ...projectProperty,
         marketingVersion: { type: "string" },
-        buildNumber: { type: "string" },
+        buildNumber: {
+          type: "string",
+          description:
+            "Omit to use one above the highest build in App Store Connect",
+        },
       },
       required: ["projectDir"],
     },
@@ -139,7 +247,11 @@ const releaseTools: Tool[] = [
       properties: {
         ...projectProperty,
         marketingVersion: { type: "string" },
-        buildNumber: { type: "string" },
+        buildNumber: {
+          type: "string",
+          description:
+            "Omit to use one above the highest build in App Store Connect",
+        },
       },
       required: ["projectDir"],
     },
@@ -160,7 +272,7 @@ const releaseTools: Tool[] = [
   {
     name: "apple_release_execute",
     description:
-      "Execute a plan after a later authenticated human approval in Settings → Integrations → Apple mobile. confirmation must exactly equal its full commit SHA.",
+      "Execute a plan after a later authenticated human approval (the card under the plan in the session, or Settings → Integrations → Apple mobile). confirmation must exactly equal its full commit SHA.",
     inputSchema: {
       type: "object",
       properties: {
@@ -183,12 +295,90 @@ function reviewablePlan<T extends { plan: Parameters<typeof safePlanView>[0] }>(
     ...result,
     plan: safePlanView(result.plan),
     approvalRequired: true,
-    approvalLocation: "Settings → Integrations → Apple mobile",
+    approvalLocation:
+      "The approval card under this tool call in the session, or Settings → Integrations → Apple mobile",
   };
+}
+
+const strings = (args: Args, key: string): string[] | undefined => {
+  const value = args[key];
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.some((item) => typeof item !== "string" || !item)
+  )
+    throw new Error(`${key} must be an array of non-empty strings`);
+  return value as string[];
+};
+
+async function projectApp(args: Args) {
+  const projectDir = resolveProjectDir(string(args, "projectDir")!);
+  const { config } = await loadConfig(projectDir);
+  return { projectDir, config, client: ascClient(projectDir) };
 }
 
 async function call(name: string, args: Args): Promise<unknown> {
   switch (name) {
+    case "apple_mobile_create_app":
+      return createApp({
+        projectDir: string(args, "projectDir")!,
+        name: string(args, "name")!,
+        bundleId: string(args, "bundleId")!,
+        teamId: string(args, "teamId", false),
+        platform: string(args, "platform", false) as
+          | "ios"
+          | "macos"
+          | undefined,
+        deploymentTarget: string(args, "deploymentTarget", false),
+      });
+    case "apple_release_app_status": {
+      const { config, client } = await projectApp(args);
+      return appStatus(client, {
+        bundleId: config.bundleId,
+        platform: config.platform,
+      });
+    }
+    case "apple_release_register_bundle_id": {
+      const { config, client } = await projectApp(args);
+      return registerBundleId(client, {
+        identifier: config.bundleId,
+        name:
+          string(args, "name", false) ??
+          config.xcode?.scheme ??
+          config.bundleId,
+        platform: config.platform,
+      });
+    }
+    case "apple_release_testflight_distribute": {
+      const { config, client } = await projectApp(args);
+      return distributeTestFlight(client, {
+        bundleId: config.bundleId,
+        platform: config.platform,
+        buildNumber: string(args, "buildNumber")!,
+        marketingVersion: string(args, "marketingVersion", false),
+        whatToTest: string(args, "whatToTest", false),
+        groups: strings(args, "groups"),
+        locale: string(args, "locale", false),
+      });
+    }
+    case "apple_release_plan_submit":
+      return reviewablePlan(
+        await createStorePlan(string(args, "projectDir")!, "submit", {
+          marketingVersion: string(args, "marketingVersion")!,
+          buildNumber: string(args, "buildNumber")!,
+          releaseType: string(args, "releaseType", false) as
+            | "manual"
+            | "after_approval"
+            | undefined,
+          whatsNew: string(args, "whatsNew", false),
+        }),
+      );
+    case "apple_release_plan_store_release":
+      return reviewablePlan(
+        await createStorePlan(string(args, "projectDir")!, "release", {
+          marketingVersion: string(args, "marketingVersion")!,
+        }),
+      );
     case "apple_mobile_doctor":
     case "apple_release_doctor":
       return doctor(string(args, "projectDir", false));

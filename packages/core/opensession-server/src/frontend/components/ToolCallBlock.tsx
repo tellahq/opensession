@@ -55,6 +55,11 @@ import { useOpenAsset, useOpenAssetPaths } from "../lib/open-asset";
 import { assetPathForMediaSrc } from "../lib/asset-preview";
 import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
 import { z } from "zod";
+import {
+  appleReleasePlanId,
+  isAppleReleasePlanTool,
+} from "../lib/apple-release";
+import { AppleReleaseApprovalCard } from "./AppleReleaseApprovalCard";
 // Re-exported so the session view keeps one import for the transcript's
 // context providers; the context itself lives with the rest of the
 // open-an-asset behaviour, which the turn footer shares.
@@ -464,6 +469,10 @@ export const ToolCallBlock = function ToolCallBlock({
     ? (filePathOf(callInput.arguments).split("/").pop() ?? "")
     : "";
   const fileMark = fileExt(baseName) ? baseName : "";
+  const applePlanId =
+    !failed && shownResult && isAppleReleasePlanTool(toolName)
+      ? appleReleasePlanId(shownResult.content)
+      : null;
   const resultContent = visibleResultContent(
     shownResult?.content,
     hasMedia,
@@ -828,6 +837,11 @@ export const ToolCallBlock = function ToolCallBlock({
             )}
         </div>
       </Fold>
+      {applePlanId && (
+        <div className="ml-[30px]">
+          <AppleReleaseApprovalCard planId={applePlanId} />
+        </div>
+      )}
     </div>
   );
 };

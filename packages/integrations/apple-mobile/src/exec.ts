@@ -38,6 +38,9 @@ export async function runCommand(
     env: {
       PATH: process.env.PATH ?? "",
       HOME: process.env.HOME ?? "",
+      // XcodeGen and Xcode resolve the current user from these.
+      USER: process.env.USER ?? "",
+      LOGNAME: process.env.LOGNAME ?? process.env.USER ?? "",
       TMPDIR: process.env.TMPDIR ?? "/tmp",
       LANG: process.env.LANG ?? "en_US.UTF-8",
       ...options.extraEnv,

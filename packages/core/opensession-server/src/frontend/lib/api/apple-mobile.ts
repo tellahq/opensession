@@ -20,16 +20,22 @@ export interface AppleMobileSetupStatus {
 export interface AppleReleaseApprovalRequest {
   schemaVersion: 1;
   planId: string;
-  action: "adhoc" | "testflight" | "upload";
+  action: "adhoc" | "testflight" | "upload" | "submit" | "release";
   projectDir: string;
   commit: string;
   branch: string;
+  bundleId: string;
+  platform: "ios" | "macos";
   createdAt: string;
   expiresAt: string;
   marketingVersion?: string;
   buildNumber?: string;
   sourceArtifactName?: string;
   sourceArtifactSha256?: string;
+  releaseType?: "manual" | "after_approval";
+  whatsNew?: string;
+  /** What executing the plan will do, written by the release server. */
+  effects: string[];
 }
 
 export interface AppleReleaseApprovals {
