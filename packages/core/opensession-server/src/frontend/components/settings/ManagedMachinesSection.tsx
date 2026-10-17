@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import type { ManagedMachine } from "../../lib/api/runners";
 import {
-  fetchManagedMachines,
-  managedMachineAction,
-  type ManagedMachine,
-} from "../../lib/api/runners";
+  runManagedMachineAction,
+  useManagedMachines,
+} from "../../lib/managed-machines-store";
 import {
   markTileClass,
   markTileGradient,
@@ -23,8 +23,6 @@ const stateStyle: Record<ManagedMachine["state"], string> = {
   off: "bg-hover text-dim",
   unknown: "bg-red-soft text-red",
 };
-
-const REFRESH_MS = 15_000;
 
 function ago(at: string, now: number): string {
   const minutes = Math.round((now - Date.parse(at)) / 60_000);
@@ -64,38 +62,12 @@ function idleLine(machine: ManagedMachine, now: number): string | undefined {
 /** Managed machines: turned on and off through operator commands. The
  * section only appears when the server's config defines at least one. */
 export function ManagedMachinesSection() {
-  const [machines, setMachines] = useState<ManagedMachine[]>([]);
+  const { machines, at: now } = useManagedMachines();
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    let alive = true;
-    const load = () =>
-      fetchManagedMachines()
-        .then((data) => {
-          if (!alive) return;
-          setMachines(data.machines);
-          setNow(Date.now());
-        })
-        .catch(() => {});
-    void load();
-    const timer = setInterval(() => void load(), REFRESH_MS);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, []);
 
   const act = async (machine: ManagedMachine, action: "start" | "stop") => {
     setBusyId(machine.id);
-    await managedMachineAction(machine.id, action)
-      .then((next) => {
-        if (next)
-          setMachines((items) =>
-            items.map((item) => (item.id === next.id ? next : item)),
-          );
-        setNow(Date.now());
-      })
+    await runManagedMachineAction(machine.id, action)
       .catch((error) =>
         toast(
           error instanceof Error ? error.message : `Could not ${action} it`,

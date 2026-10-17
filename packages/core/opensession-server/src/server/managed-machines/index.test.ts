@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { getConfigAsync } from "../config";
@@ -230,6 +230,46 @@ describe("start, stop and exec", () => {
       kind: "start",
       ok: false,
     });
+  });
+
+  test("an accepted start is not dispatched again while it is on its way", async () => {
+    status = json({ state: "off" });
+    await pollFor(1);
+    const starts = () => calls.filter((c) => c[1] === "on").length;
+    expect(await startMachine("gpu-box", { user: "ana", via: "agent" })).toBe(
+      true,
+    );
+    status = json({ state: "starting" });
+    await pollFor(5);
+    expect(await startMachine("gpu-box", { user: "ana", via: "agent" })).toBe(
+      false,
+    );
+    // Past startTimeoutMinutes (20) a person may start it again.
+    await pollFor(16);
+    expect((await view()).attention).toContain("still reports starting");
+    expect(await startMachine("gpu-box", { user: "ana", via: "agent" })).toBe(
+      true,
+    );
+    expect(starts()).toBe(2);
+  });
+
+  test("a failed state write does not leave the machine locked", async () => {
+    await pollFor(1);
+    await view(); // load the store before breaking its file
+    // A non-empty directory where the store file goes: every write fails.
+    const store = join(
+      process.env.OPENSESSION_STATE_DIR!,
+      ".opensession-managed-machines.json",
+    );
+    mkdirSync(join(store, "x"), { recursive: true });
+    await expect(
+      stopMachine("gpu-box", { user: "ana", via: "user" }),
+    ).rejects.toThrow();
+    expect((await view()).acting).toBeUndefined();
+    expect(stops()).toBe(0);
+    rmSync(store, { recursive: true });
+    await stopMachine("gpu-box", { user: "ana", via: "user" });
+    expect(stops()).toBe(1);
   });
 
   test("allowedUsers limits who may use it", async () => {

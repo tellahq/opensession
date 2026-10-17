@@ -270,9 +270,11 @@ async function runPowerCommand(
     via: input.via,
     ...(input.user ? { by: input.user } : {}),
   };
-  await patchMachineRecord(machine.id, { lastAction: action });
   let error: string | undefined;
+  // Everything after `acting` is set, the first write included, sits inside
+  // the try: a failed write (ENOSPC) must not leave the machine locked.
   try {
+    await patchMachineRecord(machine.id, { lastAction: action });
     const result = await registry.deps.run(machine[kind], {
       env: commandEnv(machine),
       timeoutMs: machine.commandTimeoutSeconds * 1_000,
@@ -285,7 +287,12 @@ async function runPowerCommand(
   }
   await patchMachineRecord(machine.id, {
     lastAction: { ...action, ok: !error, ...(error ? { error } : {}) },
-  });
+  }).catch((caught) =>
+    console.error(
+      `[managed-machines] could not save the ${kind} outcome for ${machine.id}:`,
+      caught,
+    ),
+  );
   audit({
     msg: `managed_machine_${kind}`,
     machine_id: machine.id,
@@ -311,13 +318,37 @@ async function resolve(
   return machine;
 }
 
+/** A start already on its way: the command succeeded recently and the
+ * machine has not reached `on` or given up. A start command often only
+ * queues work (a CI workflow dispatch exits long before the machine boots),
+ * so calling it again would dispatch a second start. */
+export function startPending(
+  machine: ManagedMachineConfig,
+  now = registry.deps.now(),
+): boolean {
+  const action = machineRecord(machine.id).lastAction;
+  return (
+    action?.kind === "start" &&
+    action.ok === true &&
+    now - Date.parse(action.at) < machine.startTimeoutMinutes * 60_000
+  );
+}
+
+/** Start the machine unless it is on or a start is already on its way.
+ * Resolves to whether the start command ran. */
 export async function startMachine(
   id: string,
   input: { user?: string; via: "user" | "agent" },
-): Promise<void> {
+): Promise<boolean> {
   const machine = await resolve(id, input.user);
   const entry = live(id);
-  if (entry.acting === "start") return;
+  if (entry.acting === "start") return false;
+  const poll = entry.lastPoll;
+  if (poll?.ok && poll.report.state === "on") return false;
+  // Even while status still says off: the start may not be visible yet, and
+  // a second dispatch is worse than waiting. A start still not on after
+  // startTimeoutMinutes is flagged for a person, and then may run again.
+  if (startPending(machine)) return false;
   if (entry.acting === "stop")
     throw new MachineError(
       `${machine.label} is running its stop command. Try again when it finishes.`,
@@ -332,6 +363,7 @@ export async function startMachine(
       machineRecord(id).lastAction?.error ?? "The start command failed.",
       502,
     );
+  return true;
 }
 
 export async function stopMachine(

@@ -303,12 +303,12 @@ export function createRunnersMcpServer(
           if (!machineAllows(machine, context.user))
             return text(`You are not allowed to use ${machine.label}.`);
           try {
-            const already = machineView(machine, context.user).state === "on";
-            if (!already)
-              await startMachine(machine.id, {
-                user: context.user,
-                via: "agent",
-              });
+            // startMachine skips the command while the machine is on or an
+            // earlier start is still on its way, so calling again only waits.
+            await startMachine(machine.id, {
+              user: context.user,
+              via: "agent",
+            });
             const minutes = Math.min(
               Math.max(args.waitMinutes ?? WAIT_DEFAULT_MINUTES, 0),
               WAIT_MAX_MINUTES,
