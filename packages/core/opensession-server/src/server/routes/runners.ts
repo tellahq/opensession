@@ -25,6 +25,14 @@ import {
 } from "../runner-bootstrap";
 import { dropRunnerPortalsForRunner } from "../runner-portals";
 import { runnerTailnetOrigin, type PeerServer } from "../runner-origin";
+import {
+  listMachineViews,
+  MachineError,
+  releaseMachine,
+  reserveMachine,
+  startMachine,
+  stopMachine,
+} from "../managed-machines";
 
 /** The Runner's tailnet origin, from the one resolver `/runner-ws` uses. */
 function tailnetOrigin(ctx: RouteContext): string | undefined {
@@ -40,10 +48,51 @@ function publicView() {
   );
 }
 
+/** Managed machines: list, start, stop, reserve, release. Commands come only
+ * from the operator's config; a request names a machine and nothing else. */
+async function handleManagedMachineRoutes(
+  ctx: RouteContext,
+): Promise<Response | undefined> {
+  const { path, req } = ctx;
+  const user = requestUser(ctx) || undefined;
+  if (path === "/api/managed-machines" && req.method === "GET")
+    return Response.json({ machines: await listMachineViews(user) });
+  const match = path.match(
+    /^\/api\/managed-machines\/([a-z0-9][a-z0-9-]{0,62})\/(start|stop|reserve|release)$/,
+  );
+  if (!match || req.method !== "POST") return undefined;
+  const [, id, action] = match;
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  try {
+    if (action === "start") await startMachine(id, { user, via: "user" });
+    else if (action === "stop")
+      await stopMachine(id, { user, via: "user", force: body.force === true });
+    else if (action === "reserve")
+      await reserveMachine(id, {
+        user,
+        reason: String(body.reason ?? "Reserved from Settings"),
+        durationMinutes:
+          typeof body.durationMinutes === "number"
+            ? body.durationMinutes
+            : undefined,
+      });
+    else await releaseMachine(id, { user });
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      { status: error instanceof MachineError ? error.status : 500 },
+    );
+  }
+  const machine = (await listMachineViews(user)).find((m) => m.id === id);
+  return Response.json({ machine });
+}
+
 export async function handleRunnersRoutes(
   ctx: RouteContext,
 ): Promise<Response | undefined> {
   const { path, req } = ctx;
+  if (path.startsWith("/api/managed-machines"))
+    return handleManagedMachineRoutes(ctx);
   if (path === "/api/runners" && req.method === "GET")
     return Response.json({ runners: publicView() });
   if (path === "/api/runners/bootstrap" && req.method === "GET") {

@@ -18,6 +18,7 @@ import { startWorktreeReaper } from "./src/server/worktree-reaper";
 import { startMemoryRepoMaintenance } from "./src/server/memory-repo/maintenance";
 import { startPortalReaper } from "./src/server/portal-supervisor";
 import { startRunnerPortalReaper } from "./src/server/runner-portals";
+import { startManagedMachines } from "./src/server/managed-machines";
 import { startTodoReminderTicker } from "./src/server/todos";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { startLiveActivitySync } from "./src/server/live-activities";
@@ -939,6 +940,9 @@ if (!g.__opensessionBooted) {
     // durable owner records immediately and keep reaping deleted-session husks.
     startPortalReaper(getSessionListSnapshotAsync);
     startRunnerPortalReaper();
+
+    // Managed machines: status polling and idle stops (managed-machines/).
+    startManagedMachines();
 
     // Desk todo reminders: push + Slack DM when a remindAt passes (todos.ts)
     startTodoReminderTicker();

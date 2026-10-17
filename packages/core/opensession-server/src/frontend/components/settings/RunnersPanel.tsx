@@ -37,6 +37,7 @@ import {
   markTileShadow,
 } from "../../lib/mark-tile";
 import { IconServer } from "../icons";
+import { ManagedMachinesSection } from "./ManagedMachinesSection";
 
 const stateStyle: Record<RunnerInfo["state"], string> = {
   online: "bg-green-soft text-green",
@@ -340,6 +341,7 @@ export function RunnersPanel() {
         </div>
       )}
 
+      <ManagedMachinesSection />
       <SettingsGroupLabel
         actions={
           <Button size="sm" variant="ghost" onClick={() => void load()}>
