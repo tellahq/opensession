@@ -7,6 +7,7 @@
  * `bun --hot` reload keeps every connected client and watcher set intact.
  */
 
+import { registerMemoryProbe } from "./memory-probes";
 import { appendSessionFeed, isFeedEvent } from "./session-feed";
 
 const g = globalThis as any;
@@ -130,6 +131,16 @@ export const sessionWatchers: Map<
 // the moment the worktree lands or the create fails.
 export const preparingWorkspaces: Set<string> = (g.__preparingWorkspaces ??=
   new Set());
+registerMemoryProbe("ws-hub.clients", () => allClients.size);
+registerMemoryProbe("ws-hub.sessionWatchers", () => {
+  let sockets = 0;
+  for (const set of sessionWatchers.values()) sockets += set.size;
+  return { sessions: sessionWatchers.size, sockets };
+});
+registerMemoryProbe(
+  "ws-hub.preparingWorkspaces",
+  () => preparingWorkspaces.size,
+);
 
 export function joinSession(ws: WebSocketClient, sessionId: string) {
   let set = sessionWatchers.get(sessionId);
@@ -299,6 +310,10 @@ export function setClientAway(ws: WebSocketClient, away: boolean) {
  *  stays silent instead of waking every client every 15s. */
 const lastPresence: Map<string, string> = (g.__lastPresence ??= new Map());
 const lastTyping: Map<string, string> = (g.__lastTyping ??= new Map());
+registerMemoryProbe("ws-hub.presence", () => ({
+  presence: lastPresence.size,
+  typing: lastTyping.size,
+}));
 
 function presenceViewers(sessionId: string): string[] {
   const set = sessionWatchers.get(sessionId);
