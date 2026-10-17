@@ -22,6 +22,10 @@ import { resolve as resolvePath } from "path";
 import { statePath } from "./paths";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { shellSafeDefaultBranch } from "./repo-branch";
+import {
+  parseManagedMachines,
+  type ManagedMachineConfig,
+} from "./managed-machines/config";
 
 const HOME = homeDir();
 const OPENSESSION_ROOT = resolvePath(import.meta.dir, "../../../../..");
@@ -257,6 +261,8 @@ export interface OpenSessionConfig {
   organization?: OrganizationSection;
   persona?: PersonaSection;
   branding?: BrandingSection;
+  /** Machines Open Session starts, stops and polls (managed-machines/). */
+  managedMachines?: ManagedMachineConfig[];
 }
 
 // ---------------------------------------------------------------------------
@@ -584,6 +590,8 @@ function parseConfig(text: string): OpenSessionConfig {
 
     const integrations = obj(raw.integrations);
     if (integrations) cfg.integrations = integrations;
+    if (raw.managedMachines !== undefined)
+      cfg.managedMachines = parseManagedMachines(raw.managedMachines);
     const policy = obj(raw.policy);
     if (policy) {
       cfg.policy = defined({

@@ -42,7 +42,7 @@ touches an in-process tool:
 | --- | --- | --- | --- |
 | [`opensession-sessions`](#opensession-sessions) | 23 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
 | [`opensession-admin`](#opensession-admin) | 14 | interactive, Slack loop | – |
-| [`opensession-runners`](#opensession-runners) | 5 | interactive | – |
+| [`opensession-runners`](#opensession-runners) | 7 | interactive | – |
 | [`opensession-goals`](#opensession-goals) | 8 | interactive | – |
 | [`opensession-search`](#opensession-search) | 2 | interactive, automation | – |
 | [`opensession-self-deploy`](#opensession-self-deploy) | 2 | interactive | Withheld from dev instances (isDevInstance()) — the script targets the production service and state. |
@@ -78,7 +78,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-37 servers, 180 tools.
+37 servers, 182 tools.
 
 ## opensession-sessions
 
@@ -347,9 +347,21 @@ Read one Runner's health, workload, resources, and execution permissions. A Runn
 
 ### `run_on_runner`
 
-`mcp__opensession-runners__run_on_runner` · input: `runner` (string, required), `command` (string, required), `cwd` (string), `timeoutSeconds` (number)
+`mcp__opensession-runners__run_on_runner` · input: `runner` (string, required), `command` (string, required), `cwd` (string), `timeoutSeconds` (number), `stdin` (string)
 
 Run one bounded command on a trusted Runner. It runs as that machine's local user and is not sandboxed. Check status first, use only the session-owned workspace, and avoid destructive commands. Commands run under PowerShell on a win32 Runner and under bash elsewhere, so match the syntax to the Runner's platform.
+
+### `start_runner`
+
+`mcp__opensession-runners__start_runner` · input: `runner` (string, required), `waitMinutes` (number)
+
+Turn on a managed machine (see list_runners) and wait until its status check reports it on. A cold start can take several minutes; if it is not on when the wait ends, call again to keep waiting. Managed machines stop on their own after an idle period: reserve_runner keeps one on across long pauses.
+
+### `stop_runner`
+
+`mcp__opensession-runners__stop_runner` · input: `runner` (string, required)
+
+Turn off a managed machine now. Refused while it is in use (a command running through Open Session, or someone else's reservation). Idle machines stop on their own, so call this only when the work is done.
 
 ### `reserve_runner`
 
