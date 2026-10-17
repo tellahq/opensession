@@ -453,6 +453,33 @@ export class SessionListStore {
     return decodeRows(rows);
   }
 
+  /** Live rows whose id starts with `prefix`, in id order after `afterId`,
+   * at most `limit`. A primary-key range read, so a cursored sweep over one id
+   * family never walks unrelated rows. Null while the live slice has no
+   * coverage, so a caller never mistakes an unbuilt index for "none". */
+  listLiveByIdPrefixCovered(
+    prefix: string,
+    afterId: string,
+    limit: number,
+  ): UnifiedSession[] | null {
+    if (!this.hasCoverage("exclude")) return null;
+    const rows = this.db
+      .query(
+        `
+        SELECT payload FROM session_list
+        WHERE id > ? AND id < ? AND archived = 0
+        ORDER BY id
+        LIMIT ?
+      `,
+      )
+      .all(
+        afterId > prefix ? afterId : prefix,
+        `${prefix}\uffff`,
+        Math.max(1, Math.min(200, Math.floor(limit))),
+      ) as StoredRow[];
+    return decodeRows(rows);
+  }
+
   /** Every materialized member of one known workspace, live or archived. */
   listWorkspaceMembers(workspaceId: string): UnifiedSession[] {
     const rows = this.db

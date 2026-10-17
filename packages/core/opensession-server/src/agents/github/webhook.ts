@@ -53,6 +53,10 @@ import { DEFAULT_REVIEW_PROMPT } from "./prompts";
 import { automaticReviewEventAllowed } from "./public-review";
 import { refreshApprovalGate } from "./approval-gate";
 import { githubAppIdentity } from "../../server/github-auth";
+import {
+  archiveClosedPrSessions,
+  restoreReopenedPrSessions,
+} from "./pr-session-archive";
 
 let onSessionInvalidate: (() => void) | undefined;
 export function setGithubSessionInvalidate(cb: () => void): void {
@@ -350,9 +354,31 @@ export async function handleGithubPrEvent(
 
     // Closed (merged or not): a pending debounced review would fire against a
     // dead PR — cancel it, and drop any handoff round tracking.
+    // Its own review/mention/auto-fix sessions are done too: archive them as
+    // `auto` (never one with a run in flight), and restore them on reopen.
     if (action === "closed") {
       desiredReviews.cancel(ref);
       clearHandoff(pr.number, ghRepo);
+      // Enqueued synchronously (static import) so a later reopen always runs
+      // after this archive, never interleaved with it.
+      archiveClosedPrSessions(pr.number, ghRepo || defaultRepo().ghRepo).catch(
+        (e) =>
+          console.error(
+            `[github] archiving sessions for closed PR #${pr.number} failed:`,
+            e,
+          ),
+      );
+    }
+    if (action === "reopened") {
+      restoreReopenedPrSessions(
+        pr.number,
+        ghRepo || defaultRepo().ghRepo,
+      ).catch((e) =>
+        console.error(
+          `[github] restoring sessions for reopened PR #${pr.number} failed:`,
+          e,
+        ),
+      );
     }
 
     // ── Merge → notify linked sessions + fire configured docs-sync ──

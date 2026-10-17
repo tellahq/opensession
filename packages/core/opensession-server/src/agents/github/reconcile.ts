@@ -48,9 +48,12 @@ export function reconcileEnabled(): boolean {
   return process.env.OPENSESSION_REVIEW_RECONCILE !== "0";
 }
 
-/** One sweep pass over every configured repo. Exported for tests/manual runs. */
-export async function reconcileOpenPrs(): Promise<void> {
-  if (!reconcileEnabled()) return;
+/** One sweep pass over every configured repo. Exported for tests/manual runs.
+ * Returns the `prKey` of every open PR it listed, so the closed-PR session
+ * sweep can skip those without another GitHub call. */
+export async function reconcileOpenPrs(): Promise<Set<string>> {
+  const listedOpen = new Set<string>();
+  if (!reconcileEnabled()) return listedOpen;
   const { resolveReviewConfig, fireReview, fireAutoFix } =
     await import("./webhook");
   const { autoEnabled } = await resolveReviewConfig();
@@ -63,6 +66,7 @@ export async function reconcileOpenPrs(): Promise<void> {
     const prs = await listOpenPrs(repo.ghRepo).catch(
       () => [] as OpenPrSummary[],
     );
+    for (const pr of prs) listedOpen.add(prKey(pr.number, repo.ghRepo));
     const repoOpts = loadReviewOptions(repo.repo);
     for (const pr of prs) {
       if (fires >= MAX_FIRES_PER_CYCLE) break;
@@ -199,6 +203,7 @@ export async function reconcileOpenPrs(): Promise<void> {
       void fireReview(ref, false);
     }
   }
+  return listedOpen;
 }
 
 /** Start the periodic sweep. Parked on globalThis so `--hot` reloads don't
@@ -214,7 +219,19 @@ export function startReconcileSweep(): void {
   if (g.__githubReconcileTimer) return;
   g.__githubReconcileTimer = setTimeout(function tick() {
     reconcileOpenPrs()
-      .catch((e) => console.error("[github] reconcile sweep failed:", e))
+      .catch((e) => {
+        console.error("[github] reconcile sweep failed:", e);
+        return new Set<string>();
+      })
+      // Backfill: archive sessions of PRs that closed without archiving them.
+      .then((listedOpen) =>
+        import("./pr-session-archive").then((m) =>
+          m.runClosedPrSessionSweep(listedOpen),
+        ),
+      )
+      .catch((e) =>
+        console.error("[github] closed-PR session sweep failed:", e),
+      )
       .finally(() => {
         g.__githubReconcileTimer = setTimeout(tick, RECONCILE_MS);
       });
