@@ -63,6 +63,14 @@ of that attempt but does not block the session. Interactive creation starts this
 work in the background, so the first turn may begin before dependencies finish
 installing.
 
+Each setup command may run for `setupTimeoutMinutes` (per repo, default 15).
+On timeout Open Session kills the command's whole setup scope, including
+package-manager workers, and posts a notice in the sessions using that
+worktree. Archiving or deleting a session stops setup still running in its
+worktree, unless another live session uses the same checkout. The lifecycle
+reaper also stops setup scopes whose owners are archived, or that have no owner
+and have outlived the longest configured timeout.
+
 Commit `.agents/setup` and `.agents/portals.json` to let each workspace
 provision itself and expose its app as a Portal on demand. This also lets an
 agent open its own change in a browser. See [repo-lifecycle.md](repo-lifecycle.md).

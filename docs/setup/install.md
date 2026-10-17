@@ -447,7 +447,7 @@ The two sections a team install normally sets:
 
 - `repos` — your git repos (checkout path, `defaultBranch`, `ghRepo`
   owner/name for the `gh` CLI, `default: true` on the main one, optional
-  `depsInstall`, warm cache markers, deployment tracking,
+  `depsInstall`, `setupTimeoutMinutes`, warm cache markers, deployment tracking,
   and security-scan guidance). When `repos` is present it is authoritative.
   With no config, a source checkout registers itself as the shared
   `opensession` repo.
