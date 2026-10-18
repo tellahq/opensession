@@ -232,6 +232,10 @@ Remove a teammate from a workspace's collaborators. Removing someone who is not 
 
 Built for: automation. 16 tools, without `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`.
 
+### Variant · wake of a person's wait in an automation-owned session (isAdmin: false, waitContinuation: true)
+
+Built for: automation. 7 tools, without `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`, `spawn_task`, `cancel_task`, `get_session_reviewer`, `set_session_reviewer`, `remove_session_reviewer`, `accept_session_review`, `list_collaborators`, `add_collaborator`, `remove_collaborator`.
+
 ## opensession-admin
 
 Manage automations, MCP connections and channel memory.

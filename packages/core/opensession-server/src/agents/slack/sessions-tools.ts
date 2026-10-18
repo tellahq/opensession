@@ -17,7 +17,8 @@
  * collaborator tools in collaboration-tools.ts) are gated to the trusted user
  * via `isAdmin`, matching opensession-admin. The spawn suite and the
  * background waits (wait_for without its timer kind) also reach the
- * `humanResume` and `automationSelf` shapes.
+ * `humanResume` and `automationSelf` shapes, and the waits plus task_status
+ * reach `waitContinuation`, the turn a `humanResume` wait wakes.
  */
 import { audit } from "../../server/audit";
 import { collaborationTools } from "./collaboration-tools";
@@ -88,6 +89,15 @@ export interface SessionsToolContext {
    * workspaces, not automation-owned ones.
    */
   humanResume?: boolean;
+  /**
+   * The wake of a background wait that a `humanResume` turn (or an earlier
+   * continuation) registered, in an automation-owned session. No person is
+   * present, so it grants only the read tools, task_status and the waits
+   * (without the timer kind), never spawning or cancelling: enough to re-arm
+   * a wait or move on to the next child the person asked it to watch.
+   * `createdBy` is that person.
+   */
+  waitContinuation?: boolean;
   /**
    * Who owns a session these tools create, resolved at call time. The turn's
    * sender (`createdBy`) may be a webhook or a scheduled check-back while a
@@ -878,14 +888,20 @@ export function createSessionsMcpServer(
 
   // Background waits. Every shape that can start other sessions (the
   // trusted user, a person prompting an automation-owned session, a
-  // self-improving automation) can also wait on them: the run instructions
+  // self-improving automation) can also wait on them, and so can the turn
+  // such a person's wait wakes (waitContinuation): the run instructions
   // and the sessions capability line tell any run carrying this server to use
   // wait_for, so withholding it left those runs told to call a tool they did
   // not have. A wait only reads state and wakes this same session. The timer
   // kind stays with the trusted user: elsewhere it would be a self-wake that
   // the opensession-schedule server (withheld from automation-owned
   // sessions) is deliberately not there to provide.
-  if (ctx.isAdmin || ctx.automationSelf || ctx.humanResume) {
+  if (
+    ctx.isAdmin ||
+    ctx.automationSelf ||
+    ctx.humanResume ||
+    ctx.waitContinuation
+  ) {
     tools.push(
       tool(
         "wait_for",
@@ -983,12 +999,18 @@ export function createSessionsMcpServer(
               "A timer wait is not available in this session. Use kind pr_checks, workflow_run, or session_turn.",
             );
           const waitId = durableToolRequestId(ctx, "wait_for", extra, args);
+          // In an automation-owned session a person's own turn (or the wake
+          // of their earlier wait) registers this wait, so its wake keeps
+          // their wait tools; see waitContinuationOwner.
+          const wakeAs =
+            ctx.humanResume || ctx.waitContinuation ? ctx.createdBy : undefined;
           const current = getSessionControl().getSession(sessionId);
           const result =
             args.kind === "timer"
               ? await registerTimerAgentWait({
                   sessionId,
                   user: ctx.createdBy,
+                  wakeAs,
                   seconds: args.seconds ?? Number.NaN,
                   prompt: args.prompt,
                   waitId,
@@ -997,6 +1019,7 @@ export function createSessionsMcpServer(
                 ? await registerWorkflowRunAgentWait({
                     sessionId,
                     user: ctx.createdBy,
+                    wakeAs,
                     repo: args.repo || current?.repo || "",
                     runId: args.run_id,
                     workflow: args.workflow,
@@ -1012,6 +1035,7 @@ export function createSessionsMcpServer(
                   ? await registerSessionTurnAgentWait({
                       sessionId,
                       user: ctx.createdBy,
+                      wakeAs,
                       targetSessionId: args.session_id || "",
                       timeoutSeconds: args.timeout_seconds,
                       prompt: args.prompt,
@@ -1020,6 +1044,7 @@ export function createSessionsMcpServer(
                   : await registerPrChecksAgentWait({
                       sessionId,
                       user: ctx.createdBy,
+                      wakeAs,
                       repo: args.repo || current?.repo || "",
                       branch: args.branch || current?.branch || "",
                       timeoutSeconds: args.timeout_seconds,
@@ -1561,6 +1586,22 @@ export function createSessionsMcpServer(
     );
   }
 
+  const taskStatusTool = tool(
+    "task_status",
+    "Status of a spawned task (or any session id): running / waiting (blocked on a question) / done / error, plus the recent transcript tail, a diff stat when it changed code, and its PR when one exists.",
+    {
+      taskId: z
+        .string()
+        .describe("The task/session id returned by spawn_task."),
+      transcript_lines: z
+        .number()
+        .optional()
+        .describe("Trailing transcript entries to include (default 12)."),
+    },
+    async (args: { taskId: string; transcript_lines?: number }) =>
+      text(await taskStatusImpl(args)),
+  );
+
   // Tasks — fire-and-forget child sessions (spawn / poll / cancel). Available
   // to the trusted user, and to self-improving automations (automationSelf):
   // there the spawn suite is the ONLY control surface — no answer/send/cancel/
@@ -1632,21 +1673,7 @@ export function createSessionsMcpServer(
           );
         },
       ),
-      tool(
-        "task_status",
-        "Status of a spawned task (or any session id): running / waiting (blocked on a question) / done / error, plus the recent transcript tail, a diff stat when it changed code, and its PR when one exists.",
-        {
-          taskId: z
-            .string()
-            .describe("The task/session id returned by spawn_task."),
-          transcript_lines: z
-            .number()
-            .optional()
-            .describe("Trailing transcript entries to include (default 12)."),
-        },
-        async (args: { taskId: string; transcript_lines?: number }) =>
-          text(await taskStatusImpl(args)),
-      ),
+      taskStatusTool,
       tool(
         "cancel_task",
         "Cancel a spawned task's in-flight run (drops queued messages too). Only runs this server owns" +
@@ -1675,6 +1702,14 @@ export function createSessionsMcpServer(
       }),
     );
   }
+
+  // The wake of a person's wait (waitContinuation) checks on the children
+  // that person's turn spawned, but spawns and cancels nothing itself.
+  if (
+    ctx.waitContinuation &&
+    !(ctx.isAdmin || ctx.automationSelf || ctx.humanResume)
+  )
+    tools.push(taskStatusTool);
 
   return createSdkMcpServer({
     name: "opensession-sessions",

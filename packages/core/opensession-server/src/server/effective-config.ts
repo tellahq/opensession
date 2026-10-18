@@ -273,7 +273,8 @@ export async function inProcessServerNames(
   } = await import("./interactive-mcp");
   if (
     inputs.inProcessMcpBranch === "automation-self-improve" ||
-    inputs.inProcessMcpBranch === "automation+human-spawn"
+    inputs.inProcessMcpBranch === "automation+human-spawn" ||
+    inputs.inProcessMcpBranch === "automation+wait-continuation"
   ) {
     // The automation-bar set the turn really carries (papercuts, report,
     // selfImprove pair, and the human turn's spawn suite), from the same

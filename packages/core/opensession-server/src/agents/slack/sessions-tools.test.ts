@@ -1098,6 +1098,36 @@ describe("wait_for availability", () => {
     expect(names).not.toContain("create_session");
   });
 
+  it("keeps the waits and task_status, but not spawning, on the wake of a person's wait", async () => {
+    const tools = await listed({
+      createdBy: "Michiel",
+      isAdmin: false,
+      waitContinuation: true,
+      currentSessionId: "bks-parent",
+    });
+    const names = tools.map((t) => t.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "wait_for",
+        "wait_status",
+        "cancel_wait",
+        "task_status",
+      ]),
+    );
+    expect(kindsOf(tools)).toEqual([
+      "pr_checks",
+      "workflow_run",
+      "session_turn",
+    ]);
+    for (const withheld of [
+      "spawn_task",
+      "cancel_task",
+      "send_to_session",
+      "create_session",
+    ])
+      expect(names).not.toContain(withheld);
+  });
+
   it("keeps the timer kind for the trusted user", async () => {
     const tools = await listed({
       createdBy: "Michiel",

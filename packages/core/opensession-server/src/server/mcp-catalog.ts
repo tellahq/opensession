@@ -161,6 +161,18 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
             currentSessionId: SESSION_ID,
           }),
       },
+      {
+        label:
+          "wake of a person's wait in an automation-owned session (isAdmin: false, waitContinuation: true)",
+        runClasses: ["automation"],
+        build: () =>
+          createSessionsMcpServer({
+            createdBy: USER,
+            isAdmin: false,
+            waitContinuation: true,
+            currentSessionId: SESSION_ID,
+          }),
+      },
     ],
   },
   {
