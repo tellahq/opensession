@@ -230,7 +230,7 @@ Remove a teammate from a workspace's collaborators. Removing someone who is not 
 
 ### Variant · selfImprove automation (isAdmin: false, automationSelf: true)
 
-Built for: automation. 13 tools, without `wait_for`, `wait_status`, `cancel_wait`, `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`.
+Built for: automation. 16 tools, without `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`.
 
 ## opensession-admin
 
