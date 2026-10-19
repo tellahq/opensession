@@ -383,12 +383,16 @@ export function useSessionConversationActions({
     });
   }
   const canForkSession = session.source === "opensession" && !!session.ran;
-  const handleFork = useCallback(
-    (messageId?: string) => {
-      void navigation.duplicateSession(messageId);
-    },
-    [navigation],
-  );
+  // The app rebuilds its navigation actions whenever the session list
+  // changes. Read them at click time so a background session's update does
+  // not hand the transcript a new `onFork` and re-render every range.
+  const navigationRef = useRef(navigation);
+  useLayoutEffect(() => {
+    navigationRef.current = navigation;
+  });
+  const handleFork = useCallback((messageId?: string) => {
+    void navigationRef.current.duplicateSession(messageId);
+  }, []);
   const continueAfterFailure = useCallback(() => {
     send({
       type: "prompt",
