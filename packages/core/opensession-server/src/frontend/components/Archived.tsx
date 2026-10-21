@@ -20,7 +20,7 @@ import {
   ARCHIVED_SECTION_LABEL,
   ARCHIVED_SECTION_ROWS,
 } from "../lib/archived-classes";
-import React, { useState, useEffect, useRef } from "react";
+import React, { startTransition, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { z } from "zod";
 import type { UnifiedSession } from "../lib/types";
@@ -227,6 +227,36 @@ function originChip(s: UnifiedSession): { label: string; tone: string } | null {
     };
   }
   return null;
+}
+
+/**
+ * The search box keeps its own text, so a keystroke repaints only the field.
+ * The page gets the query in a transition: refiltering and redrawing up to
+ * PAGE_SIZE rows is interruptible work behind the typing, not part of it.
+ */
+function ArchivedSearchField({
+  initial,
+  onSearch,
+}: {
+  initial: string;
+  onSearch: (query: string) => void;
+}) {
+  const [value, setValue] = useState(initial);
+  return (
+    <Input
+      className="w-[200px] min-w-[90px] shrink-[100] phone:min-h-11 phone:w-full phone:px-3.5 phone:text-input-phone"
+      type="search"
+      aria-label="Search archived sessions"
+      placeholder="Search archived…"
+      value={value}
+      onChange={(e) => {
+        const next = e.target.value;
+        setValue(next);
+        startTransition(() => onSearch(next));
+      }}
+      spellCheck={false}
+    />
+  );
 }
 
 export function Archived({
@@ -443,15 +473,7 @@ export function Archived({
   // Match Pull requests on desktop. On a phone the pickers sit in a row above
   // the list, as on Feed, while Search floats at the thumb edge below it.
   const searchAction = (
-    <Input
-      className="w-[200px] min-w-[90px] shrink-[100] phone:min-h-11 phone:w-full phone:px-3.5 phone:text-input-phone"
-      type="search"
-      aria-label="Search archived sessions"
-      placeholder="Search archived…"
-      value={search}
-      onChange={(e) => setSearch(e.target.value)}
-      spellCheck={false}
-    />
+    <ArchivedSearchField initial={search} onSearch={setSearch} />
   );
   // Owner and repository are pickers side by side, each wearing its value, so
   // the scope reads without opening anything. Reason stays behind an icon: it
