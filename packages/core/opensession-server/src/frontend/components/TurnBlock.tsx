@@ -31,11 +31,13 @@ import {
 } from "../lib/started-suggested-tasks";
 import {
   suggestedTaskOf,
+  unwrapMcpDispatcher,
   type SuggestedTask,
 } from "@tellahq/opensession-protocol/tool-presentation";
 import { unplacedMedia } from "../lib/placed-media";
 import { IconChevronDown, IconStack } from "./icons";
 import { cn } from "../ui/cn";
+import { isAppleReleasePlanTool } from "../lib/apple-release";
 import { Fold } from "../ui/fold";
 import { TextShimmer } from "../ui/text-shimmer";
 import { Tooltip } from "../ui/tooltip";
@@ -634,6 +636,14 @@ function isCompactTool(
     COMPACT_TOOL_FAMILIES.has(toolFamily(name));
   if (!routine) return false;
   if (assetToolPath(name, entry.toolInput)) return false;
+  // A release plan carries its approval card, which a folded run would hide.
+  if (
+    isAppleReleasePlanTool(
+      unwrapMcpDispatcher(name, entry.toolInput).toolName,
+    ) &&
+    !result?.isError
+  )
+    return false;
   return !result?.featuredMedia?.length;
 }
 

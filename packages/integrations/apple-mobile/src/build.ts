@@ -1,7 +1,14 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
-import { loadConfig } from "./config";
+import { loadConfig, XCODEGEN_SPEC } from "./config";
+import { platformProfile } from "./platforms";
 import { findExecutable, runChecked, runCommand } from "./exec";
 import { resolveProjectDir, resolveProjectPath } from "./security";
 
@@ -34,6 +41,7 @@ export async function doctor(projectDirInput?: string) {
     swift: await probe("swift", ["--version"]),
     xtool: await probe("xtool", ["--version"]),
     xcodebuild: await probe("xcodebuild", ["-version"]),
+    xcodegen: await probe("xcodegen", ["--version"]),
     xcrun: await probe("xcrun", ["--version"]),
     unzip: await probe("unzip", ["-v"]),
     python3: await probe("python3", ["--version"]),
@@ -103,24 +111,70 @@ export async function buildUnsigned(
   }
 
   const xcode = config.xcode!;
+  const profile = platformProfile(config.platform);
+  const results = [];
+  if (xcode.generator === "xcodegen") {
+    results.push(
+      await runChecked(
+        {
+          executable: "xcodegen",
+          args: ["generate", "--spec", XCODEGEN_SPEC],
+          cwd: projectDir,
+        },
+        { timeoutMs: 10 * 60_000 },
+      ),
+    );
+  }
   const containerPath = resolveProjectPath(projectDir, xcode.path);
+  const buildConfiguration =
+    xcode.configuration ?? selected[0]!.toUpperCase() + selected.slice(1);
+  const derivedData = resolveProjectPath(
+    projectDir,
+    join(
+      config.release?.artifactDirectory ?? ".build/apple-mobile",
+      "DerivedData",
+    ),
+    { mustExist: false },
+  );
   const args = [
     xcode.container === "workspace" ? "-workspace" : "-project",
     containerPath,
     "-scheme",
     xcode.scheme,
     "-configuration",
-    xcode.configuration ?? selected[0]!.toUpperCase() + selected.slice(1),
+    buildConfiguration,
     "-sdk",
-    "iphonesimulator",
+    profile.unsignedSdk,
+    "-derivedDataPath",
+    derivedData,
     "CODE_SIGNING_ALLOWED=NO",
     "build",
   ];
-  const result = await runChecked(
-    { executable: "xcodebuild", args, cwd: projectDir },
-    { timeoutMs: 45 * 60_000 },
+  results.push(
+    await runChecked(
+      { executable: "xcodebuild", args, cwd: projectDir },
+      { timeoutMs: 45 * 60_000 },
+    ),
   );
-  return { backend: "xcode", configuration: selected, artifact: null, result };
+  const products = join(
+    derivedData,
+    "Build",
+    "Products",
+    config.platform === "ios"
+      ? `${buildConfiguration}-${profile.unsignedSdk}`
+      : buildConfiguration,
+  );
+  const app = existsSync(products)
+    ? readdirSync(products).find((entry) => entry.endsWith(".app"))
+    : undefined;
+  return {
+    backend: "xcode",
+    configuration: selected,
+    // Project-relative, so it can go straight to start_simulator_portal's
+    // appPath when the project is the session workspace.
+    artifact: app ? relative(projectDir, join(products, app)) : null,
+    results,
+  };
 }
 
 export async function inspectIpa(
