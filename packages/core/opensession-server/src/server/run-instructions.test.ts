@@ -178,8 +178,10 @@ describe("buildRunInstructions", () => {
     // timer. "Messages during a turn" adds ~170: without it, a reply to a
     // mid-turn message read as progress narration, or never came. The
     // name rule in "Finish your turns" adds ~110: models opened replies
-    // with the prompter's name, which reads as curt.
-    expect(prompt.length).toBeLessThan(4_250);
+    // with the prompter's name, which reads as curt. Linking child sessions
+    // in a report adds ~100: a PR summary without them left the person
+    // hunting for the session that owns each PR.
+    expect(prompt.length).toBeLessThan(4_350);
   });
 
   test("asks for visual proof by default only where walkthroughs are mounted", () => {

@@ -9,6 +9,11 @@
  * point); without a grant the route 403s with a pointer to the Account page.
  */
 import type { RouteContext } from "./context";
+import {
+  SLACK_THREAD_TARGET,
+  slackThreadOption,
+  type SlackThreadTarget,
+} from "../slack-thread-target";
 import { configuredIntegration } from "../config";
 import {
   mergeSlackChannels,
@@ -69,6 +74,9 @@ export async function slackChannelsPayload(
     everyChannel?: boolean;
     /** Preferred channel, when the feature has its own setting for one. */
     defaultChannel?: string;
+    /** The Slack thread the session started from: listed first and
+     *  preselected, since a Slack-started session reports back there. */
+    thread?: SlackThreadTarget;
   } = {},
 ) {
   const configured = configuredSlackChannels();
@@ -85,11 +93,13 @@ export async function slackChannelsPayload(
         ? await slackChannelsForUser(caller, grantToken)
         : [];
   const channels = mergeSlackChannels(configured, directory);
-  const preferred =
-    opts.defaultChannel &&
-    channels.some((channel) => channel.id === opts.defaultChannel)
+  const preferred = opts.thread
+    ? SLACK_THREAD_TARGET
+    : opts.defaultChannel &&
+        channels.some((channel) => channel.id === opts.defaultChannel)
       ? opts.defaultChannel
       : defaultSlackChannel(configured) || channels[0]?.id;
+  if (opts.thread) channels.unshift(slackThreadOption(opts.thread));
   return {
     channels,
     defaultChannel: preferred,

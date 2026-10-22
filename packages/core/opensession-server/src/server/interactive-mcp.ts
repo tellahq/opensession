@@ -16,7 +16,11 @@
 import { lazyServerRecord } from "./inprocess-mcp";
 import { deskNavigationMcp } from "./desk-navigation-mcp";
 import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
-import { interactivePrompter, sessionCreationOwner } from "./session-actors";
+import {
+  interactivePrompter,
+  sessionCreationOwner,
+  waitContinuationOwner,
+} from "./session-actors";
 import { isDevInstance } from "./dev-mode";
 import { createRunnersMcpServer } from "./runners-mcp";
 import { createAdminMcpServer } from "../agents/slack/admin-tools";
@@ -598,6 +602,11 @@ export function interactiveMcpServers(
  * person is driving, and an owner still approves each personal one.
  * Descendants (sandboxed children with a publication policy) are excluded.
  *
+ * A wait registered on such a turn wakes as `waitActor(person)`. That turn
+ * gets `opensession-sessions` in its `waitContinuation` shape only: the
+ * waits and task_status, so it can re-arm or move on to the next child,
+ * never spawn, cancel or borrow credentials.
+ *
  * An auto-triage session that reports into a Plain discussion
  * (`plainDiscussionId`) also carries `opensession-plain-discussion`, so a
  * follow-up asked in that discussion can reply to the customer or run a
@@ -627,6 +636,26 @@ export async function automationSessionMcp(
     ...((await selfImproveMcpForSession(session, sessionId)) || {}),
   };
   const prompter = interactivePrompter(opts.humanPrompter);
+  // The wake of a wait that a person's own turn registered: no person is
+  // present, so no spawn suite and no keychain, but the turn keeps the waits
+  // and task_status to follow up on what that person asked it to watch. A
+  // selfImprove automation's own shape already carries more, so it stays.
+  const continuing = prompter
+    ? null
+    : waitContinuationOwner(opts.humanPrompter);
+  if (
+    continuing &&
+    session.automation &&
+    !session.automationDescendantPolicy &&
+    !servers["opensession-sessions"]
+  ) {
+    servers["opensession-sessions"] = createSessionsMcpServer({
+      createdBy: continuing,
+      isAdmin: false,
+      waitContinuation: true,
+      currentSessionId: sessionId,
+    });
+  }
   if (prompter && session.automation && !session.automationDescendantPolicy) {
     servers["opensession-sessions"] = createSessionsMcpServer({
       createdBy: prompter,

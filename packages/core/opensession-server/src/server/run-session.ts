@@ -142,6 +142,7 @@ import {
   clearReplySuggestions,
   maybeSuggestReplies,
 } from "./reply-suggestions";
+import { draftShippedChangeAfterTurn } from "./shipped-change-draft";
 import {
   clearComposerPrediction,
   maybePredictComposer,
@@ -239,7 +240,7 @@ import {
   withUploadsNote,
 } from "./uploads";
 import {
-  attachedGithubRepos,
+  sessionGithubRepos,
   buildSessionNote,
   retrievedMemoryNoteFor,
   sessionRepoIds,
@@ -3241,7 +3242,7 @@ async function runSessionPromptInner(
       : undefined;
   const attachedGhRepos = session.automationDescendantPolicy
     ? undefined
-    : attachedGithubRepos(session);
+    : sessionGithubRepos(session);
   const runnerRun = await maybeLaunchRunnerRun(session, {
     prompt,
     hostId: startToken,
@@ -4021,6 +4022,19 @@ async function runSessionPromptInner(
       // (composer-prediction.ts). Same presence gate as the chips.
       maybePredictComposer(sessionId, user || session.startedBy || undefined);
     }
+    // A turn that leaves the session's PR merged writes the "Send to Slack"
+    // draft now and saves it on the session, so it is ready whenever someone
+    // opens the session (shipped-change-draft.ts).
+    if (!endedWithError)
+      void draftShippedChangeAfterTurn(
+        sessionId,
+        user || session.startedBy || undefined,
+      ).catch((error) =>
+        console.warn(
+          `[shipped-change] background draft for ${sessionId} failed:`,
+          error,
+        ),
+      );
   }
 }
 

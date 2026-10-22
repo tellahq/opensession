@@ -1540,7 +1540,7 @@ struct PersonalPromptSection: View {
     }
 }
 
-/// Where "Start an Agent" is explained and handed over to the system.
+/// Where "Start an Agent" and "Talk to Desk" are explained and handed over to the system.
 ///
 /// It needs no setup — an `AppShortcutsProvider` registers it the moment the
 /// app is installed (see `AgentShortcuts`), and the widgets ship with it — but
@@ -1550,6 +1550,15 @@ struct PersonalPromptSection: View {
 /// what the shortcut does, where its widgets live, a `ShortcutsLink` into the
 /// Shortcuts app, and the paths Apple gives no deep link for.
 struct ShortcutsSettingsView: View {
+    #if os(iOS)
+    private static let talkToDeskDetail = """
+    Starts a live voice call with your Desk. It stays in the Dynamic Island, \
+    so you can keep using your phone.
+    """
+    #else
+    private static let talkToDeskDetail = "Opens the Desk on a live voice call."
+    #endif
+
     var body: some View {
         Form {
             Section {
@@ -1560,6 +1569,11 @@ struct ShortcutsSettingsView: View {
                     Opens the composer with the mic listening, so you can speak \
                     the idea and still change repo, mode or model before sending.
                     """
+                )
+                shortcut(
+                    icon: "waveform",
+                    title: "Talk to Desk",
+                    detail: Self.talkToDeskDetail
                 )
             } footer: {
                 // No section header: the navigation title above already says
@@ -1610,7 +1624,7 @@ struct ShortcutsSettingsView: View {
                 #endif
             } footer: {
                 #if os(iOS)
-                Text("To put it on the Action Button: iPhone Settings → Action Button → swipe to Shortcut → Choose a Shortcut → \(AppBrand.appName) → Start an Agent.")
+                Text("To put it on the Action Button: iPhone Settings → Action Button → swipe to Shortcut → Choose a Shortcut → \(AppBrand.appName) → Start an Agent or Talk to Desk.")
                 #else
                 Text("Run it from Spotlight, or say it to Siri.")
                 #endif

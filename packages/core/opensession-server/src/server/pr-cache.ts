@@ -1268,7 +1268,7 @@ export interface RecentPrEntry extends Omit<
 }
 
 /** Only trusted authors may turn a PR-body link into an in-app session route. */
-function trustedPrSessionId(
+export function trustedPrSessionId(
   pr: Pick<PrInfo, "author" | "sessionRef">,
 ): string | undefined {
   if (!pr.sessionRef) return undefined;

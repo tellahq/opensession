@@ -56,10 +56,16 @@ interface PendingDeploy {
   ghRepo?: string;
   author?: string;
   mergedBy?: string;
+  /** Configured repo id, for the session's deploy record. */
+  repoId?: string;
+  /** Set when this merge's own Deploy run finished without succeeding. The
+   *  entry stays so a re-run, or a later deploy that includes it, still
+   *  settles it. */
+  concluded?: string;
 }
 
 /** merge_commit_sha → the merge we're waiting on a deploy for. */
-type PendingDeploys = Record<string, PendingDeploy>;
+export type PendingDeploys = Record<string, PendingDeploy>;
 
 function readPending(): PendingDeploys {
   if (!existsSync(PENDING_PATH)) return {};
@@ -94,6 +100,16 @@ export async function sessionsAwaitingDeploy(): Promise<Set<string>> {
     for (const id of p.sessionIds || []) ids.add(id);
   }
   return ids;
+}
+
+/** Loaded on use, like the other session-store calls here. */
+async function recordPrDeploy(
+  ...args: Parameters<
+    (typeof import("../../server/pr-deploy-state"))["recordPrDeploy"]
+  >
+): Promise<void> {
+  const { recordPrDeploy } = await import("../../server/pr-deploy-state");
+  await recordPrDeploy(...args);
 }
 
 /** Deduplicate ordinary multi-session matches and fail closed on an
@@ -228,9 +244,42 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
       ...(ghRepo ? { ghRepo } : {}),
       ...(author ? { author } : {}),
       mergedBy,
+      repoId: workspaceId,
     };
     writeJsonAtomic(PENDING_PATH, pending);
+    // The "Send to Slack" card waits for the deploy (pr-deploy-state.ts).
+    await recordPrDeploy(sessionIds, {
+      repoId: workspaceId,
+      prNumber,
+      sha: pr.merge_commit_sha,
+      state: "deploying",
+      at: new Date().toISOString(),
+    });
   }
+}
+
+/**
+ * Merges a successful deploy of `run` put live: its own commit, plus every
+ * earlier merge in the same repo. A deploy ships the branch head, so a merge
+ * recorded before the run was created is in it. That covers a merge whose own
+ * run was cancelled when a newer merge replaced it.
+ */
+export function mergesCoveredByDeploy(
+  pending: PendingDeploys,
+  run: { head_sha: string; created_at?: string },
+  ghRepo: string,
+): string[] {
+  const created = Date.parse(run.created_at || "");
+  return Object.entries(pending)
+    .filter(
+      ([sha, entry]) =>
+        sha === run.head_sha ||
+        (!!ghRepo &&
+          entry.ghRepo === ghRepo &&
+          Number.isFinite(created) &&
+          Date.parse(entry.recordedAt) <= created),
+    )
+    .map(([sha]) => sha);
 }
 
 /** `workflow_run` webhook payload; acts only on Deploy completions we're waiting on. */
@@ -241,15 +290,50 @@ export async function handleDeployWorkflowRun(payload: any): Promise<void> {
     return;
 
   const pending = readPending();
+  const success = run.conclusion === "success";
+  const runRepo: string = payload?.repository?.full_name || "";
+  let settledCovered = false;
+  if (success) {
+    for (const sha of mergesCoveredByDeploy(pending, run, runRepo)) {
+      const covered = pending[sha];
+      if (covered.repoId)
+        await recordPrDeploy(covered.sessionIds, {
+          repoId: covered.repoId,
+          prNumber: covered.prNumber,
+          sha,
+          state: "deployed",
+          at: covered.recordedAt,
+          ...(run.html_url ? { url: run.html_url } : {}),
+        });
+      // A merge whose own run is still going keeps its entry: that run
+      // still reports to the session.
+      if (sha !== run.head_sha && covered.concluded) {
+        delete pending[sha];
+        settledCovered = true;
+      }
+    }
+  }
   const entry = pending[run.head_sha];
-  if (!entry) return;
-  delete pending[run.head_sha];
+  if (!entry) {
+    if (settledCovered) writeJsonAtomic(PENDING_PATH, pending);
+    return;
+  }
+  if (success) delete pending[run.head_sha];
+  else entry.concluded = run.conclusion || "failure";
   writeJsonAtomic(PENDING_PATH, pending);
+  // A cancelled run was replaced by a newer deploy, which settles this one.
+  if (!success && run.conclusion !== "cancelled" && entry.repoId)
+    await recordPrDeploy(entry.sessionIds, {
+      repoId: entry.repoId,
+      prNumber: entry.prNumber,
+      sha: run.head_sha,
+      state: "failed",
+      at: entry.recordedAt,
+      ...(run.html_url ? { url: run.html_url } : {}),
+    });
 
   const control = tryGetSessionControl();
   if (!control) return;
-
-  const success = run.conclusion === "success";
   const message = success
     ? `PR #${entry.prNumber} deployed. No action needed.`
     : `Deploy ${run.conclusion || "failed"} for PR #${entry.prNumber}: ${run.html_url}`;

@@ -109,6 +109,9 @@ struct SessionsListView: View {
     @State private var newSessionRequest: NewSessionRequest?
     /// Parked "Start an Agent" requests (`StartAgentIntent`, widgets, Siri).
     @State private var quickCapture = QuickCapture.shared
+    /// Parked "Talk to Desk" requests (`TalkToDeskIntent`). The Desk sheet
+    /// takes the request and starts the call; this only opens the sheet.
+    @State private var deskCall = DeskCallRequest.shared
     /// A session tapped in the Live Activity, parked until the list has loaded.
     @State private var requestedSession = SessionOpenRequest.shared
     /// Opening prompts (and images) of just-created sessions, keyed by id —
@@ -421,8 +424,16 @@ struct SessionsListView: View {
         #endif
     }
 
-    var body: some View {
+    /// Kept out of `body`'s modifier chain, which is already at the edge of
+    /// what the type checker accepts in reasonable time.
+    private var deskCallContainer: some View {
         navigationContainer
+            .onAppear(perform: openDeskCall)
+            .onChange(of: deskCall.request?.id) { openDeskCall() }
+    }
+
+    var body: some View {
+        deskCallContainer
             #if DEBUG && os(iOS)
             .overlay {
                 if presentsPrReviewCardsFixture {
@@ -1699,6 +1710,11 @@ struct SessionsListView: View {
     private func openFile(_ url: URL) {
         // Back from the Tailscale switch shortcut: nothing to import, and
         // the list's own poll notices the server answering again.
+        // The Desk call's Live Activity, tapped: back to the call screen.
+        if DeskCallLink.matches(url) {
+            DeskCallRequest.shared.ask()
+            return
+        }
         if TailscaleHandoff.isReturn(url) { return }
         Task {
             do {
@@ -1724,6 +1740,13 @@ struct SessionsListView: View {
     private func openQuickCapture() {
         guard let request = quickCapture.take() else { return }
         newSessionRequest = NewSessionRequest(dictate: request.dictate)
+    }
+
+    /// Open the Desk for a "Talk to Desk" press. An already open Desk sees
+    /// the request itself.
+    private func openDeskCall() {
+        guard deskCall.request != nil else { return }
+        showDesk = true
     }
 
     private func openRequestedSession() {

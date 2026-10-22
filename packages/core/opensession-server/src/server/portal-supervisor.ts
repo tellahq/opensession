@@ -1862,11 +1862,11 @@ export async function ensureRemoteSandboxPortalAgent(input: {
     sandboxId: input.sandbox.id,
     port: input.port,
   };
-  const current = remoteRelayAgents.get(agentKey);
+  // The relay renews a connected sidecar's credential itself, so check the
+  // connection's expiry, not the one this process launched it with.
   if (
-    current &&
-    current.expiresAt > Date.now() + 30_000 &&
-    sandboxPortalRelayConnected(relayIdentity)
+    remoteRelayAgents.has(agentKey) &&
+    sandboxPortalRelayConnected(relayIdentity, 30_000)
   ) {
     return ensureSandboxPortalRelay({ ...relayIdentity, name: input.name });
   }

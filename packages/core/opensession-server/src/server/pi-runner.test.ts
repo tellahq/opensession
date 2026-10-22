@@ -1667,6 +1667,27 @@ describe("local-tool path containment", () => {
     await expect(ops.edit.access("/etc/hosts")).rejects.toThrow(/outside/);
   });
 
+  test("guarded ops also reach the session's own scratch dir, not other /tmp", async () => {
+    const scratch = mkdtempSync(join(tmpdir(), "pi-scratch-"));
+    try {
+      const ops = makeGuardedToolOps(ws, scratch);
+      await ops.write.mkdir(join(scratch, "shots"));
+      await ops.write.writeFile(join(scratch, "shots", "a.txt"), "shot");
+      expect(
+        (await ops.read.readFile(join(scratch, "shots", "a.txt"))).toString(),
+      ).toBe("shot");
+      expect(await ops.ls.readdir(scratch)).toContain("shots");
+      await expect(ops.read.readFile(join(tmpdir(), "x.txt"))).rejects.toThrow(
+        /\$TMPDIR/,
+      );
+      await expect(ops.read.access("/proc/self/environ")).rejects.toThrow(
+        /not accessible/,
+      );
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
   test("guarded find.glob walks in-process, contained, with ignores", async () => {
     const ops = makeGuardedToolOps(ws);
     const hits = await ops.find.glob("*.ts", ws, {

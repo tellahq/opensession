@@ -54,6 +54,7 @@ import { formatDuration, fullTime } from "../lib/time";
 import {
   getTurnActivityPrefs,
   onTurnActivityChanged,
+  type TurnActivityPrefs,
 } from "../lib/turn-activity";
 import {
   collectTouchedFiles,
@@ -75,6 +76,16 @@ interface Props {
   onOpenSubagent?: (agentId: string, label: string) => void;
   /** Lets wire-clamped intermediate notes fetch their full content. */
   sessionId?: string;
+}
+
+/** The two Settings → Preferences answers for how work folds, kept live. */
+export function useTurnActivityPrefs(): TurnActivityPrefs {
+  const [pref, setPref] = useState(getTurnActivityPrefs);
+  useEffect(
+    () => onTurnActivityChanged(() => setPref(getTurnActivityPrefs())),
+    [],
+  );
+  return pref;
 }
 
 /**
@@ -126,11 +137,7 @@ export const TurnBlock = function TurnBlock({
   // steps" followed by "57 steps". "Always open" and a person's manual choice
   // still win. Failures stay one click away, and explicitly surfaced media
   // outlives the fold on its own (featuredTurnMedia).
-  const [pref, setPref] = useState(getTurnActivityPrefs);
-  useEffect(
-    () => onTurnActivityChanged(() => setPref(getTurnActivityPrefs())),
-    [],
-  );
+  const pref = useTurnActivityPrefs();
   const defaultExpanded =
     pref.work === "open" ||
     (pref.work === "running" && live && expandWhileRunning);

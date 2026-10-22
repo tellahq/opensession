@@ -1,10 +1,14 @@
 import {
   archiveSessionApi,
   deleteWorkspaceApi,
+  discardWorkspaceDraftApi,
   updateWorkspaceApi,
 } from "../lib/api";
 import type { Route } from "../lib/app-route";
-import type { OpenNextSidebarItem } from "../lib/sidebar-types";
+import type {
+  DeleteWorkspaceOptions,
+  OpenNextSidebarItem,
+} from "../lib/sidebar-types";
 import type { UnifiedSession } from "../lib/types";
 
 type WorkspaceMutationsParams = {
@@ -128,10 +132,17 @@ export function useWorkspaceMutations({
     if (route.view === "workspace" && route.id === workspaceId) goBack();
   };
 
-  const deleteWorkspaceFromSidebar = async (workspaceId: string) => {
+  // A draft row may be a workspace whose sessions are all archived, so its
+  // delete discards only the draft: deleting the workspace would take the
+  // archived sessions with it.
+  const deleteWorkspaceFromSidebar = async (
+    workspaceId: string,
+    options: DeleteWorkspaceOptions = {},
+  ) => {
     const wasOpen = route.view === "workspace" && route.id === workspaceId;
     await (async () => {
-      await deleteWorkspaceApi(workspaceId);
+      if (options.draftOnly) await discardWorkspaceDraftApi(workspaceId);
+      else await deleteWorkspaceApi(workspaceId);
     })().catch(async (error) => {
       console.error("Delete workspace failed:", error);
       throw error;

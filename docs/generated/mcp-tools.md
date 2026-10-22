@@ -41,7 +41,7 @@ touches an in-process tool:
 | Server | Tools | Runs | Condition |
 | --- | --- | --- | --- |
 | [`opensession-sessions`](#opensession-sessions) | 23 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
-| [`opensession-admin`](#opensession-admin) | 14 | interactive, Slack loop | – |
+| [`opensession-admin`](#opensession-admin) | 15 | interactive, Slack loop | – |
 | [`opensession-runners`](#opensession-runners) | 7 | interactive | – |
 | [`opensession-goals`](#opensession-goals) | 8 | interactive | – |
 | [`opensession-search`](#opensession-search) | 2 | interactive, automation | – |
@@ -78,7 +78,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-37 servers, 182 tools.
+37 servers, 183 tools.
 
 ## opensession-sessions
 
@@ -230,7 +230,11 @@ Remove a teammate from a workspace's collaborators. Removing someone who is not 
 
 ### Variant · selfImprove automation (isAdmin: false, automationSelf: true)
 
-Built for: automation. 13 tools, without `wait_for`, `wait_status`, `cancel_wait`, `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`.
+Built for: automation. 16 tools, without `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`.
+
+### Variant · wake of a person's wait in an automation-owned session (isAdmin: false, waitContinuation: true)
+
+Built for: automation. 7 tools, without `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`, `spawn_task`, `cancel_task`, `get_session_reviewer`, `set_session_reviewer`, `remove_session_reviewer`, `accept_session_review`, `list_collaborators`, `add_collaborator`, `remove_collaborator`.
 
 ## opensession-admin
 
@@ -263,7 +267,13 @@ Forget a remembered entry by its id (from list_memory).
 
 `mcp__opensession-admin__list_automations` · input: none
 
-List all of Assistant's automations (routines): scheduled, event- and webhook-triggered jobs.
+List all of Assistant's automations (routines): scheduled, event- and webhook-triggered jobs. Prompts are omitted; read one with get_automation.
+
+### `get_automation`
+
+`mcp__opensession-admin__get_automation` · input: `id` (string, required)
+
+Read one automation's full record by id: its prompt and every setting (schedule, mode, repo, model, MCP allowlist, inputs, outputs, triggers), plus its five most recent runs. Read it before update_automation so a prompt edit starts from the stored text. The webhook secret is never shown.
 
 ### `create_automation`
 
@@ -749,7 +759,7 @@ Read more of a page fetched earlier in this session, by its handle. Prefer `find
 
 `mcp__opensession-web__clone_repo` · input: `repo` (string, required)
 
-Shallow-clone a public GitHub repository and return the local path, its file list and the head of its README. Use this instead of fetching GitHub pages when you want to read a project's actual source: the clone is real files, so read/grep/find work on it normally. The clone lands in scratch, not in the session's worktree.
+Shallow-clone a public GitHub repository and return the local path, its file list and the head of its README. Use this instead of fetching GitHub pages when you want to read a project's actual source: the clone is real files, so read/grep/find work on it normally. The clone lands in scratch, not in the session's worktree. It is for reading only: to change a repository, attach it with opensession-repos `attach_repo` and work in that worktree, so later turns hold a GitHub token for it.
 
 ## opensession-portals
 

@@ -27,6 +27,7 @@ import { useSessionScroll } from "./useSessionScroll";
 import { useTranscriptIndexAnchor } from "./useTranscript";
 import {
   holdTranscriptAnchor,
+  keepBottomGap,
   readFollowingLive,
 } from "../components/session-viewer/transcript-anchor";
 import {
@@ -35,6 +36,8 @@ import {
   rememberedTranscriptScroll,
 } from "../components/session-viewer/transcript-scroll-memory";
 import type { useTranscript } from "./useTranscript";
+import { linkedMessageId } from "../lib/message-link";
+import { scrollToVirtualTranscriptEntry } from "../lib/transcript-virtual-navigation";
 import type { SessionSocketSend } from "./useSessionSocket";
 import {
   beginTranscriptHistoryLoad,
@@ -94,6 +97,10 @@ interface ReaderLayoutOptions {
   history: ReaderHistoryState;
   send: SessionSocketSend;
 }
+
+/** Where a linked message lands: just under the top edge (below any header
+ * padding), the same gap the message rail leaves when it jumps. */
+const MESSAGE_LINK_TOP = 20;
 
 export function useTranscriptReaderLayout({
   session,
@@ -460,6 +467,39 @@ export function useTranscriptReaderLifecycle({
     string | null
   >(null);
   const scrollRestoreRef = useRef<(() => void) | null>(null);
+  // A message link (`#message-<entryId>`) opens the session at that message
+  // rather than at the live edge or the reader's last place. Its row may be
+  // far off screen, or not hydrated yet, so the hold asks the virtual list to
+  // bring it in each frame until it is drawn.
+  const revealLinkedMessage = useEffectEvent(
+    (el: HTMLElement, entryId: string) => {
+      scrollRestoreRef.current?.();
+      leaveLatest();
+      const stop = holdTranscriptAnchor(
+        el,
+        entryId,
+        // The phone's floating header sits over the scroller's top padding.
+        (parseFloat(getComputedStyle(el).paddingTop) || 0) + MESSAGE_LINK_TOP,
+        () => scrollToVirtualTranscriptEntry(el, entryId),
+        leaveLatest,
+        () => {
+          if (scrollRestoreRef.current === stop)
+            scrollRestoreRef.current = null;
+        },
+      );
+      scrollRestoreRef.current = stop;
+    },
+  );
+  useEffect(() => {
+    const onHashChange = () => {
+      const el = messagesRef.current;
+      const entryId = linkedMessageId(window.location.hash);
+      if (el && entryId && initiallyScrolledSessionRef.current === session.id)
+        revealLinkedMessage(el, entryId);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [messagesRef, session.id]);
   useLayoutEffect(() => {
     const el = messagesRef.current;
     if (
@@ -471,6 +511,11 @@ export function useTranscriptReaderLifecycle({
     )
       return;
     initiallyScrolledSessionRef.current = session.id;
+    const linked = linkedMessageId(window.location.hash);
+    if (linked) {
+      revealLinkedMessage(el, linked);
+      return;
+    }
     const remembered = rememberedTranscriptScroll(session.id);
     if (!remembered) {
       scrollToLatest("auto");
@@ -486,7 +531,10 @@ export function useTranscriptReaderLifecycle({
       el,
       remembered.anchorEid,
       remembered.anchorTop,
-      Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight),
+      keepBottomGap(
+        el,
+        Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight),
+      ),
       leaveLatest,
       () => {
         if (scrollRestoreRef.current === stop) scrollRestoreRef.current = null;

@@ -354,6 +354,27 @@ export interface SessionWalkthrough {
   publishedEntryId?: string;
 }
 
+/** Where a merged PR's deploy stands. See the server type. */
+export interface SessionPrDeploy {
+  repoId: string;
+  prNumber: number;
+  sha: string;
+  state: "deploying" | "deployed" | "failed";
+  at: string;
+  url?: string;
+}
+
+/** The Slack update the server wrote for a merged PR. See the server type. */
+export interface ShippedChangeDraft {
+  repoId: string;
+  branch: string;
+  prNumber: number;
+  message: string;
+  channel?: string;
+  activity: string;
+  at: string;
+}
+
 /** A Slack message a teammate sent from a session. See the server type. */
 export interface SessionSlackShare {
   channelId: string;
@@ -572,6 +593,12 @@ export interface UnifiedSession {
   /** Slack messages a teammate sent from this session. A share collapses the
    *  composer that sent it into a receipt, so nobody re-sends the update. */
   slackShares?: SessionSlackShare[];
+  /** The "Send to Slack" card's draft for a merged PR, written in the
+   *  background so it is ready when the session opens. */
+  shippedChangeDraft?: ShippedChangeDraft;
+  /** Deploys of this session's merged PRs, for repos with deploy tracking.
+   *  The "Send to Slack" card waits until its PR is deployed. */
+  prDeploys?: SessionPrDeploy[];
   automation?: string;
   /** Total live runs in this automation. Present on the bounded sidebar list. */
   automationRunCount?: number;

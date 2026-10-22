@@ -439,6 +439,33 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering. See
   (iPhone Settings > Action Button > Shortcut > OS > Start an
   Agent) — those all read the app's label, which is OS. Settings >
   Shortcuts inside the app signposts all of it.
+- **Action Button / Siri / Spotlight — "Talk to Desk"** — a second App Intent
+  (`Intents/TalkToDeskIntent.swift`) for talking instead of typing. On iPhone
+  it runs in the BACKGROUND: the press leaves you where you were and the Desk
+  call starts behind a Live Activity. It is an `AudioRecordingIntent`, which is
+  what lets a background app open the mic, on the condition that a Live
+  Activity is up for the whole call. When the call cannot start from the
+  background (the app is already open, the mic was never allowed, Live
+  Activities are off) the intent continues in the foreground instead: it parks
+  on `DeskCallRequest`, the sessions list opens the Desk, and the Desk sheet
+  shows the call screen (`DeskVoiceEngine.open()`). A second press from
+  outside the app hangs up. Running the intent is the opt-in, so it works with
+  the Desk voice preference off, and the Desk header keeps its mic button while
+  that call runs. `AgentShortcuts` registers it beside "Start an Agent".
+- **Desk call Live Activity** (`OS1Widgets/DeskCallLiveActivity.swift`, driven
+  by `DeskCallActivityController`) — every Desk call, however it started, shows
+  in the Dynamic Island and on the Lock Screen: what the Desk is doing, the
+  call timer, and mute and hang-up buttons (`LiveActivityIntent`s that run in
+  the app through `DeskCallHooks`, since the widget extension has no voice
+  engine). Tapping it opens the call screen (`os1-native://desk-call`). The
+  Desk call is one shared engine (`DeskVoiceEngine.desk`) so it can run with no
+  Desk sheet on screen. With the Live Activity up, a Desk call keeps the mic
+  and speaker in the background (`UIBackgroundModes: audio`); without one it
+  still ends when the app leaves the screen, so a hidden call can never hold
+  the mic. The system hides the Island while the app is open, so inside the
+  app the old rules stay: closing the Desk sheet hangs up, and coming back to
+  the app during a call opens the call screen. Session calls keep the old rule
+  and always end in the background.
 - **Widgets** (`OS1Widgets/`, its own iOS app-extension target) — the same
   press from three more places: a Home Screen widget (systemSmall), a Lock
   Screen one (accessoryCircular/accessoryRectangular), and a Control Center

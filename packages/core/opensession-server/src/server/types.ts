@@ -203,6 +203,13 @@ export interface UnifiedSession {
   walkthrough?: SessionWalkthrough;
   /** Slack messages a teammate sent from this session. */
   slackShares?: SessionSlackShare[];
+  /** The "Send to Slack" card's first draft for a merged PR, written in the
+   *  background (shipped-change-draft.ts) so it is ready when someone opens
+   *  the session. */
+  shippedChangeDraft?: ShippedChangeDraft;
+  /** Deploys of this session's merged PRs, for repos with deploy tracking
+   *  (pr-deploy-state.ts). The "Send to Slack" card waits for "deployed". */
+  prDeploys?: SessionPrDeploy[];
   automation?: string;
   /** Immutable trust provenance for workflow-spawned automation descendants. */
   automationDescendantPolicy?: AutomationDescendantPolicy;
@@ -557,6 +564,33 @@ export interface SessionWalkthrough {
  * A Slack message sent from this session, kept so the composer that sent it
  * collapses into a receipt instead of offering to send the same update again.
  */
+/** Where a merged PR's deploy stands (pr-deploy-state.ts). */
+export interface SessionPrDeploy {
+  /** Configured repo id, as in SessionPrRef.repo. */
+  repoId: string;
+  prNumber: number;
+  /** The merge commit the deploy is for. */
+  sha: string;
+  state: "deploying" | "deployed" | "failed";
+  /** When the wait started (the merge). */
+  at: string;
+  /** The Deploy run that settled it. */
+  url?: string;
+}
+
+/** A written first draft for a merged PR's Slack update. */
+export interface ShippedChangeDraft {
+  repoId: string;
+  branch: string;
+  prNumber: number;
+  message: string;
+  /** Channel id the model picked, when it picked one. */
+  channel?: string;
+  /** The session's `lastActivity` the draft was written against. */
+  activity: string;
+  at: string;
+}
+
 export interface SessionSlackShare {
   channelId: string;
   channelName: string;
@@ -602,6 +636,13 @@ export interface NativeSessionFile {
   walkthrough?: SessionWalkthrough;
   /** Slack messages a teammate sent from this session. */
   slackShares?: SessionSlackShare[];
+  /** The "Send to Slack" card's first draft for a merged PR, written in the
+   *  background (shipped-change-draft.ts) so it is ready when someone opens
+   *  the session. */
+  shippedChangeDraft?: ShippedChangeDraft;
+  /** Deploys of this session's merged PRs, for repos with deploy tracking
+   *  (pr-deploy-state.ts). The "Send to Slack" card waits for "deployed". */
+  prDeploys?: SessionPrDeploy[];
   createdBy: string;
   /** Verified GitHub login of the creator — stamped when GitHub web sign-in
    *  is active (web-auth.ts), and backfilled onto older sessions by the

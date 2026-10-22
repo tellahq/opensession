@@ -107,7 +107,10 @@ import { startGatewayProfilerSignal } from "./src/server/gateway-profiler";
 import { startDerivedCatalogRepair } from "./src/server/catalog-documents";
 import { ensureWarmTemplateScheduler } from "./src/server/warm-template";
 import { handleRunnerWsUpgrade } from "./src/server/runner-ws";
-import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-relay";
+import {
+  handleSandboxPortalRelayUpgrade,
+  startSandboxPortalRelays,
+} from "./src/server/sandbox-portal-relay";
 import {
   handleVmDisplayUpgrade,
   isVmDisplayRoute,
@@ -940,6 +943,15 @@ if (!g.__opensessionBooted) {
     // durable owner records immediately and keep reaping deleted-session husks.
     startPortalReaper(getSessionListSnapshotAsync);
     startRunnerPortalReaper();
+    // Sandbox Portals' loopback addresses (and the Caddy routes on them) keep
+    // their ports across this restart; the first request reconnects them.
+    void startSandboxPortalRelays()
+      .then((count) => {
+        if (count) console.log(`[sandbox-portal] rebound ${count} relays`);
+      })
+      .catch((error) =>
+        console.warn("[sandbox-portal] could not rebind relays:", error),
+      );
 
     // Managed machines: status polling and idle stops (managed-machines/).
     startManagedMachines();

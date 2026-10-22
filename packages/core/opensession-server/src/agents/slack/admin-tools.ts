@@ -25,6 +25,7 @@ import {
   deleteAutomation,
   runAutomation,
   retriggerAutomationSession,
+  type Automation,
 } from "../../server/automations";
 import { publishSessionChange } from "../../server/session-cache";
 import {
@@ -83,6 +84,36 @@ function repoParamHelp(): string {
     (fallback ? `. Omit to use the instance default (${fallback})` : "") +
     "."
   );
+}
+
+/** Runs shown by get_automation; the stored ledger keeps more. */
+const GET_AUTOMATION_RUNS = 5;
+
+/**
+ * An automation's record as get_automation returns it: the prompt as plain
+ * text, so it can be copied into update_automation verbatim, then every other
+ * field as JSON. The webhook secret is the trigger route's only auth, so it
+ * is dropped rather than shown to a model that might repeat it.
+ */
+export function formatAutomationRecord(a: Automation): string {
+  const { prompt, webhookSecret: _secret, runs, ...settings } = a;
+  const record = {
+    ...settings,
+    repo:
+      a.repo ??
+      (defaultRepoId() ? `(instance default: ${defaultRepoId()})` : undefined),
+    ...(runs?.length ? { recentRuns: runs.slice(0, GET_AUTOMATION_RUNS) } : {}),
+  };
+  return [
+    `*${a.name}* [\`${a.id}\`]`,
+    "",
+    "── prompt ──",
+    prompt,
+    "── end prompt ──",
+    "",
+    "── settings ──",
+    JSON.stringify(record, null, 2),
+  ].join("\n");
 }
 
 function fmtEntry(e: MemoryEntry): string {
@@ -156,7 +187,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
       // ---------------------------------------------------------------------
       tool(
         "list_automations",
-        `List all of ${personaName()}'s automations (routines): scheduled, event- and webhook-triggered jobs.`,
+        `List all of ${personaName()}'s automations (routines): scheduled, event- and webhook-triggered jobs. Prompts are omitted; read one with get_automation.`,
         {},
         async () => {
           const all = await listAutomations();
@@ -177,6 +208,16 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             return `• *${a.name}* [\`${a.id}\`]: ${trig}, ${a.mode}${repo}, ${a.enabled ? "enabled" : "disabled"}${next}${last}`;
           });
           return text(lines.join("\n"));
+        },
+      ),
+      tool(
+        "get_automation",
+        "Read one automation's full record by id: its prompt and every setting (schedule, mode, repo, model, MCP allowlist, inputs, outputs, triggers), plus its five most recent runs. Read it before update_automation so a prompt edit starts from the stored text. The webhook secret is never shown.",
+        { id: z.string().describe("Automation id, from list_automations.") },
+        async (args: { id: string }) => {
+          const a = await getAutomation(args.id);
+          if (!a) return text(`No automation with id \`${args.id}\`.`);
+          return text(formatAutomationRecord(a));
         },
       ),
       tool(

@@ -229,7 +229,7 @@ export function useSidebarWorkspaceController({
   function deleteDraftWsRow(row: WsRow) {
     const ws = row.workspace;
     if (!ws) return;
-    Promise.resolve(onDeleteWorkspace(ws.id)).catch(() => {
+    Promise.resolve(onDeleteWorkspace(ws.id, { draftOnly: true })).catch(() => {
       // Delete failed: bring the row back instead of leaving it slid
       // off-screen and pointing at a workspace that is still there.
       setWsSwipe(null);
@@ -1089,7 +1089,9 @@ export function useSidebarWorkspaceController({
                 ws
                   ? () => {
                       if (row.sessions.length === 0) {
-                        confirmDeleteDraft(() => onDeleteWorkspace(ws.id));
+                        confirmDeleteDraft(() =>
+                          onDeleteWorkspace(ws.id, { draftOnly: true }),
+                        );
                         return;
                       }
                       confirm({

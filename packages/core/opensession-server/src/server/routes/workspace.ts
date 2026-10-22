@@ -66,6 +66,7 @@ import {
   type WorkspaceDraft,
   createWorkspace,
   deleteWorkspace,
+  discardWorkspaceDraft,
   getWorkspace,
   listWorkspaces,
   updateWorkspace,
@@ -630,6 +631,20 @@ export async function handleWorkspaceRoutes(
       { error: "pr, plainThreadId or externalRef required" },
       { status: 400 },
     );
+  }
+
+  // Discard a sidebar draft. Never deletes sessions: the draft may sit on a
+  // workspace whose sessions are all archived, and those stay.
+  const draftMatch = path.match(/^\/api\/workspaces\/([^/]+)\/draft$/);
+  if (draftMatch && req.method === "DELETE") {
+    const id = decodeURIComponent(draftMatch[1]);
+    const hasSessions = (await getSessionListSnapshotAsync()).some(
+      (session) => session.workspaceId === id,
+    );
+    const result = await discardWorkspaceDraft(id, hasSessions);
+    if (result === "missing")
+      return Response.json({ error: "Workspace not found" }, { status: 404 });
+    return Response.json({ ok: true, result });
   }
 
   const workspaceMatch = path.match(/^\/api\/workspaces\/(.+)$/);

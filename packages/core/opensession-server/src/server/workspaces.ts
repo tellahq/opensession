@@ -776,6 +776,27 @@ export function restampWorkspaceWorktree(
 }
 
 /**
+ * Discard a workspace's parked draft without touching its sessions.
+ *
+ * A sidebar draft row is any workspace with a draft and no live session, so it
+ * can be a workspace whose sessions are all archived. Deleting that workspace
+ * would delete its archived history with it. Only a workspace with no sessions
+ * at all (archived included) and no dedupe key loses its record; any other
+ * keeps the record and loses just the draft.
+ */
+export async function discardWorkspaceDraft(
+  id: string,
+  hasSessions: boolean,
+): Promise<"cleared" | "deleted" | "missing"> {
+  const workspace = await getWorkspace(id);
+  if (!workspace) return "missing";
+  if (!hasSessions && !workspace.key) {
+    return (await deleteWorkspace(id)) ? "deleted" : "missing";
+  }
+  return (await updateWorkspace(id, { draft: null })) ? "cleared" : "missing";
+}
+
+/**
  * Remove a workspace's record. The caller must handle member sessions first
  * so none retain a reference to a workspace that no longer exists.
  */

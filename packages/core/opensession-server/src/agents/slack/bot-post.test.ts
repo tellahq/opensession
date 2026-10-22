@@ -60,6 +60,21 @@ describe("postAsSlackBot", () => {
     expect(calls.every((call) => !call.auth.includes("xoxp"))).toBe(true);
   });
 
+  test("replies in a thread when given one", async () => {
+    const calls = mockSlack((method) =>
+      method === "chat.postMessage" ? { ok: true, ts: "1.4" } : { ok: true },
+    );
+    await postAsSlackBot(channel, "Shipped", [], {
+      sender: undefined,
+      sessionUrl: undefined,
+      threadTs: "1.1",
+    });
+    expect(calls[0]).toMatchObject({
+      method: "chat.postMessage",
+      body: { channel: "C1", thread_ts: "1.1" },
+    });
+  });
+
   test("joins a public channel the bot isn't in, then posts", async () => {
     let posts = 0;
     const calls = mockSlack((method) => {

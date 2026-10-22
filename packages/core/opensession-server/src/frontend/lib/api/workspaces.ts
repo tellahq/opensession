@@ -157,6 +157,18 @@ export async function deleteWorkspaceApi(id: string): Promise<void> {
 }
 
 /**
+ * Discard a sidebar draft. Unlike deleteWorkspaceApi this never deletes
+ * sessions: the server clears the draft, and removes the workspace only when
+ * it has no sessions at all, archived ones included.
+ */
+export async function discardWorkspaceDraftApi(id: string): Promise<void> {
+  await request<void>(`/workspaces/${encodeURIComponent(id)}/draft`, {
+    method: "DELETE",
+    label: "Failed to delete draft",
+  });
+}
+
+/**
  * Start (or reuse) a triage session for a Plain thread — runs the "Plain
  * ticket triage" automation. Slow (~15-60s) when it has to boot a fresh run.
  */

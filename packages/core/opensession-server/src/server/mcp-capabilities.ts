@@ -31,8 +31,10 @@ export const INTERNAL_MCP_CAPABILITIES = {
     // suggest_task is a drive-by channel. Follow-ups to the current work
     // used to land there too, which flooded threads with cards for things
     // the same session would have picked up anyway; those stay in the reply.
+    // A summary of PRs opened by children used to list only the PRs, so
+    // tweaking one meant hunting for the child session that owns it.
     guidance:
-      "Create, inspect, steer, or cancel visible sessions and worker tasks. A request for a new session means a top-level one: `create_session` with `standalone: true` (or `spawn_task` where that is the only one offered), not a child or in-process worker, unless a child, worker, or sub-session is explicitly asked for. `suggest_task` is only for a drive-by finding: self-contained work unrelated to the current request that this session will not pick up (a bug seen on the way). Follow-ups and next steps go in your reply as a plain suggestion so the person decides. Suggest each at most once; do not start it. After `send_to_session`, wait for the reply with `wait_for` kind `session_turn`, not a timer.",
+      "Create, inspect, steer, or cancel visible sessions and worker tasks. A request for a new session means a top-level one: `create_session` with `standalone: true` (or `spawn_task` where that is the only one offered), not a child or in-process worker, unless a child, worker, or sub-session is explicitly asked for. `suggest_task` is only for a drive-by finding: self-contained work unrelated to the current request that this session will not pick up (a bug seen on the way). Follow-ups and next steps go in your reply as a plain suggestion so the person decides. Suggest each at most once; do not start it. After `send_to_session`, wait for the reply with `wait_for` kind `session_turn`, not a timer. When reporting work from sessions you started, link each one (its `url`) beside its result or PR.",
   },
   "opensession-admin": {
     summary: "Manage automations, MCP connections and channel memory.",

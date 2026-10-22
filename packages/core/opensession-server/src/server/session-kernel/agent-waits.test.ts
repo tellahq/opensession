@@ -6,6 +6,7 @@ import {
   registerWorkflowRunAgentWait,
   type WorkflowRunAgentWait,
   agentWaitWakePrompt,
+  agentWaitWakeSender,
   cancelAgentWait,
   getAgentWait,
   handleAgentWait,
@@ -652,6 +653,25 @@ describe("session turn waits", () => {
       ),
     ).toBe("failed");
     expect(sessionTurnOutcome(summary("archived"), "idle")).toBe("archived");
+  });
+
+  test("a wait a person's turn registered wakes in their name", async () => {
+    const plain = await registerSessionTurnAgentWait(
+      base,
+      turnDeps({ getSession: () => summary("running") }),
+    );
+    if (!plain.ok) throw new Error(plain.error);
+    expect(agentWaitWakeSender(plain.wait)).toBeUndefined();
+
+    const resumed = await registerSessionTurnAgentWait(
+      { ...base, waitId: "call-turn-2", wakeAs: "Michiel" },
+      turnDeps({ getSession: () => summary("running") }),
+    );
+    if (!resumed.ok) throw new Error(resumed.error);
+    // Survives the durable record's validation, and wakes as the wait actor.
+    const stored = await getAgentWait("caller-1");
+    expect(stored?.wakeAs).toBe("Michiel");
+    expect(agentWaitWakeSender(stored!)).toBe("Michiel (wait)");
   });
 
   test("rejects targets the caller cannot see and waits on itself", async () => {

@@ -1102,12 +1102,14 @@ const BLOCKED_PATH_ROOTS = ["/proc", "/sys", "/dev"];
  * Realpath-based workspace containment: resolve `rawPath`, symlink-resolve it
  * through its nearest EXISTING ancestor (so not-yet-created write targets are
  * checked too — a symlinked parent can't smuggle them out), and require the
- * result to sit under `realRoot`. Throws with a model-facing message on
+ * result to sit under `realRoot` or one of `extraRealRoots` (the session's
+ * own scratch dir, its TMPDIR). Throws with a model-facing message on
  * escape. Returns the fully-resolved path it validated.
  */
 export function assertContainedPiPath(
   rawPath: string,
   realRoot: string,
+  extraRealRoots: readonly string[] = [],
 ): string {
   const resolved = resolve(rawPath);
   let probe = resolved;
@@ -1133,10 +1135,15 @@ export function assertContainedPiPath(
       throw new Error(`Path is not accessible to this session: ${rawPath}`);
     }
   }
-  if (full !== realRoot && !full.startsWith(realRoot + sep)) {
+  const under = (root: string) => full === root || full.startsWith(root + sep);
+  if (!under(realRoot) && !extraRealRoots.some(under)) {
     throw new Error(
       `Path is outside the session workspace (${rawPath}). ` +
-        "Local file tools are contained to the session's working directory.",
+        "Local file tools are contained to the session's working directory" +
+        (extraRealRoots.length
+          ? ` and its temp dir ($TMPDIR, ${extraRealRoots[0]}). ` +
+            "Put temporary files there instead of /tmp."
+          : "."),
     );
   }
   return full;
@@ -1185,14 +1192,20 @@ function sniffImageMime(path: string): string | undefined {
  * no child, no env, `followSymlinks: false` so a symlinked dir can't be
  * traversed out of. Exported for the containment unit tests.
  */
-export function makeGuardedToolOps(cwd: string) {
-  let realRoot: string;
-  try {
-    realRoot = realpathSync(cwd);
-  } catch {
-    realRoot = resolve(cwd);
-  }
-  const guard = (p: string) => assertContainedPiPath(p, realRoot);
+export function makeGuardedToolOps(cwd: string, scratchDir?: string) {
+  const realOrResolved = (p: string) => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return resolve(p);
+    }
+  };
+  const realRoot = realOrResolved(cwd);
+  // The session's own scratch dir is its TMPDIR (bashEnv), and attachments
+  // are staged there, so the file tools must reach it too. Never a shared
+  // root: /tmp itself stays out, it holds every other session's files.
+  const extraRoots = scratchDir ? [realOrResolved(scratchDir)] : [];
+  const guard = (p: string) => assertContainedPiPath(p, realRoot, extraRoots);
   const exists = async (p: string) => {
     guard(p);
     try {
@@ -2562,7 +2575,7 @@ async function* runPiAttempt(
     // separately maintained enabled-name list would be a containment escape.
     const guardedOps = remote
       ? makeRemoteToolOps(remote, shippedSkillRoots())
-      : makeGuardedToolOps(cwd);
+      : makeGuardedToolOps(cwd, opts.scratchDir);
     const commandEnv = remote
       ? remoteCommandEnv(
           bashEnv,

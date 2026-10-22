@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   bulkReviewChanges,
   groupReviewProgress,
+  lineBreakdown,
   ruleGroupTitle,
   ruleGroups,
 } from "./review-groups";
@@ -25,6 +26,34 @@ describe("rule groups", () => {
       { title: "Tests", files: ["src/a.test.ts"] },
       { title: "Docs", files: ["README.md"] },
       { title: "Dependencies", files: ["bun.lock"] },
+    ]);
+  });
+});
+
+describe("line breakdown", () => {
+  test("sums lines per role in review order and skips empty roles", () => {
+    expect(
+      lineBreakdown([
+        { path: "src/a.test.ts", additions: 7, deletions: 1 },
+        { path: "src/a.ts", additions: 50, deletions: 5 },
+        { path: "src/b.ts", additions: 5, deletions: 2 },
+        { path: "README.md", additions: 0, deletions: 0 },
+      ]),
+    ).toEqual([
+      { title: "Code", additions: 55, deletions: 7 },
+      { title: "Tests", additions: 7, deletions: 1 },
+    ]);
+  });
+
+  test("reports lines the file list does not cover as other", () => {
+    expect(
+      lineBreakdown([{ path: "src/a.ts", additions: 4, deletions: 1 }], {
+        additions: 10,
+        deletions: 1,
+      }),
+    ).toEqual([
+      { title: "Code", additions: 4, deletions: 1 },
+      { title: "Other", additions: 6, deletions: 0 },
     ]);
   });
 });
