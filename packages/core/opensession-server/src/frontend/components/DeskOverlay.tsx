@@ -14,6 +14,7 @@ import { cn } from "../ui/cn";
 import { errorMessage } from "../lib/error-message";
 import { useDeskPanel } from "../hooks/useDeskPanel";
 import { deskPanelOwnsFocus } from "../lib/desk-panel";
+import { useDeskOverlay } from "../lib/desk-overlay-store";
 import {
   DESK_PANEL_GRAB,
   DESK_PANEL_HANDLE,
@@ -44,8 +45,6 @@ import {
  */
 
 interface DeskOverlayProps {
-  open: boolean;
-  openOrigin: "center" | "bottom-right";
   onClose: () => void;
   phone: boolean;
   /** Open the Desk session in the full viewer. */
@@ -62,7 +61,7 @@ function DeskBody({
   onOpenSession,
   onCallActiveChange,
   onGrab,
-}: Omit<DeskOverlayProps, "open" | "openOrigin"> & {
+}: DeskOverlayProps & {
   active: boolean;
   /** Desktop: a pointer down on the header starts moving the panel. */
   onGrab?: (event: React.PointerEvent<HTMLElement>) => void;
@@ -336,13 +335,12 @@ function DeskBody({
 }
 
 export function DeskOverlay({
-  open,
-  openOrigin,
   onClose,
   phone,
   onOpenSession,
   onCallActiveChange,
 }: DeskOverlayProps) {
+  const { open, origin: openOrigin } = useDeskOverlay();
   // Base UI's keepMounted preserves the Desk after its first summon, but it
   // also mounts hidden content on a cold app load. Gate the body until then so
   // a person who never opens Desk does not create its session, fetch its model
