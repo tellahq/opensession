@@ -76,6 +76,26 @@ async function stopArchivedPortals(sessionId: string): Promise<void> {
   }
 }
 
+/** Everything an archived session leaves running: Portals, awaited, and the
+ *  containers its agent started (session-containers.ts), in the background
+ *  since `stop` waits out each container's grace period. Never throws. */
+async function stopArchivedSessionResources(
+  sessionId: string,
+  aliasIds: readonly string[] = [],
+): Promise<void> {
+  await stopArchivedPortals(sessionId);
+  void import("./session-containers")
+    .then(({ stopSessionContainersAfterCommit }) =>
+      stopSessionContainersAfterCommit([sessionId, ...aliasIds]),
+    )
+    .catch((error) =>
+      console.error(
+        `[containers] archive cleanup failed for ${sessionId}:`,
+        error,
+      ),
+    );
+}
+
 function toEntry(raw: RawEntry): Entry {
   return typeof raw === "string" ? { at: raw, reason: "manual" } : raw;
 }
@@ -161,7 +181,7 @@ export async function setArchived(
   if (archived) {
     releasePreviewLease(id);
     await unpinEverywhere([id]);
-    await stopArchivedPortals(id);
+    await stopArchivedSessionResources(id);
   }
 }
 
@@ -191,7 +211,7 @@ export async function archiveOlderThan(
       releasePreviewLease(session.id);
       await setIndexedSessionArchived(session.id, true, "idle");
       publishSessionRow(session.id);
-      await stopArchivedPortals(session.id);
+      await stopArchivedSessionResources(session.id, session.aliasIds);
     }
     // Registry is written, so isArchivedId now reflects this batch — drop the
     // stale session/alias pins and any workspace pin whose last session just went.

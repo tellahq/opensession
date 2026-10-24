@@ -6,6 +6,10 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { findSession } from "./session-cache";
 import { hostSessionScratchDir } from "./session-scratch";
+import {
+  ensureContainerShimDir,
+  sessionContainerEnv,
+} from "./session-containers";
 import type { UnifiedSession } from "./types";
 
 export type ScriptSessionLookup = (
@@ -36,11 +40,18 @@ export function scriptWorkspace(
   return { cwd: cwd ? resolve(root, cwd) : root };
 }
 
-/** The run's whole environment: no server tokens, only the basics. */
-export function scriptEnv(sessionId: string): Record<string, string> {
+/** The run's whole environment: no server tokens, only the basics, plus the
+ *  container ownership label wrappers (session-containers.ts). */
+export async function scriptEnv(
+  sessionId: string,
+): Promise<Record<string, string>> {
   const scratch = hostSessionScratchDir(sessionId);
   const env: Record<string, string> = {
-    PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
+    ...sessionContainerEnv(
+      sessionId,
+      process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
+      await ensureContainerShimDir(),
+    ),
     HOME: process.env.HOME || homedir(),
     LANG: process.env.LANG || "C.UTF-8",
     TERM: "dumb",

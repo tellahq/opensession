@@ -51,6 +51,16 @@ Host Portals survive gateway restarts, but are not permanent services:
   skipped rather than risking an active preview. Running owners are protected.
   A page navigation wakes a sleeping Portal; background requests do not.
   Archive and orphan cleanup stop Portals permanently, without automatic wake.
+- Containers follow the same lifecycle. Agent bash, supervised scripts, and
+  Portals run with `OPENSESSION_SESSION_ID` set and a PATH that starts with
+  generated `podman` and `docker` wrappers. The wrappers add the label
+  `opensession.session=<id>` to `run` and `create` before calling the real
+  binary, because neither runtime has a default-label setting that covers
+  both. Archiving or deleting a session stops its running labelled
+  containers (they are stopped, not removed). The five-minute reaper stops
+  labelled containers whose owner is archived, and containers this server
+  labelled more than 15 minutes ago whose owner no longer exists. Containers without the label, such as those Docker Compose
+  creates, are never touched; add the label yourself to opt them in.
 - New host processes are refused when available RAM falls below 5% or 2 GiB,
   memory full-stall pressure reaches 10% over ten seconds, or the shared user
   workload slice reaches 90% of its memory soft limit. The existing configurable

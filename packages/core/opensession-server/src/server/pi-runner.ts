@@ -200,6 +200,10 @@ import {
 } from "./remote-workspace";
 import type { TranscriptEntry } from "./types";
 import type { RunAgentOpts } from "./agent-runner";
+import {
+  ensureContainerShimDir,
+  sessionContainerEnv,
+} from "./session-containers";
 import type { StreamEvent, ImageInput, TurnUsage } from "./run-events";
 
 const g = globalThis as any;
@@ -2518,6 +2522,21 @@ async function* runPiAttempt(
       ...awsEnv,
       ...cliEnv,
     };
+    // The owning session, for anything the agent starts. On this machine,
+    // podman/docker wrappers also label containers with it, so archive and
+    // delete can stop them (session-containers.ts).
+    if (journal?.osSessionId) {
+      if (remote) bashEnv.OPENSESSION_SESSION_ID = journal.osSessionId;
+      else
+        Object.assign(
+          bashEnv,
+          sessionContainerEnv(
+            journal.osSessionId,
+            bashEnv.PATH ?? "",
+            await ensureContainerShimDir(),
+          ),
+        );
+    }
 
     // One engine-neutral MCP runtime owns all connections for this logical
     // turn. Pi only adapts its exact catalog into mcp_search/mcp_call. The
