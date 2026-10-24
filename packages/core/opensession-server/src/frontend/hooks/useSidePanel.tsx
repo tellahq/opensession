@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { PANEL_RESIZE } from "../lib/session-panel-classes";
 import {
   SIDE_PANEL_OPEN_KEY,
@@ -101,36 +101,42 @@ export function useSidePanel(): SidePanel {
     const stored = Number(localStorage.getItem(WIDTH_KEY));
     return stored >= MIN_W && stored <= MAX_W ? stored : 0;
   });
-  const widthRef = useRef(width);
-  useLayoutEffect(() => {
-    widthRef.current = width;
-  });
   function startResize(e: React.MouseEvent) {
     e.preventDefault();
-    const right =
-      e.currentTarget.parentElement?.getBoundingClientRect().right ??
-      window.innerWidth;
+    // The handle renders inside PANEL_SHELL, the element carrying --panel-w.
+    const shell = e.currentTarget.parentElement;
+    const right = shell?.getBoundingClientRect().right ?? window.innerWidth;
     document.body.classList.add("resizing-panel");
     // Snap Motion layout morphs while dragging — the composer re-measures on
     // every step, so springing it reads as funky text (mirrors the sidebar).
     const restoreMotion = suppressLayoutAnimations();
+    // Only the shell reads the width mid-drag, as a custom property. Setting
+    // state per pointer event re-ran the whole session view (transcript,
+    // composer, cards) at pointer rate; the state catches up once, on drop.
+    let dragged = width;
+    let frame = 0;
+    const paint = () => {
+      frame = 0;
+      shell?.style.setProperty("--panel-w", `${dragged}px`);
+    };
     const onMove = (ev: MouseEvent) => {
       // Wide enough to review code side-by-side: only reserve room for the
       // left sidebar + a readable session column instead of a fixed cap.
       const max = Math.max(480, Math.round(window.innerWidth - 620));
-      const next = Math.min(
-        max,
-        Math.max(MIN_W, Math.round(right - ev.clientX)),
-      );
-      widthRef.current = next;
-      setWidth(next);
+      dragged = Math.min(max, Math.max(MIN_W, Math.round(right - ev.clientX)));
+      if (!frame) frame = requestAnimationFrame(paint);
     };
     const onUp = () => {
       document.body.classList.remove("resizing-panel");
       restoreMotion();
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
-      localStorage.setItem(WIDTH_KEY, String(Math.round(widthRef.current)));
+      if (frame) {
+        cancelAnimationFrame(frame);
+        paint();
+      }
+      setWidth(dragged);
+      localStorage.setItem(WIDTH_KEY, String(Math.round(dragged)));
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);

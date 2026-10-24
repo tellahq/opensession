@@ -10,6 +10,7 @@ import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { PHONE_QUERY } from "../lib/breakpoints";
 import { matchesShortcut } from "../lib/shortcuts";
 import { editableOwnsCaretChord } from "../lib/sidebar-swipe";
+import { WS_SUMMARY_ROOM_W } from "../lib/workspace-summary-open";
 
 interface ShippedShareIdentity {
   sessionId: string;
@@ -36,6 +37,18 @@ export function useShippedShareState(identity: ShippedShareIdentity) {
   return { dismissKey, dismissed };
 }
 
+/** Below this the header folds Share into the ⋯ menu. */
+const COMPACT_HEADER_W = 740;
+
+/** Which side of each header-width check a width falls on. Zero means
+ * unmeasured, which readers treat apart from a measured width. */
+function headerWidthBand(width: number): number {
+  if (width === 0) return 0;
+  if (width < 0) return -1;
+  if (width < COMPACT_HEADER_W) return 1;
+  return width < WS_SUMMARY_ROOM_W ? 2 : 3;
+}
+
 interface HeaderLayoutIdentity {
   topbarEl?: HTMLElement | null;
   workspaceSummaryOpen: () => boolean;
@@ -53,7 +66,16 @@ export function useSessionHeaderLayout(identity: HeaderLayoutIdentity) {
   const [reviewSessionActionTarget, setReviewSessionActionTarget] =
     useState<HTMLDivElement | null>(null);
   const desktopChangesRef = useRef<HTMLDivElement>(null);
-  const [headerW, setHeaderW] = useState(0);
+  // Every reader compares the width with the thresholds in headerWidthBand,
+  // so a resize that stays between two of them keeps the old value. Storing
+  // each pixel re-ran the whole session view per frame of a panel drag or
+  // window resize.
+  const [headerW, setHeaderWState] = useState(0);
+  function setHeaderW(next: number) {
+    setHeaderWState((prev) =>
+      headerWidthBand(prev) === headerWidthBand(next) ? prev : next,
+    );
+  }
   // Whether the header's workspace-summary card is up. The transcript and
   // composer shift out from under it while it is, and the header's own PR
   // strip and preview globe stand down, so this lives here rather than inside
@@ -83,7 +105,7 @@ export function useSessionHeaderLayout(identity: HeaderLayoutIdentity) {
   // Collapse before the inline row can overrun: the title's non-shrinkable
   // floor (source chip + Working pill) plus the inline actions (facepile,
   // links, Share) needs ~740px, so below that Share moves into the ⋯ menu.
-  const compactHeader = headerW > 0 && headerW < 740;
+  const compactHeader = headerW > 0 && headerW < COMPACT_HEADER_W;
   // Phone layout (same 720px breakpoint as the CSS page-stack): the header
   // actions portal into the top bar next to the centered title, and every
   // secondary action folds into the ⋯ menu so the bar holds just ⋯ + Workspace.
