@@ -2497,6 +2497,11 @@ export async function runnerStatus(): Promise<number> {
 
 /** The local server's own address, from the config this CLI can read. */
 async function localApi(): Promise<string> {
+  return `${await localServerOrigin()}/api/runners`;
+}
+
+/** The origin of this box's own server, from its config (loopback default). */
+export async function localServerOrigin(): Promise<string> {
   const { CONFIG_PATH } = await import("./paths");
   let host = "127.0.0.1";
   let port = 3850;
@@ -2511,7 +2516,7 @@ async function localApi(): Promise<string> {
       // fall through to defaults
     }
   }
-  return `http://${host}:${port}/api/runners`;
+  return `http://${host}:${port}`;
 }
 
 /**

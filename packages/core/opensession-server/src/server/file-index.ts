@@ -12,14 +12,41 @@
 // host copy of the worktree. Omitted = the host path, unchanged.
 
 import { $ } from "bun";
+import { pruneWhere, setBounded } from "./bounded-cache";
+import { registerMemoryProbe, totalChars } from "./memory-probes";
 import type { WorkspaceExec } from "./sandbox/workspace-exec";
 
 const CACHE_TTL_MS = 15_000;
-const cache = new Map<
-  string,
-  { files: string[]; dirs: string[]; at: number }
->();
+// Every session worktree is its own directory, and each entry holds that
+// checkout's whole file list. Keep a stale list long enough to cover a
+// transient git failure mid-typing, and only for the most recently used
+// checkouts, so the cache cannot grow with the number of sessions ever opened.
+export const FILE_INDEX_RETAIN_MS = 10 * 60_000;
+export const FILE_INDEX_MAX_DIRS = 24;
+type Entry = { files: string[]; dirs: string[]; at: number };
+const cache = new Map<string, Entry>();
 const loads = new Map<string, Promise<void>>();
+
+registerMemoryProbe("file-index.cache", () => {
+  let files = 0;
+  let pathChars = 0;
+  for (const entry of cache.values()) {
+    files += entry.files.length + entry.dirs.length;
+    pathChars += totalChars(entry.files) + totalChars(entry.dirs);
+  }
+  return { dirs: cache.size, paths: files, pathChars };
+});
+
+function remember(dir: string, entry: Entry): void {
+  const cutoff = entry.at - FILE_INDEX_RETAIN_MS;
+  pruneWhere(cache, (value) => value.at < cutoff);
+  setBounded(cache, dir, entry, { maxEntries: FILE_INDEX_MAX_DIRS });
+}
+
+/** Test seam: the cached directories, oldest first. */
+export function __fileIndexCacheForTest(): Map<string, Entry> {
+  return cache;
+}
 
 // Monotonic-ish clock without Date.now() (which is fine in server code, but a
 // single source keeps it easy to reason about). performance.now() is process
@@ -78,11 +105,11 @@ async function loadFiles(dir: string, exec?: WorkspaceExec): Promise<void> {
           (f) =>
             !f.startsWith("node_modules/") && !f.includes("/node_modules/"),
         );
-      cache.set(dir, { files, dirs: deriveDirs(files), at: now() });
+      remember(dir, { files, dirs: deriveDirs(files), at: now() });
     } catch (error) {
       // A transient git/sandbox failure should not make the picker look empty.
       if (!hit) throw error;
-      cache.set(dir, { ...hit, at: now() });
+      remember(dir, { ...hit, at: now() });
     } finally {
       loads.delete(dir);
     }

@@ -20,6 +20,7 @@
  * its tokens ahead of expiry with a periodic upkeep tick.
  */
 
+import { registerMemoryProbe } from "./memory-probes";
 import { accessSync, chmodSync, constants, existsSync, readFileSync } from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { stateDir } from "./paths";
@@ -197,6 +198,8 @@ export function markXaiExhausted(id: string, model?: string): void {
 const usageCache: Map<string, XaiUsageSnapshot> = ((
   globalThis as any
 ).__xaiAccountUsage ??= new Map());
+registerMemoryProbe("xai-accounts.usage", () => usageCache.size);
+
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let upkeepTimer: ReturnType<typeof setInterval> | null = null;
 

@@ -8,6 +8,7 @@
  * cache in session-cache.ts.
  */
 
+import { registerMemoryProbe } from "./memory-probes";
 import { localFoldersContextNote } from "./local-folders";
 import { portalAutostarting, portalsContextNote } from "./portal-autostart";
 import { ownedWorktreeHeadBranch } from "./session-branch-ownership";
@@ -1467,6 +1468,16 @@ export function attachSessionWatchersToEngineTranscript(
 }
 
 const queueDrains: Map<string, Promise<void>> = (g.__queueDrains ??= new Map());
+registerMemoryProbe("run-session.perSession", () => ({
+  autoContinueNudged: autoContinueNudged.size,
+  orphanRedeliveredTails: orphanRedeliveredTails.size,
+  wedgeRetriedFailures: wedgeRetriedFailures.size,
+  queueHoldNotified: queueHoldNotified.size,
+  recoveredSlackScanners: recoveredSlackScanners.size,
+  recoveredIncidentRecorders: recoveredIncidentRecorders.size,
+  recoveredFeedStarted: recoveredFeedStarted.size,
+  queueDrains: queueDrains.size,
+}));
 
 // One notice per session when a send parks for a restart. In-memory only: the
 // next boot delivers the parked queue, so a stale entry costs nothing.

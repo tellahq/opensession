@@ -11,6 +11,7 @@
  * kept in memory; the UI reads it via the /api/claude-accounts routes.
  */
 
+import { registerMemoryProbe } from "./memory-probes";
 import { homeDir } from "./paths";
 import { chmodSync, existsSync, readFileSync } from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
@@ -1359,6 +1360,15 @@ const NEAR_LIMIT_TIERS: { utilization: number; maxCacheAgeMs: number }[] = [
 ];
 const NEAR_LIMIT_REFRESH_COOLDOWN_MS = 20 * 60 * 1000;
 const nearLimitRefreshAt = new Map<string, number>();
+registerMemoryProbe("claude-accounts.usage", () => ({
+  usage: usageCache.size,
+  exhaustedUntil: exhaustedUntil.size,
+  lastPickedAt: lastPickedAt.size,
+  usageRateLimitedUntil: usageRateLimitedUntil.size,
+  credentialsRefreshBlockedUntil: credentialsRefreshBlockedUntil.size,
+  nearLimitRefreshAt: nearLimitRefreshAt.size,
+}));
+
 type UsageRefresher = (
   a: ClaudeAccount,
   signal?: AbortSignal,

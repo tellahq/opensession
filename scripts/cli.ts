@@ -17,6 +17,7 @@ import { existsSync } from "fs";
 import { isCompiledBinary } from "../packages/core/opensession-server/src/runner-host/exe";
 import { bind } from "./lib/bind";
 import { doctor } from "./lib/doctor";
+import { memory } from "./lib/memory";
 import { onboard } from "./lib/onboard";
 import { repos } from "./lib/repos";
 import { team } from "./lib/team";
@@ -94,6 +95,8 @@ ${bold("Running")}
   restart                  restart the service
   status                   is it running?
   logs [-f] [-n N]         tail the service journal
+  memory [--json]          gateway memory and long-lived structure sizes
+  memory --snapshot        write a heap snapshot to the state directory
 
 ${bold("Maintenance")}
   update [--channel <ref>] pull upstream (ff, or merge on a fork with local
@@ -413,6 +416,12 @@ async function main(): Promise<number> {
       return await service.control("restart");
     case "status":
       return await status();
+
+    case "memory":
+      return await memory({
+        json: flags.has("--json"),
+        snapshot: flags.has("--snapshot"),
+      });
 
     case "logs":
       return await service.logs(

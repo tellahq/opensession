@@ -4,6 +4,7 @@
  * in opensession.ts now calls invalidateSessionsCache().
  */
 
+import { registerMemoryProbe } from "./memory-probes";
 import {
   isSessionSpeed,
   sessionSpeed,
@@ -1559,6 +1560,11 @@ export function maybePersistSpeed(
 // recordRunOutcome) so the flag survives a real restart.
 export const runErrors: Map<string, { message: string; at: string }> =
   (g.__runErrors ??= new Map());
+registerMemoryProbe("session-cache.runState", () => ({
+  runErrors: runErrors.size,
+  wedgeSince: wedgeSince.size,
+  wedgeReported: wedgeReported.size,
+}));
 
 /**
  * Write the terminal failure into the transcript as a system chip, so a
