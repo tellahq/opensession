@@ -500,7 +500,9 @@ function enrichSession(
 ) {
   // The materialized row may still say a completed run is active. Reconcile
   // both edges from live runtime state before serializing any list or detail.
-  enrichSessionRuntime([s], signals?.runtime);
+  enrichSessionRuntime([s], signals?.runtime, {
+    repairIndex: overlays === "row",
+  });
   const prSession = enrichSessionPrRefs(s, {
     defaultRepoId: context.defaultRepoId,
     prsByRepo: context.prsByRepo,

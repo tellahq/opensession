@@ -315,10 +315,34 @@ export function sessionRuntimeSnapshot(): SessionRuntimeSnapshot {
   return { runStarts, journalBusy, claimedJournalSessions };
 }
 
+/** Index rows found claiming a run that live state says has ended. */
+const staleIndexedRunRepairs: Set<string> = (g.__staleIndexedRunRepairs ??=
+  new Set());
+let staleIndexedRunRepairChain: Promise<void> = Promise.resolve();
+
+/**
+ * Rewrite stored list rows whose materialized run fields outlived the run, so
+ * the `is_running` column and payload heal instead of waiting for an unrelated
+ * write. Each repair re-reads the session under its projection lock, so it
+ * cannot overwrite a newer row. Repairs run one at a time and each id is
+ * queued at most once, so a backlog of stale rows costs one pass.
+ */
+function repairStaleIndexedRunState(ids: string[]): void {
+  for (const id of ids) {
+    if (staleIndexedRunRepairs.has(id)) continue;
+    staleIndexedRunRepairs.add(id);
+    staleIndexedRunRepairChain = staleIndexedRunRepairChain
+      .then(() => publishSessionChange(id))
+      .finally(() => staleIndexedRunRepairs.delete(id));
+  }
+}
+
 export function enrichSessionRuntime(
   data: UnifiedSession[],
   snapshot = sessionRuntimeSnapshot(),
+  opts: { repairIndex?: boolean } = {},
 ): UnifiedSession[] {
+  const staleIds: string[] = [];
   const { runStarts, journalBusy } = snapshot;
   // Full session lists must not make one compatibility RPC per historical
   // session. Take the actor client's mirrored projection once; missing rows are
@@ -345,6 +369,7 @@ export function enrichSessionRuntime(
       s.codexThreadId,
       s.id,
     );
+    const storedRunning = !!s.isRunning || !!s.runState;
     const recoveryBusy =
       journalBusy.has(s.id) ||
       (!!s.claudeSessionId && journalBusy.has(s.claudeSessionId)) ||
@@ -371,9 +396,14 @@ export function enrichSessionRuntime(
     }
     if (sessionHasRunningScript(s.id)) s.scriptRunning = true;
     else delete s.scriptRunning;
+    // Like isRunning, runState is reconciled in both directions: a row
+    // materialized mid-run must not keep reporting "running" once idle.
     if (rs !== "idle") s.runState = rs;
+    else delete s.runState;
+    if (storedRunning && !s.isRunning && !s.runState) staleIds.push(s.id);
     checkRunStateWedge(s.id, rs, liveEngineBusy || recoveryBusy);
   }
+  if (opts.repairIndex && staleIds.length) repairStaleIndexedRunState(staleIds);
   return data;
 }
 
@@ -381,7 +411,7 @@ function enrichCachedSessions(
   slice: SessionArchiveSlice,
   data: UnifiedSession[],
 ): UnifiedSession[] {
-  enrichSessionRuntime(data);
+  enrichSessionRuntime(data, undefined, { repairIndex: true });
   const ts = Date.now();
   sessionsCaches[slice] = { data, ts, invalidated: false };
   // An internal/legacy whole-list scan already paid for both halves. Seed the
@@ -1248,6 +1278,11 @@ export async function primeSessionListIndex(): Promise<void> {
       );
     throw error;
   }
+}
+
+/** Settles once every queued stale-row repair has run. */
+export function __staleIndexedRunRepairsForTest(): Promise<void> {
+  return staleIndexedRunRepairChain;
 }
 
 /** Test-only: forget catalog completeness, the unavailable reason and every
