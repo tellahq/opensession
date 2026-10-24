@@ -152,3 +152,61 @@ export async function revokeRunner(id: string): Promise<void> {
     label: "Could not revoke Runner",
   });
 }
+
+/** A machine Open Session turns on and off and polls through operator
+ * commands, with no Open Session software on it (managed-machines/). */
+export type ManagedMachine = {
+  id: string;
+  label: string;
+  description?: string;
+  state: "off" | "starting" | "on" | "stopping" | "unknown";
+  detail?: string;
+  cpu?: number;
+  gpu?: number;
+  lastPollAt?: string;
+  lastPollError?: string;
+  pollSeconds: number;
+  idle?:
+    | { minutes: number; kind: "held"; reasons: string[] }
+    | { minutes: number; kind: "not-idle"; reason: string }
+    | { minutes: number; kind: "idle"; since: string; stopAt: string };
+  reservation?: {
+    reason: string;
+    reservedBy?: string;
+    sessionId?: string;
+    expiresAt: string;
+  };
+  lastAction?: {
+    kind: "start" | "stop";
+    at: string;
+    by?: string;
+    via: "user" | "agent" | "idle";
+    ok?: boolean;
+    error?: string;
+  };
+  acting?: "start" | "stop";
+  execAvailable: boolean;
+  execInFlight: number;
+  attention?: string;
+  allowed: boolean;
+};
+
+export async function fetchManagedMachines(): Promise<{
+  machines: ManagedMachine[];
+}> {
+  return request("/managed-machines", {
+    label: "Failed to load managed machines",
+  });
+}
+
+export async function managedMachineAction(
+  id: string,
+  action: "start" | "stop" | "reserve" | "release",
+  body: { force?: boolean; reason?: string; durationMinutes?: number } = {},
+): Promise<ManagedMachine | undefined> {
+  const response = await request<{ machine?: ManagedMachine }>(
+    `/managed-machines/${encodeURIComponent(id)}/${action}`,
+    { method: "POST", body, label: `Could not ${action} the machine` },
+  );
+  return response.machine;
+}

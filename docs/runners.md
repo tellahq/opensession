@@ -50,6 +50,12 @@ server decides from the connection it receives:
   does by default. Clients can set the header themselves through an SSH
   forward or a raw tunnel.
 
+A machine that should be on only while it is used, such as a GPU dev box,
+can instead be a **managed machine**: Open Session turns it on and off and
+runs commands on it through operator-configured commands, with no Runner
+client on it, and stops it when it is idle. See
+[managed-machines.md](managed-machines.md).
+
 A paired Apple silicon Mac can also host **Mac VM** Sandboxes: isolated macOS
 virtual machines, one per session, driven through the same Runner channel. See
 [self-hosting-sandboxes.md](self-hosting-sandboxes.md#mac-vm-tart-on-a-mac-runner)
