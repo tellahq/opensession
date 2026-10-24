@@ -51,7 +51,7 @@ test("index replacement preserves the bounded tail's scroll mapping", () => {
   );
   expect(capture).toContain("anchorEid: anchor?.dataset.eid ?? null");
   expect(capture!.indexOf("pendingIndexPositionRef.current = {")).toBeLessThan(
-    capture!.indexOf("setIndexState({ sessionId, entries: message.entries })"),
+    capture!.indexOf("setIndexState((current) => ({"),
   );
   expect(restore).toContain(
     "container.scrollHeight - container.clientHeight - pending.bottomGap",
