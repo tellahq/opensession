@@ -94,6 +94,7 @@ import {
 import { appTopbarTitle } from "./lib/app-topbar-title";
 import type { AppProps, PendingCreateDraft } from "./lib/app-types";
 import { dropStagingAttachments } from "./lib/attachments";
+import { useActiveWhileDeskClosed } from "./lib/desk-overlay-store";
 import { NEW_SESSION_DRAFT_KEY, clearDraft, saveDraft } from "./lib/drafts";
 import { DESK_FAB, MOBILE_FAB } from "./lib/fab-classes";
 import { pickLandingSession } from "./lib/landing-session";
@@ -462,7 +463,6 @@ export function AppContent({
     setSessionComposerPrefills,
     addToSessionInput,
     commandMenuRef,
-    deskOverlay,
     setDeskOverlay,
     shortcutsOpen,
     setShortcutsOpen,
@@ -470,7 +470,7 @@ export function AppContent({
   } = appViewState;
   // A Desk voice call outlives a minimised Desk; the trigger shows it is live.
   const [deskCallActive, setDeskCallActive] = useState(false);
-  const deskCallShown = deskCallActive && !deskOverlay.open;
+  const deskCallShown = useActiveWhileDeskClosed(deskCallActive);
   const { closePalette, startNewSessionCreate } = useNewSessionCreateStart({
     getCurrentRoute,
     navigate,
@@ -1904,8 +1904,6 @@ export function AppContent({
 
             {/* ⌘J Desk overlay — standing concierge session. */}
             <DeskOverlay
-              open={deskOverlay.open}
-              openOrigin={deskOverlay.origin}
               onClose={() =>
                 setDeskOverlay((desk) => ({ ...desk, open: false }))
               }
