@@ -235,11 +235,24 @@ export async function announceGithubRun(opts: AnnouncedRun): Promise<string> {
   await updateSessionFile(bksId, (data) =>
     announcedSessionFile(data, bksId, opts, workspaceId, repoId),
   );
+  await unarchiveForRun(bksId);
   // updateSessionFile drops the session cache but not the list route's
   // serialized snapshot on top of it. Without this the new session can stay
   // invisible to the UI for the rest of that snapshot's TTL.
   invalidateSessionsCache();
   return bksId;
+}
+
+/** A new run brings its archived session back (for example one archived when
+ * the PR closed). Best effort: the run proceeds either way. */
+async function unarchiveForRun(bksId: string): Promise<void> {
+  try {
+    const { unarchiveGithubRunSession } = await import("./pr-session-archive");
+    if (await unarchiveGithubRunSession(bksId))
+      console.log(`[github-run] unarchived ${bksId} for a new run`);
+  } catch (e) {
+    console.warn(`[github-run] could not unarchive ${bksId}:`, e);
+  }
 }
 
 /** Map a GitHub login to a git identity for commit attribution (fix/simplify). */
@@ -467,6 +480,7 @@ export async function runGithubAgent(
   // session link is already public by now (see announceGithubRun), and booting
   // an engine takes long enough that following it hit "Session not found".
   await persist(resumeFrom);
+  await unarchiveForRun(bksId);
   invalidateSessionsCache();
 
   const existingDetachedRun = opts.detached
