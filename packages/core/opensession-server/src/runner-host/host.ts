@@ -79,14 +79,9 @@ const {
 const { shouldPersistModelSwitch } = await import("../server/run-events");
 const { readFileSync } = await import("fs");
 const { writeJsonAtomic } = await import("../server/shared/atomic-write");
-const {
-  ndjsonReader,
-  HOST_SOCK_NAME,
-  HOST_META_NAME,
-  MCP_PROXY_ENTRY,
-  mcpProxyArgv,
-  rpcSocketPath,
-} = await import("./protocol");
+const { ndjsonReader, HOST_SOCK_NAME, HOST_META_NAME, rpcSocketPath } =
+  await import("./protocol");
+const { createRunRpcRelay, relayMcpMounts } = await import("./run-rpc-relay");
 const { WsFrameBuffer, replayStartFor } = await import("./ws-buffer");
 const { OPENSESSION_SESSIONS_DIR } = await import("../server/paths");
 
@@ -516,47 +511,32 @@ function onAskUser(input: Record<string, unknown>): Promise<AskResult> {
   });
 }
 
-// ── mcp-proxy config for the opensession-* servers ───────────────────────────────
-// Each named server becomes a stdio MCP proxy that forwards tools/list +
-// tools/call to opensession over its RPC socket — so session-control/self-admin
-// tools keep working across opensession restarts (calls retry while it's down).
+// ── opensession-* servers over one run-rpc relay ─────────────────────────────
+// Every named server is mounted in this process on ONE shared relay that
+// forwards tools/list + tools/call to opensession over its RPC socket (or
+// /rpc-ws), so session-control/self-admin tools keep working across opensession
+// restarts (calls retry while it's down). This used to be a stdio
+// `opensession mcp-proxy` child per server, ~25 processes per run.
+// Server names, and so the tool names the agent sees, are unchanged; the
+// per-run binding is still enforced by dispatchRunRpc for every request.
 function proxyMcpConfigs(): Record<string, unknown> | undefined {
   const names = spec.proxyMcpServers || [];
   if (!names.length || !spec.rpcToken) return undefined;
-  // WS transport: the proxies dial opensession's /rpc-ws route instead
-  // of the unix RPC socket (which isn't shareable across a remote boundary).
-  // The upgrade there authenticates with THIS run's hostId + wsToken (only
-  // ws-transport launches register one server-side); the per-frame rpc token
-  // stays what dispatchRunRpc resolves to the run's session/user.
+  // WS transport: the relay dials opensession's /rpc-ws route instead of the
+  // unix RPC socket (which isn't shareable across a remote boundary). The
+  // upgrade there authenticates with THIS run's hostId + wsToken (only
+  // ws-transport launches register one server-side); the per-request rpc
+  // token stays what dispatchRunRpc resolves to the run's session/user.
   const rpcWsUrl = process.env.OPENSESSION_RPC_WS_URL || "";
-  const transportEnv = rpcWsUrl
-    ? {
-        OPENSESSION_RPC_WS_URL: rpcWsUrl,
-        OPENSESSION_RPC_WS_HOST: spec.hostId,
-        OPENSESSION_RPC_WS_AUTH: RUN_WS_TOKEN,
-      }
-    : { OPENSESSION_RPC_SOCKET: rpcSocketPath(OPENSESSION_SESSIONS_DIR) };
-  const out: Record<string, unknown> = {};
-  // The interpreter running THIS process re-launches the proxy: from source
-  // that is `bun run <mcp-proxy.ts>` (process.execPath is bun — resolves both
-  // on the host and inside a sandbox container where protocol.ts's BUN_BIN host
-  // path doesn't exist); as a compiled binary it is `<exe> mcp-proxy`.
-  const [proxyCommand, ...proxyArgs] = mcpProxyArgv(
-    process.execPath,
-    MCP_PROXY_ENTRY,
+  return relayMcpMounts(
+    createRunRpcRelay({
+      ...(rpcWsUrl
+        ? { wsUrl: rpcWsUrl, wsHost: spec.hostId, wsAuth: RUN_WS_TOKEN }
+        : { socket: rpcSocketPath(OPENSESSION_SESSIONS_DIR) }),
+      token: spec.rpcToken,
+    }),
+    names,
   );
-  for (const name of names) {
-    out[name] = {
-      command: proxyCommand,
-      args: proxyArgs,
-      env: {
-        ...transportEnv,
-        OPENSESSION_RPC_TOKEN: spec.rpcToken,
-        OPENSESSION_MCP_SERVER: name,
-      },
-    };
-  }
-  return out;
 }
 
 // ── Drive the run ─────────────────────────────────────────────────────────────
