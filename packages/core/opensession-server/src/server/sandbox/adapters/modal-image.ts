@@ -28,7 +28,7 @@ export const MODAL_BASE_IMAGE_COMMANDS: readonly string[] = [
     "&& rm -rf /var/lib/apt/lists/*",
   "RUN mkdir -p /home/ubuntu && " +
     "HOME=/home/ubuntu sh -c 'curl -fsSL https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --component rustfmt,clippy' && " +
-    "for f in /home/ubuntu/.cargo/bin/*; do ln -sf \"$f\" /usr/local/bin/; done",
+    'for f in /home/ubuntu/.cargo/bin/*; do ln -sf "$f" /usr/local/bin/; done',
 ];
 
 /** Changes whenever the base image's commands do. */

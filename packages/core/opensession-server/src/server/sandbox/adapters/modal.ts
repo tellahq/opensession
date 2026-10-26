@@ -870,7 +870,9 @@ export class ModalProvider implements SandboxProvider {
       const remoteId = state ? state.remoteId : sandboxId;
       await terminateContainer(c, remoteId);
       if (options.strict && (await liveContainer(c, remoteId)))
-        throw new Error(`Modal container ${remoteId} still runs after terminate`);
+        throw new Error(
+          `Modal container ${remoteId} still runs after terminate`,
+        );
       deleteImage(c, state?.checkpointArtifactId);
       if (state) removeRemoteState(this.id, sandboxId);
     } catch (error) {
@@ -1162,8 +1164,12 @@ async function qualify(
     const upload = await driver.exec(
       `test "$(cat ${L.home}/.opensession-upload)" = uploaded`,
     );
-    if (upload.exitCode !== 0) throw new Error("Modal file upload check failed");
-    update("Checking filesystem snapshots (sleep, wake, project snapshots)", 60);
+    if (upload.exitCode !== 0)
+      throw new Error("Modal file upload check failed");
+    update(
+      "Checking filesystem snapshots (sleep, wake, project snapshots)",
+      60,
+    );
     const image = await source.snapshotFilesystem({
       timeoutMs: SNAPSHOT_TIMEOUT_MS,
       ttlMs: 60 * 60_000,
