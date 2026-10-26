@@ -20,6 +20,15 @@ final class HtmlRenderTests: XCTestCase {
         XCTAssertNotNil(HtmlRenderReference.from(resultContent: "Result:\n" + result()))
     }
 
+    func testReadsCodemodeReports() throws {
+        let report = "Script completed\nWall time 1.8 seconds\nOutput:\n" + result() + "\nConsole: {\"log\": 1}"
+        XCTAssertEqual(HtmlRenderReference.all(inResultContent: report).map(\.url), [url])
+        let quoted = try XCTUnwrap(String(data: JSONSerialization.data(withJSONObject: [result()], options: [.fragmentsAllowed]), encoding: .utf8))
+        XCTAssertEqual(HtmlRenderReference.from(resultContent: "Output:\n" + quoted)?.url, url)
+        let second = result().replacingOccurrences(of: "fit-abc", with: "fit-def")
+        XCTAssertEqual(HtmlRenderReference.all(inResultContent: "[" + result() + "," + second + "]").count, 2)
+    }
+
     func testNeverLoadsAnythingButAStoredRender() {
         for bad in [
             "https://evil.example/x.html",
@@ -46,6 +55,8 @@ final class HtmlRenderTests: XCTestCase {
     func testRenderToolNames() {
         XCTAssertTrue(HtmlRenderReference.mayBeRenderTool("mcp__opensession-html__html_render", input: nil))
         XCTAssertTrue(HtmlRenderReference.mayBeRenderTool("mcp__oc__mcp_call", input: nil))
+        XCTAssertTrue(HtmlRenderReference.mayBeRenderTool("codemode", input: nil))
+        XCTAssertTrue(HtmlRenderReference.mayBeRenderTool("mcp__oc__codemode", input: nil))
         XCTAssertFalse(HtmlRenderReference.mayBeRenderTool("mcp__opensession-html__html_preview", input: nil))
         XCTAssertFalse(HtmlRenderReference.mayBeRenderTool("Bash", input: nil))
     }

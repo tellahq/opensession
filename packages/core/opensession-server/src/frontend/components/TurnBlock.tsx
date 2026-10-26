@@ -20,7 +20,7 @@ import {
 import { SuggestedTaskCard } from "./SuggestedTaskCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import {
-  htmlRenderFromResult,
+  htmlRendersFromResult,
   mayBeHtmlRenderTool,
   type HtmlRenderReference,
 } from "@tellahq/opensession-protocol/html-render";
@@ -908,7 +908,8 @@ function featuredTurnMedia(
 }
 
 /**
- * The pages a turn showed with `html_render`, in call order. The reference
+ * The pages a turn showed with `html_render`, in call order, whether called
+ * directly, through `mcp_call`, or from a codemode script. The reference
  * is in the result, so a call still running shows nothing yet, and a failed
  * one never does.
  */
@@ -922,8 +923,10 @@ function turnHtmlRenders(
     if (!mayBeHtmlRenderTool(entry.toolName || "", entry.toolInput)) continue;
     const result = toolResults.get(entry.toolUseId);
     if (!result || result.isError) continue;
-    const render = htmlRenderFromResult(result.content);
-    if (render) out.push({ id: entry.id, render });
+    // A script can show several pages from one call.
+    htmlRendersFromResult(result.content).forEach((render, index) =>
+      out.push({ id: index ? `${entry.id}:${index}` : entry.id, render }),
+    );
   }
   return out;
 }
