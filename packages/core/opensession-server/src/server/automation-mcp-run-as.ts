@@ -92,31 +92,36 @@ export function authorizeMcpRunAs(
 ): AutomationMcpRunAs | FieldError {
   const target = resolveTeammate(request.person);
   if (!target)
-    return { error: `mcpRunAs: "${request.person}" is not a known teammate` };
+    return {
+      error: `Run MCP sign-ins as: "${request.person}" is not a known teammate`,
+    };
   const self = actor ? resolveTeammate(actor) : null;
   if (!self)
     return {
       error:
-        "mcpRunAs can only be set by a signed-in teammate, to their own accounts",
+        "Run MCP sign-ins as can only be set by a signed-in teammate, to themselves",
     };
   if (self.slackId !== target.slackId)
     return {
       error:
-        "mcpRunAs can only name yourself: only that person can let an automation use their MCP sign-ins",
+        "Run MCP sign-ins as can only name yourself: only that person can let an automation use their sign-ins",
     };
   if (!allowlist)
     return {
       error:
-        "mcpRunAs needs an explicit mcpServers allowlist, so it is clear which servers use your sign-ins",
+        "Run MCP sign-ins as needs a list of MCPs, so it is clear which ones use your sign-ins",
     };
   const servers = request.servers ?? [...allowlist];
   const outside = servers.filter((s) => !allowlist.includes(s));
   if (outside.length)
     return {
-      error: `mcpRunAs.servers must be in the automation's MCP allowlist (not: ${outside.join(", ")})`,
+      error: `Run MCP sign-ins as: these MCPs are not in the automation's list: ${outside.join(", ")}`,
     };
   if (!servers.length)
-    return { error: "mcpRunAs needs at least one allowlisted MCP server" };
+    return {
+      error:
+        "Run MCP sign-ins as needs at least one MCP from the automation's list",
+    };
   return {
     person: target.name,
     servers: [...new Set(servers)],
