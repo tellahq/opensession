@@ -35,26 +35,73 @@ struct HtmlRenderReference: Equatable, Sendable {
         return min(maxHeight, max(minHeight, height.rounded()))
     }
 
-    /// The reference in a result's text: `{"htmlRender": …, "message": …}`,
-    /// possibly wrapped in a dispatcher's prose. Only a stored render's URL
-    /// is accepted, so nothing else is ever loaded from a tool result.
+    /// The first reference in a result's text.
     static func from(resultContent content: String?) -> HtmlRenderReference? {
-        guard let text = content?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !text.isEmpty
-        else { return nil }
-        var candidates = [text]
-        if let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"),
-           start > text.startIndex, start < end {
-            candidates.append(String(text[start...end]))
+        all(inResultContent: content).first
+    }
+
+    /// Every reference in a result's text, in order: the tool's answer
+    /// `{"htmlRender": …, "message": …}` alone, in a dispatcher's prose, or
+    /// in a codemode script's report, printed as an object or as an escaped
+    /// JSON string, possibly several. Mirrors the protocol package's
+    /// `htmlRendersFromResult`. Only a stored render's URL is accepted, so
+    /// nothing else is ever loaded from a tool result.
+    static func all(inResultContent content: String?) -> [HtmlRenderReference] {
+        guard let text = content, text.contains("htmlRender") else { return [] }
+        var objects = renderObjects(in: text)
+        if text.contains(#"\"htmlRender\""#) {
+            let unescaped = text.replacingOccurrences(
+                of: #"\\(["\\])"#, with: "$1", options: .regularExpression
+            )
+            for object in renderObjects(in: unescaped) where !objects.contains(object) {
+                objects.append(object)
+            }
         }
-        for candidate in candidates {
-            guard let data = candidate.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let ref = from(object: object["htmlRender"])
+        var refs: [HtmlRenderReference] = []
+        for object in objects.prefix(maxRendersPerResult) {
+            guard let data = object.data(using: .utf8),
+                  let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let ref = from(object: parsed["htmlRender"]),
+                  !refs.contains(where: { $0.url == ref.url })
             else { continue }
-            return ref
+            refs.append(ref)
         }
-        return nil
+        return refs
+    }
+
+    private static let maxRendersPerResult = 12
+    private static let objectStart = try! NSRegularExpression(pattern: #"\{\s*"htmlRender"\s*:"#)
+
+    /// The `{"htmlRender": …}` objects in `text`, each cut at its closing
+    /// brace (string-aware), within the size a real answer can have.
+    private static func renderObjects(in text: String) -> [String] {
+        let units = Array(text.utf16)
+        var out: [String] = []
+        for match in objectStart.matches(in: text, range: NSRange(location: 0, length: units.count)) {
+            let start = match.range.location
+            var depth = 0
+            var inString = false
+            var index = start
+            let limit = min(units.count, start + maxResultBytes)
+            var end: Int?
+            while index < limit {
+                let c = units[index]
+                if inString {
+                    if c == 0x5C { index += 1 } else if c == 0x22 { inString = false }
+                } else if c == 0x22 {
+                    inString = true
+                } else if c == 0x7B {
+                    depth += 1
+                } else if c == 0x7D {
+                    depth -= 1
+                    if depth == 0 { end = index + 1; break }
+                }
+                index += 1
+            }
+            if let end { out.append(String(decoding: units[start..<end], as: UTF16.self)) }
+            if out.count >= maxRendersPerResult { break }
+        }
+        return out
     }
 
     static func from(object: Any?) -> HtmlRenderReference? {
@@ -110,10 +157,12 @@ struct HtmlRenderReference: Equatable, Sendable {
         return Self.clamp(min(cap, contentHeight ?? atWidth))
     }
 
-    /// Whether a call may be `html_render`: named so, or a dispatcher call,
-    /// whose inner name a large stored call can have lost. The result decides.
+    /// Whether a call may be `html_render`: named so, a dispatcher call,
+    /// whose inner name a large stored call can have lost, or a codemode
+    /// script, which reaches the tool through `tools.mcp_call`. The result
+    /// decides.
     static func mayBeRenderTool(_ rawName: String, input: JSONValue?) -> Bool {
-        if isDispatcher(rawName) { return true }
+        if isDispatcher(rawName) || isCodemode(rawName) { return true }
         guard let mcp = ToolPresentation.parseMcpTool(rawName) else { return false }
         return mcp.server == "opensession-html" && mcp.tool == "html_render"
     }
@@ -125,6 +174,11 @@ struct HtmlRenderReference: Equatable, Sendable {
         }
         return bare == "mcp_call"
     }
+
+    private static func isCodemode(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return lower == "codemode" || lower.hasSuffix("__codemode")
+    }
 }
 
 /// One render under a turn, keyed by the call that made it.
@@ -135,14 +189,18 @@ struct HtmlRenderItem: Identifiable, Equatable, Sendable {
     /// The turn's renders in call order. A call still running or one that
     /// failed shows nothing.
     static func renders(in tools: [ToolCallItem]) -> [HtmlRenderItem] {
-        tools.compactMap { tool in
+        tools.flatMap { tool -> [HtmlRenderItem] in
             guard let use = tool.use,
                   let result = tool.result,
                   result.isError != true,
-                  HtmlRenderReference.mayBeRenderTool(use.toolName ?? "", input: use.toolInput),
-                  let render = HtmlRenderReference.from(resultContent: result.content)
-            else { return nil }
-            return HtmlRenderItem(id: use.id, render: render)
+                  HtmlRenderReference.mayBeRenderTool(use.toolName ?? "", input: use.toolInput)
+            else { return [] }
+            // A script can show several pages from one call.
+            return HtmlRenderReference.all(inResultContent: result.content)
+                .enumerated()
+                .map { index, render in
+                    HtmlRenderItem(id: index == 0 ? use.id : "\(use.id):\(index)", render: render)
+                }
         }
     }
 }

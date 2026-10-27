@@ -9,6 +9,8 @@ export interface ModelEffortSelection {
   model: string;
   /** This person's preferred model for new sessions. */
   preferredDefaultModel?: string;
+  /** This person's preferred effort for new sessions ("" = none). */
+  preferredDefaultEffort?: string;
   /** Model is set elsewhere (e.g. Slack-owned sessions) — effort stays switchable. */
   modelDisabled?: boolean;
   modelTitle?: string;
@@ -33,20 +35,25 @@ export interface ModelEffortAppearance {
   title?: string;
   className?: string;
   /** The same menu can sit behind the composer pill, the full-width settings
-   * row, or the compact model link below the phone Workspace title. */
-  triggerVariant?: "pill" | "menu-row" | "hero";
+   * row, the compact model link below the phone Workspace title, or a
+   * select-shaped field in a Settings row. */
+  triggerVariant?: "pill" | "menu-row" | "hero" | "field";
   /** Label fallback for a model that has not reached the catalog yet. */
   fallbackModelLabel?: (id: string) => string;
 }
 
 export interface ModelEffortActions {
   changeModel: (model: string) => void;
-  /** Makes the current conversation model this person's default for new sessions. */
-  setAsDefault?: (model: string) => void;
+  /** Makes the current conversation model, and its effort when the model has
+   *  an effort ladder, this person's default for new sessions. */
+  setAsDefault?: (model: string, effort?: string) => void;
   changeEffort?: (effort: string) => void;
   changeAutoFallback?: (enabled: boolean) => void;
   changeSpeed?: (speed: SessionSpeed) => void;
   changeAccount?: (accountId: string) => void;
+  /** Replaces what "Reset to default" does, for a caller whose default is
+   *  something other than the default model at its own effort. */
+  reset?: () => void;
   /** Fires as the menu opens/closes. The phone composer needs it: the popup
    * takes focus (blurring the textarea), and the composer must stay expanded
    * while open or this trigger unmounts and the menu closes with it. */

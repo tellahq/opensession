@@ -27,6 +27,7 @@ import {
   DEMO_MARKER_FILE,
   DEMO_RENDER_ASSET,
   DEMO_RENDER_SESSION_ID,
+  DEMO_SCRIPT_RENDER_SESSION_ID,
   DEMO_REPO_FILES,
   DEMO_REPO_ID,
   DEMO_REPO_WT_PREFIX,
@@ -283,6 +284,13 @@ export function generateDemoData(
   );
   mkdirSync(dirname(renderPath), { recursive: true });
   writeFileSync(renderPath, injectBootstrap(MONITOR_FIT_PAGE));
+  const scriptRenderPath = join(
+    stateDir("assets"),
+    DEMO_SCRIPT_RENDER_SESSION_ID,
+    DEMO_RENDER_ASSET,
+  );
+  mkdirSync(dirname(scriptRenderPath), { recursive: true });
+  writeFileSync(scriptRenderPath, injectBootstrap(MONITOR_FIT_PAGE));
 
   if (homeStores) {
     // Repo registry first: everything below (and every repo-derived UI

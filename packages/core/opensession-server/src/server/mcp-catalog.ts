@@ -60,6 +60,7 @@ import { createRunnersMcpServer } from "./runners-mcp";
 import { createLocalFoldersMcpServer } from "./local-folders-mcp";
 import { createScheduleMcpServer } from "./schedule-mcp";
 import { createScriptsMcpServer } from "./scripts-mcp";
+import { createGpuMcpServer } from "./gpu-mcp";
 import { createPortalsMcpServer } from "./portals-mcp";
 import { createChartsMcpServer } from "./charts-mcp";
 import { createHtmlMcpServer } from "./html-mcp";
@@ -158,6 +159,18 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
             createdBy: `${AUTOMATION} (automation)`,
             isAdmin: false,
             automationSelf: true,
+            currentSessionId: SESSION_ID,
+          }),
+      },
+      {
+        label:
+          "wake of a person's wait in an automation-owned session (isAdmin: false, waitContinuation: true)",
+        runClasses: ["automation"],
+        build: () =>
+          createSessionsMcpServer({
+            createdBy: USER,
+            isAdmin: false,
+            waitContinuation: true,
             currentSessionId: SESSION_ID,
           }),
       },
@@ -313,9 +326,11 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     wiring: [
       "packages/core/opensession-server/src/server/interactive-mcp.ts",
       "packages/core/opensession-server/src/server/goal-runner.ts",
+      "packages/core/opensession-server/src/server/automations.ts",
     ],
-    runClasses: ["interactive", "goal"],
-    condition: "Needs a session id.",
+    runClasses: ["interactive", "goal", "automation"],
+    condition:
+      "Needs a session id. Automations get it only when their MCP allowlist names it.",
     build: () => createWebMcpServer({ sessionId: SESSION_ID }),
   },
   {
@@ -380,6 +395,15 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     runClasses: ["interactive"],
     condition: "Needs a session id.",
     build: () => createScriptsMcpServer({ sessionId: SESSION_ID }),
+  },
+  {
+    name: "opensession-gpu",
+    summary: INTERNAL_MCP_CAPABILITIES["opensession-gpu"].summary,
+    source: "packages/core/opensession-server/src/server/gpu-mcp.ts",
+    wiring: ["packages/core/opensession-server/src/server/interactive-mcp.ts"],
+    runClasses: ["interactive"],
+    condition: "Needs a session id.",
+    build: () => createGpuMcpServer({ sessionId: SESSION_ID }),
   },
   {
     name: "opensession-local-files",

@@ -25,7 +25,7 @@
 import { $ } from "bun";
 import { sandboxesEnabled, sandboxProviderConfigured } from "./config";
 import { isRemoteSandboxProvider } from "./config";
-import type { ExecOpts, ExecResult } from "./provider";
+import type { ExecOpts, ExecResult, Sandbox } from "./provider";
 
 /**
  * An exec bound to one workspace. `sandboxed`/`remote` let surfaces pick
@@ -94,6 +94,36 @@ export function hasRemoteWorkspace(
   session: WorkspaceExecSession | null | undefined,
 ): boolean {
   return session?.sandbox?.workspace === "volume" || !!session?.runner;
+}
+
+/**
+ * Someone opened a sleeping session's workspace (its files or diff). Wake it
+ * the way every other wake does: on the session's lifecycle lane, recorded as
+ * awake, and counted as a person's interaction so the idle timers put it back
+ * to sleep. A wake that skipped this left the record saying "sleeping", which
+ * the idle sweep skips, so only the provider's backstop stopped the machine.
+ */
+async function wakeForWorkspace(
+  session: WorkspaceExecSession | null | undefined,
+  sandboxId: string,
+  resume: () => Promise<Sandbox | null>,
+): Promise<Sandbox | null> {
+  const stored = session?.id
+    ? await (
+        await import("../session-cache")
+      )
+        .findSessionAsync(session.id)
+        .catch(() => null)
+    : null;
+  if (!stored || stored.sandbox?.sandboxId !== sandboxId) return resume();
+  const { activeSandboxFor } = await import("../session-sandbox");
+  const woken = await activeSandboxFor(stored, { wake: true });
+  if (woken)
+    (await import("./idle")).noteSandboxActivity(
+      { sandboxId, sessionId: stored.id },
+      "human",
+    );
+  return woken;
 }
 
 /**
@@ -173,7 +203,9 @@ export async function workspaceExecFor(
         (await sandbox.status()) === "stopped" &&
         provider.resume
       ) {
-        sandbox = await provider.resume(sb.sandboxId);
+        sandbox = await wakeForWorkspace(session, sb.sandboxId, () =>
+          provider.resume!(sb.sandboxId!),
+        );
       }
       if (!sandbox || (await sandbox.status()) !== "running")
         return unavailableRemote;

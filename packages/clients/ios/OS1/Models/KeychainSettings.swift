@@ -36,6 +36,9 @@ struct KeychainCredential: Codable, Sendable, Identifiable, Equatable {
     var allowedPathPrefixes: [String]?
     /// Calls return only the HTTP status, never headers or body.
     var statusOnly: Bool?
+    /// "workspace": every session may use it without asking. Absent:
+    /// personal, each session asks the owner.
+    var scope: String?
     var createdAt: String?
     var updatedAt: String?
     /// The signed-in person owns it, so they can delete it. Absent from older
@@ -44,7 +47,7 @@ struct KeychainCredential: Codable, Sendable, Identifiable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case id, owner, service, kind, loginUrl, username, host, injection
-        case allowedMethods, allowedPathPrefixes, statusOnly, createdAt, updatedAt, mine
+        case allowedMethods, allowedPathPrefixes, statusOnly, scope, createdAt, updatedAt, mine
         // Every Swift type already answers to `description`, so the wire name
         // is mapped rather than shadowing it.
         case detail = "description"
@@ -71,6 +74,7 @@ struct KeychainCredential: Codable, Sendable, Identifiable, Equatable {
         if isLogin {
             parts.append("Login on \(nonEmpty(loginUrl) ?? nonEmpty(host) ?? "its sign-in page")")
         }
+        if scope == "workspace" { parts.append("workspace") }
         if let owner = nonEmpty(owner) { parts.append("owner \(owner)") }
         if isLogin == false {
             let methods = (allowedMethods ?? []).filter { $0.isEmpty == false }
@@ -196,6 +200,7 @@ enum KeychainPresentation {
         case "standing": "7 days"
         case "run": "Scripted run"
         case "release": "Password release"
+        case "workspace": "Workspace"
         case let other?: other.isEmpty ? nil : other
         case nil: nil
         }

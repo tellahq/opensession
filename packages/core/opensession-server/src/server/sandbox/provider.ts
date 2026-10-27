@@ -11,15 +11,17 @@
  */
 
 /** The provider ids the registry knows (all implemented — see index.ts).
- *  Persisted sessions may still carry a retired id (docker, modal, e2b,
- *  microvm, lambda-microvm); those fail explicitly at dispatch. `tart` is a
+ *  Persisted sessions may still carry a retired id (docker, e2b, microvm,
+ *  lambda-microvm); those fail explicitly at dispatch. `modal` was retired
+ *  and came back with GPU support (adapters/modal.ts). `tart` is a
  *  macOS VM on a paired Mac Runner (adapters/tart.ts). */
 export type SandboxProviderId =
   | "local"
   | "daytona"
   | "box"
   | "tart"
-  | "usecomputer";
+  | "usecomputer"
+  | "modal";
 
 /** Selection authority for starting new work on a configured provider. */
 export type SandboxProviderUsability =
@@ -72,6 +74,10 @@ export interface SandboxSessionSpec {
    * checkpoint's head with its uncommitted changes in place. A workspace
    * that already exists on the sandbox disk keeps that disk instead. */
   restoreCheckpoint?: { ref: string; commit: string; branch: string };
+  /** The GPU a new container carries (modal only: "T4" or "L4"). A wake
+   *  keeps the GPU the container was created with unless this names
+   *  another. */
+  gpu?: string;
 }
 
 export interface ExecOpts {
@@ -237,8 +243,15 @@ export interface SandboxProvider {
   /** The same desktop for the agent: screenshots plus mouse and keyboard.
    *  Rejects while the sandbox is asleep. */
   desktopControl?(sandboxId: string): Promise<SandboxDesktopControl>;
+  /** Push the provider's own idle timer out while the machine is in use
+   *  (sandbox/idle.ts). Providers without one leave this undefined. */
+  keepAlive?(sandboxId: string): Promise<void>;
   /** Wake a paused sandbox and return its live handle. */
   resume?(sandboxId: string): Promise<Sandbox | null>;
+  /** The machine this provider holds for a session, awake or asleep, also
+   *  when `ensure` failed after creating it (a failed setup). The run path
+   *  records it so the session can pause it and the idle sweep sleeps it. */
+  machineFor?(sessionId: string): string | undefined;
   /** Persist a session-owned filesystem checkpoint after a clean turn.
    * Providers whose stopped sandboxes retain disk do not need this hook. */
   checkpoint?(sandboxId: string): Promise<void>;

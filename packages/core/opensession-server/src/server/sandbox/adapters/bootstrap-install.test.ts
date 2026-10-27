@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  baseRuntimeMarkerCheck,
   baseRuntimeSignature,
+  remoteLayout,
   bootstrapRemoteSandbox,
   type RemoteDriver,
 } from "./bootstrap";
@@ -27,8 +29,9 @@ function fakeDriver(
   };
 }
 
+// The marker read, answered as a Sandbox whose pinned runtime is installed.
 const prepared = (command: string) =>
-  command.startsWith("cat ") && command.includes(".opensession-base-runtime")
+  command === baseRuntimeMarkerCheck(remoteLayout())
     ? { exitCode: 0, stdout: baseRuntimeSignature() }
     : { exitCode: 0 };
 
@@ -65,6 +68,23 @@ describe("remote base runtime", () => {
     expect(written).toEqual([
       "/home/ubuntu/.local/share/opensession/workload-identity-client.ts",
     ]);
+  });
+
+  test("a marker without the pinned Node installs the runtime again", async () => {
+    // Boat restores only the home: the marker survives, /usr/local does not,
+    // so the check (which tests the binary first) prints nothing.
+    const commands: string[] = [];
+    await bootstrapRemoteSandbox(
+      fakeDriver(commands, (command) =>
+        command === baseRuntimeMarkerCheck(remoteLayout())
+          ? { exitCode: 1, stdout: "" }
+          : { exitCode: 0 },
+      ),
+      "test",
+    );
+    expect(commands.some((command) => command.includes("nodejs.org"))).toBe(
+      true,
+    );
   });
 
   test("installs nothing of Open Session itself", async () => {

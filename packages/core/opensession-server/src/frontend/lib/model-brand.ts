@@ -21,19 +21,3 @@ export function modelBrandKey(id: string, provider?: string): string | null {
     return "codex";
   return null;
 }
-
-/**
- * Resolve every vendor participating in a model choice. Presets carry their
- * concrete lead/supporting composition from the catalog; repeated vendors
- * collapse to one mark, while a cross-vendor combo keeps both.
- */
-export function modelBrandKeys(
-  id: string,
-  provider?: string,
-  composition?: string[],
-): string[] {
-  const keys = (composition?.length ? composition : [id])
-    .map((model) => modelBrandKey(model, provider))
-    .filter((key): key is string => !!key);
-  return [...new Set(keys)];
-}

@@ -34,6 +34,7 @@ import {
   rmSync,
   unlinkSync,
 } from "fs";
+import { randomUUID } from "crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "../../paths";
@@ -46,7 +47,12 @@ import {
   type WorkloadIdentityContext,
 } from "../../workload-identity";
 import { REPO_ROOT } from "../../../runner-host/protocol";
-import { sandboxConfig, remoteSandboxCallbackBaseUrl } from "../config";
+import {
+  remoteSandboxCallbackBaseUrl,
+  repoPreSetupScript,
+  sandboxConfig,
+  workspaceResumeScript,
+} from "../config";
 import type {
   ExecOpts,
   ExecResult,
@@ -291,7 +297,15 @@ export interface RemoteSandboxState extends SandboxTrustPolicy {
    *  VM currently holding the session; absent while asleep). */
   remoteId?: string;
   repoId?: string;
-  resources?: { cpu?: number; memoryMb?: number; diskGb?: number };
+  resources?: {
+    cpu?: number;
+    memoryMb?: number;
+    diskGb?: number;
+    gpu?: string;
+  };
+  /** When the current `remoteId` container started, for providers whose
+   *  containers have a maximum lifetime (modal: 24 hours). */
+  remoteStartedAt?: string;
   branch?: string;
   /** Session-private provider image used when ephemeral compute disappears. */
   checkpointArtifactId?: string;
@@ -1044,6 +1058,23 @@ function baseRuntimeMarker(L: RemoteLayout): string {
   return `${L.home}/.opensession-base-runtime`;
 }
 
+/**
+ * Print the marker only while the runtime it vouches for is still there.
+ * The marker lives in the home directory, but Node, just and gh are installed
+ * outside it (/usr/local), and some providers restore only the home from a
+ * snapshot: Boat brings back /home/user over a fresh base image. A marker
+ * trusted on its own then skipped the install and left the image's own,
+ * older Node first on PATH.
+ */
+export function baseRuntimeMarkerCheck(L: RemoteLayout): string {
+  return (
+    `[ "$(/usr/local/bin/node -p 'process.versions.node' 2>/dev/null)" = ${shellQuoteWord(REMOTE_NODE_VERSION)} ] && ` +
+    `PATH=${shellQuoteWord(L.path)} command -v just >/dev/null && ` +
+    `PATH=${shellQuoteWord(L.path)} command -v gh >/dev/null && ` +
+    `cat ${shellQuoteWord(baseRuntimeMarker(L))} 2>/dev/null`
+  );
+}
+
 async function installWorkloadIdentityClient(
   driver: RemoteDriver,
   L: RemoteLayout,
@@ -1075,9 +1106,7 @@ export async function ensureRemoteBaseRuntime(
 ): Promise<void> {
   const L = layoutFor(driver);
   const signature = baseRuntimeSignature();
-  const marker = await driver.exec(
-    `cat ${shellQuoteWord(baseRuntimeMarker(L))} 2>/dev/null`,
-  );
+  const marker = await driver.exec(baseRuntimeMarkerCheck(L));
   if (marker.exitCode === 0 && marker.stdout.trim() === signature) {
     const repaired = await driver.exec(workloadIdentityClientInstallCommand(L));
     if (repaired.exitCode === 0) return;
@@ -1707,6 +1736,11 @@ export async function runRemoteLifecycleHook(
   const key = remoteLifecycleKey(scopeKey || cwd) || "workspace";
   const log = `${L.lifecycleDir}/${key}-${hook}.log`;
   const stamp = `${L.lifecycleDir}/${key}-setup.done`;
+  // A setup script kept in Workspace settings instead of the repository
+  // runs right before `.agents/setup`, and counts as setup on its own.
+  const preSetup =
+    hook === "setup" ? repoPreSetupScript(identity?.repoId || scopeKey) : null;
+  const preSetupPath = `${L.lifecycleDir}/${key}-pre-setup`;
   const inspectCommand =
     hook === "setup"
       ? `if [ -f ${shellQuoteWord(stamp)} ]; then echo stamped; elif [ -e ${shellQuoteWord(script)} ]; then echo present; else echo absent; fi`
@@ -1735,10 +1769,25 @@ export async function runRemoteLifecycleHook(
       `could not inspect .agents/${hook}: ${probe.stderr.trim()}`,
     );
   const state = probe.stdout.trim();
-  if (state === "stamped" || state === "absent") return { ran: false, log };
-  const executable = await readProbe(`test -x ${shellQuoteWord(script)}`);
-  if (executable.exitCode !== 0)
-    throw new Error(`.agents/${hook} exists but is not executable`);
+  if (state === "stamped" || (state === "absent" && !preSetup))
+    return { ran: false, log };
+  const repoHook = state === "present";
+  if (repoHook) {
+    const executable = await readProbe(`test -x ${shellQuoteWord(script)}`);
+    if (executable.exitCode !== 0)
+      throw new Error(`.agents/${hook} exists but is not executable`);
+  }
+  if (preSetup) {
+    need(
+      await driver.exec(`mkdir -p ${shellQuoteWord(L.lifecycleDir)}`),
+      "lifecycle directory",
+    );
+    await driver.writeFile(preSetupPath, preSetup);
+    need(
+      await driver.exec(`chmod 755 ${shellQuoteWord(preSetupPath)}`),
+      "pre-setup script",
+    );
+  }
   const identityEnv = identity
     ? createWorkloadIdentityEnv({ ...identity, lifecycle: hook })
     : {};
@@ -1757,15 +1806,35 @@ export async function runRemoteLifecycleHook(
       ? `mkdir -p ${shellQuoteWord(setupBin)} && printf %s ${shellQuoteWord(bunShim)} > ${shellQuoteWord(`${setupBin}/bun`)} && chmod 755 ${shellQuoteWord(`${setupBin}/bun`)} && `
       : "";
   const lifecyclePath = hook === "setup" ? `${setupBin}:${L.path}` : L.path;
+  // Every process setup starts carries this marker, so whatever it leaves
+  // running can be found and stopped afterwards: nothing setup started
+  // reaches a project snapshot (killSetupLeftovers).
+  const runMarker = hook === "setup" ? randomUUID() : "";
+  const hookEnv =
+    `env HOME=${L.home} PATH=${shellQuoteWord(lifecyclePath)} ${identityArgs} ` +
+    (runMarker ? `${SETUP_RUN_MARKER}=${runMarker} ` : "") +
+    `OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)}`;
+  const steps = [
+    ...(preSetup
+      ? [
+          `${hookEnv} ${shellQuoteWord(preSetupPath)} >> ${shellQuoteWord(log)} 2>&1`,
+        ]
+      : []),
+    ...(repoHook
+      ? [`${hookEnv} ${shellQuoteWord(script)} >> ${shellQuoteWord(log)} 2>&1`]
+      : []),
+  ];
   const command =
     `mkdir -p ${shellQuoteWord(L.lifecycleDir)} && ` +
     setupGuard +
     `: > ${shellQuoteWord(log)} && ` +
-    `env HOME=${L.home} PATH=${shellQuoteWord(lifecyclePath)} ${identityArgs} ` +
-    `OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ${shellQuoteWord(script)} ` +
-    `>> ${shellQuoteWord(log)} 2>&1` +
+    steps.join(" && ") +
     (hook === "setup" ? ` && touch ${shellQuoteWord(stamp)}` : "");
-  const result = await driver.exec(command, { cwd, timeoutMs: 20 * 60_000 });
+  const result = await driver
+    .exec(command, { cwd, timeoutMs: SETUP_TIMEOUT_MS })
+    .finally(async () => {
+      if (runMarker) await killSetupLeftovers(driver, runMarker);
+    });
   if (result.exitCode !== 0) {
     const tail = await driver.exec(
       `tail -80 ${shellQuoteWord(log)} 2>/dev/null || true`,
@@ -1779,6 +1848,51 @@ export async function runRemoteLifecycleHook(
   return { ran: true, log };
 }
 
+/** Setup's time limit: past it the hook is stopped and the machine is not
+ *  published as a project snapshot. */
+export const SETUP_TIMEOUT_MS = 20 * 60_000;
+/** The environment variable that marks every process a setup run started. */
+export const SETUP_RUN_MARKER = "OPENSESSION_SETUP_RUN";
+
+/** Shell that stops every process still carrying `marker` in its
+ *  environment. Linux reads /proc; a guest without it has nothing to do. */
+export function setupLeftoversKillScript(marker: string): string {
+  const needle = `${SETUP_RUN_MARKER}=${marker}`;
+  return (
+    `[ -d /proc/self ] || exit 0; ` +
+    `for p in /proc/[0-9]*; do ` +
+    `pid=\${p#/proc/}; [ "$pid" = "$$" ] && continue; ` +
+    `if tr '\\0' '\\n' < "$p/environ" 2>/dev/null | grep -qxF ${shellQuoteWord(needle)}; then ` +
+    `kill -9 "$pid" 2>/dev/null && echo "$pid"; fi; done; true`
+  );
+}
+
+/** Stop what a setup run left running (development servers, watchers,
+ *  `nohup` jobs): they would not survive into a snapshot anyway, and a
+ *  process half-way through writing its files must not be captured. A
+ *  service a package manager handed to systemd is not setup's child and
+ *  keeps running. Never throws. */
+export async function killSetupLeftovers(
+  driver: RemoteDriver,
+  marker: string,
+): Promise<void> {
+  try {
+    const killed = await driver.exec(setupLeftoversKillScript(marker), {
+      timeoutMs: 60_000,
+    });
+    const pids = killed.stdout.split("\n").filter(Boolean);
+    if (pids.length)
+      console.log(
+        `[sandbox] stopped ${pids.length} process(es) setup left running`,
+      );
+  } catch (error) {
+    console.warn(
+      "[sandbox] could not stop processes setup left running:",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
 /** A setup failure that comes from a damaged Bun package cache (entries
  *  whose files are gone after a lazily restored disk was sealed into an
  *  image) rather than from the repository. */
@@ -1786,6 +1900,32 @@ export function bunCacheDamaged(message: string): boolean {
   return /downloaded package was not found in the cache|failed copying files from cache/i.test(
     message,
   );
+}
+
+/** Shell that lists (up to 20) packages in the guest's Bun cache whose
+ *  `bin/` directory is empty. An executable-shipping package (esbuild's
+ *  platform binary, for one) never has an empty one; a disk restored lazily
+ *  and sealed into an image again can, and every install linked from that
+ *  cache then lacks the binary while setup still succeeds. */
+export function bunCacheEmptyBinsScript(L: RemoteLayout): string {
+  const cache = shellQuoteWord(`${L.home}/.bun/install/cache`);
+  return `[ -d ${cache} ] || exit 0; find ${cache} -mindepth 2 -maxdepth 4 -type d -name bin -empty 2>/dev/null | head -20`;
+}
+
+/** Packages in the guest's Bun cache that lost their executables. */
+export async function bunCacheEmptyBins(
+  driver: RemoteDriver,
+): Promise<string[]> {
+  const L = layoutFor(driver);
+  const listed = await driver.exec(bunCacheEmptyBinsScript(L), {
+    timeoutMs: 5 * 60_000,
+  });
+  if (listed.exitCode !== 0) return [];
+  const cache = `${L.home}/.bun/install/cache/`;
+  return listed.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith(cache));
 }
 
 /** Drop the guest's Bun package cache and a workspace's installed packages,
@@ -1804,12 +1944,47 @@ export async function clearRemoteBunInstall(
   );
 }
 
+/** How long a wake waits for `.agents/resume` (and the workspace resume
+ *  script before it) before the agent continues; the hook keeps running in
+ *  the background. */
+export const RESUME_HOOK_WAIT_MS = 10_000;
+
+/** The workspace-wide resume script (Workspace → Sandboxes), run before the
+ *  repository's `.agents/resume` on Linux guests. Its output goes to
+ *  `workspace-resume.log` next to the hook logs. */
+export async function runWorkspaceResumeScript(
+  driver: RemoteDriver,
+  cwd: string,
+): Promise<boolean> {
+  const script = workspaceResumeScript();
+  const L = layoutFor(driver);
+  if (!script || L.os !== "linux") return false;
+  const path = `${L.lifecycleDir}/workspace-resume`;
+  const log = `${L.lifecycleDir}/workspace-resume.log`;
+  need(
+    await driver.exec(`mkdir -p ${shellQuoteWord(L.lifecycleDir)}`),
+    "lifecycle directory",
+  );
+  await driver.writeFile(path, script);
+  const result = await driver.exec(
+    `chmod 755 ${shellQuoteWord(path)} && env HOME=${L.home} PATH=${shellQuoteWord(L.path)} ` +
+      `OPENSESSION_BOOT_MODE=resume bash ${shellQuoteWord(path)} > ${shellQuoteWord(log)} 2>&1`,
+    { cwd, timeoutMs: 10 * 60_000 },
+  );
+  if (result.exitCode !== 0)
+    throw new Error(
+      `the workspace resume script failed with exit ${result.exitCode}; see ${log}`,
+    );
+  return true;
+}
+
 /**
  * `.agents/resume` on every real wake. A sandbox that slept keeps its disk but
  * loses every process, so the repository gets one idempotent chance to repair
- * what a fresh boot needs (caches, daemons, generated files) before the agent
- * or a Portal restart runs. Never fails the wake: the log is surfaced in the
- * Sandbox badge instead.
+ * what a fresh boot needs (caches, daemons, generated files). The wake waits
+ * for it at most RESUME_HOOK_WAIT_MS; a slower hook carries on in the
+ * background while the agent and the Portal restarts continue. Never fails
+ * the wake: the log is surfaced in the Sandbox badge instead.
  */
 export async function runResumeHook(
   driver: RemoteDriver,
@@ -1821,8 +1996,19 @@ export async function runResumeHook(
     repoId?: string;
     trustProfile?: "interactive" | "automation";
   },
+  waitMs = RESUME_HOOK_WAIT_MS,
 ): Promise<void> {
-  try {
+  const warn = (what: string, error: unknown) =>
+    console.warn(
+      `[sandbox:${providerId}] ${sandboxId}: ${what} failed:`,
+      error instanceof Error ? error.message : String(error),
+    );
+  const work = (async () => {
+    // A workspace script failure is a warning; the repository's own hook
+    // still runs.
+    await runWorkspaceResumeScript(driver, state.cwd).catch((error) =>
+      warn("the workspace resume script", error),
+    );
     await runRemoteLifecycleHook(
       driver,
       state.cwd,
@@ -1836,22 +2022,35 @@ export async function runResumeHook(
         repoId: state.repoId || "",
         trustProfile: state.trustProfile || "interactive",
       },
+    ).catch((error) => warn(".agents/resume", error));
+    return true;
+  })();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const finished = await Promise.race([
+    work,
+    new Promise<false>((resolve) => {
+      timer = setTimeout(() => resolve(false), waitMs);
+    }),
+  ]);
+  clearTimeout(timer);
+  if (!finished)
+    console.log(
+      `[sandbox:${providerId}] ${sandboxId}: .agents/resume is still running after ${waitMs}ms; continuing while it finishes`,
     );
-  } catch (error) {
-    console.warn(
-      `[sandbox:${providerId}] ${sandboxId}: .agents/resume failed:`,
-      error instanceof Error ? error.message : String(error),
-    );
-  }
 }
 
 // ── The Sandbox handle ────────────────────────────────────────────────────────
 
-export interface RemoteSandboxParts {
+/** Who a Sandbox handle runs for: the session, its workspace, and the
+ *  repository and trust profile its commands' workload identity carries. */
+export type RemoteSandboxOwner = Pick<
+  RemoteSandboxState,
+  "sessionId" | "cwd" | "repoId" | "trustProfile"
+>;
+
+export interface RemoteSandboxParts extends RemoteSandboxOwner {
   providerId: SandboxProviderId;
   sandboxId: string;
-  sessionId: string;
-  cwd: string;
   driver: RemoteDriver;
   ports(requestedPorts?: number[]): Promise<PortMap>;
   status(): Promise<SandboxStatus>;
@@ -1898,6 +2097,10 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
                 provider: parts.providerId,
                 lifecycle: "run" as const,
                 sessionId: parts.sessionId,
+                // A grant scoped to a repository or trust profile matches
+                // ordinary commands too, not only lifecycle hooks and Portals.
+                ...(parts.repoId ? { repoId: parts.repoId } : {}),
+                trustProfile: parts.trustProfile,
               })),
           ...opts?.env,
         },

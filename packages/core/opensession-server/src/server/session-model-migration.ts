@@ -106,10 +106,8 @@ export async function migrateSessionEngine(
   }
 
   const resolved = resolveModel(targetModel);
-  // The target must NAME an engine: an engine-prefixed id, or a preset id
-  // (dial/…, orchestrator/…) which the pi engine resolves at dispatch. A
-  // bare native slug ("claude-opus-5") names a model, not an engine, and is
-  // rejected the way it always was.
+  // The target must NAME an engine: an engine-prefixed id. A bare native
+  // slug ("claude-opus-5") names a model, not an engine, and is rejected.
   const engine = resolved ? explicitEngineFor(resolved.id) : null;
   if (!resolved || !engine) {
     return {

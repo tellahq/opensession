@@ -5,12 +5,17 @@
  * only with the token minted for its exact {session, sandbox, port} tuple.
  */
 import { randomBytes, timingSafeEqual } from "crypto";
-import { mkdir, readdir, readFile, rm, writeFile } from "fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "fs/promises";
 import { join } from "path";
+import { statePath } from "./paths";
 import { portalNavigationRequest } from "./portal-sign-in";
 import { portalWaitingResponse } from "./portal-waiting-page";
-import { sandboxHttpsPortFor } from "./sandbox/preview-ports";
+import {
+  lookupSandboxHttpsPort,
+  sandboxHttpsPortFor,
+} from "./sandbox/preview-ports";
 import { hostSessionScratchDir } from "./session-scratch";
+import { noteSandboxActivity } from "./sandbox/idle";
 
 export type SandboxPortalGrant = {
   sessionId: string;
@@ -46,6 +51,8 @@ type Connection = {
   port: number;
   expiresAt: number;
   expiryTimer: ReturnType<typeof setTimeout>;
+  /** Renews the credential over this socket before it expires. */
+  renewTimer?: ReturnType<typeof setTimeout>;
   pending: Map<string, PendingRelayResponse>;
   limitRequests: RelayRequestLimiter;
   limitAssets: RelayRequestLimiter;
@@ -235,6 +242,7 @@ function recordLocalAddress(relay: Relay, name: string | undefined): void {
       path,
       `${JSON.stringify({ name: known ?? null, port: relay.port, url })}\n`,
     );
+    touchRelayIndex(relay);
   });
 }
 
@@ -244,6 +252,106 @@ function forgetLocalAddress(relay: Relay): void {
     `${relay.port}.json`,
   );
   queueLocalRecord(path, () => rm(path, { force: true }));
+  updateRelayIndex(key(relay.sessionId, relay.sandboxId, relay.port), null);
+}
+
+/** One durable list of the loopback relays this process serves, so the next
+ * process can bind the same addresses at boot (startSandboxPortalRelays)
+ * without reading any session's files. */
+type RelayIndexEntry = {
+  sessionId: string;
+  sandboxId: string;
+  port: number;
+  name: string | null;
+  localPort: number;
+  updatedAt: string;
+};
+
+/** A relay nothing renewed or rebuilt for this long is not rebound. */
+export const RELAY_INDEX_MAX_AGE_MS = 24 * 60 * 60_000;
+
+function relayIndexPath(): string {
+  return statePath(".opensession-sandbox-portal-relays.json");
+}
+
+async function readRelayIndex(): Promise<RelayIndexEntry[]> {
+  try {
+    const parsed = JSON.parse(await readFile(relayIndexPath(), "utf8"));
+    if (!Array.isArray(parsed?.relays)) return [];
+    return parsed.relays.filter(
+      (entry: any): entry is RelayIndexEntry =>
+        typeof entry?.sessionId === "string" &&
+        typeof entry.sandboxId === "string" &&
+        Number.isInteger(entry.port) &&
+        Number.isInteger(entry.localPort) &&
+        entry.localPort > 0 &&
+        entry.localPort < 65536 &&
+        typeof entry.updatedAt === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function updateRelayIndex(id: string, entry: RelayIndexEntry | null): void {
+  const path = relayIndexPath();
+  queueLocalRecord(path, async () => {
+    const relays = (await readRelayIndex()).filter(
+      (item) => key(item.sessionId, item.sandboxId, item.port) !== id,
+    );
+    if (entry) relays.push(entry);
+    const temporary = `${path}.${process.pid}.tmp`;
+    await writeFile(temporary, `${JSON.stringify({ relays })}\n`);
+    await rename(temporary, path);
+  });
+}
+
+function touchRelayIndex(relay: Relay): void {
+  updateRelayIndex(key(relay.sessionId, relay.sandboxId, relay.port), {
+    sessionId: relay.sessionId,
+    sandboxId: relay.sandboxId,
+    port: relay.port,
+    name: relay.recordedName ?? null,
+    localPort: Number(relay.server.port),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Bind the loopback relays the previous process served, on the same ports.
+ * A deploy restarts this process and used to take every Sandbox Portal's
+ * loopback address with it: an agent shell's script got connection refused
+ * until someone restarted the Portal. Binding only listens. The first request
+ * reconnects the Sandbox through route recovery, which checks the session
+ * and never wakes a sleeping Sandbox.
+ */
+export async function startSandboxPortalRelays(): Promise<number> {
+  let rebound = 0;
+  for (const entry of await readRelayIndex()) {
+    const id = key(entry.sessionId, entry.sandboxId, entry.port);
+    const updatedAt = Date.parse(entry.updatedAt);
+    if (
+      !Number.isFinite(updatedAt) ||
+      Date.now() - updatedAt > RELAY_INDEX_MAX_AGE_MS
+    ) {
+      updateRelayIndex(id, null);
+      continue;
+    }
+    if (relays.has(id)) continue;
+    try {
+      recordLocalAddress(
+        createRelay(entry, entry.localPort),
+        entry.name ?? undefined,
+      );
+      rebound += 1;
+    } catch (error) {
+      console.warn(
+        `[sandbox-portal] could not rebind ${entry.sandboxId}:${entry.port}:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+  return rebound;
 }
 
 /** The loopback URLs of this session's relayed Sandbox Portals, by Portal
@@ -257,6 +365,12 @@ export async function sandboxPortalLocalUrls(
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const dir = sandboxPortalLocalDir(sessionId);
+  // A relay rebuilt a moment ago may still be writing its new address.
+  await Promise.all(
+    [...localRecordOps]
+      .filter(([path]) => path.startsWith(`${dir}/`))
+      .map(([, pending]) => pending),
+  );
   try {
     for (const file of await readdir(dir)) {
       if (!file.endsWith(".json")) continue;
@@ -383,6 +497,16 @@ export function mintSandboxPortalGrant(input: {
   const now = Date.now();
   for (const [token, grant] of grants)
     if (grant.expiresAt <= now) grants.delete(token);
+  // A new credential supersedes the previous one for the same service, so a
+  // replaced sidecar that is still running cannot reconnect and take the
+  // socket back from its successor.
+  for (const [token, grant] of grants)
+    if (
+      grant.sessionId === input.sessionId &&
+      grant.sandboxId === input.sandboxId &&
+      grant.port === input.port
+    )
+      grants.delete(token);
   const token = randomBytes(24).toString("base64url");
   const expiresAt =
     Date.now() +
@@ -427,6 +551,7 @@ function teardownConnection(
   reason: string,
 ): void {
   clearTimeout(connection.expiryTimer);
+  clearTimeout(connection.renewTimer);
   for (const pending of connection.pending.values()) {
     clearTimeout(pending.timer);
     pending.resolve({ status: 502, headers: {} });
@@ -525,7 +650,28 @@ export function sandboxPortalRelayOpen(ws: any): boolean {
   const previous = connections.get(id);
   if (previous) teardownConnection(previous, 1000, "replaced");
   const expiresAt = Number(ws.data.expiresAt);
-  const closeAtExpiry = setTimeout(
+  const connection: Connection = {
+    ws,
+    sessionId,
+    sandboxId,
+    port,
+    expiresAt,
+    expiryTimer: closeAtExpiry(ws, expiresAt),
+    pending: new Map(),
+    limitRequests: createRelayRequestLimiter(),
+    limitAssets: createRelayRequestLimiter(),
+  };
+  connections.set(id, connection);
+  reconnectFailures.delete(id);
+  scheduleRenewal(id, connection);
+  return true;
+}
+
+function closeAtExpiry(
+  ws: any,
+  expiresAt: number,
+): ReturnType<typeof setTimeout> {
+  const timer = setTimeout(
     () => {
       try {
         ws.close(1008, "portal credential expired");
@@ -533,19 +679,55 @@ export function sandboxPortalRelayOpen(ws: any): boolean {
     },
     Math.max(0, expiresAt - Date.now()),
   );
-  closeAtExpiry.unref?.();
-  connections.set(id, {
-    ws,
-    sessionId,
-    sandboxId,
-    port,
-    expiresAt,
-    expiryTimer: closeAtExpiry,
-    pending: new Map(),
-    limitRequests: createRelayRequestLimiter(),
-    limitAssets: createRelayRequestLimiter(),
-  });
-  return true;
+  timer.unref?.();
+  return timer;
+}
+
+/** How long before its credential expires a connected relay is renewed. */
+export const RELAY_RENEW_BEFORE_EXPIRY_MS = 60_000;
+
+/** A sidecar's credential is short-lived, and it used to be renewed only when
+ * someone happened to read the Portal's status in the 30 seconds before it
+ * expired. Otherwise the socket closed every ten minutes: the agent shell's
+ * loopback address answered 503 "not connected" and requests in flight were
+ * cut. While its relay is wanted, renew the credential over the open socket
+ * instead: no new sidecar, no replaced socket. A sidecar that predates
+ * renewal ignores the message and keeps its socket; it only cannot reconnect
+ * with the old token, so the next request relaunches it
+ * (reconnectSandboxPortal). */
+function scheduleRenewal(id: string, connection: Connection): void {
+  clearTimeout(connection.renewTimer);
+  connection.renewTimer = setTimeout(
+    () => renewConnection(id, connection),
+    Math.max(
+      0,
+      connection.expiresAt - RELAY_RENEW_BEFORE_EXPIRY_MS - Date.now(),
+    ),
+  );
+  connection.renewTimer.unref?.();
+}
+
+function renewConnection(id: string, connection: Connection): void {
+  const relay = relays.get(id);
+  if (connections.get(id) !== connection || !relay) return;
+  let grant: SandboxPortalGrant;
+  try {
+    grant = mintSandboxPortalGrant(connection);
+    connection.ws.send(
+      JSON.stringify({
+        t: "renew",
+        token: grant.token,
+        expiresAt: grant.expiresAt,
+      }),
+    );
+  } catch {
+    return;
+  }
+  connection.expiresAt = grant.expiresAt;
+  clearTimeout(connection.expiryTimer);
+  connection.expiryTimer = closeAtExpiry(connection.ws, grant.expiresAt);
+  scheduleRenewal(id, connection);
+  touchRelayIndex(relay);
 }
 export function sandboxPortalRelayMessage(
   ws: any,
@@ -637,15 +819,62 @@ export async function waitForSandboxPortalRelay(
   return false;
 }
 
-export function sandboxPortalRelayConnected(input: {
-  sessionId: string;
-  sandboxId: string;
-  port: number;
-}): boolean {
+export function sandboxPortalRelayConnected(
+  input: {
+    sessionId: string;
+    sandboxId: string;
+    port: number;
+  },
+  /** Also require the credential to outlive this many milliseconds. */
+  marginMs = 0,
+): boolean {
   const connection = connections.get(
     key(input.sessionId, input.sandboxId, input.port),
   );
-  return Boolean(connection && connection.expiresAt > Date.now());
+  return Boolean(connection && connection.expiresAt > Date.now() + marginMs);
+}
+
+const reconnectFailures: Map<string, number> =
+  (g.__opensessionSandboxPortalReconnectFailures ??= new Map()) as Map<
+    string,
+    number
+  >;
+/** After a failed reconnect, answer 503 at once for this long rather than
+ * asking the provider again on every request. */
+const RECONNECT_RETRY_MS = 10_000;
+
+/** A request found no relay connection: the sidecar's credential lapsed, it
+ * died, or this process restarted. Relaunch it through route recovery, which
+ * verifies the session and the running Sandbox first and never wakes one,
+ * and return the new connection. Before this only a person opening the
+ * Portal URL did that, so the agent shell's loopback address kept answering
+ * 503 until someone restarted the Portal. */
+async function reconnectSandboxPortal(input: {
+  sessionId: string;
+  sandboxId: string;
+  port: number;
+}): Promise<Connection | undefined> {
+  const id = key(input.sessionId, input.sandboxId, input.port);
+  const failedAt = reconnectFailures.get(id);
+  if (failedAt !== undefined && Date.now() - failedAt < RECONNECT_RETRY_MS)
+    return undefined;
+  try {
+    const httpsPort = lookupSandboxHttpsPort(input.sandboxId, input.port);
+    if (httpsPort !== null) {
+      const { recoverSandboxPortalRoute } =
+        await import("./sandbox-portal-recovery");
+      await recoverSandboxPortalRoute(httpsPort);
+    }
+  } catch (error) {
+    console.warn(
+      `[sandbox-portal] could not reconnect ${input.sandboxId}:${input.port}:`,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  const connection = connections.get(id);
+  if (connection && connection.expiresAt > Date.now()) return connection;
+  reconnectFailures.set(id, Date.now());
+  return undefined;
 }
 
 export function sandboxPortalRelayClose(ws: any): boolean {
@@ -665,9 +894,11 @@ export async function relayFetch(
   input: { sessionId: string; sandboxId: string; port: number },
   request: Request,
 ): Promise<Response> {
-  const connection = connections.get(
+  let connection = connections.get(
     key(input.sessionId, input.sandboxId, input.port),
   );
+  if (!connection || connection.expiresAt <= Date.now())
+    connection = await reconnectSandboxPortal(input);
   if (!connection)
     return new Response("Sandbox Portal is not connected", { status: 503 });
   const limit =
@@ -758,37 +989,47 @@ export async function relayFetch(
   });
 }
 
-/** Bind the browser-facing Portal route to a local-only server. The Sandbox
- * can reach it only through its one registered outbound control connection. */
-export async function ensureSandboxPortalRelay(input: {
-  sessionId: string;
-  sandboxId: string;
-  port: number;
-  /** The Portal's name, when the caller knows it (sandboxPortalLocalDir). */
-  name?: string;
-}): Promise<string | null> {
-  const id = key(input.sessionId, input.sandboxId, input.port);
-  let relay = relays.get(id);
-  if (!relay) {
-    const server = Bun.serve<{
-      id: string;
-      connection: Connection;
-      path: string;
-      headers: Record<string, string>;
-    }>({
+type RelaySocketData = {
+  id: string;
+  connection: Connection;
+  path: string;
+  headers: Record<string, string>;
+};
+
+/** Start the loopback server for one Sandbox service. It takes `localPort`
+ * when that port is free, so an address an agent shell or script already
+ * holds, and the Caddy route that points at it, keep working after this
+ * process restarts. */
+function createRelay(
+  input: { sessionId: string; sandboxId: string; port: number },
+  localPort = 0,
+): Relay {
+  const identity = {
+    sessionId: input.sessionId,
+    sandboxId: input.sandboxId,
+    port: input.port,
+  };
+  const id = key(identity.sessionId, identity.sandboxId, identity.port);
+  const serve = (port: number) =>
+    Bun.serve<RelaySocketData>({
       hostname: "127.0.0.1",
-      port: 0,
+      port,
       // Browser asset bursts wait behind the sidecar's response-frame queue,
       // and cold Next/Turbopack routes may not send headers for minutes. Bun's
       // short default closes those healthy upstream sockets and Caddy turns
       // the EOF into a misleading 502. Keep this below the sidecar's bounded
       // four-minute app fetch timeout.
       idleTimeout: 255,
-      fetch: (request, relayServer) => {
+      fetch: async (request, relayServer) => {
+        // Any request to a Portal, whoever makes it, keeps its Sandbox
+        // around for the interaction window (sandbox/idle.ts).
+        noteSandboxActivity(identity, "human");
         if (request.headers.get("upgrade")?.toLowerCase() !== "websocket")
-          return relayFetch(input, request);
-        const connection = connections.get(id);
+          return relayFetch(identity, request);
+        let connection = connections.get(id);
         if (!connection || connection.expiresAt <= Date.now())
+          connection = await reconnectSandboxPortal(identity);
+        if (!connection)
           return new Response("Sandbox Portal is not connected", {
             status: 503,
           });
@@ -854,14 +1095,29 @@ export async function ensureSandboxPortalRelay(input: {
         },
       },
     });
-    relay = {
-      sessionId: input.sessionId,
-      sandboxId: input.sandboxId,
-      port: input.port,
-      server,
-    };
-    relays.set(id, relay);
+  let server: ReturnType<typeof Bun.serve>;
+  try {
+    server = serve(localPort);
+  } catch (error) {
+    if (!localPort) throw error;
+    server = serve(0);
   }
+  const relay: Relay = { ...identity, server };
+  relays.set(id, relay);
+  return relay;
+}
+
+/** Bind the browser-facing Portal route to a local-only server. The Sandbox
+ * can reach it only through its one registered outbound control connection. */
+export async function ensureSandboxPortalRelay(input: {
+  sessionId: string;
+  sandboxId: string;
+  port: number;
+  /** The Portal's name, when the caller knows it (sandboxPortalLocalDir). */
+  name?: string;
+}): Promise<string | null> {
+  const id = key(input.sessionId, input.sandboxId, input.port);
+  const relay = relays.get(id) ?? createRelay(input);
   recordLocalAddress(relay, input.name);
   const upstream = `127.0.0.1:${relay.server.port}`;
   return queueRouteOperation(id, async () => {

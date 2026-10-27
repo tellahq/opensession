@@ -567,9 +567,16 @@ final class VoiceEngine {
     // Wires a fresh engine: voice processing first (it swaps the I/O unit, so
     // any device set earlier would be lost), then the per-engine devices with
     // read-back, the ducking policy, playback and the microphone tap.
+    //
+    // The main mixer must exist before voice processing is enabled. Created
+    // afterwards, its implicit connection to the output node picks up the
+    // voice-processing unit's unset (0 channel, 0 Hz) output format and
+    // start() fails initializing the output node with -10875
+    // (kAudioUnitErr_FailedInitialization).
     private func build() throws {
         stop()
         let engine = AVAudioEngine()
+        _ = engine.mainMixerNode
         let input = engine.inputNode
         do {
             try input.setVoiceProcessingEnabled(true)

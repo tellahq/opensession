@@ -1118,6 +1118,7 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
     previewPath: data.previewPath,
     walkthrough: data.walkthrough,
     slackShares: data.slackShares,
+    shippedChangeDraft: data.shippedChangeDraft,
     automation:
       data.automation ||
       (data.createdBy?.endsWith(" (automation)")
@@ -1159,6 +1160,7 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
     slackOrigin: data.slackOrigin,
     sandbox: data.sandbox,
     sandboxCheckpoint: data.sandboxCheckpoint,
+    sandboxGpu: data.sandboxGpu,
     portalSandbox: data.portalSandbox,
     lastActivity: data.lastActivity,
     createdAt: data.createdAt,

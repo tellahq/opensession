@@ -31,8 +31,9 @@ describe("archive undo ownership", () => {
       "rememberArchived(sessions.map((c) => c.id))",
     );
     expect(workspaceMutationsSource).toContain(
-      "rememberArchived(members.map((member) => member.id))",
+      "archiveWorkspaceSessions(sessions, {",
     );
+    expect(workspaceMutationsSource).toContain("rememberArchived,");
     expect(appSource).toContain("rememberArchived([viewerSession.id])");
     expect(appSource).toContain("unarchiveSession(currentSession)");
     expect(appSource).toContain("void reopenLastArchivedRef.current()");

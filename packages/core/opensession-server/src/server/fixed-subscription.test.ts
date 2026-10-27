@@ -287,14 +287,30 @@ describe("fixedSubscriptionTurnError", () => {
     ).toMatch(/cannot run/);
   });
 
-  test("a preset that routes to other models stops the turn", () => {
+  test("a retired preset id runs only when its model matches the account", () => {
+    // Retired presets resolve to the single model they led.
+    expect(
+      policy.fixedSubscriptionTurnError({
+        subscriptionPolicy: "fixed",
+        accountId: "team",
+        model: "dial/opus-fable",
+      }),
+    ).toBeUndefined();
+    expect(
+      policy.fixedSubscriptionTurnError({
+        subscriptionPolicy: "fixed",
+        accountId: "team",
+        model: "dial/high",
+      }),
+    ).toMatch(/cannot run/);
+    // An unresolvable preset names no provider, so it cannot be funded.
     expect(
       policy.fixedSubscriptionTurnError({
         subscriptionPolicy: "fixed",
         accountId: "team",
         model: "workspace-preset/ws1/preset1",
       }),
-    ).toMatch(/model preset/);
+    ).toMatch(/cannot run/);
   });
 
   test("a fixed session without an account stops the turn", () => {

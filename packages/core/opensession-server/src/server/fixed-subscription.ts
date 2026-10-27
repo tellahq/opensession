@@ -18,7 +18,7 @@
  */
 import { getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
-import { accountProviderForModel, modelPreset, toPiModel } from "./models";
+import { accountProviderForModel } from "./models";
 import { getXaiAccountById } from "./xai-accounts";
 
 export type SubscriptionPolicy = "fixed";
@@ -46,23 +46,6 @@ function accountProviderOfId(
 }
 
 /**
- * Presets route one session through several models (an orchestrator
- * delegates to workers on other providers; a workspace preset resolves later),
- * so a fixed session refuses them rather than guess where they bill.
- */
-function isMultiModelRoute(model: string | undefined): boolean {
-  const id = (model || "").trim().toLowerCase();
-  if (!id) return false;
-  if (modelPreset(id)) return true;
-  const routed = (toPiModel(id) || id).replace(/^pi\//, "");
-  return (
-    routed.startsWith("workspace-preset/") ||
-    routed.startsWith("dial/") ||
-    routed.startsWith("orchestrator/")
-  );
-}
-
-/**
  * Why a fixed session's account cannot fund a run of `model`, or undefined
  * when it can be tried. Usage limits are not checked here: the strict pin in
  * account selection refuses an exhausted account on its own.
@@ -76,8 +59,6 @@ export function fixedSubscriptionModelError(
   const accountProvider = accountProviderOfId(accountId);
   if (!accountProvider)
     return "This session's funding account is no longer connected. Reconnect the same account, or start a new session with a different one.";
-  if (isMultiModelRoute(model))
-    return "This session has a fixed subscription, so it cannot use a model preset that routes to other models. Pick a single model from the same provider.";
   const modelProvider = accountProviderForModel(model);
   if (modelProvider !== accountProvider)
     return `This session has a fixed subscription on a ${providerLabel(accountProvider)} account, so it cannot run ${model || "the default model"}. Pick a ${providerLabel(accountProvider)} model, or start a new session.`;

@@ -27,6 +27,7 @@ import { Spinner } from "../ui/spinner";
 import { AGENT_NAME } from "../lib/brand";
 import { InlineAlert, LoadingState } from "../ui/state";
 import { CodeFlow } from "./CodeFlow";
+import { DiffStat } from "./DiffStat";
 import { revealDiffFile } from "../lib/diff-navigation";
 import { ruleGroups } from "../lib/review-groups";
 import { useLocalReviewedFiles } from "../hooks/useLocalReviewedFiles";
@@ -42,11 +43,6 @@ import {
   useCodeOrganizationSettings,
 } from "../hooks/useCodeDisplaySettings";
 import { errorMessage } from "../lib/error-message";
-
-/* The +/− counts. Kept as constants because CommentableDiff carries the same
-   pair on its file rows and group headers, and the two must read alike. */
-const DIFF_ADD = "font-semibold text-green";
-const DIFF_DEL = "font-semibold text-red";
 
 interface Props {
   sessionId: string;
@@ -507,8 +503,13 @@ export function DiffPanel({
           </span>
         )}
       </span>
-      <span className={DIFF_ADD}>+{d.totalAdditions}</span>
-      <span className={DIFF_DEL}>−{d.totalDeletions}</span>
+      <DiffStat
+        files={d.files}
+        additions={d.totalAdditions}
+        deletions={d.totalDeletions}
+        className="gap-2.5"
+        countClassName="font-semibold"
+      />
       {d.truncated && (
         <span className="rounded-sm bg-yellow/15 px-[7px] py-px text-meta font-bold text-yellow">
           truncated

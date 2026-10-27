@@ -4,13 +4,6 @@ import type { ModelOption } from "../lib/api";
 
 const models = [
   {
-    id: "workspace-preset/ws-1111/opus-fable",
-    provider: "pi",
-    label: "Opus 5 + Fable oracle",
-    aliases: [],
-    efforts: [],
-  },
-  {
     id: "pi/anthropic/claude-sonnet-5",
     provider: "pi",
     label: "Claude Sonnet 5",
@@ -19,22 +12,8 @@ const models = [
   },
 ] satisfies ModelOption[];
 
-describe("workspace preset labels", () => {
-  it("names the preset in its own workspace", () => {
-    expect(shortModelLabel("workspace-preset/ws-1111/opus-fable", models)).toBe(
-      "Opus 5 + Fable oracle",
-    );
-  });
-
-  // A session can run a preset defined elsewhere (/model, a carried default)
-  // while the catalog only ever holds its own workspace's presets.
-  it("names a preset the catalog holds under another workspace", () => {
-    expect(shortModelLabel("workspace-preset/ws-2222/opus-fable", models)).toBe(
-      "Opus 5 + Fable oracle",
-    );
-  });
-
-  it("falls back to the preset slug, never the storage path", () => {
+describe("model labels", () => {
+  it("names a retired workspace preset by its slug, never the storage path", () => {
     expect(shortModelLabel("workspace-preset/ws-2222/dial-ultra", models)).toBe(
       "Dial Ultra",
     );
@@ -43,24 +22,18 @@ describe("workspace preset labels", () => {
     ).toBe("Dial Ultra");
   });
 
+  it("names a retired preset by the model it ran on", () => {
+    expect(shortModelLabel("pi/orchestrator/fable-sol", models)).toBe(
+      "Fable 5.1",
+    );
+    expect(shortModelLabel("dial/high", models)).toBe("GPT-6.1 Sol");
+  });
+
   it("leaves plain model ids alone", () => {
-    expect(
-      workspacePresetLabel("pi/anthropic/claude-sonnet-5", models),
-    ).toBeNull();
+    expect(workspacePresetLabel("pi/anthropic/claude-sonnet-5")).toBeNull();
     expect(shortModelLabel("pi/anthropic/claude-sonnet-5", models)).toBe(
       "Sonnet 5",
     );
-  });
-
-  it("uses the current preset label rather than its persisted slug", () => {
-    const preset: ModelOption = {
-      id: "pi/orchestrator/fable-sol",
-      provider: "pi",
-      label: "Orchestrator · Fable + Astra",
-      aliases: [],
-      efforts: [],
-    };
-    expect(shortModelLabel(preset.id, [preset])).toBe(preset.label);
   });
 
   it("capitalizes named GPT variants", () => {

@@ -54,6 +54,8 @@ const previousPath = process.env.PATH;
 const previousMemoryFloor =
   process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB;
 process.env.OPENSESSION_PORTAL_MIN_AVAILABLE_MEMORY_MB = "1";
+// The ready settle window is covered in portal-ready-settle.test.ts.
+process.env.OPENSESSION_PORTAL_READY_SETTLE_MS = "0";
 const processTools = mkdtempSync(join(tmpdir(), "os-process-tools-"));
 let testSetsid = Bun.which("setsid");
 if (!testSetsid) {
@@ -710,6 +712,56 @@ describe("session Portal supervisor", () => {
       });
     }
   });
+
+  test("a status read during the settle window keeps the start starting", async () => {
+    process.env.OPENSESSION_PORTAL_READY_SETTLE_MS = "1500";
+    try {
+      // Binds, then dies before the settle window ends (like Next crashing
+      // on its config after it opened the port).
+      const starting = startPortalService({
+        sessionId: "os-portal-test",
+        worktreeDir: worktree,
+        name: "settle-crash",
+        port: 18_704,
+        command:
+          "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"ok\")}}); setTimeout(()=>process.exit(1),700)'",
+      });
+      const result = starting.then(
+        () => "ready",
+        () => "failed",
+      );
+      let sawListening = false;
+      const until = Date.now() + 4_000;
+      while (Date.now() < until && !sawListening) {
+        const record = (await listPortalServices(worktree)).find(
+          (candidate) => candidate.name === "settle-crash",
+        );
+        expect(record?.state).not.toBe("awake");
+        if (
+          record?.pid &&
+          (await Bun.connect({
+            hostname: "127.0.0.1",
+            port: 18_704,
+            socket: { data() {} },
+          }).then(
+            (sock) => (sock.end(), true),
+            () => false,
+          ))
+        )
+          sawListening = true;
+        await Bun.sleep(50);
+      }
+      expect(sawListening).toBe(true);
+      expect(
+        (await listPortalServices(worktree)).find(
+          (candidate) => candidate.name === "settle-crash",
+        )?.state,
+      ).not.toBe("awake");
+      expect(await result).toBe("failed");
+    } finally {
+      process.env.OPENSESSION_PORTAL_READY_SETTLE_MS = "0";
+    }
+  }, 15_000);
 
   test("fails a starting record stuck past the readiness window", async () => {
     // A record poisoned before the awake-history rule: state "starting", pid
