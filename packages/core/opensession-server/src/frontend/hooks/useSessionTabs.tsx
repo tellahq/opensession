@@ -49,6 +49,7 @@ import {
 import { setTabColor } from "../lib/tab-colors";
 import { appendNewTabs, applyTabOrder, saveTabOrder } from "../lib/tab-order";
 import { copySessionTranscript } from "../lib/transcript-copy";
+import { sessionRunningStateMatches } from "../lib/session-list-state";
 import type { UnifiedSession, Workspace } from "../lib/types";
 import { workspaceArchivedSessions } from "../lib/workspace-archive";
 import { saveWorkspaceLastSession } from "../lib/workspace-last-session";
@@ -1311,11 +1312,7 @@ export function useSessionTabs({
     const prev = sessionsRef.current.find((s) => s.id === id);
     // The watch handshake repeats the current state on every open. Avoid
     // replacing a list row, and re-rendering its workspace, when it agrees.
-    if (
-      prev?.isRunning === isRunning &&
-      (isRunning ? !!prev.runStartedAt : !prev.runStartedAt)
-    )
-      return;
+    if (sessionRunningStateMatches(prev, isRunning)) return;
     patch(id, {
       isRunning,
       runStartedAt: isRunning

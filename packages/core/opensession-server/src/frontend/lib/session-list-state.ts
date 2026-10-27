@@ -123,6 +123,20 @@ export interface StickySession {
   serverSeen: boolean;
 }
 
+/** Whether a list row already shows this running state, so a repeated
+ * session_status needs no patch. List rows leave `isRunning` out when it is
+ * false, so a missing value agrees with `false`. */
+export function sessionRunningStateMatches(
+  row: UnifiedSession | undefined,
+  isRunning: boolean,
+): boolean {
+  return (
+    !!row &&
+    !!row.isRunning === isRunning &&
+    (isRunning ? !!row.runStartedAt : !row.runStartedAt)
+  );
+}
+
 /** Keep a just-created row available while its session remains selected. */
 export function reconcileStickySessions(
   sessions: UnifiedSession[],
