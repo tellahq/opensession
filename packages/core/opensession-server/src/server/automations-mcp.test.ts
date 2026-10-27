@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   automationBaselineMcpServers,
+  automationMode,
   automationWorkflowSessionPolicy,
 } from "./automations";
 
@@ -23,6 +24,27 @@ describe("automation MCP fallback", () => {
       expect(server).toMatchObject({ type: "sdk" });
       expect((server as { instance?: unknown }).instance).toBeTruthy();
     }
+  });
+
+  test("mounts opensession-web only when the allowlist names it", () => {
+    expect(
+      automationBaselineMcpServers(
+        { id: "auto-web", name: "Watch", mcpServers: ["slack"] },
+        "os-web-run",
+      ),
+    ).not.toHaveProperty("opensession-web");
+    const servers = automationBaselineMcpServers(
+      { id: "auto-web", name: "Watch", mcpServers: ["opensession-web"] },
+      "os-web-run",
+    );
+    expect(servers["opensession-web"]).toMatchObject({ type: "sdk" });
+  });
+
+  test("mode accepts scratch and falls back to ask", () => {
+    expect(automationMode("scratch")).toBe("scratch");
+    expect(automationMode("code")).toBe("code");
+    expect(automationMode("write")).toBe("ask");
+    expect(automationMode(undefined)).toBe("ask");
   });
 
   test("durable sessions require a separate repository and Runner policy", () => {

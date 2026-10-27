@@ -65,6 +65,7 @@ import {
   bootstrapRemoteSandbox,
   findRemoteStateBySession,
   makeRemoteSandbox,
+  type RemoteSandboxOwner,
   readRemoteState,
   runResumeHook,
   remoteCloneUrl,
@@ -79,6 +80,8 @@ import {
   type RemoteDriver,
   type RemoteExecOpts,
 } from "./bootstrap";
+import { launchSandboxAgent, withSandboxAgent } from "../agent-driver";
+import { sandboxAgentEnabled } from "../config";
 import {
   claimPrewarmOrWait,
   discardClaimedPrewarm,
@@ -353,7 +356,7 @@ function idleTtlSeconds(): number {
 
 const BOX_MACHINE_PROFILES: Record<
   BoxMachineType,
-  Required<SandboxMachineSettings>
+  Required<Omit<SandboxMachineSettings, "gpu">>
 > = {
   small: { cpu: 2, memoryMb: 4_096, diskGb: 40 },
   default: { cpu: 4, memoryMb: 8_192, diskGb: 80 },
@@ -1140,6 +1143,16 @@ export async function boxSshTarget(sandboxId: string): Promise<BoxSshTarget> {
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
+/** A session Box's driver: the Sandbox agent's socket while it is
+ *  connected, Box's SSH lane and command API otherwise (agent-driver.ts). */
+function sessionBoxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
+  return withSandboxAgent(boxDriver(cfg, boxId), {
+    providerId: "box",
+    sandboxId: boxId,
+    compose: boxComposeShell,
+  });
+}
+
 export class BoxProvider implements SandboxProvider {
   readonly id = "box" as const;
 
@@ -1282,7 +1295,7 @@ export class BoxProvider implements SandboxProvider {
       ...trust,
     });
 
-    const driver = boxDriver(cfg, box.id);
+    const driver = sessionBoxDriver(cfg, box.id);
     const resumingExistingWorkspace = Boolean(
       prevState && prevState.sandboxId === box.id && stateOf(box) !== "running",
     );
@@ -1301,6 +1314,15 @@ export class BoxProvider implements SandboxProvider {
     mark("dial-back verified");
     await bootstrapRemoteSandbox(driver, "box");
     mark("runtime ready");
+    // The base runtime's bun is what the agent runs on, so a fresh Box gets
+    // its agent here, in time for the clone and setup that follow.
+    if (sandboxAgentEnabled(this.id)) {
+      const connected = await launchSandboxAgent(boxDriver(cfg, box.id), {
+        providerId: this.id,
+        sandboxId: box.id,
+      });
+      mark(connected ? "agent connected" : "agent not connected");
+    }
     await setupRemoteWorkspace(
       driver,
       cwd,
@@ -1340,24 +1362,30 @@ export class BoxProvider implements SandboxProvider {
       lastActivityAt: new Date().toISOString(),
       ...trust,
     });
-    return Object.assign(this.makeHandle(cfg, box.id, spec.sessionId, cwd), {
-      wokeFromSleep: resumingExistingWorkspace,
-    });
+    return Object.assign(
+      this.makeHandle(cfg, box.id, {
+        sessionId: spec.sessionId,
+        cwd,
+        repoId: repo.id,
+        trustProfile: trust.trustProfile,
+      }),
+      {
+        wokeFromSleep: resumingExistingWorkspace,
+      },
+    );
   }
 
   private makeHandle(
     cfg: BoxClientConfig,
     boxId: string,
-    sessionId: string,
-    cwd: string,
+    owner: RemoteSandboxOwner,
   ): Sandbox {
     const providerId = this.id;
-    const driver = boxDriver(cfg, boxId);
+    const driver = sessionBoxDriver(cfg, boxId);
     return makeRemoteSandbox({
+      ...owner,
       providerId,
       sandboxId: boxId,
-      sessionId,
-      cwd,
       driver,
       async ports(requestedPorts = []): Promise<PortMap> {
         const map: PortMap = {};
@@ -1416,7 +1444,7 @@ export class BoxProvider implements SandboxProvider {
       const cfg = boxClientConfig();
       const box = await getBox(cfg, sandboxId);
       if (!box || stateOf(box) === "gone") return null;
-      return this.makeHandle(cfg, sandboxId, state.sessionId, state.cwd);
+      return this.makeHandle(cfg, sandboxId, state);
     } catch (e) {
       console.warn(`[sandbox:box] get(${sandboxId}) failed:`, e);
       return null;
@@ -1449,6 +1477,12 @@ export class BoxProvider implements SandboxProvider {
     return x11DesktopControl((cmd, opts) => sandbox.exec(cmd, opts));
   }
 
+  async keepAlive(sandboxId: string): Promise<void> {
+    await boxApi(boxClientConfig(), "PATCH", `/sandboxes/${sandboxId}`, {
+      ttlSeconds: idleTtlSeconds(),
+    });
+  }
+
   async pause(sandboxId: string): Promise<void> {
     const cfg = boxClientConfig();
     const box = await getBox(cfg, sandboxId);
@@ -1479,16 +1513,15 @@ export class BoxProvider implements SandboxProvider {
       }
       await waitForLive(cfg, sandboxId, 300_000);
     }
-    const driver = boxDriver(cfg, sandboxId);
+    const driver = sessionBoxDriver(cfg, sandboxId);
     await driver.ensureStarted();
     if (resumed) {
       primeBoxWorkspaceAfterResume(driver, state.cwd);
       await runResumeHook(driver, this.id, sandboxId, state);
     }
-    return Object.assign(
-      this.makeHandle(cfg, sandboxId, state.sessionId, state.cwd),
-      { wokeFromSleep: resumed },
-    );
+    return Object.assign(this.makeHandle(cfg, sandboxId, state), {
+      wokeFromSleep: resumed,
+    });
   }
 
   /** Box's public API exposes durable archival rather than hard deletion.

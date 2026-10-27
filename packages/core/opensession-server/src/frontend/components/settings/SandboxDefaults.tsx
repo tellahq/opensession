@@ -5,6 +5,17 @@ import {
   type SandboxStatusInfo,
 } from "../../lib/api";
 import { fetchRepos, type RepoInfo } from "../../lib/api/repos";
+import {
+  fetchSandboxLifecycle,
+  saveRepoPreSetupScript,
+  type SandboxLifecycleSettings,
+} from "../../lib/api/sandboxes";
+import {
+  sandboxMachineChoices,
+  splitSandboxChoice,
+} from "../../lib/ready-sandbox-providers";
+import { Button } from "../../ui/button";
+import { SandboxScriptDialog } from "./SandboxScriptDialog";
 import { errorMessage } from "../../lib/error-message";
 import {
   SettingCard,
@@ -23,6 +34,8 @@ function providerLabel(id: string): string {
   if (id === "box") return "Sandbox · Boat";
   if (id === "tart") return "Sandbox · Mac VM";
   if (id === "usecomputer") return "Sandbox · use.computer";
+  if (id === "modal") return "Sandbox · Modal";
+  if (id.startsWith("modal:")) return `Sandbox · Modal · ${id.slice(6)} GPU`;
   return id;
 }
 
@@ -152,12 +165,19 @@ function ProjectSandboxDefaults() {
   const [status, setStatus] = useState<SandboxStatusInfo | null>(null);
   const [repos, setRepos] = useState<RepoInfo[]>([]);
   const [saving, setSaving] = useState<string | null>(null);
+  const [lifecycle, setLifecycle] = useState<SandboxLifecycleSettings | null>(
+    null,
+  );
+  const [scriptRepo, setScriptRepo] = useState<RepoInfo | null>(null);
   useEffect(() => {
     fetchSandboxStatus(user)
       .then(setStatus)
       .catch(() => {});
     fetchRepos()
       .then(setRepos)
+      .catch(() => {});
+    fetchSandboxLifecycle()
+      .then(setLifecycle)
       .catch(() => {});
   }, [user]);
   if (!status?.defaults || !repos.length) return null;
@@ -197,10 +217,11 @@ function ProjectSandboxDefaults() {
       <SettingCard>
         {repos.map((repo) => {
           const value = defaults.repos?.[repo.id] ?? "workspace";
+          // Modal with a GPU is its own choice (`modal:T4`).
           const unavailable =
             value !== "workspace" &&
             value !== "none" &&
-            !providers.includes(value);
+            !providers.includes(splitSandboxChoice(value).provider);
           const portals = defaults.portals?.[repo.id] ?? "none";
           const portalsUnavailable =
             portals !== "none" && !providers.includes(portals);
@@ -237,7 +258,7 @@ function ProjectSandboxDefaults() {
                               },
                             ]
                           : []),
-                        ...providers.map((id) => ({
+                        ...sandboxMachineChoices(providers).map((id) => ({
                           value: id,
                           label: providerLabel(id),
                         })),
@@ -288,10 +309,43 @@ function ProjectSandboxDefaults() {
                   </div>
                 }
               />
+              {lifecycle ? (
+                <SettingRow
+                  title={`${label} setup script`}
+                  desc={
+                    lifecycle.preSetupScripts[repo.id]
+                      ? "Runs before .agents/setup in every new Sandbox. Changing it refreshes the project snapshot."
+                      : "Optional. Set up Sandboxes for this project without committing anything."
+                  }
+                  control={
+                    <Button size="sm" onClick={() => setScriptRepo(repo)}>
+                      {lifecycle.preSetupScripts[repo.id] ? "Edit" : "Add"}
+                    </Button>
+                  }
+                />
+              ) : null}
             </div>
           );
         })}
       </SettingCard>
+      <SandboxScriptDialog
+        open={Boolean(scriptRepo)}
+        onOpenChange={(open) => {
+          if (!open) setScriptRepo(null);
+        }}
+        title={`${scriptRepo?.label || scriptRepo?.id || ""} setup script`}
+        description="Runs from the checkout right before .agents/setup, once per new Sandbox. Keep secrets in environment settings, not here."
+        value={
+          scriptRepo
+            ? (lifecycle?.preSetupScripts[scriptRepo.id] ?? null)
+            : null
+        }
+        placeholder={"#!/usr/bin/env bash\nset -euo pipefail\nbun install"}
+        onSave={async (script) => {
+          if (!scriptRepo) return;
+          setLifecycle(await saveRepoPreSetupScript(scriptRepo.id, script));
+        }}
+      />
       <SettingsHint>
         A project set to a Sandbox always starts there, so its app runs in a
         Sandbox Portal instead of on this server. The per-session choice in the

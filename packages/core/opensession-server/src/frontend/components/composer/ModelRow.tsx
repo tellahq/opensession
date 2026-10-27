@@ -18,7 +18,8 @@ interface ModelRowProps {
   model: string;
   onModelChange: (model: string) => void;
   preferredDefaultModel: string;
-  onSetAsDefault: (model: string) => void;
+  preferredDefaultEffort: string;
+  onSetAsDefault: (model: string, effort?: string) => void;
   modelDisabled?: boolean;
   modelTitle?: string;
   effort?: string;
@@ -44,6 +45,7 @@ export function ModelRow({
   model,
   onModelChange,
   preferredDefaultModel,
+  preferredDefaultEffort,
   onSetAsDefault,
   modelDisabled,
   modelTitle,
@@ -77,6 +79,7 @@ export function ModelRow({
               defaultModel,
               model,
               preferredDefaultModel,
+              preferredDefaultEffort,
               modelDisabled,
               modelTitle,
               effort,

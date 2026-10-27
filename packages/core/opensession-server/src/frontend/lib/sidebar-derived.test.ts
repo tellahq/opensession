@@ -348,6 +348,53 @@ describe("sidebar derived data", () => {
     ]);
   });
 
+  test("keeps a collaborator's workspace in Active when they are asked to review it", () => {
+    const base = row("shared", "kent");
+    const shared: WsRow = {
+      ...base,
+      sessions: [
+        session("shared", {
+          startedBy: "Kent",
+          reviewRequest: {
+            to: "Jaap",
+            by: "Kent",
+            at: "2026-08-18T11:45:00.000Z",
+          },
+        }),
+      ],
+      workspace: {
+        id: "shared",
+        name: "Shared",
+        createdBy: "Kent",
+        createdAt: "2026-08-18T11:00:00.000Z",
+        collaborators: [
+          { name: "Jaap", by: "Kent", at: "2026-08-18T11:30:00.000Z" },
+        ],
+      },
+    };
+    const handedOver: WsRow = { ...shared, key: "handed", workspace: null };
+    const placement = deriveWorkspacePlacement({
+      rows: [shared, handedOver],
+      filter: filter(),
+      currentUser: "Jaap",
+      activeSnoozeKeys: new Set(),
+      feedRefKinds: new Set(),
+      ownsSelection: () => false,
+      isClaimed: () => false,
+      hasPersonalLane: () => false,
+    });
+
+    expect(
+      placement.placedWsRows.map(({ row: item, placement: lane }) => [
+        item.key,
+        lane,
+      ]),
+    ).toEqual([
+      ["shared", "status"],
+      ["handed", "needs-review"],
+    ]);
+  });
+
   test("removes pull requests already represented by a workspace", () => {
     const covered = pr(1);
     const visible = pr(2);

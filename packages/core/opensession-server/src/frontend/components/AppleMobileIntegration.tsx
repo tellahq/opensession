@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
 import {
-  approveAppleRelease,
   fetchAppleMobileSetup,
-  fetchAppleReleaseApprovals,
   saveAppleMobileSetup,
   type AppleMobileSetupInput,
   type AppleMobileSetupStatus,
-  type AppleReleaseApprovals,
 } from "../lib/api/apple-mobile";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
@@ -66,10 +63,6 @@ function AppleMobileSetupDialog({
     status.allowedUsers.join(", "),
   );
   const [saving, setSaving] = useState(false);
-  const [approvals, setApprovals] = useState<AppleReleaseApprovals | null>(
-    null,
-  );
-  const [approving, setApproving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,37 +74,8 @@ function AppleMobileSetupDialog({
     setIssuerId("");
     setPrivateKeyPath("");
     setAllowedUsers(status.allowedUsers.join(", "));
-    setApprovals(null);
-    setApproving(null);
     setError(null);
-    void fetchAppleReleaseApprovals()
-      .then(setApprovals)
-      .catch((cause) =>
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Could not load Apple release approvals",
-        ),
-      );
   }, [open, status]);
-
-  async function approve(planId: string) {
-    if (approving) return;
-    setApproving(planId);
-    setError(null);
-    try {
-      await approveAppleRelease(planId);
-      setApprovals(await fetchAppleReleaseApprovals());
-      toast("Apple release approved");
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Could not approve Apple release",
-      );
-    }
-    setApproving(null);
-  }
 
   async function save() {
     if (saving) return;
@@ -276,126 +240,6 @@ function AppleMobileSetupDialog({
             ) : null}
           </SettingsSection>
 
-          {status.releaseEnabled ? (
-            <SettingsSection className="border-0 bg-panel p-4">
-              <div className="text-item-title font-medium text-fg">
-                Release approvals
-              </div>
-              <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
-                Planning never authorizes execution. An allowed, signed-in
-                person must approve the exact plan here in a later step.
-              </p>
-              {approvals ? (
-                !approvals.authenticated ? (
-                  <InlineAlert className="mt-3">
-                    Sign in with GitHub to approve Apple releases.
-                  </InlineAlert>
-                ) : !approvals.allowed ? (
-                  <InlineAlert className="mt-3">
-                    Your account is not in the release allowlist.
-                  </InlineAlert>
-                ) : approvals.requests.length === 0 ? (
-                  <div className="mt-3 text-supporting text-faint">
-                    No release plans are waiting for approval.
-                  </div>
-                ) : (
-                  <div className="mt-3 grid gap-2">
-                    {approvals.requests.map((request) => (
-                      <div
-                        key={request.planId}
-                        className="rounded-control bg-surface p-3"
-                      >
-                        <div className="flex flex-wrap items-start gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="text-item-title font-medium text-fg">
-                              {request.action === "adhoc"
-                                ? "Ad-hoc export"
-                                : request.action === "testflight"
-                                  ? "TestFlight upload"
-                                  : "IPA upload"}
-                            </div>
-                            {request.marketingVersion || request.buildNumber ? (
-                              <div className="mt-1 text-meta text-dim">
-                                {request.marketingVersion ??
-                                  "Version unchanged"}
-                                {request.buildNumber
-                                  ? ` (${request.buildNumber})`
-                                  : ""}
-                              </div>
-                            ) : null}
-                            <dl className="m-0 mt-2 grid gap-1.5 text-meta">
-                              <div>
-                                <dt className="text-faint">Project</dt>
-                                <dd className="m-0">
-                                  <code className="block break-all text-dim">
-                                    {request.projectDir}
-                                  </code>
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="text-faint">Plan ID</dt>
-                                <dd className="m-0">
-                                  <code className="block break-all text-dim">
-                                    {request.planId}
-                                  </code>
-                                </dd>
-                              </div>
-                              <div>
-                                <dt className="text-faint">Commit</dt>
-                                <dd className="m-0">
-                                  <code className="block break-all text-dim">
-                                    {request.commit}
-                                  </code>
-                                </dd>
-                              </div>
-                              {request.action === "upload" ? (
-                                <>
-                                  <div>
-                                    <dt className="text-faint">Artifact</dt>
-                                    <dd className="m-0">
-                                      <code className="block break-all text-dim">
-                                        {request.sourceArtifactName ??
-                                          "Missing artifact name"}
-                                      </code>
-                                    </dd>
-                                  </div>
-                                  <div>
-                                    <dt className="text-faint">SHA-256</dt>
-                                    <dd className="m-0">
-                                      <code className="block break-all text-dim">
-                                        {request.sourceArtifactSha256 ??
-                                          "Missing artifact hash"}
-                                      </code>
-                                    </dd>
-                                  </div>
-                                </>
-                              ) : null}
-                            </dl>
-                          </div>
-                          <Button
-                            size="sm"
-                            className="phone:min-h-11"
-                            variant="primary"
-                            disabled={approving !== null}
-                            onClick={() => void approve(request.planId)}
-                          >
-                            {approving === request.planId
-                              ? "Approving…"
-                              : "Approve"}
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              ) : (
-                <div className="mt-3 text-supporting text-faint">
-                  Checking for release plans…
-                </div>
-              )}
-            </SettingsSection>
-          ) : null}
-
           <SettingsSection className="border-0 bg-panel p-4">
             <div className="text-item-title font-medium text-fg">
               Before the first ad-hoc build
@@ -438,8 +282,8 @@ function AppleMobileSetupDialog({
             />
             <p className="m-0 mt-3 text-meta leading-relaxed text-faint">
               The private key must be mode 0600 and outside the app project.
-              Release execution still waits for explicit approval of the full
-              commit SHA. It cannot submit for App Review or publish an app.
+              Releases run without a separate approval step. They cannot submit
+              for App Review or publish an app.
             </p>
           </SettingsSection>
         </div>

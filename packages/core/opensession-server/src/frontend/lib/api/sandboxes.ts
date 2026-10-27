@@ -14,12 +14,19 @@ export interface SessionSandboxStatus {
   status: "none" | "running" | "stopped" | "gone";
   lifecycle?: "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
   lastLifecycleError?: string;
+  /** Why a start is taking longer, e.g. waiting for a free Mac host. */
+  lifecycleNote?: string;
   materialized?: boolean;
   busy?: boolean;
   cwd?: string | null;
   canPause?: boolean;
   canResume?: boolean;
   canDesktop?: boolean;
+  /** Commands travel over the machine's Sandbox agent (else the provider's
+   *  own lane). */
+  agentConnected?: boolean;
+  /** When the idle timers would put it to sleep, if known. */
+  sleepsAt?: string;
   logs?: { setup?: string; resume?: string };
   /** The last workspace checkpoint pushed to origin; absent until the first
    *  clean turn finishes or when the repository cannot hold one. */
@@ -62,6 +69,8 @@ export function fetchSessionSandbox(
  * unpushed work behind on this machine. */
 interface AttachSandboxBody {
   provider: string;
+  /** A GPU for a Modal Sandbox ("T4" or "L4"). */
+  gpu?: string;
   confirm?: true;
 }
 
@@ -71,9 +80,10 @@ interface AttachSandboxBody {
 export function attachSandbox(
   sessionId: string,
   provider: string,
-  opts: { confirm?: boolean } = {},
+  opts: { confirm?: boolean; gpu?: string | undefined } = {},
 ): Promise<SessionSandboxStatus> {
   const body: AttachSandboxBody = { provider };
+  if (opts.gpu) body.gpu = opts.gpu;
   if (opts.confirm) body.confirm = true;
   return request(`/sessions/${encodeURIComponent(sessionId)}/sandbox/attach`, {
     method: "POST",
@@ -111,6 +121,43 @@ export function detachSandbox(
     method: "POST",
     body: opts.confirm ? { confirm: true } : {},
     label: "Failed to move the session to this machine",
+  });
+}
+
+/** Sleep timers and the lifecycle scripts kept in Workspace settings. */
+export interface SandboxLifecycleSettings {
+  idle: { agentMinutes: number; humanMinutes: number };
+  agentProviders: string[];
+  workspaceResumeScript: string | null;
+  preSetupScripts: Record<string, string>;
+}
+
+export function fetchSandboxLifecycle(): Promise<SandboxLifecycleSettings> {
+  return request("/sandbox/lifecycle", {
+    label: "Failed to load Sandbox lifecycle settings",
+  });
+}
+
+/** Store the workspace-wide resume script; null or blank removes it. */
+export function saveWorkspaceResumeScript(
+  script: string | null,
+): Promise<SandboxLifecycleSettings> {
+  return request("/sandbox/lifecycle/workspace-resume", {
+    method: "PUT",
+    body: { script },
+    label: "Failed to save the resume script",
+  });
+}
+
+/** Store a project's setup script; null or blank removes it. */
+export function saveRepoPreSetupScript(
+  repo: string,
+  script: string | null,
+): Promise<SandboxLifecycleSettings> {
+  return request(`/sandbox/lifecycle/pre-setup/${encodeURIComponent(repo)}`, {
+    method: "PUT",
+    body: { script },
+    label: "Failed to save the setup script",
   });
 }
 

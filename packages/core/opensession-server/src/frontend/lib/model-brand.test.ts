@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { modelBrandKey, modelBrandKeys } from "./model-brand";
+import { modelBrandKey } from "./model-brand";
 
 describe("modelBrandKey", () => {
   test("maps routed model vendors to their product marks", () => {
@@ -14,23 +14,13 @@ describe("modelBrandKey", () => {
     expect(modelBrandKey("gpt-5.6-sol", "codex")).toBe("codex");
   });
 
-  test("maps every distinct vendor in combo compositions", () => {
-    expect(
-      modelBrandKeys("pi/dial/ultra", "pi", [
-        "pi/anthropic/claude-fable-5-1",
-        "pi/openai/gpt-5.6-sol",
-      ]),
-    ).toEqual(["claude", "codex"]);
-    expect(
-      modelBrandKeys("pi/dial/medium", "pi", [
-        "pi/openai/gpt-5.6-sol",
-        "pi/openai/gpt-5.6-sol",
-      ]),
-    ).toEqual(["codex"]);
+  test("maps retired preset ids to the vendor of the model they ran on", () => {
+    expect(modelBrandKey("pi/dial/ultra", "pi")).toBe("claude");
+    expect(modelBrandKey("pi/orchestrator/sol", "pi")).toBe("codex");
   });
 
-  test("leaves presets without composition and unknown vendors unbranded", () => {
-    expect(modelBrandKeys("pi/dial/ultra", "pi")).toEqual([]);
+  test("leaves unknown vendors unbranded", () => {
+    expect(modelBrandKey("pi/workspace-preset/ws-1/opus", "pi")).toBeNull();
     expect(modelBrandKey("pi/google/gemini-3", "pi")).toBeNull();
   });
 });

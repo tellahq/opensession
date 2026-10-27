@@ -5,6 +5,9 @@
  */
 
 import { forgetWorkspaceSandbox } from "./sandbox/workspace-rpc";
+import { revokeSandboxAgent } from "./sandbox/agent-channel";
+import { forgetSandboxAgentLaunch } from "./sandbox/agent-driver";
+import { forgetSandboxIdle } from "./sandbox/idle";
 import { getSandboxProvider, type Sandbox } from "./sandbox";
 import {
   isRemoteSandboxProvider,
@@ -90,6 +93,15 @@ export function destroySessionSandbox(
       () => touchNativeSession(session.id, { portalSandbox: undefined }),
       `${session.id}--portals`,
     );
+  // The GPU machine its GPU jobs ran on (gpu-jobs.ts), if it ever had one.
+  void import("./gpu-jobs")
+    .then(({ retireGpuMachine }) => retireGpuMachine(session.id))
+    .catch((e) =>
+      console.warn(
+        `[sandbox] GPU machine of ${session.id} (${why}) not retired:`,
+        e,
+      ),
+    );
 }
 
 /** A failed ensure still owns a provider machine before the session has an
@@ -126,6 +138,10 @@ export async function teardownSandbox(
   sandboxId: string,
 ): Promise<void> {
   revokeWorkloadIdentityForSandbox(sandboxId);
+  // Its agent can no longer authenticate or receive commands.
+  revokeSandboxAgent(sandboxId, "retired");
+  forgetSandboxAgentLaunch(sandboxId);
+  forgetSandboxIdle(sandboxId);
   // No run's tool call may reach the machine from here on.
   forgetWorkspaceSandbox(sandboxId);
   await dropSandboxPreviewRoutes(sandboxId);

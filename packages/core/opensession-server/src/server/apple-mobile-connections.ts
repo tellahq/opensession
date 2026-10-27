@@ -2,7 +2,6 @@ import { findExecutable } from "../../../../integrations/apple-mobile/src/exec";
 import { resolvePrivateKeyPath } from "../../../../integrations/apple-mobile/src/security";
 import { readMcpConfig, replaceMcpServerEntries } from "./connections";
 import { stateDir } from "./paths";
-import { userMatchesAny } from "./shared/user-mappings";
 
 const BUILD_SERVER = "apple-build";
 const RELEASE_SERVER = "apple-release";
@@ -66,15 +65,6 @@ function configured(entry: AppleMcpEntry, mode: "build" | "release"): boolean {
     Array.isArray(entry.args) &&
     entry.args.join(" ") === `apple-mobile-mcp --mode ${mode}`
   );
-}
-
-export function appleReleaseApprover(
-  authUser: { login?: string; name?: string } | null | undefined,
-  allowedUsers: string[],
-): string | undefined {
-  return [authUser?.login, authUser?.name]
-    .filter((identity): identity is string => !!identity)
-    .find((identity) => userMatchesAny(identity, allowedUsers));
 }
 
 export function appleMobileSetupStatus(): AppleMobileSetupStatus {

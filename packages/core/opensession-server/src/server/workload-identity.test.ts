@@ -8,6 +8,7 @@ import {
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import type { RemoteSandboxOwner } from "./sandbox/adapters/bootstrap";
 
 const root = mkdtempSync(join(tmpdir(), "opensession-workload-identity-"));
 const previousState = process.env.OPENSESSION_STATE_DIR;
@@ -264,6 +265,107 @@ describe("sandbox workload identity", () => {
     g.__opensessionWorkloadIdentityLeases.clear();
     g.__opensessionWorkloadIdentityStore.lastRead = 0;
     expect((await exchange(other))?.status).toBe(200);
+  });
+
+  /** Run one command through a remote Sandbox handle and return the
+   *  workload identity environment the provider was asked to set. */
+  async function runCommandEnv(
+    owner: Partial<RemoteSandboxOwner>,
+  ): Promise<Record<string, string>> {
+    const { makeRemoteSandbox } = await import("./sandbox/adapters/bootstrap");
+    let seen: Record<string, string> = {};
+    const sandbox = makeRemoteSandbox({
+      providerId: "modal",
+      sandboxId: `sbx-run-${owner.trustProfile}`,
+      sessionId: "os-gpu-machine",
+      cwd: "/workspace",
+      trustProfile: "interactive",
+      ...owner,
+      driver: {
+        async exec(_cmd, opts) {
+          seen = opts?.env || {};
+          return { exitCode: 0, stdout: "", stderr: "" };
+        },
+        async execBackground() {},
+        async writeFile() {},
+        async ensureStarted() {},
+      },
+      ports: async () => ({}),
+      status: async () => "running",
+      touchActivity() {},
+    });
+    await sandbox.exec(["true"]);
+    return seen;
+  }
+
+  test("an interactive Sandbox's ordinary commands get the repository's run grant", async () => {
+    process.env.OPENSESSION_WORKLOAD_IDENTITY_GRANTS = JSON.stringify([
+      {
+        repoId: "acme",
+        lifecycle: "run",
+        trustProfile: "interactive",
+        audiences: ["urn:test:stage"],
+      },
+    ]);
+    const env = await runCommandEnv({
+      repoId: "acme",
+      trustProfile: "interactive",
+    });
+    const response = await identity.handleWorkloadIdentityRequest(
+      new Request(env.OPENSESSION_WORKLOAD_IDENTITY_URL!, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${env.OPENSESSION_WORKLOAD_IDENTITY_TOKEN}`,
+        },
+        body: JSON.stringify({ audience: "urn:test:stage" }),
+      }),
+    );
+    expect(response?.status).toBe(200);
+    const token = claims((await response?.text()) as string);
+    expect(token).toMatchObject({
+      aud: "urn:test:stage",
+      lifecycle: "run",
+      repo_id: "acme",
+      trust_profile: "interactive",
+      sub: "sandbox:sbx-run-interactive:provider:modal:repo:acme:session:os-gpu-machine",
+    });
+
+    // The same grant does not reach an automation Sandbox or one without
+    // a repository.
+    expect(
+      await runCommandEnv({ repoId: "acme", trustProfile: "automation" }),
+    ).toEqual({});
+    expect(await runCommandEnv({ trustProfile: "interactive" })).toEqual({});
+  });
+
+  test("a command that opts out of workload identity gets no lease", async () => {
+    process.env.OPENSESSION_WORKLOAD_IDENTITY_GRANTS = JSON.stringify([
+      { repoId: "acme", lifecycle: "run", audiences: ["urn:test:stage"] },
+    ]);
+    const { makeRemoteSandbox } = await import("./sandbox/adapters/bootstrap");
+    let seen: Record<string, string> | undefined;
+    const sandbox = makeRemoteSandbox({
+      providerId: "modal",
+      sandboxId: "sbx-opt-out",
+      sessionId: "os-opt-out",
+      cwd: "/workspace",
+      repoId: "acme",
+      trustProfile: "interactive",
+      driver: {
+        async exec(_cmd, opts) {
+          seen = opts?.env;
+          return { exitCode: 0, stdout: "", stderr: "" };
+        },
+        async execBackground() {},
+        async writeFile() {},
+        async ensureStarted() {},
+      },
+      ports: async () => ({}),
+      status: async () => "running",
+      touchActivity() {},
+    });
+    await sandbox.exec(["true"], { workloadIdentity: false });
+    expect(seen).toEqual({});
   });
 
   test("does not create a lease without a matching central audience grant", () => {

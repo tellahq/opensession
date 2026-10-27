@@ -518,7 +518,13 @@ export function deriveWorkspacePlacement({
     personFilter: filter.person,
     snoozed: activeSnoozeKeys.has(row.key),
     inStatusScope: inScope(row, showAutoCreated),
-    claimed: row.sessions.some((session) => hasPersonalLane(session.id)),
+    // Being added as a collaborator is a teammate putting the row in your
+    // sidebar, so it counts like your own "Add to sidebar": the row stays in
+    // Active even when the same teammate also asks you to review it. The
+    // session header hides that button for collaborators for this reason.
+    claimed:
+      rowHasCollaborator(row, currentUser) ||
+      row.sessions.some((session) => hasPersonalLane(session.id)),
   }));
   const autoCreatedRows = placedWsRows.filter(
     (entry) =>

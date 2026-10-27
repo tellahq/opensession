@@ -46,7 +46,11 @@ import {
   setRepoSandboxDefault,
   setWorkspaceSandboxDefault,
 } from "./config";
-import { resolveInteractiveSandbox } from "./defaults";
+import {
+  defaultSandboxGpu,
+  repoSandboxDefaults,
+  resolveInteractiveSandbox,
+} from "./defaults";
 import {
   connectSandboxProvider,
   setSandboxConnectionQualification,
@@ -150,6 +154,41 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     );
   });
 
+  test("a repo's Modal default may carry a GPU, which new sessions inherit", () => {
+    write({ provider: "daytona" });
+    connectSandboxProvider("modal", {
+      secret: "test-modal-secret",
+      settings: { tokenId: "ak-test" },
+    });
+    setSandboxConnectionQualification("modal", { status: "ready" });
+    expect(setRepoSandboxDefault("tella", "modal:T4")).toBe("modal");
+    expect(JSON.parse(readFileSync(cfgPath(), "utf-8")).perRepo).toEqual({
+      tella: { sessionDefault: "modal", sessionGpu: "T4" },
+    });
+    expect(repoSandboxDefaults()).toEqual({ tella: "modal:T4" });
+    // Only an unchosen Machine follows it.
+    expect(defaultSandboxGpu(undefined, undefined, "modal", "tella")).toBe(
+      "T4",
+    );
+    expect(defaultSandboxGpu("modal", undefined, "modal", "tella")).toBe(
+      undefined,
+    );
+    expect(defaultSandboxGpu(undefined, undefined, "modal", "other")).toBe(
+      undefined,
+    );
+    // Plain Modal drops the GPU.
+    setRepoSandboxDefault("tella", "modal");
+    expect(JSON.parse(readFileSync(cfgPath(), "utf-8")).perRepo).toEqual({
+      tella: { sessionDefault: "modal" },
+    });
+    expect(() => setRepoSandboxDefault("tella", "daytona:T4")).toThrow(
+      /Unknown sandbox choice/,
+    );
+    expect(() => setRepoSandboxDefault("tella", "modal:H100")).toThrow(
+      /Unknown sandbox choice/,
+    );
+  });
+
   test("a repo's Portal Sandbox persists beside its other overrides and is removable", () => {
     write({
       provider: "daytona",
@@ -200,6 +239,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
       "box",
       "tart",
       "usecomputer",
+      "modal",
     ]);
     expect(s.providers.every((p) => !p.configured)).toBe(true);
     expect(s.providers.filter((p) => p.certified).map((p) => p.id)).toEqual([
@@ -207,6 +247,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
       "box",
       "tart",
       "usecomputer",
+      "modal",
     ]);
     expect(s.killSwitch).toBe(!sandboxesEnabled());
   });
@@ -270,7 +311,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
   });
 
   test("retired provider ids in the file resolve to local", () => {
-    write({ provider: "docker", sessionDefault: "modal" });
+    write({ provider: "docker", sessionDefault: "e2b" });
     expect(sandboxConfig().provider).toBe("local");
     expect(sandboxConfig().sessionDefault).toBeUndefined();
   });
@@ -463,7 +504,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
   test("retired provider ids fail with a retirement error", () => {
     write({ provider: "daytona" });
     ready("daytona");
-    for (const retired of ["docker", "modal", "e2b", "lambda-microvm"]) {
+    for (const retired of ["docker", "e2b", "lambda-microvm"]) {
       const r = resolveRequestedSandbox(retired);
       expect(r.ok).toBe(false);
       if (!r.ok) expect(r.error).toContain("retired");

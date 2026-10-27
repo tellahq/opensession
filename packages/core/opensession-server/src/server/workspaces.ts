@@ -43,28 +43,11 @@ import { canonicalRepoId, defaultRepo } from "./config";
 import { stateDir } from "./paths";
 import { workspaceCheckoutProvesRepo } from "./workspace-repo";
 import type { AttachedRepo, ExternalRef } from "./types";
-import type { SessionEffort } from "./models";
 
 /** Resolved per call so a test that swaps the kernel store (or the state
  *  root the facade routes by) is honored by the next operation. */
 function store() {
   return catalogDocuments("workspaces");
-}
-
-/** A workspace-owned model combination. The lead owns the conversation; the
- * supporting models are available to it as focused worker sessions. */
-export interface WorkspaceModelPreset {
-  id: string;
-  label: string;
-  /** Picker section, so workspaces can make their own families. */
-  group?: string;
-  instructions?: string;
-  lead: { model: string; effort?: SessionEffort };
-  supporting?: Array<{ model: string; effort?: SessionEffort; role?: string }>;
-}
-
-export interface WorkspaceModelSettings {
-  presets?: WorkspaceModelPreset[];
 }
 
 /** A composer, not a document store. Mirrors MAX_DRAFT_LENGTH in drafts.ts. */
@@ -80,164 +63,6 @@ export interface WorkspaceDraft {
    *  draft's first line (see updateWorkspace); a manual rename sets this false
    *  and stops the follow for life. */
   autoName?: boolean;
-}
-
-/** Seeded into every new workspace. These are ordinary presets, not runtime
- * feature flags: removing one removes it, and new combinations use this shape. */
-export const DEFAULT_WORKSPACE_MODEL_SETTINGS: WorkspaceModelSettings = {
-  presets: [
-    {
-      id: "dial-ultra",
-      label: "Dial · Ultra",
-      group: "dial",
-      lead: { model: "pi/anthropic/claude-fable-5-1", effort: "high" },
-      supporting: [
-        {
-          model: "pi/openai/gpt-6.1-sol",
-          effort: "xhigh",
-          role: "Read-only oracle",
-        },
-      ],
-      instructions:
-        "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself.",
-    },
-    {
-      id: "dial-high",
-      label: "Dial · High",
-      group: "dial",
-      lead: { model: "pi/openai/gpt-6.1-sol", effort: "xhigh" },
-      supporting: [
-        {
-          model: "pi/anthropic/claude-fable-5-1",
-          effort: "high",
-          role: "Read-only oracle",
-        },
-      ],
-      instructions:
-        "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself.",
-    },
-    {
-      id: "dial-medium",
-      label: "Dial · Medium",
-      group: "dial",
-      lead: { model: "pi/openai/gpt-6.1-sol", effort: "high" },
-      supporting: [
-        {
-          model: "pi/openai/gpt-6.1-sol",
-          effort: "xhigh",
-          role: "Read-only oracle",
-        },
-      ],
-      instructions:
-        "Use the oracle for a second opinion when extra scrutiny helps.",
-    },
-    {
-      id: "dial-low",
-      label: "Dial · Low",
-      group: "dial",
-      lead: { model: "pi/openai/gpt-6-luna", effort: "high" },
-      supporting: [
-        {
-          model: "pi/openai/gpt-6.1-sol",
-          effort: "xhigh",
-          role: "Read-only oracle",
-        },
-      ],
-      instructions: "Use the oracle only when the task needs a second opinion.",
-    },
-    {
-      id: "opus-fable",
-      label: "Opus 5.5 + Fable oracle",
-      group: "custom",
-      lead: { model: "pi/anthropic/claude-opus-5-5", effort: "xhigh" },
-      supporting: [
-        {
-          model: "pi/anthropic/claude-fable-5-1",
-          effort: "high",
-          role: "Read-only oracle",
-        },
-      ],
-      instructions:
-        "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself.",
-    },
-    {
-      id: "ultracode",
-      label: "Ultracode",
-      group: "custom",
-      lead: { model: "pi/anthropic/claude-fable-5-1", effort: "xhigh" },
-      instructions:
-        "Plan a workflow for every substantive task instead of working through it turn by turn. Fan the work out with run_workflow, have a separate agent verify each finding, and read the result back with workflow_status. Route the judgement steps (verification, ranking, synthesis) to claude-fable-5-1 and leave mechanical extraction on the default worker model. Keep quick questions and single edits in the conversation.",
-    },
-    {
-      id: "orchestrator-fable",
-      label: "Orchestrator · Fable 5.1",
-      group: "orchestrator",
-      lead: { model: "pi/anthropic/claude-fable-5-1", effort: "high" },
-      supporting: [
-        {
-          model: "pi/anthropic/claude-sonnet-5-5",
-          effort: "medium",
-          role: "Implementation worker",
-        },
-        {
-          model: "pi/anthropic/claude-haiku-5-5",
-          effort: "medium",
-          role: "Fast worker",
-        },
-      ],
-      instructions:
-        "Plan, review, and integrate. Delegate focused implementation work to supporting workers with self-contained briefs, then verify their results.",
-    },
-    {
-      id: "orchestrator-fable-sol",
-      label: "Orchestrator · Fable + Astra",
-      group: "orchestrator",
-      lead: { model: "pi/anthropic/claude-fable-5-1", effort: "high" },
-      supporting: [
-        {
-          model: "pi/openai/gpt-6-astra",
-          effort: "high",
-          role: "Implementation worker",
-        },
-      ],
-      instructions:
-        "Use Fable to plan, review, and integrate. Delegate focused implementation work to Astra with self-contained briefs, then verify its results.",
-    },
-    {
-      id: "orchestrator-sol",
-      label: "Orchestrator · Sol",
-      group: "orchestrator",
-      lead: { model: "pi/openai/gpt-6.1-sol", effort: "xhigh" },
-      supporting: [
-        {
-          model: "pi/openai/gpt-5.6-terra",
-          effort: "medium",
-          role: "Implementation worker",
-        },
-        { model: "pi/openai/gpt-6-luna", effort: "low", role: "Fast worker" },
-      ],
-      instructions:
-        "Plan, review, and integrate. Delegate focused implementation work to supporting workers with self-contained briefs, then verify their results.",
-    },
-  ],
-};
-
-function copyModelSettings(
-  settings: WorkspaceModelSettings,
-): WorkspaceModelSettings {
-  return JSON.parse(JSON.stringify(settings)) as WorkspaceModelSettings;
-}
-
-/** A workspace without its own modelSettings inherits the current defaults.
- *  Nothing materializes defaults into workspace files or list payloads; a
- *  workspace stores modelSettings only once someone saves an edit. */
-export function workspaceModelSettings(
-  workspace?: Workspace | null,
-): WorkspaceModelSettings {
-  return (
-    workspace?.modelSettings ||
-    copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS)
-  );
 }
 
 export interface Workspace {
@@ -275,13 +100,10 @@ export interface Workspace {
   worktreeDir?: string;
   /** Secondary repos attached at the workspace level; new sessions copy these. */
   attachedRepos?: AttachedRepo[];
-  /** Workspace-specific model families and combinations. */
-  modelSettings?: WorkspaceModelSettings;
   /**
    * An unsent composer prompt parked here before any session exists. Absent
-   * = no draft. Never backfilled onto a workspace record (same rule as
-   * modelSettings above: stamping this on every row would multiply the list
-   * payload by the workspace count).
+   * = no draft. Never backfilled onto a workspace record: stamping this on
+   * every row would multiply the list payload by the workspace count.
    */
   draft?: WorkspaceDraft;
   /**
@@ -428,13 +250,7 @@ function sorted(all: Map<string, Workspace>): Workspace[] {
   return sortedCache.list;
 }
 
-/**
- * Every workspace, sorted for the sidebar. No defaults backfill here: stamping
- * the ~3KB default modelSettings on every row multiplied the list payload by
- * the workspace count (13 MB on this instance). Absent modelSettings means
- * "inherit the defaults": resolve through workspaceModelSettings() at the
- * point of use.
- */
+/** Every workspace, sorted for the sidebar. */
 export async function listWorkspaces(): Promise<Workspace[]> {
   return sorted(await projection()).slice();
 }
@@ -856,7 +672,6 @@ export async function updateWorkspace(
       | "branch"
       | "worktreeDir"
       | "attachedRepos"
-      | "modelSettings"
     >
   > & { draft?: WorkspaceDraft | null },
   expectedName?: string,
@@ -932,9 +747,6 @@ export async function updateWorkspace(
       ...(patch.attachedRepos !== undefined
         ? { attachedRepos: patch.attachedRepos }
         : {}),
-      ...(patch.modelSettings !== undefined
-        ? { modelSettings: patch.modelSettings }
-        : {}),
       draft: nextDraft,
     };
   });
@@ -961,6 +773,27 @@ export function restampWorkspaceWorktree(
       ...(next.worktreeDir ? { worktreeDir: next.worktreeDir } : {}),
     };
   });
+}
+
+/**
+ * Discard a workspace's parked draft without touching its sessions.
+ *
+ * A sidebar draft row is any workspace with a draft and no live session, so it
+ * can be a workspace whose sessions are all archived. Deleting that workspace
+ * would delete its archived history with it. Only a workspace with no sessions
+ * at all (archived included) and no dedupe key loses its record; any other
+ * keeps the record and loses just the draft.
+ */
+export async function discardWorkspaceDraft(
+  id: string,
+  hasSessions: boolean,
+): Promise<"cleared" | "deleted" | "missing"> {
+  const workspace = await getWorkspace(id);
+  if (!workspace) return "missing";
+  if (!hasSessions && !workspace.key) {
+    return (await deleteWorkspace(id)) ? "deleted" : "missing";
+  }
+  return (await updateWorkspace(id, { draft: null })) ? "cleared" : "missing";
 }
 
 /**

@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, readdirSync } from "node:fs";
+import { chmodSync, copyFileSync, readdirSync, rmSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { ensureDirectory } from "./build";
 import { findExecutable, runChecked } from "./exec";
@@ -6,7 +6,7 @@ import { resolveProjectPath } from "./security";
 import {
   CREDENTIAL_REFS,
   cleanupReleaseExecution,
-  consumeReleaseApproval,
+  claimReleasePlan,
   credentials,
   discardReleasePlan,
   exportOptions,
@@ -99,10 +99,9 @@ export async function executePlan(
     );
   }
   const prepared = await prepareReleaseExecution(plan);
-  let approvalConsumed = false;
+  let claimedPlan: string | undefined;
   try {
-    const approval = consumeReleaseApproval(plan);
-    approvalConsumed = true;
+    claimedPlan = claimReleasePlan(plan.id);
     ensureDirectory(plan.outputDirectory);
     const results: CommandResult[] = [];
     let artifact: string | undefined;
@@ -167,8 +166,6 @@ export async function executePlan(
       planId: plan.id,
       action: plan.action,
       commit: plan.commit,
-      approvedBy: approval.approvedBy,
-      approvedAt: approval.approvedAt,
       artifact:
         plan.action === "upload"
           ? plan.sourceArtifactName
@@ -187,9 +184,12 @@ export async function executePlan(
       });
     } finally {
       // Once execution starts, a failed command may already have signed or
-      // uploaded externally. Burn the approval and plan on both success and
-      // failure; preflight failures before consumption remain retryable.
-      if (approvalConsumed) discardReleasePlan(plan.id);
+      // uploaded externally. Burn the plan on both success and failure;
+      // preflight failures before the claim remain retryable.
+      if (claimedPlan) {
+        rmSync(claimedPlan, { force: true });
+        discardReleasePlan(plan.id);
+      }
     }
   }
 }

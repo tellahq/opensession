@@ -119,7 +119,11 @@ import {
   sandboxConfig,
   sandboxesEnabled,
 } from "./sandbox/config";
-import { resolveInteractiveSandbox } from "./sandbox/defaults";
+import {
+  defaultSandboxGpu,
+  resolveInteractiveSandbox,
+} from "./sandbox/defaults";
+import { resolveRequestedSandboxGpu, type SandboxGpu } from "./sandbox/config";
 import {
   getRunner,
   runnerAvailableForSession,
@@ -176,7 +180,6 @@ import {
   withUploadsNote,
 } from "./uploads";
 import { resolvePlainWorkspace } from "./workspace-resolve";
-import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import {
   type Workspace,
   getWorkspace,
@@ -279,12 +282,12 @@ export interface CreateSessionMessage {
   /** Repos to work in beside `repo` (the palette's multi-select picker). */
   attachRepos?: unknown;
   sandbox?: unknown;
+  /** A GPU for a Modal Sandbox ("T4" or "L4"). */
+  sandboxGpu?: unknown;
   runner?: unknown;
   worktreeMode?: unknown;
   checkoutMode?: unknown;
   workspaceId?: unknown;
-  /** Workspace that supplied a model preset for an otherwise independent create. */
-  modelWorkspaceId?: unknown;
   plainThreadId?: unknown;
   createWorkspace?: { name?: unknown };
 }
@@ -432,8 +435,6 @@ export interface ResolvedCreate {
   /** Undefined only for forks of sessions with no recorded model (historic). */
   model?: string;
   effort?: string;
-  /** Stable preset instructions captured at creation, even if the workspace changes later. */
-  presetNote?: string;
   autoFallback?: boolean;
   fastMode?: boolean;
   speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs GPT-6 Astra and a Pro $500 login
@@ -458,6 +459,8 @@ export interface ResolvedCreate {
    */
   runMcpServers?: McpScope;
   sandboxProvider: ResolvedSandboxProvider;
+  /** The GPU the session's Modal Sandbox carries. */
+  sandboxGpu?: SandboxGpu;
   /** Explicit persistent-machine target. Mutually exclusive with Sandbox. */
   runnerTarget?: {
     id: string;
@@ -614,9 +617,11 @@ const activeOpeningCreates = new Map<
   }
 >();
 
-// Bounds concurrent opening turns (worktree materialization, deps install,
-// repo attach and the opening engine turn). Gateway process: configurable via
-// ~/.opensession.env or a systemd drop-in.
+// Bounds concurrent opening-turn startups (worktree materialization, repo
+// attach and the engine launch). A slot is released as soon as the opening run
+// yields its first event, so long opening turns never hold it: the gate smooths
+// creation bursts without parking later sessions behind running agents.
+// Gateway process: configurable via ~/.opensession.env or a systemd drop-in.
 const OPENING_TURN_CONCURRENCY = envCapacity(
   "OPENSESSION_OPENING_TURN_CONCURRENCY",
   8,
@@ -647,11 +652,14 @@ function openingTurnRelease(): () => void {
   };
 }
 
-function acquireOpeningTurn(): Promise<() => void> {
+function acquireOpeningTurn(
+  onQueued?: (ahead: number) => void,
+): Promise<() => void> {
   if (openingTurnGate.active < OPENING_TURN_CONCURRENCY) {
     openingTurnGate.active += 1;
     return Promise.resolve(openingTurnRelease());
   }
+  onQueued?.(openingTurnGate.waiters.length);
   return new Promise((resolve) => openingTurnGate.waiters.push(resolve));
 }
 
@@ -755,7 +763,6 @@ function createdSessionFileDefaults(spec: ResolvedCreate): NativeSessionFile {
       ? { stackedOn: spec.stackedOn }
       : {}),
     ...(spec.effort ? { effort: spec.effort } : {}),
-    ...(spec.presetNote ? { presetNote: spec.presetNote } : {}),
     ...(specPstackMode(spec) ? { pstackMode: true } : {}),
     ...(spec.autoFallback === false ? { autoFallback: false } : {}),
     ...(spec.fastMode ? { fastMode: true } : {}),
@@ -796,6 +803,7 @@ function createdSessionFileDefaults(spec: ResolvedCreate): NativeSessionFile {
           },
         }
       : {}),
+    ...(spec.sandboxGpu ? { sandboxGpu: spec.sandboxGpu } : {}),
     ...(spec.runnerTarget
       ? {
           runner: {
@@ -1734,11 +1742,16 @@ export async function openCreatedSession(
       // to land on. Scanned from the raw prompt, never the assembled one,
       // so a repo note or a handoff cannot invent a mention.
       void notifyMentions(spec.titlePrompt, spec.user || "", bksId, "prompt");
-      // Projection is latency-sensitive; the agent turn is capacity-sensitive.
+      // Projection is latency-sensitive; startup is capacity-sensitive.
       // Persist and announce every accepted session first, then wait for one of
-      // the bounded opening-run slots. Keeping the gate here prevents eight long
-      // turns from hiding every later session behind "Setting up workspace".
-      releaseOpeningTurn = await acquireOpeningTurn();
+      // the bounded startup slots. The slot is released on the opening run's
+      // first event, so a waiting session is only ever behind other startups.
+      releaseOpeningTurn = await acquireOpeningTurn((ahead) =>
+        io.emit({
+          type: "notice",
+          message: `Waiting for a free start slot (position ${ahead + 1} in queue).`,
+        }),
+      );
 
       // Every worktree this session works in, its own first. The extra
       // repos are cut inside the same gate: they are git work of the same
@@ -1975,7 +1988,6 @@ export async function openCreatedSession(
       const openingReposNote = automationChild
         ? undefined
         : [
-            spec.presetNote || "",
             pstackMode ? PSTACK_MODE_NOTE : "",
             // A session that spans repos is handed the persisted map rather
             // than a reconstructed branch note.
@@ -2035,7 +2047,6 @@ export async function openCreatedSession(
               mcpServers: openingTrust.mcpServers,
               proxyMcpServers: Object.keys(openingMcp),
               reposNote: openingReposNote,
-              reposNoteHasPreset: !automationChild && !!spec.presetNote,
               images: spec.images,
               ...(spec.fork
                 ? {
@@ -2059,6 +2070,9 @@ export async function openCreatedSession(
         sandboxOpeningRun ?? runnerOpeningRun ?? localOpeningRun;
       if (!openingRun) throw new Error("Opening run isolation unavailable");
       for await (const event of openingRun) {
+        // The engine is up: free the startup slot for the next session.
+        releaseOpeningTurn?.();
+        releaseOpeningTurn = undefined;
         // Opening turns use this event ladder instead of run-session's
         // follow-up ladder. Consume Pi's exact boundary acknowledgement here
         // too, including context-only steers that transcript parsing hides.
@@ -2551,28 +2565,18 @@ export async function handleCreateSessionMessage(
     : isScratch || (isAsk && requestedRepo === NO_REPO);
   // Optional model pick from the UI; invalid input falls back to default.
   // A fork inherits the source's model. No pick = stamp the interactive
-  // default NOW: leaving it empty would let the init event persist the
-  // engine's resolved model — which for a dial default would silently
-  // disengage the dial (the preset id must be what the session stores).
-  const workspacePreset = forkSource
-    ? undefined
-    : await resolveWorkspaceModelPreset(
-        msg.model,
-        msg.workspaceId ?? msg.modelWorkspaceId,
-      );
+  // default NOW, so the session records what it was created on.
   const model = forkSource
     ? forkSource.model
-    : workspacePreset?.id ||
-      (msg.model ? resolveModel(String(msg.model))?.id : undefined) ||
+    : (msg.model ? resolveModel(String(msg.model))?.id : undefined) ||
       configuredInteractiveDefaultModel();
   // Reasoning effort from the New-session palette (forks inherit).
   const createEffort = forkSource
     ? forkSource.effort
-    : workspacePreset?.effort ||
-      (typeof msg.effort === "string" &&
-      SESSION_EFFORTS.has(msg.effort.trim().toLowerCase())
-        ? msg.effort.trim().toLowerCase()
-        : undefined);
+    : typeof msg.effort === "string" &&
+        SESSION_EFFORTS.has(msg.effort.trim().toLowerCase())
+      ? msg.effort.trim().toLowerCase()
+      : undefined;
   const createAutoFallback = forkSource
     ? forkSource.autoFallback !== false
     : msg.autoFallback !== false;
@@ -2586,11 +2590,7 @@ export async function handleCreateSessionMessage(
   // Pinned provider account from the palette (forks inherit).
   const createAccountId = forkSource
     ? forkSource.accountId
-    : resolvePinnedAccountId(
-        workspacePreset?.model || model,
-        msg.accountId,
-        user,
-      );
+    : resolvePinnedAccountId(model, msg.accountId, user);
   const createMcpServers = Array.isArray(msg.mcpServers)
     ? msg.mcpServers.map(String)
     : undefined;
@@ -2620,6 +2620,23 @@ export async function handleCreateSessionMessage(
   }
   // null = host (no sandbox recorded on the session).
   const createSandboxProvider = sandboxResolved.provider;
+  // An unchosen Machine follows the project's default, GPU included.
+  const gpuResolved = resolveRequestedSandboxGpu(
+    forkSource
+      ? undefined
+      : (msg.sandboxGpu ??
+          defaultSandboxGpu(
+            msg.sandbox,
+            msg.sandboxGpu,
+            createSandboxProvider,
+            repo.id,
+          )),
+    createSandboxProvider,
+  );
+  if (!gpuResolved.ok) {
+    failCreate(gpuResolved.error);
+    return;
+  }
   const requestedRunnerId =
     typeof msg.runner === "string" && msg.runner.trim()
       ? msg.runner.trim()
@@ -3183,7 +3200,6 @@ export async function handleCreateSessionMessage(
       autoNameWorkspace: wsAutoNamed ? workspace : null,
       model,
       effort: createEffort,
-      presetNote: workspacePreset?.note,
       autoFallback: createAutoFallback,
       fastMode: createSpeed !== "standard",
       speed: createSpeed,
@@ -3205,6 +3221,7 @@ export async function handleCreateSessionMessage(
         ? createMcpServers
         : feedMcpServers) as McpScope | undefined,
       sandboxProvider: createSandboxProvider,
+      ...(gpuResolved.gpu ? { sandboxGpu: gpuResolved.gpu } : {}),
       runnerTarget: selectedRunner
         ? {
             id: selectedRunner.id,

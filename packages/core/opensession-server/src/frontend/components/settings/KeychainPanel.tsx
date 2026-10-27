@@ -11,12 +11,15 @@ import {
   deleteKeychainCredential,
   fetchKeychain,
   revokeKeychainGrant,
+  setKeychainCredentialScope,
   type KeychainAskDto,
   type KeychainCredentialDto,
   type KeychainGrantDto,
 } from "../../lib/api";
+import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Checkbox } from "../../ui/checkbox";
+import { useConfirm } from "../../ui/confirm";
 import { Field, Input } from "../../ui/input";
 import { Modal } from "../../ui/modal";
 import {
@@ -46,6 +49,7 @@ export function KeychainSection() {
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<"api" | "login" | null>(null);
   const serviceRef = useRef<HTMLInputElement>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   const reload = () => {
     fetchKeychain()
@@ -87,10 +91,11 @@ export function KeychainSection() {
   const hint = (
     <SettingsHint>
       Any teammate's session can ask to borrow a credential. Its owner approves
-      or declines here or in Slack. The secret is injected server-side, so the
-      agent never sees it, and every grant expires. A login is different: the
-      agent types its password into the sign-in page, so it can read it. Add
-      only test accounts as logins.
+      or declines here or in Slack. A workspace credential needs no approval:
+      every session can use it. The secret is injected server-side, so the agent
+      never sees it, and every call is audited. A login is different: the agent
+      types its password into the sign-in page, so it can read it. Add only test
+      accounts as logins.
     </SettingsHint>
   );
 
@@ -128,6 +133,25 @@ export function KeychainSection() {
     answerKeychainAsk(id, decision)
       .then(reload)
       .catch((e) => setError(e.message));
+  const setScope = (c: KeychainCredentialDto) => {
+    const sharing = c.scope !== "workspace";
+    confirm({
+      title: sharing
+        ? `Share ${c.service} with the workspace?`
+        : `Make ${c.service} personal?`,
+      description: sharing
+        ? "Every session in the workspace can call it without asking you, within its host, methods and paths. Calls are still audited."
+        : "Sessions will have to ask you again before using it. Access they got without asking ends now.",
+      confirmLabel: sharing ? "Share" : "Make personal",
+      onConfirm: () =>
+        void setKeychainCredentialScope(
+          c.id,
+          sharing ? "workspace" : "personal",
+        )
+          .then(reload)
+          .catch((e) => setError(e.message)),
+    });
+  };
 
   return (
     <>
@@ -136,6 +160,7 @@ export function KeychainSection() {
       )}
 
       {label}
+      {confirmDialog}
 
       <Modal.Root
         open={adding !== null}
@@ -182,9 +207,14 @@ export function KeychainSection() {
             <SettingRow
               key={c.id}
               title={
-                c.kind === "login"
-                  ? `${c.service} · ${c.username ?? ""}`
-                  : `${c.service} · ${c.host}`
+                <span className="inline-flex flex-wrap items-center gap-2">
+                  {c.kind === "login"
+                    ? `${c.service} · ${c.username ?? ""}`
+                    : `${c.service} · ${c.host}`}
+                  {c.scope === "workspace" && (
+                    <Badge tone="info">Workspace</Badge>
+                  )}
+                </span>
               }
               desc={[
                 c.kind === "login" ? `login on ${c.loginUrl ?? c.host}` : null,
@@ -202,17 +232,28 @@ export function KeychainSection() {
                 .join(" · ")}
               control={
                 c.mine ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      deleteKeychainCredential(c.id)
-                        .then(reload)
-                        .catch((e) => setError(e.message))
-                    }
-                  >
-                    Delete
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {c.kind !== "login" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setScope(c)}
+                      >
+                        {c.scope === "workspace" ? "Make personal" : "Share"}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        deleteKeychainCredential(c.id)
+                          .then(reload)
+                          .catch((e) => setError(e.message))
+                      }
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 ) : null
               }
             />
@@ -405,6 +446,7 @@ function AddCredentialForm({
   const [methods, setMethods] = useState("");
   const [prefixes, setPrefixes] = useState("");
   const [statusOnly, setStatusOnly] = useState(false);
+  const [workspace, setWorkspace] = useState(false);
   const [busy, setBusy] = useState(false);
   const ready = Boolean(service.trim() && host.trim() && secret);
 
@@ -422,6 +464,7 @@ function AddCredentialForm({
     if (methods.trim()) credential.allowedMethods = list(methods);
     if (prefixes.trim()) credential.allowedPathPrefixes = list(prefixes);
     if (statusOnly) credential.statusOnly = true;
+    if (workspace) credential.scope = "workspace";
     addKeychainCredential(credential)
       .then(() => {
         // Clear the secret first and always — it must not survive a
@@ -511,6 +554,13 @@ function AddCredentialForm({
               onCheckedChange={(v) => setStatusOnly(v === true)}
             />
             Return only the status code, never the response
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-label">
+            <Checkbox
+              checked={workspace}
+              onCheckedChange={(v) => setWorkspace(v === true)}
+            />
+            Share with the workspace: every session can use it without asking
           </label>
           {/* The hint belongs to this zone, so it sits inside it rather
 					    than floating between the fields and the actions. */}

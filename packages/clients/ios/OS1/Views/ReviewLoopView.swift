@@ -23,6 +23,9 @@ struct ReviewLoopView: View {
     /// Resolves each nested row's own detail state, which must survive the row
     /// scrolling out of the lazy stack.
     let expansionState: (String, Bool) -> TurnFoldState
+    /// The loop is the work fold, so only the Tool calls preference is left
+    /// to answer inside it.
+    var activity = TurnActivity.standard
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -76,6 +79,7 @@ struct ReviewLoopView: View {
                 worktreeDir: worktreeDir,
                 // Only the loop's newest work can still be running.
                 isLive: loop.isLive && block.id == loop.blocks.last?.id,
+                rendersToolCallsInPlace: activity.rendersToolCallsInPlace,
                 expansionState: expansionState
             )
         case .tool(let item):

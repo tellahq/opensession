@@ -69,7 +69,57 @@ afterAll(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
+/** A workflow write agent's checkout: its branch carries work that is on the
+ *  remote but not in origin/main, so no done-signal fires for it. */
+async function addWorkflowWorktree(
+  branch: string,
+  ageMs: number,
+): Promise<string> {
+  const dir = join(worktrees, `acme-${branch}`);
+  await $`git -C ${repoDir} worktree add -q -b ${branch} ${dir} origin/main`.quiet();
+  await Bun.write(join(dir, "agent.txt"), branch);
+  await $`git -C ${dir} add agent.txt`.quiet();
+  await $`git -C ${dir} commit -q -m ${branch}`.quiet();
+  await $`git -C ${dir} push -q origin ${branch}`.quiet();
+  const created = new Date(NOW - ageMs);
+  utimesSync(join(dir, ".git"), created, created);
+  return dir;
+}
+
 describe("sweepWorktreeReaper", () => {
+  it("parks an unowned workflow checkout past the idle horizon and keeps its branch", async () => {
+    const { sweepWorktreeReaper } = await import("./worktree-reaper");
+    const orphan = await addWorkflowWorktree("wf-0aa11bb2-1", 8 * 24 * HOUR);
+    const recent = await addWorkflowWorktree("wf-0aa11bb2-2", 2 * 24 * HOUR);
+    const owned = await addWorkflowWorktree("wf-0aa11bb2-3", 8 * 24 * HOUR);
+
+    const result = await sweepWorktreeReaper({
+      nowMs: NOW,
+      sessions: [
+        {
+          worktreeDir: owned,
+          branch: "wf-0aa11bb2-3",
+          repo: "acme",
+          lastActivity: new Date(NOW - HOUR).toISOString(),
+          isRunning: false,
+        },
+      ],
+    });
+
+    expect(result.parked).toEqual(["acme-wf-0aa11bb2-1"]);
+    expect(existsSync(orphan)).toBe(false);
+    expect(existsSync(recent)).toBe(true);
+    expect(existsSync(owned)).toBe(true);
+    const branch =
+      await $`git -C ${repoDir} rev-parse --verify --quiet refs/heads/wf-0aa11bb2-1`
+        .quiet()
+        .nothrow();
+    expect(branch.exitCode).toBe(0);
+
+    for (const dir of [recent, owned])
+      await $`git -C ${repoDir} worktree remove --force ${dir}`.quiet();
+  });
+
   it("keeps an open session's done checkout and reaps an archived one", async () => {
     const { sweepWorktreeReaper } = await import("./worktree-reaper");
     const open = await addDoneWorktree("open-session");

@@ -12,8 +12,12 @@ process.env.OPENSESSION_STATE_DIR = scratch;
 
 const { SessionKernelStore, __setSessionKernelStoreForTest } =
   await import("./session-kernel");
-const { __resetWorkspaceProjectionForTest, createWorkspace, getWorkspace } =
-  await import("./workspaces");
+const {
+  __resetWorkspaceProjectionForTest,
+  createWorkspace,
+  discardWorkspaceDraft,
+  getWorkspace,
+} = await import("./workspaces");
 const { unpinArchivedSessions } = await import("./archive");
 
 let store: InstanceType<typeof SessionKernelStore>;
@@ -65,4 +69,30 @@ test("a workspace with a live session left keeps its draft", async () => {
   await unpinArchivedSessions([archived], [archived, live]);
 
   expect((await getWorkspace(ws.id))?.draft?.text).toBe(draft.text);
+});
+
+test("discarding the draft of a workspace with archived sessions keeps the workspace", async () => {
+  const ws = await createWorkspace({
+    name: "Acme",
+    createdBy: "acme",
+    key: "session-create:acme",
+    draft,
+  });
+
+  expect(await discardWorkspaceDraft(ws.id, true)).toBe("cleared");
+
+  const kept = await getWorkspace(ws.id);
+  expect(kept?.name).toBe("Acme");
+  expect(kept?.draft).toBeUndefined();
+});
+
+test("discarding the draft of a sessionless draft workspace removes it", async () => {
+  const ws = await createWorkspace({ name: "Acme", createdBy: "acme", draft });
+
+  expect(await discardWorkspaceDraft(ws.id, false)).toBe("deleted");
+  expect(await getWorkspace(ws.id)).toBeNull();
+});
+
+test("discarding the draft of a missing workspace reports it", async () => {
+  expect(await discardWorkspaceDraft("ws-missing", false)).toBe("missing");
 });

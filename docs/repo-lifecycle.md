@@ -31,15 +31,34 @@ fetch, codegen. Slow extras belong behind an existence check. During snapshot
 preparation `bun install` runs with `--frozen-lockfile` so a shared image
 never rewrites `bun.lock`.
 
+In a Sandbox, setup is stopped after 20 minutes, and every process it leaves
+running is stopped when it ends: development servers, watchers, and `nohup`
+or `setsid` jobs never reach a project snapshot. A service handed to systemd
+(`sudo systemctl enable --now <unit>`) is not setup's child and keeps
+running. Declare long-running processes as Portals instead, or start them
+from `resume`.
+
+A project can also keep a setup script in Workspace → Sandboxes → Projects
+instead of committing one. It runs from the repository root right before
+`.agents/setup`, with the same environment, and is part of the project
+snapshot's inputs: changing it refreshes the snapshot.
+
 ## resume — idempotent post-wake repair
 
-Runs inside a Sandbox after every real wake, before Portals are restored and
-before the queued turn runs. `cwd` = repo root, no arguments,
-`OPENSESSION_BOOT_MODE=resume`. Use it for wall-clock- or environment-
-sensitive state: stale pid and lock files, expired cached tokens, clock-skewed
-build caches, a daemon that must be running. It must be idempotent because it
-runs many times over a Sandbox's life. A failure is logged and shown in the
-Sandbox badge; it does not block the wake.
+Runs inside a Sandbox after every real wake. `cwd` = repo root, no
+arguments, `OPENSESSION_BOOT_MODE=resume`. Use it for wall-clock- or
+environment-sensitive state: stale pid and lock files, expired cached tokens,
+clock-skewed build caches, a daemon that must be running. It must be
+idempotent because it runs many times over a Sandbox's life. A failure is
+logged and shown in the Sandbox badge; it does not block the wake.
+
+The wake waits for it for at most 10 seconds. A slower hook keeps running in
+the background while Portals are restored and the queued turn starts, so keep
+the blocking part short and write progress to the log. Processes it starts
+keep running after it exits. A workspace-wide resume script, set in
+Workspace → Sandboxes, runs right before it in every Linux Sandbox and shares
+the 10-second wait; its output is in `workspace-resume.log` beside the hook
+logs.
 
 ## portals.json — the services Open Session supervises
 

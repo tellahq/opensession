@@ -76,6 +76,11 @@ export class SessionKernelQuarantinedError extends SessionKernelActorError {
   }
 }
 
+/** How long one actor RPC may take. Boot recovery calls every recovering
+ *  actor through this path, and under heavy host load 15 s was not enough:
+ *  a release failed its recovery gate and rolled back. */
+const ACTOR_RPC_TIMEOUT_MS = 30_000;
+
 export function isFatalSessionKernelAsyncTimeout(
   request: KernelActorClientRequest,
 ): boolean {
@@ -227,7 +232,7 @@ export class SessionKernelActorClient {
     label: string,
     large = false,
   ): Promise<TResult> {
-    const deadline = Date.now() + 15_000;
+    const deadline = Date.now() + ACTOR_RPC_TIMEOUT_MS;
     const retryableRead =
       request.t === "reduce"
         ? isReadReducer(request.command)
@@ -591,7 +596,7 @@ export class SessionKernelActorClient {
           return;
         }
         reject(new SessionKernelActorError(message, true));
-      }, 15_000);
+      }, ACTOR_RPC_TIMEOUT_MS);
       this.pending.set(request.rpcId, {
         resolve: (value) => {
           if (timeout) clearTimeout(timeout);
