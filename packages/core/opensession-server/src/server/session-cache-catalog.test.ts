@@ -660,6 +660,114 @@ describe("catalog-only list rebuild", () => {
     await freshListIndex();
   });
 
+  function staleRunRow(id: string): UnifiedSession {
+    // Materialized mid-run and never republished after the run ended.
+    return {
+      id,
+      source: "opensession",
+      title: "Done",
+      automation: "pr-review",
+      createdAt: "2026-09-01T00:00:00.000Z",
+      lastActivity: "2026-09-01T00:00:00.000Z",
+      isRunning: true,
+      runState: "running",
+      runStartedAt: "2026-09-01T00:00:00.000Z",
+    } as unknown as UnifiedSession;
+  }
+
+  test("an unhealable stale row is repaired at most once across many builds", async () => {
+    const {
+      enrichSessionRuntime,
+      __staleIndexedRunRepairsForTest,
+      __resetStaleIndexedRunRepairsForTest,
+    } = await import("./session-cache");
+    const { sessionListResponseRevision } =
+      await import("./session-list-response-revision");
+    const { SessionListStore, __setSessionListStoreForTest, indexedSessions } =
+      await import("./session-list-store");
+
+    __resetStaleIndexedRunRepairsForTest();
+    const store = new SessionListStore(":memory:");
+    __setSessionListStoreForTest(store);
+    // No session file owns this row, so the targeted refresh cannot heal it.
+    const id = "bks-stale-run-orphan";
+    store.upsertManyCovered([staleRunRow(id)], "exclude");
+    const reads = spyOn(store, "get");
+    try {
+      const revision = sessionListResponseRevision();
+      for (let build = 0; build < 20; build++) {
+        const served = enrichSessionRuntime(
+          (await indexedSessions("exclude")) ?? [],
+          undefined,
+          { repairIndex: true },
+        ).find((row) => row.id === id);
+        expect(served?.isRunning).toBe(false);
+        await __staleIndexedRunRepairsForTest();
+      }
+      expect(reads.mock.calls.filter(([key]) => key === id)).toHaveLength(1);
+      // A repair that changed nothing must not fence response builds.
+      expect(sessionListResponseRevision()).toBe(revision);
+      expect(store.get(id)?.isRunning).toBe(true);
+    } finally {
+      reads.mockRestore();
+      __resetStaleIndexedRunRepairsForTest();
+      await freshListIndex();
+    }
+  });
+
+  test("repeated list builds with a stale row converge after the first repair", async () => {
+    const {
+      enrichSessionRuntime,
+      __staleIndexedRunRepairsForTest,
+      __resetStaleIndexedRunRepairsForTest,
+    } = await import("./session-cache");
+    const { buildAtCurrentSessionListRevision } =
+      await import("./session-list-response-revision");
+    const { SessionListStore, __setSessionListStoreForTest, indexedSessions } =
+      await import("./session-list-store");
+
+    __resetStaleIndexedRunRepairsForTest();
+    const store = new SessionListStore(":memory:");
+    __setSessionListStoreForTest(store);
+    const healable = "bks-stale-run-healable";
+    const orphan = "bks-stale-run-unhealable";
+    fs.writeFileSync(
+      join(sessionsDir, `${healable}.json`),
+      sessionDoc(healable, "Done"),
+    );
+    store.upsertManyCovered(
+      [staleRunRow(healable), staleRunRow(orphan)],
+      "exclude",
+    );
+    let builds = 0;
+    const build = async () => {
+      builds++;
+      const rows = enrichSessionRuntime(
+        (await indexedSessions("exclude")) ?? [],
+        undefined,
+        { repairIndex: true },
+      );
+      // Let the queued repair land inside the fenced build, as it can on a
+      // busy instance.
+      await __staleIndexedRunRepairsForTest();
+      return rows;
+    };
+    try {
+      await buildAtCurrentSessionListRevision(build);
+      expect(store.get(healable)?.isRunning).toBe(false);
+      for (let request = 0; request < 10; request++) {
+        builds = 0;
+        const rows = await buildAtCurrentSessionListRevision(build);
+        expect(builds).toBe(1);
+        expect(rows.every((row) => !row.isRunning && !row.runState)).toBe(true);
+      }
+    } finally {
+      __resetStaleIndexedRunRepairsForTest();
+      fs.rmSync(join(sessionsDir, `${healable}.json`), { force: true });
+      await freshListIndex();
+    }
+  });
+
   test("the offline seed projects files, sidecars and agent sources, then marks the catalogs", async () => {
     await resetCatalogState();
     await freshKernelStore();
