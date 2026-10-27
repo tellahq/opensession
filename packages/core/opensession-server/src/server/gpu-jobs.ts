@@ -377,7 +377,11 @@ async function prepareAndLaunch(
   const existing = provider.machineFor?.(machineSession);
   const sandbox = await ensureSandboxWaitingForCapacity(provider, {
     sessionId: machineSession,
+    // The machine works for the owning session: its repository and its
+    // trust profile (run_gpu_job is interactive-only) scope the workload
+    // identity every command on it gets.
     repo: repo.id,
+    trustProfile: "interactive",
     branch,
     mode: "code",
     gpu: job.gpu,

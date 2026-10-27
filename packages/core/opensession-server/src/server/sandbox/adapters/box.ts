@@ -65,6 +65,7 @@ import {
   bootstrapRemoteSandbox,
   findRemoteStateBySession,
   makeRemoteSandbox,
+  type RemoteSandboxOwner,
   readRemoteState,
   runResumeHook,
   remoteCloneUrl,
@@ -1361,24 +1362,30 @@ export class BoxProvider implements SandboxProvider {
       lastActivityAt: new Date().toISOString(),
       ...trust,
     });
-    return Object.assign(this.makeHandle(cfg, box.id, spec.sessionId, cwd), {
-      wokeFromSleep: resumingExistingWorkspace,
-    });
+    return Object.assign(
+      this.makeHandle(cfg, box.id, {
+        sessionId: spec.sessionId,
+        cwd,
+        repoId: repo.id,
+        trustProfile: trust.trustProfile,
+      }),
+      {
+        wokeFromSleep: resumingExistingWorkspace,
+      },
+    );
   }
 
   private makeHandle(
     cfg: BoxClientConfig,
     boxId: string,
-    sessionId: string,
-    cwd: string,
+    owner: RemoteSandboxOwner,
   ): Sandbox {
     const providerId = this.id;
     const driver = sessionBoxDriver(cfg, boxId);
     return makeRemoteSandbox({
+      ...owner,
       providerId,
       sandboxId: boxId,
-      sessionId,
-      cwd,
       driver,
       async ports(requestedPorts = []): Promise<PortMap> {
         const map: PortMap = {};
@@ -1437,7 +1444,7 @@ export class BoxProvider implements SandboxProvider {
       const cfg = boxClientConfig();
       const box = await getBox(cfg, sandboxId);
       if (!box || stateOf(box) === "gone") return null;
-      return this.makeHandle(cfg, sandboxId, state.sessionId, state.cwd);
+      return this.makeHandle(cfg, sandboxId, state);
     } catch (e) {
       console.warn(`[sandbox:box] get(${sandboxId}) failed:`, e);
       return null;
@@ -1512,10 +1519,9 @@ export class BoxProvider implements SandboxProvider {
       primeBoxWorkspaceAfterResume(driver, state.cwd);
       await runResumeHook(driver, this.id, sandboxId, state);
     }
-    return Object.assign(
-      this.makeHandle(cfg, sandboxId, state.sessionId, state.cwd),
-      { wokeFromSleep: resumed },
-    );
+    return Object.assign(this.makeHandle(cfg, sandboxId, state), {
+      wokeFromSleep: resumed,
+    });
   }
 
   /** Box's public API exposes durable archival rather than hard deletion.

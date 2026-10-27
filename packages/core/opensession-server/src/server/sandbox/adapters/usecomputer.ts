@@ -64,6 +64,7 @@ import {
   findRemoteStateBySession,
   listRemoteStates,
   makeRemoteSandbox,
+  type RemoteSandboxOwner,
   readRemoteState,
   remoteCloneUrl,
   remoteLayout,
@@ -1003,7 +1004,12 @@ export class UseComputerProvider implements SandboxProvider {
     }
     writeRemoteState({ ...state, lastActivityAt: new Date().toISOString() });
     return Object.assign(
-      this.makeHandle(c, sandboxId, remoteId, spec.sessionId, cwd),
+      this.makeHandle(c, sandboxId, remoteId, {
+        sessionId: spec.sessionId,
+        cwd,
+        repoId: repo.id,
+        trustProfile: trust.trustProfile,
+      }),
       { wokeFromSleep: resuming, bootMode },
     );
   }
@@ -1012,15 +1018,13 @@ export class UseComputerProvider implements SandboxProvider {
     c: UcClient,
     sandboxId: string,
     remoteId: string,
-    sessionId: string,
-    cwd: string,
+    owner: RemoteSandboxOwner,
   ): Sandbox {
     const providerId = this.id;
     return makeRemoteSandbox({
+      ...owner,
       providerId,
       sandboxId,
-      sessionId,
-      cwd,
       driver: sessionUseComputerDriver(c, sandboxId, remoteId),
       // Guest ports are reachable only inside the service; every Portal
       // rides the outbound relay, which needs no published port.
@@ -1038,13 +1042,7 @@ export class UseComputerProvider implements SandboxProvider {
     try {
       const c = client();
       if ((await sandboxStatus(c, state)) === "gone") return null;
-      return this.makeHandle(
-        c,
-        sandboxId,
-        state.remoteId || "",
-        state.sessionId,
-        state.cwd,
-      );
+      return this.makeHandle(c, sandboxId, state.remoteId || "", state);
     } catch (e) {
       console.warn(`[sandbox:usecomputer] get(${sandboxId}) failed:`, e);
       return null;
@@ -1098,13 +1096,7 @@ export class UseComputerProvider implements SandboxProvider {
       const live = await getSandbox(c, state.remoteId);
       if (live?.state === "active")
         return Object.assign(
-          this.makeHandle(
-            c,
-            sandboxId,
-            live.sandbox_id,
-            state.sessionId,
-            state.cwd,
-          ),
+          this.makeHandle(c, sandboxId, live.sandbox_id, state),
           { wokeFromSleep: false },
         );
     }
@@ -1124,10 +1116,9 @@ export class UseComputerProvider implements SandboxProvider {
     await prepareGuest(driver);
     await launchUseComputerAgent(c, sandboxId, remoteId);
     await runResumeHook(driver, this.id, sandboxId, next);
-    return Object.assign(
-      this.makeHandle(c, sandboxId, remoteId, state.sessionId, state.cwd),
-      { wokeFromSleep: true },
-    );
+    return Object.assign(this.makeHandle(c, sandboxId, remoteId, state), {
+      wokeFromSleep: true,
+    });
   }
 
   /** Deletes the VM and any sleep snapshot, and with them the workspace

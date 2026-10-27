@@ -53,6 +53,7 @@ import {
   findRemoteStateBySession,
   listRemoteStates,
   makeRemoteSandbox,
+  type RemoteSandboxOwner,
   readRemoteState,
   remoteCloneUrl,
   remoteLayout,
@@ -891,7 +892,12 @@ export class ModalProvider implements SandboxProvider {
       mark("resume hook ran");
     }
     return Object.assign(
-      this.makeHandle(c, sandboxId, remoteId, spec.sessionId, cwd),
+      this.makeHandle(c, sandboxId, remoteId, {
+        sessionId: spec.sessionId,
+        cwd,
+        repoId: repo.id,
+        trustProfile: trust.trustProfile,
+      }),
       { wokeFromSleep: resuming, bootMode },
     );
   }
@@ -900,15 +906,13 @@ export class ModalProvider implements SandboxProvider {
     c: ModalClient,
     sandboxId: string,
     remoteId: string | undefined,
-    sessionId: string,
-    cwd: string,
+    owner: RemoteSandboxOwner,
   ): Sandbox {
     const providerId = this.id;
     return makeRemoteSandbox({
+      ...owner,
       providerId,
       sandboxId,
-      sessionId,
-      cwd,
       driver: sessionModalDriver(c, sandboxId, remoteId),
       // Container ports are reachable only through Modal tunnels; every
       // Portal rides the outbound relay, which needs no published port.
@@ -926,13 +930,7 @@ export class ModalProvider implements SandboxProvider {
     try {
       const c = await modalClient();
       if ((await sandboxStatus(c, state)) === "gone") return null;
-      return this.makeHandle(
-        c,
-        sandboxId,
-        state.remoteId,
-        state.sessionId,
-        state.cwd,
-      );
+      return this.makeHandle(c, sandboxId, state.remoteId, state);
     } catch (error) {
       console.warn(`[sandbox:modal] get(${sandboxId}) failed:`, error);
       return null;
