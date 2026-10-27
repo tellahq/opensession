@@ -1066,7 +1066,7 @@ describe("wait_for availability", () => {
   // tell any run carrying opensession-sessions to use wait_for.
   it.each([
     [
-      "a person prompting an automation-owned session",
+      "the bare humanResume shape (no isAdmin)",
       { createdBy: "Michiel", isAdmin: false, humanResume: true },
     ],
     [

@@ -189,9 +189,9 @@ describe("transcript snapshots", () => {
   // the per-user `allowedUsers` gate drops `snapshot-restricted` even though
   // the automation names it. The tool policy is the third: an automation's
   // denied tools are stripped from the model's tool list, not merely refused.
-  // The one addition a person's turn earns is `opensession-sessions` in its
-  // spawn-only humanResume shape (inProcess), so the session can start the
-  // work the person asked for, and `opensession-keychain` limited to
+  // The one addition a person's turn earns is the full `opensession-sessions`
+  // toolset (inProcess), as in any session that person drives, and
+  // `opensession-keychain` limited to
   // asking for and using API credentials; the automation's own ticks carry neither.
   test("mcp allowlist: filtering strips servers", async () => {
     if (!h.ready) return;

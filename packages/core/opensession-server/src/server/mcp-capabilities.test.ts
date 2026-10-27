@@ -4,6 +4,7 @@ import {
   renderInternalMcpCapabilities,
 } from "./mcp-capabilities";
 import { MCP_SERVER_CATALOG } from "./mcp-catalog";
+import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
 
 describe("internal MCP capability metadata", () => {
   test("covers the complete server catalog", () => {
@@ -65,5 +66,51 @@ describe("renderInternalMcpCapabilities", () => {
     expect(renderInternalMcpCapabilities(undefined)).toBe("");
     expect(renderInternalMcpCapabilities({})).toBe("");
     expect(renderInternalMcpCapabilities({ external: {} })).toBe("");
+  });
+});
+
+describe("opensession-sessions guidance follows the mounted shape", () => {
+  const guidanceFor = (shape: Parameters<typeof createSessionsMcpServer>[0]) =>
+    renderInternalMcpCapabilities({
+      "opensession-sessions": createSessionsMcpServer({
+        currentSessionId: "os-caller",
+        ...shape,
+      }),
+    });
+
+  test("the full control set keeps the shared text", () => {
+    const full = INTERNAL_MCP_CAPABILITIES["opensession-sessions"].guidance;
+    expect(guidanceFor({ createdBy: "Alex", isAdmin: true })).toContain(full);
+    // A person's turn in an automation-owned session carries the full set.
+    expect(
+      guidanceFor({ createdBy: "Alex", isAdmin: true, humanResume: true }),
+    ).toContain(full);
+    // Not built yet (a lazy entry) or a bare stub: the shared text.
+    expect(
+      renderInternalMcpCapabilities({ "opensession-sessions": {} }),
+    ).toContain(full);
+  });
+
+  test.each([
+    [
+      "a self-improving automation",
+      {
+        createdBy: "Ticket triage (automation)",
+        isAdmin: false,
+        automationSelf: true,
+      },
+      "`spawn_task`",
+    ],
+    [
+      "the wake of a person's wait",
+      { createdBy: "Alex", isAdmin: false, waitContinuation: true },
+      "`task_status`",
+    ],
+  ])("%s is not sent after tools it lacks", (_label, shape, names) => {
+    const note = guidanceFor(shape);
+    expect(note).not.toContain("send_to_session");
+    expect(note).not.toContain("create_session");
+    expect(note).toContain(names);
+    if (!("automationSelf" in shape)) expect(note).not.toContain("spawn_task");
   });
 });

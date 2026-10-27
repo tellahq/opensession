@@ -40,7 +40,7 @@ touches an in-process tool:
 
 | Server | Tools | Runs | Condition |
 | --- | --- | --- | --- |
-| [`opensession-sessions`](#opensession-sessions) | 25 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
+| [`opensession-sessions`](#opensession-sessions) | 25 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. A person's own turn in an automation-owned session gets the full build (`isAdmin` + `humanResume`). |
 | [`opensession-admin`](#opensession-admin) | 15 | interactive, Slack loop | – |
 | [`opensession-runners`](#opensession-runners) | 5 | interactive | – |
 | [`opensession-goals`](#opensession-goals) | 8 | interactive | – |
@@ -88,7 +88,7 @@ See and steer other sessions, and spawn worker sessions.
 - **Source** `packages/core/opensession-server/src/agents/slack/sessions-tools.ts`
 - **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`, `packages/core/opensession-server/src/agents/slack/handlers.ts`, `packages/core/opensession-server/src/server/automations.ts`
 - **Runs** interactive, Slack loop, automation
-- **Condition** Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below.
+- **Condition** Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. A person's own turn in an automation-owned session gets the full build (`isAdmin` + `humanResume`).
 - **Note** The control tools (answer/send/cancel/create) are gated on `isAdmin`; Slack passes isAdmin only for the configured trusted user.
 
 ### `list_sessions`

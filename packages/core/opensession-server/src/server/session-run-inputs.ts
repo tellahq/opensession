@@ -48,8 +48,8 @@ export type InProcessMcpBranch =
    *  (an auto-triage run's `plainDiscussionId`; see automationSessionMcp). */
   | "automation-self-improve"
   /** Automation-owned, prompted by a person themselves: the automation-bar
-   *  set plus `opensession-sessions` in its spawn-only `humanResume` shape,
-   *  so the session can start the work the person asked for. Never the
+   *  set plus the full `opensession-sessions` toolset (`isAdmin` +
+   *  `humanResume`), as in any session the person drives. Never the
    *  automation's own ticks, a scheduled /loop tick sent in a person's name,
    *  or a sandboxed descendant. */
   | "automation+human-spawn"

@@ -595,12 +595,13 @@ export function interactiveMcpServers(
  *
  * `humanPrompter` names the person whose message this turn answers, when a
  * person (not the automation's tick) prompted the session. Their turn adds
- * `opensession-sessions` in its `humanResume` shape: the spawn suite only
- * (spawn_task/task_status/cancel_task plus the list/get reads), never
- * answer/send/cancel/create on other sessions, with children created for that
- * person as ordinary interactive sessions. The automation's own runs never
- * carry it: the prompt they act on is untrusted text, and a person asking
- * for "a new session" in the thread is what makes spawning legitimate here.
+ * the full `opensession-sessions` toolset (`isAdmin` plus `humanResume`), as
+ * in any session that person drives: send_to_session, create_session,
+ * answer/cancel and the spawn suite, with sessions it creates owned by that
+ * person as ordinary interactive sessions. A spawn-only shape here once left
+ * a teammate's turn unable to message another session while its prompt said
+ * to. The automation's own runs never carry it: the prompt they act on is
+ * untrusted text, and the person present is what makes steering legitimate.
  * The gate is applied here, at the one mount point every launch and reattach
  * path resolves through: `interactivePrompter` drops every machine actor and
  * every scheduled /loop tick sent in a person's name (`"Kent (loop)"`), so a
@@ -667,7 +668,7 @@ export async function automationSessionMcp(
   if (prompter && session.automation && !session.automationDescendantPolicy) {
     servers["opensession-sessions"] = createSessionsMcpServer({
       createdBy: prompter,
-      isAdmin: false,
+      isAdmin: true,
       humanResume: true,
       currentSessionId: sessionId,
     });

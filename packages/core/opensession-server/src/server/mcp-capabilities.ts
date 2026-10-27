@@ -26,8 +26,9 @@ export interface InternalMcpCapability {
 export const INTERNAL_MCP_CAPABILITIES = {
   "opensession-sessions": {
     summary: "See and steer other sessions, and spawn worker sessions.",
-    // create_session is admin-only; the humanResume and automationSelf shapes
-    // mount spawn_task instead, and this text is shared, so it names both.
+    // The full control set's text. A shape without send_to_session and
+    // create_session (a selfImprove automation's own runs, the wake of a
+    // person's wait) is described by sessionsGuidance below instead.
     // suggest_task is a drive-by channel. Follow-ups to the current work
     // used to land there too, which flooded threads with cards for things
     // the same session would have picked up anyway; those stay in the reply.
@@ -243,6 +244,56 @@ export const INTERNAL_MCP_CAPABILITIES = {
 export type InternalMcpServerName = keyof typeof INTERNAL_MCP_CAPABILITIES;
 
 /**
+ * The opensession-sessions guidance for the tools a run really carries.
+ * `toolNames` is what createSessionsMcpServer built; unknown (a lazy entry
+ * not built yet, which is only ever the interactive full set) or a shape with
+ * the control tools gets the shared text. A narrower shape gets text that
+ * names only its own tools, so the prompt never sends a run after
+ * send_to_session or create_session that it does not have.
+ */
+export function sessionsGuidance(toolNames?: readonly string[]): string {
+  const full = INTERNAL_MCP_CAPABILITIES["opensession-sessions"].guidance;
+  if (!toolNames) return full;
+  const has = new Set(toolNames);
+  if (has.has("send_to_session") && has.has("create_session")) return full;
+  const parts = [
+    "Inspect visible sessions with `list_sessions` and `get_session`. This session cannot message, answer, cancel, or create other sessions directly.",
+  ];
+  if (has.has("spawn_task"))
+    parts.push(
+      "Start a worker task with `spawn_task` (also the way to start a new session someone asks for), follow it with `task_status`, and stop it with `cancel_task`.",
+    );
+  else if (has.has("task_status"))
+    parts.push("Follow tasks this session started with `task_status`.");
+  if (has.has("suggest_task"))
+    parts.push(
+      "`suggest_task` is only for a drive-by finding: self-contained work unrelated to the current request that this session will not pick up. Follow-ups go in your reply as a plain suggestion.",
+    );
+  if (has.has("wait_for"))
+    parts.push(
+      "To wait for a task, use `wait_for` kind `session_turn`, not a timer.",
+    );
+  parts.push(
+    "When reporting work from sessions you started, link each one (its `url`) beside its result or PR.",
+  );
+  return parts.join(" ");
+}
+
+/** Tool names a mounted opensession-sessions server carries, without
+ *  building a lazy entry (see lazyServerRecord): a getter is left unread. */
+function mountedSessionsToolNames(
+  inProcessMcp: Record<string, unknown>,
+): readonly string[] | undefined {
+  const entry = Object.getOwnPropertyDescriptor(
+    inProcessMcp,
+    "opensession-sessions",
+  );
+  const names = (entry?.value as { toolNames?: unknown } | undefined)
+    ?.toolNames;
+  return Array.isArray(names) ? (names as string[]) : undefined;
+}
+
+/**
  * The `## Tools` section of the run prompt: one guidance line per mounted
  * internal server, in catalog order whatever order the mount map has, so the
  * bytes are identical for every run with the same shape and the prompt-cache
@@ -259,7 +310,12 @@ export function renderInternalMcpCapabilities(
   )
     .filter((name) => mounted.has(name))
     .map(
-      (name) => `- \`${name}\`: ${INTERNAL_MCP_CAPABILITIES[name].guidance}`,
+      (name) =>
+        `- \`${name}\`: ${
+          name === "opensession-sessions"
+            ? sessionsGuidance(mountedSessionsToolNames(inProcessMcp ?? {}))
+            : INTERNAL_MCP_CAPABILITIES[name].guidance
+        }`,
     );
   if (!lines.length) return "";
   return (

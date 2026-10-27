@@ -142,7 +142,7 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     ],
     runClasses: ["interactive", "slack", "automation"],
     condition:
-      "Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below.",
+      "Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. A person's own turn in an automation-owned session gets the full build (`isAdmin` + `humanResume`).",
     note: "The control tools (answer/send/cancel/create) are gated on `isAdmin`; Slack passes isAdmin only for the configured trusted user.",
     build: () =>
       createSessionsMcpServer({

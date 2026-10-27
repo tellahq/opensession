@@ -83,10 +83,11 @@ export interface SessionsToolContext {
   automationSelf?: boolean;
   /**
    * A person is prompting an automation-owned session (an interactive resume
-   * with a human sender). Grants the same spawn suite as automationSelf,
-   * WITHOUT isAdmin, so the session can start the work the person just asked
-   * for: spawn_task/task_status/cancel_task only, never answer/send/cancel/
-   * create on other sessions. Children are created for that person
+   * with a human sender). Lifts spawnTaskImpl's automation refusal and makes
+   * waits registered on the turn wake as that person (`waitContinuation`).
+   * Grants the spawn suite on its own; automationSessionMcp also sets
+   * isAdmin, so the person's turn carries the full control set as in any
+   * session they drive. Sessions it creates belong to that person
    * (`createdBy`), so they are ordinary interactive sessions in the person's
    * workspaces, not automation-owned ones.
    */
@@ -1635,9 +1636,11 @@ export function createSessionsMcpServer(
         "Delegate a self-contained task to a child session and return IMMEDIATELY with {taskId, url} — the lightweight alternative to create_session + send_to_session choreography when you just want work done and a handle to poll. The child is created through the same code path as create_session (it shares this session's worktree in code mode when repos match, inherits your user, is linked as a child, and is told to report back here); poll it with task_status and stop it with cancel_task. Mode defaults to 'code' (pass a branch, or isolatedWorktree true for a generated one, unless the child can share this session's code worktree); use 'ask' for read-only investigation. Loop guard: spawned children may delegate one further level, then spawn_task refuses (depth ≥ 2). This tool ALWAYS creates a child of this session, so it is not the tool for a person's \"start a new session\" request; that means a top-level session, which is create_session with standalone true wherever create_session is offered." +
           (ctx.automationSelf
             ? " Children may edit code and open PRs but NEVER merge — a human reviews every PR."
-            : ctx.humanResume
+            : ctx.humanResume && !ctx.isAdmin
               ? ` Exception: create_session is not offered in this session, so when ${ctx.createdBy}, the person prompting this session, asks for "a new session", this is the only way to start it. The child is created for them and appears in their sidebar; reply with its URL.`
-              : " Not available from automation sessions."),
+              : ctx.humanResume
+                ? ""
+                : " Not available from automation sessions."),
         {
           prompt: z
             .string()
@@ -1748,9 +1751,14 @@ export function createSessionsMcpServer(
   )
     tools.push(taskStatusTool);
 
-  return createSdkMcpServer({
-    name: "opensession-sessions",
-    version: "1.0.0",
-    tools,
-  });
+  // The tool names ride along so the run prompt's guidance names only tools
+  // this shape really has (sessionsGuidance in mcp-capabilities.ts).
+  return Object.assign(
+    createSdkMcpServer({
+      name: "opensession-sessions",
+      version: "1.0.0",
+      tools,
+    }),
+    { toolNames: tools.map((t) => t.name as string) },
+  );
 }

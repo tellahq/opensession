@@ -874,17 +874,18 @@ set:
   the summary cannot point a responder at another session. Separately, every
   run's `incident_create` gets the declaring session's link appended to its
   summary before it is sent.
-- `opensession-sessions` in its `humanResume` shape is mounted on a turn a
-  person sends to an automation-owned session (a thread reply or a message in
-  the web UI; `resolveSessionRunInputs` reports it as the
-  `automation+human-spawn` branch). It carries the session list/get reads and
-  `spawn_task`, `task_status`, and `cancel_task` only, never
-  `answer_session_question`, `send_to_session`, `cancel_session`, or
-  `create_session`. Without `isAdmin`, `cancel_task` cancels only children
-  this session started with `spawn_task` (persisted `parentSessionId`), so it
-  is not `cancel_session` under another name. Children are created for the
+- The full `opensession-sessions` toolset (`isAdmin` plus `humanResume`) is
+  mounted on a turn a person sends to an automation-owned session (a thread
+  reply or a message in the web UI; `resolveSessionRunInputs` reports it as
+  the `automation+human-spawn` branch), as in any session that person
+  drives: `send_to_session`, `create_session`, `answer_session_question`,
+  `cancel_session`, and the spawn suite. The person present is what makes
+  steering other sessions legitimate. Sessions it creates belong to the
   person who prompted, so they are ordinary interactive sessions in that
-  person's workspaces, depth-guarded like every spawned child. The
+  person's workspaces; spawned children are depth-guarded like every other.
+  A timer or other wait registered on that turn wakes as `waitActor(person)`,
+  which mounts only the narrower `waitContinuation` shape (waits and
+  `task_status`), so no person-less turn inherits the controls. The
   automation's own ticks never carry it, and neither does a scheduled `/loop`
   tick sent in a person's name (`"Kent (loop)"`, `loopActor`): the prompter
   is `interactivePrompter(user)` (`RunInputs.humanPrompter`), undefined for

@@ -260,3 +260,61 @@ describe("sessions created from a machine-started turn", () => {
     expect(opts.user).toBe(GITHUB_ACTOR);
   });
 });
+
+// A person messaging an automation-owned session (an event-triggered triage
+// session a teammate took over) gets the whole opensession-sessions toolset
+// for that turn. Before, the turn mounted a spawn-only shape, so the agent
+// could not message or create sessions while its prompt told it to.
+describe("a person's turn in an automation-owned session", () => {
+  const automationSession = {
+    id: "os-auto-triage",
+    automation: "Ticket triage",
+    automationEvent: "plain:thread_created",
+  } as unknown as UnifiedSession;
+
+  async function sessionsToolsFor(humanPrompter: string | undefined) {
+    const find = spyOn(sessionCache, "findSession").mockReturnValue(
+      automationSession,
+    );
+    const token = `automation-human-turn-${crypto.randomUUID()}`;
+    registerRunToken(token, {
+      sessionId: automationSession.id,
+      user: "Ticket triage (automation)",
+      humanPrompter,
+    });
+    try {
+      const listed = await dispatchRunRpc("/mcp/list", {
+        token,
+        server: "opensession-sessions",
+      });
+      if (listed.kind !== "immediate") return undefined;
+      const body = listed.body as { tools?: Array<{ name: string }> };
+      return body.tools?.map((tool) => tool.name);
+    } finally {
+      unregisterRunToken(token);
+      find.mockRestore();
+    }
+  }
+
+  test("carries send_to_session, create_session and the other controls", async () => {
+    const names = await sessionsToolsFor("Alex Rivera");
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "send_to_session",
+        "create_session",
+        "answer_session_question",
+        "cancel_session",
+        "spawn_task",
+        "wait_for",
+      ]),
+    );
+  });
+
+  test("the automation's own turn still gets no sessions tools", async () => {
+    expect(await sessionsToolsFor(undefined)).toBeUndefined();
+    // A scheduled tick sent in a person's name is not that person.
+    expect(
+      await sessionsToolsFor(scheduledActor("Alex Rivera")),
+    ).toBeUndefined();
+  });
+});
