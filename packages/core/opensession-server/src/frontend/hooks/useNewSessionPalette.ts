@@ -6,9 +6,6 @@ interface NewSessionPaletteState {
   open: boolean;
   prompt?: string;
   workspaceId?: string;
-  /** Workspace whose model combinations the picker displays. This does not
-   * join the created session to that workspace. */
-  modelWorkspaceId?: string;
   repo?: string;
   branch?: string;
   mode?: NewSessionPrefill["mode"];
@@ -20,13 +17,11 @@ type NewSessionPalettePrefill = Omit<NewSessionPaletteState, "open">;
 interface UseNewSessionPaletteOptions {
   initiallyOpen: boolean;
   initialPrompt?: string;
-  modelWorkspaceId?: string;
 }
 
 export function useNewSessionPalette({
   initiallyOpen,
   initialPrompt,
-  modelWorkspaceId,
 }: UseNewSessionPaletteOptions) {
   const [palette, setPaletteState] = useState<NewSessionPaletteState>(() =>
     initiallyOpen ? { open: true, prompt: initialPrompt } : { open: false },
@@ -46,11 +41,8 @@ export function useNewSessionPalette({
   });
 
   const openPalette = (prompt?: string, mcpServers?: string[]) => {
-    // The global action can borrow model combinations from the visible
-    // workspace, but must not make that workspace the create destination.
     const next: NewSessionPaletteState = { open: true, prompt };
     if (mcpServers?.length) next.mcpServers = mcpServers;
-    if (modelWorkspaceId) next.modelWorkspaceId = modelWorkspaceId;
     setPalette(next);
   };
 

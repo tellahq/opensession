@@ -40,8 +40,8 @@ touches an in-process tool:
 
 | Server | Tools | Runs | Condition |
 | --- | --- | --- | --- |
-| [`opensession-sessions`](#opensession-sessions) | 23 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
-| [`opensession-admin`](#opensession-admin) | 14 | interactive, Slack loop | – |
+| [`opensession-sessions`](#opensession-sessions) | 25 | interactive, Slack loop, automation | Automation runs get it ONLY with the human-set `selfImprove` flag, and then in the `automationSelf` build below. |
+| [`opensession-admin`](#opensession-admin) | 15 | interactive, Slack loop | – |
 | [`opensession-runners`](#opensession-runners) | 5 | interactive | – |
 | [`opensession-goals`](#opensession-goals) | 8 | interactive | – |
 | [`opensession-search`](#opensession-search) | 2 | interactive, automation | – |
@@ -51,12 +51,13 @@ touches an in-process tool:
 | [`opensession-publish`](#opensession-publish) | 4 | interactive | Needs a session id. |
 | [`opensession-repos`](#opensession-repos) | 7 | interactive | Needs a session id. |
 | [`opensession-memory`](#opensession-memory) | 6 | interactive, automation | Needs a session id. |
-| [`opensession-web`](#opensession-web) | 3 | interactive, goal wake | Needs a session id. |
+| [`opensession-web`](#opensession-web) | 3 | interactive, goal wake, automation | Needs a session id. Automations get it only when their MCP allowlist names it. |
 | [`opensession-portals`](#opensession-portals) | 9 | interactive | Needs a session id. |
 | [`opensession-desktop`](#opensession-desktop) | 8 | interactive | Needs a sandboxed session. |
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | Needs a session id. |
 | [`opensession-slack`](#opensession-slack) | 1 | interactive | Needs a session id. |
 | [`opensession-scripts`](#opensession-scripts) | 3 | interactive | Needs a session id. |
+| [`opensession-gpu`](#opensession-gpu) | 3 | interactive | Needs a session id. |
 | [`opensession-local-files`](#opensession-local-files) | 1 | interactive | Needs a session id. |
 | [`opensession-local-folders`](#opensession-local-folders) | 10 | interactive | Needs a session id. |
 | [`opensession-plain-discussion`](#opensession-plain-discussion) | 2 | interactive | Only a session that answers a Plain discussion (plainDiscussionId): an Ask Sidekick session carries this server alone instead of the interactive set; an auto-triage session that reports into a discussion carries it beside the automation-bar set on its later turns. |
@@ -78,7 +79,7 @@ touches an in-process tool:
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | Only on a session that carries a goalId. |
 
-37 servers, 180 tools.
+38 servers, 186 tools.
 
 ## opensession-sessions
 
@@ -158,7 +159,7 @@ Change a native Open Session session's parent/orchestrator link, or detach it by
 
 ### `create_session`
 
-`mcp__opensession-sessions__create_session` · input: `prompt` (string, required), `repo` (string), `mode` ("ask" | "code"), `branch` (string), `model` (string), `mcpServers` (string[]), `parentSessionId` (string), `reportBack` (boolean), `standalone` (boolean), `isolatedWorktree` (boolean), `sandbox` (boolean | "daytona" | "box" | "tart" | "usecomputer"), `accountId` (string), `forkFrom` (object)
+`mcp__opensession-sessions__create_session` · input: `prompt` (string, required), `repo` (string), `mode` ("ask" | "code"), `branch` (string), `model` (string), `mcpServers` (string[]), `parentSessionId` (string), `reportBack` (boolean), `standalone` (boolean), `isolatedWorktree` (boolean), `sandbox` (boolean | "daytona" | "box" | "tart" | "usecomputer" | "modal"), `sandboxGpu` ("T4" | "L4"), `accountId` (string), `forkFrom` (object)
 
 Spin up a visible Open Session session and start it on a prompt. When a PERSON asks for a new session ("start a new session", "open a new session", "kick off a session for X", "spin one up on Y"), they mean a new TOP-LEVEL session: call this tool with standalone true. That creates a detached session with no parent link and no report-back that appears in their sidebar and outlives the current run; never an in-process subagent or task agent. Reply with the new session's URL. Only create a child session (standalone omitted) when YOU are delegating for yourself, such as fanning out focused sub-tasks whose results this session will consume, or when the person explicitly asks for a worker, child, or sub-session. A child defaults to this session as its parent, shares its workspace, and is instructed to report back here. mode 'ask' (default) runs read-only on the selected repo checkout; mode 'code' can edit files / open PRs (never merges). A child targeting one of the parent's repos shares that exact primary or attached worktree, so reviewers see current/uncommitted work; pass repo explicitly for attached-repo tasks. Pass isolatedWorktree true to instead give the child its own worktree and branch (child/report-back linkage is kept); use it when fanning work out across separate workspaces. `branch` is only used when there is nothing to share, a standalone session or a child targeting a repo the parent does not carry, and is generated from the prompt when omitted. Repo defaults to the parent session's repo (example when standalone); pass another registered repo id to override. For sessions that only need filesystem/code access, pass mcpServers: [] to avoid unrelated MCP startup cost/failures.
 
@@ -170,7 +171,7 @@ Migrate an existing session onto the Pi engine by flipping its model to a pi/* i
 
 ### `spawn_task`
 
-`mcp__opensession-sessions__spawn_task` · input: `prompt` (string, required), `repo` (string), `branch` (string), `isolatedWorktree` (boolean), `model` (string), `mode` ("ask" | "code" | "scratch"), `sandbox` (boolean | "daytona" | "box" | "tart" | "usecomputer")
+`mcp__opensession-sessions__spawn_task` · input: `prompt` (string, required), `repo` (string), `branch` (string), `isolatedWorktree` (boolean), `model` (string), `mode` ("ask" | "code" | "scratch"), `sandbox` (boolean | "daytona" | "box" | "tart" | "usecomputer" | "modal"), `sandboxGpu` ("T4" | "L4")
 
 Delegate a self-contained task to a child session and return IMMEDIATELY with {taskId, url} — the lightweight alternative to create_session + send_to_session choreography when you just want work done and a handle to poll. The child is created through the same code path as create_session (it shares this session's worktree in code mode when repos match, inherits your user, is linked as a child, and is told to report back here); poll it with task_status and stop it with cancel_task. Mode defaults to 'code' (pass a branch, or isolatedWorktree true for a generated one, unless the child can share this session's code worktree); use 'ask' for read-only investigation. Loop guard: spawned children may delegate one further level, then spawn_task refuses (depth ≥ 2). This tool ALWAYS creates a child of this session, so it is not the tool for a person's "start a new session" request; that means a top-level session, which is create_session with standalone true wherever create_session is offered. Not available from automation sessions.
 
@@ -228,9 +229,25 @@ Add a teammate to a workspace so it shows in their sidebar. The first add notifi
 
 Remove a teammate from a workspace's collaborators. Removing someone who is not listed changes nothing. The creator cannot be removed.
 
+### `archive_session`
+
+`mcp__opensession-sessions__archive_session` · input: `id` (string, required), `archived` (boolean)
+
+Archive or unarchive one session, exactly like the sidebar's Archive / Unarchive action. Archiving stops a run this server owns and removes the session from the sidebar; unarchiving puts it back.
+
+### `archive_workspace`
+
+`mcp__opensession-sessions__archive_workspace` · input: `workspace_id` (string, required), `archived` (boolean)
+
+Archive or unarchive every session of a workspace (ws-…), including automation runs and workers the sidebar row hides. Unarchiving brings the workspace back into the sidebar.
+
 ### Variant · selfImprove automation (isAdmin: false, automationSelf: true)
 
-Built for: automation. 13 tools, without `wait_for`, `wait_status`, `cancel_wait`, `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`.
+Built for: automation. 16 tools, without `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`, `archive_session`, `archive_workspace`.
+
+### Variant · wake of a person's wait in an automation-owned session (isAdmin: false, waitContinuation: true)
+
+Built for: automation. 7 tools, without `answer_session_question`, `send_to_session`, `send_file_to_session`, `cancel_session`, `reparent_session`, `create_session`, `migrate_session_engine`, `spawn_task`, `cancel_task`, `get_session_reviewer`, `set_session_reviewer`, `remove_session_reviewer`, `accept_session_review`, `list_collaborators`, `add_collaborator`, `remove_collaborator`, `archive_session`, `archive_workspace`.
 
 ## opensession-admin
 
@@ -263,17 +280,23 @@ Forget a remembered entry by its id (from list_memory).
 
 `mcp__opensession-admin__list_automations` · input: none
 
-List all of Assistant's automations (routines): scheduled, event- and webhook-triggered jobs.
+List all of Assistant's automations (routines): scheduled, event- and webhook-triggered jobs. Prompts are omitted; read one with get_automation.
+
+### `get_automation`
+
+`mcp__opensession-admin__get_automation` · input: `id` (string, required)
+
+Read one automation's full record by id: its prompt and every setting (schedule, mode, repo, model, MCP allowlist, inputs, outputs, triggers), plus its five most recent runs. Read it before update_automation so a prompt edit starts from the stored text. The webhook secret is never shown.
 
 ### `create_automation`
 
-`mcp__opensession-admin__create_automation` · input: `name` (string, required), `prompt` (string, required), `schedule` (string), `mode` ("ask" | "code"), `repo` (string), `mcpServers` (string[]), `sandbox` (boolean), `model` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `readRepos` (string[]), `owner` (string), `workspaceId` (string)
+`mcp__opensession-admin__create_automation` · input: `name` (string, required), `prompt` (string, required), `schedule` (string), `mode` ("ask" | "code" | "scratch"), `repo` (string), `mcpServers` (string[]), `sandbox` (boolean), `model` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `readRepos` (string[]), `owner` (string), `workspaceId` (string)
 
-Create a new automation (routine). Provide a clear prompt describing the task. Set `repo` to the repository it works in, or it runs against the instance default. Use a 5-field UTC cron `schedule` for recurring jobs (omit for manual/webhook only). Pick mode 'ask' for read-only or 'code' if it must edit and commit files. Ordinary automations receive no GitHub credential, so code mode alone cannot push or open a GitHub PR. Set sandbox true to use a fresh disposable Executor. Sandboxed automations require an explicit mcpServers list, a pinned accountId, a supported model, and a configured qualified provider.
+Create a new automation (routine). Provide a clear prompt describing the task. Set `repo` to the repository it works in, or it runs against the instance default. Use a 5-field UTC cron `schedule` for recurring jobs (omit for manual/webhook only). Pick mode 'ask' for read-only, 'scratch' for a full shell (curl, scripts, downloads) without a repository checkout, or 'code' if it must edit and commit files. Ordinary automations receive no GitHub credential, so code mode alone cannot push or open a GitHub PR. Set sandbox true to use a fresh disposable Executor. Sandboxed automations require an explicit mcpServers list, a pinned accountId, a supported model, and a configured qualified provider.
 
 ### `update_automation`
 
-`mcp__opensession-admin__update_automation` · input: `id` (string, required), `name` (string), `prompt` (string), `schedule` (string), `mode` ("ask" | "code"), `enabled` (boolean), `repo` (string), `mcpServers` (string[]), `sandbox` (boolean), `model` (string), `fallbackModel` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `readRepos` (string[]), `owner` (string), `workspaceId` (string), `webhookMaxConcurrent` (integer)
+`mcp__opensession-admin__update_automation` · input: `id` (string, required), `name` (string), `prompt` (string), `schedule` (string), `mode` ("ask" | "code" | "scratch"), `enabled` (boolean), `repo` (string), `mcpServers` (string[]), `sandbox` (boolean), `model` (string), `fallbackModel` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `readRepos` (string[]), `owner` (string), `workspaceId` (string), `webhookMaxConcurrent` (integer)
 
 Update an existing automation by id. Only provided fields change. Use enabled to pause/resume.
 
@@ -297,7 +320,7 @@ Re-run an automation with the exact triggering payload of one of its past runs (
 
 ### `schedule_once`
 
-`mcp__opensession-admin__schedule_once` · input: `when` (string, required), `prompt` (string, required), `name` (string), `mode` ("ask" | "code"), `repo` (string), `mcpServers` (string[]), `replyInThread` (boolean)
+`mcp__opensession-admin__schedule_once` · input: `when` (string, required), `prompt` (string, required), `name` (string), `mode` ("ask" | "code" | "scratch"), `repo` (string), `mcpServers` (string[]), `replyInThread` (boolean)
 
 Schedule a ONE-OFF run at a future time, after which it auto-deletes — use for 'remind me about this next week', 'run this again in a week', or any one-time scheduled task. `when` is a natural time expression ('next Tuesday 9am', 'in a week', 'tomorrow morning', 'in 3 hours') — just pass the user's phrasing through; it's resolved to an exact instant for you. `prompt` is what Assistant should do when it fires, written to yourself — it runs as a normal assistant session, so it can post to a channel, DM someone via the Slack MCP, or carry out a task. By default, when this is invoked from a Slack thread, the run is told to post its reminder back into that thread; set replyInThread:false to suppress (e.g. when the prompt should DM someone else instead). Omit mcpServers to give the run the full toolset; pass it to restrict (least-privilege).
 
@@ -514,19 +537,19 @@ Check this session's macOS Keychain request. Returns only pending/claimed/comple
 
 `mcp__opensession-keychain__list_credentials` · input: none
 
-List the credentials teammates have registered in the keychain — service, owner, target host, and any method/path limits. Secrets are never included. Use this to find out whether the access you need already exists before asking anyone for a token.
+List the credentials teammates have registered in the keychain: service, owner, target host, any method/path limits, and whether it is a workspace credential. Secrets are never included. A workspace credential can be used right away with call_credential or run_with_credential, no request needed; a personal one needs request_credential and its owner's approval. Use this to find out whether the access you need already exists before asking anyone for a token.
 
 ### `request_credential`
 
 `mcp__opensession-keychain__request_credential` · input: `credential` (string), `credentials` (string[]), `purpose` (string, required), `mode` ("once" | "standing"), `run` (object)
 
-Ask a credential's owner to lend it to THIS session for a stated purpose. They get a DM with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive instructions for call_credential, which injects the credential server-side; you never see the secret itself. For a login (a username and password for a sign-in page), the owner instead chooses Release password or Decline, and on approval you use use_login to get the password into this session's workspace. Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. For bulk work by a script (hundreds or more calls), pass `run` instead: the owner approves that exact command and call cap, and you start it with run_with_credential. A script that needs several APIs in one process names them all in `credentials` with `run`: each credential's owner approves, and the run starts only once all of them did. If they decline, don't re-ask. Calling again with the same purpose while your ask is pending reminds the owner and waits on that same ask; if they already approved it, you get the live grant back. If this session already holds a standing grant for the credential, any new ask returns that grant without asking the owner again.
+Ask a credential's owner to lend it to THIS session for a stated purpose. Not needed for a workspace credential (list_credentials marks them): call_credential and run_with_credential use those directly, and asking for one just returns this session's grant at once without asking anybody. For a personal credential, the owner gets a DM with Approve once / Approve standing / Decline, and this call blocks until they answer. On approval you receive instructions for call_credential, which injects the credential server-side; you never see the secret itself. For a login (a username and password for a sign-in page), the owner instead chooses Release password or Decline, and on approval you use use_login to get the password into this session's workspace. Ask only when you actually need the access now, state the real purpose (the owner is approving that sentence, and every call is audited against it), and prefer 'once' unless the task genuinely needs repeated calls. For bulk work by a script (hundreds or more calls), pass `run` instead: the owner approves that exact command and call cap, and you start it with run_with_credential. A script that needs several APIs in one process names them all in `credentials` with `run`: each credential's owner approves, and the run starts only once all of them did. If they decline, don't re-ask. Calling again with the same purpose while your ask is pending reminds the owner and waits on that same ask; if they already approved it, you get the live grant back. If this session already holds a standing grant for the credential, any new ask returns that grant without asking the owner again.
 
 ### `call_credential`
 
-`mcp__opensession-keychain__call_credential` · input: `credential` (string, required), `method` ("GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE", required), `path` (string, required), `headers` (object), `body` (string)
+`mcp__opensession-keychain__call_credential` · input: `credential` (string, required), `method` ("GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE", required), `path` (string, required), `headers` (object), `body` (string), `purpose` (string)
 
-Make one HTTPS API call with a credential this session holds a live grant for (see request_credential and list_grants). The credential is injected server-side; you never see it. The call goes to the credential's own host, within its method and path limits, and does not follow redirects. A once grant is spent by this call even if it fails. Returns the status, a few response headers and the text body (secret scrubbed, long bodies truncated, binary omitted), or only the status for a status-only credential. Stay within the purpose the owner approved; every call is audited.
+Make one HTTPS API call with a workspace credential, or with a personal credential this session holds a live grant for (see request_credential and list_grants). A workspace credential needs no request or approval, but every call must pass `purpose`. The credential is injected server-side; you never see it. The call goes to the credential's own host, within its method and path limits, and does not follow redirects. A once grant is spent by this call even if it fails. Returns the status, a few response headers and the text body (secret scrubbed, long bodies truncated, binary omitted), or only the status for a status-only credential. Stay within the purpose the owner approved; every call is audited.
 
 ### `use_login`
 
@@ -536,9 +559,9 @@ Get the password of a login credential (a test account for a sign-in page) that 
 
 ### `run_with_credential`
 
-`mcp__opensession-keychain__run_with_credential` · input: `credential` (string), `credentials` (string[]), `command` (string, required), `cwd` (string), `timeoutMinutes` (number), `title` (string)
+`mcp__opensession-keychain__run_with_credential` · input: `credential` (string), `credentials` (string[]), `command` (string, required), `cwd` (string), `timeoutMinutes` (number), `title` (string), `purpose` (string), `maxCalls` (integer)
 
-Start a scripted run the credential's owner approved (request_credential with `run`): one process running exactly the approved command, on this server, in the session's workspace. The process gets KEYCHAIN_PROXY_URL, a base URL standing in for https://<credential host>: a request to $KEYCHAIN_PROXY_URL/v1/items goes to https://<host>/v1/items with the credential injected. A run approved with several `credentials` starts once every owner approved, and gets one URL per credential instead, KEYCHAIN_PROXY_URL_<SLUG> (slug upper-cased, other characters as _), each reaching only its own credential's host. The URLs work only for this run and all stop working when the process exits, times out or is stopped. Calls are held to each credential's method/path limits and its approved cap, and every call is audited. The script gets a minimal environment (PATH, HOME, LANG, TMPDIR), so pass anything else on the command line, and never a secret. The run is a script run: it keeps going through Open Session restarts (the URLs hold requests while the server is back up), shows as a card in the session with its call counts, and this session is woken with how it ended, so start it and end your turn. Returns at once with a run id; credential_run_status shows progress. A Sandbox or Runner session cannot start one.
+Start a scripted run the credential's owner approved (request_credential with `run`), or a run whose credentials are all workspace credentials, which needs no approval (pass `purpose` and optionally `maxCalls`): one process running exactly the approved command, on this server, in the session's workspace. The process gets KEYCHAIN_PROXY_URL, a base URL standing in for https://<credential host>: a request to $KEYCHAIN_PROXY_URL/v1/items goes to https://<host>/v1/items with the credential injected. A run approved with several `credentials` starts once every owner approved, and gets one URL per credential instead, KEYCHAIN_PROXY_URL_<SLUG> (slug upper-cased, other characters as _), each reaching only its own credential's host. The URLs work only for this run and all stop working when the process exits, times out or is stopped. Calls are held to each credential's method/path limits and its approved cap, and every call is audited. The script gets a minimal environment (PATH, HOME, LANG, TMPDIR), so pass anything else on the command line, and never a secret. The run is a script run: it keeps going through Open Session restarts (the URLs hold requests while the server is back up), shows as a card in the session with its call counts, and this session is woken with how it ended, so start it and end your turn. Returns at once with a run id; credential_run_status shows progress. A Sandbox or Runner session cannot start one.
 
 ### `credential_run_status`
 
@@ -560,15 +583,15 @@ Withdraw one of this session's pending keychain asks (ids from list_grants). The
 
 ### `register_credential`
 
-`mcp__opensession-keychain__register_credential` · input: `service` (string, required), `kind` ("api" | "login"), `host` (string), `loginUrl` (string), `username` (string), `description` (string), `allowedMethods` ("GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE"[]), `allowedPathPrefixes` (string[]), `header` (string), `scheme` (string), `statusOnly` (boolean)
+`mcp__opensession-keychain__register_credential` · input: `service` (string, required), `kind` ("api" | "login"), `host` (string), `loginUrl` (string), `username` (string), `description` (string), `allowedMethods` ("GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE"[]), `allowedPathPrefixes` (string[]), `header` (string), `scheme` (string), `statusOnly` (boolean), `scope` ("personal" | "workspace")
 
-Add a credential to the keychain, owned by the person driving this session, so this and later sessions can borrow it through request_credential. You supply only metadata. A card appears in the session where THEY paste the secret; it goes straight to the keychain and you never see it. For a username and password that must be typed into a sign-in page, pass kind 'login' with loginUrl and username (no host or limits): its owner later approves each release of the password with use_login, and the agent does see it then, so only register test accounts this way. This call waits until they save or decline (15 minutes at most) and returns the credential's id, service, host and owner. If the call is cut short, the card stays open: call again with the same service and host to keep waiting on it, or check list_credentials. Never ask anyone to paste a secret in chat; if they already did, tell them to rotate it. Check list_credentials first: service slugs are unique. Set allowedMethods / allowedPathPrefixes when the task needs less than full access. Interactive sessions with a signed-in teammate only.
+Add a credential to the keychain, owned by the person driving this session, so this and later sessions can borrow it through request_credential. With scope 'workspace', every session in the workspace may use it without asking (only for an API credential, and only when the owner says so; the card shows it). You supply only metadata. A card appears in the session where THEY paste the secret; it goes straight to the keychain and you never see it. For a username and password that must be typed into a sign-in page, pass kind 'login' with loginUrl and username (no host or limits): its owner later approves each release of the password with use_login, and the agent does see it then, so only register test accounts this way. This call waits until they save or decline (15 minutes at most) and returns the credential's id, service, host and owner. If the call is cut short, the card stays open: call again with the same service and host to keep waiting on it, or check list_credentials. Never ask anyone to paste a secret in chat; if they already did, tell them to rotate it. Check list_credentials first: service slugs are unique. Set allowedMethods / allowedPathPrefixes when the task needs less than full access. Interactive sessions with a signed-in teammate only.
 
 ### `update_credential`
 
-`mcp__opensession-keychain__update_credential` · input: `credential` (string, required), `rotateSecret` (boolean), `host` (string), `loginUrl` (string), `username` (string), `description` (string), `allowedMethods` ("GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE"[]), `allowedPathPrefixes` (string[]), `header` (string), `scheme` (string), `statusOnly` (boolean)
+`mcp__opensession-keychain__update_credential` · input: `credential` (string, required), `rotateSecret` (boolean), `host` (string), `loginUrl` (string), `username` (string), `description` (string), `allowedMethods` ("GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE"[]), `allowedPathPrefixes` (string[]), `header` (string), `scheme` (string), `statusOnly` (boolean), `scope` ("personal" | "workspace")
 
-Replace a keychain credential's secret, or change its metadata, when the person driving this session owns it: e.g. they pasted the wrong key and the API answers 401. A card appears where THEY paste the new secret (and see any metadata change); you never see it. With only `credential`, the card asks for a new secret. With metadata fields, only those change (omitted ones keep their value; an empty description or list clears it), and a new secret is optional unless rotateSecret is true. The service slug and kind can't change. Active grants keep working with the new secret and limits; a new host or sign-in page revokes them, since they were approved for the old one. This call waits until they save or decline (15 minutes at most). Interactive sessions with a signed-in teammate only.
+Replace a keychain credential's secret, or change its metadata, when the person driving this session owns it: e.g. they pasted the wrong key and the API answers 401. A card appears where THEY paste the new secret (and see any metadata change); you never see it. With only `credential`, the card asks for a new secret. With metadata fields, only those change (omitted ones keep their value; an empty description or list clears it), and a new secret is optional unless rotateSecret is true. The service slug and kind can't change. To share an API credential with every session in the workspace, pass only scope 'workspace'; scope 'personal' makes it ask-first again and revokes the grants sessions got without asking. Only the owner can do either. Active grants keep working with the new secret and limits; a new host or sign-in page revokes them, since they were approved for the old one. This call waits until they save or decline (15 minutes at most). Interactive sessions with a signed-in teammate only.
 
 ### `delete_credential`
 
@@ -717,9 +740,9 @@ Sync one visible memory repository with its configured upstream and report the r
 Read a URL as text, search what was fetched, clone a GitHub repo. No web search.
 
 - **Source** `packages/core/opensession-server/src/server/web-mcp.ts`
-- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`, `packages/core/opensession-server/src/server/goal-runner.ts`
-- **Runs** interactive, goal wake
-- **Condition** Needs a session id.
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`, `packages/core/opensession-server/src/server/goal-runner.ts`, `packages/core/opensession-server/src/server/automations.ts`
+- **Runs** interactive, goal wake, automation
+- **Condition** Needs a session id. Automations get it only when their MCP allowlist names it.
 
 ### `fetch_url`
 
@@ -737,7 +760,7 @@ Read more of a page fetched earlier in this session, by its handle. Prefer `find
 
 `mcp__opensession-web__clone_repo` · input: `repo` (string, required)
 
-Shallow-clone a public GitHub repository and return the local path, its file list and the head of its README. Use this instead of fetching GitHub pages when you want to read a project's actual source: the clone is real files, so read/grep/find work on it normally. The clone lands in scratch, not in the session's worktree.
+Shallow-clone a public GitHub repository and return the local path, its file list and the head of its README. Use this instead of fetching GitHub pages when you want to read a project's actual source: the clone is real files, so read/grep/find work on it normally. The clone lands in scratch, not in the session's worktree. It is for reading only: to change a repository, attach it with opensession-repos `attach_repo` and work in that worktree, so later turns hold a GitHub token for it.
 
 ## opensession-portals
 
@@ -921,6 +944,33 @@ Check a script run started with start_script or run_with_credential: running/exi
 `mcp__opensession-scripts__stop_script` · input: `id` (string, required)
 
 Stop a running script run: its process group is sent SIGTERM, then SIGKILL after 10 seconds. The session is woken when it has ended, as for any other end.
+
+## opensession-gpu
+
+Jobs on an NVIDIA T4 or L4 machine.
+
+- **Source** `packages/core/opensession-server/src/server/gpu-mcp.ts`
+- **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`
+- **Runs** interactive
+- **Condition** Needs a session id.
+
+### `run_gpu_job`
+
+`mcp__opensession-gpu__run_gpu_job` · input: `job` (string), `command` (string), `gpu` ("T4" | "L4"), `timeoutMinutes` (number)
+
+Run work that needs an NVIDIA GPU (CUDA, Vulkan) on a GPU machine, from a session without one. Pass `job` to run one the repository declares in .agents/gpu-jobs.json (call with no arguments to list them), or `command` for any bash command, e.g. a single test. The session's work is checkpointed, uncommitted changes included, and landed on the session's own GPU machine (Modal, T4 or L4), which keeps its build cache between jobs and sleeps when idle. The command runs from the repository root with a read-only GitHub credential for the repository and its private build dependencies. It keeps running through Open Session restarts, and this session is woken with the exit code and the end of the output when it ends: start it, tell the person, and end your turn instead of polling. One job at a time per session.
+
+### `gpu_job_status`
+
+`mcp__opensession-gpu__gpu_job_status` · input: `id` (string)
+
+Check a GPU job started with run_gpu_job: preparing/running/exited/failed/timed_out/stopped/lost, exit code, the commit it ran on, and the end of its output. Without an id, lists this session's jobs.
+
+### `stop_gpu_job`
+
+`mcp__opensession-gpu__stop_gpu_job` · input: `id` (string, required)
+
+Stop a running GPU job: its process group gets SIGTERM, then SIGKILL. The session is woken when it has ended.
 
 ## opensession-local-files
 

@@ -58,40 +58,23 @@ export async function fetchSessionOverview(
 
 // ── Workspaces (containers that group sessions) ──
 
-let defaultModelSettings: Workspace["modelSettings"] | undefined;
 let workspaceSnapshot = "";
 let stableWorkspaces: Workspace[] | null = null;
-
-/** The instance-wide default model settings, captured from the last workspaces
- *  fetch. A workspace without its own modelSettings inherits these. */
-export function defaultWorkspaceModelSettings():
-  | Workspace["modelSettings"]
-  | undefined {
-  return defaultModelSettings;
-}
 
 export async function fetchWorkspaces(options?: {
   includeWorkspaceId?: string;
   onError?: (cause: unknown) => void;
 }): Promise<Workspace[]> {
   try {
-    const data = await request<{
-      workspaces?: Workspace[];
-      defaultModelSettings?: Workspace["modelSettings"];
-    }>(
+    const data = await request<{ workspaces?: Workspace[] }>(
       `/workspaces?active=1${options?.includeWorkspaceId ? `&includeWorkspaceId=${encodeURIComponent(options.includeWorkspaceId)}` : ""}`,
     );
-    if (data?.defaultModelSettings)
-      defaultModelSettings = data.defaultModelSettings;
     const next = data?.workspaces ?? [];
     // Workspace invalidations can overlap or repeat (PR attachment, focus,
     // settings broadcasts). Preserve the array identity for an unchanged
     // response so workspace-list state can bail instead of reconciling every
     // route and sidebar row after parsing the same 500+ KB payload again.
-    const snapshot = JSON.stringify({
-      workspaces: next,
-      defaultModelSettings: data?.defaultModelSettings,
-    });
+    const snapshot = JSON.stringify(next);
     if (stableWorkspaces && snapshot === workspaceSnapshot)
       return stableWorkspaces;
     workspaceSnapshot = snapshot;
@@ -125,7 +108,6 @@ export async function updateWorkspaceApi(
     /** null clears the swatch color. */
     color?: string | null;
     order?: number;
-    modelSettings?: Workspace["modelSettings"];
     /** null clears the draft. */
     draft?: Workspace["draft"] | null;
   },
@@ -171,6 +153,33 @@ export async function deleteWorkspaceApi(id: string): Promise<void> {
   await request<void>(`/workspaces/${encodeURIComponent(id)}`, {
     method: "DELETE",
     label: "Failed to delete workspace",
+  });
+}
+
+/**
+ * Archive every live session of a workspace on the server, including the ones
+ * the sidebar row does not render (PR reviews and other automation runs,
+ * workers). Returns the ids it archived and any it could not.
+ */
+export async function archiveWorkspaceApi(
+  id: string,
+): Promise<{ archived: string[]; failed: string[] }> {
+  const res = await request<{ archived?: string[]; failed?: string[] }>(
+    `/workspaces/${encodeURIComponent(id)}/archive`,
+    { method: "POST", label: "Failed to archive workspace" },
+  );
+  return { archived: res?.archived ?? [], failed: res?.failed ?? [] };
+}
+
+/**
+ * Discard a sidebar draft. Unlike deleteWorkspaceApi this never deletes
+ * sessions: the server clears the draft, and removes the workspace only when
+ * it has no sessions at all, archived ones included.
+ */
+export async function discardWorkspaceDraftApi(id: string): Promise<void> {
+  await request<void>(`/workspaces/${encodeURIComponent(id)}/draft`, {
+    method: "DELETE",
+    label: "Failed to delete draft",
   });
 }
 

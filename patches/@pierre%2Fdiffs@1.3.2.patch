@@ -1,0 +1,64 @@
+diff --git a/dist/utils/renderDiffWithHighlighter.js b/dist/utils/renderDiffWithHighlighter.js
+index a6cb642521578407d1a1fef4a5b4df02f8b8b242..2e3ed4bf6a9828294ebdb12436c8e1294dca9e58 100644
+--- a/dist/utils/renderDiffWithHighlighter.js
++++ b/dist/utils/renderDiffWithHighlighter.js
+@@ -171,24 +171,42 @@ function computeLineDiffDecorations({ deletionLine, additionLine, deletionLineIn
+ 			isLastItem
+ 		});
+ 	}
+-	let spanIndex = 0;
+-	for (const span of deletionSpans) {
+-		if (span[0] === 1) deletionDecorations.push(createDiffSpanDecoration({
+-			line: deletionLineIndex,
+-			spanStart: spanIndex,
+-			spanLength: span[1].length
+-		}));
+-		spanIndex += span[1].length;
+-	}
+-	spanIndex = 0;
+-	for (const span of additionSpans) {
+-		if (span[0] === 1) additionDecorations.push(createDiffSpanDecoration({
+-			line: additionLineIndex,
+-			spanStart: spanIndex,
+-			spanLength: span[1].length
+-		}));
+-		spanIndex += span[1].length;
++	const deletionMarks = trimmedEmphasis(deletionLine, deletionSpans);
++	const additionMarks = trimmedEmphasis(additionLine, additionSpans);
++	if (mostlyRewritten(deletionLine, deletionMarks) || mostlyRewritten(additionLine, additionMarks)) return;
++	for (const [start, end] of deletionMarks) deletionDecorations.push(createDiffSpanDecoration({
++		line: deletionLineIndex,
++		spanStart: start,
++		spanLength: end - start
++	}));
++	for (const [start, end] of additionMarks) additionDecorations.push(createDiffSpanDecoration({
++		line: additionLineIndex,
++		spanStart: start,
++		spanLength: end - start
++	}));
++}
++const WHITESPACE = /\s/;
++function trimmedEmphasis(line, spans) {
++	const marks = [];
++	let index = 0;
++	for (const span of spans) {
++		let start = index;
++		let end = index + span[1].length;
++		index = end;
++		if (span[0] !== 1) continue;
++		while (start < end && WHITESPACE.test(line[start])) start++;
++		while (end > start && WHITESPACE.test(line[end - 1])) end--;
++		if (end > start) marks.push([start, end]);
+ 	}
++	return marks;
++}
++function mostlyRewritten(line, marks) {
++	if (marks.length === 0) return false;
++	let visible = 0;
++	for (const char of line) if (!WHITESPACE.test(char)) visible++;
++	let marked = 0;
++	for (const [start, end] of marks) for (let i = start; i < end; i++) if (!WHITESPACE.test(line[i])) marked++;
++	return marked > visible * .6;
+ }
+ function createBucket() {
+ 	return {

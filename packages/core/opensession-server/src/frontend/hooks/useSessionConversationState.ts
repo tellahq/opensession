@@ -211,8 +211,22 @@ export function useShippedChangePresentation({
       setDrafting(false);
     };
   }, [suggestionKey, session.id, mergedPrRepo, mergedPrBranch]);
+  // The server writes the draft in the background once the PR merges and
+  // saves it on the session, so a saved one shows at once while the request
+  // above confirms it. Its channel waits for that answer: a Slack-started
+  // session's thread outranks the saved pick.
+  const savedDraft = session.shippedChangeDraft;
+  const savedMessage =
+    suggestionKey &&
+    savedDraft &&
+    savedDraft.prNumber === mergedPrNumber &&
+    savedDraft.activity === (session.lastActivity || "")
+      ? savedDraft.message
+      : "";
   const suggestedMessage =
-    suggested && suggested.key === suggestionKey ? suggested.message : "";
+    suggested && suggested.key === suggestionKey
+      ? suggested.message
+      : savedMessage;
   const suggestedChannel =
     suggested && suggested.key === suggestionKey
       ? suggested.channel

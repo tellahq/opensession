@@ -168,13 +168,18 @@ struct TranscriptRow: View {
         case .reviewLoop(let loop):
             // Folded by default, like the web: a settled loop's header already
             // says what it concluded, and the rounds behind it are automation.
-            // A check-back fold shares the row.
+            // Steps · Open opens it like any other work. A check-back fold
+            // shares the row.
             ReviewLoopView(
                 loop: loop,
                 sessionId: sessionId,
                 worktreeDir: worktreeDir,
-                state: expansionState(block.id, Self.loopsOpenForScreenshot),
-                expansionState: expansionState
+                state: expansionState(
+                    block.id,
+                    Self.loopsOpenForScreenshot || activity.work == .open
+                ),
+                expansionState: expansionState,
+                activity: activity
             )
         case .note(let thread):
             TimelineThreadCard(thread: thread, sessionId: sessionId, context: comments)

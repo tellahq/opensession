@@ -64,6 +64,7 @@ import {
   bootstrapRemoteSandbox,
   findRemoteStateBySession,
   makeRemoteSandbox,
+  type RemoteSandboxOwner,
   readRemoteState,
   runResumeHook,
   remoteCloneUrl,
@@ -885,9 +886,17 @@ export class DaytonaProvider implements SandboxProvider {
         lastActivityAt: new Date().toISOString(),
         ...trust,
       });
-      return Object.assign(this.makeHandle(sbx, spec.sessionId, cwd), {
-        wokeFromSleep,
-      });
+      return Object.assign(
+        this.makeHandle(sbx, {
+          sessionId: spec.sessionId,
+          cwd,
+          repoId: repo.id,
+          trustProfile: trust.trustProfile,
+        }),
+        {
+          wokeFromSleep,
+        },
+      );
     } catch (error) {
       if (disposable) {
         try {
@@ -903,17 +912,12 @@ export class DaytonaProvider implements SandboxProvider {
     }
   }
 
-  private makeHandle(
-    sbx: DaytonaSandbox,
-    sessionId: string,
-    cwd: string,
-  ): Sandbox {
+  private makeHandle(sbx: DaytonaSandbox, owner: RemoteSandboxOwner): Sandbox {
     const providerId = this.id;
     return makeRemoteSandbox({
+      ...owner,
       providerId,
       sandboxId: sbx.id,
-      sessionId,
-      cwd,
       driver: daytonaDriver(sbx),
       async ports(requestedPorts = []): Promise<PortMap> {
         const map: PortMap = {};
@@ -964,7 +968,7 @@ export class DaytonaProvider implements SandboxProvider {
       const client = await daytonaClient();
       const sbx = await client.get(sandboxId);
       if (!sbx || stateOf(sbx) === "gone") return null;
-      return this.makeHandle(sbx, state.sessionId, state.cwd);
+      return this.makeHandle(sbx, state);
     } catch (e) {
       console.warn(`[sandbox:daytona] get(${sandboxId}) failed:`, e);
       return null;
@@ -1023,7 +1027,7 @@ export class DaytonaProvider implements SandboxProvider {
     const driver = daytonaDriver(sbx);
     await driver.ensureStarted();
     if (woke) await runResumeHook(driver, this.id, sandboxId, state);
-    return Object.assign(this.makeHandle(sbx, state.sessionId, state.cwd), {
+    return Object.assign(this.makeHandle(sbx, state), {
       wokeFromSleep: woke,
     });
   }

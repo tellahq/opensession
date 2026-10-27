@@ -26,7 +26,10 @@ import {
   isRemoteSandboxProvider,
   resolveRequestedSandbox,
 } from "../sandbox/config";
-import { resolveInteractiveSandbox } from "../sandbox/defaults";
+import {
+  defaultSandboxGpu,
+  resolveInteractiveSandbox,
+} from "../sandbox/defaults";
 import {
   SESSIONS_DIR,
   findSessionAsync,
@@ -61,13 +64,12 @@ import { handleSlashCommand } from "../slash-commands";
 import { sanitizeBranchSlug } from "../suggest-branch";
 import { type NativeSessionFile, type StackedOn } from "../types";
 import {
-  DEFAULT_WORKSPACE_MODEL_SETTINGS,
   WorkspaceRepoConflictError,
   type Workspace,
   type WorkspaceDraft,
-  type WorkspaceModelSettings,
   createWorkspace,
   deleteWorkspace,
+  discardWorkspaceDraft,
   getWorkspace,
   listWorkspaces,
   updateWorkspace,
@@ -149,6 +151,40 @@ export async function deleteWorkspaceMemberSessions(
     });
     if (response && !response.ok && response.status !== 404) return response;
   }
+}
+
+/**
+ * Archive every listed session through the normal archive route, so running
+ * agents are stopped, pins dropped and drafts cleared exactly as for one
+ * session. Keeps going past a failure and reports which ids failed; a session
+ * that vanished meanwhile (404) counts as done.
+ */
+export async function archiveWorkspaceMemberSessions(
+  ctx: RouteContext,
+  sessionIds: readonly string[],
+  handleSessionRoute: typeof handleSessionsRoutes = handleSessionsRoutes,
+): Promise<{ archived: string[]; failed: string[] }> {
+  const archived: string[] = [];
+  const failed: string[] = [];
+  for (const sessionId of sessionIds) {
+    const sessionPath = `/api/sessions/${encodeURIComponent(sessionId)}/archive`;
+    const sessionUrl = new URL(ctx.url);
+    sessionUrl.pathname = sessionPath;
+    sessionUrl.search = "";
+    const response = await handleSessionRoute({
+      ...ctx,
+      req: new Request(sessionUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ archived: true }),
+      }),
+      url: sessionUrl,
+      path: sessionPath,
+    }).catch(() => undefined);
+    if (response?.ok) archived.push(sessionId);
+    else if (response?.status !== 404) failed.push(sessionId);
+  }
+  return { archived, failed };
 }
 
 function findNativeSessionForFileMentions(
@@ -502,9 +538,6 @@ export async function handleWorkspaceRoutes(
   // ── Workspaces (containers that group sessions) ──
   // A workspace is just metadata; membership lives on each session's `workspaceId`.
   if (path === "/api/workspaces" && req.method === "GET") {
-    // The defaults ride once at the top level; a workspace row carries
-    // modelSettings only when someone saved their own copy. Stamping the
-    // defaults on every row multiplied the payload by the workspace count.
     let workspaces = await listWorkspaces();
     const activeOnly = url.searchParams.get("active") === "1";
     // Keep a directly opened empty/archived workspace in the sidebar projection.
@@ -529,10 +562,7 @@ export async function handleWorkspaceRoutes(
     }
     return conditionalJsonResponse(
       req,
-      {
-        workspaces,
-        defaultModelSettings: DEFAULT_WORKSPACE_MODEL_SETTINGS,
-      },
+      { workspaces },
       {
         cache: {
           key: activeOnly ? "workspaces-list-active" : "workspaces-list-all",
@@ -640,6 +670,39 @@ export async function handleWorkspaceRoutes(
     );
   }
 
+  // Archive a whole workspace: every live member, including the ones the
+  // sidebar row does not render (automation runs such as PR reviews, workers,
+  // sessions outside the current lens). Archiving only the rendered sessions
+  // left those live, so the workspace never went away.
+  const archiveMatch = path.match(/^\/api\/workspaces\/([^/]+)\/archive$/);
+  if (archiveMatch && req.method === "POST") {
+    const id = decodeURIComponent(archiveMatch[1]);
+    // No workspace-record check: sessions can outlive their workspace record,
+    // and they still need archiving.
+    const members = (await getSessionListSnapshotAsync("exclude")).filter(
+      (session) => session.workspaceId === id && !session.archived,
+    );
+    const result = await archiveWorkspaceMemberSessions(
+      ctx,
+      members.map((member) => member.id),
+    );
+    return Response.json({ ok: result.failed.length === 0, ...result });
+  }
+
+  // Discard a sidebar draft. Never deletes sessions: the draft may sit on a
+  // workspace whose sessions are all archived, and those stay.
+  const draftMatch = path.match(/^\/api\/workspaces\/([^/]+)\/draft$/);
+  if (draftMatch && req.method === "DELETE") {
+    const id = decodeURIComponent(draftMatch[1]);
+    const hasSessions = (await getSessionListSnapshotAsync()).some(
+      (session) => session.workspaceId === id,
+    );
+    const result = await discardWorkspaceDraft(id, hasSessions);
+    if (result === "missing")
+      return Response.json({ error: "Workspace not found" }, { status: 404 });
+    return Response.json({ ok: true, result });
+  }
+
   const workspaceMatch = path.match(/^\/api\/workspaces\/(.+)$/);
   if (workspaceMatch && req.method === "PATCH") {
     const id = decodeURIComponent(workspaceMatch[1]);
@@ -648,7 +711,6 @@ export async function handleWorkspaceRoutes(
       repo?: string;
       color?: string;
       order?: number;
-      modelSettings?: WorkspaceModelSettings;
       draft?: unknown;
     };
     if (body.repo === "auto")
@@ -671,7 +733,6 @@ export async function handleWorkspaceRoutes(
         repo: body.repo,
         color: body.color,
         order: body.order,
-        modelSettings: body.modelSettings,
         ...(rawDraft !== undefined ? { draft } : {}),
       });
     } catch (error) {
@@ -913,6 +974,13 @@ export async function handleWorkspaceRoutes(
     );
     if (!sandboxResolved.ok)
       return Response.json({ error: sandboxResolved.error }, { status: 400 });
+    // A sibling on the project's GPU default gets its GPU too.
+    const siblingGpu = defaultSandboxGpu(
+      body.sandbox,
+      undefined,
+      sandboxResolved.provider,
+      repoId,
+    );
     // A sibling in a ticket-linked session/workspace stays linked to the ticket
     // (conversation tab + ticket→session mapping follow the workspace).
     const siblingWorkspace = workspaceId
@@ -947,6 +1015,7 @@ export async function handleWorkspaceRoutes(
       // sandbox check vetted (validating one model and running another
       // would make the create-gate meaningless).
       ...(siblingModel ? { model: siblingModel } : {}),
+      ...(siblingGpu ? { sandboxGpu: siblingGpu } : {}),
       ...(sandboxResolved.provider
         ? {
             sandbox: {

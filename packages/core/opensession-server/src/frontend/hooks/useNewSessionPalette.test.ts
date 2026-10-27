@@ -39,7 +39,6 @@ test("the hook owns lazy route initialization and every replacement open", () =>
   expect(openStart).toBeGreaterThan(-1);
   expect(opens.match(/setPalette\(/g)).toHaveLength(2);
   expect(opens).not.toContain("setPaletteState");
-  expect(opens).not.toContain("workspaceId: modelWorkspaceId");
   expect(opens).toContain("setPalette({ open: true, ...prefill })");
 });
 
@@ -92,5 +91,4 @@ test("App keeps Escape dismissal and workspace prefills on the controller", () =
   const workspaceOpen = appSource.slice(workspaceOpenStart, workspaceOpenEnd);
   expect(workspaceOpen).toContain("openPrefilledSession(prefill);");
   expect(workspaceOpen).toContain("prefill.workspaceId = src.workspaceId");
-  expect(workspaceOpen).toContain("prefill.modelWorkspaceId = src.workspaceId");
 });

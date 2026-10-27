@@ -316,7 +316,7 @@ describe("getAllSessions", () => {
   it("reads one native session without scanning the directory", async () => {
     writeSession("os-direct-detail", {
       title: "Direct detail",
-      model: "pi/dial/opus-fable",
+      model: "pi/anthropic/claude-opus-5-5",
       workspaceId: "ws-direct",
       piSessionId: "pi-direct",
     });

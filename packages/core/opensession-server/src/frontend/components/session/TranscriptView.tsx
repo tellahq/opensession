@@ -1,5 +1,6 @@
 import React from "react";
 import { OpenAssetPathsProvider } from "../../lib/open-asset";
+import { MessageLinkProvider } from "../../lib/message-link";
 import { cn } from "../../ui/cn";
 import { SessionTranscript } from "../SessionTranscript";
 import {
@@ -16,6 +17,8 @@ type TranscriptViewProps = SessionTranscriptProps & {
   toolPathRoots: React.ComponentProps<typeof ToolPathRootsProvider>["value"];
   liveSubagents: React.ComponentProps<typeof LiveSubagentsProvider>["value"];
   openAsset: (path: string) => void;
+  /** Builds a link to one message; null offers no "Copy link". */
+  messageLink: ((entryId: string) => string) | null;
   onRender: React.ProfilerOnRenderCallback;
 };
 
@@ -26,6 +29,7 @@ export function TranscriptView({
   toolPathRoots,
   liveSubagents,
   openAsset,
+  messageLink,
   onRender,
   ...transcript
 }: TranscriptViewProps) {
@@ -41,7 +45,9 @@ export function TranscriptView({
           <ToolPathRootsProvider value={toolPathRoots}>
             <LiveSubagentsProvider value={liveSubagents}>
               <OpenAssetProvider value={openAsset}>
-                <SessionTranscript {...transcript} />
+                <MessageLinkProvider value={messageLink}>
+                  <SessionTranscript {...transcript} />
+                </MessageLinkProvider>
               </OpenAssetProvider>
             </LiveSubagentsProvider>
           </ToolPathRootsProvider>

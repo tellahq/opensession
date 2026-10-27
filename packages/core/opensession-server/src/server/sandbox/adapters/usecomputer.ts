@@ -34,6 +34,8 @@
  *    refuses clearly; more capacity is a bigger reservation on the service.
  */
 
+import { launchSandboxAgent, withSandboxAgent } from "../agent-driver";
+import { revokeSandboxAgent } from "../agent-channel";
 import { basename, resolve } from "path";
 import { existsSync, mkdirSync, readFileSync } from "fs";
 import { getRepo, worktreePathFor } from "../../worktree";
@@ -62,6 +64,7 @@ import {
   findRemoteStateBySession,
   listRemoteStates,
   makeRemoteSandbox,
+  type RemoteSandboxOwner,
   readRemoteState,
   remoteCloneUrl,
   remoteLayout,
@@ -92,7 +95,7 @@ import {
   sealRemoteRepoTemplate,
   writeRemoteRepoTemplate,
 } from "../remote-repo-template";
-import { sandboxConfig } from "../config";
+import { sandboxAgentEnabled, sandboxConfig } from "../config";
 import { OPENSESSION_SESSIONS_DIR } from "../../paths";
 import { REPO_ROOT } from "../../run-rpc-protocol";
 import { writeJsonAtomic } from "../../shared/atomic-write";
@@ -426,6 +429,34 @@ export function parseDetachedExecStatus(stdout: string): ExecResult | null {
 }
 
 // ── Driver ────────────────────────────────────────────────────────────────────
+
+/** A session VM's driver: the Sandbox agent's socket while it is connected,
+ *  the service's exec API otherwise (agent-driver.ts). Keyed by the stable
+ *  Sandbox id: a wake restores onto a new VM, whose agent replaces the old. */
+function sessionUseComputerDriver(
+  c: UcClient,
+  sandboxId: string,
+  remoteId: string,
+): RemoteDriver {
+  return withSandboxAgent(useComputerDriver(c, remoteId), {
+    providerId: PROVIDER,
+    sandboxId,
+    compose: guestScript,
+  });
+}
+
+/** Start the VM's agent once the base runtime (bun) is installed. */
+async function launchUseComputerAgent(
+  c: UcClient,
+  sandboxId: string,
+  remoteId: string,
+): Promise<boolean> {
+  if (!sandboxAgentEnabled(PROVIDER)) return false;
+  return launchSandboxAgent(useComputerDriver(c, remoteId), {
+    providerId: PROVIDER,
+    sandboxId,
+  });
+}
 
 export function useComputerDriver(c: UcClient, remoteId: string): RemoteDriver {
   const exec = async (
@@ -795,6 +826,10 @@ export async function pauseUseComputerSandbox(
     writeRemoteState({ ...state, remoteId: undefined });
     return;
   }
+  // The agent dies with this VM; a wake restores onto a new one and launches
+  // a fresh agent there. Revoke first so nothing is routed to a closing
+  // socket and the snapshot never holds a live agent.
+  revokeSandboxAgent(sandboxId, "asleep");
   const version = sleepSnapshotVersion(sandboxId);
   await createSnapshot(
     c,
@@ -925,6 +960,8 @@ export class UseComputerProvider implements SandboxProvider {
     const prepareRunner = async () => {
       await bootstrapRemoteSandbox(driver, this.id);
       mark("runner ready");
+      if (await launchUseComputerAgent(c, sandboxId, remoteId))
+        mark("agent connected");
     };
     const prepareWorkspace = async () => {
       await setupRemoteWorkspace(
@@ -967,7 +1004,12 @@ export class UseComputerProvider implements SandboxProvider {
     }
     writeRemoteState({ ...state, lastActivityAt: new Date().toISOString() });
     return Object.assign(
-      this.makeHandle(c, sandboxId, remoteId, spec.sessionId, cwd),
+      this.makeHandle(c, sandboxId, remoteId, {
+        sessionId: spec.sessionId,
+        cwd,
+        repoId: repo.id,
+        trustProfile: trust.trustProfile,
+      }),
       { wokeFromSleep: resuming, bootMode },
     );
   }
@@ -976,16 +1018,14 @@ export class UseComputerProvider implements SandboxProvider {
     c: UcClient,
     sandboxId: string,
     remoteId: string,
-    sessionId: string,
-    cwd: string,
+    owner: RemoteSandboxOwner,
   ): Sandbox {
     const providerId = this.id;
     return makeRemoteSandbox({
+      ...owner,
       providerId,
       sandboxId,
-      sessionId,
-      cwd,
-      driver: useComputerDriver(c, remoteId),
+      driver: sessionUseComputerDriver(c, sandboxId, remoteId),
       // Guest ports are reachable only inside the service; every Portal
       // rides the outbound relay, which needs no published port.
       async ports(): Promise<PortMap> {
@@ -1002,13 +1042,7 @@ export class UseComputerProvider implements SandboxProvider {
     try {
       const c = client();
       if ((await sandboxStatus(c, state)) === "gone") return null;
-      return this.makeHandle(
-        c,
-        sandboxId,
-        state.remoteId || "",
-        state.sessionId,
-        state.cwd,
-      );
+      return this.makeHandle(c, sandboxId, state.remoteId || "", state);
     } catch (e) {
       console.warn(`[sandbox:usecomputer] get(${sandboxId}) failed:`, e);
       return null;
@@ -1062,13 +1096,7 @@ export class UseComputerProvider implements SandboxProvider {
       const live = await getSandbox(c, state.remoteId);
       if (live?.state === "active")
         return Object.assign(
-          this.makeHandle(
-            c,
-            sandboxId,
-            live.sandbox_id,
-            state.sessionId,
-            state.cwd,
-          ),
+          this.makeHandle(c, sandboxId, live.sandbox_id, state),
           { wokeFromSleep: false },
         );
     }
@@ -1086,11 +1114,11 @@ export class UseComputerProvider implements SandboxProvider {
     const driver = useComputerDriver(c, remoteId);
     await driver.ensureStarted();
     await prepareGuest(driver);
+    await launchUseComputerAgent(c, sandboxId, remoteId);
     await runResumeHook(driver, this.id, sandboxId, next);
-    return Object.assign(
-      this.makeHandle(c, sandboxId, remoteId, state.sessionId, state.cwd),
-      { wokeFromSleep: true },
-    );
+    return Object.assign(this.makeHandle(c, sandboxId, remoteId, state), {
+      wokeFromSleep: true,
+    });
   }
 
   /** Deletes the VM and any sleep snapshot, and with them the workspace

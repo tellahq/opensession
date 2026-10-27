@@ -20,7 +20,8 @@ struct DeskSheet: View {
     @AppStorage("os1.desk.voice") private var deskVoice = "off"
 
     @State private var loadState: LoadState = .loading
-    @State private var engine = DeskVoiceEngine()
+    private let engine = DeskVoiceEngine.desk
+    @State private var deskCall = DeskCallRequest.shared
 
     var body: some View {
         @Bindable var engine = engine
@@ -45,12 +46,17 @@ struct DeskSheet: View {
                 engine.open()
             }
             #endif
+            startRequestedCall()
             await load()
         }
+        // "Talk to Desk" pressed while the sheet is already up.
+        .onChange(of: deskCall.request?.id) { startRequestedCall() }
         .onDisappear {
             // A full-screen cover takes its presenter off screen, so this
             // fires when the CALL opens — hanging up the call it just
-            // presented. Only a sheet that is really going away stops it.
+            // presented. Only a sheet that is really going away stops it. The
+            // Dynamic Island does not save it here: the system hides it while
+            // the app is open, so the call would have nothing on screen.
             if !engine.callPresented { engine.stop() }
         }
         .task {
@@ -59,8 +65,9 @@ struct DeskSheet: View {
             ) {
                 // A backgrounded app must never hold the mic open. Inactive is
                 // not backgrounded: a notification banner or Control Center
-                // must not silently end a conversation.
-                engine.stop()
+                // must not silently end a conversation. A call in the Dynamic
+                // Island is not a hidden mic, so it keeps going.
+                if !engine.shownOutsideApp { engine.stop() }
             }
         }
         .fullScreenCoverCompat(isPresented: $engine.callPresented) {
@@ -166,7 +173,9 @@ struct DeskSheet: View {
                 .foregroundStyle(OS1VisualStyle.text)
             Spacer(minLength: 8)
             voiceStatusLabel
-            if deskVoice == "on" {
+            // A call started by "Talk to Desk" runs with the preference
+            // off, and this button is the way back to it once minimized.
+            if deskVoice == "on" || engine.active {
                 micButton
             }
             Button {
@@ -240,6 +249,13 @@ struct DeskSheet: View {
             )
         }
         .accessibilityLabel(engine.active ? "Return to the voice call" : "Start a voice call")
+    }
+
+    /// Start the call a "Talk to Desk" press asked for. The call does not
+    /// need the transcript to have loaded.
+    private func startRequestedCall() {
+        guard deskCall.take() != nil else { return }
+        engine.open()
     }
 
     private func load() async {

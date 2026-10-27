@@ -34,11 +34,31 @@ export function pickScrollAnchor(el: HTMLElement): HTMLElement | null {
   return anchor;
 }
 
+/** Keep the scroller `bottomGap` px from its bottom edge. */
+export function keepBottomGap(
+  container: HTMLElement,
+  bottomGap: number,
+): () => void {
+  return () => {
+    container.scrollTop = Math.max(
+      0,
+      container.scrollHeight - container.clientHeight - bottomGap,
+    );
+  };
+}
+
+/**
+ * Hold one entry `top` px below the scroller's top edge while the rows around
+ * it mount and measure, until it has held for `settleMs` or the reader takes
+ * over. Until the entry is drawn, `whenMissing` runs each frame: a restore
+ * keeps the scroller where it started (`keepBottomGap`), a jump to an entry far
+ * off screen asks the virtual list to bring its row in.
+ */
 export function holdTranscriptAnchor(
   container: HTMLElement,
   entryId: string,
   top: number,
-  bottomGap: number,
+  whenMissing: () => void,
   onFound: () => void,
   onStop?: () => void,
   settleMs = 2500,
@@ -81,10 +101,7 @@ export function holdTranscriptAnchor(
         top;
       if (Math.abs(delta) > 0.5) container.scrollTop += delta;
     } else {
-      container.scrollTop = Math.max(
-        0,
-        container.scrollHeight - container.clientHeight - bottomGap,
-      );
+      whenMissing();
     }
     if (
       (foundAt !== null && now - foundAt >= settleMs) ||

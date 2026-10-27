@@ -1,4 +1,5 @@
 import { DEFAULT_REPO_ID } from "./brand";
+import { isAutomationSession } from "./landing-session";
 import {
   prBranchKey,
   prLookupKeys,
@@ -47,30 +48,49 @@ export function findPrWorkspaceId(
   sessions: UnifiedSession[],
   pr: PrIdentity,
 ): string | null {
-  if (pr.number !== undefined) {
-    // A number-only record (minted before its branch was known) has no
-    // Review to open. Let the server resolve it, which fills the branch in.
-    const byNumber = workspaces.find(
-      (workspace) =>
-        !!workspace.branch &&
-        workspaceCarriesPr(workspace, { repo: pr.repo, number: pr.number }),
-    );
-    if (byNumber) return byNumber.id;
-  }
-  if (pr.branch) {
-    const byBranch = workspaces.find((workspace) =>
-      workspaceCarriesPr(workspace, { repo: pr.repo, branch: pr.branch }),
-    );
-    if (byBranch) return byBranch.id;
-  }
   // Newest first: the same preference the server's session lookup uses, so a
   // PR reopened in a later session lands where the server would put it.
-  const carrier = [...sessions]
-    .filter((s) => !s.archived && !!s.workspaceId && sessionCarriesPr(s, pr))
-    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))[0];
-  const id = carrier?.workspaceId;
-  // Only answer with a workspace this client can actually render. Navigating
-  // to an id the list has not caught up with would trade the spinner for a
+  // Only workspaces this client can actually render count. Navigating to an
+  // id the list has not caught up with would trade the spinner for a
   // "Workspace not found", which is worse.
-  return id && workspaces.some((w) => w.id === id) ? id : null;
+  const carriers = [...sessions]
+    .filter(
+      (s) =>
+        !s.archived &&
+        !!s.workspaceId &&
+        workspaces.some((w) => w.id === s.workspaceId) &&
+        sessionCarriesPr(s, pr),
+    )
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  // The conversation a person had about this PR. A session that opened it in
+  // a repo it never attached carries it only through the PR's footer, while a
+  // review run may already have filed the PR under a workspace of its own.
+  const person = carriers.find((s) => !isAutomationSession(s));
+  const hasPerson = (workspaceId: string) =>
+    sessions.some(
+      (s) =>
+        !s.archived && s.workspaceId === workspaceId && !isAutomationSession(s),
+    );
+  const record =
+    (pr.number !== undefined
+      ? // A number-only record (minted before its branch was known) has no
+        // Review to open. Let the server resolve it, which fills the branch in.
+        workspaces.find(
+          (workspace) =>
+            !!workspace.branch &&
+            workspaceCarriesPr(workspace, { repo: pr.repo, number: pr.number }),
+        )
+      : undefined) ??
+    (pr.branch
+      ? workspaces.find((workspace) =>
+          workspaceCarriesPr(workspace, { repo: pr.repo, branch: pr.branch }),
+        )
+      : undefined);
+  if (record) {
+    // An empty PR workspace gives way to the session that opened the PR.
+    return person?.workspaceId && !hasPerson(record.id)
+      ? person.workspaceId
+      : record.id;
+  }
+  return (person ?? carriers[0])?.workspaceId ?? null;
 }

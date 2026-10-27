@@ -12,6 +12,7 @@ import { IconBox, IconConnections } from "./icons";
 import { errorMessage } from "../lib/error-message";
 import { ApiError } from "../lib/api/request";
 import { sandboxProviderLabel } from "../lib/ready-sandbox-providers";
+import { sandboxSleepSummary, sleepsInLabel } from "../lib/sandbox-sleep";
 
 type SandboxRef = {
   provider: string;
@@ -167,6 +168,8 @@ export function SandboxBadge({
     return `${Math.round(hours / 24)} d ago`;
   })();
 
+  const sleepsIn = sleepsInLabel(status?.sleepsAt);
+
   async function act(action: "pause" | "resume" | "recreate" | "checkpoint") {
     if (
       action === "recreate" &&
@@ -262,8 +265,24 @@ export function SandboxBadge({
             <span className="ml-auto font-medium text-faint">Runtime</span>
           </div>
           <div className="mt-1 text-meta text-dim">
-            Attached Sandbox · sleeps between turns
+            {sandboxSleepSummary(sandbox.provider)}
           </div>
+          {(lifecycle === "preparing" || lifecycle === "waking") &&
+          status?.lifecycleNote ? (
+            <div className="mt-1 text-meta text-faint">
+              {status.lifecycleNote}
+            </div>
+          ) : null}
+          {lifecycle === "awake" && sleepsIn ? (
+            <div className="mt-1 text-meta text-faint">{sleepsIn}</div>
+          ) : null}
+          {lifecycle === "awake" && status ? (
+            <div className="mt-1 text-meta text-faint">
+              {status.agentConnected
+                ? "Connected through the Sandbox agent"
+                : `Commands go through the ${sandboxProviderLabel(sandbox.provider)} API`}
+            </div>
+          ) : null}
           {status?.cwd ? (
             <div
               className="mt-1 truncate font-mono text-meta text-faint"

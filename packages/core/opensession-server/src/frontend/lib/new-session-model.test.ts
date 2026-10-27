@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { preferredNewSessionModel } from "./new-session-model";
+import {
+  preferredNewSessionEffort,
+  preferredNewSessionModel,
+} from "./new-session-model";
 
+const models = [
+  { id: "pi/anthropic/claude-fable-5-1", efforts: ["low", "high", "max"] },
+  { id: "pi/openai/gpt-6.1-sol", efforts: ["none", "high", "xhigh"] },
+];
 const base = {
-  models: [
-    { id: "pi/anthropic/claude-fable-5-1" },
-    { id: "pi/workspace-preset/ws-1/opus-fable" },
-  ],
+  models,
   default: "pi/anthropic/claude-fable-5-1",
   modelPref: "",
 };
@@ -18,16 +22,48 @@ describe("preferredNewSessionModel", () => {
     expect(
       preferredNewSessionModel({
         ...base,
-        modelPref: "pi/anthropic/claude-fable-5-1",
+        modelPref: "pi/openai/gpt-6.1-sol",
       }),
-    ).toBe("pi/anthropic/claude-fable-5-1");
+    ).toBe("pi/openai/gpt-6.1-sol");
   });
-  test("retains a workspace preset default", () => {
+  test("reads a retired preset preference as the model it ran on", () => {
     expect(
-      preferredNewSessionModel({
-        ...base,
-        default: "pi/workspace-preset/ws-1/opus-fable",
+      preferredNewSessionModel({ ...base, modelPref: "pi/dial/high" }),
+    ).toBe("pi/openai/gpt-6.1-sol");
+  });
+  test("ignores a model the catalog does not offer", () => {
+    expect(
+      preferredNewSessionModel({ ...base, modelPref: "pi/acme/unknown" }),
+    ).toBe("");
+  });
+});
+
+describe("preferredNewSessionEffort", () => {
+  test("applies a preference the starting model offers", () => {
+    expect(
+      preferredNewSessionEffort({
+        models,
+        model: "pi/openai/gpt-6.1-sol",
+        effortPref: "xhigh",
       }),
-    ).toBe("pi/workspace-preset/ws-1/opus-fable");
+    ).toBe("xhigh");
+  });
+  test("skips a preference the starting model does not offer", () => {
+    expect(
+      preferredNewSessionEffort({
+        models,
+        model: "pi/anthropic/claude-fable-5-1",
+        effortPref: "xhigh",
+      }),
+    ).toBeUndefined();
+  });
+  test("has nothing to apply without a preference", () => {
+    expect(
+      preferredNewSessionEffort({
+        models,
+        model: "pi/openai/gpt-6.1-sol",
+        effortPref: "",
+      }),
+    ).toBeUndefined();
   });
 });

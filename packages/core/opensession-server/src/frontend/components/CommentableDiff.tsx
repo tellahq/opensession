@@ -35,6 +35,7 @@ import {
   IconArrowUpToLine,
   IconCheck,
   IconCheckCircle,
+  IconCheckCircleFilled,
   IconChevronRight,
   IconCopy,
   IconDotsHorizontal,
@@ -72,6 +73,7 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { PhoneDiffCommentComposer } from "./PhoneDiffCommentComposer";
 import {
   DIFF_SURFACE_STYLE,
+  PHONE_SEPARATOR_CSS,
   diffAppearanceOptions,
 } from "../lib/commentable-diff-appearance";
 import { ensureDiffLanguages } from "../lib/diff-languages";
@@ -96,6 +98,11 @@ const STICKY_FILE_HEADER =
   "sticky top-[calc(var(--review-file-header-top,0px)-1px)] z-[6] bg-surface";
 const STICKY_FILE_HEADER_SURFACE =
   "rounded-md bg-surface group-data-[stuck]:shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)]";
+
+/* The phone header's folder part: shrinks first and loses its start, so a
+   deep path reads "…/src/" while the filename after it stays whole. */
+const PHONE_FILE_DIR =
+  "min-w-0 shrink overflow-hidden text-ellipsis text-faint [direction:rtl]";
 
 const FILE_TOGGLE =
   "focus-ring flex min-w-0 cursor-pointer items-center gap-2 self-stretch border-none bg-transparent p-0 text-left text-fg";
@@ -754,17 +761,34 @@ export function CommentableDiff({ patch, options }: Props) {
                 size={16}
                 className={`shrink-0 text-faint transition-transform ${isOpen ? "rotate-90" : ""}`}
               />
-              <span className="flex size-5 shrink-0 items-center justify-center text-dim">
-                {fileExt(base) ? (
-                  <ExtBadge name={base} size={14} />
-                ) : (
-                  <IconFile size={17} />
-                )}
-              </span>
-              <span className="flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap text-label">
-                <span className="shrink-0 font-semibold text-fg">{base}</span>
-                {dir && <span className="shrink-0 text-faint">{dir}</span>}
-              </span>
+              {isPhone ? (
+                // GitHub's phone header: one path, trimmed from the start so
+                // the filename at its end always stays readable.
+                <span className="flex min-w-0 items-baseline whitespace-nowrap text-label">
+                  {dir && (
+                    <span className={PHONE_FILE_DIR}>
+                      <bdi>{dir}/</bdi>
+                    </span>
+                  )}
+                  <span className="shrink-0 font-semibold text-fg">{base}</span>
+                </span>
+              ) : (
+                <>
+                  <span className="flex size-5 shrink-0 items-center justify-center text-dim">
+                    {fileExt(base) ? (
+                      <ExtBadge name={base} size={14} />
+                    ) : (
+                      <IconFile size={17} />
+                    )}
+                  </span>
+                  <span className="flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap text-label">
+                    <span className="shrink-0 font-semibold text-fg">
+                      {base}
+                    </span>
+                    {dir && <span className="shrink-0 text-faint">{dir}</span>}
+                  </span>
+                </>
+              )}
             </button>
             {editable && !isEditing && !(isPhone && fileActions) && (
               <Tooltip label="Edit file in place">
@@ -869,7 +893,10 @@ export function CommentableDiff({ patch, options }: Props) {
               </Tooltip>
             )}
             {/* Change counts stay pinned right, before the review state and menu. */}
-            {showFileStats && (
+            {/* Phone moves the counts into the file menu, so the path keeps
+                the row; the spacer keeps the trailing controls right. */}
+            {isPhone && <span className="ml-auto" />}
+            {showFileStats && !isPhone && (
               <span
                 className={`ml-auto flex shrink-0 gap-1.5 text-meta ${
                   isEditing ? "hidden" : ""
@@ -883,7 +910,29 @@ export function CommentableDiff({ patch, options }: Props) {
                 {s.del > 0 && <span className={DIFF_DEL}>−{s.del}</span>}
               </span>
             )}
-            {viewedEnabled && (
+            {viewedEnabled && isPhone && (
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={isViewed}
+                aria-label={`Reviewed ${base}`}
+                className={cn(
+                  "focus-ring inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent p-0",
+                  isViewed ? "text-green" : "text-faint",
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleViewed(file);
+                }}
+              >
+                {isViewed ? (
+                  <IconCheckCircleFilled size={22} />
+                ) : (
+                  <IconCheckCircle size={22} />
+                )}
+              </button>
+            )}
+            {viewedEnabled && !isPhone && (
               <label
                 className={`inline-flex shrink-0 cursor-pointer items-center gap-[5px] pl-1 font-sans text-label select-none phone:size-11 phone:justify-center phone:pl-0 ${
                   isViewed ? "text-dim" : "text-faint"
@@ -920,6 +969,15 @@ export function CommentableDiff({ patch, options }: Props) {
                   />
                 </Tooltip>
                 <Menu.Popup align="end" className="min-w-[230px]">
+                  {isPhone && showFileStats && (s.add > 0 || s.del > 0) && (
+                    <div className="flex gap-1.5 px-2.5 pt-1.5 pb-1 text-meta tabular-nums">
+                      {s.add > 0 && <span className={DIFF_ADD}>+{s.add}</span>}
+                      {s.del > 0 && <span className={DIFF_DEL}>−{s.del}</span>}
+                      <span className="text-faint">
+                        line{s.add + s.del === 1 ? "" : "s"} changed
+                      </span>
+                    </div>
+                  )}
                   {isPhone && editable && !isEditing && (
                     <Menu.Item onClick={() => void startEdit(file)}>
                       <IconPencil size={18} className={MENU_ICON} />
@@ -1006,6 +1064,7 @@ export function CommentableDiff({ patch, options }: Props) {
                   editing={isEditing}
                   createEditor={isEditing ? createEditor : undefined}
                   loadDiffFiles={isEditing ? loadDiffFiles : loadContextFiles}
+                  phone={isPhone}
                 />
               ))}
             {resolved.length > 0 && (
@@ -1417,6 +1476,7 @@ const FileDiffRow = function FileDiffRow({
   editing,
   createEditor,
   loadDiffFiles,
+  phone,
 }: {
   file: FileDiffMetadata;
   fileIndex: number;
@@ -1435,6 +1495,7 @@ const FileDiffRow = function FileDiffRow({
   editing?: boolean;
   createEditor?: (options: EditorOptions<Meta>) => DiffsEditor<Meta>;
   loadDiffFiles?: (fd: FileDiffMetadata) => Promise<FileDiffLoadedFiles>;
+  phone?: boolean;
 }) {
   // FileDiff compares options shallowly and redraws the whole file when any
   // entry differs, so the callbacks in them must keep one identity. The
@@ -1465,6 +1526,7 @@ const FileDiffRow = function FileDiffRow({
     // caret instead.
     enableLineSelection: !editing,
     onLineSelected: handlers.onLineSelected,
+    unsafeCSS: phone ? PHONE_SEPARATOR_CSS : undefined,
   };
   if (canLoadFiles)
     Object.assign(options, { loadDiffFiles: handlers.loadDiffFiles });

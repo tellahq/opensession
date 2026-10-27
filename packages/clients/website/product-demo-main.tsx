@@ -222,7 +222,7 @@ const sessions: UnifiedSession[] = [
         "Add an audit log to settings",
         176,
         384,
-        "openai/gpt-5.6-terra",
+        "openai/gpt-6.1-terra",
       ],
       [
         "image-uploads",
@@ -271,7 +271,7 @@ const sessions: UnifiedSession[] = [
         "Split the slow migration into batches",
         512,
         828,
-        "openai/gpt-5.6-terra",
+        "openai/gpt-6.1-terra",
       ],
       [
         "sso-errors",
