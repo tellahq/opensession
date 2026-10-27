@@ -74,6 +74,17 @@ async function stopArchivedPortals(sessionId: string): Promise<void> {
     // Archiving remains committed. The periodic lifecycle reaper retries.
     console.error(`[portals] archive cleanup failed for ${sessionId}:`, error);
   }
+  try {
+    const { stopArchivedSessionWorktreeSetup } =
+      await import("./worktree-setup");
+    await stopArchivedSessionWorktreeSetup(sessionId);
+  } catch (error) {
+    // Same retry: the lifecycle reaper stops setup scopes of archived owners.
+    console.error(
+      `[worktree-setup] archive cleanup failed for ${sessionId}:`,
+      error,
+    );
+  }
 }
 
 function toEntry(raw: RawEntry): Entry {

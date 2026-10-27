@@ -235,6 +235,9 @@ async function runOneShotAttempt(
         mode: "ask",
         mcpServers: [],
         disableLocalWorkspaceTools: true,
+        // Never resumed: release the SDK conversation (and its claude
+        // process) when the call settles instead of idling it for minutes.
+        ephemeral: true,
         reposNote: opts.system
           ? `One-shot instructions (follow these for this response):\n${opts.system}`
           : "This is a tool-less one-shot text transformation. Return only the requested answer.",

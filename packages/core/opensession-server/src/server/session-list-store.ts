@@ -390,6 +390,18 @@ export async function indexedLiveSessionsByRepoBranch(
   return rows;
 }
 
+/** Live rows in one id family (`prefix`), cursored by id. Null while the
+ * live slice has no coverage. Catalog-only: no file or actor fallback. */
+export function indexedLiveSessionsByIdPrefix(
+  prefix: string,
+  afterId: string,
+  limit: number,
+): Promise<UnifiedSession[] | null> {
+  return callIndex("listLiveByIdPrefixCovered", prefix, afterId, limit).then(
+    shared,
+  );
+}
+
 export function indexedWorkspaceMembers(
   workspaceId: string,
 ): Promise<UnifiedSession[]> {

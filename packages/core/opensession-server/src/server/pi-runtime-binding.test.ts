@@ -301,6 +301,16 @@ describe("createPiRuntimeBinding", () => {
     ]);
   });
 
+  test("passes the ephemeral flag to the in-process Anthropic provider", async () => {
+    const h = harness({ transport: "inprocess" });
+    await createPiRuntimeBinding({
+      ...input("anthropic", "claude-test", h),
+      ephemeral: true,
+    });
+    const build = h.calls.find(([name]) => name === "buildAnthropicProvider");
+    expect(build?.[1].ephemeral).toBe(true);
+  });
+
   test("registers Anthropic bridge routing and key in current order", async () => {
     const h = harness({ transport: "bridge" });
     await createPiRuntimeBinding(input("anthropic", "claude-test", h));

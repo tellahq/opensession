@@ -781,6 +781,10 @@ export interface PiAnthropicProviderOpts {
   /** The run's model id; appended as a zero-cost fallback when the builtin
    *  catalog lacks it. */
   ensureModelId?: string;
+  /** Throwaway run (a tool-less one-shot) with no follow-up turn: dispose the
+   *  live SDK conversation, and its claude process, as soon as each request
+   *  settles instead of keeping it warm for a resume that never comes. */
+  ephemeral?: boolean;
 }
 
 /** Per-account isolated SDK config dir — never host ~/.claude. */
@@ -937,7 +941,7 @@ class SdkInputQueue implements AsyncIterable<SDKUserMessage> {
   }
 }
 
-interface LiveSdkConversation {
+export interface LiveSdkConversation {
   key: string;
   accountId: string;
   query: Query;
@@ -953,7 +957,8 @@ interface LiveSdkConversation {
   thinkingKey: string;
 }
 
-function liveSdkConversations(): Map<string, LiveSdkConversation> {
+/** Live SDK conversations keyed by store key. Exported for tests. */
+export function liveSdkConversations(): Map<string, LiveSdkConversation> {
   return (g.__piAnthropicLiveSdkConversations ??= new Map<
     string,
     LiveSdkConversation
@@ -1909,6 +1914,8 @@ async function* runSdkAttempt(
       // result message (a completed run's subprocess is already exiting).
       if (!reachedResult) {
         disposeLiveSdkConversation(q.live, "stream abandoned");
+      } else if (opts.ephemeral) {
+        disposeLiveSdkConversation(q.live, "ephemeral run settled");
       }
     }
 

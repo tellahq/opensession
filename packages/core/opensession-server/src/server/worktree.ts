@@ -21,6 +21,17 @@ import {
 } from "./config";
 import { stateDir } from "./paths";
 import { workloadArgv } from "./workload-scope";
+import {
+  assertSetupPipelineLive,
+  beginSetupPipeline,
+  endSetupPipeline,
+  recordSetupTimeout,
+  runSetupCommand,
+  SetupStoppedError,
+  SetupTimeoutError,
+  setupTimeoutMs,
+  type SetupPipeline,
+} from "./worktree-setup";
 
 // The Repo type + registry defaults live in config.ts now. Re-exported so existing
 // `import { type Repo } from "./worktree"` call sites keep working.
@@ -325,50 +336,84 @@ export interface WorktreeInfo {
  * seeded tree). Both halves are best-effort; a cold install is always the
  * fallback.
  */
-async function seedAndInstallWorktree(
+export async function seedAndInstallWorktree(
   repo: Repo,
   wtPath: string,
   branchLabel: string,
+  seed: (repo: Repo, wtPath: string) => Promise<unknown> = async (r, p) =>
+    (await import("./warm-template")).seedWorktreeFromWarmTemplate(r, p),
 ): Promise<void> {
+  // Registered before the first await: archiving while seeding waits on the
+  // warm template's lock must still stop the setup commands that follow.
+  const pipeline = beginSetupPipeline(wtPath);
   try {
-    const { seedWorktreeFromWarmTemplate } = await import("./warm-template");
-    await seedWorktreeFromWarmTemplate(repo, wtPath);
-  } catch (e) {
-    console.warn(
-      `[worktree] warm-template seeding failed for ${branchLabel} (continuing):`,
-      e,
-    );
+    try {
+      await seed(repo, wtPath);
+    } catch (e) {
+      if (!(e instanceof SetupStoppedError))
+        console.warn(
+          `[worktree] warm-template seeding failed for ${branchLabel} (continuing):`,
+          e,
+        );
+    }
+    await installWorktreeDeps(repo, wtPath, branchLabel, pipeline);
+  } finally {
+    endSetupPipeline(pipeline);
   }
-  await installWorktreeDeps(repo, wtPath, branchLabel);
 }
 
 export async function installWorktreeDeps(
   repo: Repo,
   wtPath: string,
   branchLabel: string,
+  pipeline?: SetupPipeline,
 ): Promise<void> {
+  const own = pipeline ? null : beginSetupPipeline(wtPath);
+  try {
+    await runWorktreeSetupCommands(repo, wtPath, branchLabel, pipeline ?? own!);
+  } finally {
+    if (own) endSetupPipeline(own);
+  }
+}
+
+async function runWorktreeSetupCommands(
+  repo: Repo,
+  wtPath: string,
+  branchLabel: string,
+  pipeline: SetupPipeline,
+): Promise<void> {
+  // Each command is bounded and runs in a setup scope named after the
+  // worktree, so archive, delete and the lifecycle reaper can stop it.
+  const timeoutMs = setupTimeoutMs(repo);
+  const run = (argv: string[]) =>
+    runSetupCommand(argv, { cwd: wtPath, timeoutMs, pipeline });
   try {
     // `.agents/setup` — the repo lifecycle provision hook (same dir preview.ts
     // resolves; docs/repo-lifecycle.md).
     const repoSetup = `${wtPath}/.agents/setup`;
     if (existsSync(repoSetup)) {
-      await $`${workloadArgv(["bash", repoSetup], "setup")}`
-        .cwd(wtPath)
-        .quiet();
+      await run(["bash", repoSetup]);
     } else if (repo.worktreeSetup) {
-      await $`${workloadArgv(["sh", "-c", repo.worktreeSetup], "setup")}`
-        .cwd(wtPath)
-        .quiet();
+      await run(["sh", "-c", repo.worktreeSetup]);
     }
     if (repo.depsInstall) {
-      await $`${workloadArgv(["sh", "-c", repo.depsInstall], "setup")}`
-        .cwd(wtPath)
-        .quiet();
+      await run(["sh", "-c", repo.depsInstall]);
     } else if (await Bun.file(`${wtPath}/package.json`).exists()) {
-      await $`${workloadArgv(["bun", "install"], "setup")}`.cwd(wtPath).quiet();
+      await run(["bun", "install"]);
     }
   } catch (e) {
+    if (e instanceof SetupStoppedError) {
+      console.log(`[worktree] setup stopped for ${branchLabel}`);
+      return;
+    }
     console.warn(`[worktree] setup failed for ${branchLabel} (continuing):`, e);
+    if (e instanceof SetupTimeoutError)
+      await recordSetupTimeout(wtPath, e.timeoutMs).catch((error) =>
+        console.warn(
+          `[worktree] could not record the setup timeout for ${branchLabel}:`,
+          error,
+        ),
+      );
   }
 }
 

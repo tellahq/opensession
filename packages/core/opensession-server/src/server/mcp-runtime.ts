@@ -82,9 +82,21 @@ export interface LegacyProxyMcpBoundary {
   readonly configs: Record<string, unknown>;
 }
 
+/** An opensession-* server a run host reaches through its one shared run-rpc
+ *  relay (src/runner-host/run-rpc-relay.ts), mounted in process instead of
+ *  as a stdio proxy process per server. `server()` builds a fresh MCP server
+ *  for each connection. */
+export interface RelayMcpMount {
+  readonly type: "run-rpc-relay";
+  server(): {
+    connect(transport: Transport): Promise<void>;
+    close(): Promise<void>;
+  };
+}
+
 interface ServerConn {
   client: Client;
-  instance?: InProcessMcpServer["instance"];
+  instance?: { close(): Promise<void> };
 }
 interface Entry {
   name: string;
@@ -116,7 +128,16 @@ function isInProcessServer(value: unknown): value is InProcessMcpServer {
     !!(value as { instance?: unknown }).instance
   );
 }
+export function isRelayMcpMount(value: unknown): value is RelayMcpMount {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    (value as { type?: unknown }).type === "run-rpc-relay" &&
+    typeof (value as { server?: unknown }).server === "function"
+  );
+}
 function isProxyMcpConfig(value: unknown): value is Record<string, unknown> {
+  if (isRelayMcpMount(value)) return true;
   if (!value || typeof value !== "object") return false;
   const cfg = value as { command?: unknown; url?: unknown };
   return typeof cfg.command === "string" || typeof cfg.url === "string";
@@ -370,17 +391,19 @@ export async function createMcpRuntime(opts: {
     return record;
   };
   const connectInProcess = async (
-    server: InProcessMcpServer,
+    instance:
+      | InProcessMcpServer["instance"]
+      | ReturnType<RelayMcpMount["server"]>,
   ): Promise<ServerConn> => {
     const client = new Client({
       name: "opensession-mcp-runtime",
       version: "1.0.0",
     });
-    const record: ServerConn = { client, instance: server.instance };
+    const record: ServerConn = { client, instance };
     live.add(record);
     const [clientTransport, serverTransport] =
       InMemoryTransport.createLinkedPair();
-    await server.instance.connect(serverTransport);
+    await instance.connect(serverTransport);
     await client.connect(clientTransport);
     return record;
   };
@@ -427,7 +450,7 @@ export async function createMcpRuntime(opts: {
     if (!taken.has(name))
       entries.push({
         name,
-        factory: () => connectInProcess(server),
+        factory: () => connectInProcess(server.instance),
         callTimeoutMs: ownTimeoutMs,
       });
   }
@@ -437,7 +460,10 @@ export async function createMcpRuntime(opts: {
     if (taken.has(name) || !isProxyMcpConfig(value)) continue;
     entries.push({
       name,
-      factory: () => connectExternal(name, value),
+      factory: () =>
+        isRelayMcpMount(value)
+          ? connectInProcess(value.server())
+          : connectExternal(name, value),
       callTimeoutMs: ownTimeoutMs,
       // A proxy lists the current run's scoped server, not a shared catalog.
       // Never reuse another run's listing, even with identical proxy config.

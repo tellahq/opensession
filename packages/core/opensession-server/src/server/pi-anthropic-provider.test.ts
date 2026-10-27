@@ -66,6 +66,7 @@ import * as passthrough from "./meridian-passthrough";
 import {
   captureUnforwardedToolUses,
   captureVisibleSdkAssistantToolUses,
+  liveSdkConversations,
 } from "./pi-model-runtime";
 import {
   PRIOR_IMAGE_PLACEHOLDER,
@@ -1344,6 +1345,82 @@ describe("buildPiAnthropicProvider", () => {
       query.mockRestore();
     }
   });
+
+  for (const ephemeral of [true, false]) {
+    test(`a settled ${ephemeral ? "ephemeral" : "resumable"} run ${ephemeral ? "releases" : "keeps"} its live SDK conversation`, async () => {
+      designate(["settle-account"]);
+      seedAccounts(["settle-account"]);
+      accounts.__setUsageCacheForTest("settle-account", freshUsage);
+      const closed: string[] = [];
+      const query = spyOn(sdk, "query").mockImplementation(() => {
+        const messages: Array<Record<string, any>> = [
+          { type: "system", subtype: "init", session_id: "sdk-settle" },
+          {
+            type: "result",
+            subtype: "success",
+            is_error: false,
+            result: "ok",
+            usage: { input_tokens: 1, output_tokens: 1 },
+            session_id: "sdk-settle",
+          },
+        ];
+        return {
+          next: async () => {
+            const value = messages.shift();
+            return value
+              ? { value, done: false }
+              : { value: undefined, done: true };
+          },
+          close: () => closed.push("closed"),
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        } as any;
+      });
+      const sessionId = `oneshot-${crypto.randomUUID()}`;
+      try {
+        const provider = buildPiAnthropicProvider({
+          unifiedSessionId: sessionId,
+          builtinModels: [model],
+          ...(ephemeral ? { ephemeral: true } : {}),
+        }) as any;
+        const events: any[] = [];
+        for await (const ev of provider.streamSimple(
+          model,
+          { messages: [{ role: "user", content: "hi" }] },
+          { sessionId },
+        )) {
+          events.push(ev);
+        }
+        expect(events.at(-1)?.type).toBe("done");
+        const keys = [...liveSdkConversations().keys()].filter((key) =>
+          key.startsWith(`pi:${sessionId}:`),
+        );
+        if (ephemeral) {
+          // The claude process exits now instead of idling until eviction,
+          // and a never-resumed run leaves no resume mapping behind.
+          expect(keys).toEqual([]);
+          expect(closed).toEqual(["closed"]);
+          expect(
+            [...piSdkSessionStore().keys()].some((key) =>
+              key.startsWith(`pi:${sessionId}:`),
+            ),
+          ).toBe(false);
+        } else {
+          expect(keys).toHaveLength(1);
+          expect(closed).toEqual([]);
+        }
+      } finally {
+        for (const live of [...liveSdkConversations().values()]) {
+          if (live.key.startsWith(`pi:${sessionId}:`)) {
+            live.disposed = true;
+            liveSdkConversations().delete(live.key);
+          }
+        }
+        query.mockRestore();
+      }
+    });
+  }
 
   test("more than 300 requests on one account still reach the SDK", async () => {
     designate(["busy-account"]);

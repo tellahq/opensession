@@ -4,9 +4,9 @@
  * -humans / -repos / -goal-self), which can only execute inside the opensession
  * process (they close over live state: SessionControl, pendingAsks, attachRepo…).
  *
- * A run host injects a stdio proxy (src/runner-host/mcp-proxy.ts) per server
- * into its run's MCP config; the proxy forwards tools/list + tools/call here.
- * Because the proxy reconnects with retry, these tools now SURVIVE a opensession
+ * A run host mounts every such server on one in-process relay
+ * (src/runner-host/run-rpc-relay.ts) that forwards tools/list + tools/call
+ * here, naming the server per request. Because the relay reconnects with retry, these tools now SURVIVE a opensession
  * restart mid-run — with the old in-process wiring they died with the process.
  *
  * Auth: same-uid is the trust boundary on this box, but automation runs are

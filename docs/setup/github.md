@@ -427,6 +427,26 @@ While a merge waits on its deploy, the worktree reaper keeps that session's
 checkout even when it is archived. A session archived before the merge is not
 an owner, so its PR is not verified.
 
+### Archiving a closed PR's sessions
+
+When a PR closes, merged or not, the PR agent's own sessions for it (review,
+auto-fix, simplify, mention, adversarial, follow-up) are archived with the
+`auto` reason. A session with a run in flight, or a PR whose review or code
+loop is still running, is skipped and picked up later by the sweep below.
+Sessions already archived keep their reason. Reopening the PR unarchives the
+sessions that close archived, and any new run in an archived PR session
+(a mention on the closed PR, a new review) unarchives that session first.
+Issue sessions are not touched.
+
+Instances that ran before this existed may still have such sessions active.
+The reconcile sweep (every 10 minutes, off with
+`OPENSESSION_REVIEW_RECONCILE=0`) also runs a bounded backfill: each pass reads
+up to 50 active `bks-ghpr-*` sessions from the session list index, skips PRs
+it just listed as open, asks GitHub about at most 10 other PRs, and archives
+the ones that are closed. It stops on a GitHub rate limit and resumes where it
+left off on the next pass. Turn only the backfill off with
+`OPENSESSION_PR_SESSION_ARCHIVE_SWEEP=0`.
+
 ## Webhook reachability
 
 PR comments, labels, and other event-driven behavior need GitHub to reach the

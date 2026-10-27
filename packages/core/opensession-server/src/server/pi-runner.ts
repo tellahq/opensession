@@ -2380,6 +2380,7 @@ async function* runPiAttempt(
       accountId: opts.accountId,
       accountStrict: opts.accountStrict,
       usageCredits: opts.usageCredits,
+      ephemeral: opts.ephemeral,
       speed,
       excludedOpenaiAccountIds: walk.excluded,
       onAccountEvidence: (evidence) => {

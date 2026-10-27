@@ -186,11 +186,21 @@ reach it. The name is not the security boundary. Private network reachability is
 
 ### Managed setup with Cloudflare or Vercel DNS
 
-Automatic setup and certificate renewal require **Linux with systemd**, Caddy,
-and passwordless sudo. macOS and other platforms must manage their certificate
-and reverse proxy externally; automatic setup rejects them before changing DNS
-or requesting a certificate. Do not replace a tailnet-only bind with an
-unrestricted listener: private DNS alone does not prevent public access.
+Automatic setup and certificate renewal support:
+
+- **Linux with systemd**: the system Caddy and passwordless sudo. Open Session
+  edits `/etc/caddy/Caddyfile`, installs the certificate under
+  `/etc/opensession/tls`, and runs `systemctl reload caddy`.
+- **macOS with Homebrew Caddy**: start Caddy as your user with
+  `brew services start caddy`. Open Session edits
+  `$(brew --prefix)/etc/Caddyfile` without sudo, keeps the certificate in its
+  own state directory, and reloads with `caddy reload`, falling back to
+  `brew services restart caddy`.
+
+Other platforms must manage their certificate and reverse proxy externally;
+automatic setup rejects them before changing DNS or requesting a certificate.
+`OPENSESSION_CADDYFILE` and `OPENSESSION_TLS_DIR` override the Caddyfile and
+certificate paths.
 
 This built-in friendly-domain flow uses Tailscale as its private network.
 Cloudflare and Vercel authorize DNS-01 certificate issuance; they do not expose
@@ -210,7 +220,8 @@ Then click **Set up private domain**. Open Session:
 - creates or updates a DNS-only A record pointing to the server's Tailscale IP;
 - requests a Let's Encrypt certificate using DNS-01;
 - stores the certificate and private key with restricted filesystem permissions;
-- adds a Caddy site bound only to the Tailscale address;
+- adds an HTTPS Caddy site that only Tailscale clients can reach, plus an
+  `http://` site that redirects those clients to HTTPS;
 - verifies the HTTPS address; and
 - checks renewal daily, reloading Caddy when the certificate changes.
 
@@ -247,9 +258,7 @@ Store the resulting files at:
 /etc/opensession/tls/os.company.dev.key
 ```
 
-The following Caddy example targets Linux. On macOS, use a separately managed
-reverse proxy with verified tailnet-only access and certificate renewal; these
-Linux paths and low-port binding instructions are not a macOS recipe.
+The following Caddy example targets Linux.
 
 Keep Open Session on `127.0.0.1:3850` and bind Caddy only to the Tailscale
 address:
@@ -265,6 +274,33 @@ os.company.dev {
 The `bind` line is essential. Without it Caddy may listen on every interface,
 quietly undoing the private-network boundary. A TLS proxy adds encryption, not
 authentication.
+
+On macOS, an unprivileged Caddy cannot bind a specific address on ports 80 and
+443, so it listens on every interface. Drop every client outside the tailnet
+in each site instead. The managed setup generates this pair on macOS; on Linux
+it adds the same guard next to `bind`:
+
+```caddy
+https://os.company.dev {
+    @outside_tailnet not remote_ip 100.64.0.0/10 fd7a:115c:a1e0::/48
+    abort @outside_tailnet
+    tls /path/to/os.company.dev.crt /path/to/os.company.dev.key
+    reverse_proxy 127.0.0.1:3850
+}
+
+http://os.company.dev {
+    @outside_tailnet not remote_ip 100.64.0.0/10 fd7a:115c:a1e0::/48
+    route {
+        abort @outside_tailnet
+        redir https://{host}{uri} permanent
+    }
+}
+```
+
+The `http://` site makes `http://os.company.dev`, which mobile browsers often
+try first, redirect instead of failing to connect. Keep the `route` block:
+Caddy otherwise runs `redir` before `abort` and would answer clients outside
+the tailnet.
 
 After verifying the address, save it in the Advanced flow. Open Session updates
 `server.publicBaseUrl` and `OPENSESSION_UI_BASE`; restart once to update links

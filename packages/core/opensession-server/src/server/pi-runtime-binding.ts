@@ -97,6 +97,7 @@ export interface PiRuntimeBindingDependencies {
     usageCredits?: boolean;
     builtinModels: ReturnType<ModelRuntime["getModels"]>;
     ensureModelId: string;
+    ephemeral?: boolean;
   }) => Parameters<ModelRuntime["registerNativeProvider"]>[0];
   ensureAnthropicBridge: () => { url: string; key: string };
   buildThirdPartyProviderPlan: (input: {
@@ -121,6 +122,8 @@ export interface CreatePiRuntimeBindingInput {
   accountId?: string;
   accountStrict?: boolean;
   usageCredits?: boolean;
+  /** Throwaway run: release the live provider conversation once it settles. */
+  ephemeral?: boolean;
   /** Ultrafast turns prefer accounts on the plan that serves it. */
   speed?: SessionSpeed;
   /** Accounts already burned by this turn's walk (Codex and SuperGrok pools). */
@@ -379,6 +382,7 @@ export async function createPiRuntimeBinding(
       usageCredits: input.usageCredits,
       builtinModels: runtime.getModels("anthropic"),
       ensureModelId: input.modelID,
+      ...(input.ephemeral ? { ephemeral: true } : {}),
     });
     runtime.registerNativeProvider(provider);
     model = runtime.getModel("anthropic", input.modelID);

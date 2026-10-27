@@ -501,7 +501,9 @@ function enrichSession(
 ) {
   // The materialized row may still say a completed run is active. Reconcile
   // both edges from live runtime state before serializing any list or detail.
-  enrichSessionRuntime([s], signals?.runtime);
+  enrichSessionRuntime([s], signals?.runtime, {
+    repairIndex: overlays === "row",
+  });
   const prSession = enrichSessionPrRefs(s, {
     defaultRepoId: context.defaultRepoId,
     prsByRepo: context.prsByRepo,
@@ -1987,6 +1989,19 @@ export async function handleSessionsRoutes(
       // loss is the mode's documented contract). Best-effort and detached:
       // a docker hiccup must never block the delete.
       destroySessionSandbox(session, "delete");
+      // A setup still installing into this checkout would otherwise outlive
+      // the session (and race the worktree removal below). The reaper
+      // retries when this fails.
+      await import("../worktree-setup")
+        .then(({ stopSessionWorktreeSetup }) =>
+          stopSessionWorktreeSetup(session),
+        )
+        .catch((error) =>
+          console.warn(
+            `[worktree-setup] delete cleanup failed for ${session.id}:`,
+            error,
+          ),
+        );
       // The hidden checkpoint ref on origin goes with the session; an
       // archived session keeps it because it may be the only copy of its work.
       // Awaited on the lifecycle lane this deletion holds, so no checkpoint

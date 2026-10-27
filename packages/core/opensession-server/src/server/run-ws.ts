@@ -17,7 +17,7 @@
  *    without double-applying (see ws-buffer.ts; the unix-socket path stays
  *    live-only).
  *  - `/rpc-ws?host=<hostId>` — the opensession-* MCP proxy channel.
- *    mcp-proxy.ts (OPENSESSION_RPC_WS_URL) dials it; each request frame
+ *    run-rpc-relay.ts (one connection per run, every server) dials it; each request frame
  *    `{id, path, token, server, tool?, args?}` goes through the same
  *    dispatchRunRpc core as the unix RPC socket and answers with
  *    `{id, status, body}`.

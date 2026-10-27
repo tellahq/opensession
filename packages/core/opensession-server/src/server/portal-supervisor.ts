@@ -1719,6 +1719,17 @@ export function startPortalReaper(
       const { stopped } = await reapOrphanedPortalServices(sessions);
       if (stopped.length)
         console.log(`[portals] reaped ${stopped.length} Portal service(s)`);
+      try {
+        // Setup scopes share this sweep: same owners, same archived flags.
+        const { reapSetupScopes } = await import("./worktree-setup");
+        const setup = await reapSetupScopes(sessions);
+        if (setup.stopped.length)
+          console.log(
+            `[worktree-setup] reaped ${setup.stopped.length} setup scope(s)`,
+          );
+      } catch (error) {
+        console.error("[worktree-setup] reaping failed:", error);
+      }
       const { slept } = await sleepIdlePortalServices(sessions);
       if (slept.length)
         console.log(`[portals] slept ${slept.length} idle Portal service(s)`);
