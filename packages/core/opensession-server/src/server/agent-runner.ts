@@ -7,6 +7,7 @@
 
 import { registerMemoryProbe } from "./memory-probes";
 import type { SessionSpeed } from "@tellahq/opensession-protocol/session";
+import type { McpRunAs } from "./automation-mcp-run-as";
 import {
   journalClear,
   journalClearIfLineage,
@@ -133,6 +134,11 @@ export interface RunAgentOpts {
    *  grant is the fallback, then the workspace grant). TODO(sandbox): the
    *  sandboxed-run path doesn't thread this yet. */
   mcpGrantUser?: string;
+  /** "Run MCP sign-ins as" for an automation's own turn (Automation.mcpRunAs):
+   *  this teammate's personal grant comes first for exactly these servers.
+   *  MCP grant lookup only: never provider accounts, the allowedUsers gate,
+   *  GitHub or AWS. */
+  mcpRunAs?: McpRunAs;
   /** Model id; decides the backend. Omitted = default Claude model. */
   model?: string;
   /** User-selected model retained while a transient fallback drives this turn. */

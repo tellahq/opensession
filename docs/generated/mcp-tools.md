@@ -296,7 +296,7 @@ Create a new automation (routine). Provide a clear prompt describing the task. S
 
 ### `update_automation`
 
-`mcp__opensession-admin__update_automation` · input: `id` (string, required), `name` (string), `prompt` (string), `schedule` (string), `mode` ("ask" | "code" | "scratch"), `enabled` (boolean), `repo` (string), `mcpServers` (string[]), `sandbox` (boolean), `model` (string), `fallbackModel` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `readRepos` (string[]), `owner` (string), `workspaceId` (string), `webhookMaxConcurrent` (integer)
+`mcp__opensession-admin__update_automation` · input: `id` (string, required), `name` (string), `prompt` (string), `schedule` (string), `mode` ("ask" | "code" | "scratch"), `enabled` (boolean), `repo` (string), `mcpServers` (string[]), `sandbox` (boolean), `model` (string), `fallbackModel` (string), `accountId` (string), `accountStrict` (boolean), `usageCredits` (boolean), `prReviewer` (string), `readRepos` (string[]), `owner` (string), `workspaceId` (string), `webhookMaxConcurrent` (integer), `mcpRunAs` (string), `mcpRunAsServers` (string[])
 
 Update an existing automation by id. Only provided fields change. Use enabled to pause/resume.
 

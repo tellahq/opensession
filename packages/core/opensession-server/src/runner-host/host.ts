@@ -560,6 +560,7 @@ try {
       : undefined,
     mode: spec.mode,
     mcpGrantUser: spec.mcpGrantUser,
+    mcpRunAs: spec.mcpRunAs,
     model: spec.model,
     selectedModel: spec.selectedModel,
     transientFallback: spec.transientFallback,

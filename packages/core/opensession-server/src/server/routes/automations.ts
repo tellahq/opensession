@@ -25,6 +25,18 @@ import { publishSessionChange } from "../session-cache";
 import { getWorkspace } from "../workspaces";
 import { conditionalJsonResponse } from "../http-json";
 
+/**
+ * The signed-in person making this request, for the automation fields that
+ * need a verified identity (Automation.mcpRunAs). Never a client-claimed
+ * name, and never an automation's own run token: with web sign-in off, or
+ * from a machine caller, nobody can set those fields over HTTP.
+ */
+function verifiedPerson(ctx: RouteContext): string | undefined {
+  const user = ctx.authUser;
+  if (!user || user.automation) return undefined;
+  return user.login || undefined;
+}
+
 export async function handleAutomationsRoutes(
   ctx: RouteContext,
 ): Promise<Response | undefined> {
@@ -111,7 +123,9 @@ export async function handleAutomationsRoutes(
   if (path === "/api/automations" && req.method === "POST") {
     const body = await req.json().catch(() => null);
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
-    const result = await createAutomation(body);
+    const result = await createAutomation(body, {
+      actor: verifiedPerson(ctx),
+    });
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
   }
@@ -149,7 +163,9 @@ export async function handleAutomationsRoutes(
   if (autoMatch && req.method === "PUT") {
     const body = await req.json().catch(() => null);
     if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
-    const result = await updateAutomation(autoMatch[1], body);
+    const result = await updateAutomation(autoMatch[1], body, {
+      actor: verifiedPerson(ctx),
+    });
     if ("error" in result) return Response.json(result, { status: 400 });
     return Response.json(result);
   }

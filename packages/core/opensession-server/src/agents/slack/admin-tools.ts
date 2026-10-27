@@ -50,6 +50,12 @@ export interface AdminToolContext extends MemoryContext {
   /** Trusted user — gates automation + MCP management tools. */
   isAdmin: boolean;
   /**
+   * The person who sent this turn, as the run verified it (the signed-in
+   * prompter), or undefined for machine turns. The only identity an
+   * automation's "Run MCP sign-ins as" can be set to: never a tool argument.
+   */
+  actingUser?: string;
+  /**
    * Slack thread anchor (thread_ts) of the originating message, when this runs
    * from a Slack thread. Lets schedule_once post a reminder back into "this"
    * thread. Absent in Open Session sessions (no Slack thread).
@@ -444,6 +450,18 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe(
               "Webhook runs allowed in flight at once (1-10, default 1). Raise it when each webhook call is separate work that must not be skipped, such as one incident per call.",
             ),
+          mcpRunAs: z
+            .string()
+            .optional()
+            .describe(
+              "Run MCP sign-ins as: the teammate whose personal MCP OAuth sign-ins this automation's own runs use, for servers in its mcpServers allowlist. Only the person sending this turn can set it, and only to themselves; '' clears it. Needs an explicit mcpServers allowlist.",
+            ),
+          mcpRunAsServers: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "With mcpRunAs: limit the personal sign-ins to these allowlisted servers. Default: every server in the allowlist at the time it is set.",
+            ),
         },
         async (args: {
           id: string;
@@ -465,9 +483,26 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           owner?: string;
           workspaceId?: string;
           webhookMaxConcurrent?: number;
+          mcpRunAs?: string;
+          mcpRunAsServers?: string[];
         }) => {
-          const { id, ...patch } = args;
-          const res = await updateAutomation(id, patch);
+          const { id, mcpRunAs, mcpRunAsServers, ...rest } = args;
+          if (mcpRunAsServers !== undefined && !mcpRunAs)
+            return text(
+              "Couldn't update it: mcpRunAsServers needs mcpRunAs (the person whose sign-ins they use).",
+            );
+          const patch =
+            mcpRunAs === undefined
+              ? rest
+              : {
+                  ...rest,
+                  mcpRunAs: mcpRunAs
+                    ? { person: mcpRunAs, servers: mcpRunAsServers }
+                    : "",
+                };
+          const res = await updateAutomation(id, patch, {
+            actor: ctx.actingUser,
+          });
           if ("error" in res) return text(`Couldn't update it: ${res.error}`);
           const runsIn = res.repo || defaultRepoId();
           return text(
@@ -475,7 +510,12 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
               (runsIn
                 ? `, repo ${runsIn}${res.repo ? "" : " (instance default)"}`
                 : "") +
-              (res.schedule ? `, cron \`${res.schedule}\`` : ""),
+              (res.schedule ? `, cron \`${res.schedule}\`` : "") +
+              (mcpRunAs === undefined
+                ? ""
+                : res.mcpRunAs
+                  ? `, MCP sign-ins as ${res.mcpRunAs.person} for ${res.mcpRunAs.servers.join(", ")}`
+                  : ", MCP sign-ins: workspace connections only"),
           );
         },
       ),

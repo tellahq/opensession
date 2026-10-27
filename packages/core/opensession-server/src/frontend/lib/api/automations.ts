@@ -214,6 +214,9 @@ export interface Automation {
   webhookMaxConcurrent?: number;
   eventKey?: string;
   mcpServers?: string[];
+  /** "Run MCP sign-ins as": the teammate whose personal MCP sign-ins this
+   *  automation's runs use, for these allowlisted servers. */
+  mcpRunAs?: { person: string; servers: string[]; setAt: string };
   slackWatch?: { channel: string };
   inputs?: AutomationInput[];
   outputs?: AutomationOutput[];
@@ -512,6 +515,7 @@ export async function createAutomationApi(input: {
   usageCredits?: boolean;
   sandbox?: boolean;
   mcpServers?: string[];
+  mcpRunAs?: string;
   slackWatch?: { channel: string };
   webhookEnabled?: boolean;
   inputs?: unknown[];
@@ -523,10 +527,12 @@ export async function createAutomationApi(input: {
 }
 
 export type AutomationPatch = Partial<
-  Omit<Automation, "mcpServers" | "slackWatch">
+  Omit<Automation, "mcpServers" | "slackWatch" | "mcpRunAs">
 > & {
   mcpServers?: string[] | null;
   slackWatch?: { channel: string } | null;
+  /** Your own name sets it (the server checks it is you); "" clears it. */
+  mcpRunAs?: string;
 };
 
 export async function updateAutomationApi(

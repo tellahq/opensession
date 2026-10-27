@@ -39,6 +39,17 @@ configuration for the run.
   support-triage automation might name only its support-inbox, identity,
   analytics, issue-tracker, error-tracker, and billing servers so it can look
   up the customer, related issues, and errors while investigating.
+- Automation runs carry no personal MCP OAuth grant by default: only the
+  workspace grant. One automation may opt into a single teammate's personal
+  grants with `mcpRunAs` ("Run MCP sign-ins as"). Only that teammate can set
+  it, to themselves: the server checks the signed-in user over HTTP, or the
+  person who sent the turn for the admin MCP tool, never a request field.
+  Clearing it needs no identity. It applies only to the servers pinned when it
+  was set that are still in the automation's explicit `mcpServers` allowlist,
+  only to the automation's own root session (descendants and turns another
+  person sends get none), and only to the grant lookup: the `allowedUsers`
+  gate, provider-account routing, and AWS policy are unchanged. The run's
+  `pi_mcp_call` audit lines name the grant's owner as `grant_user`.
 - Scheduled automation `inputs` are a separate read path from the primary
   run's MCP allowlist. Built-in input providers fetch a bounded time window,
   pass it through a tool-less one-shot reducer as explicitly untrusted data,

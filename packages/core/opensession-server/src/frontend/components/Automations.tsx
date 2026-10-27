@@ -23,6 +23,7 @@ import {
   type AutomationOutput,
   type AutomationTemplate,
   type AutomationDraft,
+  type AutomationPatch,
   type SandboxStatusInfo,
 } from "../lib/api";
 import { fetchWorkspaces } from "../lib/api/workspaces";
@@ -667,6 +668,18 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                           ? "none"
                           : sel.mcpServers.join(", ")}
                     </span>
+
+                    {sel.mcpRunAs && (
+                      <>
+                        <DetailKey>MCP sign-ins</DetailKey>
+                        <span className="text-dim min-w-0">
+                          {sel.mcpRunAs.person}
+                          <span className="text-faint">
+                            {` · ${sel.mcpRunAs.servers.join(", ")}`}
+                          </span>
+                        </span>
+                      </>
+                    )}
 
                     {sel.inputs?.length ? (
                       <>
@@ -1523,6 +1536,15 @@ function AutomationForm({
     initial?.accountStrict !== false,
   );
   const [usageCredits, setUsageCredits] = useState(!!initial?.usageCredits);
+  // "Run MCP sign-ins as". Only the signed-in person can pick themselves; a
+  // value naming someone else can be kept or cleared, never chosen.
+  const me = getCurrentUser();
+  const initialRunAs = initial?.mcpRunAs?.person;
+  const initialRunAsIsMe =
+    !!initialRunAs && initialRunAs.split(" ")[0] === me.split(" ")[0];
+  const [runAs, setRunAs] = useState<"" | "me" | "keep">(
+    initialRunAs ? (initialRunAsIsMe ? "me" : "keep") : "",
+  );
   const [sandbox, setSandbox] = useState(!!initial?.sandbox);
   const [sandboxAvailability, setSandboxAvailability] = useState<
     SandboxStatusInfo["automation"] | null
@@ -1602,6 +1624,16 @@ function AutomationForm({
   const watchValid =
     !isWatch || /^[CG][A-Z0-9]{6,}$/i.test(watchChannel.trim());
 
+  /** Send mcpRunAs only when it changes, or when your own one should follow
+   *  an edited MCP list. Every other save leaves the stored value alone. */
+  function mcpRunAsPatch(): Pick<AutomationPatch, "mcpRunAs"> {
+    if (runAs === "" && initialRunAs) return { mcpRunAs: "" };
+    if (runAs !== "me") return {};
+    const listChanged =
+      (mcpServers ?? []).join("\n") !== (initial?.mcpServers ?? []).join("\n");
+    return !initialRunAsIsMe || listChanged ? { mcpRunAs: me } : {};
+  }
+
   async function handleSave() {
     setSaving(true);
     setError(null);
@@ -1631,6 +1663,7 @@ function AutomationForm({
           outputs: isWatch ? [] : outputs,
           owner: owner.trim(),
           workspaceId,
+          ...mcpRunAsPatch(),
         });
       } else {
         await createAutomationApi({
@@ -1650,6 +1683,7 @@ function AutomationForm({
           webhookEnabled: isWatch ? false : webhookEnabled,
           inputs: isWatch ? undefined : inputs,
           outputs: isWatch ? undefined : outputs,
+          ...mcpRunAsPatch(),
           owner: owner.trim() || undefined,
           workspaceId: workspaceId || undefined,
           createdBy: getCurrentUser(),
@@ -1973,6 +2007,30 @@ function AutomationForm({
               <option value="allow">
                 Allowed · keep going on paid credits
               </option>
+            </Select>
+          </label>
+
+          <label
+            className={FIELD_LABEL}
+            title="Runs use this person's own sign-ins for the MCPs above that have no workspace connection. Only you can choose yourself. Needs an MCP list."
+          >
+            Run MCP sign-ins as
+            <Select
+              value={runAs}
+              onChange={(e) =>
+                setRunAs(
+                  e.target.value === "me" || e.target.value === "keep"
+                    ? e.target.value
+                    : "",
+                )
+              }
+              disabled={mcpServers === undefined && runAs === ""}
+            >
+              <option value="">Workspace connections only</option>
+              {initialRunAs && !initialRunAsIsMe ? (
+                <option value="keep">{initialRunAs}</option>
+              ) : null}
+              <option value="me">Me ({me})</option>
             </Select>
           </label>
         </div>

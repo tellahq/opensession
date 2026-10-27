@@ -91,6 +91,10 @@ export interface RunHostSpec {
   mode?: "ask" | "code" | "scratch";
   /** MCP OAuth identity: the session creator (see agent-runner RunAgentOpts). */
   mcpGrantUser?: string;
+  /** An automation's "Run MCP sign-ins as": this teammate's personal MCP
+   *  grant comes first for these servers only (see agent-runner
+   *  RunAgentOpts.mcpRunAs). */
+  mcpRunAs?: { user: string; servers: string[] };
   model?: string;
   selectedModel?: string;
   transientFallback?: boolean;

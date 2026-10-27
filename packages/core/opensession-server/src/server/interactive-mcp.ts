@@ -206,6 +206,9 @@ export function interactiveMcpServers(
         isPrivate: false,
         createdBy,
         isAdmin: true,
+        // A person who pressed send; scheduled ticks and machine actors
+        // resolve to undefined and cannot set an automation's mcpRunAs.
+        actingUser: interactivePrompter(user) ?? undefined,
       }),
     // Runners are deliberately trusted persistent machines for platform-locked
     // work. Interactive-only: untrusted automation text must never reach one.

@@ -25,6 +25,7 @@ import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
 import type { InProcessMcpServer } from "./inprocess-mcp";
 import { RPC_TOOL_CALL_TIMEOUT_MS } from "./run-rpc-protocol";
 import { workloadCommand } from "./workload-scope";
+import type { McpRunAs } from "./automation-mcp-run-as";
 
 const DEFAULT_CALL_TIMEOUT_MS = 120_000;
 /** Open Session's own servers bound their calls themselves, and some wait on
@@ -74,6 +75,9 @@ export interface McpAuditEvent {
   tool: string;
   ok: boolean;
   ms: number;
+  /** The teammate whose personal OAuth grant authorized this server's
+   *  connection; absent for the workspace grant or no grant. */
+  grantUser?: string;
 }
 
 /** Explicit migration boundary for detached runner-host proxy configs.
@@ -312,10 +316,32 @@ function validListedTools(
   return tools.length === value.length ? tools : undefined;
 }
 
+/**
+ * Personal-grant identities for one external server, in priority order: an
+ * automation's "Run MCP sign-ins as" teammate (only for its pinned servers),
+ * then the session creator, then the prompter. The relay tries each one's
+ * own grant, then the workspace grant.
+ */
+export function mcpGrantCandidates(
+  name: string,
+  opts: { mcpRunAs?: McpRunAs; mcpGrantUser?: string; user?: string },
+): string[] {
+  return [
+    opts.mcpRunAs?.servers.includes(name) ? opts.mcpRunAs.user : undefined,
+    opts.mcpGrantUser,
+    opts.user,
+  ].filter((user): user is string => !!user);
+}
+
 export async function createMcpRuntime(opts: {
   mcpServers: McpScope;
   user?: string;
   mcpGrantUser?: string;
+  /** An automation's "Run MCP sign-ins as" (Automation.mcpRunAs): this
+   *  teammate's personal grant comes first, for these servers only. Grant
+   *  lookup only: the allowedUsers gate below still sees `user` and
+   *  `mcpGrantUser` exactly as before. */
+  mcpRunAs?: McpRunAs;
   /** This session's web link, handed to stdio servers as
    *  OPENSESSION_SESSION_URL so what they post can link back (Slack's "via"
    *  line). */
@@ -339,6 +365,8 @@ export async function createMcpRuntime(opts: {
   const ownTimeoutMs =
     opts.ownServerCallTimeoutMs ?? OWN_SERVER_CALL_TIMEOUT_MS;
   const grantUsers = [opts.mcpGrantUser, opts.user];
+  // Which personal grant each connected server used, for the audit trail.
+  const grantedBy = new Map<string, string>();
   let closed = false;
   const live = new Set<ServerConn>();
   const conns = new Map<string, Promise<ServerConn>>();
@@ -355,10 +383,12 @@ export async function createMcpRuntime(opts: {
     live.add(record);
     let transport: Transport;
     if (cfg.type === "http" || cfg.type === "sse" || cfg.url) {
-      const candidates = grantUsers.filter((user): user is string => !!user);
-      const hasGrant =
-        candidates.some((user) => mcpUserGrantHeader(name, user)) ||
-        !!mcpSharedGrantHeader(name);
+      const candidates = mcpGrantCandidates(name, opts);
+      const personal = candidates.find((user) =>
+        mcpUserGrantHeader(name, user),
+      );
+      if (personal) grantedBy.set(name, personal);
+      const hasGrant = !!personal || !!mcpSharedGrantHeader(name);
       let url = String(cfg.url);
       let headers = { ...((cfg.headers as Record<string, string>) || {}) };
       if (hasGrant) {
@@ -641,6 +671,7 @@ export async function createMcpRuntime(opts: {
           server: tool.server,
           tool: tool.name,
           ok: true,
+          grantUser: grantedBy.get(tool.server),
           ms: Date.now() - started,
         });
         return { content };
@@ -649,6 +680,7 @@ export async function createMcpRuntime(opts: {
           server: tool.server,
           tool: tool.name,
           ok: false,
+          grantUser: grantedBy.get(tool.server),
           ms: Date.now() - started,
         });
         throw error instanceof Error ? error : new Error(String(error));

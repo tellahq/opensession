@@ -46,6 +46,7 @@ import { getRunState, transitionRunState } from "./run-state";
 import { settlePromptThrowRunState } from "./prompt-throw-settlement";
 import { retryOnKernelSaturation } from "./session-projection-executor";
 import { resolveSessionRunInputs, runAccountSpec } from "./session-run-inputs";
+import type { McpRunAs } from "./automation-mcp-run-as";
 import {
   fixedSubscriptionTurnError,
   isFixedSubscription,
@@ -1933,9 +1934,12 @@ export function sandboxRunSecuritySpec(
      *  (`Object.keys(automationSessionMcp(...))`, computed once by the
      *  caller). Only read for a non-descendant automation-owned turn. */
     automationProxyMcpServers?: string[];
+    /** RunInputs.mcpRunAs; only an automation's own root session uses it. */
+    mcpRunAs?: McpRunAs;
   },
 ): Pick<
   RunHostSpec,
+  | "mcpRunAs"
   | "mcpServers"
   | "proxyMcpServers"
   | "reposNote"
@@ -1990,6 +1994,10 @@ export function sandboxRunSecuritySpec(
     mcpGrantUser: opts.isAutomationSession
       ? undefined
       : session.createdByLogin || undefined,
+    // The one exception: an automation's own "Run MCP sign-ins as" teammate,
+    // for its pinned servers, never on a descendant.
+    mcpRunAs:
+      opts.isAutomationSession && !descendant ? opts.mcpRunAs : undefined,
     // The person pressing send may spend their own subscription even in an
     // automation-owned session; the identity stops at account selection.
     accountUser: opts.accountUser,
@@ -2041,6 +2049,7 @@ export async function maybeLaunchSandboxedRun(
     isAutomationSession: boolean;
     /** See sandboxRunSecuritySpec. */
     automationProxyMcpServers?: string[];
+    mcpRunAs?: McpRunAs;
     startToken?: string;
   },
 ): Promise<
@@ -2297,6 +2306,7 @@ export async function maybeLaunchSandboxedRun(
       files: await readPromptFiles(opts.attachments),
       mode: session.mode,
       mcpGrantUser: security.mcpGrantUser,
+      mcpRunAs: security.mcpRunAs,
       model: session.model,
       images: opts.images,
       // The loop runs on this machine, so the session's MCP servers work as
@@ -3363,6 +3373,7 @@ async function runSessionPromptInner(
           deniedTools,
           isAutomationSession,
           automationProxyMcpServers,
+          mcpRunAs: runInputs.mcpRunAs,
           startToken,
         });
 
@@ -3463,6 +3474,9 @@ async function runSessionPromptInner(
           mcpGrantUser: isAutomationSession
             ? undefined
             : session.createdByLogin || undefined,
+          // ...except the automation's own opt-in "Run MCP sign-ins as"
+          // teammate (Automation.mcpRunAs), for its pinned servers only.
+          mcpRunAs: runInputs.mcpRunAs,
           model: session.model,
           images,
           mcpServers: mcpServers ?? "all",
@@ -3610,6 +3624,7 @@ async function runSessionPromptInner(
       // The creator grant also gives provider routing a safe human identity for
       // synthetic continuations such as worker reports and restart recovery.
       mcpGrantUser: runInputs.mcpGrantUser,
+      mcpRunAs: runInputs.mcpRunAs,
       journal: { osSessionId: session.id, kind: "prompt" },
       startToken,
       onAskUser: makeAskHandler(sessionId),

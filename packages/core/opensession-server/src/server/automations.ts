@@ -119,6 +119,14 @@ import {
 } from "./automation-outputs";
 import { automationIntentAlreadySettled } from "./automation-intent-recovery";
 import {
+  CLEAR_MCP_RUN_AS,
+  authorizeMcpRunAs,
+  mcpRunAsForAutomationTurn,
+  parseMcpRunAsInput,
+  type AutomationMcpRunAs,
+  type McpRunAs,
+} from "./automation-mcp-run-as";
+import {
   openTriageDiscussion,
   triageDiscussionThread,
 } from "../agents/plain/discussions";
@@ -285,6 +293,15 @@ export interface Automation {
    * existed. Prefer naming just what the automation actually uses.
    */
   mcpServers?: string[];
+  /**
+   * "Run MCP sign-ins as": one teammate whose personal MCP OAuth grants this
+   * automation's own runs use, for the pinned servers that are still in
+   * `mcpServers`. Unset = no personal grant (the workspace grant only). Only
+   * that teammate can set it, to themselves; see automation-mcp-run-as.ts.
+   * Never written by the generic field validators: create/update take it
+   * from an explicit verified `actor`.
+   */
+  mcpRunAs?: AutomationMcpRunAs;
   /**
    * Human-set only: give this automation's runs the opensession-workflows
    * tools (run_workflow fan-outs — model-authored scripts in a contained
@@ -947,6 +964,36 @@ function normalizeAutomation(
   return next;
 }
 
+/**
+ * Apply a `mcpRunAs` write, when the caller named the field. Kept out of
+ * AUTOMATION_FIELDS on purpose: setting it needs the verified actor, which
+ * no request body can supply. Runs against the record being written, so the
+ * allowlist it is checked against is the final one.
+ */
+function applyMcpRunAsInput(
+  next: Automation,
+  input: Record<string, unknown>,
+  actor: string | undefined,
+): { error: string } | undefined {
+  if (!("mcpRunAs" in input)) return undefined;
+  const parsed = parseMcpRunAsInput(input.mcpRunAs);
+  if (parsed === CLEAR_MCP_RUN_AS) {
+    delete next.mcpRunAs;
+    return undefined;
+  }
+  if ("error" in parsed) return parsed;
+  const value = authorizeMcpRunAs(parsed, actor, next.mcpServers);
+  if ("error" in value) return value;
+  next.mcpRunAs = value;
+  return undefined;
+}
+
+/** Who is making a create/update, for the fields that need a verified
+ *  identity (`mcpRunAs`). Surfaces pass what they verified themselves. */
+export interface AutomationWriteActor {
+  actor?: string;
+}
+
 /** Caller input after every per-field validator has accepted it. */
 type ValidatedAutomationInput = {
   fields: Record<string, unknown>;
@@ -988,43 +1035,48 @@ function applyValidatedFields(
   return normalizeAutomation(next, validated.touched);
 }
 
-export async function createAutomation(input: {
-  name: string;
-  prompt: string;
-  schedule: string;
-  /** One-off ISO8601 instant; when set, `schedule` is ignored (forced to ""). */
-  runOnceAt?: string;
-  mode: AutomationMode;
-  createdBy: string;
-  /** Defaults to true. Seeded automations pass false so an operator reads the
-   * prompt before it runs — see recipes/README.md. */
-  enabled?: boolean;
-  eventKey?: string;
-  mcpServers?: string[];
-  repo?: string;
-  prReviewer?: string;
-  readRepos?: string[];
-  owner?: string;
-  workspaceId?: string;
-  selfImprove?: boolean;
-  workflows?: boolean;
-  workflowSessions?: boolean;
-  workflowSessionRepos?: string[];
-  workflowSessionRunners?: string[];
-  claudeCliEnv?: boolean;
-  codexCliEnv?: boolean;
-  model?: string;
-  fallbackModel?: string;
-  accountId?: string;
-  accountStrict?: boolean;
-  usageCredits?: boolean;
-  sandbox?: boolean;
-  grafanaPoll?: GrafanaPollConfig;
-  slackWatch?: SlackWatchConfig;
-  inputs?: AutomationInput[];
-  outputs?: AutomationOutput[];
-  webhookEnabled?: boolean;
-}): Promise<Automation | { error: string }> {
+export async function createAutomation(
+  input: {
+    name: string;
+    prompt: string;
+    schedule: string;
+    /** One-off ISO8601 instant; when set, `schedule` is ignored (forced to ""). */
+    runOnceAt?: string;
+    mode: AutomationMode;
+    createdBy: string;
+    /** Defaults to true. Seeded automations pass false so an operator reads the
+     * prompt before it runs — see recipes/README.md. */
+    enabled?: boolean;
+    eventKey?: string;
+    mcpServers?: string[];
+    repo?: string;
+    prReviewer?: string;
+    readRepos?: string[];
+    owner?: string;
+    workspaceId?: string;
+    selfImprove?: boolean;
+    workflows?: boolean;
+    workflowSessions?: boolean;
+    workflowSessionRepos?: string[];
+    workflowSessionRunners?: string[];
+    claudeCliEnv?: boolean;
+    codexCliEnv?: boolean;
+    model?: string;
+    fallbackModel?: string;
+    accountId?: string;
+    accountStrict?: boolean;
+    usageCredits?: boolean;
+    sandbox?: boolean;
+    grafanaPoll?: GrafanaPollConfig;
+    slackWatch?: SlackWatchConfig;
+    inputs?: AutomationInput[];
+    outputs?: AutomationOutput[];
+    webhookEnabled?: boolean;
+    /** See Automation.mcpRunAs; needs `writer.actor`. */
+    mcpRunAs?: unknown;
+  },
+  writer: AutomationWriteActor = {},
+): Promise<Automation | { error: string }> {
   const base: Automation = {
     id: `auto-${randomUUIDv7()}`,
     name: "",
@@ -1042,6 +1094,12 @@ export async function createAutomation(input: {
   if ("error" in validated) return validated;
   const a = applyValidatedFields(base, validated);
   if ("error" in a) return a;
+  const runAsError = applyMcpRunAsInput(
+    a,
+    input as Record<string, unknown>,
+    writer.actor,
+  );
+  if (runAsError) return runAsError;
   await saveAutomation(a);
   return a;
 }
@@ -1126,7 +1184,11 @@ export async function updateAutomation(
       | "outputs"
       | "webhookEnabled"
     >
-  >,
+  > & {
+    /** See Automation.mcpRunAs; setting it needs `writer.actor`. */
+    mcpRunAs?: unknown;
+  },
+  writer: AutomationWriteActor = {},
 ): Promise<Automation | { error: string }> {
   const validated = await validateAutomationInput(
     patch as Record<string, unknown>,
@@ -1142,6 +1204,15 @@ export async function updateAutomation(
     const applied = applyValidatedFields(current, validated);
     if ("error" in applied) {
       rejected = applied;
+      return current;
+    }
+    const runAsError = applyMcpRunAsInput(
+      applied,
+      patch as Record<string, unknown>,
+      writer.actor,
+    );
+    if (runAsError) {
+      rejected = runAsError;
       return current;
     }
     // Backfill secrets for automations created before webhook support
@@ -1726,6 +1797,19 @@ export async function settleResumedAutomationRun(
  *  resumes of automation-owned sessions). Read-only toward customers/identity. */
 export function automationDeniedTools(): Record<string, string> {
   return AUTOMATION_DENIED_TOOLS;
+}
+
+/** The personal MCP grant identity an automation-owned session's turn may
+ *  use (Automation.mcpRunAs), resolved by the automation's display name.
+ *  `prompter` is the turn's human sender, if any. */
+export async function automationMcpRunAsByName(
+  name: string,
+  prompter?: string | null,
+): Promise<McpRunAs | undefined> {
+  const automation = (await listAutomations()).find((a) => a.name === name);
+  return automation
+    ? mcpRunAsForAutomationTurn(automation, prompter)
+    : undefined;
 }
 
 /** MCP allowlist for an automation, resolved by its display name (as stored on
@@ -2477,6 +2561,14 @@ export async function runAutomation(
       console.log(
         `[automations] "${automation.name}" completing accepted setup during shutdown`,
       );
+    // "Run MCP sign-ins as" (Automation.mcpRunAs): the named teammate's
+    // personal grants for the pinned, still-allowlisted servers. Grant lookup
+    // only; the allowedUsers gate, provider accounts and AWS stay as is.
+    const mcpRunAs = mcpRunAsForAutomationTurn(automation);
+    if (mcpRunAs)
+      console.log(
+        `[automations] "${automation.name}" run ${bksId} uses ${mcpRunAs.user}'s MCP sign-ins for ${mcpRunAs.servers.join(", ")}`,
+      );
     let events: AsyncGenerator<StreamEvent>;
     if (sandbox) {
       // The loop runs here like any automation; its tools act in the
@@ -2499,6 +2591,7 @@ export async function runAutomation(
         mode: automation.mode,
         model: runModel,
         mcpServers: automation.mcpServers || [],
+        mcpRunAs,
         proxyMcpServers: Object.keys(inProcessMcp),
         deniedTools: AUTOMATION_DENIED_TOOLS,
         confirmTools: STRIPE_CONFIRM_TOOLS,
@@ -2522,6 +2615,7 @@ export async function runAutomation(
         mode: automation.mode,
         model: runModel,
         mcpServers: (automation.mcpServers ?? "all") as "all" | string[],
+        mcpRunAs,
         deniedTools: AUTOMATION_DENIED_TOOLS,
         // No onAskUser here, so confirm tools deny with "propose it for a human".
         confirmTools: STRIPE_CONFIRM_TOOLS,
