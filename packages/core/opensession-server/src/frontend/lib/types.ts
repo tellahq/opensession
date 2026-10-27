@@ -354,6 +354,17 @@ export interface SessionWalkthrough {
   publishedEntryId?: string;
 }
 
+/** The Slack update the server wrote for a merged PR. See the server type. */
+export interface ShippedChangeDraft {
+  repoId: string;
+  branch: string;
+  prNumber: number;
+  message: string;
+  channel?: string;
+  activity: string;
+  at: string;
+}
+
 /** A Slack message a teammate sent from a session. See the server type. */
 export interface SessionSlackShare {
   channelId: string;
@@ -572,6 +583,9 @@ export interface UnifiedSession {
   /** Slack messages a teammate sent from this session. A share collapses the
    *  composer that sent it into a receipt, so nobody re-sends the update. */
   slackShares?: SessionSlackShare[];
+  /** The "Send to Slack" card's draft for a merged PR, written in the
+   *  background so it is ready when the session opens. */
+  shippedChangeDraft?: ShippedChangeDraft;
   automation?: string;
   /** Total live runs in this automation. Present on the bounded sidebar list. */
   automationRunCount?: number;
@@ -629,6 +643,8 @@ export interface UnifiedSession {
   }>;
   /** Cumulative token/cost accounting for this session's runs. */
   usage?: SessionUsage;
+  /** The GPU its Modal Sandbox carries ("T4" or "L4"), if any. */
+  sandboxGpu?: string;
   /** Sandbox opt-in (the sandbox rollout plan): the session's runs execute in an
    *  isolated container via the named provider. `sandboxId` is set once the
    *  provider materialized it; `workspace: "volume"` means the workspace lives
@@ -677,7 +693,6 @@ export interface UnifiedSession {
    * Set server-side from the status-override registry; unset = derive as usual.
    */
   manualStatus?: "needsinput" | "inprogress" | "review" | "merged" | "pending";
-  presetNote?: string;
   /**
    * A pending "please review this" pointed at a teammate, set from the info
    * panel's Reviewer picker. Surfaces the session in a "Needs review" band at
@@ -725,16 +740,6 @@ export interface Workspace {
   draft?: { text: string; updatedAt: string; by?: string; autoName?: boolean };
   /** Teammates added besides the creator; each gets it in their sidebar. */
   collaborators?: Array<{ name: string; by: string; at: string }>;
-  modelSettings?: {
-    presets?: Array<{
-      id: string;
-      label: string;
-      group?: string;
-      instructions?: string;
-      lead: { model: string; effort?: string };
-      supporting?: Array<{ model: string; effort?: string; role?: string }>;
-    }>;
-  };
 }
 
 export interface DiffFile {
@@ -1088,7 +1093,14 @@ export type WSServerMessage =
   | {
       type: "term_ready";
       termId?: string;
-      target: "host" | "daytona" | "box" | "tart" | "usecomputer" | "runner";
+      target:
+        | "host"
+        | "daytona"
+        | "box"
+        | "tart"
+        | "usecomputer"
+        | "modal"
+        | "runner";
       cwd?: string;
     }
   | { type: "term_notice"; termId?: string; message: string }

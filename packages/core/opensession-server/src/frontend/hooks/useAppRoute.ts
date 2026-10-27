@@ -15,6 +15,10 @@ import {
   settingsReturnForNavigation,
   type SettingsReturn,
 } from "../lib/settings-navigation";
+import {
+  sessionReturnForNavigation,
+  type SessionReturn,
+} from "../lib/session-return";
 
 const LAST_SESSION_KEY = "opensession-last-session";
 const LAST_SESSION_USER_KEY = "opensession-last-session-user";
@@ -23,6 +27,8 @@ const POP_FALLBACK_MS = 150;
 type NavState = {
   d: number | null;
   settingsReturn?: SettingsReturn;
+  /** The session a PR or workspace link was followed from. */
+  sessionReturn?: SessionReturn;
   /** Identifies a session opened automatically during a PWA cold restore. */
   restoredSession?: string;
 } | null;
@@ -89,10 +95,12 @@ function entryDepth(browser: AppRouteBrowser): number | null {
 function navState(
   depth: number | null,
   settingsReturn?: SettingsReturn,
+  sessionReturn?: SessionReturn,
 ): NavState {
-  if (depth === null && !settingsReturn) return null;
+  if (depth === null && !settingsReturn && !sessionReturn) return null;
   const state: NonNullable<NavState> = { d: depth };
   if (settingsReturn) state.settingsReturn = settingsReturn;
+  if (sessionReturn) state.sessionReturn = sessionReturn;
   return state;
 }
 
@@ -175,6 +183,11 @@ export class AppRouteController {
     return currentNavState(this.browser)?.restoredSession;
   }
 
+  /** Back returns to the session this page was opened from. */
+  get returnsToSession(): boolean {
+    return !!currentNavState(this.browser)?.sessionReturn;
+  }
+
   navigate(next: Route, opts?: { replace?: boolean }): void {
     const path = routePath(next);
     const current = this.route;
@@ -184,8 +197,8 @@ export class AppRouteController {
       path === this.browser.location.pathname ||
       routePath(current) === path ||
       samePanel(current, next);
-    const replace =
-      this.browser.singleHistoryEntry || (opts?.replace ?? samePath);
+    const logicalReplace = opts?.replace ?? samePath;
+    const replace = this.browser.singleHistoryEntry || logicalReplace;
     const depth = entryDepth(this.browser);
     const settingsReturn = settingsReturnForNavigation({
       currentIsSettings: isSettingsRoute(current),
@@ -195,8 +208,19 @@ export class AppRouteController {
       currentDepth: depth,
       replace,
     });
+    const sessionReturn = sessionReturnForNavigation({
+      current,
+      next,
+      currentReturn: currentNavState(this.browser)?.sessionReturn,
+      // The session itself, not a pane its URL was canonicalized to: Back
+      // should land on the conversation the link was in.
+      currentPath: routePath(current),
+      currentDepth: depth,
+      logicalReplace,
+      pushed: !replace,
+    });
     const nextState = (nextDepth: number | null) =>
-      navState(nextDepth, settingsReturn);
+      navState(nextDepth, settingsReturn, sessionReturn);
 
     if (replace) {
       this.browser.history.replaceState(
@@ -220,6 +244,11 @@ export class AppRouteController {
   goBack(parentSessionId?: string): void {
     if (this.route.view === "session" && parentSessionId) {
       this.navigate({ view: "session", id: parentSessionId });
+      return;
+    }
+    const sessionReturn = currentNavState(this.browser)?.sessionReturn;
+    if (sessionReturn) {
+      this.returnTo(sessionReturn);
       return;
     }
     const depth = entryDepth(this.browser);
@@ -247,18 +276,7 @@ export class AppRouteController {
       this.goBack();
       return;
     }
-    const restore = () => {
-      const url = new URL(settingsReturn.path, this.browser.location.origin);
-      this.browser.history.replaceState(
-        navState(settingsReturn.depth),
-        "",
-        `${url.pathname}${url.search}${url.hash}`,
-      );
-      this.route = parseRoute(url.pathname);
-      this.publish();
-    };
-    if (settingsReturn.steps > 0) this.popOr(settingsReturn.steps, restore);
-    else restore();
+    this.returnTo(settingsReturn);
   }
 
   requireFirstMile(): void {
@@ -321,6 +339,23 @@ export class AppRouteController {
 
   canonicalizePath(path: string): void {
     this.browser.history.replaceState(this.browser.history.state, "", path);
+  }
+
+  // Pop the entries pushed since `target` was left, or rewrite this entry to
+  // it when they are gone (single-entry history, or a pruned stack).
+  private returnTo(target: SettingsReturn | SessionReturn): void {
+    const restore = () => {
+      const url = new URL(target.path, this.browser.location.origin);
+      this.browser.history.replaceState(
+        navState(target.depth),
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+      );
+      this.route = parseRoute(url.pathname);
+      this.publish();
+    };
+    if (target.steps > 0) this.popOr(target.steps, restore);
+    else restore();
   }
 
   // A push everywhere a back entry is wanted; a replace where the history is
@@ -412,6 +447,7 @@ export function useAppRoute({
   return {
     route: snapshot.route,
     forceFirstMile: snapshot.forceFirstMile,
+    returnsToSession: controller.returnsToSession,
     restoredSessionId: controller.restoredSessionId,
     ...actions,
   };

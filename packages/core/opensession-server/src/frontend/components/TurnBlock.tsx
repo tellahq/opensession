@@ -20,7 +20,7 @@ import {
 import { SuggestedTaskCard } from "./SuggestedTaskCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import {
-  htmlRenderFromResult,
+  htmlRendersFromResult,
   mayBeHtmlRenderTool,
   type HtmlRenderReference,
 } from "@tellahq/opensession-protocol/html-render";
@@ -54,6 +54,7 @@ import { formatDuration, fullTime } from "../lib/time";
 import {
   getTurnActivityPrefs,
   onTurnActivityChanged,
+  type TurnActivityPrefs,
 } from "../lib/turn-activity";
 import {
   collectTouchedFiles,
@@ -75,6 +76,16 @@ interface Props {
   onOpenSubagent?: (agentId: string, label: string) => void;
   /** Lets wire-clamped intermediate notes fetch their full content. */
   sessionId?: string;
+}
+
+/** The two Settings → Preferences answers for how work folds, kept live. */
+export function useTurnActivityPrefs(): TurnActivityPrefs {
+  const [pref, setPref] = useState(getTurnActivityPrefs);
+  useEffect(
+    () => onTurnActivityChanged(() => setPref(getTurnActivityPrefs())),
+    [],
+  );
+  return pref;
 }
 
 /**
@@ -126,11 +137,7 @@ export const TurnBlock = function TurnBlock({
   // steps" followed by "57 steps". "Always open" and a person's manual choice
   // still win. Failures stay one click away, and explicitly surfaced media
   // outlives the fold on its own (featuredTurnMedia).
-  const [pref, setPref] = useState(getTurnActivityPrefs);
-  useEffect(
-    () => onTurnActivityChanged(() => setPref(getTurnActivityPrefs())),
-    [],
-  );
+  const pref = useTurnActivityPrefs();
   const defaultExpanded =
     pref.work === "open" ||
     (pref.work === "running" && live && expandWhileRunning);
@@ -901,7 +908,8 @@ function featuredTurnMedia(
 }
 
 /**
- * The pages a turn showed with `html_render`, in call order. The reference
+ * The pages a turn showed with `html_render`, in call order, whether called
+ * directly, through `mcp_call`, or from a codemode script. The reference
  * is in the result, so a call still running shows nothing yet, and a failed
  * one never does.
  */
@@ -915,8 +923,10 @@ function turnHtmlRenders(
     if (!mayBeHtmlRenderTool(entry.toolName || "", entry.toolInput)) continue;
     const result = toolResults.get(entry.toolUseId);
     if (!result || result.isError) continue;
-    const render = htmlRenderFromResult(result.content);
-    if (render) out.push({ id: entry.id, render });
+    // A script can show several pages from one call.
+    htmlRendersFromResult(result.content).forEach((render, index) =>
+      out.push({ id: index ? `${entry.id}:${index}` : entry.id, render }),
+    );
   }
   return out;
 }

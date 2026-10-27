@@ -54,6 +54,47 @@ describe("workspaceCarriesPr", () => {
 });
 
 describe("findPrWorkspaceId", () => {
+  it("prefers the session that opened the PR over an empty PR workspace", () => {
+    const workspaces = [
+      ws({ id: "ws-pr", repo: "skills", prNumber: 13, branch: "motion" }),
+      ws({ id: "ws-work", repo: "tella-fusion", branch: "motion" }),
+    ];
+    const prs: UnifiedSession["prs"] = [
+      { repo: "skills", branch: "motion", number: 13, source: "discovered" },
+    ];
+    const sessions = [
+      session({
+        id: "os-person",
+        repo: "tella-fusion",
+        branch: "motion",
+        workspaceId: "ws-work",
+        createdAt: "2026-10-20T15:00:00.000Z",
+        prs,
+      }),
+      // The review run filed under the PR workspace is newer.
+      session({
+        id: "bks-ghpr-skills-13-review",
+        repo: "skills",
+        branch: "motion",
+        workspaceId: "ws-pr",
+        createdAt: "2026-10-20T16:00:00.000Z",
+        automation: "github-pr-review",
+      }),
+    ];
+
+    expect(
+      findPrWorkspaceId(workspaces, sessions, { repo: "skills", number: 13 }),
+    ).toBe("ws-work");
+    // Once a person works in the PR workspace, it is the PR's home again.
+    expect(
+      findPrWorkspaceId(
+        workspaces,
+        [...sessions, session({ id: "os-later", workspaceId: "ws-pr" })],
+        { repo: "skills", number: 13 },
+      ),
+    ).toBe("ws-pr");
+  });
+
   it("matches a workspace minted for the PR number", () => {
     const workspaces = [
       ws({ id: "w1", repo: "opensession", prNumber: 7, branch: "a" }),

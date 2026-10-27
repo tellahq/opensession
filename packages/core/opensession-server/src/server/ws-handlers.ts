@@ -1,4 +1,10 @@
 import { registerMemoryProbe } from "./memory-probes";
+import { noteSessionHumanActivity } from "./sandbox/idle";
+import {
+  sandboxAgentClose,
+  sandboxAgentMessage,
+  sandboxAgentOpen,
+} from "./sandbox/agent-channel";
 import { localFolderWsClose, localFolderWsMessage } from "./local-folders";
 import { getConfigAsync } from "./config";
 /**
@@ -602,6 +608,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
     // Runner channels are not UI clients either (runner-ws.ts).
     if (runnerWsOpen(ws)) return;
     if (sandboxPortalRelayOpen(ws)) return;
+    if (sandboxAgentOpen(ws)) return;
     // A Mac VM display viewer is a byte stream, not a UI client (vm-display.ts).
     if (vmDisplayOpen(ws)) return;
     allClients.add(ws);
@@ -638,6 +645,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
     if (sandboxWsMessage(ws, message as any)) return;
     if (runnerWsMessage(ws, message as any)) return;
     if (sandboxPortalRelayMessage(ws, message as any)) return;
+    if (sandboxAgentMessage(ws, message)) return;
     if (vmDisplayMessage(ws, message as any)) return;
     let msg: any;
     try {
@@ -1454,6 +1462,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
           // Sending a new human turn makes archived work active again. Do this
           // only after validation and slash-command handling have accepted the turn.
           await unarchiveForHumanTurn(session);
+          // A person's turn keeps the session's Sandboxes around (sandbox/idle.ts).
+          noteSessionHumanActivity(session.id);
 
           // @People-mentions in a prompt ping the tagged teammates (roster
           // from the identity config, never the sender). Fires at send time
@@ -1641,6 +1651,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
             return;
           }
           await unarchiveForHumanTurn(session);
+          // A person's turn keeps the session's Sandboxes around (sandbox/idle.ts).
+          noteSessionHumanActivity(session.id);
           maybePersistEffort(session, msg.effort);
           maybePersistSpeed(session, msg.speed, msg.fastMode);
           await liftUserStop(sessionId);
@@ -1975,6 +1987,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
     if (sandboxWsClose(ws)) return;
     if (runnerWsClose(ws)) return;
     if (sandboxPortalRelayClose(ws)) return;
+    if (sandboxAgentClose(ws)) return;
     if (vmDisplayClose(ws)) return;
     ws.data.watchRequest = (ws.data.watchRequest ?? 0) + 1;
     allClients.delete(ws);

@@ -54,6 +54,9 @@ export const DEMO_PR_NUMBER = 128;
 export const DEMO_RENDER_SESSION_ID = "bks-demo-render";
 export const DEMO_RENDER_ASSET = "html-renders/monitor-arm-clamp-fit-demo.html";
 export const DEMO_RENDER_TITLE = "Monitor arm clamp fit";
+/** The same page shown from a codemode script through `mcp_call`, the way
+ *  pi agents usually reach `html_render`, then a screenshot marker. */
+export const DEMO_SCRIPT_RENDER_SESSION_ID = "bks-demo-render-script";
 
 const MODEL_FABLE = "pi/anthropic/claude-fable-5-1";
 const MODEL_SONNET = "pi/anthropic/claude-sonnet-5-5";
@@ -1244,6 +1247,81 @@ export function demoSessions(opts: {
           ].join("\n"),
           "demo-render-a3",
           iso(t0 + 170_000),
+          MODEL_FABLE,
+        ),
+      ],
+    });
+  }
+
+  // The same render reached from a codemode script through mcp_call: the
+  // result is the script's report around the tool's answer, not the answer
+  // alone. The turn ends on a screenshot marker.
+  {
+    const t0 = now - 26 * min;
+    const htmlRender = {
+      url: `/api/sessions/${DEMO_SCRIPT_RENDER_SESSION_ID}/assets/raw/${DEMO_RENDER_ASSET}`,
+      path: DEMO_RENDER_ASSET,
+      title: DEMO_RENDER_TITLE,
+      height: 360,
+      heights: [
+        [320, 570],
+        [390, 618],
+        [744, 359],
+        [1160, 497],
+      ],
+    };
+    const script = [
+      "const r = await tools.mcp_call({",
+      '  name: "opensession-html_html_render",',
+      `  arguments: { title: ${JSON.stringify(DEMO_RENDER_TITLE)}, height: 360, html },`,
+      "});",
+      "return JSON.parse(r);",
+    ].join("\n");
+    sessions.push({
+      id: DEMO_SCRIPT_RENDER_SESSION_ID,
+      engineSessionId: "ses_demorenderscript",
+      file: base(
+        DEMO_SCRIPT_RENDER_SESSION_ID,
+        "ses_demorenderscript",
+        26,
+        24,
+        {
+          title: "Show the clamp fit from a script",
+          mode: "ask",
+          usage: usage(0.12, 6_210, 1_980, 2, iso(now - 24 * min)),
+        },
+      ),
+      lines: [
+        transcriptLineUser(
+          "Lay out the clamp fit to scale, and send me a screenshot too.",
+          "demo-rscript-u1",
+          iso(t0),
+        ),
+        ...tool(
+          "rscript",
+          1,
+          "codemode",
+          { code: script },
+          [
+            "Script completed",
+            "Wall time 1.8 seconds",
+            "Output:",
+            JSON.stringify({
+              htmlRender,
+              message:
+                "Shown inline in the session. Do not link to it or describe where it is.",
+            }),
+            "Console: (empty)",
+          ].join("\n"),
+          t0 + 60_000,
+        ),
+        transcriptLineAssistantText(
+          "Here is the fit to scale, and the screenshot you asked for:\n\n" +
+            `OPENSESSION_IMAGE: ${mediaDir}/retry-after.png\n` +
+            "The clamp at your desk's 38 mm\n\n" +
+            "The pad sits fully on the desk in front of the rail.",
+          "demo-rscript-a1",
+          iso(t0 + 90_000),
           MODEL_FABLE,
         ),
       ],

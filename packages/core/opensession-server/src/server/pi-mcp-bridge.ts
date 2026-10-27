@@ -19,8 +19,9 @@ export interface PiMcpBridge {
  * from using it: `schedule_prompt` competes with a one-line `sleep`, and
  * searching for it first made the wrong choice the easy one. `wait_for`
  * (pr_checks) loses to an inline `until gh pr checks` loop the same way.
- * It is registered only for admin runs, so runs without it get no direct
- * `wait_for` either.
+ * It is registered wherever opensession-sessions can spawn (interactive,
+ * a person prompting an automation-owned session, selfImprove automations),
+ * so runs without it get no direct `wait_for` either.
  */
 export const DIRECT_MCP_TOOLS: Readonly<Record<string, string>> = {
   "opensession-schedule_schedule_prompt": "schedule_prompt",

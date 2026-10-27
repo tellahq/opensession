@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useTurnActivityPrefs } from "./TurnBlock";
 import { IconChevronDown, IconCheckCircle, IconX } from "./icons";
 import { cn } from "../ui/cn";
 import type { ReviewLoopResult } from "../lib/review-loop";
@@ -28,11 +29,12 @@ export function ReviewLoopBlock({
    *  merged loop keeps this durable verdict instead of a bare round count. */
   settled?: ReviewSettledOutcome | null;
   children: React.ReactNode;
-  /** Preview/test hook; the transcript never passes it, so sessions stay folded. */
+  /** Opens the fold regardless of preferences (previews, tests, a fold the
+   *  person opened before it remounted). Otherwise it follows Steps. */
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, toggle] = useLoopOpen(defaultOpen, onOpenChange);
   const status = live ? "pending" : result?.status;
   const resultDetail = reviewLoopDetail(status, rounds, settled);
   const visibleDetail =
@@ -56,13 +58,7 @@ export function ReviewLoopBlock({
       live={live}
       liveLabel="Review in progress"
       open={open}
-      onToggle={() =>
-        setOpen((value) => {
-          const next = !value;
-          onOpenChange?.(next);
-          return next;
-        })
-      }
+      onToggle={toggle}
     >
       {children}
       {result && !live && result.status !== "pending" && (
@@ -87,11 +83,12 @@ export function CheckBackBlock({
   rounds: number;
   live: boolean;
   children: React.ReactNode;
-  /** Preview/test hook; the transcript never passes it, so sessions stay folded. */
+  /** Opens the fold regardless of preferences (previews, tests, a fold the
+   *  person opened before it remounted). Otherwise it follows Steps. */
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, toggle] = useLoopOpen(defaultOpen, onOpenChange);
   const detail = live ? "Working" : checkBackCount(rounds);
   return (
     <LoopDisclosure
@@ -101,17 +98,37 @@ export function CheckBackBlock({
       live={live}
       liveLabel="Check-back in progress"
       open={open}
-      onToggle={() =>
-        setOpen((value) => {
-          const next = !value;
-          onOpenChange?.(next);
-          return next;
-        })
-      }
+      onToggle={toggle}
     >
       {children}
     </LoopDisclosure>
   );
+}
+
+/**
+ * A loop is a fold of work, so it starts the way the Steps preference says a
+ * turn's work does: open under "Open", folded otherwise. "With updates" keeps
+ * it folded; that is the quiet these loops exist for. Once toggled by hand,
+ * the person's choice wins over a later preference change.
+ */
+function useLoopOpen(
+  forceOpen: boolean,
+  onOpenChange?: (open: boolean) => void,
+): [boolean, () => void] {
+  const { work } = useTurnActivityPrefs();
+  const defaultOpen = forceOpen || work === "open";
+  const [open, setOpen] = useState(defaultOpen);
+  const toggled = useRef(false);
+  useEffect(() => {
+    if (!toggled.current) setOpen(defaultOpen);
+  }, [defaultOpen]);
+  const toggle = () => {
+    toggled.current = true;
+    const next = !open;
+    onOpenChange?.(next);
+    setOpen(next);
+  };
+  return [open, toggle];
 }
 
 function checkBackCount(rounds: number): string {

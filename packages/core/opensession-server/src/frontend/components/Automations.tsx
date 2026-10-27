@@ -600,13 +600,17 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
 
                     <DetailKey>Mode</DetailKey>
                     <span className="text-dim">
-                      {sel.mode === "ask"
+                      {sel.mode === "scratch"
                         ? sel.sandbox
-                          ? "Ask · disposable Sandbox workspace"
-                          : "Ask · read-only on the main checkout"
-                        : sel.sandbox
-                          ? "Code · disposable Sandbox workspace"
-                          : "Code · isolated worktree, can open PRs"}
+                          ? "Scratch · disposable Sandbox workspace"
+                          : "Scratch · full shell in an empty directory"
+                        : sel.mode === "ask"
+                          ? sel.sandbox
+                            ? "Ask · disposable Sandbox workspace"
+                            : "Ask · read-only on the main checkout"
+                          : sel.sandbox
+                            ? "Code · disposable Sandbox workspace"
+                            : "Code · isolated worktree, can open PRs"}
                     </span>
 
                     <DetailKey>Environment</DetailKey>
@@ -1480,7 +1484,7 @@ function AutomationForm({
   const [customCron, setCustomCron] = useState(
     !matchesPreset ? startSchedule : "",
   );
-  const [mode, setMode] = useState<"ask" | "code">(
+  const [mode, setMode] = useState<"ask" | "code" | "scratch">(
     initial?.mode || prefill?.mode || "ask",
   );
   const [eventKey, setEventKey] = useState(
@@ -1829,10 +1833,15 @@ function AutomationForm({
             <Select
               value={mode}
               onChange={(e) =>
-                setMode(e.target.value === "code" ? "code" : "ask")
+                setMode(
+                  e.target.value === "code" || e.target.value === "scratch"
+                    ? e.target.value
+                    : "ask",
+                )
               }
             >
               <option value="ask">Ask · read-only on main</option>
+              <option value="scratch">Scratch · full shell, no checkout</option>
               <option value="code">Code · fresh worktree per run</option>
             </Select>
           </label>

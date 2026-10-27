@@ -82,23 +82,6 @@ export function buildRunInstructions(input: {
   /** Stripe approvals guidance (stripeApprovalsNote), set only when the
    *  run can reach the Stripe server while approvals are enforced. */
   stripeApprovalsNote?: string;
-  /** The Dial: tells a dial-preset run about its oracle subagent. Only set for
-   *  dial runs — other sessions never learn the oracle agents exist. */
-  dialOracle?: {
-    agent: string;
-    presetLabel: string;
-    mainLabel: string;
-    oracleLabel: string;
-    /** Pi exposes the advisor as a custom tool rather than an Pi task agent. */
-    tool?: boolean;
-  };
-  /** The Orchestrator: tells an orchestrator-preset run about its worker
-   *  subagents. Only set for orchestrator runs — mirrors dialOracle. */
-  orchestrator?: {
-    presetLabel: string;
-    mainLabel: string;
-    workers: Array<{ role: string; model: string; modelLabel: string }>;
-  };
 }): string {
   const parts: string[] = [];
   parts.push(
@@ -144,32 +127,6 @@ export function buildRunInstructions(input: {
       input.isRepoLess
         ? `You are ${personaName()} in read-only Ask mode with no repository.`
         : `You are ${personaName()} in read-only Ask mode for the current checkout.`,
-    );
-  }
-
-  if (input.dialOracle) {
-    const d = input.dialOracle;
-    const access = d.tool
-      ? `the \`${d.agent}\` tool`
-      : `the \`${d.agent}\` task agent`;
-    parts.push(
-      `## Oracle\nThe "${d.presetLabel}" preset pairs ${d.mainLabel} with ${d.oracleLabel} via ` +
-        `${access}. Use it for difficult planning, architecture, debugging, or review, not routine work.`,
-    );
-  }
-
-  if (input.orchestrator) {
-    const o = input.orchestrator;
-    const workers = o.workers
-      .map(
-        (worker) =>
-          `${worker.role}: ${worker.modelLabel} via \`${worker.model}\``,
-      )
-      .join(", ");
-    parts.push(
-      `## Workers\nThe "${o.presetLabel}" preset gives ${o.mainLabel} these workers: ` +
-        `${workers}. Use opensession-sessions spawn_task with the listed model for clear ` +
-        "independent tasks, then verify their work.",
     );
   }
 

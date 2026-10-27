@@ -50,6 +50,30 @@ export const LOOP_ACTOR = "loop";
 export const SCHEDULED_ACTOR_SUFFIX = " (scheduled)";
 export const SCHEDULED_ACTOR = "scheduled";
 
+/** Suffix the wake of a background wait (agent-waits.ts) carries as sender
+ *  when a person's own turn in an automation-owned session registered it:
+ *  `"<person> (wait)"`. Like a scheduled check-back it credits the person
+ *  without counting as them being present (`isScheduledActor`); what it does
+ *  unlock is `waitContinuationOwner`. */
+export const WAIT_ACTOR_SUFFIX = " (wait)";
+
+/** Sender for the wake of a wait a person's turn registered. */
+export function waitActor(person: string): string {
+  return `${scheduledOwner(person)}${WAIT_ACTOR_SUFFIX}`;
+}
+
+/**
+ * The person whose wait this turn's wake continues, or null. Only a
+ * `waitActor` sender naming a person qualifies: it lets the woken turn of an
+ * automation-owned session keep watching what that person asked for (the
+ * waits and task_status, never the spawn suite), and nothing else does.
+ */
+export function waitContinuationOwner(sender?: string | null): string | null {
+  const name = (sender || "").trim();
+  if (!name.toLowerCase().endsWith(WAIT_ACTOR_SUFFIX)) return null;
+  return humanPrompter(scheduledOwner(name));
+}
+
 /** Sender for a delivered scheduled prompt. Same contract as `loopActor`:
  *  the person keeps ownership, commit identity and provider account, but
  *  the agent wrote the prompt, so nobody pressed send. */
@@ -68,9 +92,11 @@ export function scheduledOwner(sender?: string | null): string {
   for (;;) {
     const lower = name.toLowerCase();
     if (lower === SCHEDULED_ACTOR || lower === LOOP_ACTOR) return "";
-    const suffix = [SCHEDULED_ACTOR_SUFFIX, LOOP_ACTOR_SUFFIX].find((s) =>
-      lower.endsWith(s),
-    );
+    const suffix = [
+      SCHEDULED_ACTOR_SUFFIX,
+      LOOP_ACTOR_SUFFIX,
+      WAIT_ACTOR_SUFFIX,
+    ].find((s) => lower.endsWith(s));
     if (!suffix) return name;
     name = name.slice(0, -suffix.length).trim();
   }
@@ -86,7 +112,7 @@ export function loopActor(setBy?: string | null): string {
 
 /**
  * True for a sender our scheduler minted on a person's behalf (`loopActor`,
- * `scheduledActor`). Not a machine actor: the person is credited, so
+ * `scheduledActor`, `waitActor`). Not a machine actor: the person is credited, so
  * `humanPrompter` keeps the name. But nothing that requires a person to be
  * present right now (the spawn suite an automation-owned session earns on a
  * human's turn) may treat a scheduled tick as that person; use
@@ -98,7 +124,8 @@ export function isScheduledActor(sender?: string | null): boolean {
     lower === LOOP_ACTOR ||
     lower.endsWith(LOOP_ACTOR_SUFFIX) ||
     lower === SCHEDULED_ACTOR ||
-    lower.endsWith(SCHEDULED_ACTOR_SUFFIX)
+    lower.endsWith(SCHEDULED_ACTOR_SUFFIX) ||
+    lower.endsWith(WAIT_ACTOR_SUFFIX)
   );
 }
 

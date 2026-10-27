@@ -33,9 +33,11 @@ const MODEL_NAMES = Object.fromEntries(
   } satisfies Record<string, string>),
 );
 export function prettyModel(id: string): string {
-  // A workspace preset names itself; with no models list to read its label
-  // from, its slug is still a name and its storage path is not.
-  const preset = workspacePresetLabel(baseModelId(id), []);
+  // A retired preset id reads as the model it ran on; a retired workspace
+  // preset's slug is still a name and its storage path is not.
+  const base = baseModelId(id);
+  if (base !== id) return prettyModel(base);
+  const preset = workspacePresetLabel(id);
   if (preset) return preset;
   // Pi ids get their friendly name with no engine suffix — the engine
   // is an implementation detail ("Sonnet 5", not "… · Pi").
@@ -52,8 +54,10 @@ export function metadataModelLabel(
   effectiveModel: string,
   models: ModelOption[],
 ): string {
-  const preset = workspacePresetLabel(baseModelId(effectiveModel), models);
+  const preset = workspacePresetLabel(effectiveModel);
   if (preset) return preset;
+  if (baseModelId(effectiveModel) !== effectiveModel)
+    return prettyModel(effectiveModel);
   if (routedModelParts(effectiveModel)) return prettyModel(effectiveModel);
   return (
     models.find((m) => m.id === effectiveModel)?.label ||
@@ -62,8 +66,7 @@ export function metadataModelLabel(
 }
 // An automatic fallback arrives as by = "auto-switch — <from label> <reason>",
 // which repeats the model the divider already names. Keep only the reason, and
-// take the from-model's name from it: a dial preset id ("dial/opus-fable") has
-// no friendly name of its own here, so prettyModel would print the raw slug.
+// take the from-model's name from it, as the server labelled it.
 const AUTO_SWITCH_BY =
   /^auto-switch — (.+) (out of credits|hit a transient engine error)$/;
 export function switchDividerText(

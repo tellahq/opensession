@@ -267,14 +267,35 @@ export function relayRetryDelayMs(failedAttempts: number): number {
   );
 }
 
+export type PortalRelayCredential = { token: string; expiresAt: number };
+
+/** Adopt a credential the server renewed over the open socket. The relay
+ * keeps the connection it has; the new token is only for reconnecting. */
+export function applyPortalRelayRenewal(
+  credential: PortalRelayCredential,
+  message: any,
+): boolean {
+  if (
+    typeof message?.token !== "string" ||
+    !message.token ||
+    !Number.isFinite(message.expiresAt) ||
+    message.expiresAt <= credential.expiresAt
+  )
+    return false;
+  credential.token = message.token;
+  credential.expiresAt = message.expiresAt;
+  return true;
+}
+
 async function run(
   endpoint: string,
   token: string,
   port: number,
   expiresAt: number,
 ): Promise<void> {
+  const credential: PortalRelayCredential = { token, expiresAt };
   let failedAttempts = 0;
-  while (Date.now() < expiresAt) {
+  while (Date.now() < credential.expiresAt) {
     const connected = await new Promise<boolean>((resolve) => {
       const sockets = new Map<string, PortalSocketState>();
       const requests: PortalRequestControllers = new Map();
@@ -282,7 +303,7 @@ async function run(
       let opened = false;
       try {
         socket = new WebSocket(endpoint, {
-          headers: { authorization: `Bearer ${token}` },
+          headers: { authorization: `Bearer ${credential.token}` },
         } as any);
       } catch {
         resolve(false);
@@ -297,6 +318,8 @@ async function run(
           const message = JSON.parse(String(event.data));
           if (message.t === "http")
             void respond(sendResponse, message, port, requests);
+          else if (message.t === "renew")
+            applyPortalRelayRenewal(credential, message);
           else if (message.t === "http_cancel")
             cancelPortalRequest(requests, message);
           else if (message.t === "ws_open")
@@ -332,7 +355,7 @@ async function run(
       });
     });
     failedAttempts = connected ? 0 : failedAttempts + 1;
-    const remaining = expiresAt - Date.now();
+    const remaining = credential.expiresAt - Date.now();
     if (remaining <= 0) break;
     await Bun.sleep(Math.min(remaining, relayRetryDelayMs(failedAttempts)));
   }

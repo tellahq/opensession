@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   readySandboxProviders,
+  sandboxMachineChoices,
   sandboxProviderLabel,
   sandboxProviderNote,
+  splitSandboxChoice,
 } from "./ready-sandbox-providers";
 
 describe("readySandboxProviders", () => {
@@ -48,5 +50,31 @@ describe("sandboxProviderNote", () => {
     expect(sandboxProviderNote("")).toBe("A worktree on this server.");
     expect(sandboxProviderNote("usecomputer")).toStartWith("Attached Mac");
     expect(sandboxProviderNote("box")).toStartWith("Attached Linux");
+  });
+});
+
+describe("GPU machine choices", () => {
+  test("Modal gets one entry per GPU after the plain one", () => {
+    expect(sandboxMachineChoices(["box", "modal"])).toEqual([
+      "box",
+      "modal",
+      "modal:T4",
+      "modal:L4",
+    ]);
+  });
+
+  test("an entry splits into the provider and GPU the create request names", () => {
+    expect(splitSandboxChoice("modal:L4")).toEqual({
+      provider: "modal",
+      gpu: "L4",
+    });
+    expect(splitSandboxChoice("box")).toEqual({ provider: "box" });
+    expect(splitSandboxChoice("")).toEqual({ provider: "" });
+  });
+
+  test("labels and notes name the GPU", () => {
+    expect(sandboxProviderLabel("modal")).toBe("Modal");
+    expect(sandboxProviderLabel("modal:T4")).toBe("Modal · T4 GPU");
+    expect(sandboxProviderNote("modal:L4")).toContain("NVIDIA L4 GPU (24 GB)");
   });
 });

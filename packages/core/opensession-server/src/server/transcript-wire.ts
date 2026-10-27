@@ -1,5 +1,8 @@
 import type { SeqEntry } from "./transcript-store";
-import { isHtmlRenderResultText } from "@tellahq/opensession-protocol/html-render";
+import {
+  htmlRenderResultObjects,
+  isHtmlRenderResultText,
+} from "@tellahq/opensession-protocol/html-render";
 import {
   MESSAGE_COLLAPSE_CHARS,
   MESSAGE_PREVIEW_CHARS,
@@ -40,11 +43,27 @@ export function clampV2InitEntries(entries: SeqEntry[]): SeqEntry[] {
       ? entry
       : {
           ...entry,
-          content: entry.content.slice(0, max),
+          content: clampedContent(entry, max),
           contentClamped: true,
           contentLength: entry.contentLength ?? entry.content.length,
         };
   });
+}
+
+/**
+ * A clamped entry's preview. A tool result that showed a page with
+ * html_render from inside a longer answer (a codemode script's report around
+ * the tool's JSON) keeps each `{"htmlRender": …}` object after the preview:
+ * clients show the page under the turn from that reference without
+ * expanding the step, so cutting it off hid the page.
+ */
+function clampedContent(entry: SeqEntry, max: number): string {
+  const preview = entry.content.slice(0, max);
+  if (entry.type !== "tool_result") return preview;
+  const renders = htmlRenderResultObjects(entry.content).filter(
+    (object) => !preview.includes(object),
+  );
+  return renders.length ? `${preview}\n${renders.join("\n")}` : preview;
 }
 
 /**

@@ -16,6 +16,7 @@ struct OS1Widgets: WidgetBundle {
         StartAgentWidget()
         StartAgentControl()
         ActiveSessionsLiveActivity()
+        DeskCallLiveActivity()
     }
 }
 

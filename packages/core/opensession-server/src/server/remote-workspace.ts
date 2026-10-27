@@ -26,6 +26,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, posix, resolve as resolveLocal, sep } from "node:path";
 import type { RemoteWorkspaceSpec } from "@tellahq/opensession-protocol/runner";
+import { INLINE_GITHUB_READ_CREDENTIAL_HELPER } from "./github-git-credential";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { rpcSocketPath } from "./run-rpc-protocol";
 
@@ -964,7 +965,8 @@ export function remoteCommandEnv(
     if (key === undefined) break;
     if (
       /^credential\..*\.helper$/.test(key) &&
-      env[`GIT_CONFIG_VALUE_${index}`]
+      env[`GIT_CONFIG_VALUE_${index}`] &&
+      env[`GIT_CONFIG_VALUE_${index}`] !== INLINE_GITHUB_READ_CREDENTIAL_HELPER
     )
       env[`GIT_CONFIG_VALUE_${index}`] = INLINE_GITHUB_CREDENTIAL_HELPER;
   }
