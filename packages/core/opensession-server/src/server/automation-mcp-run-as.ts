@@ -22,11 +22,7 @@
  */
 import { resolveTeammate } from "./shared/user-mappings";
 import { AUTO_CONTINUE_USER } from "./auto-continue";
-import {
-  AUTOMATION_ACTOR_SUFFIX,
-  SYSTEM_RESTART_USER,
-  scheduledOwner,
-} from "./session-actors";
+import { SYSTEM_RESTART_USER, scheduledOwner } from "./session-actors";
 
 /** Stored on Automation.mcpRunAs. */
 export interface AutomationMcpRunAs {
@@ -136,22 +132,19 @@ export function authorizeMcpRunAs(
 
 /**
  * Whether a turn's raw sender may borrow the named person's grants: no
- * sender (the automation's own run), the session's own machine continuations
- * (auto-continue, restart resume, a report from its own worker, the
- * automation itself), or the named person, including a /loop, scheduled or
- * wait tick they set. Everything else is refused: another person, a tick
- * another person scheduled, an unattributed tick, or another session's
- * `agent <id>` message.
+ * sender (the automation's own run), the session continuing itself
+ * (auto-continue, restart resume), or the named person, including a /loop,
+ * scheduled or wait tick they set. Everything else is refused: another
+ * person, a tick another person scheduled, an unattributed tick, and every
+ * message from another session (`agent <id>`, `worker <id>`,
+ * `<name> (automation)`), because those senders do not prove the sending
+ * session belongs to this automation (any session can deliver a
+ * `worker <id>` file notification to any other).
  */
 function senderMayUseRunAs(sender: string | undefined, person: string) {
   if (!sender) return true;
   const lower = sender.toLowerCase();
-  if (
-    lower === AUTO_CONTINUE_USER ||
-    lower === SYSTEM_RESTART_USER ||
-    lower.startsWith("worker ") ||
-    lower.endsWith(AUTOMATION_ACTOR_SUFFIX)
-  )
+  if (lower === AUTO_CONTINUE_USER || lower === SYSTEM_RESTART_USER)
     return true;
   const owner = scheduledOwner(sender);
   if (!owner) return false;

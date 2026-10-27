@@ -155,6 +155,13 @@ describe("automation runs with Run MCP sign-ins as", () => {
     expect(
       mcpRunAsForAutomationTurn(automation, "agent os-01a0000000000000"),
     ).toBeUndefined();
+    // Messages from other sessions never prove they belong to this one.
+    expect(
+      mcpRunAsForAutomationTurn(automation, "worker os-01a0000000000000"),
+    ).toBeUndefined();
+    expect(
+      mcpRunAsForAutomationTurn(automation, "Docs sync (automation)"),
+    ).toBeUndefined();
     // The named person's own ticks and the session's own continuations pass.
     expect(mcpRunAsForAutomationTurn(automation, "Ada (loop)")).toBeDefined();
     expect(
