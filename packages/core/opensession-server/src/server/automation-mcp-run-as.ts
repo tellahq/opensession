@@ -21,7 +21,12 @@
  *   and a turn sent by a different person gets none.
  */
 import { resolveTeammate } from "./shared/user-mappings";
-import { interactivePrompter, waitContinuationOwner } from "./session-actors";
+import { AUTO_CONTINUE_USER } from "./auto-continue";
+import {
+  AUTOMATION_ACTOR_SUFFIX,
+  SYSTEM_RESTART_USER,
+  scheduledOwner,
+} from "./session-actors";
 
 /** Stored on Automation.mcpRunAs. */
 export interface AutomationMcpRunAs {
@@ -130,16 +135,42 @@ export function authorizeMcpRunAs(
 }
 
 /**
- * The grant identity one automation turn may use, or undefined. `prompter`
- * is the turn's sender (undefined for the automation's own ticks); a turn
- * someone else sent never borrows the named person's grants.
+ * Whether a turn's raw sender may borrow the named person's grants: no
+ * sender (the automation's own run), the session's own machine continuations
+ * (auto-continue, restart resume, a report from its own worker, the
+ * automation itself), or the named person, including a /loop, scheduled or
+ * wait tick they set. Everything else is refused: another person, a tick
+ * another person scheduled, an unattributed tick, or another session's
+ * `agent <id>` message.
+ */
+function senderMayUseRunAs(sender: string | undefined, person: string) {
+  if (!sender) return true;
+  const lower = sender.toLowerCase();
+  if (
+    lower === AUTO_CONTINUE_USER ||
+    lower === SYSTEM_RESTART_USER ||
+    lower.startsWith("worker ") ||
+    lower.endsWith(AUTOMATION_ACTOR_SUFFIX)
+  )
+    return true;
+  const owner = scheduledOwner(sender);
+  if (!owner) return false;
+  const who = resolveTeammate(owner);
+  const named = resolveTeammate(person);
+  return !!who && !!named && who.slackId === named.slackId;
+}
+
+/**
+ * The grant identity one automation turn may use, or undefined. `sender` is
+ * the turn's raw sender, scheduler suffixes included (undefined for the
+ * automation's own run); see {@link senderMayUseRunAs}.
  */
 export function mcpRunAsForAutomationTurn(
   automation: {
     mcpRunAs?: AutomationMcpRunAs;
     mcpServers?: string[];
   },
-  prompter?: string | null,
+  sender?: string | null,
 ): McpRunAs | undefined {
   const runAs = automation.mcpRunAs;
   if (!runAs?.person || !Array.isArray(automation.mcpServers)) return undefined;
@@ -147,13 +178,7 @@ export function mcpRunAsForAutomationTurn(
     automation.mcpServers!.includes(s),
   );
   if (!servers.length) return undefined;
-  const sender = prompter?.trim();
-  if (sender) {
-    const person =
-      waitContinuationOwner(sender) ?? interactivePrompter(sender) ?? sender;
-    const who = resolveTeammate(person);
-    const named = resolveTeammate(runAs.person);
-    if (!who || !named || who.slackId !== named.slackId) return undefined;
-  }
+  if (!senderMayUseRunAs(sender?.trim() || undefined, runAs.person))
+    return undefined;
   return { user: runAs.person, servers };
 }

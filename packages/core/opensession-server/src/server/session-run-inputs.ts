@@ -20,7 +20,7 @@ import type { UnifiedSession } from "./types";
 import {
   type Automation,
   automationDeniedTools,
-  automationMcpRunAsByName,
+  automationMcpRunAsById,
   automationMcpServersByName,
 } from "./automations";
 import type { McpRunAs } from "./automation-mcp-run-as";
@@ -122,6 +122,7 @@ export interface SessionRunInputs {
 export type RunInputsSession = Pick<
   UnifiedSession,
   | "automation"
+  | "automationId"
   | "automationDescendantPolicy"
   | "mcpServers"
   | "externalRefs"
@@ -223,7 +224,9 @@ export async function resolveSessionRunInputs(
     mcpGrantUser: session.createdByLogin || undefined,
     mcpRunAs:
       session.automation && !session.automationDescendantPolicy
-        ? await automationMcpRunAsByName(session.automation, prompter)
+        ? // The raw sender: a /loop or scheduled tick keeps the name of the
+          // person who set it, so it is checked against the named person.
+          await automationMcpRunAsById(session.automationId, opts.user)
         : undefined,
     accountUser,
     humanPrompter: prompter,

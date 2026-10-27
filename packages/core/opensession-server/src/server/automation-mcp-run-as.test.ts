@@ -18,8 +18,12 @@ const {
 } = await import("./automation-mcp-run-as");
 const { mcpGrantCandidates } = await import("./mcp-runtime");
 const { mintMcpRelayToken, handleMcpRelay } = await import("./mcp-relay");
-const { createAutomation, getAutomation, updateAutomation } =
-  await import("./automations");
+const {
+  automationMcpRunAsById,
+  createAutomation,
+  getAutomation,
+  updateAutomation,
+} = await import("./automations");
 
 const restoreIdentities = __setIdentitiesForTest([
   {
@@ -140,6 +144,22 @@ describe("automation runs with Run MCP sign-ins as", () => {
       mcpRunAsForAutomationTurn({ ...automation, mcpServers: undefined }),
     ).toBeUndefined();
     expect(mcpRunAsForAutomationTurn(automation, "Grace")).toBeUndefined();
+    // A tick someone else scheduled keeps their name and is refused too.
+    expect(
+      mcpRunAsForAutomationTurn(automation, "Grace (loop)"),
+    ).toBeUndefined();
+    expect(
+      mcpRunAsForAutomationTurn(automation, "Grace (scheduled)"),
+    ).toBeUndefined();
+    expect(mcpRunAsForAutomationTurn(automation, "loop")).toBeUndefined();
+    expect(
+      mcpRunAsForAutomationTurn(automation, "agent os-01a0000000000000"),
+    ).toBeUndefined();
+    // The named person's own ticks and the session's own continuations pass.
+    expect(mcpRunAsForAutomationTurn(automation, "Ada (loop)")).toBeDefined();
+    expect(
+      mcpRunAsForAutomationTurn(automation, "auto-continue"),
+    ).toBeDefined();
     expect(mcpRunAsForAutomationTurn(automation, "Ada")).toEqual({
       user: "Ada Lovelace",
       servers: ["acme"],
@@ -216,5 +236,36 @@ describe("who can set it", () => {
     const cleared = await updateAutomation(created.id, { mcpRunAs: "" });
     if ("error" in cleared) throw new Error(cleared.error);
     expect(cleared.mcpRunAs).toBeUndefined();
+  });
+
+  test("a session resolves the setting by automation id, not name", async () => {
+    const consented = await createAutomation(
+      {
+        name: "Twin",
+        prompt: "One.",
+        schedule: "",
+        mode: "ask",
+        createdBy: "Ada",
+        mcpServers: ["acme"],
+        mcpRunAs: "Ada",
+      },
+      { actor: "adalovelace" },
+    );
+    if ("error" in consented) throw new Error(consented.error);
+    const other = await createAutomation({
+      name: "Twin",
+      prompt: "Two.",
+      schedule: "",
+      mode: "ask",
+      createdBy: "Grace",
+      mcpServers: ["acme"],
+    });
+    if ("error" in other) throw new Error(other.error);
+    expect(await automationMcpRunAsById(consented.id)).toEqual({
+      user: "Ada Lovelace",
+      servers: ["acme"],
+    });
+    expect(await automationMcpRunAsById(other.id)).toBeUndefined();
+    expect(await automationMcpRunAsById(undefined)).toBeUndefined();
   });
 });

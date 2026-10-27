@@ -1800,16 +1800,16 @@ export function automationDeniedTools(): Record<string, string> {
 }
 
 /** The personal MCP grant identity an automation-owned session's turn may
- *  use (Automation.mcpRunAs), resolved by the automation's display name.
- *  `prompter` is the turn's human sender, if any. */
-export async function automationMcpRunAsByName(
-  name: string,
-  prompter?: string | null,
+ *  use (Automation.mcpRunAs). Resolved by the automation's immutable id,
+ *  never its display name: names are neither unique nor fixed, and a name
+ *  match could hand one automation another's consent. A session without a
+ *  stamped id gets none. `sender` is the turn's raw sender. */
+export async function automationMcpRunAsById(
+  id: string | undefined,
+  sender?: string | null,
 ): Promise<McpRunAs | undefined> {
-  const automation = (await listAutomations()).find((a) => a.name === name);
-  return automation
-    ? mcpRunAsForAutomationTurn(automation, prompter)
-    : undefined;
+  const automation = id ? await getAutomation(id) : undefined;
+  return automation ? mcpRunAsForAutomationTurn(automation, sender) : undefined;
 }
 
 /** MCP allowlist for an automation, resolved by its display name (as stored on
