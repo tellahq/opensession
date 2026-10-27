@@ -49,6 +49,10 @@ export interface PreviewStatus {
       | "waking"
       | "needs_attention";
     error?: string;
+    /** When the idle timers would put the machine to sleep. */
+    sleepsAt?: string;
+    /** Why a start is taking longer, e.g. waiting for a free Mac host. */
+    note?: string;
   };
 }
 

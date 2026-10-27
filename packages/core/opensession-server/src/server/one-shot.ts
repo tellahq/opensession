@@ -1,10 +1,10 @@
 /**
  * Tool-less single-prompt helper backed by Pi.
  *
- * Callers use this for titles, branch names, classifiers, recaps, and the Dial
- * oracle. Every call gets a throwaway Pi session with no local or MCP tools.
- * It is fail-soft by contract: any model, timeout, or provider failure returns
- * null so each caller can keep its deterministic fallback.
+ * Callers use this for titles, branch names, classifiers, and recaps. Every
+ * call gets a throwaway Pi session with no local or MCP tools. It is fail-soft
+ * by contract: any model, timeout, or provider failure returns null so each
+ * caller can keep its deterministic fallback.
  */
 import { mkdir, rm } from "node:fs/promises";
 import { audit } from "./audit";
@@ -125,9 +125,8 @@ export function oneShotFallbackModels(
 /** What a one-shot did: the answer, or the reason there is not one.
  *  `oneShot` collapses this to null by design, since every caller has a
  *  deterministic fallback and must not have to catch. But a caller that can
- *  ACT on the reason needs it to survive that collapse: the Dial oracle
- *  retries on another provider when the pool is dry, and says so instead of
- *  reporting a bare "unavailable" that sends the reader to journalctl. */
+ *  ACT on the reason needs it to survive that collapse, instead of reporting
+ *  a bare "unavailable" that sends the reader to journalctl. */
 export type OneShotResult = {
   text: string | null;
   error: string | null;

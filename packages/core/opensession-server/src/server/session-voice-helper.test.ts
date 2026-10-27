@@ -118,10 +118,12 @@ test("conversation target resolves the session's stored model and effort like di
   ).toEqual({ model: "pi/anthropic/claude-opus-5-5" });
 });
 
-test("conversation target uses a preset's pinned effort and lead model", async () => {
-  expect(await sessionConversationModel({ model: "dial/ultra" })).toEqual({
+test("conversation target routes a retired preset to its model with the session's effort", async () => {
+  expect(
+    await sessionConversationModel({ model: "dial/ultra", effort: "medium" }),
+  ).toEqual({
     model: "pi/anthropic/claude-fable-5-1",
-    effort: "high",
+    effort: "medium",
   });
 });
 

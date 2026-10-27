@@ -53,7 +53,8 @@ import {
   usageFromSdkResult,
   type PiCatalogModel,
   type PiWireMessage,
-  sdkThinkingDisabled,
+  sdkThinkingOptions,
+  type SdkThinkingOptions,
 } from "./pi-anthropic-provider";
 import {
   createEarlyStopTracker,
@@ -81,6 +82,7 @@ import {
 import { isPiUsageLimitShape } from "./pi-runner";
 import * as accounts from "./claude-accounts";
 import * as sdk from "@anthropic-ai/claude-agent-sdk";
+import type { EffortLevel } from "@anthropic-ai/claude-agent-sdk";
 
 // Seam everything at a throwaway dir. The config/store modules read their env
 // seams per call, so setting them here (after hoisted imports) is safe — and
@@ -1804,13 +1806,44 @@ describe("captureUnforwardedToolUses", () => {
   });
 });
 
-describe("sdkThinkingDisabled", () => {
+describe("sdkThinkingOptions", () => {
+  const off: SdkThinkingOptions = { thinking: { type: "disabled" } };
+  const adaptive = (effort: EffortLevel): SdkThinkingOptions => ({
+    thinking: { type: "adaptive", display: "summarized" },
+    effort,
+  });
+
   test("turns thinking off only when Pi sends no reasoning level for a reasoning model", () => {
-    expect(sdkThinkingDisabled({ reasoning: true }, {})).toBe(true);
-    expect(sdkThinkingDisabled({ reasoning: true }, undefined)).toBe(true);
+    expect(sdkThinkingOptions({ reasoning: true }, {})).toEqual(off);
+    expect(sdkThinkingOptions({ reasoning: true }, undefined)).toEqual(off);
+    expect(sdkThinkingOptions({ reasoning: false }, {})).toEqual({});
+  });
+
+  test("maps the thinking level to an effort with summarized thinking", () => {
     expect(
-      sdkThinkingDisabled({ reasoning: true }, { reasoning: "medium" }),
-    ).toBe(false);
-    expect(sdkThinkingDisabled({ reasoning: false }, {})).toBe(false);
+      sdkThinkingOptions({ reasoning: true }, { reasoning: "minimal" }),
+    ).toEqual(adaptive("low"));
+    expect(
+      sdkThinkingOptions({ reasoning: true }, { reasoning: "medium" }),
+    ).toEqual(adaptive("medium"));
+    expect(
+      sdkThinkingOptions({ reasoning: true }, { reasoning: "xhigh" }),
+    ).toEqual(adaptive("xhigh"));
+  });
+
+  test("prefers the model's thinking level map", () => {
+    const model = {
+      reasoning: true,
+      thinkingLevelMap: { high: "max", low: null, medium: "unknown" },
+    };
+    expect(sdkThinkingOptions(model, { reasoning: "high" })).toEqual(
+      adaptive("max"),
+    );
+    expect(sdkThinkingOptions(model, { reasoning: "low" })).toEqual(
+      adaptive("low"),
+    );
+    expect(sdkThinkingOptions(model, { reasoning: "medium" })).toEqual(
+      adaptive("high"),
+    );
   });
 });

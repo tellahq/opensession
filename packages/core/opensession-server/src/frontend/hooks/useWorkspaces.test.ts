@@ -167,12 +167,7 @@ test("preserves workspace mutation ordering and failure boundaries", () => {
   expectInOrder(mutationsSource, [
     "const archiveWorkspaceFromHeader",
     "goBack();",
-    "patch(member.id",
-    "await Promise.all(",
-    "rememberArchived(",
-    "dropStalePins(members);",
-    "refreshSessions();",
-    'console.error("Archive workspace failed:", error);',
+    "void archiveMembers(members);",
   ]);
   expectInOrder(mutationsSource, [
     "const renameWorkspace =",
@@ -203,12 +198,7 @@ test("preserves workspace mutation ordering and failure boundaries", () => {
     "const archiveWorkspaceFromSidebar",
     "const openSessionId =",
     "openNext?.()",
-    "patch(session.id",
-    "await Promise.all(",
-    "rememberArchived(",
-    'console.error("Archive workspace failed:", error);',
+    "await archiveMembers(sessions);",
     'navigate({ view: "session", id: openSessionId });',
-    "dropStalePins(sessions);",
-    "refreshSessions();",
   ]);
 });

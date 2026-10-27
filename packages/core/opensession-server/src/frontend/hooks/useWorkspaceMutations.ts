@@ -1,10 +1,16 @@
 import {
   archiveSessionApi,
+  archiveWorkspaceApi,
   deleteWorkspaceApi,
+  discardWorkspaceDraftApi,
   updateWorkspaceApi,
 } from "../lib/api";
 import type { Route } from "../lib/app-route";
-import type { OpenNextSidebarItem } from "../lib/sidebar-types";
+import { archiveWorkspaceSessions } from "../lib/archive-workspace-sessions";
+import type {
+  DeleteWorkspaceOptions,
+  OpenNextSidebarItem,
+} from "../lib/sidebar-types";
 import type { UnifiedSession } from "../lib/types";
 
 type WorkspaceMutationsParams = {
@@ -51,31 +57,23 @@ export function useWorkspaceMutations({
     });
   };
 
+  const archiveMembers = (sessions: UnifiedSession[]) =>
+    archiveWorkspaceSessions(sessions, {
+      patch,
+      archiveSession: async (id) => {
+        await archiveSessionApi(id, true);
+      },
+      archiveWorkspace: archiveWorkspaceApi,
+      rememberArchived,
+      dropStalePins,
+      refreshSessions,
+    });
+
   const archiveWorkspaceFromHeader = (members: UnifiedSession[]) => {
     if (!members.length) return;
     confirmRunningCloses(members, () => {
-      void (async () => {
-        goBack();
-        for (const member of members) {
-          patch(member.id, { archived: true, archivedReason: "manual" });
-        }
-        try {
-          await Promise.all(
-            members.map((member) => archiveSessionApi(member.id, true)),
-          );
-          rememberArchived(members.map((member) => member.id));
-          dropStalePins(members);
-          refreshSessions();
-        } catch (error) {
-          console.error("Archive workspace failed:", error);
-          for (const member of members) {
-            patch(member.id, {
-              archived: false,
-              archivedReason: undefined,
-            });
-          }
-        }
-      })();
+      goBack();
+      void archiveMembers(members);
     });
   };
 
@@ -92,31 +90,9 @@ export function useWorkspaceMutations({
       if (openSessionId && !openNext?.()) goBack();
       // The archive registry is per-session; the workspace row disappears once
       // no live sessions remain.
-      for (const session of sessions) {
-        patch(session.id, {
-          archived: true,
-          archivedReason: "manual",
-        });
-      }
-      try {
-        await Promise.all(
-          sessions.map((session) => archiveSessionApi(session.id, true)),
-        );
-        // One entry for the whole row, so ⌘Z restores the workspace in one press.
-        rememberArchived(sessions.map((session) => session.id));
-      } catch (error) {
-        console.error("Archive workspace failed:", error);
-        for (const session of sessions) {
-          patch(session.id, {
-            archived: false,
-            archivedReason: undefined,
-          });
-        }
-        if (openSessionId) navigate({ view: "session", id: openSessionId });
-        return;
-      }
-      dropStalePins(sessions);
-      refreshSessions();
+      const ok = await archiveMembers(sessions);
+      if (!ok && openSessionId)
+        navigate({ view: "session", id: openSessionId });
     };
     confirmRunningCloses(sessions, () => void archive());
   };
@@ -128,10 +104,17 @@ export function useWorkspaceMutations({
     if (route.view === "workspace" && route.id === workspaceId) goBack();
   };
 
-  const deleteWorkspaceFromSidebar = async (workspaceId: string) => {
+  // A draft row may be a workspace whose sessions are all archived, so its
+  // delete discards only the draft: deleting the workspace would take the
+  // archived sessions with it.
+  const deleteWorkspaceFromSidebar = async (
+    workspaceId: string,
+    options: DeleteWorkspaceOptions = {},
+  ) => {
     const wasOpen = route.view === "workspace" && route.id === workspaceId;
     await (async () => {
-      await deleteWorkspaceApi(workspaceId);
+      if (options.draftOnly) await discardWorkspaceDraftApi(workspaceId);
+      else await deleteWorkspaceApi(workspaceId);
     })().catch(async (error) => {
       console.error("Delete workspace failed:", error);
       throw error;

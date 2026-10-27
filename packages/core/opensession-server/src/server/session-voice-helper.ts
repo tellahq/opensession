@@ -5,7 +5,7 @@
  * and a failure surfaces as an error instead of an agent escalation. */
 import { z } from "zod";
 import { requireVoiceApiKey } from "./desk-voice";
-import { interactiveDefaultModel, SESSION_EFFORTS, toPiModel } from "./models";
+import { interactiveDefaultModel, SESSION_EFFORTS } from "./models";
 import type { SessionEffort } from "./models";
 import { oneShotDetailed } from "./one-shot";
 import { resolvePiRoutedModel } from "./pi-runner";
@@ -86,19 +86,15 @@ export async function askSessionVoiceHelper(
 }
 
 /** The model and effort the session's next agent turn would dispatch with:
- * the stored session model, else the instance interactive default, with a
- * preset's pinned effort taking precedence over the session's own. This is
+ * the stored session model, else the instance interactive default. This is
  * the same resolution effective-config and the Pi runner apply; a client may
  * not name an arbitrary model here. */
 export async function sessionConversationModel(
   session: Pick<UnifiedSession, "model" | "effort">,
 ): Promise<{ model: string; effort?: SessionEffort }> {
   const requested = session.model?.trim() || interactiveDefaultModel();
-  const resolved = await resolvePiRoutedModel(
-    toPiModel(requested) || requested,
-    requested,
-  );
-  const effort = resolved?.effort ?? session.effort;
+  const resolved = resolvePiRoutedModel(requested);
+  const effort = session.effort;
   return {
     model: resolved
       ? `pi/${resolved.providerID}/${resolved.modelID}`

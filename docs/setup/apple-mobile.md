@@ -23,7 +23,7 @@ Store the private key outside the app project with mode `0600`. Put credentials 
 
 Before an ad-hoc build, the operator must also arrange an Apple Distribution certificate and private key in the Mac's Keychain, register each target device UDID in the Apple Developer portal, and grant the App Store Connect API key access to certificates, identifiers, and profiles. The agent cannot enroll in Apple's program, accept agreements, obtain device UDIDs, or create private credentials for the operator.
 
-Open Session checks `apple-release` against the current prompter only. An allowed session creator does not grant release access to someone else steering that shared session. The setup route refuses to create or unrestrict the connection without at least one allowed person, and execution still needs the separate authenticated approval grant.
+Open Session checks `apple-release` against the current prompter only. An allowed session creator does not grant release access to someone else steering that shared session. The setup route refuses to create or unrestrict the connection without at least one allowed person.
 
 ## Configure an app
 
@@ -67,12 +67,10 @@ The project also needs `Package.swift` and `xtool.yml`.
 
 Add the artifact directory to `.gitignore`.
 
-## Release approval
+## Release plans
 
-Release plans expire after one hour. A plan is authenticated and bound to the clean git commit, branch, project config, and, for an existing IPA upload, the artifact filename and SHA-256. Repository config cannot disable the clean-worktree check. Planning copies an existing IPA into private controlled storage, and execution uploads that exact approved copy. Build releases execute from a fresh detached checkout at the planned commit, not from the selected worktree.
+Release plans expire after one hour. A plan is authenticated and bound to the clean git commit, branch, project config, and, for an existing IPA upload, the artifact filename and SHA-256. Repository config cannot disable the clean-worktree check. Planning copies an existing IPA into private controlled storage, and execution uploads that exact copy. Build releases execute from a fresh detached checkout at the planned commit, not from the selected worktree.
 
-Planning creates a pending request but never authorizes execution. In a later step, a signed-in person on the release allowlist reviews the full project path, plan ID, commit, and any IPA filename and SHA-256 under **Settings → Integrations → Apple mobile → Release approvals**, then clicks **Approve**. Execution requires the same full commit SHA and atomically consumes that one-time approval grant. Echoing the plan ID or commit from the planning response is not approval.
-
-The shipped skill requires a separate user turn between planning and execution. Review the commit, version, build number, destination, and effects before approving. TestFlight upload only hands the build to Apple for processing. It does not submit for review or make the app public.
+There is no separate human approval step: anyone allowed to use `apple-release` can plan and then execute. Execution requires the plan's full commit SHA and claims the plan atomically, so each plan runs at most once. Once execution starts the plan is discarded, even if a step fails, because signing or upload may already have happened. TestFlight upload only hands the build to Apple for processing. It does not submit for review or make the app public.
 
 Existing IPA upload uses `xcrun altool` on macOS. Linux and Windows uploads are unsupported. Release execution always requires macOS and Xcode.

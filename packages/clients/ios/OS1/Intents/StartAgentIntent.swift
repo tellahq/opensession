@@ -71,5 +71,14 @@ struct AgentShortcuts: AppShortcutsProvider {
             shortTitle: "Start an Agent",
             systemImageName: "mic"
         )
+        AppShortcut(
+            intent: TalkToDeskIntent(),
+            phrases: [
+                "Talk to Desk in \(.applicationName)",
+                "Call my \(.applicationName) Desk",
+            ],
+            shortTitle: "Talk to Desk",
+            systemImageName: "waveform"
+        )
     }
 }

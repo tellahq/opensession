@@ -34,8 +34,10 @@ import {
   query,
   createSdkMcpServer,
   tool,
+  type EffortLevel,
   type Query,
   type SDKUserMessage,
+  type ThinkingConfig,
 } from "@anthropic-ai/claude-agent-sdk";
 import { getCurrentSystemPrompt, getCurrentTools } from "@earendil-works/pi-ai";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
@@ -832,26 +834,63 @@ export function buildPiAnthropicProvider(
     },
     getModels: () => models,
     stream,
-    // pi's agent loop calls streamSimple (reasoning level rides the options).
-    // The SDK has no budget control, so both entry points map to the same
-    // run; only thinking "off" is honored (sdkThinkingDisabled).
+    // pi's agent loop calls streamSimple (reasoning level rides the options),
+    // so both entry points map to the same run; sdkThinkingOptions turns the
+    // level into the SDK's thinking and effort options.
     streamSimple: stream,
   };
   return provider as unknown as PiNativeProvider;
 }
 
+export type SdkThinkingOptions = {
+  thinking?: ThinkingConfig;
+  effort?: EffortLevel;
+};
+
+const SDK_EFFORT_LEVELS: readonly EffortLevel[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
 /**
- * Whether to start the SDK query with extended thinking off. Pi's agent loop
+ * SDK thinking and effort options for pi's thinking level. Pi's agent loop
  * sends no `reasoning` for a reasoning-capable model only when its thinking
- * level is "off" (effort "none"); every other level keeps the SDK's default
- * thinking, as before. Without this a two-sentence one-shot spends tens of
- * seconds reasoning.
+ * level is "off" (effort "none"), which turns thinking off: without it a
+ * two-sentence one-shot spends tens of seconds reasoning. Every other level
+ * runs adaptive thinking at the matching effort (the model's thinkingLevelMap
+ * first, as pi's own Anthropic provider does). Thinking is shown as a summary:
+ * recent models default to omitting it, which streams empty thinking blocks.
+ * Claude Code downgrades an effort a model does not support.
  */
-export function sdkThinkingDisabled(
-  model: { reasoning?: boolean },
+export function sdkThinkingOptions(
+  model: {
+    reasoning?: boolean;
+    thinkingLevelMap?: Partial<Record<string, string | null>>;
+  },
   options: { [key: string]: unknown } | undefined,
-): boolean {
-  return model.reasoning === true && !options?.reasoning;
+): SdkThinkingOptions {
+  if (model.reasoning !== true) return {};
+  const level = options?.reasoning;
+  if (typeof level !== "string" || !level) {
+    return { thinking: { type: "disabled" } };
+  }
+  const mapped = model.thinkingLevelMap?.[level];
+  const candidate = typeof mapped === "string" ? mapped : level;
+  const effort: EffortLevel = SDK_EFFORT_LEVELS.includes(
+    candidate as EffortLevel,
+  )
+    ? (candidate as EffortLevel)
+    : candidate === "minimal"
+      ? "low"
+      : "high";
+  return { thinking: { type: "adaptive", display: "summarized" }, effort };
+}
+
+function sdkThinkingKey(options: SdkThinkingOptions): string {
+  return JSON.stringify([options.thinking ?? null, options.effort ?? null]);
 }
 
 const MAX_LIVE_SDK_CONVERSATIONS = 24;
@@ -914,8 +953,8 @@ export interface LiveSdkConversation {
   lastUsedAt: number;
   inUse: boolean;
   disposed: boolean;
-  /** Started with extended thinking off; fixed for the query's lifetime. */
-  thinkingDisabled: boolean;
+  /** Thinking and effort the query started with; fixed for its lifetime. */
+  thinkingKey: string;
 }
 
 /** Live SDK conversations keyed by store key. Exported for tests. */
@@ -1204,7 +1243,7 @@ function createLiveSdkConversation(input: {
   system: string;
   tools: readonly PiToolShape[];
   plan: PiSdkTurnPlan;
-  thinkingDisabled: boolean;
+  thinking: SdkThinkingOptions;
 }): LiveSdkConversation {
   const prompt = new SdkInputQueue();
   const controller = new AbortController();
@@ -1247,9 +1286,7 @@ function createLiveSdkConversation(input: {
         : {}),
       abortController: controller,
       includePartialMessages: true,
-      ...(input.thinkingDisabled
-        ? { thinking: { type: "disabled" as const } }
-        : {}),
+      ...input.thinking,
       systemPrompt: input.system || " ",
       settingSources: [],
       mcpServers: mcpServers as any,
@@ -1284,7 +1321,7 @@ function createLiveSdkConversation(input: {
     lastUsedAt: Date.now(),
     inUse: false,
     disposed: false,
-    thinkingDisabled: input.thinkingDisabled,
+    thinkingKey: sdkThinkingKey(input.thinking),
   };
   liveSdkConversations().set(input.key, live);
   prompt.push(inputForPlan(input.plan));
@@ -1298,7 +1335,7 @@ function acquireLiveSdkQuery(input: {
   system: string;
   tools: readonly PiToolShape[];
   plan: PiSdkTurnPlan;
-  thinkingDisabled: boolean;
+  thinking: SdkThinkingOptions;
 }): LiveQueryFacade {
   pruneLiveSdkConversations();
   let live = liveSdkConversations().get(input.key);
@@ -1313,7 +1350,7 @@ function acquireLiveSdkQuery(input: {
     disposeLiveSdkConversation(live, "conversation diverged");
     live = undefined;
   }
-  if (live && live.thinkingDisabled !== input.thinkingDisabled) {
+  if (live && live.thinkingKey !== sdkThinkingKey(input.thinking)) {
     disposeLiveSdkConversation(live, "thinking setting changed");
     live = undefined;
   }
@@ -1513,7 +1550,7 @@ async function* runSdkAttempt(
       system,
       tools: requestTools,
       plan,
-      thinkingDisabled: sdkThinkingDisabled(model, options),
+      thinking: sdkThinkingOptions(model, options),
     });
     const controller = q.live.controller;
     q.live.inUse = true;

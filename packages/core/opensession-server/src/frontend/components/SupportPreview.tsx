@@ -10,7 +10,10 @@ import { Composer } from "./Composer";
 import { useCurrentUser } from "./UserPicker";
 import { ConversationPane } from "./ConversationPane";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
-import { resolveNewSessionModel } from "../lib/default-model-pref";
+import {
+  resolveNewSessionEffort,
+  resolveNewSessionModel,
+} from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
 
 interface Props {
@@ -78,8 +81,8 @@ export function SupportPreview({
       .then(async (m) => {
         setModels(m.models);
         setDefaultModel(m.default);
-        // Preselect this person's own default model and engine (Settings →
-        // Preferences); "" keeps the workspace default.
+        // Preselect this person's own default model (Settings →
+        // Preferences); "" keeps the instance default.
         const preselect = await resolveNewSessionModel(m);
         if (preselect) setModel((current) => current || preselect);
       })
@@ -136,6 +139,13 @@ export function SupportPreview({
       },
     };
     if (model) message.model = model;
+    // This person's default effort (Settings → Preferences), when the model
+    // the session starts on offers it.
+    const preferredEffort = resolveNewSessionEffort(
+      { models, default: defaultModel },
+      model,
+    );
+    if (preferredEffort) message.effort = preferredEffort;
     if (pastedTexts.length) message.pastedTexts = pastedTexts;
     send(message);
     // App navigates into the session on session_created

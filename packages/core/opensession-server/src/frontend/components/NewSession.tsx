@@ -53,15 +53,20 @@ import {
 } from "../lib/attachments";
 import { useAttachmentUploads } from "../hooks/useAttachmentUploads";
 import { useDefaultModelPreference } from "../hooks/useDefaultModelPreference";
-import { resolveNewSessionModel } from "../lib/default-model-pref";
+import {
+  resolveNewSessionEffort,
+  resolveNewSessionModel,
+} from "../lib/default-model-pref";
 import { projectComposerSessions } from "../lib/composer-session-projection";
 import { baseModelId, modelEngine } from "./ModelEffortSelect";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { effectiveSendKey, MOD_ENTER_GLYPH } from "../lib/send-key";
 import { NO_REPO } from "../lib/session-repo";
 import {
+  sandboxMachineChoices,
   sandboxProviderLabel,
   sandboxProviderNote,
+  splitSandboxChoice,
 } from "../lib/ready-sandbox-providers";
 import {
   getSessionCheckoutPrefs,
@@ -188,7 +193,6 @@ type NewSessionCreateMessage = Extract<
   { type: "create_session" }
 > & {
   attachRepos?: string[];
-  modelWorkspaceId?: string;
 };
 
 interface AskSurfaceStyle extends React.CSSProperties {
@@ -206,7 +210,6 @@ export function NewSession({
   initialMcpServers,
   forceMode,
   workspaceId: sourceWorkspaceId,
-  modelWorkspaceId,
   forceRepo,
   forceBranch: sourceBranch,
   workspaces,
@@ -453,14 +456,20 @@ export function NewSession({
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   const [model, setModel] = useState(""); // "" = default
-  const { preferredDefaultModel, setPreferredDefaultModel } =
-    useDefaultModelPreference();
+  const {
+    preferredDefaultModel,
+    preferredDefaultEffort,
+    setPreferredDefaultModel,
+  } = useDefaultModelPreference();
   // The shared model settings menu carries the same choices as an existing
   // session's composer. Both values persist on the new session and apply to
   // its opening turn.
   const [effort, setKnownEffort] =
     useState<NonNullable<NewSessionCreateMessage["effort"]>>("high");
-  function setEffort(nextEffort: string) {
+  // Once the person picks an effort here, the preference that preselected
+  // one (Settings → Preferences) no longer applies to this palette.
+  const effortTouchedRef = useRef(false);
+  const applyEffort = (nextEffort: string) => {
     switch (nextEffort) {
       case "none":
       case "low":
@@ -470,7 +479,11 @@ export function NewSession({
       case "max":
         setKnownEffort(nextEffort);
     }
-  }
+  };
+  const setEffort = (nextEffort: string) => {
+    effortTouchedRef.current = true;
+    applyEffort(nextEffort);
+  };
   const [autoFallback, setAutoFallback] = useState(true);
   const [speed, setSpeed] = useState<SessionSpeed>("standard");
   // Pstack mode: the pstack playbooks and skills load for every turn. Off by
@@ -559,10 +572,11 @@ export function NewSession({
       : (sandboxStatus.providers || [])
           .filter((p) => p.configured && p.certified)
           .map((p) => p.id);
+    // A Modal default may carry a GPU (`modal:T4`).
     setSandboxProvider(
       repoSandboxDefault &&
         repoSandboxDefault !== "none" &&
-        ready.includes(repoSandboxDefault)
+        ready.includes(splitSandboxChoice(repoSandboxDefault).provider)
         ? repoSandboxDefault
         : "",
     );
@@ -575,8 +589,10 @@ export function NewSession({
         .filter((p) => p.configured && p.certified)
         .map((p) => p.id);
   const sandboxAvailable = readySandboxProviders.length > 0;
+  // The Machine choice: a provider, or Modal with a GPU (`modal:T4`).
+  const sandboxChoice = splitSandboxChoice(sandboxProvider);
   const selectedSandboxAvailable =
-    !sandboxProvider || readySandboxProviders.includes(sandboxProvider);
+    !sandboxProvider || readySandboxProviders.includes(sandboxChoice.provider);
   const showSandboxPicker =
     !!sandboxStatus && (sandboxAvailable || !!sandboxProvider);
   const sandboxLabel = (id: string) =>
@@ -587,7 +603,7 @@ export function NewSession({
   // is no longer ready (a project default), so the choice stays visible.
   const sandboxChoices = [
     "",
-    ...readySandboxProviders,
+    ...sandboxMachineChoices(readySandboxProviders),
     ...(sandboxProvider && !selectedSandboxAvailable ? [sandboxProvider] : []),
   ];
   // The repo's first declared Portal, offered to start with the session.
@@ -623,7 +639,9 @@ export function NewSession({
   // Sandbox sessions adopt a full-runner prewarm that starts on the first
   // keystroke. Strictly fire-and-forget: failure must never surface or block
   // typing.
-  const shouldPrewarm = sandboxProvider !== "" && selectedSandboxAvailable;
+  // A GPU machine is never prewarmed: it would hold a GPU while you type.
+  const shouldPrewarm =
+    sandboxProvider !== "" && selectedSandboxAvailable && !sandboxChoice.gpu;
   const [sandboxWarmed, setSandboxWarmed] = useState(false);
   const lastPrewarmAtRef = useRef(0);
   useEffect(() => {
@@ -637,10 +655,10 @@ export function NewSession({
     if (!shouldPrewarm || !hasPromptText || busy) return;
     if (Date.now() - lastPrewarmAtRef.current < 60_000) return;
     lastPrewarmAtRef.current = Date.now();
-    requestSandboxPrewarm(sandboxProvider, repo, getCurrentUser())
+    requestSandboxPrewarm(sandboxChoice.provider, repo, getCurrentUser())
       .then((r) => setSandboxWarmed(r.state === "ready"))
       .catch(() => {});
-  }, [hasPromptText, shouldPrewarm, sandboxProvider, repo, busy]);
+  }, [hasPromptText, shouldPrewarm, sandboxChoice.provider, repo, busy]);
 
   // An empty selection means every available service; one or more picks narrow
   // the session to those services. Command-menu shortcuts seed this same state
@@ -742,14 +760,17 @@ export function NewSession({
   }
 
   useEffect(() => {
-    fetchModels(modelWorkspaceId || sourceWorkspaceId)
+    fetchModels()
       .then(async (m) => {
         setModels(m.models);
         setDefaultModel(m.default);
         // Untouched picker: start on this person's own default model and
-        // engine (Settings → Preferences); "" is no preference, which keeps
-        // the workspace default.
+        // effort (Settings → Preferences); "" is no preference, which keeps
+        // the instance default.
         const preselect = await resolveNewSessionModel(m);
+        const preferredEffort = resolveNewSessionEffort(m, preselect);
+        if (preferredEffort && !effortTouchedRef.current)
+          applyEffort(preferredEffort);
         setModel((current) => {
           if (current) {
             // Pi-routed ids validate against their base entry (the pi/ prefix
@@ -762,7 +783,7 @@ export function NewSession({
         });
       })
       .catch(() => {});
-  }, [modelWorkspaceId, sourceWorkspaceId]);
+  }, []);
 
   // Worktrees are per-repo; refetch and reset the selection when it changes.
   // Inside a workspace, snap back to the shared sibling branch, not "New branch".
@@ -1144,7 +1165,6 @@ export function NewSession({
     // context separately. It must not appear in the optimistic destination.
     if (candidateWorkspaceId && !createWorkspaceId)
       createMessage.workspaceId = candidateWorkspaceId;
-    if (modelWorkspaceId) createMessage.modelWorkspaceId = modelWorkspaceId;
     // This assignment replaces `selectedPullRequest ? { fromPr: true } : {}`.
     if (selectedPullRequest) createMessage.fromPr = true;
     if (model) createMessage.model = model;
@@ -1158,7 +1178,10 @@ export function NewSession({
     if (accountProvider && accountId) createMessage.accountId = accountId;
     // Once defaults have loaded, Host is an explicit override ("local").
     // Omitting the field would make the server re-apply the user's default.
-    if (sandboxStatus) createMessage.sandbox = sandboxProvider || "local";
+    if (sandboxStatus) {
+      createMessage.sandbox = sandboxChoice.provider || "local";
+      if (sandboxChoice.gpu) createMessage.sandboxGpu = sandboxChoice.gpu;
+    }
     if (selectedMcpServers.length) {
       createMessage.mcpServers = selectedMcpServers;
     }
@@ -1806,7 +1829,10 @@ export function NewSession({
                       <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
                         {sandboxChoices.map((id) => {
                           const available =
-                            id === "" || readySandboxProviders.includes(id);
+                            id === "" ||
+                            readySandboxProviders.includes(
+                              splitSandboxChoice(id).provider,
+                            );
                           const opt = {
                             id,
                             note: available
@@ -1978,6 +2004,7 @@ export function NewSession({
                   defaultModel,
                   model,
                   preferredDefaultModel,
+                  preferredDefaultEffort,
                   effort,
                   autoFallback,
                   speed,

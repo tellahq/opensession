@@ -151,6 +151,7 @@ export const WORKFLOW_INPROCESS_EXCLUDED: Record<string, string> = {
   "opensession-portals": "it starts supervised services that outlive the call",
   "opensession-scripts":
     "it starts supervised script runs that outlive the call",
+  "opensession-gpu": "it starts GPU jobs that outlive the call and bill a GPU",
   "opensession-runners": "it executes commands on trusted persistent machines",
   "opensession-repos":
     "attaching or switching repos changes the session the run is happening in",

@@ -118,6 +118,7 @@ function stripKnownSandboxRoutes(site: string): string {
     "/run-ws/\\*",
     "/rpc-ws",
     "/sandbox-portal-ws",
+    "/sandbox-agent-ws",
     "/ingress-health",
     "/workload-identity/\\*",
     "/opensession/run-ws/\\*",

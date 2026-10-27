@@ -7,30 +7,24 @@ import {
 import { catalogDocuments } from "../catalog-documents";
 import { __resetWorkspaceProjectionForTest } from "../workspaces";
 import * as catalog from "../model-catalog";
-import * as providers from "../model-providers";
 import * as models from "../models";
 import * as pi from "../pi-config";
 
 let store: SessionKernelStore;
 let previousStore: SessionKernelStore | undefined;
 let configured = new Set(["anthropic", "openai"]);
-let orchestrator = true;
-let preferred = "pi/orchestrator/fable";
+let preferred = "pi/anthropic/claude-opus-5-5";
 const restores: Array<() => void> = [];
 beforeEach(async () => {
   store = new SessionKernelStore(":memory:");
   previousStore = __setSessionKernelStoreForTest(store);
   __resetWorkspaceProjectionForTest();
   configured = new Set(["anthropic", "openai"]);
-  orchestrator = true;
-  preferred = "pi/orchestrator/fable";
+  preferred = "pi/anthropic/claude-opus-5-5";
   const mocks = [
     spyOn(pi, "piEngineEnabled").mockReturnValue(true),
     spyOn(catalog, "configuredModelProviders").mockImplementation(
       () => configured,
-    ),
-    spyOn(providers, "orchestratorEnabled").mockImplementation(
-      () => orchestrator,
     ),
     spyOn(models, "interactiveDefaultModel").mockImplementation(
       () => preferred,
@@ -49,10 +43,8 @@ afterEach(() => {
   __resetWorkspaceProjectionForTest();
 });
 
-async function modelCatalog(workspace = "ws-acme") {
-  const url = new URL(
-    `http://example.test/api/models${workspace ? `?workspace=${workspace}` : ""}`,
-  );
+async function modelCatalog() {
+  const url = new URL("http://example.test/api/models");
   const response = await handleModelsRoutes({
     req: new Request(url),
     url,
@@ -65,58 +57,29 @@ async function modelCatalog(workspace = "ws-acme") {
   };
 }
 
-test("workspace catalogs retain built-ins alongside editable presets and do not rewrite defaults", async () => {
-  for (const builtin of [
-    "pi/dial/ultra",
-    "pi/dial/opus-fable",
-    "pi/orchestrator/fable",
-  ]) {
-    preferred = builtin;
-    const result = await modelCatalog();
-    const ids = result.models.map((model) => model.id);
-    expect(ids).toContain(builtin);
-    expect(ids).toContain("pi/workspace-preset/ws-acme/dial-ultra");
-    expect(ids).toContain("pi/workspace-preset/ws-acme/orchestrator-fable");
-    expect(
-      result.models.find((model) => model.id === builtin)?.label,
-    ).toContain("(built-in)");
-    expect(result.default).toBe(builtin);
-    expect(new Set(ids).size).toBe(ids.length);
-  }
-});
-
-test("empty workspace presets do not remove built-ins and unscoped catalogs stay global", async () => {
-  await catalogDocuments("workspaces").set("ws-acme", {
-    id: "ws-acme",
-    name: "Acme",
-    modelSettings: { presets: [] },
-  });
-  for (const workspace of ["ws-acme", ""]) {
-    const result = await modelCatalog(workspace);
-    expect(result.models.map((model) => model.id)).toContain(
-      "pi/orchestrator/fable",
-    );
-    expect(
-      result.models.some((model) => model.id.includes("workspace-preset")),
-    ).toBe(false);
-  }
-});
-
-test("the union still respects provider availability and the built-in orchestrator opt-in", async () => {
-  orchestrator = false;
-  let result = await modelCatalog();
+test("the catalog lists plain models only and keeps the default", async () => {
+  preferred = "pi/anthropic/claude-opus-5-5";
+  const result = await modelCatalog();
+  const ids = result.models.map((model) => model.id);
+  expect(ids).toContain("pi/anthropic/claude-opus-5-5");
+  expect(ids.every((id) => /^pi\/[^/]+\/.+/.test(id))).toBe(true);
   expect(
-    result.models.some((model) => model.id.startsWith("pi/orchestrator/")),
+    ids.some((id) => /^pi\/(?:dial|orchestrator|workspace-preset)\//.test(id)),
   ).toBe(false);
-  expect(result.models.map((model) => model.id)).toContain(
-    "pi/workspace-preset/ws-acme/orchestrator-fable",
-  );
+  expect(result.default).toBe("pi/anthropic/claude-opus-5-5");
+  expect(new Set(ids).size).toBe(ids.length);
+});
+
+test("a retired preset default resolves to the model it led", async () => {
+  preferred = "pi/dial/ultra";
+  const result = await modelCatalog();
+  expect(result.default).toBe("pi/anthropic/claude-fable-5-1");
+});
+
+test("the catalog respects provider availability", async () => {
   configured = new Set(["openai"]);
-  result = await modelCatalog();
-  expect(result.models.some((model) => model.id.startsWith("pi/dial/"))).toBe(
-    false,
-  );
-  expect(result.models.map((model) => model.id)).not.toContain(
-    "pi/workspace-preset/ws-acme/orchestrator-fable",
-  );
+  const result = await modelCatalog();
+  expect(
+    result.models.every((model) => model.id.startsWith("pi/openai/")),
+  ).toBe(true);
 });

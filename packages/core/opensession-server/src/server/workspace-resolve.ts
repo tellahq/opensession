@@ -22,29 +22,54 @@ import {
   updateWorkspace,
   type Workspace,
 } from "./workspaces";
-import { getCachedSessions, updateSessionFile } from "./session-cache";
+import {
+  findSessionAsync,
+  getCachedSessions,
+  updateSessionFile,
+} from "./session-cache";
 import { getOpenPrSummaries, getRecentPrs } from "./sessions";
 import { workspaceOwningWorktree } from "./session-repos";
 import { getRepo, listWorktrees } from "./worktree";
 import { prKey } from "../agents/github/constants";
 import type { ExternalRef, UnifiedSession } from "./types";
 
-/** What a PR number resolves to on GitHub: its head branch and title. */
+/** What a PR number resolves to on GitHub: its head branch and title, and
+ *  the session its trusted attribution footer names. */
 type PrLookup = (
   ghRepo: string,
   number: number,
-) => Promise<{ branch: string; title: string } | null>;
+) => Promise<{ branch: string; title: string; sessionId?: string } | null>;
 
 // Loaded lazily so resolving a known PR never pulls the GitHub client in.
 const githubPrLookup: PrLookup = async (ghRepo, number) => {
   const { getPrAutomationDetails } = await import("./pr-info");
+  const { sessionRefFromPrBody, trustedPrSessionId } =
+    await import("./pr-cache");
   const pr = await getPrAutomationDetails(String(number), ghRepo);
-  return pr?.headRefName ? { branch: pr.headRefName, title: pr.title } : null;
+  if (!pr?.headRefName) return null;
+  const sessionId = trustedPrSessionId({
+    author: pr.author,
+    sessionRef: sessionRefFromPrBody(pr.body),
+  });
+  return {
+    branch: pr.headRefName,
+    title: pr.title,
+    ...(sessionId ? { sessionId } : {}),
+  };
 };
 let lookupPr: PrLookup = githubPrLookup;
 
 export function __setPrLookupForTest(lookup: PrLookup | undefined): void {
   lookupPr = lookup ?? githubPrLookup;
+}
+
+type SessionLookup = (id: string) => Promise<UnifiedSession | undefined>;
+let lookupSession: SessionLookup = findSessionAsync;
+
+export function __setSessionLookupForTest(
+  lookup: SessionLookup | undefined,
+): void {
+  lookupSession = lookup ?? findSessionAsync;
 }
 import { isNativeSessionId } from "./paths";
 
@@ -125,6 +150,32 @@ function adoptSiblingSessions(
   }
 }
 
+/** A session a person works in, as opposed to a PR review/fix run. */
+function personSession(s: UnifiedSession): boolean {
+  return !s.archived && !s.automation && !s.id.startsWith("bks-ghpr-");
+}
+
+function hasPersonSession(workspaceId: string): boolean {
+  return getCachedSessions().some(
+    (s) => s.workspaceId === workspaceId && personSession(s),
+  );
+}
+
+/**
+ * The workspace of the session a PR's attribution footer names. A session
+ * that opens a PR in a repo it never attached records no link to it, so the
+ * footer is the only thing that says where the PR came from. Only a live
+ * session filed under a workspace answers.
+ */
+async function footerSessionWorkspace(
+  sessionId: string | undefined,
+): Promise<Workspace | null> {
+  if (!sessionId) return null;
+  const session = await lookupSession(sessionId);
+  if (!session?.workspaceId || !personSession(session)) return null;
+  return getWorkspace(session.workspaceId);
+}
+
 /** Serialize concurrent resolves for the same target (double-click guard). */
 const inflight = new Map<string, Promise<unknown>>();
 async function serialized<T>(
@@ -180,7 +231,10 @@ export function workspaceBacksOpenPr(
 /**
  * Resolve the one workspace for a PR. Lookup order (adopt before create):
  * dedupe key → newest PR-matching session's workspace → worktree owner →
- * mint a session-less `ghpr-` workspace. Returns null when the PR can't be
+ * the workspace of the session the PR's footer names → mint a session-less
+ * `ghpr-` workspace. A keyed workspace with no session of its own (minted
+ * by a review run before anything knew where the PR came from) gives way to
+ * the footer session's workspace. Returns null when the PR can't be
  * normalized (unknown to the PR cache and the caller gave no branch).
  */
 export async function resolvePrWorkspace(input: {
@@ -196,10 +250,10 @@ export async function resolvePrWorkspace(input: {
     async () => {
       // Normalize number+branch+title from the PR caches when incomplete.
       let { number, branch, title } = input;
+      const match = (p: { repo: string; number: number; branch: string }) =>
+        p.repo === repoId &&
+        (number !== undefined ? p.number === number : p.branch === branch);
       if (number === undefined || !branch) {
-        const match = (p: { repo: string; number: number; branch: string }) =>
-          p.repo === repoId &&
-          (number !== undefined ? p.number === number : p.branch === branch);
         const pr =
           getOpenPrSummaries().find(match) || getRecentPrs().find(match);
         if (pr) {
@@ -208,6 +262,14 @@ export async function resolvePrWorkspace(input: {
           title = title || pr.title;
         }
       }
+      // The session named in the PR's footer, read lazily: most resolves
+      // never need it. The PR caches parse it from the body; a PR they have
+      // not seen yet (a review run starting as the PR opens) asks GitHub.
+      let lookedUp: Awaited<ReturnType<PrLookup>> | undefined;
+      const cachedFooterSession = () =>
+        number !== undefined || branch
+          ? getRecentPrs().find(match)?.sessionId
+          : undefined;
       // A number the caches have never seen (an older PR, or one named in
       // prose) still needs its branch: without it the workspace has no Review
       // to show and opens on an empty composer. Ask GitHub; a PR it does not
@@ -218,6 +280,7 @@ export async function resolvePrWorkspace(input: {
           ? await lookupPr(ghRepo, number).catch(() => undefined)
           : undefined;
         if (found === null) return null;
+        lookedUp = found;
         if (found) {
           branch = found.branch;
           title = title || found.title;
@@ -252,6 +315,11 @@ export async function resolvePrWorkspace(input: {
 
       // 1. Provenance key (workspaces minted from this PR before).
       const byKey = key ? await findWorkspaceByKey(key) : null;
+      if (byKey && !hasPersonSession(byKey.id)) {
+        const footer = await footerSessionWorkspace(cachedFooterSession());
+        if (footer && footer.id !== byKey.id)
+          return { workspace: footer, created: false, pr };
+      }
       if (byKey) {
         const stamped =
           (await stampWorkspaceIdentity(byKey.id, stamp)) || byKey;
@@ -290,7 +358,21 @@ export async function resolvePrWorkspace(input: {
         }
       }
 
-      // 4. Mint a session-less PR workspace (no worktreeDir — the first session
+      // 4. The workspace of the session that opened the PR, per its footer.
+      // Consulted after the branch-based matches because a session that opened
+      // a PR elsewhere (another repo, a second branch) is not on its branch.
+      let footerSessionId = cachedFooterSession();
+      if (!footerSessionId && number !== undefined && lookedUp === undefined) {
+        const ghRepo = getRepo(repoId).ghRepo;
+        lookedUp = ghRepo
+          ? await lookupPr(ghRepo, number).catch(() => undefined)
+          : undefined;
+      }
+      footerSessionId ??= lookedUp?.sessionId;
+      const footer = await footerSessionWorkspace(footerSessionId);
+      if (footer) return { workspace: footer, created: false, pr };
+
+      // 5. Mint a session-less PR workspace (no worktreeDir — the first session
       // materializes it via the create_session fromPr path).
       const workspace = await createWorkspace({
         name: prWorkspaceName(number, branch, title),

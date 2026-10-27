@@ -139,6 +139,10 @@ export interface RepoSection {
   prCacheRecentLimit?: number;
   /** Repo-relative files worth retaining in warm preview snapshots. */
   warmCachePaths?: string[];
+  /** Other GitHub repositories (`owner/name`, same owner) that this repo's
+   *  builds read, such as a private dependency fork. Every run on the repo
+   *  gets a read-only token for them, used by git for exactly those URLs. */
+  readRepos?: string[];
   /** Track the deployment workflow after a PR is merged. */
   deploymentTracking?: boolean;
   /** Repo-specific threat-model/build notes appended to security scan prompts. */
@@ -310,6 +314,8 @@ export interface Repo {
   prCacheOpenLimit?: number;
   prCacheRecentLimit?: number;
   warmCachePaths?: string[];
+  /** Repositories this repo's builds read (see RepoSection.readRepos). */
+  readRepos?: string[];
   deploymentTracking?: boolean;
   securityInstructions?: string;
 }
@@ -427,6 +433,7 @@ function parseRepoSection(v: unknown): RepoSection | undefined {
     prCacheOpenLimit: num(o.prCacheOpenLimit),
     prCacheRecentLimit: num(o.prCacheRecentLimit),
     warmCachePaths: strArray(o.warmCachePaths),
+    readRepos: strArray(o.readRepos),
     deploymentTracking: bool(o.deploymentTracking),
     securityInstructions: str(o.securityInstructions),
   });
@@ -916,6 +923,7 @@ function resolveConfiguredRepos(
           prCacheOpenLimit: entry.prCacheOpenLimit,
           prCacheRecentLimit: entry.prCacheRecentLimit,
           warmCachePaths: entry.warmCachePaths,
+          readRepos: entry.readRepos,
           deploymentTracking: entry.deploymentTracking,
           securityInstructions: entry.securityInstructions,
         }),
