@@ -665,7 +665,7 @@ proves exec and file upload, restores a filesystem snapshot into a second
 container, and terminates both (about 40 seconds once the image is cached).
 
 The base image is Ubuntu 24.04 with build tools, clang, CMake, Ninja, NASM,
-the OpenSSL headers, Rust
+the OpenSSL headers, the AWS CLI v2, Rust
 (rustup under `/home/ubuntu`), and the Vulkan and GL loader libraries. Modal
 injects the NVIDIA driver with every capability, so with those libraries
 `vulkaninfo` lists the GPU as a discrete device instead of falling back to

@@ -8,9 +8,11 @@ import { createHash } from "crypto";
 /**
  * The base image every Modal Sandbox starts from (before a project
  * snapshot): the base runtime's workspace tools, a native build toolchain,
- * Rust through rustup under /home/ubuntu (proxies linked into
- * /usr/local/bin, so any command with HOME=/home/ubuntu finds them), and
- * the GL dispatch and Vulkan loader libraries. Modal mounts the NVIDIA
+ * the AWS CLI v2 (GitHub-hosted Ubuntu runners ship it, and workload
+ * identity hands Sandbox commands AWS credentials), Rust through rustup
+ * under /home/ubuntu (proxies linked into /usr/local/bin, so any command
+ * with HOME=/home/ubuntu finds them), and the GL dispatch and Vulkan
+ * loader libraries. Modal mounts the NVIDIA
  * driver and its Vulkan manifest into GPU containers; without libglvnd the
  * driver cannot start and Vulkan falls back to the CPU (llvmpipe).
  *
@@ -29,6 +31,8 @@ export const MODAL_BASE_IMAGE_COMMANDS: readonly string[] = [
     "direnv lsof procps less openssh-client " +
     "libvulkan1 vulkan-tools libglvnd0 libgl1 libglx0 libegl1 libxext6 libx11-6 " +
     "&& rm -rf /var/lib/apt/lists/*",
+  "RUN curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip -o /tmp/awscliv2.zip && " +
+    "unzip -q /tmp/awscliv2.zip -d /tmp && /tmp/aws/install && rm -rf /tmp/aws /tmp/awscliv2.zip",
   "RUN mkdir -p /home/ubuntu && " +
     "HOME=/home/ubuntu sh -c 'curl -fsSL https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal --component rustfmt,clippy' && " +
     'for f in /home/ubuntu/.cargo/bin/*; do ln -sf "$f" /usr/local/bin/; done',
