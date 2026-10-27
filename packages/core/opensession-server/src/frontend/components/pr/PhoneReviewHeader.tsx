@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { TopBar } from "../../ui/top-bar";
 
-/** One phone title row; the diff, not repeated workspace chrome, owns the screen. */
+/** One phone title row; the diff, not repeated workspace chrome, owns the screen.
+ *  Trailing actions share one pill, the way GitHub's app groups them. */
 export function PhoneReviewHeader({
   title,
   subtitle,
@@ -23,9 +24,11 @@ export function PhoneReviewHeader({
         >
           {title}
         </h1>
-        <div className="truncate text-supporting text-dim">{subtitle}</div>
+        <div className="truncate text-body text-dim">{subtitle}</div>
       </div>
-      <div className="flex shrink-0 items-center gap-1">{actions}</div>
+      <div className="flex shrink-0 items-center rounded-full bg-panel">
+        {actions}
+      </div>
     </TopBar>
   );
 }

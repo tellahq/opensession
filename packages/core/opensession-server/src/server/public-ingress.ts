@@ -8,7 +8,7 @@
  * second webhook port or a copy of the route allowlist.
  *
  *   - exact routes registered by webhook-server.ts
- *   - /run-ws/<hostId>, /rpc-ws and /sandbox-portal-ws
+ *   - /run-ws/<hostId>, /rpc-ws, /sandbox-portal-ws and /sandbox-agent-ws
  *   - /ingress-health
  *   - /workload-identity/*
  *
@@ -53,6 +53,13 @@ import {
   sandboxPortalRelayMessage,
   sandboxPortalRelayOpen,
 } from "./sandbox-portal-relay";
+import {
+  handleSandboxAgentUpgrade,
+  SANDBOX_AGENT_PATH,
+  sandboxAgentClose,
+  sandboxAgentMessage,
+  sandboxAgentOpen,
+} from "./sandbox/agent-channel";
 import { configuredIngress } from "./config";
 import { publicIngressConfig } from "./sandbox/config";
 import { handleWorkloadIdentityRequest } from "./workload-identity";
@@ -174,6 +181,23 @@ async function ingressFetch(
     }
     return response;
   }
+  if (path === SANDBOX_AGENT_PATH) {
+    // Same shape as the Portal relay: authenticate first. A stale agent
+    // (its token died with a restart) probes once and exits, so it gets a
+    // budget of its own instead of spending the shared provider egress
+    // IP's, which live Portal sidecars need after the same restart.
+    const response = handleSandboxAgentUpgrade(req, server, path);
+    if (
+      response?.status === 403 &&
+      rateLimited(`agent:${clientIp(req, server)}`)
+    ) {
+      return new Response(null, {
+        status: 429,
+        headers: { "retry-after": String(Math.ceil(WINDOW_MS / 1000)) },
+      });
+    }
+    return response;
+  }
   if (path.startsWith("/run-ws/") || path === "/rpc-ws") {
     if (rateLimited(clientIp(req, server))) {
       return new Response(null, {
@@ -228,13 +252,16 @@ export function startPublicIngress(overrides?: {
       // the main server's order of magnitude rather than Bun's 16 MB default.
       maxPayloadLength: 64 * 1024 * 1024,
       open(ws) {
+        if (sandboxAgentOpen(ws)) return;
         if (!sandboxPortalRelayOpen(ws)) sandboxWsOpen(ws);
       },
       message(ws, message) {
+        if (sandboxAgentMessage(ws, message)) return;
         if (!sandboxPortalRelayMessage(ws, message as any))
           sandboxWsMessage(ws, message as any);
       },
       close(ws) {
+        if (sandboxAgentClose(ws)) return;
         if (!sandboxPortalRelayClose(ws)) sandboxWsClose(ws);
       },
     },

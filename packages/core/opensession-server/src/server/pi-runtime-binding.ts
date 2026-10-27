@@ -1,4 +1,5 @@
 import { buildPiAnthropicModels } from "./pi-anthropic-models";
+import type { ModelCost } from "@earendil-works/pi-ai";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { CodexAccount } from "./codex-accounts";
 import type { SeededOpenaiAuth } from "./openai-auth";
@@ -96,6 +97,7 @@ export interface PiRuntimeBindingDependencies {
     usageCredits?: boolean;
     builtinModels: ReturnType<ModelRuntime["getModels"]>;
     ensureModelId: string;
+    ephemeral?: boolean;
   }) => Parameters<ModelRuntime["registerNativeProvider"]>[0];
   ensureAnthropicBridge: () => { url: string; key: string };
   buildThirdPartyProviderPlan: (input: {
@@ -120,6 +122,8 @@ export interface CreatePiRuntimeBindingInput {
   accountId?: string;
   accountStrict?: boolean;
   usageCredits?: boolean;
+  /** Throwaway run: release the live provider conversation once it settles. */
+  ephemeral?: boolean;
   /** Ultrafast turns prefer accounts on the plan that serves it. */
   speed?: SessionSpeed;
   /** Accounts already burned by this turn's walk (Codex and SuperGrok pools). */
@@ -155,19 +159,56 @@ class MemoryCredentialStore {
   }
 }
 
-function openaiFallbackModel(modelID: string) {
-  // Placeholder metadata for an OpenAI model newer than the bundled Pi
-  // catalog. Catalogued models (GPT-6 Astra, Sol, 6.1 Sol, Luna) never reach
-  // this; their pricing and limits come from pi-ai.
+/** Release metadata for OpenAI models newer than the bundled Pi catalog.
+ * `sibling` names a catalogued model on the same backend whose request
+ * compat (grammar tools, tool search) the new model shares. */
+const OPENAI_RELEASE_METADATA: Record<
+  string,
+  { name: string; sibling: string; cost: ModelCost }
+> = {
+  // https://developers.openai.com/api/docs/models/gpt-6.1-terra
+  "gpt-6.1-terra": {
+    name: "GPT-6.1 Terra",
+    sibling: "gpt-6.1-sol",
+    cost: {
+      input: 1,
+      output: 5,
+      cacheRead: 0.05,
+      cacheWrite: 1.25,
+      tiers: [
+        {
+          inputTokensAbove: 272_000,
+          input: 2,
+          output: 7.5,
+          cacheRead: 0.1,
+          cacheWrite: 2.5,
+        },
+      ],
+    },
+  },
+};
+
+function openaiFallbackModel(
+  modelID: string,
+  catalogued: (id: string) => { compat?: unknown } | undefined,
+) {
+  // Metadata for an OpenAI model newer than the bundled Pi catalog.
+  // Catalogued models (GPT-6 Astra, Sol, 6.1 Sol, Luna) never reach this;
+  // their pricing and limits come from pi-ai. A model listed in
+  // OPENAI_RELEASE_METADATA gets its published rates; anything else is an
+  // unpriced placeholder.
+  const release = OPENAI_RELEASE_METADATA[modelID];
+  const compat = release ? catalogued(release.sibling)?.compat : undefined;
   return {
     id: modelID,
-    name: modelID,
+    name: release?.name ?? modelID,
     reasoning: true,
     thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" },
     input: ["text", "image"] as Array<"text" | "image">,
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    cost: release?.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 272_000,
     maxTokens: 128_000,
+    ...(compat ? { compat } : {}),
   };
 }
 
@@ -299,7 +340,11 @@ export async function createPiRuntimeBinding(
     model = runtime.getModel("openai", input.modelID);
     if (!model) {
       runtime.registerProvider("openai", {
-        models: [openaiFallbackModel(input.modelID)],
+        models: [
+          openaiFallbackModel(input.modelID, (id) =>
+            runtime.getModel("openai", id),
+          ),
+        ],
       });
       model = runtime.getModel("openai", input.modelID);
     }
@@ -312,7 +357,11 @@ export async function createPiRuntimeBinding(
     model = runtime.getModel("openai-codex", input.modelID);
     if (!model) {
       runtime.registerProvider("openai-codex", {
-        models: [openaiFallbackModel(input.modelID)],
+        models: [
+          openaiFallbackModel(input.modelID, (id) =>
+            runtime.getModel("openai-codex", id),
+          ),
+        ],
       });
       model = runtime.getModel("openai-codex", input.modelID);
     }
@@ -333,6 +382,7 @@ export async function createPiRuntimeBinding(
       usageCredits: input.usageCredits,
       builtinModels: runtime.getModels("anthropic"),
       ensureModelId: input.modelID,
+      ...(input.ephemeral ? { ephemeral: true } : {}),
     });
     runtime.registerNativeProvider(provider);
     model = runtime.getModel("anthropic", input.modelID);

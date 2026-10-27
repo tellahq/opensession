@@ -58,7 +58,6 @@ import {
   toPiModel,
 } from "./models";
 import { INTERACTIVE_KINDS, baseJournalKind } from "./run-policy";
-import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import {
   isProviderOverloadError,
   isTransientRunError,
@@ -166,6 +165,11 @@ export interface RunAgentOpts {
    * the workspace through the session-scoped remote-workspace MCP server.
    */
   disableLocalWorkspaceTools?: boolean;
+  /**
+   * Throwaway, never-resumed run (tool-less one-shots). The model runtime
+   * releases its live provider conversation as soon as the turn settles.
+   */
+  ephemeral?: boolean;
   /**
    * System-prompt note describing the session's repos (primary + attached) and
    * their worktree paths, so the agent works in the right isolated checkout for
@@ -653,15 +657,9 @@ export async function* runAgent(
 async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
   const wasCancelled = () => opts.shouldCancel?.() === true;
   if (wasCancelled()) return;
-  // Workspace presets stay as their picker id on the session. Resolve their
-  // lead only for dispatch, so the session never loses its preset identity.
-  const workspacePreset = await resolveWorkspaceModelPreset(opts.model);
-  const requestedModel = resolveModel(
-    workspacePreset?.model || opts.model || getDefaultModel(),
-  );
+  const requestedModel = resolveModel(opts.model || getDefaultModel());
   const wantsBestCodex = requestedModel?.id === BEST_AVAILABLE_CODEX_MODEL;
-  const primaryModel =
-    workspacePreset?.model || resolveConcreteModel(opts.model);
+  const primaryModel = resolveConcreteModel(opts.model);
   const preferredFallback =
     opts.fallbackModel === "none" || /^(?:claude|codex)\//.test(primaryModel)
       ? "none"

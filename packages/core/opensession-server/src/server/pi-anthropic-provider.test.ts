@@ -53,7 +53,8 @@ import {
   usageFromSdkResult,
   type PiCatalogModel,
   type PiWireMessage,
-  sdkThinkingDisabled,
+  sdkThinkingOptions,
+  type SdkThinkingOptions,
 } from "./pi-anthropic-provider";
 import {
   createEarlyStopTracker,
@@ -65,6 +66,7 @@ import * as passthrough from "./meridian-passthrough";
 import {
   captureUnforwardedToolUses,
   captureVisibleSdkAssistantToolUses,
+  liveSdkConversations,
 } from "./pi-model-runtime";
 import {
   PRIOR_IMAGE_PLACEHOLDER,
@@ -80,6 +82,7 @@ import {
 import { isPiUsageLimitShape } from "./pi-runner";
 import * as accounts from "./claude-accounts";
 import * as sdk from "@anthropic-ai/claude-agent-sdk";
+import type { EffortLevel } from "@anthropic-ai/claude-agent-sdk";
 
 // Seam everything at a throwaway dir. The config/store modules read their env
 // seams per call, so setting them here (after hoisted imports) is safe — and
@@ -1343,6 +1346,82 @@ describe("buildPiAnthropicProvider", () => {
     }
   });
 
+  for (const ephemeral of [true, false]) {
+    test(`a settled ${ephemeral ? "ephemeral" : "resumable"} run ${ephemeral ? "releases" : "keeps"} its live SDK conversation`, async () => {
+      designate(["settle-account"]);
+      seedAccounts(["settle-account"]);
+      accounts.__setUsageCacheForTest("settle-account", freshUsage);
+      const closed: string[] = [];
+      const query = spyOn(sdk, "query").mockImplementation(() => {
+        const messages: Array<Record<string, any>> = [
+          { type: "system", subtype: "init", session_id: "sdk-settle" },
+          {
+            type: "result",
+            subtype: "success",
+            is_error: false,
+            result: "ok",
+            usage: { input_tokens: 1, output_tokens: 1 },
+            session_id: "sdk-settle",
+          },
+        ];
+        return {
+          next: async () => {
+            const value = messages.shift();
+            return value
+              ? { value, done: false }
+              : { value: undefined, done: true };
+          },
+          close: () => closed.push("closed"),
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        } as any;
+      });
+      const sessionId = `oneshot-${crypto.randomUUID()}`;
+      try {
+        const provider = buildPiAnthropicProvider({
+          unifiedSessionId: sessionId,
+          builtinModels: [model],
+          ...(ephemeral ? { ephemeral: true } : {}),
+        }) as any;
+        const events: any[] = [];
+        for await (const ev of provider.streamSimple(
+          model,
+          { messages: [{ role: "user", content: "hi" }] },
+          { sessionId },
+        )) {
+          events.push(ev);
+        }
+        expect(events.at(-1)?.type).toBe("done");
+        const keys = [...liveSdkConversations().keys()].filter((key) =>
+          key.startsWith(`pi:${sessionId}:`),
+        );
+        if (ephemeral) {
+          // The claude process exits now instead of idling until eviction,
+          // and a never-resumed run leaves no resume mapping behind.
+          expect(keys).toEqual([]);
+          expect(closed).toEqual(["closed"]);
+          expect(
+            [...piSdkSessionStore().keys()].some((key) =>
+              key.startsWith(`pi:${sessionId}:`),
+            ),
+          ).toBe(false);
+        } else {
+          expect(keys).toHaveLength(1);
+          expect(closed).toEqual([]);
+        }
+      } finally {
+        for (const live of [...liveSdkConversations().values()]) {
+          if (live.key.startsWith(`pi:${sessionId}:`)) {
+            live.disposed = true;
+            liveSdkConversations().delete(live.key);
+          }
+        }
+        query.mockRestore();
+      }
+    });
+  }
+
   test("more than 300 requests on one account still reach the SDK", async () => {
     designate(["busy-account"]);
     seedAccounts(["busy-account"]);
@@ -1727,13 +1806,44 @@ describe("captureUnforwardedToolUses", () => {
   });
 });
 
-describe("sdkThinkingDisabled", () => {
+describe("sdkThinkingOptions", () => {
+  const off: SdkThinkingOptions = { thinking: { type: "disabled" } };
+  const adaptive = (effort: EffortLevel): SdkThinkingOptions => ({
+    thinking: { type: "adaptive", display: "summarized" },
+    effort,
+  });
+
   test("turns thinking off only when Pi sends no reasoning level for a reasoning model", () => {
-    expect(sdkThinkingDisabled({ reasoning: true }, {})).toBe(true);
-    expect(sdkThinkingDisabled({ reasoning: true }, undefined)).toBe(true);
+    expect(sdkThinkingOptions({ reasoning: true }, {})).toEqual(off);
+    expect(sdkThinkingOptions({ reasoning: true }, undefined)).toEqual(off);
+    expect(sdkThinkingOptions({ reasoning: false }, {})).toEqual({});
+  });
+
+  test("maps the thinking level to an effort with summarized thinking", () => {
     expect(
-      sdkThinkingDisabled({ reasoning: true }, { reasoning: "medium" }),
-    ).toBe(false);
-    expect(sdkThinkingDisabled({ reasoning: false }, {})).toBe(false);
+      sdkThinkingOptions({ reasoning: true }, { reasoning: "minimal" }),
+    ).toEqual(adaptive("low"));
+    expect(
+      sdkThinkingOptions({ reasoning: true }, { reasoning: "medium" }),
+    ).toEqual(adaptive("medium"));
+    expect(
+      sdkThinkingOptions({ reasoning: true }, { reasoning: "xhigh" }),
+    ).toEqual(adaptive("xhigh"));
+  });
+
+  test("prefers the model's thinking level map", () => {
+    const model = {
+      reasoning: true,
+      thinkingLevelMap: { high: "max", low: null, medium: "unknown" },
+    };
+    expect(sdkThinkingOptions(model, { reasoning: "high" })).toEqual(
+      adaptive("max"),
+    );
+    expect(sdkThinkingOptions(model, { reasoning: "low" })).toEqual(
+      adaptive("low"),
+    );
+    expect(sdkThinkingOptions(model, { reasoning: "medium" })).toEqual(
+      adaptive("high"),
+    );
   });
 });

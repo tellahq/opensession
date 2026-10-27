@@ -371,7 +371,7 @@ describe("fake engine through runAgent", () => {
         prompt: "p",
         cwd: "/tmp",
         mcpServers: [],
-        model: "dial/medium",
+        model: "gpt-6.1-sol",
         fallbackModel: "claude-opus-5-5",
         journal: { osSessionId: "bks-test-transient-journal", kind: "prompt" },
       }),
@@ -385,7 +385,7 @@ describe("fake engine through runAgent", () => {
     const events = await collecting;
 
     expect(run?.model).toBe("pi/openai/gpt-6-astra");
-    expect(run?.selectedModel).toBe("dial/medium");
+    expect(run?.selectedModel).toBe("gpt-6.1-sol");
     expect(run?.transientFallback).toBe(true);
     const switchEvent = events.find((event) => event.type === "model_switch");
     expect(switchEvent?.temporaryFallback).toBe(true);

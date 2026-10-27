@@ -22,6 +22,7 @@ import { CheckRow } from "./CheckRow";
 import { GitStatusRows } from "./GitStatus";
 import { CommitIcon } from "./PrViews";
 import { FileRow, ReviewerRow } from "./PrRows";
+import { DiffStat } from "../DiffStat";
 
 /**
  * The Overview page's metadata column: status, reviewers, checks, commits, the
@@ -267,10 +268,12 @@ export function ReviewRail({
             icon={<IconFile size={15} className="text-faint" />}
             label={`${files.length} file${files.length === 1 ? "" : "s"}`}
             trailing={
-              <span className="inline-flex items-center gap-1.5 text-meta">
-                <span className="text-green">+{pr.additions}</span>
-                <span className="text-red">−{pr.deletions}</span>
-              </span>
+              <DiffStat
+                files={files}
+                additions={pr.additions}
+                deletions={pr.deletions}
+                className="text-meta"
+              />
             }
           />
           {filesOpen && (
@@ -385,17 +388,31 @@ function RollupRow({
   label: string;
   trailing?: React.ReactNode;
 }) {
+  // The toggle covers the whole row; the trailing slot sits above it so a
+  // control there (the diffstat's breakdown) is not nested in a button.
   return (
-    <button className={RAIL_ROW} onClick={onToggle} aria-expanded={open}>
+    <div className={`relative ${RAIL_ROW}`}>
+      <button
+        className="absolute inset-0 cursor-pointer rounded-row border-0 bg-transparent p-0"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-label={label}
+      />
       <span className="inline-flex w-4 shrink-0 items-center justify-center [&>svg]:block">
         {icon}
       </span>
-      <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
-      {trailing}
+      <span aria-hidden className="min-w-0 flex-1 truncate font-medium">
+        {label}
+      </span>
+      {trailing && (
+        <span className="pointer-events-none relative z-1 [&_button]:pointer-events-auto">
+          {trailing}
+        </span>
+      )}
       <IconChevronRight
         size={14}
         className={`shrink-0 text-faint ${open ? "rotate-90" : ""}`}
       />
-    </button>
+    </div>
   );
 }

@@ -59,13 +59,13 @@ describe("model picker groups", () => {
       model("pi/openai/gpt-6-luna", "pi"),
       model("pi/openai/gpt-6.1-sol", "pi"),
       model("pi/openai/gpt-6-astra", "pi"),
-      model("pi/openai/gpt-5.6-terra", "pi"),
+      model("pi/openai/gpt-6.1-terra", "pi"),
     ]);
 
     expect(primary.map((entry) => entry.id)).toEqual([
       "pi/openai/gpt-6-astra",
       "pi/openai/gpt-6.1-sol",
-      "pi/openai/gpt-5.6-terra",
+      "pi/openai/gpt-6.1-terra",
       "pi/openai/gpt-6-luna",
     ]);
   });

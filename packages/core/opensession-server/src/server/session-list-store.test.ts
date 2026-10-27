@@ -43,6 +43,36 @@ function memoryStore(): SessionListStore {
 }
 
 describe("SessionListStore", () => {
+  test("pages live rows of one id family by id, after a cursor", () => {
+    const store = memoryStore();
+    const at = "2026-09-17T00:00:00Z";
+    expect(store.listLiveByIdPrefixCovered("bks-ghpr-", "", 10)).toBeNull();
+    store.upsertManyCovered(
+      [
+        session("bks-ghpr-1-review", at),
+        session("bks-ghpr-1-autofix", at),
+        session("bks-ghpr-2-review", at, { archived: true }),
+        session("bks-ghpr-3-mention", at),
+        session("bks-ghprx", at),
+        session("bks-other", at),
+        session("os-1", at),
+      ],
+      "include",
+    );
+    const ids = (after: string, limit: number) =>
+      store
+        .listLiveByIdPrefixCovered("bks-ghpr-", after, limit)!
+        .map((s) => s.id);
+    expect(ids("", 10)).toEqual([
+      "bks-ghpr-1-autofix",
+      "bks-ghpr-1-review",
+      "bks-ghpr-3-mention",
+    ]);
+    expect(ids("", 2)).toEqual(["bks-ghpr-1-autofix", "bks-ghpr-1-review"]);
+    expect(ids("bks-ghpr-1-review", 2)).toEqual(["bks-ghpr-3-mention"]);
+    expect(ids("bks-ghpr-3-mention", 2)).toEqual([]);
+  });
+
   test("maintains indexed primary and attached branch ownership atomically", () => {
     const store = memoryStore();
     const row = session("owner", "2026-09-17T00:00:00Z", {

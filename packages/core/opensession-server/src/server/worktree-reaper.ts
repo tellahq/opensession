@@ -138,6 +138,12 @@ const PARKED_WORK_RETENTION_DAYS = positiveNumber(
 
 const parkedWorkDir = () => stateDir("parked-work");
 
+/** A workflow write agent's branch (`workflowBranchName` in workflow-execute).
+ *  Its checkout is never a session's `worktreeDir`, so no session snapshot
+ *  dates it: when a run never merges the agent's work, or the server stops
+ *  mid-agent before its cleanup runs, the checkout has no owner to go idle. */
+const WORKFLOW_BRANCH = /^wf-[a-z0-9]{1,8}-\d+$/;
+
 /** Infrastructure worktrees, never session trees (same set as disk-gc). */
 const PROTECTED_SUFFIXES = ["-warm-template", "-ask-checkout"];
 
@@ -629,6 +635,14 @@ export async function sweepWorktreeReaper(
   const idleCutoffMs = nowMs - IDLE_DAYS * DAY;
   const recentWorktrees = activeSessionWorktrees(sessions, idleCutoffMs);
   const recentBranches = activeSessionBranches(sessions, idleCutoffMs);
+  const ownedWorktrees = activeSessionWorktrees(
+    sessions,
+    Number.NEGATIVE_INFINITY,
+  );
+  const ownedBranches = activeSessionBranches(
+    sessions,
+    Number.NEGATIVE_INFINITY,
+  );
 
   const inUse = worktreesWithProcesses(root);
   if (!inUse) {
@@ -742,12 +756,19 @@ export async function sweepWorktreeReaper(
     const openOwned =
       openWorktrees.has(canonicalPath(dir)) ||
       !!openBranches.get(repo.id)?.has(branch);
+    const age = checkoutAgeMs(dir, nowMs);
+    const orphanWorkflow =
+      WORKFLOW_BRANCH.test(branch) &&
+      !ownedWorktrees.has(canonicalPath(dir)) &&
+      !ownedBranches.get(repo.id)?.has(branch);
     const idle = openOwned
       ? !recentWorktrees.has(canonicalPath(dir)) &&
         !recentBranches.get(repo.id)?.has(branch)
-      : idleWorktrees.has(canonicalPath(dir));
+      : orphanWorkflow
+        ? age !== null && age >= IDLE_DAYS * DAY
+        : idleWorktrees.has(canonicalPath(dir));
     if (!reason && idle)
-      reason = `session idle>${IDLE_DAYS}d (checkout parked; branch retained)`;
+      reason = `${orphanWorkflow ? "workflow checkout" : "session"} idle>${IDLE_DAYS}d (checkout parked; branch retained)`;
     if (!reason) continue;
 
     // The work is done; the session using the checkout may not be. Match the
@@ -755,7 +776,6 @@ export async function sweepWorktreeReaper(
     // path still names the checkout that disappeared before branch revival.
     // A checkout created inside the window is spared even when no session in
     // the snapshot claims it: the snapshot can trail the session that made it.
-    const age = checkoutAgeMs(dir, nowMs);
     const youngCheckout = age !== null && age < ACTIVE_HOURS * HOUR;
     if (
       activeWorktrees.has(canonicalPath(dir)) ||

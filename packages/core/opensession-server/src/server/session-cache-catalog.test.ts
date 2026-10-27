@@ -608,6 +608,58 @@ describe("catalog-only list rebuild", () => {
     }
   });
 
+  test("a list read repairs an index row that outlived its run", async () => {
+    const { enrichSessionRuntime, __staleIndexedRunRepairsForTest } =
+      await import("./session-cache");
+    const { SessionListStore, __setSessionListStoreForTest, indexedSessions } =
+      await import("./session-list-store");
+
+    const store = new SessionListStore(":memory:");
+    __setSessionListStoreForTest(store);
+    const id = "bks-stale-run-row";
+    fs.writeFileSync(join(sessionsDir, `${id}.json`), sessionDoc(id, "Done"));
+    // Materialized mid-run and never republished after the run ended.
+    store.upsertManyCovered(
+      [
+        {
+          id,
+          source: "opensession",
+          title: "Done",
+          automation: "pr-review",
+          createdAt: "2026-09-01T00:00:00.000Z",
+          lastActivity: "2026-09-01T00:00:00.000Z",
+          isRunning: true,
+          runState: "running",
+          runStartedAt: "2026-09-01T00:00:00.000Z",
+        } as unknown as UnifiedSession,
+      ],
+      "exclude",
+    );
+    const storedIsRunning = () =>
+      (
+        (store as any).db
+          .query("SELECT is_running FROM session_list WHERE id = ?")
+          .get(id) as { is_running: number }
+      ).is_running;
+    expect(storedIsRunning()).toBe(1);
+
+    const served = enrichSessionRuntime(
+      (await indexedSessions("exclude")) ?? [],
+      undefined,
+      { repairIndex: true },
+    ).find((row) => row.id === id);
+    expect(served?.isRunning).toBe(false);
+    expect(served?.runState).toBeUndefined();
+    await __staleIndexedRunRepairsForTest();
+
+    const healed = store.get(id);
+    expect(healed?.isRunning).toBe(false);
+    expect(healed?.runState).toBeUndefined();
+    expect(healed?.runStartedAt).toBeUndefined();
+    expect(storedIsRunning()).toBe(0);
+    await freshListIndex();
+  });
+
   test("the offline seed projects files, sidecars and agent sources, then marks the catalogs", async () => {
     await resetCatalogState();
     await freshKernelStore();

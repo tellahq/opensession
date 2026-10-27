@@ -115,10 +115,16 @@ export async function archivePlainSessionCandidates(
   resolveSessionDiscussion: DiscussionResolver = resolvePlainDiscussion,
   stopPortals: (sessionId: string) => Promise<void> = async (sessionId) => {
     const { stopArchivedSessionPortals } = await import("./portal-supervisor");
-    await stopArchivedSessionPortals(sessionId);
-    const { stopSessionContainersAfterCommit } =
-      await import("./session-containers");
-    void stopSessionContainersAfterCommit([sessionId]);
+    try {
+      await stopArchivedSessionPortals(sessionId);
+    } finally {
+      const { stopSessionContainersAfterCommit } =
+        await import("./session-containers");
+      void stopSessionContainersAfterCommit([sessionId]);
+      const { stopArchivedSessionWorktreeSetup } =
+        await import("./worktree-setup");
+      await stopArchivedSessionWorktreeSetup(sessionId);
+    }
   },
 ): Promise<number> {
   let archived = 0;

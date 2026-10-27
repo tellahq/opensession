@@ -169,7 +169,9 @@ whoever started it, because the review workflows process untrusted PR
 content and can print their environment. The token also covers the
 session's attached repositories under the same owner, with the same
 permission set, so a machine-started turn reaches every repository the
-session spans. If the App cannot see one of them, the run gets its own
+session spans. In an interactive session that also includes the repositories
+of PRs linked to it or naming it in their attribution footer, so a review
+handoff for a PR opened from an unattached clone can still reply on it. If the App cannot see one of them, the run gets its own
 repository alone. Ask runs also ignore any launcher-supplied token. The gateway still uses a person's token for the UI
 buttons (merge, close, review, comment). Agents use `gh` directly, without
 dedicated PR MCP tools. A run never inherits the host operator's `gh` login:
@@ -192,6 +194,16 @@ should only read. `GH_TOKEN` stays the one-repository code set, and `gh`
 honors only `GH_TOKEN`, so a script opts in per command:
 `GH_TOKEN=$GH_READ_TOKEN gh pr list --repo owner/name`. The run's
 instructions name the token and the repositories it covers.
+
+A repository can list the same way the repositories its builds read, such
+as a private dependency fork: `readRepos` on its entry in `config.json`'s
+`repos`. Every run on that repository then gets `GH_READ_TOKEN` for them,
+interactive runs and Sandbox runs included, and git uses it for exactly
+those URLs: a credential helper scoped to `https://github.com/owner/name`
+(with and without `.git`) answers with the read token, placed ahead of the
+run's own helper, so `cargo` or `git` fetches of the dependency work while
+every other github.com URL keeps the primary credential. An automation's
+list and its repository's list are combined.
 
 The App must be installed on every repository in `readRepos` (organization
 settings, the Open Session App, repository access). GitHub refuses the whole
@@ -415,6 +427,26 @@ While a merge waits on its deploy, the worktree reaper keeps that session's
 checkout even when it is archived. A session archived before the merge is not
 an owner, so its PR is not verified.
 
+### Archiving a closed PR's sessions
+
+When a PR closes, merged or not, the PR agent's own sessions for it (review,
+auto-fix, simplify, mention, adversarial, follow-up) are archived with the
+`auto` reason. A session with a run in flight, or a PR whose review or code
+loop is still running, is skipped and picked up later by the sweep below.
+Sessions already archived keep their reason. Reopening the PR unarchives the
+sessions that close archived, and any new run in an archived PR session
+(a mention on the closed PR, a new review) unarchives that session first.
+Issue sessions are not touched.
+
+Instances that ran before this existed may still have such sessions active.
+The reconcile sweep (every 10 minutes, off with
+`OPENSESSION_REVIEW_RECONCILE=0`) also runs a bounded backfill: each pass reads
+up to 50 active `bks-ghpr-*` sessions from the session list index, skips PRs
+it just listed as open, asks GitHub about at most 10 other PRs, and archives
+the ones that are closed. It stops on a GitHub rate limit and resumes where it
+left off on the next pass. Turn only the backfill off with
+`OPENSESSION_PR_SESSION_ARCHIVE_SWEEP=0`.
+
 ## Webhook reachability
 
 PR comments, labels, and other event-driven behavior need GitHub to reach the
@@ -597,6 +629,13 @@ The check passes when the owned files are covered and either:
   fork; or
 - someone with write access, other than the author and not a bot, has
   approved.
+
+The merge-risk level comes from how long it takes to recover every user if
+the change is wrong: minutes is low, hours is medium, days or irreversible is
+high. It goes up one level when nothing in the PR proves the changed behavior
+works (no tests that reach it and, for a visible change, no screenshots or
+recording) and a mistake would not surface by itself (swallowed errors,
+fallbacks, plausible but wrong output). Good evidence never lowers it.
 
 Merge risk is shown in the check but does not decide unless the repository
 sets `maxRisk` (`low`, `medium` or `high`): then the automatic path also

@@ -485,6 +485,75 @@ describe("back behavior", () => {
   });
 });
 
+describe("returning from a PR link", () => {
+  test("back pops to the session through the PR's redirects", () => {
+    const fake = fakeBrowser();
+    const controller = new AppRouteController(fake.browser);
+    controller.start(false);
+    controller.navigate({ view: "session", id: "one" });
+    controller.navigate({ view: "pr", repo: "acme", number: 7 });
+    controller.navigate(
+      { view: "workspace", id: "ws-pr", tab: "review" },
+      { replace: true },
+    );
+    // The review back drops the pane suffix, leaving the bare workspace.
+    controller.navigate({ view: "workspace", id: "ws-pr" }, { replace: true });
+    expect(fake.browser.history.state).toEqual({
+      d: 2,
+      sessionReturn: { path: "/session/one", depth: 1, steps: 1 },
+    });
+    expect(controller.returnsToSession).toBe(true);
+
+    fake.setAutoPop(true);
+    controller.goBack();
+    fake.runTimers();
+
+    expect(fake.calls.at(-1)).toEqual({ type: "go", delta: -1 });
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "one",
+    });
+    expect(controller.returnsToSession).toBe(false);
+  });
+
+  test("returns to the session, not the pane its URL was canonicalized to", () => {
+    const fake = fakeBrowser({ singleHistoryEntry: true });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "session", id: "one" });
+    controller.canonicalizePath("/workspace/ws-one/review");
+    controller.navigate({ view: "workspace", id: "ws-pr", tab: "review" });
+    // The PR's workspace has a live session: the landing replaces into it.
+    controller.navigate({ view: "session", id: "two" }, { replace: true });
+
+    controller.goBack();
+
+    expect(fake.calls.at(-1)).toEqual({
+      type: "replace",
+      state: { d: 0 },
+      path: "/session/one",
+    });
+    expect(controller.getCurrentRoute()).toEqual({
+      view: "session",
+      id: "one",
+    });
+    controller.goBack();
+    expect(controller.getCurrentRoute()).toEqual({ view: "prs" });
+  });
+
+  test("opening a session or going home ends the trip", () => {
+    const fake = fakeBrowser({ singleHistoryEntry: true });
+    const controller = new AppRouteController(fake.browser);
+    controller.navigate({ view: "session", id: "one" });
+    controller.navigate({ view: "workspace", id: "ws-pr", tab: "review" });
+    controller.navigate({ view: "session", id: "two" });
+    expect(controller.returnsToSession).toBe(false);
+
+    controller.navigate({ view: "workspace", id: "ws-pr", tab: "review" });
+    controller.navigate({ view: "prs" });
+    expect(controller.returnsToSession).toBe(false);
+  });
+});
+
 describe("single-entry history", () => {
   test("restores the last session in place at depth zero", () => {
     const fake = fakeBrowser({ stored: remembered, singleHistoryEntry: true });

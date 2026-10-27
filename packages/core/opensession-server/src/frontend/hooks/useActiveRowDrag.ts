@@ -37,6 +37,28 @@ export interface ActiveRowLift {
   endActiveLift: () => { moved: boolean } | null;
 }
 
+// While a row is lifted the finger drags it, not the page. The listener has
+// to be native and non-passive: React's touchmove is passive, and a scroll
+// that starts would cancel the pointer stream Motion is following.
+//
+// Module scope gives add and remove one function identity in every build. The
+// document-level touchend ends the block even when the row's own touchend never
+// reaches React (the row re-rendered away mid-press). A leftover block freezes
+// every scroller in the app, including the sheet the release opens.
+function blockScroll(event: TouchEvent) {
+  if (event.cancelable) event.preventDefault();
+}
+function stopBlockingScroll() {
+  document.removeEventListener("touchmove", blockScroll);
+  document.removeEventListener("touchend", stopBlockingScroll, true);
+  document.removeEventListener("touchcancel", stopBlockingScroll, true);
+}
+function startBlockingScroll() {
+  document.addEventListener("touchmove", blockScroll, { passive: false });
+  document.addEventListener("touchend", stopBlockingScroll, true);
+  document.addEventListener("touchcancel", stopBlockingScroll, true);
+}
+
 export function useActiveRowDrag(
   isPhone: boolean,
 ): ActiveRowDrag & ActiveRowLift {
@@ -50,14 +72,6 @@ export function useActiveRowDrag(
   const lifts = useRef(new Map<string, LiftFn>());
   const lifted = useRef<{ key: string; moved: boolean } | null>(null);
 
-  // While a row is lifted the finger drags it, not the page. The listener has
-  // to be native and non-passive: React's touchmove is passive, and a scroll
-  // that starts would cancel the pointer stream Motion is following.
-  const blockScroll = (event: TouchEvent) => {
-    if (event.cancelable) event.preventDefault();
-  };
-  const stopBlockingScroll = () =>
-    document.removeEventListener("touchmove", blockScroll);
   useEffect(() => stopBlockingScroll, []);
 
   // Stable, so each row registers once rather than on every sidebar render.
@@ -105,7 +119,7 @@ export function useActiveRowDrag(
       if (!lift || !lift()) return false;
       lifted.current = { key, moved: false };
       setDragKey(key);
-      document.addEventListener("touchmove", blockScroll, { passive: false });
+      startBlockingScroll();
       return true;
     },
     endActiveLift: () => {

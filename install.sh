@@ -795,7 +795,7 @@ if [ "$WITH_CADDY" = "1" ]; then
     *) warn "LEGO_VERSION must select lego 4.x; automatic setup does not support lego 5" ;;
   esac
   if [ "$OS" = "Darwin" ]; then
-    muted "Automatic private-domain setup requires Linux with systemd; on macOS, manage the certificate and reverse proxy externally."
+    muted "For automatic private-domain setup on macOS, run Caddy as your user: brew services start caddy"
   fi
 fi
 

@@ -203,6 +203,10 @@ export interface UnifiedSession {
   walkthrough?: SessionWalkthrough;
   /** Slack messages a teammate sent from this session. */
   slackShares?: SessionSlackShare[];
+  /** The "Send to Slack" card's first draft for a merged PR, written in the
+   *  background (shipped-change-draft.ts) so it is ready when someone opens
+   *  the session. */
+  shippedChangeDraft?: ShippedChangeDraft;
   automation?: string;
   /** Immutable trust provenance for workflow-spawned automation descendants. */
   automationDescendantPolicy?: AutomationDescendantPolicy;
@@ -231,7 +235,8 @@ export interface UnifiedSession {
   externalRefs?: ExternalRef[];
   /** Model id for runs in this session; unset = default (OPENSESSION_MODEL). */
   model?: string;
-  /** Workspace model-preset instructions captured when this session was created. */
+  /** Retired workspace model-preset note. Older session files may still
+   *  carry it; nothing reads it, and list rows strip it. */
   presetNote?: string;
   /** Sticky pstack engineering mode, enabled with /pstack <task>. */
   pstackMode?: boolean;
@@ -357,11 +362,17 @@ export interface UnifiedSession {
       | "waking"
       | "needs_attention";
     lastLifecycleError?: string;
+    /** Why a start is taking longer, e.g. waiting for a free Mac host. */
+    lifecycleNote?: string;
   };
   /** The last workspace checkpoint a Sandbox session pushed to origin
    * (sandbox/checkpoint.ts). Kept beside `sandbox` rather than inside it so
    * lifecycle writers that replace the whole `sandbox` object cannot drop it. */
   sandboxCheckpoint?: SandboxCheckpointRecord;
+  /** The GPU the session asked its Modal Sandbox for ("T4" or "L4"). Kept
+   *  beside `sandbox` for the same reason as `sandboxCheckpoint`; every
+   *  start of the session's machine passes it to the provider. */
+  sandboxGpu?: string;
   /** The Sandbox that runs this session's Portals while the session itself
    * stays on this machine (portal-sandbox.ts). Never set beside a workspace
    * Sandbox, whose Portals run in it. */
@@ -556,6 +567,19 @@ export interface SessionWalkthrough {
  * A Slack message sent from this session, kept so the composer that sent it
  * collapses into a receipt instead of offering to send the same update again.
  */
+/** A written first draft for a merged PR's Slack update. */
+export interface ShippedChangeDraft {
+  repoId: string;
+  branch: string;
+  prNumber: number;
+  message: string;
+  /** Channel id the model picked, when it picked one. */
+  channel?: string;
+  /** The session's `lastActivity` the draft was written against. */
+  activity: string;
+  at: string;
+}
+
 export interface SessionSlackShare {
   channelId: string;
   channelName: string;
@@ -601,6 +625,10 @@ export interface NativeSessionFile {
   walkthrough?: SessionWalkthrough;
   /** Slack messages a teammate sent from this session. */
   slackShares?: SessionSlackShare[];
+  /** The "Send to Slack" card's first draft for a merged PR, written in the
+   *  background (shipped-change-draft.ts) so it is ready when someone opens
+   *  the session. */
+  shippedChangeDraft?: ShippedChangeDraft;
   createdBy: string;
   /** Verified GitHub login of the creator — stamped when GitHub web sign-in
    *  is active (web-auth.ts), and backfilled onto older sessions by the
@@ -669,7 +697,8 @@ export interface NativeSessionFile {
    *  the session inherited the instance default; retried on the first prompt
    *  at least one hour after the latest modelHistory switch. */
   autoFallbackModel?: string | null;
-  /** Workspace model-preset instructions captured when this session was created. */
+  /** Retired workspace model-preset note. Older session files may still
+   *  carry it; nothing reads it, and list rows strip it. */
   presetNote?: string;
   pstackMode?: boolean; // sticky pstack engineering mode, toggled with /pstack or /poteto-mode
   effort?: string; // Pi reasoning variant for this session's runs; unset = model default
@@ -731,9 +760,13 @@ export interface NativeSessionFile {
       | "waking"
       | "needs_attention";
     lastLifecycleError?: string;
+    /** Why a start is taking longer, e.g. waiting for a free Mac host. */
+    lifecycleNote?: string;
   };
   /** See UnifiedSession.sandboxCheckpoint. */
   sandboxCheckpoint?: SandboxCheckpointRecord;
+  /** See UnifiedSession.sandboxGpu. */
+  sandboxGpu?: string;
   /** See UnifiedSession.portalSandbox. */
   portalSandbox?: PortalSandboxRecord;
   runner?: {
@@ -766,6 +799,8 @@ export interface PortalSandboxRecord {
   sandboxId?: string;
   lifecycle?: "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
   lastLifecycleError?: string;
+  /** Why a start is taking longer, e.g. waiting for a free Mac host. */
+  lifecycleNote?: string;
   syncedCommit?: string;
 }
 

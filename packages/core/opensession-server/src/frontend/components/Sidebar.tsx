@@ -1530,7 +1530,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar(
                 }
                 onArchive={archiveWorkspaceWithNext}
                 onDeleteDraft={(workspace) =>
-                  confirmDeleteDraft(() => onDeleteWorkspace(workspace.id))
+                  confirmDeleteDraft(() =>
+                    onDeleteWorkspace(workspace.id, { draftOnly: true }),
+                  )
                 }
                 onClose={() => setWorkspaceMenu(null)}
               />

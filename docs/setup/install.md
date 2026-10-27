@@ -161,9 +161,10 @@ to remove it. `--help` lists them all.
 On macOS, installing Caddy requires [Homebrew](https://brew.sh). The `--caddy`
 flag installs the official pinned lego 4.26.0 build into `~/.local/bin` on both
 Linux and macOS, replacing an existing copy there. It does not use Homebrew's
-unversioned lego package. Automatic private-domain setup and renewal require
-Linux with systemd; macOS needs an externally managed certificate and reverse
-proxy. See [private domains](networking.md#managed-setup-with-cloudflare-or-vercel-dns).
+unversioned lego package. Automatic private-domain setup and renewal support
+Linux with systemd and macOS with Homebrew Caddy; on macOS, start Caddy with
+`brew services start caddy` before setup. See
+[private domains](networking.md#managed-setup-with-cloudflare-or-vercel-dns).
 
 The Pi engine is compiled into the release binary and runs in-process, so
 there is no separate engine to seed or version. A release tarball carries the
@@ -447,7 +448,7 @@ The two sections a team install normally sets:
 
 - `repos` — your git repos (checkout path, `defaultBranch`, `ghRepo`
   owner/name for the `gh` CLI, `default: true` on the main one, optional
-  `depsInstall`, warm cache markers, deployment tracking,
+  `depsInstall`, `setupTimeoutMinutes`, warm cache markers, deployment tracking,
   and security-scan guidance). When `repos` is present it is authoritative.
   With no config, a source checkout registers itself as the shared
   `opensession` repo.

@@ -40,6 +40,10 @@ targets:
         NSMicrophoneUsageDescription: Dictate messages, and talk to your Desk on a live voice call.
         NSSpeechRecognitionUsageDescription: Turn what you say into text in the message box.
         NSSupportsLiveActivities: true
+        # A Desk voice call keeps its mic and speaker after the app leaves the
+        # screen, shown in the Dynamic Island (DeskCallActivityController).
+        UIBackgroundModes:
+          - audio
         LSSupportsOpeningDocumentsInPlace: true
         # Shortcuts returns here after the Tailscale switch shortcut runs
         # (x-success in TailscaleHandoff.shortcutURL).
@@ -112,8 +116,11 @@ targets:
           - Info.plist
       # The one file shared with the app. The widget's button and control both
       # run this intent, and an intent must be compiled into every target that
-      # references it.
+      # references it. Its `AgentShortcuts` also lists "Talk to Desk", so that
+      # intent comes along.
       - path: OS1/Intents/StartAgentIntent.swift
+      - path: OS1/Intents/TalkToDeskIntent.swift
+      - path: OS1/Models/DeskCallActivity.swift
       - path: OS1/Intents/OpenSessionIntent.swift
       - path: OS1/Models/ActiveSessionsActivity.swift
     settings:

@@ -3,11 +3,7 @@ import {
   CEREBRAS_PICKER_MODELS,
   defaultPickerModelsForProvider,
 } from "./model-providers";
-import {
-  modelEfforts,
-  piModelLabel,
-  orchestratorWorkerForBridge,
-} from "./models";
+import { modelEfforts, piModelLabel } from "./models";
 
 describe("Cerebras provider", () => {
   test("seeds the public catalog", () => {
@@ -17,16 +13,6 @@ describe("Cerebras provider", () => {
       "zai-glm-4.7",
     ]);
     expect(CEREBRAS_PICKER_MODELS).toHaveLength(3);
-  });
-
-  test("uses GPT OSS for fast workers when configured", () => {
-    expect(
-      orchestratorWorkerForBridge(
-        "worker-fast",
-        "anthropic",
-        new Set(["cerebras"]),
-      ),
-    ).toMatchObject({ model: "cerebras/gpt-oss-120b" });
   });
 
   test("exposes labels and reasoning efforts", () => {

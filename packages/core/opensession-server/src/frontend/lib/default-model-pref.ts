@@ -5,12 +5,20 @@
 // lib/user-pref for the server-side ui-prefs hydrate pattern. Any string the
 // server sends (including "" for an explicit reset) is applied as-is.
 //
-// resolveNewSessionModel below is what those composers actually call: it folds
-// in the engine half of the same question (lib/default-engine-pref) through
-// the rule in lib/new-session-model.
+// resolveNewSessionModel and resolveNewSessionEffort below are what those
+// composers actually call, through the rules in lib/new-session-model. The
+// effort half reads lib/default-effort-pref.
 
 import { z } from "zod";
-import { preferredNewSessionModel } from "./new-session-model";
+import {
+  getDefaultEffortPref,
+  isDefaultEffort,
+  type DefaultEffort,
+} from "./default-effort-pref";
+import {
+  preferredNewSessionEffort,
+  preferredNewSessionModel,
+} from "./new-session-model";
 import * as userPref from "./user-pref";
 
 const storedModelSchema = z.string();
@@ -34,11 +42,11 @@ export const onDefaultModelPrefChanged = pref.onChanged;
 
 /**
  * The id a new-session composer should preselect for this person: their model
- * and engine preferences applied to the catalog it just fetched. "" means no
- * preference, so the composer sends no model and the server picks.
+ * preference applied to the catalog it just fetched. "" means no preference,
+ * so the composer sends no model and the server picks.
  */
 export async function resolveNewSessionModel(catalog: {
-  models: { id: string }[];
+  models: { id: string; efforts?: string[] }[];
   default: string;
 }): Promise<string> {
   return preferredNewSessionModel({
@@ -46,4 +54,21 @@ export async function resolveNewSessionModel(catalog: {
     default: catalog.default,
     modelPref: getDefaultModelPref(),
   });
+}
+
+/**
+ * The effort a new-session composer should preselect for the model it starts
+ * on (`model`, "" for the catalog default), or undefined to keep the model's
+ * own default.
+ */
+export function resolveNewSessionEffort(
+  catalog: { models: { id: string; efforts?: string[] }[]; default: string },
+  model: string,
+): DefaultEffort | undefined {
+  const effort = preferredNewSessionEffort({
+    models: catalog.models,
+    model: model || catalog.default,
+    effortPref: getDefaultEffortPref(),
+  });
+  return effort && isDefaultEffort(effort) ? effort : undefined;
 }

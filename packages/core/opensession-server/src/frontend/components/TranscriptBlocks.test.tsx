@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TranscriptEntry } from "../lib/types";
+import { MessageLinkProvider } from "../lib/message-link";
 import {
   setThinkingMessagesPref,
   setTurnPrefs,
@@ -179,6 +180,40 @@ describe("TranscriptBlocks sent message actions", () => {
     );
     expect(html.match(/aria-label="Edit and send again"/g)).toHaveLength(1);
     expect(html.match(/aria-label="Copy message"/g)).toHaveLength(1);
+  });
+
+  test("offers a message link on every stored person turn", () => {
+    const html = renderToStaticMarkup(
+      <MessageLinkProvider value={(id) => `https://example.test/s#${id}`}>
+        <TranscriptBlocks
+          owner="Anonymous"
+          entries={[
+            {
+              id: "mine",
+              type: "user",
+              content: "Fix the typo",
+              timestamp: "2026-08-12T12:00:00Z",
+            },
+            {
+              id: "theirs",
+              type: "user",
+              content: "A teammate's message",
+              timestamp: "2026-08-12T12:01:00Z",
+              sender: "Ada",
+            },
+          ]}
+          optimisticEntries={[
+            {
+              id: "sending",
+              type: "user",
+              content: "Not stored yet",
+              timestamp: "2026-08-12T12:02:00Z",
+            },
+          ]}
+        />
+      </MessageLinkProvider>,
+    );
+    expect(html.match(/aria-label="Copy link"/g)).toHaveLength(2);
   });
 
   test("does not animate a sent message when delivery settles", () => {
@@ -1543,6 +1578,41 @@ describe("TranscriptBlocks check-backs", () => {
     expect(html).toContain("CI is green.");
     expect(html).toContain("Now merge it");
     expect(html).toContain("Merged.");
+  });
+  test("the fold and its tool calls follow the Steps and Tool calls settings", () => {
+    const checkBack = () =>
+      renderToStaticMarkup(
+        <TranscriptBlocks
+          entries={[
+            { id: "ask", type: "user", content: "Ship it", timestamp: at(0) },
+            say("first", "Waiting on CI.", 1),
+            wake("wake-1", 10),
+            tool("look-1", 11),
+            tool("look-2", 12),
+            say("still", "Still waiting on CI.", 13),
+            wake("wake-2", 20),
+            say("report", "CI is green.", 21),
+          ]}
+        />,
+      );
+    try {
+      setTurnPrefs(null);
+      let html = checkBack();
+      expect(html).toContain('aria-expanded="false"');
+      expect(html).not.toContain("Still waiting on CI.");
+
+      setTurnPrefs("open", "folded");
+      html = checkBack();
+      expect(html).toContain("Still waiting on CI.");
+      expect(html).toContain('data-tool-run="true"');
+
+      setTurnPrefs("open", "open");
+      html = checkBack();
+      expect(html).toContain("Still waiting on CI.");
+      expect(html).not.toContain('data-tool-run="true"');
+    } finally {
+      setTurnPrefs(null);
+    }
   });
 });
 

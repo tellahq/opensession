@@ -39,6 +39,7 @@ const FIELD_LABELS: Record<Changeable, string> = {
   allowedMethods: "Methods",
   allowedPathPrefixes: "Paths",
   statusOnly: "Responses",
+  scope: "Who can use it",
 };
 
 type FieldValues = NonNullable<CredentialRequest["previous"]>;
@@ -56,6 +57,10 @@ function fieldValue(
     }
     case "statusOnly":
       return values?.statusOnly ? "Status only" : "Full response";
+    case "scope":
+      return values?.scope === "workspace"
+        ? "Every session, without asking"
+        : "Sessions you approve";
     case "allowedMethods":
     case "allowedPathPrefixes":
       return values?.[field]?.length ? values[field].join(", ") : "All";
@@ -229,10 +234,16 @@ function RequestCard({
                 ? request.changed?.includes("host") ||
                   request.changed?.includes("loginUrl")
                   ? `Its active grants are revoked: they were approved for the old ${login ? "sign-in page" : "host"}.`
-                  : `Its active grants keep working. ${AGENT_NAME} never sees the ${word}.`
+                  : request.changed?.includes("scope")
+                    ? request.scope === "workspace"
+                      ? `Every session in the workspace can use it without asking you. Calls are audited, and ${AGENT_NAME} never sees the ${word}.`
+                      : "Sessions must ask you again. Access they got without asking ends now."
+                    : `Its active grants keep working. ${AGENT_NAME} never sees the ${word}.`
                 : login
                   ? `Owned by you. Each time a session asks, you decide whether to release the password to it, and ${AGENT_NAME} can read it then. Use a test account.`
-                  : `Owned by you. Teammates' sessions must ask you before using it. ${AGENT_NAME} never sees the secret.`}
+                  : request.scope === "workspace"
+                    ? `Owned by you and shared with the workspace: every session can use it without asking. Calls are audited, and ${AGENT_NAME} never sees the secret.`
+                    : `Owned by you. Teammates' sessions must ask you before using it. ${AGENT_NAME} never sees the secret.`}
         </p>
       </div>
 

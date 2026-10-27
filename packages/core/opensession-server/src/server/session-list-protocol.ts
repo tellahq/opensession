@@ -33,6 +33,7 @@ export const SESSION_LIST_STORE_METHODS = [
   "listLiveByBranch",
   "listLiveByBranchCovered",
   "listLiveByRepoBranchCovered",
+  "listLiveByIdPrefixCovered",
   "listWorkspaceMembers",
   "listWorkspace",
   "listWorkspaceCovered",

@@ -29,6 +29,11 @@ import {
   type BusySendPrefs,
 } from "../../lib/busy-send-pref";
 import {
+  getDefaultEffortPref,
+  onDefaultEffortPrefChanged,
+  setDefaultEffortPref,
+} from "../../lib/default-effort-pref";
+import {
   getDefaultModelPref,
   onDefaultModelPrefChanged,
   setDefaultModelPref,
@@ -153,7 +158,7 @@ import {
 import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
 import { PendingSendsSection } from "./PendingSendsSection";
 import { RepoTile } from "../RepoTile";
-import { ModelMark } from "../ModelMark";
+import { ModelEffortSelect } from "../ModelEffortSelect";
 import { IconPlus, IconRepo } from "../icons";
 
 // ── Desk voice ─────────────────────────────────────────────────────────────
@@ -743,10 +748,18 @@ export function PreferencesPanel() {
     () => onPinNewWorkspacesChanged(() => setPinNewWs(getPinNewWorkspaces())),
     [],
   );
-  // Per-user default model for NEW sessions ("" = no preference — the
-  // workspace default from GET /api/models applies).
+  // Per-user default model and effort for NEW sessions, picked together in
+  // the same menu sessions use ("" = no preference: the instance default
+  // model from GET /api/models, at its own effort).
   const [modelPref, setModelPref] = useState<string>(getDefaultModelPref);
+  const [effortPref, setEffortPref] = useState<string>(getDefaultEffortPref);
+  useEffect(
+    () =>
+      onDefaultEffortPrefChanged(() => setEffortPref(getDefaultEffortPref())),
+    [],
+  );
   const [modelOptions, setModelOptions] = useState<ModelOption[]>([]);
+  const [catalogDefaultModel, setCatalogDefaultModel] = useState("");
   const [modelOptionsError, setModelOptionsError] = useState<string | null>(
     null,
   );
@@ -799,7 +812,10 @@ export function PreferencesPanel() {
   );
   useEffect(() => {
     fetchModels()
-      .then((models) => setModelOptions(models.models))
+      .then((models) => {
+        setModelOptions(models.models);
+        setCatalogDefaultModel(models.default);
+      })
       .catch((error) =>
         setModelOptionsError(errorMessage(error, "Failed to load models")),
       );
@@ -826,34 +842,32 @@ export function PreferencesPanel() {
       <SettingsHeader title="Preferences" />
       <SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
       <SettingCard>
-        {/* These four choices become one starting state for every new session. */}
+        {/* These choices become one starting state for every new session. */}
         <SettingGroup>
           <SettingRow
             title="Default model"
             desc={modelOptionsError}
             control={
-              <Select
-                label="Default model"
-                value={
-                  modelPref && modelOptions.some((m) => m.id === modelPref)
+              <ModelEffortSelect
+                selection={{
+                  models: modelOptions,
+                  defaultModel: catalogDefaultModel,
+                  model: modelOptions.some((m) => m.id === modelPref)
                     ? modelPref
-                    : ""
-                }
-                options={[
-                  { value: "", label: "No preference" },
-                  ...modelOptions.map((m) => ({
-                    value: m.id,
-                    label: m.label,
-                    icon: (
-                      <ModelMark
-                        id={m.id}
-                        provider={m.provider}
-                        composition={m.composition}
-                      />
-                    ),
-                  })),
-                ]}
-                onChange={setDefaultModelPref}
+                    : "",
+                  effort: effortPref,
+                }}
+                appearance={{ triggerVariant: "field" }}
+                actions={{
+                  changeModel: setDefaultModelPref,
+                  changeEffort: setDefaultEffortPref,
+                  // No preference for either: new sessions follow the
+                  // instance default model at its own effort.
+                  reset: () => {
+                    setDefaultModelPref("");
+                    setDefaultEffortPref("");
+                  },
+                }}
               />
             }
           />

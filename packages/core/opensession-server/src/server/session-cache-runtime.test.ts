@@ -62,6 +62,19 @@ describe("session runtime enrichment", () => {
     expect(session.runStartedAt).toBeUndefined();
   });
 
+  test("clears a stale indexed runState once the run is idle", () => {
+    const session = {
+      id: "stale-indexed-run-state-test",
+      isRunning: true,
+      runState: "running",
+    } as UnifiedSession;
+
+    enrichSessionRuntime([session]);
+
+    expect(session.isRunning).toBe(false);
+    expect(session.runState).toBeUndefined();
+  });
+
   test("a persisted create that still owes its opening turn lists as running", () => {
     const session = { id: "pending-opening-runtime-test" } as UnifiedSession;
     holdPendingOpening(session.id);
