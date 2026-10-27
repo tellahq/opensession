@@ -12,12 +12,15 @@
  * Two modes:
  *
  *   bun scripts/build-compile.ts --outfile <path>
- *       Just the binary for the host, for local testing. No sidecar, no seed.
+ *       The host binary with its Worker sidecars and Photon wasm, for local
+ *       testing. No sharp sidecar, no seed.
  *
  *   bun scripts/build-compile.ts --os linux --arch arm64 [--out <dir>]
  *       The full release artefact `opensession-<ver>-<os>-<arch>.tar.gz`:
  *         opensession                 the target binary
  *         node_modules/               sharp + @img/sharp-<target> sidecar
+ *         photon_rs_bg.wasm           Photon image wasm Pi resizes images with
+ *         *-worker.js                 Worker sidecars
  *         opensession*.service        system service and socket templates
  *         opensession.socket          (see scripts/lib/release-artefact.ts)
  *         deploy/                     fixed executor credential/helper policy
@@ -51,6 +54,7 @@ import {
   withGeneratedModules,
   writeSimulatorViewerDist,
 } from "./lib/compile-embeds";
+import { stagePhotonWasm } from "./lib/photon-wasm";
 import { RELEASE_SERVICE_TEMPLATES } from "./lib/release-artefact";
 
 const REPO_ROOT = resolve(import.meta.dir, "..");
@@ -466,6 +470,19 @@ async function buildWorkerSidecars(destDir: string): Promise<void> {
   }
 }
 
+/**
+ * Everything that must sit beside the executable in BOTH build modes: the
+ * Worker sidecars and Photon's wasm (scripts/lib/photon-wasm.ts). A bare
+ * binary without them boots but cannot run sessions or keep images in turns.
+ */
+async function stageExecutableSidecars(exeDir: string): Promise<void> {
+  await buildWorkerSidecars(exeDir);
+  const wasm = stagePhotonWasm(exeDir);
+  console.log(
+    `[compile] photon wasm: ${(statSync(wasm).size / 1e6).toFixed(1)} MB`,
+  );
+}
+
 async function main(): Promise<void> {
   const {
     version: fver,
@@ -487,7 +504,7 @@ async function main(): Promise<void> {
       shellPath,
       viewerDist,
     );
-    await buildWorkerSidecars(dirname(outfile));
+    await stageExecutableSidecars(dirname(outfile));
     const mb = (statSync(outfile).size / 1e6).toFixed(1);
     console.log(`\n[compile] built ${outfile} (${mb} MB, v=${fver})`);
     return;
@@ -529,8 +546,8 @@ async function main(): Promise<void> {
     cpSync(source, destination);
     chmodSync(destination, statSync(source).mode & 0o777);
   }
-  console.log("\n== worker sidecars");
-  await buildWorkerSidecars(stage);
+  console.log("\n== worker sidecars and photon wasm");
+  await stageExecutableSidecars(stage);
   console.log("\n== sharp sidecar");
   await buildSharpSidecar(stage, sharpVersion);
 
