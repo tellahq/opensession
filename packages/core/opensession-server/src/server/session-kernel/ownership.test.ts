@@ -749,7 +749,9 @@ describe("single session ownership", () => {
     expect(wiring).not.toContain("cancelAgentRun(");
     const routes = read("routes/sessions.ts");
     expect(routes).toContain("await cancelAgentRunAndWait(runIds)");
-    expect(routes).toContain("requestTurnCancel(session.id, session");
+    expect(read("session-archive-action.ts")).toContain(
+      "requestTurnCancel(sessionId, session",
+    );
     const prRoutes = read("routes/pr.ts");
     expect(prRoutes).toContain("requestTurnCancel(bksId, reviewSession");
     expect(prRoutes).not.toContain("cancelAgentRun(");

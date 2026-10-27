@@ -76,7 +76,9 @@ export function createSlackComposeMcpServer(ctx: {
           channel: z
             .string()
             .optional()
-            .describe("Optional configured channel name or id to preselect."),
+            .describe(
+              "Optional configured channel name or id to preselect. In a session started from a Slack thread the composer preselects that thread, so leave this unset unless the person asked for another channel.",
+            ),
           images: z
             .array(z.string())
             .max(10)

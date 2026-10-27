@@ -127,6 +127,7 @@ type TermTargetKind =
   | "box"
   | "tart"
   | "usecomputer"
+  | "modal"
   | "microvm"
   | "runner";
 
@@ -242,6 +243,13 @@ async function resolveTarget(
     return hostShellTarget(session);
   }
   const cwd = session?.worktreeDir || HOME;
+  // Opening a Terminal on the machine is an interaction (sandbox/idle.ts).
+  const sessionId = session?.id;
+  const sandboxId = sb.sandboxId;
+  if (sessionId)
+    void import("./sandbox/idle").then(({ noteSandboxActivity }) =>
+      noteSandboxActivity({ sandboxId, sessionId }, "human"),
+    );
   try {
     const { sandboxesEnabled, sandboxProviderConfigured } =
       await import("./sandbox/config");
@@ -288,6 +296,18 @@ async function resolveTarget(
         displayCwd: target.cwd,
         argv: target.argv,
         env: target.env,
+      };
+    }
+
+    if (sb.provider === "modal" && sandboxProviderConfigured("modal")) {
+      // Modal has no SSH: the shell is an exec with a PTY.
+      const { modalPtySession } = await import("./sandbox/adapters/modal");
+      const sandboxId = sb.sandboxId;
+      return {
+        kind: "remote",
+        target: "modal",
+        displayCwd: cwd,
+        connect: (io) => modalPtySession(sandboxId, cwd, io),
       };
     }
 

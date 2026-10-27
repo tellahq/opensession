@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import type { RouteContext } from "./context";
-import { deleteWorkspaceMemberSessions } from "./workspace";
+import {
+  archiveWorkspaceMemberSessions,
+  deleteWorkspaceMemberSessions,
+} from "./workspace";
 
 function workspaceDeleteContext(): RouteContext {
   const url = new URL("http://localhost/api/workspaces/ws-1?worktree=true");
@@ -60,4 +63,38 @@ test("every new-session response carries the workspace PR projection", async () 
   expect(route.match(/await sessionDetail\(/g)).toHaveLength(2);
   expect(route).not.toContain("session: existing }");
   expect(route).not.toContain("session: (await findSessionAsync(bksId))");
+});
+
+test("workspace archive sends every member through the session archive route and keeps going past a failure", async () => {
+  const requests: { path: string; method: string; body: unknown }[] = [];
+  const result = await archiveWorkspaceMemberSessions(
+    workspaceDeleteContext(),
+    ["own", "review/1", "gone", "busy", "worker"],
+    async (ctx) => {
+      requests.push({
+        path: ctx.path,
+        method: ctx.req.method,
+        body: await ctx.req.json(),
+      });
+      if (ctx.path.includes("gone"))
+        return Response.json({ error: "gone" }, { status: 404 });
+      if (ctx.path.includes("busy"))
+        return Response.json({ error: "busy" }, { status: 500 });
+      return Response.json({ ok: true });
+    },
+  );
+
+  expect(requests.map((r) => r.path)).toEqual([
+    "/api/sessions/own/archive",
+    "/api/sessions/review%2F1/archive",
+    "/api/sessions/gone/archive",
+    "/api/sessions/busy/archive",
+    "/api/sessions/worker/archive",
+  ]);
+  expect(requests.every((r) => r.method === "POST")).toBe(true);
+  expect(requests.every((r) => (r.body as any).archived === true)).toBe(true);
+  expect(result).toEqual({
+    archived: ["own", "review/1", "worker"],
+    failed: ["busy"],
+  });
 });

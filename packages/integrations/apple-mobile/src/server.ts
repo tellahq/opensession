@@ -160,7 +160,7 @@ const releaseTools: Tool[] = [
   {
     name: "apple_release_execute",
     description:
-      "Execute a plan after a later authenticated human approval in Settings → Integrations → Apple mobile. confirmation must exactly equal its full commit SHA.",
+      "Execute a release plan once. confirmation must exactly equal its full planned commit SHA.",
     inputSchema: {
       type: "object",
       properties: {
@@ -182,8 +182,6 @@ function reviewablePlan<T extends { plan: Parameters<typeof safePlanView>[0] }>(
   return {
     ...result,
     plan: safePlanView(result.plan),
-    approvalRequired: true,
-    approvalLocation: "Settings → Integrations → Apple mobile",
   };
 }
 

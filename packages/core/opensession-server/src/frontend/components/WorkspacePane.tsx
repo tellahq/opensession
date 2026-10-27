@@ -97,7 +97,10 @@ import {
   workspaceComposerTarget,
   workspaceDraftPatch,
 } from "../lib/workspace-draft";
-import { resolveNewSessionModel } from "../lib/default-model-pref";
+import {
+  resolveNewSessionEffort,
+  resolveNewSessionModel,
+} from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
 import { duration, ease } from "../ui/motion";
 import { mainSession } from "../lib/landing-session";
@@ -334,22 +337,17 @@ export function WorkspacePane({
     tab === "review" ? setReviewPanelOpen : sidePanel.setOpen;
 
   useEffect(() => {
-    const load = () =>
-      fetchModels(workspace.id)
-        .then(async (m) => {
-          setModels(m.models);
-          setDefaultModel(m.default);
-          // Preselect this person's own default model and engine (Settings →
-          // Preferences); "" keeps the workspace default.
-          const preselect = await resolveNewSessionModel(m);
-          if (preselect) setModel((current) => current || preselect);
-        })
-        .catch(() => {});
-    void load();
-    window.addEventListener("opensession:workspaces-changed", load);
-    return () =>
-      window.removeEventListener("opensession:workspaces-changed", load);
-  }, [workspace.id]);
+    fetchModels()
+      .then(async (m) => {
+        setModels(m.models);
+        setDefaultModel(m.default);
+        // Preselect this person's own default model (Settings →
+        // Preferences); "" keeps the instance default.
+        const preselect = await resolveNewSessionModel(m);
+        if (preselect) setModel((current) => current || preselect);
+      })
+      .catch(() => {});
+  }, []);
 
   // Success navigates away on session_created (App handles it); on failure the
   // `starting` lock would stick forever — reset on server error or timeout
@@ -568,6 +566,13 @@ export function WorkspacePane({
       user: currentUser,
     };
     if (model) message.model = model;
+    // This person's default effort (Settings → Preferences), when the model
+    // the session starts on offers it.
+    const preferredEffort = resolveNewSessionEffort(
+      { models, default: defaultModel },
+      model,
+    );
+    if (preferredEffort) message.effort = preferredEffort;
     if (images.length) message.images = images;
     if (files.length)
       message.files = files.map((file) =>

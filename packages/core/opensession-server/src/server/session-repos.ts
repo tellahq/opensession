@@ -72,7 +72,12 @@ import {
   serviceGithubCredential,
   type GithubCredential,
 } from "./github-auth";
-import { cachedPrNumberByBranch } from "./pr-cache";
+import {
+  cachedPrNumberByBranch,
+  footerPrsFor,
+  getPrsByRepo,
+  prsBySessionRef,
+} from "./pr-cache";
 import {
   assessPrMergeReadiness,
   fetchPrReadinessSource,
@@ -334,11 +339,33 @@ export function sessionRepoIds(session: UnifiedSession): string[] {
  * token covers these beside its own repository, so a turn nobody typed (a
  * review handoff, a worker report) reaches them as an owner turn does. */
 export function attachedGithubRepos(session: UnifiedSession): string[] {
+  return githubNamesOf((session.attachedRepos || []).map((att) => att.repo));
+}
+
+/** `owner/name` of every GitHub repository an interactive session works in
+ * beyond its own checkout: attached repositories, PRs linked by hand, and PRs
+ * whose attribution footer names the session (the agent opened them in a
+ * repository it never attached, often from a clone). A turn nobody typed, such
+ * as a review handoff for one of those PRs, holds the App token, and without
+ * these GitHub refuses every comment and PR call for the PR it was asked to
+ * fix. Automation sessions keep attached repositories only. */
+export function sessionGithubRepos(session: UnifiedSession): string[] {
+  const ids = (session.attachedRepos || []).map((att) => att.repo);
+  if (!session.automationId) {
+    for (const linked of session.linkedPrs || []) ids.push(linked.repo);
+    for (const found of footerPrsFor(prsBySessionRef(getPrsByRepo()), session))
+      ids.push(found.repo);
+  }
+  const primary = sessionRepoId(session);
+  return githubNamesOf(ids.filter((id) => id !== primary));
+}
+
+function githubNamesOf(repoIds: readonly string[]): string[] {
   const out: string[] = [];
-  for (const att of session.attachedRepos || []) {
+  for (const id of repoIds) {
     let repo: ReturnType<typeof getRepo>;
     try {
-      repo = getRepo(att.repo);
+      repo = getRepo(id);
     } catch {
       continue;
     }
@@ -363,7 +390,6 @@ export async function buildSessionNote(
 ): Promise<string | undefined> {
   return (
     [
-      session.presetNote || "",
       session.pstackMode ? PSTACK_MODE_NOTE : "",
       // The standing Desk session gets its concierge charter first — role
       // discipline for the summonable overlay (see desk.ts) — then the
@@ -373,6 +399,8 @@ export async function buildSessionNote(
       session.desk ? DESK_NOTE : "",
       session.desk ? await deskBriefingFor(user) : "",
       buildReposNote(session),
+      // GPU jobs the repository declares, for a session without a GPU.
+      await (await import("./gpu-jobs")).gpuJobsNote(session).catch(() => ""),
       await memoryNoteFor(
         user,
         sessionRepoIds(session),

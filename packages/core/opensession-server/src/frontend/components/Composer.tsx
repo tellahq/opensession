@@ -296,8 +296,11 @@ export function Composer({
   const sendKey = effectiveSendKey(storedSendKey);
   // The preference applies only to new sessions; this session's model remains
   // the value selected in the same menu.
-  const { preferredDefaultModel, setPreferredDefaultModel } =
-    useDefaultModelPreference();
+  const {
+    preferredDefaultModel,
+    preferredDefaultEffort,
+    setPreferredDefaultModel,
+  } = useDefaultModelPreference();
   // Follow-up behavior preferences (Settings → Preferences): what each send
   // gesture — plain Enter/the send button vs ⌘/Ctrl+Enter — does while the
   // run is busy. Both configurable; defaults queue/steer.
@@ -1983,6 +1986,7 @@ export function Composer({
             model={model}
             onModelChange={onModelChange}
             preferredDefaultModel={preferredDefaultModel}
+            preferredDefaultEffort={preferredDefaultEffort}
             onSetAsDefault={setPreferredDefaultModel}
             modelDisabled={modelDisabled}
             modelTitle={modelTitle}

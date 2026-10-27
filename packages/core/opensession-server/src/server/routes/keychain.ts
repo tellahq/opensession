@@ -17,6 +17,7 @@ import {
   keychainAsksInSession,
   keychainViewFor,
   revokeGrant,
+  setCredentialScopeAsync,
 } from "../keychain";
 import { readRequestTextWithinLimit } from "../shared/bounded-body";
 import {
@@ -188,10 +189,45 @@ export async function handleKeychainRoutes(
             ? body.allowedPathPrefixes
             : undefined,
           statusOnly: body.statusOnly === true,
+          // Anything but "personal" or "workspace" is refused by the spec
+          // check, and so is a workspace login.
+          ...(typeof body.scope === "string" ? { scope: body.scope } : {}),
         }),
       });
     } catch (e: any) {
       return Response.json({ error: e?.message || String(e) }, { status: 400 });
+    }
+  }
+
+  // The owner shares a credential with every session in the workspace, or
+  // makes it personal again. Verified sign-in only: a claimed name or an
+  // automation token must never open someone's credential to everyone.
+  const scopeMatch = path.match(
+    /^\/api\/keychain\/credentials\/([^/]+)\/scope$/,
+  );
+  if (scopeMatch && req.method === "POST") {
+    const by = verifiedPerson(ctx);
+    if (!by)
+      return Response.json(
+        { error: "Sign in with GitHub to change who can use a credential" },
+        { status: 401 },
+      );
+    const body = await req.json().catch(() => null);
+    if (body?.scope !== "personal" && body?.scope !== "workspace")
+      return Response.json(
+        { error: 'expected { scope: "personal" | "workspace" }' },
+        { status: 400 },
+      );
+    try {
+      return Response.json(
+        await setCredentialScopeAsync(
+          decodeURIComponent(scopeMatch[1]!),
+          by,
+          body.scope,
+        ),
+      );
+    } catch (e: any) {
+      return Response.json({ error: e?.message || String(e) }, { status: 403 });
     }
   }
 

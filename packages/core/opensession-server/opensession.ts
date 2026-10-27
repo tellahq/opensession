@@ -106,7 +106,14 @@ import { startGatewayProfilerSignal } from "./src/server/gateway-profiler";
 import { startDerivedCatalogRepair } from "./src/server/catalog-documents";
 import { ensureWarmTemplateScheduler } from "./src/server/warm-template";
 import { handleRunnerWsUpgrade } from "./src/server/runner-ws";
-import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-relay";
+import {
+  handleSandboxPortalRelayUpgrade,
+  startSandboxPortalRelays,
+} from "./src/server/sandbox-portal-relay";
+import {
+  handleSandboxAgentUpgrade,
+  SANDBOX_AGENT_PATH,
+} from "./src/server/sandbox/agent-channel";
 import {
   handleVmDisplayUpgrade,
   isVmDisplayRoute,
@@ -690,6 +697,9 @@ const server: import("bun").Server<WSClientData> = hotServe({
     if (path === "/sandbox-portal-ws") {
       return handleSandboxPortalRelayUpgrade(req, server, path);
     }
+    if (path === SANDBOX_AGENT_PATH) {
+      return handleSandboxAgentUpgrade(req, server, path);
+    }
     // A signed-in viewer of a Mac VM's display (the Desktop tab): the API
     // sign-in gate above already ran, the bridge resolves the VM's host.
     if (isVmDisplayRoute(path)) {
@@ -830,6 +840,13 @@ if (!g.__opensessionBooted) {
         const { startUseComputerIdleSweep } =
           await import("./src/server/sandbox/adapters/usecomputer");
         startUseComputerIdleSweep();
+        const { startModalIdleSweep } =
+          await import("./src/server/sandbox/adapters/modal");
+        startModalIdleSweep();
+        // Every provider: sleep idle Sandboxes on the two idle timers.
+        const { startSandboxIdleSweep } =
+          await import("./src/server/sandbox/idle");
+        startSandboxIdleSweep();
         await poolStartup;
       })
       .catch((e) => console.error("[sandbox-prewarm] startup failed:", e));
@@ -939,6 +956,15 @@ if (!g.__opensessionBooted) {
     // durable owner records immediately and keep reaping deleted-session husks.
     startPortalReaper(getSessionListSnapshotAsync);
     startRunnerPortalReaper();
+    // Sandbox Portals' loopback addresses (and the Caddy routes on them) keep
+    // their ports across this restart; the first request reconnects them.
+    void startSandboxPortalRelays()
+      .then((count) => {
+        if (count) console.log(`[sandbox-portal] rebound ${count} relays`);
+      })
+      .catch((error) =>
+        console.warn("[sandbox-portal] could not rebind relays:", error),
+      );
 
     // Desk todo reminders: push + Slack DM when a remindAt passes (todos.ts)
     startTodoReminderTicker();
@@ -994,6 +1020,7 @@ if (!g.__opensessionBooted) {
     const keychainRuns = await import("./src/server/keychain-runs");
     keychainRuns.hookKeychainRuns();
     await (await import("./src/server/script-runs")).startScriptRuns();
+    await (await import("./src/server/gpu-jobs")).startGpuJobs();
     await keychainRuns.startKeychainRuns();
   })().catch((e) => console.error("[scripts] recovery failed:", e));
 

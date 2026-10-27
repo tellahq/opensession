@@ -607,8 +607,11 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
                 "No Portals are registered. Use start_portal for a live app or service.",
             );
           const failed = portals.filter((portal) => portal.state === "failed");
+          // Reading the status reconnects a Sandbox Portal's relay, which
+          // can move its loopback address; read the address after it.
+          const statusRead = portalStatus(ctx, dir, sandbox);
           const [status, warming, local, oom] = await Promise.all([
-            portalStatus(ctx, dir, sandbox),
+            statusRead,
             sandbox
               ? sandboxPortalsWarming(
                   sandbox,
@@ -619,7 +622,10 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
                 )
               : new Set<string>(),
             sandbox && ctx.shellOnHost?.()
-              ? sandboxPortalLocalUrls(ctx.sessionId)
+              ? statusRead.then(
+                  () => sandboxPortalLocalUrls(ctx.sessionId),
+                  () => sandboxPortalLocalUrls(ctx.sessionId),
+                )
               : new Map<string, string>(),
             // A dev server that stopped listening in a Sandbox is most often
             // an out-of-memory kill; say so instead of a bare "failed".

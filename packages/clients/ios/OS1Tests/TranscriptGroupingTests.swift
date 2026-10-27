@@ -429,6 +429,20 @@ final class TranscriptGroupingTests: XCTestCase {
         }.allSatisfy(\.hasFeaturedMedia))
     }
 
+    func testRecapNoticesAreHidden() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "Ship it"),
+            TranscriptEntry(
+                id: "recap", type: "system", content: "We shipped it.",
+                notice: EntryNotice(
+                    kind: "recap", title: "Recap", tone: "info",
+                    body: "inline", link: nil, ask: nil, icon: nil
+                )
+            ),
+        ])
+        XCTAssertFalse(viewModel.displayBlocks.flatMap(\.entryIds).contains("recap"))
+    }
+
     func testOnlyFinalErrorNoticeOffersFailureContinuation() {
         let errorNotice = EntryNotice(
             kind: "system", title: "Run failed", tone: "error",
