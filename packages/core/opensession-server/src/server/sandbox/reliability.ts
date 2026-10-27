@@ -85,3 +85,69 @@ export async function ensureSandboxWithTransientRetry(
     return provider.ensure(spec);
   }
 }
+
+/**
+ * The provider has no room for another machine right now (every Mac host is
+ * at its VM budget, a pool is exhausted). Unlike other failures this one is
+ * expected to clear on its own when another Sandbox sleeps, so a start
+ * waits for room instead of failing.
+ */
+export class SandboxCapacityError extends Error {
+  readonly code = "SANDBOX_CAPACITY";
+  constructor(message: string) {
+    super(message);
+    this.name = "SandboxCapacityError";
+  }
+}
+
+export function isSandboxCapacityError(error: unknown): boolean {
+  return errorValues(error).some(
+    (value) =>
+      value instanceof SandboxCapacityError ||
+      (typeof value === "object" &&
+        value !== null &&
+        (value as { code?: unknown }).code === "SANDBOX_CAPACITY"),
+  );
+}
+
+/** How long a start waits for room before it fails. */
+export const SANDBOX_CAPACITY_WAIT_MS = 15 * 60_000;
+
+/** Backoff between capacity checks: 15s, 30s, then once a minute. */
+export function capacityRetryDelayMs(attempt: number): number {
+  return Math.min(60_000, 15_000 * 2 ** Math.max(0, attempt));
+}
+
+/**
+ * Start a Sandbox, waiting while the provider is at capacity (up to
+ * `capacityWaitMs`, reported through `onWaiting`) and retrying a transport
+ * transient once.
+ */
+export async function ensureSandboxWaitingForCapacity(
+  provider: SandboxProvider,
+  spec: SandboxSessionSpec,
+  options: {
+    delayMs?: number;
+    onRetry?: (error: unknown) => void;
+    onWaiting?: (error: unknown) => void;
+    capacityWaitMs?: number;
+    sleep?: (ms: number) => Promise<unknown>;
+  } = {},
+): Promise<Sandbox> {
+  const sleep = options.sleep ?? Bun.sleep;
+  const deadline =
+    Date.now() + (options.capacityWaitMs ?? SANDBOX_CAPACITY_WAIT_MS);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await ensureSandboxWithTransientRetry(provider, spec, options);
+    } catch (error) {
+      const remaining = deadline - Date.now();
+      if (!isSandboxCapacityError(error) || remaining <= 0) throw error;
+      options.onWaiting?.(error);
+      console.log(
+        `[sandbox:${provider.id}] ${spec.sessionId}: waiting for capacity: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      await sleep(Math.min(remaining, capacityRetryDelayMs(attempt)));
+    }
+  }
+}

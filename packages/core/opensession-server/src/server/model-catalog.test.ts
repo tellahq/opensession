@@ -3,7 +3,6 @@ import {
   chooseConfiguredDefaultModel,
   modelUpstreamProvider,
   pickerModelId,
-  presetFitsConfiguredProviders,
 } from "./model-catalog";
 
 const openaiOnly = new Set(["openai"]);
@@ -17,58 +16,11 @@ describe("model catalog provider availability", () => {
     );
   });
 
-  test("keeps preset ids intact for picker defaults", () => {
-    expect(pickerModelId("dial/high")).toBe("pi/dial/high");
-    expect(pickerModelId("pi/orchestrator/sol")).toBe("pi/orchestrator/sol");
-    expect(pickerModelId("orchestrator/fable-sol")).toBe(
-      "pi/orchestrator/fable-sol",
+  test("routes retired preset ids to the model they led", () => {
+    expect(pickerModelId("dial/high")).toBe("pi/openai/gpt-6.1-sol");
+    expect(pickerModelId("pi/orchestrator/fable-sol")).toBe(
+      "pi/anthropic/claude-fable-5-1",
     );
-  });
-
-  test("keeps the whole Dial hidden until both account providers exist", () => {
-    const openaiDial = {
-      group: "dial",
-      lead: { model: "pi/openai/gpt-6.1-sol" },
-      supporting: [{ model: "pi/openai/gpt-6.1-sol" }],
-    };
-    expect(presetFitsConfiguredProviders(openaiDial, openaiOnly)).toBe(false);
-    expect(presetFitsConfiguredProviders(openaiDial, both)).toBe(true);
-  });
-
-  test("shows other presets only when every named provider is configured", () => {
-    expect(
-      presetFitsConfiguredProviders(
-        {
-          group: "custom",
-          lead: { model: "pi/openai/gpt-6.1-sol" },
-          supporting: [{ model: "pi/anthropic/claude-fable-5-1" }],
-        },
-        openaiOnly,
-      ),
-    ).toBe(false);
-    expect(
-      presetFitsConfiguredProviders(
-        {
-          group: "orchestrator",
-          lead: { model: "pi/openai/gpt-6.1-sol" },
-          supporting: [{ model: "pi/openai/gpt-5.6-terra" }],
-        },
-        openaiOnly,
-      ),
-    ).toBe(true);
-  });
-
-  test("requires every provider used by a global orchestrator", () => {
-    expect(
-      chooseConfiguredDefaultModel(
-        "orchestrator/fable-sol",
-        new Set(["anthropic"]),
-        ["pi/anthropic/claude-fable-5-1"],
-      ),
-    ).toBe("pi/anthropic/claude-fable-5-1");
-    expect(
-      chooseConfiguredDefaultModel("orchestrator/fable-sol", both, []),
-    ).toBe("pi/orchestrator/fable-sol");
   });
 
   test("replaces an unavailable default with the first configured model", () => {
@@ -81,16 +33,16 @@ describe("model catalog provider availability", () => {
       chooseConfiguredDefaultModel("claude-fable-5-1", openaiOnly, fallbacks),
     ).toBe("pi/openai/gpt-6.1-sol");
     expect(
-      chooseConfiguredDefaultModel("dial/medium", openaiOnly, fallbacks),
+      chooseConfiguredDefaultModel("dial/ultra", openaiOnly, fallbacks),
     ).toBe("pi/openai/gpt-6.1-sol");
   });
 
-  test("preserves defaults whose required providers are configured", () => {
+  test("preserves defaults whose provider is configured", () => {
     expect(chooseConfiguredDefaultModel("gpt-6.1-sol", openaiOnly, [])).toBe(
       "pi/openai/gpt-6.1-sol",
     );
-    expect(chooseConfiguredDefaultModel("dial/high", both, [])).toBe(
-      "pi/dial/high",
+    expect(chooseConfiguredDefaultModel("claude-opus-5-5", both, [])).toBe(
+      "pi/anthropic/claude-opus-5-5",
     );
   });
 });

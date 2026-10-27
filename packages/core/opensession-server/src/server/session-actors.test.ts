@@ -10,6 +10,8 @@ import {
   isWorkerActor,
   loopActor,
   scheduledActor,
+  waitActor,
+  waitContinuationOwner,
   machineActorLabel,
   providerAccountUser,
   sessionCreationOwner,
@@ -129,6 +131,19 @@ describe("machine actors", () => {
       expect(interactivePrompter(sender)).toBeNull();
     }
     expect(humanPrompter(scheduledActor("Kent"))).toBe("Kent (scheduled)");
+    // A wait's wake keeps the person's credit and names whose wait it is,
+    // but is never their presence either.
+    expect(waitActor("Kent")).toBe("Kent (wait)");
+    expect(isScheduledActor(waitActor("Kent"))).toBe(true);
+    expect(interactivePrompter(waitActor("Kent"))).toBeNull();
+    expect(waitContinuationOwner(waitActor("Kent"))).toBe("Kent");
+    expect(waitContinuationOwner("Kent")).toBeNull();
+    expect(waitContinuationOwner(scheduledActor("Kent"))).toBeNull();
+    expect(waitContinuationOwner(" (wait)")).toBeNull();
+    expect(
+      waitContinuationOwner("Health monitor (automation) (wait)"),
+    ).toBeNull();
+    expect(scheduledActor(waitActor("Kent"))).toBe("Kent (scheduled)");
     expect(interactivePrompter("Kent")).toBe("Kent");
     expect(interactivePrompter(workerActor(SESSION))).toBeNull();
     expect(interactivePrompter("Anonymous")).toBeNull();

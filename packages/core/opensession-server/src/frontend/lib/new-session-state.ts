@@ -34,8 +34,6 @@ export interface NewSessionProps {
   forceMode?: "ask" | "code" | "scratch";
   /** Starting inside a workspace joins it unless the person chooses another project. */
   workspaceId?: string;
-  /** Workspace whose model combinations this new, independent session can use. */
-  modelWorkspaceId?: string;
   /** …and defaults to the workspace's shared repo + worktree (a sibling's branch). */
   forceRepo?: string;
   forceBranch?: string;

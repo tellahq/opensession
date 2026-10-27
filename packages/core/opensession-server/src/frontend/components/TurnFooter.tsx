@@ -13,8 +13,12 @@ import {
   IconClock,
   IconCopy,
   IconDotsHorizontal,
+  IconLink,
   IconSparkle,
 } from "./icons";
+import { useMessageLink } from "../lib/message-link";
+import { copyToClipboard } from "../lib/share-link";
+import { toast } from "../ui/toast";
 import { useOpenAsset } from "../lib/open-asset";
 import { formatDuration, fullTime } from "../lib/time";
 import { friendlyModelSlug, routedModelParts } from "./ModelEffortSelect";
@@ -82,6 +86,7 @@ export const TurnFooter = function TurnFooter({
 }: Props) {
   const pathRoots = useToolPathRoots();
   const isPhone = useIsPhone();
+  const linkTo = useMessageLink();
   const [copied, setCopied] = useState(false);
   const doCopy = () => {
     copyText(entry.content, () => {
@@ -145,7 +150,17 @@ export const TurnFooter = function TurnFooter({
                 Duplicate from here
               </Menu.Item>
             )}
-            {onFork && <Menu.Separator className="my-1" />}
+            {linkTo && (
+              <Menu.Item
+                onClick={() =>
+                  copyToClipboard(linkTo(entry.id), () => toast("Link copied"))
+                }
+              >
+                <IconLink size={20} className="text-faint" />
+                Copy link
+              </Menu.Item>
+            )}
+            {(onFork || linkTo) && <Menu.Separator className="my-1" />}
             <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-faint">
               <IconClock size={20} />
               {fullTime(entry.timestamp)}

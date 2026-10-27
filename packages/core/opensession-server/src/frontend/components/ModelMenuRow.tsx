@@ -46,8 +46,11 @@ export function ModelMenuRow({
   usage?: SessionUsage;
   variant?: "menu-row" | "hero";
 }) {
-  const { preferredDefaultModel, setPreferredDefaultModel } =
-    useDefaultModelPreference();
+  const {
+    preferredDefaultModel,
+    preferredDefaultEffort,
+    setPreferredDefaultModel,
+  } = useDefaultModelPreference();
 
   return (
     <ModelEffortSelect
@@ -56,6 +59,7 @@ export function ModelMenuRow({
         defaultModel,
         model,
         preferredDefaultModel,
+        preferredDefaultEffort,
         effort,
         autoFallback,
         speed,

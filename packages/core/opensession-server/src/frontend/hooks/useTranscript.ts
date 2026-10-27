@@ -11,6 +11,7 @@ import type { TranscriptEntry, WSServerMessage } from "../lib/types";
 import type { CachedTranscriptView } from "../components/session-viewer/transcript-cache";
 import {
   holdTranscriptAnchor,
+  keepBottomGap,
   pickScrollAnchor,
   readFollowingLive,
 } from "../components/session-viewer/transcript-anchor";
@@ -332,7 +333,7 @@ export function useTranscript({
           container,
           pending.anchorEid,
           pending.anchorTop,
-          pending.bottomGap,
+          keepBottomGap(container, pending.bottomGap),
           leaveLatest,
           () => {
             if (indexAnchorHoldCancelRef.current === cancelIndexHold)

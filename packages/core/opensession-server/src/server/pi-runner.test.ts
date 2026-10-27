@@ -39,15 +39,12 @@ import {
   PI_CODEMODE_TOOL,
   PI_STEER_TOOL_SKIP,
   piCodemodeExtension,
-  piDialOracleAgent,
   piGateReason,
   piStreamEventRequiresAccountContinuation,
   piSteeringBoundaryTools,
   interruptPiThinkingForSteer,
   piToolNames,
-  resolvePiPresetWiring,
   resolvePiRoutedModel,
-  resolvePiDialModel,
   retractPendingSteer,
   runPi,
   runPiSmokeTurn,
@@ -55,7 +52,6 @@ import {
 } from "./pi-runner";
 import type { PiBashAuditEvent } from "./pi-runner";
 import { __setCodexAccountsPathForTest } from "./codex-accounts";
-import type { ResolvedWorkspaceModelPreset } from "./workspace-model-presets";
 
 describe("acceptSteerOnce", () => {
   test("records only successful acceptance and deduplicates retries", () => {
@@ -402,202 +398,29 @@ describe("parsePiModel", () => {
 });
 
 describe("resolvePiRoutedModel", () => {
-  test("resolution errors distinguish missing presets from malformed ids", () => {
-    expect(
-      piModelResolutionError("pi/workspace-preset/ws-acme/missing"),
-    ).toContain("Cannot resolve workspace model preset");
-    expect(piModelResolutionError("pi/dial/missing")).toContain(
-      "Cannot resolve built-in model preset",
-    );
-    expect(piModelResolutionError("pi/orchestrator/missing")).toContain(
-      "Cannot resolve built-in model preset",
-    );
+  test("routes plain models to their provider and model", () => {
+    expect(resolvePiRoutedModel("pi/anthropic/claude-opus-5-5")).toEqual({
+      providerID: "anthropic",
+      modelID: "claude-opus-5-5",
+    });
+  });
+
+  test("routes retired preset ids to the model they led", () => {
+    expect(resolvePiRoutedModel("pi/dial/ultra")).toEqual({
+      providerID: "anthropic",
+      modelID: "claude-fable-5-1",
+    });
+    expect(resolvePiRoutedModel("pi/orchestrator/sol")).toEqual({
+      providerID: "openai",
+      modelID: "gpt-6.1-sol",
+    });
+  });
+
+  test("leaves retired workspace preset ids unresolved", () => {
+    expect(resolvePiRoutedModel("pi/workspace-preset/ws-acme/opus")).toBeNull();
     expect(piModelResolutionError("not-a-model")).toContain(
       "Not a pi model id",
     );
-  });
-  test("routes plain models and both preset families to their concrete Pi model", async () => {
-    expect(
-      await resolvePiRoutedModel("pi/anthropic/claude-opus-5-5"),
-    ).toMatchObject({
-      providerID: "anthropic",
-      modelID: "claude-opus-5-5",
-    });
-    expect(await resolvePiRoutedModel("pi/dial/opus-fable")).toMatchObject({
-      providerID: "anthropic",
-      modelID: "claude-opus-5-5",
-      dial: { id: "dial/opus-fable" },
-    });
-    expect(await resolvePiRoutedModel("pi/orchestrator/sol")).toMatchObject({
-      providerID: "openai",
-      modelID: "gpt-6.1-sol",
-      orchestrator: { id: "orchestrator/sol" },
-    });
-    expect(
-      await resolvePiRoutedModel("pi/orchestrator/fable-sol"),
-    ).toMatchObject({
-      providerID: "anthropic",
-      modelID: "claude-fable-5-1",
-      orchestrator: {
-        id: "orchestrator/fable-sol",
-        workerAgents: ["worker-astra"],
-      },
-      effort: "high",
-    });
-  });
-
-  test("rejects unknown preset ids", async () => {
-    expect(await resolvePiRoutedModel("pi/dial/nope")).toBeNull();
-    expect(await resolvePiRoutedModel("pi/orchestrator/nope")).toBeNull();
-    // A workspace preset id with no live workspace behind it resolves to
-    // nothing rather than minting a bogus "workspace-preset" provider.
-    expect(
-      await resolvePiRoutedModel("pi/workspace-preset/ws-not-a-workspace/nope"),
-    ).toBeNull();
-  });
-
-  test("preset wiring on the STORED id survives dispatch of the concrete lead", async () => {
-    // agent-runner dispatches presets as their concrete model; the stored
-    // session id is where the preset (and its oracle/effort) still lives.
-    expect(
-      await resolvePiRoutedModel("pi/anthropic/claude-fable-5-1", "dial/ultra"),
-    ).toMatchObject({
-      providerID: "anthropic",
-      modelID: "claude-fable-5-1",
-      dial: { id: "dial/ultra" },
-      effort: "high",
-    });
-    expect(
-      await resolvePiRoutedModel(
-        "pi/openai/gpt-6.1-sol",
-        "pi/orchestrator/sol",
-      ),
-    ).toMatchObject({
-      providerID: "openai",
-      modelID: "gpt-6.1-sol",
-      orchestrator: { id: "orchestrator/sol" },
-      effort: "xhigh",
-    });
-    // A non-preset stored id attaches nothing.
-    const plain = await resolvePiRoutedModel(
-      "pi/anthropic/claude-opus-5-5",
-      "pi/anthropic/claude-opus-5-5",
-    );
-    expect(plain?.dial).toBeUndefined();
-    expect(plain?.orchestrator).toBeUndefined();
-    expect(plain?.effort).toBeUndefined();
-  });
-});
-
-// Workspace ("Custom") preset fixtures — the store read is the one impure
-// step in resolvePiRoutedModel, so like claude-direct-policy.test.ts these
-// exercise the pure wiring half on already-resolved presets.
-const WS_PRESETS: Record<string, ResolvedWorkspaceModelPreset> = {
-  opus: {
-    id: "pi/workspace-preset/ws-test/opus",
-    label: "Opus, my way",
-    model: "pi/anthropic/claude-opus-5-5",
-    effort: "xhigh",
-    note: "## Workspace model preset · Opus, my way",
-  },
-  opusFable: {
-    id: "pi/workspace-preset/ws-test/opus-fable",
-    label: "Opus + Fable oracle",
-    model: "pi/anthropic/claude-opus-5-5",
-    effort: "xhigh",
-    enginePresetId: "dial/opus-fable",
-    note: "## Workspace model preset · Opus + Fable oracle",
-  },
-  lead: {
-    id: "pi/workspace-preset/ws-test/lead",
-    label: "Fable leads",
-    model: "pi/anthropic/claude-fable-5-1",
-    effort: "high",
-    enginePresetId: "orchestrator/fable",
-    note: "## Workspace model preset · Fable leads",
-  },
-};
-
-describe("resolvePiPresetWiring (workspace presets)", () => {
-  test("a routed workspace preset id resolves to its lead with the preset attached", () => {
-    const out = resolvePiPresetWiring(
-      "pi/workspace-preset/ws-test/opus",
-      WS_PRESETS.opus,
-    );
-    expect(out).toMatchObject({
-      providerID: "anthropic",
-      modelID: "claude-opus-5-5",
-      workspacePreset: { id: "pi/workspace-preset/ws-test/opus" },
-      effort: "xhigh",
-    });
-    expect(out?.dial).toBeUndefined();
-  });
-
-  test("follows enginePresetId so a restated built-in keeps its oracle", () => {
-    const out = resolvePiPresetWiring(
-      "pi/workspace-preset/ws-test/opus-fable",
-      WS_PRESETS.opusFable,
-    );
-    expect(out).toMatchObject({
-      modelID: "claude-opus-5-5",
-      dial: { id: "dial/opus-fable", oracleAgent: "oracle-fable" },
-      // The workspace preset's own pin outranks the built-in tier's.
-      effort: "xhigh",
-    });
-  });
-
-  test("follows enginePresetId on the orchestrator side too", () => {
-    const out = resolvePiPresetWiring(
-      "pi/workspace-preset/ws-test/lead",
-      WS_PRESETS.lead,
-    );
-    expect(out).toMatchObject({
-      modelID: "claude-fable-5-1",
-      orchestrator: { id: "orchestrator/fable" },
-      effort: "high",
-    });
-  });
-
-  test("wiring rides the stored id while the routed id is the concrete lead", () => {
-    // The agent-runner path: dispatch got the lead, opts.model kept the preset.
-    const out = resolvePiPresetWiring(
-      "pi/anthropic/claude-opus-5-5",
-      WS_PRESETS.opusFable,
-      ["pi/anthropic/claude-opus-5-5", WS_PRESETS.opusFable.id],
-    );
-    expect(out).toMatchObject({
-      modelID: "claude-opus-5-5",
-      dial: { id: "dial/opus-fable" },
-      effort: "xhigh",
-    });
-  });
-
-  test("an unknown enginePresetId is ignored rather than faked", () => {
-    const out = resolvePiPresetWiring("pi/workspace-preset/ws-test/opus", {
-      ...WS_PRESETS.opus,
-      enginePresetId: "dial/not-real",
-    });
-    expect(out?.dial).toBeUndefined();
-    expect(out?.modelID).toBe("claude-opus-5-5");
-  });
-});
-
-describe("piDialOracleAgent (same-bridge semantics)", () => {
-  test("keeps the preset's oracle when the account family matches", () => {
-    expect(piDialOracleAgent("oracle-fable", "anthropic")).toBe("oracle-fable");
-    expect(piDialOracleAgent("oracle-sol", "openai")).toBe("oracle-sol");
-  });
-
-  test("substitutes the same-bridge alternate across families", () => {
-    // dial/ultra on a pi/anthropic run: Sol → Opus, like every other engine.
-    expect(piDialOracleAgent("oracle-sol", "anthropic")).toBe("oracle-opus");
-    // dial/high on a pi/openai run: Fable → Terra.
-    expect(piDialOracleAgent("oracle-fable", "openai")).toBe("oracle-terra");
-  });
-
-  test("third-party providers keep the preset's own choice", () => {
-    expect(piDialOracleAgent("oracle-sol", "wafer")).toBe("oracle-sol");
-    expect(piDialOracleAgent("oracle-fable", "cerebras")).toBe("oracle-fable");
   });
 });
 
@@ -717,30 +540,6 @@ describe("buildPiThirdPartyProviderPlan", () => {
       builtinModelIds: [],
     });
     expect(plan).toMatchObject({ error: expect.stringContaining("neither") });
-  });
-});
-
-describe("resolvePiDialModel", () => {
-  test("keeps regular Pi models unchanged", async () => {
-    expect(
-      await resolvePiDialModel("pi/anthropic/claude-opus-5-5"),
-    ).toMatchObject({
-      providerID: "anthropic",
-      modelID: "claude-opus-5-5",
-    });
-  });
-
-  test("routes a Pi Dial preset to its main model while retaining the preset", async () => {
-    const resolved = await resolvePiDialModel("pi/dial/ultra");
-    expect(resolved).toMatchObject({
-      providerID: "anthropic",
-      modelID: "claude-fable-5-1",
-      dial: { id: "dial/ultra", effort: "high", oracleAgent: "oracle-sol" },
-    });
-  });
-
-  test("rejects unknown Pi preset ids", async () => {
-    expect(await resolvePiDialModel("pi/dial/not-real")).toBeNull();
   });
 });
 
@@ -1866,6 +1665,27 @@ describe("local-tool path containment", () => {
       ops.write.writeFile("/tmp/pi-guard-escape.txt", "x"),
     ).rejects.toThrow(/outside/);
     await expect(ops.edit.access("/etc/hosts")).rejects.toThrow(/outside/);
+  });
+
+  test("guarded ops also reach the session's own scratch dir, not other /tmp", async () => {
+    const scratch = mkdtempSync(join(tmpdir(), "pi-scratch-"));
+    try {
+      const ops = makeGuardedToolOps(ws, scratch);
+      await ops.write.mkdir(join(scratch, "shots"));
+      await ops.write.writeFile(join(scratch, "shots", "a.txt"), "shot");
+      expect(
+        (await ops.read.readFile(join(scratch, "shots", "a.txt"))).toString(),
+      ).toBe("shot");
+      expect(await ops.ls.readdir(scratch)).toContain("shots");
+      await expect(ops.read.readFile(join(tmpdir(), "x.txt"))).rejects.toThrow(
+        /\$TMPDIR/,
+      );
+      await expect(ops.read.access("/proc/self/environ")).rejects.toThrow(
+        /not accessible/,
+      );
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
   });
 
   test("guarded find.glob walks in-process, contained, with ignores", async () => {

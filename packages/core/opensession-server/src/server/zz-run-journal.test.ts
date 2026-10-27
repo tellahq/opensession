@@ -1254,7 +1254,7 @@ describe("run journal", () => {
       },
       confirmTools: { mcp__stripe__create_refund: "Create a refund" },
       model: "pi/openai/gpt-5.6-terra",
-      selectedModel: "dial/medium",
+      selectedModel: "gpt-6.1-sol",
       transientFallback: true,
       fallbackModel: "gpt-5.5",
       startedAt: "2026-07-02T00:00:00.000Z",
@@ -1271,7 +1271,7 @@ describe("run journal", () => {
       headBranch: "compat/layout",
     });
     expect(run.fallbackModel).toBe("gpt-5.5");
-    expect(run.selectedModel).toBe("dial/medium");
+    expect(run.selectedModel).toBe("gpt-6.1-sol");
     expect(run.transientFallback).toBe(true);
     // Returned records carry no claim stamp…
     expect(run.claimedAt).toBeUndefined();

@@ -85,6 +85,11 @@ export async function qualifySandboxConnection(
       await qualifyUseComputerConnection((stage, progress) =>
         update({ stage, progress }),
       );
+    } else if (provider === "modal") {
+      const { qualifyModalConnection } = await import("./adapters/modal");
+      await qualifyModalConnection((stage, progress) =>
+        update({ stage, progress }),
+      );
     } else {
       const { qualifyBoxConnection } = await import("./adapters/box");
       await qualifyBoxConnection((stage, progress) =>

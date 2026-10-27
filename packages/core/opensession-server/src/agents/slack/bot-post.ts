@@ -30,7 +30,7 @@ async function post(
     });
     return slackUploadTs(completed, channel.id);
   }
-  const posted = await sendSlackMessage(channel.id, message);
+  const posted = await sendSlackMessage(channel.id, message, upload.threadTs);
   if (!posted?.ok)
     throw new Error(
       `Slack message failed: ${posted?.error || "invalid response"}`,

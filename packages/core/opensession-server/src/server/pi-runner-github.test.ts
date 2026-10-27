@@ -1,3 +1,4 @@
+import { INLINE_GITHUB_READ_CREDENTIAL_HELPER } from "./github-git-credential";
 import { getConfigAsync } from "./config";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
@@ -290,7 +291,17 @@ describe("recovered GitHub code-run credentials", () => {
       expect(env.GH_TOKEN).toBe("projected-service-token");
       expect(env.GITHUB_TOKEN).toBe("projected-service-token");
       expect(env.GH_READ_TOKEN).toBe("projected-read-token");
-      expect(env.GIT_CONFIG_VALUE_2).toBe("git@github.com:");
+      const config = Object.fromEntries(
+        Array.from({ length: Number(env.GIT_CONFIG_COUNT) }, (_, i) => [
+          env[`GIT_CONFIG_KEY_${i}`],
+          env[`GIT_CONFIG_VALUE_${i}`],
+        ]),
+      );
+      expect(Object.values(env)).toContain("git@github.com:");
+      // Git fetches the listed repository with the read token.
+      expect(
+        config["credential.https://github.com/tellahq/api.git.helper"],
+      ).toBe(INLINE_GITHUB_READ_CREDENTIAL_HELPER);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

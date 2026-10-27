@@ -64,6 +64,7 @@ import {
   bootstrapRemoteSandbox,
   baseRuntimeSignature,
   bunCacheDamaged,
+  bunCacheEmptyBins,
   clearRemoteBunInstall,
   listRemoteStates,
   remoteCloneUrl,
@@ -93,6 +94,8 @@ export interface SandboxMachineSettings {
   cpu?: number;
   memoryMb?: number;
   diskGb?: number;
+  /** Modal: the GPU a session's container carries ("T4" or "L4"). */
+  gpu?: string;
 }
 
 export interface PrewarmEntry {
@@ -266,7 +269,9 @@ function prewarmSignature(
         ? "named-snapshot"
         : provider === "usecomputer"
           ? "snapshot"
-          : "";
+          : provider === "modal"
+            ? "filesystem-image"
+            : "";
   return `${baseRuntimeSignature()}|${shape}|${JSON.stringify(resources || {})}`;
 }
 
@@ -357,6 +362,10 @@ async function adapterFor(provider: string): Promise<PrewarmAdapter | null> {
     const { useComputerPrewarmAdapter } =
       await import("./adapters/usecomputer");
     return useComputerPrewarmAdapter;
+  }
+  if (provider === "modal") {
+    const { modalPrewarmAdapter } = await import("./adapters/modal");
+    return modalPrewarmAdapter;
   }
   return null;
 }
@@ -736,6 +745,43 @@ async function runPrewarmBootstrap(
       void destroyRecord(record, "superseded mid-warm");
       return;
     }
+    if (
+      adapter.publishTemplate &&
+      (!restoredFromTemplate || entry.refreshTemplate) &&
+      (record.waiters || 0) === 0
+    ) {
+      // Setup can succeed on a Bun cache whose packages lost their
+      // executables (an image sealed from a lazily restored disk): it links
+      // the empty files and finds nothing to do. Sealing that again carries
+      // the damage into every later image, so repair it here, once.
+      const emptyBins = await bunCacheEmptyBins(driver);
+      if (emptyBins.length) {
+        console.warn(
+          `[sandbox-prewarm] ${entry.key} Bun cache lost executables (${emptyBins.slice(0, 5).join(", ")}); clearing it and running setup again`,
+        );
+        setPrewarmStage(entry, "Repairing the package cache", 81);
+        const warmDir = remoteWarmWorkspaceDir(repo.id);
+        await clearRemoteBunInstall(driver, warmDir);
+        await resetRemoteSetupLifecycleStamp(driver, repo.id);
+        await runRemoteLifecycleHook(
+          driver,
+          warmDir,
+          "setup",
+          "fresh",
+          repo.id,
+          {
+            sandboxId: entry.sandboxId || `prewarm:${entry.key}`,
+            provider: entry.provider,
+            repoId: repo.id,
+          },
+        );
+        const still = await bunCacheEmptyBins(driver);
+        if (still.length)
+          throw new Error(
+            `the Bun cache still has packages without executables after a clean install (${still.slice(0, 5).join(", ")}); not sealing it`,
+          );
+      }
+    }
     // Compile the Portal into the image, when the operator opted the repo
     // in. Only for an image about to be sealed: a standby handed straight to
     // a waiting session would make that session wait for it.
@@ -1050,16 +1096,24 @@ export function restoreReadyPrewarms(now = Date.now()): number {
 
 export function sessionOwnedSandboxIds(
   states: Array<
-    Pick<ReturnType<typeof listRemoteStates>[number], "sessionId" | "sandboxId">
+    Pick<
+      ReturnType<typeof listRemoteStates>[number],
+      "sessionId" | "sandboxId" | "remoteId"
+    >
   >,
 ): Set<string> {
+  // Providers that name the machine apart from the stable Sandbox id (Modal,
+  // use.computer) record the current one as `remoteId`: an adopted prewarm
+  // whose relabel failed still carries the prewarm label under that id.
   return new Set(
     states
       .filter(
         (state) =>
           !state.sessionId.startsWith("__prewarm__:") && state.sandboxId,
       )
-      .map((state) => state.sandboxId),
+      .flatMap((state) =>
+        state.remoteId ? [state.sandboxId, state.remoteId] : [state.sandboxId],
+      ),
   );
 }
 
@@ -1246,42 +1300,70 @@ async function auditProviderOrphans(now: number): Promise<void> {
   const g = globalThis as unknown as { __prewarmOrphanAuditAt?: number };
   if (now - (g.__prewarmOrphanAuditAt || 0) < ORPHAN_AUDIT_INTERVAL_MS) return;
   g.__prewarmOrphanAuditAt = now;
-  for (const provider of ["daytona", "box"] as const) {
-    if (!sandboxProviderConfigured(provider)) continue;
-    // A create in flight has a live sandbox with no recorded id yet — skip
-    // this provider's audit round rather than destroy it mid-bootstrap.
-    const creating = [...pool().values()].some(
-      ({ entry: e }) =>
-        e.provider === provider && e.state === "bootstrapping" && !e.sandboxId,
+  // Each provider on its own: a provider whose destroys hang must not keep
+  // another's orphans running.
+  await Promise.all(
+    (["daytona", "box", "modal"] as const).map((provider) =>
+      auditOneProviderOrphans(provider),
+    ),
+  );
+}
+
+/** A destroy the provider never answers stops holding the audit after this;
+ *  the next round tries again. */
+const ORPHAN_DESTROY_TIMEOUT_MS = 2 * 60_000;
+
+async function auditOneProviderOrphans(
+  provider: "daytona" | "box" | "modal",
+): Promise<void> {
+  if (!sandboxProviderConfigured(provider)) return;
+  // A create in flight has a live sandbox with no recorded id yet — skip
+  // this provider's audit round rather than destroy it mid-bootstrap.
+  const creating = [...pool().values()].some(
+    ({ entry: e }) =>
+      e.provider === provider && e.state === "bootstrapping" && !e.sandboxId,
+  );
+  if (creating) return;
+  const adapter = await adapterFor(provider);
+  if (!adapter) return;
+  let listed: Array<{ id: string; key: string }> = [];
+  try {
+    listed = await adapter.listPrewarmed();
+  } catch {
+    return;
+  }
+  if (!listed.length) return;
+  const known = knownSandboxIds(provider);
+  for (const { id, key } of listed) {
+    if (known.has(id)) continue;
+    // Only reap keys whose repo THIS process's registry knows: a
+    // conformance/verify run (scratch registry) can never destroy the live
+    // server's prewarms, and the live server never touches sbxtest ones —
+    // each side's own audit cleans its own. Unlabeled/malformed keys have
+    // no owner and are fair game.
+    const repoId = key.includes(":") ? key.slice(key.indexOf(":") + 1) : "";
+    if (repoId && !(repoId in REPOS)) continue;
+    console.warn(
+      `[sandbox-prewarm] destroying untracked ${provider} prewarm ${id} (${key || "no key"})`,
     );
-    if (creating) continue;
-    const adapter = await adapterFor(provider);
-    if (!adapter) continue;
-    let listed: Array<{ id: string; key: string }> = [];
     try {
-      listed = await adapter.listPrewarmed();
-    } catch {
-      continue;
-    }
-    if (!listed.length) continue;
-    const known = knownSandboxIds(provider);
-    for (const { id, key } of listed) {
-      if (known.has(id)) continue;
-      // Only reap keys whose repo THIS process's registry knows: a
-      // conformance/verify run (scratch registry) can never destroy the live
-      // server's prewarms, and the live server never touches sbxtest ones —
-      // each side's own audit cleans its own. Unlabeled/malformed keys have
-      // no owner and are fair game.
-      const repoId = key.includes(":") ? key.slice(key.indexOf(":") + 1) : "";
-      if (repoId && !(repoId in REPOS)) continue;
-      console.warn(
-        `[sandbox-prewarm] destroying untracked ${provider} prewarm ${id} (${key || "no key"})`,
-      );
-      try {
-        await adapter.destroy(id);
-      } catch (e) {
-        console.warn(`[sandbox-prewarm] orphan destroy of ${id} failed:`, e);
-      }
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        adapter.destroy(id),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `no answer within ${ORPHAN_DESTROY_TIMEOUT_MS / 1000}s`,
+                ),
+              ),
+            ORPHAN_DESTROY_TIMEOUT_MS,
+          );
+        }),
+      ]).finally(() => clearTimeout(timer));
+    } catch (e) {
+      console.warn(`[sandbox-prewarm] orphan destroy of ${id} failed:`, e);
     }
   }
 }

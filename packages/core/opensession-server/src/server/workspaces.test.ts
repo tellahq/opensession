@@ -25,7 +25,6 @@ const { SessionKernelStore, __setSessionKernelStoreForTest } =
 const { catalogDocuments, importApplicationCatalog } =
   await import("./catalog-documents");
 const {
-  DEFAULT_WORKSPACE_MODEL_SETTINGS,
   __resetWorkspaceProjectionForTest,
   addWorkspaceCollaborator,
   createWorkspace,
@@ -74,26 +73,6 @@ afterAll(() => {
 async function seedRaw(id: string, value: unknown): Promise<void> {
   await catalogDocuments("workspaces").set(id, value);
 }
-
-describe("default workspace model settings", () => {
-  test("offers Fable planning with an Astra high implementation worker", () => {
-    expect(
-      DEFAULT_WORKSPACE_MODEL_SETTINGS.presets?.find(
-        (preset) => preset.id === "orchestrator-fable-sol",
-      ),
-    ).toMatchObject({
-      label: "Orchestrator · Fable + Astra",
-      lead: { model: "pi/anthropic/claude-fable-5-1", effort: "high" },
-      supporting: [
-        {
-          model: "pi/openai/gpt-6-astra",
-          effort: "high",
-          role: "Implementation worker",
-        },
-      ],
-    });
-  });
-});
 
 describe("catalog storage", () => {
   test("a created workspace reads back from the catalog", async () => {

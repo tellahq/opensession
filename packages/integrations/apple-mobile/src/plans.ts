@@ -4,11 +4,9 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
   realpathSync,
   renameSync,
   rmSync,
-  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { timingSafeEqual } from "node:crypto";
@@ -238,50 +236,6 @@ function validSignature(
   );
 }
 
-export interface ReleaseApprovalRequest {
-  schemaVersion: 1;
-  planId: string;
-  action: ReleaseAction;
-  projectDir: string;
-  commit: string;
-  branch: string;
-  createdAt: string;
-  expiresAt: string;
-  marketingVersion?: string;
-  buildNumber?: string;
-  sourceArtifactName?: string;
-  sourceArtifactSha256?: string;
-}
-
-interface ReleaseApprovalGrant {
-  schemaVersion: 1;
-  planId: string;
-  projectDir: string;
-  commit: string;
-  action: ReleaseAction;
-  sourceArtifactName?: string;
-  sourceArtifactSha256?: string;
-  approvedBy: string;
-  approvedAt: string;
-}
-
-interface Signed<T> {
-  value: T;
-  signature: string;
-}
-
-function approvalsDir(root?: string): string {
-  return join(appleMobileStateDir(root), "approvals");
-}
-
-function approvalPath(
-  planId: string,
-  kind: "request" | "grant",
-  root?: string,
-): string {
-  return join(approvalsDir(root), `${checkedPlanId(planId)}.${kind}.json`);
-}
-
 export function discardReleasePlan(planId: string, root?: string): void {
   checkedPlanId(planId);
   rmSync(controlledPlanPath(planId, root), { force: true });
@@ -293,227 +247,19 @@ export function discardReleasePlan(planId: string, root?: string): void {
     recursive: true,
     force: true,
   });
-  rmSync(approvalPath(planId, "request", root), { force: true });
-  rmSync(approvalPath(planId, "grant", root), { force: true });
 }
 
-function writeSigned<T>(path: string, value: T, root?: string): void {
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const temporary = `${path}.tmp-${crypto.randomUUID()}`;
+/** Atomically take a plan for execution so it can run at most once. The
+ * returned path is the claimed plan file; remove it when execution ends. */
+export function claimReleasePlan(planId: string, root?: string): string {
+  const path = controlledPlanPath(planId, root);
+  const claimed = `${path}.claimed-${crypto.randomUUID()}`;
   try {
-    writeFileSync(
-      temporary,
-      JSON.stringify({ value, signature: signature(value, root) }, null, 2) +
-        "\n",
-      { mode: 0o600, flag: "wx" },
-    );
-    renameSync(temporary, path);
-    chmodSync(path, 0o600);
-  } finally {
-    rmSync(temporary, { force: true });
-  }
-}
-
-function readSigned<T>(path: string, root?: string): T {
-  const stored = JSON.parse(readFileSync(path, "utf8")) as Signed<T>;
-  if (!stored?.value || !validSignature(stored.value, stored.signature, root)) {
-    throw new Error("Apple mobile approval signature is invalid");
-  }
-  return stored.value;
-}
-
-function approvalRequest(plan: ReleasePlan): ReleaseApprovalRequest {
-  return {
-    schemaVersion: 1,
-    planId: plan.id,
-    action: plan.action,
-    projectDir: plan.projectDir,
-    commit: plan.commit,
-    branch: plan.branch,
-    createdAt: plan.createdAt,
-    expiresAt: plan.expiresAt,
-    marketingVersion: plan.marketingVersion,
-    buildNumber: plan.buildNumber,
-    sourceArtifactName: plan.sourceArtifactName,
-    sourceArtifactSha256: plan.sourceArtifactSha256,
-  };
-}
-
-function recordApprovalRequest(plan: ReleasePlan, root?: string): void {
-  writeSigned(
-    approvalPath(plan.id, "request", root),
-    approvalRequest(plan),
-    root,
-  );
-}
-
-function validApprovalRequest(
-  request: ReleaseApprovalRequest,
-  planId: string,
-): boolean {
-  const createdAt = Date.parse(request.createdAt);
-  const expiresAt = Date.parse(request.expiresAt);
-  return (
-    request.schemaVersion === 1 &&
-    request.planId === planId &&
-    ["adhoc", "testflight", "upload"].includes(request.action) &&
-    typeof request.projectDir === "string" &&
-    request.projectDir.length > 0 &&
-    typeof request.commit === "string" &&
-    /^[0-9a-f]{40}$/.test(request.commit) &&
-    Number.isFinite(createdAt) &&
-    Number.isFinite(expiresAt) &&
-    createdAt <= expiresAt &&
-    (request.action !== "upload" ||
-      (typeof request.sourceArtifactName === "string" &&
-        request.sourceArtifactName.length > 0 &&
-        basename(request.sourceArtifactName) === request.sourceArtifactName &&
-        typeof request.sourceArtifactSha256 === "string" &&
-        /^[0-9a-f]{64}$/.test(request.sourceArtifactSha256)))
-  );
-}
-
-export function listReleaseApprovalRequests(
-  root?: string,
-): ReleaseApprovalRequest[] {
-  const dir = approvalsDir(root);
-  if (!existsSync(dir)) return [];
-  const now = Date.now();
-  const requests: ReleaseApprovalRequest[] = [];
-  for (const name of readdirSync(dir)) {
-    if (!name.endsWith(".request.json")) continue;
-    const planId = name.slice(0, -".request.json".length);
-    try {
-      checkedPlanId(planId);
-      const requestPath = join(dir, name);
-      const request = readSigned<ReleaseApprovalRequest>(requestPath, root);
-      if (!validApprovalRequest(request, planId)) continue;
-      const expiresAt = Date.parse(request.expiresAt);
-      if (expiresAt < now) {
-        discardReleasePlan(planId, root);
-        continue;
-      }
-      if (existsSync(approvalPath(planId, "grant", root))) continue;
-      requests.push(request);
-    } catch {
-      // Invalid request files are never approval candidates.
-    }
-  }
-  return requests
-    .sort(
-      (a, b) =>
-        Date.parse(b.createdAt) - Date.parse(a.createdAt) ||
-        b.planId.localeCompare(a.planId),
-    )
-    .slice(0, 100);
-}
-
-export function approveReleasePlan(
-  planId: string,
-  approvedBy: string,
-  root?: string,
-): ReleaseApprovalRequest {
-  if (!approvedBy.trim())
-    throw new Error("An authenticated approver is required");
-  let request: ReleaseApprovalRequest;
-  try {
-    request = readSigned<ReleaseApprovalRequest>(
-      approvalPath(planId, "request", root),
-      root,
-    );
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error("Release approval request is not pending");
-    }
-    throw error;
-  }
-  if (!validApprovalRequest(request, planId)) {
-    throw new Error("Release approval request is invalid");
-  }
-  if (Date.parse(request.expiresAt) < Date.now()) {
-    discardReleasePlan(planId, root);
-    throw new Error("Release approval request has expired");
-  }
-  const grant: ReleaseApprovalGrant = {
-    schemaVersion: 1,
-    planId,
-    projectDir: request.projectDir,
-    commit: request.commit,
-    action: request.action,
-    sourceArtifactName: request.sourceArtifactName,
-    sourceArtifactSha256: request.sourceArtifactSha256,
-    approvedBy: approvedBy.trim(),
-    approvedAt: new Date().toISOString(),
-  };
-  writeSigned(approvalPath(planId, "grant", root), grant, root);
-  return request;
-}
-
-export function consumeReleaseApproval(
-  plan: ReleasePlan,
-  root?: string,
-  hooks: { afterRequestClaimed?: () => void } = {},
-): { approvedBy: string; approvedAt: string } {
-  const requestPath = approvalPath(plan.id, "request", root);
-  const requestClaimPath = `${requestPath}.claimed-${crypto.randomUUID()}`;
-  try {
-    renameSync(requestPath, requestClaimPath);
+    renameSync(path, claimed);
   } catch {
-    throw new Error(
-      "Release plan needs approval in Settings → Integrations → Apple mobile",
-    );
+    throw new Error("Release plan was already executed or has been discarded");
   }
-
-  hooks.afterRequestClaimed?.();
-  const grantPath = approvalPath(plan.id, "grant", root);
-  const grantClaimPath = `${grantPath}.claimed-${crypto.randomUUID()}`;
-  try {
-    renameSync(grantPath, grantClaimPath);
-  } catch {
-    try {
-      renameSync(requestClaimPath, requestPath);
-    } catch (error) {
-      throw new Error(
-        "Release approval request could not be restored after grant claim failed",
-        { cause: error },
-      );
-    }
-    throw new Error(
-      "Release plan needs approval in Settings → Integrations → Apple mobile",
-    );
-  }
-
-  try {
-    const request = readSigned<ReleaseApprovalRequest>(requestClaimPath, root);
-    const grant = readSigned<ReleaseApprovalGrant>(grantClaimPath, root);
-    if (
-      !validApprovalRequest(request, plan.id) ||
-      request.projectDir !== plan.projectDir ||
-      request.commit !== plan.commit ||
-      request.action !== plan.action ||
-      request.sourceArtifactName !== plan.sourceArtifactName ||
-      request.sourceArtifactSha256 !== plan.sourceArtifactSha256 ||
-      grant.schemaVersion !== 1 ||
-      grant.planId !== plan.id ||
-      grant.projectDir !== plan.projectDir ||
-      grant.commit !== plan.commit ||
-      grant.action !== plan.action ||
-      grant.sourceArtifactName !== plan.sourceArtifactName ||
-      grant.sourceArtifactSha256 !== plan.sourceArtifactSha256 ||
-      Date.parse(grant.approvedAt) < Date.parse(plan.createdAt) ||
-      Date.parse(grant.approvedAt) > Date.parse(plan.expiresAt)
-    ) {
-      throw new Error("Release approval does not match this plan");
-    }
-    return { approvedBy: grant.approvedBy, approvedAt: grant.approvedAt };
-  } finally {
-    try {
-      unlinkSync(grantClaimPath);
-    } catch {}
-    try {
-      unlinkSync(requestClaimPath);
-    } catch {}
-  }
+  return claimed;
 }
 
 export function planPath(planId: string, root?: string): string {
@@ -557,7 +303,6 @@ async function persist(plan: ReleasePlan) {
     { mode: 0o600, flag: "wx" },
   );
   renameSync(temporary, path);
-  recordApprovalRequest(plan);
   return {
     plan,
     planFile: relative(appleMobileStateDir(), path),
