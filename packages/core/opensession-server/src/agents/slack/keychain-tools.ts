@@ -43,7 +43,7 @@ import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
 import { z } from "zod";
 import {
   githubLoginFor,
-  resolveTeammate,
+  trustedGithubTeammate,
 } from "../../server/shared/user-mappings";
 import { findSession } from "../../server/session-cache";
 import type { UnifiedSession } from "../../server/types";
@@ -167,7 +167,7 @@ function registrationRefusal(
     session?.automationDescendantPolicy
   )
     return `Credentials can't be ${past} from an automation run. Ask a teammate to do it in Settings → Account.`;
-  if (!githubLoginFor(ctx.user) || !resolveTeammate(ctx.user))
+  if (!trustedGithubTeammate(ctx.user))
     return `Only a signed-in teammate driving this session can ${verb} a credential. Ask them to do it in Settings → Account.`;
   return null;
 }
@@ -848,8 +848,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
       ) => {
         const refusal = registrationRefusal(ctx);
         if (refusal) return text(refusal);
-        const owner = resolveTeammate(ctx.user)!.name;
-        const login = githubLoginFor(ctx.user)!;
+        const { name: owner, login } = trustedGithubTeammate(ctx.user)!;
         // Load the store off-thread; the spec check below reads it.
         await ensureKeychainLoaded();
         let waiting;
@@ -941,8 +940,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
       ) => {
         const refusal = registrationRefusal(ctx, "update", "updated");
         if (refusal) return text(refusal);
-        const owner = resolveTeammate(ctx.user)!.name;
-        const login = githubLoginFor(ctx.user)!;
+        const { name: owner, login } = trustedGithubTeammate(ctx.user)!;
         await ensureKeychainLoaded();
         const { credential, rotateSecret, ...fields } = args;
         let waiting;
@@ -1006,8 +1004,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
       async ({ credential }: { credential: string }, extra: any) => {
         const refusal = registrationRefusal(ctx, "delete", "deleted");
         if (refusal) return text(refusal);
-        const owner = resolveTeammate(ctx.user)!.name;
-        const login = githubLoginFor(ctx.user)!;
+        const { name: owner, login } = trustedGithubTeammate(ctx.user)!;
         await ensureKeychainLoaded();
         let waiting;
         try {

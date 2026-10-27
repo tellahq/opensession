@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  test,
+} from "bun:test";
 import {
   existsSync,
   mkdtempSync,
@@ -65,6 +73,19 @@ const ROSTER: Record<string, { name: string; slackId: string; login: string }> =
 const who = (ref?: string | null) =>
   ref ? ROSTER[ref.trim().toLowerCase()] : undefined;
 const realMappings = await import("./shared/user-mappings");
+// The tools' driver gate reads the configured roster itself: pin one with
+// the two Slack members above and Casey, who has only a GitHub login (an
+// instance without Slack).
+const restoreRoster = realMappings.__setIdentitiesForTest([
+  ...Object.values(ROSTER).map((p) => ({
+    name: p.name,
+    email: `${p.login}@example.test`,
+    slackId: p.slackId,
+    github: p.login,
+  })),
+  { name: "Casey", github: "casey-gh" },
+]);
+afterAll(() => restoreRoster());
 mock.module("./shared/user-mappings", () => ({
   ...realMappings,
   resolveTeammate: (ref?: string | null) => {
@@ -542,6 +563,11 @@ describe("register_credential tool", () => {
     expect(auto).toMatch(/automation run/);
     const bot = await (await toolFor("Open Session"))(args);
     expect(bot).toMatch(/signed-in teammate/);
+    for (const outsider of ["mallory", "Anonymous", "Automation"]) {
+      expect(await (await toolFor(outsider))(args)).toMatch(
+        /signed-in teammate/,
+      );
+    }
     expect(broadcasts).toEqual([]);
     expect(reg.pendingCredentialRegistration("s-tool-alex")).toBeNull();
   });
@@ -569,6 +595,22 @@ describe("register_credential tool", () => {
       owner: "Alex",
     });
     expectNoSecretLeaked(out);
+  });
+
+  test("a teammate with only a GitHub login (no Slack) gets a card", async () => {
+    const call = (await toolFor("Casey"))(args);
+    const request = await openCard("s-tool-Casey");
+    expect(request.owner).toBe("Casey");
+    await reg.submitCredentialRegistration(
+      "s-tool-Casey",
+      request.id,
+      "casey-gh",
+      SECRET,
+    );
+    expect(JSON.parse(await call).registered).toMatchObject({
+      service: "acme-prod",
+      owner: "Casey",
+    });
   });
 
   test("a taken slug is reported without opening a card", async () => {
