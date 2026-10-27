@@ -4,12 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
 import {
-  approveReleasePlan,
+  claimReleasePlan,
   cleanupReleaseExecution,
-  consumeReleaseApproval,
   createBuildPlan,
   createUploadPlan,
-  listReleaseApprovalRequests,
   loadPlan,
   planPath,
   prepareReleaseExecution,
@@ -162,14 +160,9 @@ describe("release plans", () => {
     const ipa = join(project, ".build", "reviewed.ipa");
     await Bun.write(ipa, "approved bytes");
     const result = await createUploadPlan(project, ".build/reviewed.ipa");
-    const [request] = listReleaseApprovalRequests();
-
-    expect(request?.planId).toBe(result.plan.id);
-    expect(request?.projectDir).toBe(project);
-    expect(request?.sourceArtifactName).toBe("reviewed.ipa");
-    expect(request?.sourceArtifactSha256).toBe(
-      result.plan.sourceArtifactSha256,
-    );
+    expect(result.plan.projectDir).toBe(project);
+    expect(result.plan.sourceArtifactName).toBe("reviewed.ipa");
+    expect(result.plan.sourceArtifactSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(result.plan.sourceArtifact).not.toBe(ipa);
 
     await Bun.write(ipa, "changed after planning");
@@ -188,104 +181,16 @@ describe("release plans", () => {
     }
   });
 
-  test("filters pending requests before sorting and limiting", async () => {
-    const realNow = Date.now;
-    let now = Date.parse("2026-01-01T00:00:00.000Z");
-    Date.now = () => now++;
-    try {
-      const plans = [];
-      for (let index = 0; index < 101; index++) {
-        plans.push((await createBuildPlan(project, "adhoc")).plan);
-      }
-      for (const plan of plans.slice(0, 50)) {
-        approveReleasePlan(plan.id, "alice");
-      }
-      expect(
-        listReleaseApprovalRequests().map((request) => request.planId),
-      ).toEqual(
-        plans
-          .slice(50)
-          .toReversed()
-          .map((plan) => plan.id),
-      );
-    } finally {
-      Date.now = realNow;
-    }
-  }, 20_000);
-
-  test("removes expired approval requests and grants", async () => {
-    const realNow = Date.now;
-    const plannedAt = Date.parse("2026-01-01T00:00:00.000Z");
-    Date.now = () => plannedAt;
-    try {
-      const result = await createBuildPlan(project, "adhoc");
-      approveReleasePlan(result.plan.id, "alice");
-      Date.now = () => plannedAt + 2 * 60 * 60_000;
-      expect(listReleaseApprovalRequests()).toEqual([]);
-      const approvals = join(
-        process.env.OPENSESSION_STATE_DIR!,
-        "apple-mobile",
-        "approvals",
-      );
-      expect(
-        existsSync(join(approvals, `${result.plan.id}.request.json`)),
-      ).toBe(false);
-      expect(existsSync(join(approvals, `${result.plan.id}.grant.json`))).toBe(
-        false,
-      );
-      expect(existsSync(planPath(result.plan.id))).toBe(false);
-    } finally {
-      Date.now = realNow;
-    }
-  });
-
-  test("requires and consumes a later approval grant", async () => {
+  test("needs no approval and runs each plan at most once", async () => {
     const result = await createBuildPlan(project, "adhoc");
-    expect(listReleaseApprovalRequests()).toHaveLength(1);
-    expect(() => consumeReleaseApproval(result.plan)).toThrow("needs approval");
-    expect(listReleaseApprovalRequests()).toHaveLength(1);
+    const stateDir = join(process.env.OPENSESSION_STATE_DIR!, "apple-mobile");
+    expect(existsSync(join(stateDir, "approvals"))).toBe(false);
 
-    approveReleasePlan(result.plan.id, "alice");
-    expect(listReleaseApprovalRequests()).toHaveLength(0);
-    expect(consumeReleaseApproval(result.plan).approvedBy).toBe("alice");
-    expect(() => consumeReleaseApproval(result.plan)).toThrow("needs approval");
-  });
-
-  test("blocks concurrent reapproval and duplicate approval consumption", async () => {
-    const result = await createBuildPlan(project, "adhoc");
-    approveReleasePlan(result.plan.id, "alice");
-
-    const consumed = consumeReleaseApproval(result.plan, undefined, {
-      afterRequestClaimed: () => {
-        expect(listReleaseApprovalRequests()).toEqual([]);
-        expect(() => approveReleasePlan(result.plan.id, "bob")).toThrow(
-          "not pending",
-        );
-        expect(() => consumeReleaseApproval(result.plan)).toThrow(
-          "needs approval",
-        );
-      },
-    });
-
-    expect(consumed.approvedBy).toBe("alice");
-    expect(() => approveReleasePlan(result.plan.id, "bob")).toThrow(
-      "not pending",
-    );
-    expect(() => consumeReleaseApproval(result.plan)).toThrow("needs approval");
-  });
-
-  test("burns both claims when a consumed approval is invalid", async () => {
-    const result = await createBuildPlan(project, "adhoc");
-    approveReleasePlan(result.plan.id, "alice");
-
-    expect(() =>
-      consumeReleaseApproval({ ...result.plan, commit: "0".repeat(40) }),
-    ).toThrow("does not match");
-    expect(listReleaseApprovalRequests()).toEqual([]);
-    expect(() => approveReleasePlan(result.plan.id, "bob")).toThrow(
-      "not pending",
-    );
-    expect(() => consumeReleaseApproval(result.plan)).toThrow("needs approval");
+    const claimed = claimReleasePlan(result.plan.id);
+    expect(existsSync(planPath(result.plan.id))).toBe(false);
+    expect(() => claimReleasePlan(result.plan.id)).toThrow("already executed");
+    expect(loadPlan(project, result.plan.id)).rejects.toThrow();
+    rmSync(claimed, { force: true });
   });
 
   test("rejects a release key stored in the project", async () => {

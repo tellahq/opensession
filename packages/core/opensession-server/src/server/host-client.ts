@@ -29,10 +29,6 @@
 import type { SessionSpeed } from "@tellahq/opensession-protocol/session";
 import type { McpScope } from "./runner-shared";
 import { audit } from "./audit";
-import {
-  portableWorkspacePresetRun,
-  resolveWorkspaceModelPreset,
-} from "./workspace-model-presets";
 import { waitForRunHostAdmission } from "./host-admission";
 import {
   isRetryableSessionCommandError,
@@ -243,8 +239,6 @@ export interface HostedRunOpts {
    *  machine's upload paths (see RunHostSpec.files). */
   files?: PromptFile[];
   reposNote?: string;
-  /** reposNote already carries the session's captured workspace preset note. */
-  reposNoteHasPreset?: boolean;
   deniedTools?: Record<string, string>;
   publicationPolicy?: { repo: string; branch: string; headBranch: string };
   confirmTools?: Record<string, string>;
@@ -295,28 +289,6 @@ export interface HostedRunOpts {
     | undefined;
 }
 
-/** Resolve on the gateway before crossing into a host that has no catalog actor.
- * Both opening turns and continuations use this boundary, as do auxiliary runs. */
-export async function resolveHostedRunOptions(
-  opts: HostedRunOpts,
-): Promise<HostedRunOpts> {
-  if (!/^(?:pi\/)?workspace-preset\//.test(opts.model || "")) return opts;
-  const preset = await resolveWorkspaceModelPreset(opts.model);
-  if (!preset)
-    throw new Error(
-      `Cannot resolve workspace model preset "${opts.model}". Check the workspace model settings.`,
-    );
-  return {
-    ...opts,
-    ...portableWorkspacePresetRun(preset),
-    // Interactive callers already put the session's captured preset note in
-    // reposNote. Keep that snapshot, even after the workspace is edited.
-    reposNote: opts.reposNoteHasPreset
-      ? opts.reposNote
-      : [preset.note, opts.reposNote].filter(Boolean).join("\n\n"),
-  };
-}
-
 /**
  * Run a prompt in a detached run host, yielding the same StreamEvents as
  * runAgent. A Linux host never falls back into the gateway: launch failure is
@@ -326,7 +298,6 @@ export async function* runAgentHosted(
   opts: HostedRunOpts,
 ): AsyncGenerator<StreamEvent> {
   if (opts.shouldCancel?.()) return;
-  opts = await resolveHostedRunOptions(opts);
   if (!runHostsEnabled()) {
     if (localRunHostsSupported()) {
       throw new Error(
@@ -403,7 +374,6 @@ export async function* runAuxiliaryAgentHosted(
   const shouldCancel = () =>
     Boolean(opts.signal?.aborted || opts.shouldCancel?.());
   if (shouldCancel()) return;
-  opts = { ...opts, ...(await resolveHostedRunOptions(opts)) };
   if (!runHostsEnabled()) {
     if (localRunHostsSupported()) {
       throw new Error(

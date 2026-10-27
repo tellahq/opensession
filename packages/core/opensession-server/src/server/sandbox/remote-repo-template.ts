@@ -25,8 +25,15 @@ import {
 } from "./adapters/bootstrap";
 import { getSandboxConnection } from "./connections";
 import { configuredRepos } from "../config";
+import { repoPreSetupScript } from "./config";
+import { MODAL_BASE_IMAGE_REVISION } from "./adapters/modal-image";
 
-export type RemoteTemplateProvider = "daytona" | "box" | "tart" | "usecomputer";
+export type RemoteTemplateProvider =
+  | "daytona"
+  | "box"
+  | "tart"
+  | "usecomputer"
+  | "modal";
 
 export interface RemoteRepoTemplate {
   provider: RemoteTemplateProvider;
@@ -373,8 +380,26 @@ export function projectPreparationSignature(repoId: string): string {
     });
     step = steps.next({ status: r.status, stdout: r.stdout ?? "" });
   }
-  signatureCache.set(repoId, { at: Date.now(), value: step.value });
-  return step.value;
+  const value = withPreSetupScript(repoId, step.value);
+  signatureCache.set(repoId, { at: Date.now(), value });
+  return value;
+}
+
+/** A settings-held pre-setup script (Workspace → Sandboxes → Projects) is a
+ *  setup input like `.agents/setup`. Folded in only when there is one, so a
+ *  project without it keeps the signature, and the snapshot, it had. */
+export function withPreSetupScript(repoId: string, signature: string): string {
+  const script = repoPreSetupScript(repoId);
+  if (!script) return signature;
+  return createHash("sha256")
+    .update(`${signature}|pre-setup:`)
+    .update(script)
+    .digest("hex");
+}
+
+/** Drop one repo's memoized signature (its pre-setup script changed). */
+export function forgetProjectPreparationSignature(repoId: string): void {
+  signatureCache.delete(repoId);
 }
 
 /** Recompute a repo's signature without blocking the event loop, so later
@@ -395,8 +420,9 @@ export async function refreshProjectPreparationSignature(
     ]);
     step = steps.next({ status, stdout });
   }
-  signatureCache.set(repoId, { at: Date.now(), value: step.value });
-  return step.value;
+  const value = withPreSetupScript(repoId, step.value);
+  signatureCache.set(repoId, { at: Date.now(), value });
+  return value;
 }
 
 /** Refresh every signature something has asked for, off the event loop. */
@@ -441,7 +467,12 @@ export function remoteRepoTemplateSignature(
           ? // Snapshots must match the reservation's VM layout; the service
             // picks the image.
             { reservation: settings.reservation || "default" }
-          : { machineProfile: settings.profile || "default" };
+          : provider === "modal"
+            ? // Built on the base image; a new base retires it.
+              {
+                image: `${settings.image || "default"}|${MODAL_BASE_IMAGE_REVISION}`,
+              }
+            : { machineProfile: settings.profile || "default" };
   return createHash("sha256")
     .update(
       `repo-template-v4|${baseRuntimeSignature()}|${JSON.stringify(shape)}`,

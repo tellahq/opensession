@@ -1,5 +1,5 @@
 /**
- * Pi-only model catalog, presets, labels, account-pool selection and fallback routing.
+ * Pi-only model catalog, labels, account-pool selection and fallback routing.
  * Native and provider/model ids are normalized to pi/<provider>/<model> at dispatch.
  */
 
@@ -25,11 +25,6 @@ import {
   xaiSubscriptionPickerModels,
 } from "./xai-accounts";
 import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
-// Workspace ("Custom") presets live in the workspace store, so the one thing
-// this module needs from them — a preset's lead model — has to be read there.
-// The import cycle back into this module is inert: workspace-model-presets
-// touches these bindings only inside function bodies, never at load time.
-import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 
 // "claude" and "codex" are LEGACY provider tags: the CLI-era engines and the
 // removed direct-SDK engines stored them on sessions (and readers still key
@@ -40,7 +35,7 @@ export type Provider = "claude" | "codex" | "pi";
  *  the removed direct engines' claude/ and codex/, which legacy stored ids
  *  still carry. Keep this in step with the Provider union above: it is the
  *  single place the id grammar's engine axis is spelled out, so an engine
- *  prefix can't silently lose efforts, preset lookup, tiering or account-pool
+ *  prefix can't silently lose efforts, tiering or account-pool
  *  detection. */
 const ENGINE_PREFIX_RE = /^(?:pi|claude|codex)\//;
 
@@ -53,12 +48,6 @@ export interface ModelInfo {
   provider: Provider;
   label: string;
   aliases: string[];
-  /** Picker section override ("dial" = The Dial, "orchestrator" = The
-   *  Orchestrator presets); unset = grouped by the id's upstream provider
-   *  segment. */
-  group?: string;
-  /** One-line picker subtitle (dial/orchestrator presets only today). */
-  description?: string;
 }
 
 export const SESSION_EFFORTS = [
@@ -111,7 +100,7 @@ export function modelEfforts(
 
   if (
     provider === "openai" &&
-    /^(?:gpt-6\.1-sol|gpt-6-sol|gpt-6-luna)$/.test(slug)
+    /^(?:gpt-6\.1-sol|gpt-6\.1-terra|gpt-6-sol|gpt-6-luna)$/.test(slug)
   )
     return [...OPENAI_EFFORTS, "max"];
   if (
@@ -184,7 +173,7 @@ export const DEFAULT_BRIDGE_PICKER_MODELS = [
   "claude-haiku-5-5",
   "gpt-6-astra",
   "gpt-6.1-sol",
-  "gpt-5.6-terra",
+  "gpt-6.1-terra",
   "gpt-6-luna",
 ] as const;
 
@@ -287,10 +276,18 @@ export const KNOWN_MODELS: ModelInfo[] = [
     aliases: ["sol5.6", "gpt5.6"],
   },
   {
+    id: "gpt-6.1-terra",
+    provider: "codex",
+    label: "GPT-6.1 Terra",
+    aliases: ["terra", "terra6.1"],
+  },
+  // Superseded by GPT-6.1 Terra. Kept resolvable for persisted sessions;
+  // dispatch upgrades it through RETIRED_CODEX_REROUTE.
+  {
     id: "gpt-5.6-terra",
     provider: "codex",
     label: "GPT-5.6 Terra",
-    aliases: ["terra"],
+    aliases: ["terra5.6"],
   },
   {
     id: "gpt-6-luna",
@@ -336,388 +333,36 @@ export const KNOWN_MODELS: ModelInfo[] = [
   },
 ];
 
-// ── The Dial ──────────────────────────────────────────────────────────────
-//
-// Amp-style task-difficulty presets (https://ampcode.com/news/the-dial): one
-// picker choice bundles the MAIN model + reasoning effort with an ORACLE — a
-// different frontier model wired in as a read-only Pi subagent the main
-// agent consults for plan review, architecture calls and deep debugging. The
-// session stores the preset id (`dial/<tier>`) as its `model`, so tier wiring
-// can change over time without touching stored sessions; everything resolves
-// to concrete models at dispatch (toPiModel + the runner's dial hook).
-
-export interface DialPreset {
-  /** Stored as the session's model id, e.g. "dial/high". */
-  id: string;
-  label: string;
-  /** One-line picker subtitle, Amp-style. */
-  description: string;
-  /** Native id of the MAIN agent model (resolved via toPiModel). */
-  model: string;
-  /** Reasoning effort for the main model (overrides the session's effort). */
-  effort: SessionEffort;
-  /** Which DIAL_ORACLE_AGENTS entry backs this tier's oracle. */
-  oracleAgent: string;
-  /** Picker section this preset renders under (defaults to "dial"). Lets
-   * one-off personal combos (group "custom") reuse the
-   *  whole dial mechanism without joining the tier ladder. */
-  group?: string;
-}
-
 /**
- * The oracle subagents, keyed by Pi agent name. Defined STATICALLY in
- * every engine server config (shared servers serve many sessions with
- * different presets, so the set can't vary per run — and a stable config keeps
- * the server hash stable). Only dial runs are told about them; other sessions
- * never get oracle instructions. `variant` rides the agent config through the
- * open index signature — honored where the engine supports per-agent variants,
- * harmlessly ignored otherwise.
+ * Retired picker presets (The Dial, The Orchestrator, and one-off combos)
+ * bundled a model with an effort and companion agents. They are gone; stored
+ * sessions that still carry one of these ids run on the model it led.
  */
-export const DIAL_ORACLE_AGENTS: Record<
-  string,
-  { model: string; variant: SessionEffort; label: string; description: string }
-> = {
-  "oracle-fable": {
-    model: "anthropic/claude-fable-5-1",
-    variant: "high",
-    label: "Claude Fable 5.1",
-    description:
-      "Oracle: senior-engineer second opinion on Claude Fable 5.1 — plan review, " +
-      "architecture decisions, deep debugging, reviewing significant work. Read-only advisor.",
-  },
-  "oracle-sol": {
-    model: "openai/gpt-6.1-sol",
-    variant: "xhigh",
-    label: "GPT-6.1 Sol",
-    description:
-      "Oracle: senior-engineer second opinion on GPT-6.1 Sol at extra-high reasoning — " +
-      "plan review, architecture decisions, deep debugging, reviewing significant work. " +
-      "Read-only advisor.",
-  },
-  // Same-bridge substitutes: an engine server carries ONE bridge's auth, so a
-  // cross-provider oracle (dial/ultra's sol-on-anthropic, dial/high's
-  // fable-on-openai) has no model in that server's catalog — the task call
-  // errored loudly or no-oped silently (Dreaming 2026-07-17). Each bridge gets
-  // a distinct-model alternate so premium presets keep a REAL second opinion.
-  "oracle-terra": {
-    model: "openai/gpt-5.6-terra",
-    variant: "high",
-    label: "GPT-5.6 Terra",
-    description:
-      "Oracle: senior-engineer second opinion on GPT-5.6 Terra at high reasoning — " +
-      "plan review, architecture decisions, deep debugging, reviewing significant work. " +
-      "Read-only advisor.",
-  },
-  "oracle-opus": {
-    model: "anthropic/claude-opus-5-5",
-    variant: "high",
-    label: "Claude Opus 5.5",
-    description:
-      "Oracle: senior-engineer second opinion on Claude Opus 5.5 — plan review, " +
-      "architecture decisions, deep debugging, reviewing significant work. Read-only advisor.",
-  },
+const RETIRED_PRESET_MODELS: Record<string, string> = {
+  "dial/ultra": "claude-fable-5-1",
+  "dial/high": "gpt-6.1-sol",
+  "dial/medium": "gpt-6.1-sol",
+  "dial/low": "gpt-6-luna",
+  "dial/opus-fable": "claude-opus-5-5",
+  "orchestrator/fable": "claude-fable-5-1",
+  "orchestrator/fable-sol": "claude-fable-5-1",
+  "orchestrator/sol": "gpt-6.1-sol",
 };
 
-/**
- * Where an oracle consultation goes when its own model cannot serve, the same
- * courtesy interactiveFallbackModel does for a full session: degrade to a
- * different senior model rather than fail the call.
- *
- * Every hop crosses PROVIDERS, which is the whole point. A dry pool is a
- * provider-wide condition (the Claude weekly cap takes fable and opus out
- * together, and it did on 2026-08-19), so a substitute on the same bridge
- * answers with the same outage and only costs a second attempt to learn it.
- * Ordering favours the strongest cross-provider peer, not the cheapest.
- */
-export const DIAL_ORACLE_FALLBACKS: Record<string, string[]> = {
-  "oracle-fable": ["oracle-sol"],
-  "oracle-opus": ["oracle-sol"],
-  "oracle-sol": ["oracle-fable"],
-  "oracle-terra": ["oracle-opus"],
-};
-
-/**
- * The oracle agent a dial run can ACTUALLY consult on its server: the preset's
- * oracle when its provider matches the server's bridge, else the same-bridge
- * substitute (openai → Terra, anthropic → Opus). Unknown/native providers keep
- * the preset's choice (status quo).
- */
-export function sameBridgeDialOracle(
-  oracleAgent: string,
-  mainProviderID: string,
-): string {
-  const oracle = DIAL_ORACLE_AGENTS[oracleAgent];
-  if (!oracle) return oracleAgent;
-  const oracleProvider = oracle.model.split("/")[0];
-  if (oracleProvider === mainProviderID) return oracleAgent;
-  if (mainProviderID === "openai") return "oracle-terra";
-  if (mainProviderID === "anthropic") return "oracle-opus";
-  return oracleAgent;
-}
-
-export const DIAL_PRESETS: DialPreset[] = [
-  {
-    id: "dial/ultra",
-    label: "Dial · Ultra",
-    description:
-      "The most capable combo for hard, open-ended tasks — Fable 5.1 high with a Sol-xhigh oracle",
-    model: "claude-fable-5-1",
-    effort: "high",
-    oracleAgent: "oracle-sol",
-  },
-  {
-    id: "dial/high",
-    label: "Dial · High",
-    description:
-      "Deep reasoning for hard tasks — Sol at extra-high effort with a Fable 5.1-high oracle",
-    model: "gpt-6.1-sol",
-    effort: "xhigh",
-    oracleAgent: "oracle-fable",
-  },
-  {
-    id: "dial/medium",
-    label: "Dial · Medium",
-    description:
-      "Balanced depth and speed for everyday work — Sol-high with a Sol-xhigh oracle",
-    model: "gpt-6.1-sol",
-    effort: "high",
-    oracleAgent: "oracle-sol",
-  },
-  {
-    id: "dial/low",
-    label: "Dial · Low",
-    description:
-      "Fast edits and small tasks — Luna-high with a Sol-xhigh oracle",
-    model: "gpt-6-luna",
-    effort: "high",
-    oracleAgent: "oracle-sol",
-  },
-  {
-    id: "dial/opus-fable",
-    label: "Opus 5.5 + Fable oracle",
-    description:
-      "Custom combo — Opus 5.5 at extra-high effort with a Fable 5.1-high oracle",
-    model: "claude-opus-5-5",
-    effort: "xhigh",
-    oracleAgent: "oracle-fable",
-    group: "custom",
-  },
-];
-
-/** The dial preset behind a model id, or undefined for non-dial ids.
- *  Engine-agnostic: "pi/dial/<tier>" is the same preset routed to the pi
- *  engine, so any leading engine prefix strips before the lookup. */
-export function dialPreset(model?: string | null): DialPreset | undefined {
+/** The model a retired preset id ran on, or undefined. Strips a leading
+ *  engine prefix ("pi/dial/high"). */
+export function retiredPresetModel(model?: string | null): string | undefined {
   const id = (model || "").trim().toLowerCase().replace(ENGINE_PREFIX_RE, "");
-  if (!id.startsWith("dial/")) return undefined;
-  return DIAL_PRESETS.find((p) => p.id === id);
+  return RETIRED_PRESET_MODELS[id];
 }
 
-// ── The Orchestrator ──────────────────────────────────────────────────────
-//
-// The Dial reversed: a frontier main model plans, decides, reviews, and
-// integrates, while focused worker sessions handle implementation. A preset
-// stores `orchestrator/<name>` on the session and resolves its lead and workers
-// at dispatch. Only orchestrator runs are told the workers exist. The global
-// presets remain opt-in via orchestratorEnabled().
-
-export interface OrchestratorPreset {
-  /** Stored as the session's model id, e.g. "orchestrator/fable". */
-  id: string;
-  label: string;
-  /** One-line picker subtitle. */
-  description: string;
-  /** Native id of the MAIN (orchestrator) model (resolved via toPiModel). */
-  model: string;
-  /** Reasoning effort for the main model (overrides the session's effort). */
-  effort: SessionEffort;
-  /** ORCHESTRATOR_WORKER_AGENTS names this preset delegates to. */
-  workerAgents: string[];
-}
-
-/**
- * Worker roles are stable while their backing model may follow the lead's
- * provider. Pi delegates them through Open Session worker sessions, so an
- * explicit cross-provider role such as `worker-astra` can deliberately stay on
- * OpenAI while Fable leads on Anthropic. Only orchestrator runs receive the
- * instructions that name these workers.
- */
-export const ORCHESTRATOR_WORKER_AGENTS: Record<
-  string,
-  {
-    label: string;
-    /** Task-tool description the main model sees — when to pick this worker. */
-    description: string;
-    /** Per-bridge backing model + effort variant. */
-    bridges: Record<
-      string,
-      { model: string; variant: SessionEffort; label: string }
-    >;
-  }
-> = {
-  worker: {
-    label: "Worker",
-    description:
-      "Worker: executes one well-scoped implementation subtask end to end — a function, " +
-      "a module, a migration step, a test file. Give it a self-contained brief (exact " +
-      "files, constraints, acceptance criteria); it sees the checkout but none of your " +
-      "conversation. Not for design decisions or final review.",
-    bridges: {
-      anthropic: {
-        model: "anthropic/claude-sonnet-5-5",
-        variant: "medium",
-        label: "Sonnet 5.5",
-      },
-      // Terra medium, not 5.5/5.4: the 272k-window codex models are retired
-      // (see RETIRED_CODEX_REROUTE) — the cheap codex tiers are the 5.6
-      // siblings Terra/Luna, never a smaller-window model.
-      openai: {
-        model: "openai/gpt-5.6-terra",
-        variant: "medium",
-        label: "Terra",
-      },
-    },
-  },
-  "worker-fast": {
-    label: "Fast worker",
-    description:
-      "Fast worker: quick mechanical subtasks — renames, boilerplate, repetitive sweeps, " +
-      "straightforward lookups. Cheapest and fastest; escalate anything needing judgment " +
-      "to the standard worker or do it yourself.",
-    bridges: {
-      anthropic: {
-        model: "anthropic/claude-haiku-5-5",
-        variant: "medium",
-        label: "Haiku 5.5",
-      },
-      openai: {
-        model: "openai/gpt-6-luna",
-        variant: "low",
-        label: "Luna low",
-      },
-      cerebras: {
-        model: "cerebras/gpt-oss-120b",
-        variant: "medium",
-        label: "GPT OSS 120B",
-      },
-    },
-  },
-  "worker-astra": {
-    label: "Implementation worker",
-    description:
-      "Implementation worker: GPT-6 Astra at high effort executes one well-scoped " +
-      "implementation task end to end. Give it exact files, constraints, and acceptance criteria.",
-    bridges: {
-      anthropic: {
-        model: "openai/gpt-6-astra",
-        variant: "high",
-        label: "GPT-6 Astra",
-      },
-      openai: {
-        model: "openai/gpt-6-astra",
-        variant: "high",
-        label: "GPT-6 Astra",
-      },
-    },
-  },
-};
-
-/** The backing (model/variant/label) a worker NAME resolves to. A configured
- *  Cerebras provider wins for worker-fast; otherwise workers stay on the main
- *  bridge, with unknown providers falling back to Anthropic. */
-export function orchestratorWorkerForBridge(
-  name: string,
-  mainProviderID: string,
-  availableProviderIDs: ReadonlySet<string> = new Set(
-    Object.entries(modelProviders())
-      .filter(([, config]) => !!config.apiKey)
-      .map(([id]) => id),
-  ),
-): { model: string; variant: SessionEffort; label: string } | undefined {
-  const w = ORCHESTRATOR_WORKER_AGENTS[name];
-  if (!w) return undefined;
-  if (name === "worker-fast" && availableProviderIDs.has("cerebras"))
-    return w.bridges.cerebras;
-  return w.bridges[mainProviderID] ?? w.bridges.anthropic;
-}
-
-export function orchestratorWorkerModels(
-  preset: OrchestratorPreset,
-  availableProviderIDs?: ReadonlySet<string>,
-): string[] {
-  const mainProviderID = preset.model.startsWith("claude-")
-    ? "anthropic"
-    : "openai";
-  return preset.workerAgents.flatMap((name) => {
-    const worker = orchestratorWorkerForBridge(
-      name,
-      mainProviderID,
-      availableProviderIDs,
-    );
-    return worker ? [worker.model] : [];
-  });
-}
-
-export const ORCHESTRATOR_PRESETS: OrchestratorPreset[] = [
-  {
-    id: "orchestrator/fable",
-    label: "Orchestrator · Fable 5.1",
-    description: "Fable 5.1 high leads planning, review, and integration",
-    model: "claude-fable-5-1",
-    effort: "high",
-    workerAgents: ["worker", "worker-fast"],
-  },
-  {
-    // Keep the persisted preset id so existing selections follow this upgrade.
-    id: "orchestrator/fable-sol",
-    label: "Orchestrator · Fable + Astra",
-    description:
-      "Fable 5.1 high leads planning, review, and integration; Astra high implements",
-    model: "claude-fable-5-1",
-    effort: "high",
-    workerAgents: ["worker-astra"],
-  },
-  {
-    id: "orchestrator/sol",
-    label: "Orchestrator · Sol",
-    description: "Sol xhigh leads planning, review, and integration",
-    model: "gpt-6.1-sol",
-    effort: "xhigh",
-    workerAgents: ["worker", "worker-fast"],
-  },
-];
-
-function orchestratorPickerDescription(preset: OrchestratorPreset): string {
-  const mainProviderID = preset.model.startsWith("claude-")
-    ? "anthropic"
-    : "openai";
-  const workers = preset.workerAgents.flatMap((name) => {
-    const backing = orchestratorWorkerForBridge(name, mainProviderID);
-    if (!backing) return [];
-    const role = ORCHESTRATOR_WORKER_AGENTS[name]?.label || name;
-    return [`${role.toLowerCase()}: ${backing.label} ${backing.variant}`];
-  });
-  return `${preset.description}; delegates to ${workers.join(" and ")}`;
-}
-
-/** The orchestrator preset behind a model id, or undefined. Strips a leading
- *  engine prefix like dialPreset so the same preset routes through any engine. */
-export function orchestratorPreset(
-  model?: string | null,
-): OrchestratorPreset | undefined {
-  const id = (model || "").trim().toLowerCase().replace(ENGINE_PREFIX_RE, "");
-  if (!id.startsWith("orchestrator/")) return undefined;
-  return ORCHESTRATOR_PRESETS.find((p) => p.id === id);
-}
-
-/** The preset (dial or orchestrator) behind a model id. Sessions store the
- *  preset id itself, so callers that persist runner-reported models must not
- *  overwrite it — gate on this, not dialPreset, so both preset families keep
- *  their wiring across turns. */
-export function modelPreset(
-  model?: string | null,
-): DialPreset | OrchestratorPreset | undefined {
-  return dialPreset(model) ?? orchestratorPreset(model);
+/** Any other preset id is unresolvable: workspace ("Custom") presets named a
+ *  lead model only the removed workspace preset store knew, and unknown Dial
+ *  or Orchestrator ids never ran. Callers fall back to the default model. */
+function isRetiredPresetId(model: string): boolean {
+  return /^(?:pi\/)?(?:workspace-preset|dial|orchestrator)\//.test(
+    model.trim().toLowerCase(),
+  );
 }
 
 /** "claude-opus-4-8" → "Opus 4.8", "gpt-5.4-mini" → "GPT-5.4 mini". Fallback
@@ -768,8 +413,8 @@ export function piModelLabel(
   id: string,
   providers: Record<string, ModelProviderConfig> = modelProviders(),
 ): string {
-  const preset = modelPreset(id);
-  if (preset) return preset.label;
+  const retired = retiredPresetModel(id);
+  if (retired) return piModelLabel(retired, providers);
   const canonical = canonicalProviderPickerModelId(
     id.startsWith("pi/") ? id : `pi/${id}`,
   );
@@ -794,8 +439,6 @@ export function piModelLabel(
 /** Friendly label for a legacy direct-SDK id retained in model history. */
 export function directModelLabel(id: string): string {
   const engine = id.startsWith("codex/") ? "Codex" : "Claude";
-  const preset = modelPreset(id);
-  if (preset) return `${engine} · ${preset.label}`;
   return `${engine} · ${piModelLabel(id)}`;
 }
 
@@ -862,7 +505,7 @@ export const DEFAULT_CLAUDE_MODEL = "claude-fable-5-1";
 export const DEFAULT_CODEX_MODEL = "gpt-6.1-sol";
 export const BEST_AVAILABLE_CODEX_MODEL = "codex-best-available";
 
-const CODEX_MODEL_ORDER = ["gpt-6.1-sol", "gpt-5.6-terra", "gpt-6-luna"];
+const CODEX_MODEL_ORDER = ["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna"];
 
 /**
  * Fallback ROUTING tiers (higher = smarter). NOT an absolute capability
@@ -882,6 +525,7 @@ const FALLBACK_TIER: Record<string, number> = {
   "gpt-6-sol": 3,
   "claude-opus-5-5": 3,
   "claude-opus-5": 3,
+  "gpt-6.1-terra": 3,
   "gpt-5.6-terra": 3,
   "gpt-6-luna": 3,
   "claude-opus-4-8": 2,
@@ -911,7 +555,7 @@ const FALLBACK_DESTINATIONS = [
   // Prefer Opus before Terra/Luna once Sol is unavailable.
   "claude-opus-5-5",
   // Terra/Luna remain automatic top-tier fallbacks after Opus.
-  "gpt-5.6-terra",
+  "gpt-6.1-terra",
   "gpt-6-luna",
   // gpt-5.5 / gpt-5.4 / gpt-5.4-mini / spark removed 2026-07-25: retired
   // 272k-window models (RETIRED_CODEX_REROUTE) — falling back onto them would
@@ -929,9 +573,7 @@ const FALLBACK_DESTINATIONS = [
 /** Stored as { model, interactiveModel? }: `model` is the GLOBAL default every
  *  consumer of getDefaultModel() sees (Slack/Linear/Plain loops, workflows);
  *  `interactiveModel` overrides what NEW interactive sessions (the composer's
- *  preselected row) start on, without touching those loops. Dial preset ids
- *  are valid here — interactiveDefaultModel returns them unresolved so the
- *  session stores `dial/<tier>` and keeps its oracle+effort. */
+ *  preselected row) start on, without touching those loops. */
 const defaultModelStore = () => stateDir("default-model.json");
 const FALLBACK_AUTO_STORE = stateDir("model-fallback.json");
 
@@ -1019,8 +661,8 @@ export function setDefaultModel(input: string | null): string {
 /**
  * Persist the default for NEW interactive sessions only (the composer's
  * preselected model) — the global default above, and everything that reads it
- * (Slack/Linear/Plain loops, workflows), stays untouched. Accepts dial preset
- * ids ("dial/medium"); null clears back to the Pi-mapped global default.
+ * (Slack/Linear/Plain loops, workflows), stays untouched. null clears back to
+ * the Pi-mapped global default.
  */
 export function setInteractiveDefaultModel(input: string | null): string {
   if (input === null || input.trim() === "") {
@@ -1143,6 +785,7 @@ export function interactiveFallbackModel(
 const RETIRED_CODEX_REROUTE: Record<string, string> = {
   "gpt-6-sol": "gpt-6.1-sol",
   "gpt-5.6-sol": "gpt-6.1-sol",
+  "gpt-5.6-terra": "gpt-6.1-terra",
   "gpt-5.6-luna": "gpt-6-luna",
   "gpt-5.5": "gpt-6.1-sol",
   "gpt-5.4": "gpt-6.1-sol",
@@ -1150,17 +793,9 @@ const RETIRED_CODEX_REROUTE: Record<string, string> = {
   "gpt-5.3-codex-spark": "gpt-6-luna",
 };
 
-function isAppRoutedPiProvider(provider: string): boolean {
-  return (
-    provider === "dial" ||
-    provider === "orchestrator" ||
-    provider === "workspace-preset"
-  );
-}
-
-/** Route a model or preset to Pi. Explicit Pi ids keep the model suffix's
+/** Route a model to Pi. Explicit Pi ids keep the model suffix's
  * casing because OpenAI-compatible gateways may treat model ids as
- * case-sensitive; only the provider and app-owned routing ids are normalized. */
+ * case-sensitive; only the provider segment is normalized. */
 export function toPiModel(model?: string | null): string | undefined {
   const raw = (model || "").trim();
   let requested = raw.toLowerCase();
@@ -1173,8 +808,9 @@ export function toPiModel(model?: string | null): string | undefined {
   const pickerId = requested.startsWith("pi/")
     ? requested.slice("pi/".length)
     : requested;
-  const preset = modelPreset(pickerId);
-  if (preset) return toPiModel(preset.model);
+  const retired = retiredPresetModel(pickerId);
+  if (retired) return toPiModel(retired);
+  if (isRetiredPresetId(pickerId)) return undefined;
   if (requested.includes("/")) {
     const piId = requested.startsWith("pi/") ? requested : `pi/${requested}`;
     const canonical = canonicalProviderPickerModelId(piId);
@@ -1190,10 +826,8 @@ export function toPiModel(model?: string | null): string | undefined {
     if (explicit) {
       const provider = explicit[1]!.toLowerCase();
       const suffix = explicit[2]!;
-      // App-owned preset ids are case-insensitive routing keys. Provider model
-      // ids are not, so prefer the picker/catalog's exact casing when known
-      // and otherwise preserve what the caller supplied.
-      if (isAppRoutedPiProvider(provider)) return requested;
+      // Provider model ids are case-sensitive, so prefer the picker/catalog's
+      // exact casing when known and otherwise preserve what the caller supplied.
       const lowerId = `pi/${provider}/${suffix.toLowerCase()}`;
       const known = KNOWN_MODELS.find(
         (candidate) => candidate.id.toLowerCase() === lowerId,
@@ -1232,15 +866,10 @@ export function explicitEngineFor(model?: string | null): Provider | null {
   return (model || "").trim().toLowerCase().startsWith("pi/") ? "pi" : null;
 }
 
-const PRESET_HEADS = ["dial/", "orchestrator/", "workspace-preset/"];
-
 function pickerBaseId(id: string): string {
   const value = id.trim();
   if (!value.startsWith("pi/")) return value;
-  const rest = value.slice("pi/".length);
-  return PRESET_HEADS.some((head) => rest.startsWith(head))
-    ? rest
-    : rest.split("/").slice(1).join("/");
+  return value.slice("pi/".length).split("/").slice(1).join("/");
 }
 
 export function modelEngineKey(model?: string | null): string {
@@ -1264,15 +893,12 @@ export function routeModel(
 
 export type AccountProvider = "claude" | "codex" | "xai";
 
-/** Account pool used by a model after resolving presets and legacy ids. */
+/** Account pool used by a model after resolving legacy ids. */
 export function accountProviderForModel(
   model?: string | null,
 ): AccountProvider | undefined {
   const requested = model || interactiveDefaultModel();
   const resolved = toPiModel(requested) || requested;
-  // Presets resolve to their main model before selecting an account pool.
-  const piPreset = modelPreset(resolved);
-  if (piPreset) return accountProviderForModel(piPreset.model);
   const upstream = resolved.match(ENGINE_UPSTREAM_RE)?.[1];
   if (upstream === "anthropic" || resolved.startsWith("claude-"))
     return "claude";
@@ -1290,9 +916,6 @@ export function accountProviderForModel(
 /** Default model for new interactive sessions, always routed to Pi. */
 export function interactiveDefaultModel(): string {
   const configured = loadInteractiveOverride() || getDefaultModel();
-  if (modelPreset(configured)) {
-    return configured.startsWith("pi/") ? configured : `pi/${configured}`;
-  }
   return toPiModel(configured) || toPiModel(getDefaultModel())!;
 }
 
@@ -1439,20 +1062,9 @@ export function resolveModel(input: string): ModelInfo | null {
       model.id.split("/").at(-1)?.toLowerCase() === pickerAlias,
   );
   if (pickerMatches.length === 1) return pickerMatches[0];
-  const presetId = value.startsWith("pi/") ? value.slice(3) : value;
-  if (presetId.startsWith("dial/") || presetId.startsWith("orchestrator/")) {
-    const preset = modelPreset(presetId);
-    return preset
-      ? {
-          id: value.startsWith("pi/") ? `pi/${preset.id}` : preset.id,
-          provider: "pi",
-          label: preset.label,
-          aliases: [],
-          group: presetId.split("/")[0],
-          description: preset.description,
-        }
-      : null;
-  }
+  const retired = retiredPresetModel(value);
+  if (retired) return resolveModel(retired);
+  if (isRetiredPresetId(value)) return null;
   if (value.startsWith("pi/")) {
     const routed = toPiModel(raw) || raw;
     return routed.slice("pi/".length).includes("/")
@@ -1508,6 +1120,7 @@ const CONTEXT_WINDOWS: Record<string, number> = {
   // Pi's catalog caps GPT-6 at 272K (the long-context price tier starts
   // there), so the engine compacts at that ceiling.
   "gpt-6.1-sol": 272_000,
+  "gpt-6.1-terra": 272_000,
   "gpt-6-sol": 272_000,
   "gpt-6-luna": 272_000,
   // Older Codex/GPT — approximate.
@@ -1517,11 +1130,8 @@ const CONTEXT_WINDOWS: Record<string, number> = {
   "gpt-5.3-codex-spark": 400_000,
 };
 
-/** Preset ids (dial/orchestrator) price/gauge as their main model; everything
- *  else passes through. */
 function pricingKey(model?: string | null): string {
-  const id = resolveModel(model || "")?.id || model || "";
-  return modelPreset(id)?.model || id;
+  return resolveModel(model || "")?.id || model || "";
 }
 
 /** Context-window token ceiling for a model (0 if unknown → gauge hidden). */

@@ -1,7 +1,15 @@
 /** Workspace sandbox connections, defaults, qualification and environments. */
 
 import { requestUser, type RouteContext } from "./context";
-import { sandboxCapabilityStatus } from "../sandbox/config";
+import {
+  DEFAULT_SANDBOX_AGENT_PROVIDERS,
+  sandboxCapabilityStatus,
+  sandboxConfig,
+  sandboxIdlePolicy,
+  setRepoPreSetupScript,
+  setWorkspaceResumeScript,
+} from "../sandbox/config";
+import { forgetProjectPreparationSignature } from "../sandbox/remote-repo-template";
 import { sandboxIngressStatus } from "../sandbox/caddy-ingress";
 import {
   sandboxDefaultsStatus,
@@ -53,6 +61,28 @@ function qualificationOperation(
   return startSandboxOperation({ kind: "qualification", provider }, (update) =>
     qualifySandboxConnection(provider, update),
   );
+}
+
+/** Sleep timers, the agent's providers, and the settings-held lifecycle
+ *  scripts (Workspace → Sandboxes). */
+function sandboxLifecyclePayload() {
+  const config = sandboxConfig();
+  const idle = sandboxIdlePolicy();
+  const preSetupScripts: Record<string, string> = {};
+  for (const [repo, override] of Object.entries(config.perRepo ?? {}))
+    if (override.preSetupScript)
+      preSetupScripts[repo] = override.preSetupScript;
+  return {
+    idle: {
+      agentMinutes: idle.agentMs / 60_000,
+      humanMinutes: idle.humanMs / 60_000,
+    },
+    agentProviders: config.agent?.providers ?? [
+      ...DEFAULT_SANDBOX_AGENT_PROVIDERS,
+    ],
+    workspaceResumeScript: config.workspaceResumeScript ?? null,
+    preSetupScripts,
+  };
 }
 
 export async function handleSandboxesRoutes(
@@ -125,6 +155,48 @@ export async function handleSandboxesRoutes(
       settings: body.settings,
     });
     return Response.json({ operation }, { status: 202 });
+  }
+
+  if (path === "/api/sandbox/lifecycle" && req.method === "GET") {
+    return Response.json(sandboxLifecyclePayload());
+  }
+
+  if (
+    path === "/api/sandbox/lifecycle/workspace-resume" &&
+    req.method === "PUT"
+  ) {
+    const body = (await req.json().catch(() => null)) as {
+      script?: unknown;
+    } | null;
+    if (!body || (body.script !== null && typeof body.script !== "string"))
+      return errorResponse("script must be a string or null");
+    try {
+      setWorkspaceResumeScript(body.script);
+      return Response.json(sandboxLifecyclePayload());
+    } catch (error) {
+      return errorResponse(error);
+    }
+  }
+
+  const preSetupMatch = path.match(
+    /^\/api\/sandbox\/lifecycle\/pre-setup\/([^/]+)$/,
+  );
+  if (preSetupMatch && req.method === "PUT") {
+    const repo = decodeURIComponent(preSetupMatch[1]!);
+    if (!(repo in REPOS)) return errorResponse(`Unknown repo "${repo}"`, 404);
+    const body = (await req.json().catch(() => null)) as {
+      script?: unknown;
+    } | null;
+    if (!body || (body.script !== null && typeof body.script !== "string"))
+      return errorResponse("script must be a string or null");
+    try {
+      setRepoPreSetupScript(repo, body.script);
+      // The script is a setup input: the project snapshot refreshes.
+      forgetProjectPreparationSignature(repo);
+      return Response.json(sandboxLifecyclePayload());
+    } catch (error) {
+      return errorResponse(error);
+    }
   }
 
   if (path === "/api/sandbox/defaults" && req.method === "PUT") {

@@ -28,7 +28,7 @@ import {
   sandboxProviderUsability,
 } from "./sandbox/config";
 import { withSessionLifecycleLane } from "./sandbox/lifecycle-lane";
-import { ensureSandboxWithTransientRetry } from "./sandbox/reliability";
+import { ensureSandboxWaitingForCapacity } from "./sandbox/reliability";
 import {
   findSessionAsync,
   touchNativeSession,
@@ -44,6 +44,7 @@ import {
   workspaceSandboxClaimed,
 } from "./session-sandbox";
 import type { PortalSandboxRecord, UnifiedSession } from "./types";
+import { noteSandboxActivity, sandboxSleepsAt } from "./sandbox/idle";
 
 type PortalSandboxGlobals = {
   __osPortalSandboxWakes?: Map<string, InFlightWake>;
@@ -143,6 +144,10 @@ export type PortalSandboxReport =
       materialized: boolean;
       error?: string;
       busy: boolean;
+      /** When the idle timers would put the machine to sleep. */
+      sleepsAt?: string;
+      /** Why a start is taking longer. */
+      note?: string;
     };
 
 export function describePortalSandbox(
@@ -167,12 +172,18 @@ export function describePortalSandbox(
   const lifecycle = record
     ? (record.lifecycle ?? (record.sandboxId ? "sleeping" : "preparing"))
     : "none";
+  const sleepsAt =
+    record?.sandboxId && lifecycle === "awake"
+      ? sandboxSleepsAt(record.sandboxId)
+      : null;
   return {
     where: "portal",
     provider,
     lifecycle,
     materialized: Boolean(record?.sandboxId),
+    ...(sleepsAt ? { sleepsAt: new Date(sleepsAt).toISOString() } : {}),
     ...(record?.lastLifecycleError ? { error: record.lastLifecycleError } : {}),
+    ...(record?.lifecycleNote ? { note: record.lifecycleNote } : {}),
     busy,
   };
 }
@@ -211,9 +222,20 @@ export function sandboxForPortals(
       : current.task;
   }
   const entry: InFlightWake = {
-    task: resolveSandboxForPortals(session, options).finally(() => {
-      if (wakes.get(session.id) === entry) wakes.delete(session.id);
-    }),
+    task: resolveSandboxForPortals(session, options)
+      .then((sandbox) => {
+        // Starting or waking Portals is activity on that machine: the
+        // agent's own start is agent work, anything else a person's.
+        if (sandbox)
+          noteSandboxActivity(
+            { sandboxId: sandbox.id, sessionId: session.id },
+            options.ownTurn ? "agent" : "human",
+          );
+        return sandbox;
+      })
+      .finally(() => {
+        if (wakes.get(session.id) === entry) wakes.delete(session.id);
+      }),
     provision: Boolean(options.provision),
   };
   wakes.set(session.id, entry);
@@ -354,7 +376,7 @@ async function provisionPortalSandbox(
     const checkpoint = outcome.checkpoint;
     const current = await findSessionAsync(session.id);
     if (!current) throw new Error("the session was deleted");
-    const sandbox = await ensureSandboxWithTransientRetry(
+    const sandbox = await ensureSandboxWaitingForCapacity(
       getSandboxProvider(provider),
       {
         sessionId: portalSandboxSessionId(session.id),
@@ -365,6 +387,17 @@ async function provisionPortalSandbox(
           ref: checkpoint.ref,
           commit: checkpoint.commit,
           branch: checkpoint.branch,
+        },
+      },
+      {
+        onWaiting(error) {
+          touchNativeSession(session.id, {
+            portalSandbox: {
+              provider,
+              lifecycle: "preparing",
+              lifecycleNote: `Waiting for room: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          });
         },
       },
     );

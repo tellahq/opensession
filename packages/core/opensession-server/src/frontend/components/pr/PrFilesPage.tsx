@@ -18,17 +18,16 @@ import {
 import { Button } from "../../ui/button";
 import { Tooltip } from "../../ui/tooltip";
 import { ResponsiveDialog } from "../../ui/sheet";
-import {
-  IconChevronLeft,
-  IconChevronRight,
-  IconFile,
-  IconX,
-  IconArrowDown,
-} from "../icons";
+import { IconChevronLeft, IconChevronRight, IconFile, IconX } from "../icons";
 import { CodeFlow } from "../CodeFlow";
 import { CommentableDiff } from "../DeferredDiff";
 import { DiffPanel } from "../DiffPanel";
+import { DiffStat } from "../DiffStat";
 import { PrFileTree } from "./PrFileTree";
+import {
+  PHONE_REVIEW_PILL,
+  PHONE_REVIEW_PILL_DOCK,
+} from "../../lib/phone-review-classes";
 
 type DiffSource = "pull-request" | "worktree";
 type CodeView = "all" | "guide" | "flow";
@@ -205,7 +204,7 @@ export function PrFilesPage({
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col"
+      className="relative flex min-h-0 flex-1 flex-col"
       onKeyDown={(event) => {
         if (
           diffSource !== "pull-request" ||
@@ -259,14 +258,17 @@ export function PrFilesPage({
               Files
             </Button>
           )}
-          <span
-            className="mr-auto text-supporting tabular-nums text-dim"
-            role="status"
-          >
-            {reviewedFiles
-              ? `${reviewedCount}/${files.length} reviewed`
-              : `${files.length} files`}
-          </span>
+          <div className="mr-auto flex items-center gap-2.5 text-supporting">
+            <span className="tabular-nums text-dim" role="status">
+              {reviewedFiles
+                ? `${reviewedCount}/${files.length} reviewed`
+                : `${files.length} files`}
+            </span>
+            {/* Phone carries the same stat in its header subtitle. */}
+            {diffSource === "pull-request" && !isPhone && (
+              <DiffStat files={files} />
+            )}
+          </div>
           {codeView !== "flow" && (
             <>
               <Tooltip label="Previous file (K)">
@@ -386,7 +388,13 @@ export function PrFilesPage({
         )}
         <main
           ref={setScroller}
-          className="min-w-0 min-h-0 flex-1 overflow-y-auto bg-surface pb-4"
+          className={cn(
+            "min-w-0 min-h-0 flex-1 overflow-y-auto bg-surface pb-4",
+            // Room for the floating review pill to clear the last line.
+            isPhone &&
+              diffSource === "pull-request" &&
+              "pb-[calc(88px+env(safe-area-inset-bottom))]",
+          )}
           aria-label="File changes"
         >
           <div className="px-2 pb-2 phone:px-0">
@@ -648,48 +656,43 @@ export function PrFilesPage({
           </div>
         </main>
       </div>
-      {isPhone && diffSource === "pull-request" && (
-        <div
-          aria-label="Review actions"
-          className="flex shrink-0 items-center gap-2 bg-surface px-3 pt-2 pb-[max(8px,env(safe-area-inset-bottom))]"
-        >
-          {mergeAction}
-          <Button
-            variant="soft"
-            className="min-h-11"
-            aria-label="Files"
-            icon={<IconFile size={20} />}
-            onClick={() => setFilesOpen(true)}
-          >
-            <span className="tabular-nums">
-              {reviewedFiles
-                ? `${reviewedCount}/${files.length}`
-                : files.length}
-            </span>
-          </Button>
-          {reviewProvider && (
-            <Button
-              variant="primary"
-              className="min-h-11 min-w-0 flex-1 whitespace-normal"
-              onClick={onFinishReview}
-            >
-              Finish review{pendingCount > 0 ? ` (${pendingCount})` : ""}
-            </Button>
-          )}
-          {codeView !== "flow" && reviewedFiles && (
-            <Tooltip label="Next unreviewed file">
+      {isPhone &&
+        diffSource === "pull-request" && (
+          // One floating pill over the diff, the way GitHub's app does it: the
+          // code keeps the full height and the review actions stay in reach.
+          // The green merge action rides at the end, beside Finish review.
+          <div aria-label="Review actions" className={PHONE_REVIEW_PILL_DOCK}>
+            <div className={PHONE_REVIEW_PILL}>
               <Button
-                variant="soft"
-                className="size-11 shrink-0"
-                aria-label="Next unreviewed"
-                disabled={!unreviewed}
-                onClick={() => navigate(unreviewed)}
-                icon={<IconArrowDown size={20} />}
-              />
-            </Tooltip>
-          )}
-        </div>
-      )}
+                variant="ghost"
+                className="min-h-11 rounded-[999px] px-3"
+                aria-label={
+                  reviewedFiles
+                    ? `Files, ${reviewedCount} of ${files.length} reviewed`
+                    : `Files, ${files.length}`
+                }
+                icon={<IconFile size={20} />}
+                onClick={() => setFilesOpen(true)}
+              >
+                <span className="tabular-nums">
+                  {reviewedFiles
+                    ? `${reviewedCount}/${files.length}`
+                    : files.length}
+                </span>
+              </Button>
+              {reviewProvider && (
+                <Button
+                  variant="primary"
+                  className="min-h-11 rounded-[999px] px-4"
+                  onClick={onFinishReview}
+                >
+                  Finish review{pendingCount > 0 ? ` (${pendingCount})` : ""}
+                </Button>
+              )}
+              {mergeAction}
+            </div>
+          </div>
+        )}
     </div>
   );
 }

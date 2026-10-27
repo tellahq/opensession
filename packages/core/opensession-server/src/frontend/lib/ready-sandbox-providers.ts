@@ -30,10 +30,38 @@ const PROVIDER_LABELS = new Map([
   ["box", "Boat"],
   ["tart", "Mac VM"],
   ["usecomputer", "use.computer"],
+  ["modal", "Modal"],
 ]);
 
 export function sandboxProviderLabel(id: string): string {
-  return PROVIDER_LABELS.get(id) ?? id;
+  const { provider, gpu } = splitSandboxChoice(id);
+  const label = PROVIDER_LABELS.get(provider) ?? provider;
+  return gpu ? `${label} · ${gpu} GPU` : label;
+}
+
+/** GPUs a Modal Sandbox can carry, and what each offers. */
+export const SANDBOX_GPUS = [
+  { id: "T4", memory: "16 GB" },
+  { id: "L4", memory: "24 GB" },
+] as const;
+
+/** Machine-menu entries: each ready provider, and for Modal one entry per
+ *  GPU after the plain one (`modal:T4`). */
+export function sandboxMachineChoices(providers: readonly string[]): string[] {
+  return providers.flatMap((id) =>
+    id === "modal"
+      ? [id, ...SANDBOX_GPUS.map((gpu) => `${id}:${gpu.id}`)]
+      : [id],
+  );
+}
+
+/** A machine-menu entry as the create request names it. */
+export function splitSandboxChoice(choice: string): {
+  provider: string;
+  gpu?: string;
+} {
+  const [provider = "", gpu] = choice.split(":");
+  return gpu ? { provider, gpu } : { provider };
 }
 
 const MAC_PROVIDERS = new Set(["tart", "usecomputer"]);
@@ -43,7 +71,12 @@ const MAC_PROVIDERS = new Set(["tart", "usecomputer"]);
  *  session for its files, commands, and Portals. */
 export function sandboxProviderNote(id: string): string {
   if (id === "") return "A worktree on this server.";
-  if (MAC_PROVIDERS.has(id))
+  const { provider, gpu } = splitSandboxChoice(id);
+  if (gpu) {
+    const memory = SANDBOX_GPUS.find((option) => option.id === gpu)?.memory;
+    return `Attached Linux Sandbox with an NVIDIA ${gpu} GPU${memory ? ` (${memory})` : ""}, CUDA and Vulkan. Costs more; sleeps between turns.`;
+  }
+  if (MAC_PROVIDERS.has(provider))
     return "Attached Mac Sandbox with a desktop. Sleeps between turns, keeps files and Portals.";
   return "Attached Linux Sandbox. Sleeps between turns, keeps files and Portals.";
 }

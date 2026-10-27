@@ -11,7 +11,11 @@
  * Apps JSON-RPC subset) a page and its client speak.
  */
 
-import { parseMcpTool, unwrapMcpDispatcher } from "./tool-presentation";
+import {
+  canonicalToolName,
+  parseMcpTool,
+  unwrapMcpDispatcher,
+} from "./tool-presentation";
 
 export const HTML_RENDER_SERVER = "opensession-html";
 export const HTML_RENDER_TOOL = "html_render";
@@ -113,10 +117,12 @@ export function readHtmlRenderReference(
 }
 
 /**
- * Whether a tool call may be `html_render`: named so directly, or a call
- * through an `mcp_call` dispatcher. A dispatcher's inner name can be gone
- * from a large call's stored input, so a dispatcher call counts and its
- * result decides (htmlRenderFromResult only accepts a stored render's URL).
+ * Whether a tool call may be `html_render`: named so directly, a call
+ * through an `mcp_call` dispatcher, or a codemode script, which reaches the
+ * tool through `tools.mcp_call` and prints its answer in the script's report.
+ * A dispatcher's inner name can be gone from a large call's stored input, so
+ * a dispatcher or script call counts and its result decides
+ * (htmlRendersFromResult only accepts a stored render's URL).
  */
 export function mayBeHtmlRenderTool(
   rawName: string,
@@ -125,6 +131,8 @@ export function mayBeHtmlRenderTool(
   const { toolName } = unwrapMcpDispatcher(rawName, rawInput);
   const mcp = parseMcpTool(toolName);
   if (mcp?.server === HTML_RENDER_SERVER && mcp.tool === HTML_RENDER_TOOL)
+    return true;
+  if (canonicalToolName(toolName) === "Codemode" || mcp?.tool === "codemode")
     return true;
   return toolName.toLowerCase() === "mcp_call" || mcp?.tool === "mcp_call";
 }
@@ -142,30 +150,89 @@ export function isHtmlRenderResultText(content: string): boolean {
   );
 }
 
+/** Most renders one result can carry: a script may show several pages. */
+const MAX_RENDERS_PER_RESULT = 12;
+const RENDER_OBJECT_START_RE = /\{\s*"htmlRender"\s*:/g;
+
+/** The end of the JSON object opening at `start`, string-aware. */
+function objectEnd(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  const limit = Math.min(text.length, start + HTML_RENDER_RESULT_MAX_BYTES);
+  for (let i = start; i < limit; i++) {
+    const c = text[i];
+    if (inString) {
+      if (c === "\\") i++;
+      else if (c === '"') inString = false;
+    } else if (c === '"') inString = true;
+    else if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return i + 1;
+  }
+  return -1;
+}
+
+function renderObjectsIn(text: string): string[] {
+  const out: string[] = [];
+  for (const match of text.matchAll(RENDER_OBJECT_START_RE)) {
+    const start = match.index ?? 0;
+    const end = objectEnd(text, start);
+    if (end > 0) out.push(text.slice(start, end));
+    if (out.length >= MAX_RENDERS_PER_RESULT) break;
+  }
+  return out;
+}
+
 /**
- * The reference in an `html_render` result's text. The tool answers with one
- * JSON object, `{ htmlRender, message }`; a dispatcher may wrap it in prose,
- * so the outermost braces are tried when the whole text is not JSON.
+ * The `{"htmlRender": …}` objects written into a result's text, as JSON
+ * text. A codemode script prints the tool's answer inside its own report
+ * ("Script completed … Output: {…} Console: …"), as an object or, when it
+ * returned the answer string itself, as an escaped JSON string; a script may
+ * also show several pages. Both spellings are read. Servers use this to keep
+ * the references when they shorten a long result.
  */
+export function htmlRenderResultObjects(content: string | undefined): string[] {
+  if (!content || !content.includes("htmlRender")) return [];
+  const found = renderObjectsIn(content);
+  if (content.includes('\\"htmlRender\\"')) {
+    // An answer string printed as a JSON string literal: undo one level of
+    // escaping. A reference's fields are plain, so this is exact for them.
+    const unescaped = content.replace(/\\(["\\])/g, "$1");
+    for (const object of renderObjectsIn(unescaped))
+      if (!found.includes(object)) found.push(object);
+  }
+  return found.slice(0, MAX_RENDERS_PER_RESULT);
+}
+
+/**
+ * Every reference in a result's text, in order. The tool answers with one
+ * JSON object, `{ htmlRender, message }`; a dispatcher may wrap it in prose,
+ * and a codemode script in its report.
+ */
+export function htmlRendersFromResult(
+  content: string | undefined,
+): HtmlRenderReference[] {
+  const out: HtmlRenderReference[] = [];
+  const seen = new Set<string>();
+  for (const object of htmlRenderResultObjects(content?.trim())) {
+    try {
+      const parsed = JSON.parse(object) as { htmlRender?: unknown };
+      const ref = readHtmlRenderReference(parsed?.htmlRender);
+      if (ref && !seen.has(ref.url)) {
+        seen.add(ref.url);
+        out.push(ref);
+      }
+    } catch {
+      // not a reference
+    }
+  }
+  return out;
+}
+
+/** The first reference in a result's text. */
 export function htmlRenderFromResult(
   content: string | undefined,
 ): HtmlRenderReference | undefined {
-  if (!content) return undefined;
-  const text = content.trim();
-  const candidates = [text];
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start > 0 && end > start) candidates.push(text.slice(start, end + 1));
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate) as { htmlRender?: unknown };
-      const ref = readHtmlRenderReference(parsed?.htmlRender);
-      if (ref) return ref;
-    } catch {
-      // not this candidate
-    }
-  }
-  return undefined;
+  return htmlRendersFromResult(content)[0];
 }
 
 // The taller of the heights measured at the nearest widths on each side: a

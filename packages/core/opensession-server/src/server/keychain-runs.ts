@@ -17,7 +17,9 @@
  *   cap per credential (request_credential with `run`, mode "run" in
  *   keychain.ts). A run with several credentials starts only once every
  *   credential's owner approved. An ordinary once or standing grant cannot
- *   start a run.
+ *   start a run. A run whose credentials are all workspace credentials
+ *   needs no approval: it starts with a stated purpose and call cap, and
+ *   is audited the same way.
  * - Each credential has its own URL and its own 32 random byte secret, and
  *   forwards only to its own credential's host: one credential's URL can
  *   never reach another's host. Secrets live only in the script's
@@ -255,6 +257,10 @@ export interface StartRunInput {
   /** Short name on the session's card. */
   title?: string;
   startedBy?: string;
+  /** For a run of workspace credentials, which needs no approval: why it
+   *  runs, and its call cap per credential. */
+  purpose?: string;
+  maxCalls?: number;
   /** Wake the session when the run ends (default true). */
   notify?: boolean;
   deps?: RunDeps;
@@ -298,6 +304,9 @@ async function claimAndStart(
     command: input.command,
     runId: id,
     deadline,
+    ...(input.startedBy ? { requestedBy: input.startedBy } : {}),
+    ...(input.purpose ? { purpose: input.purpose } : {}),
+    ...(input.maxCalls !== undefined ? { maxCalls: input.maxCalls } : {}),
   });
   if ("error" in claim) return claim;
   const relays: ScriptRelayInfo[] = claim.claims.map(

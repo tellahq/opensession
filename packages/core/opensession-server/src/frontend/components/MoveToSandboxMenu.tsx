@@ -5,7 +5,9 @@ import { attachSandbox, detachSandbox } from "../lib/api/sandboxes";
 import { errorMessage } from "../lib/error-message";
 import {
   readySandboxProviders,
+  sandboxMachineChoices,
   sandboxProviderLabel,
+  splitSandboxChoice,
 } from "../lib/ready-sandbox-providers";
 import { Menu, MENU_ICON } from "../ui/menu";
 import type { ConfirmRequest } from "../ui/confirm";
@@ -21,6 +23,8 @@ export type MoveToSandboxSession = {
   automation?: string;
   automationId?: string;
   sandbox?: { provider: string; sandboxId?: string } | null;
+  /** The GPU its Modal Sandbox carries, if any. */
+  sandboxGpu?: string;
   runner?: object | null;
 };
 
@@ -81,22 +85,25 @@ export function MoveToSandboxMenu({
     };
   }, [open]);
 
-  async function moveToSandbox(provider: string, confirmed: boolean) {
-    await attachSandbox(session.id, provider, { confirm: confirmed })
+  /** `choice` is a Machine-menu entry: a provider, or Modal with a GPU
+   *  (`modal:T4`). */
+  async function moveToSandbox(choice: string, confirmed: boolean) {
+    const { provider, gpu } = splitSandboxChoice(choice);
+    await attachSandbox(session.id, provider, { confirm: confirmed, gpu })
       .then(async () => {
         toast(
-          `Moving to ${sandboxProviderLabel(provider)}. The next message runs there.`,
+          `Moving to ${sandboxProviderLabel(choice)}. The next message runs there.`,
         );
       })
       .catch(async (cause: unknown) => {
         // 428: work that exists only here would stay behind. Ask, then move.
         if (cause instanceof ApiError && cause.status === 428 && !confirmed) {
           confirm({
-            title: `Move to ${sandboxProviderLabel(provider)} anyway?`,
+            title: `Move to ${sandboxProviderLabel(choice)} anyway?`,
             description: cause.message,
             confirmLabel: "Move",
             destructive: true,
-            onConfirm: () => void moveToSandbox(provider, true),
+            onConfirm: () => void moveToSandbox(choice, true),
           });
           return;
         }
@@ -155,8 +162,15 @@ export function MoveToSandboxMenu({
     });
   }
 
-  const destinations = (providers || []).filter(
-    (provider) => provider !== current,
+  // Modal offers one entry per GPU; the machine the session is on now is
+  // left out.
+  const here = current
+    ? session.sandboxGpu
+      ? `${current}:${session.sandboxGpu}`
+      : current
+    : null;
+  const destinations = sandboxMachineChoices(providers || []).filter(
+    (choice) => choice !== here,
   );
 
   return (

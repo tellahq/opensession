@@ -27,19 +27,12 @@ import {
   withoutStripeApprovalTools,
 } from "./run-policy";
 import {
-  DIAL_ORACLE_AGENTS,
-  ORCHESTRATOR_WORKER_AGENTS,
   accountProviderForModel,
-  dialPreset,
   interactiveDefaultModel,
   interactiveFallbackModel,
   modelSupportsSteer,
-  orchestratorPreset,
-  orchestratorWorkerForBridge,
   routeModel,
-  sameBridgeDialOracle,
 } from "./models";
-import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import { getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
 import { getXaiAccountById } from "./xai-accounts";
@@ -111,7 +104,6 @@ export interface EffectiveConfig {
     inProcess: Record<string, ConfigRow>;
   };
   tools: Record<string, ConfigRow>;
-  agents: Record<string, ConfigRow>;
   memory: Record<string, ConfigRow>;
   placement: Record<string, ConfigRow>;
   identity: Record<string, ConfigRow>;
@@ -281,7 +273,8 @@ export async function inProcessServerNames(
   } = await import("./interactive-mcp");
   if (
     inputs.inProcessMcpBranch === "automation-self-improve" ||
-    inputs.inProcessMcpBranch === "automation+human-spawn"
+    inputs.inProcessMcpBranch === "automation+human-spawn" ||
+    inputs.inProcessMcpBranch === "automation+wait-continuation"
   ) {
     // The automation-bar set the turn really carries (papercuts, report,
     // selfImprove pair, and the human turn's spawn suite), from the same
@@ -349,10 +342,6 @@ export async function buildSessionEffectiveConfig(
     reason: row(gateReason, "run-policy.ts runGateReason"),
   };
 
-  const preset =
-    dialPreset(requestedModel) ??
-    orchestratorPreset(requestedModel) ??
-    (await resolveWorkspaceModelPreset(requestedModel, session.workspaceId));
   const model: Record<string, ConfigRow> = {
     requested: row(
       requestedModel,
@@ -361,16 +350,6 @@ export async function buildSessionEffectiveConfig(
     engine: row("pi", "models.ts routeModel"),
     dispatchModel: row(routed.model, "models.ts routeModel"),
     provider: row(providerID ?? null, "Pi model id provider segment"),
-    preset: row(
-      preset
-        ? {
-            id: requestedModel,
-            label: (preset as { label?: string }).label,
-            mainModel: preset.model,
-          }
-        : null,
-      "model preset registry",
-    ),
     effort: row(session.effort ?? null, "session file effort"),
     fastMode: row(session.fastMode ?? false, "session file fastMode"),
     speed: row(sessionSpeed(session), "session file speed (fastMode fallback)"),
@@ -453,34 +432,6 @@ export async function buildSessionEffectiveConfig(
     ),
   };
 
-  const bridgeProvider = providerID || "anthropic";
-  const agents: Record<string, ConfigRow> = {
-    oracles: row(
-      Object.keys(DIAL_ORACLE_AGENTS).map((name) => {
-        const effective = sameBridgeDialOracle(name, bridgeProvider);
-        return {
-          agent: name,
-          resolvesTo: effective,
-          model: DIAL_ORACLE_AGENTS[effective]?.model,
-        };
-      }),
-      "models.ts dial oracle registry",
-    ),
-    orchestratorWorkers: row(
-      Object.keys(ORCHESTRATOR_WORKER_AGENTS)
-        .map((name) => ({
-          agent: name,
-          model: orchestratorWorkerForBridge(name, bridgeProvider)?.model,
-        }))
-        .filter((worker) => !!worker.model),
-      "models.ts worker registry",
-    ),
-    activePreset: row(
-      preset ? { id: requestedModel } : null,
-      "model preset registry",
-    ),
-  };
-
   const scopes = sessionMemoryScopes({
     user: inputs.user,
     repos: sessionRepoIds(session),
@@ -558,7 +509,6 @@ export async function buildSessionEffectiveConfig(
     account,
     mcp,
     tools,
-    agents,
     memory,
     placement,
     identity,

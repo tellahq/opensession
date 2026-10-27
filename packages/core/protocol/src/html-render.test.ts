@@ -6,6 +6,7 @@ import {
   HTML_THEME_TOKENS,
   htmlRenderFrameHeight,
   htmlRenderFromResult,
+  htmlRendersFromResult,
   htmlThemeFragment,
   mayBeHtmlRenderTool,
   readHtmlContentHeight,
@@ -89,6 +90,48 @@ describe("htmlRenderFromResult", () => {
   });
 });
 
+describe("htmlRendersFromResult", () => {
+  const answer = (url: string, title: string) =>
+    JSON.stringify({
+      htmlRender: { url, path: "p", title, height: 300 },
+      message:
+        "Shown inline in the session. Do not link to it or describe where it is.",
+    });
+  const URL_TWO = URL_OK.replace(".html", "-2.html");
+
+  test("reads a codemode report around the answer", () => {
+    const report = `Script completed\nWall time 1.8 seconds\nOutput:\n${answer(URL_OK, "Mockups")}\nConsole: {"log": 1}`;
+    expect(htmlRendersFromResult(report).map((r) => r.title)).toEqual([
+      "Mockups",
+    ]);
+  });
+
+  test("reads an answer the script returned as a string", () => {
+    const report = `Script completed\nOutput:\n${JSON.stringify(answer(URL_OK, 'Say "hi"'))}`;
+    expect(htmlRenderFromResult(report)?.url).toBe(URL_OK);
+  });
+
+  test("reads every page a script showed, once each", () => {
+    const report = `Output:\n${JSON.stringify([
+      JSON.parse(answer(URL_OK, "One")),
+      JSON.parse(answer(URL_TWO, "Two")),
+      JSON.parse(answer(URL_OK, "One")),
+    ])}`;
+    expect(htmlRendersFromResult(report).map((r) => r.title)).toEqual([
+      "One",
+      "Two",
+    ]);
+  });
+
+  test("ignores a reference that is not a stored render", () => {
+    expect(
+      htmlRendersFromResult(
+        `Output: ${answer("https://evil.test/x.html", "x")}`,
+      ),
+    ).toEqual([]);
+  });
+});
+
 describe("htmlRenderFrameHeight", () => {
   const ref: HtmlRenderReference = {
     url: URL_OK,
@@ -138,6 +181,11 @@ describe("mayBeHtmlRenderTool", () => {
     expect(mayBeHtmlRenderTool("mcp__oc__mcp_call", { keys: ["name"] })).toBe(
       true,
     );
+  });
+
+  test("codemode scripts, which reach it through tools.mcp_call", () => {
+    expect(mayBeHtmlRenderTool("codemode", { code: "…" })).toBe(true);
+    expect(mayBeHtmlRenderTool("mcp__oc__codemode")).toBe(true);
   });
 
   test("not other tools", () => {

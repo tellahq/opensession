@@ -34,7 +34,9 @@ writeFileSync(
 );
 await getConfigAsync();
 const { runGithubEnv } = await import("./pi-runner");
-const { attachedGithubRepos } = await import("./session-repos");
+const { attachedGithubRepos, sessionGithubRepos } =
+  await import("./session-repos");
+const prCache = await import("./pr-cache");
 const github = await import("./github-app");
 const code = spyOn(github, "githubServiceCredentialEnv").mockImplementation(
   async (ghRepo, also) => ({
@@ -47,7 +49,29 @@ const read = spyOn(github, "githubServiceReadOnlyEnv").mockImplementation(
   }),
 );
 
+const cached = spyOn(prCache, "getPrsByRepo").mockImplementation(
+  () => new Map(),
+);
+// The PR cache: a PR in acme/ops whose attribution footer names session s1.
+const footer = spyOn(prCache, "prsBySessionRef").mockImplementation(
+  () =>
+    new Map([
+      [
+        "s1",
+        [
+          {
+            repo: "ops",
+            branch: "fix",
+            pr: {} as import("./pr-cache").PrInfo,
+          },
+        ],
+      ],
+    ]),
+);
+
 afterAll(() => {
+  footer.mockRestore();
+  cached.mockRestore();
   code.mockRestore();
   read.mockRestore();
   for (const [key, value] of Object.entries(previous)) {
@@ -68,6 +92,26 @@ test("attached repositories resolve to their GitHub names", () => {
   } as Parameters<typeof attachedGithubRepos>[0];
   // Not on GitHub, or no longer registered: nothing to mint for.
   expect(attachedGithubRepos(session)).toEqual(["acme/ops"]);
+});
+
+test("the run token also reaches repositories of PRs the session opened", () => {
+  // The agent cloned acme/ops instead of attaching it and opened a PR there.
+  // A later review handoff for that PR must be able to reply on it.
+  const session = {
+    id: "s1",
+    repo: "app",
+    linkedPrs: [{ repo: "docs", branch: "b" }],
+  } as Parameters<typeof sessionGithubRepos>[0];
+  expect(sessionGithubRepos(session)).toEqual(["acme/ops"]);
+  // Automation sessions keep their attached repositories only.
+  expect(sessionGithubRepos({ ...session, automationId: "a1" })).toEqual([]);
+  // The primary repository is the token's own; it is not listed twice.
+  expect(
+    sessionGithubRepos({
+      ...session,
+      repo: "ops",
+    } as Parameters<typeof sessionGithubRepos>[0]),
+  ).toEqual([]);
 });
 
 test("a machine-started turn's App token reaches the attached repositories", async () => {

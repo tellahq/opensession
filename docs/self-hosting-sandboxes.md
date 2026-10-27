@@ -11,7 +11,8 @@ Portals, and the conversation intact. Companion to
 
 **Default = This machine.** The new-session menu's **Machine** row offers
 This machine plus every Ready Sandbox provider by name (Boat, Daytona,
-use.computer, Mac VM), each with a line saying whether it is Linux or a Mac.
+use.computer, Mac VM, Modal), each with a line saying whether it is Linux or a
+Mac. Modal also appears as **Modal · T4 GPU** and **Modal · L4 GPU**.
 The workspace or personal default is marked there and can make a Sandbox the
 norm, and a project can be pinned under **Workspace → Sandboxes → Projects** so
 every new session on it starts in a Sandbox whatever the workspace or person
@@ -34,7 +35,8 @@ only the workspace is in the Sandbox (see [Where the agent runs](#where-the-agen
    `:3850` is never part of it.
 2. **Connect a provider.** In **Workspace → Sandboxes**, connect Daytona,
    Boat, or **use.computer** (macOS on reserved Macs; see
-   [use.computer](#usecomputer) below) with an API key, or **Mac VM** with a
+   [use.computer](#usecomputer) below) with an API key, **Modal** (Linux
+   with an optional GPU; see [Modal](#modal) below) with a token, or **Mac VM** with a
    paired macOS Runner (no credential; see
    [Mac VM](#mac-vm-tart-on-a-mac-runner) below). Credentials
    are written once to the server-side workspace secret store and never
@@ -71,10 +73,11 @@ Every Sandbox session gets its own machine. Open Session:
   the agent makes runs in the VM (see [Where the agent runs](#where-the-agent-runs));
 - exposes services as **Portals**: authenticated HTTPS routes on this host
   that relay to the Sandbox. The browser never sees a provider URL;
-- lets the Sandbox sleep after the provider's idle interval (30 minutes by
-  default). Sleeping costs no compute. Sends while asleep persist in the
-  durable queue; the first one wakes the Sandbox, `.agents/resume` runs, the
-  Portals that were awake are restarted, and only then does the queue drain.
+- puts the Sandbox to sleep once it is idle (see [Sleep and wake](#sleep-and-wake)).
+  Sleeping costs no compute. Sends while asleep persist in the durable queue;
+  the first one wakes the Sandbox, `.agents/resume` runs (the wake waits for
+  it up to 10 seconds), the Portals that were awake are restarted, and then
+  the queue drains.
 
 The session's **Sandbox** badge shows Preparing, Awake, Sleeping, Waking, or
 Needs attention, with manual sleep, wake, checkpoint, and rebuild, plus the
@@ -109,7 +112,48 @@ skills are read from the Sandbox at the start of each turn.
 
 A tool call costs one provider round trip: about 25 to 110 ms on Boat over
 its SSH lane and 120 to 300 ms on Daytona. `deploy/sandbox/verify-remote-workspace.ts`
-measures it against a live provider.
+measures it against a live provider. With the Sandbox agent connected (below)
+it is one frame on a socket the Sandbox opened itself.
+
+### The Sandbox agent
+
+A Sandbox can run a small agent (`src/runner-host/sandbox-agent.ts`) that
+dials out to this server's public ingress at `/sandbox-agent-ws`. While it is
+connected, the Sandbox's commands, background processes and file writes
+travel over that socket instead of the provider's command API or SSH. Nothing
+has to reach into the machine, so the provider-specific part of an adapter
+shrinks to creating, starting, stopping, snapshotting and deleting machines;
+`withSandboxAgent` in `sandbox/agent-driver.ts` wraps any adapter's driver.
+
+- The server copies the agent into the Sandbox and starts it with the base
+  runtime's bun once the machine is up, and again whenever it is not
+  connected when a command needs the machine. It runs as the Sandbox user.
+- It authenticates with a token minted for that one Sandbox. The token
+  reaches the machine in a file under `/tmp` that the agent reads once and
+  deletes, so it is never on disk while the agent runs, never in a project
+  snapshot, and never in the environment of a command the agent starts.
+  The server keeps only its hash, in memory.
+- A new token revokes the previous one and closes its socket, so a Sandbox
+  restored from another's snapshot can never answer for it. Retiring a
+  Sandbox revokes its token with its workload identity leases.
+- After a server restart the old tokens are unknown: each agent's probe gets
+  a 403 and the agent exits, instead of retrying against the public ingress.
+  The next command that needs the Sandbox starts a fresh one.
+- Each command runs in its own process group with a timeout that reaches
+  every process it started. Background processes are detached and outlive
+  the agent.
+- The provider's own lane stays: it bootstraps the machine (the agent needs
+  bun), starts the agent, and carries every command while the agent is not
+  connected. A missing agent can make a Sandbox only as slow as it was
+  before, never unusable.
+
+Boat and use.computer Sandboxes run the agent by default. `agent.providers`
+in `sandbox.json` lists the providers that do (`["box", "usecomputer"]` when
+absent), and
+`OPENSESSION_SANDBOX_AGENT=0` in the server's environment turns it off
+everywhere. The Sandbox badge says whether commands go through the agent or
+the provider's API, and the agent logs to `~/.opensession/agent/agent.log`
+inside the Sandbox.
 
 ## Checkpoints
 
@@ -304,6 +348,13 @@ affect setup change; a repository can declare extra inputs in
 and session credentials are injected only after a restore, never into the
 shared image.
 
+A provider may restore only the home directory from a snapshot (Boat brings
+back `/home/user` over a fresh base image), so the base runtime installed
+outside it (Node, just, gh in `/usr/local`) is checked on every start and
+reinstalled when missing. Before a snapshot is sealed, the Bun package cache
+is checked for packages that lost their executables; a damaged cache is
+cleared and setup runs again, so the damage never reaches the next image.
+
 Typing a new-session prompt also starts a **prewarm**: Open Session begins
 provisioning a Sandbox before Create is pressed and adopts it at create time.
 Prewarms expire after ten minutes when unused; at most two are live at once.
@@ -320,6 +371,34 @@ Each project snapshot carries a **machine size** (Small, Medium, Large),
 mapped to the provider's shapes. Daytona sizes require a base snapshot created
 with those resources; Boat exposes three fixed machine types.
 
+## Sleep and wake
+
+A Sandbox sleeps once **both** are true:
+
+- the agent has done no work in it for 5 minutes (`idle.agentMinutes`): no
+  tool call and no turn running for the session;
+- nobody has interacted with it for 20 minutes (`idle.humanMinutes`): a
+  person's prompt, any request to one of its Portals (whoever makes it), a
+  Terminal or Desktop opened on it, or a manual wake.
+
+So a turn somebody sent keeps the machine around while they look at the
+result, and a turn an automation started lets it sleep five minutes after the
+work ends. Sleeping goes through the same path as the badge's Sleep action:
+on the session's lifecycle lane, the workspace is checkpointed first, Portal
+routes are suspended so opening one wakes the machine, and only then is the
+provider stopped. A host session's Portal Sandbox sleeps the same way. While a
+machine is in use the server keeps the provider's own idle timer (Boat's
+countdown, `idleStopMinutes`) from firing, which stays as the backstop for a
+machine nothing has touched since the server started.
+
+Asleep, every provider keeps the disk but not memory: files, installed tools
+and the checkout are there on wake; dev servers, Terminal shells and Desktop
+apps start again. The Sandbox badge, the Portals panel and
+Workspace → Sandboxes say so, and the badge counts down to the next sleep.
+
+A start that finds the provider full (every Mac host at its VM budget)
+waits for room instead of failing, for up to 15 minutes.
+
 ## Repo lifecycle hooks
 
 Sandboxes honor the repository contract in [repo-lifecycle.md](repo-lifecycle.md):
@@ -328,6 +407,14 @@ Portal starts from the Portals panel or through `start_declared_portal`; the
 agent can also expose any process with `start_portal`. Portal processes
 receive `PORT` and `PORTAL_URL`. Logs live under
 `~/.opensession/lifecycle/` inside the Sandbox.
+
+Setup is capped at 20 minutes and every process it leaves running is stopped
+before the disk can become a project snapshot. A wake waits at most 10
+seconds for `.agents/resume`. Two scripts can live in Workspace → Sandboxes
+instead of a repository: a project's **setup script**, run right before
+`.agents/setup` and part of the snapshot's inputs, and the workspace
+**resume script**, run before `.agents/resume` in every Linux Sandbox (for a
+fix every machine needs and no repository can deliver).
 
 ## Workload identity
 
@@ -355,7 +442,12 @@ settings below. Read fresh per call, no restart needed except where noted.
 | `sessionDefault`                    | `"daytona"`, `"box"`, `"tart"`, or `"none"`: where new sessions run when nobody chose.                                                                                  |
 | `provider`, `perRepo.<id>.provider` | Legacy default and per-repo override for API creates that pass `sandbox: true`.                                                                                         |
 | `perRepo.<id>.sessionDefault`       | `"daytona"`, `"box"`, or `"none"`: where new sessions on that repo run, ahead of the workspace and personal defaults. Managed by Workspace → Sandboxes → Projects.      |
-| `idleStopMinutes`                   | Sleep after this much idle time (default 30).                                                                                                                           |
+| `idleStopMinutes`                   | The provider's own idle backstop (default 30); the two timers below decide when a machine in use sleeps.                                                                |
+| `idle.agentMinutes`                 | Sleep once the agent has done no work for this long (default 5)...                                                                                                      |
+| `idle.humanMinutes`                 | ...and nobody has interacted for this long (default 20). See [Sleep and wake](#sleep-and-wake).                                                                         |
+| `agent.providers`                   | Providers whose Sandboxes run the [Sandbox agent](#the-sandbox-agent) (default `["box", "usecomputer"]`; `[]` turns it off).                                            |
+| `workspaceResumeScript`             | Runs before `.agents/resume` in every Linux Sandbox. Managed by Workspace → Sandboxes.                                                                                  |
+| `perRepo.<id>.preSetupScript`       | Runs before `.agents/setup` for that project. Managed by Workspace → Sandboxes → Projects.                                                                              |
 | `callbackBaseUrl`                   | Dial-back URL when the public ingress origin should not be used (tailnet setups).                                                                                       |
 | `publicIngress`                     | Advanced bind override for the `:3860` listener. Needs a restart.                                                                                                       |
 | `daytona.snapshot`                  | Org snapshot new Daytona sandboxes start from when no project snapshot exists (sizing lives in it).                                                                     |
@@ -385,7 +477,8 @@ fails clearly rather than silently running on the host.
 
 All providers passed the live conformance matrix (Daytona 2026-08-11, Boat
 2026-08-13, then called Box; Mac VM 2026-09-20 on the office Mac mini;
-use.computer 2026-09-21 on a reserved Mac): workspace tool round trip, exec
+use.computer 2026-09-21 on a reserved Mac; Modal 2026-10-26, qualification,
+exec, GPUs, and sleep/wake only): workspace tool round trip, exec
 semantics, in-sandbox workspace git, Portal relay, sleep/wake, snapshot
 restore with credential scrub, and cleanup.
 Re-run it with `bun run deploy/sandbox/conformance.ts [daytona] [box]`; it
@@ -471,8 +564,10 @@ already holds the repo's project snapshot; ties keep the configured order.
 The VM's state file records which Runner holds it, so sleep, wake, the
 Desktop tab, and Terminal tabs return to that Mac. Offline hosts are skipped
 for new VMs; a VM whose Mac is offline waits for it rather than being
-recreated elsewhere. When every host is full, the error lists each Mac's
-running VMs. Project snapshots (`tpl-<repo>-<hash>`) live on the Mac that
+recreated elsewhere. When every host is full, the start waits for a free
+slot (up to 15 minutes, checking every 15 to 60 seconds) and the Sandbox
+badge says so; after that the error lists each Mac's running VMs. Project
+snapshots (`tpl-<repo>-<hash>`) live on the Mac that
 sealed them; a session placed on another Mac clones the base instead, and
 the snapshot stays valid where it is.
 
@@ -493,8 +588,9 @@ its own. A Terminal tab is a shell inside the guest, opened by the Runner
 over SSH with the same host-local key. Both are typed Runner operations that
 name only the VM (the Runner resolves the port and the guest address itself)
 and ride the `commands` permission the provider already needs; they require
-the Runner to run this release or later. A full host refuses to start another VM and
-says which sessions hold the slots.
+the Runner to run this release or later. A full host does not start another
+VM; the start waits for a slot as above and then says which sessions hold
+them.
 
 Portals ride the outbound relay like every remote provider. The agent's
 `opensession-desktop` tools work (`screencapture` and `cliclick` inside the
@@ -551,6 +647,106 @@ proxy (`scripts/ws-stdio-proxy.ts` as the ProxyCommand); the VM's login
 password reaches `ssh` through `SSH_ASKPASS`, never argv. Portals ride the
 outbound relay. Automations never run here: the guest network is not
 policy-enforced.
+
+### Modal
+
+Provider id `modal`. Each session gets a Linux container in your
+[Modal](https://modal.com) account, optionally with one NVIDIA GPU: **T4**
+(16 GB) or **L4** (24 GB). Pick the GPU per session in the Machine menu, or
+pass `sandboxGpu: "T4" | "L4"` with `sandbox: "modal"` to the
+`create_session` and `spawn_task` tools. A GPU on any other provider fails the
+create. The GPU is for work that needs one, such as GPU render tests; it is
+billed per second while the container is awake.
+
+**Connect** takes a token id (`ak-…`) and its secret (`as-…`) from Modal's
+token settings, or both pasted into the secret field as `ak-…:as-…`.
+Qualification builds the base image, starts a small container without a GPU,
+proves exec and file upload, restores a filesystem snapshot into a second
+container, and terminates both (about 40 seconds once the image is cached).
+
+The base image is Ubuntu 24.04 with build tools, clang, CMake, Ninja, NASM,
+the OpenSSL headers, Rust
+(rustup under `/home/ubuntu`), and the Vulkan and GL loader libraries. Modal
+injects the NVIDIA driver with every capability, so with those libraries
+`vulkaninfo` lists the GPU as a discrete device instead of falling back to
+llvmpipe, and CUDA works as well. Commands run as root with
+`HOME=/home/ubuntu`.
+
+Sizes: project snapshots use Small (2 CPU, 8 GB), Medium (4 CPU, 16 GB, the
+default) or Large (8 CPU, 32 GB). A GPU session gets at least 8 CPU and 32 GB.
+Prewarms never hold a GPU; a GPU session starts from the project snapshot.
+
+Sleep takes a filesystem snapshot (kept 30 days) and terminates the container;
+wake starts a new container from it, with the GPU the session asked for, and
+deletes the old image only once the new container answers. Memory and running
+processes do not survive. Modal caps a container at 24 hours, so an awake
+container is replaced the same way after 22 hours, or when the session's GPU
+changes. The Sandbox id a session records is stable (`md-<session>`); the
+state file maps it to the current container. Project snapshots are kept 90
+days, and a replaced one is deleted ten minutes later.
+
+If a GPU container's start fails after it was created (the repository's setup
+script, a dial-back), it sleeps at once so it stops holding the GPU. Any
+Sandbox a failed start leaves behind, on any provider that reports it, is
+recorded on the session: **Sleep** works on it, and the idle timers put it to
+sleep like any other machine.
+
+A new container counts as started once it runs a command; until then it may
+be waiting for a GPU, and the start waits up to ten minutes for one. A
+prewarm or project-snapshot container left behind by a server restart is found
+by the prewarm orphan audit (every ten minutes) and terminated. Opening a
+sleeping session's files or diff wakes its Sandbox like **Wake** does: the
+session shows it awake, and the idle timers count it as an interaction.
+
+A Terminal tab is a Modal exec with a PTY. There is no Desktop. Portals ride
+the outbound relay. The Sandbox agent is not on by default here; add
+`"modal"` to `agent.providers` to try it.
+
+A session can get a GPU three ways:
+
+- **Start on one:** pick **Modal · T4 GPU** or **Modal · L4 GPU** as the
+  Machine. A project's default Machine (Workspace > Sandboxes > Projects)
+  may be one of these too; an unchosen Machine then starts there.
+- **Move onto one:** **Move to Sandbox** (or **Move session**) lists the same
+  three Modal entries. Moving between them replaces the container with one
+  carrying the new GPU; moving back to this machine drops it.
+- **Run GPU jobs from anywhere:** a session on this machine or in a CPU
+  Sandbox keeps running where it is and sends GPU work to a GPU machine of
+  its own with `run_gpu_job` (`opensession-gpu`, interactive runs only). The
+  job checkpoints the session's work, uncommitted changes included, lands it
+  on the session's GPU machine (`md-<session>--gpu`, created on first use,
+  woken after), and runs the command from the repository root with a
+  read-only GitHub credential for the repository and its `readRepos`. The
+  command runs detached inside the machine and writes its log and exit code
+  there, so it survives a restart of this server; the registry
+  (`gpu-jobs.json` in the state dir) is reattached at boot. When the job
+  ends, its log is copied to the session's scratch folder and the session is
+  woken once with the exit code and the end of the output. The machine keeps
+  its build output between jobs (a landing never removes ignored files) and
+  sleeps five minutes after its last job, whatever the session itself is
+  doing; archiving the session puts it to sleep and deleting it destroys it.
+
+A repository names its GPU jobs in `.agents/gpu-jobs.json`, and sessions on
+this machine are told about them each turn, so asking for "the GPU tests"
+needs no setup:
+
+```json
+{
+  "jobs": {
+    "gpu-tests": {
+      "description": "Render tests on a real GPU",
+      "command": "scripts/gpu-tests.sh",
+      "gpu": "T4",
+      "timeoutMinutes": 60
+    }
+  }
+}
+```
+
+`gpu` is `T4` (default) or `L4`; `timeoutMinutes` defaults to 60 and is
+capped at 360. The agent may pass its own `command` (one test) instead. The
+command sees `OPENSESSION_GPU`, `OPENSESSION_GPU_JOB_ID`, `CI=1` and
+`RUNNER_TEMP=/tmp`.
 
 ## Security posture
 

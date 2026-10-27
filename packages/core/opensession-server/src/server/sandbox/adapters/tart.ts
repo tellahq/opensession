@@ -39,6 +39,7 @@
  *    host-local key; the Runner resolves the guest address from the VM name.
  */
 
+import { SandboxCapacityError } from "../reliability";
 import { basename, dirname } from "path";
 import { getRepo, worktreePathFor } from "../../worktree";
 import {
@@ -65,6 +66,7 @@ import {
   findRemoteStateBySession,
   listRemoteStates,
   makeRemoteSandbox,
+  type RemoteSandboxOwner,
   readRemoteState,
   remoteCloneUrl,
   remoteLayout,
@@ -323,7 +325,8 @@ async function pickTartHost(
   const down = roster.unavailable.map(
     (host) => `${host.runner}: ${host.reason}`,
   );
-  throw new Error(
+  const Failure = candidates.length ? SandboxCapacityError : Error;
+  throw new Failure(
     `${candidates.length ? "Every Mac host is full" : "No Mac host is available"}: ${[
       ...full,
       ...down,
@@ -471,7 +474,7 @@ export function assertTartCapacity(
 ): void {
   const running = runningLocalVms(vms).filter((vm) => vm.name !== name);
   if (running.length >= maxVms) {
-    throw new Error(
+    throw new SandboxCapacityError(
       `Mac host ${hostName} is full: ${running.length} of ${maxVms} VMs running (${running
         .map((vm) => vm.name)
         .join(
@@ -1250,7 +1253,17 @@ export class TartProvider implements SandboxProvider {
     }
     writeRemoteState({ ...state, lastActivityAt: new Date().toISOString() });
     return Object.assign(
-      this.makeHandle(host, vmName, spec.sessionId, cwd, machine),
+      this.makeHandle(
+        host,
+        vmName,
+        {
+          sessionId: spec.sessionId,
+          cwd,
+          repoId: repo.id,
+          trustProfile: trust.trustProfile,
+        },
+        machine,
+      ),
       { wokeFromSleep: resuming, bootMode },
     );
   }
@@ -1258,17 +1271,18 @@ export class TartProvider implements SandboxProvider {
   private makeHandle(
     host: TartHost,
     vmName: string,
-    sessionId: string,
-    cwd: string,
+    owner: RemoteSandboxOwner,
     machine: { cpu: number; memoryMb: number },
   ): Sandbox {
     const providerId = this.id;
-    const driver = tartDriver(host, vmName, { machine, sessionId });
+    const driver = tartDriver(host, vmName, {
+      machine,
+      sessionId: owner.sessionId,
+    });
     return makeRemoteSandbox({
+      ...owner,
       providerId,
       sandboxId: vmName,
-      sessionId,
-      cwd,
       driver,
       // Guest ports are reachable only from the Mac; every Portal rides the
       // outbound relay, which needs no published port.
@@ -1293,13 +1307,7 @@ export class TartProvider implements SandboxProvider {
         ? sandboxEnvironmentSettings(state.repoId, "tart")
         : undefined,
     );
-    return this.makeHandle(
-      host,
-      sandboxId,
-      state.sessionId,
-      state.cwd,
-      machine,
-    );
+    return this.makeHandle(host, sandboxId, state, machine);
   }
 
   async get(sandboxId: string): Promise<Sandbox | null> {
@@ -1365,10 +1373,9 @@ export class TartProvider implements SandboxProvider {
     });
     await driver.ensureStarted();
     if (woke) await runResumeHook(driver, this.id, sandboxId, state);
-    return Object.assign(
-      this.makeHandle(host, sandboxId, state.sessionId, state.cwd, machine),
-      { wokeFromSleep: woke },
-    );
+    return Object.assign(this.makeHandle(host, sandboxId, state, machine), {
+      wokeFromSleep: woke,
+    });
   }
 
   async destroy(

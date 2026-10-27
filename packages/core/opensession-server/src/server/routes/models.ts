@@ -8,30 +8,24 @@
 
 import { requestUser, type RouteContext } from "./context";
 import {
-  DIAL_ORACLE_AGENTS,
-  DIAL_PRESETS,
   KNOWN_MODELS,
-  ORCHESTRATOR_PRESETS,
   accountProviderForModel,
   getDefaultModel,
   getModelFallbackAuto,
   interactiveDefaultModel,
   modelEfforts,
-  orchestratorWorkerModels,
-  piModelLabel,
   refreshPickerModels,
   setDefaultModel,
   setInteractiveDefaultModel,
   setModelFallbackAuto,
   toPiModel,
 } from "../models";
-import { modelProviders, orchestratorEnabled } from "../model-providers";
+import { modelProviders } from "../model-providers";
 import {
   configuredInteractiveDefaultModel,
   configuredModelProviders,
   modelFitsConfiguredProviders,
   pickerModelId,
-  presetFitsConfiguredProviders,
 } from "../model-catalog";
 import { type Sandbox } from "../sandbox";
 import { suggestBranchName } from "../suggest-branch";
@@ -40,7 +34,6 @@ import {
   supportsOpenaiFastMode,
   supportsOpenaiUltrafast,
 } from "../openai-service-tier";
-import { getWorkspace, workspaceModelSettings } from "../workspaces";
 
 const availableEngines = () => [
   { id: "pi" as const, label: "Pi", available: true },
@@ -55,132 +48,25 @@ export async function handleModelsRoutes(
   if (path === "/api/models" && req.method === "GET") {
     // Re-fold the pi entries from config on every fetch (cheap, tiny
     // JSON reads — same "read fresh" contract as /sandbox/status below) so a
-    // config flip like the Orchestrator opt-in shows up on the next picker
-    // open, not the next restart/settings-save.
+    // config change shows up on the next picker open, not the next restart.
     refreshPickerModels();
-    const workspace = url.searchParams.get("workspace")
-      ? await getWorkspace(url.searchParams.get("workspace")!)
-      : null;
-    const settings = workspaceModelSettings(workspace);
     const configuredProviders = configuredModelProviders();
-    // One engine-agnostic list: every entry (models and presets alike) runs
-    // on any configured engine — the composer's Engine choice routes it by
-    // prefix at dispatch (`engines` below is the only engine signal). Native
-    // claude/codex ids stay resolvable + executable (the direct
-    // Slack/Linear/Plain agent loops still run them on the SDK), just not
-    // selectable here. Guard: with no engine configured, fall back to the
-    // full registry so the picker is never empty.
+    // One list of Pi models. Native claude/codex ids stay resolvable for
+    // stored sessions, just not selectable here. Guard: with no engine
+    // configured, fall back to the full registry so the picker is never empty.
     const engineModels = KNOWN_MODELS.filter((m) => m.provider === "pi");
     const engineConfigured = engineModels.length > 0;
-    const visibleModels = (engineConfigured ? engineModels : KNOWN_MODELS)
-      .filter(
-        (model) => model.group !== "dial" && model.group !== "orchestrator",
-      )
-      .filter((model) =>
-        modelFitsConfiguredProviders(model.id, configuredProviders),
-      );
-    // Workspace presets are editable copies, not replacements for the built-ins.
-    // Keep both identities reachable, including when a built-in is the default.
-    const presetComposition = (models: Array<string | undefined>) =>
-      models.flatMap((model) => {
-        if (!model) return [];
-        return [toPiModel(model) || model];
-      });
-    const globalPresetEntry = (
-      p: { id: string; label: string; description: string; effort: string },
-      group: "dial" | "orchestrator",
-      composition: string[],
-    ) => ({
-      id: `pi/${p.id}`,
-      provider: "pi" as const,
-      label: workspace ? `${p.label} (built-in)` : p.label,
-      aliases: [] as string[],
-      group,
-      description: p.description,
-      fixedEffort: p.effort,
-      composition,
-    });
-    const workspacePresetModels = workspace
-      ? (settings.presets || [])
-          .filter(
-            (preset) =>
-              /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(preset.id) &&
-              !!preset.label?.trim() &&
-              !!preset.lead?.model?.trim() &&
-              presetFitsConfiguredProviders(preset, configuredProviders),
-          )
-          .map((preset) => ({
-            id: `pi/workspace-preset/${workspace!.id}/${preset.id}`,
-            provider: "pi" as const,
-            label: preset.label.trim(),
-            aliases: [],
-            group: preset.group || "custom",
-            fixedEffort: preset.lead.effort,
-            description: [
-              preset.instructions?.trim() || "Workspace model combination",
-              `${piModelLabel(toPiModel(preset.lead.model) || preset.lead.model)}${preset.supporting?.length ? ` + ${preset.supporting.length} supporting model${preset.supporting.length === 1 ? "" : "s"}` : ""}`,
-            ].join(" · "),
-            composition: presetComposition([
-              preset.lead.model,
-              ...(preset.supporting || []).map((model) => model.model),
-            ]),
-          }))
-      : [];
-    const builtinPresetModels = engineConfigured
-      ? [
-          ...DIAL_PRESETS.filter((p) =>
-            presetFitsConfiguredProviders(
-              {
-                group: "dial",
-                lead: { model: p.model },
-              },
-              configuredProviders,
-            ),
-          ).map((p) =>
-            globalPresetEntry(
-              p,
-              "dial",
-              presetComposition([
-                p.model,
-                DIAL_ORACLE_AGENTS[p.oracleAgent]?.model,
-              ]),
-            ),
-          ),
-          ...(orchestratorEnabled()
-            ? ORCHESTRATOR_PRESETS.map((preset) => ({
-                preset,
-                workers: orchestratorWorkerModels(preset, configuredProviders),
-              }))
-                .filter(({ preset, workers }) =>
-                  presetFitsConfiguredProviders(
-                    {
-                      group: "orchestrator",
-                      lead: { model: preset.model },
-                      supporting: workers.map((model) => ({ model })),
-                    },
-                    configuredProviders,
-                  ),
-                )
-                .map(({ preset, workers }) =>
-                  globalPresetEntry(
-                    preset,
-                    "orchestrator",
-                    presetComposition([preset.model, ...workers]),
-                  ),
-                )
-            : []),
-        ]
-      : [];
+    const visibleModels = (
+      engineConfigured ? engineModels : KNOWN_MODELS
+    ).filter((model) =>
+      modelFitsConfiguredProviders(model.id, configuredProviders),
+    );
     const interactiveDefault = engineConfigured
       ? configuredInteractiveDefaultModel(configuredProviders)
       : getDefaultModel();
     // One provider config read for the whole catalog, not one per model.
     const providers = modelProviders();
-    const catalogModels = [
-      ...workspacePresetModels,
-      ...builtinPresetModels,
-      ...visibleModels,
-    ].map((model) => ({
+    const catalogModels = visibleModels.map((model) => ({
       ...model,
       efforts: modelEfforts(model.id, providers),
       accountProvider: accountProviderForModel(model.id),
@@ -292,7 +178,7 @@ export async function handleModelsRoutes(
     const body = await req.json().catch(() => null);
     // Two independent knobs: `model` = the global default (Slack/Linear/
     // Plain loops, workflows); `interactiveModel` = what NEW interactive
-    // sessions start on (the composer's preselected row — dial ids OK).
+    // sessions start on (the composer's preselected row).
     if (!body || (!("model" in body) && !("interactiveModel" in body))) {
       return Response.json(
         {

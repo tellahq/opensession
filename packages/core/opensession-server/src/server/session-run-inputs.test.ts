@@ -239,6 +239,16 @@ describe("resolveSessionRunInputs", () => {
     expect(steered.deniedTools).toHaveProperty("mcp__stripe__create_refund");
   });
 
+  test("the wake of a person's wait gets the continuation branch, not the spawn suite", async () => {
+    const inputs = await resolveSessionRunInputs(
+      { ...plain, automation: "Plain ticket triage" },
+      { user: "Kent (wait)" },
+    );
+    expect(inputs.humanPrompter).toBe("Kent (wait)");
+    expect(inputs.inProcessMcpBranch).toBe("automation+wait-continuation");
+    expect(inputs.user).toBeUndefined();
+  });
+
   test("a scheduled loop tick in a person's name never gets the spawn suite", async () => {
     // Kent set the loop, so the turn is still billed to him, but nobody
     // pressed send: scheduled prompt text must not start person-owned

@@ -14,6 +14,7 @@ import { DaytonaProvider } from "./adapters/daytona";
 import { BoxProvider } from "./adapters/box";
 import { TartProvider } from "./adapters/tart";
 import { UseComputerProvider } from "./adapters/usecomputer";
+import { ModalProvider } from "./adapters/modal";
 import { effectiveSandboxProvider, isRetiredSandboxProvider } from "./config";
 import type { SandboxProvider, SandboxProviderId } from "./provider";
 
@@ -50,6 +51,7 @@ const daytonaProvider = new DaytonaProvider();
 const boxProvider = new BoxProvider();
 const tartProvider = new TartProvider();
 const useComputerProvider = new UseComputerProvider();
+const modalProvider = new ModalProvider();
 
 /**
  * Resolve a SandboxProvider. `spec` (a provider id, e.g. from a session file's
@@ -72,6 +74,8 @@ export function getSandboxProvider(
       return tartProvider;
     case "usecomputer":
       return useComputerProvider;
+    case "modal":
+      return modalProvider;
     default:
       if (isRetiredSandboxProvider(id))
         throw new Error(

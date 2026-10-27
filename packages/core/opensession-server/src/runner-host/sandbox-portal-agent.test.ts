@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import {
+  applyPortalRelayRenewal,
   cancelPortalRequest,
   createPortalResponseSender,
   loopbackHeaders,
@@ -209,4 +210,17 @@ test("rejects Portal responses beyond the bounded total size", async () => {
       maxBytes: 8,
     }),
   ).rejects.toThrow("response too large");
+});
+
+test("adopts a renewed relay credential, never an older one", () => {
+  const credential = { token: "old", expiresAt: 1_000 };
+  expect(
+    applyPortalRelayRenewal(credential, { token: "new", expiresAt: 2_000 }),
+  ).toBe(true);
+  expect(credential).toEqual({ token: "new", expiresAt: 2_000 });
+  expect(
+    applyPortalRelayRenewal(credential, { token: "stale", expiresAt: 1_500 }),
+  ).toBe(false);
+  expect(applyPortalRelayRenewal(credential, { expiresAt: 3_000 })).toBe(false);
+  expect(credential.token).toBe("new");
 });

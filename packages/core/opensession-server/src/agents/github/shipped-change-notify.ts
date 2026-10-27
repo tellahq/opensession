@@ -24,6 +24,10 @@ import { postAsSlackBot } from "../slack/bot-post";
 import { sessionLink } from "../../server/run-instructions";
 import { resolveSlackChannel } from "../slack/channel-directory";
 import { shippedChangesChannel } from "./constants";
+import {
+  slackThreadReceipt,
+  type SlackThreadTarget,
+} from "../../server/slack-thread-target";
 import { slackMessageLength } from "../../shared/slack-mentions";
 
 export interface ShippedVisualChange {
@@ -265,6 +269,9 @@ export async function shareShippedVisualChange(opts: {
   caller?: string;
   slackToken?: string;
   screenshots?: string[];
+  /** Reply in this thread (the one a Slack-started session came from)
+   *  instead of posting to `channel`. */
+  thread?: SlackThreadTarget;
 }): Promise<{
   status: "shared" | "already_shared";
   channel?: ShippedChangeChannel;
@@ -273,15 +280,18 @@ export async function shareShippedVisualChange(opts: {
   ts?: string;
   announcementKey?: string;
 }> {
-  const wanted = opts.channel || shippedChangesChannel();
+  const wanted =
+    opts.thread?.channel.id || opts.channel || shippedChangesChannel();
   if (!wanted) throw new Error("Shipped changes channel is not configured");
-  const target = await resolveSlackChannel(
-    wanted,
-    shippedChangeChannels(),
-    opts.caller && opts.slackToken
-      ? { caller: opts.caller, token: opts.slackToken }
-      : undefined,
-  );
+  const target = opts.thread
+    ? opts.thread.channel
+    : await resolveSlackChannel(
+        wanted,
+        shippedChangeChannels(),
+        opts.caller && opts.slackToken
+          ? { caller: opts.caller, token: opts.slackToken }
+          : undefined,
+      );
   if (!target) throw new Error("Choose a Slack channel you can post to");
   const channel = target.id;
   const visual = selectShippedVisualChange(
@@ -298,7 +308,7 @@ export async function shareShippedVisualChange(opts: {
   const announcementKey = shippedChangeAnnouncementKey(
     opts.repoFullName,
     opts.pr.number,
-    channel,
+    opts.thread ? `${channel}/${opts.thread.threadTs}` : channel,
     comment,
     visual?.screenshots || [],
   );
@@ -317,6 +327,7 @@ export async function shareShippedVisualChange(opts: {
         altText: `Screenshot of the shipped visual change: ${title}`,
         sender: opts.caller || opts.requestedBy,
         sessionUrl: sessionLink(opts.session.id),
+        ...(opts.thread ? { threadTs: opts.thread.threadTs } : {}),
       },
     ));
     settleShippedChangeAnnouncement(
@@ -342,7 +353,7 @@ export async function shareShippedVisualChange(opts: {
   );
   return {
     status: "shared",
-    channel: target,
+    channel: opts.thread ? slackThreadReceipt(opts.thread) : target,
     permalink,
     ts,
     announcementKey,

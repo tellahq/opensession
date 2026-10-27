@@ -236,6 +236,35 @@ describe("createPiRuntimeBinding", () => {
     });
   }
 
+  test("prices GPT-6.1 Terra from its release metadata until Pi catalogs it", async () => {
+    for (const account of [oauth, apiKey]) {
+      const bind = (modelID: string) => {
+        const h = harness({ account });
+        h.deps.loadSdk = prewarmPiSdk;
+        return createPiRuntimeBinding(input("openai", modelID, h));
+      };
+      const terra = (await bind("gpt-6.1-terra")).model;
+      const sol = (await bind("gpt-6.1-sol")).model;
+      expect(terra.id).toBe("gpt-6.1-terra");
+      expect(terra.name).toBe("GPT-6.1 Terra");
+      expect(terra.api).toBe(sol.api);
+      expect(terra.compat).toEqual(sol.compat);
+      expect(terra.contextWindow).toBe(272_000);
+      expect(terra.thinkingLevelMap?.max).toBe("max");
+      expect(terra.cost).toMatchObject({
+        input: 1,
+        output: 5,
+        cacheRead: 0.05,
+        cacheWrite: 1.25,
+      });
+      expect(terra.cost.tiers?.[0]).toMatchObject({
+        inputTokensAbove: 272_000,
+        input: 2,
+        output: 7.5,
+      });
+    }
+  });
+
   test("the bundled Pi catalog prices GPT-6.1 Sol and Luna for both account types", async () => {
     for (const account of [oauth, apiKey]) {
       for (const modelID of ["gpt-6.1-sol", "gpt-6-luna"]) {

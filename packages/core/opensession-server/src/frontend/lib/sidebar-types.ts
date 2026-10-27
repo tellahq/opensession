@@ -63,7 +63,10 @@ export interface Props {
   /** Delete a project folder and all of its sessions. A sessionless draft is
    *  simply removed. May reject; callers that need to react to failure (a swipe
    *  or long-press commit) await it. */
-  onDeleteWorkspace: (id: string) => void | Promise<void>;
+  onDeleteWorkspace: (
+    id: string,
+    options?: DeleteWorkspaceOptions,
+  ) => void | Promise<void>;
   /** True while the archived view is open — highlights the Archived row. */
   archivedActive: boolean;
   /** True while the catch-up deck is open — highlights its entry. */
@@ -256,3 +259,8 @@ export type CtxEntry =
       /** ISO until to snooze, or null to unsnooze. */
       onPick: (until: string | null) => void;
     };
+
+/** `draftOnly` discards a draft row's text and never deletes sessions. */
+export interface DeleteWorkspaceOptions {
+  draftOnly?: boolean;
+}
