@@ -264,13 +264,6 @@ export function useSessionTabs({
   const sidebarWorkspaceId = currentSession
     ? sidebarWorkspaceIdForSession(sessions, currentSession)
     : activeWorkspaceId;
-  const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string | null>(
-    null,
-  );
-  useEffect(() => {
-    if (activeWorkspaceId) setSettingsWorkspaceId(activeWorkspaceId);
-  }, [activeWorkspaceId]);
-
   // Feed the ⌘⇧C copy-link shortcut: the open session (workspace-scoped when it
   // has one, and drilled into a sub-agent when that's what's on screen), the
   // open workspace/PR preview, or nothing linkable.
@@ -963,10 +956,7 @@ export function useSessionTabs({
       repo: src.repo || workspace?.repo,
     };
     if (prompt) prefill.prompt = prompt;
-    if (src.workspaceId) {
-      prefill.workspaceId = src.workspaceId;
-      prefill.modelWorkspaceId = src.workspaceId;
-    }
+    if (src.workspaceId) prefill.workspaceId = src.workspaceId;
     // Sharing starts from the workspace's branch. Omitting the branch for
     // a stack keeps NewSession on "New branch", which the create path
     // resolves as a stacked worktree after the first prompt is sent.
@@ -1339,7 +1329,6 @@ export function useSessionTabs({
     context: {
       activeWorkspaceId,
       sidebarWorkspaceId,
-      settingsWorkspaceId,
       copyLinkPath,
       workspaceSessions,
     },

@@ -103,7 +103,7 @@ async function cloneRepo(
     );
   }
   const summary = await describeClone(dir);
-  return `Cloned ${owner}/${repo} (shallow, single branch) to:\n${dir}\n\n${summary}\n\nRead files there with the normal read/grep/find tools.`;
+  return `Cloned ${owner}/${repo} (shallow, single branch) to:\n${dir}\n\n${summary}\n\nRead files there with the normal read/grep/find tools. To change this repository, attach it with opensession-repos \`attach_repo\` instead of committing here.`;
 }
 
 async function describeClone(dir: string): Promise<string> {
@@ -264,6 +264,9 @@ export function createWebMcpServer(opts: { sessionId?: string } = {}) {
           "Use this instead of fetching GitHub pages when you want to read a project's",
           "actual source: the clone is real files, so read/grep/find work on it normally.",
           "The clone lands in scratch, not in the session's worktree.",
+          "It is for reading only: to change a repository, attach it with",
+          "opensession-repos `attach_repo` and work in that worktree, so later turns",
+          "hold a GitHub token for it.",
         ].join("\n"),
         {
           repo: z.string().describe('"owner/name" or a github.com URL.'),

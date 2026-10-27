@@ -21,7 +21,7 @@ describe("commentable diff appearance", () => {
       expect(diffAppearanceOptions(theme, false).lineDiffType).toBe("none");
     });
 
-    test(`${theme} keeps numbers neutral and softens both change fills`, () => {
+    test(`${theme} keeps numbers neutral, softens change rows and tints the gutter`, () => {
       const style = DIFF_SURFACE_STYLE[theme];
       expect(style["--diffs-bg"]).toBe(`var(--review-code-${theme})`);
       for (const side of ["addition", "deletion"]) {
@@ -30,7 +30,10 @@ describe("commentable diff appearance", () => {
         );
         const fill = style[`--diffs-bg-${side}-override`];
         expect(fill).toContain("50%, var(--diffs-bg)");
-        expect(style[`--diffs-bg-${side}-number-override`]).toBe(fill);
+        // The gutter takes the full hue, a step above its softened code row.
+        expect(style[`--diffs-bg-${side}-number-override`]).toBe(
+          side === "addition" ? "var(--green)" : "var(--red)",
+        );
         expect(style[`--diffs-bg-${side}-emphasis-override`]).toContain(
           "16%, transparent",
         );

@@ -34,6 +34,11 @@ struct OS1App: App {
         NativeNotifications.retireLegacyPreferences()
         NotificationTapRouter.install()
         CrashReporter.shared.install()
+        #if os(iOS)
+        // Before any intent runs: "Talk to Desk" can launch the app straight
+        // into the background.
+        DeskCallActivityController.install()
+        #endif
     }
 
     var body: some Scene {

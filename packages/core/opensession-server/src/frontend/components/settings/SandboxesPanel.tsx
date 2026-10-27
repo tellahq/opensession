@@ -39,6 +39,8 @@ import { toast } from "../../ui/toast";
 import { IconCheck, IconPlus, IconX } from "../icons";
 import { WorkspaceSandboxDefaults } from "./SandboxDefaults";
 import { SandboxProviderLogo } from "./SandboxProviderLogo";
+import { SandboxSleepSettings } from "./SandboxSleepSettings";
+import { sandboxSleepSummary } from "../../lib/sandbox-sleep";
 
 const PROVIDERS: Array<{
   id: SandboxConnectionInfo["provider"];
@@ -68,6 +70,12 @@ const PROVIDERS: Array<{
     label: "use.computer",
     description:
       "macOS virtual machines with Xcode on Mac minis reserved in your use.computer account, connected with your account API key.",
+  },
+  {
+    id: "modal",
+    label: "Modal",
+    description:
+      "Linux containers in your Modal account, with an optional NVIDIA T4 or L4 GPU per session, connected with a Modal token.",
   },
 ];
 
@@ -261,6 +269,26 @@ const MACHINE_PROFILES: Record<
       settings: { cpu: 6, memoryMb: 10_240 },
     },
   ],
+  modal: [
+    {
+      id: "small",
+      label: "Small",
+      detail: "2 CPU · 8 GB",
+      settings: { cpu: 2, memoryMb: 8192 },
+    },
+    {
+      id: "medium",
+      label: "Medium",
+      detail: "4 CPU · 16 GB",
+      settings: { cpu: 4, memoryMb: 16_384 },
+    },
+    {
+      id: "large",
+      label: "Large",
+      detail: "8 CPU · 32 GB",
+      settings: { cpu: 8, memoryMb: 32_768 },
+    },
+  ],
   usecomputer: [
     {
       id: "split",
@@ -367,6 +395,10 @@ function ConnectDialog({
   );
   const isMac = connection.provider === "tart";
   const isUseComputer = connection.provider === "usecomputer";
+  const isModal = connection.provider === "modal";
+  const [tokenId, setTokenId] = useState(
+    String(connection.settings.tokenId || ""),
+  );
   const [reservation, setReservation] = useState(
     String(connection.settings.reservation || ""),
   );
@@ -420,6 +452,11 @@ function ConnectDialog({
       if (cpu) settings.cpu = Number(cpu);
       if (memoryMb) settings.memoryMb = Number(memoryMb);
       if (isUseComputer && reservation) settings.reservation = reservation;
+      if (isModal) {
+        if (!tokenId.trim() && !/^ak-\S+[:\s]+as-\S+$/.test(apiKey.trim()))
+          throw new Error("Enter the Modal token id");
+        if (tokenId.trim()) settings.tokenId = tokenId.trim();
+      }
       if (isMac) {
         const chosen = hosts.filter((row) => row.runner);
         if (!chosen.length) throw new Error("Add at least one Mac");
@@ -487,7 +524,9 @@ function ConnectDialog({
                 ? "Credentials stay on this server. Open Session tests ingress, creates a disposable Boat sandbox, verifies archive/resume and snapshot restore, then archives it."
                 : isUseComputer
                   ? "Credentials stay on this server. Open Session tests ingress, checks your active Mac reservation, creates a disposable sandbox on it, proves a snapshot restore (about six minutes), and deletes everything."
-                  : "Credentials stay on this server. Open Session tests ingress, creates a disposable sandbox, restores a snapshot, and cleans up."
+                  : isModal
+                    ? "Credentials stay on this server. Open Session builds the base image, starts a small container without a GPU, restores a filesystem snapshot into a second one, and terminates both. Create a token at modal.com/settings/tokens."
+                    : "Credentials stay on this server. Open Session tests ingress, creates a disposable sandbox, restores a snapshot, and cleans up."
           }
         />
 
@@ -527,6 +566,31 @@ function ConnectDialog({
               </Field>
             </div>
           </>
+        ) : isModal ? (
+          <div className="grid gap-3">
+            <Field label="Token id">
+              <Input
+                ref={firstFieldRef}
+                autoComplete="off"
+                value={tokenId}
+                onChange={(event) => setTokenId(event.target.value)}
+                placeholder="ak-…"
+              />
+            </Field>
+            <Field label="Token secret">
+              <Input
+                type="password"
+                autoComplete="off"
+                placeholder={
+                  connection.hasCredentials
+                    ? "Leave blank to keep the current secret"
+                    : "as-…"
+                }
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+              />
+            </Field>
+          </div>
         ) : (
           <Field
             label={
@@ -749,6 +813,9 @@ function ConnectionCard({
               </div>
               <p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
                 {provider.description}
+              </p>
+              <p className="m-0 mt-1 text-meta text-faint">
+                {sandboxSleepSummary(connection.provider)}
               </p>
               {macHosts.length > 0 && (
                 <p className="m-0 mt-1 text-meta text-faint">
@@ -1025,6 +1092,8 @@ function ProjectEnvironmentDialog({
             "The VM shape applies when a VM boots. Memory is shared with the Mac itself, so keep the total of running VMs below what the host can spare."}
           {provider === "usecomputer" &&
             "Every sandbox is one of the two VMs on a reserved Mac (5 CPU, 8 GB). The reservation's layout sets the size, not the project."}
+          {provider === "modal" &&
+            "A session picks its GPU under Machine (T4 or L4). A GPU session gets at least 8 CPU and 32 GB, whatever the size here."}
         </div>
 
         <Modal.Footer>
@@ -1200,6 +1269,7 @@ export function SandboxesPanel() {
         This machine remains the default. Personal and per-session choices can
         override the workspace default.
       </SettingsHint>
+      <SandboxSleepSettings />
       {reusableEnvironments.length > 0 && (
         <>
           <SettingsGroupLabel

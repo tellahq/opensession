@@ -13,12 +13,13 @@ import {
   pushRecentModel,
 } from "../lib/model-recents";
 import { Menu } from "../ui/menu";
+import { selectTriggerClasses } from "../ui/select-classes";
 import { Badge } from "../ui/badge";
 import { cn } from "../ui/cn";
-import { Tooltip } from "../ui/tooltip";
 import {
   IconBolt,
   IconRocket,
+  IconChevronDown,
   IconChevronRight,
   IconPeople,
   IconSparkle,
@@ -64,7 +65,7 @@ const PRIMARY_MODEL_IDS = [
   "claude-haiku-5-5",
   "gpt-6-astra",
   "gpt-6.1-sol",
-  "gpt-5.6-terra",
+  "gpt-6.1-terra",
   "gpt-6-luna",
 ] as const;
 const PRIMARY_MODEL_ID_SET = new Set<string>(PRIMARY_MODEL_IDS);
@@ -146,30 +147,13 @@ export function friendlyModelSlug(slug: string): string {
 }
 
 /**
- * A workspace preset's own name for an id that carries the workspace it was
- * defined in ("workspace-preset/ws-b985…/opus-fable" → "Opus 5 + Fable
- * oracle"), or null when the id isn't one.
- *
- * A session can run a preset from a DIFFERENT workspace — /model and a carried
- * default both allow it, and the runner resolves either — while the catalog is
- * always fetched for the session's own workspace. So the exact id can be
- * absent; every workspace seeds the same preset ids, so the trailing segment
- * still names it. Without a catalog at all, the slug is still a name, and the
- * storage path never is.
+ * A name for a retired workspace ("Custom") preset id stored on an older
+ * session ("workspace-preset/ws-b985…/opus-fable" → "Opus Fable"), or null
+ * when the id isn't one. The slug is still a name; the storage path never is.
  */
-export function workspacePresetLabel(
-  id: string,
-  models: ModelOption[],
-): string | null {
+export function workspacePresetLabel(id: string): string | null {
   const slug = id.match(/^(?:pi\/)?workspace-preset\/[^/]+\/(.+)$/)?.[1];
-  if (!slug) return null;
-  return (
-    models.find((m) => m.id === id)?.label ||
-    models.find(
-      (m) => m.id.includes("workspace-preset/") && m.id.endsWith(`/${slug}`),
-    )?.label ||
-    friendlyModelSlug(slug)
-  );
+  return slug ? friendlyModelSlug(slug) : null;
 }
 
 /** Display name without the vendor noise: "Claude Fable 5.1" → "Fable 5.1",
@@ -177,19 +161,12 @@ export function workspacePresetLabel(
  * "Sonnet 5". The engine is an implementation detail — it never shows in a
  * model's name. */
 export function shortModelLabel(id: string, models: ModelOption[]): string {
-  // An engine-routed id reads as its base entry ("pi/dial/opus-fable",
-  // "claude/dial/opus-fable" both keep the preset's label, not a slug) —
-  // the engine is routing, and it never shows in a model's name.
+  // A retired preset id reads as the model it ran on.
   const routedBase = baseModelId(id);
-  if (routedBase !== id && models.some((m) => m.id === routedBase))
-    return shortModelLabel(routedBase, models);
-  const preset = workspacePresetLabel(baseModelId(id), models);
+  if (routedBase !== id) return shortModelLabel(routedBase, models);
+  const preset = workspacePresetLabel(id);
   if (preset) return preset;
   const oc = routedModelParts(id);
-  if (oc?.provider === "dial" || oc?.provider === "orchestrator") {
-    const label = models.find((m) => m.id === id)?.label;
-    if (label) return label;
-  }
   if (oc) return friendlyModelSlug(oc.model);
   // Last resort is the id itself, minus its routing prefix — an id with no
   // catalog entry is still a name, and the engine is not part of it.
@@ -199,9 +176,6 @@ export function shortModelLabel(id: string, models: ModelOption[]): string {
 
 /** Friendly names for the upstream providers in the grouped main list. */
 const PROVIDER_LABELS = {
-  dial: "The Dial",
-  custom: "Custom",
-  orchestrator: "The Orchestrator",
   anthropic: "Anthropic",
   openai: "OpenAI",
   pi: "Pi",
@@ -222,9 +196,6 @@ const PROVIDER_LABEL_BY_ID = new Map(Object.entries(PROVIDER_LABELS));
 /** Section order in the grouped main list; unlisted providers follow in
  * config order. */
 const PROVIDER_ORDER = [
-  "dial",
-  "custom",
-  "orchestrator",
   "anthropic",
   "openai",
   "xai-oauth",
@@ -239,15 +210,6 @@ const PROVIDER_ORDER = [
 /** Preferred display order for the engine main list (by id tail); anything
  * unlisted keeps its registry/config order after these. */
 const MODEL_TAIL_ORDER = [
-  // The Dial presets ("dial/<tier>" ids) lead the list, hardest tier first,
-  // then The Orchestrator presets ("orchestrator/<name>" ids).
-  "ultra",
-  "high",
-  "medium",
-  "low",
-  "fable",
-  "fable-sol",
-  "sol",
   "claude-fable-5-1",
   "claude-opus-5-5",
   "claude-opus-4-8",
@@ -258,7 +220,7 @@ const MODEL_TAIL_ORDER = [
   "claude-haiku-4-5",
   "gpt-6-astra",
   "gpt-6.1-sol",
-  "gpt-5.6-terra",
+  "gpt-6.1-terra",
   "gpt-6-luna",
   "kimi-k3",
   "gpt-oss-120b",
@@ -321,10 +283,6 @@ type ModelMenuOption = {
   id: string;
   /** Engine key (ModelOption.provider) for the legacy-fallback group headers. */
   engine: string;
-  /** Picker section override from the registry ("dial" = The Dial). */
-  group?: string;
-  /** One-line description rendered with the preset label. */
-  description?: string;
 };
 
 const PICKER_ROW_GAP = "mb-0.5 last:mb-0";
@@ -366,6 +324,7 @@ export function ModelEffortSelect({
     defaultModel,
     model,
     preferredDefaultModel,
+    preferredDefaultEffort,
     modelDisabled,
     modelTitle,
     effort,
@@ -391,9 +350,9 @@ export function ModelEffortSelect({
     changeSpeed: onSpeedChange,
     changeAccount: onAccountChange,
     changeOpen: onOpenChange,
+    reset: onReset,
   } = actions;
   const effectiveModel = model || defaultModel;
-  const isPreferredDefault = preferredDefaultModel === effectiveModel;
   const [open, setOpen] = React.useState(false);
   const setMenuOpen = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -427,25 +386,19 @@ export function ModelEffortSelect({
   const supportedEfforts = EFFORTS.filter((e) =>
     supportedEffortIds.includes(e.id),
   );
-  const fixedEffort = EFFORTS.find((e) => e.id === modelInfo?.fixedEffort);
-  // Presets expose their one fixed effort as a one-choice submenu. That keeps
-  // every model settings menu structurally consistent without pretending the
-  // preset's lead-model effort can be changed.
-  const effortOptions =
-    supportedEfforts.length > 0
-      ? supportedEfforts
-      : fixedEffort
-        ? [fixedEffort]
-        : [];
-  const effectiveEffort =
-    fixedEffort?.id ??
-    (supportedEffortIds.includes(effort ?? "")
-      ? effort!
-      : supportedEffortIds.includes("high")
-        ? "high"
-        : supportedEffortIds[0]);
+  const effortOptions = supportedEfforts;
+  const effectiveEffort = supportedEffortIds.includes(effort ?? "")
+    ? effort!
+    : supportedEffortIds.includes("high")
+      ? "high"
+      : supportedEffortIds[0];
   const effortLabel = EFFORTS.find((e) => e.id === effectiveEffort)?.label;
   const hasEffort = !!onEffortChange && effortOptions.length > 0;
+  const defaultEffortToSave = hasEffort ? effectiveEffort : undefined;
+  const isPreferredDefault =
+    preferredDefaultModel === effectiveModel &&
+    (defaultEffortToSave === undefined ||
+      preferredDefaultEffort === defaultEffortToSave);
   const accountProvider = modelInfo?.accountProvider;
   const providerAccounts = (accounts || []).filter(
     (a) => a.provider === accountProvider,
@@ -506,7 +459,7 @@ export function ModelEffortSelect({
     accounts: accounts ?? [],
     viewer,
     provider: accountProvider,
-    model: modelInfo?.composition?.[0] ?? effectiveBase,
+    model: effectiveBase,
     accountId,
   });
   // Routing stays sticky across model changes even though engine selection is
@@ -537,9 +490,9 @@ export function ModelEffortSelect({
   // the effort the current model happens to support may not exist there.
   const defaultModelInfo = modelById.get(baseModelId(defaultModel));
   const defaultEffortIds = defaultModelInfo?.efforts ?? [];
-  const defaultEffort =
-    defaultModelInfo?.fixedEffort ||
-    (defaultEffortIds.includes("high") ? "high" : defaultEffortIds[0]);
+  const defaultEffort = defaultEffortIds.includes("high")
+    ? "high"
+    : defaultEffortIds[0];
   const atDefault =
     (modelDisabled || model === "" || model === defaultModel) &&
     (!hasEffort || !defaultEffort || effectiveEffort === defaultEffort) &&
@@ -547,6 +500,7 @@ export function ModelEffortSelect({
     (!hasAccount || !accountId) &&
     (!onAutoFallbackChange || autoFallback);
   const resetToDefault = () => {
+    if (onReset) return onReset();
     if (!modelDisabled) onModelChange("");
     if (onEffortChange && defaultEffort) onEffortChange(defaultEffort);
     onAutoFallbackChange?.(true);
@@ -562,23 +516,12 @@ export function ModelEffortSelect({
     const optionFor = (id: string): ModelMenuOption => {
       const info = modelById.get(id);
       const shortLabel = shortModelLabel(id, models);
-      const standaloneLabel =
-        info?.group === "dial" || info?.group === "orchestrator"
-          ? info.label
-          : shortLabel;
       return {
         value: id === defaultModel ? "" : id,
-        // Preset rows drop their "Dial · " / "Orchestrator · " prefix because
-        // their section already names it. Recent rows use the standalone label.
-        label:
-          info?.group === "dial" || info?.group === "orchestrator"
-            ? shortLabel.replace(/^(?:Dial|Orchestrator)\s*·\s*/, "")
-            : shortLabel,
-        standaloneLabel,
+        label: shortLabel,
+        standaloneLabel: shortLabel,
         id,
         engine: info?.provider || (routedModelParts(id) ? "pi" : "claude"),
-        group: info?.group,
-        description: info?.description,
       };
     };
     // Legacy entries keep their FULL registry label ("Claude Sonnet 5",
@@ -614,7 +557,7 @@ export function ModelEffortSelect({
   // The stored routing prefix narrows the list rather than greying half of it
   // out: the direct-SDK engines each speak to one vendor, so on those a model
   // they can't run is noise, not a choice. A null recomposition means "can't
-  // route there", and presets stay visible since a preset names its own models.
+  // route there".
   // Pi serves every configured model; it still meets
   // the odd unroutable legacy slug, which stays a disabled row below).
   const {
@@ -662,8 +605,7 @@ export function ModelEffortSelect({
       options: ModelMenuOption[];
     }> = [];
     for (const option of primaryOptions) {
-      // A registry group ("dial") overrides provider-segment grouping.
-      const provider = option.group || providerOf(option.id);
+      const provider = providerOf(option.id);
       let group = providerGroups.find((g) => g.provider === provider);
       if (!group) {
         group = {
@@ -719,16 +661,13 @@ export function ModelEffortSelect({
   const renderModelOption = (option: ModelMenuOption, standalone = false) => {
     const selected = isSelected(option);
     const optionLabel = standalone ? option.standaloneLabel : option.label;
-    const optionDescription = standalone ? undefined : option.description;
     const nextModelInfo = modelById.get(option.id);
     const nextEfforts = nextModelInfo?.efforts ?? [];
-    const nextEffort =
-      nextModelInfo?.fixedEffort ||
-      (nextEfforts.includes(effort ?? "")
-        ? effort
-        : nextEfforts.includes("high")
-          ? "high"
-          : nextEfforts[0]);
+    const nextEffort = nextEfforts.includes(effort ?? "")
+      ? effort
+      : nextEfforts.includes("high")
+        ? "high"
+        : nextEfforts[0];
     const recentSettings = standalone
       ? [
           onSpeedChange &&
@@ -794,25 +733,11 @@ export function ModelEffortSelect({
         )}
       >
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          {/* The slot stays fixed so paired marks can overhang into the gap
-					    without shifting any row labels. */}
+          {/* The slot stays fixed so rows without a mark keep their labels aligned. */}
           <span className="flex size-4 shrink-0 items-center justify-center text-dim">
-            <ModelMark
-              id={option.id}
-              provider={option.engine}
-              composition={nextModelInfo?.composition}
-            />
+            <ModelMark id={option.id} provider={option.engine} />
           </span>
-          {optionDescription ? (
-            <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-              <span className="shrink-0">{optionLabel}</span>
-              <span className="min-w-0 flex-1 truncate text-xs text-faint">
-                {optionDescription}
-              </span>
-            </span>
-          ) : (
-            <span className="min-w-0 truncate">{optionLabel}</span>
-          )}
+          <span className="min-w-0 truncate">{optionLabel}</span>
         </span>
         {recentSettings.length > 0 && (
           <span className="ml-auto shrink-0 text-supporting text-faint">
@@ -822,22 +747,12 @@ export function ModelEffortSelect({
         <Menu.Check on={selected} className="text-dim" />
       </Menu.Item>
     );
-    return optionDescription ? (
-      <Tooltip
-        key={option.value || option.id}
-        label={optionDescription}
-        side="right"
-        multiline
-      >
-        {item}
-      </Tooltip>
-    ) : (
-      React.cloneElement(item, { key: option.value || option.id })
-    );
+    return React.cloneElement(item, { key: option.value || option.id });
   };
 
   const menuRowTrigger = triggerVariant === "menu-row";
   const heroTrigger = triggerVariant === "hero";
+  const fieldTrigger = triggerVariant === "field";
 
   return (
     <Menu.Root open={open} onOpenChange={setMenuOpen}>
@@ -853,9 +768,11 @@ export function ModelEffortSelect({
         className={cn(
           menuRowTrigger
             ? "flex w-full cursor-pointer items-center gap-[7px] whitespace-nowrap rounded-control border border-line-strong bg-transparent px-3 py-[7px] text-control-label font-medium text-faint hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
-            : heroTrigger
-              ? "inline-flex min-h-11 min-w-0 max-w-full cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-label font-medium text-dim transition-[color,background-color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] data-[popup-open]:bg-hover data-[popup-open]:text-fg"
-              : "border-transparent hover:border-transparent hover:bg-hover",
+            : fieldTrigger
+              ? selectTriggerClasses("md", true)
+              : heroTrigger
+                ? "inline-flex min-h-11 min-w-0 max-w-full cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-label font-medium text-dim transition-[color,background-color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+                : "border-transparent hover:border-transparent hover:bg-hover",
           className,
         )}
         title={title}
@@ -883,6 +800,22 @@ export function ModelEffortSelect({
               </span>
             </span>
             <IconChevronRight size={16} className="shrink-0 text-faint" />
+          </>
+        ) : fieldTrigger ? (
+          <>
+            <span className="col-start-1 row-start-1 flex size-4 shrink-0 items-center justify-center text-dim">
+              <ModelMark id={effectiveModel} provider={modelInfo?.provider} />
+            </span>
+            <span className="col-start-2 row-start-1 truncate">
+              {modelLabel}
+              {hasEffort && effortLabel && (
+                <span className="text-faint"> · {effortLabel}</span>
+              )}
+            </span>
+            <IconChevronDown
+              size={16}
+              className="col-start-3 row-start-1 shrink-0 text-faint"
+            />
           </>
         ) : heroTrigger ? (
           <span className="truncate">{modelLabel}</span>
@@ -913,7 +846,13 @@ export function ModelEffortSelect({
         )}
       </Menu.Trigger>
       <Menu.Popup
-        align={menuRowTrigger ? "start" : heroTrigger ? "center" : "end"}
+        align={
+          menuRowTrigger || fieldTrigger
+            ? "start"
+            : heroTrigger
+              ? "center"
+              : "end"
+        }
         sideOffset={6}
         className={cn(
           "max-w-[min(360px,calc(100vw-1rem))]",
@@ -1250,9 +1189,9 @@ export function ModelEffortSelect({
         <Menu.Separator className="my-1" />
         {onSetAsDefault && (
           <Menu.Item
-            onClick={() => onSetAsDefault(effectiveModel)}
+            onClick={() => onSetAsDefault(effectiveModel, defaultEffortToSave)}
             disabled={isPreferredDefault}
-            title={`Use ${modelLabel} for new sessions`}
+            title={`Use ${modelLabel}${defaultEffortToSave && effortLabel ? ` at ${effortLabel.toLowerCase()} effort` : ""} for new sessions`}
             className={cn(
               "justify-between gap-3",
               isPreferredDefault && "opacity-55",

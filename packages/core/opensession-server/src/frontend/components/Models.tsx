@@ -28,7 +28,6 @@ interface ModelInfo {
   label: string;
   aliases: string[];
   efforts: string[];
-  composition?: string[];
 }
 
 /** The model half of Settings → Providers: what new runs start on. Renders as
@@ -120,10 +119,10 @@ function DefaultModelRow({
     ...claudeModels.map((m) => ({ value: m.id, label: m.label })),
     ...codexModels.map((m) => ({ value: m.id, label: m.label })),
   ];
-  // Vendor mark per row; combo presets show each participating vendor while
-  // the slot stays reserved on every row (and the trigger) for alignment.
+  // Vendor mark per row; the slot stays reserved on every row (and the
+  // trigger) for alignment.
   const markFor = (m: ModelInfo) => (
-    <ModelMark id={m.id} provider={m.provider} composition={m.composition} />
+    <ModelMark id={m.id} provider={m.provider} />
   );
   const currentModel = (models || []).find((m) => m.id === current);
 

@@ -25,8 +25,10 @@ import {
   IconCopy,
   IconExpand,
   IconFileText2,
+  IconLink,
   IconPencil,
 } from "./icons";
+import { useMessageLink } from "../lib/message-link";
 import { Collapsible, collapsiblePanelClasses } from "../ui/collapsible";
 import { pastedTextLineLabel } from "@tellahq/opensession-protocol/pasted-text";
 import { personKey } from "../lib/review-queue";
@@ -548,7 +550,26 @@ function CopyMessageButton({
   );
 }
 
-/** The quiet row under your own bubble: copy, edit, and the real time.
+/** Copy a link that opens the session at this message. */
+function CopyMessageLinkButton({ entryId }: { entryId: string }) {
+  const linkTo = useMessageLink();
+  const { copied, copy } = useCopy();
+  if (!linkTo) return null;
+  return (
+    <Tooltip label={copied ? "Copied" : "Copy link"}>
+      <button
+        type="button"
+        onClick={() => copy(linkTo(entryId))}
+        aria-label={copied ? "Copied" : "Copy link"}
+        className={bubbleActionClass}
+      >
+        <CopyCheck copied={copied} idle={<IconLink size={16} />} />
+      </button>
+    </Tooltip>
+  );
+}
+
+/** The quiet row under a person's bubble: copy, link, edit, and the real time.
  *
  * Those turns carry no label row to hang a MsgTime off, and a timestamp on
  * every one of them would just be noise while reading — so the time stays
@@ -563,16 +584,20 @@ function BubbleMeta({
   ts,
   onEdit,
   copy,
+  linkEntryId,
 }: {
   ts?: string;
   onEdit?: () => void;
   copy?: { entry: TranscriptEntry; sessionId?: string };
+  /** The entry a "Copy link" points at; omitted while it is not stored. */
+  linkEntryId?: string;
 }) {
   const label = ts ? fullTime(ts) : "";
-  if (!onEdit && !copy && !label) return null;
+  if (!onEdit && !copy && !linkEntryId && !label) return null;
   return (
     <div className="absolute top-[calc(100%+2px)] right-0 flex items-center gap-1">
       {copy && <CopyMessageButton {...copy} />}
+      {linkEntryId && <CopyMessageLinkButton entryId={linkEntryId} />}
       {onEdit && <EditAgainButton onClick={onEdit} />}
       {label && (
         <span className="hidden text-meta leading-none font-medium whitespace-nowrap text-faint select-none selection:bg-[rgba(0,0,0,0.01)] [@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100">
@@ -606,6 +631,9 @@ interface Props {
   /** Offered on your own user turns: puts this message back in the composer.
    *  Omitted where there is no composer to put it in (no engine session). */
   onEdit?: (entry: TranscriptEntry) => void;
+  /** A just-sent turn the server has not stored yet: its id is the client's
+   *  own, so there is nothing a link to it could open. */
+  optimistic?: boolean;
   /** Offered on a failed run's notice: starts a turn that picks the work back
    *  up. Passed only for the notice a person can still act on — the last one,
    *  on an idle session (see TranscriptBlocks). */
@@ -865,6 +893,7 @@ export const MessageBubble = function MessageBubble({
   owner,
   sessionId,
   onEdit,
+  optimistic,
   onContinue,
 }: Props) {
   const me = useCurrentUser();
@@ -1041,10 +1070,10 @@ export const MessageBubble = function MessageBubble({
           "msg-user",
           msgOwnTurn,
           enterClass,
-          // Your own turns hang their quiet actions below the bubble. Reserve
+          // Person turns hang their quiet actions below the bubble. Reserve
           // that clearance from the optimistic mount: when Edit appears on the
           // durable row, the phone timeline must not grow underneath it.
-          !fromOther && "mb-8.75",
+          "mb-8.75",
           pendingDelivery && "opacity-70",
         )}
         data-delivery-pending={pendingDelivery || undefined}
@@ -1059,13 +1088,16 @@ export const MessageBubble = function MessageBubble({
         )}
         {/* One stack anchors the quiet actions below both the bubble and attachments. */}
         <div className="group/bubble relative flex min-w-0 flex-col">
-          {!fromOther && (
-            <BubbleMeta
-              ts={e.timestamp}
-              onEdit={onEdit ? () => onEdit(e) : undefined}
-              copy={displayContent ? { entry: e, sessionId } : undefined}
-            />
-          )}
+          {/* A teammate's turn shows its time in the label and offers only
+              its link: copy and edit stay with your own words. */}
+          <BubbleMeta
+            ts={fromOther ? undefined : e.timestamp}
+            onEdit={!fromOther && onEdit ? () => onEdit(e) : undefined}
+            copy={
+              !fromOther && displayContent ? { entry: e, sessionId } : undefined
+            }
+            linkEntryId={optimistic ? undefined : e.id}
+          />
           {displayContent && (
             <ClampedBody
               className={cn(msgBubbleUser, "markdown")}

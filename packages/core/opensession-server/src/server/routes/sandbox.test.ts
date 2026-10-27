@@ -80,6 +80,19 @@ describe("sandboxAttachRefusal", () => {
     expect(sandboxAttachRefusal(inBox, "box")).toMatch(/already runs on box/);
   });
 
+  test("another GPU on the same provider is a move", () => {
+    const onModal = {
+      ...host,
+      sandbox: { provider: "modal", sandboxId: "md-1" },
+    };
+    expect(sandboxAttachRefusal(onModal, "modal")).toMatch(/already runs/);
+    expect(sandboxAttachRefusal(onModal, "modal", "T4")).toBeNull();
+    const onT4 = { ...onModal, sandboxGpu: "T4" };
+    expect(sandboxAttachRefusal(onT4, "modal", "T4")).toMatch(/T4 GPU/);
+    expect(sandboxAttachRefusal(onT4, "modal", "L4")).toBeNull();
+    expect(sandboxAttachRefusal(onT4, "modal")).toBeNull();
+  });
+
   test("a session in a Sandbox may move to another provider", () => {
     expect(
       sandboxAttachRefusal(

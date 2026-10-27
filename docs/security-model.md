@@ -131,8 +131,8 @@ configuration for the run.
   but it grants no GitHub authority. It matters only when the run already has
   an authorized publication path. See
   [Automation PR credentials and review requests](setup/github.md#automation-pr-credentials-and-review-requests).
-- An automation's `readRepos` (sibling `owner/repo` names under its own
-  owner) gives its runs a second, read-only installation token,
+- An automation's or a repository's `readRepos` (sibling `owner/repo` names
+  under its own owner) gives its runs a second, read-only installation token,
   `GH_READ_TOKEN`, covering its repo plus those. The primary `GH_TOKEN` is
   never widened, the mint fails closed when the App is not installed on one
   of the repositories, and only the names are journaled. See
@@ -205,6 +205,42 @@ were approved for calls to the old one. Deleting revokes them too. Each change
 is audited with the fields it changed and whether the secret was rotated
 (`keychain_credential_updated`, `keychain_credential_deleted`), never the
 secret itself.
+
+A credential is personal by default. Its owner may instead make it a
+workspace credential, when registering it or later: in Settings → Account
+(Share / Make personal, behind a confirmation and a verified GitHub sign-in)
+or with `update_credential` and `scope`, which shows the owner the same card
+as any other change. Only the owner can share it, make it personal again,
+change it or delete it; there is no separate admin role, and any teammate may
+register a new credential as a workspace credential, which makes them its
+owner. A workspace credential is usable by every session that has the
+keychain tools, without `request_credential` or anyone's approval:
+`call_credential` mints the session's own implicit `workspace` grant (seven
+days, minted again on the next call) on first use, and `run_with_credential`
+starts a run whose credentials are all workspace credentials with the
+caller's stated purpose and call cap (10,000 per credential by default). Everything else
+holds: the keychain tools stay interactive-only, the secret is injected
+server-side, the host, method and path ceiling applies, the secret is scrubbed
+from responses, and grants stay bound to the session. Because no owner
+approved a purpose, every `call_credential` to a workspace credential must
+state one; the audit line (`keychain_broker_call`) records it with the
+session and the person driving it, and the implicit grant's
+`keychain_grant_minted` line is marked `scope: workspace`. Making the
+credential personal again revokes every implicit grant, which also ends a run
+using one, while grants its owner approved keep working. A login can never be
+a workspace credential: its password reaches the agent, so each release stays
+the owner's decision.
+
+Automation-owned sessions never get the full keychain server. A turn a person
+sends into one (resolved by `interactivePrompter`, never the automation's own
+ticks, a machine actor or a descendant) gets `opensession-keychain` limited to
+listing, asking for and using API credentials: `list_credentials`,
+`request_credential`, `cancel_credential_ask`, `list_grants`,
+`call_credential`, `run_with_credential` and its run status tools. Workspace
+credentials work directly; a personal one needs its owner's approval of that
+person's ask, as anywhere else. There is no registration, change or deletion,
+no login (asking for one is refused, and `use_login` is absent) and no Mac
+Keychain. Asks and calls are recorded with that person as the requester.
 
 A loopback URL that any local process could reuse is exactly what the broker
 route was, so bulk work by a script has its own path instead. The agent asks
@@ -350,6 +386,17 @@ This replaces the earlier CLI-based 1Password path. It does not offer 1Password
 vault access, item enumeration, raw export, Apple Passwords/iCloud access, or
 Keychain mutation. Native tests use a new disposable keychain with interaction
 disabled, never the default search list or real user credentials.
+
+## GPU jobs
+
+The interactive-only `opensession-gpu` server runs a command on the session's
+own Modal GPU machine (`src/server/gpu-jobs.ts`). Like a script run, a job
+outlives the call and bills compute, so automation runs and workflow scripts
+cannot start one. The machine receives the session's checkpoint and a
+read-only GitHub App token for the repository and its configured
+`readRepos`, answered by an in-shell credential helper and never written to
+disk: a job can fetch but not push. Nothing else from this host enters it.
+The log copied back into the session's scratch folder is untrusted output.
 
 ## Script runs
 

@@ -10,11 +10,13 @@ test("the conversation model menu can make its current model the personal defaul
   expect(picker).toContain(
     '<span className="min-w-0 truncate">Set as default</span>',
   );
-  expect(picker).toContain("onClick={() => onSetAsDefault(effectiveModel)}");
+  expect(picker).toContain(
+    "onClick={() => onSetAsDefault(effectiveModel, defaultEffortToSave)}",
+  );
   expect(picker).toContain("disabled={isPreferredDefault}");
 });
 
-test("both conversation model-menu triggers persist and reflect the personal default", async () => {
+test("both conversation model-menu triggers persist and reflect the personal default model and effort", async () => {
   const [composer, infoRow, preferenceHook] = await Promise.all([
     source("./Composer.tsx"),
     source("./ModelMenuRow.tsx"),
@@ -23,14 +25,17 @@ test("both conversation model-menu triggers persist and reflect the personal def
 
   expect(composer).toContain("useDefaultModelPreference()");
   expect(composer).toContain("preferredDefaultModel={preferredDefaultModel}");
+  expect(composer).toContain("preferredDefaultEffort={preferredDefaultEffort}");
   expect(composer).toContain("onSetAsDefault={setPreferredDefaultModel}");
   expect(infoRow).toContain("useDefaultModelPreference()");
   expect(infoRow).toContain("preferredDefaultModel,");
   expect(infoRow).toContain("setAsDefault: setPreferredDefaultModel");
   expect(preferenceHook).toContain("onDefaultModelPrefChanged");
+  expect(preferenceHook).toContain("onDefaultEffortPrefChanged");
   expect(preferenceHook).toContain(
-    "setPreferredDefaultModel: setDefaultModelPref",
+    "setPreferredDefaultModel: setPreferredDefault",
   );
+  expect(preferenceHook).toContain("setDefaultEffortPref(effort)");
 });
 
 test("the new-session model menu can set the personal default", async () => {

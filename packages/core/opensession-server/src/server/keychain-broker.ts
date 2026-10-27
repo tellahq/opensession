@@ -12,6 +12,10 @@
  * outside an allowed prefix. Redirects are not followed. The secret is
  * scrubbed from the response headers and body, and a statusOnly credential
  * returns nothing but the status.
+ *
+ * A workspace credential needs no grant from its owner: the session's first
+ * call mints its implicit workspace grant. Each call to it must say why
+ * (`purpose`), and the audit line records that and who made the call.
  */
 
 import { audit } from "./audit";
@@ -21,7 +25,9 @@ import {
   consumeGrantForBroker,
   ensureKeychainLoaded,
   findCredential,
+  isWorkspaceCredential,
   scrubSecret,
+  workspaceGrantFor,
 } from "./keychain";
 
 export const BROKER_METHODS = [
@@ -35,6 +41,8 @@ export const BROKER_METHODS = [
 export type BrokerMethod = (typeof BROKER_METHODS)[number];
 
 const BROKER_TIMEOUT_MS = 30_000;
+/** A call's purpose as audited. */
+const MAX_PURPOSE_CHARS = 500;
 /** What we read of a response body, and what reaches the model of it. */
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_RETURNED_CHARS = 60_000;
@@ -60,6 +68,11 @@ export interface BrokerCallInput {
   path: string;
   headers?: Record<string, string>;
   body?: string;
+  /** Who is driving the session, for the audit line. */
+  requestedBy?: string;
+  /** Why this call is made. Required for a workspace credential, where no
+   *  owner approved a purpose; recorded with the call either way. */
+  purpose?: string;
   signal?: AbortSignal;
   /** Test seam. */
   fetchImpl?: typeof fetch;
@@ -92,7 +105,23 @@ export async function brokerCall(
   if (target.hostname !== meta.host || target.port || target.username)
     return { error: `path must stay on https://${meta.host}` };
 
-  const grant = activeGrantFor(input.sessionId, meta.id);
+  const purpose = input.purpose?.trim().slice(0, MAX_PURPOSE_CHARS) || "";
+  let grant = activeGrantFor(input.sessionId, meta.id);
+  const workspace = isWorkspaceCredential(meta);
+  if (workspace && !purpose && (!grant || grant.mode === "workspace"))
+    return {
+      error: `${meta.service} is a workspace credential: pass purpose, one sentence saying why you make this call. It is recorded with the call`,
+    };
+  if (!grant && workspace) {
+    const minted = await workspaceGrantFor({
+      credential: meta.id,
+      sessionId: input.sessionId,
+      requestedBy: input.requestedBy || "unknown",
+      purpose,
+    });
+    if ("error" in minted) return minted;
+    grant = minted;
+  }
   if (!grant)
     return {
       error: `this session holds no live grant for ${meta.service}. Ask its owner with request_credential first.`,
@@ -133,6 +162,8 @@ export async function brokerCall(
     host: credential.host,
     path: target.pathname,
     mode: grant.mode,
+    ...(input.requestedBy ? { requested_by: input.requestedBy } : {}),
+    ...(purpose ? { purpose } : {}),
   });
 
   const signal = input.signal

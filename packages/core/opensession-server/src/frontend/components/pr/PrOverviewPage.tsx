@@ -8,6 +8,7 @@ import type {
   SessionWalkthrough,
   WSClientMessage,
 } from "../../lib/types";
+import { DiffStat } from "../DiffStat";
 import { IconArrowRight } from "../icons";
 import { SelectionToSession } from "../SelectionToSession";
 import { UserAvatar } from "../UserAvatar";
@@ -125,10 +126,11 @@ function PhoneIdentity({
           <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
           {pr.isDraft && pr.state === "OPEN" ? "Draft" : STATE_LABEL[pr.state]}
         </span>
-        <span className="tabular-nums">
-          <span className="text-green">+{pr.additions}</span>{" "}
-          <span className="text-red">−{pr.deletions}</span>
-        </span>
+        <DiffStat
+          files={pr.files ?? []}
+          additions={pr.additions}
+          deletions={pr.deletions}
+        />
         {fileCount > 0 && (
           <span className="text-dim tabular-nums">
             {fileCount} {fileCount === 1 ? "file" : "files"}

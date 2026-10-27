@@ -181,18 +181,7 @@ import {
   splitMcpMigrationBoundary,
   type McpRuntime,
 } from "./mcp-runtime";
-import {
-  DIAL_ORACLE_AGENTS,
-  DIAL_ORACLE_FALLBACKS,
-  ORCHESTRATOR_WORKER_AGENTS,
-  dialPreset,
-  piModelLabel,
-  orchestratorPreset,
-  orchestratorWorkerForBridge,
-  sameBridgeDialOracle,
-  toPiModel,
-} from "./models";
-import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
+import { toPiModel } from "./models";
 import {
   expandSkillCommand,
   gatePstackSkills,
@@ -209,7 +198,6 @@ import {
   runRemoteCommand,
   type RemoteWorkspace,
 } from "./remote-workspace";
-import type { ResolvedWorkspaceModelPreset } from "./workspace-model-presets";
 import type { TranscriptEntry } from "./types";
 import type { RunAgentOpts } from "./agent-runner";
 import type { StreamEvent, ImageInput, TurnUsage } from "./run-events";
@@ -314,10 +302,14 @@ export async function runGithubEnv(input: {
 }): Promise<Record<string, string>> {
   const primary = await runPrimaryGithubEnv(input);
   if (!input.readRepos?.length) return primary;
-  return {
-    ...primary,
-    ...(await githubReadReposRunEnv(input.cwd, input.readRepos)),
-  };
+  const { withReadRepoCredentials } = await import("./github-git-credential");
+  return withReadRepoCredentials(
+    {
+      ...primary,
+      ...(await githubReadReposRunEnv(input.cwd, input.readRepos)),
+    },
+    input.readRepos,
+  );
 }
 
 async function runPrimaryGithubEnv(input: {
@@ -499,106 +491,21 @@ export function parsePiModel(
   return { providerID: rest.slice(0, sep), modelID: rest.slice(sep + 1) };
 }
 
-/** Resolve a Pi model or preset to the concrete model that executes its main
- * turn. The stored preset id stays intact so its effort and companion tools
- * remain attached across continuation turns.
- *
- * `storedModel` is the session's stored id (`opts.model`). It matters for
- * workspace ("Custom") presets: agent-runner dispatches those as their
- * concrete LEAD model, so the preset id — and with it an `enginePresetId`'s
- * oracle/worker wiring and the preset's pinned effort — survives only on the
- * stored id. Resolving over both ids is the codex-direct recipe
- * (resolveCodexDirectPreset). */
-export async function resolvePiRoutedModel(
-  model: string,
-  storedModel?: string | null,
-): Promise<PiResolvedModel | null> {
-  const ids = [model, storedModel || ""].filter(Boolean);
-  let ws: ResolvedWorkspaceModelPreset | undefined;
-  for (const id of ids) {
-    ws = await resolveWorkspaceModelPreset(id);
-    if (ws) break;
-  }
-  return resolvePiPresetWiring(model, ws, ids);
+/** Resolve a Pi model id (or a legacy id) to the provider/model pair that
+ * executes the turn. */
+export function resolvePiRoutedModel(model: string): PiResolvedModel | null {
+  const concrete = toPiModel(model);
+  return concrete ? parsePiModel(concrete) : null;
 }
 
-/** Distinguish unavailable preset records from malformed model ids. */
+/** Explain why a model id could not be resolved to a Pi model. */
 export function piModelResolutionError(model: string): string {
-  if (/^pi\/workspace-preset\/[^/]+\/[A-Za-z0-9_-]{1,64}$/.test(model))
-    return `Cannot resolve workspace model preset "${model}". The workspace or preset is missing, or its lead model is unavailable. Check the workspace model settings.`;
-  if (/^pi\/(?:dial|orchestrator)\/[^/]+$/.test(model))
-    return `Cannot resolve built-in model preset "${model}". Choose an available preset from the model picker.`;
-  return `Not a pi model id: "${model}" (expected pi/<provider>/<model>, pi/dial/<preset>, pi/orchestrator/<preset>, or pi/workspace-preset/<workspace>/<preset>)`;
+  return `Not a pi model id: "${model}" (expected pi/<provider>/<model>)`;
 }
 
 export interface PiResolvedModel {
   providerID: string;
   modelID: string;
-  dial?: NonNullable<ReturnType<typeof dialPreset>>;
-  orchestrator?: NonNullable<ReturnType<typeof orchestratorPreset>>;
-  workspacePreset?: ResolvedWorkspaceModelPreset;
-  /** The preset's effort override (workspace preset first — it is what the
-   *  person configured — then the built-in preset's); undefined on a
-   *  non-preset run, where the session's own effort stands. */
-  effort?: string;
-}
-
-/** Pure half of resolvePiRoutedModel (exported for tests): the preset wiring
- * given an already-resolved workspace preset — the workspace-store read is the
- * only impure step, exactly the split claude-direct-policy makes. */
-export function resolvePiPresetWiring(
-  model: string,
-  ws: ResolvedWorkspaceModelPreset | undefined,
-  candidateIds: readonly string[] = [model],
-): PiResolvedModel | null {
-  const candidates = [...candidateIds, ws?.enginePresetId];
-  const dial = candidates
-    .map((id) => dialPreset(id))
-    .find((hit): hit is NonNullable<ReturnType<typeof dialPreset>> => !!hit);
-  const orchestrator = candidates
-    .map((id) => orchestratorPreset(id))
-    .find(
-      (hit): hit is NonNullable<ReturnType<typeof orchestratorPreset>> => !!hit,
-    );
-  const lower = model.toLowerCase();
-  if (lower.startsWith("pi/dial/") && !dial) return null;
-  if (lower.startsWith("pi/orchestrator/") && !orchestrator) return null;
-  if (lower.startsWith("pi/workspace-preset/") && !ws) return null;
-  // A workspace preset id resolves to its (already pi-routed) lead; everything
-  // else routes through toPiModel as before.
-  const concrete =
-    ws && lower.startsWith("pi/workspace-preset/")
-      ? ws.model
-      : toPiModel(model);
-  const parsed = concrete ? parsePiModel(concrete) : null;
-  if (!parsed) return null;
-  const effort = ws?.effort ?? dial?.effort ?? orchestrator?.effort;
-  return {
-    ...parsed,
-    ...(dial ? { dial } : {}),
-    ...(orchestrator ? { orchestrator } : {}),
-    ...(ws ? { workspacePreset: ws } : {}),
-    ...(effort ? { effort } : {}),
-  };
-}
-
-/** @deprecated Dial was generalized to routed presets. Keep the focused name
- * for callers/tests that only exercise the Dial family. */
-export const resolvePiDialModel = resolvePiRoutedModel;
-
-/** The oracle agent a pi dial run actually consults: the preset's oracle when
- * its account family matches the run's provider, else the same-bridge
- * substitute — the rule every other engine applies (sameBridgeDialOracle).
- * Pi's oracle executes out-of-band through oneShot, so a cross-family
- * oracle would technically work; the substitution is account-pool POLICY
- * parity — a dial run must not consult (and bill) a second account family the
- * same preset would not consult on any other engine. Third-party providers
- * (wafer, cerebras) keep the preset's own choice, also like the others. */
-export function piDialOracleAgent(
-  oracleAgent: string,
-  providerID: string,
-): string {
-  return sameBridgeDialOracle(oracleAgent, providerID);
 }
 
 /**
@@ -687,107 +594,6 @@ export function buildPiThirdPartyProviderPlan(input: {
           ? { baseUrl: ours.baseUrl }
           : {}),
       ...(models.length ? { models } : {}),
-    },
-  };
-}
-
-const ORACLE_SYSTEM =
-  "You are a read-only senior engineering advisor. Give a concise, concrete second opinion. " +
-  "Do not claim to inspect files or run tools. State assumptions, tradeoffs, and recommended next steps.";
-
-/** Which one-shot failures earn a hop to the next oracle on the ladder.
- *  An availability failure (dry pool, disabled subscription, timeout, a
- *  provider blip) is exactly what a peer on another provider can answer
- *  through. A malformed prompt or an unresolvable model id is not: the peer
- *  would fail the same way, and the caller would wait another two minutes to
- *  learn it. An empty answer with no stated reason gets one hop, since a
- *  silent empty completion is more often the pool than the prompt. */
-const ORACLE_FALLOVER_SHAPES =
-  /usage[-_ ]?limit|weekly limit|no usable|exhausted|sidelined|rate[-_ ]?limit|quota|subscription access|disabled Claude|timed out|overloaded|too many requests|\b(429|500|502|503|529)\b|ECONNREFUSED|ECONNRESET|fetch failed|socket hang up/i;
-
-function oracleShouldFallOver(error: string | null): boolean {
-  if (!error) return true;
-  return ORACLE_FALLOVER_SHAPES.test(error);
-}
-
-function makePiDialOracleTool(
-  oracleAgent: string,
-  user?: string,
-): ToolDefinition<any, any, any> {
-  const oracle = DIAL_ORACLE_AGENTS[oracleAgent];
-  return {
-    name: "oracle",
-    label: "Oracle",
-    description:
-      `Consult ${oracle?.label || oracleAgent} for a read-only senior-engineering second opinion. ` +
-      "Use it for hard plans, significant reviews, architecture tradeoffs, or stubborn debugging, not routine searches or edits.",
-    parameters: {
-      type: "object",
-      properties: {
-        prompt: {
-          type: "string",
-          description:
-            "Precise question with the relevant context, file paths, constraints, and options under consideration",
-        },
-      },
-      required: ["prompt"],
-    } as any,
-    async execute(_toolCallId, params, signal) {
-      const prompt = String(
-        (params as { prompt?: unknown })?.prompt ?? "",
-      ).trim();
-      if (!prompt) throw new Error("oracle requires a prompt");
-      if (signal?.aborted) throw new Error("Oracle request aborted");
-      if (!oracle)
-        throw new Error(`Dial oracle "${oracleAgent}" is not configured`);
-      // Dynamic import avoids a module cycle: one-shot.ts drives runPi, while
-      // Pi's Dial oracle delegates its out-of-band consultation back to it.
-      const { oneShotDetailed } = await import("./one-shot");
-      // Walk this oracle's cross-provider ladder, the same courtesy
-      // interactiveFallbackModel does for a full session. A dry pool is a
-      // provider-wide condition, so the hop has to change bridges to be worth
-      // taking (DIAL_ORACLE_FALLBACKS).
-      const ladder = [
-        oracleAgent,
-        ...(DIAL_ORACLE_FALLBACKS[oracleAgent] || []),
-      ];
-      const failures: string[] = [];
-      for (let i = 0; i < ladder.length; i++) {
-        const name = ladder[i]!;
-        const agent = DIAL_ORACLE_AGENTS[name];
-        if (!agent) continue;
-        if (signal?.aborted) throw new Error("Oracle request aborted");
-        const { text, error } = await oneShotDetailed(prompt, {
-          model: agent.model,
-          effort: agent.variant,
-          user,
-          label: i === 0 ? "pi-dial-oracle" : `pi-dial-oracle-fallback`,
-          system: ORACLE_SYSTEM,
-        });
-        if (signal?.aborted) throw new Error("Oracle request aborted");
-        if (text) {
-          // Say who actually answered. A second opinion whose author is not
-          // the one the preset named is still useful, but the reader has to
-          // know which model's judgement they are weighing.
-          const note =
-            i === 0
-              ? ""
-              : `[${oracle.label} was unavailable (${failures[0]}). Answered by ${agent.label}.]\n\n`;
-          return {
-            content: [{ type: "text", text: note + text }],
-            details: undefined,
-          };
-        }
-        failures.push(error || "no answer");
-        if (!oracleShouldFallOver(error)) break;
-      }
-      // The reason is the useful part: "every Claude account is usage-limited
-      // until Friday" tells the caller to stop asking, where a bare
-      // "unavailable" sends whoever reads it to journalctl.
-      throw new Error(
-        `The Dial oracle was unavailable: ${failures.join("; ") || "no answer"}. ` +
-          "Continue using your own judgment.",
-      );
     },
   };
 }
@@ -1300,12 +1106,14 @@ const BLOCKED_PATH_ROOTS = ["/proc", "/sys", "/dev"];
  * Realpath-based workspace containment: resolve `rawPath`, symlink-resolve it
  * through its nearest EXISTING ancestor (so not-yet-created write targets are
  * checked too — a symlinked parent can't smuggle them out), and require the
- * result to sit under `realRoot`. Throws with a model-facing message on
+ * result to sit under `realRoot` or one of `extraRealRoots` (the session's
+ * own scratch dir, its TMPDIR). Throws with a model-facing message on
  * escape. Returns the fully-resolved path it validated.
  */
 export function assertContainedPiPath(
   rawPath: string,
   realRoot: string,
+  extraRealRoots: readonly string[] = [],
 ): string {
   const resolved = resolve(rawPath);
   let probe = resolved;
@@ -1331,10 +1139,15 @@ export function assertContainedPiPath(
       throw new Error(`Path is not accessible to this session: ${rawPath}`);
     }
   }
-  if (full !== realRoot && !full.startsWith(realRoot + sep)) {
+  const under = (root: string) => full === root || full.startsWith(root + sep);
+  if (!under(realRoot) && !extraRealRoots.some(under)) {
     throw new Error(
       `Path is outside the session workspace (${rawPath}). ` +
-        "Local file tools are contained to the session's working directory.",
+        "Local file tools are contained to the session's working directory" +
+        (extraRealRoots.length
+          ? ` and its temp dir ($TMPDIR, ${extraRealRoots[0]}). ` +
+            "Put temporary files there instead of /tmp."
+          : "."),
     );
   }
   return full;
@@ -1383,14 +1196,20 @@ function sniffImageMime(path: string): string | undefined {
  * no child, no env, `followSymlinks: false` so a symlinked dir can't be
  * traversed out of. Exported for the containment unit tests.
  */
-export function makeGuardedToolOps(cwd: string) {
-  let realRoot: string;
-  try {
-    realRoot = realpathSync(cwd);
-  } catch {
-    realRoot = resolve(cwd);
-  }
-  const guard = (p: string) => assertContainedPiPath(p, realRoot);
+export function makeGuardedToolOps(cwd: string, scratchDir?: string) {
+  const realOrResolved = (p: string) => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return resolve(p);
+    }
+  };
+  const realRoot = realOrResolved(cwd);
+  // The session's own scratch dir is its TMPDIR (bashEnv), and attachments
+  // are staged there, so the file tools must reach it too. Never a shared
+  // root: /tmp itself stays out, it holds every other session's files.
+  const extraRoots = scratchDir ? [realOrResolved(scratchDir)] : [];
+  const guard = (p: string) => assertContainedPiPath(p, realRoot, extraRoots);
   const exists = async (p: string) => {
     guard(p);
     try {
@@ -2184,12 +2003,7 @@ async function* runPiAttempt(
     yield { type: "error", content: gateReason, provider: PROVIDER, model };
     return;
   }
-  // The routed id plus the session's stored id: a workspace preset's wiring
-  // (enginePresetId oracle, pinned effort) survives only on the stored one.
-  const resolved = await resolvePiRoutedModel(model, opts.model);
-  const parsed = resolved
-    ? { providerID: resolved.providerID, modelID: resolved.modelID }
-    : null;
+  const parsed = resolvePiRoutedModel(model);
   if (!parsed) {
     yield {
       type: "error",
@@ -2199,10 +2013,6 @@ async function* runPiAttempt(
     };
     return;
   }
-  // The oracle this run's dial preset actually consults (same-bridge rule).
-  const dialOracleAgent = resolved?.dial
-    ? piDialOracleAgent(resolved.dial.oracleAgent, parsed.providerID)
-    : undefined;
   const configuredProvider = modelProviders()[parsed.providerID];
   if (
     parsed.providerID !== "anthropic" &&
@@ -2769,7 +2579,7 @@ async function* runPiAttempt(
     // separately maintained enabled-name list would be a containment escape.
     const guardedOps = remote
       ? makeRemoteToolOps(remote, shippedSkillRoots())
-      : makeGuardedToolOps(cwd);
+      : makeGuardedToolOps(cwd, opts.scratchDir);
     const commandEnv = remote
       ? remoteCommandEnv(
           bashEnv,
@@ -2782,7 +2592,6 @@ async function* runPiAttempt(
     const baseCustomTools: ToolDefinition<any, any, any>[] = [
       ...mcpBridge.discoveryTools,
       ...mcpBridge.directTools,
-      ...(dialOracleAgent ? [makePiDialOracleTool(dialOracleAgent, user)] : []),
     ];
     for (const name of localTools) {
       switch (name) {
@@ -2898,48 +2707,6 @@ async function* runPiAttempt(
       inProcessMcp: opts.inProcessMcp,
       sandboxed: !!remote || process.env.OPENSESSION_SANDBOX === "1",
       hasSession: !!journal?.osSessionId,
-      dialOracle:
-        resolved?.dial && dialOracleAgent
-          ? {
-              agent: "oracle",
-              // A workspace preset that restated a built-in tier keeps its
-              // own label — that is the name the person picked.
-              presetLabel:
-                resolved.workspacePreset?.label || resolved.dial.label,
-              mainLabel: parsed.modelID,
-              oracleLabel:
-                DIAL_ORACLE_AGENTS[dialOracleAgent]?.label || dialOracleAgent,
-              tool: true,
-            }
-          : undefined,
-      // Named only when the run actually carries the delegation surface
-      // (opensession-sessions rides inProcessMcp on interactive runs) —
-      // instructions naming a tool the run does not have read as a broken
-      // tool (the codex-direct rule). An orchestrator preset without it
-      // still keeps its effort override.
-      orchestrator:
-        resolved?.orchestrator && opts.inProcessMcp?.["opensession-sessions"]
-          ? {
-              presetLabel:
-                resolved.workspacePreset?.label || resolved.orchestrator.label,
-              mainLabel: piModelLabel(resolved.orchestrator.model),
-              workers: resolved.orchestrator.workerAgents.flatMap((name) => {
-                const worker = orchestratorWorkerForBridge(
-                  name,
-                  parsed.providerID,
-                );
-                return worker
-                  ? [
-                      {
-                        role: ORCHESTRATOR_WORKER_AGENTS[name]?.label || name,
-                        model: toPiModel(worker.model) || worker.model,
-                        modelLabel: worker.label,
-                      },
-                    ]
-                  : [];
-              }),
-            }
-          : undefined,
     });
 
     // The resolution of the `tools` scope runOnModel already logged: what
@@ -2970,7 +2737,6 @@ async function* runPiAttempt(
         // guarded custom definition (see the enabled-name list above).
         local: [...localTools].sort(),
         strip: Object.keys(policy.disables).sort(),
-        ...(dialOracleAgent ? { oracleTool: dialOracleAgent } : {}),
       },
     });
     await logStandingContext({
@@ -3144,9 +2910,7 @@ async function* runPiAttempt(
       }
     }
 
-    // Preset effort override (workspace preset's pin first, then the built-in
-    // preset's) falls back to the session's own effort.
-    const selectedEffort = resolved?.effort ?? opts.effort;
+    const selectedEffort = opts.effort;
     // "none" means no reasoning at all. Left unset, Pi falls back to its
     // default thinking level, which costs a small one-shot tens of seconds.
     const thinkingLevel =

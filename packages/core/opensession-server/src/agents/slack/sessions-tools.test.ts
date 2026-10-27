@@ -1036,3 +1036,117 @@ describe("suggest_task", () => {
     }
   });
 });
+
+describe("wait_for availability", () => {
+  async function listed(input: Parameters<typeof createSessionsMcpServer>[0]) {
+    const server = createSessionsMcpServer(input);
+    const client = new Client({
+      name: "sessions-tools-test",
+      version: "1.0.0",
+    });
+    const [clientTransport, serverTransport] =
+      InMemoryTransport.createLinkedPair();
+    await server.instance.connect(serverTransport);
+    await client.connect(clientTransport);
+    try {
+      return (await client.listTools()).tools;
+    } finally {
+      await client.close();
+      await server.instance.close();
+    }
+  }
+  const kindsOf = (tools: Awaited<ReturnType<typeof listed>>) =>
+    (
+      tools.find((t) => t.name === "wait_for")?.inputSchema.properties as
+        | { kind?: { enum?: string[] } }
+        | undefined
+    )?.kind?.enum;
+
+  // Every shape that can spawn a child can wait on it: the run instructions
+  // tell any run carrying opensession-sessions to use wait_for.
+  it.each([
+    [
+      "a person prompting an automation-owned session",
+      { createdBy: "Michiel", isAdmin: false, humanResume: true },
+    ],
+    [
+      "a self-improving automation",
+      {
+        createdBy: "Editor Agent review (automation)",
+        isAdmin: false,
+        automationSelf: true,
+      },
+    ],
+  ])("is offered to %s, without the timer kind", async (_label, shape) => {
+    const tools = await listed({ ...shape, currentSessionId: "bks-parent" });
+    const names = tools.map((t) => t.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "spawn_task",
+        "wait_for",
+        "wait_status",
+        "cancel_wait",
+      ]),
+    );
+    expect(kindsOf(tools)).toEqual([
+      "pr_checks",
+      "workflow_run",
+      "session_turn",
+    ]);
+    // The control tools stay with the trusted user.
+    expect(names).not.toContain("send_to_session");
+    expect(names).not.toContain("create_session");
+  });
+
+  it("keeps the waits and task_status, but not spawning, on the wake of a person's wait", async () => {
+    const tools = await listed({
+      createdBy: "Michiel",
+      isAdmin: false,
+      waitContinuation: true,
+      currentSessionId: "bks-parent",
+    });
+    const names = tools.map((t) => t.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "wait_for",
+        "wait_status",
+        "cancel_wait",
+        "task_status",
+      ]),
+    );
+    expect(kindsOf(tools)).toEqual([
+      "pr_checks",
+      "workflow_run",
+      "session_turn",
+    ]);
+    for (const withheld of [
+      "spawn_task",
+      "cancel_task",
+      "send_to_session",
+      "create_session",
+    ])
+      expect(names).not.toContain(withheld);
+  });
+
+  it("keeps the timer kind for the trusted user", async () => {
+    const tools = await listed({
+      createdBy: "Michiel",
+      isAdmin: true,
+      currentSessionId: "bks-parent",
+    });
+    expect(kindsOf(tools)).toEqual([
+      "timer",
+      "pr_checks",
+      "workflow_run",
+      "session_turn",
+    ]);
+  });
+
+  it("is not offered to a read-only shape that cannot spawn", async () => {
+    const names = (await listed({ createdBy: "Reader", isAdmin: false })).map(
+      (t) => t.name,
+    );
+    expect(names).not.toContain("wait_for");
+    expect(names).not.toContain("spawn_task");
+  });
+});

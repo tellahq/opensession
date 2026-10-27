@@ -48,6 +48,9 @@ export interface SandboxRepoOverride {
    *  Beats the workspace and personal defaults; an explicit per-session
    *  choice still wins. */
   sessionDefault?: RunnableSandboxProviderId | "none";
+  /** The GPU a new session gets when it starts on this repo's Modal
+   *  default (`sessionDefault: "modal"`). */
+  sessionGpu?: SandboxGpu;
   /** Where this repo's Portals run for a session that lives on this machine:
    *  a Sandbox provisioned on demand for the dev server alone
    *  (portal-sandbox.ts). Absent = the Portal runs beside the session. */
@@ -56,7 +59,36 @@ export interface SandboxRepoOverride {
    *  The compile cache can hold the app's dev secrets, which is why only the
    *  operator can turn it on. */
   prebuildPortal?: boolean;
+  /** A setup script kept in Workspace settings instead of the repository.
+   *  Runs from the checkout right before `.agents/setup`, and is part of
+   *  the project snapshot's inputs. */
+  preSetupScript?: string;
 }
+
+/** Longest lifecycle script the settings accept. */
+export const MAX_SETTINGS_SCRIPT_BYTES = 64 * 1024;
+
+/** The Sandbox agent (agent-driver.ts): which providers' Sandboxes run it. */
+export interface SandboxAgentConfig {
+  providers?: string[];
+}
+
+/** Providers whose Sandboxes run the agent unless sandbox.json says
+ *  otherwise. Boat first: it is the provider the agent was certified on. */
+export const DEFAULT_SANDBOX_AGENT_PROVIDERS: readonly string[] = [
+  "box",
+  "usecomputer",
+];
+
+/** When an awake Sandbox goes to sleep: once the agent has done no work for
+ *  `agentMinutes` AND nobody has interacted with it for `humanMinutes`. */
+export interface SandboxIdleConfig {
+  agentMinutes?: number;
+  humanMinutes?: number;
+}
+
+export const DEFAULT_IDLE_AGENT_MINUTES = 5;
+export const DEFAULT_IDLE_HUMAN_MINUTES = 20;
 
 /** How remote providers authenticate `git clone` inside the sandbox (they
  *  can't mount host creds). "none" = public clone; "https-token" injects the
@@ -158,6 +190,13 @@ export interface SandboxConfig {
   /** Warm-on-typing prewarm pool. Absent = defaults, with `enabled` true
    *  whenever a provider connection is configured. */
   prewarm?: Partial<SandboxPrewarmConfig>;
+  /** The Sandbox agent's providers (absent = DEFAULT_SANDBOX_AGENT_PROVIDERS). */
+  agent?: SandboxAgentConfig;
+  /** The two idle timers (absent = 5 and 20 minutes). */
+  idle?: SandboxIdleConfig;
+  /** Runs in every Linux Sandbox right before `.agents/resume`, whatever the
+   *  repository: a fleet-wide fix that repositories cannot deliver. */
+  workspaceResumeScript?: string;
 }
 
 const PROVIDER_IDS = new Set<string>([
@@ -166,6 +205,7 @@ const PROVIDER_IDS = new Set<string>([
   "box",
   "tart",
   "usecomputer",
+  "modal",
 ]);
 
 function asProviderId(v: unknown): SandboxProviderId | undefined {
@@ -195,16 +235,27 @@ export function sandboxConfig(): SandboxConfig {
               : isRunnableSandboxProvider(o?.sessionDefault)
                 ? o.sessionDefault
                 : undefined;
+          const sessionGpu =
+            sessionDefault === "modal" ? sandboxGpu(o?.sessionGpu) : undefined;
           const portalSandbox = isRunnableSandboxProvider(o?.portalSandbox)
             ? o.portalSandbox
             : undefined;
           const prebuildPortal = o?.prebuildPortal === true;
-          if (provider || sessionDefault || portalSandbox || prebuildPortal)
+          const preSetupScript = settingsScript(o?.preSetupScript);
+          if (
+            provider ||
+            sessionDefault ||
+            portalSandbox ||
+            prebuildPortal ||
+            preSetupScript
+          )
             perRepo[repoId] = {
               ...(provider ? { provider } : {}),
               ...(sessionDefault ? { sessionDefault } : {}),
+              ...(sessionGpu ? { sessionGpu } : {}),
               ...(portalSandbox ? { portalSandbox } : {}),
               ...(prebuildPortal ? { prebuildPortal } : {}),
+              ...(preSetupScript ? { preSetupScript } : {}),
             };
         }
       }
@@ -300,10 +351,120 @@ export function sandboxConfig(): SandboxConfig {
                   : undefined,
               }
             : undefined,
+        agent:
+          raw?.agent && typeof raw.agent === "object"
+            ? {
+                providers: Array.isArray(raw.agent.providers)
+                  ? raw.agent.providers.filter(
+                      (value: unknown): value is string =>
+                        typeof value === "string",
+                    )
+                  : undefined,
+              }
+            : undefined,
+        idle:
+          raw?.idle && typeof raw.idle === "object"
+            ? {
+                agentMinutes: positiveMinutes(raw.idle.agentMinutes),
+                humanMinutes: positiveMinutes(raw.idle.humanMinutes),
+              }
+            : undefined,
+        workspaceResumeScript: settingsScript(raw?.workspaceResumeScript),
       };
     }
   } catch {}
   return { provider: "local" };
+}
+
+function positiveMinutes(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : undefined;
+}
+
+/** A stored lifecycle script, or undefined when blank or oversized. */
+function settingsScript(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  return Buffer.byteLength(value, "utf8") <= MAX_SETTINGS_SCRIPT_BYTES
+    ? value
+    : undefined;
+}
+
+/** Whether `provider`'s Sandboxes run the Sandbox agent. The environment's
+ *  `OPENSESSION_SANDBOX_AGENT=0` turns it off everywhere. */
+export function sandboxAgentEnabled(provider: string): boolean {
+  if (process.env.OPENSESSION_SANDBOX_AGENT === "0") return false;
+  const providers =
+    sandboxConfig().agent?.providers ?? DEFAULT_SANDBOX_AGENT_PROVIDERS;
+  return providers.includes(provider);
+}
+
+/** The two idle timers, in milliseconds. */
+export function sandboxIdlePolicy(): { agentMs: number; humanMs: number } {
+  const idle = sandboxConfig().idle;
+  return {
+    agentMs: (idle?.agentMinutes ?? DEFAULT_IDLE_AGENT_MINUTES) * 60_000,
+    humanMs: (idle?.humanMinutes ?? DEFAULT_IDLE_HUMAN_MINUTES) * 60_000,
+  };
+}
+
+/** The project's settings-held pre-setup script, if any. */
+export function repoPreSetupScript(repoId: string | undefined): string | null {
+  if (!repoId) return null;
+  return sandboxConfig().perRepo?.[repoId]?.preSetupScript ?? null;
+}
+
+/** The workspace-wide resume script, if any. */
+export function workspaceResumeScript(): string | null {
+  return sandboxConfig().workspaceResumeScript ?? null;
+}
+
+function validatedSettingsScript(value: string | null): string | null {
+  if (value === null || !value.trim()) return null;
+  if (Buffer.byteLength(value, "utf8") > MAX_SETTINGS_SCRIPT_BYTES)
+    throw new Error(
+      `Scripts are limited to ${MAX_SETTINGS_SCRIPT_BYTES / 1024} KB`,
+    );
+  return value;
+}
+
+/** Store (or clear, with null or blank) a project's pre-setup script. */
+export function setRepoPreSetupScript(
+  repoId: string,
+  value: string | null,
+): string | null {
+  const script = validatedSettingsScript(value);
+  if (!script && !existsSync(configPath())) return null;
+  updateSandboxConfigFile((raw) => {
+    const perRepo =
+      raw.perRepo &&
+      typeof raw.perRepo === "object" &&
+      !Array.isArray(raw.perRepo)
+        ? (raw.perRepo as Record<string, Record<string, unknown>>)
+        : {};
+    const entry =
+      perRepo[repoId] && typeof perRepo[repoId] === "object"
+        ? { ...perRepo[repoId] }
+        : {};
+    if (script) entry.preSetupScript = script;
+    else delete entry.preSetupScript;
+    if (Object.keys(entry).length) perRepo[repoId] = entry;
+    else delete perRepo[repoId];
+    if (Object.keys(perRepo).length) raw.perRepo = perRepo;
+    else delete raw.perRepo;
+  });
+  return script;
+}
+
+/** Store (or clear) the workspace-wide resume script. */
+export function setWorkspaceResumeScript(value: string | null): string | null {
+  const script = validatedSettingsScript(value);
+  if (!script && !existsSync(configPath())) return null;
+  updateSandboxConfigFile((raw) => {
+    if (script) raw.workspaceResumeScript = script;
+    else delete raw.workspaceResumeScript;
+  });
+  return script;
 }
 
 /**
@@ -380,16 +541,50 @@ export const RUNNABLE_SANDBOX_PROVIDERS = [
   "box",
   "tart",
   "usecomputer",
+  "modal",
 ] as const;
 export type RunnableSandboxProviderId =
   (typeof RUNNABLE_SANDBOX_PROVIDERS)[number];
+
+/** The GPUs a Sandbox can carry, and the one provider that offers them. */
+export const SANDBOX_GPUS = ["T4", "L4"] as const;
+export type SandboxGpu = (typeof SANDBOX_GPUS)[number];
+
+export function sandboxGpu(value: unknown): SandboxGpu | undefined {
+  if (typeof value !== "string") return undefined;
+  const upper = value.trim().toUpperCase();
+  return (SANDBOX_GPUS as readonly string[]).includes(upper)
+    ? (upper as SandboxGpu)
+    : undefined;
+}
+
+/** Check a create request's GPU against the Sandbox it chose: absent is
+ *  fine anywhere; a GPU needs a Modal Sandbox and a known GPU name. */
+export function resolveRequestedSandboxGpu(
+  value: unknown,
+  provider: string | null | undefined,
+): { ok: true; gpu?: SandboxGpu } | { ok: false; error: string } {
+  if (value === undefined || value === null || value === "")
+    return { ok: true };
+  const gpu = sandboxGpu(value);
+  if (!gpu)
+    return {
+      ok: false,
+      error: `Unknown GPU "${String(value)}". Choose ${SANDBOX_GPUS.join(" or ")}.`,
+    };
+  if (provider !== "modal")
+    return {
+      ok: false,
+      error: "A GPU needs a Modal Sandbox: choose Modal as the Machine.",
+    };
+  return { ok: true, gpu };
+}
 
 /** Provider ids Open Session once shipped. A persisted session may still name
  *  one; it can no longer be selected, woken, or recreated. */
 export const RETIRED_SANDBOX_PROVIDERS = new Set<string>([
   "docker",
   "e2b",
-  "modal",
   "microvm",
   "lambda-microvm",
 ]);
@@ -451,6 +646,11 @@ export const SANDBOX_PROVIDER_CERTIFICATIONS: Record<
     warmRestorePassedAt: "2026-09-21",
     note: "macOS VM on a reserved use.computer Mac: live qualification, remote run, snapshot sleep/wake, desktop, and terminal passed",
   }),
+  modal: certification({
+    behavioralPassedAt: "2026-10-26",
+    warmRestorePassedAt: "2026-10-26",
+    note: "Linux container with an optional T4 or L4 GPU: live qualification, exec and upload, Vulkan and CUDA on both GPUs, and filesystem-image sleep/wake passed",
+  }),
 };
 
 export function sandboxProviderCertified(
@@ -508,7 +708,12 @@ export function setRepoSandboxDefault(
   repoId: string,
   value: string | null,
 ): RunnableSandboxProviderId | "none" | null {
-  const normalized = value?.trim().toLowerCase() || "workspace";
+  // "modal:T4": Modal with a GPU, as the Machine menu names it.
+  const [choice = "", gpuName] = (value?.trim() || "").split(":");
+  const normalized = choice.toLowerCase() || "workspace";
+  const gpu = gpuName ? sandboxGpu(gpuName) : undefined;
+  if (gpuName && (!gpu || normalized !== "modal"))
+    throw new Error(`Unknown sandbox choice "${value}"`);
   if (
     normalized !== "workspace" &&
     normalized !== "none" &&
@@ -539,6 +744,8 @@ export function setRepoSandboxDefault(
         : {};
     if (normalized === "workspace") delete entry.sessionDefault;
     else entry.sessionDefault = normalized;
+    if (gpu) entry.sessionGpu = gpu;
+    else delete entry.sessionGpu;
     if (Object.keys(entry).length) perRepo[repoId] = entry;
     else delete perRepo[repoId];
     if (Object.keys(perRepo).length) raw.perRepo = perRepo;
@@ -610,6 +817,15 @@ export function repoSandboxDefault(
 ): RunnableSandboxProviderId | "none" | null {
   if (!repoId) return null;
   return sandboxConfig().perRepo?.[repoId]?.sessionDefault ?? null;
+}
+
+/** The GPU new sessions on `repoId` get from its Modal default, if any. */
+export function repoSandboxGpu(
+  repoId: string | undefined,
+): SandboxGpu | undefined {
+  if (!repoId) return undefined;
+  const entry = sandboxConfig().perRepo?.[repoId];
+  return entry?.sessionDefault === "modal" ? entry.sessionGpu : undefined;
 }
 
 /** Keep one prepared Sandbox waiting for `repoId` on `provider`, or stop
@@ -863,7 +1079,7 @@ function sandboxProviderSelectionError(
     }
     return `Sandbox provider "${id}" is not currently available.`;
   }
-  return `Sandbox provider "${id}" is not configured: connect ${id === "box" ? "Boat" : id === "tart" ? "a Mac VM host" : id === "usecomputer" ? "use.computer" : "Daytona"} in Workspace > Sandboxes.`;
+  return `Sandbox provider "${id}" is not configured: connect ${id === "box" ? "Boat" : id === "tart" ? "a Mac VM host" : id === "usecomputer" ? "use.computer" : id === "modal" ? "Modal" : "Daytona"} in Workspace > Sandboxes.`;
 }
 
 /** Whether the provider has enabled connection configuration. */

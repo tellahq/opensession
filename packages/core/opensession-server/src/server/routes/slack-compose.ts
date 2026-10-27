@@ -25,6 +25,12 @@ import {
   resolveSlackChannel,
 } from "../../agents/slack/channel-directory";
 import type { RouteContext } from "./context";
+import { findSessionAsync } from "../session-cache";
+import {
+  SLACK_THREAD_TARGET,
+  slackThreadReceipt,
+  slackThreadTarget,
+} from "../slack-thread-target";
 import { slackMessageLength } from "../../shared/slack-mentions";
 
 /** The channel to post to: any the caller can reach, with the configured
@@ -115,10 +121,18 @@ export async function handleSlackComposeRoutes(
   if (!match || !["GET", "POST", "PATCH", "DELETE"].includes(ctx.req.method))
     return;
   const sessionId = decodeURIComponent(match[1]);
-  if (ctx.req.method === "GET")
-    return Response.json(
-      await slackChannelsPayload(ctx, { everyChannel: true }),
+  if (ctx.req.method === "GET") {
+    const thread = await slackThreadTarget(
+      await findSessionAsync(sessionId),
+      configuredSlackChannels(),
     );
+    return Response.json(
+      await slackChannelsPayload(ctx, {
+        everyChannel: true,
+        ...(thread ? { thread } : {}),
+      }),
+    );
+  }
   const body = await ctx.req.json().catch(() => ({}));
   const caller = ctx.authUser?.login || ctx.authUser?.name;
   if (!caller) {
@@ -188,10 +202,20 @@ export async function handleSlackComposeRoutes(
   // message itself always goes out as the bot.
   const { mcpUserGrantToken } = await import("../mcp-oauth");
   const slackToken = mcpUserGrantToken("slack", caller);
-  const channel = await targetChannel(
-    body?.channel,
-    slackToken ? { caller, token: slackToken } : undefined,
-  );
+  // The thread a Slack-started session came from posts as a reply there.
+  const thread =
+    body?.channel === SLACK_THREAD_TARGET
+      ? await slackThreadTarget(
+          await findSessionAsync(sessionId),
+          configuredSlackChannels(),
+        )
+      : undefined;
+  const channel = thread
+    ? thread.channel
+    : await targetChannel(
+        body?.channel,
+        slackToken ? { caller, token: slackToken } : undefined,
+      );
   if (!channel)
     return Response.json(
       { error: "Choose a Slack channel you can post to" },
@@ -231,6 +255,7 @@ export async function handleSlackComposeRoutes(
         altText: "Image attached to an Open Session update",
         sender: caller,
         sessionUrl: sessionLink(sessionId),
+        ...(thread ? { threadTs: thread.threadTs } : {}),
       },
     );
     if (ts)
@@ -239,8 +264,9 @@ export async function handleSlackComposeRoutes(
         ts,
         by: caller,
       });
-    sendPendingSlackComposer(sessionId, requestId, channel, permalink, ts);
-    return Response.json({ status: "sent", channel, permalink, ts });
+    const sentTo = thread ? slackThreadReceipt(thread) : channel;
+    sendPendingSlackComposer(sessionId, requestId, sentTo, permalink, ts);
+    return Response.json({ status: "sent", channel: sentTo, permalink, ts });
   } catch (error: any) {
     restorePendingSlackComposer(sessionId, requestId);
     return Response.json(

@@ -80,6 +80,7 @@ import type { WorkflowAutomationSessionPolicy } from "../shared/workflow-types";
 import { createTurnMcpServer } from "../agents/slack/turn-tools";
 import { createAuditMcpServer } from "./audit-mcp";
 import { createChartsMcpServer } from "./charts-mcp";
+import { createWebMcpServer } from "./web-mcp";
 import { createHealthMcpServer } from "./health-mcp";
 import { papercutsEnabledForRepo } from "./papercuts";
 import {
@@ -180,6 +181,18 @@ export interface AutomationRun {
   durationMs?: number;
 }
 
+/**
+ * What a run's workspace allows. "ask" reads the repo's pinned checkout with a
+ * read-only shell; "code" gets an isolated worktree to edit, commit and open
+ * PRs; "scratch" gets an empty per-run directory with a full shell (curl,
+ * scripts, downloads) and no repository checkout.
+ */
+export type AutomationMode = "ask" | "code" | "scratch";
+
+export function automationMode(value: unknown): AutomationMode {
+  return value === "code" || value === "scratch" ? value : "ask";
+}
+
 export interface Automation {
   id: string;
   name: string;
@@ -193,12 +206,13 @@ export interface Automation {
    * one-time scheduled prompt (see schedule_once in admin-tools.ts).
    */
   runOnceAt?: string;
-  mode: "ask" | "code";
+  mode: AutomationMode;
   /**
    * Registered repo id (see worktree.ts REPOS) this automation works against.
    * Omitted = the instance default repo. Ask mode reads the repo's
    * main checkout; code mode gets an isolated worktree — for shared-checkout
    * repos (opensession) explicitly isolated, never the live checkout.
+   * Scratch mode gets no checkout at all: an empty per-run directory.
    */
   repo?: string;
   /**
@@ -837,7 +851,7 @@ const AUTOMATION_FIELDS: Record<string, AutomationFieldValidator> = {
     }
     return schedule;
   },
-  mode: (v) => (v === "code" ? "code" : "ask"),
+  mode: (v) => automationMode(v),
   // Only an explicit false opts out; every existing caller omits this and
   // keeps the old always-enabled behaviour.
   enabled: (v) => v !== false,
@@ -980,7 +994,7 @@ export async function createAutomation(input: {
   schedule: string;
   /** One-off ISO8601 instant; when set, `schedule` is ignored (forced to ""). */
   runOnceAt?: string;
-  mode: "ask" | "code";
+  mode: AutomationMode;
   createdBy: string;
   /** Defaults to true. Seeded automations pass false so an operator reads the
    * prompt before it runs — see recipes/README.md. */
@@ -1059,7 +1073,7 @@ export async function ensureConfiguredAutomations(): Promise<void> {
       prompt,
       eventKey: eventKey || undefined,
       schedule: typeof value.schedule === "string" ? value.schedule : "",
-      mode: value.mode === "code" ? "code" : "ask",
+      mode: automationMode(value.mode),
       enabled: value.enabled !== false,
       createdBy:
         typeof value.createdBy === "string"
@@ -1250,10 +1264,16 @@ export async function selfImproveMcpForSession(
  * recovery after the owning server process has unwound. Keep this list at the
  * automation-safe bar: no customer data, identity mutation, or run control. */
 export function automationBaselineMcpServers(
-  a: Pick<Automation, "id" | "name">,
+  a: Pick<Automation, "id" | "name" | "mcpServers">,
   sessionId: string,
 ): Record<string, unknown> {
   return {
+    // Opt-in by naming it in the MCP allowlist. Read-only web access whose
+    // address checks refuse private, loopback and metadata hosts on every
+    // redirect hop (web-fetch.ts).
+    ...(a.mcpServers?.includes("opensession-web")
+      ? { "opensession-web": createWebMcpServer({ sessionId }) }
+      : {}),
     "opensession-report": createReportMcpServer({
       automationId: a.id,
       automationName: a.name,
@@ -2128,6 +2148,13 @@ export async function runAutomation(
         cwd =
           worktrees.find((w) => w.branch === branch)?.path ||
           (await createWorktree(branch, repo.id, { isolated: true }));
+      }
+    } else if (automation.mode === "scratch") {
+      // No checkout: an empty directory of this run's own, so the full shell
+      // never touches a repository.
+      if (!automation.sandbox) {
+        cwd = `${stateDir("scratch")}/${bksId}`;
+        await mkdir(cwd, { recursive: true, mode: 0o700 });
       }
     } else {
       branch = repo.defaultBranch;

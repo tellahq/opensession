@@ -10,9 +10,10 @@
  * summary, and the tail of the transcript, where the agent's own closing
  * summary lists everything that landed.
  *
- * Generated on demand while a viewer has the card up, remembered per session
- * and PR until the session moves on, and fail-soft: null hands the card back
- * to the title heuristic it always had.
+ * Generated when a turn leaves the PR merged, or when a viewer opens the card
+ * first (shipped-change-draft.ts saves it on the session), remembered per
+ * session and PR until the session moves on, and fail-soft: null hands the
+ * card back to the title heuristic it always had.
  */
 
 import { oneShot } from "./one-shot";
