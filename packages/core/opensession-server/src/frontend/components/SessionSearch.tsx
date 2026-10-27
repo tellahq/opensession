@@ -1,6 +1,12 @@
 import { repoLabel } from "../lib/repo-label";
 import { FALLBACK_REPO, sessionRepoOr } from "../lib/session-repo";
-import React, { useDeferredValue, useEffect, useRef, useState } from "react";
+import React, {
+  useDebugValue,
+  useDeferredValue,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { UnifiedSession } from "../lib/types";
 import {
   fetchOpenPrs,
@@ -35,9 +41,9 @@ import {
   type FuzzyText,
 } from "../../shared/fuzzy-match";
 import {
-  canonicalNames,
   sessionHasOwner,
   sessionOwners,
+  useCanonicalNames,
 } from "../lib/session-owner";
 
 export interface CommandPaletteAction {
@@ -659,25 +665,29 @@ export function SessionSearch({
     };
   }, [query]);
 
-  // Live sessions make up the list and its filter options. Archived ones are
-  // searched only once there is a query, in their own group below.
-  const pool = sessions.filter((s) => !s.archived);
-  const archivedPool = sessions.filter((s) => s.archived);
-
-  const searchIndex = sessionSearchIndex(pool);
-  const archivedIndex = sessionSearchIndex(archivedPool);
-  // The field echoes every keystroke at once; the result list follows at a
-  // lower priority, so a slow pass over a large archive can be interrupted by
-  // the next key instead of blocking it.
-  const deferredQuery = useDeferredValue(query);
-
   // Workspace members only. `startedBy` is a free-text name that also carries
   // workers, goals, integration senders and unmapped Slack ids, so the team
   // directory decides who is a person here, and merges the spellings one
   // person has: "Michiel Westerbeek", "Michiel" and "Kent (loop)" are not
   // three more teammates (lib/session-owner).
   const roster = usePeople();
-  const canonical = canonicalNames(roster);
+  const canonical = useCanonicalNames(roster);
+  const hasSessionFilter =
+    person !== "all" || repo !== "all" || status !== "all";
+  const pools = useSessionSearchPools(sessions);
+  const { pool } = pools;
+  const results = useSessionSearchResults({
+    query,
+    pools,
+    person,
+    repo,
+    status,
+    hasSessionFilter,
+    canonical,
+    actions,
+    openPrs,
+    snippets,
+  });
   const personOptions = [
     { value: "all", label: "Anyone", icon: <IconPeople size={18} /> },
     ...sessionOwners(pool, canonical).map(({ key, label }) => ({
@@ -717,185 +727,7 @@ export function SessionSearch({
       ),
     })),
   ] satisfies ReadonlyArray<FilterOption<Status | "all">>;
-  const hasSessionFilter =
-    person !== "all" || repo !== "all" || status !== "all";
 
-  // Commands, PRs, and sessions share one flat result list so arrow-key navigation
-  // crosses group boundaries the way a command menu should.
-  const results = (() => {
-    const q = deferredQuery.trim().toLowerCase();
-    const fq = prepareFuzzyQuery(q);
-    const terms = q.split(/\s+/).filter(Boolean);
-    const hasQuery = terms.length > 0;
-    // The command menu is a search surface, not a second full list page. Keep
-    // its resting suggestions and each searched category bounded so opening or
-    // typing never mounts hundreds of rows before the person can read them.
-    const prLimit = hasQuery ? 20 : 8;
-    const sessionLimit = hasQuery || hasSessionFilter ? 40 : 12;
-    // Typo-tolerant: every term must land in the joined text, exactly or
-    // within a small edit distance, so "relase" still finds "Release". The
-    // name a row shows outranks everything else it can be found by.
-    type Scored = { row: PaletteResult; score: number };
-    const actionResults: Scored[] = (hasSessionFilter ? [] : actions)
-      .map((action) => ({
-        action,
-        score: hasQuery
-          ? matchScore(
-              q,
-              [action.label],
-              [
-                action.label,
-                action.description,
-                ...(action.keywords || []),
-                ...(action.shortcut || []),
-              ]
-                .filter(Boolean)
-                .join(" "),
-            )
-          : 1,
-      }))
-      .filter((r) => r.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, hasQuery ? 12 : 16)
-      .map(({ action, score }) => ({
-        row: { type: "action", category: action.category, action },
-        score,
-      }));
-    const prResults: Scored[] = (hasSessionFilter ? [] : openPrs)
-      .map((pr) => ({
-        pr,
-        score: !hasQuery
-          ? 1
-          : prLinksMatch(q, pr.url)
-            ? 100
-            : matchScore(
-                q,
-                [pr.title, `#${pr.number}`],
-                [
-                  pr.title,
-                  pr.repo,
-                  pr.branch,
-                  pr.author,
-                  `#${pr.number}`,
-                  prStatus(pr),
-                  pr.url,
-                ].join(" "),
-              ),
-      }))
-      .filter((r) => r.score > 0)
-      .sort(
-        (a, b) =>
-          b.score - a.score || b.pr.updatedAt.localeCompare(a.pr.updatedAt),
-      )
-      .slice(0, prLimit)
-      .map(({ pr, score }) => ({
-        row: { type: "pr", category: "Pull requests", pr },
-        score,
-      }));
-    // Falls back to deriving the text for a session the index hasn't seen, so
-    // a pool and an index that are momentarily out of step still search.
-    const hayOf = (s: UnifiedSession) => searchIndex.hay.get(s) ?? haystack(s);
-    const preparedHit = (s: UnifiedSession) => preparedOf(s, searchIndex);
-    const passesFilters = (s: UnifiedSession) => {
-      if (person !== "all" && !sessionHasOwner(s, person, canonical))
-        return false;
-      if (repo !== "all" && sessionRepo(s) !== repo) return false;
-      if (status !== "all" && sessionStatus(s) !== status) return false;
-      return true;
-    };
-    const filtered = sortByRecentActivity(
-      pool.filter(passesFilters),
-      searchIndex,
-    );
-    // Workspaces come first: a workspace is what the sidebar names, so its
-    // name is the first thing a person types.
-    const workspaceHits = matchWorkspaces(q, filtered, searchIndex).slice(0, 8);
-    const workspaceRows: PaletteResult[] = workspaceHits.map((workspace) => ({
-      type: "workspace",
-      category: "Workspaces",
-      workspace,
-    }));
-    // A session in a workspace row above is already one Enter away; list it
-    // again only when its own title matches too, and not when that title
-    // just repeats the workspace name.
-    const shownWorkspaces = new Map(
-      workspaceHits.map((hit) => [hit.id, hit.name]),
-    );
-    const scores = new Map<UnifiedSession, number>();
-    let sessionResults = filtered.filter((s) => {
-      if (terms.length === 0) return true;
-      const shownAs = s.workspaceId
-        ? shownWorkspaces.get(s.workspaceId)
-        : undefined;
-      if (
-        shownAs !== undefined &&
-        (shownAs === s.title || !titleMatches(fq, s, searchIndex))
-      )
-        return false;
-      // A session shows here if its metadata matches or the pasted PR link
-      // belongs to it. Conversation-only hits get their own group below.
-      const prepared = preparedHit(s);
-      const score = sessionUsesPrLink(s, q)
-        ? 100
-        : matchScorePrepared(fq, [prepared.title], prepared.hay);
-      scores.set(s, score);
-      return score > 0;
-    });
-    if (hasQuery) sortByMatch(sessionResults, scores, searchIndex);
-    if (sessionResults.some((session) => sessionUsesPrLink(session, q))) {
-      sessionResults = collapsePrLinkSessions(sessionResults);
-    }
-    const sessionRows: Scored[] = sessionResults
-      .slice(0, sessionLimit)
-      .map((s) => {
-        // Show the snippet only when the title/metadata didn't already match —
-        // otherwise the row explains itself.
-        const metaMatch =
-          terms.length > 0 &&
-          (terms.every((t) => hayOf(s).includes(t)) || sessionUsesPrLink(s, q));
-        return {
-          row: {
-            type: "session",
-            category: "Sessions",
-            session: s,
-            snippet: metaMatch ? undefined : snippets.get(s.id),
-          },
-          score: scores.get(s) ?? 1,
-        };
-      });
-    // Archived title matches come last whatever they score: live work is
-    // what the palette is for, and the archive is where a person looks when
-    // it isn't.
-    const archivedCandidates = hasQuery
-      ? archivedPool.filter(passesFilters)
-      : [];
-    const archivedRows: PaletteResult[] = hasQuery
-      ? archivedResults(
-          q,
-          archivedCandidates,
-          new Set(pool.map((s) => s.workspaceId).filter(Boolean)),
-          snippets,
-          archivedIndex,
-        )
-      : [];
-    const listed = [
-      ...workspaceRows,
-      ...orderGroupsByScore([actionResults, prResults, sessionRows]),
-    ];
-    const conversationRows = hasQuery
-      ? conversationResults(
-          snippets,
-          [
-            ...filtered.filter(
-              (s) => !s.workspaceId || !shownWorkspaces.has(s.workspaceId),
-            ),
-            ...archivedCandidates,
-          ],
-          new Set([...listed, ...archivedRows].map(resultKey)),
-        )
-      : [];
-    return [...listed, ...conversationRows, ...archivedRows];
-  })();
   const keyedActive = results.findIndex(
     (result) => resultKey(result) === activeKey,
   );
@@ -1288,4 +1120,236 @@ export function SessionSearch({
       </Modal.Content>
     </Modal.Root>
   );
+}
+
+/**
+ * Live sessions make up the list and its filter options. Archived ones are
+ * searched only once there is a query, in their own group below. A hook so
+ * the pools and their indexes keep one identity while `sessions` does; as
+ * plain calls the React Compiler counts them as mutable and rebuilds them on
+ * every keystroke. `useDebugValue` is what makes it compile this as a hook.
+ */
+function useSessionSearchPools(sessions: UnifiedSession[]) {
+  const pool = sessions.filter((s) => !s.archived);
+  const archivedPool = sessions.filter((s) => s.archived);
+  const searchIndex = sessionSearchIndex(pool);
+  const archivedIndex = sessionSearchIndex(archivedPool);
+  useDebugValue(pool.length, (size) => `${size} live sessions`);
+  return { pool, archivedPool, searchIndex, archivedIndex };
+}
+
+/**
+ * The palette's result list, behind its own hook boundary. Inline in the
+ * component, the React Compiler could not memoize it: it counts the search
+ * calls as possible mutations of their inputs, which kept them live across
+ * the component's later hooks, so the urgent render of every keystroke
+ * searched every session again before the deferred render did. A hook's
+ * return value is frozen for its caller, so the list now recomputes only
+ * when the deferred query, the filters or the data change.
+ */
+function useSessionSearchResults({
+  query,
+  pools: { pool, archivedPool, searchIndex, archivedIndex },
+  person,
+  repo,
+  status,
+  hasSessionFilter,
+  canonical,
+  actions,
+  openPrs,
+  snippets,
+}: {
+  query: string;
+  pools: ReturnType<typeof useSessionSearchPools>;
+  person: string;
+  repo: string;
+  status: Status | "all";
+  hasSessionFilter: boolean;
+  canonical: Map<string, string>;
+  actions: CommandPaletteAction[];
+  openPrs: OpenPr[];
+  snippets: Map<string, string>;
+}) {
+  // The field echoes every keystroke at once; the result list follows at a
+  // lower priority, so a slow pass over a large archive can be interrupted by
+  // the next key instead of blocking it.
+  const deferredQuery = useDeferredValue(query);
+
+  // Commands, PRs, and sessions share one flat result list so arrow-key navigation
+  // crosses group boundaries the way a command menu should.
+  const results = (() => {
+    const q = deferredQuery.trim().toLowerCase();
+    const fq = prepareFuzzyQuery(q);
+    const terms = q.split(/\s+/).filter(Boolean);
+    const hasQuery = terms.length > 0;
+    // The command menu is a search surface, not a second full list page. Keep
+    // its resting suggestions and each searched category bounded so opening or
+    // typing never mounts hundreds of rows before the person can read them.
+    const prLimit = hasQuery ? 20 : 8;
+    const sessionLimit = hasQuery || hasSessionFilter ? 40 : 12;
+    // Typo-tolerant: every term must land in the joined text, exactly or
+    // within a small edit distance, so "relase" still finds "Release". The
+    // name a row shows outranks everything else it can be found by.
+    type Scored = { row: PaletteResult; score: number };
+    const actionResults: Scored[] = (hasSessionFilter ? [] : actions)
+      .map((action) => ({
+        action,
+        score: hasQuery
+          ? matchScore(
+              q,
+              [action.label],
+              [
+                action.label,
+                action.description,
+                ...(action.keywords || []),
+                ...(action.shortcut || []),
+              ]
+                .filter(Boolean)
+                .join(" "),
+            )
+          : 1,
+      }))
+      .filter((r) => r.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, hasQuery ? 12 : 16)
+      .map(({ action, score }) => ({
+        row: { type: "action", category: action.category, action },
+        score,
+      }));
+    const prResults: Scored[] = (hasSessionFilter ? [] : openPrs)
+      .map((pr) => ({
+        pr,
+        score: !hasQuery
+          ? 1
+          : prLinksMatch(q, pr.url)
+            ? 100
+            : matchScore(
+                q,
+                [pr.title, `#${pr.number}`],
+                [
+                  pr.title,
+                  pr.repo,
+                  pr.branch,
+                  pr.author,
+                  `#${pr.number}`,
+                  prStatus(pr),
+                  pr.url,
+                ].join(" "),
+              ),
+      }))
+      .filter((r) => r.score > 0)
+      .sort(
+        (a, b) =>
+          b.score - a.score || b.pr.updatedAt.localeCompare(a.pr.updatedAt),
+      )
+      .slice(0, prLimit)
+      .map(({ pr, score }) => ({
+        row: { type: "pr", category: "Pull requests", pr },
+        score,
+      }));
+    // Falls back to deriving the text for a session the index hasn't seen, so
+    // a pool and an index that are momentarily out of step still search.
+    const hayOf = (s: UnifiedSession) => searchIndex.hay.get(s) ?? haystack(s);
+    const preparedHit = (s: UnifiedSession) => preparedOf(s, searchIndex);
+    const passesFilters = (s: UnifiedSession) => {
+      if (person !== "all" && !sessionHasOwner(s, person, canonical))
+        return false;
+      if (repo !== "all" && sessionRepo(s) !== repo) return false;
+      if (status !== "all" && sessionStatus(s) !== status) return false;
+      return true;
+    };
+    const filtered = sortByRecentActivity(
+      pool.filter(passesFilters),
+      searchIndex,
+    );
+    // Workspaces come first: a workspace is what the sidebar names, so its
+    // name is the first thing a person types.
+    const workspaceHits = matchWorkspaces(q, filtered, searchIndex).slice(0, 8);
+    const workspaceRows: PaletteResult[] = workspaceHits.map((workspace) => ({
+      type: "workspace",
+      category: "Workspaces",
+      workspace,
+    }));
+    // A session in a workspace row above is already one Enter away; list it
+    // again only when its own title matches too, and not when that title
+    // just repeats the workspace name.
+    const shownWorkspaces = new Map(
+      workspaceHits.map((hit) => [hit.id, hit.name]),
+    );
+    const scores = new Map<UnifiedSession, number>();
+    let sessionResults = filtered.filter((s) => {
+      if (terms.length === 0) return true;
+      const shownAs = s.workspaceId
+        ? shownWorkspaces.get(s.workspaceId)
+        : undefined;
+      if (
+        shownAs !== undefined &&
+        (shownAs === s.title || !titleMatches(fq, s, searchIndex))
+      )
+        return false;
+      // A session shows here if its metadata matches or the pasted PR link
+      // belongs to it. Conversation-only hits get their own group below.
+      const prepared = preparedHit(s);
+      const score = sessionUsesPrLink(s, q)
+        ? 100
+        : matchScorePrepared(fq, [prepared.title], prepared.hay);
+      scores.set(s, score);
+      return score > 0;
+    });
+    if (hasQuery) sortByMatch(sessionResults, scores, searchIndex);
+    if (sessionResults.some((session) => sessionUsesPrLink(session, q))) {
+      sessionResults = collapsePrLinkSessions(sessionResults);
+    }
+    const sessionRows: Scored[] = sessionResults
+      .slice(0, sessionLimit)
+      .map((s) => {
+        // Show the snippet only when the title/metadata didn't already match —
+        // otherwise the row explains itself.
+        const metaMatch =
+          terms.length > 0 &&
+          (terms.every((t) => hayOf(s).includes(t)) || sessionUsesPrLink(s, q));
+        return {
+          row: {
+            type: "session",
+            category: "Sessions",
+            session: s,
+            snippet: metaMatch ? undefined : snippets.get(s.id),
+          },
+          score: scores.get(s) ?? 1,
+        };
+      });
+    // Archived title matches come last whatever they score: live work is
+    // what the palette is for, and the archive is where a person looks when
+    // it isn't.
+    const archivedCandidates = hasQuery
+      ? archivedPool.filter(passesFilters)
+      : [];
+    const archivedRows: PaletteResult[] = hasQuery
+      ? archivedResults(
+          q,
+          archivedCandidates,
+          new Set(pool.map((s) => s.workspaceId).filter(Boolean)),
+          snippets,
+          archivedIndex,
+        )
+      : [];
+    const listed = [
+      ...workspaceRows,
+      ...orderGroupsByScore([actionResults, prResults, sessionRows]),
+    ];
+    const conversationRows = hasQuery
+      ? conversationResults(
+          snippets,
+          [
+            ...filtered.filter(
+              (s) => !s.workspaceId || !shownWorkspaces.has(s.workspaceId),
+            ),
+            ...archivedCandidates,
+          ],
+          new Set([...listed, ...archivedRows].map(resultKey)),
+        )
+      : [];
+    return [...listed, ...conversationRows, ...archivedRows];
+  })();
+  return results;
 }
