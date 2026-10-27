@@ -10,6 +10,7 @@
  *    Open Session's owned stores and detached run-host protocol.
  */
 
+import { registerMemoryProbe } from "./memory-probes";
 import {
   mkdirSync,
   readdirSync,
@@ -200,6 +201,10 @@ import {
 } from "./remote-workspace";
 import type { TranscriptEntry } from "./types";
 import type { RunAgentOpts } from "./agent-runner";
+import {
+  ensureContainerShimDir,
+  sessionContainerEnv,
+} from "./session-containers";
 import type { StreamEvent, ImageInput, TurnUsage } from "./run-events";
 
 const g = globalThis as any;
@@ -624,6 +629,10 @@ interface PiRunHandle {
 // parked on globalThis so hot reloads keep cancel/steer/isBusy working for
 // in-flight turns — same pattern as the previous runner runner's activeRuns.
 const activeRuns: Map<string, PiRunHandle> = (g.__piActiveRuns ??= new Map());
+registerMemoryProbe("pi-runner.activeRuns", () => ({
+  keys: activeRuns.size,
+  runs: new Set(activeRuns.values()).size,
+}));
 
 registerActiveRunProbe((runKey) => activeRuns.has(runKey));
 
@@ -2523,6 +2532,21 @@ async function* runPiAttempt(
       ...awsEnv,
       ...cliEnv,
     };
+    // The owning session, for anything the agent starts. On this machine,
+    // podman/docker wrappers also label containers with it, so archive and
+    // delete can stop them (session-containers.ts).
+    if (journal?.osSessionId) {
+      if (remote) bashEnv.OPENSESSION_SESSION_ID = journal.osSessionId;
+      else
+        Object.assign(
+          bashEnv,
+          sessionContainerEnv(
+            journal.osSessionId,
+            bashEnv.PATH ?? "",
+            await ensureContainerShimDir(),
+          ),
+        );
+    }
 
     // One engine-neutral MCP runtime owns all connections for this logical
     // turn. Pi only adapts its exact catalog into mcp_search/mcp_call. The

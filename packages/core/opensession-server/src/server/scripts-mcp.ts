@@ -91,7 +91,7 @@ export function createScriptsMcpServer(ctx: {
             command: args.command,
             cwd: where.cwd,
             logDir: scriptLogDir(ctx.sessionId),
-            env: scriptEnv(ctx.sessionId),
+            env: await scriptEnv(ctx.sessionId),
             ...(args.title ? { title: args.title } : {}),
             ...(args.timeoutMinutes !== undefined
               ? { timeoutMinutes: args.timeoutMinutes }

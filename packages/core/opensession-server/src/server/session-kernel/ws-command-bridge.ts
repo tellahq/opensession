@@ -5,3 +5,19 @@ export function isInternalKernelDispatch(
 ): token is string {
   return typeof token === "string" && activeTokens.has(token);
 }
+
+/**
+ * Keep a handler's response for the outer dispatch that owns `token`. The
+ * outer dispatch deletes the entry when it finishes; a token it does not own
+ * (one a client put on its own message) is never stored, because nothing
+ * would ever delete it.
+ */
+export function recordInternalKernelResult(
+  activeTokens: ReadonlySet<string>,
+  results: Map<string, unknown>,
+  token: unknown,
+  response: unknown,
+): void {
+  if (isInternalKernelDispatch(activeTokens, token))
+    results.set(token, response);
+}

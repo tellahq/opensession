@@ -70,6 +70,10 @@ import {
   providerFor,
   resolveModel,
 } from "./models";
+import {
+  resolveCreateSubscriptionPolicy,
+  type SubscriptionPolicy,
+} from "./fixed-subscription";
 import { configuredInteractiveDefaultModel } from "./model-catalog";
 import { notifyMentions } from "./mentions";
 import { newSessionId } from "./paths";
@@ -443,6 +447,8 @@ export interface ResolvedCreate {
   /** Start the repository's first Portal once the workspace is ready. */
   startPortal?: boolean;
   accountId?: string;
+  /** Hard, immutable funding pin (fixed-subscription.ts); set only here. */
+  subscriptionPolicy?: SubscriptionPolicy;
   images?: ImageInput[];
   /** Server-staged file attachments named in the opening prompt's uploads
    *  note; a remote opening run gets their bytes in its spec. */
@@ -768,6 +774,9 @@ function createdSessionFileDefaults(spec: ResolvedCreate): NativeSessionFile {
     ...(spec.fastMode ? { fastMode: true } : {}),
     ...(spec.speed && spec.speed !== "standard" ? { speed: spec.speed } : {}),
     ...(spec.accountId ? { accountId: spec.accountId } : {}),
+    ...(spec.subscriptionPolicy
+      ? { subscriptionPolicy: spec.subscriptionPolicy }
+      : {}),
     ...(spec.slackOrigin
       ? {
           slackOrigin: spec.slackOrigin,
@@ -2040,10 +2049,13 @@ export async function openCreatedSession(
               speed: spec.speed,
               pstackMode,
               accountId: spec.accountId,
-              fallbackModel: interactiveFallbackModel(
-                spec.model,
-                spec.autoFallback,
-              ),
+              ...(spec.subscriptionPolicy === "fixed"
+                ? { accountStrict: true, usageCredits: false }
+                : {}),
+              fallbackModel:
+                spec.subscriptionPolicy === "fixed"
+                  ? "none"
+                  : interactiveFallbackModel(spec.model, spec.autoFallback),
               mcpServers: openingTrust.mcpServers,
               proxyMcpServers: Object.keys(openingMcp),
               reposNote: openingReposNote,
@@ -2587,10 +2599,17 @@ export async function handleCreateSessionMessage(
   const createPstackMode = forkSource
     ? forkSource.pstackMode
     : msg.pstackMode === true;
-  // Pinned provider account from the palette (forks inherit).
-  const createAccountId = forkSource
-    ? forkSource.accountId
-    : resolvePinnedAccountId(model, msg.accountId, user);
+  // Pinned provider account from the palette (forks inherit, and a fork of
+  // a fixed-subscription session keeps that hard pin).
+  const createFunding = resolveCreateSubscriptionPolicy({
+    sources: [forkSource],
+    model: forkSource ? forkSource.model : model,
+    requestedAccountId: forkSource ? undefined : msg.accountId,
+    pinnedAccountId: forkSource
+      ? forkSource.accountId
+      : resolvePinnedAccountId(model, msg.accountId, user),
+  });
+  const createAccountId = createFunding.accountId;
   const createMcpServers = Array.isArray(msg.mcpServers)
     ? msg.mcpServers.map(String)
     : undefined;
@@ -3206,6 +3225,7 @@ export async function handleCreateSessionMessage(
       pstackMode: createPstackMode,
       ...(msg.startPortal === true && !forkSource ? { startPortal: true } : {}),
       accountId: createAccountId,
+      subscriptionPolicy: createFunding.subscriptionPolicy,
       images,
       attachments: openingAttachments,
       externalRefs: inheritedRefs,

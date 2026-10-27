@@ -16,6 +16,7 @@ import { canJoinCreateWorkspace } from "../shared/session-create-workspace";
  * exposure there, never here.
  */
 
+import { resolveCreateSubscriptionPolicy } from "./fixed-subscription";
 import { AUTO_CONTINUE_USER } from "./auto-continue";
 import { personaName } from "./config";
 import { currentAgentRunToken, isAgentSessionBusy } from "./agent-runner";
@@ -731,6 +732,8 @@ registerSessionControl({
       sandboxGpu: sandboxGpuInput,
       forkFrom,
       accountId: accountIdInput,
+      fixedSubscription,
+      invokingSessionId,
       plainDiscussionId,
       slackOrigin,
     } = ownedInput;
@@ -824,13 +827,27 @@ registerSessionControl({
     const createPstackMode = fork
       ? fork.source.pstackMode === true
       : pstackModeInput === true;
-    // Pinned provider account: validated exactly like the web palette
-    // (mismatched/unknown/foreign ids drop to the pool).
-    const createAccountId = fork
-      ? fork.source.accountId
-      : resolvePinnedAccountId(model, accountIdInput, user);
     const images = parseImageDataUrls(imageUrls);
     const parentSession = parentSessionId ? findSession(parentSessionId) : null;
+    // Pinned provider account: validated exactly like the web palette
+    // (mismatched/unknown/foreign ids drop to the pool). A session created
+    // from a fixed-subscription session (fork, child, or a standalone create
+    // its agent asked for) inherits that hard pin; nothing it passes widens it.
+    const createFunding = resolveCreateSubscriptionPolicy({
+      fixed: fixedSubscription,
+      sources: [
+        fork?.source,
+        parentSession,
+        invokingSessionId ? findSession(invokingSessionId) : null,
+        spawnedByInput ? findSession(spawnedByInput) : null,
+      ],
+      model,
+      requestedAccountId: fork ? undefined : accountIdInput,
+      pinnedAccountId: fork
+        ? fork.source.accountId
+        : resolvePinnedAccountId(model, accountIdInput, user),
+    });
+    const createAccountId = createFunding.accountId;
     // opensession-sessions is withheld from automation-owned runs. Scope the
     // server-owned worktree fetch to this trusted interactive creator.
     const githubCredential = parentSession?.automation
@@ -1345,6 +1362,7 @@ ${createMentionsNote}`;
         : { fastMode: true, speed: createSpeed }),
       pstackMode: createPstackMode || undefined,
       accountId: createAccountId,
+      subscriptionPolicy: createFunding.subscriptionPolicy,
       images,
       attachments: openingAttachments,
       // Feed-item linkage follows the session's workspace (Video tab +

@@ -118,6 +118,9 @@ export async function archivePlainSessionCandidates(
     try {
       await stopArchivedSessionPortals(sessionId);
     } finally {
+      const { stopSessionContainersAfterCommit } =
+        await import("./session-containers");
+      void stopSessionContainersAfterCommit([sessionId]);
       const { stopArchivedSessionWorktreeSetup } =
         await import("./worktree-setup");
       await stopArchivedSessionWorktreeSetup(sessionId);

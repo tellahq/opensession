@@ -14,12 +14,12 @@ path.
 ## Build
 
 ```bash
-# Full release: target binary, sharp sidecar, four Worker sidecars, three
+# Full release: target binary, sharp sidecar, Worker sidecars, Photon wasm,
 # service templates, deploy policy/helper files and release.json, tarred.
 bun scripts/build-compile.ts --os linux --arch arm64 --out ~/.cache/opensession-release
 
-# Local host build: binary plus all four Worker sidecars in dist/. Omits sharp,
-# service templates, deploy files and release.json.
+# Local host build: binary plus Worker sidecars and Photon wasm in dist/. Omits
+# sharp, service templates, deploy files and release.json.
 bun scripts/build-compile.ts --outfile dist/opensession
 ```
 
@@ -102,6 +102,15 @@ transport sidecars prevent the service or gateway from becoming ready.
 `code-flow-worker.js` run workflow and code-flow analysis Workers. Like both
 session-kernel Workers, they are bundled JavaScript files beside the executable
 because `bun build --compile` does not embed Worker entrypoints.
+
+**External: `photon_rs_bg.wasm`.** Pi resizes every image it sends to a model
+with Photon (`@silvia-odwyer/photon-node`), which reads its wasm from its
+package directory. That read cannot be embedded, so Pi falls back to
+`photon_rs_bg.wasm` beside the executable (then `photon/photon_rs_bg.wasm`,
+then the working directory). `scripts/lib/photon-wasm.ts` resolves the file
+through Pi's own dependency and both build modes stage it. Without it Pi drops
+every image from turns ("Image omitted"); the compiled server logs a warning
+naming the paths it checked when Pi first loads.
 
 **External: the `claude` CLI.** The Anthropic bridge is the Claude Agent SDK
 running in-process (`src/server/anthropic-bridge.ts`), and the SDK shells out

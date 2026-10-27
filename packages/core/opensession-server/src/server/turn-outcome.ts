@@ -36,6 +36,7 @@
  * ledger, and a dropped ledger just means no verdict for that run.
  */
 
+import { registerMemoryProbe } from "./memory-probes";
 import { audit } from "./audit";
 
 export type TurnVerdict = "reached" | "declared" | "silent-drop";
@@ -231,6 +232,7 @@ export interface TurnLedger {
 }
 
 const ledgers = new Map<string, TurnLedger>();
+registerMemoryProbe("turn-outcome.ledgers", () => ledgers.size);
 
 /**
  * Ledger key: the opensession session id, and only that.

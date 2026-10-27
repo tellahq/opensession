@@ -1082,6 +1082,8 @@ export async function handleSessionsRoutes(
       sandbox?: unknown;
       sandboxGpu?: unknown;
       forkFrom?: unknown;
+      accountId?: unknown;
+      fixedSubscription?: unknown;
       requestId?: unknown;
       clientId?: unknown;
     } | null;
@@ -1187,6 +1189,15 @@ export async function handleSessionsRoutes(
           ? { effort: body.effort }
           : {}),
         ...(body?.autoFallback === false ? { autoFallback: false } : {}),
+        // Provider account pin, validated against the creator like the web
+        // palette's. `fixedSubscription: true` makes it a hard, immutable
+        // funding pin (fixed-subscription.ts); the create fails without one.
+        ...(typeof body?.accountId === "string" && body.accountId
+          ? { accountId: body.accountId }
+          : {}),
+        ...(body?.fixedSubscription === true
+          ? { fixedSubscription: true }
+          : {}),
         ...(createSpeed && createSpeed !== "standard"
           ? { fastMode: true, speed: createSpeed }
           : {}),

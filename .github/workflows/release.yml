@@ -74,6 +74,10 @@ jobs:
             bun scripts/build-compile.ts --version "$version" --os "$os" --arch "$arch" --out "$out"
             versioned="$out/opensession-$version-$os-$arch.tar.gz"
             test -s "$versioned"
+            # Pi loads Photon's wasm from beside the binary; without it every
+            # image in a Pi turn is dropped (scripts/lib/photon-wasm.ts).
+            tar -tzf "$versioned" > "$out/listing.txt"
+            grep -Fqx "opensession-$version-$os-$arch/photon_rs_bg.wasm" "$out/listing.txt"
             cp "$versioned" "$out/assets/"
             cp "$versioned" "$out/assets/opensession-$os-$arch.tar.gz"
           done

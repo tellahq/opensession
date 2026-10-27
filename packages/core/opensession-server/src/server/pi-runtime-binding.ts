@@ -12,16 +12,30 @@ import {
 import type { ModelProviderConfig } from "./model-providers";
 import type { XaiAccount, bindXaiAccount } from "./xai-accounts";
 import { XAI_OAUTH_PROVIDER } from "./xai-provider-id";
+import { isCompiledBinary } from "../runner-host/exe";
+import { checkPhotonWasm } from "./photon-wasm";
 
 export type PiSdk = typeof import("@earendil-works/pi-coding-agent");
 type PiModel = NonNullable<ReturnType<ModelRuntime["getModel"]>>;
 type PiProviderConfigInput = Parameters<ModelRuntime["registerProvider"]>[1];
 
-const g = globalThis as typeof globalThis & { __piSdkPromise?: Promise<PiSdk> };
+const g = globalThis as typeof globalThis & {
+  __piSdkPromise?: Promise<PiSdk>;
+  __piPhotonChecked?: boolean;
+};
 
 /** Load Pi on demand and retain one process-wide cold-import promise. */
 export function loadPiSdk(): Promise<PiSdk> {
-  return (g.__piSdkPromise ??= import("@earendil-works/pi-coding-agent").catch(
+  return (g.__piSdkPromise ??= import("@earendil-works/pi-coding-agent").then(
+    (sdk) => {
+      // Pi drops images silently when Photon's wasm is missing; a compiled
+      // install is the only layout where that can happen, so warn there once.
+      if (isCompiledBinary() && !g.__piPhotonChecked) {
+        g.__piPhotonChecked = true;
+        void checkPhotonWasm().catch(() => {});
+      }
+      return sdk;
+    },
     (error: unknown) => {
       g.__piSdkPromise = undefined;
       throw error;

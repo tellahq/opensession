@@ -12,6 +12,7 @@ import {
   isTrustedGithubLogin,
   isTrustedUser,
   personKeyToDisplayName,
+  trustedGithubTeammate,
 } from "./user-mappings";
 
 const TEAM: TeamMember[] = [
@@ -108,6 +109,36 @@ describe("commit attribution", () => {
     expect(isTrustedUser("alice@work.example")).toBe(true);
     expect(isTrustedUser("ali")).toBe(false); // aliases are not authentication evidence
     expect(isTrustedUser("mallory")).toBe(false);
+  });
+
+  test("a driving teammate is identified by a roster GitHub login, Slack or not", () => {
+    const restoreTeam = __setIdentitiesForTest([
+      ...TEAM,
+      { name: "Grace Hopper", github: "grace-gh" },
+      { name: "Nolan", email: "nolan@example.com", slackId: "U_NOLAN" },
+    ]);
+    try {
+      expect(trustedGithubTeammate("Alice Example")).toEqual({
+        name: "Alice Example",
+        login: "alice",
+      });
+      expect(trustedGithubTeammate("Grace Hopper")).toEqual({
+        name: "Grace Hopper",
+        login: "grace-gh",
+      });
+      expect(trustedGithubTeammate("grace-gh")?.name).toBe("Grace Hopper");
+      for (const outsider of [
+        undefined,
+        "",
+        "Anonymous",
+        "Automation",
+        "mallory",
+        "Nolan", // on the roster, but no GitHub login
+      ])
+        expect(trustedGithubTeammate(outsider)).toBeNull();
+    } finally {
+      restoreTeam();
+    }
   });
 
   test("trusted Slack login lookup uses one exact roster entry", () => {

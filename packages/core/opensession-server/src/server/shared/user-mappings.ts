@@ -165,6 +165,36 @@ export function isTrustedGithubLogin(login?: string | null): boolean {
 }
 
 /**
+ * The configured teammate a session's driver names, with the roster GitHub
+ * login that identifies them, or null. This is the "a known teammate is
+ * driving" gate for card-confirmed actions (keychain registration, force
+ * merge). Unlike `resolveTeammate` it needs no Slack id or git email, so it
+ * answers on instances without Slack. Anonymous, automation and off-roster
+ * users, and members without a GitHub login, resolve to null.
+ */
+export function trustedGithubTeammate(
+  user?: string | null,
+): { name: string; login: string } | null {
+  const key = user?.trim();
+  if (!key) return null;
+  const lower = key.replace(/^@/, "").toLowerCase();
+  const viaIdentity = githubLoginFor(key)?.toLowerCase();
+  const member =
+    (viaIdentity &&
+      identity.team.find(
+        (m) => m.github?.trim().toLowerCase() === viaIdentity,
+      )) ||
+    identity.team.find(
+      (m) =>
+        m.name.trim().toLowerCase() === lower ||
+        m.github?.trim().toLowerCase() === lower,
+    );
+  const login = member?.github?.trim();
+  if (!member || !login || !isTrustedGithubLogin(login)) return null;
+  return { name: resolveTeammate(key)?.name || member.name, login };
+}
+
+/**
  * Whether a strong sender identifier resolves to anyone on the configured
  * team. This intentionally accepts only exact GitHub logins, Slack ids, and
  * email addresses. Names and aliases are attribution conveniences, not

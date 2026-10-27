@@ -1145,6 +1145,7 @@ export function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
     speed: data.speed,
     pstackMode: data.pstackMode,
     accountId: data.accountId,
+    subscriptionPolicy: data.subscriptionPolicy,
     codexThreadId: data.codexThreadId,
     piSessionId: data.piSessionId,
     lastEngineProvider: data.lastEngineProvider,
@@ -1764,6 +1765,16 @@ async function removeSessionArtifacts(session: UnifiedSession): Promise<void> {
   // async: a scratch hiccup must never block deletion.
   for (const id of [session.id, ...(session.aliasIds || [])])
     void removeSessionScratch(id);
+  // Containers its agent started stop with it. Best-effort: the lifecycle
+  // reaper stops labelled containers whose owner is missing.
+  const ownerIds = [session.id, ...(session.aliasIds || [])];
+  void import("./session-containers")
+    .then(({ stopSessionContainersAfterCommit }) =>
+      stopSessionContainersAfterCommit(ownerIds),
+    )
+    .catch((error) =>
+      console.warn(`[containers] cleanup for ${session.id} failed:`, error),
+    );
   // Its comment threads go with it. Best-effort for the same reason.
   void import("./comment-threads")
     .then(({ deleteSessionThreads }) => deleteSessionThreads(session.id))

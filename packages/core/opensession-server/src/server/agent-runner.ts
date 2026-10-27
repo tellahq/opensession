@@ -5,6 +5,7 @@
  * StreamEvent contract.
  */
 
+import { registerMemoryProbe } from "./memory-probes";
 import type { SessionSpeed } from "@tellahq/opensession-protocol/session";
 import {
   journalClear,
@@ -1052,6 +1053,16 @@ const activeRecoveryRuns: Map<string, ActiveRunRecord> = ((
 const activeRecoveryWorkerRunKeys: Set<string> = ((
   globalThis as any
 ).__activeRecoveryWorkerRunKeys ??= new Set());
+registerMemoryProbe("agent-runner.runs", () => ({
+  pendingStarts: pendingStarts.size,
+  cancelledRunTokens: cancelledRunTokens.size,
+  activeSessionRunTokens: activeSessionRunTokens.size,
+  sessionRunOwners: sessionRunOwners.size,
+  cancelledRecoveries: cancelledRecoveries.size,
+  activeRecoveryRuns: activeRecoveryRuns.size,
+  activeRecoveryWorkerRunKeys: activeRecoveryWorkerRunKeys.size,
+}));
+
 // Hot reloads can leave the pre-token Set globals alive in old module
 // closures. Keep observing them until those preparations unwind; using a new
 // key for the token map avoids ever casting that Set to a Map and crashing.

@@ -510,6 +510,38 @@ addresses, GitHub logins, and Slack ids resolve to the configured person.
   Adding, removing, or re-scoping a server in `mcp-config.json` is picked up on
   the next run/message and does not require a restart.
 
+## Fixed-subscription sessions (opt-in)
+
+A session's `accountId` is normally a soft pin: when the pinned account is
+exhausted, the run moves to another eligible account, and the session may
+fall back to another model. A session created with `fixedSubscription: true`
+(and a usable `accountId`) through `POST /api/sessions` or
+`SessionControl.createSession` instead stores `subscriptionPolicy: "fixed"`.
+The server enforces it (packages/core/opensession-server/src/server/fixed-subscription.ts):
+
+- Every turn, including queued prompts, retries, restart recovery and
+  continuations, runs with the pinned account as a hard pin
+  (`runAccountSpec` returns `accountStrict: true`), with usage credits off and
+  no automatic model fallback, on every launch path (host, detached pi host,
+  Runner, sandbox). An automation pin or a takeover turn does not change it.
+- A turn fails closed with a visible error, before any backend starts, when
+  the account is no longer connected or the session's model belongs to another
+  provider. An exhausted account refuses through the strict pin rather than
+  moving to the pool.
+- The policy is set only at creation. `/account` (and `/sub`) cannot change
+  or clear the account, and `/model` and `migrate_session_engine` refuse a
+  model the account's provider cannot serve.
+- Sessions created from a fixed session inherit its account and policy: forks,
+  children (`parentSessionId`), `spawn_task` workers, and standalone
+  `create_session` calls its agent makes (`invokingSessionId`, set by the
+  server from the calling session). Asking for a different account is an
+  error.
+- Attribution is unchanged: the prompter stays the run user and commit
+  author, and the owner gate still applies, so a personal account pinned this
+  way only serves its owner's turns. A pool account serves any prompter.
+
+Sessions without the policy keep their existing behavior.
+
 ## GitHub webhook actor trust (public repositories)
 
 A valid webhook signature proves that GitHub sent an event. It does **not**

@@ -5,6 +5,10 @@
  * as a command, or null to send it to the engine as a normal prompt.
  */
 
+import {
+  fixedSubscriptionModelError,
+  isFixedSubscription,
+} from "./fixed-subscription";
 import { productName } from "./config";
 import { isPstackCommand, pstackCommandInput } from "./pstack-mode";
 import { listAccountsPublic } from "./claude-accounts";
@@ -165,6 +169,12 @@ export async function handleSlashCommand(
       const switchedProvider =
         accountProviderForModel(prevModel) !==
         accountProviderForModel(resolved.id);
+      // A fixed subscription keeps its account for life: a model the
+      // account's provider cannot serve would need other funding.
+      const fixedRefusal = isFixedSubscription(session)
+        ? fixedSubscriptionModelError(session.accountId, resolved.id)
+        : undefined;
+      if (fixedRefusal) return fixedRefusal;
       touchNativeSession(session.id, {
         model: resolved.id,
         autoFallbackModel: undefined,
@@ -256,6 +266,9 @@ export async function handleSlashCommand(
       "Available (set with /account <email>, or /account auto to unpin):",
       ...accounts.map(line),
     ].join("\n");
+  }
+  if (accountCommand && isFixedSubscription(session)) {
+    return `This session has a fixed subscription, so its ${providerLabel} account cannot be changed. Start a new session to use a different account.`;
   }
   if (
     accountCommand &&

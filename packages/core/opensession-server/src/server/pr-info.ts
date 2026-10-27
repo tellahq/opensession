@@ -17,6 +17,8 @@ import { $ } from "bun";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "fs";
 import { audited } from "./audit";
+import { PR_DIFF_CACHE_LIMITS, setBounded } from "./bounded-cache";
+import { registerMemoryProbe, totalChars } from "./memory-probes";
 import {
   ghRateLimited,
   noteGhRateLimited,
@@ -647,6 +649,30 @@ function schedulePersist() {
 const cacheKey = (repo: string, branch: string) => `${repo}\u0000${branch}`;
 
 const diffCache = new Map<string, { data: PrDiffData | null; ts: number }>();
+registerMemoryProbe("pr-info.caches", () => ({
+  details: cache.size,
+  diffs: diffCache.size,
+  diffPatchChars: totalChars(
+    [...diffCache.values()].map((entry) => entry.data?.patch),
+  ),
+  numberByBranch: numberByBranch.size,
+  embeds: embedCache.size,
+}));
+
+function rememberDiff(
+  key: string,
+  entry: { data: PrDiffData | null; ts: number },
+): void {
+  setBounded(diffCache, key, entry, PR_DIFF_CACHE_LIMITS);
+}
+
+/** Test seam for the diff cache bound. */
+export function __prDiffCacheForTest(): Map<
+  string,
+  { data: PrDiffData | null; ts: number }
+> {
+  return diffCache;
+}
 
 /**
  * Pin a PR patch into the diff cache. For the demo dataset only: its PR does
@@ -660,7 +686,7 @@ export function seedPrDiff(
   branch: string,
   data: PrDiffData,
 ): void {
-  diffCache.set(cacheKey(repo, branch), {
+  rememberDiff(cacheKey(repo, branch), {
     data: {
       ...data,
       diffVersion:
@@ -949,7 +975,7 @@ export async function getPrDiff(
             .digest("base64url"),
           ...(skippedFiles ? { skippedFiles } : {}),
         };
-        if (!maxPatchBytes) diffCache.set(key, { data, ts: Date.now() });
+        if (!maxPatchBytes) rememberDiff(key, { data, ts: Date.now() });
         return data;
       }
       throw new Error("Pull request changed while loading its diff");
@@ -962,7 +988,7 @@ export async function getPrDiff(
         if (hit) return hit.data; // stale beats an error
         throw new Error(prApiErrorMessage(msg));
       }
-      diffCache.set(key, { data: null, ts: Date.now() });
+      rememberDiff(key, { data: null, ts: Date.now() });
       return null;
     }
   })().finally(() => diffInflight.delete(inflightKey));

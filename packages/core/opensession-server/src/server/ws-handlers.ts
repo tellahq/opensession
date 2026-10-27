@@ -1,3 +1,4 @@
+import { registerMemoryProbe } from "./memory-probes";
 import { noteSessionHumanActivity } from "./sandbox/idle";
 import {
   sandboxAgentClose,
@@ -158,7 +159,10 @@ import {
 } from "./ws-hub";
 import { existsSync, readFileSync, statSync, watch } from "fs";
 import { stateDir } from "./paths";
-import { isInternalKernelDispatch } from "./session-kernel/ws-command-bridge";
+import {
+  isInternalKernelDispatch,
+  recordInternalKernelResult,
+} from "./session-kernel/ws-command-bridge";
 import { withSessionMutationLock } from "./session-mutation-lock";
 import {
   acknowledgeSessionCommand,
@@ -334,6 +338,10 @@ const V2_SYNC_IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 const v2BgImports: Set<string> = ((
   globalThis as any
 ).__osTranscriptV2BgImports ??= new Set());
+registerMemoryProbe("ws-handlers.transcriptV2", () => ({
+  subscriptions: v2Unsubs.size,
+  backgroundImports: v2BgImports.size,
+}));
 
 /**
  * What `prepareEntriesForWire` does for every legacy send site, for the v2
@@ -579,6 +587,11 @@ async function serveTranscriptV2(
 const kernelDispatchTokens = new Set<string>();
 const kernelDispatchResults = new Map<string, unknown>();
 const kernelDispatchErrors = new Map<string, Error>();
+registerMemoryProbe("ws-handlers.kernelDispatch", () => ({
+  tokens: kernelDispatchTokens.size,
+  results: kernelDispatchResults.size,
+  errors: kernelDispatchErrors.size,
+}));
 
 export const websocketHandlers: WebSocketHandler<WSClientData> = {
   // One shared compressor keeps connection memory bounded. Only large
@@ -1698,8 +1711,12 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               ? { item: queueItemForClient(item) }
               : { message: "That queued message could not be edited." }),
           };
-          if (typeof msg.__sessionKernelToken === "string")
-            kernelDispatchResults.set(msg.__sessionKernelToken, response);
+          recordInternalKernelResult(
+            kernelDispatchTokens,
+            kernelDispatchResults,
+            msg.__sessionKernelToken,
+            response,
+          );
           ws.send(JSON.stringify(response));
           if (item) watchExternalRunAndDrain(sessionId);
           break;
@@ -1728,8 +1745,12 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
               ? { item: queueItemForClient(item) }
               : { message: "That steering message has already been sent." }),
           };
-          if (typeof msg.__sessionKernelToken === "string")
-            kernelDispatchResults.set(msg.__sessionKernelToken, response);
+          recordInternalKernelResult(
+            kernelDispatchTokens,
+            kernelDispatchResults,
+            msg.__sessionKernelToken,
+            response,
+          );
           ws.send(JSON.stringify(response));
           break;
         }
@@ -1909,8 +1930,13 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 
         case "create_session": {
           const response = await handleCreateSessionMessage(ws, msg);
-          if (typeof msg.__sessionKernelToken === "string" && response)
-            kernelDispatchResults.set(msg.__sessionKernelToken, response);
+          if (response)
+            recordInternalKernelResult(
+              kernelDispatchTokens,
+              kernelDispatchResults,
+              msg.__sessionKernelToken,
+              response,
+            );
           break;
         }
       }

@@ -10,7 +10,7 @@ import {
 import type { MergeMethod } from "./pr-contract";
 import { findSession } from "./session-cache";
 import { resolvePrReadinessTarget } from "./session-repos";
-import { githubLoginFor, resolveTeammate } from "./shared/user-mappings";
+import { trustedGithubTeammate } from "./shared/user-mappings";
 import { webAuthRequired } from "./web-auth";
 
 /** Why this session cannot open a force-merge card, or null. */
@@ -33,7 +33,7 @@ export function forceMergeRefusal(
     return "Force merge is not available to automation runs.";
   if (!signInRequired)
     return "Force merge needs GitHub sign-in on this instance, so a person can confirm it. Merge the PR on GitHub instead.";
-  if (!user || !githubLoginFor(user) || !resolveTeammate(user))
+  if (!trustedGithubTeammate(user))
     return "Only a signed-in teammate driving this session can confirm a force merge.";
   return null;
 }
@@ -63,10 +63,7 @@ export async function forceMergeForSession(
       target,
       reason: input.reason,
       ...(input.method ? { method: input.method } : {}),
-      driver: {
-        name: resolveTeammate(user)!.name,
-        login: githubLoginFor(user)!,
-      },
+      driver: trustedGithubTeammate(user)!,
     },
     signal,
   );
