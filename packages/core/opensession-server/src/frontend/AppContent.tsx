@@ -1827,9 +1827,16 @@ export function AppContent({
             {/* Durable prompts use a separate shelf from transient feedback. The
 				    desktop shelf stays clear of the composer; phones put the compact
 				    equivalent in the app header instead. The update nudge is not here:
-				    desktop shows it beside Settings in the sidebar's account footer. */}
+				    desktop shows it beside Settings in the sidebar's account footer.
+				    Settings hides the shelf (kept mounted so a dismissal sticks): it
+				    would cover the account row and Sign out at the nav's foot. */}
             {!isPhone && (
-              <div className={PERSISTENT_NOTICE_SHELF}>
+              <div
+                className={cn(
+                  PERSISTENT_NOTICE_SHELF,
+                  settingsActive && "hidden",
+                )}
+              >
                 {launchComplete && <DesktopLinkToast />}
               </div>
             )}
