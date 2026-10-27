@@ -475,8 +475,13 @@ type PortalProcess = Pick<
   "pid" | "scopeUnit" | "shutdownGraceMs"
 >;
 
+type PortalLivenessOps = Pick<
+  PortalOps,
+  "probePort" | "pidAlive" | "groupAlive" | "scopeAlive"
+>;
+
 async function portalProcessAlive(
-  ops: PortalOps,
+  ops: PortalLivenessOps,
   processRef: PortalProcess,
 ): Promise<boolean> {
   // The systemd-run client remains in the gateway cgroup while its detached
@@ -491,15 +496,33 @@ async function portalProcessAlive(
   return ops.pidAlive(processRef.pid);
 }
 
-async function waitForPortalPort(
-  ops: PortalOps,
+/** How long a Portal must keep listening, with its process alive, after the
+ *  port first answers. Dev servers such as Next bind before they load their
+ *  config, so one that crashes on it answered once and was reported ready. */
+export const PORTAL_READY_SETTLE_MS = 3_000;
+
+function portalReadySettleMs(): number {
+  const override = Number(process.env.OPENSESSION_PORTAL_READY_SETTLE_MS);
+  return Number.isFinite(override) && override >= 0
+    ? override
+    : PORTAL_READY_SETTLE_MS;
+}
+
+export async function waitForPortalPort(
+  ops: PortalLivenessOps,
   port: number,
   processRef: PortalProcess,
   timeoutMs = 15_000,
+  settleMs = portalReadySettleMs(),
 ): Promise<"ready" | "exited" | "timeout"> {
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
-    if (await ops.probePort(port)) return "ready";
+    if (await ops.probePort(port)) {
+      await Bun.sleep(settleMs);
+      if (!(await portalProcessAlive(ops, processRef))) return "exited";
+      if (await ops.probePort(port)) return "ready";
+      continue;
+    }
     if (!(await portalProcessAlive(ops, processRef))) return "exited";
     await Bun.sleep(200);
   }
@@ -574,12 +597,25 @@ async function portalLogHint(logPath: string | undefined): Promise<string> {
     : " Read its output with read_portal_log.";
 }
 
+/** Starts this process is still driving, by port and start time. The start
+ *  owns its record until it settles: a status read must not promote a server
+ *  that answered once (and may crash on its config) to awake meanwhile. */
+const startsInFlight: Set<string> = ((
+  globalThis as { __opensessionPortalStartsInFlight?: Set<string> }
+).__opensessionPortalStartsInFlight ??= new Set());
+
+function startKey(record: Pick<PortalRecord, "port" | "startedAt">): string {
+  return `${record.port}@${record.startedAt ?? ""}`;
+}
+
 async function listPortals(ops: PortalOps): Promise<PortalRecord[]> {
   const records = await ops.readRegistry();
   let changed = false;
   const checked = await Promise.all(
     records.map(async (record) => {
       if (record.state === "stopped" || record.state === "sleeping")
+        return record;
+      if (record.state === "starting" && startsInFlight.has(startKey(record)))
         return record;
       // A remote probe can fail transiently while the same app still runs.
       // Recheck failed records only while their original owner is alive;
@@ -734,54 +770,60 @@ async function startPortal(
     state: "starting",
     startedAt: new Date().toISOString(),
   };
-  await ops.writeRegistry(upsert(records, base));
-  let processRef: Required<Pick<PortalRecord, "pid">> & PortalProcess;
+  const inFlight = startKey(base);
+  startsInFlight.add(inFlight);
   try {
-    processRef = await input.launch({ name, command, port, url });
-  } catch (error) {
-    const failed = {
-      ...base,
-      state: "failed" as const,
-      lastError: (error as Error).message,
-    };
-    await ops.writeRegistry(upsert(records, failed));
-    throw error;
+    await ops.writeRegistry(upsert(records, base));
+    let processRef: Required<Pick<PortalRecord, "pid">> & PortalProcess;
+    try {
+      processRef = await input.launch({ name, command, port, url });
+    } catch (error) {
+      const failed = {
+        ...base,
+        state: "failed" as const,
+        lastError: (error as Error).message,
+      };
+      await ops.writeRegistry(upsert(records, failed));
+      throw error;
+    }
+    const record = { ...base, ...processRef };
+    await ops.writeRegistry(upsert(records, record));
+    const readyTimeoutMs = Math.min(
+      MAX_PORTAL_READY_MS,
+      Math.max(5_000, input.readyTimeoutMs ?? 15_000),
+    );
+    const readiness = await waitForPortalPort(
+      ops,
+      port,
+      processRef,
+      readyTimeoutMs,
+    );
+    if (readiness !== "ready") {
+      const lastError =
+        (readiness === "exited"
+          ? "The Portal process exited before it started listening."
+          : `Nothing listened on port ${port} within ${Math.round(readyTimeoutMs / 1_000)} seconds.`) +
+        (await portalLogHint(input.logPath));
+      // A timed-out process may still be compiling and can leave watchers or
+      // lock files behind. Never lose its PID by overwriting the failed record
+      // before the complete process group has been terminated.
+      await terminatePortalProcess(ops, processRef);
+      const failed = {
+        ...record,
+        pid: undefined,
+        scopeUnit: undefined,
+        state: "failed" as const,
+        lastError,
+      };
+      await ops.writeRegistry(upsert(records, failed));
+      throw new Error(lastError);
+    }
+    const awake = { ...record, state: "awake" as const };
+    await ops.writeRegistry(upsert(records, awake));
+    return { ...awake, url };
+  } finally {
+    startsInFlight.delete(inFlight);
   }
-  const record = { ...base, ...processRef };
-  await ops.writeRegistry(upsert(records, record));
-  const readyTimeoutMs = Math.min(
-    MAX_PORTAL_READY_MS,
-    Math.max(5_000, input.readyTimeoutMs ?? 15_000),
-  );
-  const readiness = await waitForPortalPort(
-    ops,
-    port,
-    processRef,
-    readyTimeoutMs,
-  );
-  if (readiness !== "ready") {
-    const lastError =
-      (readiness === "exited"
-        ? "The Portal process exited before it started listening."
-        : `Nothing listened on port ${port} within ${Math.round(readyTimeoutMs / 1_000)} seconds.`) +
-      (await portalLogHint(input.logPath));
-    // A timed-out process may still be compiling and can leave watchers or
-    // lock files behind. Never lose its PID by overwriting the failed record
-    // before the complete process group has been terminated.
-    await terminatePortalProcess(ops, processRef);
-    const failed = {
-      ...record,
-      pid: undefined,
-      scopeUnit: undefined,
-      state: "failed" as const,
-      lastError,
-    };
-    await ops.writeRegistry(upsert(records, failed));
-    throw new Error(lastError);
-  }
-  const awake = { ...record, state: "awake" as const };
-  await ops.writeRegistry(upsert(records, awake));
-  return { ...awake, url };
 }
 
 async function terminatePortalProcess(
@@ -1873,11 +1915,11 @@ export async function ensureRemoteSandboxPortalAgent(input: {
     sandboxId: input.sandbox.id,
     port: input.port,
   };
-  const current = remoteRelayAgents.get(agentKey);
+  // The relay renews a connected sidecar's credential itself, so check the
+  // connection's expiry, not the one this process launched it with.
   if (
-    current &&
-    current.expiresAt > Date.now() + 30_000 &&
-    sandboxPortalRelayConnected(relayIdentity)
+    remoteRelayAgents.has(agentKey) &&
+    sandboxPortalRelayConnected(relayIdentity, 30_000)
   ) {
     return ensureSandboxPortalRelay({ ...relayIdentity, name: input.name });
   }

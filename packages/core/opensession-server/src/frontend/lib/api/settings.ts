@@ -178,6 +178,9 @@ export interface KeychainCredentialDto {
   allowedMethods?: string[];
   allowedPathPrefixes?: string[];
   statusOnly?: boolean;
+  /** Every session in the workspace may use it without asking. Absent:
+   *  personal, each session asks the owner. */
+  scope?: "workspace";
   createdAt: string;
   updatedAt: string;
   /** The signed-in person owns it, so they can delete it. */
@@ -207,7 +210,7 @@ export interface KeychainGrantDto {
   sessionId: string;
   requestedBy: string;
   purpose: string;
-  mode: "once" | "standing" | "run" | "release";
+  mode: "once" | "standing" | "run" | "release" | "workspace";
   status: "active" | "used" | "revoked" | "expired";
   run?: KeychainScriptedRunDto;
   createdAt: string;
@@ -250,8 +253,21 @@ export async function addKeychainCredential(input: {
   allowedMethods?: string[];
   allowedPathPrefixes?: string[];
   statusOnly?: boolean;
+  scope?: "personal" | "workspace";
 }): Promise<{ credential: KeychainCredentialDto }> {
   return request("/keychain/credentials", { method: "POST", body: input });
+}
+
+/** Share a credential you own with every session in the workspace, or make
+ *  it personal again. */
+export async function setKeychainCredentialScope(
+  id: string,
+  scope: "personal" | "workspace",
+): Promise<{ credential: KeychainCredentialDto }> {
+  return request(`/keychain/credentials/${encodeURIComponent(id)}/scope`, {
+    method: "POST",
+    body: { scope },
+  });
 }
 
 export async function deleteKeychainCredential(

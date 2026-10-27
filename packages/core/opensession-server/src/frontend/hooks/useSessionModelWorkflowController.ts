@@ -63,7 +63,7 @@ export function useSessionModelWorkflowController(
   );
   const pstackMode = pstackOverride ?? !!session.pstackMode;
   useEffect(() => {
-    fetchModels(session.workspaceId || undefined)
+    fetchModels()
       .then((m) => {
         setModels(m.models);
         setDefaultModel(m.default);
@@ -72,7 +72,7 @@ export function useSessionModelWorkflowController(
     fetchProviderAccounts()
       .then(setAccounts)
       .catch(() => {});
-  }, [session.workspaceId]);
+  }, []);
   useEffect(() => {
     dispatchSessionRuntime({
       type: "sync_model",

@@ -120,6 +120,7 @@ import {
   hasRemoteWorkspace,
   workspaceExecFor,
 } from "./sandbox";
+import { noteSandboxActivity } from "./sandbox/idle";
 import {
   isRemoteSandboxProvider,
   isRunnableSandboxProvider,
@@ -128,7 +129,7 @@ import {
   sandboxProviderConfigured,
 } from "./sandbox/config";
 import { disposeAutomationSandbox } from "./sandbox/automation-disposal";
-import { ensureSandboxWithTransientRetry } from "./sandbox/reliability";
+import { ensureSandboxWaitingForCapacity } from "./sandbox/reliability";
 import { getAutomation, validateSandboxAutomation } from "./automations";
 import { getTitleOverride } from "./title-overrides";
 import {
@@ -142,6 +143,7 @@ import {
   clearReplySuggestions,
   maybeSuggestReplies,
 } from "./reply-suggestions";
+import { draftShippedChangeAfterTurn } from "./shipped-change-draft";
 import {
   clearComposerPrediction,
   maybePredictComposer,
@@ -153,6 +155,7 @@ import {
   ensureAskCheckout,
   ensureScratchDir,
   getRepo,
+  REPOS,
   repoForPath,
   repoForPathOrNull,
   reviveWorktree,
@@ -239,7 +242,7 @@ import {
   withUploadsNote,
 } from "./uploads";
 import {
-  attachedGithubRepos,
+  sessionGithubRepos,
   buildSessionNote,
   retrievedMemoryNoteFor,
   sessionRepoIds,
@@ -1981,6 +1984,22 @@ export function sandboxRunSecuritySpec(
   };
 }
 
+/** Repositories a session's runs may read beside their own: the owning
+ *  automation's list and the repository's configured one
+ *  (RepoSection.readRepos, such as a private dependency fork). */
+function sessionReadRepos(
+  session: Pick<UnifiedSession, "repo">,
+  automationReadRepos: readonly string[] | undefined,
+): string[] | undefined {
+  const repos = [
+    ...new Set([
+      ...(automationReadRepos || []),
+      ...((session.repo ? REPOS[session.repo]?.readRepos : undefined) || []),
+    ]),
+  ];
+  return repos.length ? repos : undefined;
+}
+
 export async function maybeLaunchSandboxedRun(
   session: UnifiedSession,
   opts: {
@@ -2094,7 +2113,7 @@ export async function maybeLaunchSandboxedRun(
     const automationSandbox = disposableAutomationResume
       ? sandboxAutomationConfig()
       : undefined;
-    const sandbox = await ensureSandboxWithTransientRetry(
+    const sandbox = await ensureSandboxWaitingForCapacity(
       provider,
       {
         sessionId: session.id,
@@ -2112,6 +2131,8 @@ export async function maybeLaunchSandboxedRun(
             }
           : {
               cwd: opts.cwd,
+              // A GPU the session asked its Modal Sandbox for.
+              ...(session.sandboxGpu ? { gpu: session.sandboxGpu } : {}),
               // Bind-mode containers mount attached repos too (a changed set
               // recreates the container); volume mode rejects them in ensure().
               attachedDirs: (session.attachedRepos || [])
@@ -2140,6 +2161,19 @@ export async function maybeLaunchSandboxedRun(
             kind: "sandbox_start_retry",
             session_id: session.id,
             provider: sbProvider,
+          });
+        },
+        // A full provider (every Mac host at its VM budget) is waited out,
+        // not failed: the record says why the start is taking longer.
+        onWaiting(error) {
+          if (session.source !== "opensession" || !session.sandbox) return;
+          touchNativeSession(session.id, {
+            sandbox: {
+              ...session.sandbox,
+              lifecycle: session.sandbox.sandboxId ? "waking" : "preparing",
+              lastLifecycleError: undefined,
+              lifecycleNote: `Waiting for room: ${error instanceof Error ? error.message : String(error)}`,
+            },
           });
         },
       },
@@ -2258,11 +2292,11 @@ export async function maybeLaunchSandboxedRun(
       reposNote: opts.isAutomationSession
         ? undefined
         : await buildSessionNote(session, opts.user),
-      reposNoteHasPreset: !opts.isAutomationSession && !!session.presetNote,
       deniedTools: opts.deniedTools,
       publicationPolicy: security.publicationPolicy,
       confirmTools: STRIPE_CONFIRM_TOOLS,
       aws: false,
+      readRepos: sessionReadRepos(session, owningAutomation?.readRepos),
       author: commitAuthorFor(
         opts.isAutomationSession ? undefined : opts.user,
         opts.isAutomationSession ? undefined : sessionPrincipal(session),
@@ -2326,13 +2360,31 @@ export async function maybeLaunchSandboxedRun(
       session.source === "opensession" &&
       session.sandbox
     ) {
+      // A machine the provider created before the failure (a repository
+      // setup script failed) is recorded, so the session can pause it and
+      // the idle sweep puts it to sleep instead of leaving it billing.
+      const machineId =
+        session.sandbox.sandboxId ||
+        (() => {
+          try {
+            return getSandboxProvider(sbProvider).machineFor?.(session.id);
+          } catch {
+            return undefined;
+          }
+        })();
       touchNativeSession(session.id, {
         sandbox: {
           ...session.sandbox,
+          ...(machineId ? { sandboxId: machineId } : {}),
           lifecycle: "needs_attention",
           lastLifecycleError: reason,
         },
       });
+      if (machineId)
+        noteSandboxActivity(
+          { sandboxId: machineId, sessionId: session.id },
+          "agent",
+        );
     }
     audit({
       kind: "sandbox_turn_metric",
@@ -3242,7 +3294,7 @@ async function runSessionPromptInner(
       : undefined;
   const attachedGhRepos = session.automationDescendantPolicy
     ? undefined
-    : attachedGithubRepos(session);
+    : sessionGithubRepos(session);
   const runnerRun = await maybeLaunchRunnerRun(session, {
     prompt,
     hostId: startToken,
@@ -3380,7 +3432,6 @@ async function runSessionPromptInner(
           reposNote: isAutomationSession
             ? undefined
             : await buildSessionNote(session, user),
-          reposNoteHasPreset: !isAutomationSession && !!session.presetNote,
           deniedTools,
           publicationPolicy: session.automationDescendantPolicy
             ? {
@@ -3393,7 +3444,7 @@ async function runSessionPromptInner(
           aws:
             (!isAutomationSession && !session.plainDiscussionId) ||
             agentAwsCredsForUntrustedRuns(),
-          readRepos: automationReadRepos,
+          readRepos: sessionReadRepos(session, automationReadRepos),
           attachedRepos: attachedGhRepos,
           author: commitAuthorFor(user, sessionPrincipal(session)),
           user: runInputs.user,
@@ -4023,6 +4074,19 @@ async function runSessionPromptInner(
       // (composer-prediction.ts). Same presence gate as the chips.
       maybePredictComposer(sessionId, user || session.startedBy || undefined);
     }
+    // A turn that leaves the session's PR merged writes the "Send to Slack"
+    // draft now and saves it on the session, so it is ready whenever someone
+    // opens the session (shipped-change-draft.ts).
+    if (!endedWithError)
+      void draftShippedChangeAfterTurn(
+        sessionId,
+        user || session.startedBy || undefined,
+      ).catch((error) =>
+        console.warn(
+          `[shipped-change] background draft for ${sessionId} failed:`,
+          error,
+        ),
+      );
   }
 }
 

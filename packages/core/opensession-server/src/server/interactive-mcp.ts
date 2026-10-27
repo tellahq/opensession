@@ -16,7 +16,11 @@
 import { lazyServerRecord } from "./inprocess-mcp";
 import { deskNavigationMcp } from "./desk-navigation-mcp";
 import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
-import { interactivePrompter, sessionCreationOwner } from "./session-actors";
+import {
+  interactivePrompter,
+  sessionCreationOwner,
+  waitContinuationOwner,
+} from "./session-actors";
 import { isDevInstance } from "./dev-mode";
 import { createRunnersMcpServer } from "./runners-mcp";
 import { createAdminMcpServer } from "../agents/slack/admin-tools";
@@ -27,6 +31,7 @@ import { createAskUserMcpServer } from "../agents/slack/ask-tools";
 import { createReposMcpServer } from "../agents/slack/repos-tools";
 import { createPortalsMcpServer } from "./portals-mcp";
 import { createScriptsMcpServer } from "./scripts-mcp";
+import { createGpuMcpServer } from "./gpu-mcp";
 import { createDesktopMcpServer } from "./desktop-mcp";
 import { getSandboxProvider } from "./sandbox";
 import { createWalkthroughMcpServer } from "../agents/slack/walkthrough-tools";
@@ -445,6 +450,13 @@ export function interactiveMcpServers(
               sessionId,
               user: createdBy,
             }),
+          // GPU jobs on the session's GPU machine (gpu-jobs.ts). Interactive
+          // only: a job outlives the call and bills a GPU.
+          "opensession-gpu": () =>
+            createGpuMcpServer({
+              sessionId,
+              user: createdBy,
+            }),
           // Ask the person watching for files from their own computer. They
           // pick the files; the agent never names a path there. Interactive
           // only: the purpose string is shown to a person as a request.
@@ -593,7 +605,15 @@ export function interactiveMcpServers(
  * path resolves through: `interactivePrompter` drops every machine actor and
  * every scheduled /loop tick sent in a person's name (`"Kent (loop)"`), so a
  * caller that only has the persisted account user still fails closed.
+ * The same turn also gets `opensession-keychain` for asking for and using
+ * API credentials (no registration, changes, logins or Mac Keychain): the
+ * person is driving, and an owner still approves each personal one.
  * Descendants (sandboxed children with a publication policy) are excluded.
+ *
+ * A wait registered on such a turn wakes as `waitActor(person)`. That turn
+ * gets `opensession-sessions` in its `waitContinuation` shape only: the
+ * waits and task_status, so it can re-arm or move on to the next child,
+ * never spawn, cancel or borrow credentials.
  *
  * An auto-triage session that reports into a Plain discussion
  * (`plainDiscussionId`) also carries `opensession-plain-discussion`, so a
@@ -624,12 +644,40 @@ export async function automationSessionMcp(
     ...((await selfImproveMcpForSession(session, sessionId)) || {}),
   };
   const prompter = interactivePrompter(opts.humanPrompter);
+  // The wake of a wait that a person's own turn registered: no person is
+  // present, so no spawn suite and no keychain, but the turn keeps the waits
+  // and task_status to follow up on what that person asked it to watch. A
+  // selfImprove automation's own shape already carries more, so it stays.
+  const continuing = prompter
+    ? null
+    : waitContinuationOwner(opts.humanPrompter);
+  if (
+    continuing &&
+    session.automation &&
+    !session.automationDescendantPolicy &&
+    !servers["opensession-sessions"]
+  ) {
+    servers["opensession-sessions"] = createSessionsMcpServer({
+      createdBy: continuing,
+      isAdmin: false,
+      waitContinuation: true,
+      currentSessionId: sessionId,
+    });
+  }
   if (prompter && session.automation && !session.automationDescendantPolicy) {
     servers["opensession-sessions"] = createSessionsMcpServer({
       createdBy: prompter,
       isAdmin: false,
       humanResume: true,
       currentSessionId: sessionId,
+    });
+    // The person may ask for and use API credentials, as in any session
+    // they drive: workspace ones directly, personal ones once the owner
+    // approves the person's ask. Never registration, changes or logins.
+    servers["opensession-keychain"] = createKeychainMcpServer({
+      sessionId,
+      user: prompter,
+      automationTurn: true,
     });
   }
   if (session.plainDiscussionId && !session.automationDescendantPolicy) {

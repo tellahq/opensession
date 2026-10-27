@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { htmlRenderFromResult } from "@tellahq/opensession-protocol/html-render";
 import type { SeqEntry } from "./transcript-store";
 import { MESSAGE_COLLAPSE_CHARS } from "../shared/message-preview";
 import {
@@ -57,6 +58,22 @@ describe("v2 transcript wire previews", () => {
 
     expect(clamped[0]).toBe(render);
     expect(clamped[1].content).toHaveLength(INIT_TOOL_RESULT_CLAMP_BYTES);
+  });
+
+  test("keeps a render reference a codemode report carries", () => {
+    const reference = `{"htmlRender":{"url":"/api/sessions/s/assets/raw/html-renders/a.html","path":"html-renders/a.html","title":"A","height":360},"message":"ok"}`;
+    const report = `Script completed\nWall time 1.8 seconds\nOutput:\n${"x".repeat(400)}\n${reference}\nConsole: (empty)`;
+    const result = entry("r", "tool_result", report);
+
+    const [clamped] = clampV2InitEntries([result]);
+
+    expect(clamped.contentClamped).toBe(true);
+    expect(clamped.content).toBe(
+      `${report.slice(0, INIT_TOOL_RESULT_CLAMP_BYTES)}\n${reference}`,
+    );
+    expect(htmlRenderFromResult(clamped.content)?.url).toBe(
+      "/api/sessions/s/assets/raw/html-renders/a.html",
+    );
   });
 
   test("loads intermediate assistant notes separately from visible answers", () => {

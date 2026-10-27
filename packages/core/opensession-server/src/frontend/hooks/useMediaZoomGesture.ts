@@ -409,6 +409,10 @@ export function useMediaZoomGesture({
   }
 
   function onPointerDown(e: React.PointerEvent) {
+    // Leave right and middle clicks to the browser. Capturing the pointer
+    // retargets the contextmenu event to the wrapper, which hides the
+    // image's own Copy image / Save image menu.
+    if (e.pointerType === "mouse" && e.button !== 0) return;
     if (commentMode && !diagram) {
       const image = imgRef.current;
       if (!image || e.button !== 0 || !e.isPrimary || regionGesture.current)

@@ -113,3 +113,46 @@ export function bulkReviewChanges(
   }
   return { mark, unmark };
 }
+
+export interface LineBreakdownRow {
+  title: string;
+  additions: number;
+  deletions: number;
+}
+
+/**
+ * Lines changed per file role, in review order, skipping empty roles. When
+ * the caller knows larger totals than the files add up to (a provider that
+ * caps its file list), the remainder is reported as "Other" so the rows
+ * still sum to the headline.
+ */
+export function lineBreakdown(
+  files: ReadonlyArray<{ path: string; additions: number; deletions: number }>,
+  totals?: { additions: number; deletions: number },
+): LineBreakdownRow[] {
+  const byTitle = new Map<string, LineBreakdownRow>();
+  for (const file of files) {
+    const title = ruleGroupTitle(file.path);
+    const row = byTitle.get(title) ?? { title, additions: 0, deletions: 0 };
+    row.additions += file.additions;
+    row.deletions += file.deletions;
+    byTitle.set(title, row);
+  }
+  const rows = ORDER.flatMap((title) => {
+    const row = byTitle.get(title);
+    return row && row.additions + row.deletions > 0 ? [row] : [];
+  });
+  if (totals) {
+    const additions =
+      totals.additions - rows.reduce((sum, row) => sum + row.additions, 0);
+    const deletions =
+      totals.deletions - rows.reduce((sum, row) => sum + row.deletions, 0);
+    if (additions > 0 || deletions > 0)
+      rows.push({
+        title: "Other",
+        additions: Math.max(0, additions),
+        deletions: Math.max(0, deletions),
+      });
+  }
+  return rows;
+}

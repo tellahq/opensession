@@ -367,20 +367,15 @@ async function renderEngines(): Promise<string> {
   out.push(
     "## Model routing",
     "",
-    "Every id in `KNOWN_MODELS`, plus the Dial and Orchestrator presets, with the",
+    "Every id in `KNOWN_MODELS`, with the",
     "engine and dispatch id `routeModel()` returns for it.",
     "",
     "| Model id | Label | Engine | Dispatched as |",
     "| --- | --- | --- | --- |",
   );
-  const rows: Array<{ id: string; label: string }> = [
-    ...models.KNOWN_MODELS.map((m: any) => ({ id: m.id, label: m.label })),
-    ...models.DIAL_PRESETS.map((p: any) => ({ id: p.id, label: p.label })),
-    ...models.ORCHESTRATOR_PRESETS.map((p: any) => ({
-      id: p.id,
-      label: p.label,
-    })),
-  ];
+  const rows: Array<{ id: string; label: string }> = models.KNOWN_MODELS.map(
+    (m: any) => ({ id: m.id, label: m.label }),
+  );
   for (const row of rows) {
     const route = models.routeModel(row.id);
     out.push(

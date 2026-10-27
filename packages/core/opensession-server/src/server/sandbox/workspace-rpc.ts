@@ -22,6 +22,7 @@ import {
 } from "./adapters/bootstrap";
 import type { RemoteWorkspaceSpec } from "../../runner-host/protocol";
 import { sandboxSessionScratchDir } from "../session-scratch";
+import { noteSandboxActivity } from "./idle";
 
 /**
  * The remote workspace a run acting on this session's checkout must use, or
@@ -100,6 +101,7 @@ export function primeWorkspaceSandbox(
   sandbox: Sandbox,
 ): void {
   primed().set(sessionId, sandbox);
+  noteSandboxActivity({ sandboxId: sandbox.id, sessionId }, "agent");
 }
 
 async function sandboxForRun(
@@ -189,6 +191,10 @@ export async function dispatchWorkspaceExec(
     return { error: error instanceof Error ? error.message : String(error) };
   }
   const layout = remoteLayoutForProvider(sandbox.provider);
+  noteSandboxActivity(
+    { sandboxId: sandbox.id, sessionId: ctx.sessionId },
+    "agent",
+  );
   try {
     const result = await sandbox.exec(
       [

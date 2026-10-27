@@ -54,6 +54,7 @@ import {
   sessionTimerSnapshot,
   type DurableTimer,
 } from "./session-kernel";
+import { waitActor } from "./session-actors";
 import { requestSessionKernelRuntimeDrain } from "./session-kernel/wakes";
 import {
   hasPendingOpening,
@@ -107,6 +108,9 @@ export interface TimerAgentWait {
   sessionId: string;
   kind: "timer";
   user: string;
+  /** The person a person's own turn registered this wait for, in an
+   * automation-owned session; the wake is sent as `waitActor(wakeAs)`. */
+  wakeAs?: string;
   prompt: string;
   createdAt: number;
   dueAt: number;
@@ -118,6 +122,7 @@ export interface PrChecksAgentWait {
   sessionId: string;
   kind: "pr_checks";
   user: string;
+  wakeAs?: string;
   prompt: string;
   repo: string;
   branch: string;
@@ -143,6 +148,7 @@ export interface WorkflowRunAgentWait {
   sessionId: string;
   kind: "workflow_run";
   user: string;
+  wakeAs?: string;
   prompt: string;
   /** Registered repo id or GitHub owner/name. */
   repo: string;
@@ -178,6 +184,7 @@ export interface SessionTurnAgentWait {
   sessionId: string;
   kind: "session_turn";
   user: string;
+  wakeAs?: string;
   prompt: string;
   targetSessionId: string;
   createdAt: number;
@@ -224,7 +231,8 @@ function isAgentWait(value: unknown): value is AgentWait {
     typeof wait.sessionId === "string" &&
     typeof wait.user === "string" &&
     typeof wait.prompt === "string" &&
-    typeof wait.createdAt === "number";
+    typeof wait.createdAt === "number" &&
+    (wait.wakeAs === undefined || typeof wait.wakeAs === "string");
   if (!common) return false;
   if (wait.kind === "timer")
     return typeof (wait as Partial<TimerAgentWait>).dueAt === "number";
@@ -275,6 +283,7 @@ export async function cancelAgentWait(sessionId: string): Promise<boolean> {
 export async function registerTimerAgentWait(input: {
   sessionId: string;
   user: string;
+  wakeAs?: string;
   prompt?: string;
   seconds: number;
   waitId?: string;
@@ -297,6 +306,7 @@ export async function registerTimerAgentWait(input: {
     sessionId,
     kind: "timer",
     user: input.user.trim() || "Anonymous",
+    ...(input.wakeAs?.trim() ? { wakeAs: input.wakeAs.trim() } : {}),
     prompt: input.prompt?.trim() || "Continue the task now.",
     createdAt: now,
     dueAt: now + Math.round(input.seconds * 1000),
@@ -356,6 +366,7 @@ export function resolvePrWaitRepo(
 export async function registerPrChecksAgentWait(input: {
   sessionId: string;
   user: string;
+  wakeAs?: string;
   repo: string;
   branch: string;
   prompt?: string;
@@ -402,6 +413,7 @@ export async function registerPrChecksAgentWait(input: {
     sessionId,
     kind: "pr_checks",
     user: input.user.trim() || "Anonymous",
+    ...(input.wakeAs?.trim() ? { wakeAs: input.wakeAs.trim() } : {}),
     prompt:
       input.prompt?.trim() ||
       "Inspect the PR checks. Fix failures if needed, then finish the task.",
@@ -427,6 +439,7 @@ export async function registerPrChecksAgentWait(input: {
 export async function registerWorkflowRunAgentWait(input: {
   sessionId: string;
   user: string;
+  wakeAs?: string;
   repo: string;
   runId?: number;
   workflow?: string;
@@ -487,6 +500,7 @@ export async function registerWorkflowRunAgentWait(input: {
     sessionId,
     kind: "workflow_run",
     user: input.user.trim() || "Anonymous",
+    ...(input.wakeAs?.trim() ? { wakeAs: input.wakeAs.trim() } : {}),
     prompt:
       input.prompt?.trim() ||
       "Inspect the workflow run result. Fix failures if needed, then finish the task.",
@@ -602,6 +616,7 @@ export async function registerSessionTurnAgentWait(
   input: {
     sessionId: string;
     user: string;
+    wakeAs?: string;
     targetSessionId: string;
     prompt?: string;
     timeoutSeconds?: number;
@@ -655,6 +670,7 @@ export async function registerSessionTurnAgentWait(
     sessionId,
     kind: "session_turn",
     user: input.user.trim() || "Anonymous",
+    ...(input.wakeAs?.trim() ? { wakeAs: input.wakeAs.trim() } : {}),
     prompt:
       input.prompt?.trim() ||
       "Read the watched session's reply above and continue the task.",
@@ -1034,6 +1050,12 @@ export interface AgentWaitHandlerDeps {
   watchWorkflowRun: (wait: WorkflowRunAgentWait) => void;
 }
 
+/** Who a wake is sent as: `waitActor(person)` for a wait a person's own
+ *  turn registered in an automation-owned session, else nobody. */
+export function agentWaitWakeSender(wait: AgentWait): string | undefined {
+  return wait.wakeAs ? waitActor(wait.wakeAs) : undefined;
+}
+
 export function agentWaitWakePrompt(wait: AgentWait, message: string): string {
   return wrapContext(
     `A durable background wait registered by the assistant has completed. ` +
@@ -1078,7 +1100,11 @@ const defaultHandlerDeps: AgentWaitHandlerDeps = {
     const result = await getSessionControl().deliverToSession(
       wait.sessionId,
       agentWaitWakePrompt(wait, message),
-      undefined,
+      // A wait a person's own turn registered in an automation-owned
+      // session wakes in their name (never as them being present), so the
+      // woken turn keeps the wait tools to follow up; see
+      // waitContinuationOwner. Every other wake has no sender.
+      agentWaitWakeSender(wait),
       {
         deliveryId: `agent-wait:${wait.id}:wake`,
         // The same in-flight race applies to terminal poll results. This

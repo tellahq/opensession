@@ -19,8 +19,6 @@ import {
   routeModel,
   toPiModel,
   KNOWN_MODELS,
-  orchestratorPreset,
-  orchestratorWorkerModels,
   refreshPickerModels,
 } from "./models";
 
@@ -239,20 +237,6 @@ describe("Pi-only model routing", () => {
     expect(modelEngineKey("pi/anthropic/claude-opus-5-5")).toBe(
       "claude-opus-5-5",
     );
-    expect(modelEngineKey("pi/dial/opus-fable")).toBe("dial/opus-fable");
-  });
-
-  test("keeps the Fable and Astra orchestrator cross-provider", () => {
-    const preset = orchestratorPreset("orchestrator/fable-sol");
-    expect(preset).toMatchObject({
-      model: "claude-fable-5-1",
-      effort: "high",
-      workerAgents: ["worker-astra"],
-    });
-    if (!preset) throw new Error("missing Fable + Astra orchestrator preset");
-    expect(
-      orchestratorWorkerModels(preset, new Set(["anthropic", "openai"])),
-    ).toEqual(["openai/gpt-6-astra"]);
   });
 
   test("builds a Pi-only fallback chain", () => {
@@ -336,9 +320,9 @@ describe("Pi-only model routing", () => {
     ]);
   });
 
-  test("upgrades Sol and Luna without changing historical labels", () => {
-    for (const name of ["sol", "luna"]) {
-      const current = name === "sol" ? "gpt-6.1-sol" : `gpt-6-${name}`;
+  test("upgrades Sol, Terra and Luna without changing historical labels", () => {
+    for (const name of ["sol", "terra", "luna"]) {
+      const current = name === "luna" ? "gpt-6-luna" : `gpt-6.1-${name}`;
       const previous = `gpt-5.6-${name}`;
       expect(resolveModel(name)?.id).toBe(current);
       for (const prefix of ["", "openai/", "pi/openai/", "codex/openai/"]) {
@@ -357,11 +341,11 @@ describe("Pi-only model routing", () => {
         ]);
         expect(contextWindowFor(`${prefix}${current}`)).toBe(272_000);
       }
-      const label = name === "sol" ? "Sol" : "Luna";
+      const label = name.charAt(0).toUpperCase() + name.slice(1);
       expect(modelLabel(previous)).toBe(`GPT-5.6 ${label}`);
       expect(modelLabel(`pi/openai/${previous}`)).toBe(`GPT-5.6 ${label}`);
       expect(modelLabel(current)).toBe(
-        name === "sol" ? "GPT-6.1 Sol" : `GPT-6 ${label}`,
+        name === "luna" ? "GPT-6 Luna" : `GPT-6.1 ${label}`,
       );
       expect(accountProviderForModel(current)).toBe("codex");
       expect(fallbackTier(current)).toBe(3);
@@ -431,13 +415,7 @@ test("interactive fallback is on by default and a session can opt out", () => {
   expect(interactiveFallbackModel(model, true)).toBe(
     automaticFallbackModel(model),
   );
-  for (const primary of [
-    model,
-    "dial/high",
-    "orchestrator/fable",
-    "codex-best-available",
-    undefined,
-  ]) {
+  for (const primary of [model, "codex-best-available", undefined]) {
     expect(interactiveFallbackModel(primary, false)).toBe("none");
     expect(
       fallbackPlan(primary, interactiveFallbackModel(primary, false)),
@@ -445,14 +423,14 @@ test("interactive fallback is on by default and a session can opt out", () => {
   }
 });
 
-test("picker preset ids retain their identity rather than resolving to the lead at selection", () => {
-  for (const id of [
-    "pi/dial/high",
-    "pi/dial/opus-fable",
-    "pi/orchestrator/fable",
-  ]) {
-    expect(resolveModel(id)?.id).toBe(id);
-    expect(toPiModel(id)).not.toBe(id);
-  }
+test("retired preset ids resolve to the model they led", () => {
+  expect(resolveModel("pi/dial/high")?.id).toBe("gpt-6.1-sol");
+  expect(resolveModel("dial/opus-fable")?.id).toBe("claude-opus-5-5");
+  expect(toPiModel("pi/orchestrator/fable")).toBe(
+    "pi/anthropic/claude-fable-5-1",
+  );
+  expect(toPiModel("pi/dial/ultra")).toBe("pi/anthropic/claude-fable-5-1");
   expect(resolveModel("pi/orchestrator/missing")).toBeNull();
+  expect(resolveModel("pi/workspace-preset/ws-acme/opus")).toBeNull();
+  expect(toPiModel("pi/workspace-preset/ws-acme/opus")).toBeUndefined();
 });

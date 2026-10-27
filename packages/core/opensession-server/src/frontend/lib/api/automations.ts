@@ -14,16 +14,8 @@ export interface ModelOption {
   label: string;
   aliases: string[];
   efforts: string[];
-  /** Presets fix the lead model's effort instead of offering a ladder. */
-  fixedEffort?: string;
   /** Provider account pool available to this model, if any. */
   accountProvider?: "claude" | "codex" | "xai";
-  /** Picker section override ("dial" = The Dial presets). */
-  group?: string;
-  /** One-line subtitle shown under the label (dial presets). */
-  description?: string;
-  /** Concrete lead and supporting models participating in a preset. */
-  composition?: string[];
   /** This model has subscription-backend priority-tier variants configured. */
   fastModeSupported?: boolean;
   /** GPT-6 Astra: the ChatGPT backend also serves the ultrafast tier. */
@@ -77,10 +69,8 @@ export async function transcribeClip(audio: Blob): Promise<string> {
   return data?.text ?? "";
 }
 
-export async function fetchModels(workspaceId?: string): Promise<ModelCatalog> {
-  const params = new URLSearchParams();
-  if (workspaceId) params.set("workspace", workspaceId);
-  return request<ModelCatalog>(`/models${params.size ? `?${params}` : ""}`, {
+export async function fetchModels(): Promise<ModelCatalog> {
+  return request<ModelCatalog>("/models", {
     label: "Failed to fetch models",
   });
 }
@@ -211,7 +201,7 @@ export interface Automation {
   name: string;
   prompt: string;
   schedule: string;
-  mode: "ask" | "code";
+  mode: "ask" | "code" | "scratch";
   enabled: boolean;
   createdBy: string;
   createdAt: string;
@@ -352,7 +342,7 @@ export interface SandboxStatusInfo {
   enabled: boolean;
   defaultProvider: string;
   providers: Array<{
-    id: "daytona" | "box" | "tart" | "usecomputer";
+    id: "daytona" | "box" | "tart" | "usecomputer" | "modal";
     configured: boolean;
     certified: boolean;
     lastPassedAt?: string;
@@ -408,6 +398,8 @@ export interface SandboxConnectionSettings {
   /** use.computer: the Mac reservation to use when the account holds
    *  several. */
   reservation?: string;
+  /** Modal: the token id (the secret is the stored credential). */
+  tokenId?: string;
   /** Mac VM: the older single-host form; `hosts` supersedes it. */
   runner?: string;
   maxVms?: number;
@@ -418,7 +410,7 @@ export interface SandboxConnectionSettings {
 
 export interface SandboxConnectionInfo {
   id: string;
-  provider: "daytona" | "box" | "tart" | "usecomputer";
+  provider: "daytona" | "box" | "tart" | "usecomputer" | "modal";
   enabled: boolean;
   settings: SandboxConnectionSettings;
   qualification?: {
@@ -506,7 +498,7 @@ export async function createAutomationApi(input: {
   name: string;
   prompt: string;
   schedule: string;
-  mode: "ask" | "code";
+  mode: "ask" | "code" | "scratch";
   createdBy: string;
   eventKey?: string;
   model?: string;

@@ -90,9 +90,9 @@ describe("buildRunInstructions", () => {
       buildRunInstructions({ isAsk: false, hasSession: true }),
     ).not.toContain("GH_READ_TOKEN");
 
-    // Only automations carry the list. The one interactive path that may
-    // mint it is a turn resuming an automation-owned session (a Slack thread
-    // reply), and only with that automation's own list.
+    // Two sources only: an automation's own list (a turn resuming an
+    // automation-owned session keeps it) and the repository's operator
+    // configured list (RepoSection.readRepos, a private build dependency).
     const automationSource = await Bun.file(
       new URL("./automations.ts", import.meta.url),
     ).text();
@@ -100,33 +100,22 @@ describe("buildRunInstructions", () => {
       new URL("./run-session.ts", import.meta.url),
     ).text();
     expect(automationSource).toContain("readRepos: automation.readRepos");
-    expect(interactiveSource.match(/readRepos:/g)).toEqual(["readRepos:"]);
-    expect(interactiveSource).toContain("readRepos: automationReadRepos");
+    // The hosted turn and the Sandbox turn, both through sessionReadRepos.
+    expect(interactiveSource.match(/readRepos:/g)).toEqual([
+      "readRepos:",
+      "readRepos:",
+    ]);
+    expect(interactiveSource).toContain(
+      "readRepos: sessionReadRepos(session, owningAutomation?.readRepos)",
+    );
+    expect(interactiveSource).toContain(
+      "readRepos: sessionReadRepos(session, automationReadRepos)",
+    );
+    expect(interactiveSource).toContain("...(automationReadRepos || []),");
+    expect(interactiveSource).toContain("REPOS[session.repo]?.readRepos");
     expect(interactiveSource).toContain(
       "(await getAutomation(session.automationId))?.readRepos",
     );
-  });
-
-  test("names the model worker sessions must use", () => {
-    const prompt = buildRunInstructions({
-      isAsk: false,
-      orchestrator: {
-        presetLabel: "Orchestrator · Fable + Sol",
-        mainLabel: "Fable 5.1",
-        workers: [
-          {
-            role: "Implementation worker",
-            model: "pi/openai/gpt-6.1-sol",
-            modelLabel: "GPT-6.1 Sol",
-          },
-        ],
-      },
-    });
-
-    expect(prompt).toContain(
-      "Implementation worker: GPT-6.1 Sol via `pi/openai/gpt-6.1-sol`",
-    );
-    expect(prompt).toContain("opensession-sessions spawn_task");
   });
 
   test("keeps a standard interactive prompt minimal", () => {
@@ -200,8 +189,10 @@ describe("buildRunInstructions", () => {
     // timer. "Messages during a turn" adds ~170: without it, a reply to a
     // mid-turn message read as progress narration, or never came. The
     // name rule in "Finish your turns" adds ~110: models opened replies
-    // with the prompter's name, which reads as curt.
-    expect(prompt.length).toBeLessThan(4_250);
+    // with the prompter's name, which reads as curt. Linking child sessions
+    // in a report adds ~100: a PR summary without them left the person
+    // hunting for the session that owns each PR.
+    expect(prompt.length).toBeLessThan(4_350);
   });
 
   test("asks for visual proof by default only where walkthroughs are mounted", () => {

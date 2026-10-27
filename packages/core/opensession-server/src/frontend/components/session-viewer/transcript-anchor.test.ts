@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { holdTranscriptAnchor } from "./transcript-anchor";
+import { holdTranscriptAnchor, keepBottomGap } from "./transcript-anchor";
 
 type Frame = (time: number) => void;
 
@@ -88,7 +88,7 @@ describe("transcript index anchor bridge", () => {
       scroller.node,
       "visible-entry",
       20,
-      100,
+      keepBottomGap(scroller.node, 100),
       () => found++,
       () => stopped++,
       0,
@@ -112,7 +112,7 @@ describe("transcript index anchor bridge", () => {
       scroller.node,
       "visible-entry",
       20,
-      100,
+      keepBottomGap(scroller.node, 100),
       () => found++,
       undefined,
       0,

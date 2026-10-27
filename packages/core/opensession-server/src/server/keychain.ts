@@ -99,7 +99,13 @@ const STANDING_GRANT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Terminal asks/grants older than this are pruned on load. */
 const TERMINAL_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type GrantMode = "once" | "standing" | "run" | "release";
+/** "workspace" is the implicit grant a session gets for a workspace
+ *  credential: minted on first use, never approved by anyone. */
+export type GrantMode = "once" | "standing" | "run" | "release" | "workspace";
+
+/** "personal" (the default, stored as absent): every session asks the owner.
+ *  "workspace": every session may use it without asking. */
+export type CredentialScope = "personal" | "workspace";
 
 /** "api" (the default, stored as absent) is a header the broker injects;
  *  "login" is a username and password for a sign-in page. */
@@ -164,6 +170,10 @@ export interface KeychainCredential {
   allowedPathPrefixes?: string[];
   /** Calls return only the HTTP status, never headers or body. */
   statusOnly?: boolean;
+  /** "workspace": any session in the workspace may call it without an
+   *  ask; absent: personal, every use needs the owner's approval. Never
+   *  set on a login. */
+  scope?: "workspace";
   secret: string;
   createdAt: string;
   updatedAt: string;
@@ -199,6 +209,10 @@ export interface KeychainGrant {
   /** The run was cut off (its host lost, or gone at boot), not ended by its
    *  own exit, stop, timeout or revocation. */
   interrupted?: true;
+  /** Minted without an ask because the credential is workspace-scoped (a
+   *  "workspace" grant, or a run of workspace credentials). Revoked when
+   *  the credential is made personal again. */
+  implicit?: true;
 }
 
 export interface KeychainAskRecord {
@@ -397,6 +411,7 @@ export interface AddCredentialInput {
   allowedMethods?: string[];
   allowedPathPrefixes?: string[];
   statusOnly?: boolean;
+  scope?: CredentialScope;
 }
 
 export type CredentialSpec = Omit<AddCredentialInput, "owner" | "secret">;
@@ -412,6 +427,7 @@ export interface NormalizedCredentialSpec {
   allowedMethods?: string[];
   allowedPathPrefixes?: string[];
   statusOnly?: boolean;
+  scope?: "workspace";
 }
 
 const HTTP_METHODS = new Set([
@@ -482,6 +498,12 @@ export function normalizeCredentialSpec(
       "service must be a short lowercase slug (letters, digits, . _ -)",
     );
   }
+  if (
+    input.scope !== undefined &&
+    input.scope !== "personal" &&
+    input.scope !== "workspace"
+  )
+    throw new Error('scope must be "personal" or "workspace"');
   if (input.kind === "login")
     return normalizeLoginSpec(input, service, taken(service));
   if (input.kind !== undefined && input.kind !== "api")
@@ -529,6 +551,7 @@ export function normalizeCredentialSpec(
     ...(methods.length ? { allowedMethods: methods } : {}),
     ...(prefixes.length ? { allowedPathPrefixes: prefixes } : {}),
     ...(input.statusOnly === true ? { statusOnly: true } : {}),
+    ...(input.scope === "workspace" ? { scope: "workspace" as const } : {}),
   };
 }
 
@@ -545,6 +568,11 @@ function normalizeLoginSpec(
   )
     throw new Error(
       "a login has no header, method, path or status-only settings: it is typed into its sign-in page",
+    );
+  // Its password reaches the agent, so every release stays the owner's call.
+  if (input.scope === "workspace")
+    throw new Error(
+      "a login can't be a workspace credential: its password reaches the agent, so its owner approves each release",
     );
   const url = normalizeLoginUrl(input.loginUrl);
   if (
@@ -596,6 +624,7 @@ function auditAdded(cred: KeychainCredential): KeychainCredentialMeta {
     service: cred.service,
     host: cred.host,
     ...(cred.kind ? { credential_kind: cred.kind } : {}),
+    ...(cred.scope ? { scope: cred.scope } : {}),
   });
   return meta(cred);
 }
@@ -642,11 +671,14 @@ interface RevokedGrant {
   revokedAt: string;
 }
 
-function revokeGrantsOf(id: string): RevokedGrant[] {
+function revokeGrantsOf(
+  id: string,
+  which: (gr: KeychainGrant) => boolean = () => true,
+): RevokedGrant[] {
   const revoked: RevokedGrant[] = [];
   const now = new Date().toISOString();
   for (const gr of grants.values()) {
-    if (gr.credentialId === id && gr.status === "active") {
+    if (gr.credentialId === id && gr.status === "active" && which(gr)) {
       revoked.push({
         id: gr.id,
         before: { ...gr },
@@ -754,6 +786,7 @@ export const UPDATABLE_CREDENTIAL_FIELDS = [
   "allowedMethods",
   "allowedPathPrefixes",
   "statusOnly",
+  "scope",
 ] as const;
 
 export type UpdatableCredentialField =
@@ -793,7 +826,8 @@ export interface UpdateCredentialResult {
    *  new secret for the same access does not change what they approved. */
   grantsKept: number;
   /** Active grants revoked because the credential now goes to a different
-   *  host or sign-in page than the one they were approved for. */
+   *  host or sign-in page than the one they were approved for, or because
+   *  it is personal again and they were never approved. */
   grantsRevoked: number;
 }
 
@@ -807,8 +841,11 @@ export interface UpdateCredentialResult {
  * Active grants survive a new secret or new limits: the owner approved
  * access to this credential and is the one updating it. A new host or
  * sign-in page revokes them, since they were approved for calls to the old
- * one (and a running scripted run's proxy is bound to it). Every update is
- * audited with the fields it changed; the secret is never in the audit line.
+ * one (and a running scripted run's proxy is bound to it). Making a
+ * workspace credential personal again revokes the grants sessions got
+ * without asking, so from then on every session asks the owner. Every
+ * update is audited with the fields it changed; the secret is never in the
+ * audit line.
  */
 export async function updateCredentialAsync(
   id: string,
@@ -868,7 +905,12 @@ export async function updateCredentialAsync(
     };
     credentials.set(id, next);
     const moved = changed.includes("host") || changed.includes("loginUrl");
-    const revoked = moved ? revokeGrantsOf(id) : [];
+    const unshared = changed.includes("scope") && next.scope !== "workspace";
+    const revoked = moved
+      ? revokeGrantsOf(id)
+      : unshared
+        ? revokeGrantsOf(id, (gr) => !!gr.implicit)
+        : [];
     try {
       await persistAsync();
     } catch (error) {
@@ -891,6 +933,7 @@ export async function updateCredentialAsync(
       owner: next.owner,
       service: next.service,
       host: next.host,
+      scope: next.scope ?? "personal",
       by,
       fields: changed,
       secret_rotated: secret !== undefined,
@@ -904,6 +947,25 @@ export async function updateCredentialAsync(
       grantsKept,
       grantsRevoked: revoked.length,
     };
+  });
+}
+
+/**
+ * Share a credential with every session in the workspace, or make it
+ * personal again, as its owner (Settings → Account). The same change as an
+ * update of `scope` alone, with its audit line and grant handling.
+ */
+export async function setCredentialScopeAsync(
+  id: string,
+  by: string,
+  scope: CredentialScope,
+): Promise<UpdateCredentialResult> {
+  await ensureKeychainLoaded();
+  const cred = credentials.get(id);
+  if (!cred) throw new Error("that credential no longer exists");
+  return updateCredentialAsync(id, by, {
+    spec: { ...credentialSpecOf(meta(cred)), scope },
+    expectedUpdatedAt: cred.updatedAt,
   });
 }
 
@@ -987,6 +1049,17 @@ export function revokeGrant(
 }
 
 function mintGrant(ask: KeychainAskRecord, mode: GrantMode): KeychainGrant {
+  const gr = insertGrant(ask, mode);
+  persist();
+  return gr;
+}
+
+/** Build, insert and audit a grant, without persisting. */
+function insertGrant(
+  ask: KeychainAskRecord,
+  mode: GrantMode,
+  implicit = false,
+): KeychainGrant {
   const now = Date.now();
   const gr: KeychainGrant = {
     id: `kg-${crypto.randomUUID()}`,
@@ -1008,11 +1081,10 @@ function mintGrant(ask: KeychainAskRecord, mode: GrantMode): KeychainGrant {
               : RUN_GRANT_START_TTL_MS
             : STANDING_GRANT_TTL_MS),
     ).toISOString(),
-    askId: ask.id,
+    ...(implicit ? { implicit: true as const } : { askId: ask.id }),
     ...(mode === "run" && ask.run ? { run: { ...ask.run } } : {}),
   };
   grants.set(gr.id, gr);
-  persist();
   audit({
     kind: "keychain_grant_minted",
     grant_id: gr.id,
@@ -1020,7 +1092,93 @@ function mintGrant(ask: KeychainAskRecord, mode: GrantMode): KeychainGrant {
     session_id: gr.sessionId,
     mode,
     owner: gr.owner,
+    ...(implicit
+      ? {
+          scope: "workspace",
+          requested_by: gr.requestedBy,
+          purpose: gr.purpose,
+        }
+      : {}),
   });
+  return gr;
+}
+
+/** A workspace API credential: any session may use it without an ask. */
+export function isWorkspaceCredential(
+  cred: Pick<KeychainCredentialMeta, "scope" | "kind"> | undefined,
+): boolean {
+  return cred?.scope === "workspace" && cred.kind !== "login";
+}
+
+/** Insert (without persisting) a grant nobody approved, because the
+ *  credential is workspace-scoped. The caller has checked that it is. */
+function insertImplicitGrant(input: {
+  cred: KeychainCredentialMeta;
+  sessionId: string;
+  requestedBy: string;
+  purpose: string;
+  mode: "workspace" | "run";
+  run?: KeychainScriptedRun;
+}): KeychainGrant {
+  return insertGrant(
+    {
+      id: "",
+      credentialId: input.cred.id,
+      owner: input.cred.owner,
+      sessionId: input.sessionId,
+      requestedBy: input.requestedBy,
+      purpose: input.purpose,
+      requestedMode: input.mode,
+      ...(input.run ? { run: input.run } : {}),
+      status: "approved",
+      createdAt: new Date().toISOString(),
+    },
+    input.mode,
+    true,
+  );
+}
+
+/**
+ * The live grant this session uses for a workspace credential, minted on
+ * first use (and again after it expires or is revoked). Never asks anyone:
+ * the owner made the credential workspace-wide. Persists asynchronously, so
+ * the broker can call it from a request handler.
+ */
+export async function workspaceGrantFor(input: {
+  credential: string;
+  sessionId: string;
+  requestedBy: string;
+  purpose: string;
+}): Promise<KeychainGrant | { error: string }> {
+  await ensureKeychainLoaded();
+  const cred = findCredential(input.credential);
+  if (!cred) return { error: `no credential matches "${input.credential}"` };
+  if (!isWorkspaceCredential(cred))
+    return {
+      error: `${cred.service} is a personal credential; ask its owner with request_credential`,
+    };
+  const live = [...grants.values()].find(
+    (gr) =>
+      gr.sessionId === input.sessionId &&
+      gr.credentialId === cred.id &&
+      gr.mode === "workspace" &&
+      liveNow(gr),
+  );
+  if (live) return live;
+  const gr = insertImplicitGrant({
+    cred,
+    sessionId: input.sessionId,
+    requestedBy: input.requestedBy,
+    purpose: input.purpose,
+    mode: "workspace",
+  });
+  try {
+    await persistAsync();
+  } catch (error) {
+    grants.delete(gr.id);
+    console.error("[keychain] failed to save a workspace grant:", error);
+    return { error: "couldn't write the keychain store" };
+  }
   return gr;
 }
 
@@ -1099,6 +1257,14 @@ export function consumeGrantForBroker(
     };
   const cred = credentials.get(gr.credentialId);
   if (!cred) return { error: "credential no longer exists", status: 404 };
+  // Nobody approved an implicit grant: it holds only while the credential
+  // stays workspace-wide.
+  if (gr.implicit && !isWorkspaceCredential(cred))
+    return {
+      error:
+        "this credential is personal now; ask its owner with request_credential",
+      status: 403,
+    };
   // A password is typed into its sign-in page, never sent as a header.
   if (gr.mode === "release" || cred.kind === "login")
     return {
@@ -1157,6 +1323,10 @@ export interface RunClaim {
  * claim is made in memory before the store is written, so two concurrent
  * starts cannot both take a grant; if the write fails, the claim is undone.
  * Never blocks on the filesystem.
+ *
+ * A run whose credentials are all workspace credentials needs no approval:
+ * without an approved grant, one is minted here for `purpose` and
+ * `maxCalls` (default DEFAULT_WORKSPACE_RUN_CALLS per credential).
  */
 export async function claimRunGrants(input: {
   sessionId: string;
@@ -1164,6 +1334,10 @@ export async function claimRunGrants(input: {
   command: string;
   runId: string;
   deadline: number;
+  /** For a run of workspace credentials: who started it and why. */
+  requestedBy?: string;
+  purpose?: string;
+  maxCalls?: number;
 }): Promise<{ claims: RunClaim[] } | { error: string }> {
   await ensureKeychainLoaded();
   const metas: KeychainCredentialMeta[] = [];
@@ -1188,8 +1362,9 @@ export async function claimRunGrants(input: {
       )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  let chosen: KeychainGrant[];
-  if (metas.length === 1) {
+  const approved = (): { grants: KeychainGrant[] } | { error: string } => {
+    if (metas.length > 1)
+      return findRunGroup(input.sessionId, metas, input.command, unclaimed);
     const credMeta = metas[0]!;
     const runGrants = unclaimed(credMeta);
     if (!runGrants.length)
@@ -1201,17 +1376,17 @@ export async function claimRunGrants(input: {
       return {
         error: `the owner approved a different command (${runGrants.map((g) => JSON.stringify(g.run?.command)).join(", ")}). Run exactly that, or ask again for this one`,
       };
-    chosen = [gr];
-  } else {
-    const found = findRunGroup(
-      input.sessionId,
-      metas,
-      input.command,
-      unclaimed,
-    );
-    if ("error" in found) return found;
-    chosen = found.grants;
+    return { grants: [gr] };
+  };
+  let found = approved();
+  let minted: KeychainGrant[] = [];
+  if ("error" in found && metas.every(isWorkspaceCredential)) {
+    const workspace = workspaceRunGrants(input, metas);
+    if ("error" in workspace) return workspace;
+    found = { grants: (minted = workspace.grants) };
   }
+  if ("error" in found) return found;
+  const chosen = found.grants;
 
   const before = chosen.map((gr) => gr.expiresAt);
   for (const gr of chosen) {
@@ -1227,6 +1402,7 @@ export async function claimRunGrants(input: {
       delete gr.runId;
       gr.expiresAt = before[i]!;
     });
+    for (const gr of minted) grants.delete(gr.id);
     console.error("[keychain] failed to save a run claim:", error);
     return { error: "couldn't write the keychain store" };
   }
@@ -1243,6 +1419,63 @@ export async function claimRunGrants(input: {
     });
   return {
     claims: chosen.map((grant, i) => ({ grant, credential: metas[i]! })),
+  };
+}
+
+/** Calls a run of workspace credentials may make with each one when the
+ *  caller names no cap. */
+export const DEFAULT_WORKSPACE_RUN_CALLS = 10_000;
+
+/** Unpersisted run grants, nobody's approval, for a run of workspace
+ *  credentials only. */
+function workspaceRunGrants(
+  input: {
+    sessionId: string;
+    command: string;
+    requestedBy?: string;
+    purpose?: string;
+    maxCalls?: number;
+  },
+  metas: KeychainCredentialMeta[],
+): { grants: KeychainGrant[] } | { error: string } {
+  const purpose = input.purpose?.trim();
+  if (!purpose)
+    return {
+      error:
+        "a run with workspace credentials needs a purpose: one sentence saying what the script does, recorded in the audit log",
+    };
+  const command = runCommand(input.command);
+  if ("error" in command) return command;
+  const maxCalls = input.maxCalls ?? DEFAULT_WORKSPACE_RUN_CALLS;
+  const capError = maxCallsError(maxCalls);
+  if (capError) return { error: capError };
+  const group: KeychainRunGroup | undefined =
+    metas.length > 1
+      ? {
+          id: `krg-${crypto.randomUUID()}`,
+          members: metas.map((m) => ({
+            service: m.service,
+            host: m.host,
+            owner: m.owner,
+            maxCalls,
+          })),
+        }
+      : undefined;
+  return {
+    grants: metas.map((cred) =>
+      insertImplicitGrant({
+        cred,
+        sessionId: input.sessionId,
+        requestedBy: input.requestedBy || "unknown",
+        purpose,
+        mode: "run",
+        run: {
+          command: command.command,
+          maxCalls,
+          ...(group ? { group } : {}),
+        },
+      }),
+    ),
   };
 }
 
@@ -1324,6 +1557,8 @@ export function useRunGrant(
   const cred = credentials.get(gr.credentialId);
   if (!cred || cred.kind === "login")
     return { error: "credential no longer exists", status: 403 };
+  if (gr.implicit && !isWorkspaceCredential(cred))
+    return { error: "the run's grant is revoked", status: 403 };
   const refusal = ceilingRefusal(cred, method, path);
   return refusal ? { error: refusal, status: 403 } : { credential: cred };
 }
@@ -1459,8 +1694,8 @@ export async function saveRunProgress(
 
 /**
  * The grant this session would use for a credential: its live standing grant
- * if it has one (so a once grant is not spent by accident), else its newest
- * live once grant.
+ * if it has one (so a once grant is not spent by accident), else its live
+ * workspace grant, else its newest live once grant.
  */
 export function activeGrantFor(
   sessionId: string,
@@ -1475,7 +1710,11 @@ export function activeGrantFor(
       gr.mode !== "run" &&
       gr.mode !== "release",
   );
-  return live.find((gr) => gr.mode === "standing") ?? live[0];
+  return (
+    live.find((gr) => gr.mode === "standing") ??
+    live.find((gr) => gr.mode === "workspace") ??
+    live[0]
+  );
 }
 
 export function brokerHeaders(
@@ -1544,9 +1783,21 @@ export function grantInstructions(
     );
   if (gr.mode === "run" && gr.run?.group)
     return runGroupAnswer(gr.sessionId, gr.run.group.id);
+  if (gr.mode === "workspace")
+    return (
+      `**${credMeta.service}** is a workspace credential (owner ${gr.owner}): every session may use it without asking.\n` +
+      `Call the API with call_credential({ credential: "${credMeta.service}", method, path, purpose }), where path is the path and query on https://${credMeta.host} ` +
+      `and purpose is one sentence saying why, recorded with every call. ` +
+      `The credential is injected server-side; you never see the secret. ` +
+      (limits ? `Limits: ${limits}. ` : "") +
+      (credMeta.statusOnly
+        ? "This credential returns only the HTTP status, never the response body. "
+        : "") +
+      `For bulk work, run_with_credential({ credential: "${credMeta.service}", command, purpose, maxCalls }) starts a script without asking. Every call is audited.`
+    );
   if (gr.mode === "run" && gr.run)
     return (
-      `${gr.owner} approved a scripted run with **${credMeta.service}** ` +
+      `${gr.implicit ? `**${credMeta.service}** is a workspace credential, so this scripted run needs no approval` : `${gr.owner} approved a scripted run with **${credMeta.service}**`} ` +
       `(up to ${gr.run.maxCalls} calls, grant ${gr.id}; start it before ${gr.expiresAt}).\n` +
       `Start it with run_with_credential({ credential: "${credMeta.service}", command: ${JSON.stringify(gr.run.command)} }), ` +
       `optionally with cwd and timeoutMinutes. The command must be exactly that. ` +
@@ -1609,13 +1860,15 @@ export function requestCredential(
     return {
       error: "a purpose is required — the owner approves that, not the tool",
     };
+  const isLogin = credMeta.kind === "login";
+  if (isWorkspaceCredential(credMeta))
+    return workspaceAnswer(credMeta, { ...input, purpose });
   const owner = resolveTeammate(credMeta.owner);
   if (!owner)
     return {
       error: `credential owner "${credMeta.owner}" is not in the identity roster`,
     };
 
-  const isLogin = credMeta.kind === "login";
   if (isLogin && input.run)
     return {
       error: `${credMeta.service} is a login: it can't be used by a scripted run. Ask without \`run\` to have the password released to this session`,
@@ -1778,6 +2031,61 @@ export function requestCredential(
   return { ask: record, transport };
 }
 
+/**
+ * request_credential for a workspace credential: nobody is asked. A call
+ * request gets this session's workspace grant (minted if needed), a run
+ * request a run grant for that command and cap at once. Both are audited
+ * with who asked and why.
+ */
+function workspaceAnswer(
+  credMeta: KeychainCredentialMeta,
+  input: RequestCredentialInput,
+): RequestCredentialResult {
+  let gr: KeychainGrant | undefined;
+  if (input.run) {
+    const command = runCommand(input.run.command);
+    if ("error" in command) return command;
+    const capError = maxCallsError(input.run.maxCalls);
+    if (capError) return { error: capError };
+    gr = insertImplicitGrant({
+      cred: credMeta,
+      sessionId: input.sessionId,
+      requestedBy: input.requestedBy,
+      purpose: input.purpose,
+      mode: "run",
+      run: { command: command.command, maxCalls: input.run.maxCalls },
+    });
+  } else {
+    gr = [...grants.values()].find(
+      (g) =>
+        g.sessionId === input.sessionId &&
+        g.credentialId === credMeta.id &&
+        g.mode === "workspace" &&
+        liveNow(g),
+    );
+    if (gr) {
+      audit({
+        kind: "keychain_grant_reused",
+        grant_id: gr.id,
+        credential_id: credMeta.id,
+        session_id: input.sessionId,
+        requested_by: input.requestedBy,
+        purpose: input.purpose,
+      });
+      return { grant: gr, instructions: grantInstructions(gr, credMeta) };
+    }
+    gr = insertImplicitGrant({
+      cred: credMeta,
+      sessionId: input.sessionId,
+      requestedBy: input.requestedBy,
+      purpose: input.purpose,
+      mode: "workspace",
+    });
+  }
+  persist();
+  return { grant: gr, instructions: grantInstructions(gr, credMeta) };
+}
+
 function runCommand(raw: string): { command: string } | { error: string } {
   const command = raw.trim();
   if (!command || command.length > MAX_RUN_COMMAND_CHARS)
@@ -1873,7 +2181,7 @@ export function requestCredentialRun(
       return {
         error: `${credMeta.service} is a login: it can't be used by a scripted run`,
       };
-    if (!resolveTeammate(credMeta.owner))
+    if (!isWorkspaceCredential(credMeta) && !resolveTeammate(credMeta.owner))
       return {
         error: `credential owner "${credMeta.owner}" is not in the identity roster`,
       };
@@ -2011,20 +2319,51 @@ export function requestCredentialRun(
   const group: KeychainRunGroup = { id: `krg-${crypto.randomUUID()}`, members };
   const records: KeychainAskRecord[] = [];
   const transports: HumanAsk[] = [];
+  // Workspace credentials join the run without asking anyone; only the
+  // owners of personal ones are asked.
+  const workspaceGrants = metas.filter(isWorkspaceCredential).map((cred) =>
+    insertImplicitGrant({
+      cred,
+      sessionId: input.sessionId,
+      requestedBy: input.requestedBy,
+      purpose,
+      mode: "run",
+      run: {
+        command: command.command,
+        maxCalls: members.find((x) => x.service === cred.service)!.maxCalls,
+        group,
+      },
+    }),
+  );
+  const personal = metas.filter((m) => !isWorkspaceCredential(m));
+  if (!personal.length) {
+    startWindowOnceComplete(input.sessionId, group);
+    persist();
+    return {
+      grants: workspaceGrants,
+      instructions: runGroupAnswer(input.sessionId, group.id),
+    };
+  }
   const owners: string[] = [];
-  for (const m of metas)
+  for (const m of personal)
     if (!owners.some((o) => sameOwner(o, m.owner))) owners.push(m.owner);
   const now = new Date().toISOString();
   const runList = members
-    .map(
-      (m) =>
-        `• **${m.service}** (${m.host}, owner ${m.owner}): up to ${m.maxCalls.toLocaleString("en-US")} calls`,
-    )
+    .map((m) => {
+      const cred = metas.find((x) => x.service === m.service);
+      return (
+        `• **${m.service}** (${m.host}, ` +
+        (isWorkspaceCredential(cred)
+          ? "workspace credential, no approval needed"
+          : `owner ${m.owner}`) +
+        `): up to ${m.maxCalls.toLocaleString("en-US")} calls`
+      );
+    })
     .join("\n");
   for (const owner of owners) {
     const person = resolveTeammate(owner)!;
-    const mine = metas.filter((m) => sameOwner(m.owner, owner));
-    const others = metas.filter((m) => !sameOwner(m.owner, owner));
+    const mine = personal.filter((m) => sameOwner(m.owner, owner));
+    const others = personal.filter((m) => !sameOwner(m.owner, owner));
     const ownerRecords = mine.map((m): KeychainAskRecord => ({
       id: `ka-${crypto.randomUUID()}`,
       credentialId: m.id,
@@ -2131,7 +2470,17 @@ export function runGroupAnswer(sessionId: string, groupId: string): string {
     const lapsed = missing.filter((m) => !asked(m));
     return (
       (ok.length
-        ? `${ok.map((m) => `${m.owner} approved ${m.service}`).join("; ")}. `
+        ? `${ok
+            .map((m) =>
+              approved.some(
+                (gr) =>
+                  gr.implicit &&
+                  credentials.get(gr.credentialId)?.service === m.service,
+              )
+                ? `${m.service} is a workspace credential and needs no approval`
+                : `${m.owner} approved ${m.service}`,
+            )
+            .join("; ")}. `
         : "") +
       `The run starts only once every owner approved: ` +
       (waiting.length
@@ -2167,7 +2516,9 @@ export function runGroupAnswer(sessionId: string, groupId: string): string {
     );
   });
   return (
-    `Every owner approved a scripted run with ${services.map((s) => `**${s}**`).join(" and ")} ` +
+    (approved.every((gr) => gr.implicit)
+      ? `A scripted run with ${services.map((s) => `**${s}**`).join(" and ")} needs no approval: they are workspace credentials `
+      : `Every owner approved a scripted run with ${services.map((s) => `**${s}**`).join(" and ")} `) +
     `(start it before ${approved.map((gr) => gr.expiresAt).sort()[0]}).\n` +
     `Start it with run_with_credential({ credentials: ${credsJson}, command: ${JSON.stringify(first.run!.command)} }), ` +
     `optionally with cwd and timeoutMinutes. The command must be exactly that. ` +

@@ -8,7 +8,8 @@ export type WorkspaceSandboxProvider =
   | "daytona"
   | "box"
   | "tart"
-  | "usecomputer";
+  | "usecomputer"
+  | "modal";
 
 /** Providers whose connection is a paired Runner rather than an account
  *  credential: nothing is stored in the workspace secret store for them. */

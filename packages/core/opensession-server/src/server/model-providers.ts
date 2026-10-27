@@ -328,8 +328,6 @@ export interface ModelProviderSettings {
    *  config as provider.<id>.options. Independent of `enabled` (that flag only
    *  gates the Anthropic bridge). anthropic/openai never live here. */
   providers?: Record<string, ModelProviderConfig>;
-  /** Opt-in: surface The Orchestrator presets in the model picker. */
-  orchestrator?: boolean;
 }
 
 function stringArray(v: unknown): string[] | undefined {
@@ -570,7 +568,6 @@ export function normalizeModelProviderConfig(
     openaiAccounts: stringArray(bridge?.openaiAccounts),
     xaiAccounts: stringArray(bridge?.xaiAccounts),
     providers: providerMap(r.providers, loadCatalogFile),
-    orchestrator: r.orchestrator === true,
   };
 }
 
@@ -650,14 +647,6 @@ export const DEFAULT_BRIDGE_PORT = 3456;
 
 export function bridgePort(): number {
   return readModelProviderConfig()?.port || DEFAULT_BRIDGE_PORT;
-}
-
-/** The Orchestrator presets are opt-in (off by default): `"orchestrator": true`
- *  in the config file, or OPENSESSION_ORCHESTRATOR=1. Gates only the picker —
- *  stored orchestrator/<name> session ids resolve and run regardless. */
-export function orchestratorEnabled(): boolean {
-  if (process.env.OPENSESSION_ORCHESTRATOR === "1") return true;
-  return readModelProviderConfig()?.orchestrator === true;
 }
 
 /** Configured Pi model ids to surface in the picker. */

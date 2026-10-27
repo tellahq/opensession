@@ -43,6 +43,26 @@ export function SandboxProviderLogo({
 }: {
   provider: SandboxProvider;
 }) {
+  if (provider === "modal") {
+    // Modal: two interlocking slanted bars, drawn in the current color.
+    return (
+      <SandboxProviderTile className="bg-surface text-fg">
+        <svg
+          viewBox="0 0 32 32"
+          className="size-7"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M4 22l7-12h6l-7 12z" />
+          <path d="M15 22l7-12h6l-7 12z" />
+        </svg>
+      </SandboxProviderTile>
+    );
+  }
+
   if (provider === "usecomputer") {
     // use.computer: a display with a pointer over it, the computer-use mark.
     return (
