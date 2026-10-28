@@ -36,6 +36,14 @@ export function testEnvironment(
     XDG_CACHE_HOME: join(home, ".cache"),
     XDG_DATA_HOME: join(home, ".local/share"),
     OPENSESSION_CONFIG: join(home, "config.json"),
+    // Code under test (an archive stopping a session's containers) may call
+    // `podman`/`docker`. Rootless Podman would build its store under the
+    // private XDG_DATA_HOME with files owned by sub-UIDs that this user
+    // cannot delete, failing the home's cleanup. A socket that does not
+    // exist puts Podman in remote mode and makes both runtimes fail fast,
+    // so no test reaches the host's containers.
+    CONTAINER_HOST: `unix://${join(home, "no-container-runtime.sock")}`,
+    DOCKER_HOST: `unix://${join(home, "no-container-runtime.sock")}`,
   };
 }
 

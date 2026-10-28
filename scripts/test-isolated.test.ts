@@ -22,6 +22,11 @@ test("test environments exclude operator credentials, state pointers and runtime
   expect(env.PATH).toBe("/bin");
   expect(env.HOME).toBe("/private-test-home");
   expect(env.OPENSESSION_CONFIG).toBe("/private-test-home/config.json");
+  // Container runtimes point at a socket that does not exist, never the host.
+  for (const key of ["CONTAINER_HOST", "DOCKER_HOST"])
+    expect(env[key]).toBe(
+      "unix:///private-test-home/no-container-runtime.sock",
+    );
   for (const key of [
     "GH_TOKEN",
     "AWS_ACCESS_KEY_ID",
