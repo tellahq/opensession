@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { workspaceArchivedSessions } from "./workspace-archive";
+import {
+  nextFetchedWorkspaceArchive,
+  workspaceArchivedSessions,
+} from "./workspace-archive";
 import type { UnifiedSession } from "./types";
 
 const session = (
@@ -170,5 +173,21 @@ describe("workspaceArchivedSessions", () => {
         workspaceId: null,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("nextFetchedWorkspaceArchive", () => {
+  test("keeps the stored empty list when the next one is empty too", () => {
+    const prev: UnifiedSession[] = [];
+    expect(nextFetchedWorkspaceArchive(prev, [])).toBe(prev);
+  });
+
+  test("takes the fetched rows whenever either side has rows", () => {
+    const rows = [session({ id: "old", archived: true })];
+    expect(nextFetchedWorkspaceArchive([], rows)).toBe(rows);
+    const empty: UnifiedSession[] = [];
+    expect(nextFetchedWorkspaceArchive(rows, empty)).toBe(empty);
+    const again = [session({ id: "old", archived: true })];
+    expect(nextFetchedWorkspaceArchive(rows, again)).toBe(again);
   });
 });
