@@ -74,6 +74,46 @@ function liveRange(range: Range): boolean {
   );
 }
 
+function sameRanges(a: Map<string, Range>, b: Map<string, Range>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [id, range] of b) {
+    const other = a.get(id);
+    if (
+      !other ||
+      other.startContainer !== range.startContainer ||
+      other.startOffset !== range.startOffset ||
+      other.endContainer !== range.endContainer ||
+      other.endOffset !== range.endOffset
+    )
+      return false;
+  }
+  return true;
+}
+
+function sameGeometry(a: Geometry, b: Geometry): boolean {
+  if (
+    a.columnLeft !== b.columnLeft ||
+    a.columnRight !== b.columnRight ||
+    a.marginRight !== b.marginRight ||
+    a.regionWidth !== b.regionWidth ||
+    a.viewHeight !== b.viewHeight ||
+    a.scrollerTop !== b.scrollerTop ||
+    a.boxes.size !== b.boxes.size
+  )
+    return false;
+  for (const [id, box] of b.boxes) {
+    const other = a.boxes.get(id);
+    if (
+      !other ||
+      other.top !== box.top ||
+      other.bottom !== box.bottom ||
+      other.left !== box.left
+    )
+      return false;
+  }
+  return true;
+}
+
 function hitTest(range: Range, x: number, y: number): boolean {
   for (const rect of Array.from(range.getClientRects()))
     if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom)
@@ -154,6 +194,7 @@ export function InlineComments({
           : rangeForAnchor(container, draft.anchor);
         if (range) ranges.set(DRAFT_ID, range);
       }
+      const unchangedRanges = sameRanges(rangesRef.current, ranges);
       rangesRef.current = ranges;
 
       const scrollerRect = container.getBoundingClientRect();
@@ -196,7 +237,7 @@ export function InlineComments({
         summaryRect.left - regionRect.left > columnRight
           ? summaryRect.left - regionRect.left
           : regionRect.width;
-      setGeometry({
+      const next: Geometry = {
         boxes,
         columnLeft,
         columnRight,
@@ -204,7 +245,15 @@ export function InlineComments({
         regionWidth: regionRect.width,
         viewHeight: container.clientHeight,
         scrollerTop: scrollerRect.top - regionRect.top,
-      });
+      };
+      // Streaming and scrolling mutate the transcript many times a second,
+      // usually without moving a passage. Keep the old value then, so the
+      // overlay does not re-render and the highlights are not rebuilt.
+      setGeometry((current) =>
+        current && unchangedRanges && sameGeometry(current, next)
+          ? current
+          : next,
+      );
       const layer = layerRef.current;
       if (layer) {
         layer.style.transform = `translateY(${scrollerRect.top - regionRect.top - container.scrollTop}px)`;
