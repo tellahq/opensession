@@ -8,6 +8,7 @@ import {
   sessionPatchNeedsAcknowledgement,
   sidebarSessionsQuery,
 } from "./useSessions";
+import { sessionRunningStateMatches } from "../lib/session-list-state";
 
 const appSource = await Promise.all([
   Bun.file(new URL("../AppContent.tsx", import.meta.url)).text(),
@@ -102,6 +103,35 @@ describe("sidebarSessionsQuery", () => {
     ).toBe(
       "?archived=exclude&view=sidebar&user=Ada+Lovelace&person=me&repo=tella+fusion&autoCreated=hide&prsFrom=1&session=os-1",
     );
+  });
+});
+
+describe("sessionRunningStateMatches", () => {
+  test("treats a list row without isRunning as idle", () => {
+    // The sidebar projection deletes a false isRunning; a repeated idle
+    // session_status must not patch, and so re-render, the whole list.
+    const idle = session(false);
+    Reflect.deleteProperty(idle, "isRunning");
+    expect(sessionRunningStateMatches(idle, false)).toBe(true);
+    expect(sessionRunningStateMatches(idle, true)).toBe(false);
+  });
+
+  test("patches when the run stamp or the row is missing", () => {
+    const running = { ...session(false), isRunning: true };
+    expect(sessionRunningStateMatches(running, true)).toBe(false);
+    expect(
+      sessionRunningStateMatches(
+        { ...running, runStartedAt: "2026-10-27T07:00:00.000Z" },
+        true,
+      ),
+    ).toBe(true);
+    expect(
+      sessionRunningStateMatches(
+        { ...session(false), runStartedAt: "2026-10-27T07:00:00.000Z" },
+        false,
+      ),
+    ).toBe(false);
+    expect(sessionRunningStateMatches(undefined, false)).toBe(false);
   });
 });
 
