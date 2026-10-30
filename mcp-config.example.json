@@ -15,6 +15,16 @@
         "Authorization": "Bearer <your-braintrust-api-key>"
       }
     },
+    "fathom": {
+      "_comment": "First-party read-only Fathom server. Store real values only in your gitignored mcp-config.json.",
+      "command": "opensession",
+      "args": ["fathom-mcp"],
+      "env": {
+        "FATHOM_API_TOKEN": "<site-specific-read-only-token>",
+        "FATHOM_SITE_ID": "<site-id>"
+      },
+      "allowedUsers": ["Grant"]
+    },
     "my-custom-server": {
       "_comment": "Example: your own stdio MCP server. `command` (+ optional `args`) is spawned per run; pass its credentials via the per-server `env` block.",
       "command": "bun",
