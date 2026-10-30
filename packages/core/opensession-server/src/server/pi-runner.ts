@@ -42,6 +42,7 @@ import type {
  *  accepts (ProviderConfigInput — not re-exported by the package index). */
 type PiProviderConfigInput = Parameters<ModelRuntime["registerProvider"]>[1];
 import { stateDir } from "./paths";
+import { ensureGitStashGuard, guardedPath } from "./git-stash-guard";
 import { audit, summarizeText } from "./audit";
 import { recordModelUsage, shortModel } from "./model-usage";
 import {
@@ -2549,8 +2550,22 @@ async function* runPiAttempt(
       mkdirSync(homeEnv.HOME, { recursive: true, mode: 0o700 });
     if (!remote && homeEnv.GH_CONFIG_DIR)
       mkdirSync(homeEnv.GH_CONFIG_DIR, { recursive: true, mode: 0o700 });
+    // Sibling worktrees share one stash stack; the wrapper refuses
+    // `git stash` so sessions cannot pop each other's work. A Sandbox drops
+    // this PATH and has its own checkout.
+    const gitStashGuard = remote
+      ? undefined
+      : await ensureGitStashGuard().catch((error) => {
+          console.warn(
+            `[pi-runner] git stash guard unavailable: ${error instanceof Error ? error.message : error}`,
+          );
+          return undefined;
+        });
+    const bashPath = gitStashGuard
+      ? guardedPath(gitStashGuard, process.env.PATH)
+      : process.env.PATH;
     const bashEnv: Record<string, string> = {
-      ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
+      ...(bashPath ? { PATH: bashPath } : {}),
       ...homeEnv,
       ...(process.env.LANG ? { LANG: process.env.LANG } : {}),
       // Session-scoped scratch (session-scratch.ts): temp files follow the
