@@ -33,11 +33,12 @@ import {
   Tasks,
   WorkspacePane,
 } from "./components/DeferredPanes";
+import { DeskFab } from "./components/DeskFab";
 import { DeskOverlay } from "./components/DeskOverlay";
 import { SessionVoiceHost } from "./components/SessionVoiceHost";
 import { DesktopLinkToast } from "./components/DesktopLinkToast";
 import { refWebPanel } from "./components/FeedWebPane";
-import { IconDesk, IconSidebarLeft } from "./components/icons";
+import { IconSidebarLeft } from "./components/icons";
 import { BlockExpandHost } from "./components/BlockExpandDialog";
 import { MediaLightboxHost } from "./components/MediaLightbox";
 import { NavigationProvider } from "./components/NavigationProvider";
@@ -95,7 +96,7 @@ import { appTopbarTitle } from "./lib/app-topbar-title";
 import type { AppProps, PendingCreateDraft } from "./lib/app-types";
 import { dropStagingAttachments } from "./lib/attachments";
 import { NEW_SESSION_DRAFT_KEY, clearDraft, saveDraft } from "./lib/drafts";
-import { DESK_FAB, MOBILE_FAB } from "./lib/fab-classes";
+import { MOBILE_FAB } from "./lib/fab-classes";
 import { pickLandingSession } from "./lib/landing-session";
 import { receiveMention, receiveMentionsCleared } from "./lib/mentions";
 import { InboxPage } from "./components/notifications/InboxPage";
@@ -140,7 +141,6 @@ import { Button } from "./ui/button";
 import { cn } from "./ui/cn";
 import { EmptyState, LoadingState } from "./ui/state";
 import { ToastHost, toast } from "./ui/toast";
-import { PulseDot } from "./ui/status";
 import { Tooltip } from "./ui/tooltip";
 import { TopBar, TopBarActions, TopBarTitle } from "./ui/top-bar";
 
@@ -896,7 +896,8 @@ export function AppContent({
     strip: {
       activeTabSplit,
       tabStripVisible,
-      deskFabPosition,
+      deskFabPlaced,
+      deskFabLayoutKey,
       toStoredSplit,
       focusedSide,
       activeIdFor,
@@ -1866,39 +1867,14 @@ export function AppContent({
 				    on the root page (see .desk-fab). ⌘J and the command palette still
 				    summon it too. */}
             {(!isPhone || !mobileDetail) && (
-              <Tooltip
-                label={deskCallShown ? "Desk call in progress" : "Desk"}
-                side="left"
-                shortcut={["⌘", "J"]}
-              >
-                <button
-                  className={DESK_FAB}
-                  style={
-                    deskFabPosition
-                      ? {
-                          left: deskFabPosition.left,
-                          right: "auto",
-                          bottom: deskFabPosition.bottom,
-                        }
-                      : undefined
-                  }
-                  onClick={() =>
-                    setDeskOverlay({ open: true, origin: "bottom-right" })
-                  }
-                  aria-label={
-                    deskCallShown
-                      ? "Desk call in progress. Open the Desk"
-                      : "Open the Desk"
-                  }
-                >
-                  <IconDesk size={24} />
-                  {/* The call keeps running behind a minimised Desk; the dot
-                      says so until the call ends or Desk is back up. */}
-                  {deskCallShown && (
-                    <PulseDot className="absolute top-0 right-0 ring-2 ring-[var(--composer-surface)]" />
-                  )}
-                </button>
-              </Tooltip>
+              <DeskFab
+                placed={deskFabPlaced}
+                layoutKey={deskFabLayoutKey}
+                callShown={deskCallShown}
+                onOpen={() =>
+                  setDeskOverlay({ open: true, origin: "bottom-right" })
+                }
+              />
             )}
 
             <SessionVoiceHost
