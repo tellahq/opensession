@@ -13,7 +13,6 @@ import {
   SIDEBAR_SWIPE_ACTION_TRANSITION,
   SIDEBAR_SWIPE_ACTION_UNSNOOZE,
   SIDEBAR_SWIPE_ROW,
-  SIDEBAR_WS_ACTION,
   SIDEBAR_WS_ACTIONS,
   SIDEBAR_WS_ACTIONS_HOVER,
   SIDEBAR_WS_FACE,
@@ -39,7 +38,6 @@ import { shortTime } from "../../lib/time";
 import type { WsTimePref } from "../../lib/workspace-time";
 import { ROW_TINT_CLASS } from "../../lib/row-colors";
 import { cn } from "../../ui/cn";
-import { Tooltip } from "../../ui/tooltip";
 import { RepoTile } from "../RepoTile";
 import { ReviewAskerFace } from "../ReviewAskerFace";
 import { UserAvatar } from "../UserAvatar";
@@ -51,11 +49,11 @@ import {
   WsPrStatusMark,
   WsStatusMark,
 } from "./HoverCards";
-import { KeepInSidebarMark } from "./KeepInSidebarMark";
 import { mentionLabel } from "../../lib/mentions";
 import { OriginMark } from "./OriginMark";
 import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./SidebarItem";
 import { WorkspaceDraftIndicator } from "./WorkspaceDraftIndicator";
+import { WorkspaceRowHoverActions } from "./WorkspaceRowHoverActions";
 
 export type WorkspaceRowEditing = {
   value: string;
@@ -164,19 +162,18 @@ export function WorkspaceRow({
   swipe,
   shortcuts: { pinShortcutKeys, archiveShortcutKeys },
   events,
-  actions: {
+  actions,
+}: WorkspaceRowProps) {
+  const {
     onCloseSwipe,
     onTogglePin,
     onToggleSnooze,
     onArchive,
     onDeleteDraft,
-    onConfirmDeleteDraft,
     onOpenMention,
     onStartWorkspaceRename,
     onStartSessionRename,
-    onKeepInSidebar,
-  },
-}: WorkspaceRowProps) {
+  } = actions;
   const hasQuestion = row.sessions.some((session) => session.waitingForInput);
   const failed = !hasQuestion && !!workspaceRunNeedingAttention(row.sessions);
   // A manually pinned Needs input lane remains blue, but a failed top-level
@@ -595,134 +592,17 @@ export function WorkspaceRow({
           )}
           data-ws-actions=""
         >
-          {/* Pin is not one of the row's standing actions: an unpinned row
-              offers snooze and archive, the two moves you make constantly,
-              and pinning stays in the context menu, the ⌘P chord and the
-              swipe. Once a row IS pinned the chip comes back, because
-              unpinning has to be reachable from the thing it marks. */}
-          {pinned && (
-            <Tooltip
-              label="Unpin workspace"
-              // Only on the row the chord would actually hit: ⌘P pins the
-              // workspace holding the OPEN session, so advertising it on
-              // every row would promise a key that lands elsewhere.
-              shortcut={active ? (pinShortcutKeys ?? undefined) : undefined}
-            >
-              <span
-                role="button"
-                tabIndex={0}
-                // One colour, picked here rather than stacking two `text-*`
-                // utilities, whose winner would be Tailwind's ordering: a
-                // pinned action keeps its accent under the pointer.
-                className={cn(SIDEBAR_WS_ACTION, "text-accent")}
-                aria-label="Unpin workspace"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTogglePin();
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.stopPropagation();
-                    onTogglePin();
-                  }
-                }}
-              >
-                <IconPin size={19} fill="currentColor" />
-              </span>
-            </Tooltip>
-          )}
-          {row.sessions.length > 0 ? (
-            <>
-              <Tooltip
-                label={
-                  snoozed
-                    ? "Unsnooze workspace"
-                    : "Snooze workspace until Someday"
-                }
-              >
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
-                  aria-label={
-                    snoozed ? "Unsnooze workspace" : "Snooze workspace"
-                  }
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleSnooze();
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.stopPropagation();
-                      onToggleSnooze();
-                    }
-                  }}
-                >
-                  <IconMoon size={19} />
-                </span>
-              </Tooltip>
-              <Tooltip
-                label="Archive workspace"
-                shortcut={
-                  active ? (archiveShortcutKeys ?? undefined) : undefined
-                }
-              >
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
-                  aria-label="Archive workspace"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onArchive(
-                      e.currentTarget.closest<HTMLButtonElement>(
-                        "button[data-sidebar-row]",
-                      ),
-                    );
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.stopPropagation();
-                      onArchive(
-                        e.currentTarget.closest<HTMLButtonElement>(
-                          "button[data-sidebar-row]",
-                        ),
-                      );
-                    }
-                  }}
-                >
-                  <IconArchive size={19} />
-                </span>
-              </Tooltip>
-            </>
-          ) : row.workspace?.draft ? (
-            <Tooltip label="Delete draft">
-              <span
-                role="button"
-                tabIndex={0}
-                className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-red")}
-                aria-label="Delete draft"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onConfirmDeleteDraft(onDeleteDraft);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.stopPropagation();
-                    onConfirmDeleteDraft(onDeleteDraft);
-                  }
-                }}
-              >
-                <IconTrash size={19} />
-              </span>
-            </Tooltip>
-          ) : null}
-          {canKeepInSidebar && (
-            <KeepInSidebarMark
-              className={SIDEBAR_WS_ACTION}
-              onKeep={() => onKeepInSidebar()}
-            />
-          )}
+          <WorkspaceRowHoverActions
+            pinned={pinned}
+            active={active}
+            snoozed={snoozed}
+            hasSessions={row.sessions.length > 0}
+            draft={!!row.workspace?.draft}
+            canKeepInSidebar={canKeepInSidebar}
+            pinShortcutKeys={pinShortcutKeys}
+            archiveShortcutKeys={archiveShortcutKeys}
+            actions={actions}
+          />
         </span>
       </button>
     </div>
