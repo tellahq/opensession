@@ -1181,6 +1181,14 @@ export function AppContent({
     />
   );
 
+  // Built here rather than inline in the AppSidebar props: inline, the React
+  // Compiler kept it in the app body's one memo scope (current session, desk
+  // state, sidebar collapse), so nearly every app render handed the sidebar a
+  // new footer and re-rendered all of it.
+  const sidebarUpdatePill = (
+    <UpdatePill addHandler={addHandler} variant="footer" />
+  );
+
   const navigationActions = {
     unreadChats,
     allChatsRead,
@@ -1353,9 +1361,7 @@ export function AppContent({
                     showToast,
                     panelIcon,
                     sidebarToggleKeys,
-                    footerAccessory: (
-                      <UpdatePill addHandler={addHandler} variant="footer" />
-                    ),
+                    footerAccessory: sidebarUpdatePill,
                   }}
                   shell={{
                     sidebarCollapsed,

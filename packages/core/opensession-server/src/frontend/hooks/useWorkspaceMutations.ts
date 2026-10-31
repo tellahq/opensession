@@ -1,3 +1,4 @@
+import { useDebugValue } from "react";
 import {
   archiveSessionApi,
   archiveWorkspaceApi,
@@ -28,6 +29,13 @@ type WorkspaceMutationsParams = {
   dropStalePins: (sessions: UnifiedSession[]) => void;
 };
 
+/**
+ * The sidebar receives the rename, archive and delete actions as props, so
+ * their identities decide whether an unrelated app render (toggling the
+ * sidebar, say) re-renders every row. `useDebugValue` is what makes the React
+ * Compiler memoize them: it only compiles a `use*` function whose body calls
+ * a React hook itself.
+ */
 export function useWorkspaceMutations({
   route,
   navigate,
@@ -39,6 +47,7 @@ export function useWorkspaceMutations({
   rememberArchived,
   dropStalePins,
 }: WorkspaceMutationsParams) {
+  useDebugValue(route.view, (view) => `route ${view}`);
   const renameWorkspace = async (id: string, name: string) => {
     await (async () => {
       await updateWorkspaceApi(id, { name });
