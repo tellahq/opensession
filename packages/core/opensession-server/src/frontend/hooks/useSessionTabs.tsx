@@ -1054,9 +1054,20 @@ export function useSessionTabs({
       });
   };
   const handleNewSessionRef = useRef(handleNewSession);
+  const openNewSessionInWorkspaceRef = useRef(openNewSessionInWorkspace);
   useLayoutEffect(() => {
     handleNewSessionRef.current = handleNewSession;
+    openNewSessionInWorkspaceRef.current = openNewSessionInWorkspace;
   });
+  // Both read most of this hook's state, so they change on every render. They
+  // reach the navigation context (openNewSessionInWorkspace, duplicateSession,
+  // startNewChat), and a new context value re-renders the whole sidebar. Hand
+  // out stable callers that run the latest version; only event handlers call
+  // them.
+  const startNewSession: typeof handleNewSession = (...args) =>
+    handleNewSessionRef.current(...args);
+  const startNewSessionFrom: typeof openNewSessionInWorkspace = (...args) =>
+    openNewSessionInWorkspaceRef.current(...args);
 
   // Lanes are per-user (lib/lanes.ts): setting one moves the row in YOUR
   // sidebar only, so teammates can hold the same workspace in their own
@@ -1354,8 +1365,8 @@ export function useSessionTabs({
       archiveSessionsFromCatchUp,
     },
     sessionActions: {
-      handleNewSession,
-      openNewSessionInWorkspace,
+      handleNewSession: startNewSession,
+      openNewSessionInWorkspace: startNewSessionFrom,
       setSessionLanes,
       closeSession,
       archiveSessionFromSidebar,
