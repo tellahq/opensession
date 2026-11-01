@@ -117,6 +117,20 @@ export async function handleSessionGitRoutes(
     return Response.json({ repos });
   }
 
+  // How this session ships (ship-mode.ts) and the Changes tab's buttons:
+  // Ship first, then the repository's own. Carries the session's direct
+  // ships too, so the shipped strip reads one place.
+  if (path.match(/^\/api\/sessions\/(.+)\/ship$/) && req.method === "GET") {
+    const sessionId = decodeURIComponent(
+      path.match(/^\/api\/sessions\/(.+)\/ship$/)![1],
+    );
+    const session = await findSessionAsync(sessionId);
+    if (!session)
+      return Response.json({ error: "Session not found" }, { status: 404 });
+    const { sessionShipInfo } = await import("../ship-info");
+    return Response.json(await sessionShipInfo(session));
+  }
+
   // Structural code-flow diff for the selected worktree. Kept separate from
   // the polled line diff: parsing is lazy and only runs when Code flow opens.
   if (

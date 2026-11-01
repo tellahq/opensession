@@ -149,6 +149,7 @@ import {
   maybeSuggestReplies,
 } from "./reply-suggestions";
 import { draftShippedChangeAfterTurn } from "./shipped-change-draft";
+import { trackDirectShipAfterTurn } from "./direct-ship-tracker";
 import {
   clearComposerPrediction,
   maybePredictComposer,
@@ -4112,6 +4113,12 @@ async function runSessionPromptInner(
     // linger on "Ahead by N commits" (see autoPushSessionBranches). Only on a
     // clean finish — an errored/aborted turn may be mid-work. Fire-and-forget.
     if (!endedWithError) void autoPushSessionBranches(session);
+    // A direct-mode workspace that pushed to the default branch this turn is
+    // recorded and confirmed as shipped (direct-ship.ts). Fire-and-forget.
+    if (!endedWithError)
+      void trackDirectShipAfterTurn(sessionId).catch((error) =>
+        console.warn(`[direct-ship] tracking ${sessionId} failed:`, error),
+      );
     // A turn that ended on a choice ("fix both, or only step 1?") offers that
     // choice as chips above the composer. Generated only for a watcher who is
     // actually there; anyone arriving later gets them on watch instead
