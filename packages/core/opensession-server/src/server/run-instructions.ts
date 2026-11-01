@@ -10,6 +10,7 @@
 import { join } from "path";
 import { configuredServer, personaName } from "./config";
 import { renderInternalMcpCapabilities } from "./mcp-capabilities";
+import { buildRunPublicationSection } from "./ship-mode";
 import { githubLoginFor, type GitIdentity } from "./shared/user-mappings";
 
 const UI_BASE =
@@ -132,28 +133,13 @@ export function buildRunInstructions(input: {
 
   if (input.reposNote) parts.push(input.reposNote);
 
-  if (
-    !input.isAsk &&
-    !input.isScratch &&
-    input.hasSession &&
-    input.repoHost === "codestorage"
-  ) {
+  if (!input.isAsk && !input.isScratch && input.hasSession)
     parts.push(
-      "## Code Storage\nCommit and push the branch; a pushed branch is the change request. " +
-        "Do not merge it or use `gh pr create`.",
+      ...buildRunPublicationSection({
+        repoHost: input.repoHost,
+        prReviewer: input.prReviewer,
+      }),
     );
-  } else if (!input.isAsk && !input.isScratch && input.hasSession) {
-    parts.push(
-      "## Pull requests\nEnd each PR body with the attribution footer from the session " +
-        "context and follow its assignee rule. Add the commit trailers from the session " +
-        "context to every commit, each on its own line at the end of the message. Follow repository branching and publication rules.",
-    );
-    if (input.prReviewer) {
-      parts.push(
-        `For a PR this unattended automation creates, request \`${input.prReviewer}\` as reviewer. Never add this automatic reviewer to an existing PR or a human-steered PR. If the request fails, mention it in the final response.`,
-      );
-    }
-  }
   // Everything a run publishes to a public repository is readable by anyone,
   // while its inputs (session context, memory, Slack, Linear, local
   // instructions, other checkouts) are the organization's private record.

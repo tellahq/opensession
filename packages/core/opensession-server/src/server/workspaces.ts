@@ -112,6 +112,9 @@ export interface Workspace {
    * nobody added.
    */
   collaborators?: WorkspaceCollaborator[];
+  /** Ship-mode choice made when the workspace was created (ship-mode.ts).
+   *  Absent = the repository's `publicationMode`. New sessions inherit it. */
+  shipMode?: "pull-request" | "direct";
 }
 
 /** A teammate added to a workspace, keyed by picker first name. */
@@ -672,6 +675,7 @@ export async function updateWorkspace(
       | "branch"
       | "worktreeDir"
       | "attachedRepos"
+      | "shipMode"
     >
   > & { draft?: WorkspaceDraft | null },
   expectedName?: string,
@@ -747,6 +751,7 @@ export async function updateWorkspace(
       ...(patch.attachedRepos !== undefined
         ? { attachedRepos: patch.attachedRepos }
         : {}),
+      ...(patch.shipMode !== undefined ? { shipMode: patch.shipMode } : {}),
       draft: nextDraft,
     };
   });

@@ -647,6 +647,8 @@ export function sessionListRow(
     piSessionId: _piSessionId,
     modelHistory: _modelHistory,
     transcriptPath: _transcriptPath,
+    // The open session's shipped strip reads these; no list row does.
+    directShips: _directShips,
     ...listed
   } = s;
   const row: Partial<SessionListRow> = listed;

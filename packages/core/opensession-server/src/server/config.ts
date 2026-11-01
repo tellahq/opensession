@@ -22,6 +22,7 @@ import { resolve as resolvePath } from "path";
 import { statePath } from "./paths";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { shellSafeDefaultBranch } from "./repo-branch";
+import { parseShipActions, type ShipAction } from "./ship-actions";
 
 const HOME = homeDir();
 const OPENSESSION_ROOT = resolvePath(import.meta.dir, "../../../../..");
@@ -111,8 +112,15 @@ export interface RepoSection {
   /** code.storage repo id/path (the JWT `repo` claim), e.g. "acme/widget". */
   csRepo?: string;
   sharedCheckout?: boolean;
-  /** Worktree publication preference; absent = pull-request. */
+  /** Worktree publication preference (the default ship mode, ship-mode.ts);
+   *  absent = pull-request. A session may override it at creation. */
   publicationMode?: RepoPublicationMode;
+  /** Extra buttons beside Ship on the Changes tab: each sends `prompt` to the
+   *  session's agent. At most six; malformed entries are dropped. */
+  shipActions?: ShipAction[];
+  /** Archive a workspace's sessions once its directly shipped commits are on
+   *  the default branch, the way merged-PR sessions are. Absent = off. */
+  archiveShipped?: boolean;
   /** Pins the repository's visibility for the public-repository rules
    *  (repo-visibility.ts). Absent = ask GitHub, and treat an unconfirmed
    *  answer as public. */
@@ -299,6 +307,10 @@ export interface Repo {
   sharedCheckout?: boolean;
   /** Worktree publication preference; absent = pull-request. */
   publicationMode?: RepoPublicationMode;
+  /** Changes-tab buttons beside Ship (see RepoSection.shipActions). */
+  shipActions?: ShipAction[];
+  /** See RepoSection.archiveShipped. */
+  archiveShipped?: boolean;
   /** Pinned visibility (see RepoSection.public). */
   public?: boolean;
   /** Instance default repo (defaultRepo()). */
@@ -427,6 +439,8 @@ function parseRepoSection(v: unknown): RepoSection | undefined {
     csRepo: str(o.csRepo),
     sharedCheckout: bool(o.sharedCheckout),
     publicationMode,
+    shipActions: parseShipActions(o.shipActions),
+    archiveShipped: bool(o.archiveShipped),
     public: bool(o.public),
     default: bool(o.default),
     icon: str(o.icon),
@@ -918,6 +932,8 @@ function resolveConfiguredRepos(
           csRepo: entry.csRepo,
           sharedCheckout: entry.sharedCheckout,
           publicationMode: entry.publicationMode,
+          shipActions: entry.shipActions,
+          archiveShipped: entry.archiveShipped,
           public: entry.public,
           default: entry.default,
           icon: entry.icon,

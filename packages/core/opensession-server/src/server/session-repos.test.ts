@@ -135,6 +135,36 @@ describe("buildBranchNote", () => {
     },
   );
 
+  test("a session's ship-mode choice overrides the repository default", () => {
+    expect(
+      buildBranchNote({ ...directSession(), shipMode: "pull-request" }),
+    ).toContain("This workspace keeps ONE pull request");
+    const prRepoDirect = buildBranchNote({
+      mode: "code",
+      branch: "change",
+      worktreeDir: join(configDir, "worktrees/infra-change"),
+      shipMode: "direct",
+    });
+    expect(prRepoDirect).toContain("## Branch discipline (direct publication)");
+    expect(prRepoDirect).toContain("git push origin HEAD:refs/heads/main");
+  });
+
+  test("a direct choice never reaches automations, open PRs or Code Storage", () => {
+    for (const context of [
+      { automation: "nightly" },
+      { prNumber: 3 },
+      { worktreeDir: join(configDir, "worktrees/storage-change") },
+    ]) {
+      const note = buildBranchNote({
+        ...directSession(),
+        worktreeDir: join(configDir, "worktrees/infra-change"),
+        ...context,
+        shipMode: "direct",
+      });
+      expect(note).not.toContain("HEAD:refs/heads/");
+    }
+  });
+
   test("ask and actual main-checkout sessions do not get worktree instructions", () => {
     expect(
       buildBranchNote({ ...directSession(), mode: "ask" }),

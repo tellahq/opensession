@@ -449,6 +449,11 @@ export type ProtocolClientMessage =
        * setting; the explicit choices are that user's override for this repo.
        */
       checkoutMode?: "default" | "checkout" | "worktree";
+      /**
+       * How the new workspace's change ships: one PR, or straight to the
+       * default branch. Omit to follow the repository's `publicationMode`.
+       */
+      shipMode?: "pull-request" | "direct";
       model?: string;
       /** Optional MCP server allowlist for the opening run. [] means none. */
       mcpServers?: string[];

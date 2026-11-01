@@ -63,7 +63,15 @@ import type {
   StackedOn,
   UnifiedSession,
 } from "./types";
-import { defaultRepo } from "./config";
+import { defaultRepo, type Repo } from "./config";
+import {
+  buildStackPublicationNote,
+  buildWorktreePublicationNote,
+  MERGE_CLAIM_FILE,
+  resolveShipMode,
+  type ResolvedShipMode,
+  type ShipMode,
+} from "./ship-mode";
 import { hostRepoId } from "./pr-host";
 import { resolveRegisteredPr } from "./pr-labels";
 import { isNoPrError, prMetaForBranch } from "./pr-info";
@@ -152,9 +160,8 @@ export function resolveSessionRepoContext(
  * that branch as THE branch — sibling commits included. Without this, each
  * sibling session decided the extra commits on the shared branch weren't its own
  * and cherry-picked onto a fresh branch, producing one PR per session instead of
- * one per workspace. Rewriting the branch as a whole (rebasing it onto the
- * trunk when the user asks) is fine as long as every sibling commit rides along;
- * what the note forbids is dropping or routing around them.
+ * one per workspace. The text itself, in the session's effective ship mode,
+ * comes from ship-mode.ts.
  */
 export function buildBranchNote(session: {
   mode?: "ask" | "code" | "scratch";
@@ -168,6 +175,8 @@ export function buildBranchNote(session: {
   pstackMode?: boolean;
   automation?: string;
   automationDescendantPolicy?: UnifiedSession["automationDescendantPolicy"];
+  /** The session's or workspace's ship-mode choice; absent = the repo's. */
+  shipMode?: ShipMode;
 }): string | undefined {
   if (session.mode === "ask" || !session.branch || !session.worktreeDir)
     return undefined;
@@ -176,73 +185,53 @@ export function buildBranchNote(session: {
   // default must not remove branch discipline from an existing worktree.
   if (canonicalPath(session.worktreeDir) === canonicalPath(repo.repo))
     return undefined;
-  if (
-    repo.publicationMode === "direct" &&
-    repo.host !== "codestorage" &&
-    !session.prUrl &&
-    !session.prNumber &&
-    !session.prs?.some(
-      (pr) =>
-        pr.repo === repo.id &&
-        pr.branch === session.branch &&
-        pr.state !== "MERGED" &&
-        pr.state !== "CLOSED",
-    ) &&
-    !session.stackedOn &&
-    !session.existingBranch &&
-    !session.pstackMode &&
-    !session.automation &&
-    !session.automationDescendantPolicy
-  ) {
-    return [
-      "## Branch discipline (direct publication)",
-      `You are working in \`${session.worktreeDir}\` on branch \`${session.branch}\`. Sibling sessions share this worktree and branch; preserve all their commits and uncommitted work. Stay on this branch, never switch or create branches, reset, stash, or cherry-pick around sibling commits.`,
-      `Repository \`${repo.id}\` defaults to publishing directly to \`${repo.defaultBranch}\` without a pull request. This publication preference is independent of checkout isolation. If the user explicitly requests a PR, or this branch already has an open PR, use the PR workflow instead; never merge that PR without explicit user approval for that specific PR.`,
-      `Before publishing, inspect the complete diff against \`origin/${repo.defaultBranch}\`, including sibling commits. Stop if unfinished or unrelated work would land. Stage only your own changes, inspect the staged diff, and run the repository's required checks before committing.`,
-      `Fetch with \`git fetch origin\`. Before integrating upstream, check for rebase-merge, rebase-apply, or MERGE_HEAD under \`git rev-parse --git-dir\` and coordinate with sibling sessions. If \`git merge-base --is-ancestor origin/${repo.defaultBranch} HEAD\` fails, merge \`origin/${repo.defaultBranch}\` into this branch without rewriting its history, only with a clean index. Never stash or discard another session's uncommitted work. Resolve conflicts and rerun all required checks on the final candidate.`,
-      `Publish the checked commit with a normal fast-forward push: \`git push origin HEAD:refs/heads/${repo.defaultBranch}\`. Never force-push or delete the default branch. If the push is rejected because the remote advanced, fetch, integrate, review, and check again; do not blindly retry. Keep this worktree's upstream on its own branch, not the default branch.`,
-      "This preference grants no additional credentials or permissions. If server policy or branch protection refuses direct publication, report the blocker; never bypass it. Automations and their descendants keep their existing publication restrictions.",
-      "",
-      buildConflictNote(repo.defaultBranch),
-    ].join("\n");
-  }
-  return [
-    "## Branch discipline (shared worktree)",
-    `You are working in \`${session.worktreeDir}\` on branch \`${session.branch}\`. Other sessions in this workspace share this exact worktree and branch — commits you don't recognize are their work, not noise.`,
-    `Stay on \`${session.branch}\`: never create or switch branches, and never drop, reset away, or cherry-pick around sibling commits. Commit your changes on this branch and push with \`git push -u origin ${session.branch}\`.`,
-    `When the user asks to rebase onto the trunk, do it: \`git rebase origin/<default branch>\` keeps every sibling commit, so it is allowed. First make sure no other session has a rebase or merge in progress (no \`rebase-merge\`, \`rebase-apply\`, or \`MERGE_HEAD\` under \`git rev-parse --git-dir\`) and commit or leave untouched any uncommitted work, then push the rewritten branch with \`git push --force-with-lease origin ${session.branch}\`. Do not rebase, force-push, or otherwise rewrite the branch unless the user asked for it in the current conversation.`,
-    repo.host === "codestorage"
-      ? `Commit and push your branch with \`git push -u origin ${session.branch}\` — this repo is hosted on Code Storage; there is no gh CLI and no pull requests; a pushed branch IS the change request. Never merge it into the default branch yourself.`
-      : `This workspace keeps ONE pull request: if an open PR for \`${session.branch}\` already exists, pushing updates it — do not open another. Only run \`gh pr create\` when the branch has no open PR. Never merge a pull request unless the user explicitly asks in the current conversation to merge that specific pull request. A positive review (including 5/5, no blocking findings, or “safe to merge”), passing checks, pull request ownership, or a request to create, update, review, or babysit a pull request does not authorize merging it.`,
-    repo.host === "codestorage"
-      ? "Only deviate from this (a separate branch) when the user explicitly asks for it."
-      : "Only deviate from this (separate branch or separate PR) when the user explicitly asks for it.",
-    // A stacked branch follows its base branch, not the trunk (buildStackNote).
-    ...(session.stackedOn ? [] : ["", buildConflictNote(repo.defaultBranch)]),
-  ].join("\n");
+  const { mode } = sessionShipMode(session, repo);
+  return buildWorktreePublicationNote({
+    repo,
+    mode,
+    worktreeDir: session.worktreeDir,
+    branch: session.branch,
+    stacked: !!session.stackedOn,
+  });
 }
 
-/** Claim file, under the shared git dir, naming the session resolving an
- * upstream merge. Sibling sessions share one worktree, so git's own MERGE_HEAD
- * already serializes the merge; the claim adds WHO owns it, so a sibling can
- * tell a live merge from one abandoned by a session that stopped. */
-export const MERGE_CLAIM_FILE = "opensession-merge-owner";
-
-/**
- * Conflicts with the trunk are always this workspace's job, never something to
- * report and leave: an unresolved conflict blocks every sibling's next publish.
- * Exactly one session resolves at a time, coordinated through the claim file.
- */
-function buildConflictNote(defaultBranch: string): string {
-  return [
-    "## Merge conflicts after the default branch moves",
-    `When \`origin/${defaultBranch}\` has moved and conflicts with this branch (a merge stops on conflicts, a push is rejected and integrating conflicts, or you are told this branch's PR now has merge conflicts), resolving them is part of your task. Do not stop at reporting them, and do not leave them for the user. Merge \`origin/${defaultBranch}\` into this branch (no rebase, no force-push), keep the intent of both sides, rerun the required checks, commit, and push. Ask the user only when the two sides make incompatible product decisions.`,
-    `Sibling sessions share this worktree, so exactly one session resolves at a time. Coordinate through \`$(git rev-parse --git-dir)/${MERGE_CLAIM_FILE}\`:`,
-    `- Before merging, read that file and check for \`MERGE_HEAD\`. If neither exists, write your Open Session id to the file and start the merge. You own it until the merge commit is pushed; then delete the file.`,
-    "- If the file names another session, check it with `get_session`. While it is running, queued, or waiting on a question, it owns the conflict: do not start a second merge or edit conflicted files. Keep working on unrelated files and check again before you publish. If it is idle, archived, or unknown, or `MERGE_HEAD` exists with no claim, take over: write your id to the file and finish the merge in progress.",
-    "- If git refuses the merge because a sibling's uncommitted edits would be overwritten, ask the sessions working on those files with `send_to_session` to commit them, wait for their reply, then merge. Tell the user which files block the merge only when no session owns them.",
-  ].join("\n");
+/** The effective ship mode of a session's branch in `repo`. */
+export function sessionShipMode(
+  session: {
+    branch?: string | null;
+    prUrl?: string;
+    prNumber?: number;
+    prs?: Readonly<UnifiedSession["prs"]>;
+    stackedOn?: StackedOn;
+    existingBranch?: boolean;
+    pstackMode?: boolean;
+    automation?: string;
+    automationDescendantPolicy?: UnifiedSession["automationDescendantPolicy"];
+    shipMode?: ShipMode;
+  },
+  repo: Repo,
+): ResolvedShipMode {
+  return resolveShipMode({
+    repo,
+    override: session.shipMode,
+    openPr:
+      !!session.prUrl ||
+      !!session.prNumber ||
+      !!session.prs?.some(
+        (pr) =>
+          pr.repo === repo.id &&
+          pr.branch === session.branch &&
+          pr.state !== "MERGED" &&
+          pr.state !== "CLOSED",
+      ),
+    stacked: !!session.stackedOn,
+    existingBranch: !!session.existingBranch,
+    pstackMode: !!session.pstackMode,
+    automation: !!session.automation || !!session.automationDescendantPolicy,
+  });
 }
+
+export { MERGE_CLAIM_FILE };
 
 /**
  * System-prompt note for a session whose worktree was branched off ANOTHER session's
@@ -260,29 +249,17 @@ export function buildStackNote(session: {
 }): string | undefined {
   const base = session.stackedOn?.branch;
   if (!base || session.mode !== "code" || !session.branch) return undefined;
-  // Code Storage has no PRs and no stacks — the stacked relationship is purely
-  // a branch cut from another branch, so the note reduces to push discipline.
-  let csHosted = false;
+  let codeStorage = false;
   if (session.worktreeDir) {
     try {
-      csHosted = repoForPath(session.worktreeDir).host === "codestorage";
+      codeStorage = repoForPath(session.worktreeDir).host === "codestorage";
     } catch {}
   }
-  if (csHosted) {
-    return [
-      "## Stacked branch",
-      `This branch was cut from \`${base}\` (another session's branch), not from the trunk — its commits sit ON TOP of that work, and a diff against the trunk would show both.`,
-      `Commit and push your branch with \`git push -u origin ${session.branch}\` — this repo is hosted on Code Storage; there is no gh CLI and no pull requests; a pushed branch IS the change request. When reviewing the diff, compare against \`${base}\`, not the default branch.`,
-      `Never merge \`${base}\` into this branch to "catch up" — it moves under you as its own review updates — and never merge either branch yourself; the human merges.`,
-    ].join("\n");
-  }
-  return [
-    "## Stacked branch",
-    `This branch was cut from \`${base}\` (another session's branch), not from the trunk — its commits sit ON TOP of that work, and a diff against the trunk would show both.`,
-    `Open your PR against that branch: \`gh pr create --base ${base}\`. Never retarget it at the default branch, and never merge \`${base}\` into this branch to "catch up" — it moves under you as its own PR updates.`,
-    `Once both PRs exist, register them as a GitHub stack so each is reviewed on its own diff and the bases rebase themselves as layers merge: \`gh stack link <base-PR-url> <your-PR-url>\` (bottom first, run from this worktree). If that reports \`unknown command "stack"\`, don't retry or try to install it — just say so; the PR's base is what matters, and the Stack card in the PR tab links it in one click.`,
-    "Never merge either PR — the human merges the stack.",
-  ].join("\n");
+  return buildStackPublicationNote({
+    base,
+    branch: session.branch,
+    codeStorage,
+  });
 }
 
 /**
@@ -313,6 +290,8 @@ export function buildReposNote(
   lines.push(
     "A file mentioned from an attached repo arrives as `@<project>:<path>` — resolve it under that repo's worktree dir above.",
   );
+  // A session's ship-mode choice is about its primary repository; an
+  // attached repository keeps its own configured mode.
   const attachedNotes = attached.map((repo) =>
     buildBranchNote({
       mode: session.mode,

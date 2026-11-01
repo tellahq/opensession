@@ -162,6 +162,7 @@ import {
   retrievedMemoryNoteFor,
   workspaceOwningWorktree,
 } from "./session-repos";
+import { parseShipMode, type ShipMode } from "./ship-mode";
 
 import { ownedWorktree } from "./session-workspace";
 import { engineSessionPatch, mergedSessionTranscriptAsync } from "./sessions";
@@ -291,6 +292,8 @@ export interface CreateSessionMessage {
   runner?: unknown;
   worktreeMode?: unknown;
   checkoutMode?: unknown;
+  /** "pull-request" | "direct" (ship-mode.ts); anything else = the repo's. */
+  shipMode?: unknown;
   workspaceId?: unknown;
   plainThreadId?: unknown;
   createWorkspace?: { name?: unknown };
@@ -444,6 +447,9 @@ export interface ResolvedCreate {
   speed?: SessionSpeed; // unset falls back to fastMode; "ultrafast" needs GPT-6 Astra and a Pro $500 login
   /** Pstack mode from the palette toggle; `/pstack <task>` as the opening prompt also enables it. */
   pstackMode?: boolean;
+  /** The session's ship-mode choice (palette toggle or its workspace's);
+   *  absent = the repository's publicationMode. */
+  shipMode?: ShipMode;
   /** Start the repository's first Portal once the workspace is ready. */
   startPortal?: boolean;
   accountId?: string;
@@ -770,6 +776,7 @@ function createdSessionFileDefaults(spec: ResolvedCreate): NativeSessionFile {
       : {}),
     ...(spec.effort ? { effort: spec.effort } : {}),
     ...(specPstackMode(spec) ? { pstackMode: true } : {}),
+    ...(spec.shipMode ? { shipMode: spec.shipMode } : {}),
     ...(spec.autoFallback === false ? { autoFallback: false } : {}),
     ...(spec.fastMode ? { fastMode: true } : {}),
     ...(spec.speed && spec.speed !== "standard" ? { speed: spec.speed } : {}),
@@ -1914,6 +1921,7 @@ export async function openCreatedSession(
                       stackedOn: spec.stackedOn,
                       existingBranch: spec.worktreeKind === "existing",
                       pstackMode,
+                      shipMode: spec.shipMode,
                     }),
                     await memoryNoteFor(
                       spec.user,
@@ -2013,6 +2021,7 @@ export async function openCreatedSession(
                   stackedOn: spec.stackedOn,
                   existingBranch: spec.worktreeKind === "existing",
                   pstackMode,
+                  shipMode: spec.shipMode,
                 }),
             await memoryNoteFor(
               spec.user,
@@ -2599,6 +2608,11 @@ export async function handleCreateSessionMessage(
   const createPstackMode = forkSource
     ? forkSource.pstackMode
     : msg.pstackMode === true;
+  // Ship mode from the palette's PR | Direct toggle (forks inherit). A
+  // session joining a workspace without its own choice takes the workspace's.
+  const requestedShipMode = forkSource
+    ? forkSource.shipMode
+    : parseShipMode(msg.shipMode);
   // Pinned provider account from the palette (forks inherit, and a fork of
   // a fixed-subscription session keeps that hard pin).
   const createFunding = resolveCreateSubscriptionPolicy({
@@ -3054,6 +3068,21 @@ export async function handleCreateSessionMessage(
     // deal for a workspace whose first session just consumed a draft that
     // still wears the draft's first-line name (autoName not demoted to
     // false). The generated title upgrades that first line the same way.
+    // The palette's choice belongs to the workspace it just created, so the
+    // sessions added to it later ship the same way.
+    if (
+      workspace &&
+      requestedShipMode &&
+      (mintedForSession || createdWorkspaceNow) &&
+      workspace.shipMode !== requestedShipMode
+    )
+      workspace =
+        (await updateWorkspace(workspace.id, {
+          shipMode: requestedShipMode,
+        })) ?? workspace;
+    const createShipMode = isAsk
+      ? undefined
+      : (requestedShipMode ?? workspace?.shipMode);
     const wsAutoNamed =
       mintedForSession ||
       (createdWorkspaceNow &&
@@ -3223,6 +3252,7 @@ export async function handleCreateSessionMessage(
       fastMode: createSpeed !== "standard",
       speed: createSpeed,
       pstackMode: createPstackMode,
+      ...(createShipMode ? { shipMode: createShipMode } : {}),
       ...(msg.startPortal === true && !forkSource ? { startPortal: true } : {}),
       accountId: createAccountId,
       subscriptionPolicy: createFunding.subscriptionPolicy,

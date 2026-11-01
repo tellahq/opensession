@@ -240,6 +240,11 @@ export interface UnifiedSession {
   presetNote?: string;
   /** Sticky pstack engineering mode, enabled with /pstack <task>. */
   pstackMode?: boolean;
+  /** Ship-mode choice made at creation (ship-mode.ts); absent = the repo's. */
+  shipMode?: "pull-request" | "direct";
+  /** Pushes of this workspace's branch straight to the default branch,
+   *  newest last (direct-ship.ts). */
+  directShips?: DirectShip[];
   /** Pi reasoning variant for runs in this session; unset = model default. */
   effort?: string;
   /** Allow automatic model switching when the selected model is unavailable. Defaults to true. */
@@ -583,6 +588,29 @@ export interface ShippedChangeDraft {
   at: string;
 }
 
+/**
+ * One push of a workspace branch straight to the repository's default branch
+ * (direct ship mode). Recorded when the push is seen, marked shipped once the
+ * remote's default branch is confirmed to contain it.
+ */
+export interface DirectShip {
+  repo: string;
+  /** The workspace branch that was pushed. */
+  branch: string;
+  /** The default branch it was pushed to. */
+  target: string;
+  /** The pushed commit, which the default branch now points at or past. */
+  sha: string;
+  /** The default branch before the push, when the reflog still had it. */
+  previousSha?: string;
+  /** Commits the push added to the default branch, oldest first (capped). */
+  commits: string[];
+  /** When the push was first seen. */
+  pushedAt: string;
+  /** When the remote's default branch was confirmed to contain `sha`. */
+  shippedAt?: string;
+}
+
 export interface SessionSlackShare {
   channelId: string;
   channelName: string;
@@ -704,6 +732,10 @@ export interface NativeSessionFile {
    *  carry it; nothing reads it, and list rows strip it. */
   presetNote?: string;
   pstackMode?: boolean; // sticky pstack engineering mode, toggled with /pstack or /poteto-mode
+  /** See UnifiedSession.shipMode. */
+  shipMode?: "pull-request" | "direct";
+  /** See UnifiedSession.directShips. */
+  directShips?: DirectShip[];
   effort?: string; // Pi reasoning variant for this session's runs; unset = model default
   /** Allow automatic model switching when the selected model is unavailable. Defaults to true. */
   autoFallback?: boolean;
