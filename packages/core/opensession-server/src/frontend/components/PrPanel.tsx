@@ -30,7 +30,9 @@ import {
 } from "../lib/review-verdicts";
 import { usePeople } from "../lib/people";
 import { useConfirm } from "../ui/confirm";
+import { useSessionShipResource } from "../hooks/useApiResources";
 import { DiffPanel } from "./DiffPanel";
+import { ShipActions } from "./ShipActions";
 import {
   API_BASE,
   fetchPrViewedFiles,
@@ -87,7 +89,6 @@ import {
   IconGitMerge,
   IconGlobe,
   IconPlus,
-  IconPullRequest,
   IconSliders,
   IconUndo,
   IconX,
@@ -346,15 +347,6 @@ export function PrPanel({
   const [closeError, setCloseError] = useState<string | null>(null);
   const [markingReady, setMarkingReady] = useState(false);
   const [autoMergeBusy, setAutoMergeBusy] = useState(false);
-  // The branch has no PR yet and the bar's Create PR action has been asked for.
-  // The agent does the work, so this only confirms the ask briefly while the PR
-  // itself is still being created.
-  const [prRequested, setPrRequested] = useState(false);
-  useEffect(() => {
-    if (!prRequested) return;
-    const timer = window.setTimeout(() => setPrRequested(false), 6000);
-    return () => window.clearTimeout(timer);
-  }, [prRequested]);
   const { copy: copyPrLink } = useCopy();
   // Merging is a separate decision from approving, so it starts off: the
   // reviewer opts into it, and the primary action stays "Approve".
@@ -473,6 +465,14 @@ export function PrPanel({
     showingGuide ||
     (page === "files" && codeView === "all" && grouping === "ai");
   const showingFlow = page === "files" && codeView === "flow";
+  const shipResource = useSessionShipResource(sessionId ?? "", {
+    enabled: !!sessionId && !previewTarget,
+  });
+  const localReviewOnly =
+    shipResource.data?.available === true &&
+    shipResource.data.mode === "direct" &&
+    shipResource.data.checkout === "worktree" &&
+    !shipResource.data.openPr;
   const {
     pr,
     git,
@@ -1343,7 +1343,9 @@ export function PrPanel({
       </div>
     );
 
-  if (loadError && !pr)
+  // A workspace that ships straight to its default branch has no PR to load,
+  // so a GitHub failure must not hide its local review.
+  if (loadError && !pr && !localReviewOnly)
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         {phoneLayout && phoneNavigation && (
@@ -1371,21 +1373,10 @@ export function PrPanel({
   if (!pr) {
     const showWorktreeDiff =
       !!sessionId && !previewTarget && !active?.linked && !active?.discovered;
-    // The branch's own changes are the review here, so they lead. Opening the
-    // PR is the one action this state offers, and it sits in the bar rather
-    // than inside a card below the diff.
-    const createPr = () => {
-      if (!send || !sessionId) return;
-      send({
-        type: "prompt",
-        sessionId,
-        user: getCurrentUser(),
-        content:
-          "Commit any remaining work, push the branch, and open a PR for it.",
-      });
-      setPrRequested(true);
-      toast(`Asked ${AGENT_NAME} to open a pull request`);
-    };
+    // The branch's own changes are the review here, so they lead: a local
+    // review whose line comments go to the agent. Shipping is the one action
+    // this state offers, in the session's ship mode (Create PR, or Ship to
+    // the default branch), and it sits in the bar rather than below the diff.
     return (
       <div
         className={`selectable relative flex h-full min-h-0 flex-col bg-surface ${compactToolbar ? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"}`}
@@ -1395,19 +1386,15 @@ export function PrPanel({
           <div className={PR_NO_PR_BAR}>
             {phoneLayout && phoneNavigation}
             {targetPicker}
-            {/* Opening the PR is what this state is for, so its action leads
+            {/* Shipping is what this state is for, so its actions lead
                 before the shared diff controls. */}
             {showWorktreeDiff && !!send && (
-              <Button
-                variant="primary"
-                size="sm"
-                className="phone:min-h-11"
-                icon={<IconPullRequest size={20} />}
-                disabled={prRequested}
-                onClick={createPr}
-              >
-                {prRequested ? "Opening…" : "Create PR"}
-              </Button>
+              <ShipActions
+                sessionId={sessionId}
+                canSend={!!editGate}
+                send={send}
+                layout="inline"
+              />
             )}
             {linkable && (
               <LinkPrControl
@@ -1446,6 +1433,7 @@ export function PrPanel({
                 canSend={!!send && !!editGate}
                 send={send ?? NOOP_SEND}
                 toolbarTarget={worktreeToolbarTarget}
+                showShipActions={false}
               />
             </div>
           ) : (

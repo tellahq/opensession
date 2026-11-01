@@ -26,6 +26,7 @@ import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import {
   useSessionGitResource,
   useSessionPrResource,
+  useSessionShipResource,
 } from "../hooks/useApiResources";
 import { getCurrentUser } from "./UserPicker";
 import { providerFromUrl } from "../lib/provider";
@@ -88,6 +89,7 @@ import {
   IconArrowUp,
   IconArrowUpRight,
   IconPullRequest,
+  IconRocket,
   IconGitMerge,
   IconCopy,
   IconHash,
@@ -509,6 +511,17 @@ export function PrStatusBar({
   });
   const pr = prResource.data ?? null;
   const git = gitResource.data ?? null;
+  // Only the no-PR action depends on how the session ships: Create PR, or
+  // Ship straight to the default branch (ship-mode.ts on the server).
+  const shipResource = useSessionShipResource(sessionId, {
+    enabled: !promoted && !prResource.isLoading && !pr,
+    revision: refreshTick ?? null,
+  });
+  const ship = shipResource.data?.available ? shipResource.data : null;
+  const directShip =
+    ship?.mode === "direct" && ship.checkout === "worktree"
+      ? ship.buttons.find((button) => button.primary)
+      : undefined;
   // A failed PR read and a branch with no PR both land here as a null `pr`.
   // Keep them apart: only the second one may claim "No PR open" and offer to
   // create one. SWR keeps the last good value, so this is only true when there
@@ -971,7 +984,20 @@ export function PrStatusBar({
           </PrBarButton>
         );
       case "no-pr":
-        return send ? (
+        if (!send) return null;
+        if (directShip)
+          return (
+            <PrBarButton
+              className={actionBtn}
+              tone="secondary"
+              icon={<IconRocket size={18} />}
+              title={`Push to ${ship?.target ?? "the default branch"} after the checks pass`}
+              onClick={() => promptSession("Shipping…", directShip.prompt)}
+            >
+              Ship
+            </PrBarButton>
+          );
+        return (
           <PrBarButton
             className={actionBtn}
             tone="secondary"
@@ -985,7 +1011,7 @@ export function PrStatusBar({
           >
             Create PR
           </PrBarButton>
-        ) : null;
+        );
       case "ready": {
         const mergeScheduled = mergePhase === "scheduled";
         // The five-second window already reads as merging: the button holds

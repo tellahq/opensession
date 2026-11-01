@@ -223,6 +223,16 @@ export async function fetchDiff(
   );
 }
 
+/** How this session ships, its Changes-tab buttons, and its direct ships. */
+export async function fetchSessionShip(
+  sessionId: string,
+): Promise<import("../types").SessionShipInfo> {
+  return request<import("../types").SessionShipInfo>(
+    `/sessions/${encodeURIComponent(sessionId)}/ship`,
+    { label: "Failed to load ship options" },
+  );
+}
+
 export async function fetchCodeFlow(
   sessionId: string,
   repo: string,

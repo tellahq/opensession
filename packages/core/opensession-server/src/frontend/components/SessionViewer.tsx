@@ -1627,6 +1627,7 @@ export function SessionViewer({
           onReviewChange,
           liveOverviewMedia,
           setReviewSessionActionTarget,
+          openSlackComposer: handleOpenSlackComposer,
         }}
         conversation={{ others, entries }}
       />
@@ -1929,6 +1930,7 @@ export function SessionViewer({
             diff: diffState,
             source: worktreeDiffSource,
             onSourceChange: changeWorktreeDiffSource,
+            onShareShipped: handleOpenSlackComposer,
           }}
           changesContainerRef={desktopChangesRef}
           portals={{

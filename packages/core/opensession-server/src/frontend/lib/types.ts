@@ -631,6 +631,8 @@ export interface UnifiedSession {
   speed?: "fast" | "ultrafast";
   /** Pstack mode: the pstack skill family loads for this session's runs. */
   pstackMode?: boolean;
+  /** Ship-mode choice made at creation; absent = the repository's. */
+  shipMode?: ShipMode;
   /** Pinned account in the active model provider's pool; unset = auto. */
   accountId?: string;
   /** DETAIL ONLY — see `claudeSessionId`. */
@@ -776,6 +778,58 @@ export interface SessionDiffResponse {
   repos: RepoDiff[];
   error?: string;
 }
+
+/** How a workspace's change ships (server ship-mode.ts). */
+export type ShipMode = "pull-request" | "direct";
+
+/** Why the effective ship mode is what it is (server ShipModeReason). */
+export type ShipModeReason =
+  | "repository"
+  | "override"
+  | "code-storage"
+  | "automation"
+  | "open-pr"
+  | "stacked"
+  | "existing-branch"
+  | "pstack";
+
+/** One push of the workspace branch straight to the default branch. */
+export interface DirectShip {
+  repo: string;
+  branch: string;
+  target: string;
+  sha: string;
+  previousSha?: string;
+  commits: string[];
+  pushedAt: string;
+  /** Set once the remote's default branch was confirmed to contain `sha`. */
+  shippedAt?: string;
+}
+
+export interface ShipButton {
+  id: string;
+  label: string;
+  /** The message the button sends to the session's agent. */
+  prompt: string;
+  primary?: boolean;
+}
+
+/** GET /api/sessions/:id/ship */
+export type SessionShipInfo =
+  | { available: false }
+  | {
+      available: true;
+      repo: string;
+      target: string;
+      checkout: "worktree" | "shared";
+      mode: ShipMode;
+      requested: ShipMode;
+      reason: ShipModeReason;
+      openPr?: { number: number; url?: string };
+      buttons: ShipButton[];
+      ships: DirectShip[];
+      archiveShipped: boolean;
+    };
 
 export interface DiffFileGroup {
   title: string;

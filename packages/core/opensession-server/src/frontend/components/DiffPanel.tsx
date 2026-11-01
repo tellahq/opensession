@@ -43,6 +43,7 @@ import {
   useCodeOrganizationSettings,
 } from "../hooks/useCodeDisplaySettings";
 import { errorMessage } from "../lib/error-message";
+import { DirectShipNotice, ShipActions } from "./ShipActions";
 
 interface Props {
   sessionId: string;
@@ -61,6 +62,13 @@ interface Props {
   /** Shown when Review can switch between its PR and live worktree diffs. */
   source?: "pull-request" | "worktree";
   onSourceChange?: (source: "pull-request" | "worktree") => void;
+  /** Show Ship and the repository's own buttons above the diff. Off where
+   *  a parent bar already carries them (Review's no-PR toolbar). */
+  showShipActions?: boolean;
+  /** Bumped when the session's git state changes (pushes, PR events). */
+  gitRefreshTick?: number;
+  /** Open the shipped-change Slack composer for a direct ship. */
+  onShareShipped?: () => void;
 }
 
 export interface SessionDiffState {
@@ -143,6 +151,9 @@ export function DiffPanel({
   showFileList = true,
   source,
   onSourceChange,
+  showShipActions = true,
+  gitRefreshTick,
+  onShareShipped,
 }: Props) {
   const [active, setActive] = useState(0);
   const [view, setView] = useState<"files" | "flow">("files");
@@ -441,7 +452,19 @@ export function DiffPanel({
       </Popover.Popup>
     </Popover.Root>
   );
-  const emptyState = <DiffEmptyState isRunning={isRunning} />;
+  // Ship surfaces refetch when the diff or the session's git state moves:
+  // a push to the default branch empties the diff and records the ship.
+  const shipRevision = `${gitRefreshTick ?? 0}\0${changedReposKey}\0${patchVersion}`;
+  const emptyState = (
+    <DiffEmptyState isRunning={isRunning}>
+      <DirectShipNotice
+        sessionId={sessionId}
+        refreshTick={shipRevision}
+        onShare={onShareShipped}
+        className="mt-2 w-full max-w-[420px] text-left"
+      />
+    </DiffEmptyState>
+  );
 
   if (loading) return <LoadingState>Loading diff…</LoadingState>;
   if (error) return <InlineAlert className="m-4">{error}</InlineAlert>;
@@ -571,6 +594,14 @@ export function DiffPanel({
       className={`@container flex min-h-0 flex-col ${multi ? "[--review-file-header-top:calc(var(--diff-panel-top,0px)+87px)] phone:[--review-file-header-top:calc(var(--diff-panel-top,0px)+97px)]" : "[--review-file-header-top:calc(var(--diff-panel-top,0px)+50px)]"}`}
       ref={panelRef}
     >
+      {showShipActions && toolbarTarget === undefined && (
+        <ShipActions
+          sessionId={sessionId}
+          canSend={canSend}
+          send={send}
+          refreshTick={shipRevision}
+        />
+      )}
       {multi && (
         <div className="sticky top-[var(--diff-panel-top,0px)] z-2 flex gap-1 overflow-x-auto border-b border-divider bg-panel-surface px-2.5 py-1.5">
           {changed.map((r, i) => {
@@ -721,7 +752,14 @@ export function DiffPanel({
  * polls faster then (8s vs 30s idle) and changes are imminent, so it signals
  * we're watching; once the run finishes the worktree is settled and we drop it.
  */
-function DiffEmptyState({ isRunning }: { isRunning: boolean }) {
+function DiffEmptyState({
+  isRunning,
+  children,
+}: {
+  isRunning: boolean;
+  /** The latest direct ship, when the workspace has shipped. */
+  children?: React.ReactNode;
+}) {
   return (
     <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-3 px-4 pt-12 pb-24 text-center">
       <svg
@@ -750,6 +788,7 @@ function DiffEmptyState({ isRunning }: { isRunning: boolean }) {
           <span>Pulling latest…</span>
         </div>
       )}
+      {children}
     </div>
   );
 }

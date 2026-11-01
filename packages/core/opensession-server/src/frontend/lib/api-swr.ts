@@ -36,6 +36,8 @@ export const apiSWRKey = {
     ["api", "workspace-overview", workspaceKey] as const,
   sessionDiff: (sessionId: string) =>
     ["api", "session-diff", sessionId] as const,
+  sessionShip: (sessionId: string) =>
+    ["api", "session-ship", sessionId] as const,
   sessionPr: (sessionId: string, repo?: string, branch?: string) =>
     ["api", "session-pr", sessionId, repo || "", branch || ""] as const,
   sessionPrDiff: (sessionId: string, repo?: string, branch?: string) =>

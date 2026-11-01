@@ -65,6 +65,7 @@ interface WorkspaceChangesContent {
   diff: DiffProps["diff"];
   source: DiffProps["source"];
   onSourceChange: DiffProps["onSourceChange"];
+  onShareShipped?: DiffProps["onShareShipped"];
 }
 
 interface PortalContent {
@@ -194,6 +195,8 @@ export function SessionViewerSidePanel({
                   showFileList={false}
                   source={changes.source}
                   onSourceChange={changes.onSourceChange}
+                  gitRefreshTick={summaryRuntime.refreshTick}
+                  onShareShipped={changes.onShareShipped}
                 />
               )}
             </div>

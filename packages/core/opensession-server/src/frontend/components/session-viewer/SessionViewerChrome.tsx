@@ -288,6 +288,8 @@ interface ChromeInfoActions {
     | undefined;
   liveOverviewMedia: WorkspaceMediaItem[];
   setReviewSessionActionTarget: Dispatch<SetStateAction<HTMLDivElement | null>>;
+  /** Open the shipped-change Slack composer for a direct ship. */
+  openSlackComposer?: () => void;
 }
 interface ChromeConversation {
   others: string[];
@@ -456,6 +458,7 @@ export function SessionViewerChrome({
     onReviewChange,
     liveOverviewMedia,
     setReviewSessionActionTarget,
+    openSlackComposer,
   } = infoActions;
   const { others, entries } = conversation;
   return (
@@ -1290,6 +1293,15 @@ export function SessionViewerChrome({
                             showFileList={false}
                             source={worktreeDiffSource}
                             onSourceChange={changeWorktreeDiffSource}
+                            gitRefreshTick={gitRefreshTick}
+                            onShareShipped={
+                              openSlackComposer
+                                ? () => {
+                                    setInfoPageOpen(false);
+                                    openSlackComposer();
+                                  }
+                                : undefined
+                            }
                           />
                         </div>
                       )

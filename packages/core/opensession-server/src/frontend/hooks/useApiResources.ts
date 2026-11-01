@@ -6,6 +6,7 @@ import {
   fetchPr,
   fetchPrDiff,
   fetchSessionAssets,
+  fetchSessionShip,
   type SessionAssetFile,
   type WorkspaceOverview,
 } from "../lib/api";
@@ -15,6 +16,7 @@ import type {
   PrDetails,
   PrDiffResponse,
   SessionDiffResponse,
+  SessionShipInfo,
 } from "../lib/types";
 import {
   loadOverview,
@@ -106,6 +108,21 @@ export function useSessionDiffResource(
       if (response.error) throw new Error(response.error);
       return response;
     },
+    apiResourceSWRConfig(refreshInterval, compare),
+  );
+  useRevisionRevalidation(revision, resource.mutate);
+  return resource;
+}
+
+/** The session's ship surface, shared by Changes, Review and the header. */
+export function useSessionShipResource(
+  sessionId: string,
+  options: ApiResourceOptions<SessionShipInfo> = {},
+): SWRResponse<SessionShipInfo> {
+  const { enabled = true, refreshInterval = 0, revision, compare } = options;
+  const resource = useSWR<SessionShipInfo>(
+    enabled && sessionId ? apiSWRKey.sessionShip(sessionId) : null,
+    () => fetchSessionShip(sessionId),
     apiResourceSWRConfig(refreshInterval, compare),
   );
   useRevisionRevalidation(revision, resource.mutate);
