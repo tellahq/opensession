@@ -8,7 +8,8 @@
 
 import { canonicalPath, getRepo, sessionRepoId } from "./worktree";
 import { hasRemoteWorkspace } from "./sandbox";
-import { findSessionAsync, updateSessionFile } from "./session-cache";
+import { updateSessionFile } from "./session-cache";
+import { findPrSessionAsync } from "./session-pr-lookup";
 import { sessionShipMode } from "./session-repos";
 import { reconcileDirectShips } from "./direct-ship";
 import {
@@ -79,7 +80,8 @@ async function archiveWorkspace(session: UnifiedSession): Promise<string[]> {
 export async function trackDirectShipAfterTurn(
   sessionId: string,
 ): Promise<void> {
-  const session = await findSessionAsync(sessionId);
+  // PR-aware, so a branch that opened a PR stops being tracked as direct.
+  const session = await findPrSessionAsync(sessionId);
   if (!session || !tracksDirectShips(session)) return;
   const repo = getRepo(sessionRepoId(session)!);
   const env = session.createdByLogin

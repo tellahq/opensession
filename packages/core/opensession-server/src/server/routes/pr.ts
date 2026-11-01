@@ -10,7 +10,6 @@
 import { requestUser, type RouteContext } from "./context";
 import { defaultRepo, personaName } from "../config";
 import { hostRepoId, prHostFor } from "../pr-host";
-import { footerPrsFor, getPrsByRepo, prsBySessionRef } from "../pr-cache";
 import { cachedPrDetailsForSession, reconcilePrDetails } from "../pr-info";
 import { getPrStack, linkPrStack, mergePrStack } from "../pr-stack";
 import {
@@ -19,11 +18,7 @@ import {
   publishSessionRowsForBranch,
 } from "../session-cache";
 import { getSessionControl } from "../session-control";
-import { indexedWorkspaceMemberSessions } from "../session-list-store";
-import {
-  enrichSessionPrRefs,
-  projectWorkspacePrRefs,
-} from "../session-pr-target";
+import { findPrSessionAsync } from "../session-pr-lookup";
 import { resolvePrTarget } from "../session-repos";
 import {
   getOpenPrs,
@@ -96,25 +91,6 @@ async function loadPrCodeFlow(
   if (!details || !diff || (!diff.patch && !diff.skippedFiles)) return null;
   const { prCodeFlow } = await import("../code-flow");
   return prCodeFlow(repo, details, diff);
-}
-
-async function findPrSessionAsync(sessionId: string) {
-  const stored = await findSessionAsync(sessionId);
-  if (!stored) return stored;
-  const prsByRepo = getPrsByRepo();
-  const prsBySession = prsBySessionRef(prsByRepo);
-  const enrich = (session: NonNullable<typeof stored>) =>
-    enrichSessionPrRefs(session, {
-      defaultRepoId: defaultRepo().id,
-      prsByRepo,
-      footerMatches: footerPrsFor(prsBySession, session),
-    });
-  const session = enrich(stored);
-  if (!session.workspaceId) return session;
-  return projectWorkspacePrRefs(
-    session,
-    (await indexedWorkspaceMemberSessions(session.workspaceId)).map(enrich),
-  );
 }
 
 async function codeFlowApiResponse(

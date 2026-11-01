@@ -124,7 +124,9 @@ export async function handleSessionGitRoutes(
     const sessionId = decodeURIComponent(
       path.match(/^\/api\/sessions\/(.+)\/ship$/)![1],
     );
-    const session = await findSessionAsync(sessionId);
+    // PR-aware: an open PR on the branch turns Ship into Update PR.
+    const { findPrSessionAsync } = await import("../session-pr-lookup");
+    const session = await findPrSessionAsync(sessionId);
     if (!session)
       return Response.json({ error: "Session not found" }, { status: 404 });
     const { sessionShipInfo } = await import("../ship-info");
