@@ -143,6 +143,7 @@ const mutationMessageSchema = z.discriminatedUnion("type", [
       createWorkspace: z.object({ name: z.string().optional() }).optional(),
       worktreeMode: z.enum(["share", "stack", "ask"]).optional(),
       checkoutMode: z.enum(["default", "checkout", "worktree"]).optional(),
+      shipMode: z.enum(["pull-request", "direct"]).optional(),
       model: z.string().optional(),
       mcpServers: z.array(z.string()).optional(),
       executor: z.enum(["box", "daytona", "modal"]).optional(),

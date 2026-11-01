@@ -33,6 +33,8 @@ const repoInfoSchema = z.object({
   ghRepo: z.string().optional(),
   defaultBranch: z.string(),
   sharedCheckout: z.boolean(),
+  publicationMode: z.enum(["pull-request", "direct"]).optional(),
+  host: z.literal("codestorage").optional(),
   default: z.boolean().optional(),
   color: z.string().optional(),
   colorChosen: z.boolean().optional(),

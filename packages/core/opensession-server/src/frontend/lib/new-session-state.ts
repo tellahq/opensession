@@ -82,6 +82,13 @@ export interface RepoOption {
   /** A repo whose sessions share one live checkout can be the session's own
    *  repo, but never a second one: there is no isolated worktree to attach. */
   sharedCheckout?: boolean;
+  /** The repository's default ship mode (PR or straight to its default
+   *  branch); the composer's choice overrides it for the new workspace. */
+  publicationMode?: "pull-request" | "direct";
+  /** The branch a direct ship lands on. */
+  defaultBranch?: string;
+  /** Code Storage: no PRs, and no direct shipping either. */
+  codeStorage?: boolean;
   /** The Portal a new session in this repo can start right away. */
   portal?: { id: string; name: string };
 }

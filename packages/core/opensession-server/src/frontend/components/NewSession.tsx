@@ -103,6 +103,7 @@ import {
   IconBox,
   IconMessage,
   IconNewBranch,
+  IconRocket,
   IconPlus,
   IconX,
 } from "./icons";
@@ -295,6 +296,9 @@ export function NewSession({
       label: item.label || item.id,
       default: item.default,
       sharedCheckout: item.sharedCheckout,
+      publicationMode: item.publicationMode,
+      defaultBranch: item.defaultBranch,
+      codeStorage: item.host === "codestorage",
       portal: item.portal,
     }));
   // The workspace's configured choice is what a user with no preference of
@@ -318,6 +322,26 @@ export function NewSession({
     (checkoutPref === "checkout" ||
       (checkoutPref === "default" &&
         !!repos.find((option) => option.id === repo)?.sharedCheckout));
+  // How the new workspace ships: the repository's publicationMode unless the
+  // person picks PR or Direct here. Kept per repo, so switching repos shows
+  // each one's own default rather than carrying a choice across.
+  const [shipChoice, setShipChoice] = useState<{
+    repo: string;
+    mode: "pull-request" | "direct";
+  } | null>(null);
+  const repoOption = repos.find((option) => option.id === repo);
+  const repoShipMode = repoOption?.publicationMode ?? "pull-request";
+  const shipMode = shipChoice?.repo === repo ? shipChoice.mode : repoShipMode;
+  const shipTarget = repoOption?.defaultBranch || "main";
+  // A fresh code workspace on its own branch is the only thing that ships:
+  // a PR start already has its PR, a local checkout is the default branch,
+  // and Code Storage has no direct path.
+  const showShipChoice =
+    mode === "code" &&
+    startPoint.kind === "new" &&
+    !startsInLocalCheckout &&
+    !!repoOption &&
+    !repoOption.codeStorage;
   // A second repo is an isolated worktree on this session's branch. Ask,
   // Scratch, pull-request starts, and local-checkout sessions cannot carry one.
   const canAddRepos =
@@ -1174,6 +1198,9 @@ export function NewSession({
       createMessage.speed = speed;
     }
     if (pstackMode) createMessage.pstackMode = true;
+    // Only an explicit choice is sent; otherwise the repository decides.
+    if (showShipChoice && shipChoice?.repo === createRepo)
+      createMessage.shipMode = shipChoice.mode;
     if (repoPortal && startPortal) createMessage.startPortal = true;
     if (accountProvider && accountId) createMessage.accountId = accountId;
     // Once defaults have loaded, Host is an explicit override ("local").
@@ -1747,6 +1774,7 @@ export function NewSession({
                       (branchPicked ||
                         sandboxProvider ||
                         pstackMode ||
+                        (showShipChoice && shipMode !== repoShipMode) ||
                         (repoPortal && startPortal) ||
                         modelEngine(effectiveModelId) !== "pi" ||
                         selectedMcpServers.length > 0) &&
@@ -1804,6 +1832,67 @@ export function NewSession({
                             </Menu.Item>
                           );
                         })}
+                      </Menu.Popup>
+                    </Menu.SubmenuRoot>
+                  )}
+                  {showShipChoice && (
+                    <Menu.SubmenuRoot>
+                      <Menu.SubmenuTrigger className="justify-between gap-3">
+                        <span className="flex flex-none items-center gap-2">
+                          <IconRocket className="shrink-0 text-dim" size={20} />
+                          <span>Ships as</span>
+                        </span>
+                        <span className="flex min-w-0 items-center gap-1 text-dim">
+                          <span className="truncate">
+                            {shipMode === "direct"
+                              ? `Direct to ${shipTarget}`
+                              : "Pull request"}
+                          </span>
+                          <IconChevronRight
+                            className="shrink-0 text-faint"
+                            size={17}
+                          />
+                        </span>
+                      </Menu.SubmenuTrigger>
+                      <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
+                        {(
+                          [
+                            {
+                              id: "pull-request",
+                              label: "Pull request",
+                              note: "Push the branch and open one PR to review.",
+                            },
+                            {
+                              id: "direct",
+                              label: `Direct to ${shipTarget}`,
+                              note: `Run the checks, integrate ${shipTarget}, and push to it.`,
+                            },
+                          ] as const
+                        ).map((option) => (
+                          <Menu.Item
+                            key={option.id}
+                            onClick={() =>
+                              setShipChoice({ repo, mode: option.id })
+                            }
+                            className="items-start"
+                          >
+                            <Menu.Check
+                              on={shipMode === option.id}
+                              className="mt-0.5 text-dim"
+                            />
+                            <span className="flex min-w-0 flex-col gap-0.5">
+                              <span>
+                                {option.label}
+                                {option.id === repoShipMode && (
+                                  <span className="text-faint"> · default</span>
+                                )}
+                              </span>
+                              <span className="whitespace-normal text-supporting leading-snug text-faint">
+                                {option.note}
+                              </span>
+                            </span>
+                          </Menu.Item>
+                        ))}
                       </Menu.Popup>
                     </Menu.SubmenuRoot>
                   )}

@@ -21,6 +21,10 @@ export interface RepoInfo {
   ghRepo?: string;
   defaultBranch: string;
   sharedCheckout: boolean;
+  /** How new workspaces ship by default; the composer can override it. */
+  publicationMode?: "pull-request" | "direct";
+  /** Set for Code Storage repos, which have no PRs and never ship directly. */
+  host?: "codestorage";
   default?: boolean;
   /** This repo's letter-tile color, assigned across the registered set. */
   color?: string;

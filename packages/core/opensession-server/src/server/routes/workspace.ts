@@ -424,6 +424,11 @@ export async function handleWorkspaceRoutes(
           ghRepo: p.ghRepo,
           defaultBranch: p.defaultBranch,
           sharedCheckout: !!p.sharedCheckout,
+          /** How new workspaces ship by default (ship-mode.ts); the
+           *  composer's PR | Direct choice starts here. */
+          publicationMode: p.publicationMode ?? "pull-request",
+          /** Code Storage has no PRs and never ships directly. */
+          ...(p.host === "codestorage" ? { host: "codestorage" } : {}),
           default: !!p.default,
           color: colors[p.id],
           /** Whether that color was chosen rather than assigned. */
