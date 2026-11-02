@@ -1,0 +1,13 @@
+# Open Session
+
+> Self-hosted server for running coding agents. Sessions run in their own checkouts, keep going after the laptop closes, and can be watched and steered from a browser or phone.
+
+## Setup
+
+- [Set up Open Session with your agent](https://www.opensession.com/agent-setup.md): a guide for a coding agent to install Open Session on the machine it runs on, one step at a time.
+- [Install](https://github.com/tellahq/opensession/blob/main/docs/setup/install.md): operator install reference.
+- [Setup docs](https://github.com/tellahq/opensession/blob/main/docs/setup/README.md): networking, integrations, and configuration.
+
+## Source
+
+- [Repository](https://github.com/tellahq/opensession)

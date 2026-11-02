@@ -30,8 +30,10 @@ Keep the input paths in `ignore-build.sh` up to date when adding imports from
 outside this package. Vercel may still list skipped deployments as canceled;
 they do not run the website build.
 
-The app serves `/`, `/announcement`, and `/product-demo`. A compatibility
-rewrite keeps `/product-demo.html` working for existing links and capture
+The app serves `/`, `/announcement`, and `/product-demo`. It also serves
+`/agent-setup.md`, the agent-facing setup guide rendered at build time from
+`docs/setup/agent.md`, and `/llms.txt`, which points agents to it. A
+compatibility rewrite keeps `/product-demo.html` working for existing links and capture
 tooling.
 
 The hero uses animated background artwork from Tella. Before importing the

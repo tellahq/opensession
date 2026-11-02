@@ -1,7 +1,9 @@
 # Open Session setup
 
 Operator documentation for self-hosting Open Session. Start at
-[install.md](install.md); the other pages cover networking, instance
+[install.md](install.md), or give a coding agent such as Claude Code
+[agent.md](agent.md) (also at `https://www.opensession.com/agent-setup.md`)
+and let it walk you through setup. The other pages cover networking, instance
 configuration, clients, execution backends, and optional integrations.
 
 ## What it is

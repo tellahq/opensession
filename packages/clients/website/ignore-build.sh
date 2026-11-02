@@ -9,9 +9,11 @@ if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
 fi
 
 # The interactive preview imports the production frontend and shared contracts.
+# Also include the agent setup guide served at /agent-setup.md.
 # Include workspace manifests, lockfiles, patches, and the imported app icons.
 git diff --quiet "$base" HEAD -- \
   packages/clients/website \
+  docs/setup/agent.md \
   packages/core/opensession-server/src/frontend \
   packages/core/opensession-server/src/shared \
   packages/core/opensession-server/src/simulator-portal/protocol.ts \
