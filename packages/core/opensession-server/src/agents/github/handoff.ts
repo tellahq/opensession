@@ -18,8 +18,15 @@ import {
   getConfigAsync,
 } from "../../server/config";
 import { audit } from "../../server/audit";
-import { getPrsByRepo } from "../../server/pr-cache";
+import {
+  getPrsByRepo,
+  sessionRefFromPrBody,
+  trustedPrSessionId,
+  type PrInfo,
+} from "../../server/pr-cache";
+import { getPrAutomationDetails } from "../../server/pr-info";
 import { tryGetSessionControl } from "../../server/session-control";
+import type { UnifiedSession } from "../../server/types";
 import {
   editIssueComment,
   fetchReviewFindings,
@@ -38,7 +45,7 @@ import {
   pickHandoffOwner,
   reviewSatisfied,
 } from "./handoff-gates";
-import { canOwnPrWork } from "./pr-conflict";
+import { canFixOwnPr } from "./pr-conflict";
 import {
   buildHandoffMessage,
   buildReviewSettledMessage,
@@ -85,6 +92,66 @@ export function clearHandoff(prNumber: number, ghRepo?: string): void {
   );
 }
 
+export interface HandoffOwnerDeps {
+  /** The bulk PR cache row for `headRef`, if any. */
+  cachedPr(workspaceId: string, headRef: string): PrInfo | undefined;
+  /** The session the PR's trusted attribution footer names, read from GitHub. */
+  footerSessionRef(
+    prNumber: number,
+    ghRepo?: string,
+  ): Promise<string | undefined>;
+  getSession(id: string): (UnifiedSession & { state?: string }) | undefined;
+  branchOwners(workspaceId: string, headRef: string): Promise<UnifiedSession[]>;
+}
+
+const defaultOwnerDeps: HandoffOwnerDeps = {
+  cachedPr: (workspaceId, headRef) =>
+    getPrsByRepo().get(workspaceId)?.get(headRef),
+  footerSessionRef: async (prNumber, ghRepo) => {
+    const pr = await getPrAutomationDetails(String(prNumber), ghRepo);
+    if (!pr) return undefined;
+    return trustedPrSessionId({
+      author: pr.author,
+      sessionRef: sessionRefFromPrBody(pr.body),
+    });
+  },
+  getSession: (id) => tryGetSessionControl()?.getSession(id),
+  branchOwners: async (workspaceId, headRef) =>
+    await matchSessions(workspaceId, headRef, { order: "activity" }),
+};
+/**
+ * The session a review's findings go to. The session named in the PR footer
+ * opened the PR, so it owns it whichever branch its checkout is on now, and
+ * even when an automation started it. A session can open several PRs from one
+ * worktree, so its current branch alone misses most of them. A PR opened
+ * moments ago may not be in the bulk cache yet, so the footer is read from
+ * GitHub then. Otherwise the session working on the branch: one with the
+ * branch checked out wins over one that only linked the PR.
+ */
+export async function resolveHandoffOwner(
+  pr: Pick<PrRef, "number" | "headRef" | "ghRepo">,
+  workspaceId: string,
+  deps: HandoffOwnerDeps = defaultOwnerDeps,
+): Promise<UnifiedSession | undefined> {
+  const cached = deps.cachedPr(workspaceId, pr.headRef);
+  const sessionRef =
+    cached?.number === pr.number
+      ? cached.sessionRef
+      : await deps
+          .footerSessionRef(pr.number, pr.ghRepo)
+          .catch(() => undefined);
+  // The PR's own review/fix runs also sit on this branch; never hand off to
+  // those.
+  const owners = (await deps.branchOwners(workspaceId, pr.headRef)).filter(
+    (s) => !s.id.startsWith("bks-ghpr-"),
+  );
+  return pickHandoffOwner(
+    sessionRef ? deps.getSession(sessionRef) : undefined,
+    canFixOwnPr,
+    owners,
+  );
+}
+
 /**
  * Called after every webhook-triggered review with its result. Decides whether
  * to start (or stop) a fix round in the PR's owning session. Never throws.
@@ -111,23 +178,7 @@ export async function maybeHandoffFindings(
     const workspaceId = await workspaceIdForRepo(repoFull);
     if (!workspaceId) return;
 
-    // The PR's own review/fix runs also sit on this branch — never hand off to
-    // those; deliver to the most recently active real session.
-    // A session that only linked the PR still owns it, but one with the
-    // branch checked out wins (matchSessions ranks it first).
-    const owners = (
-      await matchSessions(workspaceId, pr.headRef, { order: "activity" })
-    ).filter((s) => !s.id.startsWith("bks-ghpr-"));
-    // The session named in the PR footer comes first, as for CI-failure and
-    // conflict notices: it may have opened the PR without attaching the repo.
-    const cached = getPrsByRepo().get(workspaceId)?.get(pr.headRef);
-    const sessionRef =
-      cached?.number === pr.number ? cached.sessionRef : undefined;
-    const target = pickHandoffOwner(
-      sessionRef ? control.getSession(sessionRef) : undefined,
-      canOwnPrWork,
-      owners,
-    );
+    const target = await resolveHandoffOwner(pr, workspaceId);
     if (!target) {
       // No live owning session — the os-auto-fix label remains the path, but
       // say so on the PR instead of silently stopping (each review posts a

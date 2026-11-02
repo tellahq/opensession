@@ -170,20 +170,29 @@ export function settleConflictIntent(event: PrConflictEvent): void {
   writePending(pending);
 }
 
-/** Whether a session can be handed work on its PR: live, not one of the PR
- *  agent's own review/fix runs, not an automation run, and able to change
- *  code. */
-export function canOwnPrWork(
+/** Whether the session a PR's attribution footer names can take review
+ *  findings on that PR: live, not one of the PR agent's own review/fix runs,
+ *  and able to change code. The footer says this session opened the PR, so an
+ *  automation-started session qualifies too: it wrote the code. */
+export function canFixOwnPr(
   session: UnifiedSession & { state?: string },
 ): boolean {
   return (
     session.state !== "archived" &&
     !session.archived &&
     !session.id.startsWith("bks-ghpr-") &&
-    !session.automation &&
     session.mode !== "ask" &&
     session.mode !== "scratch"
   );
+}
+
+/** Whether a session can be handed work on its PR: live, not one of the PR
+ *  agent's own review/fix runs, not an automation run, and able to change
+ *  code. */
+export function canOwnPrWork(
+  session: UnifiedSession & { state?: string },
+): boolean {
+  return canFixOwnPr(session) && !session.automation;
 }
 
 /**
