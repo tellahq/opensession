@@ -361,6 +361,13 @@ export async function createMcpRuntime(opts: {
     tool: { server: string; name: string },
     args: Record<string, unknown>,
   ) => Record<string, unknown>;
+  /** See a successful call's sent arguments and result (e.g. remembering the
+   *  Stripe draft invoices a run created). */
+  observeResult?: (
+    tool: { server: string; name: string },
+    args: Record<string, unknown>,
+    content: readonly McpRuntimeContent[],
+  ) => void;
 }): Promise<McpRuntime> {
   const timeoutMs = opts.callTimeoutMs ?? DEFAULT_CALL_TIMEOUT_MS;
   const ownTimeoutMs =
@@ -652,12 +659,13 @@ export async function createMcpRuntime(opts: {
             `MCP server "${tool.server}" is not available in this session: ${error instanceof Error ? error.message : String(error)}`,
           );
         });
+        const sent = opts.rewriteArgs
+          ? opts.rewriteArgs({ server: tool.server, name: tool.name }, args)
+          : args;
         const result = (await conn.client.callTool(
           {
             name: tool.name,
-            arguments: opts.rewriteArgs
-              ? opts.rewriteArgs({ server: tool.server, name: tool.name }, args)
-              : args,
+            arguments: sent,
             _meta: { opensessionToolCallId: options.toolCallId },
           },
           undefined,
@@ -670,6 +678,11 @@ export async function createMcpRuntime(opts: {
         const content = mapContent(result);
         if (result.isError)
           throw new Error(errorText(content) || `${id} failed`);
+        opts.observeResult?.(
+          { server: tool.server, name: tool.name },
+          sent,
+          content,
+        );
         opts.onAudit?.({
           server: tool.server,
           tool: tool.name,

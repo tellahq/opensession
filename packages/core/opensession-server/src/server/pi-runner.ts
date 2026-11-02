@@ -108,6 +108,7 @@ import {
 import { stampIncidentDeclaration } from "./incident-declarations";
 import {
   guardStripeApprovalCall,
+  recordStripeDraftInvoice,
   stripeApprovalsEnforced,
   stripeApprovalsNote,
 } from "./stripe-approvals";
@@ -2584,6 +2585,7 @@ async function* runPiAttempt(
     // detached runner-host proxy shape remains solely at this named migration
     // boundary until Agent operation routing replaces it.
     const mcpMounts = splitMcpMigrationBoundary(opts.inProcessMcp);
+    const stripeDrafts = new Set<string>();
     mcpRuntime = await createMcpRuntime({
       mcpServers,
       user,
@@ -2603,9 +2605,13 @@ async function* runPiAttempt(
           : undefined;
         const stamped = stampIncidentDeclaration(tool.name, args, link);
         return stripeApprovals
-          ? guardStripeApprovalCall(tool, stamped, link)
+          ? guardStripeApprovalCall(tool, stamped, link, stripeDrafts)
           : stamped;
       },
+      observeResult: stripeApprovals
+        ? (tool, args, content) =>
+            recordStripeDraftInvoice(tool, args, content, stripeDrafts)
+        : undefined,
       onAudit: (e) =>
         audit({
           msg: "pi_mcp_call",

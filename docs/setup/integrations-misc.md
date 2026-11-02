@@ -97,7 +97,14 @@ never reach the Stripe server.
 The server also narrows the raw writer (`stripe-approvals.ts`): only
 `PostRefunds`, `DeleteSubscriptionsSubscriptionExposedId` and the requester's
 `PostV2CoreApprovalRequestsId` / `PostV2CoreApprovalRequestsIdCancel` go
-through; any other operation fails before it reaches Stripe. Runs are told to
+through, plus draft invoices; any other operation fails before it reaches
+Stripe. A run may create an invoice with `PostInvoices` only as a
+`send_invoice` draft (the server forces `auto_advance: false`), and add
+`PostInvoiceitems` only to a draft it created earlier in the same turn, so an
+item never lands on a subscription's next charge. Stripe neither sends nor
+charges a draft: a person finalizes it in the Dashboard, then sends it or
+marks it paid outside Stripe (for example an invoice for a payment that
+Checkout already took). Runs are told to
 treat `approval_required` as queued for review, add a reason to the request,
 and share its Dashboard approval link with its expiry. The server appends the
 session link to that reason. A request nobody reviews before `expires_at`

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   STRIPE_APPROVAL_SESSION_MARKER,
   guardStripeApprovalCall,
+  recordStripeDraftInvoice,
   stampApprovalReason,
 } from "./stripe-approvals";
 import { runToolPolicy } from "./run-policy";
@@ -25,6 +26,8 @@ describe("guardStripeApprovalCall", () => {
       "PostCharges",
       "PostPaymentIntents",
       "PostSubscriptionsSubscriptionExposedId",
+      "PostInvoicesInvoiceFinalize",
+      "PostInvoicesInvoice",
       undefined,
     ])
       expect(() =>
@@ -41,6 +44,86 @@ describe("guardStripeApprovalCall", () => {
         URL,
       ),
     ).toThrow(/not allowed/);
+  });
+
+  test("keeps created invoices drafts that cannot charge a card", () => {
+    const create = (parameters: Record<string, unknown>) =>
+      guardStripeApprovalCall(
+        write,
+        { stripe_api_operation_id: "PostInvoices", parameters },
+        URL,
+      );
+    expect(
+      create({
+        customer: "cus_1",
+        collection_method: "send_invoice",
+        days_until_due: 0,
+      }),
+    ).toEqual({
+      stripe_api_operation_id: "PostInvoices",
+      parameters: {
+        customer: "cus_1",
+        collection_method: "send_invoice",
+        days_until_due: 0,
+        auto_advance: false,
+      },
+    });
+    expect(() => create({ customer: "cus_1" })).toThrow(/send_invoice/);
+    expect(() =>
+      create({ customer: "cus_1", collection_method: "charge_automatically" }),
+    ).toThrow(/send_invoice/);
+    expect(() =>
+      create({
+        customer: "cus_1",
+        collection_method: "send_invoice",
+        auto_advance: true,
+      }),
+    ).toThrow(/auto_advance/);
+  });
+
+  test("adds invoice items only to a draft this run created", () => {
+    const drafts = new Set<string>();
+    const item = (invoice?: string) => ({
+      stripe_api_operation_id: "PostInvoiceitems",
+      parameters: { customer: "cus_1", amount: 2500, currency: "usd", invoice },
+    });
+    const created = (invoice: Record<string, unknown>) =>
+      recordStripeDraftInvoice(
+        write,
+        { stripe_api_operation_id: "PostInvoices" },
+        [{ type: "text", text: JSON.stringify(invoice) }],
+        drafts,
+      );
+
+    expect(() => guardStripeApprovalCall(write, item(), URL, drafts)).toThrow(
+      /draft invoice this run created/,
+    );
+    created({
+      id: "in_charges",
+      object: "invoice",
+      status: "draft",
+      collection_method: "charge_automatically",
+    });
+    created({
+      id: "in_open",
+      object: "invoice",
+      status: "open",
+      collection_method: "send_invoice",
+    });
+    created({
+      id: "in_draft",
+      object: "invoice",
+      status: "draft",
+      collection_method: "send_invoice",
+    });
+    expect([...drafts]).toEqual(["in_draft"]);
+    for (const invoice of ["in_charges", "in_open", "in_other"])
+      expect(() =>
+        guardStripeApprovalCall(write, item(invoice), URL, drafts),
+      ).toThrow(/draft invoice this run created/);
+    expect(
+      guardStripeApprovalCall(write, item("in_draft"), URL, drafts),
+    ).toEqual(item("in_draft"));
   });
 
   test("stamps the session link onto approval-request reasons", () => {
