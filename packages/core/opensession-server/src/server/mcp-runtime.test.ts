@@ -103,6 +103,26 @@ describe("MCP runtime catalog and exact calls", () => {
     });
   });
 
+  test("observeResult sees the sent arguments of successful calls only", async () => {
+    const seen: unknown[] = [];
+    const { runtime } = await make({
+      rewriteArgs: (_tool, args) => ({ ...args, text: `${args.text}!` }),
+      observeResult: (tool, args, content) =>
+        seen.push({ tool: tool.name, args, content }),
+    });
+    await runtime.callExact("alpha_echo", { text: "hi" }, { toolCallId: "a" });
+    await expect(
+      runtime.callExact("alpha_boom", {}, { toolCallId: "b" }),
+    ).rejects.toThrow("bad input");
+    expect(seen).toEqual([
+      {
+        tool: "echo",
+        args: { text: "hi!" },
+        content: [{ type: "text", text: "echo:hi!" }],
+      },
+    ]);
+  });
+
   test("errors, timeout, cancellation and audit stay call-scoped", async () => {
     const audits: Array<{ tool: string; ok: boolean }> = [];
     const { runtime } = await make({
