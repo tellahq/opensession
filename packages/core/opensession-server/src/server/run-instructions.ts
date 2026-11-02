@@ -111,7 +111,8 @@ export function buildRunInstructions(input: {
       "`<repo>#<number>`, never bare `#<number>`. A bare `#<number>` reads as a " +
       "PR; write GitHub issues as `issue #<number>`. A PR URL renders as that " +
       "reference, so write one, not both. Name each PR by number once per reply, " +
-      "then by what it does.",
+      "then by what it does. In Plain notes, use full PR URLs: Plain does not " +
+      "link `<repo>#<number>`.",
   );
   parts.push(
     "## Working directory\nRelative paths in this prompt resolve against the working " +

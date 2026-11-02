@@ -147,7 +147,8 @@ describe("buildRunInstructions", () => {
       "For PRs outside the current primary repository, write `<repo>#<number>`, never bare `#<number>`. " +
         "A bare `#<number>` reads as a PR; write GitHub issues as `issue #<number>`. " +
         "A PR URL renders as that reference, so write one, not both. " +
-        "Name each PR by number once per reply, then by what it does.",
+        "Name each PR by number once per reply, then by what it does. " +
+        "In Plain notes, use full PR URLs: Plain does not link `<repo>#<number>`.",
     );
     // Every MCP tool hides behind mcp_search; the Tools section is the only
     // way a run learns a tool exists before it knows to search for it, and it
@@ -191,8 +192,10 @@ describe("buildRunInstructions", () => {
     // name rule in "Finish your turns" adds ~110: models opened replies
     // with the prompter's name, which reads as curt. Linking child sessions
     // in a report adds ~100: a PR summary without them left the person
-    // hunting for the session that owns each PR.
-    expect(prompt.length).toBeLessThan(4_350);
+    // hunting for the session that owns each PR. The Plain notes clause in
+    // References adds ~75: Plain does not link `<repo>#<number>`, so notes
+    // named PRs a teammate could not click.
+    expect(prompt.length).toBeLessThan(4_450);
   });
 
   test("asks for visual proof by default only where walkthroughs are mounted", () => {
