@@ -677,7 +677,9 @@ export async function automationSessionMcp(
     });
     // The person may ask for and use API credentials, as in any session
     // they drive: workspace ones directly, personal ones once the owner
-    // approves the person's ask. Never registration, changes or logins.
+    // approves the person's ask. They may also register, change or delete
+    // their own API credentials through a card only their sign-in answers.
+    // Never logins.
     servers["opensession-keychain"] = createKeychainMcpServer({
       sessionId,
       user: prompter,

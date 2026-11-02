@@ -109,7 +109,8 @@ export interface KeychainToolContext {
     | undefined;
   /** A person's turn in an automation-owned session: list, ask for and use
    *  API credentials (workspace ones need no ask), with that person as the
-   *  requester. No registration or changes, no logins, no Mac Keychain. */
+   *  requester, and register, change or delete their own API credentials
+   *  through the card they answer. No logins, no Mac Keychain. */
   automationTurn?: boolean;
   /** Test seam: where use_login writes. Defaults to the session's workspace. */
   loginTarget?: () => Promise<LoginReleaseTarget | { error: string }>;
@@ -153,7 +154,9 @@ function runWorkspace(
  * Why this run cannot register a credential, or null when it can. The
  * keychain server is already withheld from automation runs; this is the
  * second, explicit check so a misrouted automation gets a clear refusal
- * rather than a card nobody is watching.
+ * rather than a card nobody is watching. A person's own turn in an
+ * automation session passes: they are present to answer the card, and only
+ * their verified sign-in can.
  */
 function registrationRefusal(
   ctx: KeychainToolContext,
@@ -162,9 +165,10 @@ function registrationRefusal(
 ): string | null {
   const session = (ctx.session ?? findSession)(ctx.sessionId);
   if (
-    session?.automation ||
-    session?.automationId ||
-    session?.automationDescendantPolicy
+    !ctx.automationTurn &&
+    (session?.automation ||
+      session?.automationId ||
+      session?.automationDescendantPolicy)
   )
     return `Credentials can't be ${past} from an automation run. Ask a teammate to do it in Settings → Account.`;
   if (!trustedGithubTeammate(ctx.user))
@@ -295,9 +299,13 @@ function kcAsksStillPending(ids: string[]): string[] {
 }
 
 /** What the keychain server carries in a person's turn of an automation
- *  session: asking for and using API credentials, nothing that registers,
- *  changes or deletes one, no logins and no Mac Keychain. */
+ *  session: asking for and using API credentials, and the card tools that
+ *  let that person register, change or delete their own. No logins and no
+ *  Mac Keychain. */
 const AUTOMATION_TURN_TOOLS = new Set([
+  "register_credential",
+  "update_credential",
+  "delete_credential",
   "list_credentials",
   "request_credential",
   "cancel_credential_ask",
@@ -822,7 +830,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
     tool(
       "register_credential",
       "Add a credential to the keychain, owned by the person driving this session, so this and later sessions can borrow it through request_credential. With scope 'workspace', every session in the workspace may use it without asking (only for an API credential, and only when the owner says so; the card shows it). You supply only metadata. A card appears in the session where THEY paste the secret; it goes straight to the keychain and you never see it. For a username and password that must be typed into a sign-in page, pass kind 'login' with loginUrl and username (no host or limits): its owner later approves each release of the password with use_login, and the agent does see it then, so only register test accounts this way." +
-        " This call waits until they save or decline (15 minutes at most) and returns the credential's id, service, host and owner. If the call is cut short, the card stays open: call again with the same service and host to keep waiting on it, or check list_credentials. Never ask anyone to paste a secret in chat; if they already did, tell them to rotate it. Check list_credentials first: service slugs are unique. Set allowedMethods / allowedPathPrefixes when the task needs less than full access. Interactive sessions with a signed-in teammate only.",
+        " This call waits until they save or decline (15 minutes at most) and returns the credential's id, service, host and owner. If the call is cut short, the card stays open: call again with the same service and host to keep waiting on it, or check list_credentials. Never ask anyone to paste a secret in chat; if they already did, tell them to rotate it. Check list_credentials first: service slugs are unique. Set allowedMethods / allowedPathPrefixes when the task needs less than full access. Sessions a signed-in teammate drives, including their own turns in an automation session.",
       {
         service: z
           .string()
@@ -846,7 +854,10 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
         },
         extra: any,
       ) => {
-        const refusal = registrationRefusal(ctx);
+        const refusal =
+          ctx.automationTurn && args.kind === "login"
+            ? "Logins can't be registered from an automation session. Ask a teammate to do it in Settings → Account, or from a session they started."
+            : registrationRefusal(ctx);
         if (refusal) return text(refusal);
         const { name: owner, login } = trustedGithubTeammate(ctx.user)!;
         // Load the store off-thread; the spec check below reads it.
@@ -916,7 +927,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
     tool(
       "update_credential",
       "Replace a keychain credential's secret, or change its metadata, when the person driving this session owns it: e.g. they pasted the wrong key and the API answers 401. A card appears where THEY paste the new secret (and see any metadata change); you never see it. With only `credential`, the card asks for a new secret. With metadata fields, only those change (omitted ones keep their value; an empty description or list clears it), and a new secret is optional unless rotateSecret is true. The service slug and kind can't change. To share an API credential with every session in the workspace, pass only scope 'workspace'; scope 'personal' makes it ask-first again and revokes the grants sessions got without asking. Only the owner can do either." +
-        " Active grants keep working with the new secret and limits; a new host or sign-in page revokes them, since they were approved for the old one. This call waits until they save or decline (15 minutes at most). Interactive sessions with a signed-in teammate only.",
+        " Active grants keep working with the new secret and limits; a new host or sign-in page revokes them, since they were approved for the old one. This call waits until they save or decline (15 minutes at most). Sessions a signed-in teammate drives, including their own turns in an automation session.",
       {
         credential: z
           .string()
@@ -993,7 +1004,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
     ),
     tool(
       "delete_credential",
-      "Remove a keychain credential the person driving this session owns, e.g. one registered by mistake. A card asks them to confirm; nothing is deleted until they do. Its active grants are revoked and any scripted run using it stops. This call waits until they confirm or keep it (15 minutes at most). Interactive sessions with a signed-in teammate only.",
+      "Remove a keychain credential the person driving this session owns, e.g. one registered by mistake. A card asks them to confirm; nothing is deleted until they do. Its active grants are revoked and any scripted run using it stops. This call waits until they confirm or keep it (15 minutes at most). Sessions a signed-in teammate drives, including their own turns in an automation session.",
       {
         credential: z
           .string()

@@ -525,11 +525,13 @@ async function toolFor(
   user: string,
   session: { automation?: string; automationId?: string } = {},
   name = "register_credential",
+  automationTurn = false,
 ): Promise<Call> {
   const server = createKeychainMcpServer({
     sessionId: `s-tool-${user}`,
     user,
     session: () => session,
+    automationTurn,
   });
   const client = new Client({ name: "test", version: "1.0.0" });
   const [clientTransport, serverTransport] =
@@ -972,5 +974,39 @@ describe("updating and deleting a credential", () => {
     expect(auto).toMatch(/can't be deleted from an automation run/);
     expect(broadcasts).toEqual([]);
     expect(kc.listCredentials()).toHaveLength(1);
+  });
+
+  test("a person's own turn in an automation session gets the card", async () => {
+    existing();
+    const nightly = { automation: "nightly" };
+    const update = (await toolFor("alex", nightly, "update_credential", true))({
+      credential: "acme-prod",
+      allowedPathPrefixes: ["/v1/items"],
+    });
+    const request = await openCard("s-tool-alex");
+    expect(request).toMatchObject({
+      action: "update",
+      allowedPathPrefixes: ["/v1/items"],
+    });
+    await reg.submitCredentialRegistration(
+      "s-tool-alex",
+      request.id,
+      "alex-gh",
+      undefined,
+    );
+    expect(JSON.parse(await update).updated.changed).toEqual([
+      "allowedPathPrefixes",
+    ]);
+
+    const login = await (
+      await toolFor("alex", nightly, "register_credential", true)
+    )({
+      service: "staging-login",
+      kind: "login",
+      loginUrl: "https://app.example.test/login",
+      username: "qa@example.test",
+    });
+    expect(login).toMatch(/Logins can't be registered/);
+    expect(reg.pendingCredentialRegistration("s-tool-alex")).toBeNull();
   });
 });

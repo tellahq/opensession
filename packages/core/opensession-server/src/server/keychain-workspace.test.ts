@@ -369,18 +369,21 @@ describe("a person's turn in an automation session", () => {
     }) as any;
   };
 
-  test("the keychain server carries the ask and use tools only", async () => {
+  test("the keychain server carries the ask, use and card tools only", async () => {
     expect(
       Object.keys((await server()).instance._registeredTools).sort(),
     ).toEqual([
       "call_credential",
       "cancel_credential_ask",
       "credential_run_status",
+      "delete_credential",
       "list_credentials",
       "list_grants",
+      "register_credential",
       "request_credential",
       "run_with_credential",
       "stop_credential_run",
+      "update_credential",
     ]);
   });
 
