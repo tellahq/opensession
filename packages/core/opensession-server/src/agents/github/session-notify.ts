@@ -9,7 +9,10 @@
  * session gets a second message with the outcome. A repo can replace the
  * success message with its own prompt in `.opensession/deploy-verify.md` (read at
  * the deployed commit), so the session that wrote the change verifies it in
- * production against the review's "How we'll know" plan. (Pre-merge staging previews
+ * production against the review's "How we'll know" plan. A session triaging a
+ * Plain ticket is also asked to post a draft customer reply on that ticket once
+ * the change ships (on deploy when the repo tracks deploys, else on merge).
+ * (Pre-merge staging previews
  * are NOT announced here — the session header's Preview environment button already surfaces
  * the preview URL + Ready state, so a session notification would just be redundant.)
  */
@@ -24,6 +27,10 @@ import {
 import { audit } from "../../server/audit";
 import { configuredRepos, getConfigAsync } from "../../server/config";
 import { SESSION_BRANCH_MATCH_LIMIT } from "../../server/session-list-protocol";
+import {
+  sessionRefFromPrBody,
+  trustedPrSessionId,
+} from "../../server/pr-cache";
 import { githubRequest } from "./github-rest";
 import { readPrStateAsync } from "./state";
 import { monitoringPlanMarkdown } from "./monitoring-plan";
@@ -126,19 +133,91 @@ function guardedSessionNotificationIds(
   return null;
 }
 
+/**
+ * The ask a Plain triage session gets once its fix reaches customers: post a
+ * draft reply on the ticket for a teammate to send. Merged when the repo does
+ * not track deploys, deployed when it does.
+ */
+export function plainDraftReplyPrompt(
+  prNumber: number,
+  plainThreadId: string,
+  stage: "merged" | "deployed",
+  prUrl?: string,
+): string {
+  // Plain does not link `<repo>#<number>`, so the note carries the full URL.
+  const prRef = prUrl || `PR #${prNumber}`;
+  return [
+    `PR #${prNumber} is ${stage === "deployed" ? "deployed and live" : "merged"}. This session was opened from Plain thread ${plainThreadId}, so tell the support team the fix has shipped:`,
+    `post an internal note on that thread (mcp__plain__create_note) that says ${prRef} is ${stage}, followed by "DRAFT REPLY:" and a short, friendly reply to the customer saying the issue is fixed and what to do if they still see it.`,
+    "Do not message the customer directly. Write it in English, mention the customer's language if it differs, and use no em dashes.",
+    "If the PR does not fix the customer's issue on its own, say what is still missing in the note instead of drafting a reply.",
+  ].join(" ");
+}
+
+/** Per-session text: a session triaging a Plain ticket gets the draft-reply
+ *  ask (after `base` when that carries its own instructions), the rest get
+ *  `base` unchanged. */
+export function messagesWithPlainDraftReply(
+  sessionIds: string[],
+  base: string,
+  plainThreadOf: (id: string) => string | undefined,
+  pr: {
+    number: number;
+    url?: string;
+    stage: "merged" | "deployed";
+    replaceBase: boolean;
+  },
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const id of sessionIds) {
+    const thread = id.startsWith("bks-ghpr-") ? undefined : plainThreadOf(id);
+    if (!thread) {
+      out.set(id, base);
+      continue;
+    }
+    const ask = plainDraftReplyPrompt(pr.number, thread, pr.stage, pr.url);
+    out.set(id, pr.replaceBase ? ask : `${base}\n\n${ask}`);
+  }
+  return out;
+}
+
+function plainThreadOf(control: SessionControl) {
+  return (id: string) => control.getSession(id)?.plainThreadId || undefined;
+}
+
+/** The Plain triage session named in the PR's trusted footer. It opened the
+ *  PR, so it owns it even when its checkout has moved to another branch,
+ *  which branch matching alone misses. An archived one (its ticket is done)
+ *  is left alone. */
+export function footerPlainSession(
+  pr: { body?: string | null; user?: { login?: string } } | undefined,
+  control: Pick<SessionControl, "getSession">,
+): string | undefined {
+  const id = trustedPrSessionId({
+    author: pr?.user?.login || "",
+    sessionRef: sessionRefFromPrBody(pr?.body),
+  });
+  if (!id || id.startsWith("bks-ghpr-")) return undefined;
+  const session = control.getSession(id);
+  return session?.plainThreadId && !session.archived ? id : undefined;
+}
+
 async function deliver(
   control: SessionControl,
   sessionIds: string[],
-  message: string,
+  message: string | Map<string, string>,
   deliveryKey: string,
 ): Promise<void> {
   for (const id of sessionIds) {
+    const content =
+      typeof message === "string" ? message : message.get(id) || "";
+    if (!content) continue;
     try {
       // Default busy behavior: fold into the running turn as a steer. Steering
       // is a non-interrupting history append the turn picks up at its next
       // stopping point (steerPiRun) — exactly right for an FYI; it only
       // falls back to the queue when nothing is steerable (external run).
-      const res = await control.deliverToSession(id, message, "GitHub", {
+      const res = await control.deliverToSession(id, content, "GitHub", {
         deliveryId: `${deliveryKey}:${id}`,
       });
       console.log(`[github] session notify → ${id}: ${res.status}`);
@@ -176,7 +255,8 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
     console.error(`[github] ${error.message}`);
     return;
   }
-  if (!sessions.length) return;
+  const footerSession = footerPlainSession(pr, control);
+  if (!sessions.length && !footerSession) return;
 
   const prNumber: number = pr.number;
   const title: string = pr.title || `PR #${prNumber}`;
@@ -201,7 +281,7 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
     " No action needed.";
 
   const sessionIds = guardedSessionNotificationIds(
-    sessions.map((s) => s.id),
+    [...sessions.map((s) => s.id), ...(footerSession ? [footerSession] : [])],
     "pr_merged",
     { pr_number: prNumber, workspace_id: workspaceId, head_ref: headRef },
   );
@@ -210,10 +290,24 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
   console.log(
     `[github] PR #${prNumber} merged → notifying ${sessionIds.length} session(s) on ${workspaceId}:${headRef}`,
   );
+  // Without deploy tracking, merged is as shipped as it gets: a Plain triage
+  // session drafts its customer reply now. Otherwise it waits for the deploy.
   await deliver(
     control,
     sessionIds,
-    message,
+    trackDeploy
+      ? message
+      : messagesWithPlainDraftReply(
+          sessionIds,
+          message,
+          plainThreadOf(control),
+          {
+            number: prNumber,
+            url: pr.html_url || undefined,
+            stage: "merged",
+            replaceBase: true,
+          },
+        ),
     `github-merge:${payload?.repository?.full_name || workspaceId}:${prNumber}:${pr.merge_commit_sha || headRef}`,
   );
 
@@ -288,8 +382,24 @@ export async function handleDeployWorkflowRun(payload: any): Promise<void> {
         })
       : null;
   const deliveryKey = `github-deploy:${run.id || run.head_sha}:${run.conclusion || "unknown"}`;
+  const draftReplies = (ids: string[], base: string, replaceBase: boolean) =>
+    success
+      ? messagesWithPlainDraftReply(ids, base, plainThreadOf(control), {
+          number: entry.prNumber,
+          url: ghRepo
+            ? `https://github.com/${ghRepo}/pull/${entry.prNumber}`
+            : undefined,
+          stage: "deployed",
+          replaceBase,
+        })
+      : base;
   if (!verifier || !verifyPrompt) {
-    await deliver(control, sessionIds, message, deliveryKey);
+    await deliver(
+      control,
+      sessionIds,
+      draftReplies(sessionIds, message, true),
+      deliveryKey,
+    );
     return;
   }
   const rest = sessionIds.filter((id) => id !== verifier);
@@ -309,8 +419,19 @@ export async function handleDeployWorkflowRun(payload: any): Promise<void> {
       e,
     ),
   );
-  await deliver(control, [verifier], verifyPrompt, deliveryKey);
-  if (rest.length) await deliver(control, rest, message, deliveryKey);
+  await deliver(
+    control,
+    [verifier],
+    draftReplies([verifier], verifyPrompt, false),
+    deliveryKey,
+  );
+  if (rest.length)
+    await deliver(
+      control,
+      rest,
+      draftReplies(rest, message, true),
+      deliveryKey,
+    );
 }
 
 async function surfaceArchivedSession(id: string): Promise<void> {
