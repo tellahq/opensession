@@ -309,13 +309,16 @@ export async function runGithubEnv(input: {
 }): Promise<Record<string, string>> {
   const primary = await runPrimaryGithubEnv(input);
   if (!input.readRepos?.length) return primary;
-  const { withReadRepoCredentials } = await import("./github-git-credential");
+  const { readOnlyRepos, withReadRepoCredentials } =
+    await import("./github-git-credential");
+  const readRepos = readOnlyRepos(input.readRepos, input.attachedRepos);
+  if (!readRepos.length) return primary;
   return withReadRepoCredentials(
     {
       ...primary,
-      ...(await githubReadReposRunEnv(input.cwd, input.readRepos)),
+      ...(await githubReadReposRunEnv(input.cwd, readRepos)),
     },
-    input.readRepos,
+    readRepos,
   );
 }
 
