@@ -16,6 +16,11 @@ export function shortTime(ts: string): string {
   if (s < 3600) return `${Math.floor(s / 60)}m`;
   if (s < 86400) return `${Math.floor(s / 3600)}h`;
   if (s < 7 * 86400) return `${Math.floor(s / 86400)}d`;
+  return shortDate(d);
+}
+
+/** Month and day in the default locale ("Jul 12"). */
+export function shortDate(d: Date): string {
   return (dayFormat ??= new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
@@ -46,10 +51,7 @@ export function fullTime(ts: string, now: Date = new Date()): string {
   if (days === 1) return `Yesterday at ${time}`;
   const date =
     d.getFullYear() === now.getFullYear()
-      ? (dayFormat ??= new Intl.DateTimeFormat(undefined, {
-          month: "short",
-          day: "numeric",
-        })).format(d)
+      ? shortDate(d)
       : (dayYearFormat ??= new Intl.DateTimeFormat(undefined, {
           month: "short",
           day: "numeric",
