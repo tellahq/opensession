@@ -19,7 +19,7 @@
  * calls go through `ShipGitDeps` so tests can drive them without a remote.
  */
 
-import { existsSync } from "fs";
+import { pathExists } from "./shared/path-exists";
 import type { DirectShip, UnifiedSession } from "./types";
 
 /** Newest first, as `git reflog` prints it. */
@@ -302,7 +302,7 @@ export async function reconcileDirectShips(
   const { session, repo } = ctx;
   let ships = [...(session.directShips || [])];
   const dir = session.worktreeDir;
-  if (!dir || !session.branch || !existsSync(dir))
+  if (!dir || !session.branch || !(await pathExists(dir)))
     return { ships, changed: false, archive: false };
   let changed = false;
   const fresh = await findNewDirectShip(

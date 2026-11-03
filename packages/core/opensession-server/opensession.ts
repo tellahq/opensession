@@ -158,7 +158,8 @@ import {
 import { sweepArchivedWorktrees } from "./src/server/worktree";
 import { type WSClientData, broadcastToAll } from "./src/server/ws-hub";
 import { clientAcceptsCompressedFrames } from "./src/server/ws-compression";
-import { mkdirSync, watch, writeFileSync } from "fs";
+import { watch } from "fs";
+import { access, mkdir, writeFile } from "fs/promises";
 import { join } from "node:path";
 
 // Side-effect modules: these must be loaded even when the entry references
@@ -286,7 +287,7 @@ registerSandboxSessionPredicate((sessionId) =>
 // evaluation, which is exactly when a hot reload may have killed the timers.
 startTimerPoisonHeartbeat();
 
-mkdirSync(SESSIONS_DIR, { recursive: true });
+await mkdir(SESSIONS_DIR, { recursive: true });
 
 // --- Hot-reload support (bun --hot) ---------------------------------------
 // Under `bun --hot`, editing a module re-evaluates this entry file in the SAME
@@ -782,11 +783,19 @@ if (!g.__opensessionBooted) {
   // restarting a dead server.
   {
     const { configuredPaths } = await import("./src/server/config");
-    const { existsSync } = await import("fs");
+    const { whichAsync } = await import("./src/server/shared/which-async");
     const configured = configuredPaths().claudeBin;
     const claudeBin =
-      configured && configured !== "claude" ? configured : Bun.which("claude");
-    if (!claudeBin || !existsSync(claudeBin)) {
+      configured && configured !== "claude"
+        ? configured
+        : await whichAsync("claude");
+    const claudeExists =
+      !!claudeBin &&
+      (await access(claudeBin).then(
+        () => true,
+        () => false,
+      ));
+    if (!claudeExists) {
       console.error(
         "[engine] the `claude` CLI is not installed — Anthropic turns cannot run.\n" +
           "[engine] install it: curl -fsSL https://claude.ai/install.sh | bash",
@@ -1387,7 +1396,7 @@ if (!g.__opensessionBooted) {
     try {
       // A dev instance must not overwrite the production restart marker.
       if (!devInstance) {
-        writeFileSync(
+        await writeFile(
           stateDir("last-restart.json"),
           JSON.stringify({
             by: restartBy || "",

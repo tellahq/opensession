@@ -780,7 +780,7 @@ async function registerGithubRepo(input: {
   const dest = `${root}/${id}`;
   assertRepoPathAvailable(dest, registered);
   await assertRepoOriginAvailable(
-    normalizeRepoOrigin(`https://github.com/${input.fullName}.git`),
+    await normalizeRepoOrigin(`https://github.com/${input.fullName}.git`),
     registered,
   );
   const adopted = await adoptExistingCheckout(
@@ -967,7 +967,7 @@ async function registerCodestorageRepo(input: {
   const dest = `${root}/${id}`;
   assertRepoPathAvailable(dest, registered);
   await assertRepoOriginAvailable(
-    normalizeRepoOrigin(csRemoteUrl(cfg.org, csRepo)),
+    await normalizeRepoOrigin(csRemoteUrl(cfg.org, csRepo)),
     registered,
   );
   const adopted = await adoptExistingCheckout(dest, (i) =>

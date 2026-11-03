@@ -29,7 +29,7 @@ import {
   readdir,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { MemoryStore } from "../memory-v2/store";
+import { MemoryStore, openMemoryStore } from "../memory-v2/store";
 import type { MemoryKind, MemoryRecord, MemoryState } from "../memory-v2/types";
 import {
   appendEntry,
@@ -1527,7 +1527,7 @@ export class MemoryRepoService {
   }
 
   async parityReport(v2Path: string): Promise<ParityReport> {
-    const v2 = new MemoryStore(v2Path);
+    const v2 = await openMemoryStore(v2Path);
     try {
       return parityWithV2(this, v2);
     } finally {
@@ -1675,7 +1675,7 @@ export async function syncFromV2(
   v2Path: string,
   mode: "import" | "mirror",
 ): Promise<V2SyncResult> {
-  const v2 = new MemoryStore(v2Path);
+  const v2 = await openMemoryStore(v2Path);
   try {
     v2.expireDue();
     const records = allRecords(v2, [
@@ -1732,11 +1732,11 @@ export function parityWithV2(
  * Rollback: bring entries written in repo mode back into memory-v2, by id.
  * New entries are created, changed ones updated, removed ones archived.
  */
-export function importIntoV2(
+export async function importIntoV2(
   service: MemoryRepoService,
   v2Path: string,
-): { created: number; updated: number; archived: number } {
-  const v2 = new MemoryStore(v2Path);
+): Promise<{ created: number; updated: number; archived: number }> {
+  const v2 = await openMemoryStore(v2Path);
   let created = 0;
   let updated = 0;
   let archived = 0;

@@ -227,7 +227,7 @@ export async function handleConnectionsRoutes(
   }
 
   if (path === "/api/connections/apple-mobile" && req.method === "GET") {
-    return Response.json(appleMobileSetupStatus());
+    return Response.json(await appleMobileSetupStatus());
   }
 
   if (path === "/api/connections/apple-mobile" && req.method === "PUT") {
@@ -236,7 +236,7 @@ export async function handleConnectionsRoutes(
       return Response.json({ error: "Invalid JSON" }, { status: 400 });
     }
     try {
-      return Response.json(configureAppleMobileConnections(body));
+      return Response.json(await configureAppleMobileConnections(body));
     } catch (error) {
       return Response.json(
         { error: error instanceof Error ? error.message : String(error) },
