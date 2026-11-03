@@ -21,9 +21,18 @@ describe("guardStripeApprovalCall", () => {
     expect(guardStripeApprovalCall(write, args, URL)).toEqual(args);
   });
 
+  test("lets invoice voids through unchanged", () => {
+    const args = {
+      stripe_api_operation_id: "PostInvoicesInvoiceVoid",
+      parameters: { id: "in_open" },
+    };
+    expect(guardStripeApprovalCall(write, args, URL)).toEqual(args);
+  });
+
   test("rejects writes Stripe cannot hold for approval", () => {
     for (const op of [
       "PostCharges",
+      "PostInvoicesInvoiceMarkUncollectible",
       "PostPaymentIntents",
       "PostSubscriptionsSubscriptionExposedId",
       "PostInvoicesInvoiceFinalize",

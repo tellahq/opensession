@@ -97,8 +97,13 @@ never reach the Stripe server.
 The server also narrows the raw writer (`stripe-approvals.ts`): only
 `PostRefunds`, `DeleteSubscriptionsSubscriptionExposedId` and the requester's
 `PostV2CoreApprovalRequestsId` / `PostV2CoreApprovalRequestsIdCancel` go
-through, plus draft invoices; any other operation fails before it reaches
-Stripe. A run may create an invoice with `PostInvoices` only as a
+through, plus draft invoices and invoice voids; any other operation fails
+before it reaches Stripe. A void (`PostInvoicesInvoiceVoid`) runs immediately:
+Stripe approval rules cannot hold it, so nobody reviews it. It moves no money,
+and Stripe only voids `open` or `uncollectible` invoices. Runs are told to void
+only an open invoice they have a clear reason to void, such as one left open
+on a subscription they just had cancelled, and to report it done once Stripe
+returns status `void`. A run may create an invoice with `PostInvoices` only as a
 `send_invoice` draft (the server forces `auto_advance: false`), and add
 `PostInvoiceitems` only to a draft it created earlier in the same turn, so an
 item never lands on a subscription's next charge. Stripe neither sends nor
