@@ -20,7 +20,7 @@
  * no subprocess and no network mount, and its address safety (see
  * web-fetch.ts) is enforced in our own code rather than trusted to a vendor.
  */
-import { existsSync, mkdirSync, readFileSync } from "fs";
+import { access, mkdir, readFile } from "fs/promises";
 import { z } from "zod";
 import { createSdkMcpServer, tool } from "./inprocess-mcp";
 import { stateDir } from "./paths";
@@ -45,10 +45,10 @@ function text(body: string) {
 
 /** Where clones land: the session's swept scratch when there is one, else a
  *  shared cache dir. Never the worktree — a clone is not the run's work. */
-function cloneRoot(sessionId?: string): string {
+async function cloneRoot(sessionId?: string): Promise<string> {
   const scratch = sessionId ? ensureSessionScratch(sessionId) : undefined;
   const root = scratch ? `${scratch}/repos` : `${stateDir("web-cache")}/repos`;
-  if (!existsSync(root)) mkdirSync(root, { recursive: true, mode: 0o700 });
+  await mkdir(root, { recursive: true, mode: 0o700 });
   return root;
 }
 
@@ -80,8 +80,13 @@ async function cloneRepo(
   repo: string,
   sessionId?: string,
 ): Promise<string> {
-  const dir = `${cloneRoot(sessionId)}/${owner}-${repo}`;
-  if (existsSync(`${dir}/.git`)) {
+  const dir = `${await cloneRoot(sessionId)}/${owner}-${repo}`;
+  if (
+    await access(`${dir}/.git`).then(
+      () => true,
+      () => false,
+    )
+  ) {
     const summary = await describeClone(dir);
     return `Already cloned at ${dir} (reused).\n\n${summary}`;
   }
@@ -116,11 +121,12 @@ async function describeClone(dir: string): Promise<string> {
   ];
   for (const name of ["README.md", "readme.md", "README.rst", "README"]) {
     const path = `${dir}/${name}`;
-    if (!existsSync(path)) continue;
     try {
-      const head = readFileSync(path, "utf8").slice(0, 1500);
+      const head = (await readFile(path, "utf8")).slice(0, 1500);
       lines.push("", `--- ${name} (first 1500 chars) ---`, head);
-    } catch {}
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+    }
     break;
   }
   return lines.join("\n");
@@ -238,7 +244,7 @@ export function createWebMcpServer(opts: { sessionId?: string } = {}) {
             .describe("Maximum characters to return. Default 20000."),
         },
         async (args) => {
-          const slice = readFetched(String(args.handle ?? ""), {
+          const slice = await readFetched(String(args.handle ?? ""), {
             find: args.find,
             caseSensitive: args.caseSensitive,
             context: args.context,

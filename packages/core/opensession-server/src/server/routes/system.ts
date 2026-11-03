@@ -363,7 +363,7 @@ export async function handleSystemRoutes(
         { status: 400 },
       );
     }
-    if (isPrebuiltFrontend()) {
+    if (await isPrebuiltFrontend()) {
       return Response.json(
         { ok: false, error: "not available for a prebuilt release" },
         { status: 400 },

@@ -228,7 +228,7 @@ const precheckRuntimePeers =
 // must log, not exit the gateway (see process-guards.ts).
 installUnhandledRejectionGuard();
 if (process.env.OPENSESSION_GATEWAY_ROLE === "standby")
-  preloadPreparedFrontend();
+  await preloadPreparedFrontend();
 if (precheckRuntimePeers)
   await waitForRuntimePeerGeneration({ timeoutMs: 5_000 });
 // A supervised standby is allowed to preload this import graph, but it cannot
@@ -544,7 +544,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
     // reconnect instead of a sign-in it thinks it already did.
     let reconnectRequired = false;
     if (webAuthRequired()) {
-      authUser = resolveWebAuth(req);
+      authUser = await resolveWebAuth(req);
       // Server-local CDP/CLI traffic has its own machine principal. A
       // teammate's cookie must never let automation act as that person.
       if (hostedLoopback && authUser?.automation !== true) authUser = null;
@@ -874,7 +874,9 @@ if (!g.__opensessionBooted) {
     configureWebhookRoutes(agents, webhookRoutes);
     try {
       startPublicIngress();
-      ensureCloudflareTunnel();
+      void ensureCloudflareTunnel().catch((e) =>
+        console.error("[public-ingress] Cloudflare Tunnel failed to start:", e),
+      );
       startPrivateAppCertificateRenewal();
     } catch (e) {
       console.error("[public-ingress] failed to start:", e);
@@ -1480,7 +1482,7 @@ if (!g.__opensessionBooted) {
   // (we're on 6.17) — fine here.
   // A prebuilt bundle (compiled binary's embedded assets, or a release
   // tarball's .frontend-dist) has no src/frontend tree to watch.
-  if (!IS_DEV && frontend && isPrebuiltFrontend()) {
+  if (!IS_DEV && frontend && (await isPrebuiltFrontend())) {
     console.log("[frontend] Prebuilt bundle: source rebuilds are off");
   } else if (!IS_DEV && frontend) {
     try {
@@ -1503,7 +1505,7 @@ if (!g.__opensessionBooted) {
   // (scripts/migrate-session-github-users.ts), never a boot-time fleet writer.
   try {
     if (!devInstance) {
-      ensureAutomationWebSession();
+      await ensureAutomationWebSession();
     }
   } catch (e) {
     console.error("[web-auth] automation identity initialization failed:", e);

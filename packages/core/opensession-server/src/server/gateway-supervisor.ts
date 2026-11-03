@@ -17,7 +17,7 @@ import {
   type GatewayTcpProxyMetrics,
 } from "./gateway-tcp-proxy";
 import { installUnhandledRejectionGuard } from "./process-guards";
-import { createStableFrontendResponder } from "./stable-frontend";
+import { createStableFrontendResponder } from "./stable-frontend-responder";
 import { publishGatewayBackendPort } from "./gateway-routing";
 
 /**

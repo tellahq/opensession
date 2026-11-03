@@ -64,36 +64,36 @@ describe("editorName", () => {
     expect(editorName("U08S8B3P83X")).toBe("Kent");
   });
 
-  it("keeps a web run's display name", () => {
+  it("keeps a web run's display name", async () => {
     roster();
     expect(editorName("Michiel")).toBe("Michiel");
   });
 
-  it("names one person once, whichever id each of their runs carries", () => {
+  it("names one person once, whichever id each of their runs carries", async () => {
     roster();
     expect(editorName("kentdebruin")).toBe(editorName("U08S8B3P83X"));
   });
 
-  it("drops a Slack id that resolves to nobody, rather than printing it", () => {
+  it("drops a Slack id that resolves to nobody, rather than printing it", async () => {
     roster();
     expect(editorName("U0NOTONROSTER")).toBeNull();
   });
 
-  it("keeps a label that was never an id, like an agent loop", () => {
+  it("keeps a label that was never an id, like an agent loop", async () => {
     roster();
     expect(editorName("Agent (loops)")).toBe("Agent (loops)");
   });
 
-  it("has nothing to say about an empty user", () => {
+  it("has nothing to say about an empty user", async () => {
     expect(editorName("")).toBeNull();
     expect(editorName(null)).toBeNull();
   });
 });
 
 describe("frontendInputsHash", () => {
-  it("is stable across calls and reads as a portable content hash", () => {
-    const a = frontendInputsHash();
-    expect(a).toBe(frontendInputsHash());
+  it("is stable across calls and reads as a portable content hash", async () => {
+    const a = await frontendInputsHash();
+    expect(a).toBe(await frontendInputsHash());
     expect(a).toMatch(/^[0-9a-z]+$/);
   });
 });
@@ -120,8 +120,8 @@ describe("renderIndexHtml", () => {
     assets: ["App-abc.js", "global-def.css", "tailwind-ghi.css"],
   };
 
-  it("points the source shell at the compiled assets and fills the instance blob", () => {
-    const html = renderIndexHtml(meta);
+  it("points the source shell at the compiled assets and fills the instance blob", async () => {
+    const html = await renderIndexHtml(meta);
     expect(html).toContain(
       `<script type="module" crossorigin src="/App-abc.js"></script>`,
     );
@@ -131,16 +131,16 @@ describe("renderIndexHtml", () => {
     expect(html).not.toContain("window.__OPENSESSION_INSTANCE__ || {}");
   });
 
-  it("omits the Tailwind link when no sheet compiled", () => {
-    const html = renderIndexHtml({ ...meta, twName: null });
+  it("omits the Tailwind link when no sheet compiled", async () => {
+    const html = await renderIndexHtml({ ...meta, twName: null });
     expect(html).not.toContain('href="/tailwind-');
     expect(bundleVersion({ ...meta, twName: null })).toBe(
       "App-abc.js|global-def.css|no-tw",
     );
   });
 
-  it("preloads the entry's static chunks and nothing when the meta predates them", () => {
-    const html = renderIndexHtml({
+  it("preloads the entry's static chunks and nothing when the meta predates them", async () => {
+    const html = await renderIndexHtml({
       ...meta,
       preload: ["App-shared.js", "App-leaf.js"],
     });
@@ -149,19 +149,21 @@ describe("renderIndexHtml", () => {
     expect(html.indexOf('rel="modulepreload"')).toBeLessThan(
       html.indexOf("</head>", html.indexOf('rel="modulepreload"')),
     );
-    expect(renderIndexHtml(meta)).not.toContain("modulepreload");
+    expect(await renderIndexHtml(meta)).not.toContain("modulepreload");
   });
 
-  it("only enables Agentation through the explicit runtime flag", () => {
+  it("only enables Agentation through the explicit runtime flag", async () => {
     delete process.env.OPENSESSION_AGENTATION;
-    expect(renderIndexHtml(meta)).not.toContain('"agentationEnabled":true');
+    expect(await renderIndexHtml(meta)).not.toContain(
+      '"agentationEnabled":true',
+    );
     process.env.OPENSESSION_AGENTATION = "1";
-    expect(renderIndexHtml(meta)).toContain('"agentationEnabled":true');
+    expect(await renderIndexHtml(meta)).toContain('"agentationEnabled":true');
   });
 });
 
 describe("staticImportClosure", () => {
-  it("follows static imports transitively and skips dynamic ones", () => {
+  it("follows static imports transitively and skips dynamic ones", async () => {
     const dist = mkdtempSync(join(tmpdir(), "os1-closure-"));
     try {
       const write = (name: string, source: string) =>
@@ -185,7 +187,7 @@ describe("staticImportClosure", () => {
         "Settings-lazy.js",
         "App-only-lazy.js",
       ]);
-      expect(staticImportClosure("App-entry.js", outputs, dist)).toEqual([
+      expect(await staticImportClosure("App-entry.js", outputs, dist)).toEqual([
         "App-shared.js",
         "App-side.js",
         "App-reexport.js",
@@ -196,7 +198,7 @@ describe("staticImportClosure", () => {
     }
   });
 
-  it("ignores names the build did not emit", () => {
+  it("ignores names the build did not emit", async () => {
     const dist = mkdtempSync(join(tmpdir(), "os1-closure-"));
     try {
       writeFileSync(
@@ -204,7 +206,11 @@ describe("staticImportClosure", () => {
         'import"/App-gone.js";const s="from \\"/not-a-chunk.js\\"";',
       );
       expect(
-        staticImportClosure("App-entry.js", new Set(["App-entry.js"]), dist),
+        await staticImportClosure(
+          "App-entry.js",
+          new Set(["App-entry.js"]),
+          dist,
+        ),
       ).toEqual([]);
     } finally {
       rmSync(dist, { recursive: true, force: true });
@@ -219,11 +225,11 @@ describe("isPrebuiltFrontend", () => {
     else process.env.OPENSESSION_PREBUILT_FRONTEND = prev;
   });
 
-  it("follows the env override in both directions", () => {
+  it("follows the env override in both directions", async () => {
     process.env.OPENSESSION_PREBUILT_FRONTEND = "1";
-    expect(isPrebuiltFrontend()).toBe(true);
+    expect(await isPrebuiltFrontend()).toBe(true);
     process.env.OPENSESSION_PREBUILT_FRONTEND = "0";
-    expect(isPrebuiltFrontend()).toBe(false);
+    expect(await isPrebuiltFrontend()).toBe(false);
   });
 });
 
@@ -269,14 +275,14 @@ describe("activateFrontendRelease", () => {
       join(previousRoot, ".frontend-dist", "Settings-old.js"),
       "old settings",
     );
-    publishStableFrontendSnapshot(scratch, {
+    await publishStableFrontendSnapshot(scratch, {
       releaseRoot: previousRoot,
       version: "App-old.js|global-old.css|no-tw",
       indexHtml: '<script src="/App-old.js"></script>',
     });
 
     const restoreRoot = __setFrontendReleaseRootForTest(previousRoot);
-    const version = activateFrontendRelease({
+    const version = await activateFrontendRelease({
       sha,
       baseSha,
       releaseRoot,
@@ -295,9 +301,11 @@ describe("activateFrontendRelease", () => {
       fallbackRoots: [previousRoot],
       version,
     });
-    expect(await frontendDistFile("Settings-old.js")?.exists()).toBe(true);
+    expect(await (await frontendDistFile("Settings-old.js"))?.exists()).toBe(
+      true,
+    );
 
-    publishStableFrontendSnapshot(scratch, {
+    await publishStableFrontendSnapshot(scratch, {
       releaseRoot: previousRoot,
       version: "App-old.js|global-old.css|no-tw",
       indexHtml: '<script src="/App-old.js"></script>',
@@ -308,12 +316,12 @@ describe("activateFrontendRelease", () => {
       JSON.parse(readFileSync(join(scratch, "stable-frontend.json"), "utf8")),
     ).toMatchObject({ releaseRoot, version });
 
-    publishStableFrontendSnapshot(scratch, {
+    await publishStableFrontendSnapshot(scratch, {
       releaseRoot: previousRoot,
       version: "App-old.js|global-old.css|no-tw",
       indexHtml: '<script src="/App-old.js"></script>',
     });
-    activateFrontendRelease({
+    await activateFrontendRelease({
       sha,
       baseSha,
       releaseRoot,
@@ -324,7 +332,7 @@ describe("activateFrontendRelease", () => {
     ).toMatchObject({ releaseRoot: previousRoot });
 
     process.env.OPENSESSION_GATEWAY_ROLE = "active";
-    activateFrontendRelease({
+    await activateFrontendRelease({
       sha,
       baseSha,
       releaseRoot,

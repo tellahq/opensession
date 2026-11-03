@@ -55,9 +55,9 @@ function save(registry: Record<string, RawEntry>): void {
   writeJsonAtomic(REGISTRY_PATH, registry);
 }
 
-function releasePreviewLease(sessionId: string): void {
+async function releasePreviewLease(sessionId: string): Promise<void> {
   try {
-    releasePreviewPathLease(sessionId);
+    await releasePreviewPathLease(sessionId);
   } catch (error) {
     console.error(
       `Failed to release preview reservation for ${sessionId}:`,
@@ -190,7 +190,7 @@ export async function setArchived(
   // the Pinned band on unarchive. Callers that know more keys (alias ids, the
   // workspace pin) drop those on top of this.
   if (archived) {
-    releasePreviewLease(id);
+    await releasePreviewLease(id);
     await unpinEverywhere([id]);
     await stopArchivedSessionResources(id);
   }
@@ -219,7 +219,7 @@ export async function archiveOlderThan(
   if (archived > 0) {
     save(registry);
     for (const session of justArchived) {
-      releasePreviewLease(session.id);
+      await releasePreviewLease(session.id);
       await setIndexedSessionArchived(session.id, true, "idle");
       publishSessionRow(session.id);
       await stopArchivedSessionResources(session.id, session.aliasIds);

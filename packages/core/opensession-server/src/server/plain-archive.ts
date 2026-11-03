@@ -111,7 +111,7 @@ export async function archivePlainSessionCandidates(
       `[plain-archive] Could not archive session ${sessionId}:`,
       error,
     ),
-  releaseLease: (sessionId: string) => void = releasePreviewPathLease,
+  releaseLease: (sessionId: string) => unknown = releasePreviewPathLease,
   resolveSessionDiscussion: DiscussionResolver = resolvePlainDiscussion,
   stopPortals: (sessionId: string) => Promise<void> = async (sessionId) => {
     const { stopArchivedSessionPortals } = await import("./portal-supervisor");
@@ -153,7 +153,7 @@ export async function archivePlainSessionCandidates(
         }),
       );
       try {
-        releaseLease(data.id);
+        await releaseLease(data.id);
       } catch (error) {
         reportFailure(data.id, error);
       }
