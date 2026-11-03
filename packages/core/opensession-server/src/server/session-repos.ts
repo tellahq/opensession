@@ -19,7 +19,7 @@ import {
 } from "./worktree";
 import { hasRemoteWorkspace } from "./sandbox";
 import type { WorkspaceExecSession } from "./sandbox/workspace-exec";
-import { existsSync } from "fs";
+import { pathExists } from "./shared/path-exists";
 import {
   findWorkspaceByWorktree,
   getWorkspace,
@@ -639,11 +639,11 @@ function projectPrTargets(session: UnifiedSession): ProjectedPrTarget[] {
  * apply the remote-workspace exception inconsistently, so a volume-mode session
  * had a worktree for diff/status/push/pull and none for image/file reads.
  */
-export function resolveWorktreeTarget(
+export async function resolveWorktreeTarget(
   session: Pick<UnifiedSession, "repo" | "worktreeDir" | "attachedRepos"> &
     WorkspaceExecSession,
   repoId?: string | null,
-): WorktreeTarget | null {
+): Promise<WorktreeTarget | null> {
   const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
   const primary = !repoId || repoId === primaryRepo;
   const dir = primary
@@ -656,7 +656,8 @@ export function resolveWorktreeTarget(
     dir,
     primary,
     defaultBranch: getRepo(id).defaultBranch,
-    reachable: existsSync(dir) || (primary && hasRemoteWorkspace(session)),
+    reachable:
+      (await pathExists(dir)) || (primary && hasRemoteWorkspace(session)),
   };
 }
 

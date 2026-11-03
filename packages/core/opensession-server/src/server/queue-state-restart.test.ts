@@ -61,7 +61,7 @@ describe("steer receipt restart persistence", () => {
     const queue = promptQueues.get(SESSION) || [];
     queue.push({ id: "new", content: "after boot" });
     await promptQueues.set(SESSION, queue);
-    persistQueues(storePath);
+    await persistQueues(storePath);
     const persisted = JSON.parse(await Bun.file(storePath).text());
     expect(
       persisted.queued[SESSION].map((item: { id: string }) => item.id),

@@ -289,12 +289,14 @@ export async function loadSnapshotHarness(): Promise<SnapshotHarness> {
         );
       if (!owner?.id)
         throw new Error(`No session owns engine id ${engineSessionId}`);
-      const { parseJsonlLines } = await import("../jsonl-parser");
+      const { parseJsonlLinesWithMedia } = await import("../jsonl-parser");
       await transcriptStore
         .transcriptStore()
         .importLegacyTranscript(
           owner.id,
-          parseJsonlLines(lines.map((line) => JSON.stringify(line))),
+          await parseJsonlLinesWithMedia(
+            lines.map((line) => JSON.stringify(line)),
+          ),
           "merged",
           null,
         );

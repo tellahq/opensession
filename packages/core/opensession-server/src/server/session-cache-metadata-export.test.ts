@@ -159,7 +159,7 @@ describe("committed session metadata export", () => {
     expect(peekCachedSessions().find((s) => s.id === id)?.aliasIds).toEqual([
       alias,
     ]);
-    setTitleOverride(alias, "Renamed under the alias");
+    await setTitleOverride(alias, "Renamed under the alias");
 
     // The first write seeds the actor document from the (absent) legacy file.
     await updateSessionFile(id, () => sessionDoc(id));

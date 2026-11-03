@@ -27,7 +27,7 @@ import {
   appendTranscriptEntries,
   recordEngineSessionOwner,
 } from "../transcript-persistence";
-import { parseJsonlLines } from "../jsonl-parser";
+import { parseJsonlLinesWithMedia } from "../jsonl-parser";
 import {
   importLegacyTranscript,
   replaceTranscriptEvents,
@@ -91,7 +91,7 @@ export async function startDemoReplayer(): Promise<void> {
         // watchers drop the previous loop instead of merging into it.
         await replaceTranscriptEvents(
           sessionId,
-          parseJsonlLines(lines.map((l) => JSON.stringify(l))),
+          await parseJsonlLinesWithMedia(lines.map((l) => JSON.stringify(l))),
         );
       } else {
         await appendTranscriptEntries(ocId, lines);

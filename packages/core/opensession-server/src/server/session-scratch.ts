@@ -25,8 +25,8 @@
  * file imported this first (the workspaces.ts leak of 2026-08-15).
  */
 
-import { type Dirent, mkdirSync, readdirSync, statSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { stateDir } from "./paths";
 
@@ -81,17 +81,25 @@ export function sandboxSessionScratchDir(
   return join(root, scratchName(sessionId) ?? "_");
 }
 
+/** The session's scratch dir path without touching the disk; undefined for
+ * an unusable id. */
+export function sessionScratchPath(sessionId: string): string | undefined {
+  const name = scratchName(sessionId);
+  return name ? join(sessionScratchRoot(), name) : undefined;
+}
+
 /**
  * Ensure the session's scratch dir exists and return its path. Undefined on
  * an unusable id or an fs failure — callers treat scratch as best-effort and
  * a run without one simply gets no scratch section.
  */
-export function ensureSessionScratch(sessionId: string): string | undefined {
-  const name = scratchName(sessionId);
-  if (!name) return undefined;
-  const dir = join(sessionScratchRoot(), name);
+export async function ensureSessionScratch(
+  sessionId: string,
+): Promise<string | undefined> {
+  const dir = sessionScratchPath(sessionId);
+  if (!dir) return undefined;
   try {
-    mkdirSync(dir, { recursive: true });
+    await mkdir(dir, { recursive: true });
     return dir;
   } catch {
     return undefined;
@@ -197,7 +205,7 @@ export async function sweepSessionScratch(
   const root = sessionScratchRoot();
   let entries: Dirent[];
   try {
-    entries = readdirSync(root, { withFileTypes: true });
+    entries = await readdir(root, { withFileTypes: true });
   } catch {
     return []; // store not created yet
   }
@@ -207,7 +215,7 @@ export async function sweepSessionScratch(
     try {
       dirs.push({
         name: entry.name,
-        mtimeMs: statSync(join(root, entry.name)).mtimeMs,
+        mtimeMs: (await stat(join(root, entry.name))).mtimeMs,
       });
     } catch {}
   }

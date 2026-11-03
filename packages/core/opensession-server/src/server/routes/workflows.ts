@@ -96,16 +96,18 @@ export async function handleWorkflowsRoutes(
       const engineSessionId =
         snap?.engineSessionId || journal?.outcome.engineSessionId;
       const nativePath = engineSessionId
-        ? findPiNativeTranscript(engineSessionId)
+        ? await findPiNativeTranscript(engineSessionId)
         : journal
-          ? findPiNativeTranscriptByPrompt(journal)
+          ? await findPiNativeTranscriptByPrompt(journal)
           : null;
       if (!nativePath)
         return Response.json(
           { error: "No conversation recorded for this agent", entries: [] },
           { status: 404 },
         );
-      return Response.json({ entries: readPiNativeTranscript(nativePath) });
+      return Response.json({
+        entries: await readPiNativeTranscript(nativePath),
+      });
     }
   }
 

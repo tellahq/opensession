@@ -23,7 +23,7 @@ import { sessionTouchedPaths } from "../session-touched";
 import { getRepo, isSharedCheckoutDir, sessionRepoId } from "../worktree";
 import { defaultRepo } from "../config";
 import { $ } from "bun";
-import { existsSync } from "fs";
+import { pathExists } from "../shared/path-exists";
 import { resolve } from "path";
 import { githubMutationCredential } from "./github-credential";
 
@@ -76,7 +76,7 @@ export async function handleSessionGitRoutes(
           // A volume-mode workspace has no host dir but is still reachable:
           // the primary repo's diff runs through the session's sandbox exec
           // instead (workspaceExecFor; host exec when no active sandbox).
-          const target = resolveWorktreeTarget(session, repoId);
+          const target = await resolveWorktreeTarget(session, repoId);
           if (target?.reachable) {
             try {
               const ownPaths = isSharedCheckoutDir(target.dir)
@@ -221,7 +221,7 @@ export async function handleSessionGitRoutes(
     // Primary volume-mode workspaces exist only in the sandbox — the
     // resolver counts them as reachable and the discard routes through
     // the session's exec instead of a host dir.
-    const target = resolveWorktreeTarget(session, body.repo);
+    const target = await resolveWorktreeTarget(session, body.repo);
     if (!target?.reachable)
       return Response.json(
         { error: "No worktree for this repo" },
@@ -262,7 +262,10 @@ export async function handleSessionGitRoutes(
     // Primary volume-mode workspaces have no host dir — status runs
     // through the sandbox exec (host exec when no active sandbox). No
     // checkout at all answers 200 with null; clients read that.
-    const target = resolveWorktreeTarget(session, url.searchParams.get("repo"));
+    const target = await resolveWorktreeTarget(
+      session,
+      url.searchParams.get("repo"),
+    );
     if (!target?.reachable) return Response.json(null);
     // A shared checkout holds every concurrent session's edits, so the raw
     // dirty count belongs to nobody. Scope it to the files this session's own
@@ -298,13 +301,16 @@ export async function handleSessionGitRoutes(
     const filePath = url.searchParams.get("path") || "";
     const contentType = imageContentType(filePath);
     if (!contentType) return new Response("Not an image path", { status: 400 });
-    const target = resolveWorktreeTarget(session, url.searchParams.get("repo"));
+    const target = await resolveWorktreeTarget(
+      session,
+      url.searchParams.get("repo"),
+    );
     if (!target?.reachable) return new Response("No worktree", { status: 404 });
     const dir = target.dir;
     // Reachable but host-invisible (volume-mode sandbox / runner): image
     // bytes are read straight off the host fs, so say that plainly instead
     // of claiming the session has no worktree.
-    if (!existsSync(dir))
+    if (!(await pathExists(dir)))
       return new Response("Worktree is not readable on the host", {
         status: 400,
       });
@@ -371,14 +377,14 @@ export async function handleSessionGitRoutes(
     if (!filePath)
       return Response.json({ error: "Missing path" }, { status: 400 });
     const repoId = body ? body.repo || null : url.searchParams.get("repo");
-    const target = resolveWorktreeTarget(session, repoId);
+    const target = await resolveWorktreeTarget(session, repoId);
     if (!target?.reachable)
       return Response.json({ error: "No worktree" }, { status: 404 });
     const dir = target.dir;
     // Reachable but host-invisible (volume-mode sandbox / runner): both the
     // read and the edit-mode write go through the host fs, so say that
     // plainly instead of claiming the session has no worktree.
-    if (!existsSync(dir))
+    if (!(await pathExists(dir)))
       return Response.json(
         { error: "Worktree is not readable on the host" },
         { status: 400 },
@@ -443,7 +449,7 @@ export async function handleSessionGitRoutes(
       return Response.json({ error: "Session not found" }, { status: 404 });
     const body = await req.json().catch(() => ({}));
     const repoId = typeof body?.repo === "string" ? body.repo : null;
-    const target = resolveWorktreeTarget(session, repoId);
+    const target = await resolveWorktreeTarget(session, repoId);
     if (!target?.reachable)
       return Response.json(
         { error: "Session has no worktree" },
@@ -474,7 +480,7 @@ export async function handleSessionGitRoutes(
       return Response.json({ error: "Session not found" }, { status: 404 });
     const body = await req.json().catch(() => ({}));
     const repoId = typeof body?.repo === "string" ? body.repo : null;
-    const target = resolveWorktreeTarget(session, repoId);
+    const target = await resolveWorktreeTarget(session, repoId);
     if (!target?.reachable)
       return Response.json(
         { error: "Session has no worktree" },

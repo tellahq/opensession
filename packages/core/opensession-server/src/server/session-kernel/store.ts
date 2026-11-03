@@ -43,7 +43,6 @@ import { isReadOnlyStoreQuarantine } from "./store-routing";
 import {
   chmodSync,
   closeSync,
-  existsSync,
   fsyncSync,
   mkdirSync,
   openSync,
@@ -238,16 +237,65 @@ const parsed = <T>(value: string | null | undefined): T | undefined => {
   return JSON.parse(value) as T;
 };
 type ProcessOwnerIdentity = { token: string; bootId?: string; start?: string };
+
+// The store's few direct file operations, kept in one place. The store itself
+// is synchronous SQLite and runs only in the session-kernel actor service.
+function readStoreFile(path: string): string {
+  // gateway-sync-ok: SessionKernelStore runs in the session-kernel actor service; the gateway constructs it only under NODE_ENV=test
+  return readFileSync(path, "utf8");
+}
+function ensureStoreDirectory(path: string): void {
+  // gateway-sync-ok: SessionKernelStore runs in the session-kernel actor service; the gateway constructs it only under NODE_ENV=test
+  mkdirSync(dirname(path), { recursive: true });
+}
+function removeStoreFiles(paths: readonly string[]): void {
+  // gateway-sync-ok: SessionKernelStore runs in the session-kernel actor service; the gateway constructs it only under NODE_ENV=test
+  for (const path of paths) rmSync(path, { force: true });
+}
+function storeFileBytes(path: string): number {
+  try {
+    // gateway-sync-ok: SessionKernelStore runs in the session-kernel actor service; the gateway constructs it only under NODE_ENV=test
+    return statSync(path).size;
+  } catch {
+    return 0;
+  }
+}
+function restrictStoreFile(path: string): void {
+  try {
+    // gateway-sync-ok: SessionKernelStore runs in the session-kernel actor service; the gateway constructs it only under NODE_ENV=test
+    chmodSync(path, 0o600);
+  } catch {}
+}
+/** Flush `path` and rename it over `target`, then flush the directory so the
+ * rename itself is durable. */
+function durableRename(path: string, target: string): void {
+  const flush = (file: string) => {
+    // gateway-sync-ok: SessionKernelStore runs in the session-kernel actor service; the gateway constructs it only under NODE_ENV=test
+    const fd = openSync(file, "r");
+    try {
+      // gateway-sync-ok: SessionKernelStore runs in the session-kernel actor service; the gateway constructs it only under NODE_ENV=test
+      fsyncSync(fd);
+    } finally {
+      // gateway-sync-ok: SessionKernelStore runs in the session-kernel actor service; the gateway constructs it only under NODE_ENV=test
+      closeSync(fd);
+    }
+  };
+  flush(path);
+  // gateway-sync-ok: SessionKernelStore runs in the session-kernel actor service; the gateway constructs it only under NODE_ENV=test
+  renameSync(path, target);
+  flush(dirname(target));
+}
+
 function linuxBootId(): string | undefined {
   try {
-    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+    return readStoreFile("/proc/sys/kernel/random/boot_id").trim();
   } catch {
     return undefined;
   }
 }
 function linuxProcessStart(pid: number): string | undefined {
   try {
-    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const stat = readStoreFile(`/proc/${pid}/stat`);
     const fields = stat
       .slice(stat.lastIndexOf(")") + 2)
       .trim()
@@ -267,14 +315,9 @@ function parseOwnerIdentity(value: string): ProcessOwnerIdentity | undefined {
 }
 function plausibleLegacyOwner(pid: number): boolean {
   try {
-    const command = readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(
-      /\0/g,
-      " ",
-    );
+    const command = readStoreFile(`/proc/${pid}/cmdline`).replace(/\0/g, " ");
     if (!command.includes("opensession.ts")) return false;
-    const environment = readFileSync(`/proc/${pid}/environ`, "utf8").split(
-      "\0",
-    );
+    const environment = readStoreFile(`/proc/${pid}/environ`).split("\0");
     const stateDir = environment
       .find((entry) => entry.startsWith("OPENSESSION_STATE_DIR="))
       ?.slice("OPENSESSION_STATE_DIR=".length);
@@ -293,14 +336,17 @@ function plausibleLegacyOwner(pid: number): boolean {
 const ownerGlobal = globalThis as typeof globalThis & {
   __opensessionSessionKernelOwnerId?: string;
 };
-const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
-  JSON.stringify({
+/** This process's writer identity, computed when a store first claims the
+ * writer rather than at import, so importing the module reads no files. */
+function processOwnerId(): string {
+  return (ownerGlobal.__opensessionSessionKernelOwnerId ??= JSON.stringify({
     token:
       process.env.OPENSESSION_SESSION_KERNEL_OWNER_ID?.trim() ||
       crypto.randomUUID(),
     bootId: linuxBootId(),
     start: linuxProcessStart(process.pid),
   } satisfies ProcessOwnerIdentity));
+}
 export const SESSION_KERNEL_SCHEMA_VERSION = 35;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
@@ -1156,10 +1202,7 @@ export class SessionKernelStore {
       if (options.hydrateRunStateCache !== false) this.hydrateRunStateCache();
       return;
     }
-    if (path !== ":memory:") {
-      const dir = dirname(path);
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    }
+    if (path !== ":memory:") ensureStoreDirectory(path);
     this.db = new Database(path);
     this.closeable = true;
     // Install the busy handler before any other statement. Opening a WAL
@@ -1631,11 +1674,7 @@ export class SessionKernelStore {
     usageStore.migrateUsageSchema35(this.db, schemaVersion);
     assertAgentOperationSchema28(this.db);
     assertAgentOperationCancellationSchema32(this.db);
-    if (path !== ":memory:") {
-      try {
-        chmodSync(path, 0o600);
-      } catch {}
-    }
+    if (path !== ":memory:") restrictStoreFile(path);
     // A processing execution dies with its actor. Keep replay-safe intent pending
     // so the client's receipt outbox can re-admit the exact same command id.
     this.db.run(
@@ -1698,7 +1737,7 @@ export class SessionKernelStore {
           "SELECT owner_id, pid FROM session_kernel_owner WHERE singleton = 1",
         )
         .get() as { owner_id: string; pid: number } | null;
-      if (current && current.owner_id !== PROCESS_OWNER_ID) {
+      if (current && current.owner_id !== processOwnerId()) {
         let alive = false;
         try {
           process.kill(current.pid, 0);
@@ -1729,7 +1768,7 @@ export class SessionKernelStore {
 				 VALUES (1, ?, ?, ?)
 				 ON CONFLICT(singleton) DO UPDATE SET owner_id = excluded.owner_id,
 					pid = excluded.pid, claimed_at = excluded.claimed_at`,
-        [PROCESS_OWNER_ID, process.pid, Date.now()],
+        [processOwnerId(), process.pid, Date.now()],
       );
     });
     transaction.immediate();
@@ -5325,13 +5364,7 @@ export class SessionKernelStore {
           this.db.query(`PRAGMA ${name}`).get() as Record<string, unknown>,
         )[0] ?? 0,
       );
-    const fileBytes = (path: string) => {
-      try {
-        return statSync(path).size;
-      } catch {
-        return 0;
-      }
-    };
+    const fileBytes = storeFileBytes;
     return {
       sessions: count("session_kernel_state"),
       quarantinedSessions: count("session_kernel_quarantine"),
@@ -5771,15 +5804,14 @@ export class SessionKernelStore {
     if (!this.hasSessionDurableState(sessionId)) return false;
 
     const temporaryPath = `${targetPath}.migrating-${crypto.randomUUID()}`;
-    for (const path of [
+    removeStoreFiles([
       targetPath,
       `${targetPath}-wal`,
       `${targetPath}-shm`,
       temporaryPath,
       `${temporaryPath}-wal`,
       `${temporaryPath}-shm`,
-    ])
-      rmSync(path, { force: true });
+    ]);
     const initialized = new SessionKernelStore(temporaryPath, {
       busyTimeoutMs: 250,
     });
@@ -5905,21 +5937,8 @@ export class SessionKernelStore {
       this.db.exec("DETACH DATABASE session_migration");
       attached = false;
 
-      for (const suffix of ["-wal", "-shm"])
-        rmSync(`${temporaryPath}${suffix}`, { force: true });
-      const file = openSync(temporaryPath, "r");
-      try {
-        fsyncSync(file);
-      } finally {
-        closeSync(file);
-      }
-      renameSync(temporaryPath, targetPath);
-      const directory = openSync(dirname(targetPath), "r");
-      try {
-        fsyncSync(directory);
-      } finally {
-        closeSync(directory);
-      }
+      removeStoreFiles([`${temporaryPath}-wal`, `${temporaryPath}-shm`]);
+      durableRename(temporaryPath, targetPath);
 
       const publish = this.db.transaction(() => {
         if (this.sessionPlacement(sessionId)) return false;
@@ -5965,15 +5984,14 @@ export class SessionKernelStore {
         } catch {}
       }
       if (!this.sessionPlacement(sessionId)) {
-        for (const path of [
+        removeStoreFiles([
           targetPath,
           `${targetPath}-wal`,
           `${targetPath}-shm`,
           temporaryPath,
           `${temporaryPath}-wal`,
           `${temporaryPath}-shm`,
-        ])
-          rmSync(path, { force: true });
+        ]);
       }
       throw error;
     }
