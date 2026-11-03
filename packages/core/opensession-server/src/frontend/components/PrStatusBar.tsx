@@ -67,6 +67,7 @@ import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
 import { Skeleton, SkeletonBar } from "../ui/state";
 import { cn } from "../ui/cn";
+import { useSessionPendingCreation } from "../hooks/useSessionPendingCreation";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import {
   useDeferredMergeDeadline,
@@ -502,11 +503,15 @@ export function PrStatusBar({
   const promoted = presented?.source !== "primary" ? presented : undefined;
   const targetRepo = promoted?.repo || repo;
   const targetBranch = promoted?.branch;
+  // A new tab's id is unknown to the server until its create lands. Asking
+  // earlier caches a 404 that reads as "Session not found" in the card.
+  const pendingCreation = useSessionPendingCreation();
   const prResource = useSessionPrResource(sessionId, targetRepo, targetBranch, {
+    enabled: !pendingCreation,
     refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
   });
   const gitResource = useSessionGitResource(sessionId, repo, {
-    enabled: !promoted,
+    enabled: !promoted && !pendingCreation,
     refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
   });
   const pr = prResource.data ?? null;
@@ -514,7 +519,7 @@ export function PrStatusBar({
   // Only the no-PR action depends on how the session ships: Create PR, or
   // Ship straight to the default branch (ship-mode.ts on the server).
   const shipResource = useSessionShipResource(sessionId, {
-    enabled: !promoted && !prResource.isLoading && !pr,
+    enabled: !pendingCreation && !promoted && !prResource.isLoading && !pr,
     revision: refreshTick ?? null,
   });
   const ship = shipResource.data?.available ? shipResource.data : null;
@@ -536,7 +541,9 @@ export function PrStatusBar({
   const mergePhase = useDeferredMergePhase(mergeKey);
   const mergeDeadline = useDeferredMergeDeadline(mergeKey);
   const loaded =
-    !prResource.isLoading && (Boolean(promoted) || !gitResource.isLoading);
+    !pendingCreation &&
+    !prResource.isLoading &&
+    (Boolean(promoted) || !gitResource.isLoading);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isArchived, setIsArchived] = useState(!!archived);

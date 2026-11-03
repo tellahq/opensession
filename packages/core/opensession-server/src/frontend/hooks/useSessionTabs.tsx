@@ -855,9 +855,13 @@ export function useSessionTabs({
       draft.worktreeDir = null;
       draft.mode = "ask";
     }
-    // Commit the local shell before changing the route. Without this boundary,
-    // the route can render against the previous list and keep the old session's
-    // conversation visible until the create response arrives.
+    // Commit the local shell and the route in one synchronous render. Routing
+    // first would render against the previous list and keep the old session's
+    // conversation visible until the create response arrives. Routing after
+    // would commit the pending id while the old route is still current, and
+    // App drops a pending id the route has left, so the new tab would mount
+    // connected, watch an id the server does not know yet, and flash "Session
+    // not found".
     clearNewTabMorphTimer();
     flushSync(() => {
       inject(draft, { sticky: true });
@@ -865,6 +869,7 @@ export function useSessionTabs({
       setPendingSessionId(id);
       setPendingNewWorkspace(false);
       setNewTabMorph(morphOrigin ? { id, origin: morphOrigin } : null);
+      navigate({ view: "session", id });
     });
     if (morphOrigin) startNewTabMorphTimer(id);
     replacePendingTimer(() => {
@@ -872,7 +877,6 @@ export function useSessionTabs({
       setOptimisticSession((pending) => (pending?.id === id ? null : pending));
       unstick(id);
     }, 30_000);
-    navigate({ view: "session", id });
 
     return await (async () => {
       const source = await persistedSource;
@@ -915,10 +919,9 @@ export function useSessionTabs({
         },
         { sticky: true },
       );
-      // The tab's PR and git surfaces already asked the server about this id
-      // while it was only a local shell, and SWR kept the 404. The server
-      // knows the id now: ask again, so the workspace's PR fills in without
-      // waiting for a poll.
+      // Some of the tab's surfaces asked the server about this id while it was
+      // only a local shell, and SWR kept the 404. The server knows the id now:
+      // ask again, so they fill in without waiting for a poll.
       void revalidateApiResources(sessionApiKeyFilter(createdId));
       clearTimeout(pendingTimer.current);
       setPendingSessionId((pending) => (pending === id ? null : pending));

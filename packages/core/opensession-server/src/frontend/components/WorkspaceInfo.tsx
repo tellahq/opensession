@@ -27,6 +27,7 @@ import {
   useSessionPrResource,
   useWorkspaceOverviewResource,
 } from "../hooks/useApiResources";
+import { useSessionPendingCreation } from "../hooks/useSessionPendingCreation";
 import { getCurrentUser, TEAM, useCurrentUser } from "./UserPicker";
 import { personNameForKey, usePeople, useReviewTeams } from "../lib/people";
 import { UserAvatar } from "./UserAvatar";
@@ -1511,18 +1512,19 @@ export function WorkspaceInfo({
     sessions,
     { revision: overviewRevision },
   );
+  const pendingCreation = useSessionPendingCreation();
   const prResource = useSessionPrResource(sessionId, repo, undefined, {
-    enabled: Boolean(prState),
+    enabled: Boolean(prState) && !pendingCreation,
     refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
     revision: refreshTick,
   });
   const diffResource = useSessionDiffResource(sessionId, {
-    enabled: Boolean(repo && sessionId),
+    enabled: Boolean(repo && sessionId) && !pendingCreation,
     refreshInterval: 45_000,
     revision: liveMediaCount,
   });
   const gitResource = useSessionGitResource(sessionId, repo, {
-    enabled: Boolean(repo && sessionId),
+    enabled: Boolean(repo && sessionId) && !pendingCreation,
     refreshInterval: 45_000,
     revision: liveMediaCount,
   });
