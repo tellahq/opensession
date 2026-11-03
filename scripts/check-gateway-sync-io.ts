@@ -104,9 +104,7 @@ export function gatewayModules(entry = GATEWAY_ENTRY): string[] {
         stack.push(target);
     }
   }
-  return [...seen]
-    .filter((file) => !file.includes("/src/frontend/"))
-    .sort();
+  return [...seen].filter((file) => !file.includes("/src/frontend/")).sort();
 }
 
 function exempt(source: ts.SourceFile, node: ts.Node): boolean {
@@ -161,7 +159,10 @@ export function scanSource(file: string, text: string): SyncSite[] {
   };
   const visit = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node)) return;
-    if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression)) {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression)
+    ) {
       const owner = node.expression.text;
       const member = node.name.text;
       const module = namespaces.get(owner);
@@ -193,7 +194,9 @@ export function scanGateway(): SyncSite[] {
   );
 }
 
-export function countByFile(sites: readonly SyncSite[]): Record<string, number> {
+export function countByFile(
+  sites: readonly SyncSite[],
+): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const site of sites) counts[site.file] = (counts[site.file] ?? 0) + 1;
   return Object.fromEntries(
@@ -203,7 +206,10 @@ export function countByFile(sites: readonly SyncSite[]): Record<string, number> 
 
 export function readBaseline(): Record<string, number> {
   return existsSync(BASELINE_PATH)
-    ? (JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as Record<string, number>)
+    ? (JSON.parse(readFileSync(BASELINE_PATH, "utf8")) as Record<
+        string,
+        number
+      >)
     : {};
 }
 

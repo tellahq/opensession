@@ -67,8 +67,8 @@ describe("gateway sync I/O scan", () => {
 
   test("gateway modules add no synchronous filesystem or subprocess calls", () => {
     const sites = scanGateway();
-    expect(compareWithBaseline(countByFile(sites), readBaseline(), sites)).toEqual(
-      [],
-    );
+    expect(
+      compareWithBaseline(countByFile(sites), readBaseline(), sites),
+    ).toEqual([]);
   });
 });
