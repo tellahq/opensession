@@ -305,7 +305,9 @@ describe("single session ownership", () => {
     expect(read("routes/sessions.ts")).not.toContain("promptReceipt(");
     expect(existsSync(join(serverDir, "prompt-receipts.ts"))).toBe(false);
     const steerEligibility = control.indexOf('opts?.busy !== "queue"');
-    const steerItem = control.indexOf("const steerItem = durableQueueItem(id");
+    const steerItem = control.indexOf(
+      "const steerItem = await durableQueueItem(id",
+    );
     expect(steerEligibility).toBeGreaterThan(-1);
     expect(steerItem).toBeGreaterThan(steerEligibility);
     expect(

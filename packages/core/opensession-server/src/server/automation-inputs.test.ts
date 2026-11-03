@@ -129,7 +129,7 @@ describe("prepareAutomationInputs", () => {
   });
 
   test("injects structured report history without raw HTML", async () => {
-    publishReport({
+    await publishReport({
       automationId,
       automationName: "Cassandra",
       title: "Previous assessment",

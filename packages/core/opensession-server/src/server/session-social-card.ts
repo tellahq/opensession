@@ -12,7 +12,7 @@
  */
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
-import { chmodSync, readFileSync, statSync, writeFileSync } from "fs";
+import { chmod, readFile, stat, writeFile } from "fs/promises";
 import { configuredIntegration, configuredServer, productName } from "./config";
 import { teamDirectory, type DirectoryPerson } from "./people";
 import { stateDir } from "./paths";
@@ -160,7 +160,7 @@ function dataShotBytes(source: string): Buffer | undefined {
   }
 }
 
-function usableShot(source: string): boolean {
+async function usableShot(source: string): Promise<boolean> {
   if (!source) return false;
   if (source.startsWith("data:")) {
     if (!DATA_SHOT_RE.test(source)) return false;
@@ -169,11 +169,11 @@ function usableShot(source: string): boolean {
     );
     return encodedBytes > 0 && encodedBytes <= SHOT_MAX_BYTES;
   }
-  if (!isWithinUploads(source)) return false;
   if (!/\.(png|jpe?g|webp|gif)$/i.test(source)) return false;
+  if (!(await isWithinUploads(source))) return false;
   try {
-    const stat = statSync(source);
-    return stat.isFile() && stat.size > 0 && stat.size <= SHOT_MAX_BYTES;
+    const st = await stat(source);
+    return st.isFile() && st.size > 0 && st.size <= SHOT_MAX_BYTES;
   } catch {
     return false;
   }
@@ -181,10 +181,10 @@ function usableShot(source: string): boolean {
 
 /** Resolve one transcript image without widening the card route into a general
  * file reader. Composer uploads and transcript-owned data images are eligible. */
-function transcriptShot(src: string): string | undefined {
-  const staged = stagedImageRef(src);
-  if (staged && usableShot(staged.path)) return staged.path;
-  return usableShot(src) ? src : undefined;
+async function transcriptShot(src: string): Promise<string | undefined> {
+  const staged = await stagedImageRef(src);
+  if (staged && (await usableShot(staged.path))) return staged.path;
+  return (await usableShot(src)) ? src : undefined;
 }
 
 /** Add eligible images from the requested entry order without duplicates. */
@@ -192,7 +192,7 @@ async function appendEntryShots(
   sessionId: string,
   entries: TranscriptEntry[],
   field: "images" | "featuredMedia",
-  append: (source: string | undefined) => boolean,
+  append: (source: string | undefined) => Promise<boolean>,
 ): Promise<void> {
   for (const entry of entries) {
     // Bounded transcript rows replace large data images with os-blob markers.
@@ -204,7 +204,7 @@ async function appendEntryShots(
       ? ((await transcript.getFullEntry(sessionId, entry.id)) ?? entry)
       : entry;
     for (const src of [...(source[field] ?? [])].reverse()) {
-      if (!append(transcriptShot(src))) return;
+      if (!(await append(await transcriptShot(src)))) return;
     }
   }
 }
@@ -219,16 +219,16 @@ async function appendEntryShots(
 async function sessionShotPaths(session: UnifiedSession): Promise<string[]> {
   const paths: string[] = [];
   const seen = new Set<string>();
-  const append = (source: string | undefined): boolean => {
+  const append = async (source: string | undefined): Promise<boolean> => {
     if (paths.length >= SHOT_CANDIDATE_LIMIT) return false;
-    if (!source || seen.has(source) || !usableShot(source)) return true;
+    if (!source || seen.has(source) || !(await usableShot(source))) return true;
     seen.add(source);
     paths.push(source);
     return paths.length < SHOT_CANDIDATE_LIMIT;
   };
   const walkthroughShots = session.walkthrough?.shots ?? [];
-  for (const shot of walkthroughShots) append(shot.after);
-  for (const shot of walkthroughShots) append(shot.before);
+  for (const shot of walkthroughShots) await append(shot.after);
+  for (const shot of walkthroughShots) await append(shot.before);
   if (paths.length >= SHOT_CANDIDATE_LIMIT) return paths;
 
   try {
@@ -580,38 +580,49 @@ function publicBase(): string {
   ).replace(/\/+$/, "");
 }
 
-export function sessionSocialCardUrl(sessionId: string): string {
-  return `${publicBase()}/session-card/${encodeURIComponent(sessionId)}/${cardToken(sessionId)}.png?v=${SESSION_CARD_VERSION}`;
+export async function sessionSocialCardUrl(sessionId: string): Promise<string> {
+  return `${publicBase()}/session-card/${encodeURIComponent(sessionId)}/${await cardToken(sessionId)}.png?v=${SESSION_CARD_VERSION}`;
 }
 
-let cachedCardSecret = "";
+let storedCardSecret: Promise<string> | null = null;
 
-function cardSecret(): string {
-  const configured = process.env.OPENSESSION_SESSION_CARD_SECRET?.trim();
-  if (configured) return configured;
-  if (cachedCardSecret) return cachedCardSecret;
+async function readOrCreateCardSecret(): Promise<string> {
   const path = stateDir("social-card-secret");
   try {
-    const stored = readFileSync(path, "utf8").trim();
-    if (stored.length >= 32) return (cachedCardSecret = stored);
+    const stored = (await readFile(path, "utf8")).trim();
+    if (stored.length >= 32) return stored;
   } catch {}
   const created = randomBytes(32).toString("hex");
-  writeFileSync(path, `${created}\n`, { mode: 0o600 });
+  await writeFile(path, `${created}\n`, { mode: 0o600 });
   try {
-    chmodSync(path, 0o600);
+    await chmod(path, 0o600);
   } catch {}
-  return (cachedCardSecret = created);
+  return created;
 }
 
-function cardToken(sessionId: string): string {
-  return createHmac("sha256", cardSecret())
+function cardSecret(): Promise<string> {
+  const configured = process.env.OPENSESSION_SESSION_CARD_SECRET?.trim();
+  if (configured) return Promise.resolve(configured);
+  // One read (or creation) per process; a failure is retried next call.
+  storedCardSecret ??= readOrCreateCardSecret().catch((error) => {
+    storedCardSecret = null;
+    throw error;
+  });
+  return storedCardSecret;
+}
+
+async function cardToken(sessionId: string): Promise<string> {
+  return createHmac("sha256", await cardSecret())
     .update(`session-social-card:${sessionId}`)
     .digest("base64url")
     .slice(0, 32);
 }
 
-function validCardToken(sessionId: string, token: string): boolean {
-  const expected = Buffer.from(cardToken(sessionId));
+async function validCardToken(
+  sessionId: string,
+  token: string,
+): Promise<boolean> {
+  const expected = Buffer.from(await cardToken(sessionId));
   const presented = Buffer.from(token);
   return (
     expected.length === presented.length && timingSafeEqual(expected, presented)
@@ -636,7 +647,7 @@ export async function sessionHtmlWithSocialMeta(
   pathname: string,
 ): Promise<string> {
   const data = await sessionSocialCardBaseData(session);
-  const image = sessionSocialCardUrl(session.id);
+  const image = await sessionSocialCardUrl(session.id);
   const page = `${configuredServer().publicBaseUrl.replace(/\/+$/, "")}${pathname}`;
   const documentTitle = `${data.title} · ${productName()}`;
   let output = htmlSource.replace(
@@ -688,21 +699,21 @@ function rememberCard(
   if (oldest) cardCache.delete(oldest);
 }
 
-function shotFingerprint(source: string): string {
+async function shotFingerprint(source: string): Promise<string> {
   if (source.startsWith("data:"))
     return createHash("sha256").update(source).digest("base64url");
   try {
-    const stat = statSync(source);
-    return `${source}:${stat.size}:${stat.mtimeMs}`;
+    const st = await stat(source);
+    return `${source}:${st.size}:${st.mtimeMs}`;
   } catch {
     return `${source}:missing`;
   }
 }
 
-function cardFingerprint(data: SessionSocialCardData): string {
+async function cardFingerprint(data: SessionSocialCardData): Promise<string> {
   return JSON.stringify({
     ...data,
-    shots: data.shots?.map(shotFingerprint),
+    shots: data.shots && (await Promise.all(data.shots.map(shotFingerprint))),
   });
 }
 
@@ -725,7 +736,7 @@ export function sessionSocialCardPublicRoutes(): Map<
     } catch {
       return Response.json({ error: "Not found" }, { status: 404 });
     }
-    if (!validCardToken(sessionId, match[2]))
+    if (!(await validCardToken(sessionId, match[2])))
       return Response.json({ error: "Not found" }, { status: 404 });
     const session = await findSessionAsync(sessionId);
     if (!session) return Response.json({ error: "Not found" }, { status: 404 });
@@ -736,7 +747,7 @@ export function sessionSocialCardPublicRoutes(): Map<
         { status: 501 },
       );
     const cacheKey = `${SESSION_CARD_VERSION}:${session.id}`;
-    const fingerprint = cardFingerprint(data);
+    const fingerprint = await cardFingerprint(data);
     const cached = cardCache.get(cacheKey);
     const now = Date.now();
     let bytes: Buffer;

@@ -313,6 +313,9 @@ if (!g.__opensessionBooted) {
   const { warmWorkspacesAsync } = await import("./src/server/workspaces");
   await warmWorkspacesAsync();
 }
+// The archive registry backs synchronous session-row readers. Warmed on hot
+// reloads too: a reloaded module starts with an empty memory copy.
+await (await import("./src/server/archive")).warmArchiveRegistry();
 // The first list read fills the list index. With the actor up it can come
 // from the metadata catalog. An unavailable or unseeded catalog cannot fall
 // back to filesystem discovery. Prime the index before any list reader, then

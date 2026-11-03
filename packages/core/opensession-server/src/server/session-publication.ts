@@ -1,20 +1,13 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "fs";
+import { access, mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
+import { join } from "path";
 import { githubAppRepositoryToken } from "./github-app";
 import { stateDir } from "./paths";
 import { requestRunnerBranchBundle } from "./runner-ws";
 import { isRemoteSandboxProvider } from "./sandbox/config";
 import { findSessionAsync } from "./session-cache";
 import type { UnifiedSession } from "./types";
-import { writeJsonAtomic } from "./shared/atomic-write";
+import { writeJsonAtomicAsync } from "./shared/atomic-write";
 
 export interface SessionPublicationResult {
   repo: string;
@@ -73,13 +66,20 @@ async function runGit(
   return { exitCode, stdout, stderr };
 }
 
+function pathExists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
+}
+
 async function localBranchBundle(
   session: UnifiedSession,
   branch: string,
 ): Promise<Buffer> {
-  if (!session.worktreeDir || !existsSync(session.worktreeDir))
+  if (!session.worktreeDir || !(await pathExists(session.worktreeDir)))
     throw new Error("Publication provider cannot export this workspace");
-  const dir = mkdtempSync(join(tmpdir(), "opensession-bundle-export-"));
+  const dir = await mkdtemp(join(tmpdir(), "opensession-bundle-export-"));
   const bundlePath = join(dir, "branch.bundle");
   try {
     const env = isolatedGitEnv(dir);
@@ -100,22 +100,23 @@ async function localBranchBundle(
       throw new Error(
         `Branch bundle export failed: ${result.stderr.slice(0, 300)}`,
       );
-    return readFileSync(bundlePath);
+    return await readFile(bundlePath);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
   }
 }
 
-export function publicationBundleProvider(
+export async function publicationBundleProvider(
   session: UnifiedSession,
-): "runner" | "local" | "unavailable" {
+): Promise<"runner" | "local" | "unavailable"> {
   if (session.runner?.id) return "runner";
   if (
     session.sandbox?.provider &&
     isRemoteSandboxProvider(session.sandbox.provider)
   )
     return "unavailable";
-  if (session.worktreeDir && existsSync(session.worktreeDir)) return "local";
+  if (session.worktreeDir && (await pathExists(session.worktreeDir)))
+    return "local";
   return "unavailable";
 }
 
@@ -145,8 +146,8 @@ const defaultDeps: PublicationDeps = {
       throw new Error("Protected base branch returned an invalid commit");
     return oid;
   },
-  exportBundle(session, branch) {
-    const provider = publicationBundleProvider(session);
+  async exportBundle(session, branch) {
+    const provider = await publicationBundleProvider(session);
     if (provider === "runner") {
       const runner = session.runner!;
       return requestRunnerBranchBundle(runner.id, {
@@ -165,10 +166,12 @@ const defaultDeps: PublicationDeps = {
     stateDir(`publication-receipts/${sessionId}/${requestId}.json`),
 };
 
-function readReceipt(path: string): SessionPublicationResult | undefined {
+async function readReceipt(
+  path: string,
+): Promise<SessionPublicationResult | undefined> {
   try {
     const value = JSON.parse(
-      readFileSync(path, "utf8"),
+      await readFile(path, "utf8"),
     ) as SessionPublicationResult;
     if (value.repo && value.branch && value.baseBranch && value.prUrl)
       return value;
@@ -225,7 +228,7 @@ export async function publishSessionBranch(
   if (!requestId) throw new Error("Scoped publication requires a request id");
   const deps = { ...defaultDeps, ...overrides };
   const receiptPath = deps.receiptPath(sessionId, requestId);
-  const receipt = readReceipt(receiptPath);
+  const receipt = await readReceipt(receiptPath);
   if (receipt) return receipt;
 
   const session = await deps.findSession(sessionId);
@@ -240,10 +243,10 @@ export async function publishSessionBranch(
   // Export before minting a token. Child-controlled hooks/config therefore
   // never coexist with a credential, even if bundle export is compromised.
   const bundle = await deps.exportBundle(session, session.branch);
-  const publishDir = mkdtempSync(join(tmpdir(), "opensession-publisher-"));
+  const publishDir = await mkdtemp(join(tmpdir(), "opensession-publisher-"));
   const bundlePath = join(publishDir, "branch.bundle");
-  writeFileSync(bundlePath, bundle, { mode: 0o600 });
   try {
+    await writeFile(bundlePath, bundle, { mode: 0o600 });
     const env = isolatedGitEnv(join(publishDir, "home"));
     let result = await deps.runGit(
       publishDir,
@@ -361,10 +364,9 @@ export async function publishSessionBranch(
       baseBranch: policy.baseBranch,
       prUrl,
     };
-    mkdirSync(dirname(receiptPath), { recursive: true });
-    writeJsonAtomic(receiptPath, published);
+    await writeJsonAtomicAsync(receiptPath, published);
     return published;
   } finally {
-    rmSync(publishDir, { recursive: true, force: true });
+    await rm(publishDir, { recursive: true, force: true });
   }
 }
