@@ -652,7 +652,7 @@ export async function enqueuePrompt(
   item: QueueItem,
   opts?: { front?: boolean },
 ): Promise<void> {
-  const owned = durableQueueItem(sessionId, queueItem(item));
+  const owned = await durableQueueItem(sessionId, queueItem(item));
   // Actor-owned enqueue makes concurrent producers atomic. Stable ids make a
   // replay after commit an adoption rather than a second prompt.
   await sessionDelivery({
@@ -740,7 +740,7 @@ export async function steerQueuedPrompt(
       undefined,
       true,
     );
-    const images = parseImageDataUrls(item.images || []);
+    const images = await parseImageDataUrls(item.images || []);
     try {
       await storeAppendUserLineEarly(
         sessionId,
@@ -785,7 +785,7 @@ export async function steerQueuedPrompt(
     item.user && !isContextOnly(item.content)
       ? `[${item.user}] ${item.content}`
       : item.content;
-  const images = parseImageDataUrls(item.images || []);
+  const images = await parseImageDataUrls(item.images || []);
   if (!item.id) return false;
   const outcome = await prepareAndSteerQueuedPrompt({
     sessionId,
@@ -894,7 +894,7 @@ export async function interruptQueuedPrompt(
     item.user && !isContextOnly(item.content)
       ? `[${item.user}] ${item.content}`
       : item.content;
-  const images = parseImageDataUrls(item.images || []);
+  const images = await parseImageDataUrls(item.images || []);
   if (
     !isAgentSessionBusy(
       session.claudeSessionId,
@@ -1604,7 +1604,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
     }
     // Attachments queued alongside the text ride the drained turn: images are
     // decoded to ImageInput, files handed through as staged/inline refs.
-    const combinedImages = parseImageDataUrls(
+    const combinedImages = await parseImageDataUrls(
       batch.flatMap((m) => m.images ?? []),
     );
     const combinedFiles = batch.flatMap((m) =>
@@ -3096,7 +3096,7 @@ async function runSessionPromptInner(
   }
   // Non-image attachments: stage to disk and tell the agent where they landed.
   // A host on another machine also gets the bytes (see the launchers below).
-  const attachments = stageFileAttachments(sessionId, rawFiles);
+  const attachments = await stageFileAttachments(sessionId, rawFiles);
   prompt = withUploadsNote(prompt, attachments);
   // The goal guides the model on every turn, but it is session-level system
   // context, not text the person added to this message. Fence it so the model

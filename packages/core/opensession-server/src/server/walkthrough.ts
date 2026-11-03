@@ -21,7 +21,7 @@
  * is on the tailnet) but renders as a bare link on GitHub.
  */
 
-import { existsSync, mkdirSync, copyFileSync } from "fs";
+import { access, copyFile, mkdir } from "fs/promises";
 import { basename } from "path";
 import type {
   SessionWalkthrough,
@@ -67,11 +67,11 @@ function readablePath(p: string): boolean {
 
 /** Copy one media file into the session's walkthrough dir; returns the staged
  *  absolute path. Throws with an agent-actionable message on a bad path. */
-function stageMedia(
+async function stageMedia(
   sessionId: string,
   path: string,
   kind: "video" | "image",
-): string {
+): Promise<string> {
   const p = (path || "").trim();
   const allowed = kind === "video" ? VIDEO_EXTS : IMAGE_EXTS;
   if (!readablePath(p))
@@ -80,16 +80,21 @@ function stageMedia(
     );
   if (!allowed.has(ext(p)))
     throw new Error(`${kind} must be one of ${[...allowed].join(" ")}: ${p}`);
-  if (!existsSync(p)) throw new Error(`${kind} file not found: ${p}`);
+  const exists = (file: string) =>
+    access(file).then(
+      () => true,
+      () => false,
+    );
+  if (!(await exists(p))) throw new Error(`${kind} file not found: ${p}`);
   const dir = `${UPLOADS_DIR}/walkthrough/${sessionId}`;
-  mkdirSync(dir, { recursive: true });
+  await mkdir(dir, { recursive: true });
   const name = basename(p).replace(/[^\w. -]/g, "_");
   let target = `${dir}/${name}`;
-  if (existsSync(target) && target !== p) {
+  if (target !== p && (await exists(target))) {
     const dot = name.lastIndexOf(".");
     target = `${dir}/${name.slice(0, dot)}-${Date.now().toString(36)}${name.slice(dot)}`;
   }
-  if (target !== p) copyFileSync(p, target);
+  if (target !== p) await copyFile(p, target);
   return target;
 }
 
@@ -149,15 +154,15 @@ export async function publishWalkthrough(
     ...(publishedEntryId ? { publishedEntryId } : {}),
   };
   if (input.video) {
-    walkthrough.video = stageMedia(sessionId, input.video, "video");
+    walkthrough.video = await stageMedia(sessionId, input.video, "video");
     if (input.videoTitle?.trim())
       walkthrough.videoTitle = input.videoTitle.trim();
   }
   const shots: WalkthroughShot[] = [];
   for (const s of input.shots || []) {
     const shot: WalkthroughShot = {};
-    if (s.before) shot.before = stageMedia(sessionId, s.before, "image");
-    if (s.after) shot.after = stageMedia(sessionId, s.after, "image");
+    if (s.before) shot.before = await stageMedia(sessionId, s.before, "image");
+    if (s.after) shot.after = await stageMedia(sessionId, s.after, "image");
     if (s.caption?.trim()) shot.caption = s.caption.trim();
     if (shot.before || shot.after) shots.push(shot);
   }

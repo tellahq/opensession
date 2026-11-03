@@ -413,9 +413,17 @@ export async function handleWorkspaceRoutes(
         ),
       ),
     );
+    const icons = new Map(
+      await Promise.all(
+        Object.values(REPOS).map(async (p) => {
+          const icon = await resolveRepoIcon(p.icon, p.repo);
+          return [p.id, { icon, rev: await repoIconRevision(icon) }] as const;
+        }),
+      ),
+    );
     return Response.json({
       repos: Object.values(REPOS).map((p) => {
-        const icon = resolveRepoIcon(p.icon, p.repo);
+        const { icon, rev: iconRev } = icons.get(p.id)!;
         const portal = portals.get(p.id);
         return {
           id: p.id,
@@ -441,7 +449,7 @@ export async function handleWorkspaceRoutes(
           /** Which picker choice that art came from, when we stored it. */
           iconSource: icon ? (p.iconSource ?? null) : null,
           /** Bumped when that art changes, so tiles don't stay cached. */
-          iconRev: repoIconRevision(icon),
+          iconRev,
           /** The Portal a new session can start with it, when declared. */
           ...(portal ? { portal } : {}),
         };
