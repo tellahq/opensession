@@ -6,6 +6,7 @@ import { isSettingsRoute, type Route } from "../lib/app-route";
 import { closestHTMLElement, eventTargetElement } from "../lib/event-target";
 import { trackKeyboardInset } from "../lib/keyboard-inset";
 import { initAlerts } from "../lib/notify";
+import { getPrLinksOnGithubPref } from "../lib/pr-links-on-github";
 import type { useSidebarFilter } from "../lib/sidebar-filter";
 import { personFilterFor, setFilter } from "../lib/sidebar-filter";
 import { getTabColors, onTabColorsChanged } from "../lib/tab-colors";
@@ -123,6 +124,8 @@ export function useAppDocumentInteractions({
   //     PR on github.com in a new tab. That gesture means "open elsewhere",
   //     and elsewhere for a PR is GitHub — opening a second copy of this app
   //     in a tab is never what it was asked for.
+  // With "Open pull requests on GitHub" on (Preferences), a plain click goes
+  // to GitHub too, which on a phone with the GitHub app opens the app.
   // A repo with no GitHub name to go to keeps the browser's own behavior.
   useEffect(() => {
     const chipAt = (e: MouseEvent) => {
@@ -157,6 +160,7 @@ export function useAppDocumentInteractions({
       // Shift (new window) and alt (download) are deliberate browser
       // gestures on the href — leave them to it.
       if (e.shiftKey || e.altKey) return;
+      if (getPrLinksOnGithubPref() && openOnGithub(e, chip)) return;
       e.preventDefault();
       openPrRef.current(chip.repo, chip.number);
     };
